@@ -26,6 +26,7 @@ import {
 	HOST_TARGET,
 	NODE_TARGETS,
 	type NodeTarget,
+	provisionNodeExeTargets,
 	readUserPackageJson,
 	resolveBinaryCompiler,
 	resolveBunBuildRunner,
@@ -525,7 +526,8 @@ type SelectedCompilers = {
  * Selects every compiler the build uses, once, before `.crust/` is wiped, so a
  * missing tool or an engines mismatch keeps the previous stage. Binaries use
  * the selected compiler's own version (`resolveBinaryCompiler`, or
- * `resolveNodeBinaryCompiler` with tsdown's requirements for node); runtime
+ * `resolveNodeBinaryCompiler` with tsdown's requirements for node, whose
+ * targets' embedded Node binaries are also provisioned here); runtime
  * packages are bundled by Bun and embed no runtime, so engines stay a
  * consumer requirement there and are not checked against the bundler.
  */
@@ -555,6 +557,8 @@ async function selectCompilers(plan: BuildPlan, io: InvocationIO): Promise<Selec
 	if (plan.runtime === "node") {
 		const compiler = await resolveNodeBinaryCompiler(plan.userPackageJson, plan.cwd);
 		printCompiler(compiler);
+		// Downloads and unpacks each target's Node now, so a missing tar/xz/unzip keeps the stage.
+		await provisionNodeExeTargets(plan.targets, plan.cwd, compiler);
 		const distribution: Distribution<NodeTarget> = {
 			table: NODE_TARGETS,
 			targets: plan.targets,

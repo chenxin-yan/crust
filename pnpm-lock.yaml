@@ -406,12 +406,6 @@ importers:
       '@crustjs/style':
         specifier: workspace:^
         version: link:../style
-      '@tsdown/exe':
-        specifier: 0.23.0
-        version: 0.23.0(tsdown@0.23.0)
-      tsdown:
-        specifier: 0.23.0
-        version: 0.23.0(@arethetypeswrong/core@0.18.5)(@tsdown/exe@0.23.0)(publint@0.3.24)(typescript@7.0.2)
     devDependencies:
       '@arethetypeswrong/core':
         specifier: ^0.18.5
@@ -437,6 +431,13 @@ importers:
       vite-plus:
         specifier: 'catalog:'
         version: 1.0.0-rc.0(@arethetypeswrong/core@0.18.5)(@types/node@24.13.3)(@vitest/ui@5.0.1)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.24)(typescript@7.0.2)(yaml@2.9.0)
+    optionalDependencies:
+      '@tsdown/exe':
+        specifier: 0.23.0
+        version: 0.23.0(tsdown@0.23.0)
+      tsdown:
+        specifier: 0.23.0
+        version: 0.23.0(@arethetypeswrong/core@0.18.5)(@tsdown/exe@0.23.0)(publint@0.3.24)(typescript@7.0.2)
 
   packages/effect:
     dependencies:
@@ -6152,7 +6153,8 @@ snapshots:
 
   '@oxc-project/runtime@0.151.0': {}
 
-  '@oxc-project/types@0.148.0': {}
+  '@oxc-project/types@0.148.0':
+    optional: true
 
   '@oxc-project/types@0.151.0': {}
 
@@ -6315,6 +6317,7 @@ snapshots:
   '@quansync/fs@1.1.0':
     dependencies:
       quansync: 1.0.0
+    optional: true
 
   '@radix-ui/number@1.1.3': {}
 
@@ -7044,6 +7047,7 @@ snapshots:
       tinyexec: 1.3.1
       tsdown: 0.23.0(@arethetypeswrong/core@0.18.5)(@tsdown/exe@0.23.0)(publint@0.3.24)(typescript@7.0.2)
       verkit: 0.4.1
+    optional: true
 
   '@types/aria-query@5.0.4': {}
 
@@ -7463,7 +7467,8 @@ snapshots:
   '@yuku-parser/binding-win32-x64@0.9.4':
     optional: true
 
-  '@yuku-toolchain/types@0.10.2': {}
+  '@yuku-toolchain/types@0.10.2':
+    optional: true
 
   '@yuku-toolchain/types@0.9.4': {}
 
@@ -7647,7 +7652,8 @@ snapshots:
     dependencies:
       character-entities: 2.0.2
 
-  defu@6.1.7: {}
+  defu@6.1.7:
+    optional: true
 
   depd@2.0.0: {}
 
@@ -7667,7 +7673,8 @@ snapshots:
 
   dom-accessibility-api@0.5.16: {}
 
-  dts-resolver@3.0.0: {}
+  dts-resolver@3.0.0:
+    optional: true
 
   dunder-proto@1.0.1:
     dependencies:
@@ -7683,7 +7690,8 @@ snapshots:
 
   emoji-regex@10.6.0: {}
 
-  empathic@2.1.0: {}
+  empathic@2.1.0:
+    optional: true
 
   encodeurl@2.0.0: {}
 
@@ -8100,6 +8108,7 @@ snapshots:
   get-tsconfig@5.0.0-beta.6:
     dependencies:
       resolve-pkg-maps: 1.0.0
+    optional: true
 
   github-slugger@2.0.0: {}
 
@@ -8228,7 +8237,8 @@ snapshots:
 
   hono@4.13.8: {}
 
-  hookable@6.1.2: {}
+  hookable@6.1.2:
+    optional: true
 
   html-void-elements@3.0.0: {}
 
@@ -8248,7 +8258,8 @@ snapshots:
 
   import-meta-resolve@4.2.0: {}
 
-  import-without-cache@0.4.1: {}
+  import-without-cache@0.4.1:
+    optional: true
 
   inherits@2.0.4: {}
 
@@ -8928,7 +8939,8 @@ snapshots:
 
   obug@2.1.4: {}
 
-  obug@3.0.0: {}
+  obug@3.0.0:
+    optional: true
 
   on-finished@2.4.1:
     dependencies:
@@ -9071,7 +9083,8 @@ snapshots:
       es-define-property: 1.0.1
       side-channel: 1.1.1
 
-  quansync@1.0.0: {}
+  quansync@1.0.0:
+    optional: true
 
   range-parser@1.3.0: {}
 
@@ -9227,7 +9240,8 @@ snapshots:
 
   reselect@5.3.0: {}
 
-  resolve-pkg-maps@1.0.0: {}
+  resolve-pkg-maps@1.0.0:
+    optional: true
 
   rolldown-plugin-dts@0.28.6(rolldown@1.2.7)(typescript@7.0.2):
     dependencies:
@@ -9242,6 +9256,7 @@ snapshots:
       typescript: 7.0.2
     transitivePeerDependencies:
       - oxc-resolver
+    optional: true
 
   rolldown@1.2.7:
     dependencies:
@@ -9263,6 +9278,7 @@ snapshots:
       '@rolldown/binding-openharmony-arm64': 1.2.7
       '@rolldown/binding-win32-arm64-msvc': 1.2.7
       '@rolldown/binding-win32-x64-msvc': 1.2.7
+    optional: true
 
   rou3@0.8.1: {}
 
@@ -9478,7 +9494,8 @@ snapshots:
 
   totalist@3.0.1: {}
 
-  tree-kill@1.2.2: {}
+  tree-kill@1.2.2:
+    optional: true
 
   trim-lines@3.0.1: {}
 
@@ -9511,6 +9528,7 @@ snapshots:
       - '@vue/language-core'
       - oxc-resolver
       - vue-tsc
+    optional: true
 
   tslib@2.8.1: {}
 
@@ -9551,6 +9569,7 @@ snapshots:
     dependencies:
       '@quansync/fs': 1.1.0
       quansync: 1.0.0
+    optional: true
 
   undici-types@7.18.2: {}
 
@@ -9639,7 +9658,8 @@ snapshots:
 
   vary@1.1.2: {}
 
-  verkit@0.4.1: {}
+  verkit@0.4.1:
+    optional: true
 
   vfile-location@5.0.3:
     dependencies:
@@ -9828,6 +9848,7 @@ snapshots:
   yuku-ast@0.10.2:
     dependencies:
       '@yuku-toolchain/types': 0.10.2
+    optional: true
 
   yuku-ast@0.9.4:
     dependencies:
@@ -9849,6 +9870,7 @@ snapshots:
       '@yuku-codegen/binding-linux-x64-musl': 0.10.2
       '@yuku-codegen/binding-win32-arm64': 0.10.2
       '@yuku-codegen/binding-win32-x64': 0.10.2
+    optional: true
 
   yuku-codegen@0.9.4:
     dependencies:
@@ -9884,6 +9906,7 @@ snapshots:
       '@yuku-parser/binding-linux-x64-musl': 0.10.2
       '@yuku-parser/binding-win32-arm64': 0.10.2
       '@yuku-parser/binding-win32-x64': 0.10.2
+    optional: true
 
   yuku-parser@0.9.4:
     dependencies:

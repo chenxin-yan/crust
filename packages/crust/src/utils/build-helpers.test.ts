@@ -390,7 +390,7 @@ describe("Node binary compiler", () => {
 			await expect(
 				resolveNodeExeBackend(nodeCompiler("26.10.0"), process.cwd(), installPath),
 			).rejects.toThrow(
-				`tsdown, which builds node standalone binaries, is not installed with crust (${installPath}).\n  Reinstall @crustjs/crust: it ships tsdown and @tsdown/exe as dependencies.`,
+				`tsdown, which builds node standalone binaries, is not installed with crust (${installPath}).\n  @crustjs/crust ships tsdown and @tsdown/exe as optional dependencies, which package managers skip when optional dependencies are disabled or the installing node does not satisfy tsdown's engines.\n  Reinstall @crustjs/crust with optional dependencies enabled`,
 			);
 		} finally {
 			process.env.NODE_PATH = nodePathEnv;

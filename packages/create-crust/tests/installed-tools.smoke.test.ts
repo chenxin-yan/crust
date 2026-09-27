@@ -42,6 +42,13 @@ describe.skipIf(!enabled)("installed create-crust and crust (Linux/npm)", () => 
 		if (seaNodeDir === null) {
 			throw new Error("Set CRUST_TEST_SEA_NODE to a Node >=26 for the Node binary build.");
 		}
+		// A Node that runs crust but is outside tsdown's engines (e.g. 22.16.0).
+		const legacyNode = process.env.CRUST_TEST_LEGACY_NODE;
+		if (!legacyNode) {
+			throw new Error(
+				"Set CRUST_TEST_LEGACY_NODE to a Node outside tsdown's engines, e.g. 22.16.0.",
+			);
+		}
 		const base = realpathSync(process.env.RUNNER_TEMP ?? tmpdir());
 		if (isInside(repoRoot, base)) throw new Error("Fixture base must be outside the workspace.");
 		const root = mkdtempSync(join(base, "create-crust-installed-"));
@@ -146,11 +153,14 @@ describe.skipIf(!enabled)("installed create-crust and crust (Linux/npm)", () => 
 			if (!manifest.packages.some((pkg: { os: string }) => pkg.os !== process.platform)) {
 				throw new Error("Build crust with all targets first; host-only staging is insufficient.");
 			}
-			expect(stagedRoot.optionalDependencies).toEqual(
-				Object.fromEntries(
+			// Platform packages plus the Node binary backend, both optional.
+			expect(stagedRoot.optionalDependencies).toEqual({
+				...Object.fromEntries(
 					manifest.packages.map((pkg: { name: string }) => [pkg.name, stagedRoot.version]),
 				),
-			);
+				...readJson(join(repoRoot, "packages/crust/package.json")).optionalDependencies,
+			});
+			expect(stagedRoot).not.toHaveProperty("dependencies");
 			const host = manifest.packages.find((pkg: { target: string }) => pkg.target === target);
 			if (!host) throw new Error(`Build crust for ${target} before running this test.`);
 			const specs: Record<string, string> = {};
@@ -393,6 +403,66 @@ describe.skipIf(!enabled)("installed create-crust and crust (Linux/npm)", () => 
 			mkdirSync(emptyPath);
 			const standalone = await run([nodeExecutable, "Ada"], root, 0, 30_000, emptyPath);
 			expect(standalone.stdout.trim()).toBe("Hello, Ada!");
+
+			// An engine-strict install under a Node outside tsdown's engines skips the
+			// optional backend instead of failing; every other build still works, and
+			// a Node binary build reports the missing backend before staging.
+			const legacy = join(root, "legacy-node");
+			mkdirSync(legacy);
+			symlinkSync(realpathSync(legacyNode), join(legacy, "node"));
+			const legacyPath = [legacy, env.PATH].join(delimiter);
+			rmSync(join(project, "node_modules"), { recursive: true });
+			rmSync(join(project, "package-lock.json"));
+			pkg.crust = { ...pkg.crust, runtime: "bun", artifact: "binary" };
+			writeFileSync(join(project, "package.json"), `${JSON.stringify(pkg, null, "\t")}\n`);
+			await run(["node", "--version"], project, 0, 30_000, legacyPath);
+			// The same npm, run by the legacy node: a version-manager npm wrapper may pick its own node.
+			const npmCli = (
+				await run(["npm", "exec", "--", "node", "-p", "process.env.npm_execpath"], project)
+			).stdout.trim();
+			await run(
+				[
+					join(legacy, "node"),
+					npmCli,
+					"install",
+					"--engine-strict",
+					"--ignore-scripts",
+					"--no-audit",
+					"--no-fund",
+				],
+				project,
+				0,
+				120_000,
+				legacyPath,
+			);
+			expect(existsSync(join(project, "node_modules/@crustjs/crust/package.json"))).toBe(true);
+			for (const backend of ["tsdown", "@tsdown/exe"]) {
+				expect(existsSync(join(project, "node_modules", backend))).toBe(false);
+			}
+			await run([crust, "build", "--target", "host"], project, 0, 120_000, legacyPath);
+			expect(readJson(join(project, ".crust/manifest.json"))).toMatchObject({
+				runtime: "bun",
+				artifact: "binary",
+			});
+			const legacyRun = await run([launcher, "Ada"], project, 0, 30_000, legacyPath);
+			expect(legacyRun.stdout.trim()).toBe("Hello, Ada!");
+			writeFileSync(join(project, ".crust/kept.txt"), "kept\n");
+			pkg.crust = { ...pkg.crust, runtime: "node", artifact: "binary" };
+			writeFileSync(join(project, "package.json"), `${JSON.stringify(pkg, null, "\t")}\n`);
+			const missing = await run(
+				[crust, "build", "--target", "host"],
+				project,
+				1,
+				60_000,
+				legacyPath,
+			);
+			expect(missing.stderr).toContain(
+				"tsdown, which builds node standalone binaries, is not installed with crust",
+			);
+			expect(missing.stderr).toContain(
+				"Reinstall @crustjs/crust with optional dependencies enabled",
+			);
+			expect(readFileSync(join(project, ".crust/kept.txt"), "utf8")).toBe("kept\n");
 			passed = true;
 		} finally {
 			if (passed) rmSync(root, { recursive: true, force: true });

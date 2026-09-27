@@ -52,7 +52,9 @@
 	"dependencies": {
 		"@crustjs/core": "workspace:^",
 		"@crustjs/extensions": "workspace:^",
-		"@crustjs/style": "workspace:^",
+		"@crustjs/style": "workspace:^"
+	},
+	"optionalDependencies": {
 		"@tsdown/exe": "0.23.0",
 		"tsdown": "0.23.0"
 	},

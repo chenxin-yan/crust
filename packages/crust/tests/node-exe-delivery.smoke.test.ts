@@ -100,10 +100,17 @@ console.log(JSON.stringify({ tsdown: compiler.backend.packageJsonPath, node: com
 				readFileSync(join(stageDir, "manifest.json"), "utf8"),
 			) as DistributionManifest;
 			const platform = manifest.packages[0]!;
+			// Optional beside the root's platform packages, never required.
+			const backend = { tsdown: "0.23.0", "@tsdown/exe": "0.23.0" };
+			const staged = (dir: string) =>
+				JSON.parse(readFileSync(join(stageDir, dir, "package.json"), "utf8"));
+			expect(staged("root").optionalDependencies).toEqual({
+				[platform.name]: manifest.version,
+				...backend,
+			});
+			expect(staged(platform.dir).optionalDependencies).toEqual(backend);
 			for (const dir of ["root", platform.dir]) {
-				expect(
-					JSON.parse(readFileSync(join(stageDir, dir, "package.json"), "utf8")).dependencies,
-				).toEqual({ tsdown: "0.23.0", "@tsdown/exe": "0.23.0" });
+				expect(staged(dir)).not.toHaveProperty("dependencies");
 			}
 
 			const rootTarball = await pack(join(stageDir, "root"));

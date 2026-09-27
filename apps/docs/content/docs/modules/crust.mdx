@@ -15,7 +15,7 @@ npm install -D @crustjs/crust
 
 - The `crust` command is a Node launcher for a standalone executable with Bun embedded. Node is required to start it; a separate Bun installation is not.
 - Without `bun` on `PATH`, arm64 hosts cannot build their own target. The error names the targets you can build; otherwise install Bun.
-- `@crustjs/crust` depends on `tsdown` and `@tsdown/exe`, which build [Node.js binaries](/docs/guide/build-and-distribution#nodejs-binaries) with the `node` on `PATH`. Other builds never load them.
+- `@crustjs/crust` optionally depends on `tsdown` and `@tsdown/exe`, which build [Node.js binaries](/docs/guide/build-and-distribution#nodejs-binaries) with the `node` on `PATH`. Other builds never load them, so an install that skipped them, for example under a Node.js outside tsdown's engines, still builds everything else.
 - The [`build()`](#programmatic-api) library is a plain JavaScript module, so it needs `bun` on `PATH` unless the script runs under Bun. `@crustjs/core` is a peer dependency so `BuildReport` is the same type your Extensions see.
 
 ### npm installation caveat
@@ -96,7 +96,7 @@ crust publish --dry-run
 | `executable`         | `<platform>/bin/<command>-<target>`                | `command`, canonical `target`  |
 | `bundle`             | `root/bin/<command>.js` for runtime packages       | `command`                      |
 
-- `build()` validates `bin`, the `crust` block, and its options with the same errors the CLI prints, selects the compiler (checking `engines` for binaries, and tsdown's requirements for Node.js binaries), then wipes `.crust/` and stages every package. `manifest.json` is written last.
+- `build()` validates `bin`, the `crust` block, and its options with the same errors the CLI prints, selects the compiler (checking `engines` for binaries, and tsdown's requirements for Node.js binaries, whose targets' Node.js binaries are also downloaded and unpacked then), then wipes `.crust/` and stages every package. `manifest.json` is written last.
 - It throws on failure and prints nothing; `onLog` receives each progress line with its stream.
 - `BuildReport` is `@crustjs/core`'s type, re-exported.
 - Overlapping calls for the same project in one process reject before staging. Serialize builds across processes yourself, and consume staged artifacts before rebuilding.

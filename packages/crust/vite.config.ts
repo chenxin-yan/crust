@@ -10,9 +10,9 @@ export default defineConfig({
 	pack: {
 		...pack,
 		entry: ["src/index.ts"],
-		// The published packages depend only on the Node binary backend (tsdown,
-		// resolved at build time, never imported); the binaries inline everything
-		// else, so the library bundles the workspace packages' code.
+		// The published packages only optionally depend on the Node binary backend
+		// (tsdown, resolved at build time, never imported); the binaries inline
+		// everything else, so the library bundles the workspace packages' code.
 		// Declarations stay external: bundling core's `unique symbol` brands would
 		// mint a second `ExtensionId`, making the re-exported `BuildReport`
 		// incompatible with `@crustjs/core`'s. package.json declares core as the

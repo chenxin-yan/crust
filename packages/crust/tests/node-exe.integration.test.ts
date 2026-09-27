@@ -6,10 +6,11 @@ import {
 	realpathSync,
 	renameSync,
 	rmSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Crust } from "@crustjs/core";
@@ -245,6 +246,51 @@ describe.skipIf(seaNodeDir === null || host === null || npm === null)(
 			}
 			expect(readFileSync(join(stageDir, alias, bins.greet)).includes("do-not-embed")).toBe(false);
 		});
+
+		it("provisions every target before staging, keeping the previous stage without an unpacking tool", async () => {
+			// A cold tsdown cache forces a real download and unpack of the host
+			// target's Node. Linux: tar without xz, as observed on a real host;
+			// elsewhere no tar at all, only the selected node.
+			const cache = mkdtempSync(join(root, "tsdown-cache-"));
+			const tools = mkdtempSync(join(root, "tools-"));
+			if (process.platform === "linux") {
+				symlinkSync(realpathSync(which("tar")!), join(tools, "tar"));
+			}
+			writeFileSync(join(stageDir, "kept.txt"), "kept\n");
+			const manifest = readFileSync(join(stageDir, "manifest.json"), "utf8");
+			const env = {
+				PATH: [seaNodeDir, tools].join(delimiter),
+				XDG_CACHE_HOME: cache,
+				LOCALAPPDATA: cache,
+				HOME: cache,
+			};
+			const saved = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
+			const originalCwd = process.cwd;
+			Object.assign(process.env, env);
+			process.cwd = () => project;
+			let result: Awaited<ReturnType<typeof crustBuild>>;
+			try {
+				result = await captureExecute(new Crust("test").add(buildCommand), [
+					"build",
+					"--target",
+					"host",
+					"--no-validate",
+				]);
+			} finally {
+				process.cwd = originalCwd;
+				for (const [key, value] of Object.entries(saved)) {
+					if (value === undefined) delete process.env[key];
+					else process.env[key] = value;
+				}
+			}
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain(`Could not provision the Node ${nodeVersion} binary`);
+			expect(result.stderr).toContain(`${host}: Failed to extract Node.js archive with \`tar\``);
+			if (process.platform === "linux") expect(result.stderr).toContain("xz");
+			expect(readFileSync(join(stageDir, "kept.txt"), "utf8")).toBe("kept\n");
+			expect(readFileSync(join(stageDir, "manifest.json"), "utf8")).toBe(manifest);
+			rmSync(join(stageDir, "kept.txt"));
+		}, 180_000);
 
 		it("constructs a bounded non-host target embedding the same Node version", async () => {
 			// Construction evidence only: this host cannot execute the other architecture.
