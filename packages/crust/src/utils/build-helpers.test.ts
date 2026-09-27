@@ -15,7 +15,7 @@ import { pathToFileURL } from "node:url";
 
 import { defineExtensionId } from "@crustjs/core";
 import { which } from "@crustjs/utils/process";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
 	assertCompilerSatisfiesEngines,
@@ -137,6 +137,48 @@ console.log(JSON.stringify({ command: runner.command, bunBeBun: runner.env.BUN_B
 				`Could not read the Deno version from ${which("bun")} --version (exit 0):\n${bunVersion}`,
 			);
 		},
+	);
+
+	// A hung compiler or version-manager shim must fail the build, not stall it.
+	it.skipIf(process.platform === "win32")(
+		"kills a --version probe that does not exit by the deadline",
+		async () => {
+			const dir = await mkdtemp(join(tmpdir(), "crust-stalled-compiler-"));
+			const pidFile = join(dir, "pid");
+			const compiler = join(dir, "bun");
+			await writeFile(
+				compiler,
+				`#!/bin/sh\necho $$ > '${pidFile}.tmp'\nmv '${pidFile}.tmp' '${pidFile}'\nexec sleep 60\n`,
+				{
+					mode: 0o755,
+				},
+			);
+			let pid: number | undefined;
+			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+			try {
+				const probe = readCompilerVersion("bun", { command: compiler, env: process.env }, dir);
+				while (pid === undefined) {
+					await new Promise(setImmediate);
+					pid = await readFile(pidFile, "utf8").then(Number, () => undefined);
+				}
+				const rejected = expect(probe).rejects.toThrow(
+					`${compiler} --version did not exit within 30000 ms and was killed.`,
+				);
+				await vi.advanceTimersByTimeAsync(30_000);
+				await rejected;
+				vi.useRealTimers();
+				await vi.waitFor(() => expect(() => process.kill(pid!, 0)).toThrow());
+			} finally {
+				vi.useRealTimers();
+				try {
+					if (pid !== undefined) process.kill(pid, "SIGKILL");
+				} catch {
+					// Already gone.
+				}
+				await rm(dir, { recursive: true, force: true });
+			}
+		},
+		10_000,
 	);
 });
 

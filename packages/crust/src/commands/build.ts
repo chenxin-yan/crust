@@ -639,7 +639,7 @@ const activeBuilds = new Set<string>();
  * under Node as well when Bun is installed; Deno binaries need deno on PATH.
  *
  * Throws on any failure. Planning and compiler-selection failures (bad
- * options or package.json, a missing compiler, an engines mismatch) leave the
+ * options or package.json, a missing or hung compiler, an engines mismatch) leave the
  * previous `.crust/` stage untouched; later failures leave a wiped stage
  * without a completion `manifest.json`. Overlapping calls for the same real
  * project directory in this process are rejected before staging.

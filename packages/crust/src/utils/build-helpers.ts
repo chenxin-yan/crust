@@ -377,12 +377,16 @@ export type BuildCompiler = {
 	version: string;
 };
 
+const COMPILER_VERSION_TIMEOUT_MS = 30_000;
+
 /**
  * Runtime version reported by the runner itself (`<command> --version`), never
  * the runtime hosting this process: `bun` prints `1.4.2`, `deno` prints
  * `deno 2.9.6 (…)`, `node` prints `v24.21.0`. Under the `BUN_BE_BUN` fallback
  * this is the embedded Bun, which is the compiler. `cwd` must be the directory
- * compilation runs in: a version-manager shim picks its runtime from it.
+ * compilation runs in: a version-manager shim picks its runtime from it. A
+ * probe still running after {@link COMPILER_VERSION_TIMEOUT_MS} is killed and
+ * fails the build, before `.crust/` is replaced.
  */
 export async function readCompilerVersion(
 	runtime: BuildRuntime,
@@ -393,6 +397,7 @@ export async function readCompilerVersion(
 		env: runner.env,
 		cwd,
 		stdio: "collect",
+		timeout: COMPILER_VERSION_TIMEOUT_MS,
 	});
 	const reported = runtime === "deno" ? /^deno (\S+)/.exec(stdout.trim())?.[1] : stdout.trim();
 	const version = exitCode === 0 && reported !== undefined ? validVersion(reported) : null;

@@ -88,7 +88,7 @@ Publish every platform you intend to support—not just `host`. Set [`crust.targ
 
 Every binary embeds the version of the compiler that builds it: the first `bun` on `PATH`, else the Bun inside the `crust` executable; for Deno, `deno` on `PATH`. The build prints it as `Compiler:` and records it as `embeddedRuntimeVersion` in `.crust/manifest.json`, for cross-platform targets too.
 
-When `package.json` declares `engines.bun` or `engines.deno`, that compiler must satisfy the semver range, or the build fails before replacing `.crust/`. An exact version is a requirement, not a download request: Crust never installs or upgrades a compiler, so pin one with your version manager or CI. Runtime packages embed no runtime; their `engines` only describes what users need.
+When `package.json` declares `engines.bun` or `engines.deno`, that compiler must satisfy the semver range, or the build fails before replacing `.crust/`. A compiler whose `--version` does not exit within 30 seconds is killed and fails the build the same way. An exact version is a requirement, not a download request: Crust never installs or upgrades a compiler, so pin one with your version manager or CI. Runtime packages embed no runtime; their `engines` only describes what users need.
 
 ## Run locally
 
