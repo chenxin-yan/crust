@@ -187,13 +187,13 @@ Each `bin` key is an installed command name and each value is the TypeScript ent
 
 `crust.artifact` is required unless every build passes `--artifact`; the other keys are optional. Unknown keys under `crust` fail the build, so typos such as `bunPlugin` are not ignored.
 
-| Key                | Description |
-| ------------------ | ----------- |
-| `crust.runtime`    | `bun`, `deno`, or `node`. Without it, `deno.json`/`deno.jsonc` selects Deno and `@types/node` without `@types/bun` selects Node; otherwise Bun. |
-| `crust.artifact`   | `package` (a root-only runtime package for `bun`, `node`, or, experimentally, `deno`) or `binary` (standalone executables for `bun`, `deno`, or `node`). `--artifact` overrides it. |
-| `crust.targets`    | Canonical compiler targets staged when a binary build runs without `--target`, `host` included. Without it every target of the compiler is staged. Rejected for runtime packages. |
+| Key                | Description                                                                                                                                                                                                                                                                     |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `crust.runtime`    | `bun`, `deno`, or `node`. Without it, `deno.json`/`deno.jsonc` selects Deno and `@types/node` without `@types/bun` selects Node; otherwise Bun.                                                                                                                                 |
+| `crust.artifact`   | `package` (a root-only runtime package for `bun`, `node`, or, experimentally, `deno`) or `binary` (standalone executables for `bun`, `deno`, or `node`). `--artifact` overrides it.                                                                                             |
+| `crust.targets`    | Canonical compiler targets staged when a binary build runs without `--target`, `host` included. Without it every target of the compiler is staged. Rejected for runtime packages.                                                                                               |
 | `crust.bunPlugins` | [Bun bundler plugin](https://bun.com/docs/bundler/plugins) modules applied to Bun builds and Node runtime packages, in order. A bare name resolves from `node_modules`, a path from the project root; each must default-export the plugin. Rejected for Deno and Node binaries. |
-| `crust.include`    | Directories relative to the project root that `crust build` copies into `.crust/root/` (listed in `files`) and into each platform package's `bin/`. |
+| `crust.include`    | Directories relative to the project root that `crust build` copies into `.crust/root/` (listed in `files`) and into each platform package's `bin/`.                                                                                                                             |
 
 `crust.include` entries must be existing directories inside the project, cannot be named `bin`, cannot be inside `.crust`, and cannot reuse an Extension artifact directory name. Symlinks are copied dereferenced and must resolve inside the project.
 
