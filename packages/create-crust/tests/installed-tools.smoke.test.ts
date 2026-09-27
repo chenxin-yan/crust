@@ -13,12 +13,12 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { describe, expect, it } from "vite-plus/test";
 
-import { hostTarget } from "../../crust/tests/helpers.ts";
+import { hostTarget, seaNodeBinDir } from "../../crust/tests/helpers.ts";
 import { which } from "../../utils/src/process.ts";
 
 const repoRoot = realpathSync(resolve(import.meta.dirname, "../../.."));
@@ -35,8 +35,12 @@ describe.skipIf(!enabled)("installed create-crust and crust (Linux/npm)", () => 
 		if (process.platform !== "linux") throw new Error("This opt-in smoke requires Linux.");
 		const target = hostTarget()?.replace(/^bun-/, "");
 		if (!target) throw new Error("Unsupported host for installed-tool smoke.");
-		for (const tool of ["node", "npm", "bun", "git", "pnpm"]) {
+		for (const tool of ["node", "npm", "bun", "git", "pnpm", "tar", "xz"]) {
 			if (!which(tool)) throw new Error(`${tool} is required on PATH.`);
+		}
+		const seaNodeDir = seaNodeBinDir();
+		if (seaNodeDir === null) {
+			throw new Error("Set CRUST_TEST_SEA_NODE to a Node >=26 for the Node binary build.");
 		}
 		const base = realpathSync(process.env.RUNNER_TEMP ?? tmpdir());
 		if (isInside(repoRoot, base)) throw new Error("Fixture base must be outside the workspace.");
@@ -350,6 +354,45 @@ describe.skipIf(!enabled)("installed create-crust and crust (Linux/npm)", () => 
 			const underBun = await run([launcher, "Ada"], project);
 			expect(underBun.stdout.trim()).toBe("Hello, Ada!");
 			await run([launcher, "Ada"], project, 127, 30_000, nodeOnly);
+
+			// Node standalone binaries: the installed crust runs the tsdown it was
+			// installed with under the Node on PATH, here the only tool besides tar and
+			// xz (which unpack the cached Node download); no global tsdown or NODE_PATH.
+			const seaNode = join(root, "sea-node");
+			mkdirSync(seaNode);
+			symlinkSync(realpathSync(join(seaNodeDir, "node")), join(seaNode, "node"));
+			const seaPath = [
+				seaNode,
+				...new Set(["tar", "xz"].map((tool) => dirname(realpathSync(which(tool)!)))),
+			].join(delimiter);
+			const seaVersion = (await run(["node", "--version"], consumer, 0, 30_000, seaPath)).stdout
+				.trim()
+				.replace(/^v/, "");
+			pkg.crust = { ...pkg.crust, runtime: "node", artifact: "binary" };
+			writeFileSync(join(project, "package.json"), `${JSON.stringify(pkg, null, "\t")}\n`);
+			const nodeBinary = await run(
+				[crust, "build", "--target", "host"],
+				project,
+				0,
+				180_000,
+				seaPath,
+			);
+			expect(nodeBinary.stdout).toContain(
+				`Compiler: node ${seaVersion} (${join(seaNode, "node")})`,
+			);
+			const nodeManifest = readJson(join(project, ".crust/manifest.json"));
+			expect(nodeManifest).toMatchObject({
+				runtime: "node",
+				artifact: "binary",
+				embeddedRuntimeVersion: seaVersion,
+				packages: [{ target, bins: { "installed-cli": `bin/installed-cli-${target}` } }],
+			});
+			expect(nodeManifest.build["installed-cli"]).toBeDefined();
+			const nodeExecutable = join(project, ".crust", target, `bin/installed-cli-${target}`);
+			const emptyPath = join(root, "empty-path");
+			mkdirSync(emptyPath);
+			const standalone = await run([nodeExecutable, "Ada"], root, 0, 30_000, emptyPath);
+			expect(standalone.stdout.trim()).toBe("Hello, Ada!");
 			passed = true;
 		} finally {
 			if (passed) rmSync(root, { recursive: true, force: true });

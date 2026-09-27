@@ -97,6 +97,66 @@ jobs:
       - name: Build, pack, install, and run a Bun runtime package
         run: pnpm --dir packages/crust exec vp test run tests/package.integration.test.ts -t "Bun runtime package"
 
+  # Node standalone binaries need a node that meets the bundled tsdown's
+  # executable requirements (Node 26+ for tsdown 0.23). The shared toolchain
+  # stays on Node 24; the tests receive Node 26 through CRUST_TEST_SEA_NODE and
+  # fail rather than skip when it does not qualify.
+  node-standalone-binary:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    concurrency:
+      group: node-standalone-binary-${{ matrix.os }}-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup runtimes
+        uses: jdx/mise-action@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build crust and its workspace dependencies
+        run: pnpm exec vp run --fail-if-no-match --filter ./packages/crust pack:task
+
+      - name: Select Node 26 for Node binary builds
+        run: echo "CRUST_TEST_SEA_NODE=$(mise exec node@26.10.0 -- node -p process.execPath)" >> "$GITHUB_ENV"
+
+      - name: Print tool versions
+        run: |
+          node --version
+          npm --version
+          bun --version
+          "$CRUST_TEST_SEA_NODE" --version
+
+      - name: Build, pack, install, and run Node binaries
+        run: pnpm --dir packages/crust exec vp test run tests/node-exe.integration.test.ts
+
+      # The real-SEA case only runs on Linux under a Node 25.5+ test host.
+      - name: Resolve assets inside a Node SEA (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: mise exec node@26.10.0 -- pnpm --dir packages/utils exec vp test run tests/artifacts-runtimes.test.ts
+
+      - name: Carry the Node binary backend through installed distributions (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          for package_manager in bun npm pnpm; do
+            CRUST_SMOKE_PM="$package_manager" pnpm --dir packages/crust exec vp test run tests/node-exe-delivery.smoke.test.ts
+          done
+
   ci:
     runs-on: ubuntu-latest
     timeout-minutes: 15

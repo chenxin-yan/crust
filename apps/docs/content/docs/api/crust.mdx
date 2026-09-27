@@ -278,12 +278,12 @@ Returns the absolute path of an Extension artifact directory or a [`crust.includ
 
 `name` is one top-level directory name such as `"skills"` or `"templates"`; a path separator, `.`, `..`, or an empty string throws. The directory is not probed, so the caller reports a missing directory.
 
-| Running as                                                    | Result                                                                                                                |
-| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Compiled executable (`bun build --compile`, `deno compile`)   | `<name>` next to the executable                                                                                       |
-| Crust-built runtime package bundle (Bun or Node)              | `<name>` beside the bundle's `bin/` directory: `.crust/root/<name>` in place, `<installed root>/<name>` after install |
-| Snapshot preparation inside `crust build`                     | `<name>` under the entry's build output directory, containing what earlier build hooks wrote                          |
-| Source (`bun run`, `node`, `deno run`, source-linked command) | `.crust/root/<name>` under the nearest `package.json` above the real entrypoint: the output of the last `crust build` |
+| Running as                                                                                         | Result                                                                                                                |
+| -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Compiled executable (`bun build --compile`, `deno compile`, Node.js single executable application) | `<name>` next to the executable                                                                                       |
+| Crust-built runtime package bundle (Bun or Node)                                                   | `<name>` beside the bundle's `bin/` directory: `.crust/root/<name>` in place, `<installed root>/<name>` after install |
+| Snapshot preparation inside `crust build`                                                          | `<name>` under the entry's build output directory, containing what earlier build hooks wrote                          |
+| Source (`bun run`, `node`, `deno run`, source-linked command)                                      | `.crust/root/<name>` under the nearest `package.json` above the real entrypoint: the output of the last `crust build` |
 
 <Callout type="warn">
   `crust build` defines `process.env.CRUST_INTERNAL_BUILD` as `"1"` in the bundles it produces. The

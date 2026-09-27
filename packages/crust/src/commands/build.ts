@@ -21,11 +21,15 @@ import {
 	execBuild,
 	execBunPackageBuild,
 	execDenoBuild,
+	execNodeBinaryBuild,
 	execNodeBuild,
 	HOST_TARGET,
+	NODE_TARGETS,
+	type NodeTarget,
 	readUserPackageJson,
 	resolveBinaryCompiler,
 	resolveBunBuildRunner,
+	resolveNodeBinaryCompiler,
 	resolveTargets,
 	buildEntrypoint,
 } from "../utils/build-helpers.ts";
@@ -377,6 +381,7 @@ export type BuildPlan = CommonBuildPlan &
 	(
 		| { runtime: "bun"; artifact: "binary"; targets: BunTarget[] }
 		| { runtime: "deno"; artifact: "binary"; targets: DenoTarget[] }
+		| { runtime: "node"; artifact: "binary"; targets: NodeTarget[] }
 		| { runtime: "bun" | "node"; artifact: "package" }
 	);
 
@@ -390,7 +395,7 @@ const IMPLICIT_ARTIFACTS = {
 /** The runtime/artifact combinations this release can build. */
 type ArtifactSelection =
 	| { runtime: "bun" | "node"; artifact: "package" }
-	| { runtime: "bun" | "deno"; artifact: "binary" };
+	| { runtime: BuildRuntime; artifact: "binary" };
 
 /** `option` (the `artifact` build option or `--artifact`) > package.json `crust.artifact`; no default. */
 function resolveArtifact(
@@ -420,11 +425,6 @@ function resolveArtifact(
 			);
 		}
 		return { runtime, artifact };
-	}
-	if (runtime === "node") {
-		throw new Error(
-			"Standalone binaries are not available for the node runtime yet.\n  Use artifact package for a Node runtime package, or set crust.runtime to bun or deno for a standalone binary.",
-		);
 	}
 	return { runtime, artifact };
 }
@@ -466,6 +466,11 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 			"package.json crust.bunPlugins is not supported with the deno runtime.\n  deno compile has no Bun bundler; remove crust.bunPlugins or set crust.runtime to bun.",
 		);
 	}
+	if (runtime === "node" && selection.artifact === "binary" && bunPlugins.length > 0) {
+		throw new Error(
+			"package.json crust.bunPlugins is not supported for node standalone binaries.\n  They are bundled by tsdown, not Bun; remove crust.bunPlugins, or use artifact package or the bun runtime.",
+		);
+	}
 
 	const stageDir = resolve(cwd, CRUST_DIR);
 	const common = {
@@ -493,6 +498,14 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 			targets: resolveTargets(BUN_TARGETS, targetInputs),
 		};
 	}
+	if (binaryRuntime === "node") {
+		return {
+			...common,
+			runtime: binaryRuntime,
+			artifact,
+			targets: resolveTargets(NODE_TARGETS, targetInputs),
+		};
+	}
 	return {
 		...common,
 		runtime: binaryRuntime,
@@ -511,7 +524,8 @@ type SelectedCompilers = {
 /**
  * Selects every compiler the build uses, once, before `.crust/` is wiped, so a
  * missing tool or an engines mismatch keeps the previous stage. Binaries use
- * the selected compiler's own version (`resolveBinaryCompiler`); runtime
+ * the selected compiler's own version (`resolveBinaryCompiler`, or
+ * `resolveNodeBinaryCompiler` with tsdown's requirements for node); runtime
  * packages are bundled by Bun and embed no runtime, so engines stay a
  * consumer requirement there and are not checked against the bundler.
  */
@@ -534,14 +548,41 @@ async function selectCompilers(plan: BuildPlan, io: InvocationIO): Promise<Selec
 		};
 	}
 
+	const printCompiler = (compiler: BuildCompiler) =>
+		io.stdout(
+			`${dim("Compiler:")} ${compiler.runtime} ${compiler.version} ${dim(`(${compiler.runner.command})`)}`,
+		);
+	if (plan.runtime === "node") {
+		const compiler = await resolveNodeBinaryCompiler(plan.userPackageJson, plan.cwd);
+		printCompiler(compiler);
+		const distribution: Distribution<NodeTarget> = {
+			table: NODE_TARGETS,
+			targets: plan.targets,
+			embeddedRuntimeVersion: compiler.version,
+			execute: (entry, outfile, target) =>
+				execNodeBinaryBuild(
+					entry,
+					outfile,
+					plan.minify,
+					target,
+					plan.envFiles,
+					plan.cwd,
+					compiler,
+					io.stderr,
+				),
+		};
+		return {
+			// Command Snapshots run under Bun; tsdown bundles the executables.
+			snapshotRunner: plan.validate ? resolveBunBuildRunner() : undefined,
+			stage: (reports) => runDistributeBuild(plan, distribution, io, reports),
+		};
+	}
 	const compiler: BuildCompiler = await resolveBinaryCompiler(
 		plan.runtime,
 		plan.userPackageJson,
 		plan.cwd,
 	);
-	io.stdout(
-		`${dim("Compiler:")} ${compiler.runtime} ${compiler.version} ${dim(`(${compiler.runner.command})`)}`,
-	);
+	printCompiler(compiler);
 	if (plan.runtime === "bun") {
 		assertTargetsBuildableWithoutBun(plan.targets, undefined, compiler.runner);
 		const distribution: Distribution<BunTarget> = {
@@ -636,7 +677,8 @@ const activeBuilds = new Set<string>();
  * come from `bin`; the runtime, artifact, Bun plugins, and extra directories
  * from package.json `crust`. Bundling and Command Snapshots run in bun
  * subprocesses (bun on PATH, or the running Bun executable), so this works
- * under Node as well when Bun is installed; Deno binaries need deno on PATH.
+ * under Node as well when Bun is installed; Deno binaries need deno on PATH,
+ * and Node binaries a node on PATH that Crust's tsdown can build executables with.
  *
  * Throws on any failure. Planning and compiler-selection failures (bad
  * options or package.json, a missing or hung compiler, an engines mismatch) leave the

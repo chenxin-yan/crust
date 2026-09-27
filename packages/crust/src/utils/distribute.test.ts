@@ -16,7 +16,14 @@ import { type BuildReport, defineExtensionId } from "@crustjs/core";
 import type { JsonValue } from "@crustjs/utils/json";
 import { afterAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
-import { BUN_TARGETS, type BunTarget, DENO_TARGETS, type DenoTarget } from "./build-helpers.ts";
+import {
+	BUN_TARGETS,
+	type BunTarget,
+	DENO_TARGETS,
+	type DenoTarget,
+	NODE_TARGETS,
+	type NodeTarget,
+} from "./build-helpers.ts";
 import {
 	type ArtifactOwner,
 	type DistributeBuildPlan,
@@ -841,6 +848,68 @@ describe("runDistributeBuild", () => {
 		await expect(
 			stage({ peerDependencies: { a: "^1" }, peerDependenciesMeta: "optional" }),
 		).rejects.toThrow("peerDependenciesMeta must be an object");
+	});
+
+	it("keeps engines.node off node binary packages unless the root carries library exports", async () => {
+		mkdirSync(join(tmpDir, "dist"), { recursive: true });
+		writeFileSync(join(tmpDir, "dist", "index.js"), "export const build = 1;\n");
+		const stageDir = join(tmpDir, ".crust");
+		const nodeDistribution: Distribution<NodeTarget> = {
+			table: NODE_TARGETS,
+			targets: ["linux-x64", "win-x64"],
+			embeddedRuntimeVersion: "26.10.0",
+			execute: fakeExecutor,
+		};
+		const stage = (
+			fields: Record<string, JsonValue>,
+			runtime: DistributeBuildPlan["runtime"] = "node",
+			distribution: Distribution<NodeTarget> = nodeDistribution,
+		) => {
+			rmSync(stageDir, { recursive: true, force: true });
+			return runDistributeBuild(
+				createPlan(
+					tmpDir,
+					{ name: "node-cli", version: "0.1.0", type: "module", ...fields },
+					{ runtime, include: ["dist"] },
+				),
+				distribution,
+				io,
+			);
+		};
+		const staged = (dir: string) =>
+			readJson<Record<string, JsonValue>>(join(stageDir, dir, "package.json"));
+
+		// engines.node constrained the builder Node that every binary embeds; users need only the launcher's Node.
+		const engines = { node: ">=20", bun: ">=1.4.0" };
+		const source = { engines, description: "CLI", license: "MIT" };
+		await stage(source);
+		for (const dir of ["root", "linux-x64", "windows-x64"]) {
+			expect(staged(dir)).toMatchObject({
+				engines: { bun: ">=1.4.0" },
+				description: "CLI",
+				license: "MIT",
+			});
+			expect(staged(dir).engines).not.toHaveProperty("node");
+		}
+		expect(engines).toEqual({ node: ">=20", bun: ">=1.4.0" });
+		await stage({ engines: { node: ">=20" } });
+		for (const dir of ["root", "linux-x64"]) expect(staged(dir)).not.toHaveProperty("engines");
+
+		// A library's consumers import the staged exports on their own Node, so the root keeps its range.
+		await stage({ ...source, exports: { ".": "./dist/index.js" } });
+		expect(staged("root").engines).toEqual(engines);
+		expect(staged("linux-x64").engines).toEqual({ bun: ">=1.4.0" });
+
+		// Node runtime packages and other runtimes' binaries keep engines as written.
+		await stage(source, "node", { execute: fakeExecutor });
+		expect(staged("root").engines).toEqual(engines);
+		rmSync(stageDir, { recursive: true, force: true });
+		await runDistributeBuild(
+			createPlan(tmpDir, { name: "node-cli", version: "0.1.0", ...source }),
+			bunDistribution(["bun-linux-x64"]),
+			io,
+		);
+		for (const dir of ["root", "linux-x64"]) expect(staged(dir).engines).toEqual(engines);
 	});
 });
 

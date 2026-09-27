@@ -77,8 +77,10 @@ jobs:
         timeout-minutes: 10
         # npm 10.9.8 deletes the root bin when pruning incompatible optional platforms.
         # Keep the verified npm version local to this step; existing smoke keeps Node's npm.
+        # The installed crust also builds a Node binary, which needs Node 26+ (tsdown 0.23).
         run: |
           npm install --global --prefix "$RUNNER_TEMP/installed-tool-npm" --cache "$RUNNER_TEMP/installed-tool-npm-cache" --ignore-scripts --no-audit --no-fund npm@11.19.1
+          export CRUST_TEST_SEA_NODE="$(mise exec node@26.10.0 -- node -p process.execPath)"
           PATH="$RUNNER_TEMP/installed-tool-npm/bin:$PATH" pnpm --dir packages/create-crust exec vp test run tests/installed-tools.smoke.test.ts
         env:
           CREATE_CRUST_INSTALLED_SMOKE: "1"

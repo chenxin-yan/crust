@@ -627,10 +627,19 @@ function writeDistributionManifest(
 	return manifest;
 }
 
+/** `pkg` without `engines.node`, dropping `engines` once nothing else is left. */
+function omitNodeEngine(pkg: PublishPackageMetadata): PublishPackageMetadata {
+	const { engines, ...rest } = pkg;
+	if (engines?.node === undefined) return pkg;
+	const others = Object.entries(engines).filter(([runtime]) => runtime !== "node");
+	return others.length > 0 ? { ...rest, engines: Object.fromEntries(others) } : rest;
+}
+
 function stageDistributionPackages(
 	cwd: string,
 	stageDir: string,
 	metadata: DistributionMetadata,
+	platformMetadata: DistributionMetadata,
 	commands: readonly string[],
 	targets: readonly DistributionTarget[],
 	options: StagingOptions,
@@ -651,7 +660,7 @@ function stageDistributionPackages(
 		mkdirSync(join(target.packageDir, "bin"), { recursive: true });
 		writeJson(
 			join(target.packageDir, "package.json"),
-			buildDistributionPlatformPackageJson(metadata, commands, target),
+			buildDistributionPlatformPackageJson(platformMetadata, commands, target),
 		);
 	}
 
@@ -716,9 +725,17 @@ export async function runDistributeBuild<T extends string>(
 	io: InvocationIO,
 	build?: Record<string, BuildReport>,
 ): Promise<BuildArtifact[]> {
-	const metadata = resolveDistributionMetadata(plan.cwd, plan.userPackageJson);
+	const sourceMetadata = resolveDistributionMetadata(plan.cwd, plan.userPackageJson);
 	const commands = plan.entries.map((entry) => entry.command);
 	const table = distribution.table;
+	// A Node binary embeds the Node that engines.node was checked against; its
+	// users need only the launcher's Node. The root keeps engines.node for the
+	// consumers of a staged library `exports`, which run on their own Node.
+	const platformMetadata =
+		plan.runtime === "node" && table
+			? { ...sourceMetadata, rootPackageJson: omitNodeEngine(sourceMetadata.rootPackageJson) }
+			: sourceMetadata;
+	const metadata = sourceMetadata.exports === undefined ? platformMetadata : sourceMetadata;
 	const distributionTargets = table
 		? distribution.targets.map((target) =>
 				resolveDistributionTarget(table, plan.stageDir, metadata.rootPackageName, target),
@@ -734,10 +751,18 @@ export async function runDistributeBuild<T extends string>(
 	const artifactOutDir = plan.validate ? plan.outDir : undefined;
 	const artifacts = collectArtifacts(artifactOutDir);
 	const includeDirs = collectIncludeDirs(plan.cwd, plan.stageDir, plan.include, artifacts.names);
-	stageDistributionPackages(plan.cwd, plan.stageDir, metadata, commands, distributionTargets, {
-		artifactDirs: [...artifacts.names, ...includeDirs],
-		manPages: artifacts.manPages,
-	});
+	stageDistributionPackages(
+		plan.cwd,
+		plan.stageDir,
+		metadata,
+		platformMetadata,
+		commands,
+		distributionTargets,
+		{
+			artifactDirs: [...artifacts.names, ...includeDirs],
+			manPages: artifacts.manPages,
+		},
+	);
 
 	const rootDir = join(plan.stageDir, "root");
 	const produced: BuildArtifact[] = [

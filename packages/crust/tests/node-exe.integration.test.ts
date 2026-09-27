@@ -3,49 +3,97 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	realpathSync,
 	renameSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { Crust } from "@crustjs/core";
+import { captureExecute } from "@crustjs/testing";
+import type { JsonValue } from "@crustjs/utils/json";
+import { which } from "@crustjs/utils/process";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 
+import { buildCommand } from "../src/commands/build.ts";
 import {
-	execNodeBinaryBuild,
 	hostTarget,
-	type NodeBinaryCompiler,
 	NODE_TARGETS,
 	type NodeTarget,
-	resolveNodeBinaryCompiler,
+	type TargetInfo,
 } from "../src/utils/build-helpers.ts";
+import type { DistributionManifest } from "../src/utils/distribute.ts";
 import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
 import { seaNodeBinDir, withPathPrefix } from "./helpers.ts";
 
-// Real tsdown executable builds under the selected external Node (see
-// seaNodeBinDir), run from an unrelated directory without Node on PATH after
-// the project's node_modules is gone.
+// Public `crust build` of Node standalone binaries with the selected external
+// Node (see seaNodeBinDir) -> npm pack -> install -> execute: direct binaries
+// run from an unrelated directory without Node on PATH after the project's
+// node_modules is gone; the npm launcher keeps its own Node prerequisite.
 const seaNodeDir = seaNodeBinDir();
 const host = hostTarget(NODE_TARGETS);
+const consumerNode = which("node");
+const npm = which("npm");
+const exe = process.platform === "win32" ? ".exe" : "";
 const coreDist = fileURLToPath(import.meta.resolve("@crustjs/core"));
 const extensionsDist = fileURLToPath(import.meta.resolve("@crustjs/extensions"));
 
 const root = mkdtempSync(join(tmpdir(), "crust-node-exe-"));
 const project = join(root, "project");
-const outDir = join(root, "out");
+const stageDir = join(project, ".crust");
+const packDir = join(root, "packs");
+const consumer = join(root, "consumer");
 const elsewhere = join(root, "elsewhere");
 const emptyBin = join(root, "empty-bin");
-let compiler: NodeBinaryCompiler;
+const packageJson = {
+	name: "@scope/node-exe",
+	version: "0.1.0",
+	type: "module",
+	bin: { greet: "src/greet.ts", admin: "src/admin.ts" },
+	crust: { runtime: "node", artifact: "binary", include: ["assets"] },
+	// The builder Node must satisfy both this range and tsdown's own requirements.
+	engines: { node: ">=22" },
+	dependencies: { "esm-dep": "1.0.0", "cjs-dep": "1.0.0" },
+};
+let nodeVersion: string;
+let hostBuild: Awaited<ReturnType<typeof crustBuild>>;
+let rootTarball: string;
+let platformTarball: string;
 
 function writeFile(path: string, content: string): void {
-	mkdirSync(join(path, ".."), { recursive: true });
+	mkdirSync(dirname(path), { recursive: true });
 	writeFileSync(path, content);
 }
 
-/** Runs a built executable with no Node (or anything else) on PATH. */
-function runExecutable(path: string, args: string[], env: NodeJS.ProcessEnv = {}) {
+function readJson<T>(path: string): T {
+	return JSON.parse(readFileSync(path, "utf8")) as T;
+}
+
+/** `crust build` in the project with the selected Node first on PATH. */
+async function crustBuild(argv: string[]) {
+	const originalCwd = process.cwd;
+	process.cwd = () => project;
+	try {
+		return await withPathPrefix(seaNodeDir!, () =>
+			captureExecute(new Crust("test").add(buildCommand), ["build", ...argv]),
+		);
+	} finally {
+		process.cwd = originalCwd;
+	}
+}
+
+/** A consumer dependency spec: relative with forward slashes, which npm accepts on every OS. */
+async function pack(dir: string): Promise<string> {
+	const packed = await runBoundedProcess(npm!, ["pack", dir], { cwd: packDir, timeout: 25_000 });
+	expect(packed.exitCode, packed.stderr).toBe(0);
+	return `file:../packs/${packed.stdout.trim().split("\n").at(-1)!}`;
+}
+
+/** Runs a file with nothing, not even Node, on PATH. */
+function runWithoutNode(path: string, args: string[], env: NodeJS.ProcessEnv = {}) {
 	return runBoundedProcess(path, args, {
 		cwd: elsewhere,
 		env: {
@@ -57,23 +105,16 @@ function runExecutable(path: string, args: string[], env: NodeJS.ProcessEnv = {}
 	});
 }
 
-function executable(name: string): string {
-	return join(outDir, process.platform === "win32" ? `${name}.exe` : name);
-}
-
 beforeAll(async () => {
-	if (seaNodeDir === null || host === null) return;
-	for (const dir of [outDir, elsewhere, emptyBin]) mkdirSync(dir, { recursive: true });
-	writeFile(
-		join(project, "package.json"),
-		JSON.stringify({
-			name: "@scope/node-exe",
-			version: "0.1.0",
-			type: "module",
-			engines: { node: ">=26" },
-			dependencies: { "esm-dep": "1.0.0", "cjs-dep": "1.0.0" },
-		}),
-	);
+	if (seaNodeDir === null || host === null || npm === null) return;
+	for (const dir of [packDir, consumer, elsewhere, emptyBin]) mkdirSync(dir, { recursive: true });
+	nodeVersion = (
+		await runBoundedProcess(join(seaNodeDir, `node${exe}`), ["--version"], { timeout: 10_000 })
+	).stdout
+		.trim()
+		.replace(/^v/, "");
+	writeFile(join(project, "package.json"), JSON.stringify(packageJson));
+	writeFile(join(project, "assets", "greeting.txt"), "hello from assets\n");
 	writeFile(
 		join(project, "node_modules", "esm-dep", "package.json"),
 		JSON.stringify({ name: "esm-dep", version: "1.0.0", type: "module", exports: "./index.js" }),
@@ -91,14 +132,19 @@ beforeAll(async () => {
 		join(project, ".env.build"),
 		"PUBLIC_ORIGIN=https://file.example\nSECRET_TOKEN=do-not-embed\n",
 	);
+	// Real Crust commands: an Extension build hook generates man/, crust.include
+	// ships assets/, and both resolve next to the executable.
 	writeFile(
 		join(project, "src", "greet.ts"),
-		`import { Crust } from ${JSON.stringify(coreDist)};
+		`import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { Crust, defineExtension, defineExtensionId, resolveArtifactDir } from ${JSON.stringify(coreDist)};
 import { help } from ${JSON.stringify(extensionsDist)};
 import { mark } from "esm-dep";
 import cjs from "cjs-dep";
+const man = defineExtension(defineExtensionId("man")).build(() => [{ path: "man/greet.1", content: ".Dd" }]);
 await new Crust("greet", { description: "Greets from a Node binary" })
-	.extend(help())
+	.extend(man, help())
 	.args({ name: "name", type: "string", required: true })
 	.flags({ name: "shout", type: "boolean" })
 	.action(async ({ args, flags, stdout, stderr }) => {
@@ -109,9 +155,12 @@ await new Crust("greet", { description: "Greets from a Node binary" })
 			greeting: flags.shout ? greeting.toUpperCase() : greeting,
 			node: process.version,
 			bun: process.versions.bun ?? null,
+			sea: process.getBuiltinModule("node:sea")?.isSea() ?? false,
 			origin: process.env.PUBLIC_ORIGIN ?? null,
 			secret: process.env.SECRET_TOKEN ?? null,
 			cjs: [cjs.dirnameType(), cjs.sep],
+			asset: readFileSync(join(resolveArtifactDir("assets"), "greeting.txt"), "utf8").trim(),
+			man: readFileSync(join(resolveArtifactDir("man"), "greet.1"), "utf8"),
 		}));
 	})
 	.execute();
@@ -131,24 +180,12 @@ await new Crust("admin").action(({ stdout }) => {
 		'import { nope } from "not-installed";\nconsole.log(nope);\n',
 	);
 
-	compiler = await withPathPrefix(seaNodeDir, () =>
-		resolveNodeBinaryCompiler({ engines: { node: ">=26" } }, project),
-	);
-	// Each command is its own single-entry tsdown build.
-	for (const command of ["greet", "admin"]) {
-		await execNodeBinaryBuild(
-			join(project, "src", `${command}.ts`),
-			executable(command),
-			true,
-			host,
-			[join(project, ".env.build")],
-			project,
-			compiler,
-		);
-	}
-	// Nothing may resolve from the build machine any more.
-	renameSync(join(project, "node_modules"), join(project, "node_modules.moved"));
-}, 240_000);
+	hostBuild = await crustBuild(["--target", "host", "--env-file", ".env.build"]);
+	expect(hostBuild.exitCode, hostBuild.stderr).toBe(0);
+	const alias = NODE_TARGETS.info[host].alias;
+	rootTarball = await pack(join(stageDir, "root"));
+	platformTarball = await pack(join(stageDir, alias));
+}, 300_000);
 
 afterEach(reapBoundedProcesses);
 
@@ -157,91 +194,189 @@ afterAll(async () => {
 	rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 });
 
-describe.skipIf(seaNodeDir === null || host === null)("execNodeBinaryBuild", () => {
-	it("selects the external node and the backend installed with crust", () => {
-		expect(compiler.runner.command).toBe(
-			join(seaNodeDir!, process.platform === "win32" ? "node.exe" : "node"),
-		);
-		expect(compiler.backend).toMatchObject({ version: "0.23.0", seaMinVersion: "25.7.0" });
-		expect(compiler.backend.packageJsonPath).toContain("node_modules");
-	});
+describe.skipIf(seaNodeDir === null || host === null || npm === null)(
+	"Node standalone binary",
+	() => {
+		it("stages every command for the host with the selected Node's version", () => {
+			const nodePath = join(seaNodeDir!, `node${exe}`);
+			expect(hostBuild.stdout).toContain("Runtime: node (from package.json)");
+			expect(hostBuild.stdout).toContain("Artifact: binary");
+			expect(hostBuild.stdout).toContain(`Compiler: node ${nodeVersion} (${nodePath})`);
+			const { alias, os, cpu, libc }: TargetInfo = NODE_TARGETS.info[host!];
+			const bins = { greet: `bin/greet-${host}${exe}`, admin: `bin/admin-${host}${exe}` };
+			const manifest = readJson<DistributionManifest>(join(stageDir, "manifest.json"));
+			expect(manifest).toMatchObject({
+				runtime: "node",
+				artifact: "binary",
+				embeddedRuntimeVersion: nodeVersion,
+				root: { name: "@scope/node-exe", bins: ["greet", "admin"] },
+				packages: [
+					{
+						target: alias,
+						name: `@scope/node-exe-${alias}`,
+						os,
+						cpu,
+						...(libc ? { libc } : {}),
+						bins,
+					},
+				],
+				publishOrder: [alias, "root"],
+			});
+			// Command Snapshots ran for both commands (under Bun) before tsdown built them.
+			expect(Object.keys(manifest.build ?? {})).toEqual(["greet", "admin"]);
 
-	it("runs a real command standalone with its dependencies and the selected Node embedded", async () => {
-		const run = await runExecutable(executable("greet"), ["ada", "--shout"]);
-		expect(run.exitCode, run.stderr).toBe(0);
-		expect(run.stderr.trim()).toBe("to stderr");
-		expect(JSON.parse(run.stdout)).toEqual({
-			greeting: "HELLO ADA!",
-			node: `v${compiler.version}`,
-			bun: null,
-			origin: "https://file.example",
-			secret: null,
-			cjs: ["string", process.platform === "win32" ? "\\" : "/"],
+			const rootPackage = readJson<Record<string, JsonValue>>(
+				join(stageDir, "root", "package.json"),
+			);
+			expect(rootPackage).toMatchObject({
+				bin: { greet: "bin/greet.js", admin: "bin/admin.js" },
+				optionalDependencies: { [`@scope/node-exe-${alias}`]: "0.1.0" },
+			});
+			// Dependencies are bundled, and engines.node constrained the builder, not the users.
+			for (const staged of [
+				rootPackage,
+				readJson<Record<string, JsonValue>>(join(stageDir, alias, "package.json")),
+			]) {
+				expect(staged).not.toHaveProperty("dependencies");
+				expect(staged).not.toHaveProperty("engines");
+			}
+			for (const bin of Object.values(bins)) {
+				expect(existsSync(join(stageDir, alias, bin))).toBe(true);
+			}
+			expect(readFileSync(join(stageDir, alias, bins.greet)).includes("do-not-embed")).toBe(false);
 		});
-		expect(readFileSync(executable("greet")).includes("do-not-embed")).toBe(false);
 
-		const help = await runExecutable(executable("greet"), ["--help"]);
-		expect(help.exitCode, help.stderr).toBe(0);
-		expect(help.stdout).toContain("Greets from a Node binary");
+		it("constructs a bounded non-host target embedding the same Node version", async () => {
+			// Construction evidence only: this host cannot execute the other architecture.
+			const target: NodeTarget =
+				process.platform === "win32"
+					? "win-arm64"
+					: host === "linux-arm64"
+						? "linux-x64"
+						: "linux-arm64";
+			const { alias, os, cpu } = NODE_TARGETS.info[target];
+			const result = await crustBuild(["--target", target, "--no-validate"]);
+			expect(result.exitCode, result.stderr).toBe(0);
+			const manifest = readJson<DistributionManifest>(join(stageDir, "manifest.json"));
+			expect(manifest).toMatchObject({
+				embeddedRuntimeVersion: nodeVersion,
+				packages: [{ target: alias, os, cpu }],
+			});
+			const binary = readFileSync(join(stageDir, alias, manifest.packages[0]!.bins.admin!));
+			if (os === "win32") {
+				// PE: "MZ", then the COFF machine after "PE\0\0" (0xAA64 is ARM64).
+				const pe = binary.readUInt32LE(0x3c);
+				expect(binary.subarray(0, 2).toString()).toBe("MZ");
+				expect(binary.readUInt16LE(pe + 4)).toBe(0xaa64);
+			} else {
+				// ELF e_machine: 62 is x86-64, 183 is AArch64.
+				expect(binary.subarray(0, 4).toString("hex")).toBe("7f454c46");
+				expect(binary.readUInt16LE(18)).toBe(cpu === "x64" ? 62 : 183);
+			}
+			expect(binary.includes(`v${nodeVersion}`)).toBe(true);
+		}, 240_000);
 
-		const invalid = await runExecutable(executable("greet"), []);
-		expect(invalid.exitCode).not.toBe(0);
-		expect(invalid.stderr).toContain("name");
-	});
+		it("fails on an import left for the runtime and writes no manifest", async () => {
+			writeFile(
+				join(project, "package.json"),
+				JSON.stringify({ ...packageJson, bin: { ...packageJson.bin, broken: "src/missing.ts" } }),
+			);
+			try {
+				const result = await crustBuild(["--target", "host", "--no-validate"]);
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain(
+					"not-installed is imported in app.mjs but is not included in deps.onlyImport",
+				);
+			} finally {
+				writeFile(join(project, "package.json"), JSON.stringify(packageJson));
+			}
+			expect(existsSync(join(stageDir, "manifest.json"))).toBe(false);
+		}, 120_000);
 
-	it("builds every command separately", async () => {
-		const run = await runExecutable(executable("admin"), []);
-		expect(run.stdout.trim()).toBe("admin ran");
-		expect(run.exitCode).toBe(3);
-	});
+		it.skipIf(consumerNode === null)(
+			"installs with strict engines and runs each command without Node or the project",
+			async () => {
+				const alias = NODE_TARGETS.info[host!].alias;
+				writeFile(
+					join(consumer, "package.json"),
+					JSON.stringify({
+						name: "consumer",
+						private: true,
+						dependencies: {
+							"@scope/node-exe": rootTarball,
+							[`@scope/node-exe-${alias}`]: platformTarball,
+						},
+					}),
+				);
+				// The consumer's npm and Node, not the builder's: no package demands the embedded version.
+				const install = await runBoundedProcess(
+					npm!,
+					["install", "--engine-strict", "--no-audit", "--no-fund"],
+					{ cwd: consumer, timeout: 60_000 },
+				);
+				expect(install.exitCode, install.stderr).toBe(0);
+				// Nothing may resolve from the build machine any more.
+				renameSync(join(project, "node_modules"), join(project, "node_modules.moved"));
 
-	it("ignores a conflicting Command Snapshot path in the finished executable", async () => {
-		const snapshotPath = join(root, "snapshot.json");
-		const run = await runExecutable(executable("greet"), ["ada"], {
-			CRUST_INTERNAL_SNAPSHOT_PATH: snapshotPath,
-			CRUST_INTERNAL_BUILD: "0",
-		});
-		expect(run.exitCode, run.stderr).toBe(0);
-		expect(JSON.parse(run.stdout).greeting).toBe("hello ada!");
-		expect(existsSync(snapshotPath)).toBe(false);
-	});
+				const platformDir = join(consumer, "node_modules", "@scope", `node-exe-${alias}`);
+				const greetBinary = join(platformDir, "bin", `greet-${host}${exe}`);
+				const expected = {
+					greeting: "HELLO ADA!",
+					node: `v${nodeVersion}`,
+					bun: null,
+					sea: true,
+					origin: "https://file.example",
+					secret: null,
+					cjs: ["string", process.platform === "win32" ? "\\" : "/"],
+					asset: "hello from assets",
+					man: ".Dd",
+				};
+				const direct = await runWithoutNode(greetBinary, ["ada", "--shout"]);
+				expect(direct.exitCode, direct.stderr).toBe(0);
+				expect(direct.stderr.trim()).toBe("to stderr");
+				expect(JSON.parse(direct.stdout)).toEqual(expected);
 
-	it("rejects an import left for the runtime and writes no executable", async () => {
-		const outfile = executable("missing");
-		await expect(
-			execNodeBinaryBuild(
-				join(project, "src", "missing.ts"),
-				outfile,
-				false,
-				host!,
-				[],
-				project,
-				compiler,
-			),
-		).rejects.toThrow(
-			"not-installed is imported in app.mjs but is not included in deps.onlyImport",
+				const help = await runWithoutNode(greetBinary, ["--help"]);
+				expect(help.exitCode, help.stderr).toBe(0);
+				expect(help.stdout).toContain("Greets from a Node binary");
+				const invalid = await runWithoutNode(greetBinary, []);
+				expect(invalid.exitCode).toBe(1);
+				expect(invalid.stderr).toContain('Missing required argument "<name>"');
+				const admin = await runWithoutNode(join(platformDir, "bin", `admin-${host}${exe}`), []);
+				expect(admin.stdout.trim()).toBe("admin ran");
+				expect(admin.exitCode).toBe(3);
+
+				// Build-only protocol variables cannot turn the finished binary into a snapshot run.
+				const snapshotPath = join(root, "snapshot.json");
+				const protocol = await runWithoutNode(greetBinary, ["ada"], {
+					CRUST_INTERNAL_SNAPSHOT_PATH: snapshotPath,
+					CRUST_INTERNAL_BUILD: "0",
+					CRUST_INTERNAL_BUILD_OUT_DIR: join(root, "hooks"),
+				});
+				expect(protocol.exitCode, protocol.stderr).toBe(0);
+				expect(JSON.parse(protocol.stdout)).toMatchObject({
+					greeting: "hello ada!",
+					asset: "hello from assets",
+				});
+				expect(existsSync(snapshotPath)).toBe(false);
+				expect(existsSync(join(root, "hooks"))).toBe(false);
+
+				// The npm launcher runs on the consumer's Node and hands off to the embedded one.
+				const launcher = join(consumer, "node_modules", "@scope", "node-exe", "bin", "greet.js");
+				const launched = await runBoundedProcess(consumerNode!, [launcher, "ada", "--shout"], {
+					cwd: elsewhere,
+					timeout: 20_000,
+				});
+				expect(launched.exitCode, launched.stderr).toBe(0);
+				expect(JSON.parse(launched.stdout)).toEqual(expected);
+				// ...so the launcher itself is not Node-free.
+				if (process.platform !== "win32") {
+					const withoutNode = await runWithoutNode(realpathSync(launcher), ["ada"]);
+					expect(withoutNode.exitCode).not.toBe(0);
+					expect(withoutNode.stdout).not.toContain("hello");
+				}
+			},
+			120_000,
 		);
-		expect(existsSync(outfile)).toBe(false);
-	}, 60_000);
-
-	it("constructs a non-host Linux target embedding the same Node version", async () => {
-		// Construction evidence only: this host cannot execute the other architecture.
-		const target: NodeTarget = host === "linux-arm64" ? "linux-x64" : "linux-arm64";
-		const outfile = join(outDir, `admin-${target}`);
-		await execNodeBinaryBuild(
-			join(project, "src", "admin.ts"),
-			outfile,
-			true,
-			target,
-			[],
-			project,
-			compiler,
-		);
-		const binary = readFileSync(outfile);
-		const header = binary.subarray(0, 20);
-		expect(header.subarray(0, 4).toString("hex")).toBe("7f454c46");
-		// ELF e_machine: 62 is x86-64, 183 is AArch64.
-		expect(header.readUInt16LE(18)).toBe(target === "linux-x64" ? 62 : 183);
-		expect(binary.includes(`v${compiler.version}`)).toBe(true);
-	}, 180_000);
-});
+	},
+);

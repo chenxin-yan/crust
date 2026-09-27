@@ -40,12 +40,12 @@ The `bin` key must match your root command: `new Crust("my-cli")`. `"private": t
 | Runtime | `"artifact": "package"`                         | `"artifact": "binary"`                                                 |
 | ------- | ----------------------------------------------- | ---------------------------------------------------------------------- |
 | `bun`   | Bun-targeted JavaScript; users need Bun         | Node launcher + standalone executable per platform; users need Node.js |
-| `node`  | Node.js-targeted JavaScript; users need Node.js | Not available yet                                                      |
+| `node`  | Node.js-targeted JavaScript; users need Node.js | Node launcher + standalone executable per platform; users need Node.js |
 | `deno`  | Not available yet                               | Node launcher + standalone executable per platform; users need Node.js |
 
-A runtime package is one root-only npm package whose commands run on the user's installed runtime; a Bun package's commands start with `#!/usr/bin/env bun`, so installed commands run under Bun whether npm or Bun installed the package. A standalone binary embeds its runtime, so users do not install Bun or Deno; the npm launcher that selects the platform binary needs Node.js. `--artifact package` or `--artifact binary` overrides `crust.artifact` for one build.
+A runtime package is one root-only npm package whose commands run on the user's installed runtime; a Bun package's commands start with `#!/usr/bin/env bun`, so installed commands run under Bun whether npm or Bun installed the package. A standalone binary embeds its runtime, so running the executable needs no Bun, Deno, or Node.js; the npm launcher that selects the platform binary still needs Node.js. `--artifact package` or `--artifact binary` overrides `crust.artifact` for one build.
 
-The commands below assume Node.js and Bun are installed; Deno builds also need `deno` on `PATH`. See [tooling requirements](/docs/modules/crust#install) and [runtime versions](/docs/guide/runtime-support#run-the-same-cli).
+The commands below assume Node.js and Bun are installed; Deno builds also need `deno` on `PATH`, and Node.js binaries need a `node` on `PATH` that [tsdown can build executables with](#nodejs-binaries). See [tooling requirements](/docs/modules/crust#install) and [runtime versions](/docs/guide/runtime-support#run-the-same-cli).
 
 ## Build
 
@@ -86,9 +86,19 @@ Publish every platform you intend to support—not just `host`. Set [`crust.targ
 
 ### Binary runtime version
 
-Every binary embeds the version of the compiler that builds it: the first `bun` on `PATH`, else the Bun inside the `crust` executable; for Deno, `deno` on `PATH`. The build prints it as `Compiler:` and records it as `embeddedRuntimeVersion` in `.crust/manifest.json`, for cross-platform targets too.
+Every binary embeds the version of the compiler that builds it: the first `bun` on `PATH`, else the Bun inside the `crust` executable; for Deno, `deno` on `PATH`; for Node.js, `node` on `PATH`. The build prints it as `Compiler:` and records it as `embeddedRuntimeVersion` in `.crust/manifest.json`, for cross-platform targets too.
 
-When `package.json` declares `engines.bun` or `engines.deno`, that compiler must satisfy the semver range, or the build fails before replacing `.crust/`. A compiler whose `--version` does not exit within 30 seconds is killed and fails the build the same way. An exact version is a requirement, not a download request: Crust never installs or upgrades a compiler, so pin one with your version manager or CI. Runtime packages embed no runtime; their `engines` only describes what users need.
+When `package.json` declares `engines.bun`, `engines.deno`, or `engines.node`, that compiler must satisfy the semver range, or the build fails before replacing `.crust/`. A compiler whose `--version` does not exit within 30 seconds is killed and fails the build the same way. An exact version is a requirement, not a download request: Crust never installs or upgrades a compiler, so pin one with your version manager or CI. Runtime packages embed no runtime; their `engines` only describes what users need.
+
+### Node.js binaries
+
+Crust builds Node.js binaries with [tsdown's executable support](https://tsdown.dev/options/exe) (Node.js single executable applications), which ships with `@crustjs/crust`; no global tsdown is needed. The `node` on `PATH` runs the build and is embedded, so it must satisfy both your `engines.node` and the installed tsdown's own requirements: its package engines and its executable builder's minimum. With the bundled tsdown 0.23 that means Node.js 26 or later. Crust reads both requirements from tsdown and reports which one fails, before replacing `.crust/`.
+
+These are build requirements, not your users' requirements: `engines.node` can keep your own range (for example `>=22`) as long as the build machine's Node.js satisfies it. Binary packages do not repeat `engines.node`, since running the executable needs no Node.js; the npm launcher keeps its usual Node.js requirement. A root package that also publishes library `exports` keeps `engines.node`, because consumers import that code on their own Node.js.
+
+Every command is its own single-entry executable. Application dependencies are bundled into it; a build fails if an import other than a Node.js built-in would be left for the runtime to resolve. Native addons, computed imports, and `crust.bunPlugins` are not supported.
+
+For each target, tsdown downloads the official Node.js archive of exactly that version once, verifies its checksum, and caches it. Unpacking needs `tar` with `xz` support for Linux targets, `tar` for macOS targets, and, on non-Windows hosts, `unzip` for Windows targets. macOS executables are only code-signed when built on macOS; sign cross-built ones yourself before running them on Apple silicon.
 
 ## Run locally
 
@@ -173,7 +183,7 @@ Extensions such as `man()`, `skill()`, and `completion()` generate their own dir
 
 ### Environment variables
 
-Keep secrets in runtime variables; use `PUBLIC_*` only for values safe to embed. This entry reads one of each:
+Keep secrets in runtime variables; use `PUBLIC_*` only for values safe to embed. Env files apply to Bun and Node.js builds of either artifact. This entry reads one of each:
 
 <include lang="ts" meta='title="src/cli.ts"'>
   ../../../examples/guide/build.ts
@@ -209,7 +219,7 @@ Bun executables also load `.env` from their working directory at startup, but do
 }
 ```
 
-Plugins apply to Bun and Node.js compilation, not build preparation. If entry imports need the same transform during preparation, register a runtime plugin in `bunfig.toml` `preload` too. See [plugin configuration](/docs/modules/crust#packagejson-configuration) and the [TUI setup](/docs/modules/tui).
+Plugins apply to Bun binaries and to Bun and Node.js runtime packages, not build preparation; Deno builds and Node.js binaries reject them. If entry imports need the same transform during preparation, register a runtime plugin in `bunfig.toml` `preload` too. See [plugin configuration](/docs/modules/crust#packagejson-configuration) and the [TUI setup](/docs/modules/tui).
 
 ### Programmatic builds
 
@@ -224,4 +234,4 @@ const result = await build({
 console.log(result.stageDir); // <cwd>/.crust
 ```
 
-Run with Bun, or with Node.js and `bun` on `PATH`. `build()` uses the same configuration as the CLI and returns artifact paths and Extension reports; it throws on failure. See the [options and result types](/docs/modules/crust#programmatic-api).
+Run with Bun, or with Node.js and `bun` on `PATH`; Node.js binaries also need a qualifying `node` on `PATH`. `build()` uses the same configuration as the CLI and returns artifact paths and Extension reports; it throws on failure. See the [options and result types](/docs/modules/crust#programmatic-api).
