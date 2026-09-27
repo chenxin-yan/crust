@@ -1,5 +1,7 @@
+import { spawnSync } from "node:child_process";
 import {
 	chmodSync,
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
@@ -162,6 +164,52 @@ ${exitParent ? "process.exit(0);" : "setTimeout(() => {}, 20000);"}`;
 			15_000,
 		);
 	}
+
+	it.skipIf(process.platform === "win32" || !which("deno"))(
+		"kills the direct child under Deno with executable-scoped run permission",
+		async () => {
+			const dir = mkdtempSync(join(tmpdir(), "run-process-deno-"));
+			const pidFile = join(dir, "pid");
+			const probe = join(dir, "probe.ts");
+			const script = `require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+setTimeout(() => {}, 20000);`;
+			writeFileSync(
+				probe,
+				`import assert from "node:assert/strict";
+import { runProcess } from ${JSON.stringify(new URL("./process.ts", import.meta.url).href)};
+await assert.rejects(
+  runProcess(${JSON.stringify(process.execPath)}, ["-e", ${JSON.stringify(script)}], { timeout: 2000 }),
+  { message: "Process-tree cleanup failed after timeout." },
+);`,
+			);
+			try {
+				const result = spawnSync(
+					"deno",
+					[
+						"run",
+						"--no-config",
+						"--no-prompt",
+						`--allow-run=${process.execPath}`,
+						"--allow-env",
+						"--allow-read",
+						probe,
+					],
+					{ encoding: "utf8", timeout: 8_000 },
+				);
+				expect(result.error).toBeUndefined();
+				expect(result.status, result.stderr).toBe(0);
+				const pid = Number(readFileSync(pidFile, "utf8"));
+				await vi.waitFor(() => expect(isRunning(pid)).toBe(false));
+			} finally {
+				if (existsSync(pidFile)) {
+					const pid = Number(readFileSync(pidFile, "utf8"));
+					if (isRunning(pid)) process.kill(pid, "SIGKILL");
+				}
+				rmSync(dir, { recursive: true, force: true });
+			}
+		},
+		15_000,
+	);
 
 	it.skipIf(process.platform !== "win32")(
 		"round-trips arguments through Windows forwarding shims",

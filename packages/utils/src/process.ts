@@ -26,6 +26,8 @@ export type RunProcessOptions = {
 	/**
 	 * Milliseconds before process-tree cleanup and rejection. POSIX descendants
 	 * must remain in the child's group; Windows requires a live parent.
+	 * Deno requires unrestricted `--allow-run` for POSIX group cleanup; a scoped
+	 * grant still permits direct-child termination, but group cleanup is reported as failed.
 	 */
 	timeout?: number;
 };
@@ -86,6 +88,7 @@ export function getWindowsShimCommand(
 /**
  * @internal Kill a POSIX process group (spawned with `detached: true`) or a
  * live Windows process tree. Descendants that leave the group are not reached.
+ * If POSIX group signaling fails, try the direct child before rethrowing.
  */
 export function killProcessTree(child: ChildProcess): void {
 	if (child.pid === undefined) return;
@@ -105,8 +108,11 @@ export function killProcessTree(child: ChildProcess): void {
 	try {
 		process.kill(-child.pid, "SIGKILL");
 	} catch (error) {
-		// SAFETY: process.kill throws errno exceptions.
-		if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+		// SAFETY: process.kill errors may carry an errno code.
+		if ((error as NodeJS.ErrnoException).code === "ESRCH") return;
+		// Deno's child handle can still be killed with executable-scoped run permission.
+		child.kill("SIGKILL");
+		throw error;
 	}
 }
 
