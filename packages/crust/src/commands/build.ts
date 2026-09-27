@@ -534,7 +534,11 @@ async function selectCompilers(plan: BuildPlan, io: InvocationIO): Promise<Selec
 		};
 	}
 
-	const compiler: BuildCompiler = await resolveBinaryCompiler(plan.runtime, plan.userPackageJson);
+	const compiler: BuildCompiler = await resolveBinaryCompiler(
+		plan.runtime,
+		plan.userPackageJson,
+		plan.cwd,
+	);
 	io.stdout(
 		`${dim("Compiler:")} ${compiler.runtime} ${compiler.version} ${dim(`(${compiler.runner.command})`)}`,
 	);

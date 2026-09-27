@@ -903,6 +903,57 @@ describe("build", () => {
 		expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
 		expect(existsSync(join(stageDir, "manifest.json"))).toBe(false);
 	}, 30_000);
+
+	// A version-manager shim picks the runtime from its working directory, so the
+	// version probe must run in the project, where compilation runs, not in the caller's cwd.
+	it.skipIf(host === null || process.platform === "win32")(
+		"reads the compiler version in the project directory, like compilation",
+		async () => {
+			const bunPath = which("bun")!;
+			const bunVersion = execFileSync(bunPath, ["--version"], { encoding: "utf8" }).trim();
+			writeProject(
+				{ name: "shim-cli", engines: { bun: bunVersion } },
+				"console.log(process.versions.bun);\n",
+			);
+			const shimDir = mkdtempSync(join(tmpdir(), "crust-bun-shim-"));
+			const project = realpathSync(tmpDir);
+			const log = join(shimDir, "calls.log");
+			// The real bun inside the project; a different (fake) runtime anywhere else.
+			writeFileSync(
+				join(shimDir, "bun"),
+				`#!/bin/sh\ncwd=$(pwd -P)\necho "$cwd $1" >> '${log}'\n` +
+					`if [ "$cwd" = '${project}' ]; then exec '${bunPath}' "$@"; fi\n` +
+					`if [ "$1" = --version ]; then echo 0.0.1; exit 0; fi\nexit 1\n`,
+				{ mode: 0o755 },
+			);
+			const path = process.env.PATH;
+			process.env.PATH = `${shimDir}:${path}`;
+			try {
+				expect(process.cwd()).not.toBe(tmpDir);
+				const logged: string[] = [];
+				const result = await build({
+					cwd: tmpDir,
+					artifact: "binary",
+					targets: ["host"],
+					validate: false,
+					onLog: (line) => logged.push(line),
+				});
+				expect(logged).toContain(`Compiler: bun ${bunVersion} (${join(shimDir, "bun")})`);
+				const calls = readFileSync(log, "utf8").trim().split("\n");
+				expect(calls).toEqual([`${project} --version`, `${project} build`]);
+				expect(readManifest(join(stageDir, "manifest.json")).embeddedRuntimeVersion).toBe(
+					bunVersion,
+				);
+				const executable = result.artifacts.find((artifact) => artifact.kind === "executable")!;
+				const embedded = execFileSync(executable.path, [], { encoding: "utf8", timeout: 10_000 });
+				expect(embedded.trim()).toBe(bunVersion);
+			} finally {
+				process.env.PATH = path;
+				rmSync(shimDir, { recursive: true, force: true });
+			}
+		},
+		30_000,
+	);
 });
 
 describe("buildCommand error handling", () => {

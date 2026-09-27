@@ -87,14 +87,16 @@ const denoPath = which("deno");
 
 describe("readCompilerVersion", () => {
 	it("reads the version the selected bun reports", async () => {
-		expect(await readCompilerVersion("bun", resolveBunBuildRunner())).toBe(bunVersion);
+		expect(await readCompilerVersion("bun", resolveBunBuildRunner(), process.cwd())).toBe(
+			bunVersion,
+		);
 	});
 
 	it.skipIf(denoPath === null)("reads the version the selected deno reports", async () => {
 		const reported = spawnSync(denoPath!, ["--version"], { encoding: "utf8" }).stdout;
-		expect(await readCompilerVersion("deno", { command: denoPath!, env: process.env })).toBe(
-			/^deno (\S+)/.exec(reported)![1],
-		);
+		expect(
+			await readCompilerVersion("deno", { command: denoPath!, env: process.env }, process.cwd()),
+		).toBe(/^deno (\S+)/.exec(reported)![1]);
 	});
 
 	it("reads the embedded Bun version from the BUN_BE_BUN fallback, not the outer process", () => {
@@ -104,7 +106,7 @@ describe("readCompilerVersion", () => {
 			[
 				"--eval",
 				`import { resolveBinaryCompiler } from ${helpers};
-const { runner, version } = await resolveBinaryCompiler("bun", { engines: { bun: Bun.version } });
+const { runner, version } = await resolveBinaryCompiler("bun", { engines: { bun: Bun.version } }, process.cwd());
 console.log(JSON.stringify({ command: runner.command, bunBeBun: runner.env.BUN_BE_BUN, execPath: process.execPath, version, embedded: Bun.version }));`,
 			],
 			{ env: { ...process.env, PATH: "" }, encoding: "utf8", timeout: 10_000 },
@@ -121,9 +123,11 @@ console.log(JSON.stringify({ command: runner.command, bunBeBun: runner.env.BUN_B
 		"rejects output that is not the requested runtime's version",
 		async () => {
 			await expect(
-				readCompilerVersion("bun", { command: denoPath!, env: process.env }),
+				readCompilerVersion("bun", { command: denoPath!, env: process.env }, process.cwd()),
 			).rejects.toThrow(/^Could not read the Bun version from .*deno --version \(exit 0\):\ndeno /);
-			await expect(readCompilerVersion("deno", resolveBunBuildRunner())).rejects.toThrow(
+			await expect(
+				readCompilerVersion("deno", resolveBunBuildRunner(), process.cwd()),
+			).rejects.toThrow(
 				`Could not read the Deno version from ${which("bun")} --version (exit 0):\n${bunVersion}`,
 			);
 		},
@@ -180,10 +184,16 @@ describe("assertCompilerSatisfiesEngines", () => {
 
 describe("resolveBinaryCompiler", () => {
 	it("selects bun on PATH and validates its actual version", async () => {
-		const compiler = await resolveBinaryCompiler("bun", { engines: { bun: bunVersion } });
+		const compiler = await resolveBinaryCompiler(
+			"bun",
+			{ engines: { bun: bunVersion } },
+			process.cwd(),
+		);
 		expect(compiler).toMatchObject({ runtime: "bun", version: bunVersion });
 		expect(compiler.runner.command).toBe(which("bun"));
-		await expect(resolveBinaryCompiler("bun", { engines: { bun: "0.0.1" } })).rejects.toThrow(
+		await expect(
+			resolveBinaryCompiler("bun", { engines: { bun: "0.0.1" } }, process.cwd()),
+		).rejects.toThrow(
 			`Bun ${bunVersion} (${which("bun")}) does not satisfy package.json engines.bun "0.0.1".`,
 		);
 	});
@@ -191,18 +201,18 @@ describe("resolveBinaryCompiler", () => {
 	it.skipIf(denoPath === null)(
 		"selects deno on PATH and validates its actual version",
 		async () => {
-			const compiler = await resolveBinaryCompiler("deno", undefined);
+			const compiler = await resolveBinaryCompiler("deno", undefined, process.cwd());
 			expect(compiler.runner.command).toBe(denoPath);
 			await expect(
-				resolveBinaryCompiler("deno", { engines: { deno: `>${compiler.version}` } }),
+				resolveBinaryCompiler("deno", { engines: { deno: `>${compiler.version}` } }, process.cwd()),
 			).rejects.toThrow(`Deno ${compiler.version} (${denoPath}) does not satisfy`);
 		},
 	);
 
 	it("reports a missing deno instead of falling back to another compiler", async () => {
-		await expect(withoutBunOnPath(() => resolveBinaryCompiler("deno", undefined))).rejects.toThrow(
-			"Deno is required for the deno runtime but was not found on PATH.",
-		);
+		await expect(
+			withoutBunOnPath(() => resolveBinaryCompiler("deno", undefined, process.cwd())),
+		).rejects.toThrow("Deno is required for the deno runtime but was not found on PATH.");
 	});
 });
 

@@ -381,14 +381,17 @@ export type BuildCompiler = {
  * Runtime version reported by the runner itself (`<command> --version`), never
  * the runtime hosting this process: `bun` prints `1.4.2`, `deno` prints
  * `deno 2.9.6 (…)`, `node` prints `v24.21.0`. Under the `BUN_BE_BUN` fallback
- * this is the embedded Bun, which is the compiler.
+ * this is the embedded Bun, which is the compiler. `cwd` must be the directory
+ * compilation runs in: a version-manager shim picks its runtime from it.
  */
 export async function readCompilerVersion(
 	runtime: BuildRuntime,
 	runner: BuildRunner,
+	cwd: string,
 ): Promise<string> {
 	const { exitCode, stdout, stderr } = await runProcess(runner.command, ["--version"], {
 		env: runner.env,
+		cwd,
 		stdio: "collect",
 	});
 	const reported = runtime === "deno" ? /^deno (\S+)/.exec(stdout.trim())?.[1] : stdout.trim();
@@ -442,15 +445,17 @@ export function assertCompilerSatisfiesEngines(
 /**
  * Select the binary compiler once for a build: the Bun runner (external bun
  * first, then the embedded fallback) or the external deno. Returns its actual
- * version after validating it against `engines`. Pass `runner` on to the
- * `exec*`/`buildEntrypoint` helpers so every step uses this same compiler.
+ * version, read in the project directory `cwd`, after validating it against
+ * `engines`. Pass `runner` and the same `cwd` on to the `exec*`/`buildEntrypoint`
+ * helpers so every step uses this same compiler.
  */
 export async function resolveBinaryCompiler(
 	runtime: "bun" | "deno",
 	userPackageJson: JsonValue | undefined,
+	cwd: string,
 ): Promise<BuildCompiler> {
 	const runner = runtime === "bun" ? resolveBunBuildRunner() : resolveDenoBuildRunner();
-	const compiler = { runtime, runner, version: await readCompilerVersion(runtime, runner) };
+	const compiler = { runtime, runner, version: await readCompilerVersion(runtime, runner, cwd) };
 	assertCompilerSatisfiesEngines(compiler, userPackageJson);
 	return compiler;
 }
