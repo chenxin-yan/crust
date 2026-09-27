@@ -1,5 +1,6 @@
 ---
 "@crustjs/crust": minor
+"@crustjs/utils": minor
 "create-crust": minor
 ---
 
