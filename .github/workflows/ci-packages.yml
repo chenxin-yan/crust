@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   library-runtime:
-    name: Library compatibility (${{ matrix.runtime }})
+    name: Library runtime checks (${{ matrix.label }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
@@ -33,10 +33,13 @@ jobs:
       matrix:
         include:
           - runtime: node
+            label: Node
             smoke: mise exec node@22.0.0 -- node scripts/smoke-runtimes/smoke.mjs
           - runtime: deno
+            label: Deno
             smoke: mise exec deno@2.8.0 -- deno run --allow-env --allow-read --allow-write --allow-run --config scripts/smoke-runtimes/deno.json scripts/smoke-runtimes/smoke.mjs
           - runtime: bun
+            label: Bun
             smoke: mise exec bun@1.4.0 -- bun scripts/smoke-runtimes/smoke.mjs
     steps:
       - name: Checkout
@@ -60,14 +63,17 @@ jobs:
         run: ${{ matrix.smoke }}
 
   artifact-acceptance:
-    name: Artifact acceptance (${{ matrix.os }})
+    name: CLI distribution checks (${{ matrix.label }})
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
+        include:
+          - os: ubuntu-latest
+            label: Linux
+          - os: macos-latest
+            label: macOS
+          - os: windows-latest
+            label: Windows
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
     concurrency:
@@ -170,7 +176,7 @@ jobs:
       - name: Type check
         run: pnpm run check:types
 
-      # Artifact acceptance owns Crust's tests/ and the compiled marker/path fixtures.
+      # CLI distribution checks own Crust's tests/ and the compiled marker/path fixtures.
       # Keep the ordinary local `pnpm run test` unchanged: it still runs every suite.
       - name: Test library and tooling behavior
         run: >-
