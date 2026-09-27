@@ -130,10 +130,10 @@ Each command becomes `bin/<command>.js`, with no shebang and no permission flags
 
 ```sh
 # The bin named after the package can be omitted: deno run npm:my-cli
-deno run --allow-read npm:my-cli@0.1.0/my-cli --help
+deno run --allow-read --allow-env=NO_COLOR,FORCE_COLOR,COLORTERM,TERM npm:my-cli@0.1.0/my-cli --help
 
 # Install globally with the same grants
-deno install -g --allow-read -n my-cli npm:my-cli@0.1.0/my-cli
+deno install -g --allow-read --allow-env=NO_COLOR,FORCE_COLOR,COLORTERM,TERM -n my-cli npm:my-cli@0.1.0/my-cli
 my-cli --help
 ```
 
