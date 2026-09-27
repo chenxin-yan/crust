@@ -7,7 +7,7 @@
 	"description": "A CLI built with Crust",
 	"crust": {
 		"runtime": "bun",
-		"artifact": "binary"
+		"artifact": "{{artifact}}"
 	},
 	"bin": {
 		"{{name}}": "src/cli.ts"

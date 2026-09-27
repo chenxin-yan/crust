@@ -313,6 +313,51 @@ describe("create-crust CLI", () => {
 		expect(readme).not.toContain("bun run");
 	}, 30_000);
 
+	for (const runtime of ["bun", "node", "deno"]) {
+		it.each(["package", "binary"])(
+			`scaffolds ${runtime} with explicit artifact %s`,
+			async (artifact) => {
+				const projectDir = join(makeTempRoot("create-crust-artifact"), "my-cli");
+				const result = await runCreateCrust([
+					projectDir,
+					"--runtime",
+					runtime,
+					"--artifact",
+					artifact,
+					"--no-install",
+					"--no-git",
+				]);
+				expect(result.exitCode, result.stderr).toBe(0);
+				const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf8"));
+				expect(pkg.crust).toEqual({ runtime, artifact });
+				expect(Object.keys(pkg.scripts).sort()).toEqual(templateScriptKeys);
+				const readme = readFileSync(join(projectDir, "README.md"), "utf8");
+				expect(readme).toContain(`Runtime: **${runtime}**`);
+				expect(readme).toContain(`Build output: **${artifact}**`);
+				expect(readme).toContain("npm is optional");
+				expect(readme).not.toContain("{{");
+			},
+		);
+	}
+
+	it("rejects an invalid artifact before writing files", async () => {
+		const projectDir = join(makeTempRoot("create-crust-invalid-artifact"), "my-cli");
+		const result = await runCreateCrust([
+			projectDir,
+			"--runtime",
+			"bun",
+			"--artifact",
+			"invalid",
+			"--no-install",
+			"--no-git",
+		]);
+		expect(result.exitCode).not.toBe(0);
+		expect(result.stderr).toContain(
+			'Invalid value "invalid" for --artifact. Expected one of: package, binary',
+		);
+		expect(existsSync(projectDir)).toBe(false);
+	});
+
 	it("installs a Deno runtime project with deno install", async () => {
 		const tempRoot = makeTempRoot("create-crust-deno-install");
 		const projectDir = join(tempRoot, "deno-cli");
