@@ -571,7 +571,7 @@ describe.skipIf(denoPath === null)("execDenoPackageBuild", () => {
 		await Promise.all(tempDirs.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 	});
 
-	it("fails with deno's diagnostics, writes no bundle, and removes the generated entry", async () => {
+	it("fails with deno's diagnostics without leaving a bundle or temporary inputs", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "crust-deno-package-test-"));
 		tempDirs.push(directory);
 		await writeFile(join(directory, "cli.ts"), 'import "./missing.ts";\n');
