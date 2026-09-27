@@ -131,7 +131,8 @@ beforeAll(async () => {
 	);
 	writeFile(
 		join(project, ".env.build"),
-		"PUBLIC_ORIGIN=https://file.example\nSECRET_TOKEN=do-not-embed\n",
+		// Bun expands the reference while preparing snapshots; the binary must embed the same value.
+		"PUBLIC_HOST=file.example\nPUBLIC_ORIGIN=https://$PUBLIC_HOST\nSECRET_TOKEN=do-not-embed\n",
 	);
 	// Real Crust commands: an Extension build hook generates man/, crust.include
 	// ships assets/, and both resolve next to the executable.

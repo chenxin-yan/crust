@@ -68,7 +68,7 @@ describe.skipIf(!packageManager || seaNodeDir === null || nodeHost === null)(
 import { execNodeBinaryBuild, hostTarget, NODE_TARGETS, resolveNodeBinaryCompiler } from ${JSON.stringify(buildHelpers)};
 const [project, outfile] = process.argv.slice(2);
 const compiler = await resolveNodeBinaryCompiler(undefined, project);
-await execNodeBinaryBuild(join(project, "src", "cli.ts"), outfile, true, hostTarget(NODE_TARGETS), [], project, compiler);
+await execNodeBinaryBuild(join(project, "src", "cli.ts"), outfile, true, hostTarget(NODE_TARGETS), {}, project, compiler);
 console.log(JSON.stringify({ tsdown: compiler.backend.packageJsonPath, node: compiler.version }));
 `,
 			);

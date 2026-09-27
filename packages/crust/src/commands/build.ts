@@ -31,6 +31,7 @@ import {
 	resolveBinaryCompiler,
 	resolveBunBuildRunner,
 	resolveNodeBinaryCompiler,
+	resolveNodeExePublicEnv,
 	resolveTargets,
 	buildEntrypoint,
 } from "../utils/build-helpers.ts";
@@ -559,6 +560,7 @@ async function selectCompilers(plan: BuildPlan, io: InvocationIO): Promise<Selec
 		printCompiler(compiler);
 		// Downloads and unpacks each target's Node now, so a missing tar/xz/unzip keeps the stage.
 		await provisionNodeExeTargets(plan.targets, plan.cwd, compiler);
+		const publicEnv = await resolveNodeExePublicEnv(plan.envFiles, plan.cwd);
 		const distribution: Distribution<NodeTarget> = {
 			table: NODE_TARGETS,
 			targets: plan.targets,
@@ -569,7 +571,7 @@ async function selectCompilers(plan: BuildPlan, io: InvocationIO): Promise<Selec
 					outfile,
 					plan.minify,
 					target,
-					plan.envFiles,
+					publicEnv,
 					plan.cwd,
 					compiler,
 					io.stderr,
