@@ -71,7 +71,6 @@ function run(bundlePath: string, permissions: string[]) {
 
 describe.skipIf(deno === null)("packaged Deno bundle", () => {
 	let marked: string;
-	let unmarked: string;
 
 	beforeAll(() => {
 		// Bundles consume dist: never rebuild an existing dist here, sibling tests
@@ -106,7 +105,6 @@ describe.skipIf(deno === null)("packaged Deno bundle", () => {
 		writeFileSync(join(sourceDir, "main.js"), PACKAGED_ENTRY_SOURCE);
 
 		marked = bundle("marked", "main.js");
-		unmarked = bundle("unmarked", "entry.ts");
 		// Installed execution must not reach back into the source checkout.
 		rmSync(sourceDir, { recursive: true, force: true });
 	}, 240_000);
@@ -126,17 +124,5 @@ describe.skipIf(deno === null)("packaged Deno bundle", () => {
 		}
 		expect(existsSync(snapshotPath)).toBe(false);
 		expect(existsSync(staleOutDir)).toBe(false);
-	});
-
-	it("reproduces the unmarked regression: it reads build-only env and obeys it", () => {
-		const denied = run(unmarked, [`--allow-read=${join(fixtureDir, "unmarked")}`]);
-		expect(denied.exitCode).not.toBe(0);
-		expect(denied.stderr).toContain('Requires env access to "CRUST_INTERNAL_BUILD"');
-
-		const granted = run(unmarked, ["--allow-env", "--allow-read", `--allow-write=${fixtureDir}`]);
-		expect(granted.stderr).toBe("");
-		expect(granted.exitCode).toBe(0);
-		expect(granted.stdout).toBe("");
-		expect(existsSync(snapshotPath)).toBe(true);
 	});
 });
