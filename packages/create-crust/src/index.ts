@@ -5,6 +5,7 @@ import { basename, join, resolve } from "node:path";
 
 import { Crust, resolveArtifactDir } from "@crustjs/core";
 import { detectPackageManager, isInGitRepo, runSteps, scaffold } from "@crustjs/create";
+import type { BuildOptions } from "@crustjs/crust";
 import { spinner } from "@crustjs/progress";
 import { confirm, input, select } from "@crustjs/prompts";
 
@@ -80,6 +81,12 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 			description: 'Runtime to develop and build for ("bun", "node", or "deno")',
 		},
 		{
+			name: "artifact",
+			type: "string",
+			choices: ["package", "binary"],
+			description: "Build output: runtime package or standalone binary",
+		},
+		{
 			name: "install",
 			type: "boolean",
 			description: "Install dependencies after scaffolding",
@@ -145,21 +152,41 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 				{
 					label: "Bun (recommended)",
 					value: "bun",
-					hint: "standalone binaries per platform, published as npm packages",
+					hint: "Bun APIs and TypeScript execution",
 				},
 				{
 					label: "Node.js",
 					value: "node",
-					hint: "one JavaScript bundle, published as a single npm package",
+					hint: "Node.js APIs and ecosystem",
 				},
 				{
 					label: "Deno",
 					value: "deno",
-					hint: "standalone binaries per platform, published as npm packages",
+					hint: "Deno APIs and permission model",
 				},
 			],
 			default: "bun",
 			...(runtimeInitial !== undefined ? { initial: runtimeInitial } : {}),
+		});
+		const artifact = await select<NonNullable<BuildOptions["artifact"]>>({
+			message: "Build output",
+			choices: [
+				{
+					label: "Standalone binary",
+					value: "binary",
+					hint: "Embeds the runtime; users need no separate JavaScript runtime",
+				},
+				{
+					label: "Runtime package",
+					value: "package",
+					hint:
+						runtime === "deno"
+							? "Requires Deno installed; experimental bundling"
+							: "JavaScript bundle; requires the selected runtime installed",
+				},
+			],
+			default: runtime === "node" ? "package" : "binary",
+			...(flags.artifact !== undefined ? { initial: flags.artifact } : {}),
 		});
 		const installDeps = await confirm({
 			message: "Install dependencies?",
@@ -191,6 +218,8 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 		// Scaffolding produces no console output, so it is safe inside a spinner.
 		const context = {
 			name,
+			runtime,
+			artifact,
 			run: packageManager === "deno" ? "deno task" : `${packageManager} run`,
 			install: `${packageManager} install`,
 			...RUNTIME_TEMPLATE_CONTEXT[runtime],

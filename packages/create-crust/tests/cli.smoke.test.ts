@@ -8,15 +8,17 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, delimiter, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import type { BuildOptions } from "@crustjs/crust";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 
 import { reapBoundedProcesses, runBoundedProcess } from "../../crust/tests/bounded-process.ts";
 import { type RunProcessResult, which } from "../../utils/src/process.ts";
 
 type Runtime = "bun" | "node" | "deno";
+type Artifact = NonNullable<BuildOptions["artifact"]>;
 
 const builtCliPath = resolve(import.meta.dirname, "..", ".crust", "root", "bin", "create-crust.js");
 const repoRoot = resolve(import.meta.dirname, "..", "..", "..");
@@ -128,10 +130,15 @@ function assertSuccess(
 }
 
 /** The linked workspace crust's bin is its Bun source entry, so run it with Bun. */
-function crustBuildArgv(projectDir: string, runtime: Runtime): string[] {
+function crustBuildArgv(projectDir: string, artifact: Artifact): string[] {
 	const crustCli = join(projectDir, "node_modules", "@crustjs", "crust", "src", "cli.ts");
 	// Host-only target avoids cross-compile downloads (flaky on Windows CI for Linux Bun artifacts).
-	return [which("bun")!, crustCli, "build", ...(runtime === "node" ? [] : ["--target", "host"])];
+	return [
+		which("bun")!,
+		crustCli,
+		"build",
+		...(artifact === "package" ? [] : ["--target", "host"]),
+	];
 }
 
 async function packLocalDependencyPackages(): Promise<Record<string, string>> {
@@ -266,14 +273,16 @@ async function linkAndRunCommands(
 	}
 }
 
-async function smokeRuntime(runtime: Runtime): Promise<void> {
-	const sampleDir = join(smokeRoot, `smoke-${runtime}`);
+async function smokeRuntime(runtime: Runtime, artifact: Artifact): Promise<void> {
+	const sampleDir = join(smokeRoot, `smoke-${runtime}-${artifact}`);
 	const scaffoldCommand = [
 		which("bun")!,
 		builtCliPath,
 		sampleDir,
 		"--runtime",
 		runtime,
+		"--artifact",
+		artifact,
 		"--no-install",
 		"--no-git",
 	];
@@ -320,7 +329,7 @@ async function smokeRuntime(runtime: Runtime): Promise<void> {
 	const checkTypes = await run(checkTypesCommand, sampleDir);
 	assertSuccess("generated project type-check", checkTypesCommand, sampleDir, checkTypes);
 
-	const buildCommand = crustBuildArgv(sampleDir, runtime);
+	const buildCommand = crustBuildArgv(sampleDir, artifact);
 
 	// GitHub-hosted Windows: project is often on D: while default TEMP/cache are on C:;
 	// Bun compile can fail extracting toolchains across volumes (oven-sh/bun#28327).
@@ -339,7 +348,13 @@ async function smokeRuntime(runtime: Runtime): Promise<void> {
 				}
 			: undefined;
 
-	const build = await run(buildCommand, sampleDir, buildExtraEnv);
+	const nodeCompiler = process.env.CRUST_TEST_SEA_NODE;
+	const build = await run(buildCommand, sampleDir, {
+		...buildExtraEnv,
+		...(runtime === "node" && artifact === "binary" && nodeCompiler
+			? { PATH: `${dirname(nodeCompiler)}${delimiter}${process.env.PATH}` }
+			: {}),
+	});
 	assertSuccess("generated project build", buildCommand, sampleDir, build);
 
 	const crustDir = join(sampleDir, ".crust");
@@ -347,8 +362,9 @@ async function smokeRuntime(runtime: Runtime): Promise<void> {
 		expect(existsSync(join(crustDir, "root", "bin", `${command}.js`))).toBe(true);
 	}
 	const manifest = JSON.parse(readFileSync(join(crustDir, "manifest.json"), "utf8"));
+	expect(manifest).toMatchObject({ runtime, artifact });
 	expect(manifest.root.bins).toEqual(commands);
-	if (runtime !== "node") {
+	if (artifact === "binary") {
 		// `--target host` stages exactly one platform package, holding every command's binary.
 		expect(manifest.packages).toHaveLength(1);
 		expect(Object.keys(manifest.packages[0].bins)).toEqual(commands);
@@ -357,6 +373,9 @@ async function smokeRuntime(runtime: Runtime): Promise<void> {
 				existsSync(join(crustDir, manifest.packages[0].dir, manifest.packages[0].bins[command])),
 			).toBe(true);
 		}
+	} else {
+		expect(manifest.packages).toEqual([]);
+		expect(manifest).not.toHaveProperty("embeddedRuntimeVersion");
 	}
 
 	// Run the template's own `start` script the way its users do, so the
@@ -374,22 +393,32 @@ async function smokeRuntime(runtime: Runtime): Promise<void> {
 	// `bin` points at the source, so linking the project runs src/*.ts through the
 	// runtime shebang (a cmd-shim `.cmd` on Windows); linking `.crust/root` runs
 	// the staged launcher/bundle. Both consumers live under a path with spaces.
-	const linkRoot = join(smokeRoot, "link consumers", runtime);
+	const linkRoot = join(smokeRoot, "link consumers", `${runtime}-${artifact}`);
 	await linkAndRunCommands("source link", sampleDir, join(linkRoot, "source"), commands);
-	await linkAndRunCommands(
-		"staged link",
-		join(crustDir, "root"),
-		join(linkRoot, "staged"),
-		commands,
-	);
+	if (runtime === "deno" && artifact === "package") {
+		// Deno packages deliberately have no shebang: npm link is not their runner.
+		for (const command of commands) {
+			const argv = denoArgv(["run", "-A", join(crustDir, "root", "bin", `${command}.js`), "Ada"]);
+			const result = await run(argv, smokeRoot);
+			assertSuccess("Deno package action", argv, smokeRoot, result);
+			expect(result.stdout.trim()).toBe("Hello, Ada!");
+		}
+	} else {
+		await linkAndRunCommands(
+			"staged link",
+			join(crustDir, "root"),
+			join(linkRoot, "staged"),
+			commands,
+		);
+	}
 }
 
-function smokeCase(runtime: Runtime): () => Promise<void> {
+function smokeCase(runtime: Runtime, artifact: Artifact): () => Promise<void> {
 	return async () => {
 		// Leaves headroom before the 300s case timeout to fail with the command's output.
 		commandDeadline = Date.now() + 280_000;
 		try {
-			await smokeRuntime(runtime);
+			await smokeRuntime(runtime, artifact);
 		} catch (error) {
 			keepSmokeRoot = true;
 			throw error;
@@ -428,11 +457,13 @@ describe.skipIf(!smokeEnabled)("create-crust smoke test", () => {
 
 	// Generous timeouts: each case installs from the registry and compiles a
 	// binary; `deno compile` also downloads a denort runtime on a cold cache.
-	it("bun: scaffolds, installs, type-checks, builds, and runs", smokeCase("bun"), 300_000);
-	it("node: scaffolds, installs, type-checks, builds, and runs", smokeCase("node"), 300_000);
-	it.skipIf(denoSkipReason !== null)(
-		"deno: scaffolds, installs, type-checks, builds, and runs",
-		smokeCase("deno"),
-		300_000,
-	);
+	for (const runtime of ["bun", "node", "deno"] as const) {
+		for (const artifact of ["package", "binary"] as const) {
+			it.skipIf(runtime === "deno" && denoSkipReason !== null)(
+				`${runtime} ${artifact}: scaffolds, installs, type-checks, builds, and runs`,
+				smokeCase(runtime, artifact),
+				300_000,
+			);
+		}
+	}
 });

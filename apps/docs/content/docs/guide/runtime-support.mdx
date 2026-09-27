@@ -35,7 +35,7 @@ Node.js 22+ can run the published libraries, but the direct TypeScript command a
 npx create-crust@latest my-cli --runtime node
 ```
 
-This selects Node.js for the generated `dev` script, TypeScript settings, and build output. Use `--runtime bun` or `--runtime deno` instead; Bun is the default choice. See [package setup](/docs/guide/build-and-distribution#set-up-packagejson) for the build and release scripts.
+This selects Node.js for the generated `dev` script, TypeScript settings, and target runtime. The next wizard question selects the build output independently; pass `--artifact package` or `--artifact binary` to skip it. All six combinations are supported, with experimental Deno package bundling. Defaults are Node.js packages and Bun/Deno binaries. Use `--runtime bun` or `--runtime deno` instead; Bun is the default runtime. See [package setup](/docs/guide/build-and-distribution#set-up-packagejson) for the build and release scripts.
 
 **The package manager does not choose the runtime.** npm, pnpm, Yarn, and Bun can install dependencies for either Bun or Node.js projects. The Deno scaffold uses `deno install`; for manual setup, use `deno add npm:@crustjs/core npm:@crustjs/extensions`.
 
