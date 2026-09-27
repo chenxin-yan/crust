@@ -278,6 +278,8 @@ Returns the absolute path of an Extension artifact directory or a [`crust.includ
 
 `name` is one top-level directory name such as `"skills"` or `"templates"`; a path separator, `.`, `..`, or an empty string throws. The directory is not probed, so the caller reports a missing directory.
 
+Artifact paths do not depend on npm or its launcher. For [direct binary distribution](/docs/guide/build-and-distribution#custom-distribution), keep these directories next to the executable when archiving or installing it; copying only the executable leaves its data behind. Runtime packages use the different layout below.
+
 | Running as                                                                                         | Result                                                                                                                |
 | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | Compiled executable (`bun build --compile`, `deno compile`, Node.js single executable application) | `<name>` next to the executable                                                                                       |
