@@ -469,7 +469,7 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 	}
 	if (runtime === "node" && selection.artifact === "binary" && bunPlugins.length > 0) {
 		throw new Error(
-			"package.json crust.bunPlugins is not supported for node standalone binaries.\n  They are bundled by tsdown, not Bun; remove crust.bunPlugins, or use artifact package or the bun runtime.",
+			"package.json crust.bunPlugins is not supported for node standalone binaries.\n  Remove crust.bunPlugins, or use artifact package or the bun runtime.",
 		);
 	}
 

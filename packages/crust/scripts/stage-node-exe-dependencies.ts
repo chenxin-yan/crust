@@ -18,13 +18,10 @@ import type { DistributionManifest } from "../src/utils/distribute.ts";
  * the `optionalDependencies` of every staged package.json, keeping the root's
  * platform packages.
  */
-export function stageNodeExeDependencies(
-	stageDir: string,
-	optionalDependencies: Record<string, string> = crustPackage.optionalDependencies,
-): void {
+export function stageNodeExeDependencies(stageDir: string): void {
 	const backend = Object.fromEntries(
 		NODE_EXE_BACKEND_PACKAGES.map((name) => {
-			const range = optionalDependencies[name];
+			const range = crustPackage.optionalDependencies[name];
 			if (range === undefined)
 				throw new Error(`packages/crust/package.json must optionally depend on ${name}.`);
 			return [name, range];
