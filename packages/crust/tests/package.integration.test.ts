@@ -498,7 +498,7 @@ import { Crust, defineExtension, defineExtensionId, resolveArtifactDir } from "@
 import { help } from "@crustjs/extensions";
 import { greet } from "fixture-greeting";
 const man = defineExtension(defineExtensionId("man")).build(() => [{ path: "man/deno-greet.1", content: ".Dd" }]);
-await new Crust("deno-greet", { description: "Greets under Deno" })
+const app = new Crust("deno-greet", { description: "Greets under Deno" })
 	.extend(man, help())
 	.args({ name: "name", type: "string", required: true })
 	.flags({ name: "shout", type: "boolean" })
@@ -512,8 +512,8 @@ await new Crust("deno-greet", { description: "Greets under Deno" })
 			asset: readFileSync(join(resolveArtifactDir("assets"), "greeting.txt"), "utf8").trim(),
 			man: readFileSync(join(resolveArtifactDir("man"), "deno-greet.1"), "utf8"),
 		}));
-	})
-	.execute();
+	});
+if (import.meta.main) await app.execute();
 `,
 			);
 			writeFileSync(

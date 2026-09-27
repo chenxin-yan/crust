@@ -126,7 +126,7 @@ To build, you need:
 
 `--minify`, `--env-file`, `crust.bunPlugins`, `--target`, and `crust.targets` are rejected. Load configuration at runtime instead, for example with `deno run --env-file`.
 
-Each command becomes `bin/<command>.js`, with no shebang and no permission flags. After publishing, users run a command by package and bin name, and grant the permissions it needs:
+Each command becomes `bin/<command>.js`, with no shebang and no permission flags. The declared command retains its `import.meta.main` behavior, so it can guard its `execute()` call; imported dependencies are not main modules. After publishing, users run a command by package and bin name, and grant the permissions it needs:
 
 ```sh
 # The bin named after the package can be omitted: deno run npm:my-cli

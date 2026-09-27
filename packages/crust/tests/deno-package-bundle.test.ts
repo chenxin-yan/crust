@@ -31,11 +31,12 @@ const deno = which("deno");
 const npm = which("npm");
 const pnpm = which("pnpm");
 
-const GREET_SOURCE = `import { readFileSync } from "node:fs";
+const GREET_SOURCE = `#!/usr/bin/env deno
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Crust, resolveArtifactDir } from "@crustjs/core";
 import { greet } from "greeting";
-await new Crust("deno-greet")
+const app = new Crust("deno-greet")
 	.args({ name: "name", type: "string", required: true })
 	.flags({ name: "shout", type: "boolean" })
 	.action(async ({ args, flags, stdout }) => {
@@ -47,8 +48,8 @@ await new Crust("deno-greet")
 			deno: typeof Deno === "undefined" ? null : Deno.version.deno,
 			asset: readFileSync(join(resolveArtifactDir("assets"), "greeting.txt"), "utf8"),
 		}));
-	})
-	.execute();
+	});
+if (import.meta.main) await app.execute();
 `;
 
 const ADMIN_SOURCE = `import { Crust } from "@crustjs/core";
@@ -130,7 +131,8 @@ describe.skipIf(deno === null || npm === null || pnpm === null)(
 			);
 			writeFileSync(
 				join(dependency, "index.js"),
-				'export const greet = (name) => "hello " + name;\n',
+				'if (import.meta.main) throw new Error("dependency must not be main");\n' +
+					'export const greet = (name) => "hello " + name;\n',
 			);
 			await run(npm!, ["pack", dependency, "--pack-destination", packs], root);
 			// Relative with forward slashes: npm accepts it on every OS.
@@ -267,7 +269,7 @@ describe.skipIf(deno === null || npm === null || pnpm === null)(
 			expect(denied.stderr).toContain("greeting.txt");
 		});
 
-		it("reproduces the unmarked bundle regression the generated entry fixes", async () => {
+		it("reproduces the unmarked bundle regression the prepended marker fixes", async () => {
 			const greet = join(unmarked, "bin", "deno-greet.js");
 			const denied = await runInstalled([`--allow-read=${unmarked}`, greet, "world"]);
 			expect(denied.exitCode).not.toBe(0);
