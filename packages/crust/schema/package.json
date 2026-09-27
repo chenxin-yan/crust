@@ -24,7 +24,7 @@
 					]
 				},
 				"artifact": {
-					"description": "What `crust build` distributes; the --artifact flag overrides it. `package`: a root-only runtime package whose commands are JavaScript bundles run by the consumer's installed runtime (bun or node). `binary`: standalone executables in per-platform npm packages behind a Node launcher (bun, deno, or node; node binaries are built by tsdown with a node on PATH that meets its executable requirements, Node 26 or later for the bundled tsdown 0.23).",
+					"description": "What `crust build` distributes; the --artifact flag overrides it. `package`: a root-only runtime package whose commands are JavaScript bundles run by the consumer's installed runtime (bun, node, or experimental deno, bundled with deno bundle; Deno consumers choose permissions with deno run / deno install). `binary`: standalone executables in per-platform npm packages behind a Node launcher (bun, deno, or node; node binaries are built by tsdown with a node on PATH that meets its executable requirements, Node 26 or later for the bundled tsdown 0.23).",
 					"type": "string",
 					"enum": [
 						"package",

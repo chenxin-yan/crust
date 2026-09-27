@@ -16,6 +16,7 @@ npm install -D @crustjs/crust
 - The `crust` command is a Node launcher for a standalone executable with Bun embedded. Node is required to start it; a separate Bun installation is not.
 - Without `bun` on `PATH`, arm64 hosts cannot build their own target. The error names the targets you can build; otherwise install Bun.
 - `@crustjs/crust` optionally depends on `tsdown` and `@tsdown/exe`, which build [Node.js binaries](/docs/guide/build-and-distribution#nodejs-binaries) with the `node` on `PATH`. Other builds never load them, so an install that skipped them, for example under a Node.js outside tsdown's engines, still builds everything else.
+- Deno binaries need `deno` on `PATH`; [Deno runtime packages](/docs/guide/build-and-distribution#deno-runtime-packages-experimental) (experimental) need `deno` 2.5.0 or newer there.
 - The [`build()`](#programmatic-api) library is a plain JavaScript module, so it needs `bun` on `PATH` unless the script runs under Bun. `@crustjs/core` is a peer dependency so `BuildReport` is the same type your Extensions see.
 
 ### npm installation caveat
@@ -186,13 +187,13 @@ Each `bin` key is an installed command name and each value is the TypeScript ent
 
 `crust.artifact` is required unless every build passes `--artifact`; the other keys are optional. Unknown keys under `crust` fail the build, so typos such as `bunPlugin` are not ignored.
 
-| Key                | Description                                                                                                                                                                                                                                                                     |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `crust.runtime`    | `bun`, `deno`, or `node`. Without it, `deno.json`/`deno.jsonc` selects Deno and `@types/node` without `@types/bun` selects Node; otherwise Bun.                                                                                                                                 |
-| `crust.artifact`   | `package` (a root-only runtime package for `bun` or `node`) or `binary` (standalone executables for `bun`, `deno`, or `node`). `--artifact` overrides it. Deno packages are not available yet.                                                                                  |
-| `crust.targets`    | Canonical compiler targets staged when a binary build runs without `--target`, `host` included. Without it every target of the compiler is staged. Rejected for runtime packages.                                                                                               |
+| Key                | Description |
+| ------------------ | ----------- |
+| `crust.runtime`    | `bun`, `deno`, or `node`. Without it, `deno.json`/`deno.jsonc` selects Deno and `@types/node` without `@types/bun` selects Node; otherwise Bun. |
+| `crust.artifact`   | `package` (a root-only runtime package for `bun`, `node`, or, experimentally, `deno`) or `binary` (standalone executables for `bun`, `deno`, or `node`). `--artifact` overrides it. |
+| `crust.targets`    | Canonical compiler targets staged when a binary build runs without `--target`, `host` included. Without it every target of the compiler is staged. Rejected for runtime packages. |
 | `crust.bunPlugins` | [Bun bundler plugin](https://bun.com/docs/bundler/plugins) modules applied to Bun builds and Node runtime packages, in order. A bare name resolves from `node_modules`, a path from the project root; each must default-export the plugin. Rejected for Deno and Node binaries. |
-| `crust.include`    | Directories relative to the project root that `crust build` copies into `.crust/root/` (listed in `files`) and into each platform package's `bin/`.                                                                                                                             |
+| `crust.include`    | Directories relative to the project root that `crust build` copies into `.crust/root/` (listed in `files`) and into each platform package's `bin/`. |
 
 `crust.include` entries must be existing directories inside the project, cannot be named `bin`, cannot be inside `.crust`, and cannot reuse an Extension artifact directory name. Symlinks are copied dereferenced and must resolve inside the project.
 

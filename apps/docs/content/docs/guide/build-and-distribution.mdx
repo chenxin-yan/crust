@@ -37,11 +37,11 @@ The `bin` key must match your root command: `new Crust("my-cli")`. `"private": t
 
 `crust.runtime` is the runtime your CLI runs on; [without it](/docs/modules/crust#packagejson-configuration) Crust infers one. `crust.artifact` is required and chooses what the build distributes, independently of the runtime:
 
-| Runtime | `"artifact": "package"`                         | `"artifact": "binary"`                                                 |
-| ------- | ----------------------------------------------- | ---------------------------------------------------------------------- |
-| `bun`   | Bun-targeted JavaScript; users need Bun         | Node launcher + standalone executable per platform; users need Node.js |
-| `node`  | Node.js-targeted JavaScript; users need Node.js | Node launcher + standalone executable per platform; users need Node.js |
-| `deno`  | Not available yet                               | Node launcher + standalone executable per platform; users need Node.js |
+| Runtime | `"artifact": "package"`                                                                      | `"artifact": "binary"`                                                 |
+| ------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `bun`   | Bun-targeted JavaScript; users need Bun                                                      | Node launcher + standalone executable per platform; users need Node.js |
+| `node`  | Node.js-targeted JavaScript; users need Node.js                                              | Node launcher + standalone executable per platform; users need Node.js |
+| `deno`  | [Experimental](#deno-runtime-packages-experimental) Deno-bundled JavaScript; users need Deno | Node launcher + standalone executable per platform; users need Node.js |
 
 A runtime package is one root-only npm package whose commands run on the user's installed runtime; a Bun package's commands start with `#!/usr/bin/env bun`, so installed commands run under Bun whether npm or Bun installed the package. A standalone binary embeds its runtime, so running the executable needs no Bun, Deno, or Node.js; the npm launcher that selects the platform binary still needs Node.js. `--artifact package` or `--artifact binary` overrides `crust.artifact` for one build.
 
@@ -108,9 +108,38 @@ npm run start -- --help
 node .crust/root/bin/my-cli.js --help
 ```
 
-Run the staged entry before publishing. Binary launchers find their executables in the sibling platform directories; a runtime package's bundle runs directly, so start a Bun package with `bun .crust/root/bin/my-cli.js`.
+Run the staged entry before publishing. Binary launchers find their executables in the sibling platform directories; a runtime package's bundle runs directly, so start a Bun package with `bun .crust/root/bin/my-cli.js`, or a Deno package with `deno run --allow-read=.crust/root .crust/root/bin/my-cli.js` plus the permissions your CLI needs.
 
 To test through `npm link`, link from `.crust/root`. Linking from the project root runs the source entry instead.
+
+## Deno runtime packages (experimental)
+
+With `"crust": { "runtime": "deno", "artifact": "package" }`, `crust build` bundles each command with Deno's native `deno bundle`, which Deno itself marks experimental. The package embeds no runtime: users need Deno and run it through Deno's npm support, not through Node.js.
+
+To build, you need:
+
+- `deno` 2.5.0 or newer on `PATH`. Crust reads its version in the project directory and fails before replacing `.crust/` if it is older, because older `deno bundle` resolves `package.json` dependencies from the registry instead of your installed `node_modules`. Crust never installs or upgrades Deno. It prints the bundler as `Compiler:` but records no `embeddedRuntimeVersion`, and `engines.deno` stays a requirement for your users.
+- Your dependencies installed as Deno resolves them: `package.json` with its `node_modules`, `deno.json` `imports`, or both. `deno bundle` applies your Deno configuration itself; for example, `"nodeModulesDir": "none"` resolves npm packages from Deno's cache and registry instead of `node_modules`.
+- Imports that also resolve under Bun: build preparation runs your entry under Bun (`bun` on `PATH`, else the Bun inside the `crust` executable), as it does for Deno binaries. Entry imports must resolve there too, so map `deno.json` `imports` to the same names as the `node_modules` packages, or build with `--no-validate`, which also skips Extension artifacts.
+- `@crustjs/core` from the same release as `@crustjs/crust`, or newer. The bundle includes your installed core, and older releases do not recognize Crust's Deno package marker: their packages need `--allow-env` and obey build-only snapshot variables.
+- Network access on a cold Deno cache: `deno bundle` downloads its bundler once.
+
+`--minify`, `--env-file`, `crust.bunPlugins`, `--target`, and `crust.targets` are rejected. Load configuration at runtime instead, for example with `deno run --env-file`.
+
+Each command becomes `bin/<command>.js`, with no shebang and no permission flags. After publishing, users run a command by package and bin name, and grant the permissions it needs:
+
+```sh
+# The bin named after the package can be omitted: deno run npm:my-cli
+deno run --allow-read npm:my-cli@0.1.0/my-cli --help
+
+# Install globally with the same grants
+deno install -g --allow-read -n my-cli npm:my-cli@0.1.0/my-cli
+my-cli --help
+```
+
+Crust never adds `-A` or any other grant: permissions belong to your users and depend on your CLI. Reading files shipped with `crust.include` or Extension artifacts through `resolveArtifactDir()` needs read access to the installed package, which is inside Deno's npm cache for `deno run npm:`; for `deno install -g` it is in that cache or, on newer Deno versions, in the install root. Terminal styling such as `help()` reads `NO_COLOR`, `FORCE_COLOR`, `COLORTERM`, and `TERM`, so it needs `--allow-env` for those names. Finished packages never read Crust's internal build variables, so they add no environment permission of their own.
+
+The package is not a Node.js package: `npm install -g` installs a bin that Node.js cannot run, and `npx` is not supported. Building, packing, and running through `deno run npm:` and `deno install -g` from a local registry has been tested on Linux x64 with Deno 2.5.0, 2.6.0, 2.7.0, 2.8.0, and 2.9.6. Code that only works on another runtime, dependencies `deno bundle` cannot inline, and dynamic imports it cannot follow are not made portable.
 
 ## Publish with `crust publish`
 

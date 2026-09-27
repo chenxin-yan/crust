@@ -21,6 +21,7 @@ import {
 	execBuild,
 	execBunPackageBuild,
 	execDenoBuild,
+	execDenoPackageBuild,
 	execNodeBinaryBuild,
 	execNodeBuild,
 	HOST_TARGET,
@@ -30,6 +31,7 @@ import {
 	readUserPackageJson,
 	resolveBinaryCompiler,
 	resolveBunBuildRunner,
+	resolveDenoPackageBundler,
 	resolveNodeBinaryCompiler,
 	resolveTargets,
 	buildEntrypoint,
@@ -383,7 +385,7 @@ export type BuildPlan = CommonBuildPlan &
 		| { runtime: "bun"; artifact: "binary"; targets: BunTarget[] }
 		| { runtime: "deno"; artifact: "binary"; targets: DenoTarget[] }
 		| { runtime: "node"; artifact: "binary"; targets: NodeTarget[] }
-		| { runtime: "bun" | "node"; artifact: "package" }
+		| { runtime: BuildRuntime; artifact: "package" }
 	);
 
 /** What earlier releases built for each runtime without being asked; quoted in the migration error. */
@@ -394,9 +396,7 @@ const IMPLICIT_ARTIFACTS = {
 } as const satisfies Record<BuildRuntime, ArtifactKind>;
 
 /** The runtime/artifact combinations this release can build. */
-type ArtifactSelection =
-	| { runtime: "bun" | "node"; artifact: "package" }
-	| { runtime: BuildRuntime; artifact: "binary" };
+type ArtifactSelection = { runtime: BuildRuntime; artifact: ArtifactKind };
 
 /** `option` (the `artifact` build option or `--artifact`) > package.json `crust.artifact`; no default. */
 function resolveArtifact(
@@ -419,14 +419,7 @@ function resolveArtifact(
 				`  Earlier versions built a ${previous} for the ${runtime} runtime implicitly; set "artifact": "${previous}" to keep that output.`,
 		);
 	}
-	if (artifact === "package") {
-		if (runtime === "deno") {
-			throw new Error(
-				"Runtime packages are not available for the deno runtime yet.\n  Use artifact binary for Deno standalone binaries, or set crust.runtime to bun or node for a runtime package.",
-			);
-		}
-		return { runtime, artifact };
-	}
+
 	return { runtime, artifact };
 }
 
@@ -450,21 +443,27 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 			'package.json crust.targets is not supported for runtime packages (artifact package).\n  A runtime package is one portable JavaScript bundle; remove crust.targets or set "artifact": "binary".',
 		);
 	}
+	const denoTool = selection.artifact === "binary" ? "deno compile" : "deno bundle";
 	if (runtime === "deno" && options.minify) {
 		throw new Error(
-			"--minify is not supported with the deno runtime.\n  deno compile has no minification step; drop the flag.",
+			selection.artifact === "binary"
+				? "--minify is not supported with the deno runtime.\n  deno compile has no minification step; drop the flag."
+				: "--minify is not supported with the deno runtime.\n  crust does not minify Deno runtime packages; drop the flag.",
 		);
 	}
 	if (runtime === "deno" && envFiles.length > 0) {
 		throw new Error(
-			"--env-file is not supported with the deno runtime.\n" +
-				"  deno compile embeds every variable from the file into the binary — secrets included —\n" +
-				"  with no PUBLIC_* filter. Load configuration at runtime instead (e.g. deno run --env-file).",
+			selection.artifact === "binary"
+				? "--env-file is not supported with the deno runtime.\n" +
+						"  deno compile embeds every variable from the file into the binary — secrets included —\n" +
+						"  with no PUBLIC_* filter. Load configuration at runtime instead (e.g. deno run --env-file)."
+				: "--env-file is not supported with the deno runtime.\n" +
+						"  deno bundle has no PUBLIC_* build-time constants. Load configuration at runtime instead (e.g. deno run --env-file).",
 		);
 	}
 	if (runtime === "deno" && bunPlugins.length > 0) {
 		throw new Error(
-			"package.json crust.bunPlugins is not supported with the deno runtime.\n  deno compile has no Bun bundler; remove crust.bunPlugins or set crust.runtime to bun.",
+			`package.json crust.bunPlugins is not supported with the deno runtime.\n  ${denoTool} has no Bun bundler; remove crust.bunPlugins or set crust.runtime to bun.`,
 		);
 	}
 	if (runtime === "node" && selection.artifact === "binary" && bunPlugins.length > 0) {
@@ -528,10 +527,34 @@ type SelectedCompilers = {
  * the selected compiler's own version (`resolveBinaryCompiler`, or
  * `resolveNodeBinaryCompiler` with tsdown's requirements for node, whose
  * targets' embedded Node binaries are also provisioned here); runtime
- * packages are bundled by Bun and embed no runtime, so engines stay a
- * consumer requirement there and are not checked against the bundler.
+ * packages are bundled by Bun (or, for Deno, by `deno bundle`) and embed no
+ * runtime, so engines stay a consumer requirement there and are not checked
+ * against the bundler.
  */
 async function selectCompilers(plan: BuildPlan, io: InvocationIO): Promise<SelectedCompilers> {
+	if (plan.artifact === "package" && plan.runtime === "deno") {
+		const bundler = await resolveDenoPackageBundler(plan.cwd);
+		io.stdout(
+			`${dim("Compiler:")} deno ${bundler.version} ${dim(`(${bundler.runner.command}, deno bundle)`)}`,
+		);
+		io.stderr(
+			"Deno runtime packages are experimental: they are bundled with deno bundle, which Deno marks experimental.",
+		);
+		return {
+			// Command Snapshots always run under Bun, as for Deno binaries.
+			snapshotRunner: plan.validate ? resolveBunBuildRunner() : undefined,
+			stage: (reports) =>
+				runDistributeBuild(
+					plan,
+					{
+						execute: (entry, outfile) =>
+							execDenoPackageBuild(entry, outfile, plan.cwd, bundler.runner),
+					},
+					io,
+					reports,
+				),
+		};
+	}
 	if (plan.artifact === "package") {
 		const runner = resolveBunBuildRunner();
 		const bundle = plan.runtime === "bun" ? execBunPackageBuild : execNodeBuild;
@@ -683,8 +706,9 @@ const activeBuilds = new Set<string>();
  * come from `bin`; the runtime, artifact, Bun plugins, and extra directories
  * from package.json `crust`. Bundling and Command Snapshots run in bun
  * subprocesses (bun on PATH, or the running Bun executable), so this works
- * under Node as well when Bun is installed; Deno binaries need deno on PATH,
- * and Node binaries a node on PATH that Crust's tsdown can build executables with.
+ * under Node as well when Bun is installed; Deno binaries and Deno runtime
+ * packages (experimental, deno 2.5.0 or newer) need deno on PATH, and Node
+ * binaries a node on PATH that Crust's tsdown can build executables with.
  *
  * Throws on any failure. Planning and compiler-selection failures (bad
  * options or package.json, a missing or hung compiler, an engines mismatch) leave the

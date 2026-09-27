@@ -4,6 +4,7 @@ import {
 	mkdtempSync,
 	readdirSync,
 	readFileSync,
+	realpathSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
@@ -98,7 +99,8 @@ describe.skipIf(deno === null || npm === null || pnpm === null)(
 	"Deno runtime package bundle",
 	() => {
 		beforeAll(async () => {
-			root = mkdtempSync(join(tmpdir(), "crust-deno-package-"));
+			// Real path: Deno checks --allow-read grants against resolved paths (macOS tmpdir is a symlink).
+			root = realpathSync.native(mkdtempSync(join(tmpdir(), "crust-deno-package-")));
 			const packs = join(root, "packs");
 			const project = join(root, "project");
 			elsewhere = join(root, "elsewhere");
