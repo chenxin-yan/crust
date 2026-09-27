@@ -30,8 +30,10 @@ import {
 	bunCompileTarget,
 	createBunCompileArgs,
 	createBunPluginDriverScript,
+	DENO_PACKAGE_MIN_VERSION,
 	execBuild,
 	execBunPackageBuild,
+	execDenoPackageBuild,
 	execNodeBuild,
 	hostTarget,
 	assertNodeExeBackendSupports,
@@ -47,6 +49,7 @@ import {
 	resolveNodeBuildRunner,
 	resolveNodeExeBackend,
 	resolveTargets,
+	resolveDenoPackageBundler,
 	type BunPluginDriverOptions,
 } from "./build-helpers.ts";
 
@@ -495,6 +498,94 @@ describe("Node binary compiler", () => {
 			withoutBunOnPath(() => resolveNodeBinaryCompiler(undefined, process.cwd())),
 		).rejects.toThrow("Node is required for node standalone binaries but was not found on PATH.");
 	});
+});
+
+describe("resolveDenoPackageBundler", () => {
+	const tempDirs: string[] = [];
+
+	afterEach(async () => {
+		await Promise.all(tempDirs.splice(0).map((path) => rm(path, { recursive: true, force: true })));
+	});
+
+	/** A deno stand-in that only answers `--version`, reporting `version`. */
+	async function fakeDeno(version: string): Promise<string> {
+		const directory = await mkdtemp(join(tmpdir(), "crust-fake-deno-"));
+		tempDirs.push(directory);
+		const line = `deno ${version} (stable, release, x86_64-unknown-linux-gnu)`;
+		if (process.platform === "win32") {
+			const command = join(directory, "deno.cmd");
+			await writeFile(command, `@echo ${line}\r\n`);
+			return command;
+		}
+		const command = join(directory, "deno");
+		await writeFile(command, `#!/bin/sh\necho "${line}"\n`, { mode: 0o755 });
+		return command;
+	}
+
+	it("accepts deno 2.5.0 and rejects the 2.4 bundler, reading the version in the project directory", async () => {
+		const accepted = await fakeDeno("2.5.0");
+		expect(
+			await resolveDenoPackageBundler(process.cwd(), { command: accepted, env: process.env }),
+		).toEqual({
+			runtime: "deno",
+			runner: { command: accepted, env: process.env },
+			version: "2.5.0",
+		});
+
+		const old = await fakeDeno("2.4.5");
+		await expect(
+			resolveDenoPackageBundler(process.cwd(), { command: old, env: process.env }),
+		).rejects.toThrow(
+			`Deno 2.4.5 (${old}) cannot bundle a Deno runtime package; deno ${DENO_PACKAGE_MIN_VERSION} or newer is required.`,
+		);
+	});
+
+	it("rejects a runner that does not report a Deno version", async () => {
+		await expect(resolveDenoPackageBundler(process.cwd(), resolveBunBuildRunner())).rejects.toThrow(
+			`Could not read the Deno version from ${which("bun")} --version (exit 0):\n${bunVersion}`,
+		);
+	});
+
+	it("reports a missing deno instead of falling back to another compiler", async () => {
+		await expect(withoutBunOnPath(() => resolveDenoPackageBundler(process.cwd()))).rejects.toThrow(
+			"Deno is required for the deno runtime but was not found on PATH.",
+		);
+	});
+
+	it.skipIf(denoPath === null)(
+		"selects deno on PATH without checking engines.deno, a consumer requirement",
+		async () => {
+			const bundler = await resolveDenoPackageBundler(process.cwd());
+			expect(bundler.runner.command).toBe(denoPath);
+			expect(bundler.version).toBe(
+				await readCompilerVersion("deno", bundler.runner, process.cwd()),
+			);
+		},
+	);
+});
+
+describe.skipIf(denoPath === null)("execDenoPackageBuild", () => {
+	const tempDirs: string[] = [];
+
+	afterEach(async () => {
+		await Promise.all(tempDirs.splice(0).map((path) => rm(path, { recursive: true, force: true })));
+	});
+
+	it("fails with deno's diagnostics, writes no bundle, and removes the generated entry", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "crust-deno-package-test-"));
+		tempDirs.push(directory);
+		await writeFile(join(directory, "cli.ts"), 'import "./missing.ts";\n');
+		const outfile = join(directory, "out", "bin", "cli.js");
+
+		await expect(
+			execDenoPackageBuild(join(directory, "cli.ts"), outfile, directory, {
+				command: denoPath!,
+				env: process.env,
+			}),
+		).rejects.toThrow(/^Build failed for .*cli\.js:\n[\s\S]*missing\.ts/);
+		await expect(access(outfile)).rejects.toThrow();
+		expect(await readdir(directory)).toEqual(["cli.ts"]);
+	}, 60_000);
 });
 
 describe("resolveBunPluginSource", () => {
