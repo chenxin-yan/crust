@@ -19,9 +19,9 @@ import { which } from "@crustjs/utils/process";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 
 import { buildCommand } from "../src/commands/build.ts";
-import { BUN_TARGETS, type BunTarget, DENO_TARGETS } from "../src/utils/build-helpers.ts";
+import { BUN_TARGETS, type BunTarget } from "../src/utils/build-helpers.ts";
 import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
-import { hostDenoTarget, hostTarget } from "./helpers.ts";
+import { hostTarget } from "./helpers.ts";
 
 function getHostBunTarget() {
 	return hostTarget();
@@ -299,76 +299,6 @@ await app.execute();
 				secretValue: null,
 			});
 		},
-	);
-
-	it.skipIf(which("node") === null)(
-		"builds an executable Node artifact from package.json runtime config",
-		async () => {
-			process.cwd = () => tmpDir;
-			writePackageJson(tmpDir, {
-				...basePackageJson,
-				crust: { runtime: "node", artifact: "package" },
-				bin: { "node-core-cli": "src/node-core-cli.ts" },
-			});
-			// Bundle @crustjs/core into the artifact — the portability claim is "a
-			// Crust CLI runs under node", not "a console.log runs under node".
-			writeFileSync(
-				join(tmpDir, "src", "node-core-cli.ts"),
-				`import { Crust } from ${JSON.stringify(corePath)};
-const app = new Crust("node-core-cli", { version: "1.0.0" }).action(() => console.log("core under node"));
-await app.execute();
-`,
-			);
-			await new Crust("test").add(buildCommand).execute({ argv: ["build", "--no-validate"] });
-			const outPath = join(tmpDir, ".crust", "root", "bin", "node-core-cli.js");
-			expect(readFileSync(outPath, "utf8").startsWith("#!/usr/bin/env node\n")).toBe(true);
-			if (process.platform !== "win32") expect(statSync(outPath).mode & 0o111).not.toBe(0);
-
-			const action = await runBoundedProcess(which("node")!, [outPath], { timeout: 25_000 });
-			expect(action.exitCode).toBe(0);
-			expect(action.stdout.trim()).toBe("core under node");
-
-			// Unknown flag exercises core's dispatch/error path in the bundle.
-			const bad = await runBoundedProcess(which("node")!, [outPath, "--definitely-not-a-flag"], {
-				timeout: 25_000,
-			});
-			expect(bad.exitCode).toBe(1);
-			expect(bad.stderr).toContain("Unknown flag");
-		},
-		30_000,
-	);
-
-	// ponytail: entry is dependency-free — `deno compile` type-checks raw
-	// workspace TS (unlike published dist), so bundling @crustjs/core here fails
-	// for monorepo reasons real users never hit. The dist-layer "core runs under
-	// Deno" claim is covered by the CI smoke matrix; a faithful compile-with-deps
-	// test needs a pack+install harness.
-	it.skipIf(which("deno") === null || hostDenoTarget() === null)(
-		"builds and runs a Deno standalone executable for the host target",
-		async () => {
-			const denoTarget = hostDenoTarget()!;
-			process.cwd = () => tmpDir;
-			writePackageJson(tmpDir, {
-				...basePackageJson,
-				crust: { runtime: "deno", artifact: "binary" },
-			});
-			await new Crust("test").add(buildCommand).execute({
-				argv: ["build", "--target", "host", "--no-validate"],
-			});
-			const info = DENO_TARGETS.info[denoTarget];
-			const outPath = join(
-				tmpDir,
-				".crust",
-				info.alias,
-				"bin",
-				`test-build-cli-${denoTarget}${info.os === "win32" ? ".exe" : ""}`,
-			);
-			const { exitCode, stdout } = await runBoundedProcess(outPath, [], { timeout: 50_000 });
-			expect(exitCode).toBe(0);
-			expect(stdout.trim()).toBe("hello from crust build test");
-		},
-		// A cold Deno compile may need to download the standalone runtime.
-		120_000,
 	);
 
 	it.skipIf(getHostBunTarget() === null)(

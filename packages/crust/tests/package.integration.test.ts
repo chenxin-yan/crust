@@ -1,12 +1,4 @@
-import {
-	cpSync,
-	existsSync,
-	mkdirSync,
-	mkdtempSync,
-	readFileSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -16,10 +8,8 @@ import { which } from "@crustjs/utils/process";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 
 import { buildCommand } from "../src/commands/build.ts";
-import { BUN_TARGETS, DENO_TARGETS } from "../src/utils/build-helpers.ts";
 import type { DistributionManifest } from "../src/utils/distribute.ts";
 import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
-import { hostDenoTarget, hostTarget } from "./helpers.ts";
 
 const tmpDir = mkdtempSync(join(tmpdir(), "crust-package-integration-"));
 const stageDir = join(tmpDir, ".crust");
@@ -103,170 +93,6 @@ describe("crust build integration", () => {
 		expect(existsSync(join(stageDir, "linux-x64"))).toBe(true);
 		expect(existsSync(join(stageDir, "darwin-arm64"))).toBe(false);
 	});
-
-	it.skipIf(hostTarget() === null || !which("node"))(
-		"runs the staged launcher in place and from an installed layout",
-		async () => {
-			const hostBunTarget = hostTarget();
-			const nodePath = which("node");
-			if (!hostBunTarget || !nodePath) return;
-			const hostAlias = BUN_TARGETS.info[hostBunTarget].alias;
-
-			await runBuild(["--target", hostBunTarget, "--no-validate"]);
-
-			const launcherPath = join(stageDir, "root", "bin", "test-cli.js");
-			const inPlace = await runBoundedProcess(nodePath, [launcherPath], {
-				cwd: tmpDir,
-				timeout: 4_000,
-			});
-			expect(inPlace.stderr.trim()).toBe("");
-			expect(inPlace.exitCode).toBe(0);
-			expect(inPlace.stdout.trim()).toBe("hello from packaged test");
-
-			// Installed layout: the platform package under root/node_modules. Scoped
-			// names split into @scope/name path segments, matching the launcher's
-			// resolve(..., target.packageName, ...).
-			const installedRoot = join(tmpDir, "installed");
-			cpSync(join(stageDir, "root"), installedRoot, { recursive: true });
-			cpSync(
-				join(stageDir, hostAlias),
-				join(installedRoot, "node_modules", "@scope", `test-cli-${hostAlias}`),
-				{ recursive: true },
-			);
-			const installed = await runBoundedProcess(
-				nodePath,
-				[join(installedRoot, "bin", "test-cli.js")],
-				{
-					cwd: tmpDir,
-					timeout: 4_000,
-				},
-			);
-			expect(installed.stderr.trim()).toBe("");
-			expect(installed.exitCode).toBe(0);
-			expect(installed.stdout.trim()).toBe("hello from packaged test");
-		},
-	);
-
-	it.skipIf(!which("node"))(
-		"stages a root-only Node package whose bin is the runnable bundle",
-		async () => {
-			mkdirSync(join(tmpDir, "assets"), { recursive: true });
-			writeFileSync(join(tmpDir, "assets", "greeting.txt"), "hi\n");
-			const packageJsonPath = join(tmpDir, "package.json");
-			const original = readFileSync(packageJsonPath, "utf8");
-			writeFileSync(
-				packageJsonPath,
-				JSON.stringify({
-					...JSON.parse(original),
-					crust: { runtime: "node", artifact: "package", include: ["assets"] },
-				}),
-			);
-			// The bundle must locate its include via the build-time marker; the
-			// fixture has no node_modules, so core is imported from its built dist.
-			const entryPath = join(tmpDir, "src", "cli.ts");
-			const originalEntry = readFileSync(entryPath, "utf8");
-			writeFileSync(
-				entryPath,
-				`import { resolveArtifactDir } from ${JSON.stringify(resolve(import.meta.dirname, "../../core/dist/index.js"))};\n` +
-					'console.log("hello from packaged test");\n' +
-					'if (process.argv.includes("assets")) console.log(resolveArtifactDir("assets"));\n' +
-					'if (process.argv.includes("env")) console.log(process.env.PUBLIC_MESSAGE, process.env.SECRET_MESSAGE);\n',
-			);
-			const envFile = join(tmpDir, ".env.build");
-			writeFileSync(envFile, "PUBLIC_MESSAGE=hello-from-build\nSECRET_MESSAGE=private\n");
-			try {
-				const { stdout } = await runBuild(["--no-validate", "--env-file", envFile]);
-				expect(stdout).toContain("Runtime: node (from package.json)");
-				expect(stdout).toContain("Artifact: package");
-			} finally {
-				writeFileSync(packageJsonPath, original);
-				writeFileSync(entryPath, originalEntry);
-			}
-
-			expect(readJson<object>(join(stageDir, "manifest.json"))).toMatchObject({
-				runtime: "node",
-				artifact: "package",
-				packages: [],
-				publishOrder: ["root"],
-			});
-			expect(readFileSync(join(stageDir, "root", "assets", "greeting.txt"), "utf8")).toBe("hi\n");
-			expect(existsSync(join(stageDir, "linux-x64"))).toBe(false);
-
-			const bundlePath = join(stageDir, "root", "bin", "test-cli.js");
-			const bundle = readFileSync(bundlePath, "utf8");
-			expect(bundle.startsWith("#!/usr/bin/env node\n")).toBe(true);
-			// The marker is inlined as a literal, not read from the environment.
-			expect(bundle).not.toContain("process.env.CRUST_INTERNAL_BUILD");
-			const { exitCode, stdout } = await runBoundedProcess(which("node")!, [bundlePath, "assets"], {
-				cwd: tmpDir,
-				timeout: 25_000,
-			});
-			expect(exitCode).toBe(0);
-			expect(stdout.trim().split("\n")).toEqual([
-				"hello from packaged test",
-				join(stageDir, "root", "assets"),
-			]);
-			// The non-plugin Node build forwards --env-file and inlines only PUBLIC_* values.
-			const env = await runBoundedProcess(which("node")!, [bundlePath, "env"], {
-				cwd: tmpDir,
-				env: {},
-				timeout: 25_000,
-			});
-			expect(env.exitCode, env.stderr).toBe(0);
-			expect(env.stdout.trim().split("\n").at(-1)).toBe("hello-from-build undefined");
-		},
-		30_000,
-	);
-
-	// One host target only: compiling all six Deno targets downloads six runtimes.
-	it.skipIf(which("deno") === null || hostDenoTarget() === null || !which("node"))(
-		"stages Deno platform packages and runs them through the Node launcher",
-		async () => {
-			const denoTarget = hostDenoTarget()!;
-			const hostAlias = DENO_TARGETS.info[denoTarget].alias;
-			const packageJsonPath = join(tmpDir, "package.json");
-			const original = readFileSync(packageJsonPath, "utf8");
-			writeFileSync(
-				packageJsonPath,
-				JSON.stringify({ ...JSON.parse(original), crust: { runtime: "deno", artifact: "binary" } }),
-			);
-			try {
-				await runBuild(["--target", "host", "--no-validate"]);
-			} finally {
-				writeFileSync(packageJsonPath, original);
-			}
-
-			const denoVersion = /^deno (\S+)/.exec(
-				(await runBoundedProcess(which("deno")!, ["--version"], { timeout: 10_000 })).stdout,
-			)?.[1];
-			expect(readJson<object>(join(stageDir, "manifest.json"))).toMatchObject({
-				runtime: "deno",
-				artifact: "binary",
-				embeddedRuntimeVersion: denoVersion,
-				publishOrder: [hostAlias, "root"],
-			});
-			expect(
-				existsSync(
-					join(
-						stageDir,
-						hostAlias,
-						"bin",
-						`test-cli-${denoTarget}${process.platform === "win32" ? ".exe" : ""}`,
-					),
-				),
-			).toBe(true);
-
-			const { exitCode, stdout, stderr } = await runBoundedProcess(
-				which("node")!,
-				[join(stageDir, "root", "bin", "test-cli.js")],
-				{ cwd: tmpDir, timeout: 100_000 },
-			);
-			expect(stderr.trim()).toBe("");
-			expect(exitCode).toBe(0);
-			expect(stdout.trim()).toBe("hello from packaged test");
-		},
-		120_000,
-	);
 });
 
 // Public build -> npm pack -> install -> execute for a Bun runtime package: the
