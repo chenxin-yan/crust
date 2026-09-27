@@ -115,6 +115,10 @@ jobs:
           deno --version
           "$CRUST_TEST_SEA_NODE" --version
 
+      - name: Test Windows process cleanup and command-shim arguments
+        if: matrix.os == 'windows-latest'
+        run: pnpm exec vp test run packages/utils/src/process.test.ts packages/crust/tests/bounded-process.test.ts
+
       # Linux owns the full build/distribution suite, including all six modes.
       # Other hosts repeat only portable acceptance, not hardcoded cross-target cases.
       - name: Test all build and distribution integrations (Linux)

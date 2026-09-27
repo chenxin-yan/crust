@@ -1,47 +1,30 @@
 // Test-only subprocess runner. Vitest's test timeout neither cancels an awaited
 // child nor reaps it, so a hung command would keep writing into fixtures during
-// teardown. runBoundedProcess kills the child and its descendants at `timeout`;
-// reapBoundedProcesses kills any still running (e.g. after the test itself timed
-// out) and must run in afterEach/afterAll before fixtures are removed.
-import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+// teardown. At `timeout`, runBoundedProcess kills the POSIX process group or
+// live Windows tree; Windows descendants whose parent exited can escape cleanup.
+// reapBoundedProcesses applies the same cleanup to tracked children and must run
+// in afterEach/afterAll before fixtures are removed.
+import { spawn } from "node:child_process";
 import { once } from "node:events";
 
 // Imported as a package, never by source path: `vp pack` for this package emits
 // declarations beside any out-of-package source file its test program reaches.
-import { getWindowsShimCommand, type RunProcessResult } from "@crustjs/utils/process";
+import {
+	getWindowsShimCommand,
+	killProcessTree,
+	type RunProcessResult,
+} from "@crustjs/utils/process";
 
 export type BoundedProcessOptions = {
 	cwd?: string;
 	env?: NodeJS.ProcessEnv;
-	/** Milliseconds before the child and its descendants are killed. */
+	/** Milliseconds before process-tree cleanup; Windows requires a live parent. */
 	timeout: number;
 };
 
 type RunningProcess = { stop: (reason: string) => void; closed: Promise<unknown> };
 
 const running = new Set<RunningProcess>();
-
-/** POSIX kills the child's process group; Windows kills its live process tree. */
-function killTree(child: ChildProcess): void {
-	if (child.pid === undefined) return;
-	if (process.platform === "win32") {
-		// An exited child's PID may be reused, and taskkill only walks live parents.
-		// ponytail: descendants that outlive their parent on Windows are not reached.
-		if (child.exitCode === null && child.signalCode === null) {
-			spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
-				stdio: "ignore",
-				timeout: 10_000,
-			});
-		}
-		return;
-	}
-	try {
-		process.kill(-child.pid, "SIGKILL");
-	} catch (error) {
-		// SAFETY: process.kill throws errno exceptions.
-		if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
-	}
-}
 
 /** runProcess (same Windows command-shim handling and result) with a kill deadline. */
 export async function runBoundedProcess(
@@ -72,7 +55,7 @@ export async function runBoundedProcess(
 	const entry: RunningProcess = {
 		stop(reason) {
 			killedBecause ??= reason;
-			killTree(child);
+			killProcessTree(child);
 			// Descendants that escaped the kill must not hold "close" open.
 			child.stdout.destroy();
 			child.stderr.destroy();
@@ -96,7 +79,7 @@ export async function runBoundedProcess(
 		clearTimeout(timer);
 		running.delete(entry);
 		// Leftover members of the child's process group die with it.
-		if (process.platform !== "win32") killTree(child);
+		if (process.platform !== "win32") killProcessTree(child);
 	}
 }
 
