@@ -60,6 +60,6 @@ These grants apply to library code too. Subprocesses run outside Deno's sandbox,
 
 ## Build separately from running
 
-You don't need Bun to run Node.js or Deno source. **`crust build` is separate, Bun-powered tooling**, even when producing Node.js or Deno output. The packaged CLI can use its embedded Bun runtime; Deno binaries additionally require `deno` on `PATH`.
+You don't need Bun to run Node.js or Deno source. **`crust build` is separate, Bun-powered tooling**, even when producing Node.js or Deno output. The packaged CLI can use its embedded Bun runtime; Deno binaries additionally require `deno` on `PATH`, and Node.js binaries a `node` on `PATH` that meets [tsdown's executable requirements](/docs/guide/build-and-distribution#nodejs-binaries) (Node.js 26+ with the bundled tsdown).
 
-The runtime does not choose the output: `crust.artifact` does. A runtime package is JavaScript for the user's installed Bun or Node.js; a standalone binary embeds Bun or Deno. Node.js binaries and Deno runtime packages are not available yet. Continue to [Build and distribution](/docs/guide/build-and-distribution) for targets, launchers, and publishing.
+The runtime does not choose the output: `crust.artifact` does. A runtime package is JavaScript for the user's installed Bun or Node.js; a standalone binary embeds Bun, Deno, or Node.js. Deno runtime packages are not available yet. Continue to [Build and distribution](/docs/guide/build-and-distribution) for targets, launchers, and publishing.

@@ -15,6 +15,7 @@ npm install -D @crustjs/crust
 
 - The `crust` command is a Node launcher for a standalone executable with Bun embedded. Node is required to start it; a separate Bun installation is not.
 - Without `bun` on `PATH`, arm64 hosts cannot build their own target. The error names the targets you can build; otherwise install Bun.
+- `@crustjs/crust` optionally depends on `tsdown` and `@tsdown/exe`, which build [Node.js binaries](/docs/guide/build-and-distribution#nodejs-binaries) with the `node` on `PATH`. Other builds never load them, so an install that skipped them, for example under a Node.js outside tsdown's engines, still builds everything else.
 - The [`build()`](#programmatic-api) library is a plain JavaScript module, so it needs `bun` on `PATH` unless the script runs under Bun. `@crustjs/core` is a peer dependency so `BuildReport` is the same type your Extensions see.
 
 ### npm installation caveat
@@ -95,7 +96,7 @@ crust publish --dry-run
 | `executable`         | `<platform>/bin/<command>-<target>`                | `command`, canonical `target`  |
 | `bundle`             | `root/bin/<command>.js` for runtime packages       | `command`                      |
 
-- `build()` validates `bin`, the `crust` block, and its options with the same errors the CLI prints, selects the compiler (checking `engines` for binaries), then wipes `.crust/` and stages every package. `manifest.json` is written last.
+- `build()` validates `bin`, the `crust` block, and its options with the same errors the CLI prints, selects the compiler (checking `engines` for binaries, and tsdown's requirements for Node.js binaries, whose targets' Node.js binaries are also downloaded and unpacked then), then wipes `.crust/` and stages every package. `manifest.json` is written last.
 - It throws on failure and prints nothing; `onLog` receives each progress line with its stream.
 - `BuildReport` is `@crustjs/core`'s type, re-exported.
 - Overlapping calls for the same project in one process reject before staging. Serialize builds across processes yourself, and consume staged artifacts before rebuilding.
@@ -110,15 +111,17 @@ crust publish --dry-run
 
 Staged manifests are generated rather than copied:
 
-| Project field                                         | Staged behavior                                                                                                                        |
-| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`, `version`                                     | Required; platform names append the alias, such as `@scope/my-cli-linux-x64`                                                           |
-| npm metadata                                          | `description`, `license`, `author`, `homepage`, `bugs`, `repository`, `keywords`, `publishConfig`, `funding`, and `engines` are copied |
-| `bin`, `files`, `type`                                | Generated for the output; the root always uses `"type": "module"`                                                                      |
-| `dependencies`, `devDependencies`                     | Omitted; the compiler bundles the CLI code                                                                                             |
-| `optionalDependencies`                                | Generated for binary platform packages; absent for runtime packages                                                                    |
-| `exports`, `peerDependencies`, `peerDependenciesMeta` | Preserved in the root only, subject to the rules below                                                                                 |
-| `private`, source scripts, `$schema`                  | Omitted                                                                                                                                |
+| Project field                                         | Staged behavior                                                                                                                         |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`, `version`                                     | Required; platform names append the alias, such as `@scope/my-cli-linux-x64`                                                            |
+| npm metadata                                          | `description`, `license`, `author`, `homepage`, `bugs`, `repository`, `keywords`, `publishConfig`, `funding`, and `engines` are copied¹ |
+| `bin`, `files`, `type`                                | Generated for the output; the root always uses `"type": "module"`                                                                       |
+| `dependencies`, `devDependencies`                     | Omitted; the compiler bundles the CLI code                                                                                              |
+| `optionalDependencies`                                | Generated for binary platform packages; absent for runtime packages                                                                     |
+| `exports`, `peerDependencies`, `peerDependenciesMeta` | Preserved in the root only, subject to the rules below                                                                                  |
+| `private`, source scripts, `$schema`                  | Omitted                                                                                                                                 |
+
+¹ Node.js binaries omit `engines.node`, which constrained the Node.js that built and is embedded in the executables, from platform packages, and from the root unless it carries `exports`, whose importers need it. Other `engines` keys are copied.
 
 `README.md` is copied into the root package and the license file into every package. Platform manifests carry `os`, `cpu`, and, on Linux, `libc`.
 
@@ -132,18 +135,20 @@ To ship a library alongside the CLI:
 
 Targets apply to binaries. `--target` overrides `crust.targets`; without either, all targets of the compiler are built. `host` selects this machine's OS, architecture, and Linux C library and can be mixed with explicit targets. Runtime packages reject both `--target` and `crust.targets`.
 
-| Bun target                                   | Deno target                                             | Platform alias                       |
-| -------------------------------------------- | ------------------------------------------------------- | ------------------------------------ |
-| `bun-linux-x64`, `bun-linux-arm64`           | `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` | `linux-x64`, `linux-arm64`           |
-| `bun-linux-x64-musl`, `bun-linux-arm64-musl` | none                                                    | `linux-x64-musl`, `linux-arm64-musl` |
-| `bun-darwin-x64`, `bun-darwin-arm64`         | `x86_64-apple-darwin`, `aarch64-apple-darwin`           | `darwin-x64`, `darwin-arm64`         |
-| `bun-windows-x64`, `bun-windows-arm64`       | `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`     | `windows-x64`, `windows-arm64`       |
+| Bun target                                   | Deno target                                             | Node.js target               | Platform alias                       |
+| -------------------------------------------- | ------------------------------------------------------- | ---------------------------- | ------------------------------------ |
+| `bun-linux-x64`, `bun-linux-arm64`           | `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` | `linux-x64`, `linux-arm64`   | `linux-x64`, `linux-arm64`           |
+| `bun-linux-x64-musl`, `bun-linux-arm64-musl` | none                                                    | none                         | `linux-x64-musl`, `linux-arm64-musl` |
+| `bun-darwin-x64`, `bun-darwin-arm64`         | `x86_64-apple-darwin`, `aarch64-apple-darwin`           | `darwin-x64`, `darwin-arm64` | `darwin-x64`, `darwin-arm64`         |
+| `bun-windows-x64`, `bun-windows-arm64`       | `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`     | `win-x64`, `win-arm64`       | `windows-x64`, `windows-arm64`       |
+
+Node.js targets use Node.js's own release names. Cross-platform builds download that target's official Node.js archive of the same version; see [Node.js binaries](/docs/guide/build-and-distribution#nodejs-binaries) for the unpacking tools and macOS signing.
 
 Each platform package contains `bin/<command>-<target>` (`.exe` on Windows) per command. The launcher supports only the targets included in the build.
 
 ### Linux glibc and musl
 
-Plain Linux targets use glibc; Alpine needs Bun's `-musl` targets. The launcher detects the host C library and selects the matching binary. Deno has no musl target.
+Plain Linux targets use glibc; Alpine needs Bun's `-musl` targets. The launcher detects the host C library and selects the matching binary. Deno and Node.js have no musl target.
 
 <Callout type="warn">
   Bun's musl executables still load `libstdc++` and `libgcc` dynamically. A bare Alpine image needs
@@ -181,13 +186,13 @@ Each `bin` key is an installed command name and each value is the TypeScript ent
 
 `crust.artifact` is required unless every build passes `--artifact`; the other keys are optional. Unknown keys under `crust` fail the build, so typos such as `bunPlugin` are not ignored.
 
-| Key                | Description                                                                                                                                                                                                                                  |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `crust.runtime`    | `bun`, `deno`, or `node`. Without it, `deno.json`/`deno.jsonc` selects Deno and `@types/node` without `@types/bun` selects Node; otherwise Bun.                                                                                              |
-| `crust.artifact`   | `package` (a root-only runtime package for `bun` or `node`) or `binary` (standalone executables for `bun` or `deno`). `--artifact` overrides it. Node binaries and Deno packages are not available yet.                                      |
-| `crust.targets`    | Canonical compiler targets staged when a binary build runs without `--target`, `host` included. Without it every target of the compiler is staged. Rejected for runtime packages.                                                            |
-| `crust.bunPlugins` | [Bun bundler plugin](https://bun.com/docs/bundler/plugins) modules applied to Bun and Node builds, in order. A bare name resolves from `node_modules`, a path from the project root; each must default-export the plugin. Rejected for Deno. |
-| `crust.include`    | Directories relative to the project root that `crust build` copies into `.crust/root/` (listed in `files`) and into each platform package's `bin/`.                                                                                          |
+| Key                | Description                                                                                                                                                                                                                                                                     |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `crust.runtime`    | `bun`, `deno`, or `node`. Without it, `deno.json`/`deno.jsonc` selects Deno and `@types/node` without `@types/bun` selects Node; otherwise Bun.                                                                                                                                 |
+| `crust.artifact`   | `package` (a root-only runtime package for `bun` or `node`) or `binary` (standalone executables for `bun`, `deno`, or `node`). `--artifact` overrides it. Deno packages are not available yet.                                                                                  |
+| `crust.targets`    | Canonical compiler targets staged when a binary build runs without `--target`, `host` included. Without it every target of the compiler is staged. Rejected for runtime packages.                                                                                               |
+| `crust.bunPlugins` | [Bun bundler plugin](https://bun.com/docs/bundler/plugins) modules applied to Bun builds and Node runtime packages, in order. A bare name resolves from `node_modules`, a path from the project root; each must default-export the plugin. Rejected for Deno and Node binaries. |
+| `crust.include`    | Directories relative to the project root that `crust build` copies into `.crust/root/` (listed in `files`) and into each platform package's `bin/`.                                                                                                                             |
 
 `crust.include` entries must be existing directories inside the project, cannot be named `bin`, cannot be inside `.crust`, and cannot reuse an Extension artifact directory name. Symlinks are copied dereferenced and must resolve inside the project.
 

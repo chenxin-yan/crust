@@ -63,6 +63,18 @@ function withExecPath<T>(value: string, run: () => T): T {
 	}
 }
 
+// Reports a Node single executable application; the real one is in tests/artifacts-runtimes.test.ts.
+function withNodeSea<T>(run: () => T): T {
+	const original = process.getBuiltinModule;
+	process.getBuiltinModule = (id: string) =>
+		id === "node:sea" ? { isSea: () => true } : original(id);
+	try {
+		return run();
+	} finally {
+		process.getBuiltinModule = original;
+	}
+}
+
 describe("resolveArtifactDir", () => {
 	it("rejects anything but a single directory name", () => {
 		for (const name of ["", ".", "..", "skills/demo", "a\\b", "/skills"]) {
@@ -84,6 +96,16 @@ describe("resolveArtifactDir", () => {
 		process.env.CRUST_INTERNAL_BUILD = "1";
 		const result = withExecPath(join(tmpDir, "bin", "cli.exe"), () =>
 			withBunMain("B:/~BUN/root/cli.exe", () => resolveArtifactDir("skills")),
+		);
+		expect(result).toBe(join(tmpDir, "bin", "skills"));
+	});
+
+	it("resolves next to the executable inside a Node SEA over build-only markers", () => {
+		process.argv[1] = join(tmpDir, "bin", "cli");
+		process.env.CRUST_INTERNAL_BUILD = "1";
+		process.env[BUILD_OUT_DIR_ENV] = join(tmpDir, ".crust", "artifacts");
+		const result = withExecPath(join(tmpDir, "bin", "cli"), () =>
+			withNodeSea(() => resolveArtifactDir("skills")),
 		);
 		expect(result).toBe(join(tmpDir, "bin", "skills"));
 	});

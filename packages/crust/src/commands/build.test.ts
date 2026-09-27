@@ -10,7 +10,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Crust, defineExtensionId } from "@crustjs/core";
@@ -27,6 +27,7 @@ import {
 	BUN_TARGETS,
 	DENO_TARGETS,
 	hostTarget,
+	NODE_TARGETS,
 	resolveTargets,
 	type TargetTable,
 } from "../utils/build-helpers.ts";
@@ -151,15 +152,44 @@ describe("planBuild", () => {
 		});
 	});
 
-	it("reports runtime/artifact combinations that are not available yet", () => {
+	it("plans node standalone binaries over Node's own target table", () => {
 		writePackageJson({ crust: { runtime: "node", artifact: "binary" } });
-		expect(() => planBuild(baseFlags, tmpDir)).toThrow(
-			"Standalone binaries are not available for the node runtime yet.",
+		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+			runtime: "node",
+			artifact: "binary",
+			targets: [...NODE_TARGETS.targets],
+		});
+		// Inferred node runtime, --artifact binary, explicit targets deduplicated in order.
+		writePackageJson({ devDependencies: { "@types/node": "^22" } });
+		expect(
+			planBuild({ ...binary, targets: ["win-x64", "linux-arm64", "win-x64"] }, tmpDir),
+		).toMatchObject({
+			runtime: "node",
+			runtimeSource: "inferred from @types/node",
+			targets: ["win-x64", "linux-arm64"],
+		});
+		expect(() => planBuild({ ...binary, targets: ["windows-x64"] }, tmpDir)).toThrow(
+			'Unknown Node target "windows-x64". Targets must use canonical Node names. Did you mean "win-x64"?',
 		);
-		writePackageJson({ crust: { runtime: "node" } });
+		// Node publishes no musl builds, and Bun names are not Node names.
+		for (const target of ["linux-x64-musl", "bun-linux-x64"]) {
+			expect(() => planBuild({ ...binary, targets: [target] }, tmpDir)).toThrow(
+				`Unknown Node target "${target}".`,
+			);
+		}
+		// tsdown has no Bun plugin support; the same plugins still work for a Node runtime package.
+		writePackageJson({ crust: { runtime: "node", bunPlugins: ["./plugin.ts"] } });
 		expect(() => planBuild(binary, tmpDir)).toThrow(
-			"Standalone binaries are not available for the node runtime yet.",
+			"package.json crust.bunPlugins is not supported for node standalone binaries.",
 		);
+		expect(planBuild(runtimePackage, tmpDir)).toMatchObject({
+			runtime: "node",
+			artifact: "package",
+			bunPlugins: ["./plugin.ts"],
+		});
+	});
+
+	it("reports runtime/artifact combinations that are not available yet", () => {
 		writePackageJson({ crust: { runtime: "deno" } });
 		expect(() => planBuild(runtimePackage, tmpDir)).toThrow(
 			"Runtime packages are not available for the deno runtime yet.",
@@ -805,9 +835,9 @@ describe("build", () => {
 		await expect(
 			build({ cwd: tmpDir, targets: ["bun-linux-x64"], validate: false }),
 		).rejects.toThrow("--target cannot be used with runtime packages");
-		await expect(build({ cwd: tmpDir, artifact: "binary", validate: false })).rejects.toThrow(
-			"Standalone binaries are not available for the node runtime yet",
-		);
+		await expect(
+			build({ cwd: tmpDir, artifact: "binary", targets: ["bun-linux-x64"], validate: false }),
+		).rejects.toThrow('Unknown Node target "bun-linux-x64"');
 		await expect(
 			build({ cwd: tmpDir, envFiles: [".env.missing"], validate: false }),
 		).rejects.toThrow("Env file not found");
@@ -906,6 +936,73 @@ describe("build", () => {
 		expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
 		expect(existsSync(join(stageDir, "manifest.json"))).toBe(false);
 	}, 30_000);
+
+	// The shim is a POSIX script; the real Node binary builds run in tests/node-exe.integration.test.ts.
+	it.skipIf(process.platform === "win32")(
+		"selects and validates the node binary compiler and tsdown's requirements before wiping the previous stage",
+		async () => {
+			const nodePath = which("node")!;
+			const nodeBinary = {
+				cwd: tmpDir,
+				artifact: "binary",
+				targets: ["linux-x64"],
+				validate: false,
+			} as const;
+			const project = (engines?: Record<string, string>) => {
+				writeProject(
+					{ name: "node-exe-cli", crust: { runtime: "node" }, ...(engines ? { engines } : {}) },
+					'console.log("hi");\n',
+				);
+				mkdirSync(stageDir);
+				writeFileSync(join(stageDir, "kept.txt"), "kept\n");
+			};
+
+			project({ node: "0.0.1" });
+			await expect(build(nodeBinary)).rejects.toThrow(
+				`(${nodePath}) does not satisfy package.json engines.node "0.0.1"`,
+			);
+			expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
+
+			// A node inside tsdown's package engines but below its executable minimum,
+			// which is read from the installed tsdown under that node.
+			project();
+			const shimDir = mkdtempSync(join(tmpdir(), "crust-node-shim-"));
+			writeFileSync(
+				join(shimDir, "node"),
+				`#!/bin/sh\nif [ "$1" = --version ]; then echo v24.11.0; exit 0; fi\nexec '${nodePath}' "$@"\n`,
+				{ mode: 0o755 },
+			);
+			const path = process.env.PATH;
+			try {
+				process.env.PATH = `${shimDir}:${path}`;
+				await expect(build(nodeBinary)).rejects.toThrow(
+					/^Node 24\.11\.0 \(.*\) cannot build standalone executables: tsdown \S+'s executable builder requires Node \S+ or later\.\n  Binaries embed the selected node's version; crust does not install or upgrade it\./,
+				);
+				expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
+
+				process.env.PATH = "";
+				await expect(build(nodeBinary)).rejects.toThrow(
+					"Node is required for node standalone binaries but was not found on PATH.",
+				);
+			} finally {
+				process.env.PATH = path;
+				rmSync(shimDir, { recursive: true, force: true });
+			}
+			expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
+			expect(existsSync(join(stageDir, "manifest.json"))).toBe(false);
+
+			// Node runtime packages need neither tsdown's node nor tsdown: Bun bundles them.
+			process.env.PATH = dirname(which("bun")!);
+			try {
+				await expect(
+					build({ cwd: tmpDir, artifact: "package", validate: false }),
+				).resolves.toHaveProperty("stageDir", stageDir);
+			} finally {
+				process.env.PATH = path;
+			}
+		},
+		30_000,
+	);
 
 	// A version-manager shim picks the runtime from its working directory, so the
 	// version probe must run in the project, where compilation runs, not in the caller's cwd.
@@ -1020,9 +1117,9 @@ describe("buildCommand error handling", () => {
 			await executeBuildError(
 				"artifact-precedence",
 				{ crust: { runtime: "node", artifact: "package" } },
-				["--artifact", "binary", "--no-validate"],
+				["--artifact", "binary", "--target", "bun-linux-x64", "--no-validate"],
 			),
-		).toContain("Standalone binaries are not available for the node runtime yet");
+		).toContain('Unknown Node target "bun-linux-x64"');
 		expect(
 			await executeBuildError("deno-package", { crust: { runtime: "deno", artifact: "binary" } }, [
 				"--artifact",

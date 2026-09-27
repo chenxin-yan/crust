@@ -4,13 +4,15 @@ import { libraryTasks, pack, runtimeInput, upstreamBuild } from "../../vite.shar
 
 // The programmatic `build()` library. The `crust` executable itself is staged
 // by `crust build` (`build:task` below), which ships this `dist/` via
-// `crust.include` and carries `exports` into the generated root package.
+// `crust.include` and carries `exports` into the generated root package;
+// scripts/stage-node-exe-dependencies.ts then adds the Node binary backend.
 export default defineConfig({
 	pack: {
 		...pack,
 		entry: ["src/index.ts"],
-		// The published root package has no runtime dependencies (the binaries
-		// inline theirs), so the library bundles the workspace packages' code.
+		// The published packages only optionally depend on the Node binary backend
+		// (tsdown, resolved at build time, never imported); the binaries inline
+		// everything else, so the library bundles the workspace packages' code.
 		// Declarations stay external: bundling core's `unique symbol` brands would
 		// mint a second `ExtensionId`, making the re-exported `BuildReport`
 		// incompatible with `@crustjs/core`'s. package.json declares core as the
@@ -35,7 +37,7 @@ export default defineConfig({
 				output: ["dist/**"],
 			},
 			"build:task": {
-				command: "bun src/cli.ts build",
+				command: "bun src/cli.ts build && bun scripts/stage-node-exe-dependencies.ts",
 				dependsOn: ["pack:task", upstreamBuild],
 				env: ["CI"],
 				input: [...runtimeInput, "dist/**", "!.crust/**"],

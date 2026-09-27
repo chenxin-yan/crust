@@ -17,7 +17,14 @@ type StandaloneGlobals = {
 	Deno?: { build?: { standalone?: boolean } };
 };
 
-/** True inside a `bun build --compile` or `deno compile` executable. */
+type SeaProcess = {
+	getBuiltinModule?: (id: "node:sea") => { isSea(): boolean } | undefined;
+};
+
+/**
+ * True inside a `bun build --compile` or `deno compile` executable, or a Node
+ * single executable application.
+ */
 function isCompiledExecutable(): boolean {
 	// SAFETY: both globals are optional and every access below is optional-chained.
 	const { Bun, Deno } = globalThis as StandaloneGlobals;
@@ -28,7 +35,13 @@ function isCompiledExecutable(): boolean {
 	return (
 		bunMain.startsWith("/$bunfs/") ||
 		/^[A-Za-z]:[\\/]~BUN[\\/]/.test(bunMain) ||
-		Deno?.build?.standalone === true
+		Deno?.build?.standalone === true ||
+		// A static `node:sea` import would fail to load on Bun and Deno. A SEA's
+		// `import.meta.url` is the executable (or undefined after GC), never the
+		// bundle layout below.
+		// SAFETY: Node added getBuiltinModule in 22.3 and Bun/Deno return undefined
+		// for `node:sea`; both are optional-chained.
+		(process as SeaProcess).getBuiltinModule?.("node:sea")?.isSea() === true
 	);
 }
 
@@ -37,7 +50,7 @@ function isCompiledExecutable(): boolean {
  * this CLI. `name` is a top-level directory name such as `"skills"`.
  *
  * The artifact path is computed from how the CLI is running — never probed:
- * - Compiled executable (Bun or Deno): `<dir of the executable>/<name>`, which
+ * - Compiled executable (Bun, Deno, or Node SEA): `<dir of the executable>/<name>`, which
  *   is a platform package's `bin/` or wherever the binary was placed.
  * - Crust-built Node bundle: `<name>` next to the bundle's `bin/` directory,
  *   i.e. `.crust/root/<name>` in place and `<installed root>/<name>` after install.
