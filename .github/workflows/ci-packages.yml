@@ -114,9 +114,6 @@ jobs:
     concurrency:
       group: node-standalone-binary-${{ matrix.os }}-${{ github.ref }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-    defaults:
-      run:
-        shell: bash
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -133,9 +130,11 @@ jobs:
         run: pnpm exec vp run --fail-if-no-match --filter ./packages/crust pack:task
 
       - name: Select Node 26 for Node binary builds
+        shell: bash
         run: echo "CRUST_TEST_SEA_NODE=$(mise exec node@26.10.0 -- node -p process.execPath)" >> "$GITHUB_ENV"
 
       - name: Print tool versions
+        shell: bash
         run: |
           node --version
           npm --version
@@ -145,7 +144,6 @@ jobs:
       - name: Build, pack, install, and run Node binaries
         # Git Bash shadows Windows' ZIP-capable tar with GNU tar, which also
         # interprets the archive's drive-letter prefix as a remote host.
-        shell: ${{ matrix.os == 'windows-latest' && 'pwsh' || 'bash' }}
         run: pnpm --dir packages/crust exec vp test run tests/node-exe.integration.test.ts
 
       # The real-SEA case only runs on Linux under a Node 25.5+ test host.
