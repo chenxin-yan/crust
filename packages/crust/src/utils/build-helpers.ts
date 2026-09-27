@@ -2,11 +2,11 @@ import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { once } from "node:events";
 import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, posix, resolve, win32 } from "node:path";
+import { dirname, isAbsolute, join, posix, resolve, win32 } from "node:path";
 import { text } from "node:stream/consumers";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { type BuildReport, defineExtensionId, type InvocationIO } from "@crustjs/core";
 import { type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
@@ -37,7 +37,7 @@ export type TargetInfo = {
 };
 
 export type TargetTable<T extends string> = {
-	runtime: "Bun" | "Deno";
+	runtime: "Bun" | "Deno" | "Node";
 	targets: readonly T[];
 	info: Record<T, TargetInfo>;
 };
@@ -169,6 +169,65 @@ export const DENO_TARGETS = {
 		},
 	},
 } as const satisfies TargetTable<DenoTarget>;
+
+// Node's own release platform names (`node-v26.10.0-win-x64`), which tsdown's
+// executable builder accepts as `{ platform, arch }`. It has no libc variant:
+// the official Linux builds link glibc, so musl hosts have no Node target.
+const NODE_TARGET_NAMES = [
+	"linux-x64",
+	"linux-arm64",
+	"darwin-x64",
+	"darwin-arm64",
+	"win-x64",
+	"win-arm64",
+] as const;
+
+export type NodeTarget = (typeof NODE_TARGET_NAMES)[number];
+
+export const NODE_TARGETS = {
+	runtime: "Node",
+	targets: NODE_TARGET_NAMES,
+	info: {
+		"linux-x64": {
+			alias: "linux-x64",
+			platformKey: "linux-x64",
+			os: "linux",
+			cpu: "x64",
+			libc: "glibc",
+		},
+		"linux-arm64": {
+			alias: "linux-arm64",
+			platformKey: "linux-arm64",
+			os: "linux",
+			cpu: "arm64",
+			libc: "glibc",
+		},
+		"darwin-x64": {
+			alias: "darwin-x64",
+			platformKey: "darwin-x64",
+			os: "darwin",
+			cpu: "x64",
+		},
+		"darwin-arm64": {
+			alias: "darwin-arm64",
+			platformKey: "darwin-arm64",
+			os: "darwin",
+			cpu: "arm64",
+		},
+		"win-x64": {
+			alias: "windows-x64",
+			platformKey: "win32-x64",
+			os: "win32",
+			cpu: "x64",
+		},
+		"win-arm64": {
+			alias: "windows-arm64",
+			platformKey: "win32-arm64",
+			os: "win32",
+			cpu: "arm64",
+		},
+	},
+} as const satisfies TargetTable<NodeTarget>;
 
 /** `--target` value that stands for this machine's canonical target. */
 export const HOST_TARGET = "host";
@@ -364,6 +423,17 @@ export function resolveDenoBuildRunner(): BuildRunner {
 	return { command: denoPath, env: { ...process.env } };
 }
 
+/** The external `node` on PATH, which runs tsdown's executable builder; there is no embedded fallback. */
+export function resolveNodeBuildRunner(): BuildRunner {
+	const nodePath = which("node");
+	if (!nodePath) {
+		throw new Error(
+			"Node is required for node standalone binaries but was not found on PATH.\n  Binaries embed the selected node's version; install Node (https://nodejs.org) or put it first on PATH with your version manager.",
+		);
+	}
+	return { command: nodePath, env: { ...process.env } };
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Binary compiler versions
 // ────────────────────────────────────────────────────────────────────────────
@@ -463,6 +533,189 @@ export async function resolveBinaryCompiler(
 	const compiler = { runtime, runner, version: await readCompilerVersion(runtime, runner, cwd) };
 	assertCompilerSatisfiesEngines(compiler, userPackageJson);
 	return compiler;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Node standalone binaries (tsdown exe)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Crust's own dependencies that build Node standalone binaries. Crust's staged
+ * root and platform packages declare them (scripts/stage-node-exe-dependencies.ts)
+ * so an installed crust resolves them next to itself.
+ */
+export const NODE_EXE_BACKEND_PACKAGES = ["tsdown", "@tsdown/exe"] as const;
+
+/** Crust's installed tsdown, as the selected Node resolves and loads it. */
+export type NodeExeBackend = {
+	/** tsdown's package.json, resolved from Crust's own installation. */
+	packageJsonPath: string;
+	version: string;
+	/** tsdown's package `engines.node`. */
+	engines: string;
+	/** Oldest Node tsdown's executable builder accepts (Node SEA with an ESM entry). */
+	seaMinVersion: string;
+};
+
+/** The selected external Node together with the backend it builds binaries with. */
+export type NodeBinaryCompiler = BuildCompiler & { runtime: "node"; backend: NodeExeBackend };
+
+/**
+ * A file of Crust's own installation that the backend is resolved from, never
+ * the project or PATH. A compiled crust serves its modules from Bun's virtual
+ * filesystem (`/$bunfs/`, `B:/~BUN/` on Windows), so there it is the
+ * executable, inside its platform package.
+ */
+export function crustInstallPath(moduleUrl = import.meta.url, execPath = process.execPath): string {
+	return /^file:\/\/\/(?:\$bunfs|[A-Za-z]:\/~BUN)\//.test(moduleUrl)
+		? execPath
+		: fileURLToPath(moduleUrl);
+}
+
+/**
+ * `<dir>/node_modules/<name>/package.json` for the nearest `dir` at or above
+ * `from`: Node's node_modules lookup without its NODE_PATH and global-folder
+ * fallbacks, so only an installation next to `from` can supply the package.
+ */
+function findInstalledPackageJson(from: string, name: string): string | null {
+	for (let dir = from; ; dir = dirname(dir)) {
+		const candidate = join(dir, "node_modules", name, "package.json");
+		if (existsSync(candidate)) return candidate;
+		if (dirname(dir) === dir) return null;
+	}
+}
+
+function isTsdownPackageJson(
+	value: JsonValue,
+): value is JsonObject & { version: string; engines: JsonObject & { node: string } } {
+	return (
+		isJsonObject(value) &&
+		typeof value.version === "string" &&
+		value.engines !== undefined &&
+		isJsonObject(value.engines) &&
+		value.engines.node !== undefined &&
+		isVersionRange(value.engines.node)
+	);
+}
+
+// Loads tsdown's executable-builder minimum under the selected Node, the way
+// the build loads tsdown: as a self-reference from its package.json.
+function createNodeExeProbeScript(tsdownPackageJson: string): string {
+	return `// Generated by crust build to read tsdown's executable minimum; deleted when it exits.
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
+
+const internal = createRequire(${JSON.stringify(tsdownPackageJson)}).resolve("tsdown/internal");
+console.log((await import(pathToFileURL(internal).href)).NODE_SEA_MIN_VERSION);
+`;
+}
+
+const NODE_TOOLCHAIN_GUIDANCE =
+	"  Binaries embed the selected node's version; crust does not install or upgrade it.\n  Put a supported node first on PATH (e.g. with your version manager).";
+
+/**
+ * Checks the selected Node against the installed backend's two separate
+ * requirements: tsdown's package `engines.node` and its executable builder's
+ * minimum (skipped while unknown). Both come from the installed tsdown, not
+ * from this file.
+ */
+export function assertNodeExeBackendSupports(
+	compiler: BuildCompiler,
+	backend: Pick<NodeExeBackend, "version" | "engines"> & { seaMinVersion?: string },
+): void {
+	const selected = `Node ${compiler.version} (${compiler.runner.command})`;
+	if (!satisfies(compiler.version, backend.engines)) {
+		throw new Error(
+			`${selected} is not supported by tsdown ${backend.version}, which builds node standalone binaries: its package requires Node "${backend.engines}".\n${NODE_TOOLCHAIN_GUIDANCE}`,
+		);
+	}
+	if (
+		backend.seaMinVersion !== undefined &&
+		!satisfies(compiler.version, `>=${backend.seaMinVersion}`)
+	) {
+		throw new Error(
+			`${selected} cannot build standalone executables: tsdown ${backend.version}'s executable builder requires Node ${backend.seaMinVersion} or later.\n${NODE_TOOLCHAIN_GUIDANCE}`,
+		);
+	}
+}
+
+/**
+ * Finds Crust's installed tsdown and @tsdown/exe from `installPath` and
+ * validates the selected Node against tsdown's requirements, loading the
+ * executable builder's minimum under that Node. `cwd` is the project
+ * directory, as for every other compiler step.
+ */
+export async function resolveNodeExeBackend(
+	compiler: BuildCompiler,
+	cwd: string,
+	installPath: string = crustInstallPath(),
+): Promise<NodeExeBackend> {
+	const reinstall = `  Reinstall @crustjs/crust: it ships ${NODE_EXE_BACKEND_PACKAGES.join(" and ")} as dependencies.`;
+	const packageJsonPath = findInstalledPackageJson(dirname(installPath), "tsdown");
+	if (packageJsonPath === null) {
+		throw new Error(
+			`tsdown, which builds node standalone binaries, is not installed with crust (${installPath}).\n${reinstall}`,
+		);
+	}
+	// tsdown imports @tsdown/exe from its real location for executable targets.
+	if (findInstalledPackageJson(dirname(realpathSync(packageJsonPath)), "@tsdown/exe") === null) {
+		throw new Error(
+			`@tsdown/exe is not installed beside crust's tsdown (${packageJsonPath}).\n${reinstall}`,
+		);
+	}
+	const tsdownPackage: JsonValue = JSON.parse(readFileSync(packageJsonPath, "utf8"));
+	if (!isTsdownPackageJson(tsdownPackage)) {
+		throw new Error(`Unexpected tsdown package metadata in ${packageJsonPath}.\n${reinstall}`);
+	}
+	const backend = {
+		packageJsonPath,
+		version: tsdownPackage.version,
+		engines: tsdownPackage.engines.node,
+	};
+	assertNodeExeBackendSupports(compiler, backend);
+
+	const workDir = await mkdtemp(join(tmpdir(), "crust-node-exe-probe-"));
+	try {
+		const scriptPath = join(workDir, "probe.mjs");
+		await writeFile(scriptPath, createNodeExeProbeScript(packageJsonPath));
+		const { exitCode, stdout, stderr } = await runProcess(compiler.runner.command, [scriptPath], {
+			env: compiler.runner.env,
+			cwd,
+			stdio: "collect",
+		});
+		const seaMinVersion = exitCode === 0 ? validVersion(stdout.trim()) : null;
+		if (seaMinVersion === null) {
+			const output = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
+			throw new Error(
+				`tsdown ${backend.version}'s executable builder could not be loaded with ${compiler.runner.command} (exit ${exitCode}).\n${reinstall}${output ? `\n${output}` : ""}`,
+			);
+		}
+		const resolved = { ...backend, seaMinVersion };
+		assertNodeExeBackendSupports(compiler, resolved);
+		return resolved;
+	} finally {
+		await rm(workDir, { recursive: true, force: true });
+	}
+}
+
+/**
+ * Select the Node binary compiler once for a build: the external `node`, its
+ * version read in the project directory `cwd`, validated against the
+ * project's `engines.node` and then the installed tsdown's requirements.
+ * Pass it to {@link execNodeBinaryBuild} for every command and target.
+ */
+export async function resolveNodeBinaryCompiler(
+	userPackageJson: JsonValue | undefined,
+	cwd: string,
+): Promise<NodeBinaryCompiler> {
+	const runner = resolveNodeBuildRunner();
+	const compiler = {
+		runtime: "node" as const,
+		runner,
+		version: await readCompilerVersion("node", runner, cwd),
+	};
+	assertCompilerSatisfiesEngines(compiler, userPackageJson);
+	return { ...compiler, backend: await resolveNodeExeBackend(compiler, cwd) };
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -796,6 +1049,133 @@ export async function execDenoBuild(
 		outfilePath,
 		cwd,
 	);
+}
+
+/** tsdown's `ExeTarget` (`@tsdown/exe`): Node's release platform and arch, and the exact embedded version. */
+export type NodeExeTarget = {
+	platform: "linux" | "darwin" | "win";
+	arch: "x64" | "arm64";
+	nodeVersion: string;
+};
+
+/** tsdown's executable target for a Node target, embedding exactly `nodeVersion`. */
+export function nodeExeTarget(target: NodeTarget, nodeVersion: string): NodeExeTarget {
+	const { os, cpu } = NODE_TARGETS.info[target];
+	return { platform: os === "win32" ? "win" : os, arch: cpu, nodeVersion };
+}
+
+type NodeExeBuildScriptOptions = {
+	tsdownPackageJson: string;
+	cwd: string;
+	entry: string;
+	bundleDir: string;
+	exeDir: string;
+	minify: boolean;
+	envFiles: readonly string[];
+	target: NodeExeTarget;
+};
+
+/**
+ * Script the selected Node runs to build one command for one target with
+ * tsdown's programmatic `build`. Every value is embedded via JSON.stringify.
+ */
+function createNodeExeBuildScript(options: NodeExeBuildScriptOptions): string {
+	return `// Generated by crust build for a Node standalone binary; deleted when the build finishes.
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
+import { parseEnv } from "node:util";
+
+const options = ${JSON.stringify(options)};
+const { build } = await import(pathToFileURL(createRequire(options.tsdownPackageJson).resolve("tsdown")).href);
+// The PUBLIC_* constants of \`bun build --env-file ... --env=PUBLIC_*\`: later files override earlier ones, the environment overrides both.
+const env = {};
+for (const file of options.envFiles) Object.assign(env, parseEnv(readFileSync(file, "utf8")));
+Object.assign(env, process.env);
+await build({
+	config: false,
+	cwd: options.cwd,
+	entry: { app: options.entry },
+	outDir: options.bundleDir,
+	format: "esm",
+	platform: "node",
+	// Bundled CommonJS dependencies still read __dirname/__filename.
+	shims: true,
+	dts: false,
+	minify: options.minify,
+	logLevel: "warn",
+	report: false,
+	define: ${JSON.stringify(CRUST_BUILD_DEFINE)},
+	env: Object.fromEntries(Object.entries(env).filter(([name]) => name.startsWith("PUBLIC_"))),
+	envPrefix: "PUBLIC_",
+	// An executable ships no node_modules: bundle every dependency and fail on
+	// any import other than a Node built-in left for the runtime to resolve.
+	deps: { alwaysBundle: () => true, onlyBundle: false, onlyImport: [] },
+	exe: { outDir: options.exeDir, fileName: "app", targets: [options.target] },
+});
+`;
+}
+
+/**
+ * Build a single entry file into a Node standalone executable with tsdown's
+ * executable builder (Node SEA), run by the selected external Node and
+ * embedding exactly its version for `target`. tsdown takes a single entry per
+ * executable, so callers build every command separately. Matching official
+ * Node binaries for targets are downloaded, checksum-verified, and cached by
+ * @tsdown/exe. Builds for darwin are only code-signed on a macOS host.
+ *
+ * @param compiler - The selected Node compiler (`resolveNodeBinaryCompiler`)
+ * @param onWarning - Receives the backend's warnings (such as a skipped code
+ *   signature) after a successful build
+ * @throws {Error} If the build fails
+ */
+export async function execNodeBinaryBuild(
+	entryPath: string,
+	outfilePath: string,
+	minify: boolean,
+	target: NodeTarget,
+	envFiles: readonly string[],
+	cwd: string,
+	compiler: NodeBinaryCompiler,
+	onWarning: (message: string) => void = () => {},
+): Promise<void> {
+	const workDir = await mkdtemp(join(tmpdir(), "crust-node-exe-"));
+	try {
+		const scriptPath = join(workDir, "build.mjs");
+		const exeDir = join(workDir, "exe");
+		await writeFile(
+			scriptPath,
+			createNodeExeBuildScript({
+				tsdownPackageJson: compiler.backend.packageJsonPath,
+				cwd,
+				entry: resolve(cwd, entryPath),
+				bundleDir: join(workDir, "bundle"),
+				exeDir,
+				minify,
+				envFiles,
+				target: nodeExeTarget(target, compiler.version),
+			}),
+		);
+		const { exitCode, stdout, stderr } = await runProcess(compiler.runner.command, [scriptPath], {
+			env: compiler.runner.env,
+			cwd,
+			stdio: "collect",
+		});
+		const output = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
+		if (exitCode !== 0) {
+			throw new Error(`Build failed for ${outfilePath}${output ? `:\n${output}` : ""}`);
+		}
+		const produced = await readdir(exeDir);
+		if (produced.length !== 1) {
+			throw new Error(
+				`Build failed for ${outfilePath}: expected one executable from tsdown, found ${JSON.stringify(produced)}.`,
+			);
+		}
+		await copyFile(join(exeDir, produced[0]!), outfilePath);
+		if (output) onWarning(output);
+	} finally {
+		await rm(workDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+	}
 }
 
 /**

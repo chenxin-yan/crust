@@ -11,7 +11,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { defineExtensionId } from "@crustjs/core";
 import { which } from "@crustjs/utils/process";
@@ -31,10 +31,18 @@ import {
 	execBunPackageBuild,
 	execNodeBuild,
 	hostTarget,
+	assertNodeExeBackendSupports,
+	crustInstallPath,
+	NODE_TARGETS,
+	nodeExeTarget,
 	readCompilerVersion,
 	resolveBinaryCompiler,
 	resolveBunBuildRunner,
 	resolveBunPluginSource,
+	resolveNodeBinaryCompiler,
+	resolveNodeBuildRunner,
+	resolveNodeExeBackend,
+	resolveTargets,
 	type BunPluginDriverOptions,
 } from "./build-helpers.ts";
 
@@ -261,6 +269,145 @@ describe("resolveBinaryCompiler", () => {
 		await expect(
 			withoutBunOnPath(() => resolveBinaryCompiler("deno", undefined, process.cwd())),
 		).rejects.toThrow("Deno is required for the deno runtime but was not found on PATH.");
+	});
+});
+
+describe("NODE_TARGETS", () => {
+	it("maps each target to tsdown's executable target and npm metadata", () => {
+		expect(
+			NODE_TARGETS.targets.map((target) => [
+				target,
+				nodeExeTarget(target, "26.10.0"),
+				NODE_TARGETS.info[target].platformKey,
+			]),
+		).toEqual([
+			["linux-x64", { platform: "linux", arch: "x64", nodeVersion: "26.10.0" }, "linux-x64"],
+			["linux-arm64", { platform: "linux", arch: "arm64", nodeVersion: "26.10.0" }, "linux-arm64"],
+			["darwin-x64", { platform: "darwin", arch: "x64", nodeVersion: "26.10.0" }, "darwin-x64"],
+			[
+				"darwin-arm64",
+				{ platform: "darwin", arch: "arm64", nodeVersion: "26.10.0" },
+				"darwin-arm64",
+			],
+			["win-x64", { platform: "win", arch: "x64", nodeVersion: "26.10.0" }, "win32-x64"],
+			["win-arm64", { platform: "win", arch: "arm64", nodeVersion: "26.10.0" }, "win32-arm64"],
+		]);
+		// Official Node Linux builds link glibc; npm must skip them on musl.
+		expect(NODE_TARGETS.info["linux-arm64"].libc).toBe("glibc");
+	});
+
+	it("rejects musl and points package aliases at the canonical Node target", () => {
+		expect(() => resolveTargets(NODE_TARGETS, ["linux-x64-musl"])).toThrow(
+			'Unknown Node target "linux-x64-musl". Targets must use canonical Node names.\n  Valid targets: linux-x64, linux-arm64, darwin-x64, darwin-arm64, win-x64, win-arm64',
+		);
+		expect(() => resolveTargets(NODE_TARGETS, ["windows-x64"])).toThrow(
+			'Unknown Node target "windows-x64". Targets must use canonical Node names. Did you mean "win-x64"?',
+		);
+		expect(() => resolveTargets(NODE_TARGETS, ["bun-linux-x64"])).toThrow(
+			'Unknown Node target "bun-linux-x64"',
+		);
+	});
+});
+
+describe("crustInstallPath", () => {
+	it("resolves from the executable inside a compiled crust and from the module otherwise", () => {
+		const exe = resolve("/pkg/node_modules/@crustjs/crust-linux-x64/bin/crust-bun-linux-x64");
+		expect(crustInstallPath("file:///$bunfs/root/crust", exe)).toBe(exe);
+		expect(crustInstallPath("file:///B:/~BUN/root/crust.exe", exe)).toBe(exe);
+		const library = pathToFileURL(resolve("/pkg/node_modules/@crustjs/crust/dist/index.js"));
+		expect(crustInstallPath(library.href, exe)).toBe(
+			resolve("/pkg/node_modules/@crustjs/crust/dist/index.js"),
+		);
+	});
+});
+
+describe("Node binary compiler", () => {
+	const nodePath = which("node");
+	const backend = { version: "0.23.0", engines: "^22.18.0 || ^24.11.0 || >=26.0.0" };
+	const nodeCompiler = (version: string): BuildCompiler => ({
+		runtime: "node",
+		runner: { command: "/opt/node/bin/node", env: {} },
+		version,
+	});
+
+	it("tells tsdown's package engines apart from its executable minimum", () => {
+		expect(() =>
+			assertNodeExeBackendSupports(nodeCompiler("25.9.0"), { ...backend, seaMinVersion: "25.7.0" }),
+		).toThrow(
+			'Node 25.9.0 (/opt/node/bin/node) is not supported by tsdown 0.23.0, which builds node standalone binaries: its package requires Node "^22.18.0 || ^24.11.0 || >=26.0.0".\n' +
+				"  Binaries embed the selected node's version; crust does not install or upgrade it.\n" +
+				"  Put a supported node first on PATH (e.g. with your version manager).",
+		);
+		expect(() =>
+			assertNodeExeBackendSupports(nodeCompiler("24.21.0"), {
+				...backend,
+				seaMinVersion: "25.7.0",
+			}),
+		).toThrow(
+			"Node 24.21.0 (/opt/node/bin/node) cannot build standalone executables: tsdown 0.23.0's executable builder requires Node 25.7.0 or later.",
+		);
+		expect(() => assertNodeExeBackendSupports(nodeCompiler("24.21.0"), backend)).not.toThrow();
+		expect(() =>
+			assertNodeExeBackendSupports(nodeCompiler("26.10.0"), {
+				...backend,
+				seaMinVersion: "25.7.0",
+			}),
+		).not.toThrow();
+	});
+
+	it.skipIf(nodePath === null)(
+		"reads both requirements from the tsdown installed with crust, under the selected node",
+		async () => {
+			const compiler = { ...nodeCompiler("24.21.0"), runner: resolveNodeBuildRunner() };
+			await expect(resolveNodeExeBackend(compiler, process.cwd())).rejects.toThrow(
+				`Node 24.21.0 (${nodePath}) cannot build standalone executables: tsdown 0.23.0's executable builder requires Node 25.7.0 or later.`,
+			);
+			await expect(
+				resolveNodeExeBackend({ ...compiler, version: "25.9.0" }, process.cwd()),
+			).rejects.toThrow('its package requires Node "^22.18.0 || ^24.11.0 || >=26.0.0"');
+			const backendInstalled = await resolveNodeExeBackend(
+				{ ...compiler, version: "26.10.0" },
+				process.cwd(),
+			);
+			expect(backendInstalled).toMatchObject({ ...backend, seaMinVersion: "25.7.0" });
+			expect(await realpath(backendInstalled.packageJsonPath)).toBe(
+				await realpath(fileURLToPath(import.meta.resolve("tsdown/package.json"))),
+			);
+		},
+	);
+
+	it("never resolves the backend from outside crust's installation, even through NODE_PATH", async () => {
+		const elsewhere = await mkdtemp(join(tmpdir(), "crust-no-backend-"));
+		const nodePathEnv = process.env.NODE_PATH;
+		// Where the repository's tsdown really lives; Node's require would fall back to it.
+		process.env.NODE_PATH = resolve(
+			fileURLToPath(import.meta.resolve("tsdown/package.json")),
+			"..",
+			"..",
+		);
+		try {
+			const installPath = join(elsewhere, "bin", "crust");
+			await expect(
+				resolveNodeExeBackend(nodeCompiler("26.10.0"), process.cwd(), installPath),
+			).rejects.toThrow(
+				`tsdown, which builds node standalone binaries, is not installed with crust (${installPath}).\n  Reinstall @crustjs/crust: it ships tsdown and @tsdown/exe as dependencies.`,
+			);
+		} finally {
+			process.env.NODE_PATH = nodePathEnv;
+			await rm(elsewhere, { recursive: true, force: true });
+		}
+	});
+
+	it.skipIf(nodePath === null)("checks engines.node before loading the backend", async () => {
+		await expect(
+			resolveNodeBinaryCompiler({ engines: { node: "0.0.1" } }, process.cwd()),
+		).rejects.toThrow(/^Node \S+ \(.+\) does not satisfy package\.json engines\.node "0\.0\.1"\./);
+	});
+
+	it("reports a missing node instead of falling back to another runtime", async () => {
+		await expect(
+			withoutBunOnPath(() => resolveNodeBinaryCompiler(undefined, process.cwd())),
+		).rejects.toThrow("Node is required for node standalone binaries but was not found on PATH.");
 	});
 });
 
