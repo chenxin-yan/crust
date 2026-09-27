@@ -1,15 +1,26 @@
 import { spawnSync } from "node:child_process";
-import { access, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import {
+	access,
+	mkdtemp,
+	readdir,
+	readFile,
+	realpath,
+	rm,
+	stat,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { defineExtensionId } from "@crustjs/core";
 import { which } from "@crustjs/utils/process";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
+	assertCompilerSatisfiesEngines,
 	assertTargetsBuildableWithoutBun,
+	type BuildCompiler,
 	BUN_TARGETS,
 	buildEntrypoint,
 	bunBaselineAlias,
@@ -17,8 +28,11 @@ import {
 	createBunCompileArgs,
 	createBunPluginDriverScript,
 	execBuild,
+	execBunPackageBuild,
 	execNodeBuild,
 	hostTarget,
+	readCompilerVersion,
+	resolveBinaryCompiler,
 	resolveBunBuildRunner,
 	resolveBunPluginSource,
 	type BunPluginDriverOptions,
@@ -65,6 +79,188 @@ console.log(JSON.stringify({ command: runner.command, execPath: process.execPath
 		await expect(withoutBunOnPath(() => resolveBunBuildRunner(false))).rejects.toThrow(
 			"bun was not found on PATH",
 		);
+	});
+});
+
+const bunVersion = spawnSync(which("bun")!, ["--version"], {
+	encoding: "utf8",
+	timeout: 10_000,
+}).stdout.trim();
+const denoPath = which("deno");
+
+describe("readCompilerVersion", () => {
+	it("reads the version the selected bun reports", async () => {
+		expect(await readCompilerVersion("bun", resolveBunBuildRunner(), process.cwd())).toBe(
+			bunVersion,
+		);
+	});
+
+	it.skipIf(denoPath === null)("reads the version the selected deno reports", async () => {
+		const reported = spawnSync(denoPath!, ["--version"], {
+			encoding: "utf8",
+			timeout: 10_000,
+		}).stdout;
+		expect(
+			await readCompilerVersion("deno", { command: denoPath!, env: process.env }, process.cwd()),
+		).toBe(/^deno (\S+)/.exec(reported)![1]);
+	});
+
+	it("reads the embedded Bun version from the BUN_BE_BUN fallback, not the outer process", () => {
+		const helpers = JSON.stringify(new URL("./build-helpers.ts", import.meta.url).href);
+		const probe = spawnSync(
+			which("bun")!,
+			[
+				"--eval",
+				`import { resolveBinaryCompiler } from ${helpers};
+const { runner, version } = await resolveBinaryCompiler("bun", { engines: { bun: Bun.version } }, process.cwd());
+console.log(JSON.stringify({ command: runner.command, bunBeBun: runner.env.BUN_BE_BUN, execPath: process.execPath, version, embedded: Bun.version }));`,
+			],
+			{ env: { ...process.env, PATH: "" }, encoding: "utf8", timeout: 10_000 },
+		);
+		expect(probe.stderr).toBe("");
+		expect(probe.status).toBe(0);
+		const fallback = JSON.parse(probe.stdout) as Record<string, string>;
+		expect(fallback.command).toBe(fallback.execPath);
+		expect(fallback.bunBeBun).toBe("1");
+		expect(fallback.version).toBe(fallback.embedded);
+	});
+
+	it.skipIf(denoPath === null)(
+		"rejects output that is not the requested runtime's version",
+		async () => {
+			await expect(
+				readCompilerVersion("bun", { command: denoPath!, env: process.env }, process.cwd()),
+			).rejects.toThrow(/^Could not read the Bun version from .*deno --version \(exit 0\):\ndeno /);
+			await expect(
+				readCompilerVersion("deno", resolveBunBuildRunner(), process.cwd()),
+			).rejects.toThrow(
+				`Could not read the Deno version from ${which("bun")} --version (exit 0):\n${bunVersion}`,
+			);
+		},
+	);
+
+	// A hung compiler or version-manager shim must fail the build, not stall it.
+	it.skipIf(process.platform === "win32")(
+		"kills a --version probe that does not exit by the deadline",
+		async () => {
+			const dir = await mkdtemp(join(tmpdir(), "crust-stalled-compiler-"));
+			const pidFile = join(dir, "pid");
+			const compiler = join(dir, "bun");
+			await writeFile(
+				compiler,
+				`#!/bin/sh\necho $$ > '${pidFile}.tmp'\nmv '${pidFile}.tmp' '${pidFile}'\nexec sleep 60\n`,
+				{
+					mode: 0o755,
+				},
+			);
+			let pid: number | undefined;
+			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+			try {
+				const probe = readCompilerVersion("bun", { command: compiler, env: process.env }, dir);
+				while (pid === undefined) {
+					await new Promise(setImmediate);
+					pid = await readFile(pidFile, "utf8").then(Number, () => undefined);
+				}
+				const rejected = expect(probe).rejects.toThrow(
+					`${compiler} --version did not exit within 30000 ms and was killed.`,
+				);
+				await vi.advanceTimersByTimeAsync(30_000);
+				await rejected;
+				vi.useRealTimers();
+				await vi.waitFor(() => expect(() => process.kill(pid!, 0)).toThrow());
+			} finally {
+				vi.useRealTimers();
+				try {
+					if (pid !== undefined) process.kill(pid, "SIGKILL");
+				} catch {
+					// Already gone.
+				}
+				await rm(dir, { recursive: true, force: true });
+			}
+		},
+		10_000,
+	);
+});
+
+describe("assertCompilerSatisfiesEngines", () => {
+	const compiler: BuildCompiler = {
+		runtime: "bun",
+		runner: { command: "/opt/bun/bin/bun", env: {} },
+		version: "1.4.2",
+	};
+	const check = (userPackageJson: Parameters<typeof assertCompilerSatisfiesEngines>[1]) => () =>
+		assertCompilerSatisfiesEngines(compiler, userPackageJson);
+
+	it.each([
+		["no package.json", undefined],
+		["no engines", { name: "cli" }],
+		["another runtime's engines only", { engines: { node: ">=99", deno: "not a range" } }],
+		["an exact match", { engines: { bun: "1.4.2" } }],
+		["a satisfied range", { engines: { bun: ">=1.4.0 <2" } }],
+		["a satisfied caret range", { engines: { bun: "^1.3.0" } }],
+	])("accepts %s", (_label, userPackageJson) => {
+		expect(check(userPackageJson)).not.toThrow();
+	});
+
+	it.each([
+		["a newer exact version", "1.4.3"],
+		["an older exact version", "1.4.1"],
+		["an unsatisfied range", ">=1.5.0"],
+	])("rejects %s without substituting another compiler", (_label, constraint) => {
+		expect(check({ engines: { bun: constraint } })).toThrow(
+			`Bun 1.4.2 (/opt/bun/bin/bun) does not satisfy package.json engines.bun "${constraint}".\n` +
+				"  Binaries embed the selected compiler's Bun version; crust does not install or upgrade it.\n" +
+				"  Put a matching bun first on PATH (e.g. with your version manager), or update package.json engines.bun.",
+		);
+	});
+
+	it.each(["latest", ">=1.4.0 ||| banana", 1.4, null, ["1.4.2"]])(
+		"rejects the malformed constraint %j",
+		(constraint) => {
+			expect(check({ engines: { bun: constraint } })).toThrow(
+				`package.json engines.bun is not a valid semver range: ${JSON.stringify(constraint)}.`,
+			);
+		},
+	);
+
+	it("rejects engines that is not an object", () => {
+		expect(check({ engines: "bun 1.4.2" })).toThrow(
+			"package.json engines must be an object of runtime version ranges.",
+		);
+	});
+});
+
+describe("resolveBinaryCompiler", () => {
+	it("selects bun on PATH and validates its actual version", async () => {
+		const compiler = await resolveBinaryCompiler(
+			"bun",
+			{ engines: { bun: bunVersion } },
+			process.cwd(),
+		);
+		expect(compiler).toMatchObject({ runtime: "bun", version: bunVersion });
+		expect(compiler.runner.command).toBe(which("bun"));
+		await expect(
+			resolveBinaryCompiler("bun", { engines: { bun: "0.0.1" } }, process.cwd()),
+		).rejects.toThrow(
+			`Bun ${bunVersion} (${which("bun")}) does not satisfy package.json engines.bun "0.0.1".`,
+		);
+	});
+
+	it.skipIf(denoPath === null)(
+		"selects deno on PATH and validates its actual version",
+		async () => {
+			const compiler = await resolveBinaryCompiler("deno", undefined, process.cwd());
+			expect(compiler.runner.command).toBe(denoPath);
+			await expect(
+				resolveBinaryCompiler("deno", { engines: { deno: `>${compiler.version}` } }, process.cwd()),
+			).rejects.toThrow(`Deno ${compiler.version} (${denoPath}) does not satisfy`);
+		},
+	);
+
+	it("reports a missing deno instead of falling back to another compiler", async () => {
+		await expect(
+			withoutBunOnPath(() => resolveBinaryCompiler("deno", undefined, process.cwd())),
+		).rejects.toThrow("Deno is required for the deno runtime but was not found on PATH.");
 	});
 });
 
@@ -234,6 +430,114 @@ describe.skipIf(hostTarget(BUN_TARGETS) === null)("execBuild with crust.bunPlugi
 	});
 });
 
+describe("execBunPackageBuild", () => {
+	const tempDirs: string[] = [];
+
+	afterEach(async () => {
+		await Promise.all(tempDirs.splice(0).map((path) => rm(path, { recursive: true, force: true })));
+	});
+
+	// PUBLIC_PINNED exists only in the pinned runner's environment, so its
+	// inlined value proves the bundle was built by that runner.
+	const pinnedRunner = () => ({
+		command: which("bun")!,
+		env: { ...process.env, PUBLIC_PINNED: "pinned-runner" },
+	});
+
+	async function project(): Promise<string> {
+		const directory = await mkdtemp(join(tmpdir(), "crust-bun-package-test-"));
+		tempDirs.push(directory);
+		await writeFile(
+			join(directory, ".env.build"),
+			"PUBLIC_FROM_FILE=public\nBUILD_SECRET=secret\n",
+		);
+		await writeFile(
+			join(directory, "plugin.ts"),
+			`export default { name: "greeting", setup(build) {
+	build.onResolve({ filter: /^virtual:greeting$/ }, () => ({ path: "greeting", namespace: "greeting" }));
+	build.onLoad({ filter: /.*/, namespace: "greeting" }, () => ({ contents: 'export default "from plugin";', loader: "js" }));
+} };
+`,
+		);
+		return directory;
+	}
+
+	function runBundle(outfile: string): Record<string, string | null> {
+		const run = spawnSync(which("bun")!, [outfile], {
+			env: { PATH: process.env.PATH },
+			encoding: "utf8",
+			timeout: 10_000,
+		});
+		expect(run.stderr).toBe("");
+		expect(run.status).toBe(0);
+		return JSON.parse(run.stdout) as Record<string, string | null>;
+	}
+
+	const report = (extra = "") =>
+		`console.log(JSON.stringify({ bun: typeof Bun === "undefined" ? null : Bun.version, fromFile: process.env.PUBLIC_FROM_FILE ?? null, pinned: process.env.PUBLIC_PINNED ?? null, secret: process.env.BUILD_SECRET ?? null, marker: process.env.CRUST_INTERNAL_BUILD ?? null${extra} }));\n`;
+
+	it("bundles Bun-targeted ESM behind a bun shebang with PUBLIC_* values and the build marker", async () => {
+		const directory = await project();
+		await writeFile(join(directory, "cli.ts"), `#!/usr/bin/env node\n${report()}`);
+		const outfile = join(directory, "out", "cli.js");
+		await execBunPackageBuild(
+			join(directory, "cli.ts"),
+			outfile,
+			false,
+			[join(directory, ".env.build")],
+			directory,
+			[],
+			pinnedRunner(),
+		);
+
+		const output = await readFile(outfile, "utf8");
+		expect(output.startsWith("#!/usr/bin/env bun\n// @bun\n")).toBe(true);
+		expect(output).not.toContain("#!/usr/bin/env node");
+		expect(output).not.toContain('"secret"');
+		if (process.platform !== "win32") expect((await stat(outfile)).mode & 0o111).toBe(0o111);
+		expect(runBundle(outfile)).toEqual({
+			bun: bunVersion,
+			fromFile: "public",
+			pinned: "pinned-runner",
+			secret: null,
+			marker: "1",
+		});
+	});
+
+	it("runs crust.bunPlugins through the pinned runner and keeps the same contract", async () => {
+		const directory = await project();
+		await writeFile(
+			join(directory, "cli.ts"),
+			`import greeting from "virtual:greeting";\n${report(", greeting")}`,
+		);
+		const outfile = join(directory, "cli.js");
+		await execBunPackageBuild(
+			join(directory, "cli.ts"),
+			outfile,
+			true,
+			[join(directory, ".env.build")],
+			directory,
+			["./plugin.ts"],
+			pinnedRunner(),
+		);
+
+		const output = await readFile(outfile, "utf8");
+		expect(output.startsWith("#!/usr/bin/env bun\n// @bun\n")).toBe(true);
+		expect(output).not.toContain('"secret"');
+		expect(runBundle(outfile)).toEqual({
+			bun: bunVersion,
+			fromFile: "public",
+			pinned: "pinned-runner",
+			secret: null,
+			marker: "1",
+			greeting: "from plugin",
+		});
+		expect((await readdir(directory)).filter((name) => name.startsWith(".crust-build-"))).toEqual(
+			[],
+		);
+	});
+});
+
 const fallbackRunner = { command: process.execPath, env: { BUN_BE_BUN: "1" } };
 const realBunRunner = { command: "/usr/local/bin/bun", env: {} };
 
@@ -313,6 +617,17 @@ describe("assertTargetsBuildableWithoutBun", () => {
 			] as const) {
 				expect(() => assertTargetsBuildableWithoutBun(BUN_TARGETS.targets, host)).not.toThrow();
 			}
+		});
+	});
+
+	it("judges the pinned runner rather than looking up bun on PATH again", async () => {
+		expect(() =>
+			assertTargetsBuildableWithoutBun(["bun-darwin-arm64"], "bun-darwin-arm64", fallbackRunner),
+		).toThrow("Cannot build bun-darwin-arm64 without a separate bun executable on PATH.");
+		await withoutBunOnPath(() => {
+			expect(() =>
+				assertTargetsBuildableWithoutBun(["bun-darwin-arm64"], "bun-darwin-arm64", realBunRunner),
+			).not.toThrow();
 		});
 	});
 

@@ -89,7 +89,7 @@ describe("create-crust CLI", () => {
 			// publishes `.crust/`, so a stray `npm publish` here must be refused.
 			private: true,
 			type: "module",
-			crust: { runtime: "bun" },
+			crust: { runtime: "bun", artifact: "binary" },
 			bin: { "my-cli": "src/cli.ts" },
 			scripts: {
 				dev: "bun run src/cli.ts",
@@ -232,7 +232,7 @@ describe("create-crust CLI", () => {
 		expect(pkg).toMatchObject({
 			$schema: "./node_modules/@crustjs/crust/schema/package.json",
 			private: true,
-			crust: { runtime: "node" },
+			crust: { runtime: "node", artifact: "package" },
 			bin: { "node-cli": "src/cli.ts" },
 			scripts: {
 				dev: "node src/cli.ts",
@@ -282,7 +282,7 @@ describe("create-crust CLI", () => {
 		expect(pkg).toMatchObject({
 			$schema: "./node_modules/@crustjs/crust/schema/package.json",
 			private: true,
-			crust: { runtime: "deno" },
+			crust: { runtime: "deno", artifact: "binary" },
 			bin: { "deno-cli": "src/cli.ts" },
 			scripts: {
 				dev: "deno run -A src/cli.ts",

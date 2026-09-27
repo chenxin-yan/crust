@@ -4,6 +4,10 @@
   "bin": {
     "my-cli": "src/cli.ts"
   },
+  "crust": {
+    "runtime": "bun",
+    "artifact": "binary"
+  },
   "scripts": {
     "build": "crust build",
     "release": "crust publish"

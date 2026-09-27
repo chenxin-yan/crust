@@ -32,6 +32,7 @@
 		}
 	},
 	"crust": {
+		"artifact": "binary",
 		"include": [
 			"schema",
 			"dist"
@@ -61,7 +62,9 @@
 		"@crustjs/config": "workspace:*",
 		"@crustjs/testing": "workspace:*",
 		"@crustjs/utils": "workspace:*",
+		"@types/semver": "^7.8.0",
 		"publint": "^0.3.24",
+		"semver": "^7.8.5",
 		"vite-plus": "catalog:"
 	},
 	"engines": {

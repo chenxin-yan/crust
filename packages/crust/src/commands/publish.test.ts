@@ -104,6 +104,9 @@ describe("publish manifest validation", () => {
 	const tmpDir = mkdtempSync(join(tmpdir(), "crust-publish-"));
 	const manifest: DistributionManifest = {
 		version: "1.2.3",
+		runtime: "bun",
+		artifact: "binary",
+		embeddedRuntimeVersion: "1.4.2",
 		root: { name: "@scope/demo", dir: "root", bins: ["demo", "demo-admin"] },
 		packages: [
 			{
@@ -154,6 +157,8 @@ describe("publish manifest validation", () => {
 		const nodeDir = join(tmpDir, "node");
 		const nodeManifest: DistributionManifest = {
 			version: "1.2.3",
+			runtime: "node",
+			artifact: "package",
 			root: { name: "@scope/node-demo", dir: "root", bins: ["node-demo"] },
 			packages: [],
 			publishOrder: ["root"],

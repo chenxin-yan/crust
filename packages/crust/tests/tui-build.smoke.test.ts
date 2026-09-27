@@ -46,7 +46,11 @@ async function buildFixture(command: string, entry: string, bunPlugins: string[]
 	writeFileSync(
 		join(fixtureDir, "package.json"),
 		JSON.stringify(
-			{ ...FIXTURE_PACKAGE_JSON, bin: { [command]: entry }, crust: { bunPlugins } },
+			{
+				...FIXTURE_PACKAGE_JSON,
+				bin: { [command]: entry },
+				crust: { artifact: "binary", bunPlugins },
+			},
 			null,
 			2,
 		),

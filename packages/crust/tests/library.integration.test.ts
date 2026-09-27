@@ -76,7 +76,7 @@ beforeAll(async () => {
 			license: crustPackage.license,
 			type: "module",
 			bin: { crust: "src/cli.ts" },
-			crust: { runtime: "node", include: ["dist"] },
+			crust: { runtime: "node", artifact: "package", include: ["dist"] },
 			exports: crustPackage.exports,
 			peerDependencies: crustPackage.peerDependencies,
 		}),
@@ -125,7 +125,7 @@ describe("carried CommonJS exports", () => {
 				version: "0.1.0",
 				type,
 				bin: { "commonjs-cli": "src/cli.ts" },
-				crust: { runtime: "node", include: ["dist"] },
+				crust: { runtime: "node", artifact: "package", include: ["dist"] },
 				exports: "./dist/nested/index.js",
 			};
 			writeFileSync(join(project, "package.json"), JSON.stringify(pkg));
@@ -283,6 +283,7 @@ const [cwd, resultPath, withLog] = process.argv.slice(2);
 const logged = [];
 const result = await build({
 	cwd,
+	artifact: "binary",
 	targets: ["host"],
 	...(withLog ? { onLog: (line, stream) => logged.push([line, stream]) } : {}),
 });

@@ -23,6 +23,8 @@ export type RunProcessOptions = {
 	stdout?: "collect" | "ignore";
 	/** Run the command through the platform shell. */
 	shell?: boolean;
+	/** Milliseconds before the process is killed and the call rejects. */
+	timeout?: number;
 };
 
 export type RunProcessResult = {
@@ -102,13 +104,39 @@ export async function runProcess(
 		windowsVerbatimArguments: windowsShimCommand?.windowsVerbatimArguments,
 	});
 
-	const [stdout, stderr, [exitCode]] = await Promise.all([
-		collectStdout ? text(proc.stdout!) : "",
-		collect ? text(proc.stderr!) : "",
-		once(proc, "close"),
-	]);
+	let timer: NodeJS.Timeout | undefined;
+	const deadline = new Promise<never>((_, reject) => {
+		if (options.timeout === undefined) return;
+		const timeout = options.timeout;
+		timer = setTimeout(() => {
+			// ponytail: kills the direct child only; a descendant it started (e.g. a
+			// version-manager shim's runtime) outlives it. Kill the process tree, as
+			// tests/bounded-process.ts does, if that matters.
+			proc.kill("SIGKILL");
+			// Such a descendant can hold the pipes open, so stop waiting for them.
+			proc.stdout?.destroy();
+			proc.stderr?.destroy();
+			reject(
+				new Error(
+					`${[command, ...args].join(" ")} did not exit within ${timeout} ms and was killed.`,
+				),
+			);
+		}, timeout);
+	});
 
-	return { exitCode, stdout, stderr };
+	try {
+		const [stdout, stderr, [exitCode]] = await Promise.race([
+			Promise.all([
+				collectStdout ? text(proc.stdout!) : "",
+				collect ? text(proc.stderr!) : "",
+				once(proc, "close"),
+			]),
+			deadline,
+		]);
+		return { exitCode, stdout, stderr };
+	} finally {
+		clearTimeout(timer);
+	}
 }
 
 /** Resolve a bare executable name from PATH (and PATHEXT on Windows). */

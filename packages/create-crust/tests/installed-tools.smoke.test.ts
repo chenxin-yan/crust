@@ -9,6 +9,7 @@ import {
 	realpathSync,
 	renameSync,
 	rmSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -75,13 +76,19 @@ describe.skipIf(!enabled)("installed create-crust and crust (Linux/npm)", () => 
 		});
 		// Leave headroom before the test's deadline to reap children and preserve diagnostics.
 		const deadline = Date.now() + 240_000;
-		async function run(command: string[], cwd: string, expectedExit = 0, timeout = 30_000) {
+		async function run(
+			command: string[],
+			cwd: string,
+			expectedExit = 0,
+			timeout = 30_000,
+			path = env.PATH,
+		) {
 			const started = Date.now();
 			const label = `command: ${JSON.stringify(command)}\ncwd: ${cwd}`;
 			appendFileSync(join(diagnostics, "commands.log"), `${label}\n`);
 			const child = spawn(command[0]!, command.slice(1), {
 				cwd,
-				env,
+				env: { ...env, PATH: path },
 				detached: true,
 				stdio: ["ignore", "pipe", "pipe"],
 			});
@@ -305,6 +312,44 @@ describe.skipIf(!enabled)("installed create-crust and crust (Linux/npm)", () => 
 			expect(help.stdout).toContain("installed-cli");
 			const invalid = await run([launcher, "--not-a-real-flag"], project, 1);
 			expect(invalid.stderr).toContain("--not-a-real-flag");
+
+			// Without bun on PATH the installed crust compiles with its embedded Bun,
+			// and binaries record that Bun's version.
+			const nodeOnly = join(root, "node-only");
+			mkdirSync(nodeOnly);
+			symlinkSync(realpathSync(which("node")!), join(nodeOnly, "node"));
+			const bunVersion = (await run(["bun", "--version"], consumer)).stdout.trim();
+			const embedded = await run(
+				[crust, "build", "--target", "host"],
+				project,
+				0,
+				120_000,
+				nodeOnly,
+			);
+			expect(embedded.stdout).toContain(`Compiler: bun ${bunVersion} (${binary})`);
+			expect(readJson(join(project, ".crust/manifest.json"))).toMatchObject({
+				runtime: "bun",
+				artifact: "binary",
+				embeddedRuntimeVersion: bunVersion,
+			});
+
+			// --artifact overrides the template's crust.artifact: a Bun runtime package
+			// whose command runs on the consumer's bun, bundled by the embedded Bun.
+			const runtimePackage = await run(
+				[crust, "build", "--artifact", "package"],
+				project,
+				0,
+				120_000,
+				nodeOnly,
+			);
+			expect(runtimePackage.stdout).toContain("Artifact: package");
+			const packaged = readJson(join(project, ".crust/manifest.json"));
+			expect(packaged).toMatchObject({ runtime: "bun", artifact: "package", packages: [] });
+			expect(packaged).not.toHaveProperty("embeddedRuntimeVersion");
+			expect(readFileSync(launcher, "utf8").startsWith("#!/usr/bin/env bun\n")).toBe(true);
+			const underBun = await run([launcher, "Ada"], project);
+			expect(underBun.stdout.trim()).toBe("Hello, Ada!");
+			await run([launcher, "Ada"], project, 127, 30_000, nodeOnly);
 			passed = true;
 		} finally {
 			if (passed) rmSync(root, { recursive: true, force: true });

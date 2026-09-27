@@ -40,15 +40,15 @@ Every generated project includes:
 - `README.md` — getting started instructions
 - `.gitignore` — sensible defaults for Node/Bun projects
 
-Every project has the same scripts: `build` (`crust build`) stages the publishable npm package(s) in `.crust/`, `start` runs the built CLI from `.crust/root/bin/<name>.js`, and `release` (`crust publish`) publishes them. The runtime decides how the project runs in development and what `build` puts in `.crust/`:
+Every project has the same scripts: `build` (`crust build`) stages the publishable npm package(s) in `.crust/`, `start` runs the built CLI from `.crust/root/bin/<name>.js`, and `release` (`crust publish`) publishes them. The runtime decides how the project runs in development; the `crust.artifact` setting decides what `build` puts in `.crust/`. Each template keeps its runtime's established output:
 
-| Runtime | `dev`                    | `build` output                                                                      |
-| ------- | ------------------------ | ----------------------------------------------------------------------------------- |
-| `bun`   | `bun run src/cli.ts`     | A root package with a Node launcher plus one standalone binary package per platform |
-| `node`  | `node src/cli.ts`        | A root package containing one JavaScript bundle that needs Node 22.18+              |
-| `deno`  | `deno run -A src/cli.ts` | A root package with a Node launcher plus one standalone binary package per platform |
+| Runtime | `dev`                    | `build` output (`crust.artifact`)                                                             |
+| ------- | ------------------------ | --------------------------------------------------------------------------------------------- |
+| `bun`   | `bun run src/cli.ts`     | `binary`: a root package with a Node launcher plus one standalone binary package per platform |
+| `node`  | `node src/cli.ts`        | `package`: a root package containing one JavaScript bundle that needs Node 22.18+             |
+| `deno`  | `deno run -A src/cli.ts` | `binary`: a root package with a Node launcher plus one standalone binary package per platform |
 
-Every runtime puts the Crust packages your code imports (`@crustjs/core`, `@crustjs/extensions`) in `dependencies` and the build tool (`@crustjs/crust`) in `devDependencies`, and sets `"crust": { "runtime": ... }` in `package.json` so `crust build` picks the runtime without flags. See [Build and distribution](https://crustjs.com/docs/guide/build-and-distribution).
+Every runtime puts the Crust packages your code imports (`@crustjs/core`, `@crustjs/extensions`) in `dependencies` and the build tool (`@crustjs/crust`) in `devDependencies`, and sets `"crust": { "runtime": ..., "artifact": ... }` in `package.json` so `crust build` picks the runtime and artifact kind without flags. A Bun project can switch to `"artifact": "package"` for a root-only JavaScript package that runs on the consumer's installed Bun. See [Build and distribution](https://crustjs.com/docs/guide/build-and-distribution).
 
 ## Documentation
 

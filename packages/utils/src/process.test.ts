@@ -1,8 +1,16 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+	chmodSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join, relative } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
 	getWindowsShimCommand,
@@ -101,6 +109,32 @@ describe("runProcess", () => {
 
 		expect(result).toEqual({ exitCode: 0, stdout: "", stderr: "collected" });
 	});
+
+	it("kills a process that outlives its timeout, even while a descendant holds its pipes", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "run-process-timeout-"));
+		const pidsFile = join(dir, "pids.json");
+		const script = `const { spawn } = require("node:child_process");
+const descendant = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "inherit" });
+require("node:fs").writeFileSync(${JSON.stringify(pidsFile)}, JSON.stringify([process.pid, descendant.pid]));
+setInterval(() => {}, 1000);`;
+		let pids: number[] = [];
+		try {
+			await expect(
+				runProcess(process.execPath, ["-e", script], { timeout: 2_000 }),
+			).rejects.toThrow(/ did not exit within 2000 ms and was killed\.$/);
+			pids = JSON.parse(readFileSync(pidsFile, "utf8")) as number[];
+			await vi.waitFor(() => expect(() => process.kill(pids[0]!, 0)).toThrow());
+		} finally {
+			for (const pid of pids) {
+				try {
+					process.kill(pid, "SIGKILL");
+				} catch {
+					// Already gone.
+				}
+			}
+			rmSync(dir, { recursive: true, force: true });
+		}
+	}, 10_000);
 
 	it.skipIf(process.platform !== "win32")(
 		"runs Windows command shims through the shell",

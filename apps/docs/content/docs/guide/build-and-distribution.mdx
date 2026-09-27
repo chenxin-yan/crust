@@ -5,7 +5,7 @@ description: Configure, build, test, and publish your CLI.
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-`crust build` turns your TypeScript entry into a Node.js bundle or standalone Bun/Deno executables. The examples below use the `my-cli` command from [Quick Start](/docs/quick-start).
+`crust build` turns your TypeScript entry into a runtime package, JavaScript that runs on the user's installed runtime, or into standalone executables. The examples below use the `my-cli` command from [Quick Start](/docs/quick-start).
 
 ## Set up `package.json`
 
@@ -24,7 +24,7 @@ Merge these fields into your `package.json`, keeping your dependencies:
   "private": true,
   "type": "module",
   "bin": { "my-cli": "src/cli.ts" },
-  "crust": { "runtime": "bun" },
+  "crust": { "runtime": "bun", "artifact": "binary" },
   "scripts": {
     "build": "crust build",
     "start": "node .crust/root/bin/my-cli.js",
@@ -35,27 +35,29 @@ Merge these fields into your `package.json`, keeping your dependencies:
 
 The `bin` key must match your root command: `new Crust("my-cli")`. `"private": true` prevents accidentally publishing the source project; Crust generates separate publishable packages in `.crust/`.
 
-Choose `crust.runtime` for the output you want:
+`crust.runtime` is the runtime your CLI runs on; [without it](/docs/modules/crust#packagejson-configuration) Crust infers one. `crust.artifact` is required and chooses what the build distributes, independently of the runtime:
 
-| Runtime | Build output                                       | Users need after npm install |
-| ------- | -------------------------------------------------- | ---------------------------- |
-| `bun`   | Node launcher + standalone executable per platform | Node.js, not Bun             |
-| `deno`  | Node launcher + standalone executable per platform | Node.js, not Deno            |
-| `node`  | JavaScript bundle                                  | Node.js                      |
+| Runtime | `"artifact": "package"`                         | `"artifact": "binary"`                                                 |
+| ------- | ----------------------------------------------- | ---------------------------------------------------------------------- |
+| `bun`   | Bun-targeted JavaScript; users need Bun         | Node launcher + standalone executable per platform; users need Node.js |
+| `node`  | Node.js-targeted JavaScript; users need Node.js | Not available yet                                                      |
+| `deno`  | Not available yet                               | Node launcher + standalone executable per platform; users need Node.js |
+
+A runtime package is one root-only npm package whose commands run on the user's installed runtime; a Bun package's commands start with `#!/usr/bin/env bun`, so installed commands run under Bun whether npm or Bun installed the package. A standalone binary embeds its runtime, so users do not install Bun or Deno; the npm launcher that selects the platform binary needs Node.js. `--artifact package` or `--artifact binary` overrides `crust.artifact` for one build.
 
 The commands below assume Node.js and Bun are installed; Deno builds also need `deno` on `PATH`. See [tooling requirements](/docs/modules/crust#install) and [runtime versions](/docs/guide/runtime-support#run-the-same-cli).
 
 ## Build
 
-For a quick local Bun or Deno build, compile only for your machine:
+For a quick local binary build, compile only for your machine:
 
 ```sh
 npm run build -- --target host
 ```
 
-For Node.js, run `npm run build` without `--target`.
+Runtime packages have no targets: run `npm run build` without `--target`.
 
-Builds replace `.crust/`; add it to `.gitignore`. On Linux x64 with Bun selected, the output looks like this:
+Builds replace `.crust/`; add it to `.gitignore`. On Linux x64 with Bun binaries selected, the output looks like this:
 
 ```text
 .crust/
@@ -68,7 +70,7 @@ Builds replace `.crust/`; add it to `.gitignore`. On Linux x64 with Bun selected
     └── bin/my-cli-bun-linux-x64         # standalone executable
 ```
 
-Node.js builds omit the platform directories; `root/bin/my-cli.js` is the bundle itself. [Generated manifests](/docs/modules/crust#staged-packagejson-files) describe which metadata and files are shipped.
+Runtime packages omit the platform directories; `root/bin/my-cli.js` is the bundle itself. [Generated manifests](/docs/modules/crust#staged-packagejson-files) describe which metadata and files are shipped.
 
 ### Choose release targets
 
@@ -82,6 +84,12 @@ npm run build -- --target bun-linux-x64 --target bun-darwin-arm64
 
 Publish every platform you intend to support—not just `host`. Set [`crust.targets`](/docs/modules/crust#packagejson-configuration) to keep a release subset in configuration. See [supported targets](/docs/modules/crust#supported-targets), including musl targets and prerequisites for Alpine Linux.
 
+### Binary runtime version
+
+Every binary embeds the version of the compiler that builds it: the first `bun` on `PATH`, else the Bun inside the `crust` executable; for Deno, `deno` on `PATH`. The build prints it as `Compiler:` and records it as `embeddedRuntimeVersion` in `.crust/manifest.json`, for cross-platform targets too.
+
+When `package.json` declares `engines.bun` or `engines.deno`, that compiler must satisfy the semver range, or the build fails before replacing `.crust/`. A compiler whose `--version` does not exit within 30 seconds is killed and fails the build the same way. An exact version is a requirement, not a download request: Crust never installs or upgrades a compiler, so pin one with your version manager or CI. Runtime packages embed no runtime; their `engines` only describes what users need.
+
 ## Run locally
 
 ```sh
@@ -90,7 +98,7 @@ npm run start -- --help
 node .crust/root/bin/my-cli.js --help
 ```
 
-Run the staged entry before publishing. Bun and Deno launchers find their binaries in the sibling platform directories; the Node.js bundle runs directly.
+Run the staged entry before publishing. Binary launchers find their executables in the sibling platform directories; a runtime package's bundle runs directly, so start a Bun package with `bun .crust/root/bin/my-cli.js`.
 
 To test through `npm link`, link from `.crust/root`. Linking from the project root runs the source entry instead.
 
@@ -116,7 +124,7 @@ npm install -g my-cli
 my-cli --help
 ```
 
-For Bun and Deno, the package manager selects the matching platform dependency. See the [npm installation caveat](/docs/modules/crust#npm-installation-caveat) for an affected npm version and a verified alternative.
+For binaries, the package manager selects the matching platform dependency. See the [npm installation caveat](/docs/modules/crust#npm-installation-caveat) for an affected npm version and a verified alternative.
 
 ### Publishing from CI
 
@@ -147,7 +155,7 @@ npm run build -- --target bun-linux-x64
 tar -czf my-cli-linux-x64.tar.gz -C .crust/linux-x64/bin .
 ```
 
-This includes the executable **and any adjacent data directories**. Bun and Deno executables need no runtime installation; Node.js distributions still need Node.js and should include the contents of `.crust/root/`. Copy or archive your output before the next build replaces it.
+This includes the executable **and any adjacent data directories**. Standalone executables need no runtime installation; runtime packages still need their runtime and should include the contents of `.crust/root/`. Copy or archive your output before the next build replaces it.
 
 ## Customize the build
 
@@ -175,7 +183,7 @@ Keep secrets in runtime variables; use `PUBLIC_*` only for values safe to embed.
 PUBLIC_API_ORIGIN=https://api.example.com
 ```
 
-For Bun or Node.js builds:
+For Bun or Node.js builds (here Bun binaries behind the Node launcher):
 
 ```sh
 npm run build -- --env-file .env.production
@@ -209,6 +217,7 @@ Plugins apply to Bun and Node.js compilation, not build preparation. If entry im
 import { build } from "@crustjs/crust";
 
 const result = await build({
+  artifact: "binary", // overrides crust.artifact
   onLog: (line) => console.log(line),
 });
 

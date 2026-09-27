@@ -16,6 +16,9 @@ import { isErrnoException } from "@crustjs/utils/error";
 import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
 import { isWithin } from "@crustjs/utils/path";
 import { runProcess, which } from "@crustjs/utils/process";
+import satisfies from "semver/functions/satisfies.js";
+import validVersion from "semver/functions/valid.js";
+import validRange from "semver/ranges/valid.js";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Build runtimes and compile targets
@@ -326,17 +329,16 @@ export function bunCompileTarget(
 /**
  * Refuse the host target when only the `BUN_BE_BUN` fallback runner is
  * available and no `-baseline` alias can stand in for it (arm64 hosts).
+ * Pass the selected `runner` to judge that compiler instead of looking up
+ * `bun` on PATH again.
  */
 export function assertTargetsBuildableWithoutBun(
 	targets: readonly BunTarget[],
 	host = hostTarget(BUN_TARGETS),
+	runner?: BuildRunner,
 ): void {
-	if (
-		host === null ||
-		!targets.includes(host) ||
-		bunBaselineAlias(host) !== null ||
-		which("bun") !== null
-	) {
+	const externalBun = runner ? runner.env.BUN_BE_BUN !== "1" : which("bun") !== null;
+	if (host === null || !targets.includes(host) || bunBaselineAlias(host) !== null || externalBun) {
 		return;
 	}
 	const others = targets.filter((target) => target !== host);
@@ -349,6 +351,118 @@ export function assertTargetsBuildableWithoutBun(
 			"  Bun reuses the running crust executable as the base for its own platform, which yields a binary that crashes on start.\n" +
 			`  Install Bun (https://bun.sh), or ${alternative}.`,
 	);
+}
+
+/** The external `deno` on PATH; Deno has no embedded fallback. */
+export function resolveDenoBuildRunner(): BuildRunner {
+	const denoPath = which("deno");
+	if (!denoPath) {
+		throw new Error(
+			"Deno is required for the deno runtime but was not found on PATH.\n  Install Deno from https://deno.com/ and try again.",
+		);
+	}
+	return { command: denoPath, env: { ...process.env } };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Binary compiler versions
+// ────────────────────────────────────────────────────────────────────────────
+
+const RUNTIME_LABELS = { bun: "Bun", deno: "Deno", node: "Node" } as const;
+
+/** The compiler selected once for a build and the runtime version it embeds. */
+export type BuildCompiler = {
+	runtime: BuildRuntime;
+	runner: BuildRunner;
+	version: string;
+};
+
+const COMPILER_VERSION_TIMEOUT_MS = 30_000;
+
+/**
+ * Runtime version reported by the runner itself (`<command> --version`), never
+ * the runtime hosting this process: `bun` prints `1.4.2`, `deno` prints
+ * `deno 2.9.6 (…)`, `node` prints `v24.21.0`. Under the `BUN_BE_BUN` fallback
+ * this is the embedded Bun, which is the compiler. `cwd` must be the directory
+ * compilation runs in: a version-manager shim picks its runtime from it. A
+ * probe still running after {@link COMPILER_VERSION_TIMEOUT_MS} is killed and
+ * fails the build, before `.crust/` is replaced.
+ */
+export async function readCompilerVersion(
+	runtime: BuildRuntime,
+	runner: BuildRunner,
+	cwd: string,
+): Promise<string> {
+	const { exitCode, stdout, stderr } = await runProcess(runner.command, ["--version"], {
+		env: runner.env,
+		cwd,
+		stdio: "collect",
+		timeout: COMPILER_VERSION_TIMEOUT_MS,
+	});
+	const reported = runtime === "deno" ? /^deno (\S+)/.exec(stdout.trim())?.[1] : stdout.trim();
+	const version = exitCode === 0 && reported !== undefined ? validVersion(reported) : null;
+	if (version === null) {
+		const output = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
+		throw new Error(
+			`Could not read the ${RUNTIME_LABELS[runtime]} version from ${runner.command} --version (exit ${exitCode})${output ? `:\n${output}` : "."}`,
+		);
+	}
+	return version;
+}
+
+function isVersionRange(value: JsonValue): value is string {
+	return typeof value === "string" && validRange(value) !== null;
+}
+
+/**
+ * Check the selected compiler against the project's `engines.<runtime>` with
+ * npm semver semantics. An absent constraint allows any version; an exact
+ * value is a requirement, not a request to install that version.
+ */
+export function assertCompilerSatisfiesEngines(
+	compiler: BuildCompiler,
+	userPackageJson: JsonValue | undefined,
+): void {
+	if (userPackageJson === undefined || !isJsonObject(userPackageJson)) return;
+	const { engines } = userPackageJson;
+	if (engines === undefined) return;
+	if (!isJsonObject(engines)) {
+		throw new Error("package.json engines must be an object of runtime version ranges.");
+	}
+	const constraint = engines[compiler.runtime];
+	if (constraint === undefined) return;
+	const field = `package.json engines.${compiler.runtime}`;
+	if (!isVersionRange(constraint)) {
+		throw new Error(
+			`${field} is not a valid semver range: ${JSON.stringify(constraint)}.\n  Use an exact version or range such as "1.4.2" or ">=1.4.0".`,
+		);
+	}
+	if (!satisfies(compiler.version, constraint)) {
+		const label = RUNTIME_LABELS[compiler.runtime];
+		throw new Error(
+			`${label} ${compiler.version} (${compiler.runner.command}) does not satisfy ${field} "${constraint}".\n` +
+				`  Binaries embed the selected compiler's ${label} version; crust does not install or upgrade it.\n` +
+				`  Put a matching ${compiler.runtime} first on PATH (e.g. with your version manager), or update ${field}.`,
+		);
+	}
+}
+
+/**
+ * Select the binary compiler once for a build: the Bun runner (external bun
+ * first, then the embedded fallback) or the external deno. Returns its actual
+ * version, read in the project directory `cwd`, after validating it against
+ * `engines`. Pass `runner` and the same `cwd` on to the `exec*`/`buildEntrypoint`
+ * helpers so every step uses this same compiler.
+ */
+export async function resolveBinaryCompiler(
+	runtime: "bun" | "deno",
+	userPackageJson: JsonValue | undefined,
+	cwd: string,
+): Promise<BuildCompiler> {
+	const runner = runtime === "bun" ? resolveBunBuildRunner() : resolveDenoBuildRunner();
+	const compiler = { runtime, runner, version: await readCompilerVersion(runtime, runner, cwd) };
+	assertCompilerSatisfiesEngines(compiler, userPackageJson);
+	return compiler;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -383,7 +497,7 @@ type BunPluginDriverBuild = {
 	env: "PUBLIC_*";
 } & (
 	| { target: "bun"; compile: { target: string; outfile: string; autoloadBunfig: false } }
-	| { target: "node"; format: "esm" }
+	| { target: "bun" | "node"; format: "esm" }
 );
 
 export type BunPluginDriverOptions = {
@@ -424,7 +538,7 @@ if (!result.success) {
 	for (const log of result.logs) console.error(log);
 	process.exit(1);
 }
-if (options.build.target === "node") {
+if (!options.build.compile) {
 	if (result.outputs.length !== 1) {
 		// Same refusal as \`bun build --outfile\`: a file-type asset import yields entry + asset.
 		console.error("error: cannot write multiple output files without an output directory");
@@ -441,6 +555,7 @@ async function runBunPluginDriver(
 	bunPlugins: readonly string[],
 	envFiles: readonly string[],
 	cwd: string,
+	runner: BuildRunner,
 ): Promise<void> {
 	const driverPath = join(cwd, `.crust-build-${randomBytes(6).toString("hex")}.ts`);
 	await writeFile(
@@ -457,12 +572,7 @@ async function runBunPluginDriver(
 	try {
 		// The runtime loads env files before the script runs, so `env: "PUBLIC_*"`
 		// inlines the same values as the CLI path's --env-file/--env flags.
-		await runBuildProcess(
-			resolveBunBuildRunner(),
-			[...toBunEnvFileArgs(envFiles), driverPath],
-			outfilePath,
-			cwd,
-		);
+		await runBuildProcess(runner, [...toBunEnvFileArgs(envFiles), driverPath], outfilePath, cwd);
 	} finally {
 		await rm(driverPath, { force: true });
 	}
@@ -483,6 +593,7 @@ async function runBunPluginDriver(
  * @param envFiles - Optional env files to load during build
  * @param bunPlugins - Bun bundler plugin specifiers; when present the build
  *   runs through the generated `Bun.build` driver instead of `bun build`
+ * @param runner - The selected Bun compiler (`resolveBinaryCompiler`)
  * @throws {Error} If the build fails
  */
 export async function execBuild(
@@ -493,8 +604,8 @@ export async function execBuild(
 	envFiles: readonly string[],
 	cwd: string,
 	bunPlugins: readonly string[] = [],
+	runner: BuildRunner = resolveBunBuildRunner(),
 ): Promise<void> {
-	const runner = resolveBunBuildRunner();
 	const compileTarget = bunCompileTarget(target, runner);
 	if (bunPlugins.length > 0) {
 		await runBunPluginDriver(
@@ -513,6 +624,7 @@ export async function execBuild(
 			bunPlugins,
 			envFiles,
 			cwd,
+			runner,
 		);
 		return;
 	}
@@ -588,6 +700,7 @@ async function runBuildProcess(
 	}
 }
 
+/** Bundle a Node runtime package entry: ESM for Node behind `#!/usr/bin/env node`. */
 export async function execNodeBuild(
 	entryPath: string,
 	outfilePath: string,
@@ -595,6 +708,36 @@ export async function execNodeBuild(
 	envFiles: readonly string[],
 	cwd: string,
 	bunPlugins: readonly string[] = [],
+	runner: BuildRunner = resolveBunBuildRunner(),
+): Promise<void> {
+	await execScriptBuild("node", entryPath, outfilePath, minify, envFiles, cwd, bunPlugins, runner);
+}
+
+/**
+ * Bundle a Bun runtime package entry: Bun-targeted ESM behind
+ * `#!/usr/bin/env bun`, so the installed bin launches with Bun rather than Node.
+ */
+export async function execBunPackageBuild(
+	entryPath: string,
+	outfilePath: string,
+	minify: boolean,
+	envFiles: readonly string[],
+	cwd: string,
+	bunPlugins: readonly string[] = [],
+	runner: BuildRunner = resolveBunBuildRunner(),
+): Promise<void> {
+	await execScriptBuild("bun", entryPath, outfilePath, minify, envFiles, cwd, bunPlugins, runner);
+}
+
+async function execScriptBuild(
+	target: "bun" | "node",
+	entryPath: string,
+	outfilePath: string,
+	minify: boolean,
+	envFiles: readonly string[],
+	cwd: string,
+	bunPlugins: readonly string[],
+	runner: BuildRunner,
 ): Promise<void> {
 	if (bunPlugins.length > 0) {
 		await runBunPluginDriver(
@@ -602,17 +745,18 @@ export async function execNodeBuild(
 				entrypoints: [entryPath],
 				minify,
 				env: "PUBLIC_*",
-				target: "node",
+				target,
 				format: "esm",
 			},
 			outfilePath,
 			bunPlugins,
 			envFiles,
 			cwd,
+			runner,
 		);
 	} else {
 		await runBuildProcess(
-			resolveBunBuildRunner(),
+			runner,
 			[
 				"build",
 				...toBunEnvFileArgs(envFiles),
@@ -620,7 +764,7 @@ export async function execNodeBuild(
 				"--define",
 				CRUST_BUILD_DEFINE_ARG,
 				"--target",
-				"node",
+				target,
 				"--format",
 				"esm",
 				"--outfile",
@@ -634,7 +778,7 @@ export async function execNodeBuild(
 	}
 
 	const output = await readFile(outfilePath, "utf8");
-	const shebang = "#!/usr/bin/env node\n";
+	const shebang = `#!/usr/bin/env ${target}\n`;
 	await writeFile(outfilePath, shebang + output.replace(/^#![^\n]*(?:\n|$)/, ""));
 	if (process.platform !== "win32") await chmod(outfilePath, 0o755);
 }
@@ -644,15 +788,10 @@ export async function execDenoBuild(
 	outfilePath: string,
 	target: DenoTarget,
 	cwd: string,
+	runner: BuildRunner = resolveDenoBuildRunner(),
 ): Promise<void> {
-	const denoPath = which("deno");
-	if (!denoPath) {
-		throw new Error(
-			"Deno is required for the deno runtime but was not found on PATH.\n  Install Deno from https://deno.com/ and try again.",
-		);
-	}
 	await runBuildProcess(
-		{ command: denoPath, env: { ...process.env } },
+		runner,
 		createDenoCompileArgs(entryPath, outfilePath, target),
 		outfilePath,
 		cwd,
@@ -666,9 +805,10 @@ export async function execDenoBuild(
  * to a temporary file. `.execute()` validates and writes the command graph and
  * adjacent Build Report, then exits before any following entrypoint code can run.
  *
- * Runs with the same bun as compilation (`resolveBunBuildRunner`): bun on
- * PATH, or a compiled standalone crust executable as `BUN_BE_BUN=1`, so
- * arbitrary `.ts` entries run without a separate `bun` install.
+ * Runs with the same bun as compilation (`resolveBunBuildRunner`, or the
+ * pinned Bun `runner`): bun on PATH, or a compiled standalone crust executable
+ * as `BUN_BE_BUN=1`, so arbitrary `.ts` entries run without a separate `bun`
+ * install.
  */
 const SNAPSHOT_TIMEOUT_MS = 30_000;
 
@@ -692,6 +832,7 @@ export async function buildEntrypoint(
 	envFiles: readonly string[],
 	io: InvocationIO,
 	cwd: string,
+	runner: BuildRunner = resolveBunBuildRunner(),
 ): Promise<{ snapshot: CommandSnapshot; build: BuildReport }> {
 	const absoluteEntry = resolve(entryPath);
 	const snapshotDir = await mkdtemp(join(tmpdir(), "crust-snapshot-"));
@@ -699,7 +840,6 @@ export async function buildEntrypoint(
 	const buildReportPath = join(snapshotDir, "build-report.json");
 
 	try {
-		const runner = resolveBunBuildRunner();
 		const spawnedAt = Date.now();
 		const proc = spawn(runner.command, [...toBunEnvFileArgs(envFiles), absoluteEntry], {
 			env: {

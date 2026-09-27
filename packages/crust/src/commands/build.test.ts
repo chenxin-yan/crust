@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import {
 	existsSync,
 	mkdirSync,
@@ -15,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { Crust, defineExtensionId } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import type { JsonValue } from "@crustjs/utils/json";
+import { which } from "@crustjs/utils/process";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
 const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
@@ -23,13 +25,12 @@ import schema from "../../schema/package.json";
 import {
 	BUILD_RUNTIMES,
 	BUN_TARGETS,
-	bunBaselineAlias,
 	DENO_TARGETS,
 	hostTarget,
 	resolveTargets,
 	type TargetTable,
 } from "../utils/build-helpers.ts";
-import type { DistributionManifest } from "../utils/distribute.ts";
+import { ARTIFACT_KINDS, type DistributionManifest } from "../utils/distribute.ts";
 import {
 	build,
 	type BuildOptions,
@@ -76,6 +77,8 @@ describe("env file helpers", () => {
 describe("planBuild", () => {
 	const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-plan-"));
 	const baseFlags: BuildOptions = {};
+	const binary: BuildOptions = { artifact: "binary" };
+	const runtimePackage: BuildOptions = { artifact: "package" };
 	// Every plan needs a package name: without an object bin it names the command.
 	const writePackageJson = (pkg: Record<string, JsonValue>) =>
 		writeFileSync(
@@ -95,35 +98,98 @@ describe("planBuild", () => {
 	afterEach(() => rmSync(join(tmpDir, "package.json"), { force: true }));
 
 	it("defaults to Bun and src/cli.ts without project configuration", () => {
-		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+		expect(planBuild(binary, tmpDir)).toMatchObject({
 			runtime: "bun",
 			runtimeSource: "default",
+			artifact: "binary",
 			entries: [{ command: "plan-cli", entryPath: join(tmpDir, "src", "cli.ts") }],
 		});
 	});
 
+	it("requires an explicit artifact kind, with migration guidance naming the old implicit output", () => {
+		expect(() => planBuild(baseFlags, tmpDir)).toThrow(
+			'crust build needs an artifact kind: pass --artifact package|binary or set package.json "crust": { "artifact": "package" | "binary" }.',
+		);
+		expect(() => planBuild(baseFlags, tmpDir)).toThrow(
+			'Earlier versions built a binary for the bun runtime implicitly; set "artifact": "binary" to keep that output.',
+		);
+		writePackageJson({ devDependencies: { "@types/node": "^22" } });
+		expect(() => planBuild(baseFlags, tmpDir)).toThrow(
+			'Earlier versions built a package for the node runtime implicitly; set "artifact": "package"',
+		);
+		writePackageJson({ crust: { runtime: "deno" } });
+		expect(() => planBuild(baseFlags, tmpDir)).toThrow(
+			"Earlier versions built a binary for the deno runtime implicitly",
+		);
+		// Checked before bin entries, so the migration error is what an old project sees first.
+		writePackageJson({ bin: { cli: "src/missing.ts" } });
+		expect(() => planBuild(baseFlags, tmpDir)).toThrow("crust build needs an artifact kind");
+		// Programmatic callers are validated like the CLI's choices.
+		// @ts-expect-error an invalid artifact from an untyped caller
+		expect(() => planBuild({ artifact: "exe" }, tmpDir)).toThrow(
+			'Invalid artifact "exe". Valid artifacts: package, binary',
+		);
+	});
+
+	it("takes the artifact option over package.json crust.artifact and keeps runtime inference", () => {
+		writePackageJson({ crust: { artifact: "package" } });
+		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+			runtime: "bun",
+			runtimeSource: "default",
+			artifact: "package",
+		});
+		expect(planBuild(binary, tmpDir)).toMatchObject({ runtime: "bun", artifact: "binary" });
+		writePackageJson({ crust: { artifact: "binary" } });
+		expect(planBuild(runtimePackage, tmpDir)).toMatchObject({ artifact: "package" });
+		expect(planBuild(runtimePackage, tmpDir)).not.toHaveProperty("targets");
+		// The artifact never selects the runtime: node inference still applies.
+		writePackageJson({ devDependencies: { "@types/node": "^22" }, crust: { artifact: "package" } });
+		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+			runtime: "node",
+			runtimeSource: "inferred from @types/node",
+			artifact: "package",
+		});
+	});
+
+	it("reports runtime/artifact combinations that are not available yet", () => {
+		writePackageJson({ crust: { runtime: "node", artifact: "binary" } });
+		expect(() => planBuild(baseFlags, tmpDir)).toThrow(
+			"Standalone binaries are not available for the node runtime yet.",
+		);
+		writePackageJson({ crust: { runtime: "node" } });
+		expect(() => planBuild(binary, tmpDir)).toThrow(
+			"Standalone binaries are not available for the node runtime yet.",
+		);
+		writePackageJson({ crust: { runtime: "deno" } });
+		expect(() => planBuild(runtimePackage, tmpDir)).toThrow(
+			"Runtime packages are not available for the deno runtime yet.",
+		);
+	});
+
 	it("stages package.json crust.targets unless --target is passed", () => {
 		writePackageJson({ crust: { targets: ["bun-linux-x64", "bun-darwin-arm64"] } });
-		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+		expect(planBuild(binary, tmpDir)).toMatchObject({
 			runtime: "bun",
 			targets: ["bun-linux-x64", "bun-darwin-arm64"],
 		});
-		expect(planBuild({ ...baseFlags, targets: ["bun-linux-arm64"] }, tmpDir)).toMatchObject({
+		expect(planBuild({ ...binary, targets: ["bun-linux-arm64"] }, tmpDir)).toMatchObject({
 			targets: ["bun-linux-arm64"],
 		});
 		writePackageJson({ crust: { targets: ["linux-x64"] } });
-		expect(() => planBuild(baseFlags, tmpDir)).toThrow(
+		expect(() => planBuild(binary, tmpDir)).toThrow(
 			'Unknown target "linux-x64". Targets must use canonical Bun names. Did you mean "bun-linux-x64"?',
 		);
-		writePackageJson({ crust: { runtime: "node", targets: ["bun-linux-x64"] } });
-		expect(() => planBuild(baseFlags, tmpDir)).toThrow(
-			"package.json crust.targets is not supported with the node runtime",
-		);
+		for (const runtime of ["node", "bun"]) {
+			writePackageJson({ crust: { runtime, artifact: "package", targets: ["bun-linux-x64"] } });
+			expect(() => planBuild(baseFlags, tmpDir)).toThrow(
+				"package.json crust.targets is not supported for runtime packages (artifact package)",
+			);
+		}
 	});
 
 	it("reads package.json crust.runtime", () => {
 		writePackageJson({ crust: { runtime: "deno" } });
-		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+		expect(planBuild(binary, tmpDir)).toMatchObject({
 			runtime: "deno",
 			runtimeSource: "from package.json",
 		});
@@ -132,14 +198,14 @@ describe("planBuild", () => {
 	it("infers the runtime from deno.json or @types/node, never from lockfiles", () => {
 		const nodeTypes = { devDependencies: { "@types/node": "^22" } };
 		writePackageJson(nodeTypes);
-		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+		expect(planBuild(runtimePackage, tmpDir)).toMatchObject({
 			runtime: "node",
 			runtimeSource: "inferred from @types/node",
 		});
 		writePackageJson({ dependencies: { "@types/node": "^22" } });
-		expect(planBuild(baseFlags, tmpDir).runtime).toBe("node");
+		expect(planBuild(runtimePackage, tmpDir).runtime).toBe("node");
 		writePackageJson({ devDependencies: { "@types/node": "^22", "@types/bun": "^1" } });
-		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+		expect(planBuild(runtimePackage, tmpDir)).toMatchObject({
 			runtime: "bun",
 			runtimeSource: "default",
 		});
@@ -149,18 +215,18 @@ describe("planBuild", () => {
 		try {
 			// deno.json wins over @types/node; the lockfile is not a signal.
 			writePackageJson(nodeTypes);
-			expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+			expect(planBuild(binary, tmpDir)).toMatchObject({
 				runtime: "deno",
 				runtimeSource: "inferred from deno.jsonc",
 			});
 			// Explicit configuration beats inference.
 			writePackageJson({ crust: { runtime: "bun" } });
-			expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+			expect(planBuild(binary, tmpDir)).toMatchObject({
 				runtime: "bun",
 				runtimeSource: "from package.json",
 			});
 			writePackageJson({});
-			expect(planBuild(baseFlags, tmpDir).runtime).toBe("deno");
+			expect(planBuild(binary, tmpDir).runtime).toBe("deno");
 		} finally {
 			rmSync(join(tmpDir, "bun.lock"));
 			rmSync(join(tmpDir, "deno.jsonc"));
@@ -178,13 +244,13 @@ describe("planBuild", () => {
 			name: "@scope/tool",
 			bin: { greet: "./src/cli.ts", "admin-tool": "src/admin.ts" },
 		});
-		expect(planBuild(baseFlags, tmpDir).entries).toEqual([
+		expect(planBuild(binary, tmpDir).entries).toEqual([
 			{ command: "greet", entryPath: join(tmpDir, "src", "cli.ts") },
 			{ command: "admin-tool", entryPath: join(tmpDir, "src", "admin.ts") },
 		]);
 		// A string bin is the entry of a command named after the unscoped package name.
 		writePackageJson({ name: "@scope/tool", bin: "src/admin.ts" });
-		expect(planBuild(baseFlags, tmpDir).entries).toEqual([
+		expect(planBuild(binary, tmpDir).entries).toEqual([
 			{ command: "tool", entryPath: join(tmpDir, "src", "admin.ts") },
 		]);
 	});
@@ -201,26 +267,36 @@ describe("planBuild", () => {
 		error: string;
 	}> = [
 		{
-			name: "Node builds with targets",
-			crust: { runtime: "node" },
+			name: "Node packages with targets",
+			crust: { runtime: "node", artifact: "package" },
 			flags: { targets: ["bun-linux-x64"] },
-			error: "--target cannot be used with the node runtime",
+			error: "--target cannot be used with runtime packages (artifact package)",
+		},
+		{
+			name: "Bun packages with targets, including host",
+			crust: { runtime: "bun" },
+			flags: { artifact: "package", targets: ["host"] },
+			error: "--target cannot be used with runtime packages (artifact package)",
 		},
 		{
 			name: "minified Deno builds",
-			crust: { runtime: "deno" },
+			crust: { runtime: "deno", artifact: "binary" },
 			flags: { minify: true },
 			error: "--minify is not supported with the deno runtime",
 		},
 		{
 			name: "Deno builds with env files",
-			crust: { runtime: "deno" },
+			crust: { runtime: "deno", artifact: "binary" },
 			flags: { envFiles: [".env"] },
 			error: "--env-file is not supported with the deno runtime",
 		},
 		{
 			name: "Deno builds with Bun bundler plugins",
-			crust: { runtime: "deno", bunPlugins: ["@opentui/solid/bun-plugin"] },
+			crust: {
+				runtime: "deno",
+				artifact: "binary",
+				bunPlugins: ["@opentui/solid/bun-plugin"],
+			},
 			flags: {},
 			error: "package.json crust.bunPlugins is not supported with the deno runtime",
 		},
@@ -233,46 +309,32 @@ describe("planBuild", () => {
 	}
 
 	it("keeps crust.bunPlugins specifiers in order and defaults to none", () => {
-		expect(planBuild(baseFlags, tmpDir).bunPlugins).toEqual([]);
+		expect(planBuild(binary, tmpDir).bunPlugins).toEqual([]);
 		writePackageJson({
 			crust: { bunPlugins: ["./plugins/second.ts", "@opentui/solid/bun-plugin"] },
 		});
-		expect(planBuild(baseFlags, tmpDir).bunPlugins).toEqual([
+		expect(planBuild(binary, tmpDir).bunPlugins).toEqual([
+			"./plugins/second.ts",
+			"@opentui/solid/bun-plugin",
+		]);
+		expect(planBuild(runtimePackage, tmpDir).bunPlugins).toEqual([
 			"./plugins/second.ts",
 			"@opentui/solid/bun-plugin",
 		]);
 		writePackageJson({ crust: { runtime: "node", bunPlugins: ["./plugin.ts"] } });
-		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+		expect(planBuild(runtimePackage, tmpDir)).toMatchObject({
 			runtime: "node",
 			bunPlugins: ["./plugin.ts"],
 		});
 	});
 
-	// Only arm64 hosts hit the self-copy refusal; x64 hosts compile their own
-	// target through its -baseline alias, which Bun downloads clean.
-	const hostHasAlias = host !== null && bunBaselineAlias(host) !== null;
-
-	it.skipIf(host === null || hostHasAlias)(
-		"refuses the host target before planning outputs when bun is not on PATH",
-		() => {
-			const path = process.env.PATH;
-			process.env.PATH = "";
-			try {
-				expect(() => planBuild(baseFlags, tmpDir)).toThrow(
-					`Cannot build ${host} without a separate bun executable on PATH`,
-				);
-				expect(planBuild({ ...baseFlags, targets: ["bun-linux-x64"] }, tmpDir).runtime).toBe("bun");
-			} finally {
-				process.env.PATH = path;
-			}
-		},
-	);
-
-	it.skipIf(!hostHasAlias)("plans every target when bun is not on PATH on an x64 host", () => {
+	// Planning never looks up a compiler: build() selects it once and judges the
+	// host target against that runner (see the build() compiler-selection tests).
+	it.skipIf(host === null)("plans every target when bun is not on PATH", () => {
 		const path = process.env.PATH;
 		process.env.PATH = "";
 		try {
-			const plan = planBuild(baseFlags, tmpDir);
+			const plan = planBuild(binary, tmpDir);
 			expect(plan.runtime === "bun" && "targets" in plan && plan.targets.length).toBe(
 				BUN_TARGETS.targets.length,
 			);
@@ -284,30 +346,44 @@ describe("planBuild", () => {
 	it("stages .crust for every runtime", () => {
 		const stageDir = resolve(tmpDir, ".crust");
 		const outDir = resolve(stageDir, "artifacts");
-		expect(planBuild({ ...baseFlags, targets: ["bun-linux-x64"] }, tmpDir)).toMatchObject({
+		expect(planBuild({ ...binary, targets: ["bun-linux-x64"] }, tmpDir)).toMatchObject({
 			runtime: "bun",
+			artifact: "binary",
 			targets: ["bun-linux-x64"],
 			stageDir,
 			outDir,
 			include: [],
 		});
+		expect(planBuild(runtimePackage, tmpDir)).toMatchObject({
+			runtime: "bun",
+			artifact: "package",
+			minify: true,
+			stageDir,
+		});
 		writePackageJson({ crust: { runtime: "deno" } });
-		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+		expect(planBuild(binary, tmpDir)).toMatchObject({
 			runtime: "deno",
+			artifact: "binary",
 			targets: [...DENO_TARGETS.targets],
 			minify: false,
 			stageDir,
 		});
-		expect(() => planBuild({ ...baseFlags, targets: ["linux-x64"] }, tmpDir)).toThrow(
+		expect(() => planBuild({ ...binary, targets: ["linux-x64"] }, tmpDir)).toThrow(
 			'Unknown Deno target "linux-x64"',
 		);
 		mkdirSync(join(tmpDir, "templates"), { recursive: true });
 		writePackageJson({
-			crust: { runtime: "node", bunPlugins: ["./plugin.ts"], include: ["templates"] },
+			crust: {
+				runtime: "node",
+				artifact: "package",
+				bunPlugins: ["./plugin.ts"],
+				include: ["templates"],
+			},
 		});
 		const nodePlan = planBuild(baseFlags, tmpDir);
 		expect(nodePlan).toMatchObject({
 			runtime: "node",
+			artifact: "package",
 			minify: true,
 			bunPlugins: ["./plugin.ts"],
 			include: ["templates"],
@@ -317,22 +393,22 @@ describe("planBuild", () => {
 	});
 
 	it.skipIf(host === null)("resolves --target host to this machine's target", () => {
-		expect(planBuild({ ...baseFlags, targets: ["host"] }, tmpDir)).toMatchObject({
+		expect(planBuild({ ...binary, targets: ["host"] }, tmpDir)).toMatchObject({
 			runtime: "bun",
 			targets: [host],
 		});
 		expect(
-			planBuild({ ...baseFlags, targets: ["host", host!, "bun-linux-x64", "host"] }, tmpDir),
+			planBuild({ ...binary, targets: ["host", host!, "bun-linux-x64", "host"] }, tmpDir),
 		).toMatchObject({ targets: host === "bun-linux-x64" ? [host] : [host, "bun-linux-x64"] });
 		const denoHost = hostTarget(DENO_TARGETS);
 		writePackageJson({ crust: { runtime: "deno" } });
 		if (denoHost !== null) {
-			expect(planBuild({ ...baseFlags, targets: ["host"] }, tmpDir)).toMatchObject({
+			expect(planBuild({ ...binary, targets: ["host"] }, tmpDir)).toMatchObject({
 				runtime: "deno",
 				targets: [denoHost],
 			});
 		} else {
-			expect(() => planBuild({ ...baseFlags, targets: ["host"] }, tmpDir)).toThrow(
+			expect(() => planBuild({ ...binary, targets: ["host"] }, tmpDir)).toThrow(
 				/No Deno target matches this machine \(linux-(x64|arm64)-musl\)/,
 			);
 		}
@@ -450,13 +526,14 @@ describe("resolveBinEntries", () => {
 });
 
 describe("readCrustConfig", () => {
-	it("accepts the four documented keys and nothing else", () => {
+	it("accepts the five documented keys and nothing else", () => {
 		expect(readCrustConfig(undefined)).toEqual({});
 		expect(readCrustConfig({ name: "x" })).toEqual({});
 		expect(
 			readCrustConfig({
 				crust: {
 					runtime: "node",
+					artifact: "package",
 					targets: ["bun-linux-x64"],
 					bunPlugins: ["./p.ts"],
 					include: ["t"],
@@ -464,13 +541,19 @@ describe("readCrustConfig", () => {
 			}),
 		).toEqual({
 			runtime: "node",
+			artifact: "package",
 			targets: ["bun-linux-x64"],
 			bunPlugins: ["./p.ts"],
 			include: ["t"],
 		});
 		for (const key of ["bunPlugin", "entry", "target"]) {
 			expect(() => readCrustConfig({ crust: { [key]: [] } })).toThrow(
-				`Unknown package.json crust key "${key}". Allowed keys: runtime, targets, bunPlugins, include`,
+				`Unknown package.json crust key "${key}". Allowed keys: runtime, artifact, targets, bunPlugins, include`,
+			);
+		}
+		for (const artifact of ["exe", "standalone", "", 1, null]) {
+			expect(() => readCrustConfig({ crust: { artifact } })).toThrow(
+				`Invalid package.json crust.artifact ${JSON.stringify(artifact)}. Valid artifacts: package, binary`,
 			);
 		}
 		for (const targets of ["bun-linux-x64", []]) {
@@ -492,6 +575,7 @@ describe("readCrustConfig", () => {
 		expect(crust.additionalProperties).toBe(false);
 		expect(Object.keys(crust.properties)).toEqual([...CRUST_CONFIG_KEYS]);
 		expect(crust.properties.runtime.enum).toEqual([...BUILD_RUNTIMES]);
+		expect(crust.properties.artifact.enum).toEqual([...ARTIFACT_KINDS]);
 		expect(crust.description).toContain("`bin` field");
 	});
 });
@@ -605,9 +689,15 @@ describe("build", () => {
 			const logged: Array<[string, string]> = [];
 			const result = await build({
 				cwd: tmpDir,
+				artifact: "binary",
 				targets: ["host"],
 				onLog: (line, stream) => logged.push([line, stream]),
 			});
+			const bunPath = which("bun")!;
+			const bunVersion = execFileSync(bunPath, ["--version"], {
+				encoding: "utf8",
+				timeout: 10_000,
+			}).trim();
 
 			const alias = BUN_TARGETS.info[host!].alias;
 			const root = join(stageDir, "root");
@@ -632,8 +722,20 @@ describe("build", () => {
 			expect(result.reports).toEqual({
 				"api-cli": { extensions: [{ id: defineExtensionId("hook"), files: ["man/api-cli.1"] }] },
 			});
-			expect(readManifest(join(stageDir, "manifest.json")).build).toEqual(result.reports);
+			expect(readManifest(join(stageDir, "manifest.json"))).toMatchObject({
+				runtime: "bun",
+				artifact: "binary",
+				// The external bun on PATH is the selected compiler, so its version is embedded.
+				embeddedRuntimeVersion: bunVersion,
+				build: result.reports,
+			});
 			expect(existsSync(join(root, "man", "api-cli.1"))).toBe(true);
+			expect(logged.map(([line]) => line)).toEqual(
+				expect.arrayContaining([
+					expect.stringContaining("Artifact: binary"),
+					expect.stringContaining(`Compiler: bun ${bunVersion}`),
+				]),
+			);
 			// Every CLI progress line arrives through the callback, on the stream the CLI would use.
 			expect(logged.map(([line]) => line).join("\n")).toContain(
 				"Preparing Command Snapshot for api-cli...\n  hook  1 file  man/api-cli.1",
@@ -645,7 +747,10 @@ describe("build", () => {
 	);
 
 	it("rejects overlapping builds of one project and releases the guard after success or failure", async () => {
-		writeProject({ name: "node-cli", crust: { runtime: "node" } }, 'console.log("hi");\n');
+		writeProject(
+			{ name: "node-cli", crust: { runtime: "node", artifact: "package" } },
+			'console.log("hi");\n',
+		);
 		const alias = join(tmpDir, "alias");
 		symlinkSync(tmpDir, alias, "junction");
 		const results = await Promise.allSettled([
@@ -672,7 +777,10 @@ describe("build", () => {
 	}, 30_000);
 
 	it("stages a node bundle without reports when validate is false and rejects bad options", async () => {
-		writeProject({ name: "node-cli", crust: { runtime: "node" } }, 'console.log("hi");\n');
+		writeProject(
+			{ name: "node-cli", crust: { runtime: "node", artifact: "package" } },
+			'console.log("hi");\n',
+		);
 		mkdirSync(stageDir);
 		writeFileSync(join(stageDir, "stale.txt"), "from a previous build\n");
 
@@ -687,35 +795,186 @@ describe("build", () => {
 		});
 		expect(readFileSync(bundlePath, "utf8")).toMatch(/^#!\/usr\/bin\/env node\n/);
 		expect(existsSync(join(stageDir, "stale.txt"))).toBe(false);
-		expect(readManifest(join(stageDir, "manifest.json"))).not.toHaveProperty("build");
+		const manifest = readManifest(join(stageDir, "manifest.json"));
+		expect(manifest).toMatchObject({ runtime: "node", artifact: "package" });
+		expect(manifest).not.toHaveProperty("build");
+		expect(manifest).not.toHaveProperty("embeddedRuntimeVersion");
 
 		// Option validation fails before the stage is wiped, with the CLI's messages.
 		writeFileSync(join(stageDir, "kept.txt"), "kept\n");
 		await expect(
 			build({ cwd: tmpDir, targets: ["bun-linux-x64"], validate: false }),
-		).rejects.toThrow("--target cannot be used with the node runtime");
+		).rejects.toThrow("--target cannot be used with runtime packages");
+		await expect(build({ cwd: tmpDir, artifact: "binary", validate: false })).rejects.toThrow(
+			"Standalone binaries are not available for the node runtime yet",
+		);
 		await expect(
 			build({ cwd: tmpDir, envFiles: [".env.missing"], validate: false }),
 		).rejects.toThrow("Env file not found");
 		expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
 		writeProject({ name: "bun-cli" }, 'console.log("hi");\n');
-		await expect(build({ cwd: tmpDir, targets: ["linux-x64"], validate: false })).rejects.toThrow(
+		mkdirSync(stageDir);
+		writeFileSync(join(stageDir, "kept.txt"), "kept\n");
+		await expect(build({ cwd: tmpDir, validate: false })).rejects.toThrow(
+			"crust build needs an artifact kind",
+		);
+		await expect(
+			build({ cwd: tmpDir, artifact: "binary", targets: ["linux-x64"], validate: false }),
+		).rejects.toThrow(
 			'Unknown target "linux-x64". Targets must use canonical Bun names. Did you mean "bun-linux-x64"?',
 		);
+		expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
 	}, 30_000);
+
+	it("stages a root-only Bun runtime package that runs under Bun", async () => {
+		writeProject(
+			{ name: "bun-pkg", crust: { artifact: "package" }, engines: { bun: ">=99" } },
+			"console.log(JSON.stringify({ bun: process.versions.bun ?? null, marker: process.env.CRUST_INTERNAL_BUILD ?? null }));\n",
+		);
+		const logged: string[] = [];
+		const result = await build({
+			cwd: tmpDir,
+			validate: false,
+			onLog: (line) => logged.push(line),
+		});
+		const bundlePath = join(stageDir, "root", "bin", "bun-pkg.js");
+		expect(result.artifacts).toEqual([
+			{ kind: "package-json", path: join(stageDir, "root", "package.json") },
+			{ kind: "bundle", path: bundlePath, command: "bun-pkg" },
+		]);
+		expect(readFileSync(bundlePath, "utf8")).toMatch(/^#!\/usr\/bin\/env bun\n/);
+		const manifest = readManifest(join(stageDir, "manifest.json"));
+		expect(manifest).toMatchObject({
+			runtime: "bun",
+			artifact: "package",
+			packages: [],
+			publishOrder: ["root"],
+		});
+		expect(manifest).not.toHaveProperty("embeddedRuntimeVersion");
+		// engines describes the consumer's Bun for a runtime package; the bundler is not checked against it.
+		expect(JSON.parse(readFileSync(join(stageDir, "root", "package.json"), "utf8"))).toMatchObject({
+			engines: { bun: ">=99" },
+			bin: { "bun-pkg": "bin/bun-pkg.js" },
+		});
+		expect(logged).toContain("Artifact: package");
+		expect(logged.some((line) => line.includes("Compiler:"))).toBe(false);
+
+		const bunPath = which("bun")!;
+		const run = execFileSync(bunPath, [bundlePath], { encoding: "utf8", timeout: 10_000 });
+		expect(JSON.parse(run)).toEqual({
+			bun: execFileSync(bunPath, ["--version"], { encoding: "utf8", timeout: 10_000 }).trim(),
+			marker: "1",
+		});
+	}, 30_000);
+
+	it("selects and validates the binary compiler before wiping the previous stage", async () => {
+		writeProject({ name: "engine-cli", engines: { bun: "0.0.1" } }, 'console.log("hi");\n');
+		mkdirSync(stageDir);
+		writeFileSync(join(stageDir, "kept.txt"), "kept\n");
+		const bunPath = which("bun")!;
+		await expect(
+			build({ cwd: tmpDir, artifact: "binary", targets: ["bun-linux-x64"], validate: false }),
+		).rejects.toThrow(`(${bunPath}) does not satisfy package.json engines.bun "0.0.1"`);
+		writeProject({ name: "engine-cli", engines: { bun: "latest" } }, 'console.log("hi");\n');
+		mkdirSync(stageDir);
+		writeFileSync(join(stageDir, "kept.txt"), "kept\n");
+		await expect(
+			build({ cwd: tmpDir, artifact: "binary", targets: ["bun-linux-x64"], validate: false }),
+		).rejects.toThrow('package.json engines.bun is not a valid semver range: "latest"');
+		expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
+
+		// Under Node there is no embedded Bun to fall back to: a missing bun fails before the wipe too.
+		writeProject({ name: "engine-cli" }, 'console.log("hi");\n');
+		mkdirSync(stageDir);
+		writeFileSync(join(stageDir, "kept.txt"), "kept\n");
+		const path = process.env.PATH;
+		process.env.PATH = "";
+		try {
+			for (const artifact of ["binary", "package"] as const) {
+				await expect(
+					build({
+						cwd: tmpDir,
+						artifact,
+						...(artifact === "binary" ? { targets: ["bun-linux-x64"] } : {}),
+						validate: false,
+					}),
+				).rejects.toThrow("bun was not found on PATH");
+			}
+		} finally {
+			process.env.PATH = path;
+		}
+		expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
+		expect(existsSync(join(stageDir, "manifest.json"))).toBe(false);
+	}, 30_000);
+
+	// A version-manager shim picks the runtime from its working directory, so the
+	// version probe must run in the project, where compilation runs, not in the caller's cwd.
+	it.skipIf(host === null || process.platform === "win32")(
+		"reads the compiler version in the project directory, like compilation",
+		async () => {
+			const bunPath = which("bun")!;
+			const bunVersion = execFileSync(bunPath, ["--version"], {
+				encoding: "utf8",
+				timeout: 10_000,
+			}).trim();
+			writeProject(
+				{ name: "shim-cli", engines: { bun: bunVersion } },
+				"console.log(process.versions.bun);\n",
+			);
+			const shimDir = mkdtempSync(join(tmpdir(), "crust-bun-shim-"));
+			const project = realpathSync(tmpDir);
+			const log = join(shimDir, "calls.log");
+			// The real bun inside the project; a different (fake) runtime anywhere else.
+			writeFileSync(
+				join(shimDir, "bun"),
+				`#!/bin/sh\ncwd=$(pwd -P)\necho "$cwd $1" >> '${log}'\n` +
+					`if [ "$cwd" = '${project}' ]; then exec '${bunPath}' "$@"; fi\n` +
+					`if [ "$1" = --version ]; then echo 0.0.1; exit 0; fi\nexit 1\n`,
+				{ mode: 0o755 },
+			);
+			const path = process.env.PATH;
+			process.env.PATH = `${shimDir}:${path}`;
+			try {
+				expect(process.cwd()).not.toBe(tmpDir);
+				const logged: string[] = [];
+				const result = await build({
+					cwd: tmpDir,
+					artifact: "binary",
+					targets: ["host"],
+					validate: false,
+					onLog: (line) => logged.push(line),
+				});
+				expect(logged).toContain(`Compiler: bun ${bunVersion} (${join(shimDir, "bun")})`);
+				const calls = readFileSync(log, "utf8").trim().split("\n");
+				expect(calls).toEqual([`${project} --version`, `${project} build`]);
+				expect(readManifest(join(stageDir, "manifest.json")).embeddedRuntimeVersion).toBe(
+					bunVersion,
+				);
+				const executable = result.artifacts.find((artifact) => artifact.kind === "executable")!;
+				const embedded = execFileSync(executable.path, [], { encoding: "utf8", timeout: 10_000 });
+				expect(embedded.trim()).toBe(bunVersion);
+			} finally {
+				process.env.PATH = path;
+				rmSync(shimDir, { recursive: true, force: true });
+			}
+		},
+		30_000,
+	);
 });
 
 describe("buildCommand error handling", () => {
 	it("rejects unsupported runtime and flag combinations before compiling", async () => {
 		expect(
-			await executeBuildError("node-target", { crust: { runtime: "node" } }, [
+			await executeBuildError("node-target", { crust: { runtime: "node", artifact: "package" } }, [
 				"--target",
 				"bun-linux-x64",
 				"--no-validate",
 			]),
-		).toContain("--target cannot be used with the node runtime");
+		).toContain("--target cannot be used with runtime packages");
 		expect(
 			await executeBuildError("deno-minify", { crust: { runtime: "deno" } }, [
+				"--artifact",
+				"binary",
 				"--minify",
 				"--no-validate",
 			]),
@@ -726,6 +985,8 @@ describe("buildCommand error handling", () => {
 		try {
 			expect(
 				await executeBuildError("deno-env-file", { crust: { runtime: "deno" } }, [
+					"--artifact",
+					"binary",
 					"--env-file",
 					envFile,
 					"--no-validate",
@@ -738,14 +999,37 @@ describe("buildCommand error handling", () => {
 			await executeBuildError(
 				"deno-bun-plugin",
 				{ crust: { runtime: "deno", bunPlugins: ["@opentui/solid/bun-plugin"] } },
-				["--no-validate"],
+				["--artifact", "binary", "--no-validate"],
 			),
 		).toContain("package.json crust.bunPlugins is not supported with the deno runtime");
 		expect(
 			await executeBuildError("unknown-key", { crust: { bunPlugin: [] } }, ["--no-validate"]),
 		).toContain(
-			'Unknown package.json crust key "bunPlugin". Allowed keys: runtime, targets, bunPlugins, include',
+			'Unknown package.json crust key "bunPlugin". Allowed keys: runtime, artifact, targets, bunPlugins, include',
 		);
+	});
+
+	it("requires --artifact or crust.artifact, validates it, and lets the flag win", async () => {
+		expect(await executeBuildError("no-artifact", {}, ["--no-validate"])).toContain(
+			"crust build needs an artifact kind: pass --artifact package|binary",
+		);
+		expect(
+			await executeBuildError("bad-artifact", {}, ["--artifact", "exe", "--no-validate"]),
+		).toContain('Invalid value "exe" for --artifact. Expected one of: package, binary');
+		expect(
+			await executeBuildError(
+				"artifact-precedence",
+				{ crust: { runtime: "node", artifact: "package" } },
+				["--artifact", "binary", "--no-validate"],
+			),
+		).toContain("Standalone binaries are not available for the node runtime yet");
+		expect(
+			await executeBuildError("deno-package", { crust: { runtime: "deno", artifact: "binary" } }, [
+				"--artifact",
+				"package",
+				"--no-validate",
+			]),
+		).toContain("Runtime packages are not available for the deno runtime yet");
 	});
 
 	it("rejects invalid identity before wiping the previous stage, even with --no-validate", async () => {
@@ -764,7 +1048,11 @@ describe("buildCommand error handling", () => {
 			]) {
 				writeFileSync(
 					join(tmpDir, "package.json"),
-					JSON.stringify({ ...identity, bin: { tool: "cli.ts" }, crust: { runtime: "node" } }),
+					JSON.stringify({
+						...identity,
+						bin: { tool: "cli.ts" },
+						crust: { runtime: "node", artifact: "package" },
+					}),
 				);
 				const result = await captureExecute(new Crust("test").add(buildCommand), [
 					"build",
@@ -788,7 +1076,7 @@ describe("buildCommand error handling", () => {
 				name: "legacy",
 				version: "1",
 				bin: { legacy: "cli.ts" },
-				crust: { runtime: "node" },
+				crust: { runtime: "node", artifact: "package" },
 			}),
 		);
 		writeFileSync(
@@ -837,6 +1125,8 @@ describe("buildCommand error handling", () => {
 				);
 				const result = await captureExecute(new Crust("test").add(buildCommand), [
 					"build",
+					"--artifact",
+					"binary",
 					"--no-validate",
 					"--target",
 					"bun-linux-x64",
@@ -875,6 +1165,8 @@ describe("buildCommand error handling", () => {
 			try {
 				const result = await captureExecute(new Crust("test").add(buildCommand), [
 					"build",
+					"--artifact",
+					"binary",
 					"--target",
 					"host",
 				]);
@@ -922,7 +1214,14 @@ describe("buildCommand error handling", () => {
 					`await new Crust(${JSON.stringify(name)}).extend(hook).action(() => {}).execute();\n`,
 			);
 		const build = (argv: string[]) =>
-			captureExecute(new Crust("test").add(buildCommand), ["build", "--target", "host", ...argv]);
+			captureExecute(new Crust("test").add(buildCommand), [
+				"build",
+				"--artifact",
+				"binary",
+				"--target",
+				"host",
+				...argv,
+			]);
 
 		beforeAll(() => {
 			mkdirSync(join(tmpDir, "src"), { recursive: true });
