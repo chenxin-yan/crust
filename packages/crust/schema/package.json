@@ -10,7 +10,7 @@
 	],
 	"properties": {
 		"crust": {
-			"description": "Build configuration read by `crust build`. Every key is optional; unknown keys fail the build. Command names and their source entries come from the standard `bin` field.",
+			"description": "Build configuration read by `crust build`. `artifact` is required unless every build passes --artifact; the other keys are optional. Unknown keys fail the build. Command names and their source entries come from the standard `bin` field.",
 			"type": "object",
 			"additionalProperties": false,
 			"properties": {
@@ -23,8 +23,16 @@
 						"node"
 					]
 				},
+				"artifact": {
+					"description": "What `crust build` distributes; the --artifact flag overrides it. `package`: a root-only runtime package whose commands are JavaScript bundles run by the consumer's installed runtime (bun or node). `binary`: standalone executables in per-platform npm packages behind a Node launcher (bun or deno).",
+					"type": "string",
+					"enum": [
+						"package",
+						"binary"
+					]
+				},
 				"targets": {
-					"description": "Canonical compiler targets `crust build` stages when no --target flag is passed, or `host` for the building machine; without it every Bun or Deno target is staged. Rejected for Node.",
+					"description": "Canonical compiler targets `crust build` stages for binaries when no --target flag is passed, or `host` for the building machine; without it every target of the compiler is staged. Rejected for runtime packages.",
 					"type": "array",
 					"minItems": 1,
 					"items": {
@@ -32,7 +40,7 @@
 					}
 				},
 				"bunPlugins": {
-					"description": "Bun bundler plugin modules applied to Bun and Node builds, in order: bare names resolve from node_modules, paths from the project root; each must default-export the plugin. Rejected for Deno.",
+					"description": "Bun bundler plugin modules applied to Bun binaries and runtime packages, in order: bare names resolve from node_modules, paths from the project root; each must default-export the plugin. Rejected for Deno.",
 					"type": "array",
 					"items": {
 						"type": "string"

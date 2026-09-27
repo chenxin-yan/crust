@@ -37,6 +37,7 @@ function createPlan(
 		cwd,
 		entries: [{ command: "test-cli", entryPath: join(cwd, "src", "cli.ts") }],
 		stageDir: join(cwd, ".crust"),
+		runtime: "bun",
 		validate: false,
 		outDir: join(cwd, ".crust", "artifacts"),
 		userPackageJson: packageJson,
@@ -57,7 +58,7 @@ function bunDistribution(
 		target: BunTarget,
 	) => Promise<void> = fakeExecutor,
 ): Distribution<BunTarget> {
-	return { table: BUN_TARGETS, targets, execute };
+	return { table: BUN_TARGETS, targets, embeddedRuntimeVersion: "1.4.2", execute };
 }
 
 const rootOnlyDistribution: Distribution<never> = { execute: fakeExecutor };
@@ -104,6 +105,11 @@ describe("runDistributeBuild", () => {
 		);
 
 		const manifest = readJson<DistributionManifest>(join(plan.stageDir, "manifest.json"));
+		expect(manifest).toMatchObject({
+			runtime: "bun",
+			artifact: "binary",
+			embeddedRuntimeVersion: "1.4.2",
+		});
 		expect(manifest.root).toEqual({
 			name: "@scope/test-package-cli",
 			dir: "root",
@@ -284,10 +290,17 @@ describe("runDistributeBuild", () => {
 		expect(readFileSync(join(nodePlan.stageDir, "root", "bin", "admin.js"), "utf8")).toBe(
 			"fake binary\n",
 		);
-		expect(readJson<DistributionManifest>(join(nodePlan.stageDir, "manifest.json"))).toMatchObject({
+		const rootOnlyManifest = readJson<DistributionManifest>(
+			join(nodePlan.stageDir, "manifest.json"),
+		);
+		expect(rootOnlyManifest).toMatchObject({
+			runtime: "bun",
+			artifact: "package",
 			root: { bins: ["greet", "admin"] },
 			packages: [],
 		});
+		// A runtime package embeds no runtime, so no compiler version is recorded as one.
+		expect(rootOnlyManifest).not.toHaveProperty("embeddedRuntimeVersion");
 	});
 
 	it("runs the executor once per target with the canonical target name", async () => {
@@ -310,7 +323,11 @@ describe("runDistributeBuild", () => {
 	});
 
 	it("stages Deno platform packages with the same npm names and glibc-only Linux metadata", async () => {
-		const plan = createPlan(tmpDir, { name: "@scope/deno-cli", version: "2.0.0" });
+		const plan = createPlan(
+			tmpDir,
+			{ name: "@scope/deno-cli", version: "2.0.0" },
+			{ runtime: "deno" },
+		);
 		const outputs: string[] = [];
 		const targets: DenoTarget[] = ["x86_64-unknown-linux-gnu", "aarch64-pc-windows-msvc"];
 
@@ -319,6 +336,7 @@ describe("runDistributeBuild", () => {
 			{
 				table: DENO_TARGETS,
 				targets,
+				embeddedRuntimeVersion: "2.9.6",
 				execute: async (entryPath: string, outfilePath: string) => {
 					outputs.push(outfilePath);
 					await fakeExecutor(entryPath, outfilePath);
@@ -342,6 +360,11 @@ describe("runDistributeBuild", () => {
 			}),
 		]);
 		expect(manifest.publishOrder).toEqual(["linux-x64", "windows-arm64", "root"]);
+		expect(manifest).toMatchObject({
+			runtime: "deno",
+			artifact: "binary",
+			embeddedRuntimeVersion: "2.9.6",
+		});
 		expect(
 			readJson<{ libc?: string[] }>(join(plan.stageDir, "linux-x64", "package.json")).libc,
 		).toEqual(["glibc"]);

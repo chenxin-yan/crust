@@ -52,7 +52,14 @@ console.log(args.join(" ") || "resolver-ok");
 	const originalCwd = process.cwd;
 	process.cwd = () => sampleDir;
 	try {
-		const result = await captureExecute(app, ["build", "--target", target, "--no-validate"]);
+		const result = await captureExecute(app, [
+			"build",
+			"--artifact",
+			"binary",
+			"--target",
+			target,
+			"--no-validate",
+		]);
 		if (result.exitCode !== 0) throw new Error(result.stderr);
 	} finally {
 		process.cwd = originalCwd;

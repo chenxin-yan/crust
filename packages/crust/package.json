@@ -32,6 +32,7 @@
 		}
 	},
 	"crust": {
+		"artifact": "binary",
 		"include": [
 			"schema",
 			"dist"

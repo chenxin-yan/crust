@@ -16,10 +16,18 @@ import { bold, cyan, dim, green } from "@crustjs/style";
 import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
 import { isWithin } from "@crustjs/utils/path";
 
-import type { TargetInfo, TargetTable } from "./build-helpers.ts";
+import type { BuildRuntime, TargetInfo, TargetTable } from "./build-helpers.ts";
 
 /** Project-relative directory that `crust build` owns: wiped per build, read by `crust publish`. */
 export const CRUST_DIR = ".crust";
+
+/**
+ * What one build distributes: a runtime `package` (a root-only JavaScript
+ * bundle that needs the runtime installed) or standalone `binary` executables
+ * in platform packages behind a Node launcher.
+ */
+export const ARTIFACT_KINDS = ["package", "binary"] as const;
+export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
 
 const MAX_PACKAGE_NAME_LENGTH = 214;
 const METADATA_KEYS = [
@@ -126,6 +134,13 @@ export type BinEntry = { command: string; entryPath: string };
 
 export type DistributionManifest = {
 	version: string;
+	runtime: BuildRuntime;
+	artifact: ArtifactKind;
+	/**
+	 * Binary builds only: the runtime version the selected compiler reported and
+	 * embedded in every platform binary. Runtime packages embed no runtime.
+	 */
+	embeddedRuntimeVersion?: string;
 	root: {
 		name: string;
 		dir: string;
@@ -582,12 +597,14 @@ function copyLicense(cwd: string, packageDirs: readonly string[]): void {
 function writeDistributionManifest(
 	stageDir: string,
 	metadata: DistributionMetadata,
+	identity: Pick<DistributionManifest, "runtime" | "artifact" | "embeddedRuntimeVersion">,
 	commands: readonly string[],
 	targets: readonly DistributionTarget[],
 	build: Record<string, BuildReport> | undefined,
 ): DistributionManifest {
 	const manifest: DistributionManifest = {
 		version: metadata.version,
+		...identity,
 		root: {
 			name: metadata.rootPackageName,
 			dir: "root",
@@ -646,6 +663,8 @@ export type DistributeBuildPlan = {
 	/** Validated package.json `bin` entries, in declaration order; never empty. */
 	entries: readonly BinEntry[];
 	stageDir: string;
+	/** Application runtime recorded in `manifest.json`. */
+	runtime: BuildRuntime;
 	validate: boolean;
 	/** Where Extension build hooks write: `.crust/artifacts`. */
 	outDir: string;
@@ -656,14 +675,17 @@ export type DistributeBuildPlan = {
 
 /**
  * How each staged root `bin/<command>.js` gets its content. With a target
- * table it is a generated launcher and `execute` compiles one binary per
- * command per platform package; without one the package is root-only and
- * `execute` writes the command's self-contained bundle to that path (Node).
+ * table (binary artifact) it is a generated launcher and `execute` compiles
+ * one binary per command per platform package; without one (package
+ * artifact) the package is root-only and `execute` writes the command's
+ * self-contained bundle to that path.
  */
 export type Distribution<T extends string> =
 	| {
 			table: TargetTable<T>;
 			targets: readonly T[];
+			/** Version the selected compiler embeds; recorded in `manifest.json`. */
+			embeddedRuntimeVersion: string;
 			execute: (entryPath: string, outfilePath: string, target: T) => Promise<void>;
 	  }
 	| {
@@ -795,7 +817,20 @@ export async function runDistributeBuild<T extends string>(
 
 	// Written last: `crust publish` treats manifest.json as proof of a complete
 	// build, so a failed compile must not leave one behind.
-	writeDistributionManifest(plan.stageDir, metadata, commands, distributionTargets, build);
+	writeDistributionManifest(
+		plan.stageDir,
+		metadata,
+		table
+			? {
+					runtime: plan.runtime,
+					artifact: "binary",
+					embeddedRuntimeVersion: distribution.embeddedRuntimeVersion,
+				}
+			: { runtime: plan.runtime, artifact: "package" },
+		commands,
+		distributionTargets,
+		build,
+	);
 	const manifestPath = join(plan.stageDir, "manifest.json");
 	io.stdout(
 		`\n${green("✓")} Staged ${bold(`${distributionTargets.length + 1}`)} npm package(s) successfully:`,

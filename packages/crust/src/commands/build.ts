@@ -11,20 +11,27 @@ import { isWithin } from "@crustjs/utils/path";
 import {
 	assertTargetsBuildableWithoutBun,
 	BUILD_RUNTIMES,
+	type BuildCompiler,
+	type BuildRunner,
 	type BuildRuntime,
 	BUN_TARGETS,
 	type BunTarget,
 	DENO_TARGETS,
 	type DenoTarget,
 	execBuild,
+	execBunPackageBuild,
 	execDenoBuild,
 	execNodeBuild,
 	HOST_TARGET,
 	readUserPackageJson,
+	resolveBinaryCompiler,
+	resolveBunBuildRunner,
 	resolveTargets,
 	buildEntrypoint,
 } from "../utils/build-helpers.ts";
 import {
+	ARTIFACT_KINDS,
+	type ArtifactKind,
 	type ArtifactOwner,
 	type BinEntry,
 	type BuildArtifact,
@@ -41,11 +48,18 @@ import {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Also mirrored by `schema/package.json`; build.test.ts guards against drift. */
-export const CRUST_CONFIG_KEYS = ["runtime", "targets", "bunPlugins", "include"] as const;
+export const CRUST_CONFIG_KEYS = [
+	"runtime",
+	"artifact",
+	"targets",
+	"bunPlugins",
+	"include",
+] as const;
 
 /** The `crust` block of the user's package.json, shape-validated. */
 export type CrustConfig = {
 	runtime?: BuildRuntime;
+	artifact?: ArtifactKind;
 	targets?: string[];
 	bunPlugins?: string[];
 	include?: string[];
@@ -53,6 +67,10 @@ export type CrustConfig = {
 
 function isBuildRuntime(value: JsonValue): value is BuildRuntime {
 	return typeof value === "string" && BUILD_RUNTIMES.some((runtime) => runtime === value);
+}
+
+function isArtifactKind(value: JsonValue): value is ArtifactKind {
+	return typeof value === "string" && ARTIFACT_KINDS.some((kind) => kind === value);
 }
 
 function isString(value: JsonValue): value is string {
@@ -85,6 +103,14 @@ export function readCrustConfig(pkg: JsonValue | undefined): CrustConfig {
 			);
 		}
 		config.runtime = crust.runtime;
+	}
+	if (crust.artifact !== undefined) {
+		if (!isArtifactKind(crust.artifact)) {
+			throw new Error(
+				`Invalid package.json crust.artifact ${JSON.stringify(crust.artifact)}. Valid artifacts: ${ARTIFACT_KINDS.join(", ")}`,
+			);
+		}
+		config.artifact = crust.artifact;
 	}
 	if (crust.targets !== undefined) {
 		// An empty list would mean "every target" downstream, the opposite of what it says.
@@ -303,9 +329,16 @@ export type BuildOptions = {
 	/** Project root whose package.json `bin` and `crust` are read. Default: `process.cwd()`. */
 	cwd?: string;
 	/**
+	 * `"package"` for a runtime package (a root-only JavaScript bundle that runs
+	 * on the installed runtime) or `"binary"` for standalone executables in
+	 * platform packages. Overrides package.json `crust.artifact`; one of the two
+	 * is required.
+	 */
+	artifact?: ArtifactKind;
+	/**
 	 * Canonical compiler targets, or `"host"` for this machine. Overrides
-	 * package.json `crust.targets`; omit both to stage every Bun/Deno target.
-	 * Rejected for the node runtime.
+	 * package.json `crust.targets`; omit both to stage every target of the
+	 * binary compiler. Rejected for runtime packages.
 	 */
 	targets?: readonly string[];
 	/** Env files inlining `PUBLIC_*` build-time constants, resolved against `cwd`. Rejected for deno. */
@@ -336,31 +369,84 @@ type CommonBuildPlan = DistributeBuildPlan & {
 	minify: boolean;
 };
 
-/** The publishable `.crust/` tree: root package plus platform packages for Bun/Deno. */
+/**
+ * The publishable `.crust/` tree: a root-only runtime package, or a root
+ * launcher package plus one platform package per binary target.
+ */
 export type BuildPlan = CommonBuildPlan &
 	(
-		| { runtime: "bun"; targets: BunTarget[] }
-		| { runtime: "deno"; targets: DenoTarget[] }
-		| { runtime: "node" }
+		| { runtime: "bun"; artifact: "binary"; targets: BunTarget[] }
+		| { runtime: "deno"; artifact: "binary"; targets: DenoTarget[] }
+		| { runtime: "bun" | "node"; artifact: "package" }
 	);
+
+/** What earlier releases built for each runtime without being asked; quoted in the migration error. */
+const IMPLICIT_ARTIFACTS = {
+	bun: "binary",
+	deno: "binary",
+	node: "package",
+} as const satisfies Record<BuildRuntime, ArtifactKind>;
+
+/** The runtime/artifact combinations this release can build. */
+type ArtifactSelection =
+	| { runtime: "bun" | "node"; artifact: "package" }
+	| { runtime: "bun" | "deno"; artifact: "binary" };
+
+/** `option` (the `artifact` build option or `--artifact`) > package.json `crust.artifact`; no default. */
+function resolveArtifact(
+	option: ArtifactKind | undefined,
+	config: CrustConfig,
+	runtime: BuildRuntime,
+): ArtifactSelection {
+	if (option !== undefined && !isArtifactKind(option)) {
+		throw new Error(
+			`Invalid artifact ${JSON.stringify(option)}. Valid artifacts: ${ARTIFACT_KINDS.join(", ")}`,
+		);
+	}
+	const artifact = option ?? config.artifact;
+	if (artifact === undefined) {
+		const previous = IMPLICIT_ARTIFACTS[runtime];
+		throw new Error(
+			`crust build needs an artifact kind: pass --artifact package|binary or set package.json "crust": { "artifact": "package" | "binary" }.\n` +
+				"  package: one JavaScript bundle per command that runs on the consumer's installed runtime.\n" +
+				"  binary: standalone executables in per-platform npm packages behind a Node launcher.\n" +
+				`  Earlier versions built a ${previous} for the ${runtime} runtime implicitly; set "artifact": "${previous}" to keep that output.`,
+		);
+	}
+	if (artifact === "package") {
+		if (runtime === "deno") {
+			throw new Error(
+				"Runtime packages are not available for the deno runtime yet.\n  Use artifact binary for Deno standalone binaries, or set crust.runtime to bun or node for a runtime package.",
+			);
+		}
+		return { runtime, artifact };
+	}
+	if (runtime === "node") {
+		throw new Error(
+			"Standalone binaries are not available for the node runtime yet.\n  Use artifact package for a Node runtime package, or set crust.runtime to bun or deno for a standalone binary.",
+		);
+	}
+	return { runtime, artifact };
+}
 
 export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 	const userPackageJson = readUserPackageJson(cwd);
 	const config = readCrustConfig(userPackageJson);
 	const { runtime, source: runtimeSource } = resolveBuildRuntime(userPackageJson, config, cwd);
+	const selection = resolveArtifact(options.artifact, config, runtime);
 	const entries = resolveBinEntries(cwd, userPackageJson);
 	validatePackageIdentity(userPackageJson, "package.json");
 	const envFiles = resolveEnvFilePaths(cwd, options.envFiles);
 	const bunPlugins = config.bunPlugins ?? [];
 
-	if (runtime === "node" && options.targets?.length) {
+	if (selection.artifact === "package" && options.targets?.length) {
 		throw new Error(
-			"--target cannot be used with the node runtime.\n  Node builds produce one portable JavaScript artifact.",
+			"--target cannot be used with runtime packages (artifact package).\n  A runtime package is one portable JavaScript bundle; drop --target or use artifact binary.",
 		);
 	}
-	if (runtime === "node" && config.targets !== undefined) {
+	if (selection.artifact === "package" && config.targets !== undefined) {
 		throw new Error(
-			"package.json crust.targets is not supported with the node runtime.\n  Node builds produce one portable JavaScript artifact; remove crust.targets or set crust.runtime to bun or deno.",
+			'package.json crust.targets is not supported for runtime packages (artifact package).\n  A runtime package is one portable JavaScript bundle; remove crust.targets or set "artifact": "binary".',
 		);
 	}
 	if (runtime === "deno" && options.minify) {
@@ -396,48 +482,97 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 		minify: runtime === "deno" ? false : (options.minify ?? true),
 	};
 
-	if (runtime === "node") return { ...common, runtime };
+	if (selection.artifact === "package") return { ...common, ...selection };
 	const targetInputs = options.targets?.length ? options.targets : config.targets;
-	if (runtime === "bun") {
-		const targets = resolveTargets(BUN_TARGETS, targetInputs);
-		assertTargetsBuildableWithoutBun(targets);
-		return { ...common, runtime, targets };
+	const { runtime: binaryRuntime, artifact } = selection;
+	if (binaryRuntime === "bun") {
+		return {
+			...common,
+			runtime: binaryRuntime,
+			artifact,
+			targets: resolveTargets(BUN_TARGETS, targetInputs),
+		};
 	}
-	return { ...common, runtime, targets: resolveTargets(DENO_TARGETS, targetInputs) };
+	return {
+		...common,
+		runtime: binaryRuntime,
+		artifact,
+		targets: resolveTargets(DENO_TARGETS, targetInputs),
+	};
 }
 
-/** Bun and Deno stage platform packages behind a Node launcher; Node stages a root-only bundle. */
-async function runStagedBuild(
-	plan: BuildPlan,
-	io: InvocationIO,
-	reports: Record<string, BuildReport> | undefined,
-): Promise<BuildArtifact[]> {
+type SelectedCompilers = {
+	/** Bun runner for Command Snapshots; absent only when a Deno build skips them. */
+	snapshotRunner: BuildRunner | undefined;
+	/** Stages the distribution with the compilers selected here. */
+	stage: (reports: Record<string, BuildReport> | undefined) => Promise<BuildArtifact[]>;
+};
+
+/**
+ * Selects every compiler the build uses, once, before `.crust/` is wiped, so a
+ * missing tool or an engines mismatch keeps the previous stage. Binaries use
+ * the selected compiler's own version (`resolveBinaryCompiler`); runtime
+ * packages are bundled by Bun and embed no runtime, so engines stay a
+ * consumer requirement there and are not checked against the bundler.
+ */
+async function selectCompilers(plan: BuildPlan, io: InvocationIO): Promise<SelectedCompilers> {
+	if (plan.artifact === "package") {
+		const runner = resolveBunBuildRunner();
+		const bundle = plan.runtime === "bun" ? execBunPackageBuild : execNodeBuild;
+		return {
+			snapshotRunner: runner,
+			stage: (reports) =>
+				runDistributeBuild(
+					plan,
+					{
+						execute: (entry, outfile) =>
+							bundle(entry, outfile, plan.minify, plan.envFiles, plan.cwd, plan.bunPlugins, runner),
+					},
+					io,
+					reports,
+				),
+		};
+	}
+
+	const compiler: BuildCompiler = await resolveBinaryCompiler(plan.runtime, plan.userPackageJson);
+	io.stdout(
+		`${dim("Compiler:")} ${compiler.runtime} ${compiler.version} ${dim(`(${compiler.runner.command})`)}`,
+	);
 	if (plan.runtime === "bun") {
+		assertTargetsBuildableWithoutBun(plan.targets, undefined, compiler.runner);
 		const distribution: Distribution<BunTarget> = {
 			table: BUN_TARGETS,
 			targets: plan.targets,
+			embeddedRuntimeVersion: compiler.version,
 			execute: (entry, outfile, target) =>
-				execBuild(entry, outfile, plan.minify, target, plan.envFiles, plan.cwd, plan.bunPlugins),
+				execBuild(
+					entry,
+					outfile,
+					plan.minify,
+					target,
+					plan.envFiles,
+					plan.cwd,
+					plan.bunPlugins,
+					compiler.runner,
+				),
 		};
-		return runDistributeBuild(plan, distribution, io, reports);
-	}
-	if (plan.runtime === "deno") {
-		const distribution: Distribution<DenoTarget> = {
-			table: DENO_TARGETS,
-			targets: plan.targets,
-			execute: (entry, outfile, target) => execDenoBuild(entry, outfile, target, plan.cwd),
+		return {
+			snapshotRunner: compiler.runner,
+			stage: (reports) => runDistributeBuild(plan, distribution, io, reports),
 		};
-		return runDistributeBuild(plan, distribution, io, reports);
 	}
-	return runDistributeBuild(
-		plan,
-		{
-			execute: (entry, outfile) =>
-				execNodeBuild(entry, outfile, plan.minify, plan.envFiles, plan.cwd, plan.bunPlugins),
-		},
-		io,
-		reports,
-	);
+	const distribution: Distribution<DenoTarget> = {
+		table: DENO_TARGETS,
+		targets: plan.targets,
+		embeddedRuntimeVersion: compiler.version,
+		execute: (entry, outfile, target) =>
+			execDenoBuild(entry, outfile, target, plan.cwd, compiler.runner),
+	};
+	return {
+		// Command Snapshots always run under Bun, even for Deno binaries.
+		snapshotRunner: plan.validate ? resolveBunBuildRunner() : undefined,
+		stage: (reports) => runDistributeBuild(plan, distribution, io, reports),
+	};
 }
 
 /**
@@ -450,6 +585,7 @@ async function runStagedBuild(
 async function prepareEntries(
 	plan: BuildPlan,
 	io: InvocationIO,
+	runner: BuildRunner | undefined,
 ): Promise<Record<string, BuildReport>> {
 	const owners = new Map<string, ArtifactOwner>();
 	const reports: Record<string, BuildReport> = {};
@@ -462,6 +598,7 @@ async function prepareEntries(
 				plan.envFiles,
 				io,
 				plan.cwd,
+				runner,
 			);
 			if (snapshot.meta.name !== command) {
 				throw new Error(
@@ -487,19 +624,21 @@ async function prepareEntries(
 const activeBuilds = new Set<string>();
 
 /**
- * Stages the publishable npm tree in `<cwd>/.crust`: a root package with one
- * `bin/<command>.js` per package.json `bin` entry, each a Node launcher (Bun,
- * Deno) or the bundle itself (Node), plus one platform package per target for
- * Bun and Deno holding one binary per command. Command names and source
- * entries come from `bin`; the runtime, Bun plugins, and extra directories
- * from package.json `crust`. Compilation and Command Snapshots run in bun
+ * Stages the publishable npm tree in `<cwd>/.crust` for one runtime/artifact
+ * combination: a root package with one `bin/<command>.js` per package.json
+ * `bin` entry, each the command's bundle (artifact `package`) or a Node
+ * launcher (artifact `binary`), plus for binaries one platform package per
+ * target holding one executable per command. Command names and source entries
+ * come from `bin`; the runtime, artifact, Bun plugins, and extra directories
+ * from package.json `crust`. Bundling and Command Snapshots run in bun
  * subprocesses (bun on PATH, or the running Bun executable), so this works
- * under Node as well when Bun is installed.
+ * under Node as well when Bun is installed; Deno binaries need deno on PATH.
  *
- * Throws on any failure. Planning failures (bad options or package.json) leave
- * the previous `.crust/` stage untouched; failures after planning leave a
- * wiped stage without a completion `manifest.json`. Overlapping calls for the
- * same real project directory in this process are rejected before staging.
+ * Throws on any failure. Planning and compiler-selection failures (bad
+ * options or package.json, a missing compiler, an engines mismatch) leave the
+ * previous `.crust/` stage untouched; later failures leave a wiped stage
+ * without a completion `manifest.json`. Overlapping calls for the same real
+ * project directory in this process are rejected before staging.
  */
 export async function build(options: BuildOptions = {}): Promise<BuildResult> {
 	const cwd = resolve(options.cwd ?? process.cwd());
@@ -514,11 +653,15 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
 		};
 		const plan = planBuild(options, cwd);
 		io.stdout(`${dim("Runtime:")} ${plan.runtime} ${dim(`(${plan.runtimeSource})`)}`);
+		io.stdout(`${dim("Artifact:")} ${plan.artifact}`);
+		const compilers = await selectCompilers(plan, io);
 		// Wipe once, before Extension hooks fill .crust/artifacts; staging only adds to the tree.
 		rmSync(plan.stageDir, { recursive: true, force: true });
 		// validate: false skips the snapshots (and so the name check and hooks), not the bin validation above.
-		const reports = plan.validate ? await prepareEntries(plan, io) : undefined;
-		const artifacts = await runStagedBuild(plan, io, reports);
+		const reports = plan.validate
+			? await prepareEntries(plan, io, compilers.snapshotRunner)
+			: undefined;
+		const artifacts = await compilers.stage(reports);
 		return { stageDir: plan.stageDir, artifacts, ...(reports ? { reports } : {}) };
 	} finally {
 		activeBuilds.delete(project);
@@ -531,9 +674,10 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
  *
  * @example
  * ```sh
- * crust build                                  # Stage .crust/ for every target of the runtime
- * crust build --target host                    # Stage only this machine's target
- * crust build --target bun-linux-x64           # Stage only Linux x64
+ * crust build --artifact package               # Stage a root-only runtime package
+ * crust build --artifact binary                # Stage binaries for every target of the compiler
+ * crust build --artifact binary --target host  # Stage only this machine's target
+ * crust build --target bun-linux-x64           # Stage only Linux x64 (crust.artifact: binary)
  * crust build --no-minify                      # Disable minification
  * crust build --env-file .env.production       # Inline PUBLIC_* constants from a file
  * ```
@@ -545,10 +689,17 @@ export const buildCommand = defineCommand(
 		command
 			.flags(
 				{
+					name: "artifact",
+					type: "string",
+					choices: ARTIFACT_KINDS,
+					description:
+						"package: a JavaScript bundle for the installed runtime; binary: standalone executables. Overrides package.json crust.artifact",
+				},
+				{
 					name: "target",
 					type: "string",
 					multiple: true,
-					description: `Canonical compiler target(s), or "${HOST_TARGET}" for this machine; repeatable. Omit to stage package.json crust.targets, or every Bun/Deno target`,
+					description: `Canonical compiler target(s) for binaries, or "${HOST_TARGET}" for this machine; repeatable. Omit to stage package.json crust.targets, or every target`,
 					short: "t",
 				},
 				{
@@ -575,6 +726,7 @@ export const buildCommand = defineCommand(
 			.action(async ({ flags, stdout, stderr }) => {
 				await build({
 					cwd: process.cwd(),
+					artifact: flags.artifact,
 					targets: flags.target,
 					envFiles: flags["env-file"],
 					minify: flags.minify,

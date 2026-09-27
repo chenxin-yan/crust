@@ -17,6 +17,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/
 
 import { buildCommand } from "../src/commands/build.ts";
 import { BUN_TARGETS, DENO_TARGETS } from "../src/utils/build-helpers.ts";
+import type { DistributionManifest } from "../src/utils/distribute.ts";
 import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
 import { hostDenoTarget, hostTarget } from "./helpers.ts";
 
@@ -53,6 +54,7 @@ beforeAll(() => {
 				bin: {
 					"test-cli": "src/cli.ts",
 				},
+				crust: { artifact: "binary" },
 			},
 			null,
 			2,
@@ -156,7 +158,7 @@ describe("crust build integration", () => {
 				packageJsonPath,
 				JSON.stringify({
 					...JSON.parse(original),
-					crust: { runtime: "node", include: ["assets"] },
+					crust: { runtime: "node", artifact: "package", include: ["assets"] },
 				}),
 			);
 			// The bundle must locate its include via the build-time marker; the
@@ -175,12 +177,15 @@ describe("crust build integration", () => {
 			try {
 				const { stdout } = await runBuild(["--no-validate", "--env-file", envFile]);
 				expect(stdout).toContain("Runtime: node (from package.json)");
+				expect(stdout).toContain("Artifact: package");
 			} finally {
 				writeFileSync(packageJsonPath, original);
 				writeFileSync(entryPath, originalEntry);
 			}
 
 			expect(readJson<object>(join(stageDir, "manifest.json"))).toMatchObject({
+				runtime: "node",
+				artifact: "package",
 				packages: [],
 				publishOrder: ["root"],
 			});
@@ -223,7 +228,7 @@ describe("crust build integration", () => {
 			const original = readFileSync(packageJsonPath, "utf8");
 			writeFileSync(
 				packageJsonPath,
-				JSON.stringify({ ...JSON.parse(original), crust: { runtime: "deno" } }),
+				JSON.stringify({ ...JSON.parse(original), crust: { runtime: "deno", artifact: "binary" } }),
 			);
 			try {
 				await runBuild(["--target", "host", "--no-validate"]);
@@ -231,9 +236,15 @@ describe("crust build integration", () => {
 				writeFileSync(packageJsonPath, original);
 			}
 
-			expect(
-				readJson<{ publishOrder: string[] }>(join(stageDir, "manifest.json")).publishOrder,
-			).toEqual([hostAlias, "root"]);
+			const denoVersion = /^deno (\S+)/.exec(
+				(await runBoundedProcess(which("deno")!, ["--version"], { timeout: 10_000 })).stdout,
+			)?.[1];
+			expect(readJson<object>(join(stageDir, "manifest.json"))).toMatchObject({
+				runtime: "deno",
+				artifact: "binary",
+				embeddedRuntimeVersion: denoVersion,
+				publishOrder: [hostAlias, "root"],
+			});
 			expect(
 				existsSync(
 					join(
@@ -256,4 +267,214 @@ describe("crust build integration", () => {
 		},
 		120_000,
 	);
+});
+
+// Public build -> npm pack -> install -> execute for a Bun runtime package: the
+// installed commands must run under the consumer's Bun, from an unrelated cwd,
+// after the source project is gone.
+describe.skipIf(!which("bun") || !which("npm"))("Bun runtime package", () => {
+	const root = mkdtempSync(join(tmpdir(), "crust-bun-package-"));
+	const project = join(root, "project");
+	const coreDist = resolve(import.meta.dirname, "../../core/dist/index.js");
+	const extensionsDist = resolve(import.meta.dirname, "../../extensions/dist/index.js");
+	const bin = (dir: string, command: string) =>
+		join(dir, "node_modules", ".bin", `${command}${process.platform === "win32" ? ".cmd" : ""}`);
+
+	afterAll(async () => {
+		await reapBoundedProcesses();
+		rmSync(root, { recursive: true, force: true });
+	});
+
+	it("installs with npm and bun, runs every command under Bun, and ships assets", async () => {
+		mkdirSync(join(project, "src"), { recursive: true });
+		mkdirSync(join(project, "assets"), { recursive: true });
+		writeFileSync(join(project, "assets", "greeting.txt"), "hello from assets\n");
+		// Real Crust commands: core and extensions are bundled from their dist (a
+		// bundled application dependency; the fixture has no node_modules), an Extension build hook
+		// generates man/, and crust.include ships assets/.
+		writeFileSync(
+			join(project, "src", "greet.ts"),
+			`import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { Crust, defineExtension, defineExtensionId, resolveArtifactDir } from ${JSON.stringify(coreDist)};
+import { help } from ${JSON.stringify(extensionsDist)};
+const man = defineExtension(defineExtensionId("man")).build(() => [{ path: "man/bun-greet.1", content: ".Dd" }]);
+await new Crust("bun-greet", { description: "Greets under Bun" })
+	.extend(man, help())
+	.args({ name: "name", type: "string", required: true })
+	.flags({ name: "shout", type: "boolean" })
+	.action(async ({ args, flags, stdout }) => {
+		await new Promise((done) => setTimeout(done, 5));
+		const greeting = \`hello \${args.name}\`;
+		stdout(JSON.stringify({
+			greeting: flags.shout ? greeting.toUpperCase() : greeting,
+			bun: process.versions.bun ?? null,
+			asset: readFileSync(join(resolveArtifactDir("assets"), "greeting.txt"), "utf8").trim(),
+			man: readFileSync(join(resolveArtifactDir("man"), "bun-greet.1"), "utf8"),
+		}));
+	})
+	.execute();
+`,
+		);
+		writeFileSync(
+			join(project, "src", "admin.ts"),
+			`import { Crust } from ${JSON.stringify(coreDist)};
+await new Crust("bun-admin").action(({ stdout }) => {
+	stdout("admin under " + (process.versions.bun ? "bun" : "node"));
+	process.exitCode = 3;
+}).execute();
+`,
+		);
+		writeFileSync(
+			join(project, "package.json"),
+			JSON.stringify({
+				name: "@scope/bun-package",
+				version: "0.1.0",
+				bin: { "bun-greet": "src/greet.ts", "bun-admin": "src/admin.ts" },
+				crust: { include: ["assets"] },
+				engines: { bun: ">=1.0.0" },
+			}),
+		);
+
+		const app = new Crust("test").add(buildCommand);
+		process.cwd = () => project;
+		try {
+			const result = await captureExecute(app, ["build", "--artifact", "package"]);
+			expect(result.exitCode, result.stderr).toBe(0);
+			expect(result.stdout).toContain("Runtime: bun (default)");
+			expect(result.stdout).toContain("Artifact: package");
+		} finally {
+			process.cwd = originalCwd;
+		}
+		const staged = join(project, ".crust");
+		const manifest = readJson<DistributionManifest>(join(staged, "manifest.json"));
+		expect(manifest).toMatchObject({
+			runtime: "bun",
+			artifact: "package",
+			root: { name: "@scope/bun-package", bins: ["bun-greet", "bun-admin"] },
+			packages: [],
+			publishOrder: ["root"],
+		});
+		expect(manifest).not.toHaveProperty("embeddedRuntimeVersion");
+		expect(readJson<object>(join(staged, "root", "package.json"))).toMatchObject({
+			bin: { "bun-greet": "bin/bun-greet.js", "bun-admin": "bin/bun-admin.js" },
+			files: ["bin", "man", "assets"],
+			engines: { bun: ">=1.0.0" },
+		});
+		expect(existsSync(join(staged, "root", "node_modules"))).toBe(false);
+
+		const packDir = join(root, "packs");
+		mkdirSync(packDir);
+		const packed = await runBoundedProcess("npm", ["pack", join(staged, "root")], {
+			cwd: packDir,
+			timeout: 25_000,
+		});
+		expect(packed.exitCode, packed.stderr).toBe(0);
+		const tarball = join(packDir, packed.stdout.trim().split("\n").at(-1)!);
+
+		const npmConsumer = join(root, "npm-consumer");
+		const bunConsumer = join(root, "bun-consumer");
+		for (const consumer of [npmConsumer, bunConsumer]) {
+			mkdirSync(consumer);
+			writeFileSync(
+				join(consumer, "package.json"),
+				JSON.stringify({
+					name: "consumer",
+					private: true,
+					dependencies: { "@scope/bun-package": `file:${tarball}` },
+				}),
+			);
+		}
+		const npmInstall = await runBoundedProcess("npm", ["install", "--no-audit", "--no-fund"], {
+			cwd: npmConsumer,
+			timeout: 60_000,
+		});
+		expect(npmInstall.exitCode, npmInstall.stderr).toBe(0);
+		const bunInstall = await runBoundedProcess(which("bun")!, ["install"], {
+			cwd: bunConsumer,
+			timeout: 60_000,
+		});
+		expect(bunInstall.exitCode, bunInstall.stderr).toBe(0);
+
+		// Neither the source project nor its build output is needed any more.
+		rmSync(project, { recursive: true, force: true });
+		const elsewhere = join(root, "elsewhere");
+		mkdirSync(elsewhere);
+		const bunVersion = (
+			await runBoundedProcess(which("bun")!, ["--version"], { timeout: 10_000 })
+		).stdout.trim();
+
+		for (const consumer of [npmConsumer, bunConsumer]) {
+			const greet = await runBoundedProcess(bin(consumer, "bun-greet"), ["world", "--shout"], {
+				cwd: elsewhere,
+				timeout: 25_000,
+			});
+			expect(greet.exitCode, greet.stderr).toBe(0);
+			expect(JSON.parse(greet.stdout.trim())).toEqual({
+				greeting: "HELLO WORLD",
+				bun: bunVersion,
+				asset: "hello from assets",
+				man: ".Dd",
+			});
+
+			const help = await runBoundedProcess(bin(consumer, "bun-greet"), ["--help"], {
+				cwd: elsewhere,
+				timeout: 25_000,
+			});
+			expect(help.exitCode, help.stderr).toBe(0);
+			expect(help.stdout).toContain("Greets under Bun");
+
+			const missing = await runBoundedProcess(bin(consumer, "bun-greet"), [], {
+				cwd: elsewhere,
+				timeout: 25_000,
+			});
+			expect(missing.exitCode).toBe(1);
+			expect(missing.stderr).toContain('Missing required argument "<name>"');
+
+			const admin = await runBoundedProcess(bin(consumer, "bun-admin"), [], {
+				cwd: elsewhere,
+				timeout: 25_000,
+			});
+			expect(admin.exitCode, admin.stderr).toBe(3);
+			expect(admin.stdout.trim()).toBe("admin under bun");
+		}
+
+		// Build-only protocol variables cannot turn the finished bundle into a snapshot run.
+		const snapshotPath = join(root, "snapshot.json");
+		const protocol = await runBoundedProcess(bin(npmConsumer, "bun-greet"), ["protocol"], {
+			cwd: elsewhere,
+			env: {
+				...process.env,
+				CRUST_INTERNAL_SNAPSHOT_PATH: snapshotPath,
+				CRUST_INTERNAL_BUILD_OUT_DIR: join(root, "hooks"),
+			},
+			timeout: 25_000,
+		});
+		expect(protocol.exitCode, protocol.stderr).toBe(0);
+		expect(JSON.parse(protocol.stdout.trim())).toMatchObject({ greeting: "hello protocol" });
+		expect(existsSync(snapshotPath)).toBe(false);
+		expect(existsSync(join(root, "hooks"))).toBe(false);
+
+		// Native Bun package execution resolves the installed bin, still under Bun.
+		const bunRun = await runBoundedProcess(which("bun")!, ["run", "bun-greet", "bun"], {
+			cwd: bunConsumer,
+			timeout: 25_000,
+		});
+		expect(bunRun.exitCode, bunRun.stderr).toBe(0);
+		expect(JSON.parse(bunRun.stdout.trim())).toMatchObject({
+			greeting: "hello bun",
+			bun: bunVersion,
+		});
+
+		// A runtime package needs the consumer's Bun: without bun on PATH it cannot start.
+		if (process.platform !== "win32") {
+			const withoutBun = await runBoundedProcess(bin(npmConsumer, "bun-greet"), ["world"], {
+				cwd: elsewhere,
+				env: { PATH: "/nonexistent" },
+				timeout: 25_000,
+			});
+			expect(withoutBun.exitCode).not.toBe(0);
+			expect(withoutBun.stdout).not.toContain("hello");
+		}
+	}, 120_000);
 });

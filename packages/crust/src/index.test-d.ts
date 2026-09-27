@@ -9,6 +9,7 @@ import { build } from "./index.ts";
 async function release(): Promise<void> {
 	const result = await build({
 		cwd: process.cwd(), // default; package.json bin and crust are read from here
+		artifact: "binary", // overrides crust.artifact; "package" stages a runtime package instead
 		targets: ["bun-linux-x64", "bun-darwin-arm64"], // overrides crust.targets; omit for config, then every target
 		envFiles: [".env.production"],
 		onLog: (line) => console.log(line), // silent without it
@@ -28,8 +29,9 @@ async function release(): Promise<void> {
 	}
 }
 
-// Every option is optional; the callback may take the stream too.
+// Every option is optional in the type (crust.artifact may supply the artifact); the callback may take the stream too.
 const options: BuildOptions = {};
+const runtimePackage: BuildOptions = { artifact: "package" };
 const withStream: BuildOptions = { onLog: (_line, stream) => stream satisfies "stdout" | "stderr" };
 const artifact: BuildArtifact = { kind: "launcher", path: "/x/.crust/root/bin/x.js", command: "x" };
 const result: Promise<BuildResult> = build(options);
@@ -38,11 +40,14 @@ report.extensions[0]?.files satisfies readonly string[] | undefined;
 
 // @ts-expect-error unknown option
 void build({ target: ["bun-linux-x64"] });
+// @ts-expect-error artifact is "package" or "binary"
+void build({ artifact: "standalone" });
 // @ts-expect-error an executable always names its target
 const executable: BuildArtifact = { kind: "executable", path: "", command: "x" };
 
 void release;
 void withStream;
+void runtimePackage;
 void artifact;
 void result;
 void executable;
