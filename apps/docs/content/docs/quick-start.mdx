@@ -20,16 +20,6 @@ npx create-crust@latest my-cli
 cd my-cli
 ```
 
-The wizard asks for a runtime, then a **build output**: a runtime package or a standalone binary. All three runtimes support both outputs. Defaults are Bun/Deno binaries and Node.js packages; Deno package bundling is experimental. Installation and Git initialization follow.
-
-To skip those two prompts, pass both choices explicitly:
-
-```sh
-npx create-crust@latest my-cli --runtime node --artifact binary
-```
-
-Node binary builds need Node 26+ and Bun; the wizard does not install compilers. See [build requirements](/docs/guide/build-and-distribution#binary-runtime-version). The generated README explains npm and direct distribution independently of the artifact choice.
-
 <Files>
   <Folder name="my-cli" defaultOpen>
     <Folder name="src" defaultOpen>
