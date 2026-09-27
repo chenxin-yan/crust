@@ -12,6 +12,29 @@ import { findNearestPackageRoot } from "./source.ts";
  */
 export const BUILD_OUT_DIR_ENV = "CRUST_INTERNAL_BUILD_OUT_DIR";
 
+/**
+ * `Symbol.for` registry key of the packaged-build marker, for bundlers without a
+ * `define` option (native `deno bundle`). `crust build` prepends
+ * `globalThis[Symbol.for(PACKAGED_BUILD_KEY)] = true` to the command bundle,
+ * before the inlined application graph, so every bundled copy sees it.
+ * The registry key is shared across module copies; the value is never read from
+ * the environment, so detection needs no Deno env permission.
+ */
+export const PACKAGED_BUILD_KEY = "crustjs.packagedBuild";
+
+const packagedBuildMarker: unique symbol = Symbol.for(PACKAGED_BUILD_KEY);
+type PackagedBuildGlobals = { [packagedBuildMarker]?: unknown };
+
+/**
+ * True inside a finished bundle marked through {@link PACKAGED_BUILD_KEY}. Such a
+ * bundle resolves artifacts from its installed layout and never runs the snapshot
+ * protocol. Bun/Node bundles use the `process.env.CRUST_INTERNAL_BUILD` define instead.
+ */
+export function isPackagedBuild(): boolean {
+	// SAFETY: the marker is an optional global; any value but `true` means unmarked.
+	return (globalThis as PackagedBuildGlobals)[packagedBuildMarker] === true;
+}
+
 type StandaloneGlobals = {
 	Bun?: { main?: string };
 	Deno?: { build?: { standalone?: boolean } };
@@ -52,8 +75,9 @@ function isCompiledExecutable(): boolean {
  * The artifact path is computed from how the CLI is running — never probed:
  * - Compiled executable (Bun, Deno, or Node SEA): `<dir of the executable>/<name>`, which
  *   is a platform package's `bin/` or wherever the binary was placed.
- * - Crust-built Node bundle: `<name>` next to the bundle's `bin/` directory,
- *   i.e. `.crust/root/<name>` in place and `<installed root>/<name>` after install.
+ * - Crust-built Bun/Node bundle or packaged Deno bundle: `<name>` next to the
+ *   bundle's `bin/` directory, i.e. `.crust/root/<name>` in place and
+ *   `<installed root>/<name>` after install. Build-only environment is ignored.
  * - Snapshot preparation inside `crust build`: `<build output dir>/<name>`, the
  *   artifacts earlier Extension build hooks wrote in this same build.
  * - Source (`bun run`, `node`, `deno run`): `.crust/root/<name>` under the
@@ -74,8 +98,9 @@ export function resolveArtifactDir(name: string): string {
 
 	// `crust build` defines this literal in every Bun/Node bundle it produces so a
 	// staged bundle can be told apart from source. Kept as a literal property
-	// access so the bundler can replace it.
-	if (process.env.CRUST_INTERNAL_BUILD === "1") {
+	// access so the bundler can replace it. The packaged marker is checked first:
+	// a Deno package must not touch `process.env` without an env permission.
+	if (isPackagedBuild() || process.env.CRUST_INTERNAL_BUILD === "1") {
 		// import.meta.url is the bundle itself (everything is inlined) and Node
 		// realpaths it, unlike process.argv[1] through a node_modules/.bin symlink.
 		return resolve(fileURLToPath(import.meta.url), "..", "..", name);

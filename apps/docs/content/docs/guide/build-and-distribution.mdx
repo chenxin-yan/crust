@@ -5,7 +5,9 @@ description: Configure, build, test, and publish your CLI.
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-`crust build` turns your TypeScript entry into a runtime package, JavaScript that runs on the user's installed runtime, or into standalone executables. The examples below use the `my-cli` command from [Quick Start](/docs/quick-start).
+`crust build` turns your TypeScript entry into a **runtime package** (JavaScript for the user's installed runtime) or **standalone executables** (with the runtime embedded). The examples below use the `my-cli` command from [Quick Start](/docs/quick-start).
+
+**Building does not commit you to npm.** Distribute the same binaries through npm, release downloads, Homebrew, Scoop, or your own installer. Running a binary directly needs no separately installed Node.js, Bun, or Deno. Node.js is required only by the generated npm launcher. [`crust publish`](#publish-with-crust-publish) handles npm; [other channels](#custom-distribution) use the built files with your own release tooling.
 
 ## Set up `package.json`
 
@@ -37,13 +39,13 @@ The `bin` key must match your root command: `new Crust("my-cli")`. `"private": t
 
 `crust.runtime` is the runtime your CLI runs on; [without it](/docs/modules/crust#packagejson-configuration) Crust infers one. `crust.artifact` is required and chooses what the build distributes, independently of the runtime:
 
-| Runtime | `"artifact": "package"`                         | `"artifact": "binary"`                                                 |
-| ------- | ----------------------------------------------- | ---------------------------------------------------------------------- |
-| `bun`   | Bun-targeted JavaScript; users need Bun         | Node launcher + standalone executable per platform; users need Node.js |
-| `node`  | Node.js-targeted JavaScript; users need Node.js | Node launcher + standalone executable per platform; users need Node.js |
-| `deno`  | Not available yet                               | Node launcher + standalone executable per platform; users need Node.js |
+| Runtime | `"artifact": "package"`                                                                      | `"artifact": "binary"`                                    |
+| ------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `bun`   | Bun-targeted JavaScript; users need Bun                                                      | Standalone executable per platform, with Bun embedded     |
+| `node`  | Node.js-targeted JavaScript; users need Node.js                                              | Standalone executable per platform, with Node.js embedded |
+| `deno`  | [Experimental](#deno-runtime-packages-experimental) Deno-bundled JavaScript; users need Deno | Standalone executable per platform, with Deno embedded    |
 
-A runtime package is one root-only npm package whose commands run on the user's installed runtime; a Bun package's commands start with `#!/usr/bin/env bun`, so installed commands run under Bun whether npm or Bun installed the package. A standalone binary embeds its runtime, so running the executable needs no Bun, Deno, or Node.js; the npm launcher that selects the platform binary still needs Node.js. `--artifact package` or `--artifact binary` overrides `crust.artifact` for one build.
+Crust stages npm metadata for either artifact kind, even if you never publish to npm. Binary builds include a Node.js launcher for npm distribution; direct binary distribution does not use it. Runtime packages contain no embedded runtime: for example, Bun packages use `#!/usr/bin/env bun`, whether installed by npm or Bun. `--artifact package` or `--artifact binary` overrides `crust.artifact` for one build.
 
 The commands below assume Node.js and Bun are installed; Deno builds also need `deno` on `PATH`, and Node.js binaries need a `node` on `PATH` that [tsdown can build executables with](#nodejs-binaries). See [tooling requirements](/docs/modules/crust#install) and [runtime versions](/docs/guide/runtime-support#run-the-same-cli).
 
@@ -62,9 +64,9 @@ Builds replace `.crust/`; add it to `.gitignore`. On Linux x64 with Bun binaries
 ```text
 .crust/
 ├── manifest.json                       # package paths and publish order
-├── root/                               # the package users install
+├── root/                               # root package for npm distribution
 │   ├── package.json
-│   └── bin/my-cli.js                    # Node launcher
+│   └── bin/my-cli.js                    # npm launcher; needs Node.js
 └── linux-x64/
     ├── package.json
     └── bin/my-cli-bun-linux-x64         # standalone executable
@@ -88,7 +90,9 @@ Publish every platform you intend to support—not just `host`. Set [`crust.targ
 
 Every binary embeds the version of the compiler that builds it: the first `bun` on `PATH`, else the Bun inside the `crust` executable; for Deno, `deno` on `PATH`; for Node.js, `node` on `PATH`. The build prints it as `Compiler:` and records it as `embeddedRuntimeVersion` in `.crust/manifest.json`, for cross-platform targets too.
 
-When `package.json` declares `engines.bun`, `engines.deno`, or `engines.node`, that compiler must satisfy the semver range, or the build fails before replacing `.crust/`. A compiler whose `--version` does not exit within 30 seconds is killed and fails the build the same way. An exact version is a requirement, not a download request: Crust never installs or upgrades a compiler, so pin one with your version manager or CI. Runtime packages embed no runtime; their `engines` only describes what users need.
+When `package.json` declares `engines.bun`, `engines.deno`, or `engines.node`, that compiler must satisfy the semver range, or the build fails before replacing `.crust/`. A compiler whose `--version` does not exit within 30 seconds fails the build the same way, with cleanup targeting its POSIX process group or live Windows process tree. Descendants that leave the POSIX group or outlive their parent on Windows can escape cleanup. An exact version is a requirement, not a download request: Crust never installs or upgrades a compiler, so pin one with your version manager or CI. Runtime packages embed no runtime; their `engines` only describes what users need.
+
+When the calling process runs under Deno, POSIX process-group cleanup requires unrestricted `--allow-run`. With an executable-scoped grant such as `--allow-run=bun`, timeout cleanup still terminates the direct child but reports the group-cleanup failure; descendants may survive.
 
 ### Node.js binaries
 
@@ -102,15 +106,52 @@ For each target, tsdown downloads the official Node.js archive of exactly that v
 
 ## Run locally
 
+Choose the entry you intend to distribute:
+
 ```sh
+# npm's launcher route; requires Node.js:
 npm run start -- --help
 # Equivalent with the configuration above:
 node .crust/root/bin/my-cli.js --help
+
+# Direct executable for the Linux x64 Bun example above; no installed JS runtime:
+./.crust/linux-x64/bin/my-cli-bun-linux-x64 --help
 ```
 
-Run the staged entry before publishing. Binary launchers find their executables in the sibling platform directories; a runtime package's bundle runs directly, so start a Bun package with `bun .crust/root/bin/my-cli.js`.
+The direct executable's name depends on your command and target; Windows executables end in `.exe`.
+
+Run the staged entry before publishing. Binary launchers find their executables in the sibling platform directories; a runtime package's bundle runs directly, so start a Bun package with `bun .crust/root/bin/my-cli.js`, or a Deno package with `deno run --allow-read=.crust/root .crust/root/bin/my-cli.js` plus the permissions your CLI needs.
 
 To test through `npm link`, link from `.crust/root`. Linking from the project root runs the source entry instead.
+
+## Deno runtime packages (experimental)
+
+With `"crust": { "runtime": "deno", "artifact": "package" }`, `crust build` bundles each command with Deno's native `deno bundle`, which Deno itself marks experimental. The package embeds no runtime: users need Deno and run it through Deno's npm support, not through Node.js.
+
+To build, you need:
+
+- `deno` 2.5.0 or newer on `PATH`. Crust reads its version in the project directory and fails before replacing `.crust/` if it is older, because older `deno bundle` resolves `package.json` dependencies from the registry instead of your installed `node_modules`. Crust never installs or upgrades Deno. It prints the bundler as `Compiler:` but records no `embeddedRuntimeVersion`, and `engines.deno` stays a requirement for your users.
+- Your dependencies installed as Deno resolves them: `package.json` with its `node_modules`, `deno.json` `imports`, or both. `deno bundle` applies your Deno configuration itself; for example, `"nodeModulesDir": "none"` resolves npm packages from Deno's cache and registry instead of `node_modules`.
+- Imports that also resolve under Bun: build preparation runs your entry under Bun (`bun` on `PATH`, else the Bun inside the `crust` executable), as it does for Deno binaries. Entry imports must resolve there too, so map `deno.json` `imports` to the same names as the `node_modules` packages, or build with `--no-validate`, which also skips Extension artifacts.
+- `@crustjs/core` from the same release as `@crustjs/crust`, or newer. The bundle includes your installed core, and older releases do not recognize Crust's Deno package marker: their packages need `--allow-env` and obey build-only snapshot variables.
+- Network access on a cold Deno cache: `deno bundle` downloads its bundler once.
+
+`--minify`, `--env-file`, `crust.bunPlugins`, `--target`, and `crust.targets` are rejected. Load configuration at runtime instead, for example with `deno run --env-file`.
+
+Each command becomes `bin/<command>.js`, with no shebang and no permission flags. The declared command retains its `import.meta.main` behavior, so it can guard its `execute()` call; imported dependencies are not main modules. After publishing, users run a command by package and bin name, and grant the permissions it needs:
+
+```sh
+# The bin named after the package can be omitted: deno run npm:my-cli
+deno run --allow-read --allow-env=NO_COLOR,FORCE_COLOR,COLORTERM,TERM npm:my-cli@0.1.0/my-cli --help
+
+# Install globally with the same grants
+deno install -g --allow-read --allow-env=NO_COLOR,FORCE_COLOR,COLORTERM,TERM -n my-cli npm:my-cli@0.1.0/my-cli
+my-cli --help
+```
+
+Crust never adds `-A` or any other grant: permissions belong to your users and depend on your CLI. Reading files shipped with `crust.include` or Extension artifacts through `resolveArtifactDir()` needs read access to the installed package, which is inside Deno's npm cache for `deno run npm:`; for `deno install -g` it is in that cache or, on newer Deno versions, in the install root. Terminal styling such as `help()` reads `NO_COLOR`, `FORCE_COLOR`, `COLORTERM`, and `TERM`, so it needs `--allow-env` for those names. Finished packages never read Crust's internal build variables, so they add no environment permission of their own.
+
+The package is not a Node.js package: `npm install -g` installs a bin that Node.js cannot run, and `npx` is not supported. Building, packing, and running through `deno run npm:` and `deno install -g` from a local registry has been tested on Linux x64 with Deno 2.5.0, 2.6.0, 2.7.0, 2.8.0, and 2.9.6. Code that only works on another runtime, dependencies `deno bundle` cannot inline, and dynamic imports it cannot follow are not made portable.
 
 ## Publish with `crust publish`
 
@@ -158,14 +199,40 @@ Keep credentials out of version control. Use `--registry` or `--tag` through the
 
 ## Custom distribution
 
-For release archives or containers, take the built files directly—npm is optional. For example, package a Linux x64/glibc Bun build:
+For standalone binaries, distribute the contents of `.crust/<platform>/bin/`: the executable for each command **and its adjacent data directories**. You do not need the npm root launcher or npm manifests to run these files. Users need a compatible OS, architecture and system libraries, plus any external tools your own application calls—not a separate JavaScript runtime.
+
+### Release downloads
+
+With `crust.runtime` set to `"bun"`, build and archive a Linux x64/glibc release:
 
 ```sh
-npm run build -- --target bun-linux-x64
+npm run build -- --artifact binary --target bun-linux-x64
 tar -czf my-cli-linux-x64.tar.gz -C .crust/linux-x64/bin .
+sha256sum my-cli-linux-x64.tar.gz
 ```
 
-This includes the executable **and any adjacent data directories**. Standalone executables need no runtime installation; runtime packages still need their runtime and should include the contents of `.crust/root/`. Copy or archive your output before the next build replaces it.
+Upload the archive and its checksum to your release host, such as GitHub Releases. Create a separate archive for each supported platform; include your license and any other required distribution files. Users verify the checksum, extract the matching archive, and run the executable directly:
+
+```sh
+mkdir my-cli
+tar -xzf my-cli-linux-x64.tar.gz -C my-cli
+./my-cli/my-cli-bun-linux-x64 --help
+```
+
+The same approach works for Node.js and Deno binaries using their [target names](/docs/modules/crust#supported-targets) and generated filenames. Preserve executable permissions, keep shipped directories next to the executable, and apply any required platform signing before creating the archive.
+
+### Homebrew, Scoop, and other installers
+
+These channels use the same release archives; they do not need Crust's npm resolver:
+
+1. Build and host an archive for each platform you support.
+2. Create a [Homebrew formula](https://docs.brew.sh/Formula-Cookbook) or [Scoop manifest](https://github.com/ScoopInstaller/Scoop/wiki/App-Manifests) that selects the matching archive and verifies its checksum.
+3. Install the executable and its adjacent data directories together, then expose the command using the installer's link or shim mechanism. Do not move the executable away from its data directories.
+4. Test the installed command from an unrelated working directory, including commands that read shipped assets.
+
+The installer supplies platform selection instead of the npm launcher, so **running the installed binary does not require Node.js**. Crust does not generate formulas/manifests or publish to these channels; maintain them with your own release tooling. You can offer npm and direct-binary installation for the same build.
+
+Runtime packages can also be archived, but must retain the contents/layout of `.crust/root/` and still require their selected runtime. Copy or archive any output before the next build replaces `.crust/`.
 
 ## Customize the build
 

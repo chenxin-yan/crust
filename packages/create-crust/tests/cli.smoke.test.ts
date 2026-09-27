@@ -402,13 +402,14 @@ afterEach(reapBoundedProcesses);
 afterAll(async () => {
 	await reapBoundedProcesses();
 	if (smokeEnabled && !keepSmokeRoot) {
-		rmSync(smokeRoot, { recursive: true, force: true });
+		// Windows can briefly retain a lock on a just-exited executable.
+		rmSync(smokeRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 	}
 });
 
 describe.skipIf(!smokeEnabled)("create-crust smoke test", () => {
 	beforeAll(async () => {
-		rmSync(smokeRoot, { recursive: true, force: true });
+		rmSync(smokeRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 		mkdirSync(smokeRoot, { recursive: true });
 
 		if (!existsSync(builtCliPath)) {

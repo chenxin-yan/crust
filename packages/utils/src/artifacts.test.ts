@@ -1,10 +1,15 @@
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
-import { BUILD_OUT_DIR_ENV, resolveArtifactDir } from "./artifacts.ts";
+import {
+	BUILD_OUT_DIR_ENV,
+	isPackagedBuild,
+	PACKAGED_BUILD_KEY,
+	resolveArtifactDir,
+} from "./artifacts.ts";
 
 let tmpDir: string;
 let originalArgv1: string | undefined;
@@ -50,6 +55,25 @@ function withBunMain<T>(value: string, run: () => T): T {
 		return run();
 	} finally {
 		delete (globalThis as { Bun?: unknown }).Bun;
+	}
+}
+
+/** Sets the packaged marker and makes every `process.env` read throw, like Deno without --allow-env. */
+function asPackagedBuildWithoutEnv<T>(run: () => T): T {
+	const marker = Symbol.for(PACKAGED_BUILD_KEY);
+	const envDescriptor = Object.getOwnPropertyDescriptor(process, "env")!;
+	const deniedEnv = new Proxy(process.env, {
+		get: (_target, key) => {
+			throw new Error(`env read: ${String(key)}`);
+		},
+	});
+	Object.defineProperty(globalThis, marker, { value: true, configurable: true });
+	Object.defineProperty(process, "env", { ...envDescriptor, value: deniedEnv });
+	try {
+		return run();
+	} finally {
+		Object.defineProperty(process, "env", envDescriptor);
+		Reflect.deleteProperty(globalThis, marker);
 	}
 }
 
@@ -116,6 +140,26 @@ describe("resolveArtifactDir", () => {
 			withDenoGlobal({ build: { standalone: true } }, () => resolveArtifactDir("templates")),
 		);
 		expect(result).toBe(join(tmpDir, "bin", "templates"));
+	});
+
+	it("resolves next to the bundle's bin/ in a packaged build, ignoring build-only env", async () => {
+		await writeFile(join(tmpDir, "package.json"), "{}");
+		process.argv[1] = join(tmpDir, "src", "cli.ts");
+		process.env[BUILD_OUT_DIR_ENV] = join(tmpDir, "stale-build-output");
+		const result = asPackagedBuildWithoutEnv(() => resolveArtifactDir("skills"));
+		// Same layout as the Bun/Node define: `<artifacts.ts dir>/../skills`.
+		expect(result).toBe(resolve(import.meta.dirname, "..", "skills"));
+	});
+
+	it("treats only a true packaged marker as packaged", () => {
+		const marker = Symbol.for(PACKAGED_BUILD_KEY);
+		expect(isPackagedBuild()).toBe(false);
+		Object.defineProperty(globalThis, marker, { value: "1", configurable: true });
+		try {
+			expect(isPackagedBuild()).toBe(false);
+		} finally {
+			Reflect.deleteProperty(globalThis, marker);
+		}
 	});
 
 	it("resolves .crust/root under the nearest package root of argv[1] when running from source", async () => {

@@ -22,20 +22,24 @@ permissions:
   contents: read
 
 jobs:
-  runtime-smoke:
+  library-runtime:
+    name: Library runtime checks (${{ matrix.label }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
-      group: runtime-smoke-${{ matrix.runtime }}-${{ github.ref }}
+      group: library-runtime-${{ matrix.runtime }}-${{ github.ref }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     strategy:
       matrix:
         include:
           - runtime: node
+            label: Node
             smoke: mise exec node@22.0.0 -- node scripts/smoke-runtimes/smoke.mjs
           - runtime: deno
+            label: Deno
             smoke: mise exec deno@2.8.0 -- deno run --allow-env --allow-read --allow-write --allow-run --config scripts/smoke-runtimes/deno.json scripts/smoke-runtimes/smoke.mjs
           - runtime: bun
+            label: Bun
             smoke: mise exec bun@1.4.0 -- bun scripts/smoke-runtimes/smoke.mjs
     steps:
       - name: Checkout
@@ -55,22 +59,25 @@ jobs:
       - name: Build packages
         run: pnpm run build:pkgs
 
-      - name: Smoke built distributions with ${{ matrix.runtime }}
+      - name: Smoke built libraries with ${{ matrix.runtime }}
         run: ${{ matrix.smoke }}
 
-  # Linux runs this test in `ci`; these runners cover native install shims
-  # (npm's .cmd and Bun's .exe on Windows) and macOS.
-  bun-runtime-package:
+  artifact-acceptance:
+    name: CLI distribution checks (${{ matrix.label }})
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - macos-latest
-          - windows-latest
+        include:
+          - os: ubuntu-latest
+            label: Linux
+          - os: macos-latest
+            label: macOS
+          - os: windows-latest
+            label: Windows
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 35
     concurrency:
-      group: bun-runtime-package-${{ matrix.os }}-${{ github.ref }}
+      group: artifact-acceptance-${{ matrix.os }}-${{ github.ref }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     steps:
       - name: Checkout
@@ -87,82 +94,76 @@ jobs:
       - name: Build crust and its workspace dependencies
         run: pnpm exec vp run --fail-if-no-match --filter ./packages/crust pack:task
 
-      # The test skips without bun or npm; fail here instead of passing on a skip.
-      - name: Print tool versions
-        run: |
-          node --version
-          npm --version
-          bun --version
+      # Library packaging checks consume Crust's staged distribution too.
+      - name: Stage the build tool for packaging checks (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: pnpm exec vp run --fail-if-no-match --filter ./packages/crust build:task
 
-      - name: Build, pack, install, and run a Bun runtime package
-        run: pnpm --dir packages/crust exec vp test run tests/package.integration.test.ts -t "Bun runtime package"
-
-  # Node standalone binaries need a node that meets the bundled tsdown's
-  # executable requirements (Node 26+ for tsdown 0.23). The shared toolchain
-  # stays on Node 24; the tests receive Node 26 through CRUST_TEST_SEA_NODE and
-  # fail rather than skip when it does not qualify.
-  node-standalone-binary:
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
-    concurrency:
-      group: node-standalone-binary-${{ matrix.os }}-${{ github.ref }}
-      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: Setup runtimes
-        uses: jdx/mise-action@v4
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build crust and its workspace dependencies
-        run: pnpm exec vp run --fail-if-no-match --filter ./packages/crust pack:task
-
+      # The test host stays on Node 24; only the executable compiler needs 26.
       - name: Select Node 26 for Node binary builds
         shell: bash
         run: echo "CRUST_TEST_SEA_NODE=$(mise exec node@26.10.0 -- node -p process.execPath)" >> "$GITHUB_ENV"
 
-      - name: Print tool versions
+      # Runtime-gated suites must not pass merely because a required tool is missing.
+      - name: Print required tool versions
         shell: bash
         run: |
           node --version
           npm --version
+          pnpm --version
           bun --version
+          deno --version
           "$CRUST_TEST_SEA_NODE" --version
 
+      - name: Test Windows process cleanup and command-shim arguments
+        if: matrix.os == 'windows-latest'
+        run: pnpm exec vp test run packages/utils/src/process.test.ts packages/crust/tests/bounded-process.test.ts
+
+      # Linux owns the full build/distribution suite, including all six modes.
+      # Other hosts repeat only portable acceptance, not hardcoded cross-target cases.
+      - name: Test all build and distribution integrations (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: pnpm --dir packages/crust exec vp test run tests
+
       - name: Build, pack, install, and run Node binaries
-        # Git Bash shadows Windows' ZIP-capable tar with GNU tar, which also
-        # interprets the archive's drive-letter prefix as a remote host.
+        if: matrix.os != 'ubuntu-latest'
+        # Keep Windows' native shell: Git Bash shadows its ZIP-capable tar with GNU tar.
         run: pnpm --dir packages/crust exec vp test run tests/node-exe.integration.test.ts
 
-      # The real-SEA case only runs on Linux under a Node 25.5+ test host.
-      - name: Resolve assets inside a Node SEA (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: mise exec node@26.10.0 -- pnpm --dir packages/utils exec vp test run tests/artifacts-runtimes.test.ts -t "single executable"
+      - name: Build, pack, install, and run a Bun runtime package
+        if: matrix.os != 'ubuntu-latest'
+        run: pnpm --dir packages/crust exec vp test run tests/package.integration.test.ts -t "Bun runtime package"
 
-      - name: Carry the Node binary backend through installed distributions (Linux)
+      - name: Bundle, pack, serve, run, and install a Deno runtime package
+        if: matrix.os != 'ubuntu-latest'
+        run: pnpm --dir packages/crust exec vp test run tests/package.integration.test.ts -t "Deno runtime package"
+
+      - name: Build, install, and run a Node package, Bun binary, and Deno binary
+        if: matrix.os != 'ubuntu-latest'
+        run: pnpm --dir packages/crust exec vp test run tests/host-artifacts.integration.test.ts
+
+      - name: Test packaged build markers (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: pnpm --dir packages/core exec vp test run tests/build-marker-bundle.test.ts tests/deno-packaged-bundle.test.ts
+
+      # A Node 26 test host enables the real SEA case alongside Bun/Deno source paths.
+      - name: Test artifact paths across runtimes (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: mise exec node@26.10.0 -- pnpm --dir packages/utils exec vp test run tests/artifacts-runtimes.test.ts
+
+      - name: Test application installs and compiler-backend delivery (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
           for package_manager in bun npm pnpm; do
-            CRUST_SMOKE_PM="$package_manager" pnpm --dir packages/crust exec vp test run tests/node-exe-delivery.smoke.test.ts
+            CRUST_SMOKE_PM="$package_manager" pnpm --dir packages/crust exec vp test run tests/package-manager.smoke.test.ts tests/node-exe-delivery.smoke.test.ts
           done
 
-  ci:
+  code-checks:
+    name: Code checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
-      group: ci-packages-${{ github.ref }}
+      group: code-checks-${{ github.ref }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     steps:
       - name: Checkout
@@ -170,25 +171,29 @@ jobs:
         with:
           persist-credentials: false
 
-      # Deno is installed so integration tests run instead of skipping.
       - name: Setup runtimes
         uses: jdx/mise-action@v4
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build, type check, and test
-        run: |
-          pnpm run check:types
-          pnpm run test
+      - name: Type check
+        run: pnpm run check:types
+
+      # CLI distribution checks own Crust's tests/ and the compiled marker/path fixtures.
+      # Keep the ordinary local `pnpm run test` unchanged: it still runs every suite.
+      - name: Test library and tooling behavior
+        run: >-
+          pnpm exec vp run --filter './packages/*' --filter ./tools --filter ./scripts
+          --filter '!@crustjs/crust' test:task
+          --exclude '**/artifacts-runtimes.test.ts'
+          --exclude '**/build-marker-bundle.test.ts'
+          --exclude '**/deno-packaged-bundle.test.ts'
+
+      - name: Test build-tool source behavior
+        run: pnpm --dir packages/crust run test src
 
       - name: Lint and format check (packages)
         run: |
           pnpm run lint packages
           pnpm run format packages
-
-      - name: Run package-manager smoke tests
-        run: |
-          for package_manager in bun npm pnpm; do
-            CRUST_SMOKE_PM="$package_manager" pnpm --dir packages/crust exec vp test run tests/package-manager.smoke.test.ts
-          done

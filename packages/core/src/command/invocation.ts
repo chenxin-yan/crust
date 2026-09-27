@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, posix, win32 } from "node:path";
 
-import { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
+import { BUILD_OUT_DIR_ENV, isPackagedBuild } from "@crustjs/utils/artifacts";
 import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
 
 import { createContextResolver, DisposalStack } from "../api/context.ts";
@@ -87,7 +87,9 @@ interface PreparedInvocation {
  * without dispatching a Command Action. In-process callers use `Crust.snapshot()`.
  *
  * Only source entries run by `crust build` honor it: finished Bun/Node bundles carry
- * `process.env.CRUST_INTERNAL_BUILD === "1"` as a literal and compile the protocol out.
+ * `process.env.CRUST_INTERNAL_BUILD === "1"` as a literal and compile the protocol out;
+ * packaged Deno bundles set the `isPackagedBuild()` marker and skip it without
+ * reading the environment.
  */
 export const SNAPSHOT_PATH_ENV = "CRUST_INTERNAL_SNAPSHOT_PATH";
 const EXIT_CODE_CANCELLED = 130;
@@ -561,79 +563,83 @@ export async function executeInvocation(
 	const signal = options?.signal
 		? AbortSignal.any([options.signal, controller.signal])
 		: controller.signal;
-	// Literal property access, no destructuring: `crust build` defines the marker
-	// as `"1"`, so bundlers fold this to `undefined` and drop the snapshot branch.
-	const snapshotPath =
-		process.env.CRUST_INTERNAL_BUILD === "1" ? undefined : process.env[SNAPSHOT_PATH_ENV];
+	// A packaged Deno bundle must not read `process.env`, so its marker gates the
+	// block; folding it into the ternary would stop Bun inlining the `const` below.
+	if (!isPackagedBuild()) {
+		// Literal property access, no destructuring: `crust build` defines the marker
+		// as `"1"`, so bundlers fold this to `undefined` and drop the snapshot branch.
+		const snapshotPath =
+			process.env.CRUST_INTERNAL_BUILD === "1" ? undefined : process.env[SNAPSHOT_PATH_ENV];
 
-	if (snapshotPath) {
-		try {
-			// Commands and flags materialize once so recipes keep their
-			// once-per-`.add()` lifecycle; only section callbacks re-evaluate.
-			const base = buildExtensionTree(node, materializeCommandDefinition);
-			const takeSnapshot = () =>
-				snapshotCommand(applySectionsAndFreeze(cloneCommandNode(base.rootNode), base.extensions));
-			let snapshot = takeSnapshot();
-			const buildOutDir = process.env[BUILD_OUT_DIR_ENV];
-			if (buildOutDir) {
-				const extensions: Array<BuildReport["extensions"][number]> = [];
-				// Keyed case-insensitively: the tree may land on a case-insensitive filesystem
-				// where `Config.json` and `config.json` are one file and the second write wins.
-				const owners = new Map<string, { id: ExtensionId; path: string }>();
-				for (const extension of base.extensions) {
-					if (!extension.build) continue;
-					try {
-						const artifacts = await extension.build({ snapshot });
-						// Every path is checked before any file is written, so a rejected hook leaves nothing behind.
-						const files = artifacts.map((file) => {
-							const path = normalizeArtifactPath(file.path);
-							const key = path.toLowerCase();
-							// A file and a directory cannot share a name, so an ancestor or descendant
-							// of an owned path collides just like an equal one.
-							for (const [ownedKey, owner] of owners) {
-								if (
-									ownedKey === key ||
-									ownedKey.startsWith(`${key}/`) ||
-									key.startsWith(`${ownedKey}/`)
-								) {
-									throw new Error(
-										`Artifact path "${path}" collides with "${owner.path}" produced by Extension "${owner.id}".`,
-									);
+		if (snapshotPath) {
+			try {
+				// Commands and flags materialize once so recipes keep their
+				// once-per-`.add()` lifecycle; only section callbacks re-evaluate.
+				const base = buildExtensionTree(node, materializeCommandDefinition);
+				const takeSnapshot = () =>
+					snapshotCommand(applySectionsAndFreeze(cloneCommandNode(base.rootNode), base.extensions));
+				let snapshot = takeSnapshot();
+				const buildOutDir = process.env[BUILD_OUT_DIR_ENV];
+				if (buildOutDir) {
+					const extensions: Array<BuildReport["extensions"][number]> = [];
+					// Keyed case-insensitively: the tree may land on a case-insensitive filesystem
+					// where `Config.json` and `config.json` are one file and the second write wins.
+					const owners = new Map<string, { id: ExtensionId; path: string }>();
+					for (const extension of base.extensions) {
+						if (!extension.build) continue;
+						try {
+							const artifacts = await extension.build({ snapshot });
+							// Every path is checked before any file is written, so a rejected hook leaves nothing behind.
+							const files = artifacts.map((file) => {
+								const path = normalizeArtifactPath(file.path);
+								const key = path.toLowerCase();
+								// A file and a directory cannot share a name, so an ancestor or descendant
+								// of an owned path collides just like an equal one.
+								for (const [ownedKey, owner] of owners) {
+									if (
+										ownedKey === key ||
+										ownedKey.startsWith(`${key}/`) ||
+										key.startsWith(`${ownedKey}/`)
+									) {
+										throw new Error(
+											`Artifact path "${path}" collides with "${owner.path}" produced by Extension "${owner.id}".`,
+										);
+									}
 								}
+								owners.set(key, { id: extension.id, path });
+								return { path, content: file.content };
+							});
+							// ponytail: in-memory files; stream if an extension ever ships large binaries
+							for (const file of files) {
+								const target = join(buildOutDir, file.path);
+								await mkdir(dirname(target), { recursive: true });
+								await writeFile(target, file.content);
 							}
-							owners.set(key, { id: extension.id, path });
-							return { path, content: file.content };
-						});
-						// ponytail: in-memory files; stream if an extension ever ships large binaries
-						for (const file of files) {
-							const target = join(buildOutDir, file.path);
-							await mkdir(dirname(target), { recursive: true });
-							await writeFile(target, file.content);
+							extensions.push({ id: extension.id, files: files.map((file) => file.path) });
+						} catch (error) {
+							const message = error instanceof Error ? error.message : String(error);
+							throw new Error(`Extension "${extension.id}" build failed: ${message}`, {
+								cause: error,
+							});
 						}
-						extensions.push({ id: extension.id, files: files.map((file) => file.path) });
-					} catch (error) {
-						const message = error instanceof Error ? error.message : String(error);
-						throw new Error(`Extension "${extension.id}" build failed: ${message}`, {
-							cause: error,
-						});
+						// The hook sees the snapshot from before it starts; re-evaluating sections
+						// after its files are on disk lets later hooks observe its outputs without
+						// mutating the frozen tree.
+						snapshot = takeSnapshot();
 					}
-					// The hook sees the snapshot from before it starts; re-evaluating sections
-					// after its files are on disk lets later hooks observe its outputs without
-					// mutating the frozen tree.
-					snapshot = takeSnapshot();
+					await writeFile(
+						join(dirname(snapshotPath), "build-report.json"),
+						JSON.stringify({ extensions } satisfies BuildReport),
+					);
 				}
-				await writeFile(
-					join(dirname(snapshotPath), "build-report.json"),
-					JSON.stringify({ extensions } satisfies BuildReport),
-				);
+				await writeFile(snapshotPath, JSON.stringify(snapshot));
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				console.error(message);
+				return process.exit(1);
 			}
-			await writeFile(snapshotPath, JSON.stringify(snapshot));
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			console.error(message);
-			return process.exit(1);
+			return process.exit(0);
 		}
-		return process.exit(0);
 	}
 
 	const invoke = async (): Promise<number> => {

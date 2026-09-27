@@ -1,5 +1,7 @@
+import { spawnSync } from "node:child_process";
 import {
 	chmodSync,
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
@@ -81,6 +83,21 @@ describe("getWindowsShimCommand", () => {
 	});
 });
 
+function isRunning(pid: number): boolean {
+	try {
+		process.kill(pid, 0);
+		if (process.platform === "linux") {
+			// Container init may retain a terminated descendant as a zombie.
+			const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+			return stat[stat.lastIndexOf(")") + 2] !== "Z";
+		}
+		return true;
+	} catch (error) {
+		const code = (error as NodeJS.ErrnoException).code;
+		return code !== "ESRCH" && code !== "ENOENT";
+	}
+}
+
 describe("runProcess", () => {
 	it("collects output and forwards cwd and env", async () => {
 		const cwd = tmpdir();
@@ -110,46 +127,104 @@ describe("runProcess", () => {
 		expect(result).toEqual({ exitCode: 0, stdout: "", stderr: "collected" });
 	});
 
-	it("kills a process that outlives its timeout, even while a descendant holds its pipes", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "run-process-timeout-"));
-		const pidsFile = join(dir, "pids.json");
-		const script = `const { spawn } = require("node:child_process");
-const descendant = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "inherit" });
+	for (const exitParent of [false, true]) {
+		it.skipIf(exitParent && process.platform === "win32")(
+			`kills timed-out descendants when their parent ${exitParent ? "has exited" : "is alive"}`,
+			async () => {
+				const dir = mkdtempSync(join(tmpdir(), "run-process-timeout-"));
+				const pidsFile = join(dir, "pids.json");
+				const script = `const { spawn } = require("node:child_process");
+const descendant = spawn(process.execPath, ["-e", "setTimeout(() => {}, 20000)"], { stdio: "inherit" });
 require("node:fs").writeFileSync(${JSON.stringify(pidsFile)}, JSON.stringify([process.pid, descendant.pid]));
-setInterval(() => {}, 1000);`;
-		let pids: number[] = [];
-		try {
-			await expect(
-				runProcess(process.execPath, ["-e", script], { timeout: 2_000 }),
-			).rejects.toThrow(/ did not exit within 2000 ms and was killed\.$/);
-			pids = JSON.parse(readFileSync(pidsFile, "utf8")) as number[];
-			await vi.waitFor(() => expect(() => process.kill(pids[0]!, 0)).toThrow());
-		} finally {
-			for (const pid of pids) {
+${exitParent ? "process.exit(0);" : "setTimeout(() => {}, 20000);"}`;
 				try {
-					process.kill(pid, "SIGKILL");
-				} catch {
-					// Already gone.
+					await expect(
+						runProcess(process.execPath, ["-e", script], { timeout: 2_000 }),
+					).rejects.toThrow(/ did not exit within 2000 ms and was killed\.$/);
+					const pids = JSON.parse(readFileSync(pidsFile, "utf8")) as number[];
+					expect(pids).toHaveLength(2);
+					await vi.waitFor(() => expect(pids.filter(isRunning)).toEqual([]));
+				} finally {
+					try {
+						const pids = JSON.parse(readFileSync(pidsFile, "utf8")) as number[];
+						for (const pid of pids) {
+							if (isRunning(pid)) {
+								try {
+									process.kill(pid, "SIGKILL");
+								} catch {
+									// Exited between the check and cleanup.
+								}
+							}
+						}
+					} finally {
+						rmSync(dir, { recursive: true, force: true });
+					}
 				}
+			},
+			15_000,
+		);
+	}
+
+	it.skipIf(process.platform === "win32" || !which("deno"))(
+		"kills the direct child under Deno with executable-scoped run permission",
+		async () => {
+			const dir = mkdtempSync(join(tmpdir(), "run-process-deno-"));
+			const pidFile = join(dir, "pid");
+			const probe = join(dir, "probe.ts");
+			const script = `require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+setTimeout(() => {}, 20000);`;
+			writeFileSync(
+				probe,
+				`import assert from "node:assert/strict";
+import { runProcess } from ${JSON.stringify(new URL("./process.ts", import.meta.url).href)};
+await assert.rejects(
+  runProcess(${JSON.stringify(process.execPath)}, ["-e", ${JSON.stringify(script)}], { timeout: 2000 }),
+  { message: "Process-tree cleanup failed after timeout." },
+);`,
+			);
+			try {
+				const result = spawnSync(
+					"deno",
+					[
+						"run",
+						"--no-config",
+						"--no-prompt",
+						`--allow-run=${process.execPath}`,
+						"--allow-env",
+						"--allow-read",
+						probe,
+					],
+					{ encoding: "utf8", timeout: 8_000 },
+				);
+				expect(result.error).toBeUndefined();
+				expect(result.status, result.stderr).toBe(0);
+				const pid = Number(readFileSync(pidFile, "utf8"));
+				await vi.waitFor(() => expect(isRunning(pid)).toBe(false));
+			} finally {
+				if (existsSync(pidFile)) {
+					const pid = Number(readFileSync(pidFile, "utf8"));
+					if (isRunning(pid)) process.kill(pid, "SIGKILL");
+				}
+				rmSync(dir, { recursive: true, force: true });
 			}
-			rmSync(dir, { recursive: true, force: true });
-		}
-	}, 10_000);
+		},
+		15_000,
+	);
 
 	it.skipIf(process.platform !== "win32")(
-		"runs Windows command shims through the shell",
+		"round-trips arguments through Windows forwarding shims",
 		async () => {
 			const dir = mkdtempSync(join(tmpdir(), "run-process-test-"));
 			const shim = join(dir, "crust-process-probe.cmd");
-			writeFileSync(shim, "@echo off\r\necho shim-output\r\n");
+			const probe = join(dir, "argv.cjs");
+			const args = ["plain", "two words", "(parentheses)", "C:\\path with spaces\\", ""];
+			writeFileSync(probe, "process.stdout.write(JSON.stringify(process.argv.slice(2)));");
+			writeFileSync(shim, `@echo off\r\n"${process.execPath}" "${probe}" %*\r\n`);
 
 			try {
-				const result = await runProcess(shim, [], {
-					env: { ...process.env, PATH: `${dir}${delimiter}${process.env.PATH ?? ""}` },
-					stdio: "collect",
-				});
+				const result = await runProcess(shim, args, { timeout: 5_000 });
 				expect(result.exitCode).toBe(0);
-				expect(result.stdout.trim()).toBe("shim-output");
+				expect(JSON.parse(result.stdout)).toEqual(args);
 			} finally {
 				rmSync(dir, { recursive: true, force: true });
 			}

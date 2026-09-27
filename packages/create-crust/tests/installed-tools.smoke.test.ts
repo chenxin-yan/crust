@@ -35,7 +35,7 @@ describe.skipIf(!enabled)("installed create-crust and crust (Linux/npm)", () => 
 		if (process.platform !== "linux") throw new Error("This opt-in smoke requires Linux.");
 		const target = hostTarget()?.replace(/^bun-/, "");
 		if (!target) throw new Error("Unsupported host for installed-tool smoke.");
-		for (const tool of ["node", "npm", "bun", "git", "pnpm", "tar", "xz"]) {
+		for (const tool of ["node", "npm", "bun", "deno", "git", "pnpm", "tar", "xz"]) {
 			if (!which(tool)) throw new Error(`${tool} is required on PATH.`);
 		}
 		const seaNodeDir = seaNodeBinDir();
@@ -463,6 +463,38 @@ describe.skipIf(!enabled)("installed create-crust and crust (Linux/npm)", () => 
 				"Reinstall @crustjs/crust with optional dependencies enabled",
 			);
 			expect(readFileSync(join(project, ".crust/kept.txt"), "utf8")).toBe("kept\n");
+
+			// The installed crust also builds an experimental Deno runtime package:
+			// deno on PATH bundles it and the embedded Bun prepares the snapshot.
+			const nodeAndDeno = join(root, "node-and-deno");
+			mkdirSync(nodeAndDeno);
+			for (const tool of ["node", "deno"]) {
+				symlinkSync(realpathSync(which(tool)!), join(nodeAndDeno, tool));
+			}
+			writeFileSync(
+				join(project, "package.json"),
+				`${JSON.stringify({ ...pkg, crust: { ...pkg.crust, runtime: "deno" } }, null, "\t")}\n`,
+			);
+			const denoVersion = /^deno (\S+)/.exec(
+				(await run(["deno", "--version"], consumer)).stdout,
+			)![1];
+			const denoPackage = await run(
+				[crust, "build", "--artifact", "package"],
+				project,
+				0,
+				120_000,
+				nodeAndDeno,
+			);
+			expect(denoPackage.stdout).toContain("Runtime: deno (from package.json)");
+			expect(denoPackage.stdout).toContain(`Compiler: deno ${denoVersion}`);
+			expect(denoPackage.stderr).toContain("Deno runtime packages are experimental");
+			const denoManifest = readJson(join(project, ".crust/manifest.json"));
+			expect(denoManifest).toMatchObject({ runtime: "deno", artifact: "package", packages: [] });
+			expect(denoManifest).not.toHaveProperty("embeddedRuntimeVersion");
+			expect(denoManifest.build["installed-cli"]).toBeDefined();
+			expect(readFileSync(launcher, "utf8").startsWith("#!")).toBe(false);
+			const underDeno = await run(["deno", "run", "--no-prompt", launcher, "Ada"], project);
+			expect(underDeno.stdout.trim()).toBe("Hello, Ada!");
 			passed = true;
 		} finally {
 			if (passed) rmSync(root, { recursive: true, force: true });

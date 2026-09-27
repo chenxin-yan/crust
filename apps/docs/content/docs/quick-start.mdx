@@ -91,7 +91,7 @@ npm run build
 npm run start Ada
 ```
 
-`crust build` stages the publishable npm package(s) in `.crust/`. See [Build and distribution](/docs/guide/build-and-distribution) for cross-platform targets and the `.crust/` layout.
+`crust build` stages your selected artifact and npm packaging metadata in `.crust/`. npm is optional: standalone binaries embed their runtime and can also ship as [release downloads or through Homebrew and other installers](/docs/guide/build-and-distribution#custom-distribution), without the Node-based npm launcher. Runtime packages still require their selected runtime. See [Build and distribution](/docs/guide/build-and-distribution) for targets and output layouts.
 
 <Callout type="info">
   Both `create-crust` and `crust` CLI are built with crust. If you would like to see crust in

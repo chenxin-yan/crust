@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
+import { BUILD_OUT_DIR_ENV, PACKAGED_BUILD_KEY } from "@crustjs/utils/artifacts";
 import { getAmbientTerminalIO } from "@crustjs/utils/terminal";
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
@@ -2564,6 +2564,45 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		expect(errorCalls).toHaveLength(1);
 		expect(errorCalls[0]).toMatch(/^Extension "unsafe" build failed:/);
 		expect(errorCalls[0]).toContain(message);
+		expect(existsSync(outDir)).toBe(false);
+	});
+
+	it("skips the protocol in a packaged build without reading the environment", async () => {
+		const path = await snapshotPath();
+		const outDir = join(dirname(path), "output");
+		process.env[SNAPSHOT_PATH_ENV] = path;
+		process.env[BUILD_OUT_DIR_ENV] = outDir;
+		const calls: string[] = [];
+		const app = new Crust("packaged")
+			.extend(
+				defineExtension(defineExtensionId("builder")).build(() => {
+					calls.push("build");
+					return [];
+				}),
+			)
+			.action(() => {
+				calls.push("action");
+			});
+		// Stands in for Deno without --allow-env: any read throws.
+		const envDescriptor = Object.getOwnPropertyDescriptor(process, "env")!;
+		const deniedEnv = new Proxy(process.env, {
+			get: (_target, key) => {
+				throw new Error(`env read: ${String(key)}`);
+			},
+		});
+		const marker = Symbol.for(PACKAGED_BUILD_KEY);
+		Object.defineProperty(globalThis, marker, { value: true, configurable: true });
+		Object.defineProperty(process, "env", { ...envDescriptor, value: deniedEnv });
+		try {
+			expect(await app.execute({ argv: [] })).toBe(0);
+		} finally {
+			Object.defineProperty(process, "env", envDescriptor);
+			Reflect.deleteProperty(globalThis, marker);
+		}
+
+		expect(calls).toEqual(["action"]);
+		expect(exitCalls).toEqual([]);
+		expect(existsSync(path)).toBe(false);
 		expect(existsSync(outDir)).toBe(false);
 	});
 });

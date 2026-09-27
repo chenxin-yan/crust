@@ -48,7 +48,7 @@ Every project has the same scripts: `build` (`crust build`) stages the publishab
 | `node`  | `node src/cli.ts`        | `package`: a root package containing one JavaScript bundle that needs Node 22.18+             |
 | `deno`  | `deno run -A src/cli.ts` | `binary`: a root package with a Node launcher plus one standalone binary package per platform |
 
-Every runtime puts the Crust packages your code imports (`@crustjs/core`, `@crustjs/extensions`) in `dependencies` and the build tool (`@crustjs/crust`) in `devDependencies`, and sets `"crust": { "runtime": ..., "artifact": ... }` in `package.json` so `crust build` picks the runtime and artifact kind without flags. A Bun project can switch to `"artifact": "package"` for a root-only JavaScript package that runs on the consumer's installed Bun. See [Build and distribution](https://crustjs.com/docs/guide/build-and-distribution).
+Every runtime puts the Crust packages your code imports (`@crustjs/core`, `@crustjs/extensions`) in `dependencies` and the build tool (`@crustjs/crust`) in `devDependencies`, and sets `"crust": { "runtime": ..., "artifact": ... }` in `package.json` so `crust build` picks the runtime and artifact kind without flags. A Bun project can switch to `"artifact": "package"` for a root-only JavaScript package that runs on the consumer's installed Bun. A Deno project can switch to the experimental `"artifact": "package"`, which consumers run with `deno run npm:` or `deno install -g`. See [Build and distribution](https://crustjs.com/docs/guide/build-and-distribution).
 
 ## Documentation
 

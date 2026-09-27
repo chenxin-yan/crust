@@ -5,7 +5,7 @@ description: Build and distribute Crust applications for Bun, Deno, and Node.
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-`@crustjs/crust` provides the `crust` CLI. `crust build` writes the publishable npm packages for your CLI to `.crust/`, and `crust publish` uploads them. The same build is available to scripts as [`build()`](#programmatic-api). The [Build and distribution guide](/docs/guide/build-and-distribution) walks through the workflow; this page is the reference.
+`@crustjs/crust` provides the `crust` CLI. `crust build` stages runtime packages or standalone binaries in `.crust/`, together with npm packaging metadata. `crust publish` uploads the npm packages; [other distribution channels](/docs/guide/build-and-distribution#custom-distribution), such as release downloads or Homebrew, use the built binaries directly. The same build is available to scripts as [`build()`](#programmatic-api). The [Build and distribution guide](/docs/guide/build-and-distribution) walks through the workflow; this page is the reference.
 
 ## Install
 
@@ -13,9 +13,10 @@ import { Callout } from "fumadocs-ui/components/callout";
 npm install -D @crustjs/crust
 ```
 
-- The `crust` command is a Node launcher for a standalone executable with Bun embedded. Node is required to start it; a separate Bun installation is not.
+- Installed through npm, the `crust` command is a Node launcher for a standalone executable with Bun embedded. That launcher requires Node; a separate Bun installation is not needed. This is a build-tool installation requirement, not a requirement for users running your generated binaries directly.
 - Without `bun` on `PATH`, arm64 hosts cannot build their own target. The error names the targets you can build; otherwise install Bun.
 - `@crustjs/crust` optionally depends on `tsdown` and `@tsdown/exe`, which build [Node.js binaries](/docs/guide/build-and-distribution#nodejs-binaries) with the `node` on `PATH`. Other builds never load them, so an install that skipped them, for example under a Node.js outside tsdown's engines, still builds everything else.
+- Deno binaries need `deno` on `PATH`; [Deno runtime packages](/docs/guide/build-and-distribution#deno-runtime-packages-experimental) (experimental) need `deno` 2.5.0 or newer there.
 - The [`build()`](#programmatic-api) library is a plain JavaScript module, so it needs `bun` on `PATH` unless the script runs under Bun. `@crustjs/core` is a peer dependency so `BuildReport` is the same type your Extensions see.
 
 ### npm installation caveat
@@ -39,7 +40,7 @@ crust build --artifact binary --target bun-linux-x64
 # ✓ Staged 2 npm package(s) successfully: (excerpt)
 ```
 
-[`crust build`](/docs/guide/build-and-distribution#build) validates your CLI and stages it in `.crust/`. [`crust publish`](/docs/guide/build-and-distribution#publish-with-crust-publish) publishes what `crust build` staged.
+[`crust build`](/docs/guide/build-and-distribution#build) validates your CLI and stages it in `.crust/`. [`crust publish`](/docs/guide/build-and-distribution#publish-with-crust-publish) publishes the staged npm packages, not release archives, Homebrew formulas, or other installer metadata.
 
 ### `crust build` options
 
@@ -103,7 +104,9 @@ crust publish --dry-run
 
 ## Build output
 
-`crust build` stages the publishable npm tree in `.crust/`: `manifest.json`, `root/`, one `<platform>/` per target for binaries, and `artifacts/` from Extension build hooks. It checks that `package.json` has non-empty `name` and `version` before wiping the previous stage, even with `--no-validate`. See [Build](/docs/guide/build-and-distribution#build) for the tree and the launcher.
+`crust build` stages its output in `.crust/`: `manifest.json`, `root/`, one `<platform>/` per selected target for binaries, and `artifacts/` from Extension build hooks. The tree is ready for npm publishing, but npm is optional: distribute `<platform>/bin/` with its adjacent data for direct-binary installation. The executable embeds its runtime; only the npm launcher needs Node.js. Runtime packages instead use `root/` and require the user's selected runtime.
+
+The build checks that `package.json` has non-empty `name` and `version` before wiping the previous stage, even with `--no-validate`. See [Build](/docs/guide/build-and-distribution#build) for the tree and [Custom distribution](/docs/guide/build-and-distribution#custom-distribution) for release archives and installers.
 
 `manifest.json` records the build's `runtime` and `artifact`. Binary builds also record `embeddedRuntimeVersion`, the version the selected compiler reported and embedded in every platform binary; runtime packages embed no runtime and omit it. See [Binary runtime version](/docs/guide/build-and-distribution#binary-runtime-version).
 
@@ -189,7 +192,7 @@ Each `bin` key is an installed command name and each value is the TypeScript ent
 | Key                | Description                                                                                                                                                                                                                                                                     |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `crust.runtime`    | `bun`, `deno`, or `node`. Without it, `deno.json`/`deno.jsonc` selects Deno and `@types/node` without `@types/bun` selects Node; otherwise Bun.                                                                                                                                 |
-| `crust.artifact`   | `package` (a root-only runtime package for `bun` or `node`) or `binary` (standalone executables for `bun`, `deno`, or `node`). `--artifact` overrides it. Deno packages are not available yet.                                                                                  |
+| `crust.artifact`   | `package` (a root-only runtime package for `bun`, `node`, or, experimentally, `deno`) or `binary` (standalone executables for `bun`, `deno`, or `node`). `--artifact` overrides it.                                                                                             |
 | `crust.targets`    | Canonical compiler targets staged when a binary build runs without `--target`, `host` included. Without it every target of the compiler is staged. Rejected for runtime packages.                                                                                               |
 | `crust.bunPlugins` | [Bun bundler plugin](https://bun.com/docs/bundler/plugins) modules applied to Bun builds and Node runtime packages, in order. A bare name resolves from `node_modules`, a path from the project root; each must default-export the plugin. Rejected for Deno and Node binaries. |
 | `crust.include`    | Directories relative to the project root that `crust build` copies into `.crust/root/` (listed in `files`) and into each platform package's `bin/`.                                                                                                                             |

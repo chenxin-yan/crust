@@ -56,10 +56,13 @@ These grants apply to library code too. Subprocesses run outside Deno's sandbox,
   The generated `dev` and `start` scripts use `-A` (all permissions). For sandboxed source
   execution, replace `-A` in `dev` with only the grants you need. Deno executables produced by
   `crust build` are also compiled with `-A`; choosing Deno does not make those binaries sandboxed.
+  Deno runtime packages carry no grants: their users choose them with `deno run` or `deno install`.
 </Callout>
 
 ## Build separately from running
 
-You don't need Bun to run Node.js or Deno source. **`crust build` is separate, Bun-powered tooling**, even when producing Node.js or Deno output. The packaged CLI can use its embedded Bun runtime; Deno binaries additionally require `deno` on `PATH`, and Node.js binaries a `node` on `PATH` that meets [tsdown's executable requirements](/docs/guide/build-and-distribution#nodejs-binaries) (Node.js 26+ with the bundled tsdown).
+You don't need Bun to run Node.js or Deno source. **`crust build` is separate, Bun-powered tooling**, even when producing Node.js or Deno output. The packaged CLI can use its embedded Bun runtime; Deno binaries and Deno runtime packages additionally require `deno` on `PATH`, and Node.js binaries a `node` on `PATH` that meets [tsdown's executable requirements](/docs/guide/build-and-distribution#nodejs-binaries) (Node.js 26+ with the bundled tsdown).
 
-The runtime does not choose the output: `crust.artifact` does. A runtime package is JavaScript for the user's installed Bun or Node.js; a standalone binary embeds Bun, Deno, or Node.js. Deno runtime packages are not available yet. Continue to [Build and distribution](/docs/guide/build-and-distribution) for targets, launchers, and publishing.
+The runtime does not choose the output: `crust.artifact` does. A runtime package is JavaScript for the user's installed Bun, Node.js, or Deno (experimental); a standalone binary embeds Bun, Deno, or Node.js and needs no separately installed JavaScript runtime.
+
+The distribution channel is a separate choice. npm's generated launcher needs Node.js to select and start a binary; [direct downloads, Homebrew, or other installers](/docs/guide/build-and-distribution#custom-distribution) can run that same binary without the launcher or Node.js. `crust publish` handles npm only. Continue to [Build and distribution](/docs/guide/build-and-distribution) for targets and release layouts.

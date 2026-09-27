@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { accessSync, constants, statSync } from "node:fs";
 import { delimiter, extname, join, resolve, sep, win32 } from "node:path";
@@ -23,7 +23,12 @@ export type RunProcessOptions = {
 	stdout?: "collect" | "ignore";
 	/** Run the command through the platform shell. */
 	shell?: boolean;
-	/** Milliseconds before the process is killed and the call rejects. */
+	/**
+	 * Milliseconds before process-tree cleanup and rejection. POSIX descendants
+	 * must remain in the child's group; Windows requires a live parent.
+	 * Deno requires unrestricted `--allow-run` for POSIX group cleanup; a scoped
+	 * grant still permits direct-child termination, but group cleanup is reported as failed.
+	 */
 	timeout?: number;
 };
 
@@ -81,11 +86,43 @@ export function getWindowsShimCommand(
 }
 
 /**
+ * @internal Kill a POSIX process group (spawned with `detached: true`) or a
+ * live Windows process tree. Descendants that leave the group are not reached.
+ * If POSIX group signaling fails, try the direct child before rethrowing.
+ */
+export function killProcessTree(child: ChildProcess): void {
+	if (child.pid === undefined) return;
+	if (process.platform === "win32") {
+		// An exited child's PID may be reused, and taskkill only walks live parents.
+		// ponytail: Windows orphans escape cleanup; use Job Objects if supported tools leave workers behind.
+		if (child.exitCode === null && child.signalCode === null) {
+			const result = spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
+				stdio: "ignore",
+				timeout: 10_000,
+			});
+			// Preserve direct-child cleanup if taskkill is unavailable or fails.
+			if (result.error || result.status !== 0) child.kill("SIGKILL");
+		}
+		return;
+	}
+	try {
+		process.kill(-child.pid, "SIGKILL");
+	} catch (error) {
+		// SAFETY: process.kill errors may carry an errno code.
+		if ((error as NodeJS.ErrnoException).code === "ESRCH") return;
+		// Deno's child handle can still be killed with executable-scoped run permission.
+		child.kill("SIGKILL");
+		throw error;
+	}
+}
+
+/**
  * Spawn a process and wait for it to exit without imposing an error policy.
  *
- * On Windows, the automatic `.cmd`/`.bat` workaround escapes arguments for
- * `cmd.exe`; unsafe shell-expansion characters throw before spawning. Explicit
- * `shell: true` calls are passed through unchanged and own their shell escaping.
+ * On Windows, the automatic `.cmd`/`.bat` workaround supports command shims
+ * forwarding arguments through `%*`, not arbitrary batch files consuming `%1`.
+ * Unsafe shell-expansion characters throw before spawning. Explicit `shell: true`
+ * calls are passed through unchanged and own their shell escaping.
  */
 export async function runProcess(
 	command: string,
@@ -101,6 +138,8 @@ export async function runProcess(
 		env: options.env,
 		shell: options.shell,
 		stdio: collect ? ["ignore", collectStdout ? "pipe" : "ignore", "pipe"] : "inherit",
+		// Only timed calls need a group; untimed interactive children keep terminal semantics.
+		detached: options.timeout !== undefined && process.platform !== "win32",
 		windowsVerbatimArguments: windowsShimCommand?.windowsVerbatimArguments,
 	});
 
@@ -109,18 +148,18 @@ export async function runProcess(
 		if (options.timeout === undefined) return;
 		const timeout = options.timeout;
 		timer = setTimeout(() => {
-			// ponytail: kills the direct child only; a descendant it started (e.g. a
-			// version-manager shim's runtime) outlives it. Kill the process tree, as
-			// tests/bounded-process.ts does, if that matters.
-			proc.kill("SIGKILL");
-			// Such a descendant can hold the pipes open, so stop waiting for them.
+			let failure = new Error(
+				`${[command, ...args].join(" ")} did not exit within ${timeout} ms and was killed.`,
+			);
+			try {
+				killProcessTree(proc);
+			} catch (cause) {
+				failure = new Error("Process-tree cleanup failed after timeout.", { cause });
+			}
+			// Escaped descendants must not hold the timeout open through inherited pipes.
 			proc.stdout?.destroy();
 			proc.stderr?.destroy();
-			reject(
-				new Error(
-					`${[command, ...args].join(" ")} did not exit within ${timeout} ms and was killed.`,
-				),
-			);
+			reject(failure);
 		}, timeout);
 	});
 

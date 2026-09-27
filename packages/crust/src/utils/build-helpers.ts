@@ -11,7 +11,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { type BuildReport, defineExtensionId, type InvocationIO } from "@crustjs/core";
 import { type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
-import { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
+import { BUILD_OUT_DIR_ENV, PACKAGED_BUILD_KEY } from "@crustjs/utils/artifacts";
 import { isErrnoException } from "@crustjs/utils/error";
 import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
 import { isWithin } from "@crustjs/utils/path";
@@ -1275,6 +1275,78 @@ export async function provisionNodeExeTargets(
 	} finally {
 		await rm(workDir, { recursive: true, force: true });
 	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Deno runtime packages (native `deno bundle`)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Oldest `deno` accepted to bundle a Deno runtime package. Deno 2.4 resolves a
+ * package.json project's npm dependencies from the registry instead of its
+ * installed node_modules, so it can bundle a different Crust than the project
+ * installed. Tested on Linux x64 with Deno 2.5.0 through 2.9.6.
+ */
+export const DENO_PACKAGE_MIN_VERSION = "2.5.0";
+
+/**
+ * Select the external deno that bundles a Deno runtime package, reading its
+ * version in the project directory `cwd`. Call it before staging is replaced.
+ * A runtime package embeds no Deno, so `engines.deno` stays a consumer
+ * requirement and is not checked against this bundler.
+ */
+export async function resolveDenoPackageBundler(
+	cwd: string,
+	runner: BuildRunner = resolveDenoBuildRunner(),
+): Promise<BuildCompiler> {
+	const version = await readCompilerVersion("deno", runner, cwd);
+	if (!satisfies(version, `>=${DENO_PACKAGE_MIN_VERSION}`, { includePrerelease: true })) {
+		throw new Error(
+			`Deno ${version} (${runner.command}) cannot bundle a Deno runtime package; deno ${DENO_PACKAGE_MIN_VERSION} or newer is required.\n` +
+				"  Older deno bundle resolves package.json dependencies from the npm registry instead of the installed node_modules.\n" +
+				"  crust does not install or upgrade Deno; put a newer deno first on PATH (e.g. with your version manager).",
+		);
+	}
+	return { runtime: "deno", runner, version };
+}
+
+/**
+ * Bundle a Deno runtime package entry with native `deno bundle`, which resolves
+ * dependencies through the project's own Deno setup (deno.json imports,
+ * package.json with its installed node_modules) and inlines them into one file.
+ *
+ * Bundle the declared command directly so Deno preserves its `import.meta.main`
+ * semantics without making dependencies main. Prepend the packaged-build marker
+ * (`PACKAGED_BUILD_KEY`) to the bundled code so it runs before the inlined
+ * application graph. The output has no shebang or permission flags: consumers
+ * choose grants with `deno run` / `deno install`.
+ * No env files or plugins: `deno bundle` has no PUBLIC_* filter or Bun plugins.
+ */
+export async function execDenoPackageBuild(
+	entryPath: string,
+	outfilePath: string,
+	cwd: string,
+	runner: BuildRunner = resolveDenoBuildRunner(),
+): Promise<void> {
+	await runBuildProcess(
+		runner,
+		[
+			"bundle",
+			"--platform=deno",
+			"--packages=bundle",
+			"--output",
+			outfilePath,
+			resolve(cwd, entryPath),
+		],
+		outfilePath,
+		cwd,
+	);
+	const output = await readFile(outfilePath, "utf8");
+	await writeFile(
+		outfilePath,
+		`globalThis[Symbol.for(${JSON.stringify(PACKAGED_BUILD_KEY)})] = true;\n` +
+			output.replace(/^#![^\n]*(?:\n|$)/, ""),
+	);
 }
 
 /**
