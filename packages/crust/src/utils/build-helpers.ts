@@ -20,6 +20,8 @@ import satisfies from "semver/functions/satisfies.js";
 import validVersion from "semver/functions/valid.js";
 import validRange from "semver/ranges/valid.js";
 
+import crustPackage from "../../package.json" with { type: "json" };
+
 // ────────────────────────────────────────────────────────────────────────────
 // Build runtimes and compile targets
 // ────────────────────────────────────────────────────────────────────────────
@@ -577,6 +579,8 @@ export function crustInstallPath(moduleUrl = import.meta.url, execPath = process
  * `<dir>/node_modules/<name>/package.json` for the nearest `dir` at or above
  * `from`: Node's node_modules lookup without its NODE_PATH and global-folder
  * fallbacks, so only an installation next to `from` can supply the package.
+ * Package managers hoist crust's backend into the project's node_modules, so
+ * the found package may be the project's own: callers check its version.
  */
 function findInstalledPackageJson(from: string, name: string): string | null {
 	for (let dir = from; ; dir = dirname(dir)) {
@@ -586,12 +590,15 @@ function findInstalledPackageJson(from: string, name: string): string | null {
 	}
 }
 
+function isVersionedPackageJson(value: JsonValue): value is JsonObject & { version: string } {
+	return isJsonObject(value) && typeof value.version === "string";
+}
+
 function isTsdownPackageJson(
 	value: JsonValue,
 ): value is JsonObject & { version: string; engines: JsonObject & { node: string } } {
 	return (
-		isJsonObject(value) &&
-		typeof value.version === "string" &&
+		isVersionedPackageJson(value) &&
 		value.engines !== undefined &&
 		isJsonObject(value.engines) &&
 		value.engines.node !== undefined &&
@@ -641,9 +648,10 @@ export function assertNodeExeBackendSupports(
 }
 
 /**
- * Finds Crust's installed tsdown and @tsdown/exe from `installPath` and
- * validates the selected Node against tsdown's requirements, loading the
- * executable builder's minimum under that Node. `cwd` is the project
+ * Finds Crust's installed tsdown and @tsdown/exe from `installPath`, at the
+ * versions its package.json `optionalDependencies` pin, and validates the
+ * selected Node against tsdown's requirements, loading the executable
+ * builder's minimum under that Node. `cwd` is the project
  * directory, as for every other compiler step.
  */
 export async function resolveNodeExeBackend(
@@ -661,10 +669,28 @@ export async function resolveNodeExeBackend(
 		);
 	}
 	// tsdown imports @tsdown/exe from its real location for executable targets.
-	if (findInstalledPackageJson(dirname(realpathSync(packageJsonPath)), "@tsdown/exe") === null) {
+	const exePackageJsonPath = findInstalledPackageJson(
+		dirname(realpathSync(packageJsonPath)),
+		"@tsdown/exe",
+	);
+	if (exePackageJsonPath === null) {
 		throw new Error(
 			`@tsdown/exe is not installed beside crust's tsdown (${packageJsonPath}).\n${reinstall}`,
 		);
+	}
+	// Before running any of it: when crust's copy was skipped, the lookup can reach the project's own.
+	for (const [name, path] of [
+		["tsdown", packageJsonPath],
+		["@tsdown/exe", exePackageJsonPath],
+	] as const) {
+		const installed: JsonValue = JSON.parse(readFileSync(path, "utf8"));
+		const version = isVersionedPackageJson(installed) ? installed.version : "without a version";
+		const pinned = crustPackage.optionalDependencies[name];
+		if (!satisfies(version, pinned)) {
+			throw new Error(
+				`${name} ${version} (${path}) is not the ${name} ${pinned} that crust builds node standalone binaries with.\n${reinstall}`,
+			);
+		}
 	}
 	const tsdownPackage: JsonValue = JSON.parse(readFileSync(packageJsonPath, "utf8"));
 	if (!isTsdownPackageJson(tsdownPackage)) {
