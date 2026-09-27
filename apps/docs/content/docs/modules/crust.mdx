@@ -29,8 +29,10 @@ npm install -D @crustjs/crust
 ## Commands
 
 ```sh
-crust build --target bun-linux-x64
+crust build --artifact binary --target bun-linux-x64
 # Runtime: bun (default)
+# Artifact: binary
+# Compiler: bun 1.4.2 (/usr/local/bin/bun)
 # Staging 1 distribution target(s) in .../.crust...
 #   → linux-x64: .../.crust/linux-x64/bin/my-cli-bun-linux-x64
 # ✓ Staged 2 npm package(s) successfully: (excerpt)
@@ -40,12 +42,13 @@ crust build --target bun-linux-x64
 
 ### `crust build` options
 
-| Option                        | Type               | Default | Description                                                                                                       |
-| ----------------------------- | ------------------ | ------- | ----------------------------------------------------------------------------------------------------------------- |
-| `-t, --target`                | string, repeatable | none    | Canonical compiler target(s), or `host` for this machine. Omit to stage `crust.targets`, or every Bun/Deno target |
-| `--env-file`                  | string, repeatable | none    | Explicit env file(s) used for build-time constants                                                                |
-| `--validate`, `--no-validate` | boolean            | `true`  | Materialize command definitions before compiling; `--no-validate` also skips Extension build hooks                |
-| `--minify`, `--no-minify`     | boolean            | none    | Minify the output (default for bun and node; unsupported for deno)                                                |
+| Option                        | Type                | Default | Description                                                                                                                                                          |
+| ----------------------------- | ------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--artifact`                  | `package`, `binary` | none    | Artifact kind: a runtime package or standalone binaries. Overrides `crust.artifact`; one of them is required                                                         |
+| `-t, --target`                | string, repeatable  | none    | Canonical compiler target(s) for binaries, or `host` for this machine. Omit to stage `crust.targets`, or every target of the compiler. Rejected for runtime packages |
+| `--env-file`                  | string, repeatable  | none    | Explicit env file(s) used for build-time constants                                                                                                                   |
+| `--validate`, `--no-validate` | boolean             | `true`  | Materialize command definitions before compiling; `--no-validate` also skips Extension build hooks                                                                   |
+| `--minify`, `--no-minify`     | boolean             | none    | Minify the output (default for bun and node; unsupported for deno)                                                                                                   |
 
 Command names, entry files, runtime, default targets, Bun bundler plugins, and extra directories are not flags: they come from [`bin`](#commands-and-entries-bin) and the [`crust` block](#packagejson-configuration) in `package.json`.
 
@@ -88,18 +91,20 @@ crust publish --dry-run
 | `BuildArtifact` kind | Path                                               | Extra fields                   |
 | -------------------- | -------------------------------------------------- | ------------------------------ |
 | `package-json`       | Root manifest first, then one per platform package | `target` on platform manifests |
-| `launcher`           | `root/bin/<command>.js` for Bun and Deno           | `command`                      |
+| `launcher`           | `root/bin/<command>.js` for binaries               | `command`                      |
 | `executable`         | `<platform>/bin/<command>-<target>`                | `command`, canonical `target`  |
-| `bundle`             | `root/bin/<command>.js` for Node                   | `command`                      |
+| `bundle`             | `root/bin/<command>.js` for runtime packages       | `command`                      |
 
-- `build()` validates `bin`, the `crust` block, and its options with the same errors the CLI prints, then wipes `.crust/` and stages every package. `manifest.json` is written last.
+- `build()` validates `bin`, the `crust` block, and its options with the same errors the CLI prints, selects the compiler (checking `engines` for binaries), then wipes `.crust/` and stages every package. `manifest.json` is written last.
 - It throws on failure and prints nothing; `onLog` receives each progress line with its stream.
 - `BuildReport` is `@crustjs/core`'s type, re-exported.
 - Overlapping calls for the same project in one process reject before staging. Serialize builds across processes yourself, and consume staged artifacts before rebuilding.
 
 ## Build output
 
-`crust build` stages the publishable npm tree in `.crust/`: `manifest.json`, `root/`, one `<platform>/` per target for Bun and Deno, and `artifacts/` from Extension build hooks. It checks that `package.json` has non-empty `name` and `version` before wiping the previous stage, even with `--no-validate`. See [Build](/docs/guide/build-and-distribution#build) for the tree and the launcher.
+`crust build` stages the publishable npm tree in `.crust/`: `manifest.json`, `root/`, one `<platform>/` per target for binaries, and `artifacts/` from Extension build hooks. It checks that `package.json` has non-empty `name` and `version` before wiping the previous stage, even with `--no-validate`. See [Build](/docs/guide/build-and-distribution#build) for the tree and the launcher.
+
+`manifest.json` records the build's `runtime` and `artifact`. Binary builds also record `embeddedRuntimeVersion`, the version the selected compiler reported and embedded in every platform binary; runtime packages embed no runtime and omit it. See [Binary runtime version](/docs/guide/build-and-distribution#binary-runtime-version).
 
 ### Staged `package.json` files
 
@@ -111,7 +116,7 @@ Staged manifests are generated rather than copied:
 | npm metadata                                          | `description`, `license`, `author`, `homepage`, `bugs`, `repository`, `keywords`, `publishConfig`, `funding`, and `engines` are copied |
 | `bin`, `files`, `type`                                | Generated for the output; the root always uses `"type": "module"`                                                                      |
 | `dependencies`, `devDependencies`                     | Omitted; the compiler bundles the CLI code                                                                                             |
-| `optionalDependencies`                                | Generated for Bun/Deno platform packages; absent for Node                                                                              |
+| `optionalDependencies`                                | Generated for binary platform packages; absent for runtime packages                                                                    |
 | `exports`, `peerDependencies`, `peerDependenciesMeta` | Preserved in the root only, subject to the rules below                                                                                 |
 | `private`, source scripts, `$schema`                  | Omitted                                                                                                                                |
 
@@ -125,7 +130,7 @@ To ship a library alongside the CLI:
 
 ## Supported targets
 
-`--target` overrides `crust.targets`; without either, all targets for the runtime are built. `host` selects this machine's OS, architecture, and Linux C library and can be mixed with explicit targets. Node builds reject both `--target` and `crust.targets`.
+Targets apply to binaries. `--target` overrides `crust.targets`; without either, all targets of the compiler are built. `host` selects this machine's OS, architecture, and Linux C library and can be mixed with explicit targets. Runtime packages reject both `--target` and `crust.targets`.
 
 | Bun target                                   | Deno target                                             | Platform alias                       |
 | -------------------------------------------- | ------------------------------------------------------- | ------------------------------------ |
@@ -153,7 +158,7 @@ Plain Linux targets use glibc; Alpine needs Bun's `-musl` targets. The launcher 
 }
 ```
 
-Each `bin` key is an installed command name and each value is the TypeScript entry compiled for it. Every entry becomes `bin/<command>.js` in the root package and, for Bun and Deno, a `<command>-<target>` binary in every platform package. A string `bin` names one command after the unscoped package name; without `bin`, the build compiles `src/cli.ts` under that name.
+Each `bin` key is an installed command name and each value is the TypeScript entry compiled for it. Every entry becomes `bin/<command>.js` in the root package and, for binaries, a `<command>-<target>` binary in every platform package. A string `bin` names one command after the unscoped package name; without `bin`, the build compiles `src/cli.ts` under that name.
 
 - Entries must be relative paths to existing files inside the project. Containment is checked lexically; symlinks may point elsewhere. Two commands cannot share one entry (compared by real path).
 - Command names use letters, digits, `.`, `_`, `~`, and `-`, cannot start with `.` or `-`, and cannot differ only by case.
@@ -166,6 +171,7 @@ Each `bin` key is an installed command name and each value is the TypeScript ent
 {
   "crust": {
     "runtime": "bun",
+    "artifact": "binary",
     "targets": ["bun-linux-x64", "bun-linux-arm64", "bun-darwin-arm64"],
     "bunPlugins": ["@opentui/solid/bun-plugin", "./build/plugin.ts"],
     "include": ["templates"]
@@ -173,12 +179,13 @@ Each `bin` key is an installed command name and each value is the TypeScript ent
 }
 ```
 
-Every key is optional. Unknown keys under `crust` fail the build, so typos such as `bunPlugin` are not ignored.
+`crust.artifact` is required unless every build passes `--artifact`; the other keys are optional. Unknown keys under `crust` fail the build, so typos such as `bunPlugin` are not ignored.
 
 | Key                | Description                                                                                                                                                                                                                                  |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `crust.runtime`    | `bun`, `deno`, or `node`. Without it, `deno.json`/`deno.jsonc` selects Deno and `@types/node` without `@types/bun` selects Node; otherwise Bun.                                                                                              |
-| `crust.targets`    | Canonical compiler targets staged when `crust build` runs without `--target`, `host` included. Without it every Bun or Deno target is staged. Rejected for Node.                                                                             |
+| `crust.artifact`   | `package` (a root-only runtime package for `bun` or `node`) or `binary` (standalone executables for `bun` or `deno`). `--artifact` overrides it. Node binaries and Deno packages are not available yet.                                      |
+| `crust.targets`    | Canonical compiler targets staged when a binary build runs without `--target`, `host` included. Without it every target of the compiler is staged. Rejected for runtime packages.                                                            |
 | `crust.bunPlugins` | [Bun bundler plugin](https://bun.com/docs/bundler/plugins) modules applied to Bun and Node builds, in order. A bare name resolves from `node_modules`, a path from the project root; each must default-export the plugin. Rejected for Deno. |
 | `crust.include`    | Directories relative to the project root that `crust build` copies into `.crust/root/` (listed in `files`) and into each platform package's `bin/`.                                                                                          |
 

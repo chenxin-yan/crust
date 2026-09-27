@@ -58,6 +58,45 @@ jobs:
       - name: Smoke built distributions with ${{ matrix.runtime }}
         run: ${{ matrix.smoke }}
 
+  # Linux runs this test in `ci`; these runners cover native install shims
+  # (npm's .cmd and Bun's .exe on Windows) and macOS.
+  bun-runtime-package:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    concurrency:
+      group: bun-runtime-package-${{ matrix.os }}-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup runtimes
+        uses: jdx/mise-action@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build crust and its workspace dependencies
+        run: pnpm exec vp run --fail-if-no-match --filter ./packages/crust pack:task
+
+      # The test skips without bun or npm; fail here instead of passing on a skip.
+      - name: Print tool versions
+        run: |
+          node --version
+          npm --version
+          bun --version
+
+      - name: Build, pack, install, and run a Bun runtime package
+        run: pnpm --dir packages/crust exec vp test run tests/package.integration.test.ts -t "Bun runtime package"
+
   ci:
     runs-on: ubuntu-latest
     timeout-minutes: 15

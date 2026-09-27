@@ -6,7 +6,8 @@
 	"type": "module",
 	"description": "A CLI built with Crust",
 	"crust": {
-		"runtime": "node"
+		"runtime": "node",
+		"artifact": "package"
 	},
 	"bin": {
 		"{{name}}": "src/cli.ts"

@@ -277,8 +277,12 @@ describe.skipIf(!which("bun") || !which("npm"))("Bun runtime package", () => {
 	const project = join(root, "project");
 	const coreDist = resolve(import.meta.dirname, "../../core/dist/index.js");
 	const extensionsDist = resolve(import.meta.dirname, "../../extensions/dist/index.js");
-	const bin = (dir: string, command: string) =>
-		join(dir, "node_modules", ".bin", `${command}${process.platform === "win32" ? ".cmd" : ""}`);
+	// Windows shims: npm writes `<command>.cmd`, Bun writes `<command>.exe`.
+	const bin = (dir: string, command: string) => {
+		const base = join(dir, "node_modules", ".bin", command);
+		if (process.platform !== "win32") return base;
+		return existsSync(`${base}.exe`) ? `${base}.exe` : `${base}.cmd`;
+	};
 
 	afterAll(async () => {
 		await reapBoundedProcesses();
@@ -289,15 +293,31 @@ describe.skipIf(!which("bun") || !which("npm"))("Bun runtime package", () => {
 		mkdirSync(join(project, "src"), { recursive: true });
 		mkdirSync(join(project, "assets"), { recursive: true });
 		writeFileSync(join(project, "assets", "greeting.txt"), "hello from assets\n");
-		// Real Crust commands: core and extensions are bundled from their dist (a
-		// bundled application dependency; the fixture has no node_modules), an Extension build hook
-		// generates man/, and crust.include ships assets/.
+		// A bare-specifier application dependency that exists only in the source
+		// project: the installed command works after the project is deleted only
+		// if the bundle inlined it.
+		const dependencyDir = join(project, "node_modules", "crust-greeting-dep");
+		mkdirSync(dependencyDir, { recursive: true });
+		writeFileSync(
+			join(dependencyDir, "package.json"),
+			JSON.stringify({
+				name: "crust-greeting-dep",
+				version: "1.0.0",
+				type: "module",
+				main: "index.js",
+			}),
+		);
+		writeFileSync(join(dependencyDir, "index.js"), 'export const punctuation = "!";\n');
+		// Real Crust commands: core and extensions are bundled from their dist by
+		// absolute path, an Extension build hook generates man/, and crust.include
+		// ships assets/.
 		writeFileSync(
 			join(project, "src", "greet.ts"),
 			`import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Crust, defineExtension, defineExtensionId, resolveArtifactDir } from ${JSON.stringify(coreDist)};
 import { help } from ${JSON.stringify(extensionsDist)};
+import { punctuation } from "crust-greeting-dep";
 const man = defineExtension(defineExtensionId("man")).build(() => [{ path: "man/bun-greet.1", content: ".Dd" }]);
 await new Crust("bun-greet", { description: "Greets under Bun" })
 	.extend(man, help())
@@ -305,7 +325,7 @@ await new Crust("bun-greet", { description: "Greets under Bun" })
 	.flags({ name: "shout", type: "boolean" })
 	.action(async ({ args, flags, stdout }) => {
 		await new Promise((done) => setTimeout(done, 5));
-		const greeting = \`hello \${args.name}\`;
+		const greeting = \`hello \${args.name}\${punctuation}\`;
 		stdout(JSON.stringify({
 			greeting: flags.shout ? greeting.toUpperCase() : greeting,
 			bun: process.versions.bun ?? null,
@@ -332,6 +352,7 @@ await new Crust("bun-admin").action(({ stdout }) => {
 				version: "0.1.0",
 				bin: { "bun-greet": "src/greet.ts", "bun-admin": "src/admin.ts" },
 				crust: { include: ["assets"] },
+				dependencies: { "crust-greeting-dep": "1.0.0" },
 				engines: { bun: ">=1.0.0" },
 			}),
 		);
@@ -356,21 +377,25 @@ await new Crust("bun-admin").action(({ stdout }) => {
 			publishOrder: ["root"],
 		});
 		expect(manifest).not.toHaveProperty("embeddedRuntimeVersion");
-		expect(readJson<object>(join(staged, "root", "package.json"))).toMatchObject({
+		const stagedPackageJson = readJson<object>(join(staged, "root", "package.json"));
+		expect(stagedPackageJson).toMatchObject({
 			bin: { "bun-greet": "bin/bun-greet.js", "bun-admin": "bin/bun-admin.js" },
 			files: ["bin", "man", "assets"],
 			engines: { bun: ">=1.0.0" },
 		});
+		expect(stagedPackageJson).not.toHaveProperty("dependencies");
 		expect(existsSync(join(staged, "root", "node_modules"))).toBe(false);
 
 		const packDir = join(root, "packs");
 		mkdirSync(packDir);
-		const packed = await runBoundedProcess("npm", ["pack", join(staged, "root")], {
+		const npm = which("npm")!;
+		const packed = await runBoundedProcess(npm, ["pack", join(staged, "root")], {
 			cwd: packDir,
 			timeout: 25_000,
 		});
 		expect(packed.exitCode, packed.stderr).toBe(0);
-		const tarball = join(packDir, packed.stdout.trim().split("\n").at(-1)!);
+		// Relative with forward slashes: both npm and Bun accept it on every OS.
+		const tarball = `../packs/${packed.stdout.trim().split("\n").at(-1)!}`;
 
 		const npmConsumer = join(root, "npm-consumer");
 		const bunConsumer = join(root, "bun-consumer");
@@ -385,7 +410,7 @@ await new Crust("bun-admin").action(({ stdout }) => {
 				}),
 			);
 		}
-		const npmInstall = await runBoundedProcess("npm", ["install", "--no-audit", "--no-fund"], {
+		const npmInstall = await runBoundedProcess(npm, ["install", "--no-audit", "--no-fund"], {
 			cwd: npmConsumer,
 			timeout: 60_000,
 		});
@@ -411,7 +436,7 @@ await new Crust("bun-admin").action(({ stdout }) => {
 			});
 			expect(greet.exitCode, greet.stderr).toBe(0);
 			expect(JSON.parse(greet.stdout.trim())).toEqual({
-				greeting: "HELLO WORLD",
+				greeting: "HELLO WORLD!",
 				bun: bunVersion,
 				asset: "hello from assets",
 				man: ".Dd",
@@ -451,7 +476,7 @@ await new Crust("bun-admin").action(({ stdout }) => {
 			timeout: 25_000,
 		});
 		expect(protocol.exitCode, protocol.stderr).toBe(0);
-		expect(JSON.parse(protocol.stdout.trim())).toMatchObject({ greeting: "hello protocol" });
+		expect(JSON.parse(protocol.stdout.trim())).toMatchObject({ greeting: "hello protocol!" });
 		expect(existsSync(snapshotPath)).toBe(false);
 		expect(existsSync(join(root, "hooks"))).toBe(false);
 
@@ -462,7 +487,7 @@ await new Crust("bun-admin").action(({ stdout }) => {
 		});
 		expect(bunRun.exitCode, bunRun.stderr).toBe(0);
 		expect(JSON.parse(bunRun.stdout.trim())).toMatchObject({
-			greeting: "hello bun",
+			greeting: "hello bun!",
 			bun: bunVersion,
 		});
 
