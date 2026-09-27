@@ -419,9 +419,15 @@ importers:
       '@crustjs/utils':
         specifier: workspace:*
         version: link:../utils
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
       publint:
         specifier: ^0.3.24
         version: 0.3.24
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
       vite-plus:
         specifier: 'catalog:'
         version: 1.0.0-rc.0(@arethetypeswrong/core@0.18.5)(@types/node@24.13.3)(@vitest/ui@5.0.1)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.24)(typescript@7.0.2)(yaml@2.9.0)
@@ -2694,6 +2700,9 @@ packages:
 
   '@types/react@19.2.18':
     resolution: {integrity: sha512-AnzbBERsrLKtk2XSfTbYRLjQPdy116Sty4q+T+Bp3IC4l6jNBvreVPAHmpq9qhXQM7CXZPjLVmGMw9sy+hxQ3w==}
+
+  '@types/semver@7.8.0':
+    resolution: {integrity: sha512-1mAINjtQCXXeLkJ9ehXkwOcBpqtLxiVtKhpUf83DdRNdQKV0iXZpaHYqRr7nj+wvxuJzoAmAwXI+sCNMv1CzLQ==}
 
   '@types/unist@2.0.11':
     resolution: {integrity: sha512-CmBKiL6NNo/OqgmMn95Fk9Whlp2mtvIv+KNpQKN2F4SjvrEesubTRWGYSg+BnWZOnlCaSTU1sMpsBOzgbYhnsA==}
@@ -6809,6 +6818,8 @@ snapshots:
   '@types/react@19.2.18':
     dependencies:
       csstype: 3.2.3
+
+  '@types/semver@7.8.0': {}
 
   '@types/unist@2.0.11': {}
 
