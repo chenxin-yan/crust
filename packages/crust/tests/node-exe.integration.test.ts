@@ -53,7 +53,7 @@ const packageJson = {
 	name: "@scope/node-exe",
 	version: "0.1.0",
 	type: "module",
-	bin: { greet: "src/greet.ts", admin: "src/admin.ts" },
+	bin: { greet: "src/greet.ts", admin: "src/admin.cjs" },
 	crust: { runtime: "node", artifact: "binary", include: ["assets"] },
 	// The builder Node must satisfy both this range and tsdown's own requirements.
 	engines: { node: ">=22" },
@@ -127,12 +127,17 @@ beforeAll(async () => {
 	);
 	writeFile(
 		join(project, "node_modules", "cjs-dep", "index.js"),
-		'const path = require("node:path");\nmodule.exports = { dirnameType: () => typeof __dirname, sep: path.sep };\n',
+		'const path = require("node:path");\nif (require.main === module) console.log("CJS DEP RAN AS MAIN");\nmodule.exports = { dirnameType: () => typeof __dirname, sep: path.sep };\n',
 	);
 	writeFile(
 		join(project, ".env.build"),
-		// Bun expands the reference while preparing snapshots; the binary must embed the same value.
-		"PUBLIC_HOST=file.example\nPUBLIC_ORIGIN=https://$PUBLIC_HOST\nSECRET_TOKEN=do-not-embed\n",
+		"PUBLIC_HOST=file.example\nPUBLIC_ORIGIN=https://$PUBLIC_HOST\nPUBLIC_REGION=file\nSECRET_TOKEN=do-not-embed\n",
+	);
+	// Bun's precedence, then expansion: the later file wins PUBLIC_HOST, the environment PUBLIC_REGION.
+	writeFile(join(project, ".env.local"), "PUBLIC_HOST=later.example\n");
+	writeFile(
+		join(project, "src", "helper.ts"),
+		'if (import.meta.main) console.log("HELPER RAN AS MAIN");\nexport const helper = "imported";\n',
 	);
 	// Real Crust commands: an Extension build hook generates man/, crust.include
 	// ships assets/, and both resolve next to the executable.
@@ -144,8 +149,10 @@ import { Crust, defineExtension, defineExtensionId, resolveArtifactDir } from ${
 import { help } from ${JSON.stringify(extensionsDist)};
 import { mark } from "esm-dep";
 import cjs from "cjs-dep";
+import { helper } from "./helper.ts";
 const man = defineExtension(defineExtensionId("man")).build(() => [{ path: "man/greet.1", content: ".Dd" }]);
-await new Crust("greet", { description: "Greets from a Node binary" })
+// Only this module is main: helper.ts and cjs-dep guard main-only output.
+if (import.meta.main) await new Crust("greet", { description: "Greets from a Node binary" })
 	.extend(man, help())
 	.args({ name: "name", type: "string", required: true })
 	.flags({ name: "shout", type: "boolean" })
@@ -159,7 +166,9 @@ await new Crust("greet", { description: "Greets from a Node binary" })
 			bun: process.versions.bun ?? null,
 			sea: process.getBuiltinModule("node:sea")?.isSea() ?? false,
 			origin: process.env.PUBLIC_ORIGIN ?? null,
+			region: process.env.PUBLIC_REGION ?? null,
 			secret: process.env.SECRET_TOKEN ?? null,
+			helper,
 			cjs: [cjs.dirnameType(), cjs.sep],
 			asset: readFileSync(join(resolveArtifactDir("assets"), "greeting.txt"), "utf8").trim(),
 			man: readFileSync(join(resolveArtifactDir("man"), "greet.1"), "utf8"),
@@ -169,12 +178,14 @@ await new Crust("greet", { description: "Greets from a Node binary" })
 `,
 	);
 	writeFile(
-		join(project, "src", "admin.ts"),
-		`import { Crust } from ${JSON.stringify(coreDist)};
-await new Crust("admin").action(({ stdout }) => {
-	stdout("admin ran");
-	process.exitCode = 3;
-}).execute();
+		join(project, "src", "admin.cjs"),
+		`const { Crust } = require(${JSON.stringify(coreDist)});
+if (require.main === module) {
+	new Crust("admin").action(({ stdout }) => {
+		stdout("admin ran");
+		process.exitCode = 3;
+	}).execute();
+}
 `,
 	);
 	writeFile(
@@ -182,7 +193,19 @@ await new Crust("admin").action(({ stdout }) => {
 		'import { nope } from "not-installed";\nconsole.log(nope);\n',
 	);
 
-	hostBuild = await crustBuild(["--target", "host", "--env-file", ".env.build"]);
+	process.env.PUBLIC_REGION = "environment";
+	try {
+		hostBuild = await crustBuild([
+			"--target",
+			"host",
+			"--env-file",
+			".env.build",
+			"--env-file",
+			".env.local",
+		]);
+	} finally {
+		delete process.env.PUBLIC_REGION;
+	}
 	expect(hostBuild.exitCode, hostBuild.stderr).toBe(0);
 	const alias = NODE_TARGETS.info[host].alias;
 	rootTarball = await pack(join(stageDir, "root"));
@@ -299,6 +322,30 @@ describe.skipIf(seaNodeDir === null || host === null || npm === null)(
 			rmSync(join(stageDir, "kept.txt"));
 		}, 180_000);
 
+		it("requires Bun, which bundles every command, before staging even without validation", async () => {
+			const manifest = readFileSync(join(stageDir, "manifest.json"), "utf8");
+			const path = process.env.PATH;
+			const originalCwd = process.cwd;
+			// The host target's Node is cached by now, so only Bun is missing.
+			process.env.PATH = seaNodeDir!;
+			process.cwd = () => project;
+			let result: Awaited<ReturnType<typeof crustBuild>>;
+			try {
+				result = await captureExecute(new Crust("test").add(buildCommand), [
+					"build",
+					"--target",
+					"host",
+					"--no-validate",
+				]);
+			} finally {
+				process.cwd = originalCwd;
+				process.env.PATH = path;
+			}
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("bun was not found on PATH.");
+			expect(readFileSync(join(stageDir, "manifest.json"), "utf8")).toBe(manifest);
+		}, 120_000);
+
 		it("constructs a bounded non-host target embedding the same Node version", async () => {
 			// Construction evidence only: this host cannot execute the other architecture.
 			const target: NodeTarget =
@@ -337,9 +384,7 @@ describe.skipIf(seaNodeDir === null || host === null || npm === null)(
 			try {
 				const result = await crustBuild(["--target", "host", "--no-validate"]);
 				expect(result.exitCode).toBe(1);
-				expect(result.stderr).toContain(
-					"not-installed is imported in app.mjs but is not included in deps.onlyImport",
-				);
+				expect(result.stderr).toContain('Could not resolve: "not-installed"');
 			} finally {
 				writeFile(join(project, "package.json"), JSON.stringify(packageJson));
 			}
@@ -378,8 +423,10 @@ describe.skipIf(seaNodeDir === null || host === null || npm === null)(
 					node: `v${nodeVersion}`,
 					bun: null,
 					sea: true,
-					origin: "https://file.example",
+					origin: "https://later.example",
+					region: "environment",
 					secret: null,
+					helper: "imported",
 					cjs: ["string", process.platform === "win32" ? "\\" : "/"],
 					asset: "hello from assets",
 					man: ".Dd",

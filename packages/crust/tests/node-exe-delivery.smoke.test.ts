@@ -65,10 +65,10 @@ describe.skipIf(!packageManager || seaNodeDir === null || nodeHost === null)(
 			writeFile(
 				join(carrier, "src", "carrier.ts"),
 				`import { join } from "node:path";
-import { execNodeBinaryBuild, hostTarget, NODE_TARGETS, resolveNodeBinaryCompiler } from ${JSON.stringify(buildHelpers)};
+import { execNodeBinaryBuild, hostTarget, NODE_TARGETS, resolveBunBuildRunner, resolveNodeBinaryCompiler } from ${JSON.stringify(buildHelpers)};
 const [project, outfile] = process.argv.slice(2);
 const compiler = await resolveNodeBinaryCompiler(undefined, project);
-await execNodeBinaryBuild(join(project, "src", "cli.ts"), outfile, true, hostTarget(NODE_TARGETS), {}, project, compiler);
+await execNodeBinaryBuild(join(project, "src", "cli.ts"), outfile, true, hostTarget(NODE_TARGETS), [], project, compiler, resolveBunBuildRunner());
 console.log(JSON.stringify({ tsdown: compiler.backend.packageJsonPath, node: compiler.version }));
 `,
 			);
@@ -163,7 +163,8 @@ console.log(JSON.stringify({ tsdown: compiler.backend.packageJsonPath, node: com
 			);
 
 			// Only the selected node and tar (for @tsdown/exe's cached download) on
-			// PATH, and no NODE_PATH: nothing but the install can supply tsdown.
+			// PATH, and no NODE_PATH: nothing but the install can supply tsdown,
+			// and the carrier's embedded Bun does the Bun bundling.
 			const outfile = join(root, process.platform === "win32" ? "app-binary.exe" : "app-binary");
 			const launcher = join(installDir, "node_modules", manifest.root.name, "bin", "carrier.js");
 			const carried = await runBoundedProcess(

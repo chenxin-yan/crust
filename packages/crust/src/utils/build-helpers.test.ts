@@ -46,7 +46,6 @@ import {
 	resolveNodeBinaryCompiler,
 	resolveNodeBuildRunner,
 	resolveNodeExeBackend,
-	resolveNodeExePublicEnv,
 	resolveTargets,
 	type BunPluginDriverOptions,
 } from "./build-helpers.ts";
@@ -495,32 +494,6 @@ describe("Node binary compiler", () => {
 		await expect(
 			withoutBunOnPath(() => resolveNodeBinaryCompiler(undefined, process.cwd())),
 		).rejects.toThrow("Node is required for node standalone binaries but was not found on PATH.");
-	});
-
-	it("embeds the PUBLIC_* values Bun loads from env files, expanded after precedence", async () => {
-		const directory = await mkdtemp(join(tmpdir(), "crust-node-exe-env-test-"));
-		const saved = process.env.PUBLIC_FROM_ENV;
-		process.env.PUBLIC_FROM_ENV = "environment";
-		try {
-			const first = join(directory, "first.env");
-			const second = join(directory, "second.env");
-			await writeFile(
-				first,
-				"PUBLIC_HOST=first.example\nPUBLIC_URL=https://$PUBLIC_HOST/api\nPUBLIC_FROM_ENV=file\nSECRET=hidden\n",
-			);
-			await writeFile(second, "PUBLIC_HOST=second.example\n");
-			const env = await resolveNodeExePublicEnv([first, second], directory);
-			expect(env).toMatchObject({
-				PUBLIC_HOST: "second.example",
-				PUBLIC_URL: "https://second.example/api",
-				PUBLIC_FROM_ENV: "environment",
-			});
-			expect(env).not.toHaveProperty("SECRET");
-		} finally {
-			if (saved === undefined) delete process.env.PUBLIC_FROM_ENV;
-			else process.env.PUBLIC_FROM_ENV = saved;
-			await rm(directory, { recursive: true, force: true });
-		}
 	});
 });
 
