@@ -149,7 +149,7 @@ jobs:
       # The real-SEA case only runs on Linux under a Node 25.5+ test host.
       - name: Resolve assets inside a Node SEA (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: mise exec node@26.10.0 -- pnpm --dir packages/utils exec vp test run tests/artifacts-runtimes.test.ts
+        run: mise exec node@26.10.0 -- pnpm --dir packages/utils exec vp test run tests/artifacts-runtimes.test.ts -t "single executable"
 
       - name: Carry the Node binary backend through installed distributions (Linux)
         if: matrix.os == 'ubuntu-latest'
