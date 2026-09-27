@@ -88,7 +88,8 @@ async function crustBuild(argv: string[]) {
 
 /** A consumer dependency spec: relative with forward slashes, which npm accepts on every OS. */
 async function pack(dir: string): Promise<string> {
-	const packed = await runBoundedProcess(npm!, ["pack", dir], { cwd: packDir, timeout: 25_000 });
+	// Each command embeds Node; allow time to compress both runtimes on slower CI runners.
+	const packed = await runBoundedProcess(npm!, ["pack", dir], { cwd: packDir, timeout: 120_000 });
 	expect(packed.exitCode, packed.stderr).toBe(0);
 	return `file:../packs/${packed.stdout.trim().split("\n").at(-1)!}`;
 }
