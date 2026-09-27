@@ -487,7 +487,8 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 		minify: runtime === "deno" ? false : (options.minify ?? true),
 	};
 
-	if (selection.artifact === "package") return { ...common, ...selection };
+	if (selection.artifact === "package")
+		return { ...common, runtime: selection.runtime, artifact: selection.artifact };
 	const targetInputs = options.targets?.length ? options.targets : config.targets;
 	const { runtime: binaryRuntime, artifact } = selection;
 	if (binaryRuntime === "bun") {
