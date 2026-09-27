@@ -145,7 +145,7 @@ jobs:
       - name: Build, pack, install, and run Node binaries
         # Git Bash shadows Windows' ZIP-capable tar with GNU tar, which also
         # interprets the archive's drive-letter prefix as a remote host.
-        shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
+        shell: ${{ matrix.os == 'windows-latest' && 'pwsh' || 'bash' }}
         run: pnpm --dir packages/crust exec vp test run tests/node-exe.integration.test.ts
 
       # The real-SEA case only runs on Linux under a Node 25.5+ test host.

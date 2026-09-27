@@ -98,7 +98,7 @@ These are build requirements, not your users' requirements: `engines.node` can k
 
 Every command is its own single-entry executable. Application dependencies are bundled into it; a build fails if an import other than a Node.js built-in would be left for the runtime to resolve. Native addons, computed imports, and `crust.bunPlugins` are not supported.
 
-For each target, tsdown downloads the official Node.js archive of exactly that version once, verifies its checksum, unpacks it, and caches it. Crust does this for every target before replacing `.crust/`, so a failed download or a missing unpacking tool keeps the previous build. Archives are unpacked with the host's `tar`, except Windows targets on non-Windows hosts, which need `unzip`; GNU tar, as on most Linux hosts, also needs `xz` for Linux targets. Cached targets need none of these tools. macOS executables are only code-signed when built on macOS; sign cross-built ones yourself before running them on Apple silicon.
+For each target, tsdown downloads the official Node.js archive of exactly that version once, verifies its checksum, unpacks it, and caches it. Crust does this for every target before replacing `.crust/`, so a failed download or a missing unpacking tool keeps the previous build. Archives are unpacked with the host's `tar`, except Windows targets on non-Windows hosts, which need `unzip`; GNU tar, as on most Linux hosts, also needs `xz` for Linux targets. On Windows, put the native ZIP-capable `tar` before Git Bash's GNU tar on `PATH` (for example, use PowerShell with the standard Windows path). Cached targets need none of these tools. macOS executables are only code-signed when built on macOS; sign cross-built ones yourself before running them on Apple silicon.
 
 ## Run locally
 
