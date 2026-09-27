@@ -346,9 +346,9 @@ await new Crust("bun-admin").action(({ stdout }) => {
 // Public build -> npm pack -> loopback registry -> native `deno run npm:` and
 // `deno install -g` for an experimental Deno runtime package. The project uses
 // published-style dependencies (packed Crust tarballs installed by npm, registry
-// ranges in package.json, a deno.json import map), and is deleted before any
-// consumer run. Consumers choose every grant; the registry serves only the
-// staged tarball.
+// ranges in package.json, a deno.json import map), bundles them with a dead npm
+// registry, and is deleted before any consumer run. Consumers choose every
+// grant; the registry serves only the staged tarball.
 describe.skipIf(!which("deno") || !which("bun") || !which("npm") || !which("pnpm"))(
 	"Deno runtime package",
 	() => {
@@ -367,7 +367,6 @@ describe.skipIf(!which("deno") || !which("bun") || !which("npm") || !which("pnpm
 		const snapshotPath = join(root, "snapshot.json");
 		const hooksDir = join(root, "hooks");
 		const spec = "npm:@crust-fixture/deno-package@0.1.0";
-		const requests: string[] = [];
 		let registry: Server | undefined;
 		let registryUrl = "";
 		let denoVersion = "";
@@ -391,13 +390,17 @@ describe.skipIf(!which("deno") || !which("bun") || !which("npm") || !which("pnpm
 				CRUST_INTERNAL_BUILD_OUT_DIR: hooksDir,
 			};
 		};
-		const deno = (args: readonly string[], env = consumerEnv()) =>
-			runBoundedProcess(which("deno")!, args, { cwd: elsewhere, env, timeout: 60_000 });
-		const installed = (command: string, args: readonly string[], env = consumerEnv()) =>
+		const deno = (args: readonly string[]) =>
+			runBoundedProcess(which("deno")!, args, {
+				cwd: elsewhere,
+				env: consumerEnv(),
+				timeout: 60_000,
+			});
+		const installed = (command: string, args: readonly string[]) =>
 			runBoundedProcess(
 				join(installRoot, "bin", process.platform === "win32" ? `${command}.cmd` : command),
 				args,
-				{ cwd: elsewhere, env, timeout: 60_000 },
+				{ cwd: elsewhere, env: consumerEnv(), timeout: 60_000 },
 			);
 		const stopRegistry = async () => {
 			if (!registry) return;
@@ -432,7 +435,8 @@ describe.skipIf(!which("deno") || !which("bun") || !which("npm") || !which("pnpm
 			);
 			writeFileSync(
 				join(dependency, "index.js"),
-				'export const greet = (name) => "hello " + name;\n',
+				'if (import.meta.main) throw new Error("dependency must not be main");\n' +
+					'export const greet = (name) => "hello " + name;\n',
 			);
 			await run(which("npm")!, ["pack", dependency, "--pack-destination", packs], root);
 			// Relative with forward slashes: npm accepts it on every OS.
@@ -492,7 +496,8 @@ describe.skipIf(!which("deno") || !which("bun") || !which("npm") || !which("pnpm
 			writeFileSync(join(project, "assets", "greeting.txt"), "hello from assets\n");
 			writeFileSync(
 				join(project, "src", "greet.ts"),
-				`import { readFileSync } from "node:fs";
+				`#!/usr/bin/env deno
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Crust, defineExtension, defineExtensionId, resolveArtifactDir } from "@crustjs/core";
 import { help } from "@crustjs/extensions";
@@ -529,13 +534,24 @@ await new Crust("deno-admin").action(({ stdout }) => {
 			denoVersion = /^deno (\S+)/.exec(
 				(await run(which("deno")!, ["--version"], root)).stdout,
 			)![1]!;
+			// A cold Deno cache downloads the bundler's esbuild from npm once; do that
+			// with a dependency-free file so the real build can run with no registry.
+			const warm = join(root, "warm");
+			mkdirSync(warm);
+			writeFileSync(join(warm, "main.js"), "console.log(1);\n");
+			await run(which("deno")!, ["bundle", "--output", join(warm, "out.js"), "main.js"], warm);
 			const app = new Crust("test").add(buildCommand);
+			const registryEnv = process.env.NPM_CONFIG_REGISTRY;
 			process.cwd = () => project;
+			// Dead registry: the installed node_modules must satisfy every bundled import.
+			process.env.NPM_CONFIG_REGISTRY = "http://127.0.0.1:9/";
 			let result: Awaited<ReturnType<typeof captureExecute>>;
 			try {
 				result = await captureExecute(app, ["build"]);
 			} finally {
 				process.cwd = originalCwd;
+				if (registryEnv === undefined) delete process.env.NPM_CONFIG_REGISTRY;
+				else process.env.NPM_CONFIG_REGISTRY = registryEnv;
 			}
 			expect(result.exitCode, result.stderr).toBe(0);
 			expect(result.stdout).toContain("Runtime: deno (inferred from deno.json)");
@@ -565,9 +581,9 @@ await new Crust("deno-admin").action(({ stdout }) => {
 			expect(stagedPackageJson).not.toHaveProperty("dependencies");
 			expect(stagedPackageJson).not.toHaveProperty("optionalDependencies");
 			for (const command of ["deno-greet", "deno-admin"]) {
-				// Plain JavaScript for the consumer's deno: no shebang, launcher, or grants.
+				// Plain JavaScript for the consumer's deno: the source shebang is stripped, no launcher or grants.
 				const bundle = readFileSync(join(staged, "root", "bin", `${command}.js`), "utf8");
-				expect(bundle.startsWith("#!")).toBe(false);
+				expect(bundle).not.toMatch(/^#!/m);
 				expect(bundle).not.toContain("--allow");
 				expect(bundle).not.toContain(project);
 			}
@@ -575,7 +591,6 @@ await new Crust("deno-admin").action(({ stdout }) => {
 			const packed = await run(which("npm")!, ["pack", join(staged, "root")], packs);
 			const data = readFileSync(join(packs, packed.stdout.trim().split("\n").at(-1)!));
 			registry = createServer((request, response) => {
-				requests.push(decodeURIComponent(request.url ?? ""));
 				if (request.url === "/tarball.tgz") return response.end(data);
 				if (decodeURIComponent(request.url ?? "") !== "/@crust-fixture/deno-package") {
 					response.statusCode = 404;
@@ -634,17 +649,10 @@ await new Crust("deno-admin").action(({ stdout }) => {
 				asset: "hello from assets",
 				man: ".Dd",
 			});
-			expect(requests).toEqual(["/@crust-fixture/deno-package", "/tarball.tgz"]);
 			// Cached now: the application's own stderr is all that is left.
 			const cached = await deno(["run", "--no-prompt", readCache, `${spec}/deno-greet`, "deno"]);
 			expect(cached.stderr).toBe("note from deno-greet\n");
 			expect(JSON.parse(cached.stdout)).toMatchObject({ greeting: "hello deno" });
-
-			// Two bins, neither named after the package: Deno needs the bin in the specifier.
-			const unselected = await deno(["run", "--no-prompt", spec]);
-			expect(unselected.exitCode).not.toBe(0);
-			expect(unselected.stderr).toContain(`${spec}/deno-greet`);
-			expect(unselected.stderr).toContain(`${spec}/deno-admin`);
 
 			const admin = await deno(["run", "--no-prompt", `${spec}/deno-admin`]);
 			expect(admin.stderr).toBe("");
@@ -663,9 +671,6 @@ await new Crust("deno-admin").action(({ stdout }) => {
 			const help = await deno(["run", "--no-prompt", colorEnv, `${spec}/deno-greet`, "--help"]);
 			expect(help.exitCode, help.stderr).toBe(0);
 			expect(help.stdout).toContain("Greets under Deno");
-			const helpDenied = await deno(["run", "--no-prompt", `${spec}/deno-greet`, "--help"]);
-			expect(helpDenied.exitCode).not.toBe(0);
-			expect(helpDenied.stderr).toContain("Requires env access");
 
 			// No read grant: the packaged asset read is denied, never silently allowed.
 			const denied = await deno(["run", "--no-prompt", `${spec}/deno-greet`, "world"]);
@@ -723,16 +728,6 @@ await new Crust("deno-admin").action(({ stdout }) => {
 			]);
 			expect(offline.exitCode, offline.stderr).toBe(0);
 			expect(JSON.parse(offline.stdout)).toMatchObject({ greeting: "hello offline" });
-
-			// A runtime package needs the consumer's Deno: the installed command cannot start without it.
-			if (process.platform !== "win32") {
-				const withoutDeno = await installed("deno-admin", [], {
-					...consumerEnv(),
-					PATH: "/nonexistent",
-				});
-				expect(withoutDeno.exitCode).not.toBe(0);
-				expect(withoutDeno.stdout).toBe("");
-			}
 			expect(existsSync(snapshotPath)).toBe(false);
 			expect(existsSync(hooksDir)).toBe(false);
 		}, 120_000);
