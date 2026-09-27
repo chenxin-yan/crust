@@ -694,7 +694,10 @@ describe("build", () => {
 				onLog: (line, stream) => logged.push([line, stream]),
 			});
 			const bunPath = which("bun")!;
-			const bunVersion = execFileSync(bunPath, ["--version"], { encoding: "utf8" }).trim();
+			const bunVersion = execFileSync(bunPath, ["--version"], {
+				encoding: "utf8",
+				timeout: 10_000,
+			}).trim();
 
 			const alias = BUN_TARGETS.info[host!].alias;
 			const root = join(stageDir, "root");
@@ -859,7 +862,7 @@ describe("build", () => {
 		const bunPath = which("bun")!;
 		const run = execFileSync(bunPath, [bundlePath], { encoding: "utf8", timeout: 10_000 });
 		expect(JSON.parse(run)).toEqual({
-			bun: execFileSync(bunPath, ["--version"], { encoding: "utf8" }).trim(),
+			bun: execFileSync(bunPath, ["--version"], { encoding: "utf8", timeout: 10_000 }).trim(),
 			marker: "1",
 		});
 	}, 30_000);
@@ -910,7 +913,10 @@ describe("build", () => {
 		"reads the compiler version in the project directory, like compilation",
 		async () => {
 			const bunPath = which("bun")!;
-			const bunVersion = execFileSync(bunPath, ["--version"], { encoding: "utf8" }).trim();
+			const bunVersion = execFileSync(bunPath, ["--version"], {
+				encoding: "utf8",
+				timeout: 10_000,
+			}).trim();
 			writeProject(
 				{ name: "shim-cli", engines: { bun: bunVersion } },
 				"console.log(process.versions.bun);\n",

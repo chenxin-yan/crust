@@ -82,7 +82,10 @@ console.log(JSON.stringify({ command: runner.command, execPath: process.execPath
 	});
 });
 
-const bunVersion = spawnSync(which("bun")!, ["--version"], { encoding: "utf8" }).stdout.trim();
+const bunVersion = spawnSync(which("bun")!, ["--version"], {
+	encoding: "utf8",
+	timeout: 10_000,
+}).stdout.trim();
 const denoPath = which("deno");
 
 describe("readCompilerVersion", () => {
@@ -93,7 +96,10 @@ describe("readCompilerVersion", () => {
 	});
 
 	it.skipIf(denoPath === null)("reads the version the selected deno reports", async () => {
-		const reported = spawnSync(denoPath!, ["--version"], { encoding: "utf8" }).stdout;
+		const reported = spawnSync(denoPath!, ["--version"], {
+			encoding: "utf8",
+			timeout: 10_000,
+		}).stdout;
 		expect(
 			await readCompilerVersion("deno", { command: denoPath!, env: process.env }, process.cwd()),
 		).toBe(/^deno (\S+)/.exec(reported)![1]);
