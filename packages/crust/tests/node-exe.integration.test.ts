@@ -202,7 +202,13 @@ describe.skipIf(seaNodeDir === null || host === null || npm === null)(
 			const nodePath = join(seaNodeDir!, `node${exe}`);
 			expect(hostBuild.stdout).toContain("Runtime: node (from package.json)");
 			expect(hostBuild.stdout).toContain("Artifact: binary");
-			expect(hostBuild.stdout).toContain(`Compiler: node ${nodeVersion} (${nodePath})`);
+			const compilerLine = `Compiler: node ${nodeVersion} (${nodePath})`;
+			if (process.platform === "win32") {
+				// PATH lookup can preserve PATHEXT's uppercase .EXE spelling.
+				expect(hostBuild.stdout.toLowerCase()).toContain(compilerLine.toLowerCase());
+			} else {
+				expect(hostBuild.stdout).toContain(compilerLine);
+			}
 			const { alias, os, cpu, libc }: TargetInfo = NODE_TARGETS.info[host!];
 			const bins = { greet: `bin/greet-${host}${exe}`, admin: `bin/admin-${host}${exe}` };
 			const manifest = readJson<DistributionManifest>(join(stageDir, "manifest.json"));
