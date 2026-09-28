@@ -1,6 +1,6 @@
-import { validateCommandSections } from "../command/extensions-install.ts";
 import { CrustError, type CaughtError } from "../errors.ts";
 import { toFlagsRecord } from "../parsing/spellings.ts";
+import { validateCommandSections } from "../sections.ts";
 import type {
 	CommandSection,
 	FlagsDef,
