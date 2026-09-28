@@ -2,12 +2,12 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
 import type { CommandSnapshot } from "@crustjs/core";
+import { buildCommandDocumentation } from "@crustjs/core/tooling";
 import { isWithin } from "@crustjs/utils/path";
 import { resolveSourceDir } from "@crustjs/utils/source";
 
 import { loadBundleFiles, requireSkillFrontmatter } from "./bundle.ts";
 import { SkillSourceConflictError } from "./errors.ts";
-import { buildManifest } from "./manifest.ts";
 import { renderSkill } from "./render.ts";
 import { isValidSkillName } from "./skill-name.ts";
 import type { RenderedFile, SkillMeta } from "./types.ts";
@@ -116,7 +116,10 @@ export async function renderSkills(
 		if (!skills.has(generatedMeta.name)) {
 			validateSkillName(generatedMeta.name);
 			requireSkillFrontmatter(generatedMeta, `Skill "${generatedMeta.name}"`);
-			skills.set(generatedMeta.name, renderSkill(buildManifest(snapshot), generatedMeta));
+			skills.set(
+				generatedMeta.name,
+				renderSkill(buildCommandDocumentation(snapshot), generatedMeta),
+			);
 		}
 	}
 
