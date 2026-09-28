@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync, readdirSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 import { Crust, resolveArtifactDir } from "@crustjs/core";
 import { detectPackageManager, isInGitRepo, runSteps, scaffold } from "@crustjs/create";
@@ -194,10 +194,13 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 			...(flags.install !== undefined ? { initial: flags.install } : {}),
 		});
 
-		// Skip git init prompt if already inside a git repository.
-		// Check resolvedDir itself when it exists (e.g. "." or overwrite),
-		// otherwise check the parent (directory will be created by scaffold).
-		const gitCheckDir = existsSync(resolvedDir) ? resolvedDir : resolve(resolvedDir, "..");
+		// Skip git init prompt if already inside a git repository. Git cannot run
+		// in a directory scaffold has not created yet, so probe the nearest
+		// existing ancestor (resolvedDir itself for "." or overwrite).
+		let gitCheckDir = resolvedDir;
+		while (!existsSync(gitCheckDir) && dirname(gitCheckDir) !== gitCheckDir) {
+			gitCheckDir = dirname(gitCheckDir);
+		}
 		const alreadyInRepo = isInGitRepo(gitCheckDir);
 		const initGit = alreadyInRepo
 			? false

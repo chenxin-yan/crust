@@ -510,20 +510,45 @@ describe("create-crust CLI", () => {
 		expect(existsSync(join(tempRoot, "package.json"))).toBe(true);
 	}, 30_000);
 
-	it("skips git initialization inside an existing repository even when --git is passed", async () => {
-		const tempRoot = makeTempRoot("create-crust-git-repo");
-		const repoRoot = join(tempRoot, "repo");
-		const projectName = "inside-repo-cli";
-		const projectDir = join(repoRoot, projectName);
-		mkdirSync(repoRoot, { recursive: true });
+	// Missing intermediate directories must not hide the enclosing repository.
+	it.each(["inside-repo-cli", "missing-parent/inside-repo-cli"])(
+		"skips git initialization for repo/%s even when --git is passed",
+		async (relativeDir) => {
+			const tempRoot = makeTempRoot("create-crust-git-repo");
+			const repoRoot = join(tempRoot, "repo");
+			const projectDir = join(repoRoot, relativeDir);
+			mkdirSync(repoRoot, { recursive: true });
 
-		const gitInit = await runBoundedProcess("git", ["init"], { cwd: repoRoot, timeout: 10_000 });
-		expect(gitInit.exitCode).toBe(0);
+			const gitInit = await runBoundedProcess("git", ["init"], { cwd: repoRoot, timeout: 10_000 });
+			expect(gitInit.exitCode).toBe(0);
+
+			const result = await runCreateCrust([
+				projectDir,
+				"--runtime",
+				"bun",
+				"--no-install",
+				"--git",
+			]);
+
+			expect(result.exitCode, result.stderr).toBe(0);
+			expect(existsSync(join(projectDir, "package.json"))).toBe(true);
+			expect(existsSync(join(projectDir, ".git"))).toBe(false);
+		},
+		30_000,
+	);
+
+	it("initializes git for a destination with missing parents outside any repository", async () => {
+		const tempRoot = makeTempRoot("create-crust-git-outside");
+		const projectDir = join(tempRoot, "missing-parent", "outside-repo-cli");
+		const probe = await runBoundedProcess("git", ["rev-parse", "--is-inside-work-tree"], {
+			cwd: tempRoot,
+			timeout: 10_000,
+		});
+		expect(probe.exitCode, "temp directory must be outside any Git repository").not.toBe(0);
 
 		const result = await runCreateCrust([projectDir, "--runtime", "bun", "--no-install", "--git"]);
 
-		expect(result.exitCode).toBe(0);
-		expect(existsSync(join(projectDir, "package.json"))).toBe(true);
-		expect(existsSync(join(projectDir, ".git"))).toBe(false);
+		expect(result.exitCode, result.stderr).toBe(0);
+		expect(existsSync(join(projectDir, ".git"))).toBe(true);
 	}, 30_000);
 });
