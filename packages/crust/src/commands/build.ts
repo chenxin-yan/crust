@@ -1,10 +1,11 @@
-import { existsSync, realpathSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, rmdirSync, rmSync, statSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 
 import type { BuildReport, InvocationIO } from "@crustjs/core";
 import { dim } from "@crustjs/style";
+import { isErrnoException } from "@crustjs/utils/error";
 import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
 import { isWithin } from "@crustjs/utils/path";
 
@@ -694,9 +695,6 @@ async function prepareEntries(
 // Build command
 // ────────────────────────────────────────────────────────────────────────────
 
-// ponytail: process-local guard; callers must serialize builders in separate processes.
-const activeBuilds = new Set<string>();
-
 /**
  * Stages the publishable npm tree in `<cwd>/.crust` for one runtime/artifact
  * combination: a root package with one `bin/<command>.js` per package.json
@@ -714,13 +712,24 @@ const activeBuilds = new Set<string>();
  * options or package.json, a missing or hung compiler, an engines mismatch) leave the
  * previous `.crust/` stage untouched; later failures leave a wiped stage
  * without a completion `manifest.json`. Overlapping calls for the same real
- * project directory in this process are rejected before staging.
+ * project directory are rejected across processes before staging. An interrupted
+ * process may leave `.crust.lock`; remove it only when no build is running.
  */
 export async function build(options: BuildOptions = {}): Promise<BuildResult> {
 	const cwd = resolve(options.cwd ?? process.cwd());
 	const project = realpathSync(cwd);
-	if (activeBuilds.has(project)) throw new Error(`crust build is already building ${project}`);
-	activeBuilds.add(project);
+	// Outside the stage so wiping .crust cannot release another process's exclusion.
+	const lockDir = join(project, `${CRUST_DIR}.lock`);
+	try {
+		mkdirSync(lockDir);
+	} catch (error) {
+		if (!isErrnoException(error) || error.code !== "EEXIST") throw error;
+		throw new Error(
+			`crust build is already building ${project}, or an interrupted build left its lock.\n` +
+				`  Remove ${lockDir} only after confirming no build is running.`,
+			{ cause: error },
+		);
+	}
 	try {
 		const onLog = options.onLog ?? (() => {});
 		const io: InvocationIO = {
@@ -740,6 +749,6 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
 		const artifacts = await compilers.stage(reports);
 		return { stageDir: plan.stageDir, artifacts, ...(reports ? { reports } : {}) };
 	} finally {
-		activeBuilds.delete(project);
+		rmdirSync(lockDir);
 	}
 }

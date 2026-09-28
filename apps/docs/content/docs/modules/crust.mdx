@@ -100,7 +100,7 @@ crust publish --dry-run
 - `build()` validates `bin`, the `crust` block, and its options with the same errors the CLI prints, selects the compiler (checking `engines` for binaries, and tsdown's requirements for Node.js binaries, whose targets' Node.js binaries are also downloaded and unpacked then), then wipes `.crust/` and stages every package. `manifest.json` is written last.
 - It throws on failure and prints nothing; `onLog` receives each progress line with its stream.
 - `BuildReport` is `@crustjs/core`'s type, re-exported.
-- Overlapping calls for the same project in one process reject before staging. Serialize builds across processes yourself, and consume staged artifacts before rebuilding.
+- Overlapping builds for the same real project directory reject before staging, including across processes and symlink aliases. An exclusive `.crust.lock` directory beside `.crust/` is removed on success or failure. If a process is interrupted, remove the leftover lock only after confirming no build is running. Consume staged artifacts before rebuilding; the lock does not protect publishing or other readers.
 
 ## Build output
 
