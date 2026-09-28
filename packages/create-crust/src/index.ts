@@ -20,23 +20,52 @@ type Runtime = "bun" | "node" | "deno";
 // which would drop `Deno`, `console`, and `process` from `deno check`.
 // `shebang` heads src/cli.ts: package.json `bin` points at the source, so a linked
 // command must start the project's runtime itself.
-const RUNTIME_TEMPLATE_CONTEXT = {
-	bun: { shebang: "#!/usr/bin/env bun", tsLib: '"ESNext"', tsTypes: '"bun"' },
-	node: { shebang: "#!/usr/bin/env node", tsLib: '"ESNext"', tsTypes: '"node"' },
+// The remaining fields are the runtime's package.json differences; `startRunner`
+// runs the built bin. Deno type-checks natively, so it needs no TypeScript packages.
+const RUNTIMES = {
+	bun: {
+		shebang: "#!/usr/bin/env bun",
+		tsLib: '"ESNext"',
+		tsTypes: '"bun"',
+		dev: "bun run src/cli.ts",
+		startRunner: "bun",
+		checkTypes: "tsc --noEmit",
+		engines: undefined,
+		devDependencies: { "@types/bun": "latest", typescript: "^7.0.2" },
+	},
+	node: {
+		shebang: "#!/usr/bin/env node",
+		tsLib: '"ESNext"',
+		tsTypes: '"node"',
+		dev: "node src/cli.ts",
+		startRunner: "node",
+		checkTypes: "tsc --noEmit",
+		engines: { node: ">=22.18" },
+		devDependencies: { "@types/node": "^22", typescript: "^7.0.2" },
+	},
 	deno: {
 		shebang: "#!/usr/bin/env -S deno run -A",
 		tsLib: '"ESNext", "deno.window"',
 		tsTypes: "",
+		dev: "deno run -A src/cli.ts",
+		startRunner: "deno run -A",
+		checkTypes: "deno check src/cli.ts",
+		engines: undefined,
+		devDependencies: {},
 	},
-} satisfies Record<Runtime, { shebang: string; tsLib: string; tsTypes: string }>;
-
-// The bundle inlines these JSON imports, so scaffolded package.json files pin
-// the sibling package versions from the build that produced create-crust.
-const CRUST_TEMPLATE_VERSION_CONTEXT = {
-	crustCoreVersion: corePkg.version,
-	crustExtensionsVersion: extensionsPkg.version,
-	crustCliVersion: crustPkg.version,
-};
+} satisfies Record<
+	Runtime,
+	{
+		shebang: string;
+		tsLib: string;
+		tsTypes: string;
+		dev: string;
+		startRunner: string;
+		checkTypes: string;
+		engines: Record<string, string> | undefined;
+		devDependencies: Record<string, string>;
+	}
+>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Validation
@@ -218,32 +247,55 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 		// `templates` is a crust.include directory staged next to this bundle.
 		const templatePath = (template: string) => join(resolveArtifactDir("templates"), template);
 		const packageManager = runtime === "deno" ? "deno" : detectPackageManager(resolvedDir);
-		// Scaffolding produces no console output, so it is safe inside a spinner.
+		const { shebang, tsLib, tsTypes, dev, startRunner, checkTypes, engines, devDependencies } =
+			RUNTIMES[runtime];
+		// The bundle inlines the sibling package.json imports, so scaffolded projects
+		// pin the Crust versions from the build that produced create-crust.
+		const packageJson = {
+			$schema: "./node_modules/@crustjs/crust/schema/package.json",
+			name,
+			version: "0.0.0",
+			private: true,
+			type: "module",
+			description: "A CLI built with Crust",
+			crust: { runtime, artifact },
+			bin: { [name]: "src/cli.ts" },
+			scripts: {
+				dev,
+				build: "crust build",
+				release: "crust publish",
+				start: `${startRunner} .crust/root/bin/${name}.js`,
+				"check:types": checkTypes,
+			},
+			engines,
+			dependencies: {
+				"@crustjs/core": `^${corePkg.version}`,
+				"@crustjs/extensions": `^${extensionsPkg.version}`,
+			},
+			devDependencies: { "@crustjs/crust": `^${crustPkg.version}`, ...devDependencies },
+		};
 		const context = {
 			name,
 			runtime,
 			artifact,
 			run: packageManager === "deno" ? "deno task" : `${packageManager} run`,
 			install: `${packageManager} install`,
-			...RUNTIME_TEMPLATE_CONTEXT[runtime],
-			...CRUST_TEMPLATE_VERSION_CONTEXT,
+			shebang,
+			tsLib,
+			tsTypes,
+			// JSON.stringify omits `engines` when it is undefined (Bun, Deno).
+			packageJson: JSON.stringify(packageJson, null, "\t"),
 		};
+		// Scaffolding produces no console output, so it is safe inside a spinner.
 		await spinner({
 			message: "Scaffolding project...",
-			task: async () => {
-				await scaffold({
+			task: () =>
+				scaffold({
 					template: templatePath("base"),
 					dest: resolvedDir,
 					context,
 					...(overwrite ? { conflict: "overwrite" } : {}),
-				});
-				await scaffold({
-					template: templatePath(`runtime/${runtime}`),
-					dest: resolvedDir,
-					context,
-					conflict: "overwrite",
-				});
-			},
+				}),
 		});
 
 		if (installDeps) {

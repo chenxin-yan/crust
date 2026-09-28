@@ -11,6 +11,7 @@ export default defineConfig({
 			".pi/",
 			"**/tests/fixtures/",
 			".worktrees/",
+			"packages/create-crust/templates/base/package.json",
 			"packages/create-crust/templates/base/tsconfig.json",
 			"packages/create-crust/templates/base/src/cli.ts",
 			"apps/docs/.source/",
