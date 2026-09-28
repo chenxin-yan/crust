@@ -58,9 +58,28 @@ export type TextEditResult = TextEditState | null;
 // Core handler
 // ────────────────────────────────────────────────────────────────────────────
 
+/** UTF-16 length of the code point starting at `pos` (2 for a surrogate pair). */
+function codePointLengthAt(text: string, pos: number): number {
+	return (text.codePointAt(pos) ?? 0) > 0xffff ? 2 : 1;
+}
+
+/** UTF-16 length of the code point ending at `pos` (2 for a surrogate pair). */
+function codePointLengthBefore(text: string, pos: number): number {
+	return pos >= 2 && (text.codePointAt(pos - 2) ?? 0) > 0xffff ? 2 : 1;
+}
+
+/** True when `char` is exactly one complete code point (no lone surrogate). */
+function isSingleCodePoint(char: string): boolean {
+	const cp = char.codePointAt(0);
+	return cp !== undefined && char.length === (cp > 0xffff ? 2 : 1) && (cp < 0xd800 || cp > 0xdfff);
+}
+
 /**
  * Handle common text-editing keypresses: backspace, delete, left, right,
  * home, end, and printable character insertion.
+ *
+ * Edits step over whole Unicode code points, so surrogate pairs are never
+ * split; `cursorPos` remains a UTF-16 offset into `text`.
  *
  * Returns the updated `{ text, cursorPos }` if the key was handled,
  * or `null` if the key is not a text-editing key (so the caller can
@@ -78,26 +97,24 @@ export function handleTextEdit(
 ): TextEditResult {
 	if (key.name === "backspace") {
 		if (cursorPos === 0) return { text, cursorPos };
-		const before = text.slice(0, cursorPos - 1);
-		const after = text.slice(cursorPos);
-		return { text: before + after, cursorPos: cursorPos - 1 };
+		const start = cursorPos - codePointLengthBefore(text, cursorPos);
+		return { text: text.slice(0, start) + text.slice(cursorPos), cursorPos: start };
 	}
 
 	if (key.name === "delete") {
 		if (cursorPos >= text.length) return { text, cursorPos };
-		const before = text.slice(0, cursorPos);
-		const after = text.slice(cursorPos + 1);
-		return { text: before + after, cursorPos };
+		const end = cursorPos + codePointLengthAt(text, cursorPos);
+		return { text: text.slice(0, cursorPos) + text.slice(end), cursorPos };
 	}
 
 	if (key.name === "left") {
 		if (cursorPos === 0) return { text, cursorPos };
-		return { text, cursorPos: cursorPos - 1 };
+		return { text, cursorPos: cursorPos - codePointLengthBefore(text, cursorPos) };
 	}
 
 	if (key.name === "right") {
 		if (cursorPos >= text.length) return { text, cursorPos };
-		return { text, cursorPos: cursorPos + 1 };
+		return { text, cursorPos: cursorPos + codePointLengthAt(text, cursorPos) };
 	}
 
 	if (key.name === "home") {
@@ -109,10 +126,10 @@ export function handleTextEdit(
 	}
 
 	// Printable character — insert at cursor position
-	if (key.char.length === 1 && !key.ctrl && !key.meta) {
+	if (isSingleCodePoint(key.char) && !key.ctrl && !key.meta) {
 		const before = text.slice(0, cursorPos);
 		const after = text.slice(cursorPos);
-		return { text: before + key.char + after, cursorPos: cursorPos + 1 };
+		return { text: before + key.char + after, cursorPos: cursorPos + key.char.length };
 	}
 
 	// Not a text-editing key
