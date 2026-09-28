@@ -1400,12 +1400,19 @@ describe("buildEntrypoint", () => {
 		const helpersUrl = pathToFileURL(resolve(import.meta.dirname, "build-helpers.ts")).href;
 
 		/**
-		 * Runs a Bun host that prepares hung entries (each with a stderr-holding descendant),
+		 * Runs a host that prepares hung entries (each with a stderr-holding descendant),
 		 * then interrupts itself as `mode` describes once all are alive. `concurrent`
 		 * prepares two projects at once and sends SIGINT.
 		 */
 		async function runInterruptedHost(
 			mode: "SIGINT" | "SIGTERM" | "SIGHUP" | "SIGQUIT" | "exit" | "listener" | "concurrent",
+			{
+				runtime = "bun",
+				listenerSignal = "SIGINT",
+			}: {
+				runtime?: "bun" | "node";
+				listenerSignal?: "SIGINT" | "SIGQUIT";
+			} = {},
 		) {
 			const directory = await mkdtemp(join(tmpdir(), "crust-entry-interrupt-test-"));
 			tempDirs.push(directory);
@@ -1433,14 +1440,15 @@ describe("buildEntrypoint", () => {
 					`import { join } from "node:path";\n` +
 					`import { buildEntrypoint } from ${JSON.stringify(helpersUrl)};\n` +
 					`const mode = ${JSON.stringify(mode)};\n` +
-					`if (mode === "listener") process.on("SIGINT", () => console.log("host listener"));\n` +
+					`const listenerSignal = ${JSON.stringify(listenerSignal)};\n` +
+					`if (mode === "listener") process.on(listenerSignal, () => console.log("host listener"));\n` +
 					`const io = { stdout: () => {}, stderr: () => {} };\n` +
 					`const prepared = ${JSON.stringify(projects)}.map((project) => buildEntrypoint(join(project, "cli.ts"), join(project, "dist"), [], io, project, undefined, 60_000));\n` +
 					`const poll = setInterval(() => {\n` +
 					`  if (!${JSON.stringify(pidFiles)}.every((pidFile) => existsSync(pidFile))) return;\n` +
 					`  clearInterval(poll);\n` +
 					`  if (mode === "exit") process.exit(3);\n` +
-					`  process.kill(process.pid, mode === "listener" || mode === "concurrent" ? "SIGINT" : mode);\n` +
+					`  process.kill(process.pid, mode === "listener" ? listenerSignal : mode === "concurrent" ? "SIGINT" : mode);\n` +
 					`}, 20);\n` +
 					`for (const preparation of prepared) {\n` +
 					`  await preparation.catch((error) => console.log(error.message, ${JSON.stringify(lifetimeEvents)}.map((event) => process.listenerCount(event)).join()));\n` +
@@ -1449,10 +1457,11 @@ describe("buildEntrypoint", () => {
 			);
 
 			// SIGQUIT's default action dumps core; `exec` keeps the host's own exit signal.
-			const run = runBoundedProcess("sh", ["-c", 'ulimit -c 0; exec bun "$0"', host], {
-				cwd: directory,
-				timeout: 15_000,
-			});
+			const run = runBoundedProcess(
+				"sh",
+				["-c", 'ulimit -c 0; exec "$0" "$1"', runtime === "node" ? process.execPath : "bun", host],
+				{ cwd: directory, timeout: 15_000 },
+			);
 			// Recorded even when the host fails, so teardown still kills the entry groups.
 			await run.catch(() => {});
 			const recorded: number[] = [];
@@ -1474,7 +1483,10 @@ describe("buildEntrypoint", () => {
 			.each(["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const)(
 			"kills the entry group and keeps default termination when the host gets %s",
 			async (signal) => {
-				const result = await runInterruptedHost(signal);
+				// Bun 1.4 does not terminate on an unhandled SIGQUIT; Node preserves its default action.
+				const result = await runInterruptedHost(signal, {
+					runtime: signal === "SIGQUIT" ? "node" : "bun",
+				});
 
 				expect(result).toMatchObject({ exitCode: null, signal, stdout: "" });
 			},
@@ -1489,15 +1501,15 @@ describe("buildEntrypoint", () => {
 			20_000,
 		);
 
-		it.skipIf(process.platform === "win32")(
-			"leaves an existing host SIGINT listener in charge",
-			async () => {
-				const result = await runInterruptedHost("listener");
+		it.skipIf(process.platform === "win32").each(["SIGINT", "SIGQUIT"] as const)(
+			"kills the entry group and leaves an existing Bun host %s listener in charge",
+			async (signal) => {
+				const result = await runInterruptedHost("listener", { listenerSignal: signal });
 
 				expect(result).toMatchObject({ exitCode: 0, signal: null });
 				// The host listener still ran and remains the only lifetime listener.
 				expect(result.stdout).toBe(
-					"host listener\nCommand Snapshot preparation was interrupted by SIGINT. 1,0,0,0,0\n",
+					`host listener\nCommand Snapshot preparation was interrupted by ${signal}. ${signal === "SIGINT" ? "1,0,0,0,0" : "0,0,0,1,0"}\n`,
 				);
 			},
 			20_000,
