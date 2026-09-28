@@ -10,11 +10,12 @@ import {
 import { MAN } from "./extension.ts";
 
 function escapeMdocBodyLine(line: string): string {
-	// Both `.` and `'` start roff control lines.
-	return /^[.']/.test(line) ? `\\&${line}` : line;
+	// Plain text: backslashes would start roff escapes; `.` and `'` start control lines.
+	const text = macroArgument(line);
+	return /^[.']/.test(text) ? `\\&${text}` : text;
 }
 function macroArgument(text: string): string {
-	// Backslashes would otherwise start roff escape sequences inside heading macros.
+	// Backslashes would otherwise start roff escape sequences (`\e` prints a literal one).
 	return text.replace(/\\/g, "\\e");
 }
 function shTitle(title: string): string {
@@ -97,7 +98,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		`.Nd ${ndArgument(description)}`,
 		".Sh SYNOPSIS",
 		".Bd -literal",
-		model.usage,
+		...model.usage.split("\n").map(escapeMdocBodyLine),
 		".Ed",
 		".Sh DESCRIPTION",
 	];

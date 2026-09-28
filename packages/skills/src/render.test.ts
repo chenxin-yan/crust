@@ -1,11 +1,12 @@
 import type { ArgDef } from "@crustjs/core";
-import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
+import { Crust, defineCommand, defineContext, defineExtensionId, defineFlag } from "@crustjs/core";
+import { buildCommandDocumentation, type CommandDocumentation } from "@crustjs/core/tooling";
 import { describe, expect, it } from "vite-plus/test";
 
 import { makeCommand, snapshotFixture } from "../tests/fixtures.ts";
-import { buildManifest } from "./manifest.ts";
+import { SKILLS } from "./extension.ts";
 import { renderSkill } from "./render.ts";
-import type { ManifestNode, RenderedFile, SkillMeta } from "./types.ts";
+import type { RenderedFile, SkillMeta } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
@@ -37,14 +38,14 @@ function expectTextContent(file: RenderedFile | undefined): string {
 }
 
 /**
- * Builds a simple manifest from a makeCommand call for testing.
+ * Builds a simple documentation tree from a makeCommand call for testing.
  */
-async function buildSimpleManifest(): Promise<ManifestNode> {
+async function buildSimpleDocumentation(): Promise<CommandDocumentation> {
 	const cmd = makeCommand({
 		meta: { name: "test-cli", description: "A test CLI tool" },
 		run() {},
 	});
-	return buildManifest(await snapshotFixture(cmd));
+	return buildCommandDocumentation(await snapshotFixture(cmd));
 }
 
 describe("renderSkill", () => {
@@ -54,9 +55,9 @@ describe("renderSkill", () => {
 
 	describe("SKILL.md content", () => {
 		it("includes version in metadata when provided", async () => {
-			const manifest = await buildSimpleManifest();
+			const documentation = await buildSimpleDocumentation();
 			const meta: SkillMeta = { ...baseMeta, version: "1.2.3" };
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const skill = findFile(files, "SKILL.md");
 
 			expect(skill?.content).toContain("metadata:");
@@ -64,8 +65,8 @@ describe("renderSkill", () => {
 		});
 
 		it("omits the metadata block when no version is provided", async () => {
-			const manifest = await buildSimpleManifest();
-			const files = renderSkill(manifest, baseMeta);
+			const documentation = await buildSimpleDocumentation();
+			const files = renderSkill(documentation, baseMeta);
 			const skill = findFile(files, "SKILL.md");
 
 			expect(skill?.content).not.toContain("metadata:");
@@ -73,8 +74,8 @@ describe("renderSkill", () => {
 		});
 
 		it("includes usage section when root is runnable", async () => {
-			const manifest = await buildSimpleManifest();
-			const files = renderSkill(manifest, baseMeta);
+			const documentation = await buildSimpleDocumentation();
+			const files = renderSkill(documentation, baseMeta);
 			const skill = findFile(files, "SKILL.md");
 
 			expect(skill?.content).toContain("## Usage");
@@ -91,13 +92,13 @@ describe("renderSkill", () => {
 				subCommands: { child },
 			});
 
-			const manifest = buildManifest(await snapshotFixture(root));
+			const documentation = buildCommandDocumentation(await snapshotFixture(root));
 			const meta: SkillMeta = {
 				name: "app",
 				description: "App",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const skill = findFile(files, "SKILL.md");
 
 			// Should not contain the runnable usage section
@@ -105,12 +106,12 @@ describe("renderSkill", () => {
 		});
 
 		it("uses the literal skill name in when-to-use text", async () => {
-			const manifest = await buildSimpleManifest();
+			const documentation = await buildSimpleDocumentation();
 			const meta: SkillMeta = {
 				...baseMeta,
 				name: "use-my-tool",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const skill = findFile(files, "SKILL.md");
 
 			expect(skill?.content).toContain(
@@ -119,12 +120,12 @@ describe("renderSkill", () => {
 		});
 
 		it("escapes YAML-special characters in description", async () => {
-			const manifest = await buildSimpleManifest();
+			const documentation = await buildSimpleDocumentation();
 			const meta: SkillMeta = {
 				...baseMeta,
 				description: 'Deploy: the "app" to {production}',
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const skill = findFile(files, "SKILL.md");
 
 			// Should be wrapped in double quotes with internal quotes escaped
@@ -132,8 +133,8 @@ describe("renderSkill", () => {
 		});
 
 		it("does not quote YAML values that are safe plain scalars", async () => {
-			const manifest = await buildSimpleManifest();
-			const files = renderSkill(manifest, baseMeta);
+			const documentation = await buildSimpleDocumentation();
+			const files = renderSkill(documentation, baseMeta);
 			const skill = findFile(files, "SKILL.md");
 
 			// "A test CLI tool" has no special chars — should not be quoted
@@ -155,7 +156,7 @@ describe("renderSkill", () => {
 				meta: { name: "app", description: "Build | deploy" },
 				subCommands: { child },
 			});
-			const files = renderSkill(buildManifest(await snapshotFixture(root)), baseMeta);
+			const files = renderSkill(buildCommandDocumentation(await snapshotFixture(root)), baseMeta);
 			const skill = findFile(files, "SKILL.md");
 
 			expect(skill).toBeDefined();
@@ -184,13 +185,13 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(await snapshotFixture(hybrid));
+			const documentation = buildCommandDocumentation(await snapshotFixture(hybrid));
 			const meta: SkillMeta = {
 				name: "hybrid",
 				description: "Test",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const skill = findFile(files, "SKILL.md");
 
 			// hybrid is both runnable and has children
@@ -232,13 +233,13 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(await snapshotFixture(cmd));
+			const documentation = buildCommandDocumentation(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "copy",
 				description: "Copy",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const copy = findFile(files, "commands/copy.md");
 
 			expect(copy?.content).toContain("## Arguments");
@@ -261,13 +262,13 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(await snapshotFixture(cmd));
+			const documentation = buildCommandDocumentation(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "serve",
 				description: "Serve",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const serve = findFile(files, "commands/serve.md");
 
 			expect(serve?.content).toContain("Default: `3000`");
@@ -284,7 +285,7 @@ describe("renderSkill", () => {
 			const app = new Crust("test-cli")
 				.provide(auth())
 				.add(defineCommand("deploy", (command) => command.action(() => {})));
-			const files = renderSkill(buildManifest(await snapshotFixture(app)), baseMeta);
+			const files = renderSkill(buildCommandDocumentation(await snapshotFixture(app)), baseMeta);
 			const deploy = findFile(files, "commands/deploy.md");
 
 			expect(deploy?.content).toContain("--api-key");
@@ -316,13 +317,13 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(await snapshotFixture(cmd));
+			const documentation = buildCommandDocumentation(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "build",
 				description: "Build",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const build = findFile(files, "commands/build.md");
 
 			expect(build?.content).toContain("## Flags");
@@ -348,13 +349,13 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(await snapshotFixture(cmd));
+			const documentation = buildCommandDocumentation(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "lint",
 				description: "Lint",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const lint = findFile(files, "commands/lint.md");
 
 			expect(lint?.content).toContain("Can be specified multiple times");
@@ -374,13 +375,13 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(await snapshotFixture(cmd));
+			const documentation = buildCommandDocumentation(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "install",
 				description: "Install",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const install = findFile(files, "commands/install.md");
 
 			expect(install?.content).toContain("install <packages...>");
@@ -392,13 +393,13 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(await snapshotFixture(cmd));
+			const documentation = buildCommandDocumentation(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "serve",
 				description: "Serve",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const serve = findFile(files, "commands/serve.md");
 
 			expect(serve?.content).toContain("[Skill Overview](../SKILL.md)");
@@ -426,8 +427,8 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(await snapshotFixture(cmd));
-			const files = renderSkill(manifest, {
+			const documentation = buildCommandDocumentation(await snapshotFixture(cmd));
+			const files = renderSkill(documentation, {
 				name: "deploy",
 				description: "Deploy",
 				version: "1.0.0",
@@ -449,13 +450,13 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(await snapshotFixture(cmd));
+			const documentation = buildCommandDocumentation(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "serve",
 				description: "Serve",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const serve = findFile(files, "commands/serve.md");
 
 			expect(serve?.content).not.toContain("## Arguments");
@@ -469,13 +470,13 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(await snapshotFixture(cmd));
+			const documentation = buildCommandDocumentation(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "test",
 				description: "Test",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const test = findFile(files, "commands/test.md");
 
 			expect(test?.content).toContain("| `file` | string | No | - |");
@@ -490,13 +491,13 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(await snapshotFixture(cmd));
+			const documentation = buildCommandDocumentation(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "test",
 				description: "Test",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const test = findFile(files, "commands/test.md");
 
 			expect(test?.content).toContain("| `--quiet`, `--no-quiet` | boolean | No | - |");
@@ -526,13 +527,13 @@ describe("renderSkill", () => {
 				subCommands: { remote },
 			});
 
-			const manifest = buildManifest(await snapshotFixture(root));
+			const documentation = buildCommandDocumentation(await snapshotFixture(root));
 			const meta: SkillMeta = {
 				name: "git",
 				description: "Git",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const remoteFile = findFile(files, "commands/remote.md");
 
 			expect(remoteFile?.content).toContain("## Subcommands");
@@ -559,13 +560,13 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(await snapshotFixture(parent));
+			const documentation = buildCommandDocumentation(await snapshotFixture(parent));
 			const meta: SkillMeta = {
 				name: "parent",
 				description: "Parent",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const parentFile = findFile(files, "commands/parent.md");
 
 			expect(parentFile?.content).toContain("## Usage");
@@ -584,13 +585,13 @@ describe("renderSkill", () => {
 				subCommands: { sub },
 			});
 
-			const manifest = buildManifest(await snapshotFixture(parent));
+			const documentation = buildCommandDocumentation(await snapshotFixture(parent));
 			const meta: SkillMeta = {
 				name: "parent",
 				description: "Parent",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const parentFile = findFile(files, "commands/parent.md");
 
 			expect(parentFile?.content).not.toContain("## Usage");
@@ -618,8 +619,8 @@ describe("renderSkill", () => {
 				subCommands: { sub },
 			});
 
-			const manifest = buildManifest(await snapshotFixture(parent));
-			const files = renderSkill(manifest, {
+			const documentation = buildCommandDocumentation(await snapshotFixture(parent));
+			const files = renderSkill(documentation, {
 				name: "parent",
 				description: "Parent",
 				version: "1.0.0",
@@ -645,13 +646,13 @@ describe("renderSkill", () => {
 				subCommands: { remote },
 			});
 
-			const manifest = buildManifest(await snapshotFixture(root));
+			const documentation = buildCommandDocumentation(await snapshotFixture(root));
 			const meta: SkillMeta = {
 				name: "git",
 				description: "Git",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const remoteFile = findFile(files, "commands/remote.md");
 
 			// commands/remote.md → commands/remote/add.md should be "remote/add.md"
@@ -678,13 +679,13 @@ describe("renderSkill", () => {
 				subCommands: { serve, build },
 			});
 
-			const manifest = buildManifest(await snapshotFixture(root));
+			const documentation = buildCommandDocumentation(await snapshotFixture(root));
 			const meta: SkillMeta = {
 				name: "app",
 				description: "App CLI",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const allPaths = new Set(files.map((f) => f.path));
 			expect([...allPaths].sort()).toEqual([
 				"SKILL.md",
@@ -723,13 +724,13 @@ describe("renderSkill", () => {
 				subCommands: { remote },
 			});
 
-			const manifest = buildManifest(await snapshotFixture(root));
+			const documentation = buildCommandDocumentation(await snapshotFixture(root));
 			const meta: SkillMeta = {
 				name: "git",
 				description: "Git",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const skillContent = expectTextContent(findFile(files, "SKILL.md"));
 			const commandFiles = files.filter((f) => f.path.startsWith("commands/")).map((f) => f.path);
 			expect(commandFiles.sort()).toEqual([
@@ -807,14 +808,14 @@ describe("renderSkill", () => {
 				subCommands: { clone, remote },
 			});
 
-			const manifest = buildManifest(await snapshotFixture(root));
+			const documentation = buildCommandDocumentation(await snapshotFixture(root));
 			const meta: SkillMeta = {
 				name: "git",
 				description:
 					"A distributed version control system. Use when working with git repositories.",
 				version: "2.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 
 			// Verify file count: SKILL.md + 5 commands
 			// (git, clone, remote, remote/add, remote/remove)
@@ -885,13 +886,13 @@ describe("renderSkill", () => {
 				subCommands: { level2 },
 			});
 
-			const manifest = buildManifest(await snapshotFixture(root));
+			const documentation = buildCommandDocumentation(await snapshotFixture(root));
 			const meta: SkillMeta = {
 				name: "root",
 				description: "Root",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 
 			const deepFile = findFile(files, "commands/level2/level3/deep.md");
 			expect(deepFile).toBeDefined();
@@ -912,13 +913,13 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(await snapshotFixture(cmd));
+			const documentation = buildCommandDocumentation(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "test",
 				description: "Test tool",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const testContent = expectTextContent(findFile(files, "commands/test.md"));
 
 			// Pipe should be escaped inside table cells
@@ -943,13 +944,13 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(await snapshotFixture(cmd));
+			const documentation = buildCommandDocumentation(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "test",
 				description: "Test tool",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const test = findFile(files, "commands/test.md");
 
 			// Outside tables, the raw description is preserved as-is
@@ -969,13 +970,13 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(await snapshotFixture(cmd));
+			const documentation = buildCommandDocumentation(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "test",
 				description: "Test tool",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const test = findFile(files, "commands/test.md");
 
 			expect(test?.content).toContain("File path \\| URL to process");
@@ -987,16 +988,180 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(await snapshotFixture(cmd));
+			const documentation = buildCommandDocumentation(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "app",
 				description: "App",
 				version: "1.0.0",
 			};
-			const files = renderSkill(manifest, meta);
+			const files = renderSkill(documentation, meta);
 			const app = findFile(files, "commands/app.md");
 
 			expect(app?.content).not.toContain("Parent:");
+		});
+	});
+
+	// ────────────────────────────────────────────────────────────────────────
+	// Skills-specific projection of Core command documentation
+	// ────────────────────────────────────────────────────────────────────────
+
+	describe("command documentation projection", () => {
+		async function render(fixture: Parameters<typeof snapshotFixture>[0]): Promise<RenderedFile[]> {
+			return renderSkill(buildCommandDocumentation(await snapshotFixture(fixture)), baseMeta);
+		}
+
+		it("rejects a direct subcommand that would overwrite the root command file", async () => {
+			const child = makeCommand({ meta: { name: "demo" }, run: () => {} });
+			const root = makeCommand({ meta: { name: "demo" }, subCommands: { demo: child } });
+
+			await expect(render(root)).rejects.toThrow(
+				'Cannot generate skills: commands "demo" and "demo demo" both render to "commands/demo.md".',
+			);
+		});
+
+		it("omits hidden commands, including a hidden child named like the root", async () => {
+			const root = makeCommand({
+				meta: { name: "demo" },
+				subCommands: {
+					demo: makeCommand({ meta: { name: "demo", hidden: true }, run() {} }),
+					visible: makeCommand({ meta: { name: "visible" }, run() {} }),
+					secret: makeCommand({ meta: { name: "secret", hidden: true }, run() {} }),
+				},
+			});
+
+			const files = await render(root);
+
+			expect(files.map((file) => file.path)).toEqual([
+				"SKILL.md",
+				"commands/demo.md",
+				"commands/visible.md",
+			]);
+			expect(expectTextContent(findFile(files, "commands/demo.md"))).toContain(
+				"- [`visible`](visible.md)\n\n",
+			);
+		});
+
+		it("trims and lowercases command names in files, invocations, and links", async () => {
+			const root = makeCommand({
+				meta: { name: "  My-CLI  " },
+				subCommands: { Sub: makeCommand({ meta: { name: "Sub" }, run() {} }) },
+				run() {},
+			});
+
+			const files = await render(root);
+			const skill = expectTextContent(findFile(files, "SKILL.md"));
+
+			expect(files.map((file) => file.path)).toEqual([
+				"SKILL.md",
+				"commands/my-cli.md",
+				"commands/sub.md",
+			]);
+			expect(skill).toContain(
+				"| `my-cli sub` | runnable | - | [commands/sub.md](commands/sub.md) |",
+			);
+			expect(skill).toContain("You should see [my-cli](commands/my-cli.md) for usage details.");
+			expect(expectTextContent(findFile(files, "commands/my-cli.md"))).toContain(
+				"- [`sub`](sub.md)",
+			);
+		});
+
+		it("renders custom usage verbatim and generated usage otherwise", async () => {
+			const root = makeCommand({
+				meta: { name: "app" },
+				subCommands: {
+					build: makeCommand({
+						meta: { name: "build", usage: "build [options] <entry>" },
+						run() {},
+					}),
+				},
+				run() {},
+			});
+
+			const files = await render(root);
+
+			expect(findFile(files, "commands/build.md")?.content).toContain(
+				"```\nbuild [options] <entry>\n```",
+			);
+			expect(findFile(files, "commands/app.md")?.content).toContain("```\napp\n```");
+		});
+
+		it("renders only sections whose audience includes skills", async () => {
+			const other = defineExtensionId("acme:other");
+			const cmd = makeCommand({
+				meta: {
+					name: "deploy",
+					sections: [
+						{ title: "Skills only", body: "visible", only: [SKILLS] },
+						{ title: "Other only", body: "hidden", only: [other] },
+						{ title: "Not skills", body: "hidden", except: [SKILLS] },
+						{ title: "Everyone", body: "shared" },
+					],
+				},
+				run() {},
+			});
+
+			const deploy = expectTextContent(findFile(await render(cmd), "commands/deploy.md"));
+
+			expect(deploy).toContain("## Skills only\nvisible\n\n## Everyone\nshared\n\n## Usage");
+			expect(deploy).not.toContain("hidden");
+		});
+
+		it("sorts subcommands and flags alphabetically", async () => {
+			const group = makeCommand({
+				meta: { name: "group" },
+				subCommands: {
+					zeta: makeCommand({ meta: { name: "zeta" }, run() {} }),
+					alpha: makeCommand({ meta: { name: "alpha" }, run() {} }),
+					beta: makeCommand({ meta: { name: "beta" }, run() {} }),
+				},
+				flags: { zulu: { type: "boolean", noNegate: true }, able: { type: "string" } },
+				run() {},
+			});
+
+			const files = await render(makeCommand({ meta: { name: "app" }, subCommands: { group } }));
+			const content = expectTextContent(findFile(files, "commands/group.md"));
+
+			expect(files.map((file) => file.path).slice(3)).toEqual([
+				"commands/group/alpha.md",
+				"commands/group/beta.md",
+				"commands/group/zeta.md",
+			]);
+			expect(content).toContain("| `--able` | string | No | - |\n| `--zulu` | boolean | No | - |");
+			expect(content).toContain(
+				"- [`alpha`](group/alpha.md)\n- [`beta`](group/beta.md)\n- [`zeta`](group/zeta.md)",
+			);
+		});
+
+		it("formats defaults like Core help and displays other value types as strings", async () => {
+			const schemaArg = {
+				name: "target",
+				schema: {
+					"~standard": { version: 1, vendor: "test", validate: (value: unknown) => ({ value }) },
+				},
+			} as ArgDef;
+			const cmd = makeCommand({
+				meta: { name: "serve" },
+				args: [schemaArg],
+				flags: {
+					port: { type: "number", default: 8080 },
+					host: { type: "string", default: "localhost" },
+					watch: { type: "boolean", default: true },
+					entry: { type: "string", multiple: true, default: ["src/index.ts", "src/cli.ts"] },
+					root: { type: "path" },
+				},
+				run() {},
+			});
+
+			const serve = expectTextContent(findFile(await render(cmd), "commands/serve.md"));
+
+			expect(serve).toContain("| `target` | string | No | - |");
+			expect(serve).toContain(
+				"| `--entry` | string | No | Can be specified multiple times. Default: `src/index.ts, src/cli.ts` |",
+			);
+			expect(serve).toContain('| `--host` | string | No | Default: `"localhost"` |');
+			expect(serve).toContain("| `--port` | number | No | Default: `8080` |");
+			expect(serve).toContain("| `--root` | string | No | - |");
+			expect(serve).toContain("| `--watch`, `--no-watch` | boolean | No | Default: `true` |");
 		});
 	});
 });

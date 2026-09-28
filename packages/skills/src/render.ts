@@ -1,10 +1,20 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Markdown renderers — produce distributable skill files from manifest
+// Markdown renderers — produce distributable skill files from Core command documentation
 // ────────────────────────────────────────────────────────────────────────────
 
 import { posix } from "node:path";
 
-import type { ManifestArg, ManifestFlag, ManifestNode, RenderedFile, SkillMeta } from "./types.ts";
+import {
+	formatDefault,
+	sectionsFor,
+	type CommandDocumentation,
+	type DocumentationArg,
+	type DocumentationFlag,
+} from "@crustjs/core/tooling";
+import type { BaseValueType } from "@crustjs/utils/primitive";
+
+import { SKILLS } from "./extension.ts";
+import type { RenderedFile, SkillMeta } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Text escaping helpers
@@ -41,31 +51,35 @@ function escapeTableCell(value: string): string {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Renders a complete set of skill files from a manifest tree and metadata.
+ * Renders a complete set of skill files from a command documentation tree and metadata.
  *
  * Produces:
  * - `SKILL.md` — entrypoint with frontmatter and lazy-load instructions
  * - `commands/` — per-command markdown files mirroring the command hierarchy
  *
- * @param manifest - The canonical manifest tree from {@link buildManifest}
+ * Command names are trimmed and lowercased for file names and invocations; children and
+ * flags render alphabetically, and only sections whose audience includes skills render.
+ *
+ * @param root - Core documentation tree from `buildCommandDocumentation()`
  * @param meta - Skill metadata for frontmatter and naming
  * @returns Array of rendered files ready for writing
  */
-export function renderSkill(manifest: ManifestNode, meta: SkillMeta): RenderedFile[] {
+export function renderSkill(root: CommandDocumentation, meta: SkillMeta): RenderedFile[] {
+	assertCommandFiles(root, new Map());
 	const files: RenderedFile[] = [];
 
 	// Collect all command nodes from the tree (including the root)
-	const allNodes = collectNodes(manifest);
+	const allNodes = collectNodes(root);
 
 	// 1. SKILL.md — entrypoint
 	files.push({
 		path: "SKILL.md",
-		content: renderSkillMd(manifest, meta, allNodes),
+		content: renderSkillMd(root, meta, allNodes),
 	});
 
 	// 2. commands/ — per-command markdown files
 	for (const node of allNodes) {
-		files.push({ path: commandFilePath(node), content: renderCommand(node, manifest) });
+		files.push({ path: commandFilePath(node), content: renderCommand(node, root) });
 	}
 
 	return files;
@@ -76,15 +90,28 @@ export function renderSkill(manifest: ManifestNode, meta: SkillMeta): RenderedFi
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Collects all nodes in the manifest tree via depth-first traversal.
+ * Collects all nodes in the documentation tree via depth-first traversal.
  * Includes the root node and all descendants.
  */
-function collectNodes(root: ManifestNode): ManifestNode[] {
-	const nodes: ManifestNode[] = [root];
-	for (const child of root.children) {
+function collectNodes(root: CommandDocumentation): CommandDocumentation[] {
+	const nodes: CommandDocumentation[] = [root];
+	for (const child of sortedChildren(root)) {
 		nodes.push(...collectNodes(child));
 	}
 	return nodes;
+}
+
+function sortedChildren(node: CommandDocumentation): CommandDocumentation[] {
+	return [...node.children].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function normalizeName(raw: string): string {
+	return raw.trim().toLowerCase();
+}
+
+/** Raw command names that become file-name segments under `commands/`; the root keeps its own. */
+function fileSegments(node: CommandDocumentation): readonly string[] {
+	return node.path.length <= 1 ? [node.name] : node.path.slice(1);
 }
 
 /**
@@ -93,24 +120,73 @@ function collectNodes(root: ManifestNode): ManifestNode[] {
  * The root command maps to `commands/<root-name>.md`.
  * Subcommands strip the root prefix:
  *   `["cli", "remote", "add"]` → `commands/remote/add.md`
- *
- * Single-segment paths (root only) map to `commands/<name>.md`.
  */
-function commandFilePath(node: ManifestNode): string {
-	if (node.path.length <= 1) {
-		return `commands/${node.name}.md`;
+function commandFilePath(node: CommandDocumentation): string {
+	return `commands/${fileSegments(node).map(normalizeName).join("/")}.md`;
+}
+
+/**
+ * Core accepts any non-empty command name, but each one becomes a file-name segment under
+ * `commands/`. Rejects names that would traverse out of it or that normalize onto another
+ * command's file or directory, before any output is replaced.
+ */
+function assertCommandFiles(node: CommandDocumentation, owners: Map<string, string>): void {
+	const segments = fileSegments(node);
+	for (const raw of segments) {
+		const segment = normalizeName(raw);
+		if (segment === "." || segment === ".." || /[/\\\0]/.test(segment)) {
+			throw new Error(
+				`Cannot generate skills for command name "${raw}": it must be a single file-name segment, without "/" or "\\" and not "." or "..".`,
+			);
+		}
 	}
-	// Strip the root segment — subcommands start from path[1]
-	const segments = node.path.slice(1);
-	return `commands/${segments.join("/")}.md`;
+	// A nested command's directory `commands/<path>` must not collide with another `<name>.md` file.
+	const hasDirectory = node.path.length > 1 && node.children.length > 0;
+	// Windows rules apply to the names actually created: this command's `<name>.md` file and, for a
+	// nested group, its `<name>` directory. Ancestor directories are checked at their own nodes.
+	const raw = segments[segments.length - 1] ?? node.name;
+	const name = normalizeName(raw);
+	for (const generated of hasDirectory ? [`${name}.md`, name] : [`${name}.md`]) {
+		if (
+			// eslint-disable-next-line no-control-regex -- Windows forbids ASCII control characters in file names.
+			/[<>:"|?*\u0000-\u001f]/.test(generated) ||
+			generated.endsWith(".") ||
+			/^(con|prn|aux|nul|com[1-9\u00b9\u00b2\u00b3]|lpt[1-9\u00b9\u00b2\u00b3])(?:\.|$)/.test(
+				generated,
+			)
+		) {
+			throw new Error(
+				`Cannot generate skills for command name "${raw}": generated name "${generated}" is not a portable file name (Windows-reserved name or character, or trailing dot).`,
+			);
+		}
+	}
+	const invocation = node.path.join(" ");
+	const file = commandFilePath(node);
+	for (const path of hasDirectory ? [file, file.slice(0, -".md".length)] : [file]) {
+		// APFS treats canonically equivalent Unicode spellings as the same path.
+		const key = path.normalize("NFC");
+		const owner = owners.get(key);
+		if (owner !== undefined) {
+			throw new Error(
+				`Cannot generate skills: commands "${owner}" and "${invocation}" both render to "${path}".`,
+			);
+		}
+		owners.set(key, invocation);
+	}
+	for (const child of node.children) assertCommandFiles(child, owners);
 }
 
 /**
  * Builds the full invocation string for a command.
  * Example: `my-cli remote add`
  */
-function commandInvocation(node: ManifestNode): string {
-	return node.path.join(" ");
+function commandInvocation(node: CommandDocumentation): string {
+	return node.path.map(normalizeName).join(" ");
+}
+
+/** Displayed value type; schema-backed and richer Core types document as `string`. */
+function displayType(type: string | undefined): BaseValueType {
+	return type === "number" || type === "boolean" ? type : "string";
 }
 
 /**
@@ -130,7 +206,11 @@ function relativePath(from: string, to: string): string {
  * Renders the `SKILL.md` entrypoint file with YAML frontmatter and
  * lazy-load instructions directing agents to supporting files.
  */
-function renderSkillMd(manifest: ManifestNode, meta: SkillMeta, allNodes: ManifestNode[]): string {
+function renderSkillMd(
+	root: CommandDocumentation,
+	meta: SkillMeta,
+	allNodes: CommandDocumentation[],
+): string {
 	const lines: string[] = [];
 
 	// YAML frontmatter
@@ -147,8 +227,8 @@ function renderSkillMd(manifest: ManifestNode, meta: SkillMeta, allNodes: Manife
 	// Title and overview
 	lines.push(`# ${meta.name}`);
 	lines.push("");
-	if (manifest.description) {
-		lines.push(manifest.description);
+	if (root.description) {
+		lines.push(root.description);
 		lines.push("");
 	}
 
@@ -188,12 +268,12 @@ function renderSkillMd(manifest: ManifestNode, meta: SkillMeta, allNodes: Manife
 	lines.push("");
 
 	// Root command details (if runnable)
-	if (manifest.runnable) {
+	if (root.hasAction) {
 		lines.push("## Usage");
 		lines.push("");
-		const rootFile = commandFilePath(manifest);
+		const rootFile = commandFilePath(root);
 		lines.push(
-			`The root command is directly executable. You should see [${manifest.name}](${rootFile}) for usage details.`,
+			`The root command is directly executable. You should see [${normalizeName(root.name)}](${rootFile}) for usage details.`,
 		);
 		lines.push("");
 	}
@@ -209,7 +289,7 @@ function renderSkillMd(manifest: ManifestNode, meta: SkillMeta, allNodes: Manife
  * Renders a markdown table mapping all command paths to their
  * documentation file paths.
  */
-function renderCommandReferenceTable(allNodes: ManifestNode[]): string[] {
+function renderCommandReferenceTable(allNodes: CommandDocumentation[]): string[] {
 	const lines: string[] = [];
 
 	lines.push("| Command | Type | Description | Documentation |");
@@ -229,11 +309,11 @@ function renderCommandReferenceTable(allNodes: ManifestNode[]): string[] {
 /**
  * Returns a human-readable label for the command type.
  */
-function commandType(node: ManifestNode): string {
-	if (node.runnable && node.children.length > 0) {
+function commandType(node: CommandDocumentation): string {
+	if (node.hasAction && node.children.length > 0) {
 		return "runnable, group";
 	}
-	if (node.runnable) {
+	if (node.hasAction) {
 		return "runnable";
 	}
 	return "group";
@@ -244,9 +324,9 @@ function commandType(node: ManifestNode): string {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Renders a command markdown file with its runnable details and child links. */
-function renderCommand(node: ManifestNode, root: ManifestNode): string {
+function renderCommand(node: CommandDocumentation, root: CommandDocumentation): string {
 	const lines = [...renderCommandHeading(node), ...renderCommandSections(node)];
-	if (node.runnable) lines.push(...renderRunnableCommandSections(node));
+	if (node.hasAction) lines.push(...renderRunnableCommandSections(node));
 	if (node.children.length > 0) lines.push(...renderSubcommandLinks(node, commandFilePath(node)));
 	lines.push(...renderNavigation(node, root));
 	return lines.join("\n");
@@ -256,7 +336,7 @@ function renderCommand(node: ManifestNode, root: ManifestNode): string {
 // Shared rendering helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-function renderCommandHeading(node: ManifestNode): string[] {
+function renderCommandHeading(node: CommandDocumentation): string[] {
 	const lines = [`# \`${commandInvocation(node)}\``, ""];
 
 	if (node.description) {
@@ -266,11 +346,15 @@ function renderCommandHeading(node: ManifestNode): string[] {
 	return lines;
 }
 
-function renderCommandSections(node: ManifestNode): string[] {
-	return (node.sections ?? []).flatMap((section) => [`## ${section.title}`, section.body, ""]);
+function renderCommandSections(node: CommandDocumentation): string[] {
+	return sectionsFor(node.sections, SKILLS).flatMap((section) => [
+		`## ${section.title}`,
+		section.body,
+		"",
+	]);
 }
 
-function renderRunnableCommandSections(node: ManifestNode): string[] {
+function renderRunnableCommandSections(node: CommandDocumentation): string[] {
 	const lines = ["## Usage", "", "```", node.usage, "```", ""];
 
 	if (node.args.length > 0) {
@@ -278,7 +362,8 @@ function renderRunnableCommandSections(node: ManifestNode): string[] {
 	}
 
 	if (node.flags.length > 0) {
-		lines.push("## Flags", "", ...renderFlagsTable(node.flags), "");
+		const flags = [...node.flags].sort((a, b) => a.name.localeCompare(b.name));
+		lines.push("## Flags", "", ...renderFlagsTable(flags), "");
 	}
 
 	lines.push(
@@ -292,14 +377,14 @@ function renderRunnableCommandSections(node: ManifestNode): string[] {
 	return lines;
 }
 
-function renderSubcommandLinks(node: ManifestNode, filePath: string): string[] {
+function renderSubcommandLinks(node: CommandDocumentation, filePath: string): string[] {
 	const lines = ["## Subcommands", ""];
 
-	for (const child of node.children) {
+	for (const child of sortedChildren(node)) {
 		const childPath = commandFilePath(child);
 		const childRelative = relativePath(filePath, childPath);
 		const desc = child.description ? ` - ${child.description}` : "";
-		lines.push(`- [\`${child.name}\`](${childRelative})${desc}`);
+		lines.push(`- [\`${normalizeName(child.name)}\`](${childRelative})${desc}`);
 	}
 
 	lines.push("");
@@ -309,7 +394,7 @@ function renderSubcommandLinks(node: ManifestNode, filePath: string): string[] {
 /**
  * Renders a markdown table for positional arguments.
  */
-function renderArgsTable(args: ManifestArg[]): string[] {
+function renderArgsTable(args: readonly DocumentationArg[]): string[] {
 	const lines: string[] = [];
 
 	lines.push("| Argument | Type | Required | Description |");
@@ -319,7 +404,7 @@ function renderArgsTable(args: ManifestArg[]): string[] {
 		const name = arg.variadic ? `${arg.name}...` : arg.name;
 		const required = arg.required ? "Yes" : "No";
 		const desc = escapeTableCell(formatFieldDescription(arg));
-		lines.push(`| \`${name}\` | ${arg.type} | ${required} | ${desc} |`);
+		lines.push(`| \`${name}\` | ${displayType(arg.type)} | ${required} | ${desc} |`);
 	}
 
 	return lines;
@@ -328,7 +413,7 @@ function renderArgsTable(args: ManifestArg[]): string[] {
 /**
  * Renders a markdown table for named flags.
  */
-function renderFlagsTable(flags: ManifestFlag[]): string[] {
+function renderFlagsTable(flags: readonly DocumentationFlag[]): string[] {
 	const lines: string[] = [];
 
 	lines.push("| Flag | Type | Required | Description |");
@@ -338,13 +423,13 @@ function renderFlagsTable(flags: ManifestFlag[]): string[] {
 		const name = flag.spellings.map((spelling) => `\`${spelling}\``).join(", ");
 		const required = flag.required ? "Yes" : "No";
 		const desc = escapeTableCell(formatFieldDescription(flag));
-		lines.push(`| ${name} | ${flag.type} | ${required} | ${desc} |`);
+		lines.push(`| ${name} | ${displayType(flag.type)} | ${required} | ${desc} |`);
 	}
 
 	return lines;
 }
 
-function formatFieldDescription(field: ManifestArg | ManifestFlag): string {
+function formatFieldDescription(field: DocumentationArg | DocumentationFlag): string {
 	const parts: string[] = [];
 	if (field.description) {
 		parts.push(field.description);
@@ -353,7 +438,7 @@ function formatFieldDescription(field: ManifestArg | ManifestFlag): string {
 		parts.push("Can be specified multiple times");
 	}
 	if (field.default !== undefined) {
-		parts.push(`Default: \`${field.default}\``);
+		parts.push(`Default: \`${formatDefault(field.default)}\``);
 	}
 	return parts.join(". ") || "-";
 }
@@ -361,7 +446,7 @@ function formatFieldDescription(field: ManifestArg | ManifestFlag): string {
 /**
  * Renders navigation links back to the parent command and skill entrypoint.
  */
-function renderNavigation(node: ManifestNode, root: ManifestNode): string[] {
+function renderNavigation(node: CommandDocumentation, root: CommandDocumentation): string[] {
 	const lines: string[] = [];
 	const filePath = commandFilePath(node);
 
@@ -390,9 +475,12 @@ function renderNavigation(node: ManifestNode, root: ManifestNode): string[] {
 }
 
 /**
- * Finds a node in the manifest tree by its full path.
+ * Finds a node in the documentation tree by its full path.
  */
-function findNode(root: ManifestNode, path: string[]): ManifestNode | undefined {
+function findNode(
+	root: CommandDocumentation,
+	path: readonly string[],
+): CommandDocumentation | undefined {
 	if (root.path.length === path.length && root.path.every((value, i) => value === path[i])) {
 		return root;
 	}

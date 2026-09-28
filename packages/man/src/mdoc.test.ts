@@ -202,6 +202,26 @@ describe("renderManPageMdoc", () => {
 		expect(mdoc.indexOf(".Sh C:\\ePATHS")).toBeGreaterThan(mdoc.indexOf(".Sh EXTRA NOTES"));
 	});
 
+	it("escapes backslashes in plain-text descriptions, bodies and synopsis", async () => {
+		const app = new Crust("x", {
+			description: "Reads C:\\tmp\\x.ini, not \\fBbold.",
+			usage: "x \\fB[options]\n.x --help",
+			sections: [{ title: "Notes", body: "\\fBliteral\\fR text" }],
+		})
+			.flags({ name: "path", type: "string", description: "Path like \\n", default: "C:\\x" })
+			.action(() => {});
+		const root = await app.snapshot();
+		const mdoc = renderManPageMdoc({ root, name: "x" });
+
+		expect(mdoc).toContain(".Nd Reads C:\\etmp\\ex.ini, not \\efBbold.");
+		expect(mdoc).toContain(".Sh DESCRIPTION\nReads C:\\etmp\\ex.ini, not \\efBbold.");
+		expect(mdoc).toContain(".Sh NOTES\n\\efBliteral\\efR text");
+		expect(mdoc).toContain("Path like \\en");
+		expect(mdoc).toContain('[default: "C:\\e\\ex"]');
+		expect(mdoc).toContain(".Bd -literal\nx \\efB[options]\n\\&.x --help\n.Ed");
+		expect(mdoc).not.toMatch(/(^|[^\\])\\[fn]/);
+	});
+
 	it("uses explicit date for .Dd", async () => {
 		const app = new Crust("x").action(() => {});
 		const root = await app.snapshot();
