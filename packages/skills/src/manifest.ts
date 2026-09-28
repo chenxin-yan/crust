@@ -14,13 +14,39 @@ import type { ManifestArg, ManifestFlag, ManifestNode } from "./types.ts";
 
 export function buildManifest(command: CommandSnapshot): ManifestNode {
 	const model = buildCommandDocumentation(command);
-	const rootName = normalizeName(model.name);
-	if (model.children.some((child) => normalizeName(child.name) === rootName)) {
-		throw new Error(
-			`Cannot generate skills when a direct subcommand has the root command name "${rootName}".`,
-		);
-	}
+	assertCommandFiles(model, new Map());
 	return buildNode(model);
+}
+
+/**
+ * Core accepts any non-empty command name, but each one becomes a file-name segment under
+ * `commands/`. Rejects names that would traverse out of it or that normalize onto another
+ * command's file or directory, before any output is replaced.
+ */
+function assertCommandFiles(model: CommandDocumentation, owners: Map<string, string>): void {
+	const segments = (model.path.length <= 1 ? [model.name] : model.path.slice(1)).map((raw) => {
+		const segment = normalizeName(raw);
+		if (segment === "." || segment === ".." || /[/\\\0]/.test(segment)) {
+			throw new Error(
+				`Cannot generate skills for command name "${raw}": it must be a single file-name segment, without "/" or "\\" and not "." or "..".`,
+			);
+		}
+		return segment;
+	});
+	const invocation = model.path.join(" ");
+	const file = `commands/${segments.join("/")}`;
+	// A nested command's directory `commands/<path>` must not collide with another `<name>.md` file.
+	const hasDirectory = model.path.length > 1 && model.children.length > 0;
+	for (const path of hasDirectory ? [`${file}.md`, file] : [`${file}.md`]) {
+		const owner = owners.get(path);
+		if (owner !== undefined) {
+			throw new Error(
+				`Cannot generate skills: commands "${owner}" and "${invocation}" both render to "${path}".`,
+			);
+		}
+		owners.set(path, invocation);
+	}
+	for (const child of model.children) assertCommandFiles(child, owners);
 }
 function buildNode(model: CommandDocumentation): ManifestNode {
 	return {

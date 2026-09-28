@@ -211,6 +211,53 @@ describe("writeSkills", () => {
 		await expect(readdir(outDir)).rejects.toThrow();
 	});
 
+	it.each([
+		["../../../escaped", '"../../../escaped"'],
+		["..\\..\\escaped", '"..\\..\\escaped"'],
+		["remote/add", '"remote/add"'],
+		["..", '".."'],
+	])("rejects command name %s that is not one portable file segment", async (name, quoted) => {
+		const outDir = join(tempRoot, "out", "skills");
+		await mkdir(join(outDir, "previous"), { recursive: true });
+		const app = createApp().add(defineCommand(name, (command) => command.action(() => {})));
+
+		const result = writeSkills({ app, outDir, version: "1.0.0" });
+		await expect(result).rejects.toThrow(`Cannot generate skills for command name ${quoted}`);
+		expect(await readdir(outDir)).toEqual(["previous"]);
+		expect((await readdir(tempRoot)).sort()).toEqual(["out"]);
+		expect(await readdir(join(tempRoot, "out"))).toEqual(["skills"]);
+	});
+
+	it("rejects distinct commands that render to one file before replacing output", async () => {
+		const outDir = join(tempRoot, "skills");
+		await mkdir(join(outDir, "previous"), { recursive: true });
+		const app = createApp()
+			.add(defineCommand("Foo", (command) => command.action(() => {})))
+			.add(defineCommand("foo", (command) => command.action(() => {})));
+
+		const result = writeSkills({ app, outDir, version: "1.0.0" });
+		await expect(result).rejects.toThrow(
+			'Cannot generate skills: commands "demo Foo" and "demo foo" both render to "commands/foo.md".',
+		);
+		expect(await readdir(outDir)).toEqual(["previous"]);
+	});
+
+	it("rejects a command file that collides with a nested command directory", async () => {
+		const outDir = join(tempRoot, "skills");
+		const app = createApp()
+			.add(defineCommand("x", (command) => command.action(() => {})))
+			.add(
+				defineCommand("x.md", (command) =>
+					command.add(defineCommand("y", (child) => child.action(() => {}))),
+				),
+			);
+
+		await expect(writeSkills({ app, outDir, version: "1.0.0" })).rejects.toThrow(
+			'Cannot generate skills: commands "demo x" and "demo x.md" both render to "commands/x.md".',
+		);
+		await expect(readdir(outDir)).rejects.toThrow();
+	});
+
 	it("rejects an invalid skill name before writing", async () => {
 		const outDir = join(tempRoot, "skills");
 

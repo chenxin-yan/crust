@@ -18,7 +18,7 @@ describe("buildManifest", () => {
 
 			const snapshot = await snapshotFixture(root);
 			expect(() => buildManifest(snapshot)).toThrow(
-				'Cannot generate skills when a direct subcommand has the root command name "demo"',
+				'Cannot generate skills: commands "demo" and "demo demo" both render to "commands/demo.md".',
 			);
 		});
 

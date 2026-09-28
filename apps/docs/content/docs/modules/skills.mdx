@@ -15,7 +15,7 @@ npm install @crustjs/skills
 
 <include lang="ts">../../../examples/modules/skills.ts#write</include>
 
-`writeSkills()` generates one skill directory from `app` (a `SKILL.md` plus one file per command under `commands/`) and copies any authored `extras`. It replaces a dedicated output directory named `skills` and returns paths relative to it. An authored skill with the generated skill's name replaces the generated one.
+`writeSkills()` generates one skill directory from `app` (a `SKILL.md` plus one file per command under `commands/`) and copies any authored `extras`. It replaces a dedicated output directory named `skills` and returns paths relative to it. An authored skill with the generated skill's name replaces the generated one. Command file names are lowercased, so generation fails before replacing output when a command name contains `/` or `\`, is `.` or `..`, or lowercases onto another command's file.
 
 <auto-type-table path="../../../../../packages/skills/src/build.ts" name="WriteSkillsOptions" />
 
