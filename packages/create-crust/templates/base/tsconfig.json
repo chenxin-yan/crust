@@ -1,7 +1,7 @@
 {
 	"compilerOptions": {
-		"lib": [{{tsLib}}],
-		"types": [{{tsTypes}}],
+		"lib": [<%~ it.tsLib %>],
+		"types": [<%~ it.tsTypes %>],
 		"target": "ESNext",
 		"module": "Preserve",
 		"moduleDetection": "force",

@@ -214,6 +214,74 @@ describe("scaffold", () => {
 		expect(readOutputFile("readme.txt")).toBe("Hello world");
 	});
 
+	describe("render", () => {
+		it("replaces interpolation with the renderer's output for text files only", async () => {
+			const binaryData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x7b, 0x7b, 0x7d, 0x7d]);
+			createTemplateBinaryFile("assets/image.png", binaryData);
+			createTemplateFile("readme.txt", "Hello {{name}}");
+			const context = { name: "world" };
+			const calls: [string, Record<string, string>][] = [];
+
+			const result = await scaffold({
+				template: templateDir,
+				dest: destDir,
+				context,
+				// Output keeps a placeholder: no second interpolation pass may fill it.
+				render: (source, ctx) => {
+					calls.push([source, ctx]);
+					return `${source.replace("Hello", "Bye")} ${ctx.name}`;
+				},
+			});
+
+			expect(calls).toEqual([["Hello {{name}}", context]]);
+			expect(readOutputFile("readme.txt")).toBe("Bye {{name}} world");
+			expect(Buffer.compare(readFileSync(join(destDir, "assets", "image.png")), binaryData)).toBe(
+				0,
+			);
+			expect(result.files).toHaveLength(2);
+		});
+
+		it("awaits an async renderer before writing", async () => {
+			createTemplateFile("readme.txt", "Hello {{name}}");
+
+			await scaffold({
+				template: templateDir,
+				dest: destDir,
+				context: { name: "world" },
+				render: async (source, ctx) => {
+					await new Promise((resolveDelay) => setTimeout(resolveDelay, 5));
+					return source.toUpperCase() + ctx.name;
+				},
+			});
+
+			expect(readOutputFile("readme.txt")).toBe("HELLO {{NAME}}world");
+		});
+
+		it("propagates thrown and rejected renderer errors", async () => {
+			createTemplateFile("readme.txt", "Hello");
+
+			await expect(
+				scaffold({
+					template: templateDir,
+					dest: destDir,
+					context: {},
+					render: () => {
+						throw new Error("sync render failed");
+					},
+				}),
+			).rejects.toThrow("sync render failed");
+			await expect(
+				scaffold({
+					template: templateDir,
+					dest: destDir,
+					context: {},
+					render: () => Promise.reject(new Error("async render failed")),
+				}),
+			).rejects.toThrow("async render failed");
+			expect(existsSync(join(destDir, "readme.txt"))).toBe(false);
+		});
+	});
+
 	// Windows needs a privilege to create symlinks; the traversal itself is the same on every platform.
 	it.skipIf(process.platform === "win32")(
 		"skips symlinked files and writes only template-relative paths under dest",
@@ -296,16 +364,75 @@ describe("scaffold", () => {
 			expect(existsSync(missingTarget)).toBe(false);
 		});
 
-		it("does not write earlier template files when a later one escapes", async () => {
+		it("does not render or write earlier template files when a later one escapes", async () => {
 			createTemplateFile("a.txt", "a");
 			createTemplateFile("z.txt", "z");
 			symlinkSync(sentinel, join(destDir, "z.txt"));
+			const rendered: string[] = [];
 
 			await expect(
-				scaffold({ template: templateDir, dest: destDir, context: {}, conflict: "overwrite" }),
+				scaffold({
+					template: templateDir,
+					dest: destDir,
+					context: {},
+					conflict: "overwrite",
+					render: (source) => {
+						rendered.push(source);
+						return source;
+					},
+				}),
 			).rejects.toThrow("outside the destination");
+			expect(rendered).toEqual([]);
 			expect(existsSync(join(destDir, "a.txt"))).toBe(false);
 			expect(readFileSync(sentinel, "utf-8")).toBe("original");
+		});
+
+		it.each(["file", "directory", "root"])(
+			"rejects a %s redirected outside the destination during rendering",
+			async (target) => {
+				createTemplateFile(target === "directory" ? "nested/sentinel.txt" : "sentinel.txt", "new");
+				const swappedPath =
+					target === "file"
+						? join(destDir, "sentinel.txt")
+						: target === "directory"
+							? join(destDir, "nested")
+							: destDir;
+
+				await expect(
+					scaffold({
+						template: templateDir,
+						dest: destDir,
+						context: {},
+						render: async (source) => {
+							await Promise.resolve();
+							rmSync(swappedPath, { recursive: true, force: true });
+							symlinkSync(target === "file" ? sentinel : outsideDir, swappedPath);
+							return source;
+						},
+					}),
+				).rejects.toThrow("outside the destination");
+				expect(readFileSync(sentinel, "utf-8")).toBe("original");
+			},
+		);
+
+		it("rechecks binary destinations after an earlier renderer runs", async () => {
+			createTemplateFile("a.txt", "text");
+			createTemplateBinaryFile("z.bin", Buffer.from([0, 1]));
+
+			await expect(
+				scaffold({
+					template: templateDir,
+					dest: destDir,
+					context: {},
+					render: async (source) => {
+						await Promise.resolve();
+						symlinkSync(sentinel, join(destDir, "z.bin"));
+						return source;
+					},
+				}),
+			).rejects.toThrow("outside the destination");
+			expect(readFileSync(sentinel, "utf-8")).toBe("original");
+			expect(readOutputFile("a.txt")).toBe("text");
 		});
 
 		it("writes through a link that stays inside the destination", async () => {

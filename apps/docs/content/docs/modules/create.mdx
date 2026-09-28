@@ -42,6 +42,21 @@ Ship templates inside your generator with an `import.meta.url` URL: `npx`, `bun 
 
 Text files replace `{{identifier}}` placeholders from `context`; missing values remain unchanged. Files with a null byte in their first 8 KiB are copied without interpolation.
 
+### Custom renderer
+
+Pass `render` to use a template engine instead of `{{identifier}}` interpolation. It receives each text file's contents and `context`, may return a string or a promise, and its output is written as-is without a second interpolation pass. Binary files never reach it.
+
+```ts
+await scaffold({
+  template: new URL("../templates/base", import.meta.url),
+  dest: "./my-project",
+  context: { name: "my-app" },
+  render: (source, context) => source.replaceAll("<%= name %>", context.name ?? ""),
+});
+```
+
+Templates run through `render` as trusted code. Destination conflict and symlink checks still happen before any file is rendered; an error thrown or rejected by `render` fails `scaffold()`, and files written earlier in the call remain.
+
 ```text
 templates/base/_gitignore   -> my-project/.gitignore
 templates/base/__tests__/   -> my-project/__tests__/
@@ -58,7 +73,9 @@ See [Locating templates](#locating-templates) for how `template` resolves.
 
 The default `conflict: "abort"` throws for a non-empty destination. `"overwrite"` replaces conflicting files and leaves unrelated destination files in place.
 
-Writes stay inside the destination. `dest` itself may be a symlink (its target is the destination), but an existing destination file or ancestor directory that is a symlink resolving outside that directory, or to a missing target, throws before any file is written. Symlinks that stay inside the destination are followed.
+`dest` itself may be a symlink (its target is the destination), but an existing destination file or ancestor directory that is a symlink resolving outside that directory, or to a missing target, throws before any file is written. Symlinks that stay inside the destination are followed.
+
+Containment is checked again after rendering and before each write, including binary copies. A detected redirect of the canonical destination root or an escaping link introduced during rendering aborts the call; earlier writes remain. These path checks are not atomic with filesystem writes: use a destination whose directories cannot be concurrently modified by untrusted processes.
 
 ## `runSteps(steps, cwd)`
 
@@ -86,6 +103,6 @@ Steps run in order and stop at the first error.
 interpolate("Hello, {{name}}!", { name: "world" }); // => "Hello, world!"
 ```
 
-`interpolate()` replaces placeholders in a string. `detectPackageManager(cwd?)` checks lockfiles, then `npm_config_user_agent`, and defaults to npm; `isInGitRepo(cwd?)` reports whether the path is inside a Git work tree.
+`interpolate()` replaces placeholders in a string; it is the default `render`. `detectPackageManager(cwd?)` checks lockfiles, then `npm_config_user_agent`, and defaults to npm; `isInGitRepo(cwd?)` reports whether the path is inside a Git work tree.
 
 `PackageManager` is the type `detectPackageManager()` returns. The [package entry point](https://github.com/chenxin-yan/crust/blob/main/packages/create/src/index.ts) is the complete export list.

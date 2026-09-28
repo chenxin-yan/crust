@@ -30,9 +30,21 @@ export interface ScaffoldOptions {
 
 	/**
 	 * Variables to interpolate into template file contents.
-	 * Keys map to `{{key}}` placeholders in template files.
+	 * Keys map to `{{key}}` placeholders in template files, or are passed to `render`.
 	 */
 	readonly context: Record<string, string>;
+
+	/**
+	 * Custom renderer for text file contents, replacing the built-in `{{key}}`
+	 * interpolation (the output is not interpolated again). Called once per text
+	 * file with its contents and `context`; a returned promise is awaited.
+	 * Binary files are copied without calling it. Thrown or rejected errors
+	 * propagate from `scaffold()`; files written earlier in the call remain.
+	 * Templates run through the renderer as trusted code.
+	 *
+	 * @default interpolate
+	 */
+	readonly render?: (source: string, context: Record<string, string>) => string | Promise<string>;
 
 	/**
 	 * How to handle an existing non-empty destination directory.

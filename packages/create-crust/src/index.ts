@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 
 import { existsSync, readdirSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 import { Crust, resolveArtifactDir } from "@crustjs/core";
 import { detectPackageManager, isInGitRepo, runSteps, scaffold } from "@crustjs/create";
 import type { BuildOptions } from "@crustjs/crust";
 import { spinner } from "@crustjs/progress";
 import { confirm, input, select } from "@crustjs/prompts";
+import { Eta } from "eta/core";
 
 import corePkg from "../../core/package.json" with { type: "json" };
 import crustPkg from "../../crust/package.json" with { type: "json" };
@@ -19,24 +20,18 @@ type Runtime = "bun" | "node" | "deno";
 // Deno reads the project tsconfig and a supplied `lib` replaces its default `deno.window`,
 // which would drop `Deno`, `console`, and `process` from `deno check`.
 // `shebang` heads src/cli.ts: package.json `bin` points at the source, so a linked
-// command must start the project's runtime itself.
-const RUNTIME_TEMPLATE_CONTEXT = {
+// command must start the project's runtime itself. The runtime's package.json
+// differences live in templates/base/package.json.
+const RUNTIMES = {
 	bun: { shebang: "#!/usr/bin/env bun", tsLib: '"ESNext"', tsTypes: '"bun"' },
 	node: { shebang: "#!/usr/bin/env node", tsLib: '"ESNext"', tsTypes: '"node"' },
-	deno: {
-		shebang: "#!/usr/bin/env -S deno run -A",
-		tsLib: '"ESNext", "deno.window"',
-		tsTypes: "",
-	},
+	deno: { shebang: "#!/usr/bin/env -S deno run -A", tsLib: '"ESNext", "deno.window"', tsTypes: "" },
 } satisfies Record<Runtime, { shebang: string; tsLib: string; tsTypes: string }>;
 
-// The bundle inlines these JSON imports, so scaffolded package.json files pin
-// the sibling package versions from the build that produced create-crust.
-const CRUST_TEMPLATE_VERSION_CONTEXT = {
-	crustCoreVersion: corePkg.version,
-	crustExtensionsVersion: extensionsPkg.version,
-	crustCliVersion: crustPkg.version,
-};
+// `eta/core` renders template strings only: no file loading or includes. Templates
+// are trusted package code, not sandboxed. Generated files are never HTML, so output
+// is raw, and whitespace is trimmed only where a tag asks for it (`-%>`).
+const eta = new Eta({ autoEscape: false, autoTrim: false });
 
 // ────────────────────────────────────────────────────────────────────────────
 // Validation
@@ -194,10 +189,13 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 			...(flags.install !== undefined ? { initial: flags.install } : {}),
 		});
 
-		// Skip git init prompt if already inside a git repository.
-		// Check resolvedDir itself when it exists (e.g. "." or overwrite),
-		// otherwise check the parent (directory will be created by scaffold).
-		const gitCheckDir = existsSync(resolvedDir) ? resolvedDir : resolve(resolvedDir, "..");
+		// Skip git init prompt if already inside a git repository. Git cannot run
+		// in a directory scaffold has not created yet, so probe the nearest
+		// existing ancestor (resolvedDir itself for "." or overwrite).
+		let gitCheckDir = resolvedDir;
+		while (!existsSync(gitCheckDir) && dirname(gitCheckDir) !== gitCheckDir) {
+			gitCheckDir = dirname(gitCheckDir);
+		}
 		const alreadyInRepo = isInGitRepo(gitCheckDir);
 		const initGit = alreadyInRepo
 			? false
@@ -212,35 +210,32 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 		// Infer package name from directory
 		const name = dirName;
 
-		// `templates` is a crust.include directory staged next to this bundle.
-		const templatePath = (template: string) => join(resolveArtifactDir("templates"), template);
 		const packageManager = runtime === "deno" ? "deno" : detectPackageManager(resolvedDir);
-		// Scaffolding produces no console output, so it is safe inside a spinner.
+		// The bundle inlines the sibling package.json imports, so scaffolded projects
+		// pin the Crust versions from the build that produced create-crust.
 		const context = {
 			name,
 			runtime,
 			artifact,
 			run: packageManager === "deno" ? "deno task" : `${packageManager} run`,
 			install: `${packageManager} install`,
-			...RUNTIME_TEMPLATE_CONTEXT[runtime],
-			...CRUST_TEMPLATE_VERSION_CONTEXT,
+			...RUNTIMES[runtime],
+			coreVersion: corePkg.version,
+			extensionsVersion: extensionsPkg.version,
+			crustVersion: crustPkg.version,
 		};
+		// Scaffolding produces no console output, so it is safe inside a spinner.
 		await spinner({
 			message: "Scaffolding project...",
-			task: async () => {
-				await scaffold({
-					template: templatePath("base"),
+			task: () =>
+				scaffold({
+					// `templates` is a crust.include directory staged next to this bundle.
+					template: join(resolveArtifactDir("templates"), "base"),
 					dest: resolvedDir,
 					context,
+					render: (source, data) => eta.renderString(source, data),
 					...(overwrite ? { conflict: "overwrite" } : {}),
-				});
-				await scaffold({
-					template: templatePath(`runtime/${runtime}`),
-					dest: resolvedDir,
-					context,
-					conflict: "overwrite",
-				});
-			},
+				}),
 		});
 
 		if (installDeps) {
