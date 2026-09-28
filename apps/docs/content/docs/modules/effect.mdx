@@ -53,7 +53,7 @@ Turns one fully composed Layer into an ordinary Crust Context factory whose valu
 
 Each invocation builds the Layer in a fresh `Scope`, closed with the other Contexts after `postRun` hooks. Finalizers receive the handler's `Exit`, so an `Effect.acquireRelease` release can commit on success and roll back on failure or interruption. A Layer pulled without a `handler()` closes with `Exit.void`.
 
-<Callout title="Every layer() on the path is built eagerly">
+<Callout title="Unshadowed layer() providers are built eagerly">
   When a `handler()` action starts, every `layer()` Context on the command path is built, whether or
   not the program uses it. A `layer()` replaced by a same-name provider on a descendant command is
   not built. Plain Contexts stay lazy. Attach Layers to the commands that need them.
