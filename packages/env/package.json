@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/env",
-	"version": "0.0.0",
+	"version": "0.1.0",
 	"description": "Typed, validated environment variables as a Crust Context, documented in help and man pages",
 	"type": "module",
 	"sideEffects": false,

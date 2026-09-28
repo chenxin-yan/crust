@@ -1,5 +1,13 @@
 # @crustjs/store
 
+## 0.4.2
+
+### Patch Changes
+
+- [#462](https://github.com/chenxin-yan/crust/pull/462) [`fe08f18`](https://github.com/chenxin-yan/crust/commit/fe08f1887a7b36e68741102c0c7d0586b5a12a35) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Treat store keys named like Object.prototype members (constructor, toString, __proto__) as ordinary own fields, so defaults apply and unknown keys survive patch round trips.
+- Updated dependencies [[`0da2c5c`](https://github.com/chenxin-yan/crust/commit/0da2c5ce54f71acc5d51fad1dcb2c5546a71948e), [`4360cb1`](https://github.com/chenxin-yan/crust/commit/4360cb1cefca245e76967ade43c82b5361c039e5), [`4977f33`](https://github.com/chenxin-yan/crust/commit/4977f33e87a928d968202af40f9729e390b7df93), [`4977f33`](https://github.com/chenxin-yan/crust/commit/4977f33e87a928d968202af40f9729e390b7df93)]:
+  - @crustjs/utils@0.2.0
+
 ## 0.4.1
 
 ### Patch Changes

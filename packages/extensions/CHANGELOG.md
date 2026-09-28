@@ -1,5 +1,16 @@
 # @crustjs/plugins
 
+## 0.5.0
+
+### Patch Changes
+
+- [#464](https://github.com/chenxin-yan/crust/pull/464) [`1a9004f`](https://github.com/chenxin-yan/crust/commit/1a9004f94c65380a750b1461f3f24a18f521644f) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Fix fish completion routing when value-taking flags appear with separate values before subcommands or between positionals
+- Updated dependencies [[`bc3cbb2`](https://github.com/chenxin-yan/crust/commit/bc3cbb250974fcdba4ce2f50ee4b6b90a1f16c30), [`0da2c5c`](https://github.com/chenxin-yan/crust/commit/0da2c5ce54f71acc5d51fad1dcb2c5546a71948e), [`c4f44d6`](https://github.com/chenxin-yan/crust/commit/c4f44d6f9e3dd206154d0b18a84fb75464dc2dfe), [`c6f4bd8`](https://github.com/chenxin-yan/crust/commit/c6f4bd8f3de3558d9c988acf63830ec899cf6854), [`4360cb1`](https://github.com/chenxin-yan/crust/commit/4360cb1cefca245e76967ade43c82b5361c039e5), [`fe08f18`](https://github.com/chenxin-yan/crust/commit/fe08f1887a7b36e68741102c0c7d0586b5a12a35), [`4977f33`](https://github.com/chenxin-yan/crust/commit/4977f33e87a928d968202af40f9729e390b7df93), [`0b835c2`](https://github.com/chenxin-yan/crust/commit/0b835c20b9bcf09e9dea7f179eeecd43a9c50763), [`eb9928d`](https://github.com/chenxin-yan/crust/commit/eb9928d60edc3033652ad55a3a019e790dafdf06), [`4977f33`](https://github.com/chenxin-yan/crust/commit/4977f33e87a928d968202af40f9729e390b7df93)]:
+  - @crustjs/core@0.5.0
+  - @crustjs/utils@0.2.0
+  - @crustjs/style@0.3.4
+  - @crustjs/store@0.4.2
+
 ## 0.4.1
 
 No changes in this release.

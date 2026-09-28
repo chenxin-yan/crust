@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/testing",
-	"version": "0.1.3",
+	"version": "0.1.4",
 	"description": "Testing helpers for Crust CLI applications",
 	"type": "module",
 	"sideEffects": false,

@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/utils",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"description": "Internal shared utilities for Crust packages",
 	"type": "module",
 	"sideEffects": false,

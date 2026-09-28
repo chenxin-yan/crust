@@ -1,5 +1,25 @@
 # @crustjs/core
 
+## 0.5.0
+
+### Minor Changes
+
+- [#455](https://github.com/chenxin-yan/crust/pull/455) [`bc3cbb2`](https://github.com/chenxin-yan/crust/commit/bc3cbb250974fcdba4ce2f50ee4b6b90a1f16c30) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Breaking: replace config-based Context definitions with immutable fluent authoring: defineContext(name).use(...factories).flags(...defs).setup((input, options) => value). The terminal .setup() returns the same callable ContextFactory with .of(value). Factory options move out of the setup input into setup's optional second parameter, so annotating only `options: T` keeps ctx, flags, and the value inferred; optional or defaulted options can be omitted when calling the factory. Remove the defineContext(name, setup) and defineContext(name, config, setup) forms and ContextConfig; ContextSetup drops its Options type parameter (now ContextSetup<Flags, Deps>), and ContextBuilder is exported.
+
+- [#450](https://github.com/chenxin-yan/crust/pull/450) [`c4f44d6`](https://github.com/chenxin-yan/crust/commit/c4f44d6f9e3dd206154d0b18a84fb75464dc2dfe) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Breaking: replace object-based extension definitions with immutable fluent authoring: defineExtension<MetaKeys>(id).use(...).provide(...).flags(...).add(...), followed by lifecycle methods. Configure extensions with .factory((extension, ...args) => extension...), preserving .id. Rename Context dependency configuration from uses to use. Remove the old object, factory-callback and curried defineExtension forms, ExtensionConfig, DefineExtensionWith, and exposed extension data fields; use ExtensionBuilder for authoring and Extension for registration.
+
+- [#454](https://github.com/chenxin-yan/crust/pull/454) [`0b835c2`](https://github.com/chenxin-yan/crust/commit/0b835c20b9bcf09e9dea7f179eeecd43a9c50763) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Add typed environment Contexts with redacted validation errors and command-scoped help/man sections. Reuse the core flag value pipeline and preserve ENV errors in the Effect adapter.
+
+- [#457](https://github.com/chenxin-yan/crust/pull/457) [`4977f33`](https://github.com/chenxin-yan/crust/commit/4977f33e87a928d968202af40f9729e390b7df93) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Add experimental Deno runtime packages. With `"crust": { "runtime": "deno", "artifact": "package" }` (or `--artifact package`), `crust build` bundles each command with native `deno bundle`, which Deno marks experimental, into a root-only npm package whose `bin/<command>.js` files run on the consumer's installed Deno through `deno run npm:<package>/<command>` or `deno install -g`. The package embeds no runtime, carries no shebang or permission flags, and leaves every grant to the consumer. Building needs `deno` 2.5.0 or newer on PATH, checked in the project directory before `.crust/` is replaced; the bundler version is printed as `Compiler:` but not recorded as `embeddedRuntimeVersion`, and `engines.deno` stays a consumer requirement. `--minify`, `--env-file`, `crust.bunPlugins`, `--target`, and `crust.targets` are rejected for this mode. Deno binaries and their permissions are unchanged.
+  
+  Finished Deno packages mark themselves through a marker prepended to the bundle, preserving `import.meta.main` for the declared command, so `@crustjs/core` skips Command Snapshot and build-hook execution and `resolveArtifactDir()` from `@crustjs/utils/artifacts` resolves assets beside the installed package, without reading any environment variable. The package must be built against this `@crustjs/core` release or newer: with an older core, the finished package needs `--allow-env` and obeys build-only snapshot variables.
+
+### Patch Changes
+
+- [#452](https://github.com/chenxin-yan/crust/pull/452) [`eb9928d`](https://github.com/chenxin-yan/crust/commit/eb9928d60edc3033652ad55a3a019e790dafdf06) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Omitted variadic arguments now resolve their declared `default` as a one-element array (`[default]`) for both `execute()` and `run()`; supplied values still replace it.
+- Updated dependencies [[`0da2c5c`](https://github.com/chenxin-yan/crust/commit/0da2c5ce54f71acc5d51fad1dcb2c5546a71948e), [`4360cb1`](https://github.com/chenxin-yan/crust/commit/4360cb1cefca245e76967ade43c82b5361c039e5), [`4977f33`](https://github.com/chenxin-yan/crust/commit/4977f33e87a928d968202af40f9729e390b7df93), [`4977f33`](https://github.com/chenxin-yan/crust/commit/4977f33e87a928d968202af40f9729e390b7df93)]:
+  - @crustjs/utils@0.2.0
+
 ## 0.4.1
 
 No changes in this release.
