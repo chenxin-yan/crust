@@ -216,6 +216,23 @@ describe("writeSkills", () => {
 		["..\\..\\escaped", '"..\\..\\escaped"'],
 		["remote/add", '"remote/add"'],
 		["..", '".."'],
+		["con", '"con"'],
+		["NUL.txt", '"NUL.txt"'],
+		["aux", '"aux"'],
+		["prn", '"prn"'],
+		["com1", '"com1"'],
+		["lpt9.log", '"lpt9.log"'],
+		["COM\u00b9", '"COM\u00b9"'],
+		["lpt\u00b2", '"lpt\u00b2"'],
+		["stream:name", '"stream:name"'],
+		['bad"name', '"bad"name"'],
+		["bad<name", '"bad<name"'],
+		["bad>name", '"bad>name"'],
+		["bad|name", '"bad|name"'],
+		["bad?name", '"bad?name"'],
+		["bad*name", '"bad*name"'],
+		["bad\u0001name", '"bad\u0001name"'],
+		["trailing.", '"trailing."'],
 	])("rejects command name %s that is not one portable file segment", async (name, quoted) => {
 		const outDir = join(tempRoot, "out", "skills");
 		await mkdir(join(outDir, "previous"), { recursive: true });
@@ -256,6 +273,45 @@ describe("writeSkills", () => {
 			'Cannot generate skills: commands "demo x" and "demo x.md" both render to "commands/x.md".',
 		);
 		await expect(readdir(outDir)).rejects.toThrow();
+	});
+
+	it.each([
+		["file", false],
+		["file", true],
+		["directory", false],
+		["directory", true],
+	] as const)("rejects Unicode-equivalent file/%s paths (reversed: %s)", async (kind, reverse) => {
+		const outDir = join(tempRoot, "skills");
+		await mkdir(outDir, { recursive: true });
+		await writeFile(join(outDir, "previous.md"), "Keep this output");
+		const leaf = defineCommand("\u00e9", (command) => command.action(() => {}));
+		const other =
+			kind === "file"
+				? defineCommand("e\u0301", (command) => command.action(() => {}))
+				: defineCommand("e\u0301.md", (command) =>
+						command.add(defineCommand("child", (child) => child.action(() => {}))),
+					);
+		const app = reverse ? createApp().add(other).add(leaf) : createApp().add(leaf).add(other);
+
+		await expect(writeSkills({ app, outDir })).rejects.toThrow("both render to");
+		expect(await readdir(outDir)).toEqual(["previous.md"]);
+		expect(await readFile(join(outDir, "previous.md"), "utf8")).toBe("Keep this output");
+	});
+
+	it("preserves noncolliding Unicode paths and accepts nonreserved Windows names", async () => {
+		const outDir = join(tempRoot, "skills");
+		const names = ["e\u0301", "console", "com10", "lpt0"];
+		let app = createApp();
+		for (const name of names)
+			app = app.add(defineCommand(name, (command) => command.action(() => {})));
+
+		const artifacts = await writeSkills({ app, outDir });
+		for (const name of names) {
+			expect(artifacts).toContain(join("demo", "commands", `${name}.md`));
+			expect(await readFile(join(outDir, "demo", "commands", `${name}.md`), "utf8")).toContain(
+				`# \`demo ${name}\``,
+			);
+		}
 	});
 
 	it("rejects an invalid skill name before writing", async () => {

@@ -138,19 +138,33 @@ function assertCommandFiles(node: CommandDocumentation, owners: Map<string, stri
 				`Cannot generate skills for command name "${raw}": it must be a single file-name segment, without "/" or "\\" and not "." or "..".`,
 			);
 		}
+		if (
+			// eslint-disable-next-line no-control-regex -- Windows forbids ASCII control characters in file names.
+			/[<>:"|?*\u0000-\u001f]/.test(segment) ||
+			segment.endsWith(".") ||
+			/^(con|prn|aux|nul|com[1-9\u00b9\u00b2\u00b3]|lpt[1-9\u00b9\u00b2\u00b3])(?:\.|$)/.test(
+				segment,
+			)
+		) {
+			throw new Error(
+				`Cannot generate skills for command name "${raw}": it must be a portable file-name segment without Windows-reserved names, characters, or a trailing dot.`,
+			);
+		}
 	}
 	const invocation = node.path.join(" ");
 	const file = commandFilePath(node);
 	// A nested command's directory `commands/<path>` must not collide with another `<name>.md` file.
 	const hasDirectory = node.path.length > 1 && node.children.length > 0;
 	for (const path of hasDirectory ? [file, file.slice(0, -".md".length)] : [file]) {
-		const owner = owners.get(path);
+		// APFS treats canonically equivalent Unicode spellings as the same path.
+		const key = path.normalize("NFC");
+		const owner = owners.get(key);
 		if (owner !== undefined) {
 			throw new Error(
 				`Cannot generate skills: commands "${owner}" and "${invocation}" both render to "${path}".`,
 			);
 		}
-		owners.set(path, invocation);
+		owners.set(key, invocation);
 	}
 	for (const child of node.children) assertCommandFiles(child, owners);
 }
