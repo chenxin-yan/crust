@@ -194,4 +194,37 @@ describe("applyFieldDefaults", () => {
 			retries: 3,
 		});
 	});
+
+	// ──────────────────────────────────────────────────────────────────────
+	// Own-property semantics
+	// ──────────────────────────────────────────────────────────────────────
+
+	it("treats Object.prototype names as ordinary keys", () => {
+		const persisted = JSON.parse('{"constructor":"kept","toString":"t","__proto__":{"a":1}}');
+		const result = applyFieldDefaults(persisted, {}, false);
+
+		expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+		expect(Object.entries(result)).toEqual([
+			["constructor", "kept"],
+			["toString", "t"],
+			["__proto__", { a: 1 }],
+		]);
+		expect(applyFieldDefaults(persisted, {})).toEqual({});
+	});
+
+	it("applies defaults to declared fields named like Object.prototype members", () => {
+		const fields = {
+			constructor: { type: "string", default: "c" },
+			toString: { type: "string", default: "t" },
+			["__proto__"]: { type: "string", default: "p" },
+		} as const satisfies FieldsDef;
+		const result = applyFieldDefaults({}, fields);
+
+		expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+		expect(Object.entries(result)).toEqual([
+			["constructor", "c"],
+			["toString", "t"],
+			["__proto__", "p"],
+		]);
+	});
 });

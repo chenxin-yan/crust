@@ -8,7 +8,7 @@ import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
 import { normalizeStandardIssues, type StandardSchema } from "@crustjs/utils/schema";
 
 import { CrustStoreError, type ValidationErrorDetails } from "./errors.ts";
-import { applyFieldDefaults } from "./merge.ts";
+import { applyFieldDefaults, setDocumentValue } from "./merge.ts";
 import { resolveStorePath } from "./path.ts";
 import { deleteJson, readJson, type WriteJsonOptions, writeJson } from "./persistence.ts";
 import type {
@@ -169,17 +169,27 @@ export function createStore<const F extends FieldsDef>(
 		const normalized = { ...state };
 
 		for (const [key, def] of Object.entries(fields)) {
-			if (!(key in normalized) || def.schema !== undefined) continue;
+			if (!Object.hasOwn(normalized, key)) {
+				// A missing field named like an inherited member (`constructor`, `toString`,
+				// `__proto__`) would expose that member; store it as own `undefined` instead.
+				if (key in normalized) setDocumentValue(normalized, key, undefined);
+				continue;
+			}
+			if (def.schema !== undefined) continue;
 
 			const value = normalized[key];
 			if (value === undefined) continue;
 
 			if (def.array === true && Array.isArray(value)) {
-				normalized[key] = value.map((item) => coerceByType(item, def.type));
+				setDocumentValue(
+					normalized,
+					key,
+					value.map((item) => coerceByType(item, def.type)),
+				);
 				continue;
 			}
 
-			normalized[key] = coerceByType(value, def.type);
+			setDocumentValue(normalized, key, coerceByType(value, def.type));
 		}
 
 		return normalized;
@@ -196,7 +206,7 @@ export function createStore<const F extends FieldsDef>(
 		const issues: StoreValidatorIssue[] = [];
 
 		for (const [key, def] of Object.entries(fields)) {
-			const value = mutableState[key];
+			const value = Object.hasOwn(mutableState, key) ? mutableState[key] : undefined;
 
 			if (value === undefined && def.schema === undefined) {
 				if (def.default !== undefined) {
@@ -232,7 +242,7 @@ export function createStore<const F extends FieldsDef>(
 				// Schemas own their output, including coercion and nested defaults.
 				// Core callback transforms remain mutation-only; reads never persist.
 				if (operation === "read") {
-					if (def.schema !== undefined) mutableState[key] = transformed;
+					if (def.schema !== undefined) setDocumentValue(mutableState, key, transformed);
 					continue;
 				}
 
@@ -278,7 +288,7 @@ export function createStore<const F extends FieldsDef>(
 						continue;
 					}
 
-					mutableState[key] = transformed;
+					setDocumentValue(mutableState, key, transformed);
 				}
 			}
 		}

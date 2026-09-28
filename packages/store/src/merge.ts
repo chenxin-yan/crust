@@ -5,10 +5,27 @@
 import type { FieldsDef, StoreDocument } from "./types.ts";
 
 /**
+ * Sets an own enumerable data property. Plain assignment would invoke the
+ * inherited `__proto__` setter instead of storing a `__proto__` field.
+ */
+export function setDocumentValue(
+	document: StoreDocument,
+	key: string,
+	value: StoreDocument[string],
+): void {
+	Object.defineProperty(document, key, {
+		value,
+		writable: true,
+		enumerable: true,
+		configurable: true,
+	});
+}
+
+/**
  * Applies field defaults to a persisted config object.
  *
  * For each field defined in `fields`:
- * - If the key exists in `persisted`, the persisted value is used.
+ * - If `persisted` has the key as an own property, the persisted value is used.
  * - If the key is missing and the field has a `default`, the default is used.
  *   Defaults are deep-copied to prevent shared nested mutation.
  * - If the key is missing and no default exists, the field is omitted
@@ -30,10 +47,10 @@ export function applyFieldDefaults<F extends FieldsDef>(
 	const result: StoreDocument = {};
 
 	for (const [key, def] of Object.entries(fields)) {
-		if (persisted && key in persisted) {
-			result[key] = persisted[key];
+		if (persisted && Object.hasOwn(persisted, key)) {
+			setDocumentValue(result, key, persisted[key]);
 		} else if ("default" in def && def.default !== undefined) {
-			result[key] = structuredClone(def.default);
+			setDocumentValue(result, key, structuredClone(def.default));
 		}
 		// else: no persisted value and no default → key not set (field is T | undefined)
 	}
@@ -41,8 +58,8 @@ export function applyFieldDefaults<F extends FieldsDef>(
 	// Preserve unknown persisted keys when pruning is disabled
 	if (!pruneUnknown && persisted !== undefined) {
 		for (const [key, value] of Object.entries(persisted)) {
-			if (!(key in fields)) {
-				result[key] = value;
+			if (!Object.hasOwn(fields, key)) {
+				setDocumentValue(result, key, value);
 			}
 		}
 	}

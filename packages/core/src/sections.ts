@@ -1,6 +1,7 @@
 import type { CommandSnapshot } from "./command/snapshot.ts";
+import { CrustError } from "./errors.ts";
 import type { ExtensionId } from "./identity.ts";
-import type { CommandSection } from "./types.ts";
+import type { CommandSection, RuntimeCommandSectionInput, SectionConsumer } from "./types.ts";
 
 /** Whether a command belongs in user-facing listings. */
 export function isListed(command: CommandSnapshot): boolean {
@@ -48,4 +49,56 @@ export function visibleSectionsFor(
 	}
 	visit(snapshot, []);
 	return groups;
+}
+
+/** Who authored the sections being validated; error labels derive from this. */
+export type SectionOwner = { subject: "command" | "context" | "extension"; name: string };
+
+const sectionOwnerLabels = { command: "Command", context: "Context", extension: "Extension" };
+
+function invalidSections({ subject, name }: SectionOwner): CrustError {
+	const label = sectionOwnerLabels[subject];
+	return new CrustError(
+		"DEFINITION",
+		`${label} "${name}" contains invalid documentation sections`,
+		{ subject, name, reason: "invalid-sections" },
+	);
+}
+
+export function normalizeSection(
+	section: RuntimeCommandSectionInput,
+	owner: SectionOwner,
+): CommandSection {
+	const { title, body, only, except } = section;
+	if (
+		!title.trim() ||
+		/[\r\n]/.test(title) ||
+		!body.trim() ||
+		only?.length === 0 ||
+		except?.length === 0 ||
+		(only !== undefined && except !== undefined)
+	) {
+		throw invalidSections(owner);
+	}
+	const audience = (ids: readonly SectionConsumer[]): readonly [ExtensionId, ...ExtensionId[]] => {
+		// SAFETY: normalization establishes nonemptiness; consumers carry minted IDs.
+		/* oxlint-disable anti-slop/no-runtime-typeof -- SectionConsumer is a typed minted ID or an object carrying one, not unvalidated data. */
+		return Object.freeze(
+			ids.map((consumer) => (typeof consumer === "string" ? consumer : consumer.id)),
+		) as readonly [ExtensionId, ...ExtensionId[]];
+		/* oxlint-enable anti-slop/no-runtime-typeof */
+	};
+	return Object.freeze({
+		title,
+		body,
+		...(only ? { only: audience(only) } : except ? { except: audience(except) } : {}),
+	});
+}
+
+export function validateCommandSections(
+	name: string,
+	sections: readonly RuntimeCommandSectionInput[],
+	subject: "command" | "context" = "command",
+): CommandSection[] {
+	return sections.map((section) => normalizeSection(section, { subject, name }));
 }

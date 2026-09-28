@@ -1,14 +1,8 @@
 import type { AnyContextInstance } from "../api/context.ts";
 import type { ExtensionData } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
-import type { ExtensionId } from "../identity.ts";
-import type {
-	CommandSection,
-	RuntimeCommandSectionInput,
-	SectionConsumer,
-	FlagDef,
-	FlagsDef,
-} from "../types.ts";
+import { normalizeSection, type SectionOwner } from "../sections.ts";
+import type { FlagDef, FlagsDef } from "../types.ts";
 import type { CommandDefinition } from "./crust.ts";
 import { registerFlag, type CommandContext, type CommandNode } from "./node.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
@@ -93,58 +87,6 @@ export function cloneCommandNode(node: CommandNode): CommandNode {
 		run: node.run,
 	};
 	return cloned;
-}
-
-/** Who authored the sections being validated; error labels derive from this. */
-type SectionOwner = { subject: "command" | "context" | "extension"; name: string };
-
-const sectionOwnerLabels = { command: "Command", context: "Context", extension: "Extension" };
-
-function invalidSections({ subject, name }: SectionOwner): CrustError {
-	const label = sectionOwnerLabels[subject];
-	return new CrustError(
-		"DEFINITION",
-		`${label} "${name}" contains invalid documentation sections`,
-		{ subject, name, reason: "invalid-sections" },
-	);
-}
-
-function normalizeSection(
-	section: RuntimeCommandSectionInput,
-	owner: SectionOwner,
-): CommandSection {
-	const { title, body, only, except } = section;
-	if (
-		!title.trim() ||
-		/[\r\n]/.test(title) ||
-		!body.trim() ||
-		only?.length === 0 ||
-		except?.length === 0 ||
-		(only !== undefined && except !== undefined)
-	) {
-		throw invalidSections(owner);
-	}
-	const audience = (ids: readonly SectionConsumer[]): readonly [ExtensionId, ...ExtensionId[]] => {
-		// SAFETY: normalization establishes nonemptiness; consumers carry minted IDs.
-		/* oxlint-disable anti-slop/no-runtime-typeof -- SectionConsumer is a typed minted ID or an object carrying one, not unvalidated data. */
-		return Object.freeze(
-			ids.map((consumer) => (typeof consumer === "string" ? consumer : consumer.id)),
-		) as readonly [ExtensionId, ...ExtensionId[]];
-		/* oxlint-enable anti-slop/no-runtime-typeof */
-	};
-	return Object.freeze({
-		title,
-		body,
-		...(only ? { only: audience(only) } : except ? { except: audience(except) } : {}),
-	});
-}
-
-export function validateCommandSections(
-	name: string,
-	sections: readonly RuntimeCommandSectionInput[],
-	subject: "command" | "context" = "command",
-): CommandSection[] {
-	return sections.map((section) => normalizeSection(section, { subject, name }));
 }
 
 function contributionTarget(

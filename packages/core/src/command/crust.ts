@@ -23,6 +23,7 @@ import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import type { RunInputPayload } from "../parsing/parser.ts";
 import { normalizeArg } from "../parsing/spellings.ts";
+import { validateCommandSections } from "../sections.ts";
 import type {
 	ArgsDef,
 	CommandMeta,
@@ -88,7 +89,6 @@ import {
 	cloneCommandNode,
 	cloneFlagRegistry,
 	installExtensionContexts,
-	validateCommandSections,
 } from "./extensions-install.ts";
 import {
 	executeInvocation,
