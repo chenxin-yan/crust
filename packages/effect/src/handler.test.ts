@@ -6,7 +6,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { CrustDefinitionError, CrustEnvError, tryCrust } from "./errors.ts";
 import { handler, service } from "./handler.ts";
-import { layer } from "./layer.ts";
+import { type LayerValue, layer } from "./layer.ts";
 
 class Db extends Context.Service<Db, { readonly query: (sql: string) => string }>()("test/Db") {}
 class Cache extends Context.Service<Cache, { readonly get: (key: string) => string }>()(
@@ -317,6 +317,74 @@ describe("handler with layer", () => {
 		const outcome = await app.run([]);
 
 		expect(outcome.status === "completed" && outcome.result).toBe("plain");
+	});
+
+	it("skips a layer shadowed by a descendant plain Context, keeping the plain Context lazy", async () => {
+		const log: string[] = [];
+		const shared = layer("shared", resource(log, Db, "layer", { query: (sql) => sql }));
+		let plainBuilds = 0;
+		const plain = defineContext("shared").setup(() => {
+			plainBuilds++;
+			return { port: 80 };
+		});
+		const app = new Crust("cli")
+			.provide(shared())
+			.command("child", (child) =>
+				child.provide(plain()).action(handler(() => Effect.succeed("ok"))),
+			);
+
+		const outcome = await app.run(["child"]);
+
+		expect(outcome.status === "completed" && outcome.result).toBe("ok");
+		expect(plainBuilds).toBe(0);
+		expect(log).toEqual([]);
+	});
+
+	it("builds only the effective layer when a descendant layer shadows an ancestor, in provider order", async () => {
+		const log: string[] = [];
+		const ancestor = layer("shared", resource(log, Db, "ancestor", { query: () => "ancestor" }));
+		const second = layer("second", resource(log, Db, "second", { query: () => "second" }));
+		const descendant = layer(
+			"shared",
+			resource(log, Db, "descendant", { query: () => "descendant" }),
+		);
+		const app = new Crust("cli").provide(ancestor(), second()).command("child", (child) =>
+			child.provide(descendant()).action(
+				handler(function* () {
+					return (yield* Db).query("");
+				}),
+			),
+		);
+
+		const outcome = await app.run(["child"]);
+
+		// The later effective provider wins service conflicts, as Core's last same-name provider does.
+		expect(outcome.status === "completed" && outcome.result).toBe("descendant");
+		expect(log).toEqual([
+			"acquire second",
+			"acquire descendant",
+			"release descendant",
+			"release second",
+		]);
+	});
+
+	it("provides a descendant same-factory layer .of() double without building the live layer", async () => {
+		const log: string[] = [];
+		const db = layer("db", resource(log, Db, "live", { query: () => "live" }));
+		// SAFETY: LayerValue's brand is type-only; a built Context is the runtime value.
+		const double = Context.make(Db, { query: () => "double" }) as LayerValue<Db>;
+		const app = new Crust("cli").provide(db()).command("child", (child) =>
+			child.provide(db.of(double)).action(
+				handler(function* () {
+					return (yield* Db).query("");
+				}),
+			),
+		);
+
+		const outcome = await app.run(["child"]);
+
+		expect(outcome.status === "completed" && outcome.result).toBe("double");
+		expect(log).toEqual([]);
 	});
 
 	it("fails service() with Core's missing-context error when the Context is off the path", async () => {

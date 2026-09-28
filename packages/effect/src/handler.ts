@@ -36,8 +36,9 @@ export type ServicesOf<Input> = Input extends { readonly ctx: infer Bag }
 	: never;
 
 /**
- * Adapt an Effect program to a Crust action. Every {@link layer} on the
- * command path is built up front and its services provided; `ctx` inference
+ * Adapt an Effect program to a Crust action. Every effective {@link layer} on
+ * the command path (not shadowed by a same-name descendant provider) is built
+ * up front and its services provided; `ctx` inference
  * is unchanged. A failure rethrows the original error so `execute()` renders
  * it unchanged, and interruption rethrows an `AbortError` so cancellation
  * exits with 130. Aborting the invocation's `ctx.signal` interrupts the fiber.
@@ -57,9 +58,15 @@ export function handler<Input extends ActionInput, Out>(
 ): (input: Input) => Promise<Out> {
 	return async (input) => {
 		const ctx: ContextBag = input.ctx;
-		const layers = (ctx[contextSources] ?? []).filter(
-			(source): source is ContextInstance =>
-				"factory" in source && layerFactories.has(source.factory),
+		const providers = (ctx[contextSources] ?? []).filter(
+			(source): source is ContextInstance => "factory" in source,
+		);
+		// Core resolves the last same-name provider: drop shadowed ones before classifying,
+		// so a descendant plain Context stays lazy and is never merged as a Layer.
+		const layers = providers.filter(
+			(source, i) =>
+				providers.findLastIndex(({ name }) => name === source.name) === i &&
+				layerFactories.has(source.factory),
 		);
 		const bag: Readonly<Record<string, Promise<Context.Context<unknown>>>> = input.ctx;
 		const builds = layers.map(({ name }) => bag[name]!);

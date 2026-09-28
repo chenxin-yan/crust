@@ -55,7 +55,8 @@ Each invocation builds the Layer in a fresh `Scope`, closed with the other Conte
 
 <Callout title="Every layer() on the path is built eagerly">
   When a `handler()` action starts, every `layer()` Context on the command path is built, whether or
-  not the program uses it. Plain Contexts stay lazy. Attach Layers to the commands that need them.
+  not the program uses it. A `layer()` replaced by a same-name provider on a descendant command is
+  not built. Plain Contexts stay lazy. Attach Layers to the commands that need them.
 </Callout>
 
 ## `handler(fn)`
