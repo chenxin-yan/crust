@@ -313,33 +313,36 @@ describeIfFish("renderFish · subprocess completion", () => {
 			variadic: false,
 			choices,
 		});
-		const specWith = (quiet: CompletionCommand["flags"][number]): CompletionCommand => ({
+		const specWith = (
+			quiet: CompletionCommand["flags"][number],
+			valueFlag = profile,
+		): CompletionCommand => ({
 			name: "vcli",
-			flags: [profile, quiet],
+			flags: [valueFlag, quiet],
 			args: [],
 			subCommands: [
 				{
 					name: "deploy",
 					aliases: ["dep"],
-					flags: [profile, quiet, region],
+					flags: [valueFlag, quiet, region],
 					args: [],
 					subCommands: [
 						{
 							name: "prod",
-							flags: [profile, quiet, region],
+							flags: [valueFlag, quiet, region],
 							args: [slot("first", ["alpha", "beta"]), slot("second", ["gamma", "delta"])],
 							subCommands: [],
 						},
 						{
 							name: "local",
-							flags: [profile, quiet],
+							flags: [valueFlag, quiet],
 							args: [slot("target", ["here"])],
 							subCommands: [],
 						},
 						{
 							name: "shadow",
 							flags: [
-								profile,
+								valueFlag,
 								quiet,
 								{ name: "region", type: "boolean", takesValue: false, negatable: false },
 							],
@@ -392,20 +395,30 @@ describeIfFish("renderFish · subprocess completion", () => {
 			expect({ line, candidates }).toEqual({ line, candidates: [...expected] });
 		}
 
-		// Core looks bundle characters up among canonical names and aliases
-		// too, so a one-character canonical `q` or alias `q` is a boolean prefix.
-		for (const [variant, variantQuiet] of [
-			["canonical", { ...quiet, name: "q", short: undefined }],
-			["alias", { ...quiet, short: undefined, aliases: ["q"] }],
+		// Core accepts one-character canonical names and aliases as both
+		// boolean bundle prefixes and value-taking shorts.
+		for (const [variant, variantQuiet, variantProfile] of [
+			["boolean-canonical", { ...quiet, name: "q", short: undefined }, profile],
+			["boolean-alias", { ...quiet, short: undefined, aliases: ["q"] }, profile],
+			["value-canonical", quiet, { ...profile, name: "p", short: undefined }],
+			["value-alias", quiet, { ...profile, short: undefined, aliases: ["p"] }],
 		] as const) {
 			const variantPath = join(tmpDir, `vcli-${variant}.fish`);
-			await writeFile(variantPath, renderFish(specWith(variantQuiet), "vcli", "1.0.0"), "utf8");
+			await writeFile(
+				variantPath,
+				renderFish(specWith(variantQuiet, variantProfile), "vcli", "1.0.0"),
+				"utf8",
+			);
 			for (const [line, expected] of [
+				["vcli -p dev deploy ", ["local", "prod", "shadow"]],
 				["vcli -qp dev deploy ", ["local", "prod", "shadow"]],
+				["vcli deploy prod -p dev alpha ", ["delta", "gamma"]],
+				["vcli deploy prod -qp dev alpha ", ["delta", "gamma"]],
+				["vcli deploy prod -qpdev alpha ", ["delta", "gamma"]],
 				["vcli -xp dev deploy ", []],
 			] as const) {
 				const candidates = await complete(variantPath, line);
-				expect({ variant, line, candidates }).toEqual({
+				expect.soft({ variant, line, candidates }).toEqual({
 					variant,
 					line,
 					candidates: [...expected],

@@ -273,6 +273,7 @@ function emitRules(
  * - `__<ident>_flags <value|bool> <canonical path...>` prints that command's
  *   value-taking spellings (`--name`, `-s`, `--alias`) or boolean
  *   one-character spellings (short, canonical or alias) as `-c`.
+ *   Value-taking canonical names and aliases of one character also accept `-c`.
  * - `__<ident>_takes_value <token> <canonical path...>` succeeds when `token`
  *   consumes the next argv token at that command, like Core's
  *   `matchKnownFlagToken`: `--name`/`-s` of a value flag, or a short bundle
@@ -297,6 +298,9 @@ function emitFlagScopeHelpers(ident: string, spec: CompletionCommand): string[] 
 							`--${flag.name}`,
 							...(flag.short === undefined ? [] : [`-${flag.short}`]),
 							...(flag.aliases ?? []).map((alias) => `--${alias}`),
+							...[flag.name, ...(flag.aliases ?? [])].flatMap((spelling) =>
+								spelling.length === 1 ? [`-${spelling}`] : [],
+							),
 						]
 					: [],
 			),
