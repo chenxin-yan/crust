@@ -169,7 +169,13 @@ export function createStore<const F extends FieldsDef>(
 		const normalized = { ...state };
 
 		for (const [key, def] of Object.entries(fields)) {
-			if (!Object.hasOwn(normalized, key) || def.schema !== undefined) continue;
+			if (!Object.hasOwn(normalized, key)) {
+				// A missing field named like an inherited member (`constructor`, `toString`,
+				// `__proto__`) would expose that member; store it as own `undefined` instead.
+				if (key in normalized) setDocumentValue(normalized, key, undefined);
+				continue;
+			}
+			if (def.schema !== undefined) continue;
 
 			const value = normalized[key];
 			if (value === undefined) continue;

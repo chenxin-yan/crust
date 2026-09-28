@@ -1402,4 +1402,38 @@ describe("Object.prototype key names", () => {
 			expect(Object.entries(await store.read())).toEqual(Object.entries(patched));
 		});
 	}
+
+	for (const name of ["constructor", "toString", "__proto__"]) {
+		for (const [kind, def] of [
+			["core", { type: "string" }],
+			["schema", { schema: z.string().optional() }],
+		] as const) {
+			for (const pruneUnknown of [true, false]) {
+				it(`materializes missing optional ${kind} field "${name}" as own undefined (pruneUnknown: ${pruneUnknown})`, async () => {
+					const filePath = join(tempDir, "config.json");
+					const fields: FieldsDef = { [name]: def, token: { type: "string" } };
+					const store = createStore({ dirPath: tempDir, name: "config", pruneUnknown, fields });
+					const expectMissing = (document: Awaited<ReturnType<typeof store.read>>) => {
+						expect(Object.getPrototypeOf(document)).toBe(Object.prototype);
+						expect(Object.entries(document)).toEqual([[name, undefined]]);
+						// Non-colliding optional fields stay omitted.
+						expect(Object.hasOwn(document, "token")).toBe(false);
+					};
+
+					expectMissing(await store.read());
+					expectMissing(await store.patch({}));
+					expectMissing(await store.update((current) => current));
+					expectMissing(await store.write({}));
+					expect(await readFile(filePath, "utf-8")).toBe("{}");
+					expectMissing(await store.read());
+
+					expect(Object.entries(await store.patch({ [name]: "v" }))).toEqual([[name, "v"]]);
+					expect(JSON.parse(await readFile(filePath, "utf-8"))).toEqual(
+						JSON.parse(`{"${name}":"v"}`),
+					);
+					expect(Object.entries(await store.read())).toEqual([[name, "v"]]);
+				});
+			}
+		}
+	}
 });
