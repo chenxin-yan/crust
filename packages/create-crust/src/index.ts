@@ -210,10 +210,7 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 		// Infer package name from directory
 		const name = dirName;
 
-		// `templates` is a crust.include directory staged next to this bundle.
-		const templatePath = (template: string) => join(resolveArtifactDir("templates"), template);
 		const packageManager = runtime === "deno" ? "deno" : detectPackageManager(resolvedDir);
-		const { shebang, tsLib, tsTypes } = RUNTIMES[runtime];
 		// The bundle inlines the sibling package.json imports, so scaffolded projects
 		// pin the Crust versions from the build that produced create-crust.
 		const context = {
@@ -222,9 +219,7 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 			artifact,
 			run: packageManager === "deno" ? "deno task" : `${packageManager} run`,
 			install: `${packageManager} install`,
-			shebang,
-			tsLib,
-			tsTypes,
+			...RUNTIMES[runtime],
 			coreVersion: corePkg.version,
 			extensionsVersion: extensionsPkg.version,
 			crustVersion: crustPkg.version,
@@ -234,7 +229,8 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 			message: "Scaffolding project...",
 			task: () =>
 				scaffold({
-					template: templatePath("base"),
+					// `templates` is a crust.include directory staged next to this bundle.
+					template: join(resolveArtifactDir("templates"), "base"),
 					dest: resolvedDir,
 					context,
 					render: (source, data) => eta.renderString(source, data),
