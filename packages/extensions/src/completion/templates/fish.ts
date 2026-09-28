@@ -10,9 +10,11 @@ import type { CompletionCommand } from "../spec.ts";
  * them on every TAB; there's no entry-point function, no subprocess, and
  * no shell state to manage.
  *
- * **Subcommand routing.** We emit a single helper per script —
+ * **Subcommand routing.** We emit a single routing helper per script —
  * `__<ident>_path_at_arg` — that walks `commandline -opc` left-to-right,
- * skips flags and the `--` end-of-options terminator, and verifies that
+ * skips flags (plus the separate value of a flag that takes one at the
+ * current routing depth, decided by `__<ident>_takes_value`) and the
+ * `--` end-of-options terminator, and verifies that
  * each consumed positional matches the expected canonical-or-alias set
  * for its depth in order. This replaces the stock
  * `__fish_seen_subcommand_from` chain (which is order-insensitive and
@@ -266,6 +268,86 @@ function emitRules(
 }
 
 /**
+ * Emit the flag-scope helpers used by routing:
+ *
+ * - `__<ident>_flags <value|bool> <canonical path...>` prints that command's
+ *   value-taking spellings (`--name`, `-s`, `--alias`) or boolean
+ *   one-character spellings (short, canonical or alias) as `-c`.
+ *   Value-taking canonical names and aliases of one character also accept `-c`.
+ * - `__<ident>_takes_value <token> <canonical path...>` succeeds when `token`
+ *   consumes the next argv token at that command, like Core's
+ *   `matchKnownFlagToken`: `--name`/`-s` of a value flag, or a short bundle
+ *   of known booleans ending in a value short (`-qs`). `--name=value`,
+ *   `-svalue` and bundles with an unknown character consume nothing.
+ */
+function emitFlagScopeHelpers(ident: string, spec: CompletionCommand): string[] {
+	const lines: string[] = [`function __${ident}_flags`];
+	let branch = "if";
+	const emitBranch = (key: readonly string[], spellings: readonly string[]): void => {
+		if (spellings.length === 0) return;
+		lines.push(`\t${branch} test "$argv" = ${fishSingleQuote(key.join(" "))}`);
+		lines.push(`\t\tprintf '%s\\n' ${spellings.map(fishSingleQuote).join(" ")}`);
+		branch = "else if";
+	};
+	const visit = (node: CompletionCommand, route: readonly string[]): void => {
+		emitBranch(
+			["value", ...route],
+			node.flags.flatMap((flag) =>
+				flag.takesValue
+					? [
+							`--${flag.name}`,
+							...(flag.short === undefined ? [] : [`-${flag.short}`]),
+							...(flag.aliases ?? []).map((alias) => `--${alias}`),
+							...[flag.name, ...(flag.aliases ?? [])].flatMap((spelling) =>
+								spelling.length === 1 ? [`-${spelling}`] : [],
+							),
+						]
+					: [],
+			),
+		);
+		emitBranch(
+			["bool", ...route],
+			// Core matches bundle characters against every spelling, so
+			// one-character canonical names and aliases count as shorts.
+			node.flags.flatMap((flag) =>
+				flag.takesValue
+					? []
+					: [
+							flag.name,
+							...(flag.short === undefined ? [] : [flag.short]),
+							...(flag.aliases ?? []),
+						].flatMap((spelling) => (spelling.length === 1 ? [`-${spelling}`] : [])),
+			),
+		);
+		for (const sub of node.subCommands) visit(sub, [...route, sub.name]);
+	};
+	visit(spec, []);
+	if (branch !== "if") lines.push("\tend");
+	lines.push("end");
+	lines.push("");
+	lines.push(`function __${ident}_takes_value`);
+	lines.push("\tset -l t $argv[1]");
+	lines.push("\tset -e argv[1]");
+	lines.push(`\tset -l value_flags (__${ident}_flags value $argv)`);
+	lines.push("\tcontains -- $t $value_flags; and return 0");
+	lines.push("\tstring match -q -- '--*' $t; and return 1");
+	lines.push(`\tset -l bool_shorts (__${ident}_flags bool $argv)`);
+	lines.push("\tset -l chars (string split '' -- (string sub --start 2 -- $t))");
+	lines.push("\tset -l k 0");
+	lines.push("\tfor c in $chars");
+	lines.push("\t\tset k (math $k + 1)");
+	lines.push("\t\tif contains -- -$c $value_flags");
+	lines.push("\t\t\ttest $k -eq (count $chars)");
+	lines.push("\t\t\treturn");
+	lines.push("\t\tend");
+	lines.push("\t\tcontains -- -$c $bool_shorts; or return 1");
+	lines.push("\tend");
+	lines.push("\treturn 1");
+	lines.push("end");
+	return lines;
+}
+
+/**
  * Emit the per-script `__<ident>_path_at_arg` helper. It takes a
  * `pos_spec` argument before the block list. `pos_spec` is `<N>` (fires
  * when exactly N positionals have
@@ -292,6 +374,12 @@ function emitPosHelper(ident: string): string[] {
 	lines.push("\tset -l j 2");
 	lines.push("\tset -l consumed 0");
 	lines.push("\tset -l end_of_options 0");
+	// Canonical names of the path consumed so far select the flag scope,
+	// mirroring Core routing, which consumes known flags per depth.
+	// `forwarded` holds value-consuming flag tokens seen before the next
+	// path element; Core descends only when that child consumes them too.
+	lines.push("\tset -l route");
+	lines.push("\tset -l forwarded");
 	lines.push("\twhile test $j -le $total");
 	lines.push("\t\tset -l t $tokens[$j]");
 	lines.push('\t\tif test "$t" = "--"');
@@ -300,7 +388,12 @@ function emitPosHelper(ident: string): string[] {
 	lines.push("\t\t\tcontinue");
 	lines.push("\t\tend");
 	lines.push("\t\tif test $end_of_options -eq 0; and string match -q -- '-*' $t");
-	lines.push("\t\t\tset j (math $j + 1)");
+	lines.push("\t\t\tset -l skip 1");
+	lines.push(`\t\t\tif __${ident}_takes_value $t $route`);
+	lines.push("\t\t\t\tset skip 2");
+	lines.push("\t\t\t\tset -a forwarded $t");
+	lines.push("\t\t\tend");
+	lines.push("\t\t\tset j (math $j + $skip)");
 	lines.push("\t\t\tcontinue");
 	lines.push("\t\tend");
 	lines.push("\t\tif test $consumed -lt $n");
@@ -309,6 +402,10 @@ function emitPosHelper(ident: string): string[] {
 	lines.push("\t\t\t\treturn 1");
 	lines.push("\t\t\tend");
 	lines.push("\t\t\tset consumed (math $consumed + 1)");
+	lines.push("\t\t\tset -a route $alts[1]");
+	lines.push("\t\t\tfor f in $forwarded");
+	lines.push(`\t\t\t\t__${ident}_takes_value $f $route; or return 1`);
+	lines.push("\t\t\tend");
 	lines.push("\t\telse");
 	lines.push("\t\t\tif contains -- $t $block");
 	lines.push("\t\t\t\treturn 1");
@@ -348,7 +445,8 @@ export function renderFish(spec: CompletionCommand, binName: string, version: st
 	);
 	lines.push("");
 
-	// Emit the path-resolution helper before any rules reference it.
+	// Emit the path-resolution helpers before any rules reference them.
+	lines.push(...emitFlagScopeHelpers(ident, spec));
 	lines.push(...emitPosHelper(ident));
 	lines.push("");
 

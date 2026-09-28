@@ -278,6 +278,154 @@ describeIfFish("renderFish · subprocess completion", () => {
 			).toEqual([...expected]);
 		}
 	});
+
+	it("consumes separate flag values at the routing depth that owns the flag", async () => {
+		// `--profile` / `-p` / `--env-name` is a recursive (effective at every
+		// depth) value flag; `-q` is a recursive boolean for bundling with
+		// `-p`. `--region` is a value flag on `deploy` that `prod` also
+		// accepts, `local` lacks, and `shadow` redefines as boolean — Core
+		// only descends into a child that parses earlier flags the same way.
+		const profile: CompletionCommand["flags"][number] = {
+			name: "profile",
+			short: "p",
+			aliases: ["env-name"],
+			type: "string",
+			takesValue: true,
+			negatable: false,
+		};
+		const quiet: CompletionCommand["flags"][number] = {
+			name: "quiet",
+			short: "q",
+			type: "boolean",
+			takesValue: false,
+			negatable: false,
+		};
+		const region: CompletionCommand["flags"][number] = {
+			name: "region",
+			type: "string",
+			takesValue: true,
+			negatable: false,
+		};
+		const slot = (name: string, choices: string[]): CompletionCommand["args"][number] => ({
+			name,
+			type: "string",
+			required: true,
+			variadic: false,
+			choices,
+		});
+		const specWith = (
+			quiet: CompletionCommand["flags"][number],
+			valueFlag = profile,
+		): CompletionCommand => ({
+			name: "vcli",
+			flags: [valueFlag, quiet],
+			args: [],
+			subCommands: [
+				{
+					name: "deploy",
+					aliases: ["dep"],
+					flags: [valueFlag, quiet, region],
+					args: [],
+					subCommands: [
+						{
+							name: "prod",
+							flags: [valueFlag, quiet, region],
+							args: [slot("first", ["alpha", "beta"]), slot("second", ["gamma", "delta"])],
+							subCommands: [],
+						},
+						{
+							name: "local",
+							flags: [valueFlag, quiet],
+							args: [slot("target", ["here"])],
+							subCommands: [],
+						},
+						{
+							name: "shadow",
+							flags: [
+								valueFlag,
+								quiet,
+								{ name: "region", type: "boolean", takesValue: false, negatable: false },
+							],
+							args: [slot("target", ["there"])],
+							subCommands: [],
+						},
+					],
+				},
+			],
+		});
+		const complete = async (path: string, line: string): Promise<string[]> => {
+			const driver = `source ${shQuoteForFish(path)}; complete -C ${shQuoteForFish(line)}`;
+			const { exitCode, stdout, stderr } = await runBoundedProcess("fish", ["-c", driver], {
+				timeout: 4_000,
+			});
+			expect(exitCode).toBe(0);
+			expect(stderr).toBe("");
+			return stdout
+				.split("\n")
+				.filter((candidate) => candidate !== "")
+				.map((candidate) => candidate.split("\t")[0]!);
+		};
+		const path = join(tmpDir, "vcli.fish");
+		await writeFile(path, renderFish(specWith(quiet), "vcli", "1.0.0"), "utf8");
+
+		for (const [line, expected] of [
+			// Separate values before command paths, every spelling.
+			["vcli --profile dev deploy ", ["local", "prod", "shadow"]],
+			["vcli -p dev dep ", ["local", "prod", "shadow"]],
+			["vcli --env-name dev deploy ", ["local", "prod", "shadow"]],
+			["vcli -qp dev deploy ", ["local", "prod", "shadow"]],
+			// An unknown bundle character is not a boolean prefix: `dev` stays a token.
+			["vcli -xp dev deploy ", []],
+			// A deeper-depth flag forwards only to children that parse it the same way.
+			["vcli deploy --region us prod ", ["alpha", "beta"]],
+			["vcli deploy --region us local ", []],
+			["vcli deploy --region us shadow ", []],
+			// Separate values between positionals keep the slot count.
+			["vcli deploy prod alpha --profile dev ", ["delta", "gamma"]],
+			["vcli deploy prod -p dev alpha ", ["delta", "gamma"]],
+			// Inline values consume nothing further.
+			["vcli --profile=dev deploy ", ["local", "prod", "shadow"]],
+			["vcli deploy prod -pdev alpha ", ["delta", "gamma"]],
+			// `--region` is not a root flag, so `us` is not skipped at the root.
+			["vcli --region us deploy ", []],
+			// After `--`, flag-shaped tokens are positionals and take no value.
+			["vcli deploy prod -- --profile ", ["delta", "gamma"]],
+		] as const) {
+			const candidates = await complete(path, line);
+			expect({ line, candidates }).toEqual({ line, candidates: [...expected] });
+		}
+
+		// Core accepts one-character canonical names and aliases as both
+		// boolean bundle prefixes and value-taking shorts.
+		for (const [variant, variantQuiet, variantProfile] of [
+			["boolean-canonical", { ...quiet, name: "q", short: undefined }, profile],
+			["boolean-alias", { ...quiet, short: undefined, aliases: ["q"] }, profile],
+			["value-canonical", quiet, { ...profile, name: "p", short: undefined }],
+			["value-alias", quiet, { ...profile, short: undefined, aliases: ["p"] }],
+		] as const) {
+			const variantPath = join(tmpDir, `vcli-${variant}.fish`);
+			await writeFile(
+				variantPath,
+				renderFish(specWith(variantQuiet, variantProfile), "vcli", "1.0.0"),
+				"utf8",
+			);
+			for (const [line, expected] of [
+				["vcli -p dev deploy ", ["local", "prod", "shadow"]],
+				["vcli -qp dev deploy ", ["local", "prod", "shadow"]],
+				["vcli deploy prod -p dev alpha ", ["delta", "gamma"]],
+				["vcli deploy prod -qp dev alpha ", ["delta", "gamma"]],
+				["vcli deploy prod -qpdev alpha ", ["delta", "gamma"]],
+				["vcli -xp dev deploy ", []],
+			] as const) {
+				const candidates = await complete(variantPath, line);
+				expect.soft({ variant, line, candidates }).toEqual({
+					variant,
+					line,
+					candidates: [...expected],
+				});
+			}
+		}
+	});
 });
 
 async function isFishAvailable(): Promise<boolean> {

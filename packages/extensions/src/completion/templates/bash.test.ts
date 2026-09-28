@@ -465,3 +465,99 @@ describe("renderBash — url/path/json value-flag handling", () => {
 		expect(script).not.toMatch(/\b0\)\s*\n\s*compopt \+o default/);
 	});
 });
+
+/**
+ * One command mixing all three flag-value modes (choices, files,
+ * suppression), each reachable via long/short/alias spellings under an
+ * aliased subcommand, in both the separate and `--flag=` input forms.
+ * `compopt` only works inside real completion, so the script is sourced
+ * after a stub that records each call as a candidate line.
+ */
+describe("renderBash · mixed flag value modes", () => {
+	const mixedFixture: CompletionCommand = {
+		name: "mycli",
+		flags: [],
+		args: [],
+		subCommands: [
+			{
+				name: "deploy",
+				aliases: ["dep"],
+				flags: [
+					{
+						name: "mode",
+						short: "m",
+						aliases: ["flavor"],
+						type: "string",
+						takesValue: true,
+						negatable: false,
+						choices: ["fast", "slow"],
+					},
+					{
+						name: "out",
+						short: "o",
+						aliases: ["output"],
+						type: "string",
+						takesValue: true,
+						negatable: false,
+						valueCompletion: "files",
+					},
+					{
+						name: "endpoint",
+						short: "e",
+						aliases: ["url"],
+						type: "string",
+						takesValue: true,
+						negatable: false,
+						valueCompletion: "none",
+					},
+				],
+				args: [],
+				subCommands: [],
+			},
+		],
+	};
+
+	let tmpDir: string;
+	let scriptPath: string;
+	let cwd: string;
+
+	beforeAll(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "tp010-bash-mixed-"));
+		scriptPath = join(tmpDir, "mycli-completion.bash");
+		const compoptStub = `compopt() { printf '@compopt %s\\n' "$*"; }\n`;
+		await writeFile(scriptPath, compoptStub + renderBash(mixedFixture, "mycli", "1.0.0"), "utf8");
+		cwd = join(tmpDir, "cwd");
+		await mkdir(cwd);
+		for (const name of ["hello world.txt", "notes.md"]) {
+			await writeFile(join(cwd, name), "", "utf8");
+		}
+	});
+
+	afterAll(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it.each<[string, string[], string[]]>([
+		["choices, short separate", ["dep", "-m", ""], ["fast", "slow"]],
+		["choices, alias separate", ["deploy", "--flavor", "s"], ["slow"]],
+		["choices, long equals", ["dep", "--mode=f"], ["--mode=fast"]],
+		["choices, alias equals", ["deploy", "--flavor="], ["--flavor=fast", "--flavor=slow"]],
+		[
+			"files, short separate",
+			["dep", "-o", ""],
+			["@compopt -o filenames", "hello world.txt", "notes.md"],
+		],
+		["files, long separate", ["deploy", "--out", "no"], ["@compopt -o filenames", "notes.md"]],
+		[
+			"files, alias equals",
+			["deploy", "--output=hello"],
+			["--output=hello world.txt", "@compopt -o filenames"],
+		],
+		["suppression, short separate", ["dep", "-e", ""], ["@compopt +o default"]],
+		["suppression, long equals", ["dep", "--endpoint=x"], ["@compopt +o default"]],
+		["suppression, alias equals", ["deploy", "--url=ht"], ["@compopt +o default"]],
+	])("%s", async (_label, words, expected) => {
+		const completions = await runBashCompletion(scriptPath, "_mycli", ["mycli", ...words], cwd);
+		expect(completions).toEqual(expected);
+	});
+});
