@@ -232,7 +232,6 @@ describe("writeSkills", () => {
 		["bad?name", '"bad?name"'],
 		["bad*name", '"bad*name"'],
 		["bad\u0001name", '"bad\u0001name"'],
-		["trailing.", '"trailing."'],
 	])("rejects command name %s that is not one portable file segment", async (name, quoted) => {
 		const outDir = join(tempRoot, "out", "skills");
 		await mkdir(join(outDir, "previous"), { recursive: true });
@@ -294,6 +293,35 @@ describe("writeSkills", () => {
 		const app = reverse ? createApp().add(other).add(leaf) : createApp().add(leaf).add(other);
 
 		await expect(writeSkills({ app, outDir })).rejects.toThrow("both render to");
+		expect(await readdir(outDir)).toEqual(["previous.md"]);
+		expect(await readFile(join(outDir, "previous.md"), "utf8")).toBe("Keep this output");
+	});
+
+	it("accepts a trailing-dot leaf, whose generated file name does not end in a dot", async () => {
+		const outDir = join(tempRoot, "skills");
+		const app = createApp().add(defineCommand("trailing.", (command) => command.action(() => {})));
+
+		const artifacts = await writeSkills({ app, outDir });
+
+		expect(artifacts).toContain(join("demo", "commands", "trailing..md"));
+		expect(await readFile(join(outDir, "demo", "commands", "trailing..md"), "utf8")).toContain(
+			"# `demo trailing.`",
+		);
+	});
+
+	it("rejects a trailing-dot group, whose generated directory name ends in a dot", async () => {
+		const outDir = join(tempRoot, "skills");
+		await mkdir(outDir, { recursive: true });
+		await writeFile(join(outDir, "previous.md"), "Keep this output");
+		const app = createApp().add(
+			defineCommand("trailing.", (command) =>
+				command.add(defineCommand("child", (child) => child.action(() => {}))),
+			),
+		);
+
+		await expect(writeSkills({ app, outDir })).rejects.toThrow(
+			'Cannot generate skills for command name "trailing.": generated name "trailing." is not a portable file name',
+		);
 		expect(await readdir(outDir)).toEqual(["previous.md"]);
 		expect(await readFile(join(outDir, "previous.md"), "utf8")).toBe("Keep this output");
 	});
