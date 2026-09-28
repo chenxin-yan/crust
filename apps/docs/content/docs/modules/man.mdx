@@ -70,6 +70,8 @@ console.log(source.startsWith(".Dd ")); // => true
 
 The renderer lists immediate visible children in the root summary and collects visible subcommand sections under `.Sh COMMANDS`. Sections targeted to `man` are audience-filtered, same-title sections merge at their first position, and section titles are uppercased (`Files` renders as `.Sh FILES`).
 
+Descriptions, usage lines, and section bodies are plain text: backslashes and leading `.` or `'` are escaped, so `C:\tmp` or `\fB` render literally rather than as roff.
+
 ```ts
 new Crust("my-cli", {
   sections: [{ title: "FILES", body: "~/.config/my-cli.json", only: [man] }],
