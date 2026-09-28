@@ -1350,7 +1350,7 @@ export async function execDenoPackageBuild(
 }
 
 const SNAPSHOT_TIMEOUT_MS = 30_000;
-const SNAPSHOT_FORWARDED_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+const SNAPSHOT_FORWARDED_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const;
 
 function isBuildReport(value: JsonValue): value is JsonObject & BuildReport {
 	return (
@@ -1380,8 +1380,8 @@ function isBuildReport(value: JsonValue): value is JsonObject & BuildReport {
  *
  * After `timeoutMs`, the entry's POSIX process group or live Windows process
  * tree is killed and preparation fails, even if a descendant still holds stderr.
- * On POSIX, SIGINT, SIGTERM, SIGHUP or a synchronous exit of this process also
- * kills the entry's group.
+ * On POSIX, SIGINT, SIGTERM, SIGHUP, SIGQUIT or a synchronous exit of this
+ * process also kills the entry's group.
  */
 export async function buildEntrypoint(
 	entryPath: string,
@@ -1434,7 +1434,7 @@ export async function buildEntrypoint(
 		);
 		// The detached group no longer receives terminal signals, so the entry stops with this
 		// process. Like Core's SIGINT handling, re-raise only when no other listener owns the signal.
-		// ponytail: SIGKILL cannot be observed and SIGQUIT is not forwarded; both orphan the entry.
+		// SIGKILL and native crashes cannot be observed and still orphan the entry.
 		const onSignal = (signal: NodeJS.Signals): void => {
 			removeLifetimeListeners();
 			stop(`Command Snapshot preparation was interrupted by ${signal}.`);
