@@ -1312,3 +1312,94 @@ describe("core validator transform type enforcement", () => {
 		await expect(store.write({ name: "  hi  " })).resolves.toEqual({ name: "hi" });
 	});
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// Own-property document semantics
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("Object.prototype key names", () => {
+	let tempDir: string;
+
+	beforeEach(async () => {
+		tempDir = createTempDir();
+		await mkdir(tempDir, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
+
+	const PROTO_KEYS_JSON = '{"constructor":"kept","toString":"t","__proto__":{"a":1}}';
+
+	it("patch preserves unknown prototype-named keys on disk when pruneUnknown is false", async () => {
+		const filePath = join(tempDir, "config.json");
+		await writeFile(filePath, PROTO_KEYS_JSON);
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: BASIC_FIELDS,
+			pruneUnknown: false,
+		});
+
+		const patched = await store.patch({ theme: "dark" });
+
+		expect(Object.getPrototypeOf(patched)).toBe(Object.prototype);
+		expect(Object.hasOwn(patched, "__proto__")).toBe(true);
+		expect(JSON.parse(await readFile(filePath, "utf-8"))).toEqual(
+			JSON.parse(
+				'{"constructor":"kept","toString":"t","__proto__":{"a":1},"theme":"dark","verbose":false}',
+			),
+		);
+	});
+
+	it("patch prunes unknown prototype-named keys on disk by default", async () => {
+		const filePath = join(tempDir, "config.json");
+		await writeFile(filePath, PROTO_KEYS_JSON);
+		const store = createStore({ dirPath: tempDir, name: "config", fields: BASIC_FIELDS });
+
+		await store.patch({ theme: "dark" });
+
+		expect(JSON.parse(await readFile(filePath, "utf-8"))).toEqual({
+			theme: "dark",
+			verbose: false,
+		});
+	});
+
+	for (const pruneUnknown of [true, false]) {
+		it(`reads, validates, and patches declared prototype-named fields (pruneUnknown: ${pruneUnknown})`, async () => {
+			const filePath = join(tempDir, "config.json");
+			const store = createStore({
+				dirPath: tempDir,
+				name: "config",
+				pruneUnknown,
+				fields: {
+					constructor: { type: "string", default: "c" },
+					toString: { type: "number", default: 1 },
+					["__proto__"]: { type: "boolean", default: false },
+				},
+			});
+
+			const initial = await store.read();
+			expect(Object.getPrototypeOf(initial)).toBe(Object.prototype);
+			expect(Object.entries(initial)).toEqual([
+				["constructor", "c"],
+				["toString", 1],
+				["__proto__", false],
+			]);
+
+			// Persisted strings are coerced by declared type, including the `__proto__` field.
+			// TypeScript sees inherited `toString` on object literals, so the patch names both.
+			await writeFile(filePath, '{"__proto__":"true"}');
+			const patched = await store.patch({ constructor: "x", toString: 2 });
+			expect(Object.entries(patched)).toEqual([
+				["constructor", "x"],
+				["toString", 2],
+				["__proto__", true],
+			]);
+			expect(JSON.parse(await readFile(filePath, "utf-8"))).toEqual(
+				JSON.parse('{"constructor":"x","toString":2,"__proto__":true}'),
+			);
+			expect(Object.entries(await store.read())).toEqual(Object.entries(patched));
+		});
+	}
+});
