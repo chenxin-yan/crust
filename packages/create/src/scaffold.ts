@@ -124,7 +124,7 @@ function assertDestinationContained(realDestDir: string, relPath: string): void 
 
 /**
  * Copy a template directory to a destination, applying variable interpolation
- * and dotfile renaming.
+ * (or the custom `render` callback) and dotfile renaming.
  *
  * Template resolution:
  * - `string` paths resolve from the current working directory, exactly like `dest`
@@ -138,6 +138,7 @@ function assertDestinationContained(realDestDir: string, relPath: string): void 
  * @returns The list of all written file paths, relative to the destination directory.
  * @throws When the template source cannot be resolved, does not exist, or is not a directory.
  * @throws When `conflict` is `"abort"` and the destination is a non-empty directory.
+ * @throws Whatever a custom `render` throws or rejects with, after earlier files are written.
  * @throws When an existing destination file or ancestor directory is a symlink that
  *   resolves outside the destination (or to a missing target), regardless of `conflict`.
  *   A `dest` that is itself a symlink is followed once: its target is the destination.
@@ -156,7 +157,7 @@ function assertDestinationContained(realDestDir: string, relPath: string): void 
  * ```
  */
 export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult> {
-	const { template, dest, context, conflict = "abort" } = options;
+	const { template, dest, context, conflict = "abort", render = interpolate } = options;
 
 	const templateDir = template instanceof URL ? fileURLToPath(template) : resolve(template);
 	const destDir = resolve(dest);
@@ -217,10 +218,9 @@ export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult
 			// Binary files are copied as-is
 			writeFileSync(destFilePath, buffer);
 		} else {
-			// Text files get interpolation applied
-			const content = buffer.toString("utf-8");
-			const interpolated = interpolate(content, context);
-			writeFileSync(destFilePath, interpolated, "utf-8");
+			// Text files go through the renderer (default: interpolation)
+			const rendered = await render(buffer.toString("utf-8"), context);
+			writeFileSync(destFilePath, rendered, "utf-8");
 		}
 
 		writtenFiles.push(destRelPath);
