@@ -134,71 +134,60 @@ function collectPathCases(parentPath: string, parent: CompletionCommand, out: Ba
 	}
 }
 
-interface ChoiceCase {
-	/** `<cmd_path>|<flag-spelling>` (long, short, or alias). */
-	key: string;
-	/** Bash-quoted, space-joined value list. */
-	values: string;
-}
-
 /**
- * One entry per value-flag that needs explicit value-completion handling.
+ * One `case` branch per spelling of a flag with explicit value completion.
+ * The spec makes these modes mutually exclusive per flag, and spellings are
+ * unique per command, so each key maps to exactly one mode.
  *
+ * - `kind: "choices"`  — offer the static value list.
  * - `kind: "path"`     — emit `compgen -f` candidates for the value token
  *                       via the line-preserving `__<bin>_file_candidates`.
  * - `kind: "suppress"` — disable the `complete -o default` file fallback
  *                       so url/json flags don't get filenames offered.
  */
-interface ValueTypeCase {
+type FlagValueCase = {
 	/** `<cmd_path>|<flag-spelling>` (long, short, or alias). */
 	key: string;
-	kind: "path" | "suppress";
-}
+} & FlagValueMode;
+
+type FlagValueMode =
+	| {
+			kind: "choices";
+			/** Bash-quoted, space-joined value list. */
+			values: string;
+	  }
+	| { kind: "path" | "suppress" };
 
 /**
- * Walk every flag at every depth and emit one {@link ValueTypeCase} per
- * spelling for flags that declared `type: "path"` (file completion) or
- * `type: "url" | "json"` (suppress file fallback).
+ * Walk every flag at every depth and emit one {@link FlagValueCase} per
+ * spelling (long, short, alias) so the lookup is constant-time regardless
+ * of how the user wrote the flag. Plain value flags are omitted; they fall
+ * through to `complete -o default`.
  */
-function collectValueTypeCases(
+function collectFlagValueCases(
 	cmdPath: string,
 	node: CompletionCommand,
-	out: ValueTypeCase[],
+	out: FlagValueCase[],
 ): void {
 	for (const flag of node.flags) {
-		if (flag.valueCompletion === undefined) continue;
-		const kind: ValueTypeCase["kind"] = flag.valueCompletion === "files" ? "path" : "suppress";
+		let mode: FlagValueMode;
+		if (flag.choices !== undefined) {
+			// Choice values are validated to a safe character set, so we can
+			// emit them bare inside the `compgen -W` wordlist without per-
+			// candidate quoting. This keeps the generated script readable.
+			mode = { kind: "choices", values: flag.choices.join(" ") };
+		} else if (flag.valueCompletion !== undefined) {
+			mode = { kind: flag.valueCompletion === "files" ? "path" : "suppress" };
+		} else {
+			continue;
+		}
 		for (const spelling of flagSpellings(flag)) {
-			out.push({ key: `${cmdPath}|${spelling}`, kind });
+			out.push({ key: `${cmdPath}|${spelling}`, ...mode });
 		}
 	}
 	for (const sub of node.subCommands) {
 		const subPath = cmdPath === "" ? sub.name : `${cmdPath}:${sub.name}`;
-		collectValueTypeCases(subPath, sub, out);
-	}
-}
-
-/**
- * For every flag at every command depth that declares `choices`, emit a
- * `case` branch mapping `<path>|<flag-spelling>` → values. Each spelling
- * (long, short, alias) gets its own branch so the lookup is constant-time
- * regardless of how the user wrote the flag.
- */
-function collectChoiceCases(cmdPath: string, node: CompletionCommand, out: ChoiceCase[]): void {
-	for (const flag of node.flags) {
-		if (flag.choices === undefined) continue;
-		// Choice values are validated to a safe character set, so we can
-		// emit them bare inside the `compgen -W` wordlist without per-
-		// candidate quoting. This keeps the generated script readable.
-		const values = flag.choices.join(" ");
-		const spellings = flagSpellings(flag);
-		for (const spelling of spellings) {
-			out.push({ key: `${cmdPath}|${spelling}`, values });
-		}
-	}
-	for (const sub of node.subCommands) {
-		const subPath = cmdPath === "" ? sub.name : `${cmdPath}:${sub.name}`;
-		collectChoiceCases(subPath, sub, out);
+		collectFlagValueCases(subPath, sub, out);
 	}
 }
 
@@ -290,7 +279,7 @@ function collectArgChoiceCases(
 		if (arg.variadic) {
 			if (arg.choices !== undefined) {
 				variadicFrom = idx;
-				// Validated bare values — see comment in `collectChoiceCases`.
+				// Validated bare values — see comment in `collectFlagValueCases`.
 				variadicValues = arg.choices.join(" ");
 				hasAny = true;
 			}
@@ -356,11 +345,8 @@ export function renderBash(spec: CompletionCommand, binName: string, version: st
 	const pathCases: BashCase[] = [];
 	collectPathCases("", spec, pathCases);
 
-	const choiceCases: ChoiceCase[] = [];
-	collectChoiceCases("", spec, choiceCases);
-
-	const valueTypeCases: ValueTypeCase[] = [];
-	collectValueTypeCases("", spec, valueTypeCases);
+	const flagValueCases: FlagValueCase[] = [];
+	collectFlagValueCases("", spec, flagValueCases);
 
 	const argChoiceEntries: ArgChoiceEntry[] = [];
 	collectArgChoiceCases("", spec, argChoiceEntries);
@@ -369,6 +355,29 @@ export function renderBash(spec: CompletionCommand, binName: string, version: st
 	collectArgSuppressCases("", spec, argSuppressEntries);
 
 	const lines: string[] = [];
+
+	// Emit one `case` over `$subject` for the value token `$value`. The
+	// equals form passes `prefix` so candidates keep their `--flag=` head.
+	const pushFlagValueCase = (indent: string, subject: string, value: string, prefix?: string) => {
+		if (flagValueCases.length === 0) return;
+		lines.push(`${indent}case "$cmd_path|${subject}" in`);
+		for (const c of flagValueCases) {
+			lines.push(`${indent}\t"${bashDoubleQuoteInner(c.key)}")`);
+			if (c.kind === "choices") {
+				const prefixArg = prefix === undefined ? "" : `-P "${prefix}" `;
+				lines.push(
+					`${indent}\t\tCOMPREPLY=( $(compgen ${prefixArg}-W "${bashDoubleQuoteInner(c.values)}" -- "${value}") )`,
+				);
+			} else if (c.kind === "path") {
+				lines.push(`${indent}\t\t__${ident}_file_candidates "${prefix ?? ""}" "${value}"`);
+			} else {
+				lines.push(`${indent}\t\tcompopt +o default 2>/dev/null`);
+			}
+			lines.push(`${indent}\t\treturn`);
+			lines.push(`${indent}\t\t;;`);
+		}
+		lines.push(`${indent}esac`);
+	};
 
 	lines.push(
 		`# completion script for ${binName} v${version} — regenerate with: ${binName} completion bash`,
@@ -410,7 +419,7 @@ export function renderBash(spec: CompletionCommand, binName: string, version: st
 	// it is absent on Bash 3, where candidates are inserted unquoted.
 	// Filenames containing newlines remain unsupported (compgen output is
 	// newline-delimited).
-	if (valueTypeCases.some((c) => c.kind === "path")) {
+	if (flagValueCases.some((c) => c.kind === "path")) {
 		lines.push(`__${ident}_file_candidates() {`);
 		lines.push("\tlocal f");
 		lines.push("\tcompopt -o filenames 2>/dev/null || :");
@@ -481,76 +490,25 @@ export function renderBash(spec: CompletionCommand, binName: string, version: st
 	lines.push("\tfi");
 	lines.push("");
 
-	// `--name=value` partial: split, look up, offer either choice values
-	// or fall through to default (file) completion.
+	// `--name=value` partial: split, look up, then offer choice values or
+	// path candidates, or suppress the file fallback. `compgen -P` / the
+	// file helper prefix each candidate with `${_flag}=` so bash's
+	// command-line replacement substitutes the full token (otherwise
+	// readline would replace `--target=br` with bare `browser`).
 	lines.push('\tif [[ "$cur" == --*=* ]]; then');
 	lines.push('\t\tlocal _flag="${cur%%=*}"');
 	lines.push('\t\tlocal _value="${cur#*=}"');
-	if (choiceCases.length > 0) {
-		// `compgen -P` prefixes every candidate with `${_flag}=` so bash's
-		// command-line replacement substitutes the full token (otherwise
-		// readline would replace `--target=br` with bare `browser`).
-		lines.push('\t\tcase "$cmd_path|$_flag" in');
-		for (const c of choiceCases) {
-			lines.push(`\t\t\t"${bashDoubleQuoteInner(c.key)}")`);
-			lines.push(
-				`\t\t\t\tCOMPREPLY=( $(compgen -P "\${_flag}=" -W "${bashDoubleQuoteInner(c.values)}" -- "$_value") )`,
-			);
-			lines.push("\t\t\t\treturn");
-			lines.push("\t\t\t\t;;");
-		}
-		lines.push("\t\tesac");
-	}
-	// `--name=value` for typed value flags: emit explicit path candidates
-	// (path) or suppress the `complete -o default` file fallback (url/json).
-	if (valueTypeCases.length > 0) {
-		lines.push('\t\tcase "$cmd_path|$_flag" in');
-		for (const c of valueTypeCases) {
-			lines.push(`\t\t\t"${bashDoubleQuoteInner(c.key)}")`);
-			if (c.kind === "path") {
-				lines.push(`\t\t\t\t__${ident}_file_candidates "\${_flag}=" "$_value"`);
-			} else {
-				lines.push("\t\t\t\tcompopt +o default 2>/dev/null");
-			}
-			lines.push("\t\t\t\treturn");
-			lines.push("\t\t\t\t;;");
-		}
-		lines.push("\t\tesac");
-	}
+	pushFlagValueCase("\t\t", "$_flag", "$_value", "${_flag}=");
 	// Free-form `--name=value`: let bash file-complete the value portion.
 	lines.push("\t\treturn");
 	lines.push("\tfi");
 	lines.push("");
 
-	// Flag-with-choices: if previous word matches, offer the value list.
-	if (choiceCases.length > 0) {
-		lines.push('\tcase "$cmd_path|$prev" in');
-		for (const c of choiceCases) {
-			lines.push(`\t\t"${bashDoubleQuoteInner(c.key)}")`);
-			lines.push(`\t\t\tCOMPREPLY=( $(compgen -W "${bashDoubleQuoteInner(c.values)}" -- "$cur") )`);
-			lines.push("\t\t\treturn");
-			lines.push("\t\t\t;;");
-		}
-		lines.push("\tesac");
-		lines.push("");
-	}
-
-	// Typed value-flag context: previous token is a path/url/json flag.
-	// Path → emit explicit file candidates; url/json → suppress the
-	// `complete -o default` fallback so we don't offer filenames.
-	if (valueTypeCases.length > 0) {
-		lines.push('\tcase "$cmd_path|$prev" in');
-		for (const c of valueTypeCases) {
-			lines.push(`\t\t"${bashDoubleQuoteInner(c.key)}")`);
-			if (c.kind === "path") {
-				lines.push(`\t\t\t__${ident}_file_candidates "" "$cur"`);
-			} else {
-				lines.push("\t\t\tcompopt +o default 2>/dev/null");
-			}
-			lines.push("\t\t\treturn");
-			lines.push("\t\t\t;;");
-		}
-		lines.push("\tesac");
+	// Separate form: previous token is a choice/path/url/json flag.
+	// Choices → offer the value list; path → explicit file candidates;
+	// url/json → suppress the `complete -o default` filename fallback.
+	if (flagValueCases.length > 0) {
+		pushFlagValueCase("\t", "$prev", "$cur");
 		lines.push("");
 	}
 
