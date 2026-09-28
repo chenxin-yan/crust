@@ -1456,10 +1456,19 @@ describe("buildEntrypoint", () => {
 					`process.exit(0);\n`,
 			);
 
-			// SIGQUIT's default action dumps core; `exec` keeps the host's own exit signal.
+			// SIGQUIT's default action dumps core (Bun's is gigabytes of reserved memory). Ubuntu's
+			// systemd-coredump core_pattern passes a fixed 2^63 limit, and the kernel ignores
+			// RLIMIT_CORE for piped patterns, so `ulimit -c 0` (kept for macOS and file patterns)
+			// alone does not stop it. An empty coredump_filter keeps the Linux dump tiny.
+			// `exec` keeps the host's own exit signal.
 			const run = runBoundedProcess(
 				"sh",
-				["-c", 'ulimit -c 0; exec "$0" "$1"', runtime === "node" ? process.execPath : "bun", host],
+				[
+					"-c",
+					'ulimit -c 0; [ -w /proc/self/coredump_filter ] && echo 0 > /proc/self/coredump_filter; exec "$0" "$1"',
+					runtime === "node" ? process.execPath : "bun",
+					host,
+				],
 				{ cwd: directory, timeout: 15_000 },
 			);
 			// Recorded even when the host fails, so teardown still kills the entry groups.
@@ -1478,15 +1487,16 @@ describe("buildEntrypoint", () => {
 			return result;
 		}
 
-		it
-			.skipIf(process.platform === "win32")
-			.each(["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const)(
-			"kills the entry group and keeps default termination when the host gets %s",
-			async (signal) => {
-				// Bun 1.4 does not terminate on an unhandled SIGQUIT; Node preserves its default action.
-				const result = await runInterruptedHost(signal, {
-					runtime: signal === "SIGQUIT" ? "node" : "bun",
-				});
+		it.skipIf(process.platform === "win32").each([
+			["bun", "SIGINT"],
+			["bun", "SIGTERM"],
+			["bun", "SIGHUP"],
+			["bun", "SIGQUIT"],
+			["node", "SIGQUIT"],
+		] as const)(
+			"kills the entry group and keeps default termination when the %s host gets %s",
+			async (runtime, signal) => {
+				const result = await runInterruptedHost(signal, { runtime });
 
 				expect(result).toMatchObject({ exitCode: null, signal, stdout: "" });
 			},
