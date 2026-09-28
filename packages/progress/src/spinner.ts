@@ -235,14 +235,22 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 			finished = true;
 			if (message !== undefined) currentMessage = message;
 			cleanup();
-			// `finished` blocks retries, so a throwing theme or sink must not skip cursor restore.
+			// `finished` blocks retries, so a throwing theme or sink must not skip cursor
+			// restore. The first failure wins; boxed because any value (even undefined) can be thrown.
+			let renderFailure: { error: unknown } | undefined;
 			try {
 				sink.write(renderFinal(currentMessage, theme, outcome, started && isInteractive));
-			} finally {
-				if (started && isInteractive) {
+			} catch (error) {
+				renderFailure = { error };
+			}
+			if (started && isInteractive) {
+				try {
 					sink.write(SHOW_CURSOR);
+				} catch (error) {
+					if (!renderFailure) throw error;
 				}
 			}
+			if (renderFailure) throw renderFailure.error;
 		},
 	};
 }
