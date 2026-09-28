@@ -57,9 +57,7 @@ export const libraryTasks = {
 		command: "vp pack",
 		dependsOn: [upstreamBuild],
 		cache: {
-			// publint and ATTW run only when CI is set.
 			env: ["CI"],
-			// The builders read their previous output; a cache hit restores it instead.
 			input: [...runtimeInput, "!dist/**", "!.crust/**"],
 			output: ["dist/**", ".crust/**"],
 		},
