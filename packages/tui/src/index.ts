@@ -18,11 +18,12 @@ export class NonInteractiveError extends Error {
 
 export type TuiMount = (renderer: CliRenderer) => void | Promise<void>;
 
-// Mirrors OpenTUI's own exitOnCtrlC match (exact modifiers, `baseCode` for non-Latin layouts);
+// Mirrors OpenTUI's own exitOnCtrlC match (exact modifiers, `baseCode` for non-Latin layouts,
+// where it lowercases ASCII uppercase base codes, so 67 "C" matches too);
 // its `matchesKeyBinding` helper is not exported.
 function isCtrlC(event: KeyEvent): boolean {
 	if (!event.ctrl || event.shift || event.meta || event.super) return false;
-	return event.name === "c" || event.baseCode === 99;
+	return event.name === "c" || event.baseCode === 99 || event.baseCode === 67;
 }
 
 export async function runTui(mount: TuiMount, config: CliRendererConfig = {}): Promise<void> {

@@ -95,8 +95,27 @@ export type TuiScenario =
 	| "destroy-during-pending-mount"
 	| "keypress-listener-teardown"
 	| "ctrl-shift-c"
-	| "ctrl-c-base-code"
+	| "ctrl-c-base-code-99"
+	| "ctrl-c-base-code-67"
+	| "ctrl-shift-c-base-code-99"
+	| "ctrl-shift-c-base-code-67"
 	| "ctrl-c-without-exit";
+
+/** Ctrl+C on a non-Latin (Cyrillic) layout, where only `baseCode` identifies the physical C key. */
+function baseCodeCtrlC(baseCode: 99 | 67, shift = false) {
+	return async (): Promise<TuiObservation> => {
+		const { config } = createTtyConfig();
+		const name = shift ? "С" : "с";
+		return {
+			outcome: await settle(
+				runTui((renderer) => {
+					renderer.keyInput.emit("keypress", key({ name, ctrl: true, shift, baseCode }));
+					setTimeout(() => renderer.destroy(), 10);
+				}, config),
+			),
+		};
+	};
+}
 
 const scenarios = {
 	"mount-failure": async () => {
@@ -172,17 +191,10 @@ const scenarios = {
 			),
 		};
 	},
-	"ctrl-c-base-code": async () => {
-		const { config } = createTtyConfig();
-		return {
-			outcome: await settle(
-				runTui((renderer) => {
-					renderer.keyInput.emit("keypress", key({ name: "с", ctrl: true, baseCode: 99 }));
-					setTimeout(() => renderer.destroy(), 10);
-				}, config),
-			),
-		};
-	},
+	"ctrl-c-base-code-99": baseCodeCtrlC(99),
+	"ctrl-c-base-code-67": baseCodeCtrlC(67),
+	"ctrl-shift-c-base-code-99": baseCodeCtrlC(99, true),
+	"ctrl-shift-c-base-code-67": baseCodeCtrlC(67, true),
 	"ctrl-c-without-exit": async () => {
 		const { config, stdin } = createTtyConfig({ exitOnCtrlC: false });
 		let renderer: CliRenderer | undefined;

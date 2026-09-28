@@ -444,6 +444,81 @@ describe("spinner — cleanup", () => {
 
 		expect(writes.join("")).toBe(outputAfterComplete);
 	});
+
+	it("restores the cursor and cleans up when the final theme throws", async () => {
+		const previousHandlers = process.listeners("SIGINT");
+		const themeError = new Error("theme boom");
+
+		await expect(
+			spinner({
+				sink,
+				message: "Working",
+				theme: {
+					success: () => {
+						throw themeError;
+					},
+				},
+				task: async () => "ok",
+			}),
+		).rejects.toBe(themeError);
+
+		expect(writes.at(-1)).toBe("\x1B[?25h");
+		expect(process.listeners("SIGINT")).toEqual(previousHandlers);
+		const outputAfterError = writes.join("");
+		await tick(200);
+		expect(writes.join("")).toBe(outputAfterError);
+	});
+
+	function stopWithFailingRestore(theme?: { success: () => never }) {
+		const previousHandlers = process.listeners("SIGINT");
+		const { sink: recording, writes } = createFakeSink(true);
+		const failingRestore: ProgressSink = {
+			isTTY: true,
+			write: (text) => {
+				recording.write(text);
+				if (text === "\x1B[?25h") throw new Error("restore boom");
+				return true;
+			},
+		};
+		const handle = spinner({ message: "Working", sink: failingRestore, theme });
+		handle.start();
+		const caught = (() => {
+			try {
+				handle.stop();
+			} catch (error) {
+				return { error };
+			}
+			return undefined;
+		})();
+		expect(writes.at(-1)).toBe("\x1B[?25h");
+		expect(process.listeners("SIGINT")).toEqual(previousHandlers);
+		return { caught, writes, themeWrites: writes.filter((text) => text.includes("✓")) };
+	}
+
+	it("keeps the final-render error when cursor restoration also throws", async () => {
+		const { caught, writes } = stopWithFailingRestore({
+			success: () => {
+				// Arbitrary thrown values, including undefined, must survive.
+				throw undefined;
+			},
+		});
+
+		expect(caught).toStrictEqual({ error: undefined });
+		const outputAfterError = writes.join("");
+		await tick(200);
+		expect(writes.join("")).toBe(outputAfterError);
+	});
+
+	it("propagates a cursor restoration failure after a successful final line", async () => {
+		const { caught, writes, themeWrites } = stopWithFailingRestore();
+
+		expect(caught?.error).toBeInstanceOf(Error);
+		expect(caught?.error).toHaveProperty("message", "restore boom");
+		expect(themeWrites).toHaveLength(1);
+		const outputAfterError = writes.join("");
+		await tick(200);
+		expect(writes.join("")).toBe(outputAfterError);
+	});
 });
 
 describe("spinner — non-interactive", () => {

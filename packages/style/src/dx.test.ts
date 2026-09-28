@@ -113,6 +113,32 @@ describe("fg/bg as chain methods", () => {
 		expect(() => always.fg("definitely-not-a-color")).toThrow(TypeError);
 		expect(() => always.bold.fg("nope")).toThrow(TypeError);
 	});
+
+	it("root fg snapshots tuple input against later caller mutation", () => {
+		const s = createStyle({ mode: "always" });
+		const rgb: [number, number, number] = [255, 0, 0];
+		const chain = s.fg(rgb);
+		rgb[0] = 0;
+		rgb[1] = 255;
+		const red = "\x1b[38;2;255;0;0mx\x1b[39m";
+		expect(chain("x")).toBe(red);
+		expect(`${chain.open}x${chain.close}`).toBe(red);
+		expect(s.fg("#ff0000")("x")).toBe(red);
+		expect(s.fg(rgb)("x")).toBe("\x1b[38;2;0;255;0mx\x1b[39m");
+	});
+
+	it("appended bg snapshots tuple input against later caller mutation", () => {
+		const s = createStyle({ mode: "always" });
+		const rgb: [number, number, number] = [51, 0, 0];
+		const chain = s.bold.bg(rgb);
+		rgb[0] = 0;
+		rgb[2] = 51;
+		const darkRed = "\x1b[1m\x1b[48;2;51;0;0mx\x1b[49m\x1b[22m";
+		expect(chain("x")).toBe(darkRed);
+		expect(`${chain.open}x${chain.close}`).toBe(darkRed);
+		expect(s.bold.bg("#330000")("x")).toBe(darkRed);
+		expect(s.bold.bg(rgb)("x")).toBe("\x1b[1m\x1b[48;2;0;0;51mx\x1b[49m\x1b[22m");
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────

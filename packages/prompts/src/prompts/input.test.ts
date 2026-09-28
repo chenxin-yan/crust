@@ -280,6 +280,28 @@ describe("input — keypress editing", () => {
 		expect(result).toBe("ABC");
 	});
 
+	it("edits non-BMP characters without splitting surrogate pairs", async () => {
+		const prompt = renderPrompt(input, { message: "Name?" });
+
+		await tick();
+		prompt.type("😀");
+		await tick();
+		prompt.type("🎉");
+		await tick();
+		prompt.keys("left");
+		await tick();
+		prompt.type("a");
+		await tick();
+		prompt.keys("left");
+		await tick();
+		prompt.keys("backspace");
+		await tick();
+		prompt.keys("return");
+
+		const result = await prompt.answer;
+		expect(result).toBe("a🎉");
+	});
+
 	it("ignores ctrl+key combinations", async () => {
 		const prompt = renderPrompt(input, { message: "Name?" });
 

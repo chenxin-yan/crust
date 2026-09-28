@@ -326,6 +326,50 @@ describe("multiselect — validation", () => {
 		expect(result).toEqual(["a"]);
 	});
 
+	for (const [name, constraint, error] of [
+		["required", { required: true }, "At least one item must be selected"],
+		["min", { min: 1 }, "Select at least 1 item"],
+	] as const) {
+		for (const navigation of [[], ["up"]] as const) {
+			it(`${name} blocks submit of empty choices after ${[...navigation, "space"].join(" ")}`, async () => {
+				const options: MultiselectOptions<string> = {
+					message: "Select",
+					choices: [],
+					...constraint,
+				};
+				const prompt = renderPrompt(multiselect, options);
+
+				await tick();
+				prompt.keys(...navigation);
+				prompt.type(" ");
+				await tick();
+				prompt.keys("return");
+				await tick();
+
+				expect(prompt.screen()).toContain(error);
+				prompt.keys("ctrl+c");
+				await expect(prompt.answer).rejects.toMatchObject({ name: "AbortError" });
+			});
+		}
+	}
+
+	it("required accepts selected falsy choice values", async () => {
+		const prompt = renderPrompt(multiselect, {
+			message: "Select",
+			choices: [
+				{ label: "false", value: false },
+				{ label: "zero", value: 0 },
+				{ label: "undefined", value: undefined },
+			],
+			required: true,
+		});
+
+		await tick();
+		prompt.keys("space", "down", "space", "down", "space", "return");
+
+		expect(await prompt.answer).toEqual([false, 0, undefined]);
+	});
+
 	it("min validation blocks submit when too few selected", async () => {
 		const prompt = renderPrompt(multiselect, {
 			message: "Select",
