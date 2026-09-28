@@ -281,8 +281,10 @@ describeIfFish("renderFish · subprocess completion", () => {
 
 	it("consumes separate flag values at the routing depth that owns the flag", async () => {
 		// `--profile` / `-p` / `--env-name` is a recursive (effective at every
-		// depth) value flag; `--region` exists only on `deploy`; `-q` is a
-		// root boolean for bundling with `-p`.
+		// depth) value flag; `-q` is a recursive boolean for bundling with
+		// `-p`. `--region` is a value flag on `deploy` that `prod` also
+		// accepts, `local` lacks, and `shadow` redefines as boolean — Core
+		// only descends into a child that parses earlier flags the same way.
 		const profile: CompletionCommand["flags"][number] = {
 			name: "profile",
 			short: "p",
@@ -296,6 +298,12 @@ describeIfFish("renderFish · subprocess completion", () => {
 			short: "q",
 			type: "boolean",
 			takesValue: false,
+			negatable: false,
+		};
+		const region: CompletionCommand["flags"][number] = {
+			name: "region",
+			type: "string",
+			takesValue: true,
 			negatable: false,
 		};
 		const slot = (name: string, choices: string[]): CompletionCommand["args"][number] => ({
@@ -313,17 +321,29 @@ describeIfFish("renderFish · subprocess completion", () => {
 				{
 					name: "deploy",
 					aliases: ["dep"],
-					flags: [
-						profile,
-						quiet,
-						{ name: "region", type: "string", takesValue: true, negatable: false },
-					],
+					flags: [profile, quiet, region],
 					args: [],
 					subCommands: [
 						{
 							name: "prod",
-							flags: [profile, quiet],
+							flags: [profile, quiet, region],
 							args: [slot("first", ["alpha", "beta"]), slot("second", ["gamma", "delta"])],
+							subCommands: [],
+						},
+						{
+							name: "local",
+							flags: [profile, quiet],
+							args: [slot("target", ["here"])],
+							subCommands: [],
+						},
+						{
+							name: "shadow",
+							flags: [
+								profile,
+								quiet,
+								{ name: "region", type: "boolean", takesValue: false, negatable: false },
+							],
+							args: [slot("target", ["there"])],
 							subCommands: [],
 						},
 					],
@@ -335,17 +355,21 @@ describeIfFish("renderFish · subprocess completion", () => {
 
 		for (const [line, expected] of [
 			// Separate values before command paths, every spelling.
-			["vcli --profile dev deploy ", ["prod"]],
-			["vcli -p dev dep ", ["prod"]],
-			["vcli --env-name dev deploy ", ["prod"]],
-			["vcli -qp dev deploy ", ["prod"]],
-			// A flag known only at the deeper depth.
+			["vcli --profile dev deploy ", ["local", "prod", "shadow"]],
+			["vcli -p dev dep ", ["local", "prod", "shadow"]],
+			["vcli --env-name dev deploy ", ["local", "prod", "shadow"]],
+			["vcli -qp dev deploy ", ["local", "prod", "shadow"]],
+			// An unknown bundle character is not a boolean prefix: `dev` stays a token.
+			["vcli -xp dev deploy ", []],
+			// A deeper-depth flag forwards only to children that parse it the same way.
 			["vcli deploy --region us prod ", ["alpha", "beta"]],
+			["vcli deploy --region us local ", []],
+			["vcli deploy --region us shadow ", []],
 			// Separate values between positionals keep the slot count.
 			["vcli deploy prod alpha --profile dev ", ["delta", "gamma"]],
 			["vcli deploy prod -p dev alpha ", ["delta", "gamma"]],
 			// Inline values consume nothing further.
-			["vcli --profile=dev deploy ", ["prod"]],
+			["vcli --profile=dev deploy ", ["local", "prod", "shadow"]],
 			["vcli deploy prod -pdev alpha ", ["delta", "gamma"]],
 			// `--region` is not a root flag, so `us` is not skipped at the root.
 			["vcli --region us deploy ", []],
