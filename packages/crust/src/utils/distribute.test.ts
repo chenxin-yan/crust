@@ -570,6 +570,23 @@ describe("runDistributeBuild", () => {
 		);
 	});
 
+	it("rejects a case-variant reserved bin artifact directory before compiling", async () => {
+		const plan = createPlan(
+			tmpDir,
+			{ name: "artifact-stage-cli", version: "0.1.0" },
+			{ validate: true },
+		);
+		mkdirSync(join(plan.outDir, "Bin"), { recursive: true });
+		const compiled: string[] = [];
+		const execute = async (_entryPath: string, outfilePath: string) => {
+			compiled.push(outfilePath);
+		};
+		await expect(runDistributeBuild(plan, bunDistribution(undefined, execute), io)).rejects.toThrow(
+			'Artifact directory "Bin"',
+		);
+		expect(compiled).toEqual([]);
+	});
+
 	it("stages crust.include directories beside Extension artifacts", async () => {
 		const outDir = join(tmpDir, ".crust", "artifacts");
 		mkdirSync(join(outDir, "skills"), { recursive: true });
@@ -653,6 +670,48 @@ describe("runDistributeBuild", () => {
 		await expect(stage(["src", "src"])).rejects.toThrow("already staged");
 		await expect(stage(["skills"], true)).rejects.toThrow("Extension artifact directory");
 		await expect(stage(["skills/sub"], true)).rejects.toThrow('overlaps "skills"');
+	});
+
+	// Directory pairs live under different parents (or are created with recursive
+	// mkdir) so the fixture is the same on case-sensitive and case-insensitive hosts.
+	it("rejects case-only crust.include collisions before compiling", async () => {
+		const outDir = join(tmpDir, ".crust", "artifacts");
+		mkdirSync(join(outDir, "assets"), { recursive: true });
+		writeFileSync(join(outDir, "assets", "config.json"), "hook\n");
+		mkdirSync(join(outDir, "skills"), { recursive: true });
+		mkdirSync(join(tmpDir, "Assets", "sub"), { recursive: true });
+		mkdirSync(join(tmpDir, "assets", "sub"), { recursive: true });
+		writeFileSync(join(tmpDir, "Assets", "config.json"), "include\n");
+		mkdirSync(join(tmpDir, "Skills", "sub"), { recursive: true });
+		mkdirSync(join(tmpDir, "Bin"), { recursive: true });
+		const compiled: string[] = [];
+		const execute = async (_entryPath: string, outfilePath: string) => {
+			compiled.push(outfilePath);
+		};
+		const stage = (include: string[], validate = false) =>
+			runDistributeBuild(
+				createPlan(tmpDir, { name: "include-cli", version: "0.1.0" }, { validate, include }),
+				bunDistribution(undefined, execute),
+				io,
+			);
+
+		await expect(stage(["Bin"])).rejects.toThrow(
+			'crust.include entry "Bin" conflicts with the generated npm bin directory',
+		);
+		await expect(stage(["Assets"], true)).rejects.toThrow(
+			'crust.include entry "Assets" overlaps "assets"',
+		);
+		await expect(stage(["Skills/sub"], true)).rejects.toThrow(
+			'crust.include entry "Skills/sub" overlaps "skills"',
+		);
+		await expect(stage(["Assets", "assets"])).rejects.toThrow(
+			'crust.include entry "assets" overlaps "Assets"',
+		);
+		await expect(stage(["assets/sub", "Assets"])).rejects.toThrow(
+			'crust.include entry "Assets" overlaps "assets/sub"',
+		);
+		expect(compiled).toEqual([]);
+		expect(readFileSync(join(outDir, "assets", "config.json"), "utf8")).toBe("hook\n");
 	});
 
 	it("returns the generated package.json files, launchers, and compiled commands in staging order", async () => {

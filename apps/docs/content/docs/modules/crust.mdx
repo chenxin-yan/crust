@@ -197,7 +197,7 @@ Each `bin` key is an installed command name and each value is the TypeScript ent
 | `crust.bunPlugins` | [Bun bundler plugin](https://bun.com/docs/bundler/plugins) modules applied to Bun builds and Node runtime packages, in order. A bare name resolves from `node_modules`, a path from the project root; each must default-export the plugin. Rejected for Deno and Node binaries. |
 | `crust.include`    | Directories relative to the project root that `crust build` copies into `.crust/root/` (listed in `files`) and into each platform package's `bin/`.                                                                                                                             |
 
-`crust.include` entries must be existing directories inside the project, cannot be named `bin`, cannot be inside `.crust`, and cannot reuse an Extension artifact directory name. Symlinks are copied dereferenced and must resolve inside the project.
+`crust.include` entries must be existing directories inside the project, cannot be named `bin`, cannot be inside `.crust`, and cannot reuse an Extension artifact directory name. Names are compared ignoring letter case (`Bin`, `Assets` vs `assets`) because they alias on case-insensitive file systems. Symlinks are copied dereferenced and must resolve inside the project.
 
 ### Editor completion
 
