@@ -365,7 +365,7 @@ describe("multiselect — validation", () => {
 		});
 
 		await tick();
-		prompt.keys("a", "return");
+		prompt.keys("space", "down", "space", "down", "space", "return");
 
 		expect(await prompt.answer).toEqual([false, 0, undefined]);
 	});
