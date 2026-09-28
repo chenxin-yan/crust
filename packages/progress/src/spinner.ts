@@ -235,9 +235,13 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 			finished = true;
 			if (message !== undefined) currentMessage = message;
 			cleanup();
-			sink.write(renderFinal(currentMessage, theme, outcome, started && isInteractive));
-			if (started && isInteractive) {
-				sink.write(SHOW_CURSOR);
+			// `finished` blocks retries, so a throwing theme or sink must not skip cursor restore.
+			try {
+				sink.write(renderFinal(currentMessage, theme, outcome, started && isInteractive));
+			} finally {
+				if (started && isInteractive) {
+					sink.write(SHOW_CURSOR);
+				}
 			}
 		},
 	};

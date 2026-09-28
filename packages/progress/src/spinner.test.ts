@@ -444,6 +444,30 @@ describe("spinner — cleanup", () => {
 
 		expect(writes.join("")).toBe(outputAfterComplete);
 	});
+
+	it("restores the cursor and cleans up when the final theme throws", async () => {
+		const previousHandlers = process.listeners("SIGINT");
+		const themeError = new Error("theme boom");
+
+		await expect(
+			spinner({
+				sink,
+				message: "Working",
+				theme: {
+					success: () => {
+						throw themeError;
+					},
+				},
+				task: async () => "ok",
+			}),
+		).rejects.toBe(themeError);
+
+		expect(writes.at(-1)).toBe("\x1B[?25h");
+		expect(process.listeners("SIGINT")).toEqual(previousHandlers);
+		const outputAfterError = writes.join("");
+		await tick(200);
+		expect(writes.join("")).toBe(outputAfterError);
+	});
 });
 
 describe("spinner — non-interactive", () => {
