@@ -8,6 +8,7 @@ import { detectPackageManager, isInGitRepo, runSteps, scaffold } from "@crustjs/
 import type { BuildOptions } from "@crustjs/crust";
 import { spinner } from "@crustjs/progress";
 import { confirm, input, select } from "@crustjs/prompts";
+import { Eta } from "eta/core";
 
 import corePkg from "../../core/package.json" with { type: "json" };
 import crustPkg from "../../crust/package.json" with { type: "json" };
@@ -19,53 +20,18 @@ type Runtime = "bun" | "node" | "deno";
 // Deno reads the project tsconfig and a supplied `lib` replaces its default `deno.window`,
 // which would drop `Deno`, `console`, and `process` from `deno check`.
 // `shebang` heads src/cli.ts: package.json `bin` points at the source, so a linked
-// command must start the project's runtime itself.
-// The remaining fields are the runtime's package.json differences; `startRunner`
-// runs the built bin. Deno type-checks natively, so it needs no TypeScript packages.
+// command must start the project's runtime itself. The runtime's package.json
+// differences live in templates/base/package.json.
 const RUNTIMES = {
-	bun: {
-		shebang: "#!/usr/bin/env bun",
-		tsLib: '"ESNext"',
-		tsTypes: '"bun"',
-		dev: "bun run src/cli.ts",
-		startRunner: "bun",
-		checkTypes: "tsc --noEmit",
-		engines: undefined,
-		devDependencies: { "@types/bun": "latest", typescript: "^7.0.2" },
-	},
-	node: {
-		shebang: "#!/usr/bin/env node",
-		tsLib: '"ESNext"',
-		tsTypes: '"node"',
-		dev: "node src/cli.ts",
-		startRunner: "node",
-		checkTypes: "tsc --noEmit",
-		engines: { node: ">=22.18" },
-		devDependencies: { "@types/node": "^22", typescript: "^7.0.2" },
-	},
-	deno: {
-		shebang: "#!/usr/bin/env -S deno run -A",
-		tsLib: '"ESNext", "deno.window"',
-		tsTypes: "",
-		dev: "deno run -A src/cli.ts",
-		startRunner: "deno run -A",
-		checkTypes: "deno check src/cli.ts",
-		engines: undefined,
-		devDependencies: {},
-	},
-} satisfies Record<
-	Runtime,
-	{
-		shebang: string;
-		tsLib: string;
-		tsTypes: string;
-		dev: string;
-		startRunner: string;
-		checkTypes: string;
-		engines: Record<string, string> | undefined;
-		devDependencies: Record<string, string>;
-	}
->;
+	bun: { shebang: "#!/usr/bin/env bun", tsLib: '"ESNext"', tsTypes: '"bun"' },
+	node: { shebang: "#!/usr/bin/env node", tsLib: '"ESNext"', tsTypes: '"node"' },
+	deno: { shebang: "#!/usr/bin/env -S deno run -A", tsLib: '"ESNext", "deno.window"', tsTypes: "" },
+} satisfies Record<Runtime, { shebang: string; tsLib: string; tsTypes: string }>;
+
+// `eta/core` renders template strings only: no file loading or includes. Templates
+// are trusted package code, not sandboxed. Generated files are never HTML, so output
+// is raw, and whitespace is trimmed only where a tag asks for it (`-%>`).
+const eta = new Eta({ autoEscape: false, autoTrim: false });
 
 // ────────────────────────────────────────────────────────────────────────────
 // Validation
@@ -247,33 +213,9 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 		// `templates` is a crust.include directory staged next to this bundle.
 		const templatePath = (template: string) => join(resolveArtifactDir("templates"), template);
 		const packageManager = runtime === "deno" ? "deno" : detectPackageManager(resolvedDir);
-		const { shebang, tsLib, tsTypes, dev, startRunner, checkTypes, engines, devDependencies } =
-			RUNTIMES[runtime];
+		const { shebang, tsLib, tsTypes } = RUNTIMES[runtime];
 		// The bundle inlines the sibling package.json imports, so scaffolded projects
 		// pin the Crust versions from the build that produced create-crust.
-		const packageJson = {
-			$schema: "./node_modules/@crustjs/crust/schema/package.json",
-			name,
-			version: "0.0.0",
-			private: true,
-			type: "module",
-			description: "A CLI built with Crust",
-			crust: { runtime, artifact },
-			bin: { [name]: "src/cli.ts" },
-			scripts: {
-				dev,
-				build: "crust build",
-				release: "crust publish",
-				start: `${startRunner} .crust/root/bin/${name}.js`,
-				"check:types": checkTypes,
-			},
-			engines,
-			dependencies: {
-				"@crustjs/core": `^${corePkg.version}`,
-				"@crustjs/extensions": `^${extensionsPkg.version}`,
-			},
-			devDependencies: { "@crustjs/crust": `^${crustPkg.version}`, ...devDependencies },
-		};
 		const context = {
 			name,
 			runtime,
@@ -283,8 +225,9 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 			shebang,
 			tsLib,
 			tsTypes,
-			// JSON.stringify omits `engines` when it is undefined (Bun, Deno).
-			packageJson: JSON.stringify(packageJson, null, "\t"),
+			coreVersion: corePkg.version,
+			extensionsVersion: extensionsPkg.version,
+			crustVersion: crustPkg.version,
 		};
 		// Scaffolding produces no console output, so it is safe inside a spinner.
 		await spinner({
@@ -294,6 +237,7 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 					template: templatePath("base"),
 					dest: resolvedDir,
 					context,
+					render: (source, data) => eta.renderString(source, data),
 					...(overwrite ? { conflict: "overwrite" } : {}),
 				}),
 		});

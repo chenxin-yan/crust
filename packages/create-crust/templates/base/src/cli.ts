@@ -1,10 +1,10 @@
-{{shebang}}
+<%~ it.shebang %>
 import { Crust } from "@crustjs/core";
 import { help, version } from "@crustjs/extensions";
 
 import pkg from "../package.json" with { type: "json" };
 
-const app = new Crust("{{name}}", { description: "A CLI built with Crust", version: pkg.version })
+const app = new Crust(<%~ JSON.stringify(it.name) %>, { description: "A CLI built with Crust", version: pkg.version })
 	.extend(version(), help())
 	.args({
 		name: "name",

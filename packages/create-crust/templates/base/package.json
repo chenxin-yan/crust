@@ -1,1 +1,51 @@
-{{packageJson}}
+<%
+/* `dev` runs the source and `start` runs the built bin with the selected runtime.
+   Deno type-checks natively, so it needs no TypeScript packages. */
+const dev = { bun: "bun run src/cli.ts", node: "node src/cli.ts", deno: "deno run -A src/cli.ts" }[it.runtime];
+const startRunner = { bun: "bun", node: "node", deno: "deno run -A" }[it.runtime];
+const checkTypes = it.runtime === "deno" ? "deno check src/cli.ts" : "tsc --noEmit";
+-%>
+{
+	"$schema": "./node_modules/@crustjs/crust/schema/package.json",
+	"name": <%~ JSON.stringify(it.name) %>,
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "A CLI built with Crust",
+	"crust": {
+		"runtime": <%~ JSON.stringify(it.runtime) %>,
+		"artifact": <%~ JSON.stringify(it.artifact) %>
+	},
+	"bin": {
+		<%~ JSON.stringify(it.name) %>: "src/cli.ts"
+	},
+	"scripts": {
+		"dev": <%~ JSON.stringify(dev) %>,
+		"build": "crust build",
+		"release": "crust publish",
+		"start": <%~ JSON.stringify(`${startRunner} .crust/root/bin/${it.name}.js`) %>,
+		"check:types": <%~ JSON.stringify(checkTypes) %>
+	},
+<% if (it.runtime === "node") { -%>
+	"engines": {
+		"node": ">=22.18"
+	},
+<% } -%>
+	"dependencies": {
+		"@crustjs/core": <%~ JSON.stringify(`^${it.coreVersion}`) %>,
+		"@crustjs/extensions": <%~ JSON.stringify(`^${it.extensionsVersion}`) %>
+	},
+	"devDependencies": {
+<% if (it.runtime === "bun") { -%>
+		"@crustjs/crust": <%~ JSON.stringify(`^${it.crustVersion}`) %>,
+		"@types/bun": "latest",
+		"typescript": "^7.0.2"
+<% } else if (it.runtime === "node") { -%>
+		"@crustjs/crust": <%~ JSON.stringify(`^${it.crustVersion}`) %>,
+		"@types/node": "^22",
+		"typescript": "^7.0.2"
+<% } else { -%>
+		"@crustjs/crust": <%~ JSON.stringify(`^${it.crustVersion}`) %>
+<% } -%>
+	}
+}

@@ -380,7 +380,7 @@ async function smokeRuntime(runtime: Runtime, artifact: Artifact): Promise<void>
 
 	// Run the template's own `start` script the way its users do, so the
 	// launcher is exercised under the template's runtime (bun/node/deno) and the
-	// script's `{{name}}` path is verified. `--silent` drops npm's script banner,
+	// script's project-name path is verified. `--silent` drops npm's script banner,
 	// which would otherwise satisfy the `name` assertion by itself.
 	const startCommand =
 		runtime === "deno"
