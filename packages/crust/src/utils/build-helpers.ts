@@ -1381,7 +1381,8 @@ function isBuildReport(value: JsonValue): value is JsonObject & BuildReport {
  * After `timeoutMs`, the entry's POSIX process group or live Windows process
  * tree is killed and preparation fails, even if a descendant still holds stderr.
  * On POSIX, SIGINT, SIGTERM, SIGHUP, SIGQUIT or a synchronous exit of this
- * process also kills the entry's group.
+ * process also kills the entry's group, and whatever remains of the group is
+ * killed once preparation settles.
  */
 export async function buildEntrypoint(
 	entryPath: string,
@@ -1440,21 +1441,21 @@ export async function buildEntrypoint(
 			stop(`Command Snapshot preparation was interrupted by ${signal}.`);
 			if (process.listenerCount(signal) === 0) process.kill(process.pid, signal);
 		};
-		// Synchronous exits (process.exit, uncaught errors) skip the awaited cleanup.
-		const onExit = (): void => {
+		// Also runs on synchronous exits (process.exit, uncaught errors), which skip the awaited cleanup.
+		const killRemainingGroup = (): void => {
 			try {
 				killProcessTree(proc);
 			} catch {
-				// The process is exiting; there is no caller left to report to.
+				// Best effort: the preparation outcome (or the exiting process) takes precedence.
 			}
 		};
 		const removeLifetimeListeners = (): void => {
 			for (const signal of SNAPSHOT_FORWARDED_SIGNALS) process.removeListener(signal, onSignal);
-			process.removeListener("exit", onExit);
+			process.removeListener("exit", killRemainingGroup);
 		};
 		if (detached) {
 			for (const signal of SNAPSHOT_FORWARDED_SIGNALS) process.prependListener(signal, onSignal);
-			process.on("exit", onExit);
+			process.on("exit", killRemainingGroup);
 		}
 		const [rawStderr, [exitCode]] = await Promise.race([
 			Promise.all([text(proc.stderr), once(proc, "close")]),
@@ -1462,6 +1463,8 @@ export async function buildEntrypoint(
 		]).finally(() => {
 			clearTimeout(timer);
 			removeLifetimeListeners();
+			// Workers the entry left behind in its detached group would escape terminal signals.
+			if (detached) killRemainingGroup();
 		});
 		const stderr = rawStderr.trim();
 
