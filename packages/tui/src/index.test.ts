@@ -92,10 +92,18 @@ describe("runTui", () => {
 		});
 	});
 
-	it("detects Ctrl+C through baseCode on non-Latin layouts", () => {
-		expect(observe("ctrl-c-base-code").outcome).toMatchObject({
+	// OpenTUI's exitOnCtrlC lowercases an ASCII uppercase baseCode (67 "C") before matching.
+	it.each([99, 67] as const)("detects Ctrl+C through baseCode %i on non-Latin layouts", (code) => {
+		expect(observe(`ctrl-c-base-code-${code}`).outcome).toMatchObject({
 			status: "rejected",
 			name: "AbortError",
+		});
+	});
+
+	it.each([99, 67] as const)("treats Ctrl+Shift with baseCode %i as a normal key", (code) => {
+		expect(observe(`ctrl-shift-c-base-code-${code}`).outcome).toEqual({
+			status: "resolved",
+			valueType: "undefined",
 		});
 	});
 
