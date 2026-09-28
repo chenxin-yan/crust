@@ -12,7 +12,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import pkg from "../package.json";
 import { crustBase } from "./app.ts";
-import { buildCommand } from "./commands/build.ts";
+import { buildCommand } from "./commands/build-command.ts";
 import { publishCommand } from "./commands/publish.ts";
 
 const expectedVersion = pkg.version;

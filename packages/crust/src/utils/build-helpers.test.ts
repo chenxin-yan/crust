@@ -17,9 +17,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { defineExtensionId } from "@crustjs/core";
 import { which } from "@crustjs/utils/process";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import crustPackage from "../../package.json" with { type: "json" };
+import { isRunning, reapBoundedProcesses, runBoundedProcess } from "../../tests/bounded-process.ts";
 import {
 	assertCompilerSatisfiesEngines,
 	assertTargetsBuildableWithoutBun,
@@ -1003,8 +1004,17 @@ describe("createBunCompileArgs", () => {
 
 describe("buildEntrypoint", () => {
 	const tempDirs: string[] = [];
+	const lifetimeEvents = ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT", "exit"] as const;
+	const listenerCounts = () => lifetimeEvents.map((event) => process.listenerCount(event));
+	let listenersBefore: number[] = [];
+
+	beforeEach(() => {
+		listenersBefore = listenerCounts();
+	});
 
 	afterEach(async () => {
+		// Normal, failed and timed-out preparations all remove their lifetime listeners.
+		expect(listenerCounts()).toEqual(listenersBefore);
 		await Promise.all(tempDirs.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 	});
 
@@ -1244,5 +1254,286 @@ describe("buildEntrypoint", () => {
 		await expect(
 			buildEntrypoint(entry, join(directory, "dist"), [], io, directory),
 		).rejects.toThrow("Entry produced an invalid Command Snapshot");
+	});
+
+	describe("entry lifetime", () => {
+		const pids: number[] = [];
+
+		// Runs before the outer afterEach removes the fixture directories.
+		afterEach(async () => {
+			await reapBoundedProcesses();
+			for (const pid of pids.splice(0)) {
+				try {
+					process.kill(pid, "SIGKILL");
+				} catch {
+					// Already exited.
+				}
+			}
+		});
+
+		/** Runs an entry that writes its hung PIDs, bounding the wait so a regression fails instead of hanging. */
+		async function expectSnapshotTimeout(source: (pidFile: string) => string): Promise<number[]> {
+			const directory = await mkdtemp(join(tmpdir(), "crust-entry-timeout-test-"));
+			tempDirs.push(directory);
+			const entry = join(directory, "cli.ts");
+			const pidFile = join(directory, "pids.json");
+			await writeFile(entry, source(pidFile));
+
+			let outerTimer: NodeJS.Timeout | undefined;
+			const outcome = await Promise.race([
+				buildEntrypoint(entry, join(directory, "dist"), [], io, directory, undefined, 2_000).then(
+					() => new Error("resolved"),
+					(error: Error) => error,
+				),
+				new Promise<Error>((resolve) => {
+					outerTimer = setTimeout(() => resolve(new Error("still pending")), 10_000);
+				}),
+			]).finally(() => clearTimeout(outerTimer));
+			// SAFETY: the fixture writes a JSON array of its hung PIDs.
+			const recorded = JSON.parse(await readFile(pidFile, "utf8")) as number[];
+			pids.push(...recorded);
+
+			expect(outcome.message).toContain("Command Snapshot preparation timed out after 2s.");
+			return recorded;
+		}
+
+		it.skipIf(process.platform === "win32")(
+			"reports an external signal with stderr rather than a timeout",
+			async () => {
+				const directory = await mkdtemp(join(tmpdir(), "crust-entry-signal-test-"));
+				tempDirs.push(directory);
+				const entry = join(directory, "cli.ts");
+				await writeFile(
+					entry,
+					`console.error("before signal");\nprocess.kill(process.pid, "SIGKILL");\n`,
+				);
+
+				await expect(
+					buildEntrypoint(entry, join(directory, "dist"), [], io, directory),
+				).rejects.toThrow("Command Snapshot preparation was killed by SIGKILL.\nbefore signal");
+			},
+		);
+
+		it("kills an entry that ignores SIGTERM", async () => {
+			const recorded = await expectSnapshotTimeout(
+				(pidFile) =>
+					`process.on("SIGTERM", () => {});\n` +
+					`await Bun.write(${JSON.stringify(pidFile)}, JSON.stringify([process.pid]));\n` +
+					`setInterval(() => {}, 1_000);\n`,
+			);
+
+			expect(recorded).toHaveLength(1);
+			await vi.waitFor(() => expect(recorded.filter(isRunning)).toEqual([]), { timeout: 5_000 });
+		}, 20_000);
+
+		it("stops waiting on a descendant that inherited stderr after the entry exited", async () => {
+			const recorded = await expectSnapshotTimeout(
+				(pidFile) =>
+					`import { spawn } from "node:child_process";\n` +
+					`const descendant = spawn(process.execPath, ["-e", "setInterval(() => {}, 1_000)"], { stdio: ["ignore", "ignore", "inherit"] });\n` +
+					`await Bun.write(${JSON.stringify(pidFile)}, JSON.stringify([process.pid, descendant.pid]));\n` +
+					`process.exit(0);\n`,
+			);
+
+			expect(recorded).toHaveLength(2);
+			// Windows taskkill cannot reach a descendant whose parent already exited.
+			const cleaned = process.platform === "win32" ? recorded.slice(0, 1) : recorded;
+			await vi.waitFor(() => expect(cleaned.filter(isRunning)).toEqual([]), { timeout: 5_000 });
+		}, 20_000);
+
+		/** Prepares an entry that leaves a worker (holding no inherited pipe) in its group, then asserts the worker dies. */
+		async function expectWorkerReaped(
+			body: string,
+			settle: (prepared: Promise<unknown>) => Promise<void>,
+		) {
+			const directory = await mkdtemp(join(tmpdir(), "crust-entry-worker-test-"));
+			tempDirs.push(directory);
+			const entry = join(directory, "cli.ts");
+			const pidFile = join(directory, "pids.json");
+			await writeFile(
+				entry,
+				`import { spawn } from "node:child_process";\n` +
+					`import { writeFileSync } from "node:fs";\n` +
+					`import { Crust } from ${JSON.stringify(coreUrl)};\n` +
+					`const worker = spawn(process.execPath, ["-e", "setInterval(() => {}, 1_000)"], { stdio: "ignore" });\n` +
+					`worker.unref();\n` +
+					`writeFileSync(${JSON.stringify(pidFile)}, JSON.stringify([worker.pid]));\n` +
+					body,
+			);
+
+			await settle(buildEntrypoint(entry, join(directory, "dist"), [], io, directory));
+			// SAFETY: the entry writes its worker's PID as a JSON array.
+			const recorded = JSON.parse(await readFile(pidFile, "utf8")) as number[];
+			pids.push(...recorded);
+			expect(recorded).toHaveLength(1);
+			await vi.waitFor(() => expect(recorded.filter(isRunning)).toEqual([]), { timeout: 5_000 });
+		}
+
+		it.skipIf(process.platform === "win32")(
+			"kills a worker left in the entry group after a successful preparation",
+			async () => {
+				await expectWorkerReaped(
+					`await new Crust("fixture").action(() => {}).execute();\n`,
+					async (prepared) => {
+						expect(await prepared).toMatchObject({
+							snapshot: { meta: { name: "fixture" } },
+						});
+					},
+				);
+			},
+			20_000,
+		);
+
+		it.skipIf(process.platform === "win32")(
+			"kills a worker left in the entry group after a failed preparation",
+			async () => {
+				await expectWorkerReaped(
+					`throw new Error("entry failed after starting a worker");\n`,
+					async (prepared) => {
+						await expect(prepared).rejects.toThrow("entry failed after starting a worker");
+					},
+				);
+			},
+			20_000,
+		);
+
+		const helpersUrl = pathToFileURL(resolve(import.meta.dirname, "build-helpers.ts")).href;
+
+		/**
+		 * Runs a host that prepares hung entries (each with a stderr-holding descendant),
+		 * then interrupts itself as `mode` describes once all are alive. `concurrent`
+		 * prepares two projects at once and sends SIGINT.
+		 */
+		async function runInterruptedHost(
+			mode: "SIGINT" | "SIGTERM" | "SIGHUP" | "SIGQUIT" | "exit" | "listener" | "concurrent",
+			{
+				runtime = "bun",
+				listenerSignal = "SIGINT",
+			}: {
+				runtime?: "bun" | "node";
+				listenerSignal?: "SIGINT" | "SIGQUIT";
+			} = {},
+		) {
+			const directory = await mkdtemp(join(tmpdir(), "crust-entry-interrupt-test-"));
+			tempDirs.push(directory);
+			const host = join(directory, "host.ts");
+			const projects = (mode === "concurrent" ? ["first", "second"] : ["project"]).map((name) =>
+				join(directory, name),
+			);
+			const pidFiles = projects.map((project) => join(project, "pids.json"));
+			for (const [index, project] of projects.entries()) {
+				const pidFile = pidFiles[index]!;
+				await mkdir(project);
+				await writeFile(
+					join(project, "cli.ts"),
+					`import { spawn } from "node:child_process";\n` +
+						`import { renameSync, writeFileSync } from "node:fs";\n` +
+						`const descendant = spawn(process.execPath, ["-e", "setInterval(() => {}, 1_000)"], { stdio: ["ignore", "ignore", "inherit"] });\n` +
+						`writeFileSync(${JSON.stringify(`${pidFile}.tmp`)}, JSON.stringify([process.pid, descendant.pid]));\n` +
+						`renameSync(${JSON.stringify(`${pidFile}.tmp`)}, ${JSON.stringify(pidFile)});\n` +
+						`setInterval(() => {}, 1_000);\n`,
+				);
+			}
+			await writeFile(
+				host,
+				`import { existsSync } from "node:fs";\n` +
+					`import { join } from "node:path";\n` +
+					`import { buildEntrypoint } from ${JSON.stringify(helpersUrl)};\n` +
+					`const mode = ${JSON.stringify(mode)};\n` +
+					`const listenerSignal = ${JSON.stringify(listenerSignal)};\n` +
+					`if (mode === "listener") process.on(listenerSignal, () => console.log("host listener"));\n` +
+					`const io = { stdout: () => {}, stderr: () => {} };\n` +
+					`const prepared = ${JSON.stringify(projects)}.map((project) => buildEntrypoint(join(project, "cli.ts"), join(project, "dist"), [], io, project, undefined, 60_000));\n` +
+					`const poll = setInterval(() => {\n` +
+					`  if (!${JSON.stringify(pidFiles)}.every((pidFile) => existsSync(pidFile))) return;\n` +
+					`  clearInterval(poll);\n` +
+					`  if (mode === "exit") process.exit(3);\n` +
+					`  process.kill(process.pid, mode === "listener" ? listenerSignal : mode === "concurrent" ? "SIGINT" : mode);\n` +
+					`}, 20);\n` +
+					`for (const preparation of prepared) {\n` +
+					`  await preparation.catch((error) => console.log(error.message, ${JSON.stringify(lifetimeEvents)}.map((event) => process.listenerCount(event)).join()));\n` +
+					`}\n` +
+					`process.exit(0);\n`,
+			);
+
+			// SIGQUIT's default action dumps core (Bun's is gigabytes of reserved memory). Ubuntu's
+			// systemd-coredump core_pattern passes a fixed 2^63 limit, and the kernel ignores
+			// RLIMIT_CORE for piped patterns, so `ulimit -c 0` (kept for macOS and file patterns)
+			// alone does not stop it. An empty coredump_filter keeps the Linux dump tiny.
+			// `exec` keeps the host's own exit signal.
+			const run = runBoundedProcess(
+				"sh",
+				[
+					"-c",
+					'ulimit -c 0; [ -w /proc/self/coredump_filter ] && echo 0 > /proc/self/coredump_filter; exec "$0" "$1"',
+					runtime === "node" ? process.execPath : "bun",
+					host,
+				],
+				{ cwd: directory, timeout: 15_000 },
+			);
+			// Recorded even when the host fails, so teardown still kills the entry groups.
+			await run.catch(() => {});
+			const recorded: number[] = [];
+			for (const pidFile of pidFiles) {
+				// SAFETY: each entry writes its own and its descendant's PIDs as a JSON array.
+				recorded.push(
+					...(JSON.parse(await readFile(pidFile, "utf8").catch(() => "[]")) as number[]),
+				);
+			}
+			pids.push(...recorded);
+			const result = await run;
+			expect(recorded).toHaveLength(2 * projects.length);
+			await vi.waitFor(() => expect(recorded.filter(isRunning)).toEqual([]), { timeout: 5_000 });
+			return result;
+		}
+
+		it.skipIf(process.platform === "win32").each([
+			["bun", "SIGINT"],
+			["bun", "SIGTERM"],
+			["bun", "SIGHUP"],
+			["bun", "SIGQUIT"],
+			["node", "SIGQUIT"],
+		] as const)(
+			"kills the entry group and keeps default termination when the %s host gets %s",
+			async (runtime, signal) => {
+				const result = await runInterruptedHost(signal, { runtime });
+
+				expect(result).toMatchObject({ exitCode: null, signal, stdout: "" });
+			},
+			20_000,
+		);
+
+		it.skipIf(process.platform === "win32")(
+			"kills the entry group when the host exits synchronously",
+			async () => {
+				expect(await runInterruptedHost("exit")).toMatchObject({ exitCode: 3, signal: null });
+			},
+			20_000,
+		);
+
+		it.skipIf(process.platform === "win32").each(["SIGINT", "SIGQUIT"] as const)(
+			"kills the entry group and leaves an existing Bun host %s listener in charge",
+			async (signal) => {
+				const result = await runInterruptedHost("listener", { listenerSignal: signal });
+
+				expect(result).toMatchObject({ exitCode: 0, signal: null });
+				// The host listener still ran and remains the only lifetime listener.
+				expect(result.stdout).toBe(
+					`host listener\nCommand Snapshot preparation was interrupted by ${signal}. ${signal === "SIGINT" ? "1,0,0,0,0" : "0,0,0,1,0"}\n`,
+				);
+			},
+			20_000,
+		);
+
+		it.skipIf(process.platform === "win32")(
+			"kills concurrent preparations of different projects and still terminates by SIGINT",
+			async () => {
+				// Each preparation defers to the other's listener; the last one re-raises.
+				const result = await runInterruptedHost("concurrent");
+
+				expect(result).toMatchObject({ exitCode: null, signal: "SIGINT", stdout: "" });
+			},
+			20_000,
+		);
 	});
 });

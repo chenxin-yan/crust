@@ -203,6 +203,12 @@ describe("published @crustjs/crust library", () => {
 		}
 	});
 
+	it("leaves the crust build command definition out of the library bundle", () => {
+		const js = readFileSync(join(distDir, "index.js"), "utf8");
+		expect(js).not.toContain("Build your CLI for Bun, Deno, or Node");
+		expect(js).not.toContain("function defineCommand(");
+	});
+
 	it("keeps BuildReport's core identity: types import @crustjs/core instead of inlining its brands", async () => {
 		const dts = readFileSync(join(stagedRoot, "dist", "index.d.ts"), "utf8");
 		expect(dts).toMatch(/from "@crustjs\/core"/);

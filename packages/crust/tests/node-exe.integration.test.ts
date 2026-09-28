@@ -19,7 +19,7 @@ import type { JsonValue } from "@crustjs/utils/json";
 import { which } from "@crustjs/utils/process";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 
-import { buildCommand } from "../src/commands/build.ts";
+import { buildCommand } from "../src/commands/build-command.ts";
 import {
 	hostTarget,
 	NODE_TARGETS,

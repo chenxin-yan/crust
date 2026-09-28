@@ -903,19 +903,22 @@ function collectIncludeDirs(
 				`package.json crust.include entry ${JSON.stringify(entry)} overlaps the build output directory ${stageDir}, which crust build replaces.`,
 			);
 		}
-		if (name.split(sep)[0] === "bin") {
+		// Staged names are compared case-folded: on a case-insensitive destination
+		// `Bin` or `Assets` addresses the same directory as `bin` or `assets`.
+		if (name.toLowerCase().split(sep)[0] === "bin") {
 			throw new Error(
 				`package.json crust.include entry ${JSON.stringify(entry)} conflicts with the generated npm bin directory.\n  Include a directory with a different top-level name.`,
 			);
 		}
 		const posixName = name.replaceAll(sep, "/");
+		const key = posixName.toLowerCase();
 		// A nested include under an artifact name (or vice versa) would silently merge into it.
-		const overlap = names.find(
-			(staged) =>
-				staged === posixName ||
-				staged.startsWith(`${posixName}/`) ||
-				posixName.startsWith(`${staged}/`),
-		);
+		const overlap = names.find((staged) => {
+			const stagedKey = staged.toLowerCase();
+			return (
+				stagedKey === key || stagedKey.startsWith(`${key}/`) || key.startsWith(`${stagedKey}/`)
+			);
+		});
 		if (overlap !== undefined) {
 			throw new Error(
 				`package.json crust.include entry ${JSON.stringify(entry)} overlaps "${overlap}", which is already staged (duplicate include or Extension artifact directory).`,
@@ -1020,10 +1023,12 @@ function collectArtifacts(artifactOutDir: string | undefined): CollectedArtifact
 		.map((entry) => entry.name)
 		.sort();
 	// Staged packages generate their own bin/ (resolver + platform binaries); a
-	// hook artifact named bin would merge into it and could overwrite them.
-	if (names.includes("bin")) {
+	// hook artifact named bin (in any case, for case-insensitive destinations)
+	// would merge into it and could overwrite them.
+	const binName = names.find((name) => name.toLowerCase() === "bin");
+	if (binName !== undefined) {
 		throw new Error(
-			`Artifact directory "bin" in ${artifactOutDir} conflicts with the generated npm bin directory.\n  Emit build artifacts under a different top-level name.`,
+			`Artifact directory "${binName}" in ${artifactOutDir} conflicts with the generated npm bin directory.\n  Emit build artifacts under a different top-level name.`,
 		);
 	}
 	const manPages = names.includes("man")

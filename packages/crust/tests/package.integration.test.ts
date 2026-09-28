@@ -19,7 +19,7 @@ import { captureExecute } from "@crustjs/testing";
 import { which } from "@crustjs/utils/process";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 
-import { buildCommand } from "../src/commands/build.ts";
+import { buildCommand } from "../src/commands/build-command.ts";
 import type { DistributionManifest } from "../src/utils/distribute.ts";
 import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
 

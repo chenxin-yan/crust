@@ -9,7 +9,7 @@ import { captureExecute } from "@crustjs/testing";
 import { which } from "@crustjs/utils/process";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 
-import { buildCommand } from "../src/commands/build.ts";
+import { buildCommand } from "../src/commands/build-command.ts";
 import { BUN_TARGETS } from "../src/utils/build-helpers.ts";
 import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
 import { hostTarget } from "./helpers.ts";

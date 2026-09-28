@@ -9,7 +9,7 @@ import { which } from "@crustjs/utils/process";
 import { afterAll, afterEach, describe, expect, it } from "vite-plus/test";
 
 import { stageNodeExeDependencies } from "../scripts/stage-node-exe-dependencies.ts";
-import { buildCommand } from "../src/commands/build.ts";
+import { buildCommand } from "../src/commands/build-command.ts";
 import { hostTarget as resolveHostTarget, NODE_TARGETS } from "../src/utils/build-helpers.ts";
 import type { DistributionManifest } from "../src/utils/distribute.ts";
 import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
