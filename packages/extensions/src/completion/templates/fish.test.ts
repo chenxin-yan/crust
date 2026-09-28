@@ -278,6 +278,93 @@ describeIfFish("renderFish · subprocess completion", () => {
 			).toEqual([...expected]);
 		}
 	});
+
+	it("consumes separate flag values at the routing depth that owns the flag", async () => {
+		// `--profile` / `-p` / `--env-name` is a recursive (effective at every
+		// depth) value flag; `--region` exists only on `deploy`; `-q` is a
+		// root boolean for bundling with `-p`.
+		const profile: CompletionCommand["flags"][number] = {
+			name: "profile",
+			short: "p",
+			aliases: ["env-name"],
+			type: "string",
+			takesValue: true,
+			negatable: false,
+		};
+		const quiet: CompletionCommand["flags"][number] = {
+			name: "quiet",
+			short: "q",
+			type: "boolean",
+			takesValue: false,
+			negatable: false,
+		};
+		const slot = (name: string, choices: string[]): CompletionCommand["args"][number] => ({
+			name,
+			type: "string",
+			required: true,
+			variadic: false,
+			choices,
+		});
+		const spec: CompletionCommand = {
+			name: "vcli",
+			flags: [profile, quiet],
+			args: [],
+			subCommands: [
+				{
+					name: "deploy",
+					aliases: ["dep"],
+					flags: [
+						profile,
+						quiet,
+						{ name: "region", type: "string", takesValue: true, negatable: false },
+					],
+					args: [],
+					subCommands: [
+						{
+							name: "prod",
+							flags: [profile, quiet],
+							args: [slot("first", ["alpha", "beta"]), slot("second", ["gamma", "delta"])],
+							subCommands: [],
+						},
+					],
+				},
+			],
+		};
+		const path = join(tmpDir, "vcli.fish");
+		await writeFile(path, renderFish(spec, "vcli", "1.0.0"), "utf8");
+
+		for (const [line, expected] of [
+			// Separate values before command paths, every spelling.
+			["vcli --profile dev deploy ", ["prod"]],
+			["vcli -p dev dep ", ["prod"]],
+			["vcli --env-name dev deploy ", ["prod"]],
+			["vcli -qp dev deploy ", ["prod"]],
+			// A flag known only at the deeper depth.
+			["vcli deploy --region us prod ", ["alpha", "beta"]],
+			// Separate values between positionals keep the slot count.
+			["vcli deploy prod alpha --profile dev ", ["delta", "gamma"]],
+			["vcli deploy prod -p dev alpha ", ["delta", "gamma"]],
+			// Inline values consume nothing further.
+			["vcli --profile=dev deploy ", ["prod"]],
+			["vcli deploy prod -pdev alpha ", ["delta", "gamma"]],
+			// `--region` is not a root flag, so `us` is not skipped at the root.
+			["vcli --region us deploy ", []],
+			// After `--`, flag-shaped tokens are positionals and take no value.
+			["vcli deploy prod -- --profile ", ["delta", "gamma"]],
+		] as const) {
+			const driver = `source ${shQuoteForFish(path)}; complete -C ${shQuoteForFish(line)}`;
+			const { exitCode, stdout, stderr } = await runBoundedProcess("fish", ["-c", driver], {
+				timeout: 4_000,
+			});
+			expect(exitCode).toBe(0);
+			expect(stderr).toBe("");
+			const candidates = stdout
+				.split("\n")
+				.filter((candidate) => candidate !== "")
+				.map((candidate) => candidate.split("\t")[0]);
+			expect({ line, candidates }).toEqual({ line, candidates: [...expected] });
+		}
+	});
 });
 
 async function isFishAvailable(): Promise<boolean> {
