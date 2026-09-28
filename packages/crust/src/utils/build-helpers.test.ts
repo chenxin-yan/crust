@@ -20,6 +20,7 @@ import { which } from "@crustjs/utils/process";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import crustPackage from "../../package.json" with { type: "json" };
+import { isRunning } from "../../tests/bounded-process.ts";
 import {
 	assertCompilerSatisfiesEngines,
 	assertTargetsBuildableWithoutBun,
@@ -1244,5 +1245,90 @@ describe("buildEntrypoint", () => {
 		await expect(
 			buildEntrypoint(entry, join(directory, "dist"), [], io, directory),
 		).rejects.toThrow("Entry produced an invalid Command Snapshot");
+	});
+
+	describe("timeout", () => {
+		const pids: number[] = [];
+
+		// Runs before the outer afterEach removes the fixture directories.
+		afterEach(() => {
+			for (const pid of pids.splice(0)) {
+				try {
+					process.kill(pid, "SIGKILL");
+				} catch {
+					// Already exited.
+				}
+			}
+		});
+
+		/** Runs an entry that writes its hung PIDs, bounding the wait so a regression fails instead of hanging. */
+		async function expectSnapshotTimeout(source: (pidFile: string) => string): Promise<number[]> {
+			const directory = await mkdtemp(join(tmpdir(), "crust-entry-timeout-test-"));
+			tempDirs.push(directory);
+			const entry = join(directory, "cli.ts");
+			const pidFile = join(directory, "pids.json");
+			await writeFile(entry, source(pidFile));
+
+			let outerTimer: NodeJS.Timeout | undefined;
+			const outcome = await Promise.race([
+				buildEntrypoint(entry, join(directory, "dist"), [], io, directory, undefined, 2_000).then(
+					() => new Error("resolved"),
+					(error: Error) => error,
+				),
+				new Promise<Error>((resolve) => {
+					outerTimer = setTimeout(() => resolve(new Error("still pending")), 10_000);
+				}),
+			]).finally(() => clearTimeout(outerTimer));
+			// SAFETY: the fixture writes a JSON array of its hung PIDs.
+			const recorded = JSON.parse(await readFile(pidFile, "utf8")) as number[];
+			pids.push(...recorded);
+
+			expect(outcome.message).toContain("Command Snapshot preparation timed out after 2s.");
+			return recorded;
+		}
+
+		it.skipIf(process.platform === "win32")(
+			"reports an external signal with stderr rather than a timeout",
+			async () => {
+				const directory = await mkdtemp(join(tmpdir(), "crust-entry-signal-test-"));
+				tempDirs.push(directory);
+				const entry = join(directory, "cli.ts");
+				await writeFile(
+					entry,
+					`console.error("before signal");\nprocess.kill(process.pid, "SIGKILL");\n`,
+				);
+
+				await expect(
+					buildEntrypoint(entry, join(directory, "dist"), [], io, directory),
+				).rejects.toThrow("Command Snapshot preparation was killed by SIGKILL.\nbefore signal");
+			},
+		);
+
+		it("kills an entry that ignores SIGTERM", async () => {
+			const recorded = await expectSnapshotTimeout(
+				(pidFile) =>
+					`process.on("SIGTERM", () => {});\n` +
+					`await Bun.write(${JSON.stringify(pidFile)}, JSON.stringify([process.pid]));\n` +
+					`setInterval(() => {}, 1_000);\n`,
+			);
+
+			expect(recorded).toHaveLength(1);
+			await vi.waitFor(() => expect(recorded.filter(isRunning)).toEqual([]), { timeout: 5_000 });
+		}, 20_000);
+
+		it("stops waiting on a descendant that inherited stderr after the entry exited", async () => {
+			const recorded = await expectSnapshotTimeout(
+				(pidFile) =>
+					`import { spawn } from "node:child_process";\n` +
+					`const descendant = spawn(process.execPath, ["-e", "setInterval(() => {}, 1_000)"], { stdio: ["ignore", "ignore", "inherit"] });\n` +
+					`await Bun.write(${JSON.stringify(pidFile)}, JSON.stringify([process.pid, descendant.pid]));\n` +
+					`process.exit(0);\n`,
+			);
+
+			expect(recorded).toHaveLength(2);
+			// Windows taskkill cannot reach a descendant whose parent already exited.
+			const cleaned = process.platform === "win32" ? recorded.slice(0, 1) : recorded;
+			await vi.waitFor(() => expect(cleaned.filter(isRunning)).toEqual([]), { timeout: 5_000 });
+		}, 20_000);
 	});
 });

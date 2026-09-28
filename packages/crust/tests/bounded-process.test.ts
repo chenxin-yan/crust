@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
+import { isRunning, reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
 
 const roots: string[] = [];
 
@@ -28,22 +28,6 @@ function startHungTree(timeout: number) {
 	// Attached now so the expected rejection is never reported as unhandled.
 	const settled = result.catch((error: Error) => error);
 	return { pidFile, settled };
-}
-
-function isRunning(pid: number): boolean {
-	try {
-		process.kill(pid, 0);
-		if (process.platform === "linux") {
-			// A non-reaping container init can retain terminated children as zombies.
-			const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-			return stat[stat.lastIndexOf(")") + 2] !== "Z";
-		}
-		return true;
-	} catch (error) {
-		// SAFETY: process.kill and readFileSync throw errno exceptions.
-		const code = (error as NodeJS.ErrnoException).code;
-		return code !== "ESRCH" && code !== "ENOENT";
-	}
 }
 
 async function expectKilled(pidFile: string): Promise<void> {

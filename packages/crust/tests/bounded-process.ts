@@ -6,6 +6,7 @@
 // in afterEach/afterAll before fixtures are removed.
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { readFileSync } from "node:fs";
 
 // Imported as a package, never by source path: `vp pack` for this package emits
 // declarations beside any out-of-package source file its test program reaches.
@@ -88,4 +89,21 @@ export async function reapBoundedProcesses(): Promise<void> {
 	const entries = [...running];
 	for (const entry of entries) entry.stop("was killed during test teardown");
 	await Promise.all(entries.map((entry) => entry.closed));
+}
+
+/** Whether `pid` is alive, treating zombies as exited. */
+export function isRunning(pid: number): boolean {
+	try {
+		process.kill(pid, 0);
+		if (process.platform === "linux") {
+			// A non-reaping container init can retain terminated children as zombies.
+			const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+			return stat[stat.lastIndexOf(")") + 2] !== "Z";
+		}
+		return true;
+	} catch (error) {
+		// SAFETY: process.kill and readFileSync throw errno exceptions.
+		const code = (error as NodeJS.ErrnoException).code;
+		return code !== "ESRCH" && code !== "ENOENT";
+	}
 }

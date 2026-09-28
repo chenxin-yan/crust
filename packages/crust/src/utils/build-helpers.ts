@@ -15,7 +15,7 @@ import { BUILD_OUT_DIR_ENV, PACKAGED_BUILD_KEY } from "@crustjs/utils/artifacts"
 import { isErrnoException } from "@crustjs/utils/error";
 import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
 import { isWithin } from "@crustjs/utils/path";
-import { runProcess, which } from "@crustjs/utils/process";
+import { killProcessTree, runProcess, which } from "@crustjs/utils/process";
 import satisfies from "semver/functions/satisfies.js";
 import validVersion from "semver/functions/valid.js";
 import validRange from "semver/ranges/valid.js";
@@ -1349,18 +1349,6 @@ export async function execDenoPackageBuild(
 	);
 }
 
-/**
- * Prepare a CLI entry's Command Snapshot in the user's project context.
- *
- * The entry runs as a subprocess with `CRUST_INTERNAL_SNAPSHOT_PATH` pointing
- * to a temporary file. `.execute()` validates and writes the command graph and
- * adjacent Build Report, then exits before any following entrypoint code can run.
- *
- * Runs with the same bun as compilation (`resolveBunBuildRunner`, or the
- * pinned Bun `runner`): bun on PATH, or a compiled standalone crust executable
- * as `BUN_BE_BUN=1`, so arbitrary `.ts` entries run without a separate `bun`
- * install.
- */
 const SNAPSHOT_TIMEOUT_MS = 30_000;
 
 function isBuildReport(value: JsonValue): value is JsonObject & BuildReport {
@@ -1377,6 +1365,21 @@ function isBuildReport(value: JsonValue): value is JsonObject & BuildReport {
 	);
 }
 
+/**
+ * Prepare a CLI entry's Command Snapshot in the user's project context.
+ *
+ * The entry runs as a subprocess with `CRUST_INTERNAL_SNAPSHOT_PATH` pointing
+ * to a temporary file. `.execute()` validates and writes the command graph and
+ * adjacent Build Report, then exits before any following entrypoint code can run.
+ *
+ * Runs with the same bun as compilation (`resolveBunBuildRunner`, or the
+ * pinned Bun `runner`): bun on PATH, or a compiled standalone crust executable
+ * as `BUN_BE_BUN=1`, so arbitrary `.ts` entries run without a separate `bun`
+ * install.
+ *
+ * After `timeoutMs`, the entry's POSIX process group or live Windows process
+ * tree is killed and preparation fails, even if a descendant still holds stderr.
+ */
 export async function buildEntrypoint(
 	entryPath: string,
 	outDir: string,
@@ -1384,6 +1387,7 @@ export async function buildEntrypoint(
 	io: InvocationIO,
 	cwd: string,
 	runner: BuildRunner = resolveBunBuildRunner(),
+	timeoutMs = SNAPSHOT_TIMEOUT_MS,
 ): Promise<{ snapshot: CommandSnapshot; build: BuildReport }> {
 	const absoluteEntry = resolve(entryPath);
 	const snapshotDir = await mkdtemp(join(tmpdir(), "crust-snapshot-"));
@@ -1391,7 +1395,6 @@ export async function buildEntrypoint(
 	const buildReportPath = join(snapshotDir, "build-report.json");
 
 	try {
-		const spawnedAt = Date.now();
 		const proc = spawn(runner.command, [...toBunEnvFileArgs(envFiles), absoluteEntry], {
 			env: {
 				...runner.env,
@@ -1400,21 +1403,33 @@ export async function buildEntrypoint(
 			},
 			cwd,
 			stdio: ["ignore", "ignore", "pipe"],
-			timeout: SNAPSHOT_TIMEOUT_MS,
+			// Its own process group lets the deadline reach POSIX descendants.
+			detached: process.platform !== "win32",
 		});
 
-		const stderrPromise = text(proc.stderr);
-		const [exitCode] = await once(proc, "close");
-		const stderr = (await stderrPromise).trim();
+		let timer: NodeJS.Timeout | undefined;
+		const deadline = new Promise<never>((_, reject) => {
+			timer = setTimeout(() => {
+				const message = `Command Snapshot preparation timed out after ${timeoutMs / 1_000}s.\n  An Extension build hook may be hanging. Use --no-validate to skip entry preparation and build hooks.`;
+				let failure = new Error(message);
+				try {
+					killProcessTree(proc);
+				} catch (cause) {
+					failure = new Error(`${message}\n  Process-tree cleanup failed.`, { cause });
+				}
+				// A descendant holding the inherited stderr pipe must not keep "close" pending.
+				proc.stderr.destroy();
+				reject(failure);
+			}, timeoutMs);
+		});
+		const [rawStderr, [exitCode]] = await Promise.race([
+			Promise.all([text(proc.stderr), once(proc, "close")]),
+			deadline,
+		]).finally(() => clearTimeout(timer));
+		const stderr = rawStderr.trim();
 
 		if (proc.signalCode !== null) {
-			// ChildProcess does not report whether the kill came from our timeout
-			// option, so use elapsed time to tell it apart from external signals.
-			if (Date.now() - spawnedAt >= SNAPSHOT_TIMEOUT_MS) {
-				throw new Error(
-					`Command Snapshot preparation timed out after ${SNAPSHOT_TIMEOUT_MS / 1_000}s.\n  An Extension build hook may be hanging. Use --no-validate to skip entry preparation and build hooks.`,
-				);
-			}
+			// Only the deadline kills the entry, and it rejects above: this signal is external.
 			throw new Error(
 				`Command Snapshot preparation was killed by ${proc.signalCode}.${stderr ? `\n${stderr}` : ""}`,
 			);
