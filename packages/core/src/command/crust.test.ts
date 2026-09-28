@@ -2085,7 +2085,7 @@ describe("Crust .execute()", () => {
 		});
 
 		it("flattens a structural SuppressedError without native support", async () => {
-			// Node 22 bundles synthesize this plain-Error shape; no instanceof is possible.
+			// Down-level bundles can synthesize this plain-Error shape; no instanceof is possible.
 			const structural = Object.assign(new Error("An error was suppressed during disposal"), {
 				name: "SuppressedError",
 				error: new Error("close failed"),

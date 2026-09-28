@@ -4,7 +4,7 @@ import { dirname, join, posix, win32 } from "node:path";
 import { BUILD_OUT_DIR_ENV, isPackagedBuild } from "@crustjs/utils/artifacts";
 import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
 
-import { createContextResolver, DisposalStack } from "../api/context.ts";
+import { createContextResolver } from "../api/context.ts";
 import {
 	finishInvocation,
 	type BuildReport,
@@ -100,7 +100,7 @@ function isAbortError(error: CaughtError): boolean {
 }
 
 /**
- * Structural: Node 22 bundles down-level `await using` to a plain `Error`
+ * Structural: down-level bundles can implement `await using` with a plain `Error`
  * carrying `error`/`suppressed`, so `instanceof SuppressedError` cannot be used.
  */
 function isSuppressedError(error: CaughtError): error is { error: unknown; suppressed: unknown } {
@@ -342,8 +342,7 @@ async function dispatch(
 	const resolvedNode = route.command;
 
 	// One resource scope and resolver span pre-run, the action, and post-run.
-	// DisposalStack (not the bare global): Node 22 has no AsyncDisposableStack.
-	await using disposal = new DisposalStack();
+	await using disposal = new AsyncDisposableStack();
 	const contexts = resolvedNode.contexts.map(({ instance }) => instance);
 	const resolver = createContextResolver(contexts, io, disposal, signal);
 

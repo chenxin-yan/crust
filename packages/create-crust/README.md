@@ -46,7 +46,7 @@ Every project has the same scripts: `build` (`crust build`) stages the publishab
 | Runtime | `dev`                    | `build` output (`crust.artifact`)                                                             |
 | ------- | ------------------------ | --------------------------------------------------------------------------------------------- |
 | `bun`   | `bun run src/cli.ts`     | `binary`: a root package with a Node launcher plus one standalone binary package per platform |
-| `node`  | `node src/cli.ts`        | `package`: a root package containing one JavaScript bundle that needs Node 22.18+             |
+| `node`  | `node src/cli.ts`        | `package`: a root package containing one JavaScript bundle that needs Node 24+                |
 | `deno`  | `deno run -A src/cli.ts` | `binary`: a root package with a Node launcher plus one standalone binary package per platform |
 
 Every runtime puts the Crust packages your code imports (`@crustjs/core`, `@crustjs/extensions`) in `dependencies` and the build tool (`@crustjs/crust`) in `devDependencies`, and writes your selections to `"crust": { "runtime": ..., "artifact": ... }` in `package.json` so `crust build` needs no additional flags.
