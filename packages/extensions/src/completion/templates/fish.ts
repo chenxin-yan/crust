@@ -271,7 +271,8 @@ function emitRules(
  * Emit the flag-scope helpers used by routing:
  *
  * - `__<ident>_flags <value|bool> <canonical path...>` prints that command's
- *   value-taking spellings (`--name`, `-s`, `--alias`) or boolean shorts.
+ *   value-taking spellings (`--name`, `-s`, `--alias`) or boolean
+ *   one-character spellings (short, canonical or alias) as `-c`.
  * - `__<ident>_takes_value <token> <canonical path...>` succeeds when `token`
  *   consumes the next argv token at that command, like Core's
  *   `matchKnownFlagToken`: `--name`/`-s` of a value flag, or a short bundle
@@ -302,8 +303,16 @@ function emitFlagScopeHelpers(ident: string, spec: CompletionCommand): string[] 
 		);
 		emitBranch(
 			["bool", ...route],
+			// Core matches bundle characters against every spelling, so
+			// one-character canonical names and aliases count as shorts.
 			node.flags.flatMap((flag) =>
-				!flag.takesValue && flag.short !== undefined ? [`-${flag.short}`] : [],
+				flag.takesValue
+					? []
+					: [
+							flag.name,
+							...(flag.short === undefined ? [] : [flag.short]),
+							...(flag.aliases ?? []),
+						].flatMap((spelling) => (spelling.length === 1 ? [`-${spelling}`] : [])),
 			),
 		);
 		for (const sub of node.subCommands) visit(sub, [...route, sub.name]);

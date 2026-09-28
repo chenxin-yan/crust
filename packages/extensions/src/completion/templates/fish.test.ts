@@ -313,7 +313,7 @@ describeIfFish("renderFish · subprocess completion", () => {
 			variadic: false,
 			choices,
 		});
-		const spec: CompletionCommand = {
+		const specWith = (quiet: CompletionCommand["flags"][number]): CompletionCommand => ({
 			name: "vcli",
 			flags: [profile, quiet],
 			args: [],
@@ -349,9 +349,21 @@ describeIfFish("renderFish · subprocess completion", () => {
 					],
 				},
 			],
+		});
+		const complete = async (path: string, line: string): Promise<string[]> => {
+			const driver = `source ${shQuoteForFish(path)}; complete -C ${shQuoteForFish(line)}`;
+			const { exitCode, stdout, stderr } = await runBoundedProcess("fish", ["-c", driver], {
+				timeout: 4_000,
+			});
+			expect(exitCode).toBe(0);
+			expect(stderr).toBe("");
+			return stdout
+				.split("\n")
+				.filter((candidate) => candidate !== "")
+				.map((candidate) => candidate.split("\t")[0]!);
 		};
 		const path = join(tmpDir, "vcli.fish");
-		await writeFile(path, renderFish(spec, "vcli", "1.0.0"), "utf8");
+		await writeFile(path, renderFish(specWith(quiet), "vcli", "1.0.0"), "utf8");
 
 		for (const [line, expected] of [
 			// Separate values before command paths, every spelling.
@@ -376,17 +388,29 @@ describeIfFish("renderFish · subprocess completion", () => {
 			// After `--`, flag-shaped tokens are positionals and take no value.
 			["vcli deploy prod -- --profile ", ["delta", "gamma"]],
 		] as const) {
-			const driver = `source ${shQuoteForFish(path)}; complete -C ${shQuoteForFish(line)}`;
-			const { exitCode, stdout, stderr } = await runBoundedProcess("fish", ["-c", driver], {
-				timeout: 4_000,
-			});
-			expect(exitCode).toBe(0);
-			expect(stderr).toBe("");
-			const candidates = stdout
-				.split("\n")
-				.filter((candidate) => candidate !== "")
-				.map((candidate) => candidate.split("\t")[0]);
+			const candidates = await complete(path, line);
 			expect({ line, candidates }).toEqual({ line, candidates: [...expected] });
+		}
+
+		// Core looks bundle characters up among canonical names and aliases
+		// too, so a one-character canonical `q` or alias `q` is a boolean prefix.
+		for (const [variant, variantQuiet] of [
+			["canonical", { ...quiet, name: "q", short: undefined }],
+			["alias", { ...quiet, short: undefined, aliases: ["q"] }],
+		] as const) {
+			const variantPath = join(tmpDir, `vcli-${variant}.fish`);
+			await writeFile(variantPath, renderFish(specWith(variantQuiet), "vcli", "1.0.0"), "utf8");
+			for (const [line, expected] of [
+				["vcli -qp dev deploy ", ["local", "prod", "shadow"]],
+				["vcli -xp dev deploy ", []],
+			] as const) {
+				const candidates = await complete(variantPath, line);
+				expect({ variant, line, candidates }).toEqual({
+					variant,
+					line,
+					candidates: [...expected],
+				});
+			}
 		}
 	});
 });
