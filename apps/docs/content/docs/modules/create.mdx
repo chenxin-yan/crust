@@ -73,7 +73,9 @@ See [Locating templates](#locating-templates) for how `template` resolves.
 
 The default `conflict: "abort"` throws for a non-empty destination. `"overwrite"` replaces conflicting files and leaves unrelated destination files in place.
 
-Writes stay inside the destination. `dest` itself may be a symlink (its target is the destination), but an existing destination file or ancestor directory that is a symlink resolving outside that directory, or to a missing target, throws before any file is written. Symlinks that stay inside the destination are followed.
+`dest` itself may be a symlink (its target is the destination), but an existing destination file or ancestor directory that is a symlink resolving outside that directory, or to a missing target, throws before any file is written. Symlinks that stay inside the destination are followed.
+
+Containment is checked again after rendering and before each write, including binary copies. A detected redirect of the canonical destination root or an escaping link introduced during rendering aborts the call; earlier writes remain. These path checks are not atomic with filesystem writes: use a destination whose directories cannot be concurrently modified by untrusted processes.
 
 ## `runSteps(steps, cwd)`
 

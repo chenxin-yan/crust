@@ -387,6 +387,54 @@ describe("scaffold", () => {
 			expect(readFileSync(sentinel, "utf-8")).toBe("original");
 		});
 
+		it.each(["file", "directory", "root"])(
+			"rejects a %s redirected outside the destination during rendering",
+			async (target) => {
+				createTemplateFile(target === "directory" ? "nested/sentinel.txt" : "sentinel.txt", "new");
+				const swappedPath =
+					target === "file"
+						? join(destDir, "sentinel.txt")
+						: target === "directory"
+							? join(destDir, "nested")
+							: destDir;
+
+				await expect(
+					scaffold({
+						template: templateDir,
+						dest: destDir,
+						context: {},
+						render: async (source) => {
+							await Promise.resolve();
+							rmSync(swappedPath, { recursive: true, force: true });
+							symlinkSync(target === "file" ? sentinel : outsideDir, swappedPath);
+							return source;
+						},
+					}),
+				).rejects.toThrow("outside the destination");
+				expect(readFileSync(sentinel, "utf-8")).toBe("original");
+			},
+		);
+
+		it("rechecks binary destinations after an earlier renderer runs", async () => {
+			createTemplateFile("a.txt", "text");
+			createTemplateBinaryFile("z.bin", Buffer.from([0, 1]));
+
+			await expect(
+				scaffold({
+					template: templateDir,
+					dest: destDir,
+					context: {},
+					render: async (source) => {
+						await Promise.resolve();
+						symlinkSync(sentinel, join(destDir, "z.bin"));
+						return source;
+					},
+				}),
+			).rejects.toThrow("outside the destination");
+			expect(readFileSync(sentinel, "utf-8")).toBe("original");
+			expect(readOutputFile("a.txt")).toBe("text");
+		});
+
 		it("writes through a link that stays inside the destination", async () => {
 			createTemplateFile("alias.txt", "{{name}}");
 			writeFileSync(join(destDir, "real.txt"), "old", "utf-8");

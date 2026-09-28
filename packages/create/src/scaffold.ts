@@ -89,6 +89,9 @@ function isNonEmptyDir(dirPath: string): boolean {
  * Components that do not exist yet are created fresh by the caller.
  */
 function assertDestinationContained(realDestDir: string, relPath: string): void {
+	if (realpathSync(realDestDir) !== realDestDir) {
+		throw new Error(`Destination root "${realDestDir}" was redirected outside the destination.`);
+	}
 	let current = realDestDir;
 	for (const segment of relPath.split(sep)) {
 		current = join(current, segment);
@@ -208,20 +211,16 @@ export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult
 		const absolutePath = join(templateDir, relFromTemplate);
 		const destFilePath = join(realDestDir, destRelPath);
 
-		// Ensure parent directory exists
-		mkdirSync(dirname(destFilePath), { recursive: true });
-
-		// Read source file
 		const buffer = readFileSync(absolutePath);
+		const content = buffer.subarray(0, 8192).includes(0)
+			? buffer
+			: await render(buffer.toString("utf-8"), context);
 
-		if (buffer.subarray(0, 8192).includes(0)) {
-			// Binary files are copied as-is
-			writeFileSync(destFilePath, buffer);
-		} else {
-			// Text files go through the renderer (default: interpolation)
-			const rendered = await render(buffer.toString("utf-8"), context);
-			writeFileSync(destFilePath, rendered, "utf-8");
-		}
+		// Rendering can yield after preflight; recheck before creating directories or writing,
+		// including binary files following a renderer. This is not an atomic filesystem guard.
+		assertDestinationContained(realDestDir, destRelPath);
+		mkdirSync(dirname(destFilePath), { recursive: true });
+		writeFileSync(destFilePath, content, "utf-8");
 
 		writtenFiles.push(destRelPath);
 	}
