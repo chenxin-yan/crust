@@ -120,6 +120,7 @@ function createHandleKey<T>(
 
 		// Space — toggle selection on current item
 		if (key.name === "space") {
+			if (state.cursor >= totalItems) return state;
 			const newSelected = new Set(state.selected);
 			if (newSelected.has(state.cursor)) {
 				newSelected.delete(state.cursor);

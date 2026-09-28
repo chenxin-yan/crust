@@ -326,6 +326,30 @@ describe("multiselect — validation", () => {
 		expect(result).toEqual(["a"]);
 	});
 
+	for (const [name, constraint, error] of [
+		["required", { required: true }, "At least one item must be selected"],
+		["min", { min: 1 }, "Select at least 1 item"],
+	] as const) {
+		it(`${name} blocks submit of empty choices after Space`, async () => {
+			const options: MultiselectOptions<string> = {
+				message: "Select",
+				choices: [],
+				...constraint,
+			};
+			const prompt = renderPrompt(multiselect, options);
+
+			await tick();
+			prompt.type(" ");
+			await tick();
+			prompt.keys("return");
+			await tick();
+
+			expect(prompt.screen()).toContain(error);
+			prompt.keys("ctrl+c");
+			await expect(prompt.answer).rejects.toMatchObject({ name: "AbortError" });
+		});
+	}
+
 	it("min validation blocks submit when too few selected", async () => {
 		const prompt = renderPrompt(multiselect, {
 			message: "Select",
