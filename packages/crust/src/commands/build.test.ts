@@ -32,10 +32,10 @@ import {
 	type TargetTable,
 } from "../utils/build-helpers.ts";
 import { ARTIFACT_KINDS, type DistributionManifest } from "../utils/distribute.ts";
+import { buildCommand } from "./build-command.ts";
 import {
 	build,
 	type BuildOptions,
-	buildCommand,
 	CRUST_CONFIG_KEYS,
 	planBuild,
 	readCrustConfig,

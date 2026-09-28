@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { crustBase } from "./app.ts";
-import { buildCommand } from "./commands/build.ts";
+import { buildCommand } from "./commands/build-command.ts";
 import { publishCommand } from "./commands/publish.ts";
 
 /**
