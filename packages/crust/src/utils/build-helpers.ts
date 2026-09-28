@@ -1350,6 +1350,7 @@ export async function execDenoPackageBuild(
 }
 
 const SNAPSHOT_TIMEOUT_MS = 30_000;
+const SNAPSHOT_FORWARDED_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
 
 function isBuildReport(value: JsonValue): value is JsonObject & BuildReport {
 	return (
@@ -1379,6 +1380,8 @@ function isBuildReport(value: JsonValue): value is JsonObject & BuildReport {
  *
  * After `timeoutMs`, the entry's POSIX process group or live Windows process
  * tree is killed and preparation fails, even if a descendant still holds stderr.
+ * On POSIX, SIGINT, SIGTERM, SIGHUP or a synchronous exit of this process also
+ * kills the entry's group.
  */
 export async function buildEntrypoint(
 	entryPath: string,
@@ -1395,6 +1398,7 @@ export async function buildEntrypoint(
 	const buildReportPath = join(snapshotDir, "build-report.json");
 
 	try {
+		const detached = process.platform !== "win32";
 		const proc = spawn(runner.command, [...toBunEnvFileArgs(envFiles), absoluteEntry], {
 			env: {
 				...runner.env,
@@ -1404,13 +1408,12 @@ export async function buildEntrypoint(
 			cwd,
 			stdio: ["ignore", "ignore", "pipe"],
 			// Its own process group lets the deadline reach POSIX descendants.
-			detached: process.platform !== "win32",
+			detached,
 		});
 
-		let timer: NodeJS.Timeout | undefined;
-		const deadline = new Promise<never>((_, reject) => {
-			timer = setTimeout(() => {
-				const message = `Command Snapshot preparation timed out after ${timeoutMs / 1_000}s.\n  An Extension build hook may be hanging. Use --no-validate to skip entry preparation and build hooks.`;
+		let stop!: (message: string) => void;
+		const stopped = new Promise<never>((_, reject) => {
+			stop = (message) => {
 				let failure = new Error(message);
 				try {
 					killProcessTree(proc);
@@ -1420,16 +1423,51 @@ export async function buildEntrypoint(
 				// A descendant holding the inherited stderr pipe must not keep "close" pending.
 				proc.stderr.destroy();
 				reject(failure);
-			}, timeoutMs);
+			};
 		});
+		const timer = setTimeout(
+			() =>
+				stop(
+					`Command Snapshot preparation timed out after ${timeoutMs / 1_000}s.\n  An Extension build hook may be hanging. Use --no-validate to skip entry preparation and build hooks.`,
+				),
+			timeoutMs,
+		);
+		// The detached group no longer receives terminal signals, so the entry stops with this
+		// process. Like Core's SIGINT handling, re-raise only when no other listener owns the signal.
+		// ponytail: SIGKILL cannot be observed and SIGQUIT is not forwarded; both orphan the entry.
+		const onSignal = (signal: NodeJS.Signals): void => {
+			removeLifetimeListeners();
+			stop(`Command Snapshot preparation was interrupted by ${signal}.`);
+			if (process.listenerCount(signal) === 0) process.kill(process.pid, signal);
+		};
+		// Synchronous exits (process.exit, uncaught errors) skip the awaited cleanup.
+		const onExit = (): void => {
+			try {
+				killProcessTree(proc);
+			} catch {
+				// The process is exiting; there is no caller left to report to.
+			}
+		};
+		const removeLifetimeListeners = (): void => {
+			for (const signal of SNAPSHOT_FORWARDED_SIGNALS) process.removeListener(signal, onSignal);
+			process.removeListener("exit", onExit);
+		};
+		if (detached) {
+			for (const signal of SNAPSHOT_FORWARDED_SIGNALS) process.prependListener(signal, onSignal);
+			process.on("exit", onExit);
+		}
 		const [rawStderr, [exitCode]] = await Promise.race([
 			Promise.all([text(proc.stderr), once(proc, "close")]),
-			deadline,
-		]).finally(() => clearTimeout(timer));
+			stopped,
+		]).finally(() => {
+			clearTimeout(timer);
+			removeLifetimeListeners();
+		});
 		const stderr = rawStderr.trim();
 
 		if (proc.signalCode !== null) {
-			// Only the deadline kills the entry, and it rejects above: this signal is external.
+			// Only the deadline and forwarded signals kill the entry, and both reject above:
+			// this signal is external.
 			throw new Error(
 				`Command Snapshot preparation was killed by ${proc.signalCode}.${stderr ? `\n${stderr}` : ""}`,
 			);

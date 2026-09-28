@@ -27,12 +27,12 @@ type RunningProcess = { stop: (reason: string) => void; closed: Promise<unknown>
 
 const running = new Set<RunningProcess>();
 
-/** runProcess (same Windows command-shim handling and result) with a kill deadline. */
+/** runProcess (same Windows command-shim handling and result, plus the exit signal) with a kill deadline. */
 export async function runBoundedProcess(
 	command: string,
 	args: readonly string[],
 	options: BoundedProcessOptions,
-): Promise<RunProcessResult> {
+): Promise<RunProcessResult & { signal: NodeJS.Signals | null }> {
 	const windowsShimCommand = getWindowsShimCommand(command, args, undefined);
 	const child = spawn(windowsShimCommand?.command ?? command, windowsShimCommand?.args ?? args, {
 		cwd: options.cwd,
@@ -69,13 +69,13 @@ export async function runBoundedProcess(
 		options.timeout,
 	);
 	try {
-		const [exitCode] = await closed;
+		const [exitCode, signal] = await closed;
 		if (killedBecause !== undefined) {
 			throw new Error(
 				`${[command, ...args].join(" ")} ${killedBecause}\nstdout:\n${stdout}\nstderr:\n${stderr}`,
 			);
 		}
-		return { exitCode, stdout, stderr };
+		return { exitCode, signal, stdout, stderr };
 	} finally {
 		clearTimeout(timer);
 		running.delete(entry);

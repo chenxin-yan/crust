@@ -17,10 +17,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { defineExtensionId } from "@crustjs/core";
 import { which } from "@crustjs/utils/process";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import crustPackage from "../../package.json" with { type: "json" };
-import { isRunning } from "../../tests/bounded-process.ts";
+import { isRunning, reapBoundedProcesses, runBoundedProcess } from "../../tests/bounded-process.ts";
 import {
 	assertCompilerSatisfiesEngines,
 	assertTargetsBuildableWithoutBun,
@@ -1004,8 +1004,17 @@ describe("createBunCompileArgs", () => {
 
 describe("buildEntrypoint", () => {
 	const tempDirs: string[] = [];
+	const lifetimeEvents = ["SIGINT", "SIGTERM", "SIGHUP", "exit"] as const;
+	const listenerCounts = () => lifetimeEvents.map((event) => process.listenerCount(event));
+	let listenersBefore: number[] = [];
+
+	beforeEach(() => {
+		listenersBefore = listenerCounts();
+	});
 
 	afterEach(async () => {
+		// Normal, failed and timed-out preparations all remove their lifetime listeners.
+		expect(listenerCounts()).toEqual(listenersBefore);
 		await Promise.all(tempDirs.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 	});
 
@@ -1247,11 +1256,12 @@ describe("buildEntrypoint", () => {
 		).rejects.toThrow("Entry produced an invalid Command Snapshot");
 	});
 
-	describe("timeout", () => {
+	describe("entry lifetime", () => {
 		const pids: number[] = [];
 
 		// Runs before the outer afterEach removes the fixture directories.
-		afterEach(() => {
+		afterEach(async () => {
+			await reapBoundedProcesses();
 			for (const pid of pids.splice(0)) {
 				try {
 					process.kill(pid, "SIGKILL");
@@ -1330,5 +1340,88 @@ describe("buildEntrypoint", () => {
 			const cleaned = process.platform === "win32" ? recorded.slice(0, 1) : recorded;
 			await vi.waitFor(() => expect(cleaned.filter(isRunning)).toEqual([]), { timeout: 5_000 });
 		}, 20_000);
+
+		const helpersUrl = pathToFileURL(resolve(import.meta.dirname, "build-helpers.ts")).href;
+
+		/**
+		 * Runs a Bun host that prepares a hung entry (with a stderr-holding descendant),
+		 * then interrupts itself as `mode` describes once both are alive.
+		 */
+		async function runInterruptedHost(mode: "SIGINT" | "SIGTERM" | "SIGHUP" | "exit" | "listener") {
+			const directory = await mkdtemp(join(tmpdir(), "crust-entry-interrupt-test-"));
+			tempDirs.push(directory);
+			const entry = join(directory, "cli.ts");
+			const host = join(directory, "host.ts");
+			const pidFile = join(directory, "pids.json");
+			await writeFile(
+				entry,
+				`import { spawn } from "node:child_process";\n` +
+					`import { renameSync, writeFileSync } from "node:fs";\n` +
+					`const descendant = spawn(process.execPath, ["-e", "setInterval(() => {}, 1_000)"], { stdio: ["ignore", "ignore", "inherit"] });\n` +
+					`writeFileSync(${JSON.stringify(`${pidFile}.tmp`)}, JSON.stringify([process.pid, descendant.pid]));\n` +
+					`renameSync(${JSON.stringify(`${pidFile}.tmp`)}, ${JSON.stringify(pidFile)});\n` +
+					`setInterval(() => {}, 1_000);\n`,
+			);
+			await writeFile(
+				host,
+				`import { existsSync } from "node:fs";\n` +
+					`import { buildEntrypoint } from ${JSON.stringify(helpersUrl)};\n` +
+					`const mode = ${JSON.stringify(mode)};\n` +
+					`if (mode === "listener") process.on("SIGINT", () => console.log("host listener"));\n` +
+					`const io = { stdout: () => {}, stderr: () => {} };\n` +
+					`const prepared = buildEntrypoint(${JSON.stringify(entry)}, ${JSON.stringify(join(directory, "dist"))}, [], io, ${JSON.stringify(directory)}, undefined, 60_000);\n` +
+					`const poll = setInterval(() => {\n` +
+					`  if (!existsSync(${JSON.stringify(pidFile)})) return;\n` +
+					`  clearInterval(poll);\n` +
+					`  if (mode === "exit") process.exit(3);\n` +
+					`  process.kill(process.pid, mode === "listener" ? "SIGINT" : mode);\n` +
+					`}, 20);\n` +
+					`await prepared.catch((error) => console.log(error.message, ${JSON.stringify(lifetimeEvents)}.map((event) => process.listenerCount(event)).join()));\n` +
+					`process.exit(0);\n`,
+			);
+
+			const run = runBoundedProcess("bun", [host], { cwd: directory, timeout: 15_000 });
+			// Recorded even when the host fails, so teardown still kills the entry group.
+			await run.catch(() => {});
+			// SAFETY: the entry writes its own and its descendant's PIDs as a JSON array.
+			const recorded = JSON.parse(await readFile(pidFile, "utf8").catch(() => "[]")) as number[];
+			pids.push(...recorded);
+			const result = await run;
+			expect(recorded).toHaveLength(2);
+			await vi.waitFor(() => expect(recorded.filter(isRunning)).toEqual([]), { timeout: 5_000 });
+			return result;
+		}
+
+		it.skipIf(process.platform === "win32").each(["SIGINT", "SIGTERM", "SIGHUP"] as const)(
+			"kills the entry group and keeps default termination when the host gets %s",
+			async (signal) => {
+				const result = await runInterruptedHost(signal);
+
+				expect(result).toMatchObject({ exitCode: null, signal, stdout: "" });
+			},
+			20_000,
+		);
+
+		it.skipIf(process.platform === "win32")(
+			"kills the entry group when the host exits synchronously",
+			async () => {
+				expect(await runInterruptedHost("exit")).toMatchObject({ exitCode: 3, signal: null });
+			},
+			20_000,
+		);
+
+		it.skipIf(process.platform === "win32")(
+			"leaves an existing host SIGINT listener in charge",
+			async () => {
+				const result = await runInterruptedHost("listener");
+
+				expect(result).toMatchObject({ exitCode: 0, signal: null });
+				// The host listener still ran and remains the only lifetime listener.
+				expect(result.stdout).toBe(
+					"host listener\nCommand Snapshot preparation was interrupted by SIGINT. 1,0,0,0\n",
+				);
+			},
+			20_000,
+		);
 	});
 });
