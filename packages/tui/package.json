@@ -44,7 +44,7 @@
 		"postpack": "rm -f LICENSE"
 	},
 	"peerDependencies": {
-		"@opentui/core": "^0.5.11",
+		"@opentui/core": "^0.5.12",
 		"typescript": "^7.0.0"
 	},
 	"peerDependenciesMeta": {
@@ -54,7 +54,7 @@
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
-		"@opentui/core": "^0.5.11",
+		"@opentui/core": "^0.5.12",
 		"vite-plus": "catalog:"
 	},
 	"engines": {

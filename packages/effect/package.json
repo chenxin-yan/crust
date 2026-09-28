@@ -49,12 +49,12 @@
 		"@crustjs/core": "workspace:*",
 		"@crustjs/env": "workspace:*",
 		"@crustjs/testing": "workspace:*",
-		"effect": "4.0.0-rc.115",
+		"effect": "4.0.0-rc.118",
 		"vite-plus": "catalog:"
 	},
 	"peerDependencies": {
 		"@crustjs/core": "workspace:^",
-		"effect": "^4.0.0-rc.115",
+		"effect": "^4.0.0-rc.118",
 		"typescript": "^7.0.0"
 	},
 	"peerDependenciesMeta": {

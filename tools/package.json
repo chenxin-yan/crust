@@ -8,7 +8,7 @@
 		"test": "vp run test:task"
 	},
 	"dependencies": {
-		"@oxlint/plugins": "^1.81.0"
+		"@oxlint/plugins": "^1.85.0"
 	},
 	"devDependencies": {
 		"vite-plus": "catalog:"

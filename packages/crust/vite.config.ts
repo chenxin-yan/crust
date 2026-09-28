@@ -34,14 +34,16 @@ export default defineConfig({
 			...libraryTasks,
 			"pack:task": {
 				...libraryTasks["build:task"],
-				output: ["dist/**"],
+				cache: { ...libraryTasks["build:task"].cache, output: ["dist/**"] },
 			},
 			"build:task": {
 				command: "bun src/cli.ts build && bun scripts/stage-node-exe-dependencies.ts",
 				dependsOn: ["pack:task", upstreamBuild],
-				env: ["CI"],
-				input: [...runtimeInput, "dist/**", "!.crust/**"],
-				output: [".crust/**"],
+				cache: {
+					env: ["CI"],
+					input: [...runtimeInput, "dist/**", "!.crust/**"],
+					output: [".crust/**"],
+				},
 			},
 		},
 	},

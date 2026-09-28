@@ -38,8 +38,10 @@ export const toolingTasks = {
 	"check:types:task": {
 		command: "tsc --noEmit",
 		dependsOn: [upstreamBuild],
-		input: runtimeInput,
-		output: [],
+		cache: {
+			input: runtimeInput,
+			output: [],
+		},
 	},
 	"test:task": {
 		command: "vp test",
@@ -54,11 +56,13 @@ export const libraryTasks = {
 	"build:task": {
 		command: "vp pack",
 		dependsOn: [upstreamBuild],
-		// publint and ATTW run only when CI is set.
-		env: ["CI"],
-		// The builders read their previous output; a cache hit restores it instead.
-		input: [...runtimeInput, "!dist/**", "!.crust/**"],
-		output: ["dist/**", ".crust/**"],
+		cache: {
+			// publint and ATTW run only when CI is set.
+			env: ["CI"],
+			// The builders read their previous output; a cache hit restores it instead.
+			input: [...runtimeInput, "!dist/**", "!.crust/**"],
+			output: ["dist/**", ".crust/**"],
+		},
 	},
 	"test:task": {
 		...toolingTasks["test:task"],

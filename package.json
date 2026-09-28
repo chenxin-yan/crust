@@ -23,8 +23,8 @@
 	"devDependencies": {
 		"@arethetypeswrong/core": "^0.18.5",
 		"@changesets/changelog-github": "^1.0.1",
-		"@changesets/cli": "^3.0.2",
-		"@types/bun": "^1.4.1",
+		"@changesets/cli": "^3.0.3",
+		"@types/bun": "^1.4.2",
 		"publint": "^0.3.24",
 		"typescript": "^7.0.2",
 		"vite-plus": "catalog:"
