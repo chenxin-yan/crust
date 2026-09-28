@@ -1,5 +1,11 @@
 # @crustjs/tui
 
+## 0.0.3
+
+### Patch Changes
+
+- [#463](https://github.com/chenxin-yan/crust/pull/463) [`c6f4bd8`](https://github.com/chenxin-yan/crust/commit/c6f4bd8f3de3558d9c988acf63830ec899cf6854) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Reject with AbortError when Ctrl+C arrives with an uppercase base code on non-Latin keyboard layouts, matching OpenTUI exitOnCtrlC.
+
 ## 0.0.2
 
 ### Patch Changes

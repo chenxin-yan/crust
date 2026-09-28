@@ -1,5 +1,16 @@
 # @crustjs/create
 
+## 0.2.0
+
+### Minor Changes
+
+- [#467](https://github.com/chenxin-yan/crust/pull/467) [`7c80b75`](https://github.com/chenxin-yan/crust/commit/7c80b7502e6649ce431e33c2e1b2a1b81795b464) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Add an optional `render` callback to `scaffold()` for using a template engine. It receives each text file's contents and `context`, may return a string or a promise, and replaces the built-in `{{key}}` interpolation. Binary files are still copied unchanged, and destination conflict and symlink checks still run before any file is rendered. Containment is rechecked after rendering and before each write to reject destination redirects introduced during rendering; these checks are not atomic protection against concurrent filesystem changes.
+
+### Patch Changes
+
+- Updated dependencies [[`0da2c5c`](https://github.com/chenxin-yan/crust/commit/0da2c5ce54f71acc5d51fad1dcb2c5546a71948e), [`4360cb1`](https://github.com/chenxin-yan/crust/commit/4360cb1cefca245e76967ade43c82b5361c039e5), [`4977f33`](https://github.com/chenxin-yan/crust/commit/4977f33e87a928d968202af40f9729e390b7df93), [`4977f33`](https://github.com/chenxin-yan/crust/commit/4977f33e87a928d968202af40f9729e390b7df93)]:
+  - @crustjs/utils@0.2.0
+
 ## 0.1.3
 
 ### Patch Changes

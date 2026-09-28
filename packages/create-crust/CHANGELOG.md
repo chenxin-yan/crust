@@ -1,5 +1,24 @@
 # create-crust
 
+## 0.5.0
+
+### Minor Changes
+
+- [#456](https://github.com/chenxin-yan/crust/pull/456) [`0da2c5c`](https://github.com/chenxin-yan/crust/commit/0da2c5ce54f71acc5d51fad1dcb2c5546a71948e) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Breaking: `crust build` and `build()` now require an explicit artifact kind, set with `"crust": { "artifact": "package" | "binary" }` in package.json, `--artifact`, or the `artifact` build option (the option overrides the config). The implicit defaults are gone: to keep the previous output, set `"artifact": "binary"` for bun and deno projects and `"artifact": "package"` for node projects; the error names the old default for the inferred runtime. Runtime inference is unchanged. New Bun runtime packages (`"runtime": "bun", "artifact": "package"`) stage one root-only package whose commands are Bun-targeted bundles behind `#!/usr/bin/env bun`, so installed commands run on the consumer's Bun. Runtime packages reject `--target` and `crust.targets`. Binary builds select the compiler once (external `bun` on PATH first, then the embedded Bun; `deno` on PATH), check its reported version against `engines.bun`/`engines.deno` before replacing `.crust/` (a `--version` probe that does not exit within 30 seconds is killed and fails the build), print it as `Compiler:`, and record it as `embeddedRuntimeVersion` in `manifest.json`, which now also records `runtime` and `artifact`. Crust never installs or upgrades a compiler. create-crust templates set `crust.artifact` to keep each runtime's existing output.
+
+- [#461](https://github.com/chenxin-yan/crust/pull/461) [`3b7165f`](https://github.com/chenxin-yan/crust/commit/3b7165fff5eb164e075dc50332a054e113fa3993) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Choose runtime packages or standalone binaries independently of the runtime in the wizard or with --artifact. Preserve existing defaults and explain compiler requirements and non-npm distribution in generated projects.
+
+### Patch Changes
+
+- [#467](https://github.com/chenxin-yan/crust/pull/467) [`7c80b75`](https://github.com/chenxin-yan/crust/commit/7c80b7502e6649ce431e33c2e1b2a1b81795b464) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Skip Git initialization when a destination with missing parent directories is inside an existing repository.
+
+- [#389](https://github.com/chenxin-yan/crust/pull/389) [`38d047c`](https://github.com/chenxin-yan/crust/commit/38d047c01b04186ca63447938d2a11762c04d183) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Use the detected package manager for generated README and next-step commands independently of the selected runtime. Include an install command when dependency installation is skipped, and document installation for freshly cloned projects.
+- Updated dependencies [[`bc3cbb2`](https://github.com/chenxin-yan/crust/commit/bc3cbb250974fcdba4ce2f50ee4b6b90a1f16c30), [`c6f4bd8`](https://github.com/chenxin-yan/crust/commit/c6f4bd8f3de3558d9c988acf63830ec899cf6854), [`c4f44d6`](https://github.com/chenxin-yan/crust/commit/c4f44d6f9e3dd206154d0b18a84fb75464dc2dfe), [`0b835c2`](https://github.com/chenxin-yan/crust/commit/0b835c20b9bcf09e9dea7f179eeecd43a9c50763), [`eb9928d`](https://github.com/chenxin-yan/crust/commit/eb9928d60edc3033652ad55a3a019e790dafdf06), [`c6f4bd8`](https://github.com/chenxin-yan/crust/commit/c6f4bd8f3de3558d9c988acf63830ec899cf6854), [`c6f4bd8`](https://github.com/chenxin-yan/crust/commit/c6f4bd8f3de3558d9c988acf63830ec899cf6854), [`7c80b75`](https://github.com/chenxin-yan/crust/commit/7c80b7502e6649ce431e33c2e1b2a1b81795b464), [`4977f33`](https://github.com/chenxin-yan/crust/commit/4977f33e87a928d968202af40f9729e390b7df93)]:
+  - @crustjs/core@0.5.0
+  - @crustjs/prompts@0.2.4
+  - @crustjs/progress@0.1.3
+  - @crustjs/create@0.2.0
+
 ## 0.4.1
 
 ### Patch Changes

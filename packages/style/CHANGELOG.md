@@ -1,5 +1,11 @@
 # @crustjs/style
 
+## 0.3.4
+
+### Patch Changes
+
+- [#463](https://github.com/chenxin-yan/crust/pull/463) [`c6f4bd8`](https://github.com/chenxin-yan/crust/commit/c6f4bd8f3de3558d9c988acf63830ec899cf6854) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Snapshot RGB tuple inputs to `fg`/`bg` chains so later caller mutation cannot change retained or cached styles
+
 ## 0.3.3
 
 ### Patch Changes
