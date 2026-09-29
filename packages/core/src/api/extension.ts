@@ -50,23 +50,23 @@ import {
 // Extension — the public integration contract
 // ────────────────────────────────────────────────────────────────────────────
 
-const finishedBrand: unique symbol = Symbol("crust.finished");
+const handledBrand: unique symbol = Symbol("crust.handled");
 
-/** Opaque token returned by {@link ExtensionContext.finish} to end an invocation successfully. */
-export interface Finished {
-	readonly [finishedBrand]: true;
+/** Opaque token returned by {@link ExtensionContext.handled} to end an invocation successfully. */
+export interface Handled {
+	readonly [handledBrand]: true;
 }
 
-const FINISHED: Finished = Object.freeze({ [finishedBrand]: true as const });
+const HANDLED: Handled = Object.freeze({ [handledBrand]: true as const });
 
 /** @internal */
-export function finishInvocation(): Finished {
-	return FINISHED;
+export function handledInvocation(): Handled {
+	return HANDLED;
 }
 
 export type InvocationOutcome =
 	| { readonly status: "completed" }
-	| { readonly status: "finished"; readonly by: ExtensionId }
+	| { readonly status: "handled"; readonly by: ExtensionId }
 	| { readonly status: "failed"; readonly error: unknown; readonly by?: ExtensionId };
 
 /** Authored root metadata fields an Extension may require. */
@@ -187,11 +187,11 @@ export interface ExtensionContext<
 	 * @example
 	 * ```ts
 	 * preRun(ctx) {
-	 *   if (ctx.flags.help === true) return ctx.finish();
+	 *   if (ctx.flags.help === true) return ctx.handled();
 	 * }
 	 * ```
 	 */
-	readonly finish: () => Finished;
+	readonly handled: () => Handled;
 }
 
 export interface ExtensionHooks<
@@ -202,10 +202,10 @@ export interface ExtensionHooks<
 	/**
 	 * Runs after routing and input binding (argv parsing for `execute()`, structured
 	 * binding for typed `run()`), before validation, in `.extend()` order.
-	 * Return `ctx.finish()` to end the invocation successfully; later pre-run hooks,
+	 * Return `ctx.handled()` to end the invocation successfully; later pre-run hooks,
 	 * validation, schemas, Contexts, and the Command Action do not run.
 	 */
-	readonly preRun?: (ctx: ExtensionContext<Defs, Deps, MetaKeys>) => Awaitable<void | Finished>;
+	readonly preRun?: (ctx: ExtensionContext<Defs, Deps, MetaKeys>) => Awaitable<void | Handled>;
 	/**
 	 * Runs after the invocation settles, in reverse `.extend()` order. This is the
 	 * `finally` slot for cleanup and post-run side effects.

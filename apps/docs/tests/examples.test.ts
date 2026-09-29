@@ -49,7 +49,7 @@ it("the cancellable Context example passes a signal and rejects failed requests"
 
 it("extensions example prints the version for `--version` on the actionless root", async () => {
 	const outcome = await extensionsExample.run([], { flags: { version: true } });
-	expect(outcome).toMatchObject({ status: "finished", by: "crust:version" });
+	expect(outcome).toMatchObject({ status: "handled", by: "crust:version" });
 	expect(outcome.stdout.trim()).toBe("my-cli v0.2.0");
 });
 

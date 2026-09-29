@@ -5,7 +5,7 @@ export const preview = defineExtension(defineExtensionId("acme:preview"))
 	.preRun((ctx) => {
 		if (ctx.flags.preview !== true) return;
 		ctx.stdout("nothing changed");
-		return ctx.finish(); // [!code highlight]
+		return ctx.handled(); // [!code highlight]
 	});
 
 const app = new Crust("deploy").extend(preview).action(({ stdout }) => stdout("deployed"));

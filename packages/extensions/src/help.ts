@@ -113,6 +113,6 @@ export const help: ExtensionFactory<[], {}, [], typeof helpFlags> = defineExtens
 		extension.flags(...helpFlags).preRun((context) => {
 			if (context.flags.help !== true && context.command.hasAction) return;
 			context.stdout(renderHelp(context.command, context.commandPath));
-			return context.finish();
+			return context.handled();
 		}),
 );

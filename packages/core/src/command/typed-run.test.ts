@@ -129,14 +129,14 @@ describe("typed programmatic invocation", () => {
 		expect(await pending).toMatchObject({ status: "completed", result: { ok: true } });
 	});
 
-	it("returns the finishing Extension when preRun finishes before the action", async () => {
+	it("returns the handling Extension when preRun handles the invocation before the action", async () => {
 		const gateId = defineExtensionId("gate");
-		const gate = defineExtension(gateId).preRun((ctx) => ctx.finish());
+		const gate = defineExtension(gateId).preRun((ctx) => ctx.handled());
 		const app = new Crust("cli").extend(gate).action(() => ({ ran: true as const }));
 		const pending = app.run([]);
 		type _result = Expect<Equal<typeof pending, Promise<RunOutcome<{ ran: true }>>>>;
 
-		expect(await pending).toMatchObject({ status: "finished", by: gateId });
+		expect(await pending).toMatchObject({ status: "handled", by: gateId });
 	});
 
 	it("binds structured input directly against the selected command", async () => {

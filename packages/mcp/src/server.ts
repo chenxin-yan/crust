@@ -123,7 +123,7 @@ function failureText({ error }: FailedOutcome): string {
  *
  * A JSON-faithful `completed` result becomes `structuredContent` (plain objects
  * as themselves, other JSON values wrapped as `{ result }`) plus a text block
- * holding the value's JSON. Any other `completed` result, and every `finished`
+ * holding the value's JSON. Any other `completed` result, and every `handled`
  * outcome, returns the captured stdout as text. `failed` sets `isError`.
  */
 export function toolResultFromOutcome(outcome: RunOutcome<unknown>): CallToolResult {
@@ -150,7 +150,7 @@ export function toolResultFromOutcome(outcome: RunOutcome<unknown>): CallToolRes
 			}
 			return text(outcome.stdout);
 		}
-		case "finished":
+		case "handled":
 			return text(outcome.stdout);
 		case "failed":
 			return { ...text(failureText(outcome)), isError: true };

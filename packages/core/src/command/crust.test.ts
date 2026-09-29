@@ -1028,14 +1028,14 @@ describe("Extension application at prepare time", () => {
 });
 
 describe("Extension named hooks", () => {
-	it("runs pre-run hooks in extension order and finish skips later hooks and the action", async () => {
+	it("runs pre-run hooks in extension order and handled skips later hooks and the action", async () => {
 		const order: string[] = [];
 		const first = defineExtension(defineExtensionId("first")).preRun(() => {
 			order.push("first");
 		});
 		const gate = defineExtension(defineExtensionId("gate")).preRun((ctx) => {
 			order.push("gate");
-			return ctx.finish();
+			return ctx.handled();
 		});
 		const last = defineExtension(defineExtensionId("last")).preRun(() => {
 			order.push("last");
@@ -1051,7 +1051,7 @@ describe("Extension named hooks", () => {
 		expect(order).toEqual(["first", "gate"]);
 	});
 
-	it("runs post-run hooks LIFO for completed, failed, and finished invocations", async () => {
+	it("runs post-run hooks LIFO for completed, failed, and handled invocations", async () => {
 		const outcomes: string[] = [];
 		const first = defineExtension(defineExtensionId("first")).postRun((_ctx, outcome) => {
 			outcomes.push(`first:${outcome.status}`);
@@ -1082,26 +1082,26 @@ describe("Extension named hooks", () => {
 		expect(outcomes).toEqual(["second:failed", "first:failed"]);
 
 		outcomes.length = 0;
-		const gate = defineExtension(defineExtensionId("gate")).preRun((ctx) => ctx.finish());
+		const gate = defineExtension(defineExtensionId("gate")).preRun((ctx) => ctx.handled());
 		await unwrap(
 			new Crust("cli")
 				.extend(first, gate, second)
 				.action(() => {})
 				.run([]),
 		);
-		expect(outcomes).toEqual(["second:finished", "first:finished"]);
+		expect(outcomes).toEqual(["second:handled", "first:handled"]);
 	});
 
-	it("reports the finishing Extension and exposes parsed snapshots before validation", async () => {
+	it("reports the handling Extension and exposes parsed snapshots before validation", async () => {
 		let outcomeBy = "";
 		let seenPort: unknown;
 		const gate = defineExtension(defineExtensionId("gate"))
 			.preRun((ctx) => {
 				seenPort = ctx.flags.port;
-				return ctx.finish();
+				return ctx.handled();
 			})
 			.postRun((_ctx, outcome) => {
-				outcomeBy = outcome.status === "finished" ? outcome.by : "";
+				outcomeBy = outcome.status === "handled" ? outcome.by : "";
 			});
 		await unwrap(
 			new Crust("cli")

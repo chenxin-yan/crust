@@ -1362,14 +1362,14 @@ describe("lazy Context bags", () => {
 		await unwrap(new Crust("cli").provide(base(), service()).extend(extension).run([]));
 	});
 
-	it("rejects flag-owning Contexts after finish skips validation", async () => {
+	it("rejects flag-owning Contexts after handled skips validation", async () => {
 		const token = defineFlag("token", { type: "string" });
 		const auth = defineContext("auth")
 			.flags(token)
 			.setup(({ flags }) => flags.token);
 		const extension = defineExtension(defineExtensionId("consumer"))
 			.use(auth)
-			.preRun((ctx) => ctx.finish())
+			.preRun((ctx) => ctx.handled())
 			.postRun(async (ctx) => void (await ctx.ctx.auth));
 		const app = new Crust("cli")
 			.provide(auth())

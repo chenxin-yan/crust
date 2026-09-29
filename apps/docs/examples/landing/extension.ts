@@ -12,7 +12,7 @@ const preview = defineExtension(id)
 		if (ctx.flags.preview !== true) return;
 		//            ^?
 		ctx.stdout("nothing changed");
-		return ctx.finish();
+		return ctx.handled();
 	});
 
 const deploy = new Crust("deploy")

@@ -79,7 +79,7 @@ Snapshots carry no schemas or `parse` functions, so schema-owned requiredness is
 The outcome of `app.run()` decides the tool result:
 
 - A `completed` result that is plain JSON (finite numbers, strings, booleans, `null`, arrays, and plain objects of those) is returned as `structuredContent` plus a text block with the same JSON. Arrays and primitives are wrapped as `{ "result": value }`.
-- Any other `completed` result (`undefined`, `Date`, `Map`, class instances, `BigInt`, `NaN`, cycles) and every `finished` outcome return the captured stdout as text. The result is copied once before serialization, so getters run once and `toJSON` is not called.
+- Any other `completed` result (`undefined`, `Date`, `Map`, class instances, `BigInt`, `NaN`, cycles) and every `handled` outcome return the captured stdout as text. The result is copied once before serialization, so getters run once and `toJSON` is not called.
 - A `failed` outcome sets `isError` with `<code>: <message>` for a `CrustError`, `<name>: <message>` for other errors.
 
 Unknown tool names are protocol errors (`InvalidParams`), which is also how hidden and excluded commands present.

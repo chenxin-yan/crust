@@ -576,7 +576,7 @@ function bind<A extends ArgsDef, F extends FlagsDef, V, W>(
  *
  * This is a pure parse+coerce function — it never throws for missing required
  * values. Use {@link validateParsed} to enforce required constraints after
- * extensions have had a chance to finish an invocation (e.g. `--help`).
+ * extensions have had a chance to handle an invocation (e.g. `--help`).
  *
  * @param command - The command whose arg/flag definitions drive the parsing
  * @param argv - The argv array to parse (typically `process.argv.slice(2)`)

@@ -19,7 +19,7 @@ Available commands: deploy
 # exit 1
 ```
 
-`help()` adds `-h` and `--help` and shows help when this actionless root is invoked. Registration order matters: `noColor()` configures color before output hooks, and `version()` handles `--version` before `help()` can finish the invocation.
+`help()` adds `-h` and `--help` and shows help when this actionless root is invoked. Registration order matters: `noColor()` configures color before output hooks, and `version()` handles `--version` before `help()` can handle the invocation.
 
 Call `.extend()` on the root builder, not inside a command recipe. See [built-in Extensions](/docs/modules/extensions) for the full list.
 
@@ -40,7 +40,7 @@ $ deploy --preview
 nothing changed
 ```
 
-Return `ctx.finish()` from `preRun` to stop before validation and the action. Calling it without returning it does not stop the invocation.
+Return `ctx.handled()` from `preRun` to stop before validation and the action. Calling it without returning it does not stop the invocation.
 
 Give each Extension a namespaced id such as `acme:preview`. Registering the same id again replaces the earlier registration.
 
@@ -79,8 +79,8 @@ Use `preRun` for work before validation and the action, and `postRun` for work a
   ../../../examples/extensions/hooks.ts
 </include>
 
-- `preRun` follows `.extend()` order. Returning `ctx.finish()` skips later `preRun` hooks and the action.
-- `postRun` runs in reverse order, including after an early finish or a failure once hooks start. Preparation, routing, and input-binding failures happen before hooks and skip it. Context cleanup runs afterwards.
+- `preRun` follows `.extend()` order. Returning `ctx.handled()` skips later `preRun` hooks and the action.
+- `postRun` runs in reverse order, including after an Extension handles the invocation early or a failure once hooks start. Preparation, routing, and input-binding failures happen before hooks and skip it. Context cleanup runs afterwards.
 - `onError` handles terminal errors from `.execute()`; see [Error handling](/docs/guide/error-handling).
 
 Hook flags are **pre-validation values**, not schema outputs. Check values before using them. See [`ExtensionHooks`](/docs/api/types#extensionhooks) for the full lifecycle.
@@ -103,7 +103,7 @@ outcome: completed
 
 A provided Context's [documentation sections](/docs/guide/contexts#documentation-owned-by-a-context) appear once on the root, not on every command.
 
-A flag-owning Context requires successful validation. Use it in the action, or in `postRun` after validation has succeeded—not after an early finish that skipped validation.
+A flag-owning Context requires successful validation. Use it in the action, or in `postRun` after validation has succeeded—not after an Extension handled the invocation early and skipped validation.
 
 ## Required root metadata
 

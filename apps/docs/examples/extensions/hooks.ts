@@ -1,9 +1,9 @@
 import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
 
 export const outcomes = defineExtension(defineExtensionId("acme:outcomes"))
-	.flags({ name: "finish", type: "boolean" })
+	.flags({ name: "skip", type: "boolean" })
 	.preRun((ctx) => {
-		if (ctx.flags.finish === true) return ctx.finish(); // [!code highlight]
+		if (ctx.flags.skip === true) return ctx.handled(); // [!code highlight]
 	})
 	// [!code highlight:2]
 	.postRun((ctx, outcome) => {
@@ -13,8 +13,8 @@ export const outcomes = defineExtension(defineExtensionId("acme:outcomes"))
 
 const completed = new Crust("app").extend(outcomes).action(() => {});
 console.log((await completed.run([])).stdout); // => "outcome: completed"
-console.log((await completed.run([], { flags: { finish: true } })).stdout);
-// => "outcome: finished"
+console.log((await completed.run([], { flags: { skip: true } })).stdout);
+// => "outcome: handled"
 
 const failed = new Crust("app").extend(outcomes).action(() => {
 	throw new Error("boom");
