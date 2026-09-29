@@ -1,5 +1,13 @@
 # @crustjs/effect
 
+## 0.2.1
+
+### Patch Changes
+
+- [`3b9245a`](https://github.com/chenxin-yan/crust/commit/3b9245a765fd48ef0625c22d1991b7cd6a91dc45) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Update MCP SDK and the supported Effect RC and OpenTUI dependency versions.
+
+- [#469](https://github.com/chenxin-yan/crust/pull/469) [`1984299`](https://github.com/chenxin-yan/crust/commit/1984299962d29641ed1b9741f1ed252a1b3f8e1b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Raise the minimum supported Node.js version to 24. Remove the Node 22 disposal-stack fallback and use native AsyncDisposableStack on all supported runtimes. Update generated Node projects to require Node 24 and use @types/node 24.
+
 ## 0.2.0
 
 ### Minor Changes

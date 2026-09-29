@@ -1,5 +1,14 @@
 # @crustjs/progress
 
+## 0.1.4
+
+### Patch Changes
+
+- [#469](https://github.com/chenxin-yan/crust/pull/469) [`1984299`](https://github.com/chenxin-yan/crust/commit/1984299962d29641ed1b9741f1ed252a1b3f8e1b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Raise the minimum supported Node.js version to 24. Remove the Node 22 disposal-stack fallback and use native AsyncDisposableStack on all supported runtimes. Update generated Node projects to require Node 24 and use @types/node 24.
+- Updated dependencies [[`1984299`](https://github.com/chenxin-yan/crust/commit/1984299962d29641ed1b9741f1ed252a1b3f8e1b)]:
+  - @crustjs/style@0.3.5
+  - @crustjs/utils@0.2.1
+
 ## 0.1.3
 
 ### Patch Changes
