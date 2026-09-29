@@ -1,5 +1,11 @@
 # @crustjs/man
 
+## 0.5.2
+
+### Patch Changes
+
+- [#478](https://github.com/chenxin-yan/crust/pull/478) [`3696635`](https://github.com/chenxin-yan/crust/commit/36966358ad7a9c6b25dfdbef83bffc2a7c981e29) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Remove the `man({ name })` and `completion({ binName })` options, and the `name` option of `renderManPageMdoc()` and `writeManPage()`. Man pages and completion scripts now always use the root command name, which `crust build` already requires to match the installed command. To change the installed name, rename the root: `new Crust("my-tool")`.
+
 ## 0.5.1
 
 ### Patch Changes
