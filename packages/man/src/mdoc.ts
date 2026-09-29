@@ -72,8 +72,6 @@ function resolveDdLine(explicit?: string): string {
 export interface RenderManPageMdocOptions {
 	/** Prepared, validated Command Snapshot for the CLI. */
 	root: CommandSnapshot;
-	/** Name for `.Nm` / `man <name>` (usually the installed binary name). */
-	name: string;
 	/**
 	 * Manual section.
 	 *
@@ -86,7 +84,8 @@ export interface RenderManPageMdocOptions {
 
 /** Render an mdoc(7) manual page for the root command. */
 export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
-	const { root, name, section = 1, date } = options;
+	const { root, section = 1, date } = options;
+	const { name } = root.meta;
 	const model = buildCommandDocumentation(root);
 	const description = model.description?.trim() || "No description provided.";
 	const lines = [

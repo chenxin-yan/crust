@@ -239,7 +239,7 @@ describe("completion · --output-dir traversal", () => {
 		process.exitCode = originalExitCode;
 	});
 
-	it("rejects a binName containing path separators before rendering or writing files", async () => {
+	it("rejects a root name containing path separators before rendering or writing files", async () => {
 		const root = await mkdtemp(join(tmpdir(), "completion-traversal-"));
 		const outputDir = join(root, "completions");
 		const stderrChunks: string[] = [];
@@ -249,9 +249,7 @@ describe("completion · --output-dir traversal", () => {
 			return true;
 		};
 		try {
-			const cli = new Crust("real", { version: "1.0.0" })
-				.extend(completion({ binName: "../pwn" }))
-				.action(() => {});
+			const cli = new Crust("../pwn", { version: "1.0.0" }).extend(completion()).action(() => {});
 			for (const argv of [
 				["completion", "bash"],
 				["completion", "bash", "--output-dir", outputDir],
@@ -259,7 +257,7 @@ describe("completion · --output-dir traversal", () => {
 				stderrChunks.length = 0;
 				process.exitCode = 0;
 				await cli.execute({ argv });
-				expect(stderrChunks.join("\n")).toMatch(/invalid binName/);
+				expect(stderrChunks.join("\n")).toMatch(/invalid root command name/);
 				expect(process.exitCode).toBe(1);
 				// Neither the output directory nor a path-traversing sibling should be written.
 				expect(await readdir(root)).toEqual([]);

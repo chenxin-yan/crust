@@ -40,7 +40,7 @@ describe("renderManPageMdoc", () => {
 				),
 			);
 
-		const output = renderManPageMdoc({ root: await app.snapshot(), name: "demo" });
+		const output = renderManPageMdoc({ root: await app.snapshot() });
 
 		expect(output).toContain(".Sh COMMANDS");
 		expect(output).toContain(
@@ -61,7 +61,7 @@ describe("renderManPageMdoc", () => {
 			),
 		);
 
-		const output = renderManPageMdoc({ root: await app.snapshot(), name: "demo" });
+		const output = renderManPageMdoc({ root: await app.snapshot() });
 
 		expect(output).not.toContain(".Sh COMMANDS");
 	});
@@ -79,7 +79,7 @@ describe("renderManPageMdoc", () => {
 			),
 		);
 
-		const output = renderManPageMdoc({ root: await app.snapshot(), name: "demo" });
+		const output = renderManPageMdoc({ root: await app.snapshot() });
 
 		expect(output).toContain(".Sh COMMANDS");
 		expect(output).not.toContain(".Ss config\n");
@@ -108,7 +108,7 @@ describe("renderManPageMdoc", () => {
 				),
 			);
 
-		const output = renderManPageMdoc({ root: await app.snapshot(), name: "demo" });
+		const output = renderManPageMdoc({ root: await app.snapshot() });
 
 		expect(output).toContain(".Ss publish\n.Sy MAN NOTES\nman body");
 		expect(output).not.toContain("other body");
@@ -125,7 +125,7 @@ describe("renderManPageMdoc", () => {
 				{ title: "NOT MAN", body: "hidden", except: [man.id] },
 			],
 		}).snapshot();
-		const output = renderManPageMdoc({ root: snapshot, name: "demo" });
+		const output = renderManPageMdoc({ root: snapshot });
 		expect(output).toContain(".Sh MAN ONLY");
 		expect(output).not.toContain(".Sh OTHER ONLY");
 		expect(output).not.toContain(".Sh NOT MAN");
@@ -143,7 +143,7 @@ describe("renderManPageMdoc", () => {
 			.add(defineCommand("ping", { description: "Ping" }, (cmd) => cmd.action(() => {})));
 
 		const root = await app.snapshot();
-		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
+		const mdoc = renderManPageMdoc({ root, section: 1 });
 
 		expect(mdoc).toContain(".Sh NAME");
 		expect(mdoc).toContain(".Nm demo");
@@ -162,7 +162,7 @@ describe("renderManPageMdoc", () => {
 		}).action(() => {});
 
 		const root = await app.snapshot();
-		const mdoc = renderManPageMdoc({ root, name: "x", section: 1 });
+		const mdoc = renderManPageMdoc({ root, section: 1 });
 
 		expect(mdoc).toMatch(/\.Nd .*\\&\.config is read automatically\./);
 		expect(mdoc).toContain(".Sh DESCRIPTION\n\\&.config is read automatically.");
@@ -190,7 +190,7 @@ describe("renderManPageMdoc", () => {
 			.action(() => {});
 
 		const root = await app.snapshot();
-		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
+		const mdoc = renderManPageMdoc({ root, section: 1 });
 
 		expect(mdoc).toContain(
 			".Sh EXTRA NOTES\n\\&.config is supported.\nMore details.\nExtension details.",
@@ -211,7 +211,7 @@ describe("renderManPageMdoc", () => {
 			.flags({ name: "path", type: "string", description: "Path like \\n", default: "C:\\x" })
 			.action(() => {});
 		const root = await app.snapshot();
-		const mdoc = renderManPageMdoc({ root, name: "x" });
+		const mdoc = renderManPageMdoc({ root });
 
 		expect(mdoc).toContain(".Nd Reads C:\\etmp\\ex.ini, not \\efBbold.");
 		expect(mdoc).toContain(".Sh DESCRIPTION\nReads C:\\etmp\\ex.ini, not \\efBbold.");
@@ -227,7 +227,6 @@ describe("renderManPageMdoc", () => {
 		const root = await app.snapshot();
 		const mdoc = renderManPageMdoc({
 			root,
-			name: "x",
 			date: "March 15, 2020",
 		});
 		expect(mdoc.startsWith(".Dd March 15, 2020\n")).toBe(true);
@@ -239,7 +238,7 @@ describe("renderManPageMdoc", () => {
 		try {
 			const app = new Crust("x").action(() => {});
 			const root = await app.snapshot();
-			const mdoc = renderManPageMdoc({ root, name: "x" });
+			const mdoc = renderManPageMdoc({ root });
 			expect(mdoc.startsWith(".Dd January 2, 1970\n")).toBe(true);
 		} finally {
 			if (prev === undefined) {
@@ -262,7 +261,7 @@ describe("renderManPageMdoc", () => {
 			);
 
 		const root = await app.snapshot();
-		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
+		const mdoc = renderManPageMdoc({ root, section: 1 });
 
 		expect(mdoc).toContain(".Sh SUBCOMMANDS");
 		// Aliases inline alongside the canonical name on the .It Nm line.
@@ -294,7 +293,7 @@ describe("renderManPageMdoc", () => {
 			);
 
 		const root = await app.snapshot();
-		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
+		const mdoc = renderManPageMdoc({ root, section: 1 });
 
 		expect(mdoc).toContain(".It Nm build");
 		expect(mdoc).not.toContain("__complete");
@@ -310,7 +309,7 @@ describe("renderManPageMdoc", () => {
 			.action(() => {});
 
 		const root = await app.snapshot();
-		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
+		const mdoc = renderManPageMdoc({ root, section: 1 });
 
 		expect(mdoc).not.toContain(".Sh SUBCOMMANDS");
 		expect(mdoc).not.toContain("__complete");
@@ -327,7 +326,7 @@ describe("renderManPageMdoc", () => {
 			.action(() => {});
 
 		const root = await app.snapshot();
-		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
+		const mdoc = renderManPageMdoc({ root, section: 1 });
 
 		// Convention audit M1: use semantic mdoc flag macros.
 		expect(mdoc).toContain(".It Fl Fl target");
@@ -340,7 +339,7 @@ describe("renderManPageMdoc", () => {
 			.action(() => {});
 
 		const root = await app.snapshot();
-		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
+		const mdoc = renderManPageMdoc({ root, section: 1 });
 
 		expect(mdoc).toContain("API token [env: HOME]");
 		// HOME is set in every test environment; the page must show the name only.
@@ -360,7 +359,7 @@ describe("renderManPageMdoc", () => {
 			.action(() => {});
 
 		const root = await app.snapshot();
-		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
+		const mdoc = renderManPageMdoc({ root, section: 1 });
 
 		expect(mdoc).toContain(".Sh ARGUMENTS");
 		expect(mdoc).toContain(".It Ar env");
@@ -379,7 +378,7 @@ describe("renderManPageMdoc", () => {
 			.action(() => {});
 
 		const root = await app.snapshot();
-		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
+		const mdoc = renderManPageMdoc({ root, section: 1 });
 
 		// Both the canonical `--output` and the alias `--out` appear in the
 		// label, comma-separated, after the short flag.
@@ -397,7 +396,7 @@ describe("renderManPageMdoc", () => {
 			.action(() => {});
 
 		const root = await app.snapshot();
-		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
+		const mdoc = renderManPageMdoc({ root, section: 1 });
 
 		// Canonical + alias + both negations, in declaration order.
 		expect(mdoc).toContain(".It Fl Fl color , Fl Fl colour , Fl Fl no-color , Fl Fl no-colour");

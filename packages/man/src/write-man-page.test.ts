@@ -14,7 +14,7 @@ describe("writeManPage", () => {
 			const root = await new Crust("demo", { description: "Demo CLI" }).action(() => {}).snapshot();
 			const outfile = join(directory, "man", "demo.1");
 
-			await writeManPage({ root, name: "demo", outfile, date: "January 1, 2020" });
+			await writeManPage({ root, outfile, date: "January 1, 2020" });
 
 			const mdoc = await readFile(outfile, "utf8");
 			expect(mdoc).toContain(".Dd January 1, 2020");

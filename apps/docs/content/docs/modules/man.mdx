@@ -28,7 +28,7 @@ const app = new Crust("my-cli").extend(man());
 
 `man()` registers a build hook; registering it writes nothing. During `crust build`, the hook returns `man/<name>.<section>`, which the build writes, copies into the staged packages, and records as an artifact owned by `crust:man`.
 
-Pass `man({ section: 5 })` to change the section and filename, or `man({ name: "my-tool" })` when the installed command name differs from the application name. The `man.id` static exposes the Extension identity used for section filtering.
+Pass `man({ section: 5 })` to change the section and filename. The page is named after the root command, which [`crust build` requires to match the installed command](/docs/modules/crust#commands-and-entries-bin). The `man.id` static exposes the Extension identity used for section filtering.
 
 <auto-type-table path="../../../../../packages/man/src/extension.ts" name="ManOptions" />
 
@@ -38,7 +38,7 @@ Pass `man({ section: 5 })` to change the section and filename, or `man({ name: "
 import { writeManPage } from "@crustjs/man";
 
 const root = await app.snapshot();
-await writeManPage({ root, name: "my-cli", outfile: "man/my-cli.1" });
+await writeManPage({ root, outfile: "man/my-cli.1" });
 // Writes man/my-cli.1
 ```
 
@@ -57,7 +57,7 @@ Without `date`, rendering uses `SOURCE_DATE_EPOCH` in UTC when set, then the cur
 import { renderManPageMdoc } from "@crustjs/man";
 
 const root = await app.snapshot();
-const source = renderManPageMdoc({ root, name: "my-cli" });
+const source = renderManPageMdoc({ root });
 console.log(source.startsWith(".Dd ")); // => true
 ```
 
