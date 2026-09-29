@@ -6,7 +6,7 @@ import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
 
 import { createContextResolver } from "../api/context.ts";
 import {
-	finishInvocation,
+	handledInvocation,
 	type BuildReport,
 	type ExtensionData,
 	type ExtensionContext,
@@ -331,7 +331,7 @@ async function dispatch(
 	signal: AbortSignal,
 	onExtensionContext?: (context: ExtensionContext) => void,
 	onFailure?: (error: CaughtError, context: ExtensionContext) => Promise<ExtensionId | undefined>,
-): Promise<{ status: "completed"; result: unknown } | { status: "finished"; by: ExtensionId }> {
+): Promise<{ status: "completed"; result: unknown } | { status: "handled"; by: ExtensionId }> {
 	const { rootNode, extensions } = prepared;
 
 	// Routing and syntax parsing — failures flow directly to the caller.
@@ -364,7 +364,7 @@ async function dispatch(
 		rawArgs: parsed.rawArgs,
 		signal,
 		ctx: resolver.bag(extensions.flatMap((extension) => extension.use)),
-		finish: finishInvocation,
+		handled: handledInvocation,
 		stdout: io.stdout,
 		stderr: io.stderr,
 	});
@@ -399,12 +399,12 @@ async function dispatch(
 	try {
 		try {
 			for (const extension of extensions) {
-				if ((await extension.hooks?.preRun?.(extensionContext)) === finishInvocation()) {
-					outcome = { status: "finished", by: extension.id };
+				if ((await extension.hooks?.preRun?.(extensionContext)) === handledInvocation()) {
+					outcome = { status: "handled", by: extension.id };
 					break;
 				}
 			}
-			if (outcome.status !== "finished") {
+			if (outcome.status !== "handled") {
 				result = await terminal();
 			}
 		} catch (error) {
@@ -436,8 +436,8 @@ async function dispatch(
 		// so its value registers its disposer before the disposal scope exits.
 		await resolver.settle();
 	}
-	return outcome.status === "finished"
-		? { status: "finished", by: outcome.by }
+	return outcome.status === "handled"
+		? { status: "handled", by: outcome.by }
 		: { status: "completed", result };
 }
 
@@ -494,7 +494,7 @@ async function renderFailure(
 			flags: Object.freeze({}),
 			rawArgs: [],
 			signal,
-			finish: finishInvocation,
+			handled: handledInvocation,
 			stdout: io.stdout,
 			stderr: io.stderr,
 			ctx: unavailableContext,

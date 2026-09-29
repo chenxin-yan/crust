@@ -317,7 +317,7 @@ describe("built-in extensions", () => {
 			);
 
 		const outcome = await app.run([]);
-		expect(outcome.status).toBe("finished");
+		expect(outcome.status).toBe("handled");
 		const rootOutput = stripAnsi(outcome.stdout);
 		expect(rootOutput).toContain("Root notes:\n  Root body");
 		expect(rootOutput).not.toContain("Build notes:");

@@ -213,7 +213,7 @@ Editors complete command names, argument and flag names, and the action's result
 - The path alone selects the command. Unknown path segments return a `COMMAND_NOT_FOUND` failure, even when the nearest parent has an action.
 - For genuinely dynamic paths and input, use an `AnyCrust` view; it resolves to `RunOutcome<unknown>`.
 
-`run()` resolves after cleanup to a [`RunOutcome`](/docs/api/types#runoutcomeresult), with captured output and a `completed`, `finished`, or `failed` status.
+`run()` resolves after cleanup to a [`RunOutcome`](/docs/api/types#runoutcomeresult), with captured output and a `completed`, `handled`, or `failed` status.
 
 - `run()` never renders errors, calls `onError`, or changes `process.exitCode`. Authoring errors still throw where the builder consumes them.
 - Captured writes are joined with `"\n"`. `stdout` and `stderr` are captured separately, so their relative order is not preserved.
@@ -253,7 +253,7 @@ Runs the terminal boundary: parses `process.argv.slice(2)` (or `options.argv`), 
 1. Prepare the command tree: apply Extensions, recipes, flags, and sections.
 2. Route the command path.
 3. Parse argv (`execute()`) or bind structured input (`run()`).
-4. Run Extension `preRun` hooks in registration order; `ctx.finish()` ends the invocation with a `finished` outcome.
+4. Run Extension `preRun` hooks in registration order; `ctx.handled()` ends the invocation with a `handled` outcome.
 5. Check required values and positional structure.
 6. Apply Standard Schemas and aggregate their issues.
 7. Construct Contexts as they are first pulled.

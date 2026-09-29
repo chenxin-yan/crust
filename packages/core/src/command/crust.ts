@@ -161,7 +161,7 @@ export interface CommandShape<
 /** Captured invocation after lifecycle cleanup. */
 export type RunOutcome<Result> = { readonly stdout: string; readonly stderr: string } & (
 	| { readonly status: "completed"; readonly result: Result }
-	| { readonly status: "finished"; readonly by: ExtensionId }
+	| { readonly status: "handled"; readonly by: ExtensionId }
 	| { readonly status: "failed"; readonly error: unknown }
 );
 
@@ -1788,7 +1788,7 @@ export class Crust<
 
 	/**
 	 * Programmatically invoke a typed command, quietly capturing its output.
-	 * Returns completed, finished, or failed after cleanup without presenting errors.
+	 * Returns completed, handled, or failed after cleanup without presenting errors.
 	 * Use {@link execute} as the streaming terminal adapter.
 	 *
 	 * @param path - Typed path to the command to invoke (`[]` selects the root)

@@ -23,7 +23,7 @@ export type {
 	ExtensionFlagDef,
 	ExtensionSectionContribution,
 	ExtensionHooks,
-	Finished,
+	Handled,
 	InferExtensionFlags,
 	InvocationOutcome,
 	NamedExtensionFlagDef,

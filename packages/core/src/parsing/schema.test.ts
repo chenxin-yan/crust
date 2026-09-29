@@ -220,13 +220,13 @@ describe("schema interaction with Extensions", () => {
 		expect(actionSaw).toBe(8080); // schema output
 	});
 
-	it("a pre-run finish skips schema validation entirely", async () => {
+	it("a pre-run handled skips schema validation entirely", async () => {
 		let validated = false;
 		const spy = schema<string | undefined, string>((raw) => {
 			validated = true;
 			return { value: String(raw) };
 		});
-		const gate = defineExtension(defineExtensionId("gate")).preRun((ctx) => ctx.finish());
+		const gate = defineExtension(defineExtensionId("gate")).preRun((ctx) => ctx.handled());
 
 		const app = new Crust("cli")
 			.flags({ name: "x", type: "string", schema: spy })

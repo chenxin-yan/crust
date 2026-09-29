@@ -67,17 +67,17 @@ describe("captured run outcomes", () => {
 			);
 		expect(result).toEqual({ status: "failed", error, stdout: "recorded", stderr: "" });
 	});
-	it("finishes before required validation and captures hook output", async () => {
-		const id = defineExtensionId("finish");
+	it("handles the invocation before required validation and captures hook output", async () => {
+		const id = defineExtensionId("handled");
 		const app = new Crust("app").flags({ name: "mode", type: "string", required: true }).extend(
 			defineExtension(id).preRun((ctx) => {
 				ctx.stdout("help");
-				return ctx.finish();
+				return ctx.handled();
 			}),
 		);
 		const erased: AnyCrust = app;
 		expect(await erased.run([])).toEqual({
-			status: "finished",
+			status: "handled",
 			by: id,
 			stdout: "help",
 			stderr: "",

@@ -59,7 +59,7 @@ function makeVersion<K extends RootMetaKey>(
 						? format(resolvedVersion, context)
 						: `${context.rootCommand.meta.name} v${resolvedVersion}`;
 			context.stdout(line);
-			return context.finish();
+			return context.handled();
 		});
 }
 

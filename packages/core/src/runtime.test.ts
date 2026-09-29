@@ -56,9 +56,9 @@ describe("runtime structured invocation", () => {
 		);
 	});
 
-	it("lets finishing hooks skip required and schema validation after binding", async () => {
+	it("lets handling hooks skip required and schema validation after binding", async () => {
 		let schemas = 0;
-		const app = new Crust("finish")
+		const app = new Crust("handled")
 			.args({ name: "file", type: "string", required: true })
 			.flags({
 				name: "config",
@@ -74,11 +74,11 @@ describe("runtime structured invocation", () => {
 					},
 				},
 			})
-			.extend(defineExtension(defineExtensionId("finish")).preRun(({ finish }) => finish()));
+			.extend(defineExtension(defineExtensionId("handled")).preRun(({ handled }) => handled()));
 		const erased: AnyCrust = app;
 		expect(await erased.run([], {})).toMatchObject({
-			status: "finished",
-			by: defineExtensionId("finish"),
+			status: "handled",
+			by: defineExtensionId("handled"),
 		});
 		expect(schemas).toBe(0);
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.

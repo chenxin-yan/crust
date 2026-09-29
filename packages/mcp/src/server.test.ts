@@ -36,7 +36,7 @@ const finisher = defineExtension(defineExtensionId("test:finisher"))
 	.preRun((ctx) => {
 		if (ctx.flags.bail === true) {
 			ctx.stdout("bailed");
-			return ctx.finish();
+			return ctx.handled();
 		}
 	});
 
@@ -221,7 +221,7 @@ describe("createMcpServer", () => {
 		});
 	});
 
-	it("returns captured stdout when an Extension finishes the invocation", async () => {
+	it("returns captured stdout when an Extension handles the invocation", async () => {
 		const client = await connect(fixture);
 		const result = await client.callTool({ name: "print", arguments: { bail: true } });
 		expect(result.content).toEqual([{ type: "text", text: "bailed" }]);

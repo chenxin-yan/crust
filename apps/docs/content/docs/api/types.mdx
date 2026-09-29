@@ -172,7 +172,7 @@ JSON inputs accept JSON primitives, structurally JSON-compatible objects, and ar
 The inferred return value of `run()`. Every branch carries readonly captured `stdout` and `stderr`. Narrow `status` before reading its branch-specific field:
 
 - `completed`: the action's awaited `result`.
-- `finished`: the finishing Extension id, `by`.
+- `handled`: the handling Extension id, `by`.
 - `failed`: the original thrown `error`.
 
 See the [source declaration](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts) for the union and [`run()`](/docs/api/crust#runpath-input-options) for a narrowing example and capture behavior. Extension `postRun` hooks receive [`InvocationOutcome`](#invocationoutcome) instead, which carries no output or result.
@@ -329,17 +329,17 @@ The flag values an Extension's hooks see. They are pre-validation values, not sc
   name="ExtensionHooks"
 />
 
-- `preRun` runs in `.extend()` order after routing and input binding, before validation. Return `ctx.finish()` to end the invocation successfully. Pulling a flag-owning Context here rejects, because its flags are not validated yet.
+- `preRun` runs in `.extend()` order after routing and input binding, before validation. Return `ctx.handled()` to end the invocation successfully. Pulling a flag-owning Context here rejects, because its flags are not validated yet.
 - `onError` runs for `execute()` only. Return `true` after rendering to stop the chain, or a falsy value to fall through to Core's renderer.
-- `postRun` runs in reverse `.extend()` order after every completed, finished, or failed invocation that reached hooks, like `finally`. Contexts remain available until it completes. Preparation, routing, and parse failures skip it.
+- `postRun` runs in reverse `.extend()` order after every completed, handled, or failed invocation that reached hooks, like `finally`. Contexts remain available until it completes. Preparation, routing, and parse failures skip it.
 
 See [propagation boundaries](/docs/api/errors#propagation-boundaries) for hook timing on failure.
 
-### `Finished`
+### `Handled`
 
-<auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Finished" />
+<auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Handled" />
 
-The opaque token returned by `ctx.finish()`. Return that exact value from `preRun`.
+The opaque token returned by `ctx.handled()`. Return that exact value from `preRun`.
 
 ### `InvocationOutcome`
 
@@ -348,7 +348,7 @@ The opaque token returned by `ctx.finish()`. Return that exact value from `preRu
   name="InvocationOutcome"
 />
 
-`postRun` receives `completed`, `finished` with the short-circuiting Extension's `by`, or `failed` with the thrown value. On `failed`, `by` names the Extension whose `onError` claimed the failure.
+`postRun` receives `completed`, `handled` with the short-circuiting Extension's `by`, or `failed` with the thrown value. On `failed`, `by` names the Extension whose `onError` claimed the failure.
 
 ### `ExtensionSectionContribution`
 
