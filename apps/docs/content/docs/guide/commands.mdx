@@ -85,6 +85,16 @@ Hello, Ada!
 </Step>
 </Steps>
 
+## Run commands from code
+
+`.execute()` is the terminal entry point: it parses argv, renders errors, and sets the exit code. To call a command from your own code, such as a script, server, or test, use `.run()` with a typed path and structured input instead.
+
+<include lang="ts" meta='title="src/script.ts"'>
+  ../../../examples/split-files/script.ts
+</include>
+
+`run()` resolves to an outcome with the captured `stdout` and `stderr` and never renders errors, changes `process.exitCode`, or applies flag `env` fallbacks. Check `status` before reading the action's `result`. See the [`run()` reference](/docs/api/crust#runpath-input-options) for input rules and capture behavior, and [Testing](/docs/guide/testing) for using it in tests.
+
 ## Unknown commands
 
 ```sh
