@@ -1,5 +1,13 @@
 # @crustjs/crust
 
+## 0.5.2
+
+### Patch Changes
+
+- Updated dependencies [[`4a0fce5`](https://github.com/chenxin-yan/crust/commit/4a0fce520c5c6e528d2137c533d75fd779cd2b58), [`3696635`](https://github.com/chenxin-yan/crust/commit/36966358ad7a9c6b25dfdbef83bffc2a7c981e29), [`6323fac`](https://github.com/chenxin-yan/crust/commit/6323facd4c45ea7b478576006f013cf7797d4116)]:
+  - @crustjs/core@0.5.2
+  - @crustjs/extensions@0.5.2
+
 ## 0.5.1
 
 ### Patch Changes

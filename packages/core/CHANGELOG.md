@@ -1,5 +1,11 @@
 # @crustjs/core
 
+## 0.5.2
+
+### Patch Changes
+
+- [#476](https://github.com/chenxin-yan/crust/pull/476) [`4a0fce5`](https://github.com/chenxin-yan/crust/commit/4a0fce520c5c6e528d2137c533d75fd779cd2b58) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Rename `ctx.finish()` to `ctx.handled()` in Extension `preRun` hooks. The returned token type `Finished` is now `Handled`, and the matching `RunOutcome` and `postRun` status `"finished"` is now `"handled"`. Update hooks to `return ctx.handled()` and outcome checks to `outcome.status === "handled"`.
+
 ## 0.5.1
 
 ### Patch Changes

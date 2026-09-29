@@ -1,5 +1,13 @@
 # @crustjs/plugins
 
+## 0.5.2
+
+### Patch Changes
+
+- [#478](https://github.com/chenxin-yan/crust/pull/478) [`3696635`](https://github.com/chenxin-yan/crust/commit/36966358ad7a9c6b25dfdbef83bffc2a7c981e29) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Remove the `man({ name })` and `completion({ binName })` options, and the `name` option of `renderManPageMdoc()` and `writeManPage()`. Man pages and completion scripts now always use the root command name, which `crust build` already requires to match the installed command. To change the installed name, rename the root: `new Crust("my-tool")`.
+
+- [#477](https://github.com/chenxin-yan/crust/pull/477) [`6323fac`](https://github.com/chenxin-yan/crust/commit/6323facd4c45ea7b478576006f013cf7797d4116) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `version()` without a value now throws a `DEFINITION` error on `--version` when the root has no `version` metadata, instead of printing `undefined`. TypeScript already rejects this setup; the runtime check covers builds that skip type-checking.
+
 ## 0.5.1
 
 ### Patch Changes
