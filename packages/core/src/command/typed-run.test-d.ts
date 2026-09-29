@@ -462,3 +462,46 @@ function _typecheckOmitsUndefinedInputSections() {
 	void app.run(["bare"], { flags: { minify: true } });
 	void app.run(["bare"], { raw: ["--"] });
 }
+
+// keeps required input required whatever the input's inference
+function _typecheckKeepsRequiredInputIndependentOfInference(
+	maybeInput: { flags: { mode: string } } | undefined,
+	maybeOptional: { flags: { minify: boolean } } | undefined,
+) {
+	const app = new Crust("app")
+		.flags({ name: "mode", type: "string", required: true })
+		.action(({ flags }) => flags.mode);
+	const handle = app.at([]);
+	const run = handle.run;
+
+	// @ts-expect-error -- omitted required input
+	void app.run([]);
+	// @ts-expect-error -- explicit undefined for required input
+	void app.run([], undefined);
+	// @ts-expect-error -- possibly undefined required input
+	void app.run([], maybeInput);
+	// @ts-expect-error -- explicit undefined with options
+	void app.run([], undefined, { stdout: () => {} });
+	// @ts-expect-error -- omitted through a handle
+	void handle.run();
+	// @ts-expect-error -- explicit undefined through a handle
+	void handle.run(undefined);
+	// @ts-expect-error -- possibly undefined through a handle
+	void handle.run(maybeInput);
+	// @ts-expect-error -- omitted through an extracted handle function
+	void run();
+	// @ts-expect-error -- explicit undefined through an extracted handle function
+	void run(undefined);
+	// Explicit path type arguments still accept valid input.
+	void app.run<readonly []>([], { flags: { mode: "safe" } });
+	void run({ flags: { mode: "safe" } });
+
+	const optional = new Crust("opt").flags({ name: "minify", type: "boolean" }).action(() => {});
+	void optional.run([]);
+	void optional.run([], undefined);
+	void optional.run([], undefined, { stdout: () => {} });
+	void optional.run([], maybeOptional);
+	void optional.run<readonly []>([]);
+	void optional.at([]).run(undefined);
+	void optional.at([]).run(maybeOptional);
+}

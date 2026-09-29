@@ -364,14 +364,16 @@ type CheckedRunInput<Shape extends CommandShape, Input> = [Input] extends [
 	? NonNullable<RunInputArguments<Shape>[0]>
 	: Input & NoInfer<ClosedRunInput<Shape, Input>>;
 
-// Keep `input` a plain optional parameter so it is inferred even when the shape depends on an
-// uninferred path. An omitted `Input` (`never`) that the shape requires fails the `this` check
-// instead, which keeps the arity message accurate.
-type RunInputThis<Shape extends CommandShape, Input, This> = [Input] extends [never]
-	? {} extends RunInput<Shape>
+// `undefined` input stands for omitted input, so only a command that requires nothing accepts it.
+type OmittableRunInput<Shape extends CommandShape> = {} extends RunInput<Shape> ? undefined : never;
+
+// A path-only call has no input to infer from, so requiredness is checked on the command itself.
+// An unknown path selects no command (`never`); leave that error to the path parameter.
+type RunWithoutInputThis<Shape extends CommandShape, This> = [Shape] extends [never]
+	? This
+	: {} extends RunInput<Shape>
 		? This
-		: This & { readonly FIX_MISSING_INPUT: "Pass the command's required arguments or flags" }
-	: This;
+		: This & { readonly FIX_MISSING_INPUT: "Pass the command's required arguments or flags" };
 
 /**
  * Typed invoker bound to one command in an app, returned by {@link Crust.at}.
@@ -382,9 +384,9 @@ type RunInputThis<Shape extends CommandShape, Input, This> = [Input] extends [ne
 export interface CommandHandle<Shape extends CommandShape> {
 	/** The typed path this handle was created with (`[]` selects the root). */
 	readonly path: readonly string[];
-	run<const Input extends RunInput<Shape> = never>(
-		this: RunInputThis<Shape, Input, unknown>,
-		input?: CheckedRunInput<Shape, Input>,
+	run(this: RunWithoutInputThis<Shape, unknown>): Promise<RunOutcome<Shape["result"]>>;
+	run<const Input extends RunInput<Shape> | OmittableRunInput<Shape> = RunInput<Shape>>(
+		input: CheckedRunInput<Shape, Input> | OmittableRunInput<Shape>,
 		options?: InvocationOptions,
 	): Promise<RunOutcome<Shape["result"]>>;
 	run<const Input>(
@@ -1797,18 +1799,26 @@ export class Crust<
 	 */
 	// `Path` is only constrained to strings, and the parameter is not intersected with `Path`:
 	// either would erase the partial literal editors use for completions (see `KnownCommandPath`).
-	async run<
-		const Path extends readonly string[],
-		const Input extends RunInput<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>> =
-			never,
-	>(
-		this: RunInputThis<
+	async run<const Path extends readonly string[]>(
+		this: RunWithoutInputThis<
 			CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>,
-			Input,
 			{ readonly _types: { readonly caps: "app" } }
 		>,
 		path: KnownCommandPath<Path, Tree>,
-		input?: CheckedRunInput<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>, Input>,
+	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
+	async run<
+		const Path extends readonly string[],
+		const Input extends
+			| RunInput<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>>
+			| OmittableRunInput<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>> = RunInput<
+			CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>
+		>,
+	>(
+		this: { readonly _types: { readonly caps: "app" } },
+		path: KnownCommandPath<Path, Tree>,
+		input:
+			| CheckedRunInput<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>, Input>
+			| OmittableRunInput<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>>,
 		options?: InvocationOptions,
 	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
 	async run<const Path extends readonly string[], const Input>(
