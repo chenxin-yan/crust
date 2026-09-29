@@ -1,5 +1,19 @@
 # @crustjs/core
 
+## 0.5.1
+
+### Patch Changes
+
+- [#473](https://github.com/chenxin-yan/crust/pull/473) [`7ec6ded`](https://github.com/chenxin-yan/crust/commit/7ec6ded6f433081034ad49dc67017cb65608fffc) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Reject unknown argument, flag, and top-level keys in `app.run()` and `handle.run()` inputs held in variables, not only in object literals. Keys set to `undefined` are still accepted. `RunInput` also omits the `args` or `flags` section when a command defines none, so editors stop suggesting it; a command without flags no longer accepts arbitrary `flags`.
+
+- [#470](https://github.com/chenxin-yan/crust/pull/470) [`ea04984`](https://github.com/chenxin-yan/crust/commit/ea0498441ba9599c7c1dbf1cf1f3128f71f126d2) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Restore editor autocompletion of command names in `app.run(path)` and `app.at(path)`. Invalid paths are still rejected at compile time.
+
+- [#472](https://github.com/chenxin-yan/crust/pull/472) [`a7e083a`](https://github.com/chenxin-yan/crust/commit/a7e083a6794335ea0723c085ff405fa6f96a5fd1) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Allow `.command()` inside `defineCommand` recipes, so subcommands can nest inline. The inline recipe sees the Contexts its parent declared with `.use()` or `.provide()` before the call.
+
+- [#469](https://github.com/chenxin-yan/crust/pull/469) [`1984299`](https://github.com/chenxin-yan/crust/commit/1984299962d29641ed1b9741f1ed252a1b3f8e1b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Raise the minimum supported Node.js version to 24. Remove the Node 22 disposal-stack fallback and use native AsyncDisposableStack on all supported runtimes. Update generated Node projects to require Node 24 and use @types/node 24.
+- Updated dependencies [[`1984299`](https://github.com/chenxin-yan/crust/commit/1984299962d29641ed1b9741f1ed252a1b3f8e1b)]:
+  - @crustjs/utils@0.2.1
+
 ## 0.5.0
 
 ### Minor Changes

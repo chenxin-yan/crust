@@ -1,5 +1,11 @@
 # @crustjs/tui
 
+## 0.0.4
+
+### Patch Changes
+
+- [`3b9245a`](https://github.com/chenxin-yan/crust/commit/3b9245a765fd48ef0625c22d1991b7cd6a91dc45) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Update MCP SDK and the supported Effect RC and OpenTUI dependency versions.
+
 ## 0.0.3
 
 ### Patch Changes
