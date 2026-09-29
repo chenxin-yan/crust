@@ -150,7 +150,7 @@ Declared in [`command/crust.ts`](https://github.com/chenxin-yan/crust/blob/main/
 | `CommandTree`                        | Compile-time command tree accumulated by `.add()` and `.command()`         |
 | `CommandPath<Tree>`                  | Every valid path through the tree, including the root path `[]`            |
 | `CommandShape` / `CommandShapeAt`    | Argument, flag, subtree, and result types of the command a path selects    |
-| `RunInput<Shape>`                    | Structured `args` / `flags` / `raw` input for a shape                      |
+| `RunInput<Shape>`                    | Structured `args` / `flags` / `raw` input; omits sections the shape lacks  |
 | `InputArgs` / `InputFlags`           | Pre-parse input value types used by `RunInput`                             |
 | `RunInputArguments` / `RunArguments` | Argument tuples that make `input` optional when nothing is required        |
 | `CommandHandle<Shape>`               | Path-bound invoker returned by `at()`: a readonly `path` and `run()`       |

@@ -236,7 +236,7 @@ export type CommandShapeAt<
 			CommandShape;
 
 type RunSection<Name extends string, Values> = keyof Values extends never
-	? { [K in Name]?: never }
+	? {}
 	: {} extends Values
 		? { [K in Name]?: Values }
 		: { [K in Name]: Values };
@@ -249,7 +249,10 @@ export type RunInput<Shape extends CommandShape> = RunSection<
 	RunSection<
 		"flags",
 		FlagsDef extends Shape["flags"]
-			? NonNullable<RunInputPayload["flags"]>
+			? // `{}` also passes the open-set check; a command with no flags stays closed.
+				[keyof Shape["flags"]] extends [never]
+				? {}
+				: NonNullable<RunInputPayload["flags"]>
 			: InputFlags<Shape["flags"]>
 	> & {
 		readonly raw?: readonly string[];
@@ -340,7 +343,9 @@ type UnknownRunKeys<Actual, Known> = {
 // input, per union member, also rejects unknown keys in inputs held in variables.
 type ClosedRunInput<Shape extends CommandShape, Input> = Input extends unknown
 	? UnknownRunKeys<Input, keyof RunInput<Shape>> & {
-			[K in keyof Input as K extends "args" | "flags" ? K : never]: UnknownRunKeys<
+			[
+				K in keyof Input as K extends ("args" | "flags") & keyof RunInput<Shape> ? K : never
+			]: UnknownRunKeys<
 				NonNullable<Input[K]>,
 				KeysOf<NonNullable<RunInput<Shape>[K & keyof RunInput<Shape>]>>
 			>;

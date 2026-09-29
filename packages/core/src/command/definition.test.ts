@@ -117,6 +117,7 @@ describe("command definitions", () => {
 		);
 		const app = new Crust("cli").add(outer);
 
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		await expect(unwrap(app.run(["outer", "nested"], { flags: { late: true } }))).rejects.toThrow(
 			/Unknown flag/,
 		);
@@ -142,6 +143,7 @@ describe("command definitions", () => {
 		const app = new Crust("cli").add(outer);
 
 		await expect(
+			// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 			unwrap(app.run(["outer", "before"], { flags: { "api-key": "secret" } })),
 		).rejects.toThrow(/Unknown flag/);
 		await unwrap(app.run(["outer", "after"], { flags: { "api-key": "secret" } }));
@@ -215,6 +217,7 @@ describe("command definitions", () => {
 		const definition = defineCommand("users", (command) => command.action(() => {}));
 		const app = new Crust("cli").flags({ name: "secret", type: "string" }).add(definition);
 
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		await expect(unwrap(app.run(["users"], { flags: { secret: "value" } }))).rejects.toThrow(
 			/Unknown flag/,
 		);

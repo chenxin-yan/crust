@@ -439,3 +439,26 @@ function _typecheckRejectsUnknownInputKeysHeldInVariables(cond: boolean) {
 	// @ts-expect-error -- a fresh union member keeps excess-property checks
 	void app.run(["build"], cond ? { flags: { minify: true } } : { flags: { nope: 1 } });
 }
+
+// omits input sections a command does not define, so editors do not offer them
+function _typecheckOmitsUndefinedInputSections() {
+	const app = new Crust("cli")
+		.command("build", (command) => command.flags({ name: "minify", type: "boolean" }))
+		.command("bare", (command) => command);
+	type Shape = (typeof app)["_types"]["shape"];
+	type _build = Expect<
+		Equal<keyof RunInput<CommandShapeAt<Shape, readonly ["build"]>>, "flags" | "raw">
+	>;
+	type _bare = Expect<Equal<keyof RunInput<CommandShapeAt<Shape, readonly ["bare"]>>, "raw">>;
+
+	// @ts-expect-error -- no args section
+	void app.run(["build"], { args: {} });
+	const withArgs = { args: { x: 1 }, flags: { minify: true } };
+	// @ts-expect-error -- no args section, held in a variable
+	void app.run(["build"], withArgs);
+	// @ts-expect-error -- no args section, through a handle
+	void app.at(["build"]).run(withArgs);
+	// @ts-expect-error -- no flags section
+	void app.run(["bare"], { flags: { minify: true } });
+	void app.run(["bare"], { raw: ["--"] });
+}

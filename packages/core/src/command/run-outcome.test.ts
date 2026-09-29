@@ -273,6 +273,7 @@ it("reads each known section once", async () => {
 			return {};
 		},
 	};
+	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 	expect(await app.run([], readOnce)).toMatchObject({ status: "completed", result: "ok" });
 	expect(flagReads).toBe(1);
 });
