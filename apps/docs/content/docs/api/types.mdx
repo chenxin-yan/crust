@@ -293,7 +293,7 @@ Declared in [`api/extension.ts`](https://github.com/chenxin-yan/crust/blob/main/
 
 A callable `(...args) => Extension` with the handle's `id`. `.factory((extension, ...args) => ...)` keeps the callback's parameters after the handle, including optional and defaulted ones, and infers flags, dependencies, providers, and commands. `define` must return an Extension with the same id, typically a chain on the received handle; otherwise the call throws a `DEFINITION` error (`factory-id-mismatch`).
 
-When annotating a published factory, preserve literal tuples for precise typed invocation, and preserve its metadata keys if it requires root metadata. See [authoring an Extension](/docs/guide/extensions#write-your-own).
+When annotating a published factory, preserve literal tuples for precise typed invocation, and preserve its metadata keys if it requires root metadata. If only some calls require metadata, annotate the factory with overloads; see [required root metadata](/docs/guide/extensions#required-root-metadata). See [authoring an Extension](/docs/guide/extensions#write-your-own).
 
 ### `Extension`
 

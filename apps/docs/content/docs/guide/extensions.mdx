@@ -115,6 +115,14 @@ An Extension that needs `version` can require it with `defineExtension<"version"
 
 TypeScript rejects `.extend(stamp)` unless the root declares `version`. Bun and Node builds (`bun build`, or `crust build` for those runtimes) skip this check, so run `tsc --noEmit` first. Deno-runtime `crust build` uses `deno compile`, which type-checks local modules by default.
 
+If a factory argument can supply the value instead, build the factory without a metadata requirement and annotate it with overloads. Only calls that omit the argument then require root metadata. The overloads are type-only, so handle a missing value at runtime:
+
+<include lang="ts" meta='title="metadata-optional.ts"'>
+  ../../../examples/extensions/metadata-optional.ts
+</include>
+
+[`version()`](/docs/modules/extensions/version) uses this pattern.
+
 ## Command sections
 
 Add documentation with `.sections()`. `command: []` targets the root; `command: ["deploy"]` would target a `deploy` command:
