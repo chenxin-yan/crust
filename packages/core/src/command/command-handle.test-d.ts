@@ -56,3 +56,18 @@ function _typecheckBindsTheSelectedCommandShapeIntoAPathFreeTypedInvoker() {
 
 	void result;
 }
+
+// Editors complete a path from the uninferred parameter type, which must not collapse to `never`
+function _typecheckUninferredPathsKeepCompletableCommandNames() {
+	const remote = defineCommand("remote", (command) =>
+		command.add(defineCommand("add", (child) => child.action(() => {}))),
+	);
+	const app = new Crust("git").add(remote);
+
+	type IsNever<T> = [T] extends [never] ? true : false;
+	type AtPath = Parameters<typeof app.at>[0];
+	type RunPath = Parameters<typeof app.run>[0];
+	type _at = Expect<Equal<IsNever<AtPath>, false>>;
+	type _run = Expect<Equal<IsNever<RunPath>, false>>;
+	type _names = Expect<Equal<Extract<AtPath, readonly [string]>[0], "remote">>;
+}

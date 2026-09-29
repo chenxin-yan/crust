@@ -186,13 +186,24 @@ export type CommandPath<
 							: never;
 				  }[keyof Tree & string];
 
-type KnownCommandPath<Path extends readonly string[], Tree> = string extends keyof Tree
+declare const invalidCommandPath: unique symbol;
+
+// Editors complete from the uninferred parameter type, where `Path` is the whole `CommandPath`
+// union; rejecting with `never` would erase every command name from completions.
+type RejectedCommandPath<Tree extends object> = CommandPath<Tree> & {
+	readonly [invalidCommandPath]: "path must be one literal command tuple";
+};
+
+type KnownCommandPath<
+	Path extends readonly string[],
+	Tree extends object,
+> = string extends keyof Tree
 	? Path
 	: IsStaticTuple<Path> extends true
 		? string extends Path[number]
-			? never
+			? RejectedCommandPath<Tree>
 			: Path
-		: never;
+		: RejectedCommandPath<Tree>;
 
 /** Resolve the command shape at a typed path. */
 export type CommandShapeAt<
