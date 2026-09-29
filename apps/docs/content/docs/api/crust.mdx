@@ -208,7 +208,7 @@ Editors complete command names, argument and flag names, and the action's result
 - Values bind directly against definitions without producing argv, then flow through parsers, schemas, Contexts, and the action. Custom parsers and schemas still receive their raw input, usually strings.
 - Supplied positionals must form a prefix. `undefined` means omitted. An empty `multiple` array means zero occurrences.
 - Structured input binding never reads `process.env`, so a flag's `env` fallback does not apply. Only [`.execute()`](#executeoptions) uses flag environment fallbacks. Contexts such as [`@crustjs/env`](/docs/modules/env) can still read the environment when pulled.
-- Unknown argument or flag keys return a failed outcome before the action runs.
+- TypeScript rejects unknown argument, flag, and top-level keys, including in inputs held in variables. Keys set to `undefined` count as omitted. At runtime, unknown argument or flag keys return a failed outcome before the action runs.
 - `raw` reaches the action as `rawArgs`, like tokens after `--`.
 - The path alone selects the command. Unknown path segments return a `COMMAND_NOT_FOUND` failure, even when the nearest parent has an action.
 - For genuinely dynamic paths and input, use an `AnyCrust` view; it resolves to `RunOutcome<unknown>`.

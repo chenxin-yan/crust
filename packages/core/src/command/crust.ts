@@ -236,7 +236,7 @@ export type CommandShapeAt<
 			CommandShape;
 
 type RunSection<Name extends string, Values> = keyof Values extends never
-	? { [K in Name]?: never }
+	? {}
 	: {} extends Values
 		? { [K in Name]?: Values }
 		: { [K in Name]: Values };
@@ -249,7 +249,10 @@ export type RunInput<Shape extends CommandShape> = RunSection<
 	RunSection<
 		"flags",
 		FlagsDef extends Shape["flags"]
-			? NonNullable<RunInputPayload["flags"]>
+			? // `{}` also passes the open-set check; a command with no flags stays closed.
+				[keyof Shape["flags"]] extends [never]
+				? {}
+				: NonNullable<RunInputPayload["flags"]>
 			: InputFlags<Shape["flags"]>
 	> & {
 		readonly raw?: readonly string[];
@@ -318,6 +321,60 @@ export type RunArguments<Shape extends CommandShape> = readonly [
 	options?: InvocationOptions,
 ];
 
+type KeysOf<T> = T extends unknown ? keyof T : never;
+
+// Undeclared literal keys may only hold `undefined`, which the runtime treats as omitted. Other
+// values map to `never` rather than `undefined`: a unit-typed conflict would collapse the whole
+// intersection and hide which key is wrong. Non-literal keys (index signatures) cannot be named
+// statically and are left to value checks.
+type UnknownRunKeys<Actual, Known> = {
+	[
+		K in keyof Actual as string extends K
+			? never
+			: number extends K
+				? never
+				: K extends Known
+					? never
+					: K
+	]: Actual[K] extends undefined ? Actual[K] : never;
+};
+
+// Excess-property checks only reach fresh object literals. Closing the keys of the inferred
+// input, per union member, also rejects unknown keys in inputs held in variables.
+type ClosedRunInput<Shape extends CommandShape, Input> = Input extends unknown
+	? UnknownRunKeys<Input, keyof RunInput<Shape>> & {
+			[
+				K in keyof Input as K extends ("args" | "flags") & keyof RunInput<Shape> ? K : never
+			]: UnknownRunKeys<
+				NonNullable<Input[K]>,
+				KeysOf<NonNullable<RunInput<Shape>[K & keyof RunInput<Shape>]>>
+			>;
+		}
+	: never;
+
+// TypeScript infers a union-typed input as only its first member. Checking
+// a passing input against the whole `RunInput` avoids false errors on the other members.
+// Spelled through `RunInputArguments`: a bare `RunInput<Shape>` here makes checking `Crust`
+// instances exceed TypeScript's union size limit (TS2590).
+// ponytail: a variable typed as a union is closed on its first member only; closing every member
+// needs inference to keep the whole union.
+type CheckedRunInput<Shape extends CommandShape, Input> = [Input] extends [
+	ClosedRunInput<Shape, Input>,
+]
+	? NonNullable<RunInputArguments<Shape>[0]>
+	: Input & NoInfer<ClosedRunInput<Shape, Input>>;
+
+// `undefined` input stands for omitted input, so only a command that requires nothing accepts it.
+type OmittableRunInput<Shape extends CommandShape> = {} extends RunInput<Shape> ? undefined : never;
+
+// A path-only call has no input to infer from, so requiredness is checked on the command itself.
+// An unknown path selects no command (`never`); leave that error to the path parameter.
+type RunWithoutInputThis<Shape extends CommandShape, This> = [Shape] extends [never]
+	? This
+	: {} extends RunInput<Shape>
+		? This
+		: This & { readonly FIX_MISSING_INPUT: "Pass the command's required arguments or flags" };
+
 /**
  * Typed invoker bound to one command in an app, returned by {@link Crust.at}.
  *
@@ -327,7 +384,11 @@ export type RunArguments<Shape extends CommandShape> = readonly [
 export interface CommandHandle<Shape extends CommandShape> {
 	/** The typed path this handle was created with (`[]` selects the root). */
 	readonly path: readonly string[];
-	run(...args: RunArguments<Shape>): Promise<RunOutcome<Shape["result"]>>;
+	run(this: RunWithoutInputThis<Shape, unknown>): Promise<RunOutcome<Shape["result"]>>;
+	run<const Input extends RunInput<Shape> | OmittableRunInput<Shape> = RunInput<Shape>>(
+		input: CheckedRunInput<Shape, Input> | OmittableRunInput<Shape>,
+		options?: InvocationOptions,
+	): Promise<RunOutcome<Shape["result"]>>;
 	run<const Input>(
 		input: Input,
 		...validation: [Input] extends [CompatibleRunInput<Shape, Input>]
@@ -1739,9 +1800,26 @@ export class Crust<
 	// `Path` is only constrained to strings, and the parameter is not intersected with `Path`:
 	// either would erase the partial literal editors use for completions (see `KnownCommandPath`).
 	async run<const Path extends readonly string[]>(
+		this: RunWithoutInputThis<
+			CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>,
+			{ readonly _types: { readonly caps: "app" } }
+		>,
+		path: KnownCommandPath<Path, Tree>,
+	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
+	async run<
+		const Path extends readonly string[],
+		const Input extends
+			| RunInput<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>>
+			| OmittableRunInput<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>> = RunInput<
+			CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>
+		>,
+	>(
 		this: { readonly _types: { readonly caps: "app" } },
 		path: KnownCommandPath<Path, Tree>,
-		...args: RunArguments<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>>
+		input:
+			| CheckedRunInput<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>, Input>
+			| OmittableRunInput<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>>,
+		options?: InvocationOptions,
 	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
 	async run<const Path extends readonly string[], const Input>(
 		this: { readonly _types: { readonly caps: "app" } },

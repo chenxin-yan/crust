@@ -68,10 +68,14 @@ function _runOutcome(
 	// @ts-expect-error unknown top-level section beside otherwise valid required input
 	void app.run([], { flags: { mode: "safe" }, flgas: { mode: "fast" } });
 	const structuralSections = { flags: { mode }, flgas: { mode } };
+	// @ts-expect-error variables cannot carry unknown top-level sections
 	void app.run([], structuralSections);
-	// Standard structural assignability permits extra keys on variables; runtime checks them.
 	const structuralInput = { flags: { mode, mdoe: "fast" } };
+	// @ts-expect-error variables cannot carry unknown flags
 	void app.run([], structuralInput);
+	// Unknown keys holding `undefined` are omitted at runtime, so they stay allowed.
+	const undefinedUnknown = { flags: { mode, mdoe: undefined }, flgas: undefined };
+	void app.run([], undefinedUnknown);
 	const broadVariableInput = { flags: { mode: broad } };
 	// @ts-expect-error variable values must still satisfy known choices
 	void app.run([], broadVariableInput);

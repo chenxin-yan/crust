@@ -287,6 +287,7 @@ describe("typed programmatic invocation", () => {
 			code: "PARSE",
 			details: { reason: "unknown-argument", argument: "bogus" },
 		});
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		await expect(unwrap(app.run([], { flags: { bogus: true } }))).rejects.toMatchObject({
 			code: "PARSE",
 			details: { reason: "unknown-flag", flag: "bogus" },

@@ -399,3 +399,109 @@ function _typecheckNarrowsSiblingsAddedByOneVariadicAddToTheirOwnShapes() {
 	void addInput;
 	void listInput;
 }
+
+// rejects unknown input keys held in variables, where excess-property checks do not apply
+function _typecheckRejectsUnknownInputKeysHeldInVariables(cond: boolean) {
+	const app = new Crust("cli").command("build", (command) =>
+		command
+			.args({ name: "entry", type: "string" })
+			.flags({ name: "minify", type: "boolean" })
+			.action(() => {}),
+	);
+	const handle = app.at(["build"]);
+
+	const unknownFlag = { flags: { minify: true, nope: 1 } };
+	// @ts-expect-error -- an unknown flag beside a known one
+	void app.run(["build"], unknownFlag);
+	// @ts-expect-error -- the same input through a handle
+	void handle.run(unknownFlag);
+
+	const unknownArg = { args: { entry: "a", extra: "b" } };
+	// @ts-expect-error -- an unknown argument beside a known one
+	void app.run(["build"], unknownArg);
+
+	const unknownKey = { flags: { minify: true }, bogus: 1 };
+	// @ts-expect-error -- an unknown top-level input key
+	void app.run(["build"], unknownKey);
+	// @ts-expect-error -- the same input through a handle
+	void handle.run(unknownKey);
+
+	const valid = { args: { entry: "a" }, flags: { minify: true }, raw: ["--"] };
+	void app.run(["build"], valid);
+	void handle.run(valid, { stdout: () => {} });
+
+	// Union inputs must not be rejected by closing only one member.
+	for (const input of [{ flags: { minify: true } }, { args: { entry: "a" } }]) {
+		void app.run(["build"], input);
+		void handle.run(input);
+	}
+	void app.run(["build"], cond ? { flags: { minify: true } } : { args: { entry: "a" } });
+	// @ts-expect-error -- a fresh union member keeps excess-property checks
+	void app.run(["build"], cond ? { flags: { minify: true } } : { flags: { nope: 1 } });
+}
+
+// omits input sections a command does not define, so editors do not offer them
+function _typecheckOmitsUndefinedInputSections() {
+	const app = new Crust("cli")
+		.command("build", (command) => command.flags({ name: "minify", type: "boolean" }))
+		.command("bare", (command) => command);
+	type Shape = (typeof app)["_types"]["shape"];
+	type _build = Expect<
+		Equal<keyof RunInput<CommandShapeAt<Shape, readonly ["build"]>>, "flags" | "raw">
+	>;
+	type _bare = Expect<Equal<keyof RunInput<CommandShapeAt<Shape, readonly ["bare"]>>, "raw">>;
+
+	// @ts-expect-error -- no args section
+	void app.run(["build"], { args: {} });
+	const withArgs = { args: { x: 1 }, flags: { minify: true } };
+	// @ts-expect-error -- no args section, held in a variable
+	void app.run(["build"], withArgs);
+	// @ts-expect-error -- no args section, through a handle
+	void app.at(["build"]).run(withArgs);
+	// @ts-expect-error -- no flags section
+	void app.run(["bare"], { flags: { minify: true } });
+	void app.run(["bare"], { raw: ["--"] });
+}
+
+// keeps required input required whatever the input's inference
+function _typecheckKeepsRequiredInputIndependentOfInference(
+	maybeInput: { flags: { mode: string } } | undefined,
+	maybeOptional: { flags: { minify: boolean } } | undefined,
+) {
+	const app = new Crust("app")
+		.flags({ name: "mode", type: "string", required: true })
+		.action(({ flags }) => flags.mode);
+	const handle = app.at([]);
+	const run = handle.run;
+
+	// @ts-expect-error -- omitted required input
+	void app.run([]);
+	// @ts-expect-error -- explicit undefined for required input
+	void app.run([], undefined);
+	// @ts-expect-error -- possibly undefined required input
+	void app.run([], maybeInput);
+	// @ts-expect-error -- explicit undefined with options
+	void app.run([], undefined, { stdout: () => {} });
+	// @ts-expect-error -- omitted through a handle
+	void handle.run();
+	// @ts-expect-error -- explicit undefined through a handle
+	void handle.run(undefined);
+	// @ts-expect-error -- possibly undefined through a handle
+	void handle.run(maybeInput);
+	// @ts-expect-error -- omitted through an extracted handle function
+	void run();
+	// @ts-expect-error -- explicit undefined through an extracted handle function
+	void run(undefined);
+	// Explicit path type arguments still accept valid input.
+	void app.run<readonly []>([], { flags: { mode: "safe" } });
+	void run({ flags: { mode: "safe" } });
+
+	const optional = new Crust("opt").flags({ name: "minify", type: "boolean" }).action(() => {});
+	void optional.run([]);
+	void optional.run([], undefined);
+	void optional.run([], undefined, { stdout: () => {} });
+	void optional.run([], maybeOptional);
+	void optional.run<readonly []>([]);
+	void optional.at([]).run(undefined);
+	void optional.at([]).run(maybeOptional);
+}
