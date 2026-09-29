@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { unwrap } from "../../tests/helpers.ts";
-import { Crust, defineCommand } from "../command/crust.ts";
+import { Crust, defineCommand, type RunOutcome } from "../command/crust.ts";
 import type { CaughtError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
 import {
@@ -2116,6 +2116,30 @@ describe("inline .command()", () => {
 
 		const outcome = await app.run(["whoami"], { args: { suffix: "!" } });
 		expect(outcome).toMatchObject({ status: "completed", result: "chenxin!" });
+	});
+
+	it("nests inline commands in recipes, seeded with the recipe's declared Contexts", async () => {
+		const db = defineContext("db").setup(() => "db-value");
+		const remote = defineCommand("remote", (cmd) =>
+			cmd.use(db).command("branch", (branch) =>
+				branch.command("list", (list) =>
+					list.action(async ({ ctx }) => {
+						const value = await ctx.db;
+						type _Db = Expect<Equal<typeof value, string>>;
+						// @ts-expect-error -- only Contexts declared up the recipe are visible
+						void ctx.missing;
+						return value;
+					}),
+				),
+			),
+		);
+
+		const outcome = await new Crust("cli")
+			.provide(db())
+			.add(remote)
+			.run(["remote", "branch", "list"]);
+		type _Result = Expect<Equal<typeof outcome, RunOutcome<string>>>;
+		expect(outcome).toMatchObject({ status: "completed", result: "db-value" });
 	});
 
 	it("does not see Contexts provided after the .command() call site", async () => {

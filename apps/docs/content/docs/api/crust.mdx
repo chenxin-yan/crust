@@ -172,7 +172,7 @@ Sibling names and aliases must not collide. A definition can itself add definiti
 
 ## `.command(name, recipe)`
 
-Root-only sugar for `.add(defineCommand(name, recipe))`, for short app-local leaf commands. Use `defineCommand()` for commands in separate files, reused commands, and packaged commands.
+Sugar for `.add(defineCommand(name, recipe))`, for short inline commands. It works on the root and inside another command's recipe, so subcommands can nest inline. Use `defineCommand()` for commands in separate files and reused commands.
 
 ```ts
 const app = new Crust("my-cli").provide(logging()).command("up", (command) =>
@@ -183,7 +183,7 @@ const app = new Crust("my-cli").provide(logging()).command("up", (command) =>
 );
 ```
 
-The recipe sees the Contexts and Context-owned flags provided before the call, so its `ctx` is typed without `.use()`. Contexts provided after `.command()` are not visible to it.
+The recipe sees the Contexts and Context-owned flags available before the call, so its `ctx` is typed without `.use()`. Inside a recipe, those are the Contexts the parent declared with `.use()` or `.provide()`. Contexts provided after `.command()` are not visible to it.
 
 ## `.snapshot()`
 

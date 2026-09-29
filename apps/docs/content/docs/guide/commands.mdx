@@ -25,7 +25,7 @@ You can use both approaches in the same app.
 
 ## Grow in one file
 
-Keep small subcommands alongside the root with `.command()`. Its callback defines the subcommand's flags and action.
+Keep small subcommands alongside the root with `.command()`. Its callback defines the subcommand's flags and action, and can call `.command()` again to nest another level.
 
 <include lang="ts" meta='title="src/cli.ts" twoslash'>
   ../../../examples/guide/commands.ts
