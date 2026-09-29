@@ -1,4 +1,5 @@
 import {
+	CrustError,
 	type Extension,
 	type RootMetaKey,
 	type ExtensionId,
@@ -42,16 +43,23 @@ export interface VersionExtension {
 	readonly id: ExtensionId;
 }
 
-function makeVersion<K extends RootMetaKey>(
-	resolve: (context: ExtensionContext<[], {}, K>) => string,
-	options: VersionOptions,
-): VersionRegistration<K> {
-	const { format } = options;
-	return defineExtension<K>(VERSION)
-		.flags(...versionFlags)
-		.preRun((context) => {
+// The builder requires no metadata so one factory serves both overloads; the
+// `VersionExtension` annotation narrows omitted values to require root `version`.
+export const version: VersionExtension = defineExtension(VERSION).factory(
+	(extension, value?: VersionValue, options: VersionOptions = {}) => {
+		const { format } = options;
+		return extension.flags(...versionFlags).preRun((context) => {
 			if (context.commandPath.length !== 1 || context.flags.version !== true) return;
-			const resolvedVersion = resolve(context);
+			const resolvedVersion =
+				// oxlint-disable-next-line anti-slop/no-runtime-typeof -- discriminating a typed options union.
+				typeof value === "function" ? value() : (value ?? context.rootCommand.meta.version);
+			// Overloads are type-only; Bun and Node builds skip the check.
+			if (resolvedVersion === undefined) {
+				throw new CrustError(
+					"DEFINITION",
+					"The version extension requires a version in new Crust(name, { version }) or version(value)",
+				);
+			}
 			const line =
 				format === "plain"
 					? resolvedVersion
@@ -61,24 +69,5 @@ function makeVersion<K extends RootMetaKey>(
 			context.stdout(line);
 			return context.finish();
 		});
-}
-
-function createVersion(value: VersionValue, options?: VersionOptions): VersionRegistration<never>;
-function createVersion(
-	value?: VersionValue,
-	options?: VersionOptions,
-): VersionRegistration<"version">;
-function createVersion(
-	value?: VersionValue,
-	options: VersionOptions = {},
-): VersionRegistration<"version"> {
-	if (value === undefined) {
-		return makeVersion<"version">((context) => context.rootCommand.meta.version, options);
-	}
-	return makeVersion<never>(() => {
-		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- discriminating a typed options union.
-		return typeof value === "function" ? value() : value;
-	}, options);
-}
-
-export const version: VersionExtension = Object.assign(createVersion, { id: VERSION });
+	},
+);
