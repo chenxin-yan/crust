@@ -64,8 +64,6 @@ function _typecheckRestrictsBuilderCapabilities() {
 
 		// @ts-expect-error -- Extensions are root-only
 		configured.extend(extension);
-		// @ts-expect-error -- Inline commands are root-only
-		configured.command("nested", (child) => child);
 		// @ts-expect-error -- Programmatic invocation is root-only
 		void configured.run([]);
 		// @ts-expect-error -- CLI execution is root-only

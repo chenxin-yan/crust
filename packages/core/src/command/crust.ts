@@ -1579,18 +1579,17 @@ export class Crust<
 	}
 
 	/**
-	 * Define an app-local leaf subcommand inline (root-only sugar for
-	 * `.add(defineCommand(name, recipe))`).
+	 * Define a subcommand inline (sugar for `.add(defineCommand(name, recipe))`),
+	 * on the root or inside another command's recipe.
 	 *
 	 * The recipe builder is seeded with the Contexts and Context-owned flags
-	 * accumulated on this builder so far — the call site. Contexts provided
-	 * after `.command()` are not visible to it, matching the positional runtime
-	 * semantics of `.provide()`. Extract to `defineCommand` when a command needs
-	 * its own file, reuse, or a package. Recipe builders cannot call this
-	 * root-only method.
+	 * accumulated on this builder so far — the call site. In a recipe, those are
+	 * its `.use()` and `.provide()` Contexts. Contexts provided after `.command()`
+	 * are not visible to it, matching the positional runtime semantics of
+	 * `.provide()`. Extract to `defineCommand` when a command needs its own file
+	 * or reuse.
 	 */
 	command<const N extends string, B extends AnyCommandDefinitionBuilder>(
-		this: { readonly _types: { readonly caps: "app" } },
 		name: N & CommandNameBrand<N> & CommandCollisionBrand<N, Sibs>,
 		recipe: ((
 			command: CommandDefinitionBuilder<
