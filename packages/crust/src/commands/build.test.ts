@@ -17,11 +17,21 @@ import { Crust, defineExtensionId } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import type { JsonValue } from "@crustjs/utils/json";
 import { which } from "@crustjs/utils/process";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
+import {
+	afterAll,
+	afterEach,
+	beforeAll,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vite-plus/test";
 
 const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 
 import schema from "../../schema/package.json";
+import { runBoundedProcess } from "../../tests/bounded-process.ts";
 import {
 	BUILD_RUNTIMES,
 	BUN_TARGETS,
@@ -808,6 +818,68 @@ describe("build", () => {
 			stageDir,
 		);
 	}, 30_000);
+
+	it("rejects a build while another process owns the project, including through an alias", async () => {
+		writeProject(
+			{ name: "node-cli", crust: { runtime: "node", artifact: "package" } },
+			'console.log("hi");\n',
+		);
+		mkdirSync(stageDir);
+		const kept = join(stageDir, "kept.txt");
+		writeFileSync(kept, "previous stage");
+		const alias = join(tmpDir, "alias");
+		symlinkSync(tmpDir, alias, "junction");
+		const ready = join(tmpDir, "ready");
+		const release = join(tmpDir, "release");
+		const script = join(tmpDir, "hold-build.ts");
+		writeFileSync(
+			script,
+			`import { existsSync, writeFileSync } from "node:fs";
+import { build } from ${JSON.stringify(new URL("./build.ts", import.meta.url).href)};
+await build({ cwd: ${JSON.stringify(tmpDir)}, validate: false, onLog() {
+	if (existsSync(${JSON.stringify(ready)})) return;
+	writeFileSync(${JSON.stringify(ready)}, "ready");
+	const deadline = Date.now() + 15_000;
+	const gate = new Int32Array(new SharedArrayBuffer(4));
+	while (!existsSync(${JSON.stringify(release)})) {
+		if (Date.now() > deadline) throw new Error("Build gate timed out");
+		Atomics.wait(gate, 0, 0, 10);
+	}
+} });
+`,
+		);
+		const holder = runBoundedProcess(which("bun")!, [script], { timeout: 25_000 });
+		// The bounded child can reject while the parent is still waiting for readiness.
+		void holder.catch(() => {});
+		try {
+			await vi.waitFor(() => expect(existsSync(ready)).toBe(true), { timeout: 10_000 });
+			await expect(build({ cwd: alias, validate: false })).rejects.toThrow("already building");
+			expect(readFileSync(kept, "utf8")).toBe("previous stage");
+			expect(existsSync(join(tmpDir, ".crust.lock"))).toBe(true);
+		} finally {
+			writeFileSync(release, "release");
+			const result = await holder;
+			expect(result.exitCode, result.stderr).toBe(0);
+		}
+		expect(existsSync(join(tmpDir, ".crust.lock"))).toBe(false);
+		await expect(build({ cwd: tmpDir, validate: false })).resolves.toHaveProperty("stageDir");
+	}, 30_000);
+
+	it("leaves an existing lock and stage untouched and explains manual recovery", async () => {
+		writeProject(
+			{ name: "node-cli", crust: { runtime: "node", artifact: "package" } },
+			'console.log("hi");\n',
+		);
+		const lock = join(tmpDir, ".crust.lock");
+		mkdirSync(lock);
+		mkdirSync(stageDir);
+		writeFileSync(join(stageDir, "kept.txt"), "previous stage");
+		await expect(build({ cwd: tmpDir, validate: false })).rejects.toThrow(
+			"only after confirming no build is running",
+		);
+		expect(existsSync(lock)).toBe(true);
+		expect(readFileSync(join(stageDir, "kept.txt"), "utf8")).toBe("previous stage");
+	});
 
 	it("stages a node bundle without reports when validate is false and rejects bad options", async () => {
 		writeProject(

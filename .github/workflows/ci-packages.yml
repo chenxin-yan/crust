@@ -34,7 +34,7 @@ jobs:
         include:
           - runtime: node
             label: Node
-            smoke: mise exec node@22.0.0 -- node scripts/smoke-runtimes/smoke.mjs
+            smoke: mise exec node@24.0.0 -- node scripts/smoke-runtimes/smoke.mjs
           - runtime: deno
             label: Deno
             smoke: mise exec deno@2.8.0 -- deno run --allow-env --allow-read --allow-write --allow-run --config scripts/smoke-runtimes/deno.json scripts/smoke-runtimes/smoke.mjs

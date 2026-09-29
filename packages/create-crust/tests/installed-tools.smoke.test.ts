@@ -13,22 +13,18 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { delimiter, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { describe, expect, it } from "vite-plus/test";
 
 import { hostTarget, seaNodeBinDir } from "../../crust/tests/helpers.ts";
+import { isWithin } from "../../utils/src/path.ts";
 import { which } from "../../utils/src/process.ts";
 
 const repoRoot = realpathSync(resolve(import.meta.dirname, "../../.."));
 const enabled = process.env.CREATE_CRUST_INSTALLED_SMOKE === "1";
 const readJson = (path: string) => JSON.parse(readFileSync(path, "utf8"));
-
-function isInside(parent: string, path: string): boolean {
-	const rel = relative(parent, path);
-	return rel === "" || (!isAbsolute(rel) && rel !== ".." && !rel.startsWith(`..${sep}`));
-}
 
 describe.skipIf(!enabled)("installed create-crust and crust (Linux/npm)", () => {
 	it("packs, installs, scaffolds, builds through the root shim, and runs", async () => {
@@ -42,15 +38,15 @@ describe.skipIf(!enabled)("installed create-crust and crust (Linux/npm)", () => 
 		if (seaNodeDir === null) {
 			throw new Error("Set CRUST_TEST_SEA_NODE to a Node >=26 for the Node binary build.");
 		}
-		// A Node that runs crust but is outside tsdown's engines (e.g. 22.16.0).
+		// A Node that runs crust but is outside tsdown's engines (e.g. 24.0.0).
 		const legacyNode = process.env.CRUST_TEST_LEGACY_NODE;
 		if (!legacyNode) {
 			throw new Error(
-				"Set CRUST_TEST_LEGACY_NODE to a Node outside tsdown's engines, e.g. 22.16.0.",
+				"Set CRUST_TEST_LEGACY_NODE to a Node outside tsdown's engines, e.g. 24.0.0.",
 			);
 		}
 		const base = realpathSync(process.env.RUNNER_TEMP ?? tmpdir());
-		if (isInside(repoRoot, base)) throw new Error("Fixture base must be outside the workspace.");
+		if (isWithin(repoRoot, base)) throw new Error("Fixture base must be outside the workspace.");
 		const root = mkdtempSync(join(base, "create-crust-installed-"));
 		const consumer = join(root, "tool consumer");
 		const project = join(consumer, "installed-cli");
@@ -70,7 +66,7 @@ describe.skipIf(!enabled)("installed create-crust and crust (Linux/npm)", () => 
 					(path) =>
 						path &&
 						!path.endsWith(`${sep}node_modules${sep}.bin`) &&
-						!isInside(repoRoot, resolve(path)),
+						!isWithin(repoRoot, resolve(path)),
 				)
 				.join(delimiter),
 			HOME: join(root, "home"),
@@ -216,7 +212,7 @@ describe.skipIf(!enabled)("installed create-crust and crust (Linux/npm)", () => 
 				const lock = readJson(join(dir, "package-lock.json"));
 				for (const name of names) {
 					const installed = realpathSync(join(modules, name));
-					expect(isInside(modules, installed)).toBe(true);
+					expect(isWithin(modules, installed)).toBe(true);
 					const pkg = readJson(join(installed, "package.json"));
 					expect(pkg.name).toBe(name);
 					expect(pkg.version).toBe(versions[name]);

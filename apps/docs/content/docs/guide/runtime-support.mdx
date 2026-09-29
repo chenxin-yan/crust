@@ -18,7 +18,7 @@ After [installing Crust](/docs/quick-start#manual-setup), save this as `src/cli.
 | Runtime | Library minimum | Run the TypeScript example            |
 | ------- | --------------- | ------------------------------------- |
 | Bun     | 1.4+            | `bun run src/cli.ts Ada`              |
-| Node.js | 22+             | `node src/cli.ts Ada` (22.18+)        |
+| Node.js | 24+             | `node src/cli.ts Ada`                 |
 | Deno    | 2.8+            | `deno run --allow-env src/cli.ts Ada` |
 
 All three print:
@@ -27,7 +27,7 @@ All three print:
 Hello, Ada!
 ```
 
-Node.js 22+ can run the published libraries, but the direct TypeScript command above needs **22.18+**. Use `"type": "module"` in `package.json` and erasable TypeScript syntax—no enums or parameter properties. See [Node's type stripping](https://nodejs.org/docs/latest-v22.x/api/typescript.html#type-stripping) for its limits.
+Node.js 24+ can run both the published libraries and the TypeScript command above. Use `"type": "module"` in `package.json` and erasable TypeScript syntax—no enums or parameter properties. See [Node's type stripping](https://nodejs.org/docs/latest-v24.x/api/typescript.html#type-stripping) for its limits.
 
 ## Choose a runtime for your project
 

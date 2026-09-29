@@ -12,7 +12,6 @@ import {
 	contextSources,
 	createContextResolver,
 	defineContext,
-	FallbackAsyncDisposableStack,
 } from "./context.ts";
 import { defineExtension } from "./extension.ts";
 import { defineFlag } from "./flags.ts";
@@ -1940,7 +1939,7 @@ describe("Context setup defer()", () => {
 		const app = new Crust("cli").provide(res()).action(async ({ ctx }) => {
 			await ctx.res;
 		});
-		// Bun has the native stack: the later-thrown error suppresses the earlier one.
+		// The later-thrown error suppresses the earlier one.
 		await expect(app.run([])).resolves.toMatchObject({
 			status: "failed",
 			error: { error: first, suppressed: second },
@@ -2094,86 +2093,6 @@ describe("Context setup defer()", () => {
 		);
 		expect(attempts).toBe(2);
 		expect(log).toEqual(["cleanup:2", "cleanup:1"]);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// FallbackAsyncDisposableStack (Node 22 lacks the AsyncDisposableStack global)
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("FallbackAsyncDisposableStack", () => {
-	it("disposes used resources and deferred callbacks in LIFO order", async () => {
-		const order: string[] = [];
-		{
-			await using disposal = new FallbackAsyncDisposableStack();
-			disposal.use({ [Symbol.dispose]: () => order.push("sync") });
-			disposal.use({
-				[Symbol.asyncDispose]: async () => {
-					order.push("async");
-				},
-			});
-			disposal.defer(() => {
-				order.push("deferred");
-			});
-		}
-		expect(order).toEqual(["deferred", "async", "sync"]);
-	});
-
-	it("prefers asyncDispose when a resource has both, and returns the resource", async () => {
-		const order: string[] = [];
-		const resource = {
-			[Symbol.dispose]: () => order.push("sync"),
-			[Symbol.asyncDispose]: async () => {
-				order.push("async");
-			},
-		};
-		{
-			await using disposal = new FallbackAsyncDisposableStack();
-			expect(disposal.use(resource)).toBe(resource);
-		}
-		expect(order).toEqual(["async"]);
-	});
-
-	it("disposes every resource even when one throws, then rethrows", async () => {
-		const order: string[] = [];
-		const run = async () => {
-			await using disposal = new FallbackAsyncDisposableStack();
-			disposal.defer(() => {
-				order.push("first");
-			});
-			disposal.defer(() => {
-				throw new Error("boom");
-			});
-			disposal.defer(() => {
-				order.push("last");
-			});
-		};
-		await expect(run()).rejects.toThrow("boom");
-		expect(order).toEqual(["last", "first"]);
-	});
-
-	it("rejects use() and defer() after disposal like the native stack", async () => {
-		const disposal = new FallbackAsyncDisposableStack();
-		await disposal[Symbol.asyncDispose]();
-		expect(() => disposal.defer(() => {})).toThrow(ReferenceError);
-		expect(() => disposal.use({ [Symbol.dispose]() {} })).toThrow(ReferenceError);
-	});
-
-	it("runs callbacks once when disposed twice like the native stack", async () => {
-		let calls = 0;
-		const disposal = new FallbackAsyncDisposableStack();
-		disposal.defer(() => {
-			calls++;
-		});
-		await disposal[Symbol.asyncDispose]();
-		await disposal[Symbol.asyncDispose]();
-		expect(calls).toBe(1);
-	});
-
-	it("rejects a non-callable defer at registration like the native stack", () => {
-		const disposal = new FallbackAsyncDisposableStack();
-		expect(() => disposal.defer(null as never)).toThrow(TypeError);
-		expect(() => new AsyncDisposableStack().defer(null as never)).toThrow(TypeError);
 	});
 });
 

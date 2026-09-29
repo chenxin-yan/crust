@@ -364,92 +364,6 @@ export function defineContext<Name extends string>(name: Name): ContextBuilder<N
 export type FactoryValueOf<F extends AnyContextFactory> =
 	F extends ContextFactory<any, any, infer Value, any, any> ? Awaited<Value> : never;
 
-/**
- * The slice of `AsyncDisposableStack` invocation disposal actually uses.
- *
- * Typed structurally because the global `AsyncDisposableStack` constructor
- * only exists on Bun, Deno, and Node >= 24 (V8 13.8); on Node 22 invocations
- * run with {@link FallbackAsyncDisposableStack} instead.
- */
-export interface DisposalScope {
-	use<T extends Disposable | AsyncDisposable>(value: T): T;
-	defer(onDisposeAsync: () => void | PromiseLike<void>): void;
-}
-
-type DisposeCallback = () => void | PromiseLike<void>;
-
-// Untyped callers can still hand the fallback a non-function at runtime.
-function isDisposeCallback(value: DisposeCallback | undefined | null): value is DisposeCallback {
-	return typeof value === "function";
-}
-
-/**
- * Minimal `AsyncDisposableStack` stand-in for runtimes without the global
- * (Node 22): LIFO disposal of used resources and deferred callbacks,
- * preferring `Symbol.asyncDispose` over `Symbol.dispose`.
- *
- * ponytail: multiple disposal errors aggregate as `AggregateError` instead of
- * the native `SuppressedError` chain; delete this class when Node 22 leaves
- * the support floor.
- *
- * @internal Exported for unit testing and invocation wiring.
- */
-export class FallbackAsyncDisposableStack implements DisposalScope, AsyncDisposable {
-	#entries: (() => void | PromiseLike<void>)[] = [];
-	#disposed = false;
-
-	// Same class of error as the native stack, so a late registration fails loud
-	// on every runtime instead of silently leaking here.
-	#assertPending(): void {
-		if (this.#disposed) throw new ReferenceError("AsyncDisposableStack is already disposed");
-	}
-
-	use<T extends Disposable | AsyncDisposable>(value: T): T {
-		this.#assertPending();
-		const dispose = hasAsyncDispose(value) ? value[Symbol.asyncDispose] : value[Symbol.dispose];
-		this.#entries.push(() => dispose.call(value));
-		return value;
-	}
-
-	defer(onDisposeAsync: () => void | PromiseLike<void>): void {
-		this.#assertPending();
-		// Native rejects at registration; failing at teardown instead would hide the bug.
-		if (!isDisposeCallback(onDisposeAsync)) throw new TypeError("defer callback is not callable");
-		this.#entries.push(onDisposeAsync);
-	}
-
-	async [Symbol.asyncDispose](): Promise<void> {
-		if (this.#disposed) return;
-		this.#disposed = true;
-		const errors: unknown[] = [];
-		for (let index = this.#entries.length - 1; index >= 0; index--) {
-			try {
-				await this.#entries[index]!();
-			} catch (error) {
-				errors.push(error);
-			}
-		}
-		if (errors.length === 1) throw errors[0];
-		if (errors.length > 1) throw new AggregateError(errors, "Disposal failed");
-	}
-}
-
-/**
- * Disposal-stack constructor for the current runtime: the native
- * `AsyncDisposableStack` when the global exists, else the fallback.
- */
-// SAFETY: this platform feature has the TC39 constructor shape when present; older runtimes use the fallback.
-const NativeDisposalStack = (
-	globalThis as { AsyncDisposableStack?: new () => DisposalScope & AsyncDisposable }
-).AsyncDisposableStack;
-export const DisposalStack: new () => DisposalScope & AsyncDisposable =
-	NativeDisposalStack ?? FallbackAsyncDisposableStack;
-
-function hasAsyncDispose(value: Disposable | AsyncDisposable): value is AsyncDisposable {
-	// SAFETY: structural property probe; the result is checked before use.
-	return typeof (value as Partial<AsyncDisposable>)[Symbol.asyncDispose] === "function";
-}
-
 function isDisposableValue(value: ContextValue): value is Disposable | AsyncDisposable {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
 	// SAFETY: structural property probe on an object; both properties are checked below.
@@ -462,7 +376,7 @@ function isDisposableValue(value: ContextValue): value is Disposable | AsyncDisp
 
 function registerDisposable(
 	value: ContextValue,
-	disposal: DisposalScope,
+	disposal: AsyncDisposableStack,
 	registered: WeakSet<object>,
 ): void {
 	if (!isDisposableValue(value) || registered.has(value)) return;
@@ -487,7 +401,7 @@ export interface ContextResolver {
 export function createContextResolver(
 	contexts: readonly AnyContextInstance[],
 	io: InvocationIO,
-	disposal: DisposalScope,
+	disposal: AsyncDisposableStack,
 	signal: AbortSignal,
 ): ContextResolver {
 	interface Entry {

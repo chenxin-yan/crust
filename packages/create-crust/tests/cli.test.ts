@@ -259,7 +259,7 @@ describe("create-crust CLI", () => {
 			start: `${{ bun: "bun", node: "node", deno: "deno run -A" }[runtime]} .crust/root/bin/${name}.js`,
 			"check:types": runtime === "deno" ? "deno check src/cli.ts" : "tsc --noEmit",
 		},
-		...(runtime === "node" ? { engines: { node: ">=22.18" } } : {}),
+		...(runtime === "node" ? { engines: { node: ">=24" } } : {}),
 		dependencies: {
 			"@crustjs/core": `^${corePackage.version}`,
 			"@crustjs/extensions": `^${extensionsPackage.version}`,
@@ -268,7 +268,7 @@ describe("create-crust CLI", () => {
 			"@crustjs/crust": `^${crustPackage.version}`,
 			...{
 				bun: { "@types/bun": "latest", typescript: "^7.0.2" },
-				node: { "@types/node": "^22", typescript: "^7.0.2" },
+				node: { "@types/node": "^24", typescript: "^7.0.2" },
 				deno: {},
 			}[runtime],
 		},
