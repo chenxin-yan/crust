@@ -186,13 +186,34 @@ export type CommandPath<
 							: never;
 				  }[keyof Tree & string];
 
-type KnownCommandPath<Path extends readonly string[], Tree> = string extends keyof Tree
+// Editors complete path elements from this type instantiated with the partial literal being
+// typed (e.g. `["remote", ""]`), so an unknown literal path must resolve to the commands under
+// its longest valid prefix rather than `never` or the whole union.
+type CommandPathContinuations<
+	Path extends readonly string[],
+	Tree extends object,
+	Prefix extends readonly string[] = readonly [],
+> = Path extends readonly [infer Head extends string, ...infer Tail extends readonly string[]]
+	? readonly [...Prefix, Head] extends CommandPath<Tree>
+		? CommandPathContinuations<Tail, Tree, readonly [...Prefix, Head]>
+		: Extract<CommandPath<Tree>, readonly [...Prefix, ...string[]]>
+	: Extract<CommandPath<Tree>, readonly [...Prefix, ...string[]]>;
+
+type KnownCommandPath<
+	Path extends readonly string[],
+	Tree extends object,
+> = string extends keyof Tree
 	? Path
 	: IsStaticTuple<Path> extends true
 		? string extends Path[number]
 			? never
-			: Path
-		: never;
+			: [Path] extends [CommandPath<Tree>]
+				? Path
+				: CommandPathContinuations<Path, Tree>
+		: // An uninferred path (`at(|)`) shows every command; union paths stay rejected.
+			number extends Path["length"]
+			? CommandPath<Tree>
+			: never;
 
 /** Resolve the command shape at a typed path. */
 export type CommandShapeAt<
@@ -1716,14 +1737,16 @@ export class Crust<
 	 *                  exposed to Command Actions and Extensions) and an
 	 *                  `AbortSignal` that cancels the invocation
 	 */
-	async run<const Path extends CommandPath<Tree>>(
+	// `Path` is only constrained to strings, and the parameter is not intersected with `Path`:
+	// either would erase the partial literal editors use for completions (see `KnownCommandPath`).
+	async run<const Path extends readonly string[]>(
 		this: { readonly _types: { readonly caps: "app" } },
-		path: Path & KnownCommandPath<Path, Tree>,
+		path: KnownCommandPath<Path, Tree>,
 		...args: RunArguments<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>>
 	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
-	async run<const Path extends CommandPath<Tree>, const Input>(
+	async run<const Path extends readonly string[], const Input>(
 		this: { readonly _types: { readonly caps: "app" } },
-		path: Path & KnownCommandPath<Path, Tree>,
+		path: KnownCommandPath<Path, Tree>,
 		input: Input,
 		// Validate after inference: a recursive Input intersection exhausts contextual typing
 		// even for a broad string supplied to a simple choice flag. Check the whole
@@ -1762,9 +1785,9 @@ export class Crust<
 	 * @param path - Typed path to the command to bind (`[]` selects the root)
 	 * @throws {CrustError} COMMAND_NOT_FOUND when the path does not name a command
 	 */
-	at<const Path extends CommandPath<Tree>>(
+	at<const Path extends readonly string[]>(
 		this: { readonly _types: { readonly caps: "app" } },
-		path: Path & KnownCommandPath<Path, Tree>,
+		path: KnownCommandPath<Path, Tree>,
 	): CommandHandle<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>>;
 
 	at(path: readonly string[]): CommandHandle<CommandShape> {

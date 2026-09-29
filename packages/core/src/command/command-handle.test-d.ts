@@ -56,3 +56,26 @@ function _typecheckBindsTheSelectedCommandShapeIntoAPathFreeTypedInvoker() {
 
 	void result;
 }
+
+// Editors complete path elements from the parameter instantiated with the partial literal
+function _typecheckPartialPathsResolveToTheirValidContinuations() {
+	const remote = defineCommand("remote", (command) =>
+		command.add(defineCommand("add", (child) => child.action(() => {}))),
+	);
+	const app = new Crust("git").add(defineCommand("status", (c) => c)).add(remote);
+
+	type PathAt<Path extends readonly string[]> = Parameters<typeof app.at<Path>>[0];
+	type All = readonly [] | readonly ["status"] | readonly ["remote"] | readonly ["remote", "add"];
+	type _root = Expect<Equal<PathAt<readonly [""]>, All>>;
+	type _nested = Expect<
+		Equal<PathAt<readonly ["remote", ""]>, readonly ["remote"] | readonly ["remote", "add"]>
+	>;
+	// A leaf has no continuations, so nothing is suggested past it.
+	type _leaf = Expect<Equal<PathAt<readonly ["status", ""]>, readonly ["status"]>>;
+	type _valid = Expect<Equal<PathAt<readonly ["remote", "add"]>, readonly ["remote", "add"]>>;
+	// Signature help before any argument is typed falls back to the constraint.
+	type _uninferred = Expect<Equal<PathAt<readonly string[]>, All>>;
+	type _run = Expect<
+		Equal<Parameters<typeof app.run<readonly ["status", ""]>>[0], readonly ["status"]>
+	>;
+}
