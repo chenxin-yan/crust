@@ -19,13 +19,6 @@ describe("man Extension", () => {
 		expect(files.get("man/demo.5")).toContain(".Dt DEMO 5");
 	});
 
-	it("honors a configured installed name", async () => {
-		const { files } = await runBuildHooks(new Crust("demo").extend(man({ name: "my-tool" })));
-
-		expect([...files.keys()]).toEqual(["man/my-tool.1"]);
-		expect(files.get("man/my-tool.1")).toContain(".Nm my-tool");
-	});
-
 	it("documents Context sections where each Context is provided", async () => {
 		const env = defineContext("env")
 			.sections({ title: "Environment", body: "APP_TOKEN  API token" })
@@ -54,8 +47,8 @@ describe("man Extension", () => {
 		expect(page).not.toContain(".Ss db migrate");
 	});
 
-	it("rejects names containing path separators", async () => {
-		const { error } = await runBuildHooks(new Crust("demo").extend(man({ name: "foo\\bar" })));
+	it("rejects root names containing path separators", async () => {
+		const { error } = await runBuildHooks(new Crust("foo\\bar").extend(man()));
 
 		expect(error).toContain("must not contain path separators");
 	});

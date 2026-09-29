@@ -247,21 +247,17 @@ describe("completion build hook", () => {
 		expect(fish).toContain("complete -c 'mycli' -f");
 	});
 
-	it("honors binName and version overrides at build time", async () => {
-		const { files } = await runBuildHooks(buildCli({ binName: "my-tool", version: "2.0.0" }));
+	it("honors a version override at build time", async () => {
+		const { files } = await runBuildHooks(buildCli({ version: "2.0.0" }));
 
-		expect([...files.keys()]).toEqual([
-			"completions/my-tool",
-			"completions/_my-tool",
-			"completions/my-tool.fish",
-		]);
-		expect(files.get("completions/_my-tool")).toMatch(/^#compdef my-tool\n/);
-		expect(files.get("completions/my-tool")).toContain("my-tool v2.0.0");
+		expect(files.get("completions/mycli")).toContain("mycli v2.0.0");
 	});
 
-	it("rejects an unsafe binName", async () => {
-		const { error } = await runBuildHooks(buildCli({ binName: "../pwn" }));
-		expect(error).toMatch(/invalid binName/);
+	it("rejects an unsafe root name", async () => {
+		const { error } = await runBuildHooks(
+			new Crust("../pwn", { version: "1.0.0" }).extend(completion()),
+		);
+		expect(error).toMatch(/invalid root command name/);
 	});
 
 	it("rejects a missing version", async () => {
@@ -294,21 +290,20 @@ describe("completion build hook", () => {
 });
 
 describe("completion renderers", () => {
-	it("uses snapshot metadata by default and honors overrides", async () => {
+	it("uses snapshot metadata by default and honors a version override", async () => {
 		const snapshot = await buildCli().snapshot();
 		expect(renderBashCompletion(snapshot)).toMatch(/^# completion script for mycli v1\.2\.3/);
 		expect(renderZshCompletion(snapshot)).toMatch(/^#compdef mycli\n/);
-		expect(renderFishCompletion(snapshot, { binName: "my-tool", version: "9.9.9" })).toMatch(
-			/^# completion script for my-tool v9\.9\.9/,
+		expect(renderFishCompletion(snapshot, { version: "9.9.9" })).toMatch(
+			/^# completion script for mycli v9\.9\.9/,
 		);
 	});
 
 	it("validates names, requires a version, and sanitizes header text", async () => {
 		const snapshot = await new Crust("mycli").snapshot();
+		const unsafe = await new Crust("../pwn").snapshot();
 		for (const render of [renderBashCompletion, renderZshCompletion, renderFishCompletion]) {
-			expect(() => render(snapshot, { binName: "../pwn", version: "1" })).toThrow(
-				/invalid binName/,
-			);
+			expect(() => render(unsafe, { version: "1" })).toThrow(/invalid root command name/);
 			expect(() => render(snapshot)).toThrow("completion extension requires a version");
 			expect(render(snapshot, { version: "1\ninjected" })).not.toContain("\ninjected");
 		}

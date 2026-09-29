@@ -10,8 +10,8 @@ export interface WriteManPageOptions extends RenderManPageMdocOptions {
 
 /** Render an mdoc(7) manual page from a Command Snapshot and write it to `outfile`. */
 export async function writeManPage(options: WriteManPageOptions): Promise<void> {
-	const { root, name, outfile, section = 1, date } = options;
-	const mdoc = renderManPageMdoc({ root, name, section, date });
+	const { root, outfile, section = 1, date } = options;
+	const mdoc = renderManPageMdoc({ root, section, date });
 	await mkdir(dirname(outfile), { recursive: true });
 	await writeFile(outfile, mdoc);
 }

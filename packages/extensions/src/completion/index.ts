@@ -36,15 +36,6 @@ export interface CompletionOptions {
 	 */
 	command?: string;
 	/**
-	 * Binary name embedded in generated scripts (the `complete -F` target,
-	 * the `#compdef` line, the `complete -c <bin>` rules).
-	 * Applies to the runtime command and build hook; set it when the npm bin key
-	 * installs the CLI under a different name.
-	 *
-	 * @default The root command's `meta.name`
-	 */
-	binName?: string;
-	/**
 	 * Free-form version string embedded in generated script headers. The
 	 * walker does not parse it.
 	 *
@@ -54,7 +45,7 @@ export interface CompletionOptions {
 }
 
 /** Render inputs shared by the pure shell renderers. */
-export type CompletionRenderOptions = Pick<CompletionOptions, "binName" | "version">;
+export type CompletionRenderOptions = Pick<CompletionOptions, "version">;
 
 /** Filename convention for each shell's drop-in completion file. */
 function filenameForShell(shell: CompletionShell, binName: string): string {
@@ -80,9 +71,9 @@ const SHELL_RENDERERS = {
 } satisfies Record<CompletionShell, typeof renderBash>;
 
 function prepareRender(root: CommandSnapshot, options: CompletionRenderOptions) {
-	// Validate `binName` before emitting anything so misconfigured CLIs fail loudly.
+	// Validate the root name before emitting anything so misconfigured CLIs fail loudly.
 	// The walker also re-validates command/flag identifiers when it builds the spec.
-	const binName = assertSafeBinName(options.binName ?? root.meta.name);
+	const binName = assertSafeBinName(root.meta.name);
 	const version = options.version ?? root.meta.version;
 	if (version === undefined) {
 		throw new CrustError(
@@ -168,8 +159,8 @@ export function renderFishCompletion(
  *
  * **Build hook.** Returns the same three files under `completions/`; `crust build`
  * writes them to `.crust/artifacts/completions/` and copies that directory into
- * the root package and each platform package's `bin/`. The binary name defaults
- * to the snapshot's `meta.name`, unless `options.binName` is set.
+ * the root package and each platform package's `bin/`. Scripts target the
+ * root command name as the installed binary.
  */
 // Configurable command names require an open command namespace.
 export const completion: ExtensionFactory<

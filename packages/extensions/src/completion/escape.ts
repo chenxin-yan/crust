@@ -4,7 +4,7 @@
  *
  * Why this exists: the completion templates inline a lot of CLI-author
  * provided text — command names, flag names, descriptions, choice values,
- * `binName`, `version` — into emitted shell scripts. Those scripts are
+ * the root name, `version` — into emitted shell scripts. Those scripts are
  * routinely installed via `eval "$(mycli completion bash)"` (it is the
  * documented install path), so any unsanitised interpolation is at
  * minimum a foot-gun and at worst arbitrary code execution at install
@@ -90,24 +90,24 @@ export function toShellIdent(name: string): string {
 }
 
 /**
- * Validate `binName` for use as the program name in generated scripts and
- * as a filesystem basename when `--output-dir` is set.
+ * Validate the root command name for use as the program name in generated
+ * scripts and as a filesystem basename when `--output-dir` is set.
  *
- * Stricter than {@link assertSafeIdentifier} because `binName` also
+ * Stricter than {@link assertSafeIdentifier} because the name also
  * becomes a filename and a `complete -F`/`compdef` argument that's
  * easier to break than option names.
  */
 export function assertSafeBinName(binName: string): string {
 	if (binName.length === 0) {
-		throw new Error("completion extension: binName must not be empty");
+		throw new Error("completion extension: root command name must not be empty");
 	}
 	if (binName.includes("/") || binName.includes("\\") || binName === ".." || binName === ".") {
 		throw new Error(
-			`completion extension: invalid binName ${JSON.stringify(binName)} — ` +
+			`completion extension: invalid root command name ${JSON.stringify(binName)} — ` +
 				`path separators and "."/".." are not allowed (used as a filename in --output-dir mode).`,
 		);
 	}
-	return assertSafeIdentifier(binName, "binName");
+	return assertSafeIdentifier(binName, "root command name");
 }
 
 // ── Free-form text sanitisation ────────────────────────────────────────────
