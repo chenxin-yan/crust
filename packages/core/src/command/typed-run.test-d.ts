@@ -399,3 +399,43 @@ function _typecheckNarrowsSiblingsAddedByOneVariadicAddToTheirOwnShapes() {
 	void addInput;
 	void listInput;
 }
+
+// rejects unknown input keys held in variables, where excess-property checks do not apply
+function _typecheckRejectsUnknownInputKeysHeldInVariables(cond: boolean) {
+	const app = new Crust("cli").command("build", (command) =>
+		command
+			.args({ name: "entry", type: "string" })
+			.flags({ name: "minify", type: "boolean" })
+			.action(() => {}),
+	);
+	const handle = app.at(["build"]);
+
+	const unknownFlag = { flags: { minify: true, nope: 1 } };
+	// @ts-expect-error -- an unknown flag beside a known one
+	void app.run(["build"], unknownFlag);
+	// @ts-expect-error -- the same input through a handle
+	void handle.run(unknownFlag);
+
+	const unknownArg = { args: { entry: "a", extra: "b" } };
+	// @ts-expect-error -- an unknown argument beside a known one
+	void app.run(["build"], unknownArg);
+
+	const unknownKey = { flags: { minify: true }, bogus: 1 };
+	// @ts-expect-error -- an unknown top-level input key
+	void app.run(["build"], unknownKey);
+	// @ts-expect-error -- the same input through a handle
+	void handle.run(unknownKey);
+
+	const valid = { args: { entry: "a" }, flags: { minify: true }, raw: ["--"] };
+	void app.run(["build"], valid);
+	void handle.run(valid, { stdout: () => {} });
+
+	// Union inputs must not be rejected by closing only one member.
+	for (const input of [{ flags: { minify: true } }, { args: { entry: "a" } }]) {
+		void app.run(["build"], input);
+		void handle.run(input);
+	}
+	void app.run(["build"], cond ? { flags: { minify: true } } : { args: { entry: "a" } });
+	// @ts-expect-error -- a fresh union member keeps excess-property checks
+	void app.run(["build"], cond ? { flags: { minify: true } } : { flags: { nope: 1 } });
+}
