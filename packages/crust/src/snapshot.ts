@@ -7,9 +7,8 @@ import { join, posix, resolve, win32 } from "node:path";
 import { text } from "node:stream/consumers";
 
 import { type BuildReport, defineExtensionId, type InvocationIO } from "@crustjs/core";
-import { type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
+import { BUILD_OUT_DIR_ENV, type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
-import { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
 import { isErrnoException } from "@crustjs/utils/error";
 import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
 import { isWithin } from "@crustjs/utils/path";
