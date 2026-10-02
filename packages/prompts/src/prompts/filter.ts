@@ -4,14 +4,14 @@
 
 import type { FuzzyFilterResult } from "../core/fuzzy.ts";
 import { fuzzyFilter, highlightMatches } from "../core/fuzzy.ts";
-import { refilter, setupListPrompt } from "../core/list.ts";
+import { handleQueryListKey, setupListPrompt } from "../core/list.ts";
 import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
 import { runPrompt, submit } from "../core/renderer.ts";
 import { CURSOR_INDICATOR, PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
-import { handleTextEdit, renderTextWithCursor } from "../core/text-edit.ts";
+import { renderTextWithCursor } from "../core/text-edit.ts";
 import type { Choice, ChoiceValue, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
-import { formatPromptLine, formatSubmitted, moveCursor, renderChoiceList } from "../core/utils.ts";
+import { formatPromptLine, formatSubmitted, renderChoiceList } from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -76,33 +76,7 @@ function createHandleKey<T>(
 			return state;
 		}
 
-		// Arrow keys — move list cursor with wrapping
-		if (key.name === "up" || key.name === "down") {
-			const delta = key.name === "up" ? -1 : 1;
-			const moved = moveCursor(
-				state.listCursor,
-				state.results.length,
-				delta,
-				state.scrollOffset,
-				maxVisible,
-			);
-			return { ...state, listCursor: moved.cursor, scrollOffset: moved.scrollOffset };
-		}
-
-		// Delegate text-editing keys to shared handler
-		const edit = handleTextEdit(key, state.query, state.cursorPos);
-		if (edit) {
-			const queryChanged = edit.text !== state.query;
-			const newState: FilterState<T> = {
-				...state,
-				query: edit.text,
-				cursorPos: edit.cursorPos,
-			};
-			// Re-filter only when the query text actually changed
-			return queryChanged ? refilter(newState, maxVisible) : newState;
-		}
-
-		return state;
+		return handleQueryListKey(key, state, maxVisible) ?? state;
 	};
 }
 

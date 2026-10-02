@@ -4,7 +4,7 @@
 
 import type { FuzzyFilterResult } from "../core/fuzzy.ts";
 import { fuzzyFilter, highlightMatches } from "../core/fuzzy.ts";
-import { refilter, setupListPrompt } from "../core/list.ts";
+import { handleQueryListKey, setupListPrompt } from "../core/list.ts";
 import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
 import { runPrompt, submit } from "../core/renderer.ts";
 import {
@@ -14,13 +14,12 @@ import {
 	PREFIX_SUBMITTED,
 	PREFIX_SYMBOL,
 } from "../core/symbols.ts";
-import { handleTextEdit, renderTextWithCursor } from "../core/text-edit.ts";
+import { renderTextWithCursor } from "../core/text-edit.ts";
 import type { Choice, ChoiceValue, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
 import {
 	formatPromptLine,
 	formatSubmitted,
-	moveCursor,
 	renderChoiceList,
 	validateSelection,
 } from "../core/utils.ts";
@@ -132,30 +131,8 @@ function createHandleKey<T>(
 			return { ...state, selected, error: null };
 		}
 
-		if (key.name === "up" || key.name === "down") {
-			const delta = key.name === "up" ? -1 : 1;
-			const moved = moveCursor(
-				state.listCursor,
-				state.results.length,
-				delta,
-				state.scrollOffset,
-				maxVisible,
-			);
-			return { ...state, listCursor: moved.cursor, scrollOffset: moved.scrollOffset, error: null };
-		}
-
-		const edit = handleTextEdit(key, state.query, state.cursorPos);
-		if (edit) {
-			const queryChanged = edit.text !== state.query;
-			const nextState: MultifilterState<T> = {
-				...state,
-				query: edit.text,
-				cursorPos: edit.cursorPos,
-			};
-			return queryChanged ? { ...refilter(nextState, maxVisible), error: null } : nextState;
-		}
-
-		return state;
+		const next = handleQueryListKey(key, state, maxVisible);
+		return next ? { ...next, error: null } : state;
 	};
 }
 
@@ -193,11 +170,10 @@ function renderMultifilter<T>(
 			maxVisible,
 			(result, resultIndex) => {
 				const choiceIdx = state.choices.indexOf(result.item);
-				const choice = choiceIdx === -1 ? undefined : state.choices[choiceIdx];
-				const checkbox =
-					choiceIdx !== -1 && state.selected.has(choiceIdx)
-						? theme.success(CHECKBOX_CHECKED)
-						: CHECKBOX_UNCHECKED;
+				const choice = state.choices[choiceIdx];
+				const checkbox = state.selected.has(choiceIdx)
+					? theme.success(CHECKBOX_CHECKED)
+					: CHECKBOX_UNCHECKED;
 				const label = highlightMatches(result.item.label, result.indices, theme);
 				const hintText = choice?.hint ? ` ${theme.hint(choice.hint)}` : "";
 				return resultIndex === state.listCursor
