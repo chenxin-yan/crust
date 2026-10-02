@@ -202,41 +202,6 @@ function buildStyleMethods(
 	return methods;
 }
 
-/**
- * Create a configured style instance with mode-aware styling functions.
- *
- * The returned instance provides the full set of modifier, foreground color,
- * and background color functions. In `"never"` mode, all functions return
- * plain text without ANSI codes. In `"always"` mode, ANSI codes are always
- * emitted. In `"auto"` mode, color methods respect `stdout.isTTY` and
- * `NO_COLOR`, non-color modifiers (bold, italic, etc.) follow TTY only,
- * and `FORCE_COLOR`, when set, decides unconditionally for both.
- *
- * @param options - Configuration options. Defaults to `{ mode: "auto" }`.
- * @returns A frozen {@link StyleInstance} with all styling functions.
- *
- * @example
- * ```ts
- * // Auto-detect terminal capabilities
- * const s = createStyle();
- * console.log(s.bold("hello"));
- *
- * // Force color output
- * const color = createStyle({ mode: "always" });
- * console.log(color.red("error"));
- * console.log(color.bold.red("critical"));
- *
- * // Disable all styling
- * const plain = createStyle({ mode: "never" });
- * console.log(plain.red("error")); // "error"
- *
- * // Deterministic testing
- * const test = createStyle({
- *   mode: "auto",
- *   overrides: { isTTY: true, noColor: undefined },
- * });
- * ```
- */
 function resolveStyleCapabilities(options?: StyleOptions): ResolvedStyleCapabilities {
 	const mode = options?.mode ?? "auto";
 	const modifiersEnabled = resolveModifierCapability(mode, options?.overrides);
@@ -305,6 +270,41 @@ function createStyleInstance(options: StyleOptions | undefined, runtime: boolean
 	return Object.freeze(instance);
 }
 
+/**
+ * Create a configured style instance with mode-aware styling functions.
+ *
+ * The returned instance provides the full set of modifier, foreground color,
+ * and background color functions. In `"never"` mode, all functions return
+ * plain text without ANSI codes. In `"always"` mode, ANSI codes are always
+ * emitted. In `"auto"` mode, color methods respect `stdout.isTTY` and
+ * `NO_COLOR`, non-color modifiers (bold, italic, etc.) follow TTY only,
+ * and `FORCE_COLOR`, when set, decides unconditionally for both.
+ *
+ * @param options - Configuration options. Defaults to `{ mode: "auto" }`.
+ * @returns A frozen {@link StyleInstance} with all styling functions.
+ *
+ * @example
+ * ```ts
+ * // Auto-detect terminal capabilities
+ * const s = createStyle();
+ * console.log(s.bold("hello"));
+ *
+ * // Force color output
+ * const color = createStyle({ mode: "always" });
+ * console.log(color.red("error"));
+ * console.log(color.bold.red("critical"));
+ *
+ * // Disable all styling
+ * const plain = createStyle({ mode: "never" });
+ * console.log(plain.red("error")); // "error"
+ *
+ * // Deterministic testing
+ * const test = createStyle({
+ *   mode: "auto",
+ *   overrides: { isTTY: true, noColor: undefined },
+ * });
+ * ```
+ */
 export function createStyle(options?: StyleOptions): StyleInstance {
 	return createStyleInstance(options, false);
 }
