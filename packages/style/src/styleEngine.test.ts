@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 
 import { styleMethodPairs } from "./ansiCodes.ts";
 import {
@@ -21,11 +21,9 @@ import {
 	yellow,
 } from "./runtimeExports.ts";
 import { applyStyle } from "./styleEngine.ts";
-import { setEnv, snapshotEnv } from "./testEnv.ts";
 
-const restoreEnv = snapshotEnv("FORCE_COLOR");
-beforeAll(() => setEnv("FORCE_COLOR", "3"));
-afterAll(restoreEnv);
+beforeAll(() => vi.stubEnv("FORCE_COLOR", "3"));
+afterAll(() => vi.unstubAllEnvs());
 
 // ────────────────────────────────────────────────────────────────────────────
 // applyStyle — basic application

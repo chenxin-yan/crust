@@ -1,32 +1,26 @@
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { resolveColorDepth } from "./capability.ts";
 import { createStyle, style } from "./createStyle.ts";
 import { bold, red } from "./index.ts";
-import { snapshotEnv } from "./testEnv.ts";
 
-const restoreEnvVars = snapshotEnv("NO_COLOR", "FORCE_COLOR", "COLORTERM", "TERM");
 const originalStdoutIsTTY = process.stdout.isTTY;
 
-/** Restore mutable runtime env (`NO_COLOR`, `FORCE_COLOR`, `isTTY`). */
-function restoreRuntimeEnv() {
-	restoreEnvVars();
+beforeEach(() => {
+	// Tests exercise the auto ladder; ambient NO_COLOR/FORCE_COLOR (e.g. CI
+	// runners) must not leak in. afterEach still restores the ambient values.
+	vi.stubEnv("NO_COLOR", undefined);
+	vi.stubEnv("FORCE_COLOR", undefined);
+	vi.stubEnv("COLORTERM", undefined);
+	vi.stubEnv("TERM", undefined);
+});
+afterEach(() => {
+	vi.unstubAllEnvs();
 	Object.defineProperty(process.stdout, "isTTY", {
 		configurable: true,
 		value: originalStdoutIsTTY,
 	});
-}
-
-beforeEach(() => {
-	restoreRuntimeEnv();
-	// Tests exercise the auto ladder; ambient NO_COLOR/FORCE_COLOR (e.g. CI
-	// runners) must not leak in. afterEach still restores the ambient values.
-	delete process.env.NO_COLOR;
-	delete process.env.FORCE_COLOR;
-	delete process.env.COLORTERM;
-	delete process.env.TERM;
 });
-afterEach(restoreRuntimeEnv);
 
 // ────────────────────────────────────────────────────────────────────────────
 // resolveColorDepth — depth-tier resolution
@@ -58,7 +52,7 @@ describe("resolveColorDepth", () => {
 
 	describe("`auto` mode", () => {
 		it("falls back to the environment for each omitted override", () => {
-			process.env.COLORTERM = "truecolor";
+			vi.stubEnv("COLORTERM", "truecolor");
 			expect(resolveColorDepth("auto", { isTTY: true })).toBe("truecolor");
 		});
 
@@ -527,7 +521,7 @@ describe("createStyle — dynamic colors auto mode with truecolor overrides", ()
 
 describe("runtime-aware default exports", () => {
 	it("keeps modifiers enabled when NO_COLOR is set", () => {
-		process.env.NO_COLOR = "1";
+		vi.stubEnv("NO_COLOR", "1");
 		Object.defineProperty(process.stdout, "isTTY", {
 			configurable: true,
 			value: true,
@@ -541,8 +535,8 @@ describe("runtime-aware default exports", () => {
 	});
 
 	it("FORCE_COLOR forces colors on — overrides NO_COLOR and non-TTY", () => {
-		process.env.NO_COLOR = "1";
-		process.env.FORCE_COLOR = "3";
+		vi.stubEnv("NO_COLOR", "1");
+		vi.stubEnv("FORCE_COLOR", "3");
 		Object.defineProperty(process.stdout, "isTTY", {
 			configurable: true,
 			value: false,
@@ -553,7 +547,7 @@ describe("runtime-aware default exports", () => {
 	});
 
 	it("FORCE_COLOR=0 forces all ANSI off — overrides TTY", () => {
-		process.env.FORCE_COLOR = "0";
+		vi.stubEnv("FORCE_COLOR", "0");
 		Object.defineProperty(process.stdout, "isTTY", {
 			configurable: true,
 			value: true,
@@ -571,45 +565,28 @@ describe("runtime-aware default exports", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("runtime style — TERM/COLORTERM changes", () => {
-	const originalTerm = process.env.TERM;
-	const originalColorTerm = process.env.COLORTERM;
-
-	function restoreVar(name: "TERM" | "COLORTERM", original: string | undefined) {
-		if (original === undefined) {
-			delete process.env[name];
-		} else {
-			process.env[name] = original;
-		}
-	}
-
 	beforeEach(() => {
-		delete process.env.NO_COLOR;
 		Object.defineProperty(process.stdout, "isTTY", {
 			configurable: true,
 			value: true,
 		});
 	});
 
-	afterEach(() => {
-		restoreVar("TERM", originalTerm);
-		restoreVar("COLORTERM", originalColorTerm);
-	});
-
 	it("re-resolves colorDepth when TERM changes", () => {
-		delete process.env.COLORTERM;
-		process.env.TERM = "xterm-16color";
+		vi.stubEnv("COLORTERM", undefined);
+		vi.stubEnv("TERM", "xterm-16color");
 		expect(style.colorDepth).toBe("16");
 
-		process.env.TERM = "xterm-256color";
+		vi.stubEnv("TERM", "xterm-256color");
 		expect(style.colorDepth).toBe("256");
 	});
 
 	it("re-resolves colorDepth when COLORTERM changes", () => {
-		process.env.TERM = "xterm-256color";
-		delete process.env.COLORTERM;
+		vi.stubEnv("TERM", "xterm-256color");
+		vi.stubEnv("COLORTERM", undefined);
 		expect(style.colorDepth).toBe("256");
 
-		process.env.COLORTERM = "truecolor";
+		vi.stubEnv("COLORTERM", "truecolor");
 		expect(style.colorDepth).toBe("truecolor");
 	});
 });

@@ -1,14 +1,12 @@
 import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { setEnv, snapshotEnv } from "../../style/src/testEnv.ts";
 import { type ProgressSink, spinner, withProgressSink } from "./spinner.ts";
 import { createFakeSink } from "./test-helpers.ts";
 
 // Sink TTY controls animation, not the default theme's process-wide ANSI styling.
-const restoreEnv = snapshotEnv("FORCE_COLOR");
-beforeAll(() => setEnv("FORCE_COLOR", "0"));
-afterAll(restoreEnv);
+beforeAll(() => vi.stubEnv("FORCE_COLOR", "0"));
+afterAll(() => vi.unstubAllEnvs());
 
 let sink: ProgressSink;
 let writes: string[];

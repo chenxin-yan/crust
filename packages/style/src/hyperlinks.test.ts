@@ -1,8 +1,7 @@
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { linkCode } from "./hyperlinks.ts";
 import { createStyle, link } from "./index.ts";
-import { setEnv, snapshotEnv } from "./testEnv.ts";
 
 describe("hyperlinks", () => {
 	it("creates OSC 8 link pairs", () => {
@@ -77,21 +76,20 @@ describe("createStyle().link", () => {
 });
 
 describe("runtime link export", () => {
-	const restoreEnv = snapshotEnv("FORCE_COLOR", "NO_COLOR");
-	afterEach(restoreEnv);
+	afterEach(() => vi.unstubAllEnvs());
 
 	it("still emits hyperlinks under NO_COLOR (colors-only switch)", () => {
 		// no-color.org: NO_COLOR suppresses colors; modifiers + hyperlinks
 		// survive. FORCE_COLOR=3 keeps emission on for this non-TTY test.
-		setEnv("FORCE_COLOR", "3");
-		setEnv("NO_COLOR", "1");
+		vi.stubEnv("FORCE_COLOR", "3");
+		vi.stubEnv("NO_COLOR", "1");
 		expect(link("Crust", "https://crustjs.com")).toBe(
 			"\x1b]8;;https://crustjs.com\x1b\\Crust\x1b]8;;\x1b\\",
 		);
 	});
 
 	it("suppresses hyperlinks under FORCE_COLOR=0 (all-ANSI switch)", () => {
-		setEnv("FORCE_COLOR", "0");
+		vi.stubEnv("FORCE_COLOR", "0");
 		expect(link("Crust", "https://crustjs.com")).toBe("Crust");
 	});
 });

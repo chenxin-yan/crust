@@ -1,12 +1,10 @@
-import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 
 import { bold } from "../runtimeExports.ts";
-import { setEnv, snapshotEnv } from "../testEnv.ts";
 import { center, padEnd, padStart } from "./pad.ts";
 
-const restoreEnv = snapshotEnv("FORCE_COLOR");
-beforeAll(() => setEnv("FORCE_COLOR", "3"));
-afterAll(restoreEnv);
+beforeAll(() => vi.stubEnv("FORCE_COLOR", "3"));
+afterAll(() => vi.unstubAllEnvs());
 
 // ────────────────────────────────────────────────────────────────────────────
 // padStart — plain text

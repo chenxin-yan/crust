@@ -10,12 +10,11 @@
 //   5. Error messages are stable (snapshotted) — refactors must update
 //      both the message and these snapshots in the same change.
 
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { linkCode } from "./hyperlinks.ts";
 import { bold, createStyle, fg, red, style } from "./index.ts";
 import { applyStyle } from "./styleEngine.ts";
-import { setEnv, snapshotEnv } from "./testEnv.ts";
 
 const always = createStyle({ mode: "always" });
 
@@ -208,23 +207,22 @@ describe("Error messages — locked via snapshots", () => {
 // chain methods, fg/bg, AnsiPair shape).
 
 describe("top-level chainables — full surface", () => {
-	const restoreEnv = snapshotEnv("FORCE_COLOR");
-	afterEach(restoreEnv);
+	afterEach(() => vi.unstubAllEnvs());
 
 	it("top-level tagged-template interleaves interpolations", () => {
-		setEnv("FORCE_COLOR", "3");
+		vi.stubEnv("FORCE_COLOR", "3");
 		expect(bold`hello ${42}!`).toBe("\x1b[1mhello 42!\x1b[22m");
 	});
 
 	it("top-level dynamic colors support direct and chain-root calls", () => {
-		setEnv("FORCE_COLOR", "3");
+		vi.stubEnv("FORCE_COLOR", "3");
 		expect(fg("x", "#ff0000")).toBe("\x1b[38;2;255;0;0mx\x1b[39m");
 		expect(fg("#ff0000")("x")).toBe("\x1b[38;2;255;0;0mx\x1b[39m");
 		expect(bold.fg("#ff0000")("x")).toBe("\x1b[1m\x1b[38;2;255;0;0mx\x1b[39m\x1b[22m");
 	});
 
 	it("top-level chain `bold.red.bgYellow('hi')` composes", () => {
-		setEnv("FORCE_COLOR", "3");
+		vi.stubEnv("FORCE_COLOR", "3");
 		expect(bold.red.bgYellow("hi")).toBe("\x1b[1m\x1b[31m\x1b[43mhi\x1b[49m\x1b[39m\x1b[22m");
 	});
 });
@@ -236,38 +234,37 @@ describe("top-level chainables — full surface", () => {
 // Runtime facade chains re-resolve capabilities when called.
 
 describe("environment changes — dynamic chains", () => {
-	const restoreEnv = snapshotEnv("FORCE_COLOR");
-	afterEach(restoreEnv);
+	afterEach(() => vi.unstubAllEnvs());
 
 	it("top-level `bold` re-resolves on every call after an env flip", () => {
-		setEnv("FORCE_COLOR", "3");
+		vi.stubEnv("FORCE_COLOR", "3");
 		const captured = bold;
 		expect(captured("x")).toBe("\x1b[1mx\x1b[22m");
-		setEnv("FORCE_COLOR", "0");
+		vi.stubEnv("FORCE_COLOR", "0");
 		// FORCE_COLOR=0 is the all-ANSI-off switch — captured ref follows.
 		expect(captured("x")).toBe("x");
 	});
 
 	it("`style.bold` (forwarder) re-resolves after an env flip", () => {
-		setEnv("FORCE_COLOR", "3");
+		vi.stubEnv("FORCE_COLOR", "3");
 		const captured = style.bold;
-		setEnv("FORCE_COLOR", "0");
+		vi.stubEnv("FORCE_COLOR", "0");
 		expect(captured.red("x")).toBe("x");
 	});
 
 	it("stored sub-chains re-resolve after an env flip", () => {
-		setEnv("FORCE_COLOR", "3");
+		vi.stubEnv("FORCE_COLOR", "3");
 		const captured = style.bold.red;
 		expect(captured("x")).toBe("\x1b[1m\x1b[31mx\x1b[39m\x1b[22m");
-		setEnv("FORCE_COLOR", "0");
+		vi.stubEnv("FORCE_COLOR", "0");
 		expect(captured("x")).toBe("x");
 	});
 
 	it("stored dynamic-color chains re-resolve color depth", () => {
-		setEnv("FORCE_COLOR", "3");
+		vi.stubEnv("FORCE_COLOR", "3");
 		const captured = style.bold.fg("#ff0000");
 		expect(captured("x")).toBe("\x1b[1m\x1b[38;2;255;0;0mx\x1b[39m\x1b[22m");
-		setEnv("FORCE_COLOR", "2");
+		vi.stubEnv("FORCE_COLOR", "2");
 		expect(captured("x")).toBe("\x1b[1m\x1b[38;5;196mx\x1b[39m\x1b[22m");
 	});
 });

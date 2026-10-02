@@ -1,13 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 
-import { setEnv, snapshotEnv } from "../../style/src/testEnv.ts";
 import { progress as createProgressBar } from "./progress.ts";
 import { withProgressSink } from "./spinner.ts";
 import { createFakeSink } from "./test-helpers.ts";
 
-const restoreEnv = snapshotEnv("FORCE_COLOR");
-beforeAll(() => setEnv("FORCE_COLOR", "0"));
-afterAll(restoreEnv);
+beforeAll(() => vi.stubEnv("FORCE_COLOR", "0"));
+afterAll(() => vi.unstubAllEnvs());
 
 describe("progress — determinate", () => {
 	it("renders current/total alongside the message", () => {
