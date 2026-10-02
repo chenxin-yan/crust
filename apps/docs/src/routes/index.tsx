@@ -43,12 +43,12 @@ export const Route = createFileRoute("/")({
 	},
 });
 
-const MODULES: Array<{
-	pkg: string;
-	desc: string;
-	doc?: string;
-	upcoming?: boolean;
-}> = [
+type LandingModule =
+	| { pkg: string; desc: string; doc: string; upcoming?: never }
+	| { pkg: string; desc: string; doc?: never; upcoming: true };
+
+// site.test.ts checks that every module page has a linked entry.
+export const MODULES: readonly LandingModule[] = [
 	{
 		pkg: "@crustjs/core",
 		desc: "Commands, Contexts, Extensions, execution",
@@ -66,7 +66,7 @@ const MODULES: Array<{
 	},
 	{
 		pkg: "@crustjs/create",
-		desc: "Scaffolding library for create-xx tools",
+		desc: "Scaffolding library for create-* tools",
 		doc: "modules/create",
 	},
 	{
@@ -83,6 +83,11 @@ const MODULES: Array<{
 		pkg: "@crustjs/effect",
 		desc: "Effect.ts adaptor",
 		doc: "modules/effect",
+	},
+	{
+		pkg: "@crustjs/env",
+		desc: "Typed, validated environment variables",
+		doc: "modules/env",
 	},
 	{
 		pkg: "@crustjs/prompts",
