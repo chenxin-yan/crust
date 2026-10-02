@@ -2,6 +2,7 @@ import {
 	chmodSync,
 	existsSync,
 	mkdirSync,
+	mkdtempSync,
 	readdirSync,
 	readFileSync,
 	rmSync,
@@ -27,8 +28,7 @@ const tempRoots: string[] = [];
 const templateScriptKeys = ["build", "check:types", "dev", "release", "start"];
 
 function makeTempRoot(label: string): string {
-	const dir = join(tmpdir(), `${label}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-	mkdirSync(dir, { recursive: true });
+	const dir = mkdtempSync(join(tmpdir(), `${label}-`));
 	tempRoots.push(dir);
 	return dir;
 }
