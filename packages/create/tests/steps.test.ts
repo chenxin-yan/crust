@@ -1,9 +1,9 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { runSteps } from "../src/steps.ts";
 
@@ -14,14 +14,12 @@ import { runSteps } from "../src/steps.ts";
 let tempDir: string;
 
 beforeEach(() => {
-	tempDir = join(tmpdir(), `crust-steps-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-	mkdirSync(tempDir, { recursive: true });
+	tempDir = mkdtempSync(join(tmpdir(), "crust-steps-test-"));
 });
 
 afterEach(() => {
-	if (existsSync(tempDir)) {
-		rmSync(tempDir, { recursive: true, force: true });
-	}
+	rmSync(tempDir, { recursive: true, force: true });
+	vi.unstubAllEnvs();
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -78,30 +76,18 @@ describe("runSteps", () => {
 				writeFileSync(join(binDir, "pnpm"), '#!/bin/sh\nprintf "%s\\n" "$@" > install-ran\n', {
 					mode: 0o755,
 				});
-				const originalPath = process.env.PATH;
-				process.env.PATH = binDir;
-				try {
-					await runSteps([{ type: "install" }], tempDir);
-					expect(readFileSync(join(tempDir, "install-ran"), "utf-8")).toBe("install\n");
-				} finally {
-					if (originalPath === undefined) delete process.env.PATH;
-					else process.env.PATH = originalPath;
-				}
+				vi.stubEnv("PATH", binDir);
+				await runSteps([{ type: "install" }], tempDir);
+				expect(readFileSync(join(tempDir, "install-ran"), "utf-8")).toBe("install\n");
 			},
 		);
 
 		it("reports when the detected package manager is unavailable", async () => {
 			writeFileSync(join(tempDir, "pnpm-lock.yaml"), "");
-			const originalPath = process.env.PATH;
-			process.env.PATH = tempDir;
-
-			try {
-				await expect(runSteps([{ type: "install" }], tempDir)).rejects.toThrow(
-					'Package manager "pnpm" was not found on PATH. Install pnpm and try again.',
-				);
-			} finally {
-				process.env.PATH = originalPath;
-			}
+			vi.stubEnv("PATH", tempDir);
+			await expect(runSteps([{ type: "install" }], tempDir)).rejects.toThrow(
+				'Package manager "pnpm" was not found on PATH. Install pnpm and try again.',
+			);
 		});
 	});
 

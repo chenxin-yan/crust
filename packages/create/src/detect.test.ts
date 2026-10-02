@@ -1,9 +1,9 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { detectPackageManager, isInGitRepo } from "./detect.ts";
 
@@ -13,26 +13,16 @@ import { detectPackageManager, isInGitRepo } from "./detect.ts";
 
 describe("detectPackageManager", () => {
 	let tempDir: string;
-	let originalUserAgent: string | undefined;
 
 	beforeEach(() => {
-		tempDir = join(
-			tmpdir(),
-			`crust-utils-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-		);
-		mkdirSync(tempDir, { recursive: true });
-		originalUserAgent = process.env.npm_config_user_agent;
+		tempDir = mkdtempSync(join(tmpdir(), "crust-detect-test-"));
 		// Clear the env var so lockfile detection takes priority
-		delete process.env.npm_config_user_agent;
+		vi.stubEnv("npm_config_user_agent", undefined);
 	});
 
 	afterEach(() => {
 		rmSync(tempDir, { recursive: true, force: true });
-		if (originalUserAgent !== undefined) {
-			process.env.npm_config_user_agent = originalUserAgent;
-		} else {
-			delete process.env.npm_config_user_agent;
-		}
+		vi.unstubAllEnvs();
 	});
 
 	it("detects bun from bun.lock", () => {
@@ -56,7 +46,7 @@ describe("detectPackageManager", () => {
 	});
 
 	it("detects npm from package-lock.json ahead of a conflicting user agent", () => {
-		process.env.npm_config_user_agent = "bun/1.0.0";
+		vi.stubEnv("npm_config_user_agent", "bun/1.0.0");
 		writeFileSync(join(tempDir, "package-lock.json"), "");
 		expect(detectPackageManager(tempDir)).toBe("npm");
 	});
@@ -70,7 +60,7 @@ describe("detectPackageManager", () => {
 	});
 
 	it("prefers pnpm over yarn and npm when bun is absent", () => {
-		process.env.npm_config_user_agent = "bun/1.0.0";
+		vi.stubEnv("npm_config_user_agent", "bun/1.0.0");
 		writeFileSync(join(tempDir, "pnpm-lock.yaml"), "");
 		writeFileSync(join(tempDir, "yarn.lock"), "");
 		writeFileSync(join(tempDir, "package-lock.json"), "");
@@ -78,17 +68,17 @@ describe("detectPackageManager", () => {
 	});
 
 	it("falls back to npm_config_user_agent for bun", () => {
-		process.env.npm_config_user_agent = "bun/1.0.0";
+		vi.stubEnv("npm_config_user_agent", "bun/1.0.0");
 		expect(detectPackageManager(tempDir)).toBe("bun");
 	});
 
 	it("falls back to npm_config_user_agent for pnpm", () => {
-		process.env.npm_config_user_agent = "pnpm/8.0.0 npm/? node/v20.0.0";
+		vi.stubEnv("npm_config_user_agent", "pnpm/8.0.0 npm/? node/v20.0.0");
 		expect(detectPackageManager(tempDir)).toBe("pnpm");
 	});
 
 	it("falls back to npm_config_user_agent for yarn", () => {
-		process.env.npm_config_user_agent = "yarn/4.0.0 npm/? node/v20.0.0";
+		vi.stubEnv("npm_config_user_agent", "yarn/4.0.0 npm/? node/v20.0.0");
 		expect(detectPackageManager(tempDir)).toBe("yarn");
 	});
 
@@ -108,22 +98,19 @@ describe("isInGitRepo", () => {
 	});
 
 	it("returns true for a subdirectory of a git repo", () => {
-		const subDir = join(
-			tmpdir(),
-			`crust-git-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-		);
-		mkdirSync(subDir, { recursive: true });
-		// Init a repo, then check a subdirectory
-		spawnSync("git", ["init"], {
-			cwd: subDir,
-			stdio: "ignore",
-			timeout: 10_000,
-		});
-		const nested = join(subDir, "nested");
-		mkdirSync(nested, { recursive: true });
+		const repoDir = mkdtempSync(join(tmpdir(), "crust-git-test-"));
+		try {
+			spawnSync("git", ["init"], {
+				cwd: repoDir,
+				stdio: "ignore",
+				timeout: 10_000,
+			});
+			const nested = join(repoDir, "nested");
+			mkdirSync(nested);
 
-		expect(isInGitRepo(nested)).toBe(true);
-
-		rmSync(subDir, { recursive: true, force: true });
+			expect(isInGitRepo(nested)).toBe(true);
+		} finally {
+			rmSync(repoDir, { recursive: true, force: true });
+		}
 	});
 });
