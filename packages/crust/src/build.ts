@@ -14,7 +14,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import type { BuildReport, InvocationIO } from "@crustjs/core";
 import { dim } from "@crustjs/style";
 import { isErrnoException } from "@crustjs/utils/error";
-import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
+import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
 import { isWithin } from "@crustjs/utils/path";
 
 import { type ArtifactOwner, mergeEntryArtifacts } from "./artifacts.ts";
@@ -62,19 +62,27 @@ import {
 	resolveTargets,
 } from "./targets.ts";
 
-export function readUserPackageJson(cwd: string): JsonValue | undefined {
+function readUserPackageJson(cwd: string): JsonObject {
 	const packageJsonPath = join(cwd, "package.json");
-	if (!existsSync(packageJsonPath)) return undefined;
+	if (!existsSync(packageJsonPath)) {
+		throw new Error(
+			`package.json not found in ${cwd}\n  crust build requires a package.json with name and version fields.`,
+		);
+	}
 
+	let packageJson: JsonValue;
 	try {
-		// SAFETY: JSON.parse returns only JSON-compatible values for a valid JSON document.
-		return JSON.parse(readFileSync(packageJsonPath, "utf8")) as JsonValue;
+		packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
 	} catch (error) {
 		throw new Error(
 			`Failed to parse package.json in ${cwd}: ${error instanceof Error ? error.message : String(error)}`,
 			{ cause: error },
 		);
 	}
+	if (!isJsonObject(packageJson)) {
+		throw new Error(`package.json in ${cwd} must contain a JSON object.`);
+	}
+	return packageJson;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -115,8 +123,8 @@ function isStringArray(value: JsonValue): value is string[] {
 	return Array.isArray(value) && value.every(isString);
 }
 
-export function readCrustConfig(pkg: JsonValue | undefined): CrustConfig {
-	if (pkg === undefined || !isJsonObject(pkg) || pkg.crust === undefined) return {};
+export function readCrustConfig(pkg: JsonObject): CrustConfig {
+	if (pkg.crust === undefined) return {};
 	const crust = pkg.crust;
 	const allowed = `Allowed keys: ${CRUST_CONFIG_KEYS.join(", ")}`;
 	if (!isJsonObject(crust)) {
@@ -174,8 +182,7 @@ export function readCrustConfig(pkg: JsonValue | undefined): CrustConfig {
 	return config;
 }
 
-function hasDependency(pkg: JsonValue, name: string): boolean {
-	if (!isJsonObject(pkg)) return false;
+function hasDependency(pkg: JsonObject, name: string): boolean {
 	return [pkg.dependencies, pkg.devDependencies].some(
 		(deps) => deps !== undefined && isJsonObject(deps) && name in deps,
 	);
@@ -198,15 +205,11 @@ type ResolvedRuntime = { runtime: BuildRuntime; source: RuntimeSource };
  * `@types/bun`. Lockfiles say which package manager installed dependencies,
  * not which runtime runs the CLI, so they are not consulted.
  */
-function resolveBuildRuntime(
-	pkg: JsonValue | undefined,
-	config: CrustConfig,
-	cwd: string,
-): ResolvedRuntime {
+function resolveBuildRuntime(pkg: JsonObject, config: CrustConfig, cwd: string): ResolvedRuntime {
 	if (config.runtime !== undefined) return { runtime: config.runtime, source: "from package.json" };
 	const denoConfig = DENO_CONFIG_FILES.find((file) => existsSync(join(cwd, file)));
 	if (denoConfig) return { runtime: "deno", source: `inferred from ${denoConfig}` };
-	if (pkg !== undefined && hasDependency(pkg, "@types/node") && !hasDependency(pkg, "@types/bun")) {
+	if (hasDependency(pkg, "@types/node") && !hasDependency(pkg, "@types/bun")) {
 		return { runtime: "node", source: "inferred from @types/node" };
 	}
 	return { runtime: "bun", source: "default" };
@@ -305,12 +308,11 @@ function resolveEntryPath(cwd: string, command: string, source: string): string 
  * collide. Command names are compared case-insensitively, because `Tool` and
  * `tool` would be the same `bin/` file on a case-insensitive filesystem.
  */
-export function resolveBinEntries(cwd: string, pkg: JsonValue | undefined): BinEntry[] {
-	const packageJson = pkg !== undefined && isJsonObject(pkg) ? pkg : {};
-	const bin = packageJson.bin;
+export function resolveBinEntries(cwd: string, pkg: JsonObject): BinEntry[] {
+	const bin = pkg.bin;
 	let declared: Array<[command: string, source: JsonValue]>;
 	if (bin === undefined || isString(bin)) {
-		const name = packageJson.name;
+		const name = pkg.name;
 		if (name === undefined || !isString(name) || name === "") {
 			throw new Error(
 				`package.json is missing a name field.\n  Without an object bin, the unscoped package name is the command name, e.g. "bin": ${BIN_EXAMPLE}.`,

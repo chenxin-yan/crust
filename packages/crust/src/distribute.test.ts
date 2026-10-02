@@ -19,6 +19,7 @@ import {
 	type DistributeBuildPlan,
 	type Distribution,
 	type DistributionManifest,
+	type IdentifiedPackageJson,
 	runDistributeBuild,
 } from "./distribute.ts";
 import {
@@ -34,7 +35,7 @@ const io = { stdout: () => {}, stderr: () => {} };
 
 function createPlan(
 	cwd: string,
-	packageJson: JsonValue,
+	packageJson: IdentifiedPackageJson,
 	overrides: Partial<DistributeBuildPlan> = {},
 ): DistributeBuildPlan {
 	return {

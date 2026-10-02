@@ -1,4 +1,4 @@
-import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
+import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
 import { runProcess, which } from "@crustjs/utils/process";
 import satisfies from "semver/functions/satisfies.js";
 import validVersion from "semver/functions/valid.js";
@@ -189,9 +189,8 @@ export function isVersionRange(value: JsonValue): value is string {
  */
 export function assertCompilerSatisfiesEngines(
 	compiler: BuildCompiler,
-	userPackageJson: JsonValue | undefined,
+	userPackageJson: JsonObject,
 ): void {
-	if (userPackageJson === undefined || !isJsonObject(userPackageJson)) return;
 	const { engines } = userPackageJson;
 	if (engines === undefined) return;
 	if (!isJsonObject(engines)) {
@@ -224,7 +223,7 @@ export function assertCompilerSatisfiesEngines(
  */
 export async function resolveBinaryCompiler(
 	runtime: "bun" | "deno",
-	userPackageJson: JsonValue | undefined,
+	userPackageJson: JsonObject,
 	cwd: string,
 ): Promise<BuildCompiler> {
 	const runner = runtime === "bun" ? resolveBunBuildRunner() : resolveDenoBuildRunner();

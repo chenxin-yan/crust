@@ -171,7 +171,6 @@ describe("assertCompilerSatisfiesEngines", () => {
 		assertCompilerSatisfiesEngines(compiler, userPackageJson);
 
 	it.each([
-		["no package.json", undefined],
 		["no engines", { name: "cli" }],
 		["another runtime's engines only", { engines: { node: ">=99", deno: "not a range" } }],
 		["an exact match", { engines: { bun: "1.4.2" } }],
@@ -228,7 +227,7 @@ describe("resolveBinaryCompiler", () => {
 	it.skipIf(denoPath === null)(
 		"selects deno on PATH and validates its actual version",
 		async () => {
-			const compiler = await resolveBinaryCompiler("deno", undefined, process.cwd());
+			const compiler = await resolveBinaryCompiler("deno", {}, process.cwd());
 			expect(compiler.runner.command).toBe(denoPath);
 			await expect(
 				resolveBinaryCompiler("deno", { engines: { deno: `>${compiler.version}` } }, process.cwd()),
@@ -238,7 +237,7 @@ describe("resolveBinaryCompiler", () => {
 
 	it("reports a missing deno instead of falling back to another compiler", async () => {
 		await expect(
-			withoutBunOnPath(() => resolveBinaryCompiler("deno", undefined, process.cwd())),
+			withoutBunOnPath(() => resolveBinaryCompiler("deno", {}, process.cwd())),
 		).rejects.toThrow("Deno is required for the deno runtime but was not found on PATH.");
 	});
 });

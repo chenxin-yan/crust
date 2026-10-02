@@ -69,7 +69,7 @@ import { resolveBunBuildRunner } from ${JSON.stringify(join(src, "compilers.ts")
 import { execNodeBinaryBuild, resolveNodeBinaryCompiler } from ${JSON.stringify(join(src, "node-exe.ts"))};
 import { hostTarget, NODE_TARGETS } from ${JSON.stringify(join(src, "targets.ts"))};
 const [project, outfile] = process.argv.slice(2);
-const compiler = await resolveNodeBinaryCompiler(undefined, project);
+const compiler = await resolveNodeBinaryCompiler({}, project);
 await execNodeBinaryBuild(join(project, "src", "cli.ts"), outfile, true, hostTarget(NODE_TARGETS), [], project, compiler, resolveBunBuildRunner());
 console.log(JSON.stringify({ tsdown: compiler.backend.packageJsonPath, node: compiler.version }));
 `,

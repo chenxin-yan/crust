@@ -214,7 +214,7 @@ export async function resolveNodeExeBackend(
  * Pass it to {@link execNodeBinaryBuild} for every command and target.
  */
 export async function resolveNodeBinaryCompiler(
-	userPackageJson: JsonValue | undefined,
+	userPackageJson: JsonObject,
 	cwd: string,
 ): Promise<NodeBinaryCompiler> {
 	const runner = resolveNodeBuildRunner();

@@ -47,17 +47,7 @@ type PublishPackageMetadata = {
 	/** npm man field: paths to man pages, e.g. `./man/mycli.1` */
 	man?: string[];
 	bin?: Record<string, string>;
-	description?: string;
-	license?: string;
-	author?: JsonValue;
-	homepage?: string;
-	bugs?: JsonValue;
-	repository?: JsonValue;
-	keywords?: string[];
-	publishConfig?: Record<string, JsonValue>;
-	funding?: JsonValue;
-	engines?: Record<string, string>;
-};
+} & { [K in (typeof METADATA_KEYS)[number]]?: JsonValue };
 
 type RootPublishPackageJson = PublishPackageMetadata & {
 	/** Absent for a root-only package: npm treats `{}` and a missing field alike, but the manifest stays honest. */
@@ -80,17 +70,8 @@ type PlatformPublishPackageJson = PublishPackageMetadata & {
 	optionalDependencies?: never;
 };
 
-type UserPackageJson = Omit<PublishPackageMetadata, "bin" | "type"> & {
-	type?: "module" | "commonjs";
-	bin?: JsonValue;
-	exports?: JsonValue;
-	peerDependencies?: JsonValue;
-	peerDependenciesMeta?: JsonValue;
-	optionalDependencies?: Record<string, string>;
-	os?: [NpmOs];
-	cpu?: [NpmCpu];
-	libc?: [NpmLibc];
-};
+/** A package.json whose npm identity passed {@link validatePackageIdentity}; other fields are uninterpreted. */
+export type IdentifiedPackageJson = JsonObject & { name: string; version: string };
 
 /** Top-level directories and `man/` pages staged into the root package's `files`/`man` fields. */
 type StagingOptions = { artifactDirs: readonly string[]; manPages: readonly string[] };
@@ -101,7 +82,7 @@ type DistributionMetadata = {
 	/** Metadata shared by the root and every platform package. */
 	rootPackageJson: PublishPackageMetadata;
 	/** The source scope for included library files; generated CLI files always use ESM. */
-	sourceType: UserPackageJson["type"];
+	sourceType: JsonValue | undefined;
 	/** The user's `exports`, root package only; validated against the staged tree. */
 	exports?: JsonValue;
 	/** The user's `peerDependencies`/`peerDependenciesMeta`, root package only; publishable ranges. */
@@ -154,27 +135,12 @@ export type DistributionManifest = {
 	build?: Record<string, BuildReport>;
 };
 
-function readPackageJson(cwd: string, packageJson: JsonValue | undefined): UserPackageJson {
-	if (packageJson === undefined) {
-		throw new Error(
-			`package.json not found in ${cwd}\n  crust build requires a package.json with name and version fields.`,
-		);
-	}
-	if (!isJsonObject(packageJson)) {
-		throw new Error(`package.json in ${cwd} must contain a JSON object.`);
-	}
-
-	validatePackageIdentity(packageJson, "package.json");
-	// Optional npm metadata is copied without interpretation.
-	return packageJson;
-}
-
 /** Only identity is interpreted here; this is not a complete npm schema validator. */
 export function validatePackageIdentity(
-	value: JsonValue | undefined,
+	value: JsonValue,
 	source: string,
-): asserts value is JsonObject & { name: string; version: string } {
-	if (value === undefined || !isJsonObject(value)) {
+): asserts value is IdentifiedPackageJson {
+	if (!isJsonObject(value)) {
 		throw new Error(`${source} must contain a JSON object.`);
 	}
 	if (typeof value.name !== "string" || value.name.trim() === "") {
@@ -271,7 +237,7 @@ function hasNodeInvalidSegment(target: string): boolean {
 function validateStagedExports(
 	exports: JsonValue,
 	rootDir: string,
-	sourceType: UserPackageJson["type"],
+	sourceType: JsonValue | undefined,
 ): void {
 	const fail = (detail: string): never => {
 		throw new Error(
@@ -390,7 +356,7 @@ function buildDistributionPlatformPackageJson(
 	};
 }
 
-function pickRootMetadata(pkgJson: UserPackageJson): PublishPackageMetadata {
+function pickRootMetadata(pkgJson: IdentifiedPackageJson): PublishPackageMetadata {
 	const metadata: PublishPackageMetadata = {
 		name: pkgJson.name,
 		version: pkgJson.version,
@@ -399,7 +365,7 @@ function pickRootMetadata(pkgJson: UserPackageJson): PublishPackageMetadata {
 	for (const key of METADATA_KEYS) {
 		const value = pkgJson[key];
 		if (value !== undefined) {
-			Object.assign(metadata, { [key]: value });
+			metadata[key] = value;
 		}
 	}
 
@@ -414,11 +380,7 @@ function validatePackageNameLength(packageName: string): void {
 	}
 }
 
-function resolveDistributionMetadata(
-	cwd: string,
-	userPackageJson: JsonValue | undefined,
-): DistributionMetadata {
-	const pkgJson = readPackageJson(cwd, userPackageJson);
+function resolveDistributionMetadata(pkgJson: IdentifiedPackageJson): DistributionMetadata {
 	validatePackageNameLength(pkgJson.name);
 
 	return {
@@ -515,7 +477,7 @@ function writeDistributionManifest(
 /** `pkg` without `engines.node`, dropping `engines` once nothing else is left. */
 function omitNodeEngine(pkg: PublishPackageMetadata): PublishPackageMetadata {
 	const { engines, ...rest } = pkg;
-	if (engines?.node === undefined) return pkg;
+	if (engines === undefined || !isJsonObject(engines) || engines.node === undefined) return pkg;
 	const others = Object.entries(engines).filter(([runtime]) => runtime !== "node");
 	return others.length > 0 ? { ...rest, engines: Object.fromEntries(others) } : rest;
 }
@@ -562,7 +524,7 @@ export type DistributeBuildPlan = {
 	validate: boolean;
 	/** Where Extension build hooks write: `.crust/artifacts`. */
 	outDir: string;
-	userPackageJson: JsonValue | undefined;
+	userPackageJson: IdentifiedPackageJson;
 	/** Validated `crust.include` entries; directories staged like Extension artifacts. */
 	include: readonly string[];
 };
@@ -610,7 +572,7 @@ export async function runDistributeBuild<T extends string>(
 	io: InvocationIO,
 	build?: Record<string, BuildReport>,
 ): Promise<BuildArtifact[]> {
-	const sourceMetadata = resolveDistributionMetadata(plan.cwd, plan.userPackageJson);
+	const sourceMetadata = resolveDistributionMetadata(plan.userPackageJson);
 	const commands = plan.entries.map((entry) => entry.command);
 	const table = distribution.table;
 	// A Node binary embeds the Node that engines.node was checked against; its

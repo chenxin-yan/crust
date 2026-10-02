@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 
 import { Crust, defineExtensionId } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
-import type { JsonValue } from "@crustjs/utils/json";
+import type { JsonObject, JsonValue } from "@crustjs/utils/json";
 import { which } from "@crustjs/utils/process";
 import {
 	afterAll,
@@ -303,6 +303,17 @@ describe("planBuild", () => {
 		expect(() => planBuild(baseFlags, tmpDir)).toThrow(`Failed to parse package.json in ${tmpDir}`);
 	});
 
+	it("rejects a missing or non-object package.json before reading any field", () => {
+		rmSync(join(tmpDir, "package.json"));
+		expect(() => planBuild(binary, tmpDir)).toThrow(
+			`package.json not found in ${tmpDir}\n  crust build requires a package.json with name and version fields.`,
+		);
+		writeFileSync(join(tmpDir, "package.json"), "[]");
+		expect(() => planBuild(binary, tmpDir)).toThrow(
+			`package.json in ${tmpDir} must contain a JSON object.`,
+		);
+	});
+
 	const rejectedCases: Array<{
 		name: string;
 		crust: JsonValue;
@@ -460,7 +471,7 @@ describe("planBuild", () => {
 
 describe("resolveBinEntries", () => {
 	const tmpDir = mkdtempSync(join(tmpdir(), "crust-bin-entries-"));
-	const entries = (pkg: JsonValue | undefined) => resolveBinEntries(tmpDir, pkg);
+	const entries = (pkg: JsonObject) => resolveBinEntries(tmpDir, pkg);
 
 	beforeAll(() => {
 		mkdirSync(join(tmpDir, "src"), { recursive: true });
@@ -470,13 +481,7 @@ describe("resolveBinEntries", () => {
 	afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
 
 	it("requires a package name when bin is absent or a string", () => {
-		const nameless: Array<JsonValue | undefined> = [
-			undefined,
-			{},
-			{ name: "" },
-			{ name: 1 },
-			{ bin: "src/cli.ts" },
-		];
+		const nameless: JsonObject[] = [{}, { name: "" }, { name: 1 }, { bin: "src/cli.ts" }];
 		for (const pkg of nameless) {
 			expect(() => entries(pkg)).toThrow("package.json is missing a name field");
 		}
@@ -570,7 +575,6 @@ describe("resolveBinEntries", () => {
 
 describe("readCrustConfig", () => {
 	it("accepts the five documented keys and nothing else", () => {
-		expect(readCrustConfig(undefined)).toEqual({});
 		expect(readCrustConfig({ name: "x" })).toEqual({});
 		expect(
 			readCrustConfig({

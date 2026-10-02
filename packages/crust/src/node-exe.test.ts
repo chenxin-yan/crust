@@ -244,7 +244,7 @@ describe("Node binary compiler", () => {
 
 	it("reports a missing node instead of falling back to another runtime", async () => {
 		await expect(
-			withoutBunOnPath(() => resolveNodeBinaryCompiler(undefined, process.cwd())),
+			withoutBunOnPath(() => resolveNodeBinaryCompiler({}, process.cwd())),
 		).rejects.toThrow("Node is required for node standalone binaries but was not found on PATH.");
 	});
 });
