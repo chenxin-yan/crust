@@ -1,9 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { beforeAll, describe, expect, it } from "vite-plus/test";
+
+import { ensureDist } from "./helpers.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Declaration emission — a consumer with `declaration: true` must be able to
@@ -128,17 +130,8 @@ ${Array.from(
 let fixtureDir: string;
 
 beforeAll(() => {
-	// Declaration emission must be checked against dist, where types live in
-	// a private chunk. Never rebuild an existing dist here: sibling packages'
-	// tests import @crustjs/core from dist in parallel, and a rebuild races
-	// them. In `pnpm run test`, core's test:task depends on its build:task; this
-	// fallback only serves a direct `vp test` on a fresh checkout.
-	if (!existsSync(join(corePkg, "dist/index.d.ts"))) {
-		const build = spawnSync("bun", ["run", "build"], { cwd: corePkg, timeout: 120_000 });
-		if (build.status !== 0) {
-			throw new Error(`core build failed:\n${build.stdout.toString()}\n${build.stderr.toString()}`);
-		}
-	}
+	// Declaration emission must be checked against dist, where types live in a private chunk.
+	ensureDist();
 
 	fixtureDir = mkdtempSync(join(tmpdir(), "crust-dts-consumer-"));
 	// Consume like a real dependency (package.json exports map in effect),
