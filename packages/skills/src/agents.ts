@@ -68,7 +68,7 @@ const PROJECT_UNIVERSAL_SKILLS_DIR = join(".agents", "skills");
 
 function configHome(home: string): string {
 	const xdg = process.env.XDG_CONFIG_HOME?.trim();
-	return xdg && xdg.length > 0 ? xdg : join(home, ".config");
+	return xdg || join(home, ".config");
 }
 
 function universalGlobalSkillsDir(home: string): string {
