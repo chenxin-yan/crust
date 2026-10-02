@@ -815,6 +815,23 @@ describe("updateNotifier post-run hook", () => {
 			expect(received).toEqual([{ packageName: pkgName, packageManager: "pnpm" }]);
 		});
 
+		it("does not call updateCommand callbacks when no notice is shown", async () => {
+			let calls = 0;
+			mockRegistryResponse("1.0.0");
+
+			await runExtensionMiddleware({
+				currentVersion: "1.0.0",
+				packageName: uniquePackageName("callback-no-notice"),
+				updateCommand: () => {
+					calls++;
+					return "custom update";
+				},
+			});
+
+			expect(calls).toBe(0);
+			expect(getOutput()).toBe("");
+		});
+
 		it("persists and deduplicates with the built-in cache by default", async () => {
 			const pkgName = uniquePackageName("built-in-cache");
 			const stateHome = process.env.XDG_STATE_HOME as string;

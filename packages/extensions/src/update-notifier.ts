@@ -439,7 +439,22 @@ export const updateNotifier: ExtensionFactory<[options: UpdateNotifierOptions]> 
 			// so the next successful write repairs the file instead of permanently
 			// disabling the notifier.
 			const state = normalizeNotifierState(await cacheAdapter.read().catch(() => null));
-			const resolvedUpdateCommand = resolveUpdateCommand(packageName, updateCommand);
+			const notify = (latestVersion: string): boolean => {
+				if (
+					!isNewerVersion(resolvedCurrentVersion, latestVersion) ||
+					state.lastNotifiedVersion === latestVersion
+				) {
+					return false;
+				}
+				emitUpdateNotice(
+					resolvedCurrentVersion,
+					latestVersion,
+					resolveUpdateCommand(packageName, updateCommand),
+					updateDocsUrl,
+					context.stderr,
+				);
+				return true;
+			};
 
 			// ── Cache gate: skip network if within interval ──────────
 			const now = Date.now();
@@ -449,18 +464,7 @@ export const updateNotifier: ExtensionFactory<[options: UpdateNotifierOptions]> 
 			// treated as stale so the refetch rewrites lastCheckedAt.
 			if (cache !== false && elapsed >= 0 && elapsed < intervalMs) {
 				// Cache is still fresh — use cached version if available
-				if (
-					state.latestVersion &&
-					isNewerVersion(resolvedCurrentVersion, state.latestVersion) &&
-					state.lastNotifiedVersion !== state.latestVersion
-				) {
-					emitUpdateNotice(
-						resolvedCurrentVersion,
-						state.latestVersion,
-						resolvedUpdateCommand,
-						updateDocsUrl,
-						context.stderr,
-					);
+				if (state.latestVersion && notify(state.latestVersion)) {
 					await cacheAdapter.write({
 						...state,
 						lastNotifiedVersion: state.latestVersion,
@@ -489,19 +493,7 @@ export const updateNotifier: ExtensionFactory<[options: UpdateNotifierOptions]> 
 			};
 
 			// ── Emit notice if newer and not already notified ─────────
-			if (
-				isNewerVersion(resolvedCurrentVersion, latestVersion) &&
-				state.lastNotifiedVersion !== latestVersion
-			) {
-				emitUpdateNotice(
-					resolvedCurrentVersion,
-					latestVersion,
-					resolvedUpdateCommand,
-					updateDocsUrl,
-					context.stderr,
-				);
-				nextState.lastNotifiedVersion = latestVersion;
-			}
+			if (notify(latestVersion)) nextState.lastNotifiedVersion = latestVersion;
 
 			await cacheAdapter.write(nextState);
 		} catch {
