@@ -645,6 +645,20 @@ function dedupeExtensions(extensions: readonly ExtensionData[]): ExtensionData[]
 	return extensions.filter((e, i) => extensions.findLastIndex((x) => x.id === e.id) === i);
 }
 
+/** Shared runtime body of `Crust.run` and `CommandHandle.run`. */
+async function runAt(
+	node: CommandNode,
+	path: readonly string[],
+	args: readonly unknown[],
+): Promise<RunOutcome<unknown>> {
+	// SAFETY: the public overloads constrain structured input to this runtime value union.
+	const input = (args[0] ?? {}) as RunInputPayload;
+	// SAFETY: the public overloads constrain the second argument to invocation options.
+	const options = args[1] as InvocationOptions | undefined;
+	// Programmatic calls capture failures and never change process status.
+	return await runInvocation(node, { path, input }, options, materializeCommandDefinition);
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Crust — Chainable builder class
 // ────────────────────────────────────────────────────────────────────────────
@@ -1586,17 +1600,7 @@ export class Crust<
 			: readonly [invalidInput: never]
 	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
 	async run(path: readonly string[], ...args: readonly unknown[]): Promise<RunOutcome<unknown>> {
-		// SAFETY: the public overloads constrain structured input to this runtime value union.
-		const structuredInput = (args[0] ?? {}) as RunInputPayload;
-		// SAFETY: the public overloads constrain the second argument to invocation options.
-		const options = args[1] as InvocationOptions | undefined;
-		// Programmatic calls capture failures and never change process status.
-		return await runInvocation(
-			this._node,
-			{ path, input: structuredInput },
-			options,
-			materializeCommandDefinition,
-		);
+		return await runAt(this._node, path, args);
 	}
 
 	/**
@@ -1622,16 +1626,7 @@ export class Crust<
 		return {
 			path: boundPath,
 			async run(...args: readonly unknown[]): Promise<RunOutcome<unknown>> {
-				// SAFETY: the public overloads constrain structured input to this runtime value union.
-				const structuredInput = (args[0] ?? {}) as RunInputPayload;
-				// SAFETY: the public overloads constrain the second argument to invocation options.
-				const options = args[1] as InvocationOptions | undefined;
-				return await runInvocation(
-					node,
-					{ path: boundPath, input: structuredInput },
-					options,
-					materializeCommandDefinition,
-				);
+				return await runAt(node, boundPath, args);
 			},
 		};
 	}
