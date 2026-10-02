@@ -1,6 +1,7 @@
-import type { AnyCrust, RunOutcome } from "../src/command/crust.ts";
+import type { AnyCrust } from "../src/command/crust.ts";
 import type { CommandAction, CommandNode } from "../src/command/node.ts";
 import { createCommandNode, registerFlag } from "../src/command/node.ts";
+import type { RunOutcome } from "../src/command/typed-run.ts";
 import type { ArgsDef, CommandMeta, FlagsDef } from "../src/types.ts";
 
 export type Expect<T extends true> = T;

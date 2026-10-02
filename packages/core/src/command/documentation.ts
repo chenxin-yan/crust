@@ -1,6 +1,6 @@
 import { isListed } from "../sections.ts";
 import type { CommandSection, DeclaredDefault } from "../types.ts";
-import type { CommandSnapshot, FlagSnapshot } from "./snapshot.ts";
+import type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "./snapshot.ts";
 
 function isNonFiniteNumber(value: DeclaredDefault): value is number {
 	return typeof value === "number" && !Number.isFinite(value);
@@ -48,7 +48,7 @@ export interface DocumentationArg {
 	 */
 	readonly token: string;
 	/** Value type (`"string"`, `"number"`, …); `undefined` for schema-backed args. */
-	readonly type?: CommandSnapshot["args"][number]["type"];
+	readonly type?: ArgSnapshot["type"];
 	/** Human-readable description from the arg definition. */
 	readonly description?: string;
 	/** `true` when parsing fails if the argument is missing. */
@@ -157,7 +157,7 @@ export interface CommandDocumentation {
 	readonly children: readonly CommandDocumentation[];
 }
 
-function argToken(arg: CommandSnapshot["args"][number]): string {
+function argToken(arg: ArgSnapshot): string {
 	const name = arg.variadic ? `${arg.name}...` : arg.name;
 	return arg.required ? `<${name}>` : `[${name}]`;
 }
@@ -187,7 +187,11 @@ function documentationFlags(flags: CommandSnapshot["flags"]): readonly Documenta
 	});
 }
 
-function buildNode(command: CommandSnapshot, path: readonly string[]): CommandDocumentation {
+/** Build the presentation-neutral documentation model for a full command tree. */
+export function buildCommandDocumentation(
+	command: CommandSnapshot,
+	path: readonly string[] = [command.meta.name],
+): CommandDocumentation {
 	const args = command.args.map((arg) =>
 		Object.freeze({
 			...arg,
@@ -197,7 +201,7 @@ function buildNode(command: CommandSnapshot, path: readonly string[]): CommandDo
 		}),
 	);
 	const children = Object.entries(command.subCommands).flatMap(([name, child]) =>
-		isListed(child) ? [buildNode(child, [...path, name])] : [],
+		isListed(child) ? [buildCommandDocumentation(child, [...path, name])] : [],
 	);
 	const flags = documentationFlags(command.flags);
 	const usageSegments: UsageSegment[] = command.meta.usage
@@ -225,12 +229,4 @@ function buildNode(command: CommandSnapshot, path: readonly string[]): CommandDo
 		sections: Object.freeze([...(command.meta.sections ?? [])]),
 		children: Object.freeze(children),
 	});
-}
-
-/** Build the presentation-neutral documentation model for a full command tree. */
-export function buildCommandDocumentation(
-	command: CommandSnapshot,
-	path: readonly string[] = [command.meta.name],
-): CommandDocumentation {
-	return buildNode(command, path);
 }

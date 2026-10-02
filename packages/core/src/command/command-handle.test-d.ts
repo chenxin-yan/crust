@@ -1,11 +1,6 @@
 import type { Equal, Expect } from "../../tests/helpers.ts";
-import {
-	type CommandHandle,
-	type CommandShapeAt,
-	type RunOutcome,
-	Crust,
-	defineCommand,
-} from "./crust.ts";
+import { Crust, defineCommand } from "./crust.ts";
+import type { CommandHandle, CommandShapeAt, RunOutcome } from "./typed-run.ts";
 
 // Compile-time regression checks; intentionally never invoked.
 // binds the selected command shape into a path-free typed invoker
