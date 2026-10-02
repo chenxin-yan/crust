@@ -6,10 +6,10 @@ import type { StandardSchema } from "@crustjs/utils/schema";
 
 import type { PromptIO } from "../core/renderer.ts";
 import { runPrompt } from "../core/renderer.ts";
-import { resolveShortCircuit } from "../core/shortCircuit.ts";
+import { resolveShortCircuit } from "../core/short-circuit.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
-import { createTextSubmitHandler, renderTextWithCursor } from "../core/textEdit.ts";
-import type { TextSubmitState } from "../core/textEdit.ts";
+import { createTextSubmitHandler, renderTextWithCursor } from "../core/text-edit.ts";
+import type { TextSubmitState } from "../core/text-edit.ts";
 import type {
 	PartialPromptTheme,
 	PromptTheme,

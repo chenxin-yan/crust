@@ -4,7 +4,7 @@
 
 import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
 import { runPrompt, submit } from "../core/renderer.ts";
-import { resolveShortCircuit } from "../core/shortCircuit.ts";
+import { resolveShortCircuit } from "../core/short-circuit.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import type { PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import { formatPromptLine, formatSubmitted } from "../core/utils.ts";

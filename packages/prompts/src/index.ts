@@ -80,6 +80,6 @@ export {
 	PREFIX_SYMBOL,
 	SCROLL_INDICATOR,
 } from "./core/symbols.ts";
-export type { TextEditResult, TextEditState } from "./core/textEdit.ts";
-export { handleTextEdit, renderTextWithCursor } from "./core/textEdit.ts";
+export type { TextEditResult, TextEditState } from "./core/text-edit.ts";
+export { handleTextEdit, renderTextWithCursor } from "./core/text-edit.ts";
 export { formatPromptLine, formatSubmitted, renderChoiceList } from "./core/utils.ts";

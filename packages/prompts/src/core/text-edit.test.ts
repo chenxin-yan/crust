@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import type { KeypressEvent } from "./renderer.ts";
-import { handleTextEdit } from "./textEdit.ts";
+import { handleTextEdit } from "./text-edit.ts";
 
 function key(name: string, char = "", mods: Partial<KeypressEvent> = {}): KeypressEvent {
 	return { name, char, ctrl: false, meta: false, shift: false, ...mods };

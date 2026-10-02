@@ -14,7 +14,7 @@ import {
 	PREFIX_SUBMITTED,
 	PREFIX_SYMBOL,
 } from "../core/symbols.ts";
-import { handleTextEdit, renderTextWithCursor } from "../core/textEdit.ts";
+import { handleTextEdit, renderTextWithCursor } from "../core/text-edit.ts";
 import type { Choice, ChoiceValue, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
 import {

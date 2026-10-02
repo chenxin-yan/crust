@@ -1,7 +1,7 @@
 import type { FuzzyFilterResult } from "./fuzzy.ts";
 import { fuzzyFilter } from "./fuzzy.ts";
 import type { PromptIO } from "./renderer.ts";
-import { resolveShortCircuit } from "./shortCircuit.ts";
+import { resolveShortCircuit } from "./short-circuit.ts";
 import type { Choice } from "./types.ts";
 import type { NormalizedChoice } from "./utils.ts";
 import { calculateScrollOffset, DEFAULT_MAX_VISIBLE, normalizeChoices } from "./utils.ts";

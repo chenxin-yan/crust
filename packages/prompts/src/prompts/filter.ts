@@ -8,7 +8,7 @@ import { refilter, setupListPrompt } from "../core/list.ts";
 import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
 import { runPrompt, submit } from "../core/renderer.ts";
 import { CURSOR_INDICATOR, PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
-import { handleTextEdit, renderTextWithCursor } from "../core/textEdit.ts";
+import { handleTextEdit, renderTextWithCursor } from "../core/text-edit.ts";
 import type { Choice, ChoiceValue, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
 import { formatPromptLine, formatSubmitted, moveCursor, renderChoiceList } from "../core/utils.ts";
