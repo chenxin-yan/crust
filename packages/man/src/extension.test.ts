@@ -47,9 +47,12 @@ describe("man Extension", () => {
 		expect(page).not.toContain(".Ss db migrate");
 	});
 
-	it("rejects root names containing path separators", async () => {
-		const { error } = await runBuildHooks(new Crust("foo\\bar").extend(man()));
+	it.each(["foo\\bar", "foo/bar", "_tool", "my~cli"])(
+		"rejects root names that are not installed command names: %s",
+		async (name) => {
+			const { error } = await runBuildHooks(new Crust(name).extend(man()));
 
-		expect(error).toContain("must not contain path separators");
-	});
+			expect(error).toContain(`Manual name "${name}" is not a valid command name`);
+		},
+	);
 });

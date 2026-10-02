@@ -1,4 +1,5 @@
 import { type ExtensionFactory, defineExtension } from "@crustjs/core";
+import { INSTALLED_COMMAND_NAME_RULE, isInstalledCommandName } from "@crustjs/core/tooling";
 
 import { MAN } from "./id.ts";
 import { renderManPageMdoc } from "./mdoc.ts";
@@ -14,10 +15,11 @@ export const man: ExtensionFactory<[options?: ManOptions]> = defineExtension(MAN
 		const section = options.section ?? 1;
 		return extension.build(async ({ snapshot }) => {
 			const { name } = snapshot.meta;
-			// The name is a filename segment; a separator would nest the page where
-			// npm's `man` field and `man -l` would not find it.
-			if (/[\\/]/.test(name)) {
-				throw new Error(`Manual name "${name}" must not contain path separators.`);
+			// The page is installed as `man <name>`, and the name is a filename segment.
+			if (!isInstalledCommandName(name)) {
+				throw new Error(
+					`Manual name "${name}" is not a valid command name: use ${INSTALLED_COMMAND_NAME_RULE}.`,
+				);
 			}
 			return [
 				{
