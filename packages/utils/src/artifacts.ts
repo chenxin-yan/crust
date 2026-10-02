@@ -69,6 +69,26 @@ function isCompiledExecutable(): boolean {
 }
 
 /**
+ * True inside a Bun/Node bundle produced by `crust build` or a packaged Deno bundle.
+ * `crust build` defines `process.env.CRUST_INTERNAL_BUILD` as a literal in every Bun/Node
+ * bundle so a staged bundle can be told apart from source; it is kept as a literal property
+ * access so the bundler can replace it. The packaged marker is checked first: a Deno package
+ * must not touch `process.env` without an env permission.
+ */
+function isCrustBundle(): boolean {
+	return isPackagedBuild() || process.env.CRUST_INTERNAL_BUILD === "1";
+}
+
+/**
+ * True when the CLI runs from source (`bun run`, `node`, `deno run`), including the entry
+ * `crust build` runs to prepare its snapshot: neither a compiled executable nor a Crust-built
+ * bundle. Artifacts then come from a checkout's last build, not from an installed CLI.
+ */
+export function isSourceRun(): boolean {
+	return !isCompiledExecutable() && !isCrustBundle();
+}
+
+/**
  * Absolute path of a build artifact or `crust.include` directory shipped with
  * this CLI. `name` is a top-level directory name such as `"skills"`.
  *
@@ -96,11 +116,7 @@ export function resolveArtifactDir(name: string): string {
 		return join(dirname(process.execPath), name);
 	}
 
-	// `crust build` defines this literal in every Bun/Node bundle it produces so a
-	// staged bundle can be told apart from source. Kept as a literal property
-	// access so the bundler can replace it. The packaged marker is checked first:
-	// a Deno package must not touch `process.env` without an env permission.
-	if (isPackagedBuild() || process.env.CRUST_INTERNAL_BUILD === "1") {
+	if (isCrustBundle()) {
 		// import.meta.url is the bundle itself (everything is inlined) and Node
 		// realpaths it, unlike process.argv[1] through a node_modules/.bin symlink.
 		return resolve(fileURLToPath(import.meta.url), "..", "..", name);

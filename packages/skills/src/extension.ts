@@ -14,7 +14,7 @@ import {
 import { spinner } from "@crustjs/progress";
 import { confirm, multiselect, select } from "@crustjs/prompts";
 import { bold, dim, yellow } from "@crustjs/style";
-import { resolveArtifactDir } from "@crustjs/utils/artifacts";
+import { isSourceRun, resolveArtifactDir } from "@crustjs/utils/artifacts";
 import { isWithin } from "@crustjs/utils/path";
 
 import {
@@ -206,6 +206,10 @@ export const skill: ExtensionFactory<
 			.add(buildSkillCommand(commandName, options))
 			.preRun(async (context) => {
 				if (context.commandPath[1] === commandName || options.autoUpdate === false) return;
+				// Only an installed CLI repairs its links. From source, the packaged directory is a
+				// checkout's last build, and repairing would move every link away from the installed
+				// CLI, which then moves them back on its next run.
+				if (isSourceRun()) return;
 				await autoRepairSkills(options, context);
 			})
 			// Skills are loaded when a snapshot is prepared, not at construction, so

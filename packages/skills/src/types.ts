@@ -93,7 +93,10 @@ export interface SkillOptions {
 	 * @default "global" for `--all` and the scope prompt.
 	 */
 	defaultScope?: Scope;
-	/** Repair stale or dangling owned links before commands run. @default true */
+	/**
+	 * Repair stale or dangling owned links before commands run. Never runs from source, so a
+	 * checkout does not take over an installed CLI's links. @default true
+	 */
 	autoUpdate?: boolean;
 	/** Name of the interactive management command. The default includes a `skill` alias. @default "skills" */
 	command?: string;

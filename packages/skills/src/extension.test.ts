@@ -62,6 +62,27 @@ async function writeSource(name: string, content = name, description = name): Pr
 	return root;
 }
 
+/**
+ * Runs as an installed CLI: a Node single executable application beside the staged skills
+ * directory `writeSource` fills, since only an installed CLI repairs links before commands.
+ */
+async function asInstalled<T>(run: () => Promise<T>): Promise<T> {
+	const execPath = Object.getOwnPropertyDescriptor(process, "execPath")!;
+	const getBuiltinModule = process.getBuiltinModule;
+	Object.defineProperty(process, "execPath", {
+		...execPath,
+		value: join(packageRoot, ".crust", "root", "demo"),
+	});
+	process.getBuiltinModule = (id: string) =>
+		id === "node:sea" ? { isSea: () => true } : getBuiltinModule(id);
+	try {
+		return await run();
+	} finally {
+		process.getBuiltinModule = getBuiltinModule;
+		Object.defineProperty(process, "execPath", execPath);
+	}
+}
+
 function createApp(autoUpdate = true) {
 	return new Crust("demo", { description: "Demo" })
 		.extend(skill({ defaultScope: "project", autoUpdate }))
@@ -403,6 +424,14 @@ import { join } from "node:path";
 import { Crust } from ${JSON.stringify(import.meta.resolve("@crustjs/core"))};
 import { skill } from ${JSON.stringify(new URL("./extension.ts", import.meta.url).href)};
 
+// An installed CLI: a Node single executable application beside the staged skills.
+const getBuiltinModule = process.getBuiltinModule;
+process.getBuiltinModule = (id: string) =>
+  id === "node:sea" ? { isSea: () => true } : getBuiltinModule(id);
+Object.defineProperty(process, "execPath", {
+  value: ${JSON.stringify(join(packageRoot, ".crust", "root", "demo"))},
+});
+
 const repairErrors: string[] = [];
 await new Crust("demo")
   .extend(skill({}))
@@ -466,9 +495,22 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		await mkdir(dirname(installed), { recursive: true });
 		await symlink(stale, installed);
 
-		await withCwd(tempRoot, () => createApp().execute({ argv: [] }));
+		await asInstalled(() => withCwd(tempRoot, () => createApp().execute({ argv: [] })));
 		expect(resolve(dirname(installed), await readlink(installed))).toBe(join(source, "demo"));
 		expect(await readFile(join(installed, "content.md"), "utf8")).toBe("current\n");
+	});
+
+	it("leaves an installed CLI's links alone when running from source", async () => {
+		await writeSource("demo", "checkout");
+		const release = join(tempRoot, "release", "skills", "demo");
+		await mkdir(release, { recursive: true });
+		await writeFile(join(release, "content.md"), "release\n");
+		const installed = join(tempRoot, ".claude", "skills", "demo");
+		await mkdir(dirname(installed), { recursive: true });
+		await symlink(release, installed);
+
+		await withCwd(tempRoot, () => createApp().execute({ argv: [] }));
+		expect(await readlink(installed)).toBe(release);
 	});
 
 	it("never creates links that were not installed", async () => {
@@ -496,7 +538,7 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		await mkdir(dirname(installed), { recursive: true });
 		await symlink(stale, installed);
 
-		await withCwd(tempRoot, () => createApp(false).execute({ argv: [] }));
+		await asInstalled(() => withCwd(tempRoot, () => createApp(false).execute({ argv: [] })));
 		expect(await readlink(installed)).toBe(stale);
 	});
 
@@ -509,7 +551,9 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		const ambientWarnings: unknown[] = [];
 		console.warn = (...args) => ambientWarnings.push(...args);
 		try {
-			const captured = await withCwd(tempRoot, () => captureExecute(createApp(), []));
+			const captured = await asInstalled(() =>
+				withCwd(tempRoot, () => captureExecute(createApp(), [])),
+			);
 			expect(captured.exitCode).toBe(0);
 			expect(captured.stderr).toContain("Skill conflict [demo]");
 			expect(ambientWarnings).toEqual([]);
@@ -522,7 +566,9 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 	it("quietly skips preRun repair for an empty packaged source", async () => {
 		await mkdir(join(packageRoot, ".crust", "root", "skills"), { recursive: true });
 
-		const captured = await withCwd(tempRoot, () => captureExecute(createApp(), []));
+		const captured = await asInstalled(() =>
+			withCwd(tempRoot, () => captureExecute(createApp(), [])),
+		);
 
 		expect(captured).toEqual({ stdout: "", stderr: "", exitCode: 0 });
 	});

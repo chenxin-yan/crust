@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import {
 	BUILD_OUT_DIR_ENV,
 	isPackagedBuild,
+	isSourceRun,
 	PACKAGED_BUILD_KEY,
 	resolveArtifactDir,
 } from "./artifacts.ts";
@@ -211,5 +212,22 @@ describe("resolveArtifactDir", () => {
 		);
 		process.argv.length = 1;
 		expect(() => resolveArtifactDir("skills")).toThrow("process.argv[1] (unset)");
+	});
+});
+
+describe("isSourceRun", () => {
+	it("is true from source, including while crust build prepares the snapshot", () => {
+		expect(isSourceRun()).toBe(true);
+		process.env[BUILD_OUT_DIR_ENV] = join(tmpDir, ".crust", "artifacts");
+		expect(isSourceRun()).toBe(true);
+	});
+
+	it("is false in Crust-built bundles and compiled executables", () => {
+		expect(asPackagedBuildWithoutEnv(isSourceRun)).toBe(false);
+		expect(withNodeSea(isSourceRun)).toBe(false);
+		expect(withBunMain("/$bunfs/root/cli", isSourceRun)).toBe(false);
+		expect(withDenoGlobal({ build: { standalone: true } }, isSourceRun)).toBe(false);
+		process.env.CRUST_INTERNAL_BUILD = "1";
+		expect(isSourceRun()).toBe(false);
 	});
 });
