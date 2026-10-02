@@ -4,7 +4,6 @@ import { dirname, join, posix, win32 } from "node:path";
 import { BUILD_OUT_DIR_ENV, isPackagedBuild } from "@crustjs/utils/artifacts";
 import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
 
-import { createContextResolver } from "../api/context.ts";
 import {
 	handledInvocation,
 	type BuildReport,
@@ -24,6 +23,7 @@ import type {
 	ParseResult,
 	RunInputPayload,
 } from "../types.ts";
+import { createContextResolver } from "./context-resolver.ts";
 import type { CrustCommandContext, RunOutcome } from "./crust.ts";
 import {
 	applyContextSections,
