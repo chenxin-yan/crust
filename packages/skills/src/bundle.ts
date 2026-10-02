@@ -173,6 +173,13 @@ export interface LoadedBundle {
 	readonly frontmatter: RequiredSkillFrontmatter;
 }
 
+function missingSkillMdError(root: string): Error {
+	return new Error(
+		`Extra skill directory is missing SKILL.md at its root "${root}". ` +
+			`Every extra skill directory must contain a top-level SKILL.md file.`,
+	);
+}
+
 /**
  * Loads the contents of a hand-authored skill bundle and extracts the
  * `name`/`description` it declares in its `SKILL.md` frontmatter.
@@ -210,6 +217,10 @@ export async function loadBundleFiles(sourceDir: string | URL): Promise<LoadedBu
 	// pointing back to root (e.g. `loop -> .`) is rejected on first descent.
 	const visitedDirs = new Set<string>([canonicalRoot]);
 	const collected = await collectBundleEntries(canonicalRoot, canonicalRoot, "", visitedDirs);
+	// Check before reading so an unreadable sibling cannot mask the missing entrypoint.
+	if (!collected.some((entry) => entry.relPath === SKILL_MD)) {
+		throw missingSkillMdError(canonicalRoot);
+	}
 
 	const files = await Promise.all(
 		collected.map(async (entry) => ({
@@ -220,10 +231,7 @@ export async function loadBundleFiles(sourceDir: string | URL): Promise<LoadedBu
 
 	const skillMd = files.find((f) => f.path === SKILL_MD);
 	if (!skillMd) {
-		throw new Error(
-			`Extra skill directory is missing SKILL.md at its root "${canonicalRoot}". ` +
-				`Every extra skill directory must contain a top-level SKILL.md file.`,
-		);
+		throw missingSkillMdError(canonicalRoot);
 	}
 	// Decode the bytes already loaded so frontmatter and returned content
 	// describe the same snapshot of SKILL.md.
