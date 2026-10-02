@@ -16,7 +16,7 @@ import gruvboxLightHard from "shiki/themes/gruvbox-light-hard.mjs";
 import type { Plugin } from "vite-plus";
 
 import { SNIPPET_SOURCES, type SnippetKey } from "../src/components/landing/snippets.ts";
-import { twoslashHovers } from "../twoslash.ts";
+import { CODE_THEMES, twoslashHovers } from "../twoslash.ts";
 
 const MODULE_ID = "virtual:landing-twoslash";
 const RESOLVED_ID = `\0${MODULE_ID}`;
@@ -45,7 +45,7 @@ export function landingTwoslash(): Plugin {
 				// SAFETY: `Object.entries` widens the key to string; SNIPPET_SOURCES has only SnippetKey keys.
 				out[key as SnippetKey] = shiki.codeToHast((await readFile(path, "utf8")).trimEnd(), {
 					lang,
-					themes: { light: "gruvbox-light-hard", dark: "gruvbox-dark-hard" },
+					themes: CODE_THEMES,
 					defaultColor: false,
 					// `// [!code highlight:N]` marker lines are removed and the next N lines get `.highlighted`;
 					// Twoslash only runs on TypeScript.
