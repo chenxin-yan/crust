@@ -5,9 +5,9 @@ description: Effect.ts v4 adaptor for Command Actions, Contexts, and Core errors
 
 `@crustjs/effect` lets you author Command Actions and Contexts in [Effect](https://effect.website) idiom. Crust remains the runtime: routing, parsing, rendering, and cleanup are unchanged. It is a set of helpers, not an Extension, so it registers no flags, commands, or hooks.
 
-<Callout type="warn" title="Effect v4 prerelease">
-  The adaptor targets `effect@4.x` prereleases. Install the exact `effect` version the package was
-  tested against; a second copy of `effect` breaks service identity, so it is a peer dependency.
+<Callout type="warn" title="Single copy of effect">
+  `effect` is a peer dependency because a second copy breaks service identity. Make sure your app
+  resolves one `effect@4` install.
 </Callout>
 
 ## Install
