@@ -72,8 +72,6 @@ export function assertSafeChoiceValue(value: string): string {
  * need bespoke escaping for `case` patterns, `compdef`, and fish
  * predicate code.
  */
-// Matches the installed command name rule today, but names a shell-safety
-// constraint on every completion identifier, not just the root command.
 const IDENT_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /** Throw if `name` is not a safe identifier; otherwise return it. */
@@ -107,7 +105,9 @@ export function assertSafeBinName(binName: string): string {
 				`it names the executable and the --output-dir files, so use ${INSTALLED_COMMAND_NAME_RULE}.`,
 		);
 	}
-	return binName;
+	// The root name is also emitted into shell scripts, so it must stay shell-safe even if
+	// Core's installed-name rule widens.
+	return assertSafeIdentifier(binName, "root command name");
 }
 
 // ── Free-form text sanitisation ────────────────────────────────────────────
