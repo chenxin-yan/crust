@@ -1,21 +1,25 @@
 import { defineConfig } from "vite-plus";
 
+const sharedIgnorePatterns = [
+	".changeset/",
+	"**/CHANGELOG.md",
+	".pi/",
+	".worktrees/",
+	"apps/docs/.source/",
+	"apps/docs/src/routeTree.gen.ts",
+];
+
 export default defineConfig({
 	fmt: {
 		useTabs: true,
 		sortImports: true,
 		sortPackageJson: false,
 		ignorePatterns: [
-			".changeset/",
-			"**/CHANGELOG.md",
-			".pi/",
+			...sharedIgnorePatterns,
 			"**/tests/fixtures/",
-			".worktrees/",
 			"packages/create-crust/templates/base/package.json",
 			"packages/create-crust/templates/base/tsconfig.json",
 			"packages/create-crust/templates/base/src/cli.ts",
-			"apps/docs/.source/",
-			"apps/docs/src/routeTree.gen.ts",
 		],
 		overrides: [
 			{
@@ -126,16 +130,11 @@ export default defineConfig({
 			"vite-plus/prefer-vite-plus-imports": "error",
 		},
 		ignorePatterns: [
+			...sharedIgnorePatterns,
 			"**/node_modules/",
 			"**/dist/",
-			".changeset/",
-			"**/CHANGELOG.md",
-			".pi/",
-			".worktrees/",
 			"packages/create-crust/templates/base/",
-			"apps/docs/.source/",
 			"apps/docs/.vercel/",
-			"apps/docs/src/routeTree.gen.ts",
 		],
 		overrides: [
 			{
