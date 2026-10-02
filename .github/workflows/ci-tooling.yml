@@ -34,6 +34,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Also builds the workspace packages scripts import, which type-aware lint resolves.
+      - name: Type-check tooling and scripts
+        run: pnpm exec vp run --fail-if-no-match --filter ./scripts --filter ./tools check:types:task
+
       - name: Lint and format check (tooling and repository files)
         run: |
           pnpm run lint . --ignore-pattern 'packages/**' --ignore-pattern 'apps/**'
