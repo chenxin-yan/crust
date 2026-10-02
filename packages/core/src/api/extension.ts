@@ -530,7 +530,7 @@ function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 		provide: (...instances: readonly AnyContextInstance[]) =>
 			next({ provide: [...state.provide, ...instances.map(definingOf)] }),
 		flags: (...defs: readonly NamedExtensionFlagDef[]) =>
-			next({ flags: [...state.flags, ...defs.map(ownDefinition)] }),
+			next({ flags: [...state.flags, ...defs.map((def) => ownDefinition(def, "flag", def.name))] }),
 		add: (...definitions: readonly CommandDefinition<any, any, any, any>[]) =>
 			next({ commands: [...state.commands, ...definitions] }),
 		preRun: (preRun: ExtensionHooks["preRun"]) => next({ hooks: { ...state.hooks, preRun } }),

@@ -1319,7 +1319,34 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 		).toThrow("default must be one of choices");
 		expect(() =>
 			new Crust("test").args({ name: "mode", type: "string", choices, default: "z" }),
-		).toThrow("default must be one of choices");
+		).toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				message: 'Argument "mode" default must be one of choices',
+				details: { subject: "argument", name: "mode", reason: "default-outside-choices" },
+			}),
+		);
+	});
+
+	it("names the flag whose dynamic definition is invalid", () => {
+		const choices: string[] = ["a", "b"];
+		expect(() =>
+			new Crust("test").flags({ name: "mode", type: "string", choices, default: "z" }),
+		).toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				message: 'Flag "mode" default must be one of choices',
+				details: { subject: "flag", name: "mode", reason: "default-outside-choices" },
+			}),
+		);
+		const short: string = "vv";
+		expect(() => new Crust("test").flags({ name: "verbose", type: "boolean", short })).toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				message: 'Flag "verbose" short "vv" must be one character',
+				details: { subject: "flag", name: "verbose", reason: "invalid-short" },
+			}),
+		);
 	});
 });
 
