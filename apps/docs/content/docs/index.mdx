@@ -4,8 +4,6 @@ description: What Crust is, why it exists, and where to start.
 icon: House
 ---
 
-import { Cards, Card } from "fumadocs-ui/components/card";
-
 ## What is Crust?
 
 Crust is **a TypeScript CLI framework with composable modules for humans and agents**. It runs on Bun, Node.js, and Deno, with native Bun integrations.
@@ -20,9 +18,7 @@ The core has no third-party runtime dependencies. Standalone libraries such as s
 
 ## Quick example
 
-A `greet` command with a defaulted positional, a `--shout`/`-s` boolean flag, a `wave` subcommand, and `--help` wired by the help Extension:
-
-For installation and project setup, start with [Quick Start](/docs/quick-start). Save this example as `src/cli.ts`:
+Save this `greet` command as `src/cli.ts`. It has a defaulted positional, a `--shout`/`-s` boolean flag, a `wave` subcommand, and `--help` wired by the help Extension. For installation and project setup, start with [Quick Start](/docs/quick-start).
 
 <include lang="ts" meta='title="src/cli.ts" twoslash'>
   ../../examples/landing/greet.ts
