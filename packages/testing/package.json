@@ -1,7 +1,7 @@
 {
 	"name": "@crustjs/testing",
 	"version": "0.1.5",
-	"description": "Testing helpers for Crust CLI applications",
+	"description": "Test helpers for Crust CLIs with captured output and fake interactive terminals",
 	"type": "module",
 	"sideEffects": false,
 	"license": "MIT",

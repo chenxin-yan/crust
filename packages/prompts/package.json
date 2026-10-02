@@ -1,7 +1,7 @@
 {
 	"name": "@crustjs/prompts",
 	"version": "0.2.5",
-	"description": "Interactive terminal prompts for the Crust CLI ecosystem",
+	"description": "Interactive input, password, confirm, select, and filter prompts for the terminal",
 	"type": "module",
 	"sideEffects": false,
 	"license": "MIT",

@@ -1,6 +1,6 @@
 # @crustjs/crust
 
-CLI tooling for the Crust framework
+CLI to build and publish Crust apps as npm packages or standalone binaries
 
 ## Install
 

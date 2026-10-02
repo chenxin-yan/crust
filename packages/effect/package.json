@@ -1,7 +1,7 @@
 {
 	"name": "@crustjs/effect",
 	"version": "0.2.2",
-	"description": "Effect.ts v4 adaptor for the Crust CLI framework: tagged errors, Effect actions, and Layer-backed Contexts",
+	"description": "Effect.ts v4 adaptor for Crust Command Actions, Contexts, and errors",
 	"type": "module",
 	"sideEffects": false,
 	"license": "MIT",

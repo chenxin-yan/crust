@@ -14,6 +14,7 @@ import { Eta } from "eta/core";
 import corePkg from "../../core/package.json" with { type: "json" };
 import crustPkg from "../../crust/package.json" with { type: "json" };
 import extensionsPkg from "../../extensions/package.json" with { type: "json" };
+import pkg from "../package.json" with { type: "json" };
 
 type Runtime = "bun" | "node" | "deno";
 
@@ -66,7 +67,7 @@ function validateProjectDirectory(path: string): void {
 // Command definition
 // ────────────────────────────────────────────────────────────────────────────
 
-const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI project" })
+const app = new Crust("create-crust", { description: pkg.description })
 	.flags(
 		{
 			name: "runtime",

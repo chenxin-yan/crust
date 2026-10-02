@@ -1,6 +1,6 @@
 # @crustjs/prompts
 
-Interactive terminal prompts for the Crust CLI ecosystem.
+Interactive input, password, confirm, select, and filter prompts for the terminal
 
 ## Install
 

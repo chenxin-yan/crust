@@ -1,6 +1,6 @@
 # @crustjs/utils
 
-Internal shared utilities for Crust workspace packages.
+Internal shared utilities for Crust packages
 
 - `@crustjs/utils/artifacts` — build artifact directory resolution.
 - `@crustjs/utils/error` — Node error type guards.

@@ -1,6 +1,6 @@
 # create-crust
 
-Scaffold a new [Crust](https://crustjs.com) CLI project in seconds.
+Scaffold a new Crust CLI project for Bun, Node.js, or Deno
 
 ## Usage
 

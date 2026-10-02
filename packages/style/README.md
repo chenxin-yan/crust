@@ -1,6 +1,6 @@
 # @crustjs/style
 
-Terminal styling foundation for the Crust CLI framework
+Terminal styling, colors, hyperlinks, and ANSI-aware text layout
 
 ## Install
 

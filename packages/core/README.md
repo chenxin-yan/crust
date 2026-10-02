@@ -1,6 +1,6 @@
 # @crustjs/core
 
-Core library for the Crust CLI framework.
+Define, parse, route, and run type-safe CLI commands with Contexts and Extensions
 
 ## Install
 

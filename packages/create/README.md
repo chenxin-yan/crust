@@ -1,6 +1,6 @@
 # @crustjs/create
 
-Headless scaffolding engine for building create-xxx tools
+Headless scaffolding engine for building project generators
 
 ## Install
 

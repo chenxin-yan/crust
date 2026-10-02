@@ -1,6 +1,6 @@
 # @crustjs/extensions
 
-Official Extensions for the Crust CLI framework
+Official Crust Extensions for help, version, completion, typo hints, color, and updates
 
 ## Install
 

@@ -1,7 +1,7 @@
 {
 	"name": "@crustjs/extensions",
 	"version": "0.5.3",
-	"description": "Official Extensions for the Crust CLI framework",
+	"description": "Official Crust Extensions for help, version, completion, typo hints, color, and updates",
 	"type": "module",
 	"sideEffects": false,
 	"license": "MIT",
