@@ -6,13 +6,13 @@ import * as processUtils from "@crustjs/utils/process";
 import type { RunProcessResult } from "@crustjs/utils/process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
+import type { DistributionManifest } from "./distribute.ts";
 import {
 	buildPublishCommand,
 	publishStagedPackages,
 	readPublishManifest,
 	validatePublishManifest,
-} from "../../src/commands/publish.ts";
-import type { DistributionManifest } from "../utils/distribute.ts";
+} from "./publish.ts";
 
 const io = { stdout: () => {}, stderr: () => {} };
 

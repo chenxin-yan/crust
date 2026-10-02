@@ -30,19 +30,8 @@ import {
 
 const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 
-import schema from "../../schema/package.json";
-import { runBoundedProcess } from "../../tests/bounded-process.ts";
-import {
-	BUILD_RUNTIMES,
-	BUN_TARGETS,
-	DENO_TARGETS,
-	hostTarget,
-	NODE_TARGETS,
-	resolveTargets,
-	type TargetTable,
-} from "../utils/build-helpers.ts";
-import { ARTIFACT_KINDS, type DistributionManifest } from "../utils/distribute.ts";
-import { buildCommand } from "./build-command.ts";
+import schema from "../schema/package.json";
+import { runBoundedProcess } from "../tests/bounded-process.ts";
 import {
 	build,
 	type BuildOptions,
@@ -52,6 +41,17 @@ import {
 	resolveBinEntries,
 	resolveEnvFilePaths,
 } from "./build.ts";
+import { buildCommand } from "./commands/build.ts";
+import { ARTIFACT_KINDS, type DistributionManifest } from "./distribute.ts";
+import {
+	BUILD_RUNTIMES,
+	BUN_TARGETS,
+	DENO_TARGETS,
+	hostTarget,
+	NODE_TARGETS,
+	resolveTargets,
+	type TargetTable,
+} from "./targets.ts";
 
 const host = hostTarget(BUN_TARGETS);
 

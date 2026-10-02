@@ -121,7 +121,7 @@ jobs:
 
       - name: Test snapshot process-group lifetime (macOS)
         if: matrix.os == 'macos-latest'
-        run: pnpm --dir packages/crust exec vp test run src/utils/build-helpers.test.ts -t "entry lifetime"
+        run: pnpm --dir packages/crust exec vp test run src/snapshot.test.ts -t "entry lifetime"
 
       # Linux owns the full build/distribution suite, including all six modes.
       # Other hosts repeat only portable acceptance, not hardcoded cross-target cases.

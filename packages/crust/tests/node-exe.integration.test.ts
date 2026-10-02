@@ -19,14 +19,9 @@ import type { JsonValue } from "@crustjs/utils/json";
 import { which } from "@crustjs/utils/process";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 
-import { buildCommand } from "../src/commands/build-command.ts";
-import {
-	hostTarget,
-	NODE_TARGETS,
-	type NodeTarget,
-	type TargetInfo,
-} from "../src/utils/build-helpers.ts";
-import type { DistributionManifest } from "../src/utils/distribute.ts";
+import { buildCommand } from "../src/commands/build.ts";
+import type { DistributionManifest } from "../src/distribute.ts";
+import { hostTarget, NODE_TARGETS, type NodeTarget, type TargetInfo } from "../src/targets.ts";
 import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
 import { seaNodeBinDir, withPathPrefix } from "./helpers.ts";
 
