@@ -1,5 +1,5 @@
 import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
-import { runProcess, which } from "@crustjs/utils/process";
+import { type RunProcessResult, runProcess, which } from "@crustjs/utils/process";
 import satisfies from "semver/functions/satisfies.js";
 import validVersion from "semver/functions/valid.js";
 import validRange from "semver/ranges/valid.js";
@@ -10,6 +10,11 @@ export type BuildRunner = {
 	command: string;
 	env: NodeJS.ProcessEnv;
 };
+
+/** A finished compiler process's stderr, then stdout, for error messages. */
+export function processOutput({ stdout, stderr }: RunProcessResult): string {
+	return [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
+}
 
 /**
  * Resolve the safest executable to run `bun build`.
@@ -161,18 +166,19 @@ export async function readCompilerVersion(
 	runner: BuildRunner,
 	cwd: string,
 ): Promise<string> {
-	const { exitCode, stdout, stderr } = await runProcess(runner.command, ["--version"], {
+	const result = await runProcess(runner.command, ["--version"], {
 		env: runner.env,
 		cwd,
 		stdio: "collect",
 		timeout: COMPILER_VERSION_TIMEOUT_MS,
 	});
-	const reported = runtime === "deno" ? /^deno (\S+)/.exec(stdout.trim())?.[1] : stdout.trim();
-	const version = exitCode === 0 && reported !== undefined ? validVersion(reported) : null;
+	const stdout = result.stdout.trim();
+	const reported = runtime === "deno" ? /^deno (\S+)/.exec(stdout)?.[1] : stdout;
+	const version = result.exitCode === 0 && reported !== undefined ? validVersion(reported) : null;
 	if (version === null) {
-		const output = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
+		const output = processOutput(result);
 		throw new Error(
-			`Could not read the ${RUNTIME_LABELS[runtime]} version from ${runner.command} --version (exit ${exitCode})${output ? `:\n${output}` : "."}`,
+			`Could not read the ${RUNTIME_LABELS[runtime]} version from ${runner.command} --version (exit ${result.exitCode})${output ? `:\n${output}` : "."}`,
 		);
 	}
 	return version;

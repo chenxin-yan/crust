@@ -5,17 +5,18 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
-import { runProcess } from "@crustjs/utils/process";
+import { type RunProcessResult, runProcess } from "@crustjs/utils/process";
 import satisfies from "semver/functions/satisfies.js";
 import validVersion from "semver/functions/valid.js";
 
 import crustPackage from "../package.json" with { type: "json" };
-import { execNodeBuild } from "./bundle.ts";
+import { execNodeBuild, runBuildProcess } from "./bundle.ts";
 import {
 	assertCompilerSatisfiesEngines,
 	type BuildCompiler,
 	type BuildRunner,
 	isVersionRange,
+	processOutput,
 	readCompilerVersion,
 	resolveNodeBuildRunner,
 } from "./compilers.ts";
@@ -158,12 +159,13 @@ export async function resolveNodeExeBackend(
 			`@tsdown/exe is not installed beside crust's tsdown (${packageJsonPath}).\n${reinstall}`,
 		);
 	}
+	const readPackage = (path: string): JsonValue => JSON.parse(readFileSync(path, "utf8"));
+	const tsdownPackage = readPackage(packageJsonPath);
 	// Before running any of it: when crust's copy was skipped, the lookup can reach the project's own.
-	for (const [name, path] of [
-		["tsdown", packageJsonPath],
-		["@tsdown/exe", exePackageJsonPath],
+	for (const [name, path, installed] of [
+		["tsdown", packageJsonPath, tsdownPackage],
+		["@tsdown/exe", exePackageJsonPath, readPackage(exePackageJsonPath)],
 	] as const) {
-		const installed: JsonValue = JSON.parse(readFileSync(path, "utf8"));
 		const version = isVersionedPackageJson(installed) ? installed.version : "without a version";
 		const pinned = crustPackage.optionalDependencies[name];
 		if (!satisfies(version, pinned)) {
@@ -172,7 +174,6 @@ export async function resolveNodeExeBackend(
 			);
 		}
 	}
-	const tsdownPackage: JsonValue = JSON.parse(readFileSync(packageJsonPath, "utf8"));
 	if (!isTsdownPackageJson(tsdownPackage)) {
 		throw new Error(`Unexpected tsdown package metadata in ${packageJsonPath}.\n${reinstall}`);
 	}
@@ -183,28 +184,22 @@ export async function resolveNodeExeBackend(
 	};
 	assertNodeExeBackendSupports(compiler, backend);
 
-	const workDir = await mkdtemp(join(tmpdir(), "crust-node-exe-probe-"));
-	try {
-		const scriptPath = join(workDir, "probe.mjs");
-		await writeFile(scriptPath, createNodeExeProbeScript(packageJsonPath));
-		const { exitCode, stdout, stderr } = await runProcess(compiler.runner.command, [scriptPath], {
-			env: compiler.runner.env,
-			cwd,
-			stdio: "collect",
-		});
-		const seaMinVersion = exitCode === 0 ? validVersion(stdout.trim()) : null;
-		if (seaMinVersion === null) {
-			const output = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
-			throw new Error(
-				`tsdown ${backend.version}'s executable builder could not be loaded with ${compiler.runner.command} (exit ${exitCode}).\n${reinstall}${output ? `\n${output}` : ""}`,
-			);
-		}
-		const resolved = { ...backend, seaMinVersion };
-		assertNodeExeBackendSupports(compiler, resolved);
-		return resolved;
-	} finally {
-		await rm(workDir, { recursive: true, force: true });
+	const probe = await runGeneratedScript(
+		compiler.runner,
+		"probe",
+		createNodeExeProbeScript(packageJsonPath),
+		cwd,
+	);
+	const seaMinVersion = probe.exitCode === 0 ? validVersion(probe.stdout.trim()) : null;
+	if (seaMinVersion === null) {
+		const output = processOutput(probe);
+		throw new Error(
+			`tsdown ${backend.version}'s executable builder could not be loaded with ${compiler.runner.command} (exit ${probe.exitCode}).\n${reinstall}${output ? `\n${output}` : ""}`,
+		);
 	}
+	const resolved = { ...backend, seaMinVersion };
+	assertNodeExeBackendSupports(compiler, resolved);
+	return resolved;
 }
 
 /**
@@ -332,15 +327,7 @@ export async function execNodeBinaryBuild(
 				target: nodeExeTarget(target, compiler.version),
 			}),
 		);
-		const { exitCode, stdout, stderr } = await runProcess(compiler.runner.command, [scriptPath], {
-			env: compiler.runner.env,
-			cwd,
-			stdio: "collect",
-		});
-		const output = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
-		if (exitCode !== 0) {
-			throw new Error(`Build failed for ${outfilePath}${output ? `:\n${output}` : ""}`);
-		}
+		const output = await runBuildProcess(compiler.runner, [scriptPath], outfilePath, cwd);
 		const produced = await readdir(exeDir);
 		if (produced.length !== 1) {
 			throw new Error(
@@ -396,29 +383,41 @@ export async function provisionNodeExeTargets(
 	cwd: string,
 	compiler: NodeBinaryCompiler,
 ): Promise<void> {
-	const workDir = await mkdtemp(join(tmpdir(), "crust-node-exe-provision-"));
-	try {
-		const scriptPath = join(workDir, "provision.mjs");
-		await writeFile(
-			scriptPath,
-			createNodeExeProvisionScript(
-				compiler.backend.packageJsonPath,
-				targets.map((name) => ({ name, target: nodeExeTarget(name, compiler.version) })),
-			),
+	const provision = await runGeneratedScript(
+		compiler.runner,
+		"provision",
+		createNodeExeProvisionScript(
+			compiler.backend.packageJsonPath,
+			targets.map((name) => ({ name, target: nodeExeTarget(name, compiler.version) })),
+		),
+		cwd,
+	);
+	if (provision.exitCode !== 0) {
+		const output = processOutput(provision);
+		throw new Error(
+			`Could not provision the Node ${compiler.version} binary that node standalone binaries embed${output ? `:\n${output}` : "."}\n` +
+				"  tsdown downloads each target's official Node archive once and unpacks it with tar (GNU tar also needs xz for linux targets), or unzip for win targets on non-Windows hosts.\n" +
+				"  Install the missing tool, or build only targets this machine can provision (--target).",
 		);
-		const { exitCode, stdout, stderr } = await runProcess(compiler.runner.command, [scriptPath], {
-			env: compiler.runner.env,
+	}
+}
+
+/** Runs a generated `<name>.mjs` with `runner` from a temporary directory that is removed afterwards. */
+async function runGeneratedScript(
+	runner: BuildRunner,
+	name: string,
+	source: string,
+	cwd: string,
+): Promise<RunProcessResult> {
+	const workDir = await mkdtemp(join(tmpdir(), `crust-node-exe-${name}-`));
+	try {
+		const scriptPath = join(workDir, `${name}.mjs`);
+		await writeFile(scriptPath, source);
+		return await runProcess(runner.command, [scriptPath], {
+			env: runner.env,
 			cwd,
 			stdio: "collect",
 		});
-		if (exitCode !== 0) {
-			const output = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
-			throw new Error(
-				`Could not provision the Node ${compiler.version} binary that node standalone binaries embed${output ? `:\n${output}` : "."}\n` +
-					"  tsdown downloads each target's official Node archive once and unpacks it with tar (GNU tar also needs xz for linux targets), or unzip for win targets on non-Windows hosts.\n" +
-					"  Install the missing tool, or build only targets this machine can provision (--target).",
-			);
-		}
 	} finally {
 		await rm(workDir, { recursive: true, force: true });
 	}

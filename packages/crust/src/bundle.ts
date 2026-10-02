@@ -9,6 +9,7 @@ import { runProcess } from "@crustjs/utils/process";
 import {
 	type BuildRunner,
 	bunCompileTarget,
+	processOutput,
 	resolveBunBuildRunner,
 	resolveDenoBuildRunner,
 } from "./compilers.ts";
@@ -231,22 +232,23 @@ function createDenoCompileArgs(
 	];
 }
 
-async function runBuildProcess(
+/** Runs one compiler step; returns its output, which a successful step may still print (warnings). */
+export async function runBuildProcess(
 	runner: BuildRunner,
 	args: readonly string[],
 	outfilePath: string,
 	cwd: string,
-): Promise<void> {
-	const { exitCode, stdout, stderr } = await runProcess(runner.command, args, {
+): Promise<string> {
+	const result = await runProcess(runner.command, args, {
 		env: runner.env,
 		cwd,
 		stdio: "collect",
 	});
-
-	if (exitCode !== 0) {
-		const output = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
+	const output = processOutput(result);
+	if (result.exitCode !== 0) {
 		throw new Error(`Build failed for ${outfilePath}${output ? `:\n${output}` : ""}`);
 	}
+	return output;
 }
 
 /** Bundle a Node runtime package entry: ESM for Node behind `#!/usr/bin/env node`. */
