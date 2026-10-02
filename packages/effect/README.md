@@ -1,6 +1,6 @@
 # @crustjs/effect
 
-Effect.ts v4 adaptor for Crust Command Actions, Contexts, and errors
+Effect.ts v4 adapter for Crust Command Actions, Contexts, and errors
 
 ## Install
 

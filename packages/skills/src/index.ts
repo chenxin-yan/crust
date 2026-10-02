@@ -1,5 +1,5 @@
 // ────────────────────────────────────────────────────────────────────────────
-// @crustjs/skills — Agent skill generation from Crust command definitions
+// @crustjs/skills
 // ────────────────────────────────────────────────────────────────────────────
 
 export { writeSkills, writeSkillsFromSnapshot } from "./build.ts";
