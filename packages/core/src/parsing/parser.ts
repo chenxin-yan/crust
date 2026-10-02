@@ -364,7 +364,7 @@ function resolveArgs<A extends ArgsDef, V>(
 	argsDef: A,
 	positionals: readonly V[],
 	coerce: (def: ArgDef, value: V, label: string, index?: number) => ParsedArgValue,
-): { args: RawParsedArgs<A>; consumed: number } {
+) {
 	const resolved: Record<string, ParsedArgValue> = {};
 	let index = 0;
 
