@@ -5,7 +5,7 @@
 import type { AnsiPair, StyleMethodName } from "./ansiCodes.ts";
 import { isModifierName, styleMethodNames, styleMethodPairs } from "./ansiCodes.ts";
 import { resolveColorDepth, resolveModifierCapability } from "./capability.ts";
-import { bg as bgDirect, bgPairAtDepth, fg as fgDirect, fgPairAtDepth } from "./color.ts";
+import { colorPair, paint } from "./color.ts";
 import { linkCode, link as linkDirect } from "./hyperlinks.ts";
 import { applyStyle } from "./styleEngine.ts";
 import type {
@@ -18,10 +18,7 @@ import type {
 	StyleOptions,
 } from "./types.ts";
 
-const dynamicColorKinds = [
-	["fg", fgDirect],
-	["bg", bgDirect],
-] as const;
+const dynamicColorKinds = ["fg", "bg"] as const;
 
 // A single step in a chainable style: a registered method or a color
 // resolved against the active terminal depth when the chain is called.
@@ -34,10 +31,9 @@ function stepIsModifier(step: ChainStep): boolean {
 }
 
 function stepPair(step: ChainStep, colorDepth: ColorDepth): AnsiPair {
-	if (step.kind === "named") return styleMethodPairs[step.name];
-	return step.kind === "fg"
-		? fgPairAtDepth(step.input, colorDepth)
-		: bgPairAtDepth(step.input, colorDepth);
+	return step.kind === "named"
+		? styleMethodPairs[step.name]
+		: colorPair(step.kind, step.input, colorDepth);
 }
 
 // Validates now; depth resolves when the chain is called. Validated tuples are
@@ -144,7 +140,7 @@ function buildChainableStyleFactory(
 			});
 		}
 
-		for (const [kind] of dynamicColorKinds) {
+		for (const kind of dynamicColorKinds) {
 			Object.defineProperty(styleFn, kind, {
 				configurable: false,
 				enumerable: true,
@@ -221,14 +217,13 @@ function createStyleInstance(options: StyleOptions | undefined, runtime: boolean
 
 	// SAFETY: dynamicColorKinds contains exactly the fg and bg entries required by this map.
 	const dynamicColors = Object.fromEntries(
-		dynamicColorKinds.map(([kind, paint]) => [
+		dynamicColorKinds.map((kind) => [
 			kind,
 			(...args: [input: ColorInput] | [text: string, input: ColorInput]) => {
-				const resolved = resolveCapabilities();
 				if (args.length === 1) {
 					return createChainableStyle([colorStep(kind, args[0])]);
 				}
-				return paint(args[0], args[1], resolved.colorDepth);
+				return paint(kind, args[0], args[1], resolveCapabilities().colorDepth);
 			},
 		]),
 	) as Pick<StyleInstance, "fg" | "bg">;
