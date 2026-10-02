@@ -1,6 +1,6 @@
 import { Crust, defineCommand, defineExtension, defineExtensionId } from "@crustjs/core";
 import { help } from "@crustjs/extensions";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { man } from "./extension.ts";
 import { renderManPageMdoc } from "./mdoc.ts";
@@ -233,19 +233,14 @@ describe("renderManPageMdoc", () => {
 	});
 
 	it("uses SOURCE_DATE_EPOCH when date omitted", async () => {
-		const prev = process.env.SOURCE_DATE_EPOCH;
-		process.env.SOURCE_DATE_EPOCH = "86400";
+		vi.stubEnv("SOURCE_DATE_EPOCH", "86400");
 		try {
 			const app = new Crust("x").action(() => {});
 			const root = await app.snapshot();
 			const mdoc = renderManPageMdoc({ root });
 			expect(mdoc.startsWith(".Dd January 2, 1970\n")).toBe(true);
 		} finally {
-			if (prev === undefined) {
-				delete process.env.SOURCE_DATE_EPOCH;
-			} else {
-				process.env.SOURCE_DATE_EPOCH = prev;
-			}
+			vi.unstubAllEnvs();
 		}
 	});
 
