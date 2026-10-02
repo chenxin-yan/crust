@@ -20,15 +20,9 @@ import {
 } from "./compilers.ts";
 import { BUN_TARGETS } from "./targets.ts";
 
-async function withoutBunOnPath<T>(run: () => T): Promise<T> {
-	const path = process.env.PATH;
-	process.env.PATH = "";
-	try {
-		return await run();
-	} finally {
-		process.env.PATH = path;
-	}
-}
+afterEach(() => {
+	vi.unstubAllEnvs();
+});
 
 describe("resolveBunBuildRunner", () => {
 	it("prefers bun on PATH and falls back to this executable as bun", () => {
@@ -53,11 +47,10 @@ console.log(JSON.stringify({ command: runner.command, execPath: process.execPath
 		expect(fallback.bunBeBun).toBe("1");
 	});
 
-	it("refuses to stand in for bun from a non-Bun process such as Node running the library", async () => {
+	it("refuses to stand in for bun from a non-Bun process such as Node running the library", () => {
 		expect(resolveBunBuildRunner(false).command).toBe(which("bun")!);
-		await expect(withoutBunOnPath(() => resolveBunBuildRunner(false))).rejects.toThrow(
-			"bun was not found on PATH",
-		);
+		vi.stubEnv("PATH", "");
+		expect(() => resolveBunBuildRunner(false)).toThrow("bun was not found on PATH");
 	});
 });
 
@@ -236,9 +229,10 @@ describe("resolveBinaryCompiler", () => {
 	);
 
 	it("reports a missing deno instead of falling back to another compiler", async () => {
-		await expect(
-			withoutBunOnPath(() => resolveBinaryCompiler("deno", {}, process.cwd())),
-		).rejects.toThrow("Deno is required for the deno runtime but was not found on PATH.");
+		vi.stubEnv("PATH", "");
+		await expect(resolveBinaryCompiler("deno", {}, process.cwd())).rejects.toThrow(
+			"Deno is required for the deno runtime but was not found on PATH.",
+		);
 	});
 });
 
@@ -289,7 +283,8 @@ describe("resolveDenoPackageBundler", () => {
 	});
 
 	it("reports a missing deno instead of falling back to another compiler", async () => {
-		await expect(withoutBunOnPath(() => resolveDenoPackageBundler(process.cwd()))).rejects.toThrow(
+		vi.stubEnv("PATH", "");
+		await expect(resolveDenoPackageBundler(process.cwd())).rejects.toThrow(
 			"Deno is required for the deno runtime but was not found on PATH.",
 		);
 	});
@@ -391,15 +386,14 @@ describe("assertTargetsBuildableWithoutBun", () => {
 		}
 	});
 
-	it("judges the selected runner rather than looking up bun on PATH", async () => {
+	it("judges the selected runner rather than looking up bun on PATH", () => {
 		expect(which("bun")).not.toBeNull();
 		expect(() =>
 			assertTargetsBuildableWithoutBun(["bun-darwin-arm64"], fallbackRunner, "bun-darwin-arm64"),
 		).toThrow("Cannot build bun-darwin-arm64 without a separate bun executable on PATH.");
-		await withoutBunOnPath(() => {
-			expect(() =>
-				assertTargetsBuildableWithoutBun(["bun-darwin-arm64"], realBunRunner, "bun-darwin-arm64"),
-			).not.toThrow();
-		});
+		vi.stubEnv("PATH", "");
+		expect(() =>
+			assertTargetsBuildableWithoutBun(["bun-darwin-arm64"], realBunRunner, "bun-darwin-arm64"),
+		).not.toThrow();
 	});
 });

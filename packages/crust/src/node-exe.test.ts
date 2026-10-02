@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { which } from "@crustjs/utils/process";
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import crustPackage from "../package.json" with { type: "json" };
 import { type BuildCompiler, resolveNodeBuildRunner } from "./compilers.ts";
@@ -18,15 +18,9 @@ import {
 } from "./node-exe.ts";
 import { NODE_TARGETS } from "./targets.ts";
 
-async function withoutBunOnPath<T>(run: () => T): Promise<T> {
-	const path = process.env.PATH;
-	process.env.PATH = "";
-	try {
-		return await run();
-	} finally {
-		process.env.PATH = path;
-	}
-}
+afterEach(() => {
+	vi.unstubAllEnvs();
+});
 
 describe("nodeExeTarget", () => {
 	it("maps each target to tsdown's executable target and npm metadata", () => {
@@ -122,12 +116,10 @@ describe("Node binary compiler", () => {
 
 	it("never resolves the backend from outside crust's installation, even through NODE_PATH", async () => {
 		const elsewhere = await mkdtemp(join(tmpdir(), "crust-no-backend-"));
-		const nodePathEnv = process.env.NODE_PATH;
 		// Where the repository's tsdown really lives; Node's require would fall back to it.
-		process.env.NODE_PATH = resolve(
-			fileURLToPath(import.meta.resolve("tsdown/package.json")),
-			"..",
-			"..",
+		vi.stubEnv(
+			"NODE_PATH",
+			resolve(fileURLToPath(import.meta.resolve("tsdown/package.json")), "..", ".."),
 		);
 		try {
 			const installPath = join(elsewhere, "bin", "crust");
@@ -137,7 +129,6 @@ describe("Node binary compiler", () => {
 				`tsdown, which builds node standalone binaries, is not installed with crust (${installPath}).\n  @crustjs/crust ships tsdown and @tsdown/exe as optional dependencies, which package managers skip when optional dependencies are disabled or the installing node does not satisfy tsdown's engines.\n  Reinstall @crustjs/crust with optional dependencies enabled`,
 			);
 		} finally {
-			process.env.NODE_PATH = nodePathEnv;
 			await rm(elsewhere, { recursive: true, force: true });
 		}
 	});
@@ -231,8 +222,9 @@ describe("Node binary compiler", () => {
 	});
 
 	it("reports a missing node instead of falling back to another runtime", async () => {
-		await expect(
-			withoutBunOnPath(() => resolveNodeBinaryCompiler({}, process.cwd())),
-		).rejects.toThrow("Node is required for node standalone binaries but was not found on PATH.");
+		vi.stubEnv("PATH", "");
+		await expect(resolveNodeBinaryCompiler({}, process.cwd())).rejects.toThrow(
+			"Node is required for node standalone binaries but was not found on PATH.",
+		);
 	});
 });

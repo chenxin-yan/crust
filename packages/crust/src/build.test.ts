@@ -47,6 +47,10 @@ import { BUILD_RUNTIMES, BUN_TARGETS, DENO_TARGETS, hostTarget, NODE_TARGETS } f
 
 const host = hostTarget(BUN_TARGETS);
 
+afterEach(() => {
+	vi.unstubAllEnvs();
+});
+
 function readManifest(path: string): DistributionManifest {
 	return JSON.parse(readFileSync(path, "utf8")) as DistributionManifest;
 }
@@ -377,16 +381,11 @@ describe("planBuild", () => {
 	// Planning never looks up a compiler: build() selects it once and judges the
 	// host target against that runner (see the build() compiler-selection tests).
 	it.skipIf(host === null)("plans every target when bun is not on PATH", () => {
-		const path = process.env.PATH;
-		process.env.PATH = "";
-		try {
-			const plan = planBuild(binary, tmpDir);
-			expect(plan.runtime === "bun" && "targets" in plan && plan.targets.length).toBe(
-				BUN_TARGETS.targets.length,
-			);
-		} finally {
-			process.env.PATH = path;
-		}
+		vi.stubEnv("PATH", "");
+		const plan = planBuild(binary, tmpDir);
+		expect(plan.runtime === "bun" && "targets" in plan && plan.targets.length).toBe(
+			BUN_TARGETS.targets.length,
+		);
 	});
 
 	it("stages .crust for every runtime", () => {
@@ -967,8 +966,7 @@ await build({ cwd: ${JSON.stringify(tmpDir)}, validate: false, onLog() {
 		"checks the Deno bundler before wiping the previous stage and writes no manifest when bundling fails",
 		async () => {
 			const shimDir = mkdtempSync(join(tmpdir(), "crust-deno-shim-"));
-			const path = process.env.PATH;
-			process.env.PATH = `${shimDir}:${path}`;
+			vi.stubEnv("PATH", `${shimDir}:${process.env.PATH}`);
 			const fakeDeno = (version: string) =>
 				writeFileSync(
 					join(shimDir, "deno"),
@@ -993,7 +991,6 @@ await build({ cwd: ${JSON.stringify(tmpDir)}, validate: false, onLog() {
 				expect(existsSync(join(stageDir, "root", "package.json"))).toBe(true);
 				expect(existsSync(join(stageDir, "manifest.json"))).toBe(false);
 			} finally {
-				process.env.PATH = path;
 				rmSync(shimDir, { recursive: true, force: true });
 			}
 		},
@@ -1020,21 +1017,16 @@ await build({ cwd: ${JSON.stringify(tmpDir)}, validate: false, onLog() {
 		writeProject({ name: "engine-cli" }, 'console.log("hi");\n');
 		mkdirSync(stageDir);
 		writeFileSync(join(stageDir, "kept.txt"), "kept\n");
-		const path = process.env.PATH;
-		process.env.PATH = "";
-		try {
-			for (const artifact of ["binary", "package"] as const) {
-				await expect(
-					build({
-						cwd: tmpDir,
-						artifact,
-						...(artifact === "binary" ? { targets: ["bun-linux-x64"] } : {}),
-						validate: false,
-					}),
-				).rejects.toThrow("bun was not found on PATH");
-			}
-		} finally {
-			process.env.PATH = path;
+		vi.stubEnv("PATH", "");
+		for (const artifact of ["binary", "package"] as const) {
+			await expect(
+				build({
+					cwd: tmpDir,
+					artifact,
+					...(artifact === "binary" ? { targets: ["bun-linux-x64"] } : {}),
+					validate: false,
+				}),
+			).rejects.toThrow("bun was not found on PATH");
 		}
 		expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
 		expect(existsSync(join(stageDir, "manifest.json"))).toBe(false);
@@ -1045,6 +1037,7 @@ await build({ cwd: ${JSON.stringify(tmpDir)}, validate: false, onLog() {
 		"selects and validates the node binary compiler and tsdown's requirements before wiping the previous stage",
 		async () => {
 			const nodePath = which("node")!;
+			const bunDir = dirname(which("bun")!);
 			const nodeBinary = {
 				cwd: tmpDir,
 				artifact: "binary",
@@ -1075,34 +1068,28 @@ await build({ cwd: ${JSON.stringify(tmpDir)}, validate: false, onLog() {
 				`#!/bin/sh\nif [ "$1" = --version ]; then echo v24.11.0; exit 0; fi\nexec '${nodePath}' "$@"\n`,
 				{ mode: 0o755 },
 			);
-			const path = process.env.PATH;
 			try {
-				process.env.PATH = `${shimDir}:${path}`;
+				vi.stubEnv("PATH", `${shimDir}:${process.env.PATH}`);
 				await expect(build(nodeBinary)).rejects.toThrow(
 					/^Node 24\.11\.0 \(.*\) cannot build standalone executables: tsdown \S+'s executable builder requires Node \S+ or later\.\n  Binaries embed the selected node's version; crust does not install or upgrade it\./,
 				);
 				expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
 
-				process.env.PATH = "";
+				vi.stubEnv("PATH", "");
 				await expect(build(nodeBinary)).rejects.toThrow(
 					"Node is required for node standalone binaries but was not found on PATH.",
 				);
 			} finally {
-				process.env.PATH = path;
 				rmSync(shimDir, { recursive: true, force: true });
 			}
 			expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
 			expect(existsSync(join(stageDir, "manifest.json"))).toBe(false);
 
 			// Node runtime packages need neither tsdown's node nor tsdown: Bun bundles them.
-			process.env.PATH = dirname(which("bun")!);
-			try {
-				await expect(
-					build({ cwd: tmpDir, artifact: "package", validate: false }),
-				).resolves.toHaveProperty("stageDir", stageDir);
-			} finally {
-				process.env.PATH = path;
-			}
+			vi.stubEnv("PATH", bunDir);
+			await expect(
+				build({ cwd: tmpDir, artifact: "package", validate: false }),
+			).resolves.toHaveProperty("stageDir", stageDir);
 		},
 		30_000,
 	);
@@ -1132,8 +1119,7 @@ await build({ cwd: ${JSON.stringify(tmpDir)}, validate: false, onLog() {
 					`if [ "$1" = --version ]; then echo 0.0.1; exit 0; fi\nexit 1\n`,
 				{ mode: 0o755 },
 			);
-			const path = process.env.PATH;
-			process.env.PATH = `${shimDir}:${path}`;
+			vi.stubEnv("PATH", `${shimDir}:${process.env.PATH}`);
 			try {
 				expect(process.cwd()).not.toBe(tmpDir);
 				const logged: string[] = [];
@@ -1154,7 +1140,6 @@ await build({ cwd: ${JSON.stringify(tmpDir)}, validate: false, onLog() {
 				const embedded = execFileSync(executable.path, [], { encoding: "utf8", timeout: 10_000 });
 				expect(embedded.trim()).toBe(bunVersion);
 			} finally {
-				process.env.PATH = path;
 				rmSync(shimDir, { recursive: true, force: true });
 			}
 		},
