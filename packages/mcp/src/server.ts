@@ -1,4 +1,5 @@
 import { type AnyCrust, CrustError, type RunOutcome } from "@crustjs/core";
+import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -16,11 +17,6 @@ export type McpServerOptions = McpToolsOptions;
 
 /** Server `version` when the root command declares none; the SDK requires one. */
 export const DEFAULT_SERVER_VERSION = "0.0.0";
-
-type JsonValue = string | number | boolean | null | readonly JsonValue[] | JsonObject;
-interface JsonObject {
-	readonly [key: string]: JsonValue;
-}
 
 function isJsonPrimitive(value: unknown): value is string | number | boolean | null {
 	return (
@@ -95,10 +91,6 @@ function parseJsonValue(
 	}
 	copies.set(value, copy);
 	return copy;
-}
-
-function isJsonObject(value: JsonValue): value is JsonObject {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isString(value: JsonValue): value is string {

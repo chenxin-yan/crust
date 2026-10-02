@@ -2,9 +2,13 @@ import { accessSync, chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs
 import { homedir, tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { detectInstalledAgents, resolveAgentPath } from "./agents.ts";
+
+afterEach(() => {
+	vi.unstubAllEnvs();
+});
 
 describe("resolveAgentPath", () => {
 	it("resolves claude-code project path", () => {
@@ -13,47 +17,30 @@ describe("resolveAgentPath", () => {
 	});
 
 	it("resolves claude-code global path", () => {
-		const original = process.env.CLAUDE_CONFIG_DIR;
-		try {
-			delete process.env.CLAUDE_CONFIG_DIR;
-			expect(resolveAgentPath("claude-code", "global", "my-cli")).toBe(
-				join(homedir(), ".claude", "skills", "my-cli"),
-			);
-			process.env.CLAUDE_CONFIG_DIR = join(homedir(), "custom-claude");
-			expect(resolveAgentPath("claude-code", "global", "my-cli")).toBe(
-				join(homedir(), "custom-claude", "skills", "my-cli"),
-			);
-		} finally {
-			if (original === undefined) delete process.env.CLAUDE_CONFIG_DIR;
-			else process.env.CLAUDE_CONFIG_DIR = original;
-		}
+		vi.stubEnv("CLAUDE_CONFIG_DIR", undefined);
+		expect(resolveAgentPath("claude-code", "global", "my-cli")).toBe(
+			join(homedir(), ".claude", "skills", "my-cli"),
+		);
+		vi.stubEnv("CLAUDE_CONFIG_DIR", join(homedir(), "custom-claude"));
+		expect(resolveAgentPath("claude-code", "global", "my-cli")).toBe(
+			join(homedir(), "custom-claude", "skills", "my-cli"),
+		);
 	});
 
 	it("resolves Mistral Vibe's global path from VIBE_HOME, falling back to ~/.vibe", () => {
-		const original = process.env.VIBE_HOME;
-		try {
-			process.env.VIBE_HOME = join(homedir(), "custom-vibe");
-			expect(resolveAgentPath("mistral-vibe", "global", "my-cli")).toBe(
-				join(homedir(), "custom-vibe", "skills", "my-cli"),
-			);
-			delete process.env.VIBE_HOME;
-			expect(resolveAgentPath("mistral-vibe", "global", "my-cli")).toBe(
-				join(homedir(), ".vibe", "skills", "my-cli"),
-			);
-		} finally {
-			if (original === undefined) {
-				delete process.env.VIBE_HOME;
-			} else {
-				process.env.VIBE_HOME = original;
-			}
-		}
+		vi.stubEnv("VIBE_HOME", join(homedir(), "custom-vibe"));
+		expect(resolveAgentPath("mistral-vibe", "global", "my-cli")).toBe(
+			join(homedir(), "custom-vibe", "skills", "my-cli"),
+		);
+		vi.stubEnv("VIBE_HOME", undefined);
+		expect(resolveAgentPath("mistral-vibe", "global", "my-cli")).toBe(
+			join(homedir(), ".vibe", "skills", "my-cli"),
+		);
 	});
 });
 
 describe("detectInstalledAgents", () => {
 	let tmpDir: string;
-	let originalPath: string | undefined;
-	let originalPathExt: string | undefined;
 
 	beforeEach(() => {
 		tmpDir = join(
@@ -61,18 +48,9 @@ describe("detectInstalledAgents", () => {
 			`crust-agent-detect-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
 		);
 		mkdirSync(tmpDir, { recursive: true });
-		originalPath = process.env.PATH;
-		originalPathExt = process.env.PATHEXT;
 	});
 
 	afterEach(() => {
-		if (originalPath === undefined) delete process.env.PATH;
-		else process.env.PATH = originalPath;
-		if (originalPathExt === undefined) {
-			delete process.env.PATHEXT;
-		} else {
-			process.env.PATHEXT = originalPathExt;
-		}
 		rmSync(tmpDir, { recursive: true, force: true });
 	});
 
@@ -82,7 +60,7 @@ describe("detectInstalledAgents", () => {
 			writeFileSync(fakeBin, "#!/bin/sh\necho fake");
 			chmodSync(fakeBin, 0o755);
 		}
-		process.env.PATH = `${tmpDir}${delimiter}${process.env.PATH}`;
+		vi.stubEnv("PATH", `${tmpDir}${delimiter}${process.env.PATH}`);
 
 		const result = await detectInstalledAgents();
 		expect(result).toContain("claude-code");
@@ -91,7 +69,7 @@ describe("detectInstalledAgents", () => {
 
 	it("does not detect a command that is not on PATH", async () => {
 		// Use an empty PATH so nothing is found
-		process.env.PATH = tmpDir; // empty dir, no executables
+		vi.stubEnv("PATH", tmpDir); // empty dir, no executables
 
 		const result = await detectInstalledAgents();
 		expect(result).toEqual([]);
@@ -103,7 +81,7 @@ describe("detectInstalledAgents", () => {
 		writeFileSync(fakeBin, "#!/bin/sh\necho fake");
 		chmodSync(fakeBin, 0o644); // readable but not executable
 
-		process.env.PATH = tmpDir; // only our temp dir, so no real `claude` can be found
+		vi.stubEnv("PATH", tmpDir); // only our temp dir, so no real `claude` can be found
 
 		const result = await detectInstalledAgents();
 		expect(result).not.toContain("claude-code");
@@ -119,10 +97,10 @@ describe("detectInstalledAgents", () => {
 			chmodSync(fakeDir, 0o755);
 		}
 		if (process.platform === "win32") {
-			process.env.PATHEXT = ".CMD";
+			vi.stubEnv("PATHEXT", ".CMD");
 		}
 
-		process.env.PATH = tmpDir;
+		vi.stubEnv("PATH", tmpDir);
 
 		const result = await detectInstalledAgents();
 		expect(result).not.toContain("claude-code");
@@ -137,7 +115,7 @@ describe("detectInstalledAgents", () => {
 			chmodSync(fakeBin, 0o755);
 		}
 
-		process.env.PATH = `${tmpDir}${delimiter}${process.env.PATH}`;
+		vi.stubEnv("PATH", `${tmpDir}${delimiter}${process.env.PATH}`);
 
 		await detectInstalledAgents();
 

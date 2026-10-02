@@ -5,7 +5,7 @@
 import { posix } from "node:path";
 
 import {
-	formatDefault,
+	formatDescription,
 	sectionsFor,
 	type CommandDocumentation,
 	type DocumentationArg,
@@ -13,7 +13,8 @@ import {
 } from "@crustjs/core/tooling";
 import type { BaseValueType } from "@crustjs/utils/primitive";
 
-import { SKILLS } from "./extension.ts";
+import { SKILL_MD } from "./bundle.ts";
+import { SKILLS } from "./id.ts";
 import type { RenderedFile, SkillMeta } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -47,7 +48,7 @@ function escapeTableCell(value: string): string {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Public API
+// Entry point
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -73,13 +74,17 @@ export function renderSkill(root: CommandDocumentation, meta: SkillMeta): Render
 
 	// 1. SKILL.md — entrypoint
 	files.push({
-		path: "SKILL.md",
+		path: SKILL_MD,
 		content: renderSkillMd(root, meta, allNodes),
 	});
 
 	// 2. commands/ — per-command markdown files
+	const parents = new Map<CommandDocumentation, CommandDocumentation>();
 	for (const node of allNodes) {
-		files.push({ path: commandFilePath(node), content: renderCommand(node, root) });
+		for (const child of node.children) parents.set(child, node);
+	}
+	for (const node of allNodes) {
+		files.push({ path: commandFilePath(node), content: renderCommand(node, parents.get(node)) });
 	}
 
 	return files;
@@ -185,7 +190,7 @@ function commandInvocation(node: CommandDocumentation): string {
 }
 
 /** Displayed value type; schema-backed and richer Core types document as `string`. */
-function displayType(type: string | undefined): BaseValueType {
+function displayType(type: DocumentationArg["type"] | DocumentationFlag["type"]): BaseValueType {
 	return type === "number" || type === "boolean" ? type : "string";
 }
 
@@ -219,7 +224,8 @@ function renderSkillMd(
 	lines.push(`description: ${escapeYaml(meta.description)}`);
 	if (meta.version !== undefined) {
 		lines.push("metadata:");
-		lines.push(`  version: "${meta.version}"`);
+		// Always quoted so `1.0` stays a string rather than a YAML float.
+		lines.push(`  version: ${JSON.stringify(meta.version)}`);
 	}
 	lines.push("---");
 	lines.push("");
@@ -324,11 +330,14 @@ function commandType(node: CommandDocumentation): string {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Renders a command markdown file with its runnable details and child links. */
-function renderCommand(node: CommandDocumentation, root: CommandDocumentation): string {
+function renderCommand(
+	node: CommandDocumentation,
+	parent: CommandDocumentation | undefined,
+): string {
 	const lines = [...renderCommandHeading(node), ...renderCommandSections(node)];
 	if (node.hasAction) lines.push(...renderRunnableCommandSections(node));
 	if (node.children.length > 0) lines.push(...renderSubcommandLinks(node, commandFilePath(node)));
-	lines.push(...renderNavigation(node, root));
+	lines.push(...renderNavigation(node, parent));
 	return lines.join("\n");
 }
 
@@ -430,63 +439,44 @@ function renderFlagsTable(flags: readonly DocumentationFlag[]): string[] {
 }
 
 function formatFieldDescription(field: DocumentationArg | DocumentationFlag): string {
-	const parts: string[] = [];
-	if (field.description) {
-		parts.push(field.description);
-	}
-	if ("multiple" in field && field.multiple) {
-		parts.push("Can be specified multiple times");
-	}
-	if (field.default !== undefined) {
-		parts.push(`Default: \`${formatDefault(field.default)}\``);
-	}
-	return parts.join(". ") || "-";
+	const flag = "multiple" in field ? field : undefined;
+	const description = [field.description, flag?.multiple ? "Can be specified multiple times" : ""]
+		.filter(Boolean)
+		.join(". ");
+	return (
+		formatDescription(
+			description,
+			field.default,
+			field.choices,
+			(annotation) => `\`${annotation}\``,
+			flag?.env?.name,
+		) || "-"
+	);
 }
 
 /**
  * Renders navigation links back to the parent command and skill entrypoint.
  */
-function renderNavigation(node: CommandDocumentation, root: CommandDocumentation): string[] {
+function renderNavigation(
+	node: CommandDocumentation,
+	parent: CommandDocumentation | undefined,
+): string[] {
 	const lines: string[] = [];
 	const filePath = commandFilePath(node);
 
 	lines.push("---");
 	lines.push("");
 
-	// Link to parent (if not root)
-	if (node.path.length > 1) {
-		const parentPath = node.path.slice(0, -1);
-		const parentNode = findNode(root, parentPath);
-		if (parentNode) {
-			const parentFile = commandFilePath(parentNode);
-			const parentRelative = relativePath(filePath, parentFile);
-			const parentInvocation = commandInvocation(parentNode);
-			lines.push(`Parent: [\`${parentInvocation}\`](${parentRelative})`);
-			lines.push("");
-		}
+	if (parent) {
+		const parentRelative = relativePath(filePath, commandFilePath(parent));
+		lines.push(`Parent: [\`${commandInvocation(parent)}\`](${parentRelative})`);
+		lines.push("");
 	}
 
 	// Link to SKILL.md
-	const skillRelative = relativePath(filePath, "SKILL.md");
+	const skillRelative = relativePath(filePath, SKILL_MD);
 	lines.push(`[Skill Overview](${skillRelative})`);
 	lines.push("");
 
 	return lines;
-}
-
-/**
- * Finds a node in the documentation tree by its full path.
- */
-function findNode(
-	root: CommandDocumentation,
-	path: readonly string[],
-): CommandDocumentation | undefined {
-	if (root.path.length === path.length && root.path.every((value, i) => value === path[i])) {
-		return root;
-	}
-	for (const child of root.children) {
-		const found = findNode(child, path);
-		if (found) return found;
-	}
-	return undefined;
 }

@@ -17,13 +17,13 @@ import { renderHelp } from "@crustjs/extensions";
 import { withPromptIO } from "@crustjs/prompts";
 import { createPromptIO } from "@crustjs/prompts/testing";
 import { captureExecute } from "@crustjs/testing";
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { reapBoundedProcesses, runBoundedProcess } from "../../crust/tests/bounded-process.ts";
 import { runBuildHooks } from "../../crust/tests/build-hooks.ts";
 import { withCwd } from "../tests/fixtures.ts";
 import { skill } from "./extension.ts";
-import { installSkill } from "./generate.ts";
+import { installSkill } from "./install.ts";
 
 let tempRoot: string;
 let packageRoot: string;
@@ -45,6 +45,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+	vi.unstubAllEnvs();
 	await reapBoundedProcesses();
 	process.exitCode = originalExitCode ?? 0;
 	if (originalArgv1 === undefined) process.argv.length = 1;
@@ -274,23 +275,18 @@ describe("skill extension packaged directory", () => {
 		await writeSource("guide");
 
 		// Empty PATH keeps agent detection deterministic: Universal is the only agent choice.
-		const path = process.env.PATH;
-		process.env.PATH = "";
-		try {
-			const harness = createPromptIO();
-			const run = withCwd(tempRoot, () =>
-				withPromptIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
-			);
-			await waitForPrompt(harness, "Select skills to install");
-			// Nothing is installed, so both skills start selected; drop "guide".
-			harness.keys("down", "space", "enter");
-			await waitForPrompt(harness, "Select agents to install for");
-			harness.keys("space", "enter");
-			await run;
-			expect(harness.screen().split("Select agents to install for")).toHaveLength(2);
-		} finally {
-			process.env.PATH = path;
-		}
+		vi.stubEnv("PATH", "");
+		const harness = createPromptIO();
+		const run = withCwd(tempRoot, () =>
+			withPromptIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
+		);
+		await waitForPrompt(harness, "Select skills to install");
+		// Nothing is installed, so both skills start selected; drop "guide".
+		harness.keys("down", "space", "enter");
+		await waitForPrompt(harness, "Select agents to install for");
+		harness.keys("space", "enter");
+		await run;
+		expect(harness.screen().split("Select agents to install for")).toHaveLength(2);
 
 		expect((await lstat(target("demo"))).isSymbolicLink()).toBe(true);
 		await expect(lstat(target("guide"))).rejects.toThrow();
@@ -304,23 +300,18 @@ describe("skill extension packaged directory", () => {
 		);
 
 		// Empty PATH keeps agent detection deterministic: Universal is the only agent choice.
-		const path = process.env.PATH;
-		process.env.PATH = "";
-		try {
-			const harness = createPromptIO();
-			const run = withCwd(tempRoot, () =>
-				withPromptIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
-			);
-			await waitForPrompt(harness, "Select skills to install");
-			// Only the installed "guide" starts selected; swap it for "demo".
-			harness.keys("space", "down", "space", "enter");
-			await waitForPrompt(harness, "Select agents to install for");
-			harness.keys("space", "enter");
-			await run;
-			expect(harness.screen().split("Select agents to install for")).toHaveLength(2);
-		} finally {
-			process.env.PATH = path;
-		}
+		vi.stubEnv("PATH", "");
+		const harness = createPromptIO();
+		const run = withCwd(tempRoot, () =>
+			withPromptIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
+		);
+		await waitForPrompt(harness, "Select skills to install");
+		// Only the installed "guide" starts selected; swap it for "demo".
+		harness.keys("space", "down", "space", "enter");
+		await waitForPrompt(harness, "Select agents to install for");
+		harness.keys("space", "enter");
+		await run;
+		expect(harness.screen().split("Select agents to install for")).toHaveLength(2);
 
 		expect(resolve(dirname(target("demo")), await readlink(target("demo")))).toBe(
 			join(source, "demo"),
@@ -341,20 +332,15 @@ describe("skill extension packaged directory", () => {
 
 			// Empty PATH keeps agent detection deterministic: Universal plus the
 			// already-installed Augment are the only agent choices.
-			const path = process.env.PATH;
-			process.env.PATH = "";
-			try {
-				const harness = createPromptIO();
-				const run = withCwd(tempRoot, () =>
-					withPromptIO(harness.io, () => createApp().execute({ argv: command.split(" ") })),
-				);
-				await waitForPrompt(harness, "Select agents to install for");
-				// Only the installed Augment starts selected; swap it for Universal.
-				harness.keys("space", "down", "space", "enter");
-				await run;
-			} finally {
-				process.env.PATH = path;
-			}
+			vi.stubEnv("PATH", "");
+			const harness = createPromptIO();
+			const run = withCwd(tempRoot, () =>
+				withPromptIO(harness.io, () => createApp().execute({ argv: command.split(" ") })),
+			);
+			await waitForPrompt(harness, "Select agents to install for");
+			// Only the installed Augment starts selected; swap it for Universal.
+			harness.keys("space", "down", "space", "enter");
+			await run;
 
 			expect(resolve(dirname(target("demo")), await readlink(target("demo")))).toBe(
 				join(source, "demo"),
@@ -631,18 +617,13 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 
 		// Empty PATH keeps agent detection deterministic: Antigravity is the only
 		// additional choice (installed), listed right after Universal.
-		const path = process.env.PATH;
-		process.env.PATH = "";
-		try {
-			const harness = createPromptIO();
-			const run = withCwd(tempRoot, () =>
-				withPromptIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
-			);
-			harness.keys("down", "space", "enter");
-			await run;
-		} finally {
-			process.env.PATH = path;
-		}
+		vi.stubEnv("PATH", "");
+		const harness = createPromptIO();
+		const run = withCwd(tempRoot, () =>
+			withPromptIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
+		);
+		harness.keys("down", "space", "enter");
+		await run;
 
 		expect((await lstat(target())).isSymbolicLink()).toBe(true);
 	});
@@ -654,24 +635,19 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 
 		// Empty PATH keeps agent detection deterministic: Universal is the only
 		// choice, so the queued keys select it and then accept the overwrite.
-		const path = process.env.PATH;
-		process.env.PATH = "";
-		try {
-			const harness = createPromptIO();
-			const run = withCwd(tempRoot, () =>
-				withPromptIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
-			);
-			harness.keys("space", "enter");
-			// The multiselect drains buffered input, so the confirm answer must
-			// wait until the confirm prompt is attached and rendering.
-			while (!harness.screen().includes("Overwrite?")) {
-				await new Promise((resolve) => setTimeout(resolve, 10));
-			}
-			harness.keys("y", "enter");
-			await run;
-		} finally {
-			process.env.PATH = path;
+		vi.stubEnv("PATH", "");
+		const harness = createPromptIO();
+		const run = withCwd(tempRoot, () =>
+			withPromptIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
+		);
+		harness.keys("space", "enter");
+		// The multiselect drains buffered input, so the confirm answer must
+		// wait until the confirm prompt is attached and rendering.
+		while (!harness.screen().includes("Overwrite?")) {
+			await new Promise((resolve) => setTimeout(resolve, 10));
 		}
+		harness.keys("y", "enter");
+		await run;
 
 		expect((await lstat(target())).isSymbolicLink()).toBe(true);
 		expect(await readFile(join(target(), "content.md"), "utf8")).toBe("demo\n");
