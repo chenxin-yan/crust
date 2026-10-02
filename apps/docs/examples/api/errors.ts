@@ -1,4 +1,4 @@
-// #region handle
+//#region handle
 import { Crust, CrustError } from "@crustjs/core";
 import { z } from "zod";
 
@@ -19,4 +19,4 @@ if (outcome.status === "failed") {
 		throw error;
 	}
 }
-// #endregion handle
+//#endregion
