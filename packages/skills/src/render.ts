@@ -5,7 +5,7 @@
 import { posix } from "node:path";
 
 import {
-	formatDefault,
+	formatDescription,
 	sectionsFor,
 	type CommandDocumentation,
 	type DocumentationArg,
@@ -190,7 +190,7 @@ function commandInvocation(node: CommandDocumentation): string {
 }
 
 /** Displayed value type; schema-backed and richer Core types document as `string`. */
-function displayType(type: string | undefined): BaseValueType {
+function displayType(type: DocumentationArg["type"] | DocumentationFlag["type"]): BaseValueType {
 	return type === "number" || type === "boolean" ? type : "string";
 }
 
@@ -224,7 +224,8 @@ function renderSkillMd(
 	lines.push(`description: ${escapeYaml(meta.description)}`);
 	if (meta.version !== undefined) {
 		lines.push("metadata:");
-		lines.push(`  version: "${meta.version}"`);
+		// Always quoted so `1.0` stays a string rather than a YAML float.
+		lines.push(`  version: ${JSON.stringify(meta.version)}`);
 	}
 	lines.push("---");
 	lines.push("");
@@ -438,17 +439,19 @@ function renderFlagsTable(flags: readonly DocumentationFlag[]): string[] {
 }
 
 function formatFieldDescription(field: DocumentationArg | DocumentationFlag): string {
-	const parts: string[] = [];
-	if (field.description) {
-		parts.push(field.description);
-	}
-	if ("multiple" in field && field.multiple) {
-		parts.push("Can be specified multiple times");
-	}
-	if (field.default !== undefined) {
-		parts.push(`Default: \`${formatDefault(field.default)}\``);
-	}
-	return parts.join(". ") || "-";
+	const flag = "multiple" in field ? field : undefined;
+	const description = [field.description, flag?.multiple ? "Can be specified multiple times" : ""]
+		.filter(Boolean)
+		.join(". ");
+	return (
+		formatDescription(
+			description,
+			field.default,
+			field.choices,
+			(annotation) => `\`${annotation}\``,
+			flag?.env?.name,
+		) || "-"
+	);
 }
 
 /**

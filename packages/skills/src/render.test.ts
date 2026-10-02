@@ -64,6 +64,14 @@ describe("renderSkill", () => {
 			expect(skill?.content).toContain('  version: "1.2.3"');
 		});
 
+		it("quotes the version as a YAML string even when it contains quotes", async () => {
+			const documentation = await buildSimpleDocumentation();
+			const files = renderSkill(documentation, { ...baseMeta, version: '1.0.0-"beta"\\x' });
+			const skill = findFile(files, "SKILL.md");
+
+			expect(skill?.content).toContain('  version: "1.0.0-\\"beta\\"\\\\x"');
+		});
+
 		it("omits the metadata block when no version is provided", async () => {
 			const documentation = await buildSimpleDocumentation();
 			const files = renderSkill(documentation, baseMeta);
@@ -271,7 +279,7 @@ describe("renderSkill", () => {
 			const files = renderSkill(documentation, meta);
 			const serve = findFile(files, "commands/serve.md");
 
-			expect(serve?.content).toContain("Default: `3000`");
+			expect(serve?.content).toContain("`[default: 3000]`");
 		});
 
 		it("renders Context-owned flags from a Core-built command tree", async () => {
@@ -332,7 +340,7 @@ describe("renderSkill", () => {
 				"`-v`, `--verbose`, `--debug`, `--no-verbose`, `--no-debug`",
 			);
 			expect(build?.content).toContain("`--target`");
-			expect(build?.content).toContain('Default: `"dist"`');
+			expect(build?.content).toContain('`[default: "dist"]`');
 			expect(build?.content).toContain("| Yes |");
 		});
 
@@ -1132,6 +1140,31 @@ describe("renderSkill", () => {
 			);
 		});
 
+		it("annotates env, defaults, and choices like Core help", async () => {
+			const cmd = makeCommand({
+				meta: { name: "serve" },
+				args: [{ name: "mode", type: "string", choices: ["dev", "prod"], default: "dev" }],
+				flags: {
+					format: {
+						type: "string",
+						description: "Output format",
+						choices: ["json", "text"],
+						env: { name: "SERVE_FORMAT" },
+					},
+				},
+				run() {},
+			});
+
+			const serve = expectTextContent(findFile(await render(cmd), "commands/serve.md"));
+
+			expect(serve).toContain(
+				'| `mode` | string | No | `[default: "dev"]` `[choices: dev, prod]` |',
+			);
+			expect(serve).toContain(
+				"| `--format` | string | No | Output format `[env: SERVE_FORMAT]` `[choices: json, text]` |",
+			);
+		});
+
 		it("formats defaults like Core help and displays other value types as strings", async () => {
 			const schemaArg = {
 				name: "target",
@@ -1156,12 +1189,12 @@ describe("renderSkill", () => {
 
 			expect(serve).toContain("| `target` | string | No | - |");
 			expect(serve).toContain(
-				"| `--entry` | string | No | Can be specified multiple times. Default: `src/index.ts, src/cli.ts` |",
+				"| `--entry` | string | No | Can be specified multiple times `[default: src/index.ts, src/cli.ts]` |",
 			);
-			expect(serve).toContain('| `--host` | string | No | Default: `"localhost"` |');
-			expect(serve).toContain("| `--port` | number | No | Default: `8080` |");
+			expect(serve).toContain('| `--host` | string | No | `[default: "localhost"]` |');
+			expect(serve).toContain("| `--port` | number | No | `[default: 8080]` |");
 			expect(serve).toContain("| `--root` | string | No | - |");
-			expect(serve).toContain("| `--watch`, `--no-watch` | boolean | No | Default: `true` |");
+			expect(serve).toContain("| `--watch`, `--no-watch` | boolean | No | `[default: true]` |");
 		});
 	});
 });
