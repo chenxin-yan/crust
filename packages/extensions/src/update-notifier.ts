@@ -227,7 +227,7 @@ export async function fetchLatestVersion(
 
 		if (!response.ok) return null;
 
-		const data: JsonValue = await response.json();
+		const data: JsonValue = JSON.parse(await response.text());
 		const tags = isJsonObject(data) ? data["dist-tags"] : undefined;
 		const latest = tags !== undefined && isJsonObject(tags) ? tags.latest : undefined;
 		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- parsing registry JSON at its I/O boundary.
