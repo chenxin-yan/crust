@@ -61,6 +61,12 @@ export type PasswordOptions<Output = string> = PasswordBaseOptions & SchemaOrVal
 
 const SUBMITTED_MASK_LENGTH = 4;
 
+/** Count code points, the unit `handleTextEdit` moves the cursor by, so each mask char is one step. */
+function codePointCount(text: string): number {
+	// oxlint-disable-next-line typescript/no-misused-spread -- code points, not graphemes, match the cursor step.
+	return [...text].length;
+}
+
 function renderPassword(
 	state: TextSubmitState,
 	theme: PromptTheme,
@@ -70,9 +76,8 @@ function renderPassword(
 	const prefix = theme.prefix(PREFIX_SYMBOL);
 	const msg = theme.message(message ?? "Enter a password");
 
-	// cursorPos is a UTF-16 offset; mask whole code points so an emoji shows one mask char.
-	const beforeMask = mask.repeat([...state.value.slice(0, state.cursorPos)].length);
-	const afterMask = mask.repeat([...state.value.slice(state.cursorPos)].length);
+	const beforeMask = mask.repeat(codePointCount(state.value.slice(0, state.cursorPos)));
+	const afterMask = mask.repeat(codePointCount(state.value.slice(state.cursorPos)));
 	const valueLine = `${beforeMask}${theme.cursor(CURSOR_CHAR)}${afterMask}`;
 
 	let output = formatPromptLine(prefix, msg, valueLine);
