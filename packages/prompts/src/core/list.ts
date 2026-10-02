@@ -34,7 +34,7 @@ type ListPromptSetup<T, Answer extends T | readonly T[]> =
 /** @internal Resolve the shared lifecycle and initial viewport for list prompts. */
 export async function setupListPrompt<T, Answer extends T | readonly T[]>(
 	options: ListPromptOptions<T, Answer>,
-	mode: "single" | "multiple",
+	defaults: readonly T[],
 	io?: PromptIO,
 ): Promise<ListPromptSetup<T, Answer>> {
 	const shortCircuit = await resolveShortCircuit(options, io);
@@ -42,13 +42,6 @@ export async function setupListPrompt<T, Answer extends T | readonly T[]>(
 
 	const choices = normalizeChoices(options.choices);
 	const maxVisible = options.maxVisible ?? DEFAULT_MAX_VISIBLE;
-	// SAFETY: The explicit mode disambiguates scalar array-valued T from multi-answer T[].
-	const defaults: readonly T[] =
-		options.default === undefined
-			? []
-			: mode === "multiple"
-				? (options.default as readonly T[])
-				: [options.default as T];
 	const selected = new Set(
 		defaults.flatMap((value) => {
 			const index = choices.findIndex((choice) => choice.value === value);

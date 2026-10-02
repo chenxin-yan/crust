@@ -293,7 +293,7 @@ export function multiselect(
 ): Promise<string[]>;
 export function multiselect<T>(options: MultiselectOptions<T>, io?: PromptIO): Promise<T[]>;
 export async function multiselect<T>(options: MultiselectOptions<T>, io?: PromptIO): Promise<T[]> {
-	const setup = await setupListPrompt<T, readonly T[]>(options, "multiple", io);
+	const setup = await setupListPrompt<T, readonly T[]>(options, options.default ?? [], io);
 	if (setup.shortCircuited) return [...setup.value];
 
 	const { choices, cursor, maxVisible, promptIO, scrollOffset, selected } = setup;

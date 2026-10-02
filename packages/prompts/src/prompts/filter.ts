@@ -202,7 +202,11 @@ export function filter(
 ): Promise<string>;
 export function filter<T>(options: FilterOptions<T>, io?: PromptIO): Promise<T>;
 export async function filter<T>(options: FilterOptions<T>, io?: PromptIO): Promise<T> {
-	const setup = await setupListPrompt<T, T>(options, "single", io);
+	const setup = await setupListPrompt<T, T>(
+		options,
+		options.default === undefined ? [] : [options.default],
+		io,
+	);
 	if (setup.shortCircuited) return setup.value;
 
 	const { choices, cursor, maxVisible, promptIO, scrollOffset } = setup;
