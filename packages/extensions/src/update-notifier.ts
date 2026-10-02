@@ -110,7 +110,8 @@ export interface UpdateNotifierOptions {
 	 * Pass a string for a fixed command, a callback to build one from the
 	 * package name and detected package manager, or a scope to generate the
 	 * package manager's standard local/global command. When omitted, the notice
-	 * does not suggest a command.
+	 * does not suggest a command. Callbacks and package-manager detection run
+	 * only when a notice is shown.
 	 */
 	updateCommand?: string | UpdateCommandResolver | { scope: "global" | "local" };
 

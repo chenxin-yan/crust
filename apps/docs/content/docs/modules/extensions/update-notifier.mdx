@@ -42,7 +42,7 @@ updateNotifier({
 });
 ```
 
-A string displays a fixed command. A resolver receives `{ packageName, packageManager }`, while a scope creates the standard command for npm, pnpm, Yarn, or Bun.
+A string displays a fixed command. A resolver receives `{ packageName, packageManager }`, while a scope creates the standard command for npm, pnpm, Yarn, or Bun. Resolvers and package-manager detection run only when a notice is shown.
 
 ```ts
 updateNotifier({
