@@ -81,9 +81,7 @@ function formatRow(
 	return `|${formattedCells.join("|")}|`;
 }
 
-/**
- * Generate a separator row using the given character.
- */
+/** Separator row of `-` matching the column widths. */
 function formatSeparator(columnWidths: readonly number[]): string {
 	const segments = columnWidths.map((width) => "-".repeat(width + 2));
 	return `|${segments.join("|")}|`;

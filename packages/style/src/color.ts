@@ -1,7 +1,8 @@
 // ────────────────────────────────────────────────────────────────────────────
 // Dynamic Colors — portable depth-aware `fg` / `bg` helpers.
 // ────────────────────────────────────────────────────────────────────────────
-// Inputs are intentionally limited to hex, rgb triples, and named colors.
+// Inputs are intentionally limited to hex, `rgb()` strings, rgb triples, and
+// named colors.
 
 import type { AnsiPair } from "./ansiCodes.ts";
 import { namedColorValues } from "./namedColorValues.ts";
@@ -111,8 +112,6 @@ function rgbToAnsi256(r: number, g: number, b: number): number {
  * Same algorithm as `ansi-styles` / `chalk`: bucket each channel at 50%,
  * pack into a 3-bit base color, then add 60 for bright when the max
  * channel rounds up. Call sites add `+10` for backgrounds.
- *
- * @internal
  */
 function rgbToAnsi16Param(r: number, g: number, b: number): number {
 	const maxChannel = Math.max(r, g, b);
@@ -130,8 +129,6 @@ function rgbToAnsi16Param(r: number, g: number, b: number): number {
 
 /**
  * Foreground SGR open sequence at `depth`.
- *
- * @internal
  */
 function fgOpen(input: ColorInput, depth: Exclude<ColorDepth, "none">): string {
 	const [r, g, b] = parseRgb(input);
@@ -145,8 +142,6 @@ function fgOpen(input: ColorInput, depth: Exclude<ColorDepth, "none">): string {
  * derived from {@link fgOpen} by swapping the `\x1b[38;` introducer for
  * `\x1b[48;` (both the truecolor and 256-color forms use it). For `16`,
  * quantized directly to a real background SGR.
- *
- * @internal
  */
 function bgOpen(input: ColorInput, depth: Exclude<ColorDepth, "none">): string {
 	if (depth === "16") {

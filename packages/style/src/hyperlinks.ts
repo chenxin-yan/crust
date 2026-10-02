@@ -78,7 +78,7 @@ export function linkCode(url: string, options?: HyperlinkOptions): AnsiPair {
  * ```ts
  * import { link } from "@crustjs/style";
  *
- * console.log(link("docs", "https://crustjs.dev"));
+ * console.log(link("docs", "https://crustjs.com"));
  * console.log(link("page 1", "https://example.com/p1", { id: "intro" }));
  * ```
  */

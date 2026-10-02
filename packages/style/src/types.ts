@@ -234,8 +234,8 @@ export interface StyleInstance extends StyleMethodMap {
 
 	/**
 	 * Apply a foreground color to text from a hex string, named CSS color,
-	 * `rgb()` string, or `[r, g, b]` tuple. Output is rendered at the depth captured at
-	 * `createStyle()` time — see {@link StyleInstance.colorDepth}.
+	 * `rgb()` string, or `[r, g, b]` tuple. Output is rendered at the instance's
+	 * current {@link StyleInstance.colorDepth}.
 	 *
 	 * Two call shapes:
 	 * - `fg(text, input)` — direct application, returns the styled string.
