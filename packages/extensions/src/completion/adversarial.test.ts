@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
 import { buildCommandDocumentation } from "@crustjs/core/tooling";
+import { captureExecute } from "@crustjs/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { reapBoundedProcesses, runBoundedProcess } from "../../../crust/tests/bounded-process.ts";
@@ -12,7 +13,7 @@ import type { CompletionCommand } from "./spec.ts";
 import { renderBash } from "./templates/bash.ts";
 import { renderFish } from "./templates/fish.ts";
 import { renderZsh } from "./templates/zsh.ts";
-import { walkCommandNode } from "./walker.ts";
+import { walkCommand } from "./walker.ts";
 
 /**
  * Adversarial test suite. These tests exercise the validation/escape
@@ -32,13 +33,13 @@ describe("walker · validation", () => {
 			.add(defineCommand("two words", (c) => c.action(() => {})))
 			.action(() => {});
 		const model = buildCommandDocumentation(await cli.snapshot());
-		expect(() => walkCommandNode(model)).toThrow(/invalid command name/);
+		expect(() => walkCommand(model)).toThrow(/invalid command name/);
 	});
 
 	it("rejects flag names with shell metacharacters", async () => {
 		const cli = new Crust("bad").flags({ name: "a;rm", type: "boolean" }).action(() => {});
 		const model = buildCommandDocumentation(await cli.snapshot());
-		expect(() => walkCommandNode(model)).toThrow(/invalid flag name/);
+		expect(() => walkCommand(model)).toThrow(/invalid flag name/);
 	});
 
 	it("rejects choice values containing spaces", async () => {
@@ -50,14 +51,14 @@ describe("walker · validation", () => {
 			})
 			.action(() => {});
 		const model = buildCommandDocumentation(await cli.snapshot());
-		expect(() => walkCommandNode(model)).toThrow(/unsupported choice value/);
+		expect(() => walkCommand(model)).toThrow(/unsupported choice value/);
 	});
 
 	it("strips control characters from descriptions instead of throwing", async () => {
 		const cli = new Crust("safe", {
 			description: "first line\nsecond line\rstill same line",
 		}).action(() => {});
-		const spec = walkCommandNode(buildCommandDocumentation(await cli.snapshot()));
+		const spec = walkCommand(buildCommandDocumentation(await cli.snapshot()));
 		// Newlines and CR collapse to spaces during normalisation.
 		expect(spec.description).toBe("first line second line still same line");
 		// And the value never contains a raw newline that could break
@@ -206,64 +207,22 @@ for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
 // ── --output-dir traversal ───────────────────────────────────────────────
 
 describe("completion · --output-dir traversal", () => {
-	type StdoutChunk = Parameters<typeof process.stdout.write>[0];
-
-	function isStringChunk(chunk: StdoutChunk): chunk is string {
-		return typeof chunk === "string";
-	}
-
-	let stdoutBuf: Buffer[];
-	let originalWrite: typeof process.stdout.write;
-	let originalStderrWrite: typeof process.stderr.write;
-	let originalExitCode: typeof process.exitCode;
-
-	beforeEach(() => {
-		stdoutBuf = [];
-		originalWrite = process.stdout.write.bind(process.stdout);
-		originalStderrWrite = process.stderr.write;
-		originalExitCode = process.exitCode;
-		process.stdout.write = (chunk: StdoutChunk) => {
-			if (isStringChunk(chunk)) {
-				stdoutBuf.push(Buffer.from(chunk, "utf8"));
-			} else if (chunk instanceof Uint8Array) {
-				stdoutBuf.push(Buffer.from(chunk));
-			}
-			return true;
-		};
-		process.stderr.write = () => true;
-	});
-
-	afterEach(() => {
-		process.stdout.write = originalWrite;
-		process.stderr.write = originalStderrWrite;
-		process.exitCode = originalExitCode;
-	});
-
 	it("rejects a root name containing path separators before rendering or writing files", async () => {
 		const root = await mkdtemp(join(tmpdir(), "completion-traversal-"));
 		const outputDir = join(root, "completions");
-		const stderrChunks: string[] = [];
-		const origWrite = process.stderr.write;
-		process.stderr.write = (chunk: string | Uint8Array) => {
-			stderrChunks.push(String(chunk));
-			return true;
-		};
 		try {
 			const cli = new Crust("../pwn", { version: "1.0.0" }).extend(completion()).action(() => {});
 			for (const argv of [
 				["completion", "bash"],
 				["completion", "bash", "--output-dir", outputDir],
 			]) {
-				stderrChunks.length = 0;
-				process.exitCode = 0;
-				await cli.execute({ argv });
-				expect(stderrChunks.join("\n")).toMatch(/invalid root command name/);
-				expect(process.exitCode).toBe(1);
+				const { stderr, exitCode } = await captureExecute(cli, argv);
+				expect(stderr).toMatch(/invalid root command name/);
+				expect(exitCode).toBe(1);
 				// Neither the output directory nor a path-traversing sibling should be written.
 				expect(await readdir(root)).toEqual([]);
 			}
 		} finally {
-			process.stderr.write = origWrite;
 			await rm(root, { recursive: true, force: true });
 		}
 	});

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust } from "@crustjs/core";
+import { captureExecute } from "@crustjs/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
@@ -269,11 +270,6 @@ describe("lazy store import", () => {
 
 describe("updateNotifier post-run hook", () => {
 	const originalFetch = globalThis.fetch;
-	const originalUserAgent = process.env.npm_config_user_agent;
-	const originalNpmExecpath = process.env.npm_execpath;
-	const originalXdgStateHome = process.env.XDG_STATE_HOME;
-	let originalStderrWrite: typeof process.stderr.write;
-	let originalExitCode: typeof process.exitCode;
 	let stderrChunks: string[];
 	let cachedState: UpdateNotifierState | undefined;
 	let tempDirs: string[];
@@ -290,30 +286,15 @@ describe("updateNotifier post-run hook", () => {
 		// suites that don't care about caching never touch the real user state dir.
 		const stateHome = await mkdtemp(join(tmpdir(), "crust-update-notifier-state-"));
 		tempDirs.push(stateHome);
-		process.env.XDG_STATE_HOME = stateHome;
+		vi.stubEnv("XDG_STATE_HOME", stateHome);
 
 		stderrChunks = [];
-		originalStderrWrite = process.stderr.write;
-		originalExitCode = process.exitCode;
-		process.stderr.write = (chunk: string | Uint8Array) => {
-			stderrChunks.push(String(chunk));
-			return true;
-		};
 	});
-
-	function restoreEnv(key: string, original: string | undefined) {
-		if (original === undefined) delete process.env[key];
-		else process.env[key] = original;
-	}
 
 	afterEach(async () => {
 		globalThis.fetch = originalFetch;
-		process.stderr.write = originalStderrWrite;
-		restoreEnv("npm_config_user_agent", originalUserAgent);
-		restoreEnv("npm_execpath", originalNpmExecpath);
-		restoreEnv("XDG_STATE_HOME", originalXdgStateHome);
+		vi.unstubAllEnvs();
 		await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })));
-		process.exitCode = originalExitCode ?? 0;
 	});
 
 	function getOutput() {
@@ -346,7 +327,7 @@ describe("updateNotifier post-run hook", () => {
 		);
 		tempDirs.push(join(stateHomeFile, ".."));
 		await writeFile(stateHomeFile, "unchanged");
-		process.env.XDG_STATE_HOME = stateHomeFile;
+		vi.stubEnv("XDG_STATE_HOME", stateHomeFile);
 		return stateHomeFile;
 	}
 
@@ -727,7 +708,7 @@ describe("updateNotifier post-run hook", () => {
 	describe("option behavior", () => {
 		it("uses global commands when updateCommand scope is global", async () => {
 			const pkgName = uniquePackageName("explicit-global");
-			process.env.npm_config_user_agent = "bun/1.3.0";
+			vi.stubEnv("npm_config_user_agent", "bun/1.3.0");
 			mockRegistryResponse("2.0.0");
 
 			await runExtensionMiddleware({
@@ -741,7 +722,7 @@ describe("updateNotifier post-run hook", () => {
 
 		it("uses local commands when updateCommand scope is local", async () => {
 			const pkgName = uniquePackageName("explicit-local");
-			process.env.npm_config_user_agent = "npm/10.0.0 node/v22";
+			vi.stubEnv("npm_config_user_agent", "npm/10.0.0 node/v22");
 			mockRegistryResponse("2.0.0");
 
 			await runExtensionMiddleware({
@@ -755,8 +736,8 @@ describe("updateNotifier post-run hook", () => {
 
 		it("infers bun from npm_execpath when user agent is missing", async () => {
 			const pkgName = uniquePackageName("npm-execpath-bun");
-			delete process.env.npm_config_user_agent;
-			process.env.npm_execpath = "/opt/homebrew/bin/bun";
+			vi.stubEnv("npm_config_user_agent", undefined);
+			vi.stubEnv("npm_execpath", "/opt/homebrew/bin/bun");
 			mockRegistryResponse("2.0.0");
 
 			await runExtensionMiddleware({
@@ -800,7 +781,7 @@ describe("updateNotifier post-run hook", () => {
 		it("passes package information to updateCommand callbacks", async () => {
 			const pkgName = uniquePackageName("callback-info");
 			const received: Array<{ packageName: string; packageManager: string }> = [];
-			process.env.npm_config_user_agent = "pnpm/10.0.0 node/v22";
+			vi.stubEnv("npm_config_user_agent", "pnpm/10.0.0 node/v22");
 			mockRegistryResponse("2.0.0");
 
 			await runExtensionMiddleware({
@@ -813,6 +794,23 @@ describe("updateNotifier post-run hook", () => {
 			});
 
 			expect(received).toEqual([{ packageName: pkgName, packageManager: "pnpm" }]);
+		});
+
+		it("does not call updateCommand callbacks when no notice is shown", async () => {
+			let calls = 0;
+			mockRegistryResponse("1.0.0");
+
+			await runExtensionMiddleware({
+				currentVersion: "1.0.0",
+				packageName: uniquePackageName("callback-no-notice"),
+				updateCommand: () => {
+					calls++;
+					return "custom update";
+				},
+			});
+
+			expect(calls).toBe(0);
+			expect(getOutput()).toBe("");
 		});
 
 		it("persists and deduplicates with the built-in cache by default", async () => {
@@ -1106,11 +1104,11 @@ describe("updateNotifier post-run hook", () => {
 					commandExecuted = true;
 				});
 
-			await app.execute({ argv: [] });
+			const { stderr } = await captureExecute(app, []);
 
 			expect(commandExecuted).toBe(true);
-			expect(getOutput()).toContain("Update available");
-			expect(getOutput()).toContain("5.0.0");
+			expect(stderr).toContain("Update available");
+			expect(stderr).toContain("5.0.0");
 		});
 
 		it("reports a missing application version", async () => {
@@ -1119,14 +1117,13 @@ describe("updateNotifier post-run hook", () => {
 				.extend(updateNotifier({ packageName: pkgName }))
 				.action(() => {});
 
-			await app.execute({ argv: [] });
+			const { stderr, exitCode } = await captureExecute(app, []);
 
-			expect(getOutput()).toContain("update notifier extension requires a version");
-			expect(process.exitCode).toBe(1);
+			expect(stderr).toContain("update notifier extension requires a version");
+			expect(exitCode).toBe(1);
 		});
 
 		it("does not break command execution when registry is down", async () => {
-			process.exitCode = 0;
 			const pkgName = uniquePackageName("registry-down");
 			mockRegistryFailure();
 
@@ -1142,12 +1139,11 @@ describe("updateNotifier post-run hook", () => {
 					commandExecuted = true;
 				});
 
-			const exitCode = await app.execute({ argv: [] });
+			const { stderr, exitCode } = await captureExecute(app, []);
 
 			expect(commandExecuted).toBe(true);
 			expect(exitCode).toBe(0);
-			expect(process.exitCode).toBe(0);
-			expect(getOutput()).toBe("");
+			expect(stderr).toBe("");
 		});
 	});
 

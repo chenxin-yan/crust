@@ -119,10 +119,8 @@ function posPredicate(
  *      on the path predicate — these surface child names + aliases with
  *      descriptions in the completion menu;
  *   2. one rule per flag of the current node;
- *   3. one rule per positional arg that declares choices (only the first
- *      slot — fish's `complete -a` model is best at offering a single
- *      candidate set; further slots fall through to filename completion
- *      via `-r` on the rule).
+ *   3. per-slot rules for positional args that declare choices or path
+ *      completion, gated on {@link posPredicate}.
  */
 function emitRules(
 	binName: string,
@@ -176,12 +174,11 @@ function emitRules(
 		// Emit a single value-taking rule for `flag`. Branches:
 		//   - choices                       → one rule per literal candidate
 		//   - valueCompletion === "files"   → require parameter + `(__fish_complete_path)`
-		//   - valueCompletion === "none"    → require parameter only; the script's
-		//                                     leading `complete -c <bin> -f` keeps
-		//                                     file completion off
-		//   - free-form                     → require parameter (current behaviour)
+		//   - otherwise (url/json/free-form) → require parameter only; the
+		//                                      script's leading `complete -c <bin> -f`
+		//                                      keeps file completion off
 		const emitValueRule = (rule: RuleParts) => {
-			if (flag.choices !== undefined && flag.choices.length > 0) {
+			if (flag.choices !== undefined) {
 				emitChoiceFlag(rule, flag.choices);
 				return;
 			}
@@ -235,7 +232,7 @@ function emitRules(
 	// suppression is implicit.
 	current.args.forEach((arg, idx) => {
 		const posSpec = arg.variadic ? `*${idx}` : String(idx);
-		if (arg.choices !== undefined && arg.choices.length > 0) {
+		if (arg.choices !== undefined) {
 			const posCondition = posPredicate(ident, path, current, posSpec);
 			for (const choice of arg.choices) {
 				out.push(
@@ -435,13 +432,19 @@ function emitPosHelper(ident: string): string[] {
  * @param spec     Walker output.
  * @param binName  User-facing binary name; validated upstream.
  * @param version  Free-form version string for the header comment.
+ * @param command  Completion subcommand name for the header's regenerate hint.
  */
-export function renderFish(spec: CompletionCommand, binName: string, version: string): string {
+export function renderFish(
+	spec: CompletionCommand,
+	binName: string,
+	version: string,
+	command = "completion",
+): string {
 	const ident = toShellIdent(binName);
 	const lines: string[] = [];
 
 	lines.push(
-		`# completion script for ${binName} v${version} — regenerate with: ${binName} completion fish`,
+		`# completion script for ${binName} v${version} — regenerate with: ${binName} ${command} fish`,
 	);
 	lines.push("");
 
@@ -450,9 +453,9 @@ export function renderFish(spec: CompletionCommand, binName: string, version: st
 	lines.push(...emitPosHelper(ident));
 	lines.push("");
 
-	// Disable file completion globally for the command. Individual rules
-	// re-enable filesystem completion via `-r` (free-form value flags) or
-	// stay file-less via `-x` (enum flags) as appropriate.
+	// Disable file completion globally for the command. Path flags and
+	// positionals opt back in with `(__fish_complete_path)` candidates;
+	// enum flags use `-x` to stay file-less.
 	lines.push(`complete -c ${fishSingleQuote(binName)} -f`);
 	lines.push("");
 

@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { captureExecute } from "@crustjs/testing";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { runBuildHooks } from "../../../crust/tests/build-hooks.ts";
 import {
@@ -14,49 +15,6 @@ import {
 	renderFishCompletion,
 	renderZshCompletion,
 } from "../index.ts";
-
-let stdoutBuf: Buffer[];
-let stderrChunks: string[];
-let originalWrite: typeof process.stdout.write;
-let originalStderrWrite: typeof process.stderr.write;
-let originalExitCode: typeof process.exitCode;
-
-type StdoutChunk = Parameters<typeof process.stdout.write>[0];
-
-function isStringChunk(chunk: StdoutChunk): chunk is string {
-	return typeof chunk === "string";
-}
-
-beforeEach(() => {
-	stdoutBuf = [];
-	stderrChunks = [];
-	originalWrite = process.stdout.write;
-	originalStderrWrite = process.stderr.write;
-	originalExitCode = process.exitCode;
-
-	process.stdout.write = (chunk: StdoutChunk) => {
-		if (isStringChunk(chunk)) {
-			stdoutBuf.push(Buffer.from(chunk, "utf8"));
-		} else if (chunk instanceof Uint8Array) {
-			stdoutBuf.push(Buffer.from(chunk));
-		}
-		return true;
-	};
-	process.stderr.write = (chunk: StdoutChunk) => {
-		stderrChunks.push(String(chunk).replace(/\n$/, ""));
-		return true;
-	};
-});
-
-afterEach(() => {
-	process.stdout.write = originalWrite;
-	process.stderr.write = originalStderrWrite;
-	process.exitCode = originalExitCode ?? 0;
-});
-
-function getStdout(): string {
-	return Buffer.concat(stdoutBuf).toString("utf8");
-}
 
 function buildCli(options?: CompletionOptions) {
 	return new Crust("mycli", { description: "Test CLI", version: "1.2.3" })
@@ -99,21 +57,20 @@ describe("completion", () => {
 		const app = new Crust("mycli", { version: "1.2.3" })
 			.extend(completion({ version: "2.0.0" }))
 			.action(() => {});
-		await app.execute({ argv: ["completion", "bash"] });
-		expect(getStdout()).toMatch(/^# completion script for mycli v2\.0\.0/);
+		const { stdout } = await captureExecute(app, ["completion", "bash"]);
+		expect(stdout).toMatch(/^# completion script for mycli v2\.0\.0/);
 	});
 
 	it("reports a missing version", async () => {
 		const app = new Crust("mycli").extend(completion()).action(() => {});
-		await app.execute({ argv: ["completion", "bash"] });
-		expect(stderrChunks.join("\n")).toContain("completion extension requires a version");
-		expect(process.exitCode).toBe(1);
+		const { stderr, exitCode } = await captureExecute(app, ["completion", "bash"]);
+		expect(stderr).toContain("completion extension requires a version");
+		expect(exitCode).toBe(1);
 	});
 
 	it("`mycli completion bash` prints a bash script to stdout", async () => {
 		const app = buildCli();
-		await app.execute({ argv: ["completion", "bash"] });
-		const out = getStdout();
+		const { stdout: out } = await captureExecute(app, ["completion", "bash"]);
 		expect(out.startsWith("# completion script for mycli v1.2.3")).toBe(true);
 		expect(out).toContain("complete -o default -F _mycli 'mycli'");
 		// Choice values are validated to a safe character set and emitted
@@ -125,20 +82,22 @@ describe("completion", () => {
 	it("writes completion scripts through injected stdout", async () => {
 		const app = buildCli();
 		const output: string[] = [];
+		const processWrite = vi.spyOn(process.stdout, "write");
 
 		await app.execute({
 			argv: ["completion", "bash"],
 			io: { stdout: (text) => output.push(text) },
 		});
+		const processWrites = processWrite.mock.calls.length;
+		processWrite.mockRestore();
 
 		expect(output.join("\n")).toMatch(/^# completion script for mycli v1\.2\.3/);
-		expect(getStdout()).toBe("");
+		expect(processWrites).toBe(0);
 	});
 
 	it("`mycli completion zsh` prints a zsh script with #compdef header", async () => {
 		const app = buildCli();
-		await app.execute({ argv: ["completion", "zsh"] });
-		const out = getStdout();
+		const { stdout: out } = await captureExecute(app, ["completion", "zsh"]);
 		expect(out.startsWith("#compdef mycli\n")).toBe(true);
 		expect(out).toContain("_arguments -C");
 		expect(out).toContain(":target:(browser bun node)");
@@ -146,8 +105,7 @@ describe("completion", () => {
 
 	it("`mycli completion fish` prints a fish script", async () => {
 		const app = buildCli();
-		await app.execute({ argv: ["completion", "fish"] });
-		const out = getStdout();
+		const { stdout: out } = await captureExecute(app, ["completion", "fish"]);
 		expect(out.startsWith("# completion script for mycli v1.2.3")).toBe(true);
 		expect(out).toContain("complete -c 'mycli' -f");
 		// We replaced the order-insensitive `__fish_seen_subcommand_from`
@@ -162,13 +120,12 @@ describe("completion", () => {
 		// before the action ever sees the value. The error message names
 		// the offending value and the allowed set.
 		const app = buildCli();
-		await app.execute({ argv: ["completion", "powershell"] });
-		const stderr = stderrChunks.join("\n");
+		const { stderr, exitCode } = await captureExecute(app, ["completion", "powershell"]);
 		expect(stderr).toContain('Invalid value "powershell"');
 		expect(stderr).toContain("bash");
 		expect(stderr).toContain("zsh");
 		expect(stderr).toContain("fish");
-		expect(process.exitCode).toBe(1);
+		expect(exitCode).toBe(1);
 	});
 
 	describe("--output-dir", () => {
@@ -212,11 +169,13 @@ describe("completion", () => {
 		});
 
 		it("writes nothing to stdout in --output-dir mode", async () => {
-			const app = buildCli();
-			await app.execute({
-				argv: ["completion", "fish", "--output-dir", tmpDir],
-			});
-			expect(getStdout()).toBe("");
+			const { stdout } = await captureExecute(buildCli(), [
+				"completion",
+				"fish",
+				"--output-dir",
+				tmpDir,
+			]);
+			expect(stdout).toBe("");
 		});
 
 		it("creates the output directory if it does not exist", async () => {
@@ -251,6 +210,17 @@ describe("completion build hook", () => {
 		const { files } = await runBuildHooks(buildCli({ version: "2.0.0" }));
 
 		expect(files.get("completions/mycli")).toContain("mycli v2.0.0");
+	});
+
+	it("names the configured command in each regenerate hint", async () => {
+		const { files } = await runBuildHooks(
+			new Crust("mycli", { version: "1.0.0" }).extend(completion({ command: "completions" })),
+		);
+
+		const [bash, zsh, fish] = files.values();
+		expect(bash).toContain("regenerate with: mycli completions bash\n");
+		expect(zsh).toContain("regenerate with: mycli completions zsh\n");
+		expect(fish).toContain("regenerate with: mycli completions fish\n");
 	});
 
 	it("rejects an unsafe root name", async () => {
