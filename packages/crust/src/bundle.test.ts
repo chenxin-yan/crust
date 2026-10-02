@@ -21,9 +21,8 @@ import {
 	createBunCompileArgs,
 	createBunPluginDriverScript,
 	execBuild,
-	execBunPackageBuild,
 	execDenoPackageBuild,
-	execNodeBuild,
+	execScriptBuild,
 	resolveBunPluginSource,
 } from "./bundle.ts";
 import { BUN_TARGETS, hostTarget } from "./targets.ts";
@@ -152,11 +151,8 @@ describe.skipIf(hostTarget(BUN_TARGETS) === null)("execBuild with crust.bunPlugi
 		const error = await execBuild(
 			join(directory, "cli.ts"),
 			join(directory, "out"),
-			false,
 			hostTarget(BUN_TARGETS)!,
-			[],
-			directory,
-			["./missing.ts"],
+			{ cwd: directory, minify: false, envFiles: [], bunPlugins: ["./missing.ts"] },
 		).catch((cause: unknown) => cause);
 		expect(error).toBeInstanceOf(Error);
 		expect((error as Error).message).toContain(
@@ -175,7 +171,12 @@ describe.skipIf(hostTarget(BUN_TARGETS) === null)("execBuild with crust.bunPlugi
 		);
 		const outfile = join(directory, "out.js");
 		await expect(
-			execNodeBuild(join(directory, "cli.ts"), outfile, false, [], directory, ["./plugin.ts"]),
+			execScriptBuild("node", join(directory, "cli.ts"), outfile, {
+				cwd: directory,
+				minify: false,
+				envFiles: [],
+				bunPlugins: ["./plugin.ts"],
+			}),
 		).rejects.toThrow(
 			/Build failed for .*out\.js:\nerror: cannot write multiple output files without an output directory/,
 		);
@@ -188,15 +189,12 @@ describe.skipIf(hostTarget(BUN_TARGETS) === null)("execBuild with crust.bunPlugi
 			"export default function createPlugin() { return { name: 'factory', setup() {} }; }\n",
 		);
 		await expect(
-			execBuild(
-				join(directory, "cli.ts"),
-				join(directory, "out"),
-				false,
-				hostTarget(BUN_TARGETS)!,
-				[],
-				directory,
-				["./plugin.ts"],
-			),
+			execBuild(join(directory, "cli.ts"), join(directory, "out"), hostTarget(BUN_TARGETS)!, {
+				cwd: directory,
+				minify: false,
+				envFiles: [],
+				bunPlugins: ["./plugin.ts"],
+			}),
 		).rejects.toThrow(
 			"crust.bunPlugins entry ./plugin.ts must default-export a Bun bundler plugin ({ name, setup }). Wrap a plugin factory in a module that default-exports the created plugin.",
 		);
@@ -209,22 +207,19 @@ describe.skipIf(hostTarget(BUN_TARGETS) === null)("execBuild with crust.bunPlugi
 		);
 		const outfile = join(directory, "out");
 		await expect(
-			execBuild(
-				join(directory, "cli.ts"),
-				outfile,
-				false,
-				hostTarget(BUN_TARGETS)!,
-				[],
-				directory,
-				["./plugin.ts"],
-			),
+			execBuild(join(directory, "cli.ts"), outfile, hostTarget(BUN_TARGETS)!, {
+				cwd: directory,
+				minify: false,
+				envFiles: [],
+				bunPlugins: ["./plugin.ts"],
+			}),
 		).rejects.toThrow(/Build failed for .*out[\s\S]*plugin exploded/);
 		expect(await leftoverDrivers(directory)).toEqual([]);
 		await expect(access(outfile)).rejects.toThrow();
 	});
 });
 
-describe("execBunPackageBuild", () => {
+describe("execScriptBuild for Bun", () => {
 	const tempDirs: string[] = [];
 
 	afterEach(async () => {
@@ -274,13 +269,11 @@ describe("execBunPackageBuild", () => {
 		const directory = await project();
 		await writeFile(join(directory, "cli.ts"), `#!/usr/bin/env node\n${report()}`);
 		const outfile = join(directory, "out", "cli.js");
-		await execBunPackageBuild(
+		await execScriptBuild(
+			"bun",
 			join(directory, "cli.ts"),
 			outfile,
-			false,
-			[join(directory, ".env.build")],
-			directory,
-			[],
+			{ cwd: directory, minify: false, envFiles: [join(directory, ".env.build")], bunPlugins: [] },
 			pinnedRunner(),
 		);
 
@@ -305,13 +298,16 @@ describe("execBunPackageBuild", () => {
 			`import greeting from "virtual:greeting";\n${report(", greeting")}`,
 		);
 		const outfile = join(directory, "cli.js");
-		await execBunPackageBuild(
+		await execScriptBuild(
+			"bun",
 			join(directory, "cli.ts"),
 			outfile,
-			true,
-			[join(directory, ".env.build")],
-			directory,
-			["./plugin.ts"],
+			{
+				cwd: directory,
+				minify: true,
+				envFiles: [join(directory, ".env.build")],
+				bunPlugins: ["./plugin.ts"],
+			},
 			pinnedRunner(),
 		);
 

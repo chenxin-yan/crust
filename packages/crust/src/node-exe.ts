@@ -10,7 +10,7 @@ import satisfies from "semver/functions/satisfies.js";
 import validVersion from "semver/functions/valid.js";
 
 import crustPackage from "../package.json" with { type: "json" };
-import { execNodeBuild, runBuildProcess } from "./bundle.ts";
+import { type BundleSettings, execScriptBuild, runBuildProcess } from "./bundle.ts";
 import {
 	assertCompilerSatisfiesEngines,
 	type BuildCompiler,
@@ -281,7 +281,7 @@ await build({
 
 /**
  * Build a single entry file into a Node standalone executable: Bun first
- * bundles it for Node exactly as a Node runtime package ({@link execNodeBuild}:
+ * bundles it for Node exactly as a Node runtime package ({@link execScriptBuild}:
  * `PUBLIC_*` constants from `envFiles` and the environment, each module's own
  * `import.meta.main` and `require.main === module`, CommonJS and ESM inputs),
  * then tsdown's executable builder (Node SEA), run by the selected external
@@ -300,21 +300,26 @@ await build({
 export async function execNodeBinaryBuild(
 	entryPath: string,
 	outfilePath: string,
-	minify: boolean,
 	target: NodeTarget,
-	envFiles: readonly string[],
-	cwd: string,
+	settings: Omit<BundleSettings, "bunPlugins">,
 	compiler: NodeBinaryCompiler,
 	bunRunner: BuildRunner,
 	onWarning: (message: string) => void = () => {},
 ): Promise<void> {
+	const { cwd, minify } = settings;
 	const workDir = await mkdtemp(join(tmpdir(), "crust-node-exe-"));
 	try {
 		const scriptPath = join(workDir, "build.mjs");
 		const bunBundle = join(workDir, "app.mjs");
 		const exeDir = join(workDir, "exe");
 		// ponytail: rebundled per target; bundle once per command if many targets get slow.
-		await execNodeBuild(resolve(cwd, entryPath), bunBundle, minify, envFiles, cwd, [], bunRunner);
+		await execScriptBuild(
+			"node",
+			resolve(cwd, entryPath),
+			bunBundle,
+			{ ...settings, bunPlugins: [] },
+			bunRunner,
+		);
 		await writeFile(
 			scriptPath,
 			createNodeExeBuildScript({

@@ -99,12 +99,20 @@ if (!options.build.compile) {
 `;
 }
 
+/** The build settings every Bun bundling step reads; a build plan satisfies it. */
+export type BundleSettings = {
+	cwd: string;
+	minify: boolean;
+	/** Env files whose `PUBLIC_*` values are inlined. */
+	envFiles: readonly string[];
+	/** Bun bundler plugin specifiers; when present the build runs through the generated `Bun.build` driver. */
+	bunPlugins: readonly string[];
+};
+
 async function runBunPluginDriver(
 	build: BunPluginDriverBuild,
 	outfilePath: string,
-	bunPlugins: readonly string[],
-	envFiles: readonly string[],
-	cwd: string,
+	{ cwd, envFiles, bunPlugins }: BundleSettings,
 	runner: BuildRunner,
 ): Promise<void> {
 	const driverPath = join(cwd, `.crust-build-${randomBytes(6).toString("hex")}.ts`);
@@ -138,30 +146,23 @@ async function runBunPluginDriver(
  *
  * @param entryPath - Absolute path to the entry file
  * @param outfilePath - Absolute path to the output binary
- * @param minify - Whether to enable minification
  * @param target - Bun compile target
- * @param envFiles - Optional env files to load during build
- * @param bunPlugins - Bun bundler plugin specifiers; when present the build
- *   runs through the generated `Bun.build` driver instead of `bun build`
  * @param runner - The selected Bun compiler (`resolveBinaryCompiler`)
  * @throws {Error} If the build fails
  */
 export async function execBuild(
 	entryPath: string,
 	outfilePath: string,
-	minify: boolean,
 	target: BunTarget,
-	envFiles: readonly string[],
-	cwd: string,
-	bunPlugins: readonly string[] = [],
+	settings: BundleSettings,
 	runner: BuildRunner = resolveBunBuildRunner(),
 ): Promise<void> {
 	const compileTarget = bunCompileTarget(target, runner);
-	if (bunPlugins.length > 0) {
+	if (settings.bunPlugins.length > 0) {
 		await runBunPluginDriver(
 			{
 				entrypoints: [entryPath],
-				minify,
+				minify: settings.minify,
 				env: "PUBLIC_*",
 				target: "bun",
 				compile: {
@@ -171,15 +172,19 @@ export async function execBuild(
 				},
 			},
 			outfilePath,
-			bunPlugins,
-			envFiles,
-			cwd,
+			settings,
 			runner,
 		);
 		return;
 	}
-	const args = createBunCompileArgs(entryPath, outfilePath, minify, compileTarget, envFiles);
-	await runBuildProcess(runner, args, outfilePath, cwd);
+	const args = createBunCompileArgs(
+		entryPath,
+		outfilePath,
+		settings.minify,
+		compileTarget,
+		settings.envFiles,
+	);
+	await runBuildProcess(runner, args, outfilePath, settings.cwd);
 }
 
 export function createBunCompileArgs(
@@ -251,46 +256,19 @@ export async function runBuildProcess(
 	return output;
 }
 
-/** Bundle a Node runtime package entry: ESM for Node behind `#!/usr/bin/env node`. */
-export async function execNodeBuild(
-	entryPath: string,
-	outfilePath: string,
-	minify: boolean,
-	envFiles: readonly string[],
-	cwd: string,
-	bunPlugins: readonly string[] = [],
-	runner: BuildRunner = resolveBunBuildRunner(),
-): Promise<void> {
-	await execScriptBuild("node", entryPath, outfilePath, minify, envFiles, cwd, bunPlugins, runner);
-}
-
 /**
- * Bundle a Bun runtime package entry: Bun-targeted ESM behind
- * `#!/usr/bin/env bun`, so the installed bin launches with Bun rather than Node.
+ * Bundle a runtime package entry as ESM behind `#!/usr/bin/env <target>`: for
+ * Node, or Bun-targeted so the installed bin launches with Bun rather than Node.
  */
-export async function execBunPackageBuild(
-	entryPath: string,
-	outfilePath: string,
-	minify: boolean,
-	envFiles: readonly string[],
-	cwd: string,
-	bunPlugins: readonly string[] = [],
-	runner: BuildRunner = resolveBunBuildRunner(),
-): Promise<void> {
-	await execScriptBuild("bun", entryPath, outfilePath, minify, envFiles, cwd, bunPlugins, runner);
-}
-
-async function execScriptBuild(
+export async function execScriptBuild(
 	target: "bun" | "node",
 	entryPath: string,
 	outfilePath: string,
-	minify: boolean,
-	envFiles: readonly string[],
-	cwd: string,
-	bunPlugins: readonly string[],
-	runner: BuildRunner,
+	settings: BundleSettings,
+	runner: BuildRunner = resolveBunBuildRunner(),
 ): Promise<void> {
-	if (bunPlugins.length > 0) {
+	const { cwd, minify, envFiles } = settings;
+	if (settings.bunPlugins.length > 0) {
 		await runBunPluginDriver(
 			{
 				entrypoints: [entryPath],
@@ -300,9 +278,7 @@ async function execScriptBuild(
 				format: "esm",
 			},
 			outfilePath,
-			bunPlugins,
-			envFiles,
-			cwd,
+			settings,
 			runner,
 		);
 	} else {

@@ -18,13 +18,7 @@ import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/js
 import { isWithin } from "@crustjs/utils/path";
 
 import { type ArtifactOwner, mergeEntryArtifacts } from "./artifacts.ts";
-import {
-	execBuild,
-	execBunPackageBuild,
-	execDenoBuild,
-	execDenoPackageBuild,
-	execNodeBuild,
-} from "./bundle.ts";
+import { execBuild, execDenoBuild, execDenoPackageBuild, execScriptBuild } from "./bundle.ts";
 import {
 	assertTargetsBuildableWithoutBun,
 	type BuildCompiler,
@@ -582,15 +576,14 @@ async function selectCompilers(plan: BuildPlan, io: InvocationIO): Promise<Selec
 	}
 	if (plan.artifact === "package") {
 		const runner = resolveBunBuildRunner();
-		const bundle = plan.runtime === "bun" ? execBunPackageBuild : execNodeBuild;
+		const target = plan.runtime === "bun" ? "bun" : "node";
 		return {
 			snapshotRunner: runner,
 			stage: (reports) =>
 				runDistributeBuild(
 					plan,
 					{
-						execute: (entry, outfile) =>
-							bundle(entry, outfile, plan.minify, plan.envFiles, plan.cwd, plan.bunPlugins, runner),
+						execute: (entry, outfile) => execScriptBuild(target, entry, outfile, plan, runner),
 					},
 					io,
 					reports,
@@ -614,17 +607,7 @@ async function selectCompilers(plan: BuildPlan, io: InvocationIO): Promise<Selec
 			targets: plan.targets,
 			embeddedRuntimeVersion: compiler.version,
 			execute: (entry, outfile, target) =>
-				execNodeBinaryBuild(
-					entry,
-					outfile,
-					plan.minify,
-					target,
-					plan.envFiles,
-					plan.cwd,
-					compiler,
-					bunRunner,
-					io.stderr,
-				),
+				execNodeBinaryBuild(entry, outfile, target, plan, compiler, bunRunner, io.stderr),
 		};
 		return {
 			snapshotRunner: bunRunner,
@@ -643,17 +626,7 @@ async function selectCompilers(plan: BuildPlan, io: InvocationIO): Promise<Selec
 			table: BUN_TARGETS,
 			targets: plan.targets,
 			embeddedRuntimeVersion: compiler.version,
-			execute: (entry, outfile, target) =>
-				execBuild(
-					entry,
-					outfile,
-					plan.minify,
-					target,
-					plan.envFiles,
-					plan.cwd,
-					plan.bunPlugins,
-					compiler.runner,
-				),
+			execute: (entry, outfile, target) => execBuild(entry, outfile, target, plan, compiler.runner),
 		};
 		return {
 			snapshotRunner: compiler.runner,
