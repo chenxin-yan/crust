@@ -178,7 +178,7 @@ function emitRules(
 		//                                      script's leading `complete -c <bin> -f`
 		//                                      keeps file completion off
 		const emitValueRule = (rule: RuleParts) => {
-			if (flag.choices !== undefined && flag.choices.length > 0) {
+			if (flag.choices !== undefined) {
 				emitChoiceFlag(rule, flag.choices);
 				return;
 			}
@@ -232,7 +232,7 @@ function emitRules(
 	// suppression is implicit.
 	current.args.forEach((arg, idx) => {
 		const posSpec = arg.variadic ? `*${idx}` : String(idx);
-		if (arg.choices !== undefined && arg.choices.length > 0) {
+		if (arg.choices !== undefined) {
 			const posCondition = posPredicate(ident, path, current, posSpec);
 			for (const choice of arg.choices) {
 				out.push(
