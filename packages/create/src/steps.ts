@@ -4,7 +4,7 @@ import { once } from "node:events";
 import { runProcess, which } from "@crustjs/utils/process";
 
 import type { PostScaffoldStep } from "./types.ts";
-import { detectPackageManager } from "./utils.ts";
+import { detectPackageManager } from "./detect.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Post-Scaffold Step Runner
