@@ -58,18 +58,11 @@ export function handler<Input extends ActionInput, Out>(
 ): (input: Input) => Promise<Out> {
 	return async (input) => {
 		const ctx: ContextBag = input.ctx;
-		const providers = (ctx[contextSources] ?? []).filter(
-			(source): source is ContextInstance => "factory" in source,
-		);
-		// Core resolves the last same-name provider: drop shadowed ones before classifying,
-		// so a descendant plain Context stays lazy and is never merged as a Layer.
-		const layers = providers.filter(
-			(source, i) =>
-				providers.findLastIndex(({ name }) => name === source.name) === i &&
-				layerFactories.has(source.factory),
-		);
-		const bag: Readonly<Record<string, Promise<Context.Context<unknown>>>> = input.ctx;
-		const builds = layers.map(({ name }) => bag[name]!);
+		// Drop shadowed providers before classifying, so a descendant plain Context
+		// stays lazy and is never merged as a Layer.
+		const builds = effectiveProviders(ctx)
+			.filter(({ factory }) => layerFactories.has(factory))
+			.map(({ name }) => readContext<Context.Context<unknown>>(ctx, name));
 		// Builds and fn(input) run inside the Effect so a failed sibling build or a
 		// synchronous throw still yields a failure Exit for the layers that did build.
 		const program = Effect.gen(function* () {
@@ -95,6 +88,21 @@ export function handler<Input extends ActionInput, Out>(
 	};
 }
 
+/** Context providers Core resolves for this bag: the last same-name provider shadows earlier ones. */
+function effectiveProviders(ctx: ContextBag): ContextInstance[] {
+	const providers = (ctx[contextSources] ?? []).filter(
+		(source): source is ContextInstance => "factory" in source,
+	);
+	return providers.filter(
+		(source, i) => providers.findLastIndex(({ name }) => name === source.name) === i,
+	);
+}
+
+function readContext<T>(ctx: ContextBag, name: string): Promise<T> {
+	// SAFETY: callers pass an effective provider's name, and that provider's factory fixes the value type.
+	return (ctx as Readonly<Record<string, Promise<T>>>)[name]!;
+}
+
 /**
  * Pull a plain Crust Context by factory from inside a {@link handler} program.
  * Lazy like `ctx.<name>`; requires the effective same-name provider to use
@@ -108,17 +116,9 @@ export function service<F extends AnyContextFactory>(
 	return Effect.flatMap(HandlerInput, (input) =>
 		tryCrust((): Promise<FactoryValueOf<F>> => {
 			const ctx: ContextBag = input.ctx;
-			const sources = ctx[contextSources] ?? [];
-			const provider = sources.findLast((source) => "factory" in source && source.name === name);
-			// Core resolves the last same-name provider, not a shadowed ancestor.
-			const bag: Readonly<Record<string, Promise<FactoryValueOf<F>>>> = input.ctx;
-			if (
-				provider &&
-				"factory" in provider &&
-				provider.factory === factory &&
-				Object.hasOwn(bag, name)
-			) {
-				return bag[name]!;
+			const provider = effectiveProviders(ctx).find((source) => source.name === name);
+			if (provider?.factory === factory && Object.hasOwn(ctx, name)) {
+				return readContext<FactoryValueOf<F>>(ctx, name);
 			}
 			throw new CrustError(
 				"DEFINITION",
