@@ -19,7 +19,7 @@ it("docs and landing hovers explain selected values without builder or boilerpla
 		import { createHighlighter } from "shiki";
 		import config from "./source.config.ts";
 		import { SNIPPET_SOURCES } from "./src/components/landing/snippets.ts";
-		import { twoslashHovers } from "./twoslash.ts";
+		import { CODE_THEMES, twoslashHovers } from "./twoslash.ts";
 
 		// Exact hover types a reader should learn, keyed by snippet then hovered token. Not every
 		// selection is listed; count parity below keeps the rest honest.
@@ -38,7 +38,7 @@ it("docs and landing hovers explain selected values without builder or boilerpla
 		};
 
 		const options = config.mdxOptions.rehypeCodeOptions;
-		const highlighter = await createHighlighter({ themes: ["gruvbox-light-hard", "gruvbox-dark-hard"], langs: ["ts", "json"] });
+		const highlighter = await createHighlighter({ themes: Object.values(CODE_THEMES), langs: ["ts", "json"] });
 		const children = node => node.children ?? [];
 		const walk = node => [node, ...children(node).flatMap(walk)];
 		const textOf = node => node.type === "text" ? node.value : children(node).map(textOf).join("");
@@ -81,7 +81,7 @@ it("docs and landing hovers explain selected values without builder or boilerpla
 		for (const { file, lang } of Object.values(SNIPPET_SOURCES)) {
 			const source = readFileSync(file, "utf8").trimEnd();
 			const hast = highlighter.codeToHast(source, {
-				lang, themes: { light: "gruvbox-light-hard", dark: "gruvbox-dark-hard" }, defaultColor: false, transformers: landing,
+				lang, themes: CODE_THEMES, defaultColor: false, transformers: landing,
 			});
 			checkRendered(file, source, "", hast);
 		}
@@ -107,7 +107,7 @@ it("docs and landing hovers explain selected values without builder or boilerpla
 				await remarkInclude.call({})({ type: "root", children: [include] }, { dirname: dirname(resolve(page)), cwd: process.cwd(), data: {} });
 				assert.equal(include.type, "code", specifier);
 				const hast = highlighter.codeToHast(include.value, {
-					lang, theme: "gruvbox-light-hard", meta: { __raw: meta }, transformers: options.transformers,
+					lang, theme: CODE_THEMES.light, meta: { __raw: meta }, transformers: options.transformers,
 				});
 				const popups = checkRendered(specifier, include.value, meta, hast);
 				if (meta.split(/\s+/).includes("twoslash")) assert.ok(popups > 0, specifier + ": twoslash meta without a selection");
