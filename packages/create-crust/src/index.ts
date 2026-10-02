@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync, readdirSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
 import { Crust, resolveArtifactDir } from "@crustjs/core";
 import { detectPackageManager, isInGitRepo, runSteps, scaffold } from "@crustjs/create";
@@ -116,21 +116,22 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 			}));
 
 		const resolvedDir = resolve(process.cwd(), targetDir);
+		const isCwd = resolvedDir === process.cwd();
 		const name = basename(resolvedDir);
 		validateProjectName(name);
 
-		// Ask before writing into an existing destination. The cwd (".") always
-		// exists, so it only needs confirmation when non-empty; a named directory
+		// Ask before writing into an existing destination. The cwd always exists,
+		// so it only needs confirmation when non-empty; any other directory
 		// prompts whenever it already exists.
-		const needsOverwriteConfirm =
-			targetDir === "." ? readdirSync(resolvedDir).length > 0 : existsSync(resolvedDir);
+		const needsOverwriteConfirm = isCwd
+			? readdirSync(resolvedDir).length > 0
+			: existsSync(resolvedDir);
 		let overwrite = false;
 		if (needsOverwriteConfirm) {
 			overwrite = await confirm({
-				message:
-					targetDir === "."
-						? "Current directory is not empty. Overwrite conflicting files?"
-						: `Directory "${name}" already exists. Overwrite?`,
+				message: isCwd
+					? "Current directory is not empty. Overwrite conflicting files?"
+					: `Directory "${name}" already exists. Overwrite?`,
 				default: false,
 				initial: flags.overwrite,
 			});
@@ -253,9 +254,10 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 
 		console.log(`\nCreated ${name}!\n`);
 		console.log("Next steps:");
-		if (targetDir !== ".") {
-			const relativeDir = targetDir.startsWith("/") ? targetDir : `./${targetDir}`;
-			console.log(`  cd ${relativeDir}`);
+		if (!isCwd) {
+			const cdTarget =
+				isAbsolute(targetDir) || targetDir.startsWith(".") ? targetDir : `./${targetDir}`;
+			console.log(`  cd ${cdTarget}`);
 		}
 		if (!installDeps) console.log(`  ${context.install}`);
 		console.log(`  ${context.run} dev`);

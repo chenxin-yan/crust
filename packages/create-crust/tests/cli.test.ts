@@ -482,17 +482,42 @@ describe("create-crust CLI", () => {
 		expect(pkg.name).toBe(basename(tempRoot));
 	}, 30_000);
 
-	it("scaffolds into an empty current directory without prompting", async () => {
-		const tempRoot = makeTempRoot("create-crust-dot-empty");
+	it.each([".", "./"])(
+		"scaffolds into an empty current directory given %j without prompting",
+		async (directory) => {
+			const tempRoot = makeTempRoot("create-crust-dot-empty");
 
-		const result = await runCreateCrust([".", "--runtime", "bun", "--no-install", "--no-git"], {
-			cwd: tempRoot,
-		});
+			const result = await runCreateCrust(
+				[directory, "--runtime", "bun", "--no-install", "--no-git"],
+				{ cwd: tempRoot },
+			);
 
-		expect(result.exitCode).toBe(0);
-		expect(result.stderr).not.toContain("Error:");
-		expect(existsSync(join(tempRoot, "package.json"))).toBe(true);
-	}, 30_000);
+			expect(result.exitCode).toBe(0);
+			expect(result.stderr).not.toContain("Error:");
+			expect(existsSync(join(tempRoot, "package.json"))).toBe(true);
+			expect(result.stdout).not.toContain("  cd ");
+		},
+		30_000,
+	);
+
+	it.each([
+		["nested-cli", "./nested-cli"],
+		["./nested-cli", "./nested-cli"],
+	])(
+		"prints a cd step for %j as %j",
+		async (directory, cdTarget) => {
+			const tempRoot = makeTempRoot("create-crust-cd-step");
+
+			const result = await runCreateCrust(
+				[directory, "--runtime", "bun", "--no-install", "--no-git"],
+				{ cwd: tempRoot },
+			);
+
+			expect(result.exitCode, result.stderr).toBe(0);
+			expect(result.stdout).toContain(`  cd ${cdTarget}\n`);
+		},
+		30_000,
+	);
 
 	// Missing intermediate directories must not hide the enclosing repository.
 	it.each(["inside-repo-cli", "missing-parent/inside-repo-cli"])(
