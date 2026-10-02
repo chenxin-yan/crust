@@ -1,3 +1,12 @@
+// ────────────────────────────────────────────────────────────────────────────
+// @crustjs/utils/schema — low-level Standard Schema helpers
+// ────────────────────────────────────────────────────────────────────────────
+//
+// Portable Standard Schema helpers shared internally by Crust packages. This
+// module intentionally stays provider-agnostic: no vendor
+// introspection, no metadata/default extraction, and no package-specific error
+// wrappers.
+
 // This structural consumer subset mirrors @standard-schema/spec v1.1.0.
 // Validation options are omitted because Crust never passes them; requiring
 // their vendor-specific shape would reject otherwise compatible schemas.
@@ -58,15 +67,6 @@ interface StandardSchemaProps<Input = unknown, Output = Input> {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// @crustjs/utils/schema — low-level Standard Schema helpers
-// ────────────────────────────────────────────────────────────────────────────
-//
-// Portable Standard Schema helpers shared internally by Crust packages. This
-// module intentionally stays provider-agnostic: no vendor
-// introspection, no metadata/default extraction, and no package-specific error
-// wrappers.
-
-// ────────────────────────────────────────────────────────────────────────────
 // Standard Schema type aliases
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -106,6 +106,10 @@ export interface ValidationIssue {
 // Path formatting — normalize issue paths to dot-path strings
 // ────────────────────────────────────────────────────────────────────────────
 
+function isNumericPathSegment(segment: PropertyKey): segment is number {
+	return typeof segment === "number";
+}
+
 /**
  * Format an issue path into a dot-path string.
  *
@@ -125,10 +129,6 @@ export interface ValidationIssue {
  * // => ""
  * ```
  */
-function isNumericPathSegment(segment: PropertyKey): segment is number {
-	return typeof segment === "number";
-}
-
 function formatPath(path: readonly PropertyKey[]): string {
 	return path
 		.map((segment, index) =>
@@ -145,6 +145,12 @@ function formatPath(path: readonly PropertyKey[]): string {
 // Path normalization — Standard Schema issue paths → PropertyKey[]
 // ────────────────────────────────────────────────────────────────────────────
 
+function isStandardPathSegment(
+	segment: PropertyKey | StandardSchemaPathSegment,
+): segment is StandardSchemaPathSegment {
+	return typeof segment === "object" && segment !== null && "key" in segment;
+}
+
 /**
  * Normalize a Standard Schema issue path to an array of `PropertyKey`.
  *
@@ -153,12 +159,6 @@ function formatPath(path: readonly PropertyKey[]): string {
  * plain `PropertyKey`. Returns an empty array for a root-level issue
  * (`undefined`).
  */
-function isStandardPathSegment(
-	segment: PropertyKey | StandardSchemaPathSegment,
-): segment is StandardSchemaPathSegment {
-	return typeof segment === "object" && segment !== null && "key" in segment;
-}
-
 function normalizeStandardPath(
 	path: ReadonlyArray<PropertyKey | StandardSchemaPathSegment> | undefined,
 ): PropertyKey[] {

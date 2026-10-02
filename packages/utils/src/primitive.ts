@@ -1,7 +1,3 @@
-// ────────────────────────────────────────────────────────────────────────────
-// Shared — primitive type vocabulary
-// ────────────────────────────────────────────────────────────────────────────
-
 /** Supported primitive type literals shared by Crust packages. */
 export type BaseValueType = "string" | "number" | "boolean";
 
@@ -22,10 +18,6 @@ export type ResolvePrimitive<T extends BaseValueType> = T extends "string"
 			? boolean
 			: never;
 
-// ────────────────────────────────────────────────────────────────────────────
-// Shared — tryCoerceNumber
-// ────────────────────────────────────────────────────────────────────────────
-
 /**
  * Attempts to coerce a string to a number, returning `undefined` only when the
  * result is `NaN`. Callers decide whether `undefined` means throw or fallback.
@@ -41,10 +33,6 @@ export function tryCoerceNumber(raw: string): number | undefined {
 	const num = Number(raw);
 	return Number.isNaN(num) ? undefined : num;
 }
-
-// ────────────────────────────────────────────────────────────────────────────
-// Shared — coerceBooleanString
-// ────────────────────────────────────────────────────────────────────────────
 
 /**
  * Coerces Crust boolean strings using the existing strict truthy spellings.
