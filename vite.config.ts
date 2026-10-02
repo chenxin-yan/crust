@@ -138,13 +138,7 @@ export default defineConfig({
 		],
 		overrides: [
 			{
-				files: [
-					"**/*.test.ts",
-					"**/*.test-d.ts",
-					"**/*.test.tsx",
-					"**/*.spec.ts",
-					"**/*.spec.tsx",
-				],
+				files: ["**/*.test.ts", "**/*.test-d.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"],
 				rules: {
 					"eslint/no-new": "off",
 					"eslint/no-shadow": "off",
