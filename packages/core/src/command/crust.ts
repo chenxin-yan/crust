@@ -572,7 +572,7 @@ function resolveCommandName<Name extends string>(
 	return name;
 }
 
-function isCommandRecipe(value: CommandConfig | CommandRecipe): value is CommandRecipe {
+function isCommandRecipe(value: CommandConfig | CommandRecipe | undefined): value is CommandRecipe {
 	return typeof value === "function";
 }
 
@@ -608,13 +608,24 @@ export function defineCommand(
 ): CommandDefinition {
 	const hasConfig = !isCommandRecipe(configOrRecipe);
 	const config: CommandConfig & { readonly version?: unknown } = hasConfig ? configOrRecipe : {};
-	// Authoring overloads require a recipe in both call forms.
-	const recipe = hasConfig ? maybeRecipe! : configOrRecipe;
+	const recipe = hasConfig ? maybeRecipe : configOrRecipe;
 	const name = resolveCommandName(nameInput, config.aliases);
+	// Authoring overloads require a recipe in both call forms; untyped JavaScript can omit it.
+	if (!isCommandRecipe(recipe)) {
+		throw new CrustError("DEFINITION", `Command "${name}" requires a recipe`, {
+			subject: "command",
+			name,
+			reason: "missing-recipe",
+		});
+	}
 
 	for (const alias of config.aliases ?? []) {
 		if (alias === "" || /[ \t\n\r\v\f]/.test(alias) || alias.startsWith("-")) {
-			throw new CrustError("DEFINITION", `Command "${name}" has an invalid alias "${alias}"`);
+			throw new CrustError("DEFINITION", `Command "${name}" has an invalid alias "${alias}"`, {
+				subject: "command",
+				name,
+				reason: "invalid-alias",
+			});
 		}
 	}
 

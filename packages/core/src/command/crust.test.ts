@@ -15,7 +15,13 @@ import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { ArgsDef, NamedFlagDef, ParsedFlagValue } from "../types.ts";
-import { type AnyCrust, type CommandDefinitionBuilder, Crust, defineCommand } from "./crust.ts";
+import {
+	type AnyCrust,
+	type CommandConfig,
+	type CommandDefinitionBuilder,
+	Crust,
+	defineCommand,
+} from "./crust.ts";
 import { cloneCommandNode } from "./extensions-install.ts";
 import { SNAPSHOT_PATH_ENV } from "./invocation.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
@@ -2847,6 +2853,28 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 			expect.objectContaining({
 				code: "DEFINITION",
 				details: { subject: "command", name: "deploy", reason: "command-collision" },
+			}),
+		);
+	});
+
+	it("rejects invalid command aliases from dynamic config", () => {
+		for (const alias of ["", "a b", "-i"]) {
+			const config: CommandConfig = { aliases: [alias] };
+			expect(() => defineCommand("deploy", config, (cmd) => cmd)).toThrow(
+				expect.objectContaining({
+					code: "DEFINITION",
+					details: { subject: "command", name: "deploy", reason: "invalid-alias" },
+				}),
+			);
+		}
+	});
+
+	it("rejects a config-form definition without a recipe", () => {
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		expect(() => defineCommand("deploy", { description: "Deploy" })).toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				details: { subject: "command", name: "deploy", reason: "missing-recipe" },
 			}),
 		);
 	});
