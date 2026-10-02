@@ -14,7 +14,6 @@ on:
       - "pnpm-workspace.yaml"
       - "vite.config.ts"
       - "vite.shared.ts"
-      - "tsconfig*.json"
       - ".github/workflows/ci-packages.yml"
       - ".github/workflows/release.yml"
 
