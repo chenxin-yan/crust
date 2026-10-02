@@ -4,6 +4,8 @@ import { accessSync, constants, statSync } from "node:fs";
 import { delimiter, extname, join, resolve, sep, win32 } from "node:path";
 import { text } from "node:stream/consumers";
 
+import { isErrnoException } from "./error.ts";
+
 export type PackageManager = "npm" | "pnpm" | "bun" | "yarn";
 
 /** Parse the package manager from npm's user-agent environment value. */
@@ -108,8 +110,7 @@ export function killProcessTree(child: ChildProcess): void {
 	try {
 		process.kill(-child.pid, "SIGKILL");
 	} catch (error) {
-		// SAFETY: process.kill errors may carry an errno code.
-		if ((error as NodeJS.ErrnoException).code === "ESRCH") return;
+		if (isErrnoException(error) && error.code === "ESRCH") return;
 		// Deno's child handle can still be killed with executable-scoped run permission.
 		child.kill("SIGKILL");
 		throw error;
@@ -178,18 +179,22 @@ export async function runProcess(
 	}
 }
 
+function isExecutableFile(path: string): boolean {
+	try {
+		accessSync(path, constants.X_OK);
+		return statSync(path).isFile();
+	} catch {
+		// Missing or non-executable paths are expected while probing.
+		return false;
+	}
+}
+
 /** Resolve a bare executable name from PATH (and PATHEXT on Windows). */
 export function which(command: string): string | null {
 	// Path-containing inputs would produce garbage when joined onto PATH
 	// entries; resolve them directly instead.
 	if (command.includes(sep) || command.includes("/")) {
-		try {
-			accessSync(command, constants.X_OK);
-			if (statSync(command).isFile()) return command;
-		} catch {
-			// Fall through: not executable or missing.
-		}
-		return null;
+		return isExecutableFile(command) ? command : null;
 	}
 	const extensions =
 		process.platform === "win32" && !extname(command)
@@ -200,12 +205,7 @@ export function which(command: string): string | null {
 			// Resolve relative PATH entries against the current cwd; a relative
 			// result would be re-resolved against the child's cwd when spawned.
 			const candidate = resolve(join(directory, command + extension));
-			try {
-				accessSync(candidate, constants.X_OK);
-				if (statSync(candidate).isFile()) return candidate;
-			} catch {
-				// Missing/non-executable PATH entries are expected while searching.
-			}
+			if (isExecutableFile(candidate)) return candidate;
 		}
 	}
 	return null;

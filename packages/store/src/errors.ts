@@ -1,7 +1,7 @@
 import type { StoreValidatorIssue } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// StoreErrorCode — Discriminated error codes for @crustjs/store
+// StoreErrorCode — Error codes and their structured details
 // ────────────────────────────────────────────────────────────────────────────
 
 /**

@@ -64,7 +64,7 @@ export async function readJson(filePath: string): Promise<JsonValue | undefined>
 		raw = await readFile(filePath, "utf-8");
 	} catch (err: unknown) {
 		// File not found is a normal case — no persisted config yet
-		if (isEnoent(err)) {
+		if (isErrnoException(err) && err.code === "ENOENT") {
 			return undefined;
 		}
 
@@ -227,15 +227,4 @@ export async function deleteJson(filePath: string): Promise<void> {
 			err,
 		);
 	}
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Internal helpers
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Checks whether a thrown error is a filesystem "file not found" error.
- */
-function isEnoent(cause: unknown): boolean {
-	return isErrnoException(cause) && cause.code === "ENOENT";
 }

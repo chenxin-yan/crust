@@ -6,7 +6,6 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
-import { CrustStoreError } from "./errors.ts";
 import { deleteJson, readJson, writeJson } from "./persistence.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -53,19 +52,13 @@ describe("readJson", () => {
 	it("should throw CrustStoreError PARSE on malformed JSON", async () => {
 		await writeFile(filePath, "{ invalid json }}}");
 
-		try {
-			await readJson(filePath);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustStoreError);
-			const storeErr = err as CrustStoreError;
-			expect(storeErr.is("PARSE")).toBe(true);
-			if (storeErr.is("PARSE")) {
-				expect(storeErr.details.path).toBe(filePath);
-			}
-			expect(storeErr.message).toContain("Malformed JSON");
-			expect(storeErr.cause).toBeInstanceOf(SyntaxError);
-		}
+		await expect(readJson(filePath)).rejects.toMatchObject({
+			name: "CrustStoreError",
+			code: "PARSE",
+			message: expect.stringContaining("Malformed JSON"),
+			details: { path: filePath },
+			cause: expect.any(SyntaxError),
+		});
 	});
 
 	it("should throw CrustStoreError IO on permission denied", async () => {
@@ -73,17 +66,12 @@ describe("readJson", () => {
 		await chmod(filePath, 0o000);
 
 		try {
-			await readJson(filePath);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustStoreError);
-			const storeErr = err as CrustStoreError;
-			expect(storeErr.is("IO")).toBe(true);
-			if (storeErr.is("IO")) {
-				expect(storeErr.details.path).toBe(filePath);
-				expect(storeErr.details.operation).toBe("read");
-			}
-			expect(storeErr.cause).toBeDefined();
+			await expect(readJson(filePath)).rejects.toMatchObject({
+				name: "CrustStoreError",
+				code: "IO",
+				details: { path: filePath, operation: "read" },
+				cause: expect.anything(),
+			});
 		} finally {
 			// Restore permissions for cleanup
 			await chmod(filePath, 0o644);
@@ -216,18 +204,12 @@ describe("writeJson", () => {
 		await writeFile(parentFile, "sentinel");
 		const badPath = join(parentFile, "impossible", "config.json");
 
-		try {
-			await writeJson(badPath, { data: true });
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustStoreError);
-			const storeErr = err as CrustStoreError;
-			expect(storeErr.is("IO")).toBe(true);
-			if (storeErr.is("IO")) {
-				expect(storeErr.details.operation).toBe("write");
-			}
-			expect(storeErr.cause).toBeDefined();
-		}
+		await expect(writeJson(badPath, { data: true })).rejects.toMatchObject({
+			name: "CrustStoreError",
+			code: "IO",
+			details: { operation: "write" },
+			cause: expect.anything(),
+		});
 	});
 });
 
@@ -271,17 +253,12 @@ describe("deleteJson", () => {
 		await chmod(tempDir, 0o444);
 
 		try {
-			await deleteJson(filePath);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustStoreError);
-			const storeErr = err as CrustStoreError;
-			expect(storeErr.is("IO")).toBe(true);
-			if (storeErr.is("IO")) {
-				expect(storeErr.details.path).toBe(filePath);
-				expect(storeErr.details.operation).toBe("delete");
-			}
-			expect(storeErr.cause).toBeDefined();
+			await expect(deleteJson(filePath)).rejects.toMatchObject({
+				name: "CrustStoreError",
+				code: "IO",
+				details: { path: filePath, operation: "delete" },
+				cause: expect.anything(),
+			});
 		} finally {
 			// Restore permissions for cleanup
 			await chmod(tempDir, 0o755);
