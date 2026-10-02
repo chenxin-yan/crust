@@ -10,6 +10,9 @@ import Showcase from "@/components/landing/Showcase";
 import { baseOptions, roadmapUrl } from "@/lib/layout.shared";
 import { buildPageMeta } from "@/lib/seo";
 
+// A head link, unlike a side-effect import, keeps the landing theme off docs pages.
+import homeCss from "@/components/landing/home.css?url";
+
 // Docs `npm` fences share this group id (source.config.ts), so one selection follows the reader everywhere.
 const PACKAGE_MANAGER_GROUP_ID = "package-manager";
 
@@ -31,7 +34,7 @@ export const Route = createFileRoute("/")({
 	component: FurnaceHome,
 	head: () => ({
 		meta: homeMeta,
-		links: homeLinks,
+		links: [...homeLinks, { rel: "stylesheet", href: homeCss }],
 	}),
 	loader: async () => {
 		try {
@@ -183,673 +186,219 @@ function FurnaceHome() {
 	}, []);
 
 	return (
-		<>
-			<style>{`
-        /* ── Light mode (warm parchment) ─────────────────────────────── */
-        :root {
-          --fn-bg: #f5f0eb;
-          --fn-surface: #ebe5de;
-          --fn-primary: #1a1410;
-          --fn-dim: #8a7a68;
-          --fn-molten: #d45400;
-          --fn-hot: #c04800;
-          --fn-cool: #6a5848;
-          --fn-border: #d8d0c6;
-          --fn-glow-opacity: 0.04;
-          --fn-grain-opacity: 0.004;
-          --fn-string-color: #a85e00;
-          --fn-btn-primary-text: #ffffff;
-        }
-
-        /* ── Dark mode (charred black + molten orange) ───────────────── */
-        .dark {
-          --fn-bg: #0c0806;
-          --fn-surface: #161210;
-          --fn-primary: #e8d8c8;
-          --fn-dim: #6a5848;
-          --fn-molten: #ff6a10;
-          --fn-hot: #ffb848;
-          --fn-cool: #c8c0b8;
-          --fn-border: #2a2220;
-          --fn-glow-opacity: 0.06;
-          --fn-grain-opacity: 0.008;
-          --fn-string-color: #d4a868;
-          --fn-btn-primary-text: #0c0806;
-        }
-
-        .furnace-home {
-          background: var(--fn-bg);
-          color: var(--fn-primary);
-          min-height: 100vh;
-          font-family: 'Saira', sans-serif;
-          overflow-x: clip;
-          position: relative;
-        }
-
-        /* Subtle glow at top */
-        .furnace-home::before {
-          content: '';
-          position: fixed;
-          top: -100px;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 800px;
-          height: 400px;
-          background: radial-gradient(ellipse, rgba(255, 106, 16, var(--fn-glow-opacity)) 0%, transparent 70%);
-          pointer-events: none;
-          z-index: 0;
-        }
-
-        /* Fine grain overlay */
-        .furnace-home::after {
-          content: '';
-          position: fixed;
-          inset: 0;
-          background:
-            repeating-linear-gradient(
-              0deg,
-              transparent,
-              transparent 2px,
-              rgba(255, 106, 16, var(--fn-grain-opacity)) 2px,
-              rgba(255, 106, 16, var(--fn-grain-opacity)) 3px
-            );
-          pointer-events: none;
-          z-index: 0;
-        }
-
-        /* Version badge — links to the roadmap */
-        .fn-dev-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 10px;
-          font-size: 10px;
-          letter-spacing: 1.5px;
-          text-transform: uppercase;
-          color: var(--fn-dim);
-          text-decoration: none;
-          padding: 7px 16px;
-          border: 1px solid var(--fn-border);
-          margin-bottom: 20px;
-          transition: border-color 0.25s;
-        }
-        .fn-dev-badge:hover {
-          border-color: var(--fn-molten);
-        }
-        .fn-dev-badge-status {
-          color: var(--fn-primary);
-          letter-spacing: 1px;
-        }
-        .fn-dev-badge-sep {
-          width: 1px;
-          height: 12px;
-          background: var(--fn-border);
-          flex-shrink: 0;
-        }
-        .fn-dev-badge-cta {
-          color: var(--fn-dim);
-          transition: color 0.2s;
-        }
-        .fn-dev-badge:hover .fn-dev-badge-cta {
-          color: var(--fn-molten);
-        }
-        .fn-dev-badge-arrow {
-          font-size: 9px;
-          line-height: 1;
-          margin-left: 5px;
-          color: var(--fn-dim);
-          transition: color 0.2s, transform 0.2s;
-        }
-        .fn-dev-badge:hover .fn-dev-badge-arrow {
-          color: var(--fn-molten);
-          transform: translateX(2px);
-        }
-
-
-        .fn-condensed {
-          font-family: 'Saira Condensed', sans-serif;
-        }
-
-        .fn-mono {
-          font-family: 'Fira Code', monospace;
-        }
-        /* Section eyebrow, shared with the showcase */
-        .fn-eyebrow {
-          margin: 0 0 16px;
-          font: 10px/1 'Fira Code', monospace;
-          letter-spacing: 4px;
-          text-transform: uppercase;
-          color: var(--fn-dim);
-        }
-
-        /* Install command — package manager tabs, click the command to copy */
-        .fn-install {
-          margin-top: 28px;
-          display: inline-flex;
-          flex-direction: column;
-          background: var(--fn-surface);
-          border: 1px solid var(--fn-border);
-          transition: border-color 0.2s;
-        }
-        .fn-install:has(.fn-install-cmd:hover) {
-          border-color: var(--fn-dim);
-        }
-        .fn-install:has(.fn-install-cmd:active) {
-          border-color: var(--fn-molten);
-        }
-        .fn-install-tabs {
-          display: flex;
-          border-bottom: 1px solid var(--fn-border);
-        }
-        .fn-install-tab {
-          padding: 6px 12px;
-          background: transparent;
-          border: none;
-          border-bottom: 1px solid transparent;
-          margin-bottom: -1px;
-          font-size: 11px;
-          color: var(--fn-dim);
-          cursor: pointer;
-          transition: color 0.2s, border-color 0.2s;
-        }
-        .fn-install-tab:hover {
-          color: var(--fn-primary);
-        }
-        .fn-install-tab[data-state="active"] {
-          color: var(--fn-molten);
-          border-bottom-color: var(--fn-molten);
-        }
-        .fn-install-tab:focus-visible,
-        .fn-install-panel:focus-visible,
-        .fn-install-cmd:focus-visible {
-          outline: 1px solid var(--fn-molten);
-          outline-offset: -1px;
-        }
-        .fn-install-cmd {
-          padding: 12px 20px;
-          background: transparent;
-          border: none;
-          font-size: 14px;
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          cursor: pointer;
-          user-select: none;
-          color: var(--fn-primary);
-        }
-
-        /* Code block */
-        .fn-code {
-          background: var(--fn-surface);
-          border: 1px solid var(--fn-border);
-          overflow: hidden;
-          display: flex;
-          flex-direction: column;
-          min-width: 0;
-        }
-        .fn-code-header {
-          padding: 10px 16px;
-          border-bottom: 1px solid var(--fn-border);
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          font-size: 12px;
-          color: var(--fn-dim);
-          flex-shrink: 0;
-        }
-        .fn-code-body {
-          padding: 12px 10px 12px 0; /* Fira Code is 0.615em/col: the 59-col line needs 436px of the 484px pane */
-          font-family: 'Fira Code', monospace;
-          font-size: 12px;
-          line-height: 1.65;
-          overflow-x: auto;
-          scrollbar-width: none;
-          overflow-y: hidden;
-          flex: 1;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        /* Shiki syntax highlighting */
-        .fn-shiki-container .shiki {
-          background: transparent !important;
-          margin: 0;
-          padding: 0;
-          width: 100%;
-          tab-size: 2;
-          font-family: 'Fira Code', monospace;
-          font-size: 12px;
-          line-height: 1.65;
-        }
-        .fn-shiki-container .shiki code {
-          font-family: inherit;
-          counter-reset: line;
-          display: flex;
-          flex-direction: column;
-        }
-        .fn-shiki-container .shiki code .line {
-          display: block;
-        }
-        .fn-shiki-container .shiki code .line::before {
-          counter-increment: line;
-          content: counter(line);
-          display: inline-block;
-          width: 20px;
-          text-align: right;
-          margin-right: 8px;
-          color: var(--fn-dim);
-          opacity: 0.5;
-          font-size: 11px;
-          user-select: none;
-        }
-
-        /* Dual-theme: light mode uses --shiki-light, dark uses --shiki-dark */
-        .fn-shiki-container .shiki,
-        .fn-shiki-container .shiki span {
-          color: var(--shiki-light) !important;
-          background-color: transparent !important;
-        }
-        .dark .fn-shiki-container .shiki,
-        .dark .fn-shiki-container .shiki span {
-          color: var(--shiki-dark) !important;
-        }
-
-        /* Buttons */
-        .fn-btn-primary {
-          background: var(--fn-molten);
-          color: var(--fn-btn-primary-text);
-          padding: 12px 32px;
-          border: none;
-          cursor: pointer;
-          font-family: 'Saira Condensed', sans-serif;
-          font-weight: 700;
-          font-size: 14px;
-          letter-spacing: 2px;
-          text-transform: uppercase;
-          transition: all 0.2s;
-          text-decoration: none;
-          display: inline-block;
-        }
-        .fn-btn-primary:hover {
-          background: var(--fn-hot);
-          transform: translateY(-2px);
-          box-shadow: 0 4px 20px rgba(255, 106, 16, 0.4), 0 2px 8px rgba(255, 106, 16, 0.2);
-        }
-        .fn-btn-ghost {
-          background: transparent;
-          color: var(--fn-primary);
-          padding: 12px 32px;
-          border: 1px solid var(--fn-border);
-          cursor: pointer;
-          font-family: 'Saira Condensed', sans-serif;
-          font-weight: 600;
-          font-size: 14px;
-          letter-spacing: 2px;
-          text-transform: uppercase;
-          transition: all 0.2s;
-          text-decoration: none;
-          display: inline-block;
-        }
-        .fn-btn-ghost:hover {
-          border-color: var(--fn-dim);
-        }
-
-        /* Accent dot */
-        .fn-dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background: var(--fn-molten);
-          display: inline-block;
-          box-shadow: 0 0 8px rgba(255, 106, 16, 0.5);
-        }
-
-        /* Module row */
-        .fn-module-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 14px 0;
-          border-bottom: 1px solid var(--fn-border);
-          text-decoration: none;
-          transition: all 0.2s;
-        }
-        .fn-module-row:hover {
-          padding-left: 8px;
-        }
-        .fn-module-row:hover .fn-module-name {
-          color: var(--fn-hot);
-        }
-        .fn-module-row:hover .fn-module-arrow {
-          opacity: 1;
-          transform: translateX(0);
-        }
-        .fn-module-arrow {
-          opacity: 0;
-          transform: translateX(-4px);
-          transition: all 0.2s;
-          color: var(--fn-molten);
-          font-size: 14px;
-        }
-
-        /* Upcoming module row — not clickable */
-        .fn-module-upcoming {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 14px 0;
-          border-bottom: 1px solid var(--fn-border);
-          opacity: 0.5;
-        }
-
-        /* Version badge */
-        .fn-badge-version {
-          font-size: 10px;
-          color: var(--fn-molten);
-          border: 1px solid var(--fn-molten);
-          padding: 1px 8px;
-          white-space: nowrap;
-          opacity: 0.7;
-          letter-spacing: 0.5px;
-        }
-
-        /* Coming soon badge */
-        .fn-badge-soon {
-          font-family: 'Saira Condensed', sans-serif;
-          font-size: 10px;
-          font-weight: 600;
-          letter-spacing: 1.5px;
-          text-transform: uppercase;
-          color: var(--fn-dim);
-          border: 1px solid var(--fn-border);
-          padding: 2px 10px;
-          white-space: nowrap;
-        }
-
-        /* Hero layout */
-        .fn-hero-grid {
-          display: grid;
-          /* The code panel gets the larger share: its 59-column line needs ~440px at 12px Fira Code. */
-          grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr);
-          gap: 48px;
-          align-items: stretch;
-        }
-
-        /* Hero section */
-        .fn-hero-section {
-          padding: 80px 40px 48px;
-          max-width: 1100px;
-          margin: 0 auto;
-          position: relative;
-          z-index: 2;
-        }
-
-        /* Content section (modules) */
-        .fn-content-section {
-          padding: 0 40px 64px;
-          max-width: 1100px;
-          margin: 0 auto;
-          position: relative;
-          z-index: 2;
-        }
-
-        /* Module info row (pkg name + desc) */
-        .fn-module-info {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-
-        /* Footer */
-        .fn-footer {
-          padding: 20px 40px;
-          border-top: 1px solid var(--fn-border);
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          position: relative;
-          z-index: 2;
-        }
-
-        @media (max-width: 860px) {
-          .fn-hero-grid {
-            grid-template-columns: 1fr;
-            gap: 32px;
-          }
-        }
-
-        @media (max-width: 640px) {
-          .fn-hero-section {
-            padding: 48px 20px 48px;
-          }
-          .fn-content-section {
-            padding: 0 20px 48px;
-          }
-          .fn-footer {
-            padding: 16px 20px;
-          }
-          .fn-module-info {
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 2px;
-          }
-        }
-      `}</style>
-
-			<HomeLayout {...baseOptions}>
-				<div className="furnace-home">
-					{/* Hero */}
-					<section className="fn-hero-section">
-						<a
-							href={roadmapUrl}
-							target="_blank"
-							rel="noopener noreferrer"
-							className="fn-mono fn-dev-badge"
-						>
-							{/* The same npm lookup the module list uses; omitted when the registry was unreachable. */}
-							{coreVersion && (
-								<>
-									<span className="fn-dev-badge-status">@crustjs/core v{coreVersion}</span>
-									<span className="fn-dev-badge-sep" />
-								</>
-							)}
-							<span className="fn-dev-badge-cta">
-								Roadmap
-								<span className="fn-dev-badge-arrow" aria-hidden="true">
-									→
-								</span>
+		<HomeLayout {...baseOptions}>
+			<div className="furnace-home">
+				{/* Hero */}
+				<section className="fn-hero-section">
+					<a
+						href={roadmapUrl}
+						target="_blank"
+						rel="noopener noreferrer"
+						className="fn-mono fn-dev-badge"
+					>
+						{/* The same npm lookup the module list uses; omitted when the registry was unreachable. */}
+						{coreVersion && (
+							<>
+								<span className="fn-dev-badge-status">@crustjs/core v{coreVersion}</span>
+								<span className="fn-dev-badge-sep" />
+							</>
+						)}
+						<span className="fn-dev-badge-cta">
+							Roadmap
+							<span className="fn-dev-badge-arrow" aria-hidden="true">
+								→
 							</span>
-						</a>
+						</span>
+					</a>
 
-						<div className="fn-hero-grid">
-							{/* Left — text content */}
-							<div>
-								<h1
-									className="fn-condensed"
-									style={{
-										fontSize: "clamp(42px, 6vw, 76px)",
-										fontWeight: 800,
-										lineHeight: 0.95,
-										margin: 0,
-										letterSpacing: "-0.01em",
-										textTransform: "uppercase",
-									}}
-								>
-									Build CLIs
-									<br />
-									<span style={{ color: "var(--fn-molten)", whiteSpace: "nowrap" }}>
-										agents can use.
-									</span>
-								</h1>
+					<div className="fn-hero-grid">
+						{/* Left — text content */}
+						<div>
+							<h1
+								className="fn-condensed"
+								style={{
+									fontSize: "clamp(42px, 6vw, 76px)",
+									fontWeight: 800,
+									lineHeight: 0.95,
+									margin: 0,
+									letterSpacing: "-0.01em",
+									textTransform: "uppercase",
+								}}
+							>
+								Build CLIs
+								<br />
+								<span style={{ color: "var(--fn-molten)", whiteSpace: "nowrap" }}>
+									agents can use.
+								</span>
+							</h1>
 
-								<p
-									style={{
-										fontSize: 16,
-										lineHeight: 1.7,
-										color: "var(--fn-dim)",
-										maxWidth: 460,
-										marginTop: 20,
-										fontWeight: 400,
-									}}
-								>
-									A TypeScript CLI framework with composable modules for humans and agents.
-								</p>
+							<p
+								style={{
+									fontSize: 16,
+									lineHeight: 1.7,
+									color: "var(--fn-dim)",
+									maxWidth: 460,
+									marginTop: 20,
+									fontWeight: 400,
+								}}
+							>
+								A TypeScript CLI framework with composable modules for humans and agents.
+							</p>
 
-								{/* Install — pick a package manager, click the command to copy */}
-								<Tabs
-									className="fn-install"
-									groupId={PACKAGE_MANAGER_GROUP_ID}
-									persist
-									defaultValue="npm"
-								>
-									<TabsList className="fn-mono fn-install-tabs" aria-label="Package manager">
-										{Object.keys(SCAFFOLD_COMMANDS).map((manager) => (
-											<TabsTrigger key={manager} value={manager} className="fn-install-tab">
-												{manager}
-											</TabsTrigger>
-										))}
-									</TabsList>
-									{Object.entries(SCAFFOLD_COMMANDS).map(([manager, command]) => (
-										<TabsContent key={manager} value={manager} className="fn-install-panel">
-											<button
-												type="button"
-												className="fn-mono fn-install-cmd"
-												onClick={() => handleCopy(command)}
-											>
-												<span style={{ color: "var(--fn-molten)" }}>{">"}</span>
-												<span>{command}</span>
-												<span
-													className="fn-mono"
-													style={{
-														fontSize: 10,
-														color: copied === command ? "var(--fn-molten)" : "var(--fn-dim)",
-														marginLeft: 8,
-														transition: "color 0.2s",
-														letterSpacing: 1,
-													}}
-												>
-													{copied === command ? "COPIED!" : "COPY"}
-												</span>
-											</button>
-										</TabsContent>
+							{/* Install — pick a package manager, click the command to copy */}
+							<Tabs
+								className="fn-install"
+								groupId={PACKAGE_MANAGER_GROUP_ID}
+								persist
+								defaultValue="npm"
+							>
+								<TabsList className="fn-mono fn-install-tabs" aria-label="Package manager">
+									{Object.keys(SCAFFOLD_COMMANDS).map((manager) => (
+										<TabsTrigger key={manager} value={manager} className="fn-install-tab">
+											{manager}
+										</TabsTrigger>
 									))}
-								</Tabs>
-
-								<div
-									style={{
-										marginTop: 20,
-										display: "flex",
-										gap: 8,
-										flexWrap: "wrap",
-									}}
-								>
-									<Link to="/docs/$" params={{ _splat: "quick-start" }} className="fn-btn-primary">
-										Quick Start
-									</Link>
-									<a
-										href="https://discord.gg/sQF8hdN6Ht"
-										target="_blank"
-										rel="noopener noreferrer"
-										className="fn-btn-ghost"
-									>
-										Join Discord
-									</a>
-								</div>
-							</div>
-
-							{/* Right — code sample */}
-							<div className="fn-code">
-								<div className="fn-code-header">
-									<span>src/cli.ts</span>
-									<span>TypeScript</span>
-								</div>
-								<div className="fn-code-body fn-shiki-container">
-									<Code code={HIGHLIGHTED.greet} />
-								</div>
-							</div>
-						</div>
-					</section>
-
-					{/* Showcase: eight features, real code and real output, driven by scroll */}
-					<Showcase />
-
-					{/* Modules */}
-					<section className="fn-content-section">
-						<p className="fn-eyebrow">Modules</p>
-
-						{MODULES.map((m) => {
-							if (m.upcoming) {
-								return (
-									<div key={m.pkg} className="fn-module-upcoming">
-										<div className="fn-module-info">
-											<code
+								</TabsList>
+								{Object.entries(SCAFFOLD_COMMANDS).map(([manager, command]) => (
+									<TabsContent key={manager} value={manager} className="fn-install-panel">
+										<button
+											type="button"
+											className="fn-mono fn-install-cmd"
+											onClick={() => handleCopy(command)}
+										>
+											<span style={{ color: "var(--fn-molten)" }}>{">"}</span>
+											<span>{command}</span>
+											<span
 												className="fn-mono"
 												style={{
-													fontSize: 14,
-													color: "var(--fn-dim)",
+													fontSize: 10,
+													color: copied === command ? "var(--fn-molten)" : "var(--fn-dim)",
+													marginLeft: 8,
+													transition: "color 0.2s",
+													letterSpacing: 1,
 												}}
 											>
-												{m.pkg}
-											</code>
-											<span style={{ fontSize: 13, color: "var(--fn-dim)" }}>{m.desc}</span>
-										</div>
-										<span className="fn-badge-soon">Coming Soon</span>
-									</div>
-								);
-							}
+												{copied === command ? "COPIED!" : "COPY"}
+											</span>
+										</button>
+									</TabsContent>
+								))}
+							</Tabs>
 
-							const version = npmVersions[m.pkg];
+							<div
+								style={{
+									marginTop: 20,
+									display: "flex",
+									gap: 8,
+									flexWrap: "wrap",
+								}}
+							>
+								<Link to="/docs/$" params={{ _splat: "quick-start" }} className="fn-btn-primary">
+									Quick Start
+								</Link>
+								<a
+									href="https://discord.gg/sQF8hdN6Ht"
+									target="_blank"
+									rel="noopener noreferrer"
+									className="fn-btn-ghost"
+								>
+									Join Discord
+								</a>
+							</div>
+						</div>
 
+						{/* Right — code sample */}
+						<div className="fn-code">
+							<div className="fn-code-header">
+								<span>src/cli.ts</span>
+								<span>TypeScript</span>
+							</div>
+							<div className="fn-code-body fn-shiki-container">
+								<Code code={HIGHLIGHTED.greet} />
+							</div>
+						</div>
+					</div>
+				</section>
+
+				{/* Showcase: eight features, real code and real output, driven by scroll */}
+				<Showcase />
+
+				{/* Modules */}
+				<section className="fn-content-section">
+					<p className="fn-eyebrow">Modules</p>
+
+					{MODULES.map((m) => {
+						if (m.upcoming) {
 							return (
-								<Link key={m.pkg} to="/docs/$" params={{ _splat: m.doc }} className="fn-module-row">
+								<div key={m.pkg} className="fn-module-upcoming">
 									<div className="fn-module-info">
 										<code
-											className="fn-mono fn-module-name"
+											className="fn-mono"
 											style={{
 												fontSize: 14,
-												color: "var(--fn-molten)",
-												transition: "color 0.2s",
+												color: "var(--fn-dim)",
 											}}
 										>
 											{m.pkg}
 										</code>
-										{version && <span className="fn-badge-version fn-mono">v{version}</span>}
 										<span style={{ fontSize: 13, color: "var(--fn-dim)" }}>{m.desc}</span>
 									</div>
-									<span className="fn-module-arrow">→</span>
-								</Link>
+									<span className="fn-badge-soon">Coming Soon</span>
+								</div>
 							);
-						})}
-					</section>
+						}
 
-					{/* Footer */}
-					<footer className="fn-footer">
-						<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-							<span className="fn-dot" />
-							<span
-								className="fn-condensed"
-								style={{
-									fontSize: 12,
-									fontWeight: 700,
-									letterSpacing: 3,
-									textTransform: "uppercase",
-								}}
-							>
-								Crust
-							</span>
-						</div>
+						const version = npmVersions[m.pkg];
+
+						return (
+							<Link key={m.pkg} to="/docs/$" params={{ _splat: m.doc }} className="fn-module-row">
+								<div className="fn-module-info">
+									<code
+										className="fn-mono fn-module-name"
+										style={{
+											fontSize: 14,
+											color: "var(--fn-molten)",
+											transition: "color 0.2s",
+										}}
+									>
+										{m.pkg}
+									</code>
+									{version && <span className="fn-badge-version fn-mono">v{version}</span>}
+									<span style={{ fontSize: 13, color: "var(--fn-dim)" }}>{m.desc}</span>
+								</div>
+								<span className="fn-module-arrow">→</span>
+							</Link>
+						);
+					})}
+				</section>
+
+				{/* Footer */}
+				<footer className="fn-footer">
+					<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+						<span className="fn-dot" />
 						<span
+							className="fn-condensed"
 							style={{
-								fontSize: 11,
-								color: "var(--fn-dim)",
-								letterSpacing: 1,
+								fontSize: 12,
+								fontWeight: 700,
+								letterSpacing: 3,
+								textTransform: "uppercase",
 							}}
 						>
-							MIT
+							Crust
 						</span>
-					</footer>
-				</div>
-			</HomeLayout>
-		</>
+					</div>
+					<span
+						style={{
+							fontSize: 11,
+							color: "var(--fn-dim)",
+							letterSpacing: 1,
+						}}
+					>
+						MIT
+					</span>
+				</footer>
+			</div>
+		</HomeLayout>
 	);
 }
