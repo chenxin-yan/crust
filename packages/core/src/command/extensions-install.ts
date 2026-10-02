@@ -1,6 +1,7 @@
 import type { AnyContextInstance } from "../api/context.ts";
 import type { ExtensionData } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
+import type { ExtensionId } from "../identity.ts";
 import { normalizeSection, type SectionOwner } from "../sections.ts";
 import type { FlagDef, FlagsDef } from "../types.ts";
 import type { CommandDefinition } from "./crust.ts";
@@ -10,7 +11,7 @@ import type { CommandSnapshot } from "./snapshot.ts";
 export type MaterializeCommandDefinition = (
 	definition: CommandDefinition,
 	parent: CommandNode,
-	extensionName?: string,
+	extensionId?: ExtensionId,
 ) => CommandNode;
 
 /** Inject an Extension-owned flag into a node and, when recursive, its descendants. */

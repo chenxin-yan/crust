@@ -1,14 +1,15 @@
-import { validateContextAvailability, definingOf } from "../api/context.ts";
-import type {
-	AnyContextFactory,
-	ContextBag,
-	ContextDependencies,
-	AnyContextInstance,
-	ContextValue,
-	ContextMap,
-	ContextsOutput,
-	ContextsOwnedFlags,
-	DefiningOf,
+import {
+	validateContextAvailability,
+	definingOf,
+	type AnyContextFactory,
+	type ContextBag,
+	type ContextDependencies,
+	type AnyContextInstance,
+	type ContextValue,
+	type ContextMap,
+	type ContextsOutput,
+	type ContextsOwnedFlags,
+	type DefiningOf,
 } from "../api/context.ts";
 import type {
 	AnyExtension,
@@ -18,6 +19,7 @@ import type {
 	RootMetaKey,
 } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
+import type { ExtensionId } from "../identity.ts";
 import type { RunInputPayload } from "../parsing/parser.ts";
 import { normalizeArg } from "../parsing/spellings.ts";
 import { validateCommandSections } from "../sections.ts";
@@ -38,8 +40,6 @@ import type { AppendArgsChecks, AttachedArgs } from "../validation/args.brands.t
 import type {
 	AttachedCommandSpellings,
 	CommandCollisionBrand,
-} from "../validation/commands.brands.ts";
-import type {
 	AliasesOf,
 	CommandDefinitionSpellings,
 	CommandNameBrand,
@@ -51,8 +51,8 @@ import type {
 	ValidateCommandDefinitions,
 	ValidateExtensionCommands,
 } from "../validation/commands.brands.ts";
-import type { KnownContextInstances } from "../validation/contexts.brands.ts";
 import type {
+	KnownContextInstances,
 	MissingDeclaredDependencyBrand,
 	DeclaredDependencyValuesBrand,
 	ValidateContextDeps,
@@ -72,8 +72,8 @@ import type {
 	AttachedSpellings,
 	LocalSpellingsOf,
 } from "../validation/flags.brands.ts";
-import type { IsClosedName } from "../validation/shared.ts";
 import type {
+	IsClosedName,
 	IsStaticTuple,
 	IsUnion,
 	MergeContext,
@@ -240,16 +240,14 @@ export type CommandDefinitionData<D> = D extends {
 function materializeCommandDefinition(
 	definition: CommandDefinition,
 	parent: CommandNode,
-	extensionName?: string,
+	extensionId?: ExtensionId,
 ): CommandNode {
 	const internal = definition[commandDefinitionInternal];
 	const name = definition.name;
-	const owner = extensionName
-		? `Extension "${extensionName}" command "${name}"`
-		: `Command "${name}"`;
+	const owner = extensionId ? `Extension "${extensionId}" command "${name}"` : `Command "${name}"`;
 	const definitionDetails = (reason: string) => ({
-		subject: extensionName ? ("extension" as const) : ("command" as const),
-		name: extensionName ?? name,
+		subject: extensionId ? ("extension" as const) : ("command" as const),
+		name: extensionId ?? name,
 		reason,
 	});
 
@@ -1575,14 +1573,14 @@ export class Crust<
 	 */
 	// `Path` is only constrained to strings, and the parameter is not intersected with `Path`:
 	// either would erase the partial literal editors use for completions (see `KnownCommandPath`).
-	async run<const Path extends readonly string[]>(
+	run<const Path extends readonly string[]>(
 		this: RunWithoutInputThis<
 			CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>,
 			{ readonly _types: { readonly caps: "app" } }
 		>,
 		path: KnownCommandPath<Path, Tree>,
 	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
-	async run<
+	run<
 		const Path extends readonly string[],
 		const Input extends
 			| RunInput<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>>
@@ -1597,7 +1595,7 @@ export class Crust<
 			| OmittableRunInput<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>>,
 		options?: InvocationOptions,
 	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
-	async run<const Path extends readonly string[], const Input>(
+	run<const Path extends readonly string[], const Input>(
 		this: { readonly _types: { readonly caps: "app" } },
 		path: KnownCommandPath<Path, Tree>,
 		input: Input,
