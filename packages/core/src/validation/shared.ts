@@ -102,8 +102,6 @@ type AsyncParseBrand<T> = T extends { parse?: (...args: never[]) => infer R }
 			}
 	: {};
 
-type DefaultChoiceError = { readonly FIX_DEFAULT_CHOICE: "default must be one of choices" };
-
 /** Brand literal defaults that fall outside a literal `choices` tuple. */
 type DefaultWithinChoicesBrand<T> = T extends {
 	choices: readonly (infer Choice extends string)[];
@@ -116,13 +114,13 @@ type DefaultWithinChoicesBrand<T> = T extends {
 				? {}
 				: Exclude<Default[number], Choice> extends never
 					? {}
-					: DefaultChoiceError
+					: { readonly FIX_DEFAULT_CHOICE: "default must be one of choices" }
 			: Default extends string
 				? string extends Default
 					? {}
 					: Exclude<Default, Choice> extends never
 						? {}
-						: DefaultChoiceError
+						: { readonly FIX_DEFAULT_CHOICE: "default must be one of choices" }
 				: {}
 	: {};
 

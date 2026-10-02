@@ -30,10 +30,6 @@ export type EmptyArgNameBrand<Name extends string> = EmptyLiteralNameBrand<Name,
 // An empty name renders as "<>" in help/snapshot labels and validation messages.
 type EmptyArgDefinitionNameBrand<A> = EmptyArgNameBrand<DefNameMembers<A>>;
 
-type VariadicPositionError = {
-	readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic";
-};
-
 type ArgChecks<A, Existing extends string> = A &
 	DuplicateArgBrand<A, Existing> &
 	LocalValueBrand<A> &
@@ -62,7 +58,9 @@ export type ValidateArgs<
 	? Tail extends readonly [unknown, ...unknown[]]
 		? Head extends { variadic: true }
 			? readonly [
-					ArgChecks<Head, Existing> & VariadicPositionError,
+					ArgChecks<Head, Existing> & {
+						readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic";
+					},
 					...ValidateArgs<Tail, Existing | DefName<Head>>,
 				]
 			: readonly [ArgChecks<Head, Existing>, ...ValidateArgs<Tail, Existing | DefName<Head>>]
@@ -70,7 +68,9 @@ export type ValidateArgs<
 	: { [I in keyof A]: ArgChecks<A[I], Existing> };
 
 type BrandVariadicPosition<A extends readonly object[]> = {
-	[I in keyof A]: A[I] & VariadicPositionError;
+	[I in keyof A]: A[I] & {
+		readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic";
+	};
 };
 
 export type AppendArgsChecks<A extends ArgsDef, NewA extends ArgsDef> = A extends readonly [

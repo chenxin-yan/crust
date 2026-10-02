@@ -34,10 +34,6 @@ type ExistingFlagCollisionBrand<F, Existing extends string> = ExistingSpellingCo
 	Existing
 >;
 
-type OwnSpellingRepeatError = {
-	readonly FIX_ALIAS_COLLISION: "Flag repeats one of its own spellings";
-};
-
 /**
  * Every statically known canonical, short, and long-alias member, including literals
  * beside an open member. Spelling grammar only: collision evidence stays with
@@ -79,7 +75,7 @@ type OwnAliasesBrand<F> = F extends { aliases: infer Aliases extends readonly st
 	? RepeatedAliases<Aliases, ExtractShort<F>> extends infer Duplicate extends string
 		? [Duplicate] extends [never]
 			? {}
-			: OwnSpellingRepeatError
+			: { readonly FIX_ALIAS_COLLISION: "Flag repeats one of its own spellings" }
 		: never
 	: {};
 
@@ -339,7 +335,9 @@ type LocalFlagBranchBrand<F> = LocalValueBrand<F> &
 	ReservedSpellingBrand<F> &
 	EmptySpellingBrand<F> &
 	NoPrefixBrand<SpellingMembers<F>> &
-	([DefName<F> & ExtractAllAliases<F>] extends [never] ? {} : OwnSpellingRepeatError);
+	([DefName<F> & ExtractAllAliases<F>] extends [never]
+		? {}
+		: { readonly FIX_ALIAS_COLLISION: "Flag repeats one of its own spellings" });
 
 /** Validate provable local fields and destination relations without inventing names for open inputs. */
 export type ValidateLocalFlagDefs<
