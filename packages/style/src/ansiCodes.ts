@@ -15,140 +15,79 @@ export interface AnsiPair {
 	readonly close: string;
 }
 
-function pair(open: number, close: number): AnsiPair {
-	return { open: `\x1b[${open}m`, close: `\x1b[${close}m` };
-}
+// Style method → `[open, close]` SGR parameters. Literal tables keep the
+// method-name union inferable under isolatedDeclarations.
+const modifierCodes = {
+	/** Bold / increased intensity. */
+	bold: [1, 22],
+	/** Dim / decreased intensity. */
+	dim: [2, 22],
+	italic: [3, 23],
+	underline: [4, 24],
+	/** Inverse / reverse video. */
+	inverse: [7, 27],
+	/** Hidden / conceal. */
+	hidden: [8, 28],
+	/** Strikethrough / crossed out. */
+	strikethrough: [9, 29],
+} as const;
 
-// ────────────────────────────────────────────────────────────────────────────
-// Modifiers
-// ────────────────────────────────────────────────────────────────────────────
+const colorCodes = {
+	black: [30, 39],
+	red: [31, 39],
+	green: [32, 39],
+	yellow: [33, 39],
+	blue: [34, 39],
+	magenta: [35, 39],
+	cyan: [36, 39],
+	white: [37, 39],
+	/** Bright black (gray). */
+	gray: [90, 39],
+	brightRed: [91, 39],
+	brightGreen: [92, 39],
+	brightYellow: [93, 39],
+	brightBlue: [94, 39],
+	brightMagenta: [95, 39],
+	brightCyan: [96, 39],
+	brightWhite: [97, 39],
 
-/** Bold / increased intensity. */
-export const bold: AnsiPair = pair(1, 22);
+	bgBlack: [40, 49],
+	bgRed: [41, 49],
+	bgGreen: [42, 49],
+	bgYellow: [43, 49],
+	bgBlue: [44, 49],
+	bgMagenta: [45, 49],
+	bgCyan: [46, 49],
+	bgWhite: [47, 49],
+	bgBrightBlack: [100, 49],
+	bgBrightRed: [101, 49],
+	bgBrightGreen: [102, 49],
+	bgBrightYellow: [103, 49],
+	bgBrightBlue: [104, 49],
+	bgBrightMagenta: [105, 49],
+	bgBrightCyan: [106, 49],
+	bgBrightWhite: [107, 49],
+} as const;
 
-/** Dim / decreased intensity. */
-export const dim: AnsiPair = pair(2, 22);
+export type StyleMethodName = keyof typeof modifierCodes | keyof typeof colorCodes;
 
-/** Italic. */
-export const italic: AnsiPair = pair(3, 23);
+const styleMethodCodes = { ...modifierCodes, ...colorCodes };
 
-/** Underline. */
-export const underline: AnsiPair = pair(4, 24);
+export const styleMethodNames: readonly StyleMethodName[] = Object.freeze(
+	// SAFETY: Object.keys returns exactly the own keys of the literal code tables.
+	Object.keys(styleMethodCodes) as StyleMethodName[],
+);
 
-/** Inverse / reverse video. */
-export const inverse: AnsiPair = pair(7, 27);
-
-/** Hidden / conceal. */
-export const hidden: AnsiPair = pair(8, 28);
-
-/** Strikethrough / crossed out. */
-export const strikethrough: AnsiPair = pair(9, 29);
-
-// ────────────────────────────────────────────────────────────────────────────
-// Foreground Colors
-// ────────────────────────────────────────────────────────────────────────────
-
-export const black: AnsiPair = pair(30, 39);
-export const red: AnsiPair = pair(31, 39);
-export const green: AnsiPair = pair(32, 39);
-export const yellow: AnsiPair = pair(33, 39);
-export const blue: AnsiPair = pair(34, 39);
-export const magenta: AnsiPair = pair(35, 39);
-export const cyan: AnsiPair = pair(36, 39);
-export const white: AnsiPair = pair(37, 39);
-
-/** Bright black (gray). */
-export const gray: AnsiPair = pair(90, 39);
-
-// Bright variants
-export const brightRed: AnsiPair = pair(91, 39);
-export const brightGreen: AnsiPair = pair(92, 39);
-export const brightYellow: AnsiPair = pair(93, 39);
-export const brightBlue: AnsiPair = pair(94, 39);
-export const brightMagenta: AnsiPair = pair(95, 39);
-export const brightCyan: AnsiPair = pair(96, 39);
-export const brightWhite: AnsiPair = pair(97, 39);
-
-// ────────────────────────────────────────────────────────────────────────────
-// Background Colors
-// ────────────────────────────────────────────────────────────────────────────
-
-export const bgBlack: AnsiPair = pair(40, 49);
-export const bgRed: AnsiPair = pair(41, 49);
-export const bgGreen: AnsiPair = pair(42, 49);
-export const bgYellow: AnsiPair = pair(43, 49);
-export const bgBlue: AnsiPair = pair(44, 49);
-export const bgMagenta: AnsiPair = pair(45, 49);
-export const bgCyan: AnsiPair = pair(46, 49);
-export const bgWhite: AnsiPair = pair(47, 49);
-
-// Bright background variants
-export const bgBrightBlack: AnsiPair = pair(100, 49);
-export const bgBrightRed: AnsiPair = pair(101, 49);
-export const bgBrightGreen: AnsiPair = pair(102, 49);
-export const bgBrightYellow: AnsiPair = pair(103, 49);
-export const bgBrightBlue: AnsiPair = pair(104, 49);
-export const bgBrightMagenta: AnsiPair = pair(105, 49);
-export const bgBrightCyan: AnsiPair = pair(106, 49);
-export const bgBrightWhite: AnsiPair = pair(107, 49);
-
-const styleMethodNameList = [
-	"bold",
-	"dim",
-	"italic",
-	"underline",
-	"inverse",
-	"hidden",
-	"strikethrough",
-	"black",
-	"red",
-	"green",
-	"yellow",
-	"blue",
-	"magenta",
-	"cyan",
-	"white",
-	"gray",
-	"brightRed",
-	"brightGreen",
-	"brightYellow",
-	"brightBlue",
-	"brightMagenta",
-	"brightCyan",
-	"brightWhite",
-	"bgBlack",
-	"bgRed",
-	"bgGreen",
-	"bgYellow",
-	"bgBlue",
-	"bgMagenta",
-	"bgCyan",
-	"bgWhite",
-	"bgBrightBlack",
-	"bgBrightRed",
-	"bgBrightGreen",
-	"bgBrightYellow",
-	"bgBrightBlue",
-	"bgBrightMagenta",
-	"bgBrightCyan",
-	"bgBrightWhite",
-] as const;
-
-export type StyleMethodName = (typeof styleMethodNameList)[number];
-export const styleMethodNames: readonly StyleMethodName[] = Object.freeze(styleMethodNameList);
-
-const modifierNames: readonly StyleMethodName[] = [
-	"bold",
-	"dim",
-	"italic",
-	"underline",
-	"inverse",
-	"hidden",
-	"strikethrough",
-];
-
-const modifierNameSet: ReadonlySet<StyleMethodName> = new Set(modifierNames);
+export const styleMethodPairs: Readonly<Record<StyleMethodName, AnsiPair>> = Object.freeze(
+	// SAFETY: the entries map every registered style method name to its pair.
+	Object.fromEntries(
+		styleMethodNames.map((name) => {
+			const [open, close] = styleMethodCodes[name];
+			return [name, { open: `\x1b[${open}m`, close: `\x1b[${close}m` }];
+		}),
+	) as Record<StyleMethodName, AnsiPair>,
+);
 
 export function isModifierName(name: StyleMethodName): boolean {
-	return modifierNameSet.has(name);
+	return Object.hasOwn(modifierCodes, name);
 }

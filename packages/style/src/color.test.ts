@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import * as codes from "./ansiCodes.ts";
+import { styleMethodPairs } from "./ansiCodes.ts";
 import { bg, fg } from "./color.ts";
 import { applyStyle } from "./styleEngine.ts";
 import type { ColorString } from "./types.ts";
@@ -102,13 +102,13 @@ describe("bg", () => {
 describe("nesting with static styles", () => {
 	it("dynamic fg nested in bold — no interference", () => {
 		const inner = fg("world", "#ff0000");
-		const outer = applyStyle(`hello ${inner}!`, codes.bold);
+		const outer = applyStyle(`hello ${inner}!`, styleMethodPairs.bold);
 
 		expect(outer).toBe("\x1b[1mhello \x1b[38;2;255;0;0mworld\x1b[39m!\x1b[22m");
 	});
 
 	it("static fg nested in dynamic fg — same close (39m) triggers reopen", () => {
-		const inner = applyStyle("static", codes.red);
+		const inner = applyStyle("static", styleMethodPairs.red);
 		const outer = applyStyle(`before ${inner} after`, {
 			open: "\x1b[38;2;0;128;255m",
 			close: "\x1b[39m",
@@ -122,7 +122,7 @@ describe("nesting with static styles", () => {
 
 	it("dynamic bg nested in static bg — same close (49m) triggers reopen", () => {
 		const inner = bg("inner", [255, 128, 0]);
-		const outer = applyStyle(`A ${inner} B`, codes.bgBlue);
+		const outer = applyStyle(`A ${inner} B`, styleMethodPairs.bgBlue);
 
 		// bg close (49m) matches bgBlue close (49m), so bgBlue reopens
 		expect(outer).toBe("\x1b[44mA \x1b[48;2;255;128;0minner\x1b[49m\x1b[44m B\x1b[49m");

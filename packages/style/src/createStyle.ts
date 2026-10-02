@@ -2,9 +2,8 @@
 // Create Style — Configurable style instance factory
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { AnsiPair } from "./ansiCodes.ts";
-import { isModifierName, styleMethodNames } from "./ansiCodes.ts";
-import * as codes from "./ansiCodes.ts";
+import type { AnsiPair, StyleMethodName } from "./ansiCodes.ts";
+import { isModifierName, styleMethodNames, styleMethodPairs } from "./ansiCodes.ts";
 import { resolveColorDepth, resolveModifierCapability } from "./capability.ts";
 import { bg as bgDirect, bgPairAtDepth, fg as fgDirect, fgPairAtDepth } from "./color.ts";
 import { linkCode, link as linkDirect } from "./hyperlinks.ts";
@@ -16,7 +15,6 @@ import type {
 	StyleInput,
 	StyleInstance,
 	StyleMethodMap,
-	StyleMethodName,
 	StyleOptions,
 } from "./types.ts";
 
@@ -24,9 +22,6 @@ const dynamicColorKinds = [
 	["fg", fgDirect],
 	["bg", bgDirect],
 ] as const;
-
-// Computed namespace access is safe because StyleMethodName contains only ANSI-pair exports.
-const styleMethodPairs = codes;
 
 // A single step in a chainable style: a registered method or a color
 // resolved against the active terminal depth when the chain is called.

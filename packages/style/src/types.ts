@@ -2,7 +2,7 @@
 // Types — Mode, options, and shared type definitions
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { AnsiPair, StyleMethodName as RegisteredStyleMethodName } from "./ansiCodes.ts";
+import type { AnsiPair, StyleMethodName } from "./ansiCodes.ts";
 import type { HyperlinkOptions } from "./hyperlinks.ts";
 import type { NamedColor } from "./namedColorValues.ts";
 
@@ -197,11 +197,6 @@ export interface ChainableStyleFn extends StyleMethodMap, AnsiPair {
 	 */
 	bg(input: ColorInput): ChainableStyleFn;
 }
-
-/**
- * Style method name used by the chain builder implementation.
- */
-export type StyleMethodName = RegisteredStyleMethodName;
 
 /**
  * A configured style instance with mode-aware styling functions.

@@ -19,14 +19,14 @@ import type { StyleInput } from "./types.ts";
  * @example
  * ```ts
  * import { applyStyle } from "./styleEngine.ts";
- * import { bold, red } from "./ansiCodes.ts";
+ * import { styleMethodPairs } from "./ansiCodes.ts";
  *
  * // Simple usage
- * applyStyle("hello", bold); // "\x1b[1mhello\x1b[22m"
+ * applyStyle("hello", styleMethodPairs.bold); // "\x1b[1mhello\x1b[22m"
  *
  * // Nesting: bold wraps a red segment — bold reopens after red's close
- * const inner = applyStyle("world", red);
- * applyStyle(`hello ${inner}!`, bold);
+ * const inner = applyStyle("world", styleMethodPairs.red);
+ * applyStyle(`hello ${inner}!`, styleMethodPairs.bold);
  * ```
  */
 export function applyStyle(text: StyleInput, style: AnsiPair): string {
