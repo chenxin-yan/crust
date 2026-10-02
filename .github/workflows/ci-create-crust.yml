@@ -43,12 +43,12 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Setup runtimes
-        uses: jdx/mise-action@v4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -92,7 +92,7 @@ jobs:
 
       - name: Upload installed-tool diagnostics on failure
         if: failure() && matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: create-crust-installed-${{ matrix.os }}
           path: ${{ runner.temp }}/create-crust-installed-*/diagnostics/**
@@ -100,7 +100,7 @@ jobs:
 
       - name: Upload smoke workspace on failure
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: create-crust-smoke-${{ matrix.os }}
           path: ${{ runner.temp }}/create-crust-smoke
