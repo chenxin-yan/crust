@@ -62,6 +62,21 @@ describe("password — masked rendering", () => {
 		expect(result).toBe("abc");
 	});
 
+	it("renders one mask character per code point", async () => {
+		const prompt = renderPrompt(password, { message: "Password?" });
+
+		await tick();
+		prompt.type("😀😀");
+		await tick();
+		prompt.keys("left");
+		await tick();
+
+		expect(prompt.screen()).toBe("┃ Password?\n  *│*");
+
+		prompt.keys("return");
+		expect(await prompt.answer).toBe("😀😀");
+	});
+
 	it("supports custom mask character", async () => {
 		const prompt = renderPrompt(password, { message: "Password?", mask: "●" });
 

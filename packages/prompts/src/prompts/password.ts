@@ -70,8 +70,9 @@ function renderPassword(
 	const prefix = theme.prefix(PREFIX_SYMBOL);
 	const msg = theme.message(message ?? "Enter a password");
 
-	const beforeMask = mask.repeat(state.cursorPos);
-	const afterMask = mask.repeat(state.value.length - state.cursorPos);
+	// cursorPos is a UTF-16 offset; mask whole code points so an emoji shows one mask char.
+	const beforeMask = mask.repeat([...state.value.slice(0, state.cursorPos)].length);
+	const afterMask = mask.repeat([...state.value.slice(state.cursorPos)].length);
 	const valueLine = `${beforeMask}${theme.cursor(CURSOR_CHAR)}${afterMask}`;
 
 	let output = formatPromptLine(prefix, msg, valueLine);
