@@ -28,10 +28,9 @@ import {
 	applyExtensionCommands,
 	applyExtensionFlags,
 	applyExtensionSections,
-	cloneCommandNode,
 	type MaterializeCommandDefinition,
 } from "./extensions-install.ts";
-import type { CommandNode } from "./node.ts";
+import { cloneCommandNode, type CommandNode } from "./node.ts";
 import { commandNotFound, resolveCommand, type CommandRoute } from "./router.ts";
 import { snapshotCommand } from "./snapshot.ts";
 import type { RunOutcome } from "./typed-run.ts";

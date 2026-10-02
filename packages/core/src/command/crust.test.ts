@@ -22,8 +22,8 @@ import {
 	Crust,
 	defineCommand,
 } from "./crust.ts";
-import { cloneCommandNode } from "./extensions-install.ts";
 import { SNAPSHOT_PATH_ENV } from "./invocation.ts";
+import { cloneCommandNode } from "./node.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
 
 // ────────────────────────────────────────────────────────────────────────────

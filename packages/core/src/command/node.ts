@@ -117,3 +117,40 @@ export function registerFlag(
 	if (def.short !== undefined) node.flagSpellings.set(def.short, { ...entry, kind: "short" });
 	for (const alias of def.aliases ?? []) node.flagSpellings.set(alias, { ...entry, kind: "alias" });
 }
+
+/** Copy the flag registry so `registerFlag` on the copy leaves `node` untouched. */
+export function cloneFlagRegistry(
+	node: CommandNode,
+): Pick<CommandNode, "localFlags" | "ownedFlags" | "effectiveFlags" | "flagSpellings"> {
+	return {
+		localFlags: { ...node.localFlags },
+		ownedFlags: { ...node.ownedFlags },
+		effectiveFlags: { ...node.effectiveFlags },
+		// Entries are immutable and already point at the effective definition
+		// (see FlagSpelling), so only the Map container needs its own copy.
+		flagSpellings: new Map(node.flagSpellings),
+	};
+}
+
+/** Deep-clone a command subtree without mutating the builder graph. */
+export function cloneCommandNode(node: CommandNode): CommandNode {
+	const subCommands: Record<string, CommandNode> = {};
+	for (const [name, sub] of Object.entries(node.subCommands)) {
+		subCommands[name] = cloneCommandNode(sub);
+	}
+
+	// Spread first, then override every structural field with a decoupled copy.
+	return {
+		...node,
+		// Section objects/arrays are never mutated in place (prepare replaces
+		// them wholesale), so sharing them here is safe.
+		meta: { ...node.meta },
+		...cloneFlagRegistry(node),
+		args: [...node.args],
+		subCommands,
+		contexts: node.contexts.map((context) => ({ ...context })),
+		providedContexts: [...node.providedContexts],
+		demands: [...node.demands],
+		extensions: [...node.extensions],
+	};
+}

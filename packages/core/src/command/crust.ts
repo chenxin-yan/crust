@@ -80,18 +80,21 @@ import type {
 	MergeProviders,
 	UnionToIntersection,
 } from "../validation/shared.ts";
-import {
-	cloneCommandNode,
-	cloneFlagRegistry,
-	installExtensionContexts,
-} from "./extensions-install.ts";
+import { installExtensionContexts } from "./extensions-install.ts";
 import {
 	executeInvocation,
 	prepareInvocation,
 	resolveTypedPath,
 	runInvocation,
 } from "./invocation.ts";
-import { type CommandAction, type CommandNode, createCommandNode, registerFlag } from "./node.ts";
+import {
+	type CommandAction,
+	type CommandNode,
+	cloneCommandNode,
+	cloneFlagRegistry,
+	createCommandNode,
+	registerFlag,
+} from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
 import type {
