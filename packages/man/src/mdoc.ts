@@ -3,16 +3,23 @@ import {
 	type CommandSnapshot,
 	formatDescription,
 	sectionsFor,
+	visibleSectionsFor,
 	type CommandDocumentation,
 	type DocumentationFlag,
 } from "@crustjs/core/tooling";
 
-import { MAN } from "./extension.ts";
+import { MAN } from "./id.ts";
 
 function escapeMdocBodyLine(line: string): string {
 	// Plain text: backslashes would start roff escapes; `.` and `'` start control lines.
 	const text = macroArgument(line);
 	return /^[.']/.test(text) ? `\\&${text}` : text;
+}
+function bodyLines(text: string): string[] {
+	return text.split("\n").map(escapeMdocBodyLine);
+}
+function byName(a: { readonly name: string }, b: { readonly name: string }): number {
+	return a.name.localeCompare(b.name);
 }
 function macroArgument(text: string): string {
 	// Backslashes would otherwise start roff escape sequences (`\e` prints a literal one).
@@ -39,24 +46,6 @@ function commandLabel(command: CommandDocumentation): string {
 		? command.name
 		: `${command.name} (${command.aliases.join(", ")})`;
 }
-function commandSectionGroups(command: CommandDocumentation): readonly {
-	readonly path: readonly string[];
-	readonly sections: readonly CommandDocumentation["sections"][number][];
-}[] {
-	const groups: {
-		path: readonly string[];
-		sections: CommandDocumentation["sections"][number][];
-	}[] = [];
-	function visit(node: CommandDocumentation, path: readonly string[]): void {
-		const sections = [...sectionsFor(node.sections, MAN)];
-		if (sections.length > 0) groups.push({ path, sections });
-		for (const child of [...node.children].sort((a, b) => a.name.localeCompare(b.name))) {
-			visit(child, [...path, child.name]);
-		}
-	}
-	visit(command, []);
-	return groups;
-}
 function resolveDdLine(explicit?: string): string {
 	if (explicit) return explicit;
 	const sec = Number.parseInt(process.env.SOURCE_DATE_EPOCH ?? "", 10);
@@ -78,7 +67,7 @@ export interface RenderManPageMdocOptions {
 	 * @default 1
 	 */
 	section?: number;
-	/** Override `.Dd` in the mdoc output (see `renderManPageMdoc` `date`). */
+	/** Overrides `.Dd`; otherwise `SOURCE_DATE_EPOCH` (UTC), then today's local date. */
 	date?: string;
 }
 
@@ -97,11 +86,11 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		`.Nd ${ndArgument(description)}`,
 		".Sh SYNOPSIS",
 		".Bd -literal",
-		...model.usage.split("\n").map(escapeMdocBodyLine),
+		...bodyLines(model.usage),
 		".Ed",
 		".Sh DESCRIPTION",
+		...bodyLines(description),
 	];
-	for (const line of description.split("\n")) lines.push(escapeMdocBodyLine(line));
 
 	// A man page intentionally summarizes only the root's immediate children;
 	// the shared model still resolves the complete visible tree for other adapters.
@@ -110,10 +99,9 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 			".Sh SUBCOMMANDS",
 			`.Bl -tag -width ${Math.max(8, ...model.children.map((child) => commandLabel(child).length))}n`,
 		);
-		for (const child of [...model.children].sort((a, b) => a.name.localeCompare(b.name))) {
+		for (const child of [...model.children].sort(byName)) {
 			lines.push(`.It Nm ${commandLabel(child)}`);
-			if (child.description)
-				lines.push(child.description.trim().split("\n").map(escapeMdocBodyLine).join("\n"));
+			if (child.description) lines.push(...bodyLines(child.description.trim()));
 		}
 		lines.push(".El");
 	}
@@ -122,7 +110,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 			".Sh OPTIONS",
 			`.Bl -tag -width ${Math.max(8, ...model.flags.map((flag) => flag.spellings.join(", ").length))}n`,
 		);
-		for (const flag of [...model.flags].sort((a, b) => a.name.localeCompare(b.name))) {
+		for (const flag of [...model.flags].sort(byName)) {
 			lines.push(`.It ${flagMacros(flag)}`);
 			const body = formatDescription(
 				flag.description,
@@ -131,7 +119,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 				undefined,
 				flag.env?.name,
 			);
-			if (body) lines.push(body.split("\n").map(escapeMdocBodyLine).join("\n"));
+			if (body) lines.push(...bodyLines(body));
 		}
 		lines.push(".El");
 	}
@@ -140,15 +128,15 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		for (const arg of model.args) {
 			lines.push(`.It Ar ${arg.name}${arg.variadic ? " ..." : ""}`);
 			const body = formatDescription(arg.description, arg.default, arg.choices);
-			if (body) lines.push(body.split("\n").map(escapeMdocBodyLine).join("\n"));
+			if (body) lines.push(...bodyLines(body));
 		}
 		lines.push(".El");
 	}
 	for (const metadataSection of sectionsFor(model.sections, MAN)) {
 		lines.push(`.Sh ${shTitle(metadataSection.title)}`);
-		for (const line of metadataSection.body.split("\n")) lines.push(escapeMdocBodyLine(line));
+		lines.push(...bodyLines(metadataSection.body));
 	}
-	const commandSections = commandSectionGroups(model).filter(({ path }) => path.length > 0);
+	const commandSections = visibleSectionsFor(root, MAN).filter(({ path }) => path.length > 0);
 	if (commandSections.length > 0) {
 		lines.push(".Sh COMMANDS");
 		for (const group of commandSections) {
@@ -157,7 +145,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 				// mandoc -Tlint warns on .Pp directly after .Ss; only separate consecutive sections.
 				if (index > 0) lines.push(".Pp");
 				lines.push(`.Sy ${shTitle(commandSection.title)}`);
-				for (const line of commandSection.body.split("\n")) lines.push(escapeMdocBodyLine(line));
+				lines.push(...bodyLines(commandSection.body));
 			});
 		}
 	}
