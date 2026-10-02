@@ -900,33 +900,6 @@ function dedupeExtensions(extensions: readonly ExtensionData[]): ExtensionData[]
 // Crust — Chainable builder class
 // ────────────────────────────────────────────────────────────────────────────
 
-/**
- * Chainable builder for defining CLI commands with full type inference.
- *
- * Generic parameters:
- * - `Flags` — flags defined locally or installed by provided Contexts
- * - `A` — positional argument definitions
- * - `Ctx` — provided Context values
- * - `Sibs` — sibling command names and aliases already registered
- * - `Sp` — accumulated flag spellings used for collision checks
- * - `Tree` — command shapes accumulated by `.add()` for typed `run()`
- * - `CtxFlags` — Context-owned flags accumulated by `.provide()` and recursive
- *   Extension flags accumulated by `.extend()`, inherited by the shapes of
- *   definitions added afterwards
- * - `Result` — awaited return type of this command's action
- * - `Meta` — authored root metadata available to Extension requirements
- * - `Caps` — root application or configure-only recipe capabilities
- *
- * @example
- * ```ts
- * const app = new Crust("my-cli")
- *   .flags({ name: "verbose", type: "boolean", short: "v" })
- *   .args({ name: "file", type: "string", required: true })
- *   .action(({ args, flags }) => {
- *     console.log(args.file, flags.verbose);
- *   });
- * ```
- */
 type CollisionSpellings<
 	Extensions extends string = never,
 	Tree extends string = never,
@@ -1258,6 +1231,33 @@ type DefinedRootMetaKeys<Meta extends RootCommandMeta | undefined> = {
 	[K in RootMetaKey]: [Meta] extends [Required<Pick<RootCommandMeta, K>>] ? K : never;
 }[RootMetaKey];
 
+/**
+ * Chainable builder for defining CLI commands with full type inference.
+ *
+ * Generic parameters:
+ * - `Flags` — flags defined locally or installed by provided Contexts
+ * - `A` — positional argument definitions
+ * - `Ctx` — provided Context values
+ * - `Sibs` — sibling command names and aliases already registered
+ * - `Sp` — accumulated flag spellings used for collision checks
+ * - `Tree` — command shapes accumulated by `.add()` for typed `run()`
+ * - `CtxFlags` — Context-owned flags accumulated by `.provide()` and recursive
+ *   Extension flags accumulated by `.extend()`, inherited by the shapes of
+ *   definitions added afterwards
+ * - `Result` — awaited return type of this command's action
+ * - `Meta` — authored root metadata available to Extension requirements
+ * - `Caps` — root application or configure-only recipe capabilities
+ *
+ * @example
+ * ```ts
+ * const app = new Crust("my-cli")
+ *   .flags({ name: "verbose", type: "boolean", short: "v" })
+ *   .args({ name: "file", type: "string", required: true })
+ *   .action(({ args, flags }) => {
+ *     console.log(args.file, flags.verbose);
+ *   });
+ * ```
+ */
 export class Crust<
 	Flags extends FlagsDef = {},
 	A extends ArgsDef = [],
@@ -1389,7 +1389,6 @@ export class Crust<
 		>(cloneFlagRegistry(this._node));
 		for (const def of defs) {
 			const { name, ...rest } = def;
-			// SAFETY: removing name from a NamedFlagDef leaves its discriminated FlagDef.
 			registerFlag(cloned._node, name, rest, "local");
 		}
 		return cloned;

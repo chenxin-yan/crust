@@ -104,8 +104,7 @@ function matchKnownFlagToken(
  *     command routing descends into recognizes them with the same token
  *     shape. A flag the subcommand cannot parse (e.g. a parent-local flag)
  *     is a PARSE error at the descend, never a silent forward-then-fail.
- * 4. If no match and the current command has NO `run()`, it signals the caller
- *    should show help (the `showHelp` flag is set in the result)
+ * 4. When argv is exhausted, return the current command, with or without `run()`
  * 5. Unknown subcommands produce a structured COMMAND_NOT_FOUND error whose
  *    `details.available` lists visible canonical sibling names (aliases are
  *    discoverable via `details.parentCommand.subCommands[name].meta.aliases`)
