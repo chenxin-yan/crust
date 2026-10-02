@@ -14,7 +14,6 @@ on:
       - "pnpm-workspace.yaml"
       - "vite.config.ts"
       - "vite.shared.ts"
-      - "tsconfig*.json"
       - ".github/workflows/ci-packages.yml"
       - ".github/workflows/release.yml"
 
@@ -43,13 +42,13 @@ jobs:
             smoke: mise exec bun@1.4.0 -- bun scripts/smoke-runtimes/smoke.mjs
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       # Build on the shared toolchain, then test the exact consumer runtime floor.
       - name: Setup runtimes
-        uses: jdx/mise-action@v4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
           install_args: bun node pnpm
 
@@ -81,12 +80,12 @@ jobs:
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Setup runtimes
-        uses: jdx/mise-action@v4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -171,12 +170,12 @@ jobs:
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Setup runtimes
-        uses: jdx/mise-action@v4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

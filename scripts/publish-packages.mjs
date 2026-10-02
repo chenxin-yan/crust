@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+// @ts-check
 
 import { glob, lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -7,13 +8,31 @@ import { parseArgs } from "node:util";
 const ROOT_DIR = resolve(import.meta.dir, "..");
 const REGISTRY = "https://registry.npmjs.org";
 
+/**
+ * @typedef {object} WorkspacePackage
+ * @property {string} name
+ * @property {string} version
+ * @property {string} dir
+ * @property {boolean} [private]
+ * @property {Record<string, string>} [scripts]
+ * @property {Record<string, string>} [dependencies]
+ * @property {Record<string, string>} [optionalDependencies]
+ * @property {Record<string, string>} [peerDependencies]
+ */
+
+/** @typedef {{ name: string; version: string; file: string }} PackageEntry */
+
+/**
+ * @param {string} path
+ * @returns {Promise<unknown>}
+ */
 async function readJson(path) {
 	return JSON.parse(await readFile(path, "utf8"));
 }
 
 async function loadWorkspacePackages() {
-	const { packages: patterns } = Bun.YAML.parse(
-		await readFile(join(ROOT_DIR, "pnpm-workspace.yaml"), "utf8"),
+	const { packages: patterns } = /** @type {{ packages?: unknown }} */ (
+		Bun.YAML.parse(await readFile(join(ROOT_DIR, "pnpm-workspace.yaml"), "utf8"))
 	);
 	if (
 		!Array.isArray(patterns) ||
@@ -23,12 +42,15 @@ async function loadWorkspacePackages() {
 	) {
 		throw new Error("pnpm-workspace.yaml must list workspace package patterns.");
 	}
+	/** @type {WorkspacePackage[]} */
 	const packages = [];
 	for await (const file of glob(
 		patterns.map((pattern) => `${pattern}/package.json`),
 		{ cwd: ROOT_DIR },
 	)) {
-		const packageJson = await readJson(join(ROOT_DIR, file));
+		const packageJson = /** @type {Omit<WorkspacePackage, "dir">} */ (
+			await readJson(join(ROOT_DIR, file))
+		);
 		if (!packageJson.private) {
 			packages.push({ ...packageJson, dir: join(ROOT_DIR, dirname(file)) });
 		}
@@ -36,8 +58,14 @@ async function loadWorkspacePackages() {
 	return packages;
 }
 
+/**
+ * @param {WorkspacePackage[]} packages
+ * @returns {WorkspacePackage[]}
+ */
 function sortPackagesForPublish(packages) {
+	/** @type {Map<string, Set<string>>} */
 	const dependents = new Map();
+	/** @type {Map<string, number>} */
 	const indegree = new Map();
 	for (const pkg of packages) {
 		dependents.set(pkg.name, new Set());
@@ -50,9 +78,10 @@ function sortPackagesForPublish(packages) {
 			...pkg.peerDependencies,
 		};
 		for (const dependency of Object.keys(dependencies)) {
-			if (indegree.has(dependency)) {
-				dependents.get(dependency).add(pkg.name);
-				indegree.set(pkg.name, indegree.get(pkg.name) + 1);
+			const dependencyDependents = dependents.get(dependency);
+			if (dependencyDependents) {
+				dependencyDependents.add(pkg.name);
+				indegree.set(pkg.name, (indegree.get(pkg.name) ?? 0) + 1);
 			}
 		}
 	}
@@ -61,12 +90,12 @@ function sortPackagesForPublish(packages) {
 		.map((pkg) => pkg.name)
 		.sort();
 	const orderedNames = [];
-	while (queue.length > 0) {
-		const current = queue.shift();
+	for (let current = queue.shift(); current !== undefined; current = queue.shift()) {
 		orderedNames.push(current);
-		for (const dependent of dependents.get(current)) {
-			indegree.set(dependent, indegree.get(dependent) - 1);
-			if (indegree.get(dependent) === 0) {
+		for (const dependent of dependents.get(current) ?? []) {
+			const remaining = (indegree.get(dependent) ?? 0) - 1;
+			indegree.set(dependent, remaining);
+			if (remaining === 0) {
 				queue.push(dependent);
 				queue.sort();
 			}
@@ -78,9 +107,14 @@ function sortPackagesForPublish(packages) {
 		);
 	}
 	const packagesByName = new Map(packages.map((pkg) => [pkg.name, pkg]));
-	return orderedNames.map((name) => packagesByName.get(name));
+	return orderedNames.flatMap((name) => packagesByName.get(name) ?? []);
 }
 
+/**
+ * @param {string[]} args
+ * @param {string} [cwd]
+ * @param {boolean} [allowFailure]
+ */
 async function runCommand(args, cwd = ROOT_DIR, allowFailure = false) {
 	const proc = Bun.spawn(args, { cwd, stdout: "pipe", stderr: "pipe" });
 	const [exitCode, stdout, stderr] = await Promise.all([
@@ -94,6 +128,7 @@ async function runCommand(args, cwd = ROOT_DIR, allowFailure = false) {
 	return { exitCode, stdout, stderr };
 }
 
+/** @param {string} directory */
 async function packPackages(directory) {
 	await mkdir(directory, { recursive: true });
 	if ((await readdir(directory)).length > 0) {
@@ -102,8 +137,10 @@ async function packPackages(directory) {
 	// Only the unprivileged pack job loads workspace code and runs lifecycle hooks.
 	const { readPublishManifest, validatePublishManifest } =
 		await import("../packages/crust/src/publish.ts");
+	/** @type {PackageEntry[]} */
 	const inventory = [];
 	for (const pkg of sortPackagesForPublish(await loadWorkspacePackages())) {
+		/** @type {Array<{ path: string; packageJson: { name: string; version: string } }>} */
 		let entries = [{ path: pkg.dir, packageJson: pkg }];
 		if (pkg.scripts?.release) {
 			const stageDir = join(pkg.dir, ".crust");
@@ -129,7 +166,11 @@ async function packPackages(directory) {
 	await writeFile(join(directory, "packages.json"), `${JSON.stringify(inventory, null, 2)}\n`);
 }
 
-/* oxlint-disable anti-slop/no-runtime-typeof -- Validate artifact JSON at the upload boundary; JavaScript has no TS type predicate. */
+/* oxlint-disable anti-slop/no-runtime-typeof -- Validate artifact JSON at the upload boundary; the rule cannot see JSDoc type predicates. */
+/**
+ * @param {any} pkg
+ * @returns {pkg is PackageEntry}
+ */
 function isPackageEntry(pkg) {
 	return (
 		pkg !== null &&
@@ -144,6 +185,7 @@ function isPackageEntry(pkg) {
 }
 /* oxlint-enable anti-slop/no-runtime-typeof */
 
+/** @param {string} directory */
 async function readInventory(directory) {
 	const packages = await readJson(join(directory, "packages.json"));
 	if (!Array.isArray(packages) || packages.length === 0 || !packages.every(isPackageEntry)) {
@@ -166,6 +208,7 @@ async function readInventory(directory) {
 	return packages;
 }
 
+/** @param {string} name */
 function registryArgs(name) {
 	// Repository releases target public npm, regardless of ambient npmrc settings.
 	// Both commands get the same explicit scope/registry overrides.
@@ -176,8 +219,13 @@ function registryArgs(name) {
 	];
 }
 
+/**
+ * @param {string} directory
+ * @param {boolean} dryRun
+ */
 async function publishPackages(directory, dryRun) {
 	const packages = await readInventory(directory);
+	/** @type {PackageEntry[]} */
 	const missing = [];
 	for (const pkg of packages) {
 		const spec = `${pkg.name}@${pkg.version}`;
@@ -229,14 +277,11 @@ const { values } = parseArgs({
 		"dry-run": { type: "boolean", default: false },
 	},
 });
-if (
-	Boolean(values["pack-dir"]) === Boolean(values["publish-dir"]) ||
-	(values["pack-dir"] && values["dry-run"])
-) {
-	throw new Error("Choose --pack-dir <empty directory> or --publish-dir <directory> [--dry-run].");
-}
-if (values["pack-dir"]) {
-	await packPackages(resolve(values["pack-dir"]));
+const { "pack-dir": packDir, "publish-dir": publishDir, "dry-run": dryRun } = values;
+if (packDir && !publishDir && !dryRun) {
+	await packPackages(resolve(packDir));
+} else if (publishDir && !packDir) {
+	await publishPackages(resolve(publishDir), dryRun);
 } else {
-	await publishPackages(resolve(values["publish-dir"]), values["dry-run"]);
+	throw new Error("Choose --pack-dir <empty directory> or --publish-dir <directory> [--dry-run].");
 }

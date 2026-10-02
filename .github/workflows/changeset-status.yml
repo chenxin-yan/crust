@@ -23,13 +23,13 @@ jobs:
       # pull_request_target must not execute PR code. Keep the default base
       # checkout; the status action reads the PR in a temporary worktree.
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Generate Changesets status
         id: pr-status
-        uses: changesets/action/pr-status@v2
+        uses: changesets/action/pr-status@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
 
   pr-comment:
     needs: pr-status
@@ -39,6 +39,6 @@ jobs:
       pull-requests: write
     steps:
       - name: Update Changesets comment
-        uses: changesets/action/pr-comment@v2
+        uses: changesets/action/pr-comment@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
           body: ${{ needs.pr-status.outputs.comment-body }}

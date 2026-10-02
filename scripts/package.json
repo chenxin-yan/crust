@@ -9,6 +9,7 @@
 	},
 	"devDependencies": {
 		"@crustjs/core": "workspace:*",
+		"@crustjs/crust": "workspace:*",
 		"vite-plus": "catalog:"
 	}
 }
