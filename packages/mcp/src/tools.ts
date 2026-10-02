@@ -68,19 +68,21 @@ function valueSchema(
 	}
 }
 
-/** JSON would publish a non-finite number as `null`, misstating the default. */
-function rejectNonFinite(_key: string, value: unknown): unknown {
-	if (typeof value === "number" && !Number.isFinite(value)) throw new TypeError("Non-finite number");
-	return value;
-}
-
 function propertySchema(def: ArgSnapshot | FlagSnapshot, list: boolean): McpPropertySchema {
 	const value = valueSchema(def.type, def.choices);
 	const schema: McpPropertySchema = list ? { type: "array", items: value } : value;
 	let defaultValue: unknown;
 	if (def.default !== undefined) {
 		try {
-			defaultValue = JSON.parse(JSON.stringify(def.default, rejectNonFinite));
+			defaultValue = JSON.parse(
+				JSON.stringify(def.default, (_key, entry) => {
+					// JSON would publish a non-finite number as `null`, misstating the default.
+					if (entry === Infinity || entry === -Infinity || Number.isNaN(entry)) {
+						throw new TypeError("Non-finite number");
+					}
+					return entry;
+				}),
+			);
 		} catch {
 			// Advisory metadata must not break discovery; run() still owns the actual default.
 		}
