@@ -21,6 +21,7 @@ export type {
 	UsageSegment,
 } from "./command/documentation.ts";
 export type { CommandSnapshot } from "./command/snapshot.ts";
+export { INSTALLED_COMMAND_NAME_RULE, isInstalledCommandName } from "./installed-command-name.ts";
 export { parseFlagValues } from "./parsing/parser.ts";
 export type { FlagEnvironment } from "./parsing/parser.ts";
 export { isListed, sectionsFor, visibleSectionsFor } from "./sections.ts";
