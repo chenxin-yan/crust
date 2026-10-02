@@ -2,13 +2,13 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-import { packageManagerFromUserAgent } from "@crustjs/utils/process";
+import { type PackageManager, packageManagerFromUserAgent } from "@crustjs/utils/process";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Package Manager Detection
 // ────────────────────────────────────────────────────────────────────────────
 
-export type PackageManager = "npm" | "pnpm" | "bun" | "yarn";
+export type { PackageManager };
 
 /**
  * Lockfile names mapped to their package manager.
@@ -21,7 +21,7 @@ const LOCKFILE_MAP: ReadonlyArray<readonly [string, PackageManager]> = [
 	["pnpm-lock.yaml", "pnpm"],
 	["yarn.lock", "yarn"],
 	["package-lock.json", "npm"],
-] as const;
+];
 
 /**
  * Detect the package manager for a project directory.
