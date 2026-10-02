@@ -813,6 +813,21 @@ describe("updateNotifier post-run hook", () => {
 			expect(getOutput()).toBe("");
 		});
 
+		it("records the check when an updateCommand callback throws", async () => {
+			mockRegistryResponse("2.0.0");
+
+			await runExtensionMiddleware({
+				currentVersion: "1.0.0",
+				packageName: uniquePackageName("callback-throws"),
+				updateCommand: () => {
+					throw new Error("callback failed");
+				},
+			});
+
+			expect(getOutput()).toBe("");
+			expect(getCachedState()).toMatchObject({ latestVersion: "2.0.0" });
+		});
+
 		it("persists and deduplicates with the built-in cache by default", async () => {
 			const pkgName = uniquePackageName("built-in-cache");
 			const stateHome = process.env.XDG_STATE_HOME as string;

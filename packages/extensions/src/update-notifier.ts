@@ -495,9 +495,16 @@ export const updateNotifier: ExtensionFactory<[options: UpdateNotifierOptions]> 
 			};
 
 			// ── Emit notice if newer and not already notified ─────────
-			if (notify(latestVersion)) nextState.lastNotifiedVersion = latestVersion;
-
-			await cacheAdapter.write(nextState);
+			// `finally` records the check even when an `updateCommand` callback
+			// throws, so a broken callback cannot force a refetch on every run.
+			let notified = false;
+			try {
+				notified = notify(latestVersion);
+			} finally {
+				await cacheAdapter.write(
+					notified ? { ...nextState, lastNotifiedVersion: latestVersion } : nextState,
+				);
+			}
 		} catch {
 			// Registry, cache, and notification failures must not fail the completed command.
 		}
