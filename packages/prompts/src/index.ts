@@ -6,8 +6,6 @@
 // Types
 // ────────────────────────────────────────────────────────────────────────────
 
-export type { FuzzyFilterResult, FuzzyMatchResult } from "./core/fuzzy.ts";
-export { highlightMatches } from "./core/fuzzy.ts";
 export type {
 	Choice,
 	ChoiceValue,
@@ -21,8 +19,6 @@ export type {
 // ────────────────────────────────────────────────────────────────────────────
 
 export { defaultTheme } from "./core/theme.ts";
-export type { CreatePromptsOptions, PromptsInstance } from "./create-prompts.ts";
-export { createPrompts } from "./create-prompts.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Renderer
@@ -52,6 +48,8 @@ export {
 // Prompts
 // ────────────────────────────────────────────────────────────────────────────
 
+export type { CreatePromptsOptions, PromptsInstance } from "./create-prompts.ts";
+export { createPrompts } from "./create-prompts.ts";
 export type { ConfirmOptions } from "./prompts/confirm.ts";
 export { confirm } from "./prompts/confirm.ts";
 export type { FilterOptions } from "./prompts/filter.ts";
@@ -71,7 +69,8 @@ export { select } from "./prompts/select.ts";
 // Utilities
 // ────────────────────────────────────────────────────────────────────────────
 
-export { fuzzyFilter, fuzzyMatch } from "./core/fuzzy.ts";
+export type { FuzzyFilterResult, FuzzyMatchResult } from "./core/fuzzy.ts";
+export { fuzzyFilter, fuzzyMatch, highlightMatches } from "./core/fuzzy.ts";
 export {
 	CHECKBOX_CHECKED,
 	CHECKBOX_UNCHECKED,
@@ -80,6 +79,6 @@ export {
 	PREFIX_SYMBOL,
 	SCROLL_INDICATOR,
 } from "./core/symbols.ts";
-export type { TextEditResult, TextEditState } from "./core/textEdit.ts";
-export { handleTextEdit, renderTextWithCursor } from "./core/textEdit.ts";
+export type { TextEditResult, TextEditState } from "./core/text-edit.ts";
+export { handleTextEdit, renderTextWithCursor } from "./core/text-edit.ts";
 export { formatPromptLine, formatSubmitted, renderChoiceList } from "./core/utils.ts";

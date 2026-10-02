@@ -16,6 +16,7 @@ export class NonInteractiveError extends Error {
 	}
 }
 
+/** Mounts an app onto the OpenTUI renderer; may be async. */
 export type TuiMount = (renderer: CliRenderer) => void | Promise<void>;
 
 // Mirrors OpenTUI's own exitOnCtrlC match (exact modifiers, `baseCode` for non-Latin layouts,
@@ -26,20 +27,26 @@ function isCtrlC(event: KeyEvent): boolean {
 	return event.name === "c" || event.baseCode === 99 || event.baseCode === 67;
 }
 
+/**
+ * Run a full-screen OpenTUI app and resolve once its renderer is destroyed.
+ *
+ * Throws {@link NonInteractiveError} unless stdin and stdout are TTYs. Defaults to the alternate
+ * screen, a disabled console, and `exitOnCtrlC: true`; explicit `config` values win. A `mount`
+ * error destroys the renderer and is rethrown; Ctrl+C cancellation rejects with an `AbortError`.
+ */
 export async function runTui(mount: TuiMount, config: CliRendererConfig = {}): Promise<void> {
 	if (!(config.stdin ?? process.stdin).isTTY || !(config.stdout ?? process.stdout).isTTY) {
 		throw new NonInteractiveError();
 	}
 
 	let aborted = false;
-	let settle!: () => void;
-	const destroyed = new Promise<void>((resolve) => (settle = resolve));
+	const { promise: destroyed, resolve: settle } = Promise.withResolvers<void>();
 	const exitOnCtrlC = config.exitOnCtrlC ?? true;
 	const renderer = await createCliRenderer({
 		screenMode: "alternate-screen",
 		consoleMode: "disabled",
-		exitOnCtrlC: true,
 		...config,
+		exitOnCtrlC,
 		onDestroy: () => {
 			try {
 				config.onDestroy?.();

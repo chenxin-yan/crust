@@ -4,8 +4,13 @@
 
 import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
 import { runPrompt, submit } from "../core/renderer.ts";
-import { resolveShortCircuit } from "../core/shortCircuit.ts";
-import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
+import { resolveShortCircuit } from "../core/short-circuit.ts";
+import {
+	CHECKBOX_CHECKED,
+	CHECKBOX_UNCHECKED,
+	PREFIX_SUBMITTED,
+	PREFIX_SYMBOL,
+} from "../core/symbols.ts";
 import type { PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
 
@@ -110,19 +115,18 @@ function renderConfirm(
 	const msg = theme.message(message ?? "Are you sure?");
 
 	const activeDisplay = state.value
-		? `${theme.selected("●")} ${theme.selected(activeLabel)}`
-		: `${theme.unselected("○")} ${theme.unselected(activeLabel)}`;
+		? `${theme.selected(CHECKBOX_CHECKED)} ${theme.selected(activeLabel)}`
+		: `${theme.unselected(CHECKBOX_UNCHECKED)} ${theme.unselected(activeLabel)}`;
 
 	const inactiveDisplay = state.value
-		? `${theme.unselected("○")} ${theme.unselected(inactiveLabel)}`
-		: `${theme.selected("●")} ${theme.selected(inactiveLabel)}`;
+		? `${theme.unselected(CHECKBOX_UNCHECKED)} ${theme.unselected(inactiveLabel)}`
+		: `${theme.selected(CHECKBOX_CHECKED)} ${theme.selected(inactiveLabel)}`;
 
 	const toggleLine = `${activeDisplay}${SEPARATOR}${inactiveDisplay}`;
 	return formatPromptLine(prefix, msg, toggleLine);
 }
 
 function renderSubmitted(
-	_state: ConfirmState,
 	value: boolean,
 	theme: PromptTheme,
 	message: string | undefined,
@@ -201,8 +205,8 @@ export async function confirm(options: ConfirmOptions, io?: PromptIO): Promise<b
 			theme: options.theme,
 			render: (state, t) => renderConfirm(state, t, options.message, activeLabel, inactiveLabel),
 			handleKey,
-			renderSubmitted: (state, value, t) =>
-				renderSubmitted(state, value, t, options.message, activeLabel, inactiveLabel),
+			renderSubmitted: (_state, value, t) =>
+				renderSubmitted(value, t, options.message, activeLabel, inactiveLabel),
 		},
 		promptIO,
 	);

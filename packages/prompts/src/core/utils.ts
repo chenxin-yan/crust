@@ -106,6 +106,7 @@ export function calculateScrollOffset(
 	maxVisible: number,
 ): number {
 	const visibleCount = Math.min(totalItems, maxVisible);
+	if (visibleCount === 0) return 0;
 
 	// Cursor moved above the viewport — scroll up
 	if (cursor < scrollOffset) {
@@ -133,6 +134,7 @@ export function moveCursor(
 	scrollOffset: number,
 	maxVisible: number,
 ): CursorPosition {
+	if (totalItems === 0) return { cursor: 0, scrollOffset: 0 };
 	const nextCursor =
 		delta === -1
 			? cursor <= 0

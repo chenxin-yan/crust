@@ -120,7 +120,6 @@ function createHandleKey<T>(
 
 		// Space — toggle selection on current item
 		if (key.name === "space") {
-			// Empty lists can leave the cursor at 0 or -1 (after Up); both are phantom indexes.
 			if (!state.choices[state.cursor]) return state;
 			const newSelected = new Set(state.selected);
 			if (newSelected.has(state.cursor)) {
@@ -216,7 +215,6 @@ function renderMultiselect<T>(
 
 function renderSubmitted<T>(
 	state: MultiselectState<T>,
-	_value: T[],
 	theme: PromptTheme,
 	message: string | undefined,
 ): string {
@@ -294,7 +292,7 @@ export function multiselect(
 ): Promise<string[]>;
 export function multiselect<T>(options: MultiselectOptions<T>, io?: PromptIO): Promise<T[]>;
 export async function multiselect<T>(options: MultiselectOptions<T>, io?: PromptIO): Promise<T[]> {
-	const setup = await setupListPrompt<T, readonly T[]>(options, "multiple", io);
+	const setup = await setupListPrompt<T, readonly T[]>(options, options.default ?? [], io);
 	if (setup.shortCircuited) return [...setup.value];
 
 	const { choices, cursor, maxVisible, promptIO, scrollOffset, selected } = setup;
@@ -313,7 +311,7 @@ export async function multiselect<T>(options: MultiselectOptions<T>, io?: Prompt
 			theme: options.theme,
 			render: (state, t) => renderMultiselect(state, t, options.message, maxVisible),
 			handleKey: createHandleKey<T>(maxVisible, options.required, options.min, options.max),
-			renderSubmitted: (state, value, t) => renderSubmitted(state, value, t, options.message),
+			renderSubmitted: (state, _value, t) => renderSubmitted(state, t, options.message),
 		},
 		promptIO,
 	);

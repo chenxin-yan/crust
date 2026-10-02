@@ -14,8 +14,8 @@ export const CURSOR_INDICATOR = "›";
 /** Indicator shown when more list items can be scrolled into view. */
 export const SCROLL_INDICATOR = "...";
 
-/** Glyph for a checked checkbox in multiselect prompts. */
+/** Glyph for a checked checkbox or selected confirm option. */
 export const CHECKBOX_CHECKED = "●";
 
-/** Glyph for an unchecked checkbox in multiselect prompts. */
+/** Glyph for an unchecked checkbox or unselected confirm option. */
 export const CHECKBOX_UNCHECKED = "○";

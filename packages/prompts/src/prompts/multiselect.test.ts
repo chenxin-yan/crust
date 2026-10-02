@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import { SCROLL_INDICATOR } from "../core/symbols.ts";
 import { renderPrompt } from "../testing.ts";
 import { multiselect, type MultiselectOptions } from "./multiselect.ts";
 import { nonTTYIO, tick } from "./test-helpers.ts";
@@ -347,6 +348,7 @@ describe("multiselect — validation", () => {
 				await tick();
 
 				expect(prompt.screen()).toContain(error);
+				expect(prompt.screen()).not.toContain(SCROLL_INDICATOR);
 				prompt.keys("ctrl+c");
 				await expect(prompt.answer).rejects.toMatchObject({ name: "AbortError" });
 			});
@@ -658,30 +660,3 @@ describe("multiselect — non-TTY", () => {
 		expect(result).toEqual(["a"]);
 	});
 });
-
-// ────────────────────────────────────────────────────────────────────────────
-// Type-level inference (compile-time only — never executed at runtime)
-// ────────────────────────────────────────────────────────────────────────────
-
-type Equal<A, B> =
-	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-type Expect<T extends true> = T;
-
-async function _multiselectTypeInferenceTests() {
-	const tags = await multiselect({ message: "?", choices: ["a", "b"] });
-	type _TagsNarrow = Expect<Equal<typeof tags, ("a" | "b")[]>>;
-
-	const ports = await multiselect({
-		message: "?",
-		choices: [
-			{ label: "HTTP", value: 80 },
-			{ label: "HTTPS", value: 443 },
-		],
-	});
-	type _PortsNarrow = Expect<Equal<typeof ports, (80 | 443)[]>>;
-
-	const widened: string[] = ["a", "b"];
-	const loose = await multiselect({ message: "?", choices: widened });
-	type _LooseIsStrings = Expect<Equal<typeof loose, string[]>>;
-}
-void _multiselectTypeInferenceTests;

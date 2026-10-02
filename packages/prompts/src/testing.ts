@@ -27,6 +27,10 @@ export type NamedKey = keyof typeof namedKeys;
  */
 export type Key = NamedKey | `ctrl+${string}` | (string & {});
 
+function isNamedKey(key: Key): key is NamedKey {
+	return Object.hasOwn(namedKeys, key);
+}
+
 /**
  * Encode a named terminal key as its raw input sequence.
  *
@@ -34,10 +38,6 @@ export type Key = NamedKey | `ctrl+${string}` | (string & {});
  * printable characters. Anything else throws — silently typing a misspelled
  * key name (e.g. `"pageup"`) into the prompt would corrupt the test input.
  */
-function isNamedKey(key: Key): key is NamedKey {
-	return Object.hasOwn(namedKeys, key);
-}
-
 export function encodeKey(key: Key): string {
 	if (isNamedKey(key)) return namedKeys[key];
 

@@ -10,12 +10,13 @@ import type { PromptTheme, ValidateFn } from "./types.ts";
 import { validateSubmitValue } from "./validate.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Constants
+// Rendering
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Thin vertical bar used as cursor indicator in text inputs */
 export const CURSOR_CHAR = "\u2502"; // │
 
+/** Render `text` with a cursor at `cursorPos`, or the placeholder when `text` is empty. */
 export function renderTextWithCursor(
 	text: string,
 	cursorPos: number,
@@ -32,10 +33,7 @@ export function renderTextWithCursor(
 // Types
 // ────────────────────────────────────────────────────────────────────────────
 
-/**
- * The text + cursor fields that `handleTextEdit` reads and updates.
- * Prompts embed these fields in their own state type.
- */
+/** The updated text and cursor position returned by `handleTextEdit`. */
 export interface TextEditState {
 	readonly text: string;
 	readonly cursorPos: number;

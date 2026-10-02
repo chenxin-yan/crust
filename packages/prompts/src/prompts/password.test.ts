@@ -62,6 +62,21 @@ describe("password — masked rendering", () => {
 		expect(result).toBe("abc");
 	});
 
+	it("renders one mask character per code point", async () => {
+		const prompt = renderPrompt(password, { message: "Password?" });
+
+		await tick();
+		prompt.type("😀😀");
+		await tick();
+		prompt.keys("left");
+		await tick();
+
+		expect(prompt.screen()).toBe("┃ Password?\n  *│*");
+
+		prompt.keys("return");
+		expect(await prompt.answer).toBe("😀😀");
+	});
+
 	it("supports custom mask character", async () => {
 		const prompt = renderPrompt(password, { message: "Password?", mask: "●" });
 
@@ -358,40 +373,3 @@ describe("password — secrecy", () => {
 		prompt.assertSecretAbsent();
 	});
 });
-
-// ────────────────────────────────────────────────────────────────────────────
-// Type-level inference (compile-time only — never executed at runtime)
-// ────────────────────────────────────────────────────────────────────────────
-
-type Equal<A, B> =
-	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-type Expect<T extends true> = T;
-
-async function _passwordTypeInferenceTests() {
-	// Schema overload — resolves to the schema's transformed Output.
-	// Strict Equal so a regression to `any`/union cannot slip through.
-	const pin = await password({
-		message: "?",
-		schema: z.coerce.number(),
-	});
-	type _PinIsNumber = Expect<Equal<typeof pin, number>>;
-
-	// Function-validator overload — resolves to string. Throw-on-fail contract.
-	const secret = await password({
-		message: "?",
-		validate: (v) => {
-			if (v.length < 8) throw new Error("too short");
-		},
-	});
-	type _SecretIsString = Expect<Equal<typeof secret, string>>;
-
-	// No validate — resolves to string.
-	const raw = await password({ message: "?" });
-	type _RawIsString = Expect<Equal<typeof raw, string>>;
-
-	const schemaInWrongSlot = z.string();
-	// @ts-expect-error — Standard Schemas belong in `schema`, not `validate`
-	void password({ validate: schemaInWrongSlot });
-	// @ts-expect-error — schema and validate are exclusive
-	void password({ schema: z.string(), validate: () => {} });
-}

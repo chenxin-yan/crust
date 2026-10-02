@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { formatPromptLine, formatSubmitted, moveCursor, normalizeChoices } from "./utils.ts";
+import {
+	calculateScrollOffset,
+	formatPromptLine,
+	formatSubmitted,
+	moveCursor,
+	normalizeChoices,
+} from "./utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // formatSubmitted
@@ -28,6 +34,17 @@ describe("moveCursor", () => {
 	it("wraps and updates the viewport", () => {
 		expect(moveCursor(0, 5, -1, 0, 3)).toEqual({ cursor: 4, scrollOffset: 2 });
 		expect(moveCursor(4, 5, 1, 2, 3)).toEqual({ cursor: 0, scrollOffset: 0 });
+	});
+
+	it("keeps an empty list at the origin", () => {
+		expect(moveCursor(0, 0, -1, 0, 3)).toEqual({ cursor: 0, scrollOffset: 0 });
+		expect(moveCursor(0, 0, 1, 0, 3)).toEqual({ cursor: 0, scrollOffset: 0 });
+	});
+});
+
+describe("calculateScrollOffset", () => {
+	it("does not scroll an empty list", () => {
+		expect(calculateScrollOffset(0, 0, 0, 10)).toBe(0);
 	});
 });
 
