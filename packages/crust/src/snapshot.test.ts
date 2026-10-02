@@ -264,6 +264,25 @@ describe("buildEntrypoint", () => {
 		).rejects.toThrow("Entry produced an invalid Command Snapshot");
 	});
 
+	it.each([null, {}, { meta: {} }, { meta: { name: 42 } }])(
+		"rejects a snapshot without a root command name: %j",
+		async (snapshot) => {
+			const directory = await mkdtemp(join(tmpdir(), "crust-entry-snapshot-test-"));
+			tempDirs.push(directory);
+			const entry = join(directory, "cli.ts");
+			await writeFile(
+				entry,
+				`import { dirname, join } from "node:path";
+			await Bun.write(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!, ${JSON.stringify(JSON.stringify(snapshot))});
+			await Bun.write(join(dirname(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!), "build-report.json"), '{"extensions":[]}');`,
+			);
+
+			await expect(
+				buildEntrypoint(entry, join(directory, "dist"), [], io, directory),
+			).rejects.toThrow(/invalid Command Snapshot[\s\S]*compatible @crustjs\/core/);
+		},
+	);
+
 	describe("entry lifetime", () => {
 		const pids: number[] = [];
 

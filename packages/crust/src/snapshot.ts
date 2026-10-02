@@ -35,6 +35,16 @@ function isBuildReport(value: JsonValue): value is JsonObject & BuildReport {
 	);
 }
 
+/** Checks only the root `meta.name`, the one snapshot field crust reads. */
+function isCommandSnapshot(value: JsonValue): value is JsonObject & CommandSnapshot {
+	return (
+		isJsonObject(value) &&
+		value.meta !== undefined &&
+		isJsonObject(value.meta) &&
+		typeof value.meta.name === "string"
+	);
+}
+
 /**
  * Prepare a CLI entry's Command Snapshot in the user's project context.
  *
@@ -177,8 +187,12 @@ export async function buildEntrypoint(
 		}
 		let snapshot: CommandSnapshot;
 		try {
-			// SAFETY: the paired core snapshot writer serializes a prepared CommandSnapshot to this private path.
-			snapshot = JSON.parse(serialized) as CommandSnapshot;
+			// Written by the application's Core, like the Build Report below.
+			const parsed: JsonValue = JSON.parse(serialized);
+			if (!isCommandSnapshot(parsed)) {
+				throw new Error("Expected a root command with a string meta.name.");
+			}
+			snapshot = parsed;
 		} catch (error) {
 			throw new Error(
 				`Entry produced an invalid Command Snapshot.\n  Ensure ${absoluteEntry} uses a compatible @crustjs/core version.`,
