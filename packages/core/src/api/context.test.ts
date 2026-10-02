@@ -2,7 +2,8 @@ import { describe, expect, it } from "vite-plus/test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { unwrap } from "../../tests/helpers.ts";
-import { Crust, defineCommand, type RunOutcome } from "../command/crust.ts";
+import { Crust, defineCommand } from "../command/crust.ts";
+import type { RunOutcome } from "../command/typed-run.ts";
 import type { CaughtError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
 import {

@@ -2,7 +2,8 @@ import type { StandardSchema } from "@crustjs/utils/schema";
 
 import type { Equal, Expect, Repeat } from "../../tests/helpers.ts";
 import type { InferArgValue, InputArgs } from "../types.ts";
-import { Crust, type RunInput } from "./crust.ts";
+import { Crust } from "./crust.ts";
+import type { RunInput } from "./typed-run.ts";
 
 function _positionalPrefixes() {
 	const app = new Crust("prefix").args(

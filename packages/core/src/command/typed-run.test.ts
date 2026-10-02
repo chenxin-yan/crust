@@ -4,8 +4,8 @@ import type { Equal, Expect } from "../../tests/helpers.ts";
 import { unwrap } from "../../tests/helpers.ts";
 import { defineExtension, type Extension } from "../api/extension.ts";
 import { defineExtensionId } from "../identity.ts";
-import type { CommandShapeAt, RunInput, RunOutcome } from "./crust.ts";
 import { Crust, defineCommand } from "./crust.ts";
+import type { CommandShapeAt, RunInput, RunOutcome } from "./typed-run.ts";
 interface StructuredRunCapture {
 	args: { name: string; count: number; files: string[] };
 	flags: {

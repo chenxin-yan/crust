@@ -2,8 +2,8 @@ import { describe, expect, it } from "vite-plus/test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { unwrap } from "../../tests/helpers.ts";
-import type { RunOutcome } from "./crust.ts";
 import { Crust, defineCommand } from "./crust.ts";
+import type { RunOutcome } from "./typed-run.ts";
 
 function buildGit() {
 	const received: { args: unknown; flags: unknown }[] = [];

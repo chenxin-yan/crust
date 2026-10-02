@@ -23,7 +23,7 @@ import {
 import { applySchemas } from "../parsing/schema.ts";
 import { isListed } from "../sections.ts";
 import type { ExecuteOptions, InvocationIO, InvocationOptions, ParseResult } from "../types.ts";
-import type { CrustCommandContext, RunOutcome } from "./crust.ts";
+import type { CrustCommandContext } from "./crust.ts";
 import {
 	applyContextSections,
 	applyExtensionCommands,
@@ -35,6 +35,7 @@ import {
 import type { CommandNode } from "./node.ts";
 import { resolveCommand, type CommandRoute } from "./router.ts";
 import { snapshotCommand } from "./snapshot.ts";
+import type { RunOutcome } from "./typed-run.ts";
 
 const ignoreStreamError = () => {};
 
