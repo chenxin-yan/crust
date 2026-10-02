@@ -153,6 +153,20 @@ describe("publish manifest validation", () => {
 		expect(() => validatePublishManifest(tmpDir, loaded)).not.toThrow();
 	});
 
+	it("names the corrupt staged file and asks for a rebuild", () => {
+		const manifestPath = join(tmpDir, "manifest.json");
+		writeFileSync(manifestPath, "{");
+		expect(() => readPublishManifest(tmpDir)).toThrow(`Invalid JSON in ${manifestPath}: `);
+		expect(() => readPublishManifest(tmpDir)).toThrow("Run `crust build` again.");
+
+		writeStageFixture(tmpDir, manifest);
+		const packageJsonPath = join(tmpDir, "linux-x64", "package.json");
+		writeFileSync(packageJsonPath, "");
+		expect(() => validatePublishManifest(tmpDir, manifest)).toThrow(
+			`Invalid JSON in ${packageJsonPath}: `,
+		);
+	});
+
 	it("validates a root-only Node manifest and publishes just the root", async () => {
 		const nodeDir = join(tmpDir, "node");
 		const nodeManifest: DistributionManifest = {

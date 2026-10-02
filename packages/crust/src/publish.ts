@@ -37,7 +37,7 @@ function isNonemptyString(value: JsonValue | undefined): value is string {
 	return typeof value === "string" && value.trim() !== "";
 }
 
-function isStringArray(value: JsonValue | undefined): value is string[] {
+function isNonemptyStringArray(value: JsonValue | undefined): value is string[] {
 	return Array.isArray(value) && value.every(isNonemptyString);
 }
 
@@ -67,8 +67,8 @@ function assertPublishManifest(value: JsonValue): asserts value is PublishManife
 		!isRecord(value.root) ||
 		!isNonemptyString(value.root.name) ||
 		!isNonemptyString(value.root.dir) ||
-		!isStringArray(value.root.bins) ||
-		!isStringArray(value.publishOrder) ||
+		!isNonemptyStringArray(value.root.bins) ||
+		!isNonemptyStringArray(value.publishOrder) ||
 		!Array.isArray(value.packages) ||
 		!value.packages.every(
 			(pkg: JsonValue) =>
@@ -120,6 +120,19 @@ type PublishOptions = {
 	runNpm?: RunNpm;
 };
 
+/** A JSON file `crust build` staged; corrupt contents mean the stage must be rebuilt. */
+function readStagedJson(path: string): JsonValue {
+	const text = readFileSync(path, "utf-8");
+	try {
+		return JSON.parse(text);
+	} catch (error) {
+		throw new Error(
+			`Invalid JSON in ${path}: ${error instanceof Error ? error.message : String(error)}\n  Run \`crust build\` again.`,
+			{ cause: error },
+		);
+	}
+}
+
 export function readPublishManifest(stageDir: string): PublishManifest {
 	const manifestPath = join(stageDir, "manifest.json");
 	if (!existsSync(manifestPath)) {
@@ -128,7 +141,7 @@ export function readPublishManifest(stageDir: string): PublishManifest {
 		);
 	}
 
-	const manifest: JsonValue = JSON.parse(readFileSync(manifestPath, "utf-8"));
+	const manifest = readStagedJson(manifestPath);
 	assertPublishManifest(manifest);
 	return manifest;
 }
@@ -144,13 +157,15 @@ function readStagedPackageJson(stageDir: string, dir: string): PublishPackageJso
 			`Staged package.json resolves outside the staging directory: ${packageJsonPath}`,
 		);
 	}
-	const value: JsonValue = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
+	const value = readStagedJson(packageJsonPath);
 	validatePackageIdentity(value, packageJsonPath);
 	if (
 		(value.bin !== undefined && !isStringRecord(value.bin)) ||
 		(value.optionalDependencies !== undefined && !isStringRecord(value.optionalDependencies)) ||
 		(value.publishConfig !== undefined && !isPublishConfig(value.publishConfig)) ||
-		[value.os, value.cpu, value.libc].some((field) => field !== undefined && !isStringArray(field))
+		[value.os, value.cpu, value.libc].some(
+			(field) => field !== undefined && !isNonemptyStringArray(field),
+		)
 	) {
 		throw new Error(
 			`Invalid staged package metadata in ${packageJsonPath}: expected string bin/dependency maps, os/cpu/libc arrays, and string publishConfig registry values.`,
