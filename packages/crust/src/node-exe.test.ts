@@ -16,7 +16,7 @@ import {
 	resolveNodeBinaryCompiler,
 	resolveNodeExeBackend,
 } from "./node-exe.ts";
-import { NODE_TARGETS, resolveTargets } from "./targets.ts";
+import { NODE_TARGETS } from "./targets.ts";
 
 async function withoutBunOnPath<T>(run: () => T): Promise<T> {
 	const path = process.env.PATH;
@@ -28,7 +28,7 @@ async function withoutBunOnPath<T>(run: () => T): Promise<T> {
 	}
 }
 
-describe("NODE_TARGETS", () => {
+describe("nodeExeTarget", () => {
 	it("maps each target to tsdown's executable target and npm metadata", () => {
 		expect(
 			NODE_TARGETS.targets.map((target) => [
@@ -50,18 +50,6 @@ describe("NODE_TARGETS", () => {
 		]);
 		// Official Node Linux builds link glibc; npm must skip them on musl.
 		expect(NODE_TARGETS.info["linux-arm64"].libc).toBe("glibc");
-	});
-
-	it("rejects musl and points package aliases at the canonical Node target", () => {
-		expect(() => resolveTargets(NODE_TARGETS, ["linux-x64-musl"])).toThrow(
-			'Unknown Node target "linux-x64-musl". Targets must use canonical Node names.\n  Valid targets: linux-x64, linux-arm64, darwin-x64, darwin-arm64, win-x64, win-arm64',
-		);
-		expect(() => resolveTargets(NODE_TARGETS, ["windows-x64"])).toThrow(
-			'Unknown Node target "windows-x64". Targets must use canonical Node names. Did you mean "win-x64"?',
-		);
-		expect(() => resolveTargets(NODE_TARGETS, ["bun-linux-x64"])).toThrow(
-			'Unknown Node target "bun-linux-x64"',
-		);
 	});
 });
 

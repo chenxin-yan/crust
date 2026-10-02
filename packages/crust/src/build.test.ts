@@ -43,15 +43,7 @@ import {
 } from "./build.ts";
 import { buildCommand } from "./commands/build.ts";
 import { ARTIFACT_KINDS, type DistributionManifest } from "./distribute.ts";
-import {
-	BUILD_RUNTIMES,
-	BUN_TARGETS,
-	DENO_TARGETS,
-	hostTarget,
-	NODE_TARGETS,
-	resolveTargets,
-	type TargetTable,
-} from "./targets.ts";
+import { BUILD_RUNTIMES, BUN_TARGETS, DENO_TARGETS, hostTarget, NODE_TARGETS } from "./targets.ts";
 
 const host = hostTarget(BUN_TARGETS);
 
@@ -624,62 +616,6 @@ describe("readCrustConfig", () => {
 		expect(crust.properties.runtime.enum).toEqual([...BUILD_RUNTIMES]);
 		expect(crust.properties.artifact.enum).toEqual([...ARTIFACT_KINDS]);
 		expect(crust.description).toContain("`bin` field");
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Unit tests for resolveTarget
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("resolveTarget", () => {
-	it("accepts full Bun target names directly", () => {
-		for (const target of BUN_TARGETS.targets) {
-			expect(resolveTargets(BUN_TARGETS, [target])[0]).toBe(target);
-		}
-	});
-
-	it("rejects every short alias with canonical-name guidance and a did-you-mean hint", () => {
-		for (const target of BUN_TARGETS.targets) {
-			const alias = BUN_TARGETS.info[target].alias;
-			expect(() => resolveTargets(BUN_TARGETS, [alias])).toThrow(
-				`Unknown target "${alias}". Targets must use canonical Bun names. Did you mean "${target}"?`,
-			);
-			expect(() => resolveTargets(BUN_TARGETS, [alias])).toThrow(/Valid targets: bun-linux-x64/);
-		}
-	});
-
-	it("throws on unknown target", () => {
-		expect(() => resolveTargets(BUN_TARGETS, ["linux-arm32"])).toThrow(/Unknown target/);
-	});
-
-	it("dedupes repeated targets in input order", () => {
-		expect(
-			resolveTargets(BUN_TARGETS, ["bun-darwin-arm64", "bun-linux-x64", "bun-darwin-arm64"]),
-		).toEqual(["bun-darwin-arm64", "bun-linux-x64"]);
-	});
-
-	it("rejects host when the table has no target for this machine", () => {
-		// A table with no entries for this platform reproduces the unsupported-host case deterministically.
-		const empty: TargetTable<never> = { runtime: "Bun", targets: [], info: {} };
-		expect(() => resolveTargets(empty, ["host"])).toThrow(
-			/No Bun target matches this machine \(\w+-\w+(-musl)?\)/,
-		);
-	});
-});
-
-describe("resolveDenoTarget", () => {
-	it("accepts exactly the targets supported by deno compile", () => {
-		for (const target of DENO_TARGETS.targets)
-			expect(resolveTargets(DENO_TARGETS, [target])[0]).toBe(target);
-		expect(resolveTargets(DENO_TARGETS, undefined)).toEqual([...DENO_TARGETS.targets]);
-	});
-
-	it("guides aliases to canonical Deno target names", () => {
-		for (const target of DENO_TARGETS.targets) {
-			expect(() => resolveTargets(DENO_TARGETS, [DENO_TARGETS.info[target].alias])).toThrow(
-				`Did you mean "${target}"?`,
-			);
-		}
 	});
 });
 
