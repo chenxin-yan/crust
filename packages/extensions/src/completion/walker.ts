@@ -1,5 +1,6 @@
 import { stripVTControlCharacters } from "node:util";
 
+import type { ValueType } from "@crustjs/core";
 import type {
 	CommandDocumentation,
 	DocumentationArg,
@@ -7,7 +8,12 @@ import type {
 } from "@crustjs/core/tooling";
 
 import { assertSafeChoiceValue, assertSafeIdentifier, sanitizeFreeText } from "./escape.ts";
-import type { CompletionArg, CompletionCommand, CompletionFlag } from "./spec.ts";
+import type {
+	CompletionArg,
+	CompletionCommand,
+	CompletionFlag,
+	StringCompletion,
+} from "./spec.ts";
 
 /**
  * Normalise an optional description: strip ANSI, then drop empty results.
@@ -20,82 +26,70 @@ function normaliseDescription(value: string | undefined): string | undefined {
 	return stripped.length === 0 ? undefined : stripped;
 }
 
+type ValueShape =
+	| { type: "boolean" }
+	| { type: "number" }
+	| ({ type: "string" } & StringCompletion);
+
+/**
+ * Map a Core value type onto its completion shape. url/path/json consume
+ * string tokens but keep their completion intent; schema-backed args
+ * (`undefined`) complete as free-form strings.
+ */
+function valueShape(type: ValueType | undefined, choices: readonly string[] | undefined): ValueShape {
+	switch (type) {
+		case "boolean":
+		case "number":
+			return { type };
+		case "path":
+			return { type: "string", valueCompletion: "files" };
+		case "url":
+		case "json":
+			return { type: "string", valueCompletion: "none" };
+		case "string":
+			return choices !== undefined && choices.length > 0
+				? { type: "string", choices: choices.map(assertSafeChoiceValue) }
+				: { type: "string" };
+		case undefined:
+			return { type: "string" };
+	}
+}
+
 /**
  * Project a single documentation flag onto a `CompletionFlag`.
  */
 function walkFlag(def: DocumentationFlag): CompletionFlag {
 	assertSafeIdentifier(def.name, "flag name");
-	const aliases = def.aliases.filter((alias) => alias.length > 0);
-	for (const alias of aliases) assertSafeIdentifier(alias, "flag alias");
-	if (def.short !== undefined && def.short.length > 0) {
-		assertSafeIdentifier(def.short, "flag short alias");
-	}
+	for (const alias of def.aliases) assertSafeIdentifier(alias, "flag alias");
+	if (def.short !== undefined) assertSafeIdentifier(def.short, "flag short alias");
 
 	const description = normaliseDescription(def.description);
 	const common = {
 		name: def.name,
-		...(def.short !== undefined && def.short.length > 0 ? { short: def.short } : {}),
-		...(aliases.length > 0 ? { aliases } : {}),
+		...(def.short === undefined ? {} : { short: def.short }),
+		...(def.aliases.length > 0 ? { aliases: def.aliases } : {}),
 		...(description === undefined ? {} : { description }),
 		...(def.multiple ? { multiple: true as const } : {}),
 		negatable: def.negatable,
 	};
 
-	if (def.type === "boolean") {
-		return {
-			...common,
-			type: "boolean",
-			takesValue: false,
-		};
-	}
-	if (def.type === "number") return { ...common, type: "number", takesValue: true };
-
-	// url/path/json all consume string tokens; preserve their completion intent.
-	if (def.type === "path") {
-		return { ...common, type: "string", takesValue: true, valueCompletion: "files" };
-	}
-	if (def.type === "url" || def.type === "json") {
-		return { ...common, type: "string", takesValue: true, valueCompletion: "none" };
-	}
-
-	const choices = def.choices;
-	if (choices !== undefined && choices.length > 0) {
-		return {
-			...common,
-			type: "string",
-			takesValue: true,
-			choices: choices.map(assertSafeChoiceValue),
-		};
-	}
-	return { ...common, type: "string", takesValue: true };
+	const shape = valueShape(def.type, def.choices);
+	return shape.type === "boolean"
+		? { ...common, ...shape, takesValue: false }
+		: { ...common, ...shape, takesValue: true };
 }
 
 /** Project a single documentation argument onto a `CompletionArg`. */
 function walkArg(def: DocumentationArg): CompletionArg {
 	assertSafeIdentifier(def.name, "arg name");
 	const description = normaliseDescription(def.description);
-	const common = {
+	return {
 		name: def.name,
 		required: def.required,
 		variadic: def.variadic,
 		...(description === undefined ? {} : { description }),
+		...valueShape(def.type, def.choices),
 	};
-
-	if (def.type === "number" || def.type === "boolean") {
-		return { ...common, type: def.type };
-	}
-	if (def.type === "path") {
-		return { ...common, type: "string", valueCompletion: "files" };
-	}
-	if (def.type === "url" || def.type === "json") {
-		return { ...common, type: "string", valueCompletion: "none" };
-	}
-
-	const choices = def.type === "string" ? def.choices : undefined;
-	if (choices !== undefined && choices.length > 0) {
-		return { ...common, type: "string", choices: choices.map(assertSafeChoiceValue) };
-	}
-	return { ...common, type: "string" };
 }
 
 /**

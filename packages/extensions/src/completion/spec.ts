@@ -54,7 +54,7 @@ interface CompletionFlagBase {
 	multiple?: true;
 }
 
-type StringCompletion =
+export type StringCompletion =
 	| { choices: readonly string[]; valueCompletion?: never }
 	| { choices?: never; valueCompletion: "files" | "none" }
 	| { choices?: never; valueCompletion?: never };
