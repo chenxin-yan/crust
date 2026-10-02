@@ -2,6 +2,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { Crust, defineCommand } from "@crustjs/core";
+import { buildCommandDocumentation } from "@crustjs/core/tooling";
 import { which } from "@crustjs/utils/process";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 
@@ -10,6 +12,7 @@ import {
 	runBoundedProcess,
 } from "../../../../crust/tests/bounded-process.ts";
 import type { CompletionCommand } from "../spec.ts";
+import { walkCommand } from "../walker.ts";
 import { renderZsh } from "./zsh.ts";
 
 /**
@@ -19,8 +22,8 @@ const fixture: CompletionCommand = {
 	name: "mycli",
 	description: "Test CLI",
 	flags: [
-		{ name: "help", short: "h", type: "boolean", takesValue: false, negatable: false },
-		{ name: "version", short: "v", type: "boolean", takesValue: false, negatable: false },
+		{ name: "help", spellings: ["-h", "--help"], type: "boolean", takesValue: false },
+		{ name: "version", spellings: ["-v", "--version"], type: "boolean", takesValue: false },
 	],
 	args: [],
 	subCommands: [
@@ -28,12 +31,12 @@ const fixture: CompletionCommand = {
 			name: "build",
 			description: "Build artifact",
 			flags: [
-				{ name: "release", type: "boolean", takesValue: false, negatable: false },
+				{ name: "release", spellings: ["--release"], type: "boolean", takesValue: false },
 				{
 					name: "target",
+					spellings: ["--target"],
 					type: "string",
 					takesValue: true,
-					negatable: false,
 					choices: ["browser", "bun", "node"],
 				},
 			],
@@ -53,9 +56,9 @@ const fixture: CompletionCommand = {
 					flags: [
 						{
 							name: "env",
+							spellings: ["--env"],
 							type: "string",
 							takesValue: true,
-							negatable: false,
 							choices: ["dev", "staging", "prod"],
 						},
 					],
@@ -140,9 +143,9 @@ describe("renderZsh", () => {
 			flags: [
 				{
 					name: "fancy",
+					spellings: ["--fancy"],
 					type: "string",
 					takesValue: true,
-					negatable: false,
 					description: "value: do [thing] now",
 				},
 			],
@@ -219,25 +222,25 @@ const collisionFixture: CompletionCommand = {
 	subCommands: [
 		{
 			name: "foo-bar",
-			flags: [{ name: "first", type: "boolean", takesValue: false, negatable: false }],
+			flags: [{ name: "first", spellings: ["--first"], type: "boolean", takesValue: false }],
 			args: [],
 			subCommands: [],
 		},
 		{
 			name: "foo_bar",
-			flags: [{ name: "second", type: "boolean", takesValue: false, negatable: false }],
+			flags: [{ name: "second", spellings: ["--second"], type: "boolean", takesValue: false }],
 			args: [],
 			subCommands: [],
 		},
 		{
 			name: "foo.bar",
-			flags: [{ name: "third", type: "boolean", takesValue: false, negatable: false }],
+			flags: [{ name: "third", spellings: ["--third"], type: "boolean", takesValue: false }],
 			args: [],
 			subCommands: [],
 		},
 		{
 			name: "a_b",
-			flags: [{ name: "flat", type: "boolean", takesValue: false, negatable: false }],
+			flags: [{ name: "flat", spellings: ["--flat"], type: "boolean", takesValue: false }],
 			args: [],
 			subCommands: [],
 		},
@@ -248,7 +251,7 @@ const collisionFixture: CompletionCommand = {
 			subCommands: [
 				{
 					name: "b",
-					flags: [{ name: "nested", type: "boolean", takesValue: false, negatable: false }],
+					flags: [{ name: "nested", spellings: ["--nested"], type: "boolean", takesValue: false }],
 					args: [],
 					subCommands: [],
 				},
@@ -350,13 +353,18 @@ describeIfZsh("renderZsh · descriptions reach _arguments unchanged", () => {
 		const spec: CompletionCommand = {
 			name: "quote",
 			flags: [
-				{ name: "x", type: "boolean", takesValue: false, negatable: false, description: "it's" },
 				{
-					name: "yes",
-					short: "y",
+					name: "ex",
+					spellings: ["--ex"],
 					type: "boolean",
 					takesValue: false,
-					negatable: true,
+					description: "it's",
+				},
+				{
+					name: "yes",
+					spellings: ["-y", "--yes", "--no-yes"],
+					type: "boolean",
+					takesValue: false,
 					description: "Don't prompt",
 				},
 			],
@@ -376,13 +384,83 @@ _quote
 		if (exitCode !== 0) throw new Error(`zsh exited ${exitCode}\nstderr:\n${stderr}`);
 		expect(stdout).toBe(
 			[
-				"--x[it's]",
+				"--ex[it's]",
 				"(-y --yes)-y[Don't prompt]",
 				"(-y --yes)--yes[Don't prompt]",
 				"--no-yes[disable\\: Don't prompt]",
 				"",
 			].join("\n"),
 		);
+	});
+});
+
+/**
+ * Type `line` into an interactive zsh on a pty and press a widget bound to
+ * compsys completion, collecting every match the completers add. The pty
+ * echoes typed input, so the end marker is computed (`END$((1+1))`) and
+ * never matches its own echo.
+ */
+async function zshComplete(scriptPath: string, line: string): Promise<string[]> {
+	const driver = `
+zmodload zsh/zpty || exit 1
+zpty -b z zsh -f -i
+zpty -w z ${shQuoteForZsh(`PS1=''; autoload -Uz compinit; compinit -u -D; source ${shQuoteForZsh(scriptPath)}`)}
+zpty -w z 'complete_print() { compadd() { local -a m; builtin compadd -O m "$@"; (( $#m )) && print -rl -- \${(@)m/#/CAND:} >/dev/tty; builtin compadd "$@"; }; _main_complete; unfunction compadd; print -r -- END$((1+1)) >/dev/tty; }; zle -C complete-print complete-word complete_print; bindkey "^X" complete-print'
+zpty -w -n z ${shQuoteForZsh(line)}$'\\x18'
+local all='' chunk
+for i in {1..150}; do
+	if zpty -r -t z chunk; then all+=$chunk; [[ $all == *END2* ]] && break; else sleep 0.05; fi
+done
+zpty -d z
+[[ $all == *END2* ]] || exit 1
+print -rl -- \${(u)\${\${(M)\${(f)all//$'\\r'/}:#CAND:*}#CAND:}}
+`;
+	const { exitCode, stdout, stderr } = await runBoundedProcess("zsh", ["-f", "-c", driver], {
+		timeout: 15_000,
+	});
+	if (exitCode !== 0)
+		throw new Error(`zsh exited ${exitCode}\nstderr:\n${stderr}\nstdout:\n${stdout}`);
+	return stdout
+		.split("\n")
+		.filter((candidate) => candidate !== "")
+		.sort();
+}
+
+/** Core accepts a one-character alias with one dash (`-P`); completion reads that from the doc model. */
+describeIfZsh("renderZsh · one-character alias spellings", () => {
+	let tmpDir: string;
+	let scriptPath: string;
+
+	beforeAll(async () => {
+		const app = new Crust("mycli")
+			.flags({ name: "port", type: "number", short: "p", aliases: ["P", "listen"] })
+			.add(
+				defineCommand("serve", (serve) =>
+					serve.add(defineCommand("start", (start) => start.action(() => {}))),
+				),
+			);
+		const spec = walkCommand(buildCommandDocumentation(await app.snapshot()));
+		tmpDir = await mkdtemp(join(tmpdir(), "zsh-one-char-"));
+		scriptPath = join(tmpDir, "_mycli");
+		await writeFile(scriptPath, renderZsh(spec, "mycli", "1.0.0"), "utf8");
+	});
+
+	afterAll(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("offers `-P` beside the other spellings", async () => {
+		expect(await zshComplete(scriptPath, "mycli -")).toEqual([
+			"--P",
+			"--listen",
+			"--port",
+			"-P",
+			"-p",
+		]);
+	});
+
+	it("routes past the value of `-P`", async () => {
+		expect(await zshComplete(scriptPath, "mycli -P 9090 serve ")).toEqual(["start"]);
 	});
 });
 
@@ -402,26 +480,26 @@ describe("renderZsh — url/path/json value-flag handling", () => {
 		flags: [
 			{
 				name: "out",
+				spellings: ["--out"],
 				type: "string",
 				takesValue: true,
-				negatable: false,
 				valueCompletion: "files",
 			},
 			{
 				name: "endpoint",
+				spellings: ["--endpoint"],
 				type: "string",
 				takesValue: true,
-				negatable: false,
 				valueCompletion: "none",
 			},
 			{
 				name: "config",
+				spellings: ["--config"],
 				type: "string",
 				takesValue: true,
-				negatable: false,
 				valueCompletion: "none",
 			},
-			{ name: "name", type: "string", takesValue: true, negatable: false },
+			{ name: "name", spellings: ["--name"], type: "string", takesValue: true },
 		],
 		args: [],
 		subCommands: [],

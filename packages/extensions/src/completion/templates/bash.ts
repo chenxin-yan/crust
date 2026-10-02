@@ -1,5 +1,5 @@
 import { bashDoubleQuoteInner, bashSingleQuote, toShellIdent } from "../escape.ts";
-import type { CompletionCommand, CompletionFlag } from "../spec.ts";
+import type { CompletionCommand } from "../spec.ts";
 
 /**
  * Pure-static bash completion script renderer.
@@ -54,18 +54,9 @@ function subcmdWordlist(node: CompletionCommand): string {
 	return words.join(" ");
 }
 
-/**
- * Render the wordlist of flag candidates for a single command. Includes
- * long names, short alias, extra long aliases, and `--no-<name>` for
- * boolean flags whose snapshot marks them as negatable.
- */
+/** Render the wordlist of flag candidates for a single command: every spelling, negations included. */
 function flagWordlist(node: CompletionCommand): string {
-	return node.flags
-		.flatMap((flag) => [
-			...flagSpellings(flag),
-			...(flag.negatable ? [flag.name, ...(flag.aliases ?? [])].map((name) => `--no-${name}`) : []),
-		])
-		.join(" ");
+	return node.flags.flatMap((flag) => flag.spellings).join(" ");
 }
 
 /** `cmd_path` of `name` under `parentPath`; the root path is `""`. */
@@ -176,7 +167,7 @@ function collectFlagValueCases(
 		} else {
 			continue;
 		}
-		for (const spelling of flagSpellings(flag)) {
+		for (const spelling of flag.spellings) {
 			out.push({ key: `${cmdPath}|${spelling}`, ...mode });
 		}
 	}
@@ -296,15 +287,6 @@ function collectArgChoiceCases(
 	}
 }
 
-function flagSpellings(flag: CompletionFlag): string[] {
-	const out: string[] = [`--${flag.name}`];
-	if (flag.short !== undefined) out.push(`-${flag.short}`);
-	if (flag.aliases !== undefined) {
-		for (const alias of flag.aliases) out.push(`--${alias}`);
-	}
-	return out;
-}
-
 /**
  * Render the wordlist of *value-taking* flag spellings for a single
  * command. Used to drive both flag-value context (after `--target`) and
@@ -314,7 +296,7 @@ function valueFlagWordlist(node: CompletionCommand): string {
 	const words: string[] = [];
 	for (const flag of node.flags) {
 		if (!flag.takesValue) continue;
-		for (const spelling of flagSpellings(flag)) words.push(spelling);
+		for (const spelling of flag.spellings) words.push(spelling);
 	}
 	return words.join(" ");
 }

@@ -91,6 +91,7 @@ const serve = new Crust("serve").flags(
 ```
 
 - Long names, aliases, and `short` spellings must not collide with other flags visible on the command.
+- One-character names and aliases accept one or two dashes: `aliases: ["P"]` accepts `-P` and `--P`. Help, completion, man, and skills output list both.
 - Boolean flags accept `--no-<spelling>` for the name and every long alias. `noNegate: true` rejects negation with a `PARSE` error and hides it from help, completion, and man output. Names and aliases beginning with `no-` are reserved.
 - Schema-backed flags still set `type: "string" | "boolean"` to declare whether a value token follows; the schema receives the raw value, including `undefined` when omitted.
 - Flags declared here do not reach subcommands. To share flags with descendants, give them to a [Context](/docs/guide/contexts) and `.provide()` it.
