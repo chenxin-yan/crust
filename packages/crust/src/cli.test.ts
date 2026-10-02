@@ -1,7 +1,7 @@
 /**
  * Integration tests for the crust CLI entry point.
  *
- * Tests the root crust command with the build subcommand wired up,
+ * Tests the root crust command with the build and publish subcommands wired up,
  * verifying help output, version output, subcommand help, and error handling.
  *
  * Uses `captureExecute(app, argv)` to exercise and capture the terminal path.

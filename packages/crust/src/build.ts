@@ -255,7 +255,7 @@ export function resolveEnvFilePaths(
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Entry built when package.json has no `bin`. */
-export const DEFAULT_ENTRY = "src/cli.ts";
+const DEFAULT_ENTRY = "src/cli.ts";
 
 /**
  * Command names become `bin/<command>.js`, `<command>-<target>` binary

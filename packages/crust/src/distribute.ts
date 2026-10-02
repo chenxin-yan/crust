@@ -448,7 +448,7 @@ function writeDistributionManifest(
 	commands: readonly string[],
 	targets: readonly DistributionTarget[],
 	build: Record<string, BuildReport> | undefined,
-): DistributionManifest {
+): string {
 	const manifest: DistributionManifest = {
 		version: metadata.version,
 		...identity,
@@ -470,8 +470,9 @@ function writeDistributionManifest(
 		...(build ? { build } : {}),
 	};
 
-	writeJson(join(stageDir, "manifest.json"), manifest);
-	return manifest;
+	const manifestPath = join(stageDir, "manifest.json");
+	writeJson(manifestPath, manifest);
+	return manifestPath;
 }
 
 /** `pkg` without `engines.node`, dropping `engines` once nothing else is left. */
@@ -689,7 +690,7 @@ export async function runDistributeBuild<T extends string>(
 
 	// Written last: `crust publish` treats manifest.json as proof of a complete
 	// build, so a failed compile must not leave one behind.
-	writeDistributionManifest(
+	const manifestPath = writeDistributionManifest(
 		plan.stageDir,
 		metadata,
 		table
@@ -703,7 +704,6 @@ export async function runDistributeBuild<T extends string>(
 		distributionTargets,
 		build,
 	);
-	const manifestPath = join(plan.stageDir, "manifest.json");
 	io.stdout(
 		`\n${green("✓")} Staged ${bold(`${distributionTargets.length + 1}`)} npm package(s) successfully:`,
 	);

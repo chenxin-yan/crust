@@ -242,7 +242,7 @@ export function resolveTargets<T extends string>(
 }
 
 /** True on musl-based Linux (Alpine, Void, …). Mirrors the check in Bun's own npm installer. */
-export function isMuslHost(): boolean {
+function isMuslHost(): boolean {
 	if (process.platform !== "linux") return false;
 	try {
 		// SAFETY: @types/node types the report as `object`; header.glibcVersionRuntime is a documented field.
