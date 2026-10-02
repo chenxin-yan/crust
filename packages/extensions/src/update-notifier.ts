@@ -230,6 +230,7 @@ export async function fetchLatestVersion(
 		const data: JsonValue = await response.json();
 		const tags = isJsonObject(data) ? data["dist-tags"] : undefined;
 		const latest = tags !== undefined && isJsonObject(tags) ? tags.latest : undefined;
+		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- parsing registry JSON at its I/O boundary.
 		return typeof latest === "string" && latest.length > 0 ? latest : null;
 	} catch {
 		// Network error, abort, JSON parse failure — all soft failures
