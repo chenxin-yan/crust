@@ -139,10 +139,12 @@ function renderFilter<T>(
 			state.scrollOffset,
 			maxVisible,
 			(result, resultIndex) => {
+				const hint = state.choices[state.choices.indexOf(result.item)]?.hint;
 				const label = highlightMatches(result.item.label, result.indices, theme);
+				const hintText = hint ? ` ${theme.hint(hint)}` : "";
 				return resultIndex === state.listCursor
-					? `${theme.cursor(CURSOR_INDICATOR)} ${theme.selected(label)}`
-					: `  ${theme.unselected(label)}`;
+					? `${theme.cursor(CURSOR_INDICATOR)} ${theme.selected(label)}${hintText}`
+					: `  ${theme.unselected(label)}${hintText}`;
 			},
 			theme.hint,
 		),

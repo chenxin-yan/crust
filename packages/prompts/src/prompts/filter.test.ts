@@ -293,6 +293,19 @@ describe("filter — rendering", () => {
 		prompt.keys("return");
 		await prompt.answer;
 	});
+
+	it("renders choice hints", async () => {
+		const prompt = renderPrompt(filter, {
+			message: "Pick",
+			choices: [{ label: "Bun", value: "bun", hint: "recommended" }],
+		});
+
+		await tick();
+		expect(prompt.screen()).toContain("Bun recommended");
+
+		prompt.keys("return");
+		await prompt.answer;
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────

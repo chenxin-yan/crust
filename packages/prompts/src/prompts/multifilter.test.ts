@@ -67,6 +67,19 @@ describe("multifilter — non-TTY", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multifilter — interactive", () => {
+	it("renders choice hints", async () => {
+		const prompt = renderPrompt(multifilter, {
+			message: "Search",
+			choices: [{ label: "Bun", value: "bun", hint: "recommended" }],
+		});
+
+		await tick();
+		expect(prompt.screen()).toContain("Bun recommended");
+
+		prompt.keys("return");
+		await prompt.answer;
+	});
+
 	it("Space toggles selection; Enter submits values in choice order", async () => {
 		const prompt = renderPrompt(multifilter, {
 			message: "Search",
