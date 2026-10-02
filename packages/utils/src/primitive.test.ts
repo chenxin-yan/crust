@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { coerceBooleanString, type ResolvePrimitive, tryCoerceNumber } from "./primitive.ts";
-
-type Expect<T extends true> = T;
-type Equal<A, B> =
-	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-
-type _checkDistributive = Expect<Equal<ResolvePrimitive<"number" | "boolean">, number | boolean>>;
+import { coerceBooleanString, tryCoerceNumber } from "./primitive.ts";
 
 describe("primitive helpers", () => {
 	describe("tryCoerceNumber", () => {

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
 	BUILD_OUT_DIR_ENV,
@@ -14,25 +14,18 @@ import {
 
 let tmpDir: string;
 let originalArgv1: string | undefined;
-let originalMarker: string | undefined;
-let originalBuildOutDir: string | undefined;
 
 beforeEach(async () => {
 	tmpDir = await mkdtemp(join(tmpdir(), "crust-artifacts-"));
 	originalArgv1 = process.argv[1];
-	originalMarker = process.env.CRUST_INTERNAL_BUILD;
-	originalBuildOutDir = process.env[BUILD_OUT_DIR_ENV];
-	delete process.env.CRUST_INTERNAL_BUILD;
-	delete process.env[BUILD_OUT_DIR_ENV];
+	vi.stubEnv("CRUST_INTERNAL_BUILD", undefined);
+	vi.stubEnv(BUILD_OUT_DIR_ENV, undefined);
 });
 
 afterEach(async () => {
 	if (originalArgv1 === undefined) process.argv.length = 1;
 	else process.argv[1] = originalArgv1;
-	if (originalMarker === undefined) delete process.env.CRUST_INTERNAL_BUILD;
-	else process.env.CRUST_INTERNAL_BUILD = originalMarker;
-	if (originalBuildOutDir === undefined) delete process.env[BUILD_OUT_DIR_ENV];
-	else process.env[BUILD_OUT_DIR_ENV] = originalBuildOutDir;
+	vi.unstubAllEnvs();
 	await rm(tmpDir, { recursive: true, force: true });
 });
 
@@ -118,7 +111,7 @@ describe("resolveArtifactDir", () => {
 	it("detects a Windows Bun compiled binary even when the crust build marker is set", () => {
 		// Windows standalone Bun mounts the embedded entry at B:/~BUN/, not /$bunfs/.
 		process.argv[1] = join(tmpDir, "elsewhere", "cli.ts");
-		process.env.CRUST_INTERNAL_BUILD = "1";
+		vi.stubEnv("CRUST_INTERNAL_BUILD", "1");
 		const result = withExecPath(join(tmpDir, "bin", "cli.exe"), () =>
 			withBunMain("B:/~BUN/root/cli.exe", () => resolveArtifactDir("skills")),
 		);
@@ -127,8 +120,8 @@ describe("resolveArtifactDir", () => {
 
 	it("resolves next to the executable inside a Node SEA over build-only markers", () => {
 		process.argv[1] = join(tmpDir, "bin", "cli");
-		process.env.CRUST_INTERNAL_BUILD = "1";
-		process.env[BUILD_OUT_DIR_ENV] = join(tmpDir, ".crust", "artifacts");
+		vi.stubEnv("CRUST_INTERNAL_BUILD", "1");
+		vi.stubEnv(BUILD_OUT_DIR_ENV, join(tmpDir, ".crust", "artifacts"));
 		const result = withExecPath(join(tmpDir, "bin", "cli"), () =>
 			withNodeSea(() => resolveArtifactDir("skills")),
 		);
@@ -146,7 +139,7 @@ describe("resolveArtifactDir", () => {
 	it("resolves next to the bundle's bin/ in a packaged build, ignoring build-only env", async () => {
 		await writeFile(join(tmpDir, "package.json"), "{}");
 		process.argv[1] = join(tmpDir, "src", "cli.ts");
-		process.env[BUILD_OUT_DIR_ENV] = join(tmpDir, "stale-build-output");
+		vi.stubEnv(BUILD_OUT_DIR_ENV, join(tmpDir, "stale-build-output"));
 		const result = asPackagedBuildWithoutEnv(() => resolveArtifactDir("skills"));
 		// Same layout as the Bun/Node define: `<artifacts.ts dir>/../skills`.
 		expect(result).toBe(resolve(import.meta.dirname, "..", "skills"));
@@ -188,7 +181,7 @@ describe("resolveArtifactDir", () => {
 		// .crust/root is wiped at this point; sections must read what earlier hooks wrote.
 		await writeFile(join(tmpDir, "package.json"), "{}");
 		process.argv[1] = join(tmpDir, "src", "cli.ts");
-		process.env[BUILD_OUT_DIR_ENV] = join(tmpDir, ".crust", "artifacts");
+		vi.stubEnv(BUILD_OUT_DIR_ENV, join(tmpDir, ".crust", "artifacts"));
 		expect(resolveArtifactDir("skills")).toBe(join(tmpDir, ".crust", "artifacts", "skills"));
 	});
 
