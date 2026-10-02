@@ -275,7 +275,7 @@ export function prepareInvocation(
 }
 
 /** An invocation starts from terminal argv or a typed path plus structured values. */
-export type InvocationInput =
+type InvocationInput =
 	| { readonly argv: readonly string[] }
 	| {
 			readonly path: readonly string[];
@@ -289,13 +289,13 @@ interface ResolvedInput {
 }
 
 function resolveArgvInput(root: CommandNode, argv: readonly string[]): ResolvedInput {
-	const route = resolveCommand(root, [...argv]);
+	const route = resolveCommand(root, argv);
 	return { argv, route, parsed: parseArgs(route.command, route.argv) };
 }
 
 /** Resolve a typed path, rejecting any element the router cannot consume as a command. */
 export function resolveTypedPath(root: CommandNode, path: readonly string[]): CommandRoute {
-	const route = resolveCommand(root, [...path]);
+	const route = resolveCommand(root, path);
 	if (route.argv.length > 0) {
 		// An unconsumed path element would otherwise silently run the nearest resolved ancestor.
 		// SAFETY: the enclosing length check proves the first element exists.
@@ -406,21 +406,17 @@ async function dispatch(
 		// trusts below (e.g. flipping "failed" to "completed" to mask an error).
 		Object.freeze(outcome);
 
-		let postRunFailed = false;
-		let postRunError: CaughtError;
+		let postRunFailure: { error: CaughtError } | undefined;
 		for (const extension of extensions.toReversed()) {
 			try {
 				await extension.hooks?.postRun?.(extensionContext, outcome);
 			} catch (error) {
-				if (outcome.status !== "failed" && !postRunFailed) {
-					postRunFailed = true;
-					postRunError = error;
-				}
+				if (outcome.status !== "failed") postRunFailure ??= { error };
 			}
 		}
 
 		if (outcome.status === "failed") throw outcome.error;
-		if (postRunFailed) throw postRunError;
+		if (postRunFailure) throw postRunFailure.error;
 	} finally {
 		// A rejected sibling pull can leave another setup in flight; wait for it
 		// so its value registers its disposer before the disposal scope exits.
@@ -441,39 +437,32 @@ async function renderFailure(
 	extensionContext: ExtensionContext | undefined,
 	silentDefault = false,
 ): Promise<ExtensionId | undefined> {
-	const renderDefault = (): void => {
-		// Cancellation (AbortError) has no default rendering — a user abort
-		// is not an error to report unless an onError hook claims it.
-		if (silentDefault) return;
-		io.stderr(describeFailure(error));
-	};
-
 	// Reuse the dispatch context so per-invocation identity (e.g. WeakMap keys
 	// set in preRun) survives into onError. During dispatch its Contexts remain
 	// live through postRun; errors raised after cleanup see the closed resolver.
 	// The synthetic fallback exists only for failures before a context was built.
-	function unavailable(property: PropertyKey): Promise<never> {
-		return Promise.reject(
-			new CrustError(
-				"DEFINITION",
-				`Context "${String(property)}" cannot be pulled from onError because invocation Contexts have already been disposed.`,
-				{
-					subject: "context",
-					name: String(property),
-					reason: "context-after-disposal",
-				},
-			),
-		);
-	}
-	const unavailableContext = new Proxy(
-		{},
-		{
-			get: (_, property) =>
-				property === "then" || isSymbol(property) ? undefined : unavailable(property),
-		},
-	);
 	let context = extensionContext;
 	if (!context) {
+		function unavailable(property: PropertyKey): Promise<never> {
+			return Promise.reject(
+				new CrustError(
+					"DEFINITION",
+					`Context "${String(property)}" cannot be pulled from onError because invocation Contexts have already been disposed.`,
+					{
+						subject: "context",
+						name: String(property),
+						reason: "context-after-disposal",
+					},
+				),
+			);
+		}
+		const unavailableContext = new Proxy(
+			{},
+			{
+				get: (_, property) =>
+					property === "then" || isSymbol(property) ? undefined : unavailable(property),
+			},
+		);
 		const rootSnapshot = snapshotCommand(prepared.rootNode);
 		context = Object.freeze({
 			argv: [...argv],
@@ -498,7 +487,9 @@ async function renderFailure(
 	} catch {
 		// Rendering must not hide the original invocation failure.
 	}
-	renderDefault();
+	// Cancellation (AbortError) has no default rendering — a user abort
+	// is not an error to report unless an onError hook claims it.
+	if (!silentDefault) io.stderr(describeFailure(error));
 	return undefined;
 }
 
@@ -668,8 +659,7 @@ export async function executeInvocation(
 		process.on("SIGINT", onSigint);
 
 		let extensionContext: ExtensionContext | undefined;
-		let renderedInDispatch = false;
-		let renderedError: CaughtError;
+		let rendered: { error: CaughtError } | undefined;
 		try {
 			await dispatch(
 				{ argv },
@@ -680,8 +670,7 @@ export async function executeInvocation(
 					extensionContext = context;
 				},
 				async (error, context) => {
-					renderedInDispatch = true;
-					renderedError = error;
+					rendered = { error };
 					const cancelled = isAbortError(error);
 					process.exitCode = cancelled ? EXIT_CODE_CANCELLED : 1;
 					return renderFailure(error, argv, prepared, io, signal, context, cancelled);
@@ -695,10 +684,10 @@ export async function executeInvocation(
 			let cleanupFailure: { error: unknown } | undefined;
 			try {
 				if (
-					renderedInDispatch &&
-					!Object.is(error, renderedError) &&
+					rendered &&
+					!Object.is(error, rendered.error) &&
 					isSuppressedError(error) &&
-					Object.is(error.suppressed, renderedError)
+					Object.is(error.suppressed, rendered.error)
 				) {
 					cleanupFailure = { error: error.error };
 				}
@@ -709,7 +698,7 @@ export async function executeInvocation(
 			if (isAbortError(error)) {
 				// Cancellation keeps its dedicated exit code while allowing Extension
 				// onError hooks to render a message. Core's default stays silent.
-				if (!renderedInDispatch) {
+				if (!rendered) {
 					await renderFailure(error, argv, prepared, io, signal, extensionContext, true);
 				}
 				process.exitCode = EXIT_CODE_CANCELLED;
@@ -718,7 +707,7 @@ export async function executeInvocation(
 			// Core always preserves a nonzero failure outcome, regardless of
 			// what Extension onError hooks do.
 			process.exitCode = 1;
-			if (!renderedInDispatch) {
+			if (!rendered) {
 				await renderFailure(error, argv, prepared, io, signal, extensionContext);
 			}
 			return 1;

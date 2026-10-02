@@ -137,11 +137,11 @@ function matchKnownFlagToken(
  * @throws {CrustError} COMMAND_NOT_FOUND when an unknown subcommand is given and the parent has no run()
  * @throws {CrustError} PARSE when a flag set aside during routing is not parseable by the subcommand being descended into
  */
-export function resolveCommand(command: CommandNode, argv: string[]): CommandRoute {
+export function resolveCommand(command: CommandNode, argv: readonly string[]): CommandRoute {
 	const path = [command.meta.name];
 
 	let current: CommandNode = command;
-	let routedArgv = argv;
+	let routedArgv: readonly string[] = argv;
 	// Known flags (and their values) encountered before a subcommand name are
 	// set aside during routing and re-prepended for the resolved command's
 	// parser, preserving token order.
