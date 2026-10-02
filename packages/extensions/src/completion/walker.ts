@@ -101,14 +101,14 @@ function walkArg(def: DocumentationArg): CompletionArg {
 /**
  * Build a completion command from the shared documentation model.
  */
-export function walkCommandNode(node: CommandDocumentation): CompletionCommand {
+export function walkCommand(node: CommandDocumentation): CompletionCommand {
 	assertSafeIdentifier(node.name, "command name");
 	for (const alias of node.aliases) {
 		assertSafeIdentifier(alias, "command alias");
 	}
 	const flags = node.flags.map(walkFlag);
 	const args = node.args.map(walkArg);
-	const subCommands = node.children.map(walkCommandNode);
+	const subCommands = node.children.map(walkCommand);
 
 	const result: CompletionCommand = {
 		name: node.name,

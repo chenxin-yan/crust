@@ -2,13 +2,13 @@ import { type AnyCrust, Crust, defineCommand, defineContext, defineFlag } from "
 import { buildCommandDocumentation } from "@crustjs/core/tooling";
 import { describe, expect, it } from "vite-plus/test";
 
-import { walkCommandNode } from "./walker.ts";
+import { walkCommand } from "./walker.ts";
 
 async function walk(app: AnyCrust) {
-	return walkCommandNode(buildCommandDocumentation(await app.snapshot()));
+	return walkCommand(buildCommandDocumentation(await app.snapshot()));
 }
 
-describe("walkCommandNode", () => {
+describe("walkCommand", () => {
 	it("walks a leaf command with no flags, args, or children", async () => {
 		const spec = await walk(new Crust("mycli", { description: "Top-level CLI" }));
 
@@ -152,7 +152,7 @@ describe("walkCommandNode", () => {
 	});
 });
 
-describe("walkCommandNode — url/path/json valueCompletion", () => {
+describe("walkCommand — url/path/json valueCompletion", () => {
 	it("normalises special flag types", async () => {
 		const app = new Crust("mycli").flags(
 			{ name: "endpoint", type: "url" },

@@ -12,7 +12,7 @@ import type { CompletionCommand } from "./spec.ts";
 import { renderBash } from "./templates/bash.ts";
 import { renderFish } from "./templates/fish.ts";
 import { renderZsh } from "./templates/zsh.ts";
-import { walkCommandNode } from "./walker.ts";
+import { walkCommand } from "./walker.ts";
 
 /**
  * Adversarial test suite. These tests exercise the validation/escape
@@ -32,13 +32,13 @@ describe("walker · validation", () => {
 			.add(defineCommand("two words", (c) => c.action(() => {})))
 			.action(() => {});
 		const model = buildCommandDocumentation(await cli.snapshot());
-		expect(() => walkCommandNode(model)).toThrow(/invalid command name/);
+		expect(() => walkCommand(model)).toThrow(/invalid command name/);
 	});
 
 	it("rejects flag names with shell metacharacters", async () => {
 		const cli = new Crust("bad").flags({ name: "a;rm", type: "boolean" }).action(() => {});
 		const model = buildCommandDocumentation(await cli.snapshot());
-		expect(() => walkCommandNode(model)).toThrow(/invalid flag name/);
+		expect(() => walkCommand(model)).toThrow(/invalid flag name/);
 	});
 
 	it("rejects choice values containing spaces", async () => {
@@ -50,14 +50,14 @@ describe("walker · validation", () => {
 			})
 			.action(() => {});
 		const model = buildCommandDocumentation(await cli.snapshot());
-		expect(() => walkCommandNode(model)).toThrow(/unsupported choice value/);
+		expect(() => walkCommand(model)).toThrow(/unsupported choice value/);
 	});
 
 	it("strips control characters from descriptions instead of throwing", async () => {
 		const cli = new Crust("safe", {
 			description: "first line\nsecond line\rstill same line",
 		}).action(() => {});
-		const spec = walkCommandNode(buildCommandDocumentation(await cli.snapshot()));
+		const spec = walkCommand(buildCommandDocumentation(await cli.snapshot()));
 		// Newlines and CR collapse to spaces during normalisation.
 		expect(spec.description).toBe("first line second line still same line");
 		// And the value never contains a raw newline that could break

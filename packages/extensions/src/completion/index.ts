@@ -18,7 +18,7 @@ import { assertSafeBinName, sanitizeFreeText } from "./escape.ts";
 import { renderBash } from "./templates/bash.ts";
 import { renderFish } from "./templates/fish.ts";
 import { renderZsh } from "./templates/zsh.ts";
-import { walkCommandNode } from "./walker.ts";
+import { walkCommand } from "./walker.ts";
 
 const COMPLETION: ExtensionId = defineExtensionId("crust:completion");
 
@@ -84,7 +84,7 @@ function prepareRender(root: CommandSnapshot, options: CompletionRenderOptions) 
 	// `version` flows into header comments only; strip control characters so it
 	// cannot break out of the comment line in the emitted script.
 	return {
-		spec: walkCommandNode(buildCommandDocumentation(root)),
+		spec: walkCommand(buildCommandDocumentation(root)),
 		binName,
 		version: sanitizeFreeText(version),
 	};
