@@ -2,13 +2,12 @@
 // Create Style — Configurable style instance factory
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { AnsiPair } from "./ansiCodes.ts";
-import { isModifierName, styleMethodNames } from "./ansiCodes.ts";
-import * as codes from "./ansiCodes.ts";
+import type { AnsiPair, StyleMethodName } from "./ansi-codes.ts";
+import { isModifierName, styleMethodNames, styleMethodPairs } from "./ansi-codes.ts";
 import { resolveColorDepth, resolveModifierCapability } from "./capability.ts";
-import { bg as bgDirect, bgPairAtDepth, fg as fgDirect, fgPairAtDepth } from "./color.ts";
+import { colorPair, paint } from "./color.ts";
 import { linkCode, link as linkDirect } from "./hyperlinks.ts";
-import { applyStyle } from "./styleEngine.ts";
+import { applyStyle } from "./style-engine.ts";
 import type {
 	ChainableStyleFn,
 	ColorDepth,
@@ -16,17 +15,10 @@ import type {
 	StyleInput,
 	StyleInstance,
 	StyleMethodMap,
-	StyleMethodName,
 	StyleOptions,
 } from "./types.ts";
 
-const dynamicColorKinds = [
-	["fg", fgDirect],
-	["bg", bgDirect],
-] as const;
-
-// Computed namespace access is safe because StyleMethodName contains only ANSI-pair exports.
-const styleMethodPairs = codes;
+const dynamicColorKinds = ["fg", "bg"] as const;
 
 // A single step in a chainable style: a registered method or a color
 // resolved against the active terminal depth when the chain is called.
@@ -39,10 +31,9 @@ function stepIsModifier(step: ChainStep): boolean {
 }
 
 function stepPair(step: ChainStep, colorDepth: ColorDepth): AnsiPair {
-	if (step.kind === "named") return styleMethodPairs[step.name];
-	return step.kind === "fg"
-		? fgPairAtDepth(step.input, colorDepth)
-		: bgPairAtDepth(step.input, colorDepth);
+	return step.kind === "named"
+		? styleMethodPairs[step.name]
+		: colorPair(step.kind, step.input, colorDepth);
 }
 
 // Validates now; depth resolves when the chain is called. Validated tuples are
@@ -149,7 +140,7 @@ function buildChainableStyleFactory(
 			});
 		}
 
-		for (const [kind] of dynamicColorKinds) {
+		for (const kind of dynamicColorKinds) {
 			Object.defineProperty(styleFn, kind, {
 				configurable: false,
 				enumerable: true,
@@ -202,41 +193,6 @@ function buildStyleMethods(
 	return methods;
 }
 
-/**
- * Create a configured style instance with mode-aware styling functions.
- *
- * The returned instance provides the full set of modifier, foreground color,
- * and background color functions. In `"never"` mode, all functions return
- * plain text without ANSI codes. In `"always"` mode, ANSI codes are always
- * emitted. In `"auto"` mode, color methods respect `stdout.isTTY` and
- * `NO_COLOR`, non-color modifiers (bold, italic, etc.) follow TTY only,
- * and `FORCE_COLOR`, when set, decides unconditionally for both.
- *
- * @param options - Configuration options. Defaults to `{ mode: "auto" }`.
- * @returns A frozen {@link StyleInstance} with all styling functions.
- *
- * @example
- * ```ts
- * // Auto-detect terminal capabilities
- * const s = createStyle();
- * console.log(s.bold("hello"));
- *
- * // Force color output
- * const color = createStyle({ mode: "always" });
- * console.log(color.red("error"));
- * console.log(color.bold.red("critical"));
- *
- * // Disable all styling
- * const plain = createStyle({ mode: "never" });
- * console.log(plain.red("error")); // "error"
- *
- * // Deterministic testing
- * const test = createStyle({
- *   mode: "auto",
- *   overrides: { isTTY: true, noColor: undefined },
- * });
- * ```
- */
 function resolveStyleCapabilities(options?: StyleOptions): ResolvedStyleCapabilities {
 	const mode = options?.mode ?? "auto";
 	const modifiersEnabled = resolveModifierCapability(mode, options?.overrides);
@@ -261,14 +217,13 @@ function createStyleInstance(options: StyleOptions | undefined, runtime: boolean
 
 	// SAFETY: dynamicColorKinds contains exactly the fg and bg entries required by this map.
 	const dynamicColors = Object.fromEntries(
-		dynamicColorKinds.map(([kind, paint]) => [
+		dynamicColorKinds.map((kind) => [
 			kind,
 			(...args: [input: ColorInput] | [text: string, input: ColorInput]) => {
-				const resolved = resolveCapabilities();
 				if (args.length === 1) {
 					return createChainableStyle([colorStep(kind, args[0])]);
 				}
-				return paint(args[0], args[1], resolved.colorDepth);
+				return paint(kind, args[0], args[1], resolveCapabilities().colorDepth);
 			},
 		]),
 	) as Pick<StyleInstance, "fg" | "bg">;
@@ -305,6 +260,41 @@ function createStyleInstance(options: StyleOptions | undefined, runtime: boolean
 	return Object.freeze(instance);
 }
 
+/**
+ * Create a configured style instance with mode-aware styling functions.
+ *
+ * The returned instance provides the full set of modifier, foreground color,
+ * and background color functions. In `"never"` mode, all functions return
+ * plain text without ANSI codes. In `"always"` mode, ANSI codes are always
+ * emitted. In `"auto"` mode, color methods respect `stdout.isTTY` and
+ * `NO_COLOR`, non-color modifiers (bold, italic, etc.) follow TTY only,
+ * and `FORCE_COLOR`, when set, decides unconditionally for both.
+ *
+ * @param options - Configuration options. Defaults to `{ mode: "auto" }`.
+ * @returns A frozen {@link StyleInstance} with all styling functions.
+ *
+ * @example
+ * ```ts
+ * // Auto-detect terminal capabilities
+ * const s = createStyle();
+ * console.log(s.bold("hello"));
+ *
+ * // Force color output
+ * const color = createStyle({ mode: "always" });
+ * console.log(color.red("error"));
+ * console.log(color.bold.red("critical"));
+ *
+ * // Disable all styling
+ * const plain = createStyle({ mode: "never" });
+ * console.log(plain.red("error")); // "error"
+ *
+ * // Deterministic testing
+ * const test = createStyle({
+ *   mode: "auto",
+ *   overrides: { isTTY: true, noColor: undefined },
+ * });
+ * ```
+ */
 export function createStyle(options?: StyleOptions): StyleInstance {
 	return createStyleInstance(options, false);
 }

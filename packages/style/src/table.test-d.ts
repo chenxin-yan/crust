@@ -1,6 +1,6 @@
 // Compile-time contracts, enforced by check:types (not vp test).
 
-import { type ColumnAlignment, table } from "./tables.ts";
+import { type ColumnAlignment, table } from "./table.ts";
 
 // `table` only reads its inputs, so predeclared readonly data (e.g. `as const`
 // command metadata) must be accepted without copies or casts.

@@ -2,7 +2,7 @@
 // Style Engine — Nesting-safe ANSI style application
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { AnsiPair } from "./ansiCodes.ts";
+import type { AnsiPair } from "./ansi-codes.ts";
 import type { StyleInput } from "./types.ts";
 
 /**
@@ -18,15 +18,15 @@ import type { StyleInput } from "./types.ts";
  *
  * @example
  * ```ts
- * import { applyStyle } from "./styleEngine.ts";
- * import { bold, red } from "./ansiCodes.ts";
+ * import { applyStyle } from "./style-engine.ts";
+ * import { styleMethodPairs } from "./ansi-codes.ts";
  *
  * // Simple usage
- * applyStyle("hello", bold); // "\x1b[1mhello\x1b[22m"
+ * applyStyle("hello", styleMethodPairs.bold); // "\x1b[1mhello\x1b[22m"
  *
  * // Nesting: bold wraps a red segment — bold reopens after red's close
- * const inner = applyStyle("world", red);
- * applyStyle(`hello ${inner}!`, bold);
+ * const inner = applyStyle("world", styleMethodPairs.red);
+ * applyStyle(`hello ${inner}!`, styleMethodPairs.bold);
  * ```
  */
 export function applyStyle(text: StyleInput, style: AnsiPair): string {

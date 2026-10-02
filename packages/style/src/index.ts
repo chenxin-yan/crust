@@ -3,13 +3,13 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 // ANSI codes
-export type { AnsiPair } from "./ansiCodes.ts";
+export type { AnsiPair } from "./ansi-codes.ts";
 // Block helpers
-export type { ColumnAlignment, TableOptions } from "./blocks/tables.ts";
-export { table } from "./blocks/tables.ts";
-export { createStyle, style } from "./createStyle.ts";
+export type { ColumnAlignment, TableOptions } from "./table.ts";
+export { table } from "./table.ts";
+export { createStyle, style } from "./create-style.ts";
 export type { HyperlinkOptions } from "./hyperlinks.ts";
-export type { NamedColor } from "./namedColorValues.ts";
+export type { NamedColor } from "./named-color-values.ts";
 export {
 	bg,
 	// Background
@@ -56,10 +56,10 @@ export {
 	underline,
 	white,
 	yellow,
-} from "./runtimeExports.ts";
+} from "./runtime-exports.ts";
 // Text utilities
-export { stringWidth } from "./stringWidth.ts";
-export { center, padEnd, padStart } from "./text/pad.ts";
+export { stringWidth } from "./string-width.ts";
+export { center, padEnd, padStart } from "./pad.ts";
 // Capability detection
 export type {
 	CapabilityOverrides,

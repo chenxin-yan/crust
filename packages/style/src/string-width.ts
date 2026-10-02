@@ -83,6 +83,13 @@ export function stringWidthJs(input: string): number {
 
 /** Measure terminal columns, ignoring ANSI escapes. */
 export function stringWidth(input: string): number {
+	// Prefer Bun's native stringWidth when the Bun global is present; fall back
+	// to the JS implementation on other runtimes.
+	// The globalThis cast avoids a ReferenceError on runtimes without the Bun
+	// global (Node, Deno) and keeps Bun types out of the portable package.
+	// If a native split ever needs real tree-shaking, use package.json export
+	// conditions ("bun" vs "default"), not runtime guards — guards always ship
+	// the fallback in the bundle.
 	// SAFETY: this only describes the optional Bun global; optional access preserves portability.
 	const bun = (
 		globalThis as {
@@ -91,13 +98,5 @@ export function stringWidth(input: string): number {
 			};
 		}
 	).Bun;
-
-	// Prefer Bun's native stringWidth when the Bun global is present; fall back
-	// to the JS implementation on other runtimes.
-	// The globalThis cast avoids a ReferenceError on runtimes without the Bun
-	// global (Node, Deno) and keeps Bun types out of the portable package.
-	// If a native split ever needs real tree-shaking, use package.json export
-	// conditions ("bun" vs "default"), not runtime guards — guards always ship
-	// the fallback in the bundle.
 	return bun?.stringWidth(input, { countAnsiEscapeCodes: false }) ?? stringWidthJs(input);
 }

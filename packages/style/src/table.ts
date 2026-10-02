@@ -2,8 +2,8 @@
 // Tables — Column-aligned table rendering with visible width
 // ────────────────────────────────────────────────────────────────────────────
 
-import { stringWidth } from "../stringWidth.ts";
-import { center, padEnd, padStart } from "../text/pad.ts";
+import { center, padEnd, padStart } from "./pad.ts";
+import { stringWidth } from "./string-width.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -81,9 +81,7 @@ function formatRow(
 	return `|${formattedCells.join("|")}|`;
 }
 
-/**
- * Generate a separator row using the given character.
- */
+/** Separator row of `-` matching the column widths. */
 function formatSeparator(columnWidths: readonly number[]): string {
 	const segments = columnWidths.map((width) => "-".repeat(width + 2));
 	return `|${segments.join("|")}|`;
