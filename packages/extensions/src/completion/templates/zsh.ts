@@ -90,9 +90,7 @@ function flagSpecs(flag: CompletionFlag): string[] {
 		// The spec is built without an outer wrapper so we can wrap the
 		// whole thing in zsh single quotes after the brace alternation.
 		// Example: '(--help -h)'{-h,--help}'[desc]' — three single-quoted
-		// fragments concatenated. Each fragment is independently safe
-		// because none of the quoted contents contain a single quote
-		// (description quotes are escaped by zshArgsDescription).
+		// fragments concatenated, each quoted by bashSingleQuote.
 		const fragments = [
 			bashSingleQuote(headPrefix),
 			`${repeatBrace}{${altGroup}}`,

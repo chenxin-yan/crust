@@ -117,11 +117,11 @@ describe("bashSingleQuote", () => {
 });
 
 describe("zshArgsDescription / zshDescribeField", () => {
-	it("zshArgsDescription escapes [ ] : \\ ' and drops newlines", () => {
+	it("zshArgsDescription escapes [ ] : \\ and drops newlines", () => {
 		expect(zshArgsDescription("a:b")).toBe("a\\:b");
 		expect(zshArgsDescription("a[b]c")).toBe("a\\[b\\]c");
 		expect(zshArgsDescription("a\\b")).toBe("a\\\\b");
-		expect(zshArgsDescription("it's")).toBe("it'\\''s");
+		expect(zshArgsDescription("it's")).toBe("it's");
 		expect(zshArgsDescription("a\nb")).toBe("a b");
 	});
 

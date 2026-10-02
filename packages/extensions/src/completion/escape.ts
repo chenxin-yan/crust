@@ -173,8 +173,8 @@ export function bashDoubleQuoteInner(value: string): string {
  *
  * `_arguments` parses spec strings with `:` as the field separator and
  * `[...]` as the description bracket; backslash escapes both. We also
- * scrub newlines (descriptions are one-liners in completion menus) and
- * single quotes (the spec is wrapped in single quotes by the caller).
+ * scrub newlines (descriptions are one-liners in completion menus).
+ * Shell quoting of the assembled spec belongs to {@link bashSingleQuote}.
  */
 export function zshArgsDescription(value: string): string {
 	return value
@@ -182,7 +182,6 @@ export function zshArgsDescription(value: string): string {
 		.replace(/\[/g, "\\[")
 		.replace(/]/g, "\\]")
 		.replace(/:/g, "\\:")
-		.replace(/'/g, "'\\''")
 		.replace(/[\r\n]+/g, " ");
 }
 

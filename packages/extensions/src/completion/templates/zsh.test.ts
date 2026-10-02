@@ -334,6 +334,58 @@ ${helper}
 	});
 });
 
+describeIfZsh("renderZsh · descriptions reach _arguments unchanged", () => {
+	let tmpDir: string;
+
+	beforeAll(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "zsh-desc-"));
+	});
+
+	afterAll(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("keeps apostrophes in single- and multi-spelling flag descriptions", async () => {
+		const scriptPath = join(tmpDir, "_quote");
+		const spec: CompletionCommand = {
+			name: "quote",
+			flags: [
+				{ name: "x", type: "boolean", takesValue: false, negatable: false, description: "it's" },
+				{
+					name: "yes",
+					short: "y",
+					type: "boolean",
+					takesValue: false,
+					negatable: true,
+					description: "Don't prompt",
+				},
+			],
+			args: [],
+			subCommands: [],
+		};
+		await writeFile(scriptPath, renderZsh(spec, "quote", "1.0.0"), "utf8");
+		const driver = `
+compdef() { :; }
+_arguments() { print -rl -- "$@"; }
+source ${shQuoteForZsh(scriptPath)} || exit 1
+_quote
+`;
+		const { exitCode, stdout, stderr } = await runBoundedProcess("zsh", ["-c", driver], {
+			timeout: 4_000,
+		});
+		if (exitCode !== 0) throw new Error(`zsh exited ${exitCode}\nstderr:\n${stderr}`);
+		expect(stdout).toBe(
+			[
+				"--x[it's]",
+				"(-y --yes)-y[Don't prompt]",
+				"(-y --yes)--yes[Don't prompt]",
+				"--no-yes[disable\\: Don't prompt]",
+				"",
+			].join("\n"),
+		);
+	});
+});
+
 async function isZshAvailable(): Promise<boolean> {
 	// A missing zsh skips; a hung one fails at the probe deadline instead of skipping.
 	if (which("zsh") === null) return false;
