@@ -15,7 +15,7 @@ import type { RenderedFile } from "./types.ts";
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Filename of the entrypoint markdown file required at the bundle root. */
-const SKILL_MD = "SKILL.md";
+export const SKILL_MD = "SKILL.md";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal — frontmatter probe
@@ -188,8 +188,6 @@ export interface LoadedBundle {
  * The returned `frontmatter` becomes the source of truth for the build
  * pipeline and output paths. Crust does not rewrite `SKILL.md`; the bundle
  * author owns it.
- *
- * @internal Exported for unit testing.
  */
 export async function loadBundleFiles(sourceDir: string | URL): Promise<LoadedBundle> {
 	const resolved = resolveSourceDir(sourceDir);

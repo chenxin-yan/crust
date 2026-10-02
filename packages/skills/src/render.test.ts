@@ -4,7 +4,7 @@ import { buildCommandDocumentation, type CommandDocumentation } from "@crustjs/c
 import { describe, expect, it } from "vite-plus/test";
 
 import { makeCommand, snapshotFixture } from "../tests/fixtures.ts";
-import { SKILLS } from "./extension.ts";
+import { SKILLS } from "./id.ts";
 import { renderSkill } from "./render.ts";
 import type { RenderedFile, SkillMeta } from "./types.ts";
 

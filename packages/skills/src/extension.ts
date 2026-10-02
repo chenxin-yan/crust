@@ -5,11 +5,9 @@ import {
 	type CommandDefinition,
 	type ExtensionBuildContext,
 	type ExtensionFactory,
-	type ExtensionId,
 	type InvocationIO,
 	defineCommand,
 	defineExtension,
-	defineExtensionId,
 } from "@crustjs/core";
 import { spinner } from "@crustjs/progress";
 import { confirm, multiselect, select } from "@crustjs/prompts";
@@ -25,12 +23,12 @@ import {
 	resolveEffectiveScope,
 } from "./agents.ts";
 import type { AgentTarget, Scope } from "./agents.ts";
+import { renderSkills } from "./build.ts";
 import { SkillConflictError } from "./errors.ts";
+import { SKILLS } from "./id.ts";
 import { getSkillStatus, groupAgentsByOutputDir, installSkill, uninstallSkill } from "./install.ts";
 import { SkillSourceUnavailableError, loadPackagedSkills, type PackagedSkill } from "./source.ts";
 import type { InstallSkillResult, SkillOptions, SkillStatusResult } from "./types.ts";
-
-export const SKILLS: ExtensionId = defineExtensionId("crust:skills");
 
 const DEFAULT_SKILL_COMMAND_NAME = "skills";
 const SKILLS_SECTION_TITLE = "Agent skills";
@@ -177,7 +175,6 @@ async function buildSkills(
 	options: SkillOptions,
 	context: ExtensionBuildContext,
 ): Promise<BuildArtifacts> {
-	const { renderSkills } = await import("./build.ts");
 	const files = await renderSkills(options.generated === false ? undefined : context.snapshot, {
 		version: context.snapshot.meta.version,
 		name: options.name,

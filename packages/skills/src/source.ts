@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { isErrnoException } from "@crustjs/utils/error";
 
-import { probeFrontmatter, requireSkillFrontmatter } from "./bundle.ts";
+import { probeFrontmatter, requireSkillFrontmatter, SKILL_MD } from "./bundle.ts";
 
 /** The packaged skills root is missing or holds no skills: the CLI has not been built yet. */
 export class SkillSourceUnavailableError extends Error {
@@ -21,7 +21,7 @@ export function readSkillFrontmatter(
 ): Pick<PackagedSkill, "name" | "description"> {
 	let content: string;
 	try {
-		content = readFileSync(join(sourceDir, "SKILL.md"), "utf8");
+		content = readFileSync(join(sourceDir, SKILL_MD), "utf8");
 	} catch (error) {
 		// ENOENT: the directory is not a skill; anything else (EACCES, EISDIR) is unexpected.
 		if (!isErrnoException(error) || error.code !== "ENOENT") throw error;
@@ -58,7 +58,7 @@ export function loadPackagedSkills(root: string): readonly PackagedSkill[] {
 		const sourceDir = join(root, entry.name);
 		// Cruft directories (__MACOSX, editor droppings) must not take down every
 		// valid skill; only a directory that claims to be a skill is validated.
-		if (!existsSync(join(sourceDir, "SKILL.md"))) continue;
+		if (!existsSync(join(sourceDir, SKILL_MD))) continue;
 		const frontmatter = readSkillFrontmatter(sourceDir);
 		if (frontmatter.name !== entry.name) {
 			throw new Error(

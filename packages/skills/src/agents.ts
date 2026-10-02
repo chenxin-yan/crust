@@ -87,7 +87,6 @@ export function resolveEffectiveScope(scope: Scope): Scope {
 	return scope === "project" && process.cwd() === homedir() ? "global" : scope;
 }
 
-// SAFETY: Entry assertions provide declaration-safe value types after each literal is checked against AgentConfig.
 const AGENTS: AgentRegistry = {
 	amp: universal("Amp"),
 	adal: {
