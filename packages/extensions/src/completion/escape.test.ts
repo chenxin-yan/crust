@@ -84,6 +84,10 @@ describe("assertSafeChoiceValue", () => {
 	])("rejects %s", (_label, value) => {
 		expect(() => assertSafeChoiceValue(value)).toThrow(/unsupported choice value/);
 	});
+
+	it("names the enforced pattern, including the alphanumeric first character", () => {
+		expect(() => assertSafeChoiceValue("-bad")).toThrow("/^[A-Za-z0-9][A-Za-z0-9_.+:@/-]*$/");
+	});
 });
 
 describe("sanitizeFreeText", () => {

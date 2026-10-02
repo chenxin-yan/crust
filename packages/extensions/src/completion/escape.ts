@@ -49,7 +49,7 @@ export function assertSafeChoiceValue(value: string): string {
 	if (!CHOICE_VALUE_PATTERN.test(value)) {
 		throw new Error(
 			`completion extension: unsupported choice value ${JSON.stringify(value)} — ` +
-				`must match /^[A-Za-z0-9_.+:@/-]+$/. ` +
+				`must match ${CHOICE_VALUE_PATTERN}. ` +
 				`Whitespace and shell metacharacters are not supported in v1.`,
 		);
 	}
@@ -70,14 +70,14 @@ export function assertSafeChoiceValue(value: string): string {
  * need bespoke escaping for `case` patterns, `compdef`, and fish
  * predicate code.
  */
-const IDENT_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*)?$/;
+const IDENT_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /** Throw if `name` is not a safe identifier; otherwise return it. */
 export function assertSafeIdentifier(name: string, kind: string): string {
 	if (!IDENT_PATTERN.test(name)) {
 		throw new Error(
 			`completion extension: invalid ${kind} ${JSON.stringify(name)} — ` +
-				`must match /^[A-Za-z0-9][A-Za-z0-9._-]*$/. ` +
+				`must match ${IDENT_PATTERN}. ` +
 				`Whitespace, quotes, and shell metacharacters are not supported.`,
 		);
 	}
