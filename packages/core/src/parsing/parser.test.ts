@@ -116,14 +116,9 @@ describe("parseArgs — number flags", () => {
 	});
 
 	it("throws CrustError with PARSE code on non-numeric value", () => {
-		try {
-			parseArgs(cmd, ["--port", "abc"]);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("PARSE");
-			expect((err as CrustError).message).toBe('Expected number for --port, got "abc"');
-		}
+		expect(() => parseArgs(cmd, ["--port", "abc"])).toThrow(
+			expect.objectContaining({ code: "PARSE", message: 'Expected number for --port, got "abc"' }),
+		);
 	});
 });
 
@@ -510,14 +505,12 @@ describe("parseArgs — variadic args", () => {
 			meta: { name: "test" },
 			args: [{ name: "numbers", type: "number", variadic: true }],
 		});
-		try {
-			parseArgs(cmd, ["1", "abc", "3"]);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("PARSE");
-			expect((err as CrustError).message).toBe('Expected number for <numbers>, got "abc"');
-		}
+		expect(() => parseArgs(cmd, ["1", "abc", "3"])).toThrow(
+			expect.objectContaining({
+				code: "PARSE",
+				message: 'Expected number for <numbers>, got "abc"',
+			}),
+		);
 	});
 });
 
@@ -609,14 +602,9 @@ describe("parseArgs — strict mode (unknown flags)", () => {
 			flags: { output: { type: "string" } },
 		});
 
-		try {
-			parseArgs(valued, ["--output"]);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("PARSE");
-			expect((err as CrustError).message).toContain("--output");
-		}
+		expect(() => parseArgs(valued, ["--output"])).toThrow(
+			expect.objectContaining({ code: "PARSE", message: expect.stringContaining("--output") }),
+		);
 	});
 });
 
@@ -735,18 +723,15 @@ describe("parseArgs — boolean flag value assignment", () => {
 	});
 
 	it("throws CrustError with PARSE code on --flag=false", () => {
-		try {
-			parseArgs(cmd, ["--verbose=false"]);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("PARSE");
-			expect((err as CrustError).message).toContain("--verbose");
-			expect((err as CrustError).cause).toBeInstanceOf(Error);
-			expect(((err as CrustError).cause as Error).message).toContain(
-				"Option '--verbose' does not take an argument",
-			);
-		}
+		expect(() => parseArgs(cmd, ["--verbose=false"])).toThrow(
+			expect.objectContaining({
+				code: "PARSE",
+				message: expect.stringContaining("--verbose"),
+				cause: expect.objectContaining({
+					message: expect.stringContaining("Option '--verbose' does not take an argument"),
+				}),
+			}),
+		);
 	});
 });
 
@@ -767,14 +752,12 @@ describe("parseArgs — negated boolean flag with value assignment", () => {
 	// ("does not take an argument", as for --flag=value), while Bun reports the
 	// whole spelling as an unknown option. Tests run on Node; Bun runs in a child.
 	it("throws CrustError with PARSE code on --no-flag=true", () => {
-		try {
-			parseArgs(cmd, ["--no-verbose=true"]);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("PARSE");
-			expect((err as CrustError).message).toBe("Option '--verbose' does not take an argument");
-		}
+		expect(() => parseArgs(cmd, ["--no-verbose=true"])).toThrow(
+			expect.objectContaining({
+				code: "PARSE",
+				message: "Option '--verbose' does not take an argument",
+			}),
+		);
 
 		const source = `import { makeNode } from ${JSON.stringify(resolve(import.meta.dirname, "../../tests/helpers.ts"))};
 import { CrustError } from ${JSON.stringify(resolve(import.meta.dirname, "../errors.ts"))};
@@ -845,16 +828,12 @@ describe("parseArgs — boolean negation", () => {
 		});
 
 		for (const spelling of ["--no-version", "--no-ver"]) {
-			try {
-				parseArgs(noNegateCmd, [spelling]);
-				expect.unreachable("should have thrown");
-			} catch (err) {
-				expect(err).toBeInstanceOf(CrustError);
-				expect((err as CrustError).code).toBe("PARSE");
-				expect((err as CrustError).message).toBe(
-					`Flag "--version" does not support negation ("${spelling}")`,
-				);
-			}
+			expect(() => parseArgs(noNegateCmd, [spelling])).toThrow(
+				expect.objectContaining({
+					code: "PARSE",
+					message: `Flag "--version" does not support negation ("${spelling}")`,
+				}),
+			);
 		}
 	});
 });
@@ -900,14 +879,9 @@ describe("parseArgs — CommandNode with effective flags", () => {
 		expect(parsed.flags.config).toBeUndefined();
 
 		// validateParsed enforces required constraints
-		try {
-			validateParsed(node, parsed);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("VALIDATION");
-			expect((err as CrustError).message).toBe('Missing required flag "--config"');
-		}
+		expect(() => validateParsed(node, parsed)).toThrow(
+			expect.objectContaining({ code: "VALIDATION", message: 'Missing required flag "--config"' }),
+		);
 	});
 });
 
@@ -932,14 +906,12 @@ describe("validateParsed", () => {
 			args: [{ name: "file", type: "string", required: true }],
 		});
 		const parsed = parseArgs(cmd, []);
-		try {
-			validateParsed(cmd, parsed);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("VALIDATION");
-			expect((err as CrustError).message).toBe('Missing required argument "<file>"');
-		}
+		expect(() => validateParsed(cmd, parsed)).toThrow(
+			expect.objectContaining({
+				code: "VALIDATION",
+				message: 'Missing required argument "<file>"',
+			}),
+		);
 	});
 
 	it("throws for missing required flag", () => {
@@ -948,14 +920,9 @@ describe("validateParsed", () => {
 			flags: { name: { type: "string", required: true } },
 		});
 		const parsed = parseArgs(cmd, []);
-		try {
-			validateParsed(cmd, parsed);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("VALIDATION");
-			expect((err as CrustError).message).toBe('Missing required flag "--name"');
-		}
+		expect(() => validateParsed(cmd, parsed)).toThrow(
+			expect.objectContaining({ code: "VALIDATION", message: 'Missing required flag "--name"' }),
+		);
 	});
 
 	it("throws for missing required variadic arg", () => {
@@ -964,14 +931,12 @@ describe("validateParsed", () => {
 			args: [{ name: "files", type: "string", variadic: true, required: true }],
 		});
 		const parsed = parseArgs(cmd, []);
-		try {
-			validateParsed(cmd, parsed);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("VALIDATION");
-			expect((err as CrustError).message).toBe('Missing required argument "<files>"');
-		}
+		expect(() => validateParsed(cmd, parsed)).toThrow(
+			expect.objectContaining({
+				code: "VALIDATION",
+				message: 'Missing required argument "<files>"',
+			}),
+		);
 	});
 
 	it("does not throw when all required values are provided", () => {
@@ -1082,7 +1047,7 @@ describe("parseArgs — parse escape hatch", () => {
 		expect(result.flags.nums).toEqual([1, 2]);
 	});
 
-	it("runs parse on default when argv is absent (oracle C regression)", () => {
+	it("parses declared defaults when argv omits the flag", () => {
 		const cmd = makeNode({
 			meta: "test",
 			flags: {
@@ -1135,16 +1100,9 @@ describe("parseArgs — parse escape hatch", () => {
 				},
 			},
 		});
-		try {
-			parseArgs(cmd, ["--n", "x"]);
-			expect.unreachable("parseArgs should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			const e = err as CrustError;
-			expect(e.code).toBe("PARSE");
-			expect(e.message).toContain("--n");
-			expect(e.message).toContain("custom failure");
-		}
+		expect(() => parseArgs(cmd, ["--n", "x"])).toThrow(
+			expect.objectContaining({ code: "PARSE", message: "Failed to parse --n: custom failure" }),
+		);
 	});
 });
 
