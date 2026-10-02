@@ -11,19 +11,19 @@ import { CrustError } from "../errors.ts";
  * ftp, …) is allowed.
  *
  * Throws `CrustError("PARSE", …)` when the input is not a valid URL.
- * The original input is echoed in the message. When the input clearly
+ * The message names `label` and echoes the input. When the input clearly
  * lacks a URL scheme, we append a hint reminding the user to include
  * one — a common foot-gun on the command line.
  */
-export function coerceUrl(raw: string): URL {
+export function coerceUrl(raw: string, label: string): URL {
 	try {
 		return new URL(raw);
-	} catch {
+	} catch (err) {
 		// WHATWG-style scheme: ASCII letter followed by letters/digits/+/-/.
 		// then a colon. Matches `http:`, `file:`, `git+ssh:`, etc.
 		const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(raw);
 		const hint = hasScheme ? "" : " (missing protocol — e.g. https://example.com)";
-		throw new CrustError("PARSE", `Invalid URL "${raw}"${hint}`);
+		throw new CrustError("PARSE", `Invalid URL for ${label}: "${raw}"${hint}`).withCause(err);
 	}
 }
 
@@ -38,11 +38,12 @@ export function coerceUrl(raw: string): URL {
  *
  * Path-traversal (`..`) is allowed — coercion does not sandbox.
  */
-export function coercePath(raw: string): string {
+export function coercePath(raw: string, label: string): string {
 	if (raw === "") {
-		throw new CrustError("PARSE", "Path cannot be empty");
+		throw new CrustError("PARSE", `Path for ${label} cannot be empty`);
 	}
-	const expanded = raw.replace(/^~(?=\/|$)/, homedir());
+	// A replacer function keeps `$` sequences in the home directory literal.
+	const expanded = raw.replace(/^~(?=\/|$)/, () => homedir());
 	return resolve(process.cwd(), expanded);
 }
 
@@ -51,20 +52,20 @@ export function coercePath(raw: string): string {
  * `JSON.parse`. Any valid JSON document is accepted — objects, arrays,
  * strings, numbers, booleans, null.
  *
- * Throws `CrustError("PARSE", …)` when the input is not valid JSON.
- * The original `SyntaxError.message` is included plus a shell-quoting
+ * Throws `CrustError("PARSE", …)` naming `label` when the input is not valid
+ * JSON. The original `SyntaxError.message` is included plus a shell-quoting
  * hint, since unquoted JSON on the command line is a common foot-gun.
  *
  * Note: `JSON.parse` loses precision on integers above `Number.MAX_SAFE_INTEGER`.
  */
-export function coerceJson(raw: string): JsonValue {
+export function coerceJson(raw: string, label: string): JsonValue {
 	try {
 		return JSON.parse(raw);
 	} catch (err) {
 		const reason = err instanceof Error ? err.message : String(err);
 		throw new CrustError(
 			"PARSE",
-			`Invalid JSON: ${reason}. Tip: wrap JSON in single quotes on the command line, e.g. --flag '{"k":1}'`,
-		);
+			`Invalid JSON for ${label}: ${reason}. Tip: wrap JSON in single quotes on the command line, e.g. --flag '{"k":1}'`,
+		).withCause(err);
 	}
 }

@@ -5,6 +5,8 @@ import { join, resolve } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 
+import { ensureDist } from "./helpers.ts";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Build marker bundle — `crust build` defines `process.env.CRUST_INTERNAL_BUILD`
 // as `"1"` in finished Bun/Node bundles. The snapshot subprocess protocol
@@ -13,7 +15,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 // ────────────────────────────────────────────────────────────────────────────
 
 const corePkg = resolve(import.meta.dirname, "..");
-const utilsPkg = resolve(corePkg, "../utils");
 
 const ENTRY_SOURCE = `import { Crust } from ${JSON.stringify(join(corePkg, "dist/index.js"))};
 await new Crust("marker-cli").action(({ stdout }) => stdout("action ran")).execute();
@@ -22,21 +23,7 @@ await new Crust("marker-cli").action(({ stdout }) => stdout("action ran")).execu
 let fixtureDir: string;
 
 beforeAll(() => {
-	// Bundles consume dist: never rebuild an existing dist here, sibling tests
-	// import it in parallel. This fallback only serves a direct `vp test` on a
-	// fresh checkout; core dist imports utils dist, so both must exist.
-	for (const [pkg, marker] of [
-		[utilsPkg, "dist/artifacts.js"],
-		[corePkg, "dist/index.js"],
-	] as const) {
-		if (existsSync(join(pkg, marker))) continue;
-		const build = spawnSync("bun", ["run", "build"], { cwd: pkg, timeout: 120_000 });
-		if (build.status !== 0) {
-			throw new Error(
-				`${pkg} build failed:\n${build.stdout.toString()}\n${build.stderr.toString()}`,
-			);
-		}
-	}
+	ensureDist();
 	fixtureDir = mkdtempSync(join(tmpdir(), "crust-build-marker-"));
 	writeFileSync(join(fixtureDir, "entry.ts"), ENTRY_SOURCE);
 });

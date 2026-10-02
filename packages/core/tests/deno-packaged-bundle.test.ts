@@ -7,6 +7,8 @@ import { PACKAGED_BUILD_KEY } from "@crustjs/utils/artifacts";
 import { which } from "@crustjs/utils/process";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 
+import { ensureDist } from "./helpers.ts";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Marker-only core fixture: a wrapper establishes packaged context before
 // loading the command graph, independently of Crust's compiler. The tooling
@@ -73,20 +75,7 @@ describe.skipIf(deno === null)("packaged Deno bundle", () => {
 	let marked: string;
 
 	beforeAll(() => {
-		// Bundles consume dist: never rebuild an existing dist here, sibling tests
-		// import it in parallel. Core dist imports utils dist, so both must exist.
-		for (const [pkg, marker] of [
-			[utilsPkg, "dist/artifacts.js"],
-			[corePkg, "dist/index.js"],
-		] as const) {
-			if (existsSync(join(pkg, marker))) continue;
-			const build = spawnSync("bun", ["run", "build"], { cwd: pkg, timeout: 120_000 });
-			if (build.status !== 0) {
-				throw new Error(
-					`${pkg} build failed:\n${build.stdout.toString()}\n${build.stderr.toString()}`,
-				);
-			}
-		}
+		ensureDist();
 		fixtureDir = mkdtempSync(join(tmpdir(), "crust-deno-packaged-"));
 		sourceDir = join(fixtureDir, "source");
 		cwd = join(fixtureDir, "unrelated-cwd");

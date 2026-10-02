@@ -1,11 +1,12 @@
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { text } from "node:stream/consumers";
 
 import { which } from "@crustjs/utils/process";
 import { beforeAll, describe, expect, it } from "vite-plus/test";
+
+import { ensureDist } from "./helpers.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Default IO through a pipe — once `process.stdout` is materialized (any platform
@@ -20,21 +21,7 @@ const LINE_LENGTH = 300_000;
 // The regression is Bun's; tests run on Node, so spawn Bun as the subject.
 const bun = which("bun")!;
 
-beforeAll(() => {
-	// Direct `vp test` needs both packages' dist; leave existing builds alone.
-	for (const [pkg, marker] of [
-		[resolve(corePkg, "../utils"), "dist/artifacts.js"],
-		[corePkg, "dist/index.js"],
-	] as const) {
-		if (existsSync(join(pkg, marker))) continue;
-		const build = spawnSync(bun, ["run", "build"], { cwd: pkg, timeout: 120_000 });
-		if (build.status !== 0) {
-			throw new Error(
-				`${pkg} build failed:\n${build.stdout.toString()}\n${build.stderr.toString()}`,
-			);
-		}
-	}
-});
+beforeAll(ensureDist);
 
 const importCore = (entry: string) =>
 	`import { Crust } from ${JSON.stringify(join(corePkg, entry))};\n`;

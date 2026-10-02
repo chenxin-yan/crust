@@ -1,3 +1,7 @@
+import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
+
 import type { AnyCrust } from "../src/command/crust.ts";
 import type { CommandAction, CommandNode } from "../src/command/node.ts";
 import { createCommandNode, registerFlag } from "../src/command/node.ts";
@@ -45,6 +49,29 @@ export function makeNode<
 	if (config.run) node.run = config.run;
 	// SAFETY: the fixture copies config.args and config.flags into the returned node above.
 	return node as CommandNode & { args: A; effectiveFlags: F };
+}
+
+/**
+ * Build the utils and core dist that smoke tests consume, when missing. Never
+ * rebuild an existing dist: sibling packages' tests import it in parallel, and a
+ * rebuild races them. In `pnpm run test`, core's test:task depends on its
+ * build:task; this fallback only serves a direct `vp test` on a fresh checkout.
+ */
+export function ensureDist(): void {
+	const corePkg = resolve(import.meta.dirname, "..");
+	// Core dist imports utils dist, so both must exist.
+	for (const [pkg, marker] of [
+		[resolve(corePkg, "../utils"), "dist/artifacts.js"],
+		[corePkg, "dist/index.d.ts"],
+	] as const) {
+		if (existsSync(join(pkg, marker))) continue;
+		const build = spawnSync("bun", ["run", "build"], { cwd: pkg, timeout: 120_000 });
+		if (build.status !== 0) {
+			throw new Error(
+				`${pkg} build failed:\n${build.stdout.toString()}\n${build.stderr.toString()}`,
+			);
+		}
+	}
 }
 
 export interface RunResult {

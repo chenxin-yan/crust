@@ -4,7 +4,6 @@ import { dirname, join, posix, win32 } from "node:path";
 import { BUILD_OUT_DIR_ENV, isPackagedBuild } from "@crustjs/utils/artifacts";
 import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
 
-import { createContextResolver } from "../api/context.ts";
 import {
 	handledInvocation,
 	type BuildReport,
@@ -14,14 +13,16 @@ import {
 } from "../api/extension.ts";
 import { CrustError, type CaughtError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
-import {
-	parseArgs,
-	parseStructured,
-	validateParsed,
-	type RunInputPayload,
-} from "../parsing/parser.ts";
+import { parseArgs, parseStructured, validateParsed } from "../parsing/parser.ts";
 import { applySchemas } from "../parsing/schema.ts";
-import type { ExecuteOptions, InvocationIO, InvocationOptions, ParseResult } from "../types.ts";
+import type {
+	ExecuteOptions,
+	InvocationIO,
+	InvocationOptions,
+	ParseResult,
+	RunInputPayload,
+} from "../types.ts";
+import { createContextResolver } from "./context-resolver.ts";
 import type { CrustCommandContext } from "./crust.ts";
 import {
 	applyContextSections,

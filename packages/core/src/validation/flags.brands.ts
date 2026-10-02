@@ -7,6 +7,7 @@ import type {
 	DefName,
 	EmptyLiteralNameBrand,
 	HasClosedNames,
+	IsAny,
 	IsStaticTuple,
 	IsClosedName,
 	LocalValueBrand,
@@ -18,14 +19,24 @@ import type {
 // Compile-time validation
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Brand an incoming definition when one of its spellings is already claimed. */
-type ExistingFlagCollisionBrand<F, Existing extends string> = CollisionBrand<
-	DefName<F> | ExtractAllAliases<F>,
+/** Brand incoming spellings that are already claimed. */
+type ExistingSpellingCollisionBrand<S extends string, Existing extends string> = CollisionBrand<
+	S,
 	Existing,
 	"FIX_ALIAS_COLLISION",
 	"Flag spelling ",
 	" collides with an existing flag"
 >;
+
+/** Brand an incoming definition when one of its spellings is already claimed. */
+type ExistingFlagCollisionBrand<F, Existing extends string> = ExistingSpellingCollisionBrand<
+	DefName<F> | ExtractAllAliases<F>,
+	Existing
+>;
+
+type OwnSpellingRepeatError = {
+	readonly FIX_ALIAS_COLLISION: "Flag repeats one of its own spellings";
+};
 
 /**
  * Every statically known canonical, short, and long-alias member, including literals
@@ -52,10 +63,7 @@ type EmptySpellingError = {
 };
 
 /** Reject empty flag names, including an empty member of a name union beside an open member. */
-export type EmptyFlagSpellingBrand<Name extends string> = EmptyLiteralNameBrand<
-	Name,
-	EmptySpellingError
->;
+type EmptyFlagSpellingBrand<Name extends string> = EmptyLiteralNameBrand<Name, EmptySpellingError>;
 
 /** Reject empty spellings: their CLI tokens (`--`, `-`) are unparseable, so the flag can never be supplied. */
 type EmptySpellingBrand<F> = "" extends SpellingMembers<F> ? EmptySpellingError : {};
@@ -71,7 +79,7 @@ type OwnAliasesBrand<F> = F extends { aliases: infer Aliases extends readonly st
 	? RepeatedAliases<Aliases, ExtractShort<F>> extends infer Duplicate extends string
 		? [Duplicate] extends [never]
 			? {}
-			: { readonly FIX_ALIAS_COLLISION: "Flag repeats one of its own spellings" }
+			: OwnSpellingRepeatError
 		: never
 	: {};
 
@@ -153,12 +161,9 @@ export type ContextOwnedFlags<C> = C extends unknown
 		: {}
 	: never;
 
-type ContextFlagCollisionBrand<C, Existing extends string> = CollisionBrand<
+type ContextFlagCollisionBrand<C, Existing extends string> = ExistingSpellingCollisionBrand<
 	LocalSpellingsOf<ContextOwnedFlags<C>>,
-	Existing,
-	"FIX_ALIAS_COLLISION",
-	"Flag spelling ",
-	" collides with an existing flag"
+	Existing
 >;
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -166,7 +171,7 @@ type ContextFlagCollisionBrand<C, Existing extends string> = CollisionBrand<
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Declared flag literals carried by an Extension's `_flagDefs` phantom; widened Extensions opt out. */
-export type ExtensionFlagDefsOf<E> = [E] extends [never]
+type ExtensionFlagDefsOf<E> = [E] extends [never]
 	? readonly []
 	: DefiningOf<E> extends {
 				readonly _flagDefs?: infer D extends readonly NamedFlagDef[];
@@ -185,7 +190,7 @@ export type ProvidedContextSpellings<P extends readonly unknown[]> = P extends r
 		: LocalSpellingsOf<ContextOwnedFlags<P[number]>>;
 
 /** All statically known flag spellings an Extension contributes: declared flags plus provided Context-owned flags. */
-export type ExtensionSpellings<E> =
+type ExtensionSpellings<E> =
 	| AttachedSpellings<ExtensionFlagDefsOf<E>>
 	| ([E] extends [never]
 			? never
@@ -221,21 +226,23 @@ export type ValidateExtensionFlags<
 // Command-tree flag spellings (for Extension-vs-subcommand collision checks)
 // ────────────────────────────────────────────────────────────────────────────
 
-// `0 extends 1 & T` detects `any`: widened definitions opt out instead of recursing.
-type ShapeSpellings<S> = 0 extends 1 & S
-	? string
-	: S extends { readonly flags: infer F extends FlagsDef; readonly children: infer C }
-		? LocalSpellingsOf<F> | TreeSpellings<C>
-		: never;
+// Widened (`any`) definitions opt out instead of recursing.
+type ShapeSpellings<S> =
+	IsAny<S> extends true
+		? string
+		: S extends { readonly flags: infer F extends FlagsDef; readonly children: infer C }
+			? LocalSpellingsOf<F> | TreeSpellings<C>
+			: never;
 
 /** Every flag spelling reachable in a compile-time command tree (`Record<spelling, CommandShape>`), recursively. */
-export type TreeSpellings<Tree> = 0 extends 1 & Tree
-	? string
-	: string extends keyof Tree
+export type TreeSpellings<Tree> =
+	IsAny<Tree> extends true
 		? string
-		: Tree extends object
-			? { [K in keyof Tree]: ShapeSpellings<Tree[K]> }[keyof Tree]
-			: never;
+		: string extends keyof Tree
+			? string
+			: Tree extends object
+				? { [K in keyof Tree]: ShapeSpellings<Tree[K]> }[keyof Tree]
+				: never;
 
 type DefinitionSpellings<D> =
 	CommandDefinitionData<D> extends { readonly _shape?: infer S } ? ShapeSpellings<S> : never;
@@ -332,9 +339,7 @@ type LocalFlagBranchBrand<F> = LocalValueBrand<F> &
 	ReservedSpellingBrand<F> &
 	EmptySpellingBrand<F> &
 	NoPrefixBrand<SpellingMembers<F>> &
-	([DefName<F> & ExtractAllAliases<F>] extends [never]
-		? {}
-		: { readonly FIX_ALIAS_COLLISION: "Flag repeats one of its own spellings" });
+	([DefName<F> & ExtractAllAliases<F>] extends [never] ? {} : OwnSpellingRepeatError);
 
 /** Validate provable local fields and destination relations without inventing names for open inputs. */
 export type ValidateLocalFlagDefs<

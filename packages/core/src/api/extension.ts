@@ -4,11 +4,13 @@ import { CrustError, type CaughtError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import { ownDefinition, toFlagsRecord } from "../parsing/spellings.ts";
 import type {
+	Awaitable,
 	CommandMeta,
 	RuntimeCommandSectionInput,
 	FlagDef,
 	InferFlags,
 	InvocationIO,
+	MergeProviders,
 	NamedFlagDef,
 	NamedFlagsRecord,
 	ParsedArgValue,
@@ -25,12 +27,7 @@ import type {
 	ProvidedContextSpellings,
 	ValidateLocalFlagDefs,
 } from "../validation/flags.brands.ts";
-import type {
-	Awaitable,
-	HasClosedNames,
-	IsStaticTuple,
-	MergeProviders,
-} from "../validation/shared.ts";
+import type { HasClosedNames, IsStaticTuple } from "../validation/shared.ts";
 import {
 	definingOf,
 	sealHandle,
@@ -367,7 +364,7 @@ export interface Extension<
 /** @internal Broad Extension constraint; contravariance requires the full metadata key set. */
 export type AnyExtension = Extension<any, any, any, any, RootMetaKey>;
 
-export type ExtensionProvidesOutput<E> =
+type ExtensionProvidesOutput<E> =
 	DefiningOf<E> extends ExtensionData<any, infer Provide, any, any, RootMetaKey>
 		? ContextsOutput<Provide>
 		: {};
@@ -533,7 +530,7 @@ function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 		provide: (...instances: readonly AnyContextInstance[]) =>
 			next({ provide: [...state.provide, ...instances.map(definingOf)] }),
 		flags: (...defs: readonly NamedExtensionFlagDef[]) =>
-			next({ flags: [...state.flags, ...defs.map(ownDefinition)] }),
+			next({ flags: [...state.flags, ...defs.map((def) => ownDefinition(def, "flag", def.name))] }),
 		add: (...definitions: readonly CommandDefinition<any, any, any, any>[]) =>
 			next({ commands: [...state.commands, ...definitions] }),
 		preRun: (preRun: ExtensionHooks["preRun"]) => next({ hooks: { ...state.hooks, preRun } }),

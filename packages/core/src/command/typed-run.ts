@@ -2,8 +2,14 @@ import type { JsonCompatible, JsonValue } from "@crustjs/utils/json";
 
 import type { ContextValue } from "../api/context.ts";
 import type { ExtensionId } from "../identity.ts";
-import type { RunInputPayload } from "../parsing/parser.ts";
-import type { ArgsDef, FlagsDef, InputArgs, InputFlags, InvocationOptions } from "../types.ts";
+import type {
+	ArgsDef,
+	FlagsDef,
+	InputArgs,
+	InputFlags,
+	InvocationOptions,
+	RunInputPayload,
+} from "../types.ts";
 import type { IsStaticTuple } from "../validation/shared.ts";
 
 export declare const commandProviders: unique symbol;

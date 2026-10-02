@@ -80,12 +80,20 @@ export function toFlagsRecord(
 }
 
 /** Copy only definition-owned collections, not JSON/URL/schema payloads. */
-export function ownDefinition<const D extends ArgDef | FlagDef>(def: D): D {
+export function ownDefinition<const D extends ArgDef | FlagDef>(
+	def: D,
+	subject: "flag" | "argument",
+	name: string,
+): D {
 	if (def.choices && def.default !== undefined) {
 		const values = "multiple" in def && def.multiple ? def.default : [def.default];
 		for (const value of values) {
 			if (!def.choices.includes(value)) {
-				throw new CrustError("DEFINITION", "default must be one of choices");
+				throw new CrustError(
+					"DEFINITION",
+					`${subject === "flag" ? "Flag" : "Argument"} "${name}" default must be one of choices`,
+					{ subject, name, reason: "default-outside-choices" },
+				);
 			}
 		}
 	}
@@ -128,7 +136,11 @@ export function normalizeFlag<const D extends FlagDef>(name: string, def: D): D 
 		});
 	}
 	if (def.short !== undefined && def.short.length !== 1) {
-		throw new CrustError("DEFINITION", "Short flags must be one character");
+		throw new CrustError(
+			"DEFINITION",
+			`Flag "${name}" short "${def.short}" must be one character`,
+			{ subject: "flag", name, reason: "invalid-short" },
+		);
 	}
 	if (def.env !== undefined && !isEnvBinding(def.env)) {
 		throw new CrustError(
@@ -168,7 +180,7 @@ export function normalizeFlag<const D extends FlagDef>(name: string, def: D): D 
 			});
 		}
 	}
-	return ownDefinition(def);
+	return ownDefinition(def, "flag", name);
 }
 
 export function normalizeArg<const D extends ArgDef>(def: D): D {
@@ -179,5 +191,5 @@ export function normalizeArg<const D extends ArgDef>(def: D): D {
 			reason: "empty-name",
 		});
 	}
-	return ownDefinition(def);
+	return ownDefinition(def, "argument", def.name);
 }

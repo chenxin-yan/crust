@@ -3,8 +3,10 @@ import type { BaseValueType } from "@crustjs/utils/primitive";
 import type { InferOutput, StandardSchema } from "@crustjs/utils/schema";
 
 import type { ExtensionId } from "./identity.ts";
-import type { RunInputPayload } from "./parsing/parser.ts";
-import type { IsClosedName, IsStaticTuple, IsUnion, Simplify } from "./validation/shared.ts";
+import type { IsClosedName, IsStaticTuple, IsUnion } from "./validation/shared.ts";
+
+export type Awaitable<T> = T | Promise<T>;
+export type Simplify<T> = { [K in keyof T]: T[K] };
 
 /** Injectable output callbacks threaded through one invocation. */
 export interface InvocationIO {
@@ -425,6 +427,9 @@ export type FlagsDef = Record<string, FlagDef>;
  */
 export type NamedFlagDef = FlagDef & { readonly name: string };
 
+/** Distribute `Omit<_, "name">` over a definition union. */
+export type OmitName<D> = D extends unknown ? Omit<D, "name"> : never;
+
 /**
  * Derive the internal `FlagsDef` record from a tuple of named flag
  * definitions: each definition's `name` literal becomes a key, its value
@@ -433,16 +438,14 @@ export type NamedFlagDef = FlagDef & { readonly name: string };
  * The `extends infer R extends FlagsDef` step defers evaluation so the
  * result satisfies `FlagsDef` in generic positions.
  */
-type FlagWithoutName<D> = D extends unknown ? Omit<D, "name"> : never;
-
 export type NamedFlagsRecord<Defs extends readonly NamedFlagDef[]> = {
-	[K in Defs[number]["name"]]: FlagWithoutName<Extract<Defs[number], { name: K }>>;
+	[K in Defs[number]["name"]]: OmitName<Extract<Defs[number], { name: K }>>;
 } extends infer R extends FlagsDef
 	? R
 	: never;
 
 // ────────────────────────────────────────────────────────────────────────────
-// Flag merge utility type
+// Merge utility types
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -455,6 +458,20 @@ export type NamedFlagsRecord<Defs extends readonly NamedFlagDef[]> = {
  * `Simplify<Omit & …>`) nested and hit TS2589 at ~47 / ~31 chained calls.
  */
 export type MergeFlags<Base extends FlagsDef, Override extends FlagsDef> = Base & Override;
+
+/** Merges two Context maps as a flat intersection, for the same depth reason as {@link MergeFlags}. */
+export type MergeContext<A, B> = A & B;
+
+/** Provider replacement is last-write-wins; an open name may leave any earlier value in place. */
+export type MergeProviders<A, B> = keyof A extends never
+	? B
+	: keyof B extends never
+		? A
+		: string extends keyof B
+			? Record<string, A[keyof A] | B[string]>
+			: [keyof A & keyof B] extends [never]
+				? A & B
+				: Omit<A, keyof B> & B;
 
 // ────────────────────────────────────────────────────────────────────────────
 // InferArgs / InferFlags — Type inference utilities
@@ -546,7 +563,7 @@ export type InferArgs<A> = A extends ArgsDef ? Simplify<InferArgsTuple<A>> : Rec
  * - **required** or **has default** → `primitive` (non-optional)
  * - otherwise → `primitive | undefined`
  */
-export type InferFlagValue<F extends FlagDef> = F extends {
+type InferFlagValue<F extends FlagDef> = F extends {
 	schema: infer S extends StandardSchema;
 }
 	? InferOutput<S>
@@ -586,6 +603,16 @@ export type InferFlags<F> = F extends FlagsDef
 // ────────────────────────────────────────────────────────────────────────────
 // Programmatic invocation input types
 // ────────────────────────────────────────────────────────────────────────────
+
+/** One structured `run()` value: native URL/JSON, or an occurrence array for repeatable inputs. */
+export type RunInputValue = URL | JsonValue | readonly RunInputValue[];
+
+/** Runtime-erased structured `run()` input bound by `parseStructured`. */
+export interface RunInputPayload {
+	readonly args?: Readonly<Record<string, RunInputValue | undefined>>;
+	readonly flags?: Readonly<Record<string, RunInputValue | undefined>>;
+	readonly raw?: readonly string[];
+}
 
 // Conditional definitions cannot certify supplied values; inspect before distribution.
 type InputBaseValue<D> = true extends IsUnion<D> | IsUnion<D[keyof D & "type"]>
@@ -697,9 +724,10 @@ type RequiredFlagNames<F extends FlagsDef> = {
 	[K in keyof F]-?: RequiredFlagName<F[K], K>;
 }[keyof F];
 
-/** Flag values accepted by typed programmatic invocation before parsing/validation. */
+// Drop index-signature keys; open records are accepted through `RunInputPayload` instead.
 type KnownFlags<F extends FlagsDef> = { [K in keyof F as string extends K ? never : K]: F[K] };
 
+/** Flag values accepted by typed programmatic invocation before parsing/validation. */
 export type InputFlags<F extends FlagsDef> =
 	IsUnion<F> extends true
 		? never
@@ -818,10 +846,10 @@ export interface CommandMeta {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Raw token shapes a Standard Schema receives before it runs. */
-export type RawSchemaFlagInput = string | boolean | readonly (string | boolean)[] | undefined;
+type RawSchemaFlagInput = string | boolean | readonly (string | boolean)[] | undefined;
 
 /** One flag value after syntax parsing and before required/schema validation. */
-export type RawFlagValue<D extends FlagDef> = D extends { schema: StandardSchema }
+type RawFlagValue<D extends FlagDef> = D extends { schema: StandardSchema }
 	? RawSchemaFlagInput
 	: InferFlagValue<D> | undefined;
 

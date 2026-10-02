@@ -2,22 +2,6 @@
 // Shared type helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-export type Awaitable<T> = T | Promise<T>;
-export type Simplify<T> = { [K in keyof T]: T[K] };
-// Flat intersections keep chained composition at constant instantiation depth.
-export type MergeContext<A, B> = A & B;
-
-/** Provider replacement is last-write-wins; an open name may leave any earlier value in place. */
-export type MergeProviders<A, B> = keyof A extends never
-	? B
-	: keyof B extends never
-		? A
-		: string extends keyof B
-			? Record<string, A[keyof A] | B[string]>
-			: [keyof A & keyof B] extends [never]
-				? A & B
-				: Omit<A, keyof B> & B;
-
 /**
  * Extract the narrowed canonical `name` literal from a definition.
  * Open name domains carry no spelling proof; attachment must retain
@@ -110,7 +94,7 @@ export type EmptyLiteralNameBrand<Name extends string, Err> =
  * union-aware (a sometimes-async `cond ? Promise.resolve(x) : x` parser is
  * caught) while `any`-returning parsers stay unbranded.
  */
-export type AsyncParseBrand<T> = T extends { parse?: (...args: never[]) => infer R }
+type AsyncParseBrand<T> = T extends { parse?: (...args: never[]) => infer R }
 	? Extract<R, Promise<unknown>> extends never
 		? {}
 		: {
@@ -118,8 +102,10 @@ export type AsyncParseBrand<T> = T extends { parse?: (...args: never[]) => infer
 			}
 	: {};
 
+type DefaultChoiceError = { readonly FIX_DEFAULT_CHOICE: "default must be one of choices" };
+
 /** Brand literal defaults that fall outside a literal `choices` tuple. */
-export type DefaultWithinChoicesBrand<T> = T extends {
+type DefaultWithinChoicesBrand<T> = T extends {
 	choices: readonly (infer Choice extends string)[];
 	default: infer Default;
 }
@@ -130,19 +116,18 @@ export type DefaultWithinChoicesBrand<T> = T extends {
 				? {}
 				: Exclude<Default[number], Choice> extends never
 					? {}
-					: {
-							readonly FIX_DEFAULT_CHOICE: "default must be one of choices";
-						}
+					: DefaultChoiceError
 			: Default extends string
 				? string extends Default
 					? {}
 					: Exclude<Default, Choice> extends never
 						? {}
-						: {
-								readonly FIX_DEFAULT_CHOICE: "default must be one of choices";
-							}
+						: DefaultChoiceError
 				: {}
 	: {};
+
+/** `true` only for `any`, which brands treat as widened input owned by runtime checks. */
+export type IsAny<T> = 0 extends 1 & T ? true : false;
 
 /** Finite literal domains have required record keys; infinite templates and branded strings do not.
  * Distribute first so a finite union member cannot hide an open member's index signature.
