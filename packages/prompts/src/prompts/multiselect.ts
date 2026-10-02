@@ -120,7 +120,6 @@ function createHandleKey<T>(
 
 		// Space — toggle selection on current item
 		if (key.name === "space") {
-			// Empty lists can leave the cursor at 0 or -1 (after Up); both are phantom indexes.
 			if (!state.choices[state.cursor]) return state;
 			const newSelected = new Set(state.selected);
 			if (newSelected.has(state.cursor)) {

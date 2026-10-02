@@ -78,7 +78,6 @@ function createHandleKey<T>(
 
 		// Arrow keys — move list cursor with wrapping
 		if (key.name === "up" || key.name === "down") {
-			if (state.results.length === 0) return state;
 			const delta = key.name === "up" ? -1 : 1;
 			const moved = moveCursor(
 				state.listCursor,

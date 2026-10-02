@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import { SCROLL_INDICATOR } from "../core/symbols.ts";
 import { renderPrompt } from "../testing.ts";
 import { multiselect, type MultiselectOptions } from "./multiselect.ts";
 import { nonTTYIO, tick } from "./test-helpers.ts";
@@ -347,6 +348,7 @@ describe("multiselect — validation", () => {
 				await tick();
 
 				expect(prompt.screen()).toContain(error);
+				expect(prompt.screen()).not.toContain(SCROLL_INDICATOR);
 				prompt.keys("ctrl+c");
 				await expect(prompt.answer).rejects.toMatchObject({ name: "AbortError" });
 			});
