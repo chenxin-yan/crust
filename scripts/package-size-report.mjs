@@ -19,6 +19,7 @@
 // require incompatible peers and need not form one valid dependency tree.
 // Local runs: rm -rf packages/*/dist first — Vite Task cache hits don't prune
 // stray dist files from other branches, which inflates install sizes.
+// @ts-check
 import { execFileSync } from "node:child_process";
 import {
 	copyFileSync,
@@ -35,6 +36,28 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 
+/**
+ * @typedef {object} PackageManifest
+ * @property {string} name
+ * @property {string} [version]
+ * @property {boolean} [private]
+ * @property {unknown} [bin]
+ * @property {Record<string, any>} [exports] Entry targets are paths or condition objects.
+ * @property {Record<string, string>} [dependencies]
+ * @property {Record<string, string>} [peerDependencies]
+ */
+
+/**
+ * @typedef {object} PackageSizes
+ * @property {number} tarball
+ * @property {number} unpacked
+ * @property {Record<string, number>} [entries]
+ * @property {Record<string, number>} [consumers]
+ * @property {number} [footprint]
+ */
+
+/** @typedef {{ name: string; file: string; define?: Record<string, string> }} ConsumerFixture */
+
 const [mode, ...args] = process.argv.slice(2);
 
 const fixturesDir = join(import.meta.dirname, "package-size-fixtures");
@@ -43,8 +66,9 @@ const fixturesDir = join(import.meta.dirname, "package-size-fixtures");
 const finishedBuildDefine = { "process.env.CRUST_INTERNAL_BUILD": '"1"' };
 // Consumer fixtures per package. Packages absent from the measured tree are
 // simply never visited, so older base refs need no fixture support. They are
-// .mjs because Bun bundles them against a chosen tree; @crustjs/core is not
-// resolvable from scripts/, so `tsc -p scripts` must not type-check them.
+// unchecked .mjs because Bun bundles them against the measured tree, which may
+// be an older release than the @crustjs/core scripts/ type-checks against.
+/** @type {Record<string, ConsumerFixture[]>} */
 const consumerFixtures = {
 	"@crustjs/core": [
 		{ name: "cli", file: "core-cli.mjs", define: finishedBuildDefine },
@@ -53,10 +77,16 @@ const consumerFixtures = {
 	],
 };
 
+/** @type {(dir: string) => PackageManifest} */
 const readPackage = (dir) => JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
 
 // Every workspace package dir with a package.json, as [pkgDir, manifest].
+/**
+ * @param {string} root
+ * @returns {Array<[string, PackageManifest]>}
+ */
 function packageDirs(root) {
+	/** @type {Array<[string, PackageManifest]>} */
 	const out = [];
 	for (const dir of readdirSync(join(root, "packages"))) {
 		const pkgDir = join(root, "packages", dir);
@@ -70,8 +100,15 @@ function packageDirs(root) {
 }
 
 // Publishable subset of packageDirs() pairs.
+/** @type {(packages: Array<[string, PackageManifest]>) => Array<[string, PackageManifest]>} */
 const publishable = (packages) => packages.filter(([, pkg]) => !pkg.private && !pkg.bin);
 
+/**
+ * @param {string} entrypoint
+ * @param {string[]} external
+ * @param {Record<string, string> | undefined} define
+ * @param {string} label
+ */
 async function gzippedBundle(entrypoint, external, define, label) {
 	const result = await Bun.build({
 		entrypoints: [entrypoint],
@@ -92,10 +129,16 @@ async function gzippedBundle(entrypoint, external, define, label) {
 
 // Peers are provided by the consumer and measured in their own row;
 // inlining them would double-count and make this row churn on their PRs.
+/** @type {(pkg: PackageManifest) => string[]} */
 const peers = (pkg) => Object.keys(pkg.peerDependencies ?? {});
 
 // Gzipped size of each public `exports` entrypoint, bundled from pkgDir.
+/**
+ * @param {string} pkgDir
+ * @param {PackageManifest} pkg
+ */
 async function bundleEntries(pkgDir, pkg) {
+	/** @type {Record<string, number>} */
 	const entries = {};
 	for (const [entry, target] of Object.entries(pkg.exports ?? {})) {
 		const file = target?.import ?? target;
@@ -113,7 +156,12 @@ async function bundleEntries(pkgDir, pkg) {
 // Gzipped size of each consumer fixture for pkg. consumerRoot is a directory
 // whose node_modules resolves pkg.name to the measured tree's artifacts, so
 // measuring base never picks up head's dist by accident.
+/**
+ * @param {string} consumerRoot
+ * @param {PackageManifest} pkg
+ */
 async function bundleConsumers(consumerRoot, pkg) {
+	/** @type {Record<string, number>} */
 	const consumers = {};
 	for (const { name, file, define } of consumerFixtures[pkg.name] ?? []) {
 		const entry = join(consumerRoot, file);
@@ -134,8 +182,16 @@ async function bundleConsumers(consumerRoot, pkg) {
 // and optional peer dependencies are excluded (consumers provide them).
 // resolveDep(name, fromDir) returns the dependency's package dir or undefined;
 // unpackedOf(dir) its unpacked bytes.
+/**
+ * @param {string} pkgDir
+ * @param {PackageManifest} pkg
+ * @param {(name: string, fromDir: string) => string | undefined} resolveDep
+ * @param {(dir: string) => number} unpackedOf
+ */
 function footprint(pkgDir, pkg, resolveDep, unpackedOf) {
+	/** @type {Set<string>} */
 	const seen = new Set();
+	/** @type {(dir: string, manifest: PackageManifest) => void} */
 	const visit = (dir, manifest) => {
 		if (seen.has(dir)) return;
 		seen.add(dir);
@@ -152,23 +208,33 @@ function footprint(pkgDir, pkg, resolveDep, unpackedOf) {
 
 // Releases pack with `pnpm pack`, which only packs local directories;
 // `sizes-published` also needs registry specs, so sizes come from npm.
+/** @type {(extraArgs: string[], cwd: string) => [{ version: string; size: number; unpackedSize: number }]} */
 const npmPack = (extraArgs, cwd) =>
 	JSON.parse(
 		execFileSync("npm", ["pack", "--dry-run", "--json", ...extraArgs], {
 			cwd,
+			encoding: "utf8",
 			stdio: ["ignore", "pipe", "ignore"],
 		}),
 	);
 
+/** @param {string} root */
 async function measure(root) {
+	/** @type {Record<string, PackageSizes>} */
 	const out = {};
 	const all = packageDirs(root);
 	const byName = new Map(all.map(([pkgDir, pkg]) => [pkg.name, pkgDir]));
 	// Each package is packed once even when several footprints include it.
+	/** @type {Map<string, { size: number; unpackedSize: number }>} */
 	const packed = new Map();
+	/** @type {(dir: string) => { size: number; unpackedSize: number }} */
 	const packOnce = (dir) => {
-		if (!packed.has(dir)) packed.set(dir, npmPack([], dir)[0]);
-		return packed.get(dir);
+		let result = packed.get(dir);
+		if (!result) {
+			[result] = npmPack([], dir);
+			packed.set(dir, result);
+		}
+		return result;
 	};
 	// Consumer root: node_modules symlinks to this tree's package dirs. Bun
 	// resolves through the symlink, so transitive workspace deps come from each
@@ -202,6 +268,11 @@ async function measure(root) {
 }
 
 // Node-style lookup of an installed dependency, walking up from fromDir to root.
+/**
+ * @param {string} name
+ * @param {string} fromDir
+ * @param {string} root
+ */
 function resolveInstalled(name, fromDir, root) {
 	for (let dir = fromDir; ; dir = dirname(dir)) {
 		const candidate = join(dir, "node_modules", name);
@@ -210,17 +281,22 @@ function resolveInstalled(name, fromDir, root) {
 	}
 }
 
+/** @param {string} root */
 async function measurePublished(root) {
+	/** @type {Record<string, PackageSizes>} */
 	const out = {};
 	for (const [, pkg] of publishable(packageDirs(root))) {
 		let packed;
 		try {
 			[packed] = npmPack([`${pkg.name}@latest`], root);
 		} catch (error) {
-			if (error.stdout && JSON.parse(error.stdout).error?.code === "E404") continue;
+			const { stdout } = /** @type {{ stdout?: string }} */ (error);
+			if (stdout && JSON.parse(stdout).error?.code === "E404") continue;
 			throw error;
 		}
-		out[pkg.name] = { tarball: packed.size, unpacked: packed.unpackedSize };
+		/** @type {PackageSizes} */
+		const sizes = { tarball: packed.size, unpacked: packed.unpackedSize };
+		out[pkg.name] = sizes;
 
 		const tmp = mkdtempSync(join(tmpdir(), "pkg-size-published-"));
 		try {
@@ -237,9 +313,9 @@ async function measurePublished(root) {
 			});
 			const pkgDir = join(tmp, "node_modules", pkg.name);
 			const installed = readPackage(pkgDir);
-			out[pkg.name].entries = await bundleEntries(pkgDir, installed);
-			out[pkg.name].consumers = await bundleConsumers(tmp, installed);
-			out[pkg.name].footprint = footprint(
+			sizes.entries = await bundleEntries(pkgDir, installed);
+			sizes.consumers = await bundleConsumers(tmp, installed);
+			sizes.footprint = footprint(
 				pkgDir,
 				installed,
 				(name, fromDir) => resolveInstalled(name, fromDir, tmp),
@@ -254,8 +330,11 @@ async function measurePublished(root) {
 	return out;
 }
 
+/** @type {(bytes: number) => string} */
 const kb = (bytes) => `${(bytes / 1024).toFixed(2)} KB`;
+/** @type {(bytes: number | undefined) => string} */
 const fmt = (bytes) => (bytes == null ? "—" : kb(bytes));
+/** @type {(b: number | undefined, h: number | undefined) => string} */
 const delta = (b, h) => {
 	if (b == null) return "new";
 	if (h == null) return "removed";
@@ -303,6 +382,7 @@ if (mode === "sizes") {
 		"|---|---:|---:|---:|---:|---:|",
 	];
 	// Union of a per-package map's keys across base and head, sorted.
+	/** @type {(name: string, key: "entries" | "consumers") => string[]} */
 	const keysOf = (name, key) =>
 		[
 			...new Set([

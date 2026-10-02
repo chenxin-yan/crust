@@ -2,7 +2,8 @@
 	"extends": "../packages/config/tsconfig.base.json",
 	"compilerOptions": {
 		"declaration": false,
-		"isolatedDeclarations": false
+		"isolatedDeclarations": false,
+		"allowJs": true
 	},
 	"include": [
 		".",
