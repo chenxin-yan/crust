@@ -61,7 +61,7 @@ const flags = {
 } satisfies FlagsDef;
 ```
 
-`env` is consulted by terminal parsing only when the flag has no argv occurrence: argv wins over env, and env wins over `default`. The env value goes through the same conversion as an argv token and satisfies `required`. Help and man pages show `[env: NAME]`, never the value. Structured [`run()`](/docs/api/crust#runpath-input-options) input ignores `env`.
+`env` is consulted by terminal parsing only when the flag has no argv occurrence: argv wins over env, and env wins over `default`. The env value goes through the same conversion as an argv token and satisfies `required`. Help, man pages, and generated skills show `[env: NAME]`, never the value. Structured [`run()`](/docs/api/crust#runpath-input-options) input ignores `env`.
 
 `delimiter` splits string argv occurrences; `env.delimiter` independently splits environment text. Both require `multiple: true` and drop empty segments. Boolean argv switches are never split.
 

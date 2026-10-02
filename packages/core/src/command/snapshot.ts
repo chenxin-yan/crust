@@ -133,7 +133,6 @@ type SerializableDefault = (ArgSnapshot | FlagSnapshot)["default"];
  * JSON defaults, including objects inside arrays, remain shared references
  * and are not frozen; callers must treat them as immutable.
  */
-
 function serializableDefault(value: DeclaredDefault): SerializableDefault {
 	if (value instanceof URL) return value.href;
 	if (Array.isArray(value)) return Object.freeze(value.map(serializableDefault));

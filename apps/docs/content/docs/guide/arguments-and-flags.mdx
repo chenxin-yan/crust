@@ -201,7 +201,7 @@ $ PUBLISH_TOKEN=example publish --tag latest,beta --tag next
 publishing to npm tags=latest,beta,next
 ```
 
-An explicit argv occurrence always wins over the environment, even when it splits to zero occurrences. Invalid argv values fail rather than trying env; invalid environment values fail rather than trying the default. Zero occurrences after splitting follow the existing default/required or schema rules. Help and man pages list the variable as `[env: PUBLISH_TOKEN]` and never print its value. Programmatic [`run()`](/docs/api/crust#runpath-input-options) binds structured input directly: it does not read the environment and never splits arrays. Positional arguments have no `env`; use a flag.
+An explicit argv occurrence always wins over the environment, even when it splits to zero occurrences. Invalid argv values fail rather than trying env; invalid environment values fail rather than trying the default. Zero occurrences after splitting follow the existing default/required or schema rules. Help, man pages, and generated skills list the variable as `[env: PUBLISH_TOKEN]` and never print its value. Programmatic [`run()`](/docs/api/crust#runpath-input-options) binds structured input directly: it does not read the environment and never splits arrays. Positional arguments have no `env`; use a flag.
 
 ### Values that start with `-`
 

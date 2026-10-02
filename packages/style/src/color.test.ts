@@ -78,7 +78,7 @@ describe("bg", () => {
 
 	it("throws for invalid input even when text is empty", () => {
 		// Empty text used to silently short-circuit before color
-		// validation, so `paint("bg", "", "definitely-not-a-color", "truecolor")` returned "".
+		// validation, so `bg("", "definitely-not-a-color")` returned "".
 		// Now both empty- and non-empty-text callers get TypeError.
 		expect(() => paint("bg", "hi", "definitely-not-a-color", "truecolor")).toThrow(TypeError);
 		expect(() => paint("bg", "", "definitely-not-a-color", "truecolor")).toThrow(TypeError);
@@ -148,14 +148,12 @@ describe("edge cases", () => {
 // Depth-aware fg / bg fallback
 // ────────────────────────────────────────────────────────────────────────────
 //
-// fg/bg accept an optional `depth` parameter that selects the matching
-// terminal color format.
+// `paint` takes an explicit `depth` that selects the matching terminal
+// color format.
 
 describe("fg — depth fallback", () => {
-	it('depth="truecolor" emits ansi-16m (default)', () => {
-		const expected = "\x1b[38;2;255;0;0mhello\x1b[39m";
-		expect(paint("fg", "hello", "#ff0000", "truecolor")).toBe(expected);
-		expect(paint("fg", "hello", "#ff0000", "truecolor")).toBe(expected);
+	it('depth="truecolor" emits ansi-16m', () => {
+		expect(paint("fg", "hello", "#ff0000", "truecolor")).toBe("\x1b[38;2;255;0;0mhello\x1b[39m");
 	});
 
 	it('depth="256" emits ansi-256 sequence', () => {

@@ -2,7 +2,11 @@ import { transformerTwoslash } from "fumadocs-twoslash";
 import { createFileSystemTypesCache } from "fumadocs-twoslash/cache-fs";
 import type { ShikiTransformer } from "shiki";
 
-/** Shiki themes shared by docs pages and the landing snippets. */
+/**
+ * Shiki themes shared by docs pages and the landing snippets. The landing
+ * highlighter (`vite/landing-twoslash.ts`) imports these theme modules
+ * statically, so change both together.
+ */
 export const CODE_THEMES = { light: "gruvbox-light-hard", dark: "gruvbox-dark-hard" } as const;
 
 /** Only `// ^?` selections get hovers; the annotations are stripped from displayed code. */

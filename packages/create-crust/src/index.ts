@@ -39,8 +39,8 @@ const eta = new Eta({ autoEscape: false, autoTrim: false });
 
 // The resolved basename is spliced into package.json (`name`, `bin` key, `start`
 // script path) and a quoted TS string, whatever its origin: positional argument,
-// prompt, or the cwd for ".". Mirrors the bin-key subset COMMAND_NAME_PATTERN in
-// packages/crust/src/commands/build.ts, excluding Core's reserved command name.
+// prompt, or the cwd. Mirrors the bin-key subset COMMAND_NAME_PATTERN in
+// packages/crust/src/build.ts, excluding Core's reserved command name.
 // This is interpolation safety, not full npm-name validation.
 const PROJECT_NAME_PATTERN = /^[A-Za-z0-9_~][A-Za-z0-9._~-]*$/;
 function validateProjectName(name: string): void {

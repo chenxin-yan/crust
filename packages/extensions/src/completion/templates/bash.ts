@@ -20,7 +20,7 @@ import type { CompletionCommand, CompletionFlag } from "../spec.ts";
  *    flag value for a subcommand. Only exact value-flag spellings are
  *    skipped: a short bundle ending in a value short (`-qo out`) is not
  *    recognised, so its value token stops routing. Fish's
- *    `__<bin>_takes_value` models Core's bundle matching.
+ *    `__<ident>_takes_value` models Core's bundle matching.
  * 3. Once the path is resolved, picks completion candidates:
  *    - if the user is mid-`--name=value`, splits on `=` and offers the
  *      static value list (or files) for that flag,
