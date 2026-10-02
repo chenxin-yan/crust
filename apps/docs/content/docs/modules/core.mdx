@@ -31,16 +31,7 @@ A Context can own the flags needed by its setup. `.provide()` installs that Cont
 
 ## Runtime exports
 
-| Export                                                               | Role                                                                      |
-| -------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| [`Crust`](/docs/api/crust)                                           | Root command builder with `run()`, `execute()`, and `snapshot()`          |
-| [`defineCommand()`](/docs/api/crust#definecommandname-config-recipe) | Creates an inert reusable command definition                              |
-| [`defineContext()`](/docs/api/types#contextbuilder)                  | Starts a fluent Context definition; `.setup()` returns its factory        |
-| [`defineExtension()`](/docs/api/types#extensionbuilder)              | Starts a fluent Extension definition; `.factory()` makes it configurable  |
-| `defineExtensionId()`                                                | Creates a branded Extension identity                                      |
-| `defineArg()` / `defineFlag()`                                       | Creates named argument and flag definitions                               |
-| [`CrustError`](/docs/api/errors)                                     | Framework error for definition, routing, parsing, and validation failures |
-| [`resolveArtifactDir()`](/docs/api/crust#resolveartifactdirname)     | Locates artifact and `crust.include` directories shipped with the CLI     |
+The [API overview](/docs/api#runtime-api) lists every runtime export of the package root.
 
 ## Types
 

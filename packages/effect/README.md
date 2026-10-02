@@ -5,7 +5,7 @@ Effect.ts v4 adaptor for Crust: write Command Actions and Contexts in Effect idi
 ## Install
 
 ```sh
-bun add @crustjs/effect effect@4
+npm install @crustjs/effect effect@4
 ```
 
 ## Documentation

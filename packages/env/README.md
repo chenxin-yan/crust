@@ -21,7 +21,7 @@ Missing or invalid variables reject with one `CrustError("ENV")` listing each va
 ## Install
 
 ```sh
-bun add @crustjs/env
+npm install @crustjs/env
 ```
 
 ## Documentation

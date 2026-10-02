@@ -7,15 +7,15 @@
     "crust",
     "man",
     "skills",
+    "effect",
+    "env",
     "mcp",
+    "testing",
     "create",
     "progress",
     "prompts",
-    "tui",
-    "effect",
-    "env",
     "store",
     "style",
-    "testing"
+    "tui"
   ]
 }

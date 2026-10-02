@@ -4,7 +4,6 @@ description: Scaffold, run, and extend a typed Crust CLI.
 icon: Rocket
 ---
 
-import { Callout } from "fumadocs-ui/components/callout";
 import { File, Files, Folder } from "fumadocs-ui/components/files";
 import { Step, Steps } from "fumadocs-ui/components/steps";
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
@@ -94,8 +93,8 @@ npm run start Ada
 `crust build` stages your selected artifact and npm packaging metadata in `.crust/`. npm is optional: standalone binaries embed their runtime and can also ship as [release downloads or through Homebrew and other installers](/docs/guide/build-and-distribution#custom-distribution), without the Node-based npm launcher. Runtime packages still require their selected runtime. See [Build and distribution](/docs/guide/build-and-distribution) for targets and output layouts.
 
 <Callout type="info">
-  Both `create-crust` and `crust` CLI are built with crust. If you would like to see crust in
-  action. Check out the crust repo on GitHub
+  `create-crust` and the `crust` CLI are themselves built with Crust; see the
+  [repository](https://github.com/chenxin-yan/crust) for working examples.
 </Callout>
 
 </Step>

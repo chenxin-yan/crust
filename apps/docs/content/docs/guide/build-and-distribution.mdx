@@ -3,8 +3,6 @@ title: Build and distribution
 description: Configure, build, test, and publish your CLI.
 ---
 
-import { Callout } from "fumadocs-ui/components/callout";
-
 `crust build` turns your TypeScript entry into a **runtime package** (JavaScript for the user's installed runtime) or **standalone executables** (with the runtime embedded). The examples below use the `my-cli` command from [Quick Start](/docs/quick-start).
 
 **Building does not commit you to npm.** Distribute the same binaries through npm, release downloads, Homebrew, Scoop, or your own installer. Running a binary directly needs no separately installed Node.js, Bun, or Deno. Node.js is required only by the generated npm launcher. [`crust publish`](#publish-with-crust-publish) handles npm; [other channels](#custom-distribution) use the built files with your own release tooling.

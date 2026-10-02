@@ -16,7 +16,6 @@
   "dependencies": {
     "@tanstack/react-router": "1.170.40",
     "@tanstack/react-start": "1.168.59",
-    "@types/hast": "^3.0.5",
     "fumadocs-core": "16.15.15",
     "fumadocs-mdx": "15.4.5",
     "fumadocs-twoslash": "4.0.1",
@@ -48,6 +47,7 @@
     "@crustjs/tui": "workspace:*",
     "@shikijs/transformers": "4.4.3",
     "@tailwindcss/vite": "^4.3.3",
+    "@types/hast": "^3.0.5",
     "@types/mdx": "^2.0.14",
     "@types/node": "^24.19.0",
     "@types/react": "^19.3.0",

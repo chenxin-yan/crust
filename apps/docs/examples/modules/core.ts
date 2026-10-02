@@ -1,4 +1,4 @@
-// #region quick
+//#region quick
 import { Crust } from "@crustjs/core";
 
 const app = new Crust("hello")
@@ -8,9 +8,9 @@ const app = new Crust("hello")
 
 const outcome = await app.run([], { flags: { verbose: true } });
 console.log(outcome.stdout); // => hello!
-// #endregion quick
+//#endregion
 
-// #region context
+//#region context
 import { Crust as ContextApp, defineContext, defineFlag } from "@crustjs/core";
 
 const apiKey = defineFlag("api-key", { type: "string", required: true });
@@ -26,4 +26,4 @@ const contextApp = new ContextApp("my-cli")
 
 const contextOutcome = await contextApp.run([], { flags: { "api-key": "secret" } });
 console.log(contextOutcome.stdout); // => secret
-// #endregion context
+//#endregion
