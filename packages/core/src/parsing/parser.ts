@@ -447,9 +447,12 @@ function tokenizeArgv(command: CommandNode, argv: string[]) {
 		});
 	} catch (error) {
 		if (error instanceof Error) {
-			const unknownMatch = error.message.match(/Unknown option '(.+?)'/);
-			if (unknownMatch) {
-				throw new CrustError("PARSE", `Unknown flag "${unknownMatch[1]}"`).withCause(error);
+			const token = error.message.match(/Unknown option '(.+?)'/)?.[1];
+			if (token !== undefined) {
+				throw new CrustError("PARSE", `Unknown flag "${token}"`, {
+					flag: token.replace(/^-+|=.*$/g, ""),
+					reason: "unknown-flag",
+				}).withCause(error);
 			}
 			if (
 				"code" in error &&

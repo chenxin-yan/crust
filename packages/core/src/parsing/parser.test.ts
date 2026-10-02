@@ -589,26 +589,18 @@ describe("parseArgs — strict mode (unknown flags)", () => {
 		},
 	});
 
-	it("throws CrustError with PARSE code on unknown long flag", () => {
-		try {
-			parseArgs(cmd, ["--unknown"]);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("PARSE");
-			expect((err as CrustError).message).toContain("Unknown flag");
-		}
-	});
-
-	it("throws CrustError with PARSE code on unknown short flag", () => {
-		try {
-			parseArgs(cmd, ["-x"]);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("PARSE");
-			expect((err as CrustError).message).toContain("Unknown flag");
-		}
+	it.each([
+		["--unknown", "unknown"],
+		["--unknown=value", "unknown"],
+		["-x", "x"],
+	])("reports unknown flag %s with structured details", (token, flag) => {
+		expect(() => parseArgs(cmd, [token])).toThrow(
+			expect.objectContaining({
+				code: "PARSE",
+				message: expect.stringContaining("Unknown flag"),
+				details: { flag, reason: "unknown-flag" },
+			}),
+		);
 	});
 
 	it("preserves the flag name when its value is missing", () => {
