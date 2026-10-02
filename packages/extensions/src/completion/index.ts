@@ -70,7 +70,7 @@ const SHELL_RENDERERS = {
 	fish: renderFish,
 } satisfies Record<CompletionShell, typeof renderBash>;
 
-function prepareRender(root: CommandSnapshot, options: CompletionRenderOptions) {
+function prepareRender(root: CommandSnapshot, options: CompletionOptions) {
 	// Validate the root name before emitting anything so misconfigured CLIs fail loudly.
 	// The walker also re-validates command/flag identifiers when it builds the spec.
 	const binName = assertSafeBinName(root.meta.name);
@@ -87,28 +87,26 @@ function prepareRender(root: CommandSnapshot, options: CompletionRenderOptions) 
 		spec: walkCommand(buildCommandDocumentation(root)),
 		binName,
 		version: sanitizeFreeText(version),
+		command: options.command ?? "completion",
 	};
 }
 
 /** Every supported shell's drop-in file, named by its autoload convention. */
-function renderCompletionFiles(
-	root: CommandSnapshot,
-	options: CompletionRenderOptions,
-): BuildArtifacts {
-	const { spec, binName, version } = prepareRender(root, options);
+function renderCompletionFiles(root: CommandSnapshot, options: CompletionOptions): BuildArtifacts {
+	const { spec, binName, version, command } = prepareRender(root, options);
 	return SUPPORTED_SHELLS.map((shell) => ({
 		path: filenameForShell(shell, binName),
-		content: SHELL_RENDERERS[shell](spec, binName, version),
+		content: SHELL_RENDERERS[shell](spec, binName, version, command),
 	}));
 }
 
 function renderCompletionScript(
 	shell: CompletionShell,
 	root: CommandSnapshot,
-	options: CompletionRenderOptions = {},
+	options: CompletionOptions = {},
 ): string {
-	const { spec, binName, version } = prepareRender(root, options);
-	return SHELL_RENDERERS[shell](spec, binName, version);
+	const { spec, binName, version, command } = prepareRender(root, options);
+	return SHELL_RENDERERS[shell](spec, binName, version, command);
 }
 
 /** Render a bash completion script from a prepared root Command Snapshot. */

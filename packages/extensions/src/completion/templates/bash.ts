@@ -324,8 +324,14 @@ function valueFlagWordlist(node: CompletionCommand): string {
  *                 {@link assertSafeBinName} upstream.
  * @param version  Free-form version string for the header comment;
  *                 control characters are stripped before emission.
+ * @param command  Completion subcommand name for the header's regenerate hint.
  */
-export function renderBash(spec: CompletionCommand, binName: string, version: string): string {
+export function renderBash(
+	spec: CompletionCommand,
+	binName: string,
+	version: string,
+	command = "completion",
+): string {
 	const ident = toShellIdent(binName);
 	const fnName = `_${ident}`;
 	const initFn = `__${ident}_init_completion`;
@@ -372,7 +378,7 @@ export function renderBash(spec: CompletionCommand, binName: string, version: st
 	};
 
 	lines.push(
-		`# completion script for ${binName} v${version} — regenerate with: ${binName} completion bash`,
+		`# completion script for ${binName} v${version} — regenerate with: ${binName} ${command} bash`,
 	);
 	lines.push("");
 

@@ -253,6 +253,17 @@ describe("completion build hook", () => {
 		expect(files.get("completions/mycli")).toContain("mycli v2.0.0");
 	});
 
+	it("names the configured command in each regenerate hint", async () => {
+		const { files } = await runBuildHooks(
+			new Crust("mycli", { version: "1.0.0" }).extend(completion({ command: "completions" })),
+		);
+
+		const [bash, zsh, fish] = files.values();
+		expect(bash).toContain("regenerate with: mycli completions bash\n");
+		expect(zsh).toContain("regenerate with: mycli completions zsh\n");
+		expect(fish).toContain("regenerate with: mycli completions fish\n");
+	});
+
 	it("rejects an unsafe root name", async () => {
 		const { error } = await runBuildHooks(
 			new Crust("../pwn", { version: "1.0.0" }).extend(completion()),

@@ -288,8 +288,14 @@ function renderHelper(
  * @param binName  User-facing binary name; validated upstream via
  *                 {@link assertSafeBinName}.
  * @param version  Free-form version string for the header comment.
+ * @param command  Completion subcommand name for the header's regenerate hint.
  */
-export function renderZsh(spec: CompletionCommand, binName: string, version: string): string {
+export function renderZsh(
+	spec: CompletionCommand,
+	binName: string,
+	version: string,
+	command = "completion",
+): string {
 	const ident = toShellIdent(binName);
 	const lines: string[] = [];
 
@@ -299,7 +305,7 @@ export function renderZsh(spec: CompletionCommand, binName: string, version: str
 	// itself rejects unusual `#compdef` arguments).
 	lines.push(`#compdef ${binName}`);
 	lines.push(
-		`# completion script for ${binName} v${version} — regenerate with: ${binName} completion zsh`,
+		`# completion script for ${binName} v${version} — regenerate with: ${binName} ${command} zsh`,
 	);
 	lines.push("");
 

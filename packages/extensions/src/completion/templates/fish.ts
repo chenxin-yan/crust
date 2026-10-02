@@ -432,13 +432,19 @@ function emitPosHelper(ident: string): string[] {
  * @param spec     Walker output.
  * @param binName  User-facing binary name; validated upstream.
  * @param version  Free-form version string for the header comment.
+ * @param command  Completion subcommand name for the header's regenerate hint.
  */
-export function renderFish(spec: CompletionCommand, binName: string, version: string): string {
+export function renderFish(
+	spec: CompletionCommand,
+	binName: string,
+	version: string,
+	command = "completion",
+): string {
 	const ident = toShellIdent(binName);
 	const lines: string[] = [];
 
 	lines.push(
-		`# completion script for ${binName} v${version} — regenerate with: ${binName} completion fish`,
+		`# completion script for ${binName} v${version} — regenerate with: ${binName} ${command} fish`,
 	);
 	lines.push("");
 

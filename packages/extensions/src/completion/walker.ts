@@ -8,12 +8,7 @@ import type {
 } from "@crustjs/core/tooling";
 
 import { assertSafeChoiceValue, assertSafeIdentifier, sanitizeFreeText } from "./escape.ts";
-import type {
-	CompletionArg,
-	CompletionCommand,
-	CompletionFlag,
-	StringCompletion,
-} from "./spec.ts";
+import type { CompletionArg, CompletionCommand, CompletionFlag, StringCompletion } from "./spec.ts";
 
 /**
  * Normalise an optional description: strip ANSI, then drop empty results.
@@ -36,7 +31,10 @@ type ValueShape =
  * string tokens but keep their completion intent; schema-backed args
  * (`undefined`) complete as free-form strings.
  */
-function valueShape(type: ValueType | undefined, choices: readonly string[] | undefined): ValueShape {
+function valueShape(
+	type: ValueType | undefined,
+	choices: readonly string[] | undefined,
+): ValueShape {
 	switch (type) {
 		case "boolean":
 		case "number":
