@@ -29,9 +29,9 @@ Import from `@crustjs/testing/interactive`; this entry point requires `@crustjs/
 
 `waitFor()` polls the ANSI-stripped screen and defaults to a 5000 ms timeout. It fails as soon as the invocation fails or completes without a match, rather than waiting for the timeout. Call `type()` or `keys()` after the expected prompt appears, then await `done`.
 
-`done` rejects with the error from a failed outcome. One ambient [`withTerminalIO`](/docs/modules/progress#output-sinks) scope sends prompts, progress, and `ctx.stderr()` to the fake screen.
+`done` rejects with the error from a failed outcome. One ambient [`withTerminalIO`](/docs/modules/progress#output-sinks) scope sends prompts, progress, and `stderr()` output to the fake screen.
 
-`ctx.stdout()` is not included, so use `run()` for stdout assertions.
+`stdout()` output is not included, so use `run()` for stdout assertions.
 
 <auto-type-table path="../../../../../packages/testing/src/interactive.ts" name="InteractiveRun" />
 
