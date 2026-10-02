@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 
 import { Crust, defineExtensionId } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
-import type { JsonValue } from "@crustjs/utils/json";
+import type { JsonObject, JsonValue } from "@crustjs/utils/json";
 import { which } from "@crustjs/utils/process";
 import {
 	afterAll,
@@ -30,19 +30,8 @@ import {
 
 const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 
-import schema from "../../schema/package.json";
-import { runBoundedProcess } from "../../tests/bounded-process.ts";
-import {
-	BUILD_RUNTIMES,
-	BUN_TARGETS,
-	DENO_TARGETS,
-	hostTarget,
-	NODE_TARGETS,
-	resolveTargets,
-	type TargetTable,
-} from "../utils/build-helpers.ts";
-import { ARTIFACT_KINDS, type DistributionManifest } from "../utils/distribute.ts";
-import { buildCommand } from "./build-command.ts";
+import schema from "../schema/package.json";
+import { runBoundedProcess } from "../tests/bounded-process.ts";
 import {
 	build,
 	type BuildOptions,
@@ -52,8 +41,15 @@ import {
 	resolveBinEntries,
 	resolveEnvFilePaths,
 } from "./build.ts";
+import { buildCommand } from "./commands/build.ts";
+import { ARTIFACT_KINDS, type DistributionManifest } from "./distribute.ts";
+import { BUILD_RUNTIMES, BUN_TARGETS, DENO_TARGETS, hostTarget, NODE_TARGETS } from "./targets.ts";
 
 const host = hostTarget(BUN_TARGETS);
+
+afterEach(() => {
+	vi.unstubAllEnvs();
+});
 
 function readManifest(path: string): DistributionManifest {
 	return JSON.parse(readFileSync(path, "utf8")) as DistributionManifest;
@@ -303,6 +299,17 @@ describe("planBuild", () => {
 		expect(() => planBuild(baseFlags, tmpDir)).toThrow(`Failed to parse package.json in ${tmpDir}`);
 	});
 
+	it("rejects a missing or non-object package.json before reading any field", () => {
+		rmSync(join(tmpDir, "package.json"));
+		expect(() => planBuild(binary, tmpDir)).toThrow(
+			`package.json not found in ${tmpDir}\n  crust build requires a package.json with name and version fields.`,
+		);
+		writeFileSync(join(tmpDir, "package.json"), "[]");
+		expect(() => planBuild(binary, tmpDir)).toThrow(
+			`package.json in ${tmpDir} must contain a JSON object.`,
+		);
+	});
+
 	const rejectedCases: Array<{
 		name: string;
 		crust: JsonValue;
@@ -374,16 +381,11 @@ describe("planBuild", () => {
 	// Planning never looks up a compiler: build() selects it once and judges the
 	// host target against that runner (see the build() compiler-selection tests).
 	it.skipIf(host === null)("plans every target when bun is not on PATH", () => {
-		const path = process.env.PATH;
-		process.env.PATH = "";
-		try {
-			const plan = planBuild(binary, tmpDir);
-			expect(plan.runtime === "bun" && "targets" in plan && plan.targets.length).toBe(
-				BUN_TARGETS.targets.length,
-			);
-		} finally {
-			process.env.PATH = path;
-		}
+		vi.stubEnv("PATH", "");
+		const plan = planBuild(binary, tmpDir);
+		expect(plan.runtime === "bun" && "targets" in plan && plan.targets.length).toBe(
+			BUN_TARGETS.targets.length,
+		);
 	});
 
 	it("stages .crust for every runtime", () => {
@@ -460,7 +462,7 @@ describe("planBuild", () => {
 
 describe("resolveBinEntries", () => {
 	const tmpDir = mkdtempSync(join(tmpdir(), "crust-bin-entries-"));
-	const entries = (pkg: JsonValue | undefined) => resolveBinEntries(tmpDir, pkg);
+	const entries = (pkg: JsonObject) => resolveBinEntries(tmpDir, pkg);
 
 	beforeAll(() => {
 		mkdirSync(join(tmpDir, "src"), { recursive: true });
@@ -470,13 +472,7 @@ describe("resolveBinEntries", () => {
 	afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
 
 	it("requires a package name when bin is absent or a string", () => {
-		const nameless: Array<JsonValue | undefined> = [
-			undefined,
-			{},
-			{ name: "" },
-			{ name: 1 },
-			{ bin: "src/cli.ts" },
-		];
+		const nameless: JsonObject[] = [{}, { name: "" }, { name: 1 }, { bin: "src/cli.ts" }];
 		for (const pkg of nameless) {
 			expect(() => entries(pkg)).toThrow("package.json is missing a name field");
 		}
@@ -570,7 +566,6 @@ describe("resolveBinEntries", () => {
 
 describe("readCrustConfig", () => {
 	it("accepts the five documented keys and nothing else", () => {
-		expect(readCrustConfig(undefined)).toEqual({});
 		expect(readCrustConfig({ name: "x" })).toEqual({});
 		expect(
 			readCrustConfig({
@@ -620,62 +615,6 @@ describe("readCrustConfig", () => {
 		expect(crust.properties.runtime.enum).toEqual([...BUILD_RUNTIMES]);
 		expect(crust.properties.artifact.enum).toEqual([...ARTIFACT_KINDS]);
 		expect(crust.description).toContain("`bin` field");
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Unit tests for resolveTarget
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("resolveTarget", () => {
-	it("accepts full Bun target names directly", () => {
-		for (const target of BUN_TARGETS.targets) {
-			expect(resolveTargets(BUN_TARGETS, [target])[0]).toBe(target);
-		}
-	});
-
-	it("rejects every short alias with canonical-name guidance and a did-you-mean hint", () => {
-		for (const target of BUN_TARGETS.targets) {
-			const alias = BUN_TARGETS.info[target].alias;
-			expect(() => resolveTargets(BUN_TARGETS, [alias])).toThrow(
-				`Unknown target "${alias}". Targets must use canonical Bun names. Did you mean "${target}"?`,
-			);
-			expect(() => resolveTargets(BUN_TARGETS, [alias])).toThrow(/Valid targets: bun-linux-x64/);
-		}
-	});
-
-	it("throws on unknown target", () => {
-		expect(() => resolveTargets(BUN_TARGETS, ["linux-arm32"])).toThrow(/Unknown target/);
-	});
-
-	it("dedupes repeated targets in input order", () => {
-		expect(
-			resolveTargets(BUN_TARGETS, ["bun-darwin-arm64", "bun-linux-x64", "bun-darwin-arm64"]),
-		).toEqual(["bun-darwin-arm64", "bun-linux-x64"]);
-	});
-
-	it("rejects host when the table has no target for this machine", () => {
-		// A table with no entries for this platform reproduces the unsupported-host case deterministically.
-		const empty: TargetTable<never> = { runtime: "Bun", targets: [], info: {} };
-		expect(() => resolveTargets(empty, ["host"])).toThrow(
-			/No Bun target matches this machine \(\w+-\w+(-musl)?\)/,
-		);
-	});
-});
-
-describe("resolveDenoTarget", () => {
-	it("accepts exactly the targets supported by deno compile", () => {
-		for (const target of DENO_TARGETS.targets)
-			expect(resolveTargets(DENO_TARGETS, [target])[0]).toBe(target);
-		expect(resolveTargets(DENO_TARGETS, undefined)).toEqual([...DENO_TARGETS.targets]);
-	});
-
-	it("guides aliases to canonical Deno target names", () => {
-		for (const target of DENO_TARGETS.targets) {
-			expect(() => resolveTargets(DENO_TARGETS, [DENO_TARGETS.info[target].alias])).toThrow(
-				`Did you mean "${target}"?`,
-			);
-		}
 	});
 });
 
@@ -1027,8 +966,7 @@ await build({ cwd: ${JSON.stringify(tmpDir)}, validate: false, onLog() {
 		"checks the Deno bundler before wiping the previous stage and writes no manifest when bundling fails",
 		async () => {
 			const shimDir = mkdtempSync(join(tmpdir(), "crust-deno-shim-"));
-			const path = process.env.PATH;
-			process.env.PATH = `${shimDir}:${path}`;
+			vi.stubEnv("PATH", `${shimDir}:${process.env.PATH}`);
 			const fakeDeno = (version: string) =>
 				writeFileSync(
 					join(shimDir, "deno"),
@@ -1053,7 +991,6 @@ await build({ cwd: ${JSON.stringify(tmpDir)}, validate: false, onLog() {
 				expect(existsSync(join(stageDir, "root", "package.json"))).toBe(true);
 				expect(existsSync(join(stageDir, "manifest.json"))).toBe(false);
 			} finally {
-				process.env.PATH = path;
 				rmSync(shimDir, { recursive: true, force: true });
 			}
 		},
@@ -1080,21 +1017,16 @@ await build({ cwd: ${JSON.stringify(tmpDir)}, validate: false, onLog() {
 		writeProject({ name: "engine-cli" }, 'console.log("hi");\n');
 		mkdirSync(stageDir);
 		writeFileSync(join(stageDir, "kept.txt"), "kept\n");
-		const path = process.env.PATH;
-		process.env.PATH = "";
-		try {
-			for (const artifact of ["binary", "package"] as const) {
-				await expect(
-					build({
-						cwd: tmpDir,
-						artifact,
-						...(artifact === "binary" ? { targets: ["bun-linux-x64"] } : {}),
-						validate: false,
-					}),
-				).rejects.toThrow("bun was not found on PATH");
-			}
-		} finally {
-			process.env.PATH = path;
+		vi.stubEnv("PATH", "");
+		for (const artifact of ["binary", "package"] as const) {
+			await expect(
+				build({
+					cwd: tmpDir,
+					artifact,
+					...(artifact === "binary" ? { targets: ["bun-linux-x64"] } : {}),
+					validate: false,
+				}),
+			).rejects.toThrow("bun was not found on PATH");
 		}
 		expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
 		expect(existsSync(join(stageDir, "manifest.json"))).toBe(false);
@@ -1105,6 +1037,7 @@ await build({ cwd: ${JSON.stringify(tmpDir)}, validate: false, onLog() {
 		"selects and validates the node binary compiler and tsdown's requirements before wiping the previous stage",
 		async () => {
 			const nodePath = which("node")!;
+			const bunDir = dirname(which("bun")!);
 			const nodeBinary = {
 				cwd: tmpDir,
 				artifact: "binary",
@@ -1135,34 +1068,28 @@ await build({ cwd: ${JSON.stringify(tmpDir)}, validate: false, onLog() {
 				`#!/bin/sh\nif [ "$1" = --version ]; then echo v24.11.0; exit 0; fi\nexec '${nodePath}' "$@"\n`,
 				{ mode: 0o755 },
 			);
-			const path = process.env.PATH;
 			try {
-				process.env.PATH = `${shimDir}:${path}`;
+				vi.stubEnv("PATH", `${shimDir}:${process.env.PATH}`);
 				await expect(build(nodeBinary)).rejects.toThrow(
 					/^Node 24\.11\.0 \(.*\) cannot build standalone executables: tsdown \S+'s executable builder requires Node \S+ or later\.\n  Binaries embed the selected node's version; crust does not install or upgrade it\./,
 				);
 				expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
 
-				process.env.PATH = "";
+				vi.stubEnv("PATH", "");
 				await expect(build(nodeBinary)).rejects.toThrow(
 					"Node is required for node standalone binaries but was not found on PATH.",
 				);
 			} finally {
-				process.env.PATH = path;
 				rmSync(shimDir, { recursive: true, force: true });
 			}
 			expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
 			expect(existsSync(join(stageDir, "manifest.json"))).toBe(false);
 
 			// Node runtime packages need neither tsdown's node nor tsdown: Bun bundles them.
-			process.env.PATH = dirname(which("bun")!);
-			try {
-				await expect(
-					build({ cwd: tmpDir, artifact: "package", validate: false }),
-				).resolves.toHaveProperty("stageDir", stageDir);
-			} finally {
-				process.env.PATH = path;
-			}
+			vi.stubEnv("PATH", bunDir);
+			await expect(
+				build({ cwd: tmpDir, artifact: "package", validate: false }),
+			).resolves.toHaveProperty("stageDir", stageDir);
 		},
 		30_000,
 	);
@@ -1192,8 +1119,7 @@ await build({ cwd: ${JSON.stringify(tmpDir)}, validate: false, onLog() {
 					`if [ "$1" = --version ]; then echo 0.0.1; exit 0; fi\nexit 1\n`,
 				{ mode: 0o755 },
 			);
-			const path = process.env.PATH;
-			process.env.PATH = `${shimDir}:${path}`;
+			vi.stubEnv("PATH", `${shimDir}:${process.env.PATH}`);
 			try {
 				expect(process.cwd()).not.toBe(tmpDir);
 				const logged: string[] = [];
@@ -1214,7 +1140,6 @@ await build({ cwd: ${JSON.stringify(tmpDir)}, validate: false, onLog() {
 				const embedded = execFileSync(executable.path, [], { encoding: "utf8", timeout: 10_000 });
 				expect(embedded.trim()).toBe(bunVersion);
 			} finally {
-				process.env.PATH = path;
 				rmSync(shimDir, { recursive: true, force: true });
 			}
 		},

@@ -1,7 +1,7 @@
 /**
  * Integration tests for the crust CLI entry point.
  *
- * Tests the root crust command with the build subcommand wired up,
+ * Tests the root crust command with the build and publish subcommands wired up,
  * verifying help output, version output, subcommand help, and error handling.
  *
  * Uses `captureExecute(app, argv)` to exercise and capture the terminal path.
@@ -12,7 +12,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import pkg from "../package.json";
 import { crustBase } from "./app.ts";
-import { buildCommand } from "./commands/build-command.ts";
+import { buildCommand } from "./commands/build.ts";
 import { publishCommand } from "./commands/publish.ts";
 
 const expectedVersion = pkg.version;

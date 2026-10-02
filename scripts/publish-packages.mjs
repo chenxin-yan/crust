@@ -101,7 +101,7 @@ async function packPackages(directory) {
 	}
 	// Only the unprivileged pack job loads workspace code and runs lifecycle hooks.
 	const { readPublishManifest, validatePublishManifest } =
-		await import("../packages/crust/src/commands/publish.ts");
+		await import("../packages/crust/src/publish.ts");
 	const inventory = [];
 	for (const pkg of sortPackagesForPublish(await loadWorkspacePackages())) {
 		let entries = [{ path: pkg.dir, packageJson: pkg }];

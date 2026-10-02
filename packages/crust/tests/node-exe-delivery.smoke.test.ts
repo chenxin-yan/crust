@@ -9,9 +9,9 @@ import { which } from "@crustjs/utils/process";
 import { afterAll, afterEach, describe, expect, it } from "vite-plus/test";
 
 import { stageNodeExeDependencies } from "../scripts/stage-node-exe-dependencies.ts";
-import { buildCommand } from "../src/commands/build-command.ts";
-import { hostTarget as resolveHostTarget, NODE_TARGETS } from "../src/utils/build-helpers.ts";
-import type { DistributionManifest } from "../src/utils/distribute.ts";
+import { buildCommand } from "../src/commands/build.ts";
+import type { DistributionManifest } from "../src/distribute.ts";
+import { hostTarget as resolveHostTarget, NODE_TARGETS } from "../src/targets.ts";
 import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
 import { hostTarget, seaNodeBinDir } from "./helpers.ts";
 
@@ -24,7 +24,7 @@ const packageManager = process.env.CRUST_SMOKE_PM;
 const seaNodeDir = seaNodeBinDir();
 const bunHost = hostTarget();
 const nodeHost = resolveHostTarget(NODE_TARGETS);
-const buildHelpers = resolve(import.meta.dirname, "..", "src", "utils", "build-helpers.ts");
+const src = resolve(import.meta.dirname, "..", "src");
 
 const root = mkdtempSync(join(tmpdir(), `crust-node-exe-delivery-${packageManager ?? "skip"}-`));
 const carrier = join(root, "carrier");
@@ -65,10 +65,12 @@ describe.skipIf(!packageManager || seaNodeDir === null || nodeHost === null)(
 			writeFile(
 				join(carrier, "src", "carrier.ts"),
 				`import { join } from "node:path";
-import { execNodeBinaryBuild, hostTarget, NODE_TARGETS, resolveBunBuildRunner, resolveNodeBinaryCompiler } from ${JSON.stringify(buildHelpers)};
+import { resolveBunBuildRunner } from ${JSON.stringify(join(src, "compilers.ts"))};
+import { execNodeBinaryBuild, resolveNodeBinaryCompiler } from ${JSON.stringify(join(src, "node-exe.ts"))};
+import { hostTarget, NODE_TARGETS } from ${JSON.stringify(join(src, "targets.ts"))};
 const [project, outfile] = process.argv.slice(2);
-const compiler = await resolveNodeBinaryCompiler(undefined, project);
-await execNodeBinaryBuild(join(project, "src", "cli.ts"), outfile, true, hostTarget(NODE_TARGETS), [], project, compiler, resolveBunBuildRunner());
+const compiler = await resolveNodeBinaryCompiler({}, project);
+await execNodeBinaryBuild(join(project, "src", "cli.ts"), outfile, hostTarget(NODE_TARGETS), { cwd: project, minify: true, envFiles: [] }, compiler, resolveBunBuildRunner());
 console.log(JSON.stringify({ tsdown: compiler.backend.packageJsonPath, node: compiler.version }));
 `,
 			);

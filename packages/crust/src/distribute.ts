@@ -1,22 +1,14 @@
-import {
-	copyFileSync,
-	cpSync,
-	existsSync,
-	lstatSync,
-	mkdirSync,
-	readdirSync,
-	realpathSync,
-	statSync,
-	writeFileSync,
-} from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { copyFileSync, cpSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 
 import type { BuildReport, InvocationIO } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
 import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
 import { isWithin } from "@crustjs/utils/path";
 
-import type { BuildRuntime, TargetInfo, TargetTable } from "./build-helpers.ts";
+import { collectArtifacts, collectIncludeDirs } from "./artifacts.ts";
+import { binaryFilename, generateLauncher } from "./launcher.ts";
+import type { BuildRuntime, TargetInfo, TargetTable } from "./targets.ts";
 
 /** Project-relative directory that `crust build` owns: wiped per build, read by `crust publish`. */
 export const CRUST_DIR = ".crust";
@@ -55,17 +47,8 @@ type PublishPackageMetadata = {
 	/** npm man field: paths to man pages, e.g. `./man/mycli.1` */
 	man?: string[];
 	bin?: Record<string, string>;
-	description?: string;
-	license?: string;
-	author?: JsonValue;
-	homepage?: string;
-	bugs?: JsonValue;
-	repository?: JsonValue;
-	keywords?: string[];
-	publishConfig?: Record<string, JsonValue>;
-	funding?: JsonValue;
-	engines?: Record<string, string>;
-};
+	// Optional npm metadata, copied from the user's package.json without interpretation.
+} & { [K in (typeof METADATA_KEYS)[number]]?: JsonValue };
 
 type RootPublishPackageJson = PublishPackageMetadata & {
 	/** Absent for a root-only package: npm treats `{}` and a missing field alike, but the manifest stays honest. */
@@ -88,17 +71,8 @@ type PlatformPublishPackageJson = PublishPackageMetadata & {
 	optionalDependencies?: never;
 };
 
-type UserPackageJson = Omit<PublishPackageMetadata, "bin" | "type"> & {
-	type?: "module" | "commonjs";
-	bin?: JsonValue;
-	exports?: JsonValue;
-	peerDependencies?: JsonValue;
-	peerDependenciesMeta?: JsonValue;
-	optionalDependencies?: Record<string, string>;
-	os?: [NpmOs];
-	cpu?: [NpmCpu];
-	libc?: [NpmLibc];
-};
+/** A package.json whose npm identity passed {@link validatePackageIdentity}; other fields are uninterpreted. */
+export type IdentifiedPackageJson = JsonObject & { name: string; version: string };
 
 /** Top-level directories and `man/` pages staged into the root package's `files`/`man` fields. */
 type StagingOptions = { artifactDirs: readonly string[]; manPages: readonly string[] };
@@ -109,7 +83,7 @@ type DistributionMetadata = {
 	/** Metadata shared by the root and every platform package. */
 	rootPackageJson: PublishPackageMetadata;
 	/** The source scope for included library files; generated CLI files always use ESM. */
-	sourceType: UserPackageJson["type"];
+	sourceType: JsonValue | undefined;
 	/** The user's `exports`, root package only; validated against the staged tree. */
 	exports?: JsonValue;
 	/** The user's `peerDependencies`/`peerDependenciesMeta`, root package only; publishable ranges. */
@@ -117,7 +91,7 @@ type DistributionMetadata = {
 	peerDependenciesMeta?: JsonObject;
 };
 
-type DistributionTarget<T extends string = string> = {
+export type DistributionTarget<T extends string = string> = {
 	target: T;
 	platformKey: PlatformKey;
 	targetAlias: string;
@@ -162,27 +136,12 @@ export type DistributionManifest = {
 	build?: Record<string, BuildReport>;
 };
 
-function readPackageJson(cwd: string, packageJson: JsonValue | undefined): UserPackageJson {
-	if (packageJson === undefined) {
-		throw new Error(
-			`package.json not found in ${cwd}\n  crust build requires a package.json with name and version fields.`,
-		);
-	}
-	if (!isJsonObject(packageJson)) {
-		throw new Error(`package.json in ${cwd} must contain a JSON object.`);
-	}
-
-	validatePackageIdentity(packageJson, "package.json");
-	// Optional npm metadata is copied without interpretation.
-	return packageJson;
-}
-
 /** Only identity is interpreted here; this is not a complete npm schema validator. */
 export function validatePackageIdentity(
-	value: JsonValue | undefined,
+	value: JsonValue,
 	source: string,
-): asserts value is JsonObject & { name: string; version: string } {
-	if (value === undefined || !isJsonObject(value)) {
+): asserts value is IdentifiedPackageJson {
+	if (!isJsonObject(value)) {
 		throw new Error(`${source} must contain a JSON object.`);
 	}
 	if (typeof value.name !== "string" || value.name.trim() === "") {
@@ -207,11 +166,6 @@ function derivePlatformPackageName(rootPackageName: string, targetAlias: string)
 
 function getPackagePathSegment(packageName: string): string {
 	return packageName.startsWith("@") ? (packageName.split("/")[1] ?? packageName) : packageName;
-}
-
-/** Platform binary filename: `<command>-<target>`, `.exe` on Windows. */
-function binaryFilename(command: string, target: DistributionTarget): string {
-	return `${command}-${target.target}${target.os === "win32" ? ".exe" : ""}`;
 }
 
 function platformBinMap(
@@ -284,7 +238,7 @@ function hasNodeInvalidSegment(target: string): boolean {
 function validateStagedExports(
 	exports: JsonValue,
 	rootDir: string,
-	sourceType: UserPackageJson["type"],
+	sourceType: JsonValue | undefined,
 ): void {
 	const fail = (detail: string): never => {
 		throw new Error(
@@ -403,7 +357,7 @@ function buildDistributionPlatformPackageJson(
 	};
 }
 
-function pickRootMetadata(pkgJson: UserPackageJson): PublishPackageMetadata {
+function pickRootMetadata(pkgJson: IdentifiedPackageJson): PublishPackageMetadata {
 	const metadata: PublishPackageMetadata = {
 		name: pkgJson.name,
 		version: pkgJson.version,
@@ -412,7 +366,7 @@ function pickRootMetadata(pkgJson: UserPackageJson): PublishPackageMetadata {
 	for (const key of METADATA_KEYS) {
 		const value = pkgJson[key];
 		if (value !== undefined) {
-			Object.assign(metadata, { [key]: value });
+			metadata[key] = value;
 		}
 	}
 
@@ -427,11 +381,7 @@ function validatePackageNameLength(packageName: string): void {
 	}
 }
 
-function resolveDistributionMetadata(
-	cwd: string,
-	userPackageJson: JsonValue | undefined,
-): DistributionMetadata {
-	const pkgJson = readPackageJson(cwd, userPackageJson);
+function resolveDistributionMetadata(pkgJson: IdentifiedPackageJson): DistributionMetadata {
 	validatePackageNameLength(pkgJson.name);
 
 	return {
@@ -469,108 +419,6 @@ function resolveDistributionTarget<T extends string>(
 	};
 }
 
-function generateDistributionJsResolver(
-	command: string,
-	targets: readonly DistributionTarget[],
-): string {
-	const targetMap = Object.fromEntries(
-		targets.map((target) => [
-			target.platformKey,
-			{
-				packagePathSegment: target.packagePathSegment,
-				packageName: target.packageName,
-				targetAlias: target.targetAlias,
-				binaryFilename: binaryFilename(command, target),
-			},
-		]),
-	);
-	const supportedPlatforms = targets.map((target) => target.targetAlias).join(", ");
-
-	// The command name is validated by the build planner and embedded as a JSON
-	// string literal, never spliced into code.
-	return `#!/usr/bin/env node
-// Auto-generated by crust build -- do not edit
-import { spawn } from "node:child_process";
-import { chmodSync, existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import process from "node:process";
-import { fileURLToPath } from "node:url";
-
-const NAME = ${JSON.stringify(command)};
-const PLATFORMS = ${JSON.stringify(targetMap, null, "\t")};
-const dir = dirname(fileURLToPath(import.meta.url));
-
-// Same check as Bun's own npm installer: glibc reports its version, musl does not.
-function isMusl() {
-	try {
-		const report = process.report?.getReport();
-		if (report?.header) return report.header.glibcVersionRuntime === undefined;
-	} catch {}
-	return existsSync("/etc/alpine-release");
-}
-
-const platformKey =
-	\`\${process.platform}-\${process.arch}\` + (process.platform === "linux" && isMusl() ? "-musl" : "");
-const target = PLATFORMS[platformKey];
-
-if (!target) {
-\tconsole.error("[" + NAME + "] Unsupported platform: " + platformKey);
-\tconsole.error("[" + NAME + "] Supported platforms: ${supportedPlatforms}");
-\tprocess.exit(1);
-}
-
-const candidates = [
-\t// Hoisted install: the platform package beside this one in node_modules.
-\tresolve(dir, "..", "..", target.packagePathSegment, "bin", target.binaryFilename),
-\t// Nested install: the platform package under this package's node_modules.
-\tresolve(dir, "..", "node_modules", target.packageName, "bin", target.binaryFilename),
-\t// In place: the .crust/ tree crust build staged, before any install.
-\tresolve(dir, "..", "..", target.targetAlias, "bin", target.binaryFilename),
-];
-const binPath = candidates.find((candidate) => existsSync(candidate));
-
-if (!binPath) {
-\tconsole.error("[" + NAME + "] Missing platform package for " + platformKey);
-\tconsole.error("[" + NAME + "] Tried:");
-\tfor (const candidate of candidates) console.error("  " + candidate);
-\tconsole.error(
-\t\t"[" + NAME + "] Reinstall dependencies on this platform and ensure optional dependencies are enabled.",
-\t);
-\tprocess.exit(1);
-}
-
-if (process.platform !== "win32") {
-\ttry {
-\t\tchmodSync(binPath, 0o755);
-\t} catch {
-\t\t// Ignore permission adjustment failures and let spawn surface real errors.
-\t}
-}
-
-const child = spawn(binPath, process.argv.slice(2), {
-\tstdio: "inherit",
-});
-
-child.on("error", (error) => {
-\tconsole.error("[" + NAME + "] Failed to launch binary: " + error.message);
-\tprocess.exit(1);
-});
-
-child.on("exit", (code, signal) => {
-\tif (signal) {
-\t\ttry {
-\t\t\tprocess.kill(process.pid, signal);
-\t\t} catch {
-\t\t\tprocess.exit(1);
-\t\t}
-\t\treturn;
-\t}
-
-\tprocess.exit(code ?? 0);
-});
-`;
-}
-
 function writeJson<T>(path: string, value: T): void {
 	writeFileSync(path, `${JSON.stringify(value, null, "\t")}\n`);
 }
@@ -601,7 +449,7 @@ function writeDistributionManifest(
 	commands: readonly string[],
 	targets: readonly DistributionTarget[],
 	build: Record<string, BuildReport> | undefined,
-): DistributionManifest {
+): string {
 	const manifest: DistributionManifest = {
 		version: metadata.version,
 		...identity,
@@ -623,14 +471,15 @@ function writeDistributionManifest(
 		...(build ? { build } : {}),
 	};
 
-	writeJson(join(stageDir, "manifest.json"), manifest);
-	return manifest;
+	const manifestPath = join(stageDir, "manifest.json");
+	writeJson(manifestPath, manifest);
+	return manifestPath;
 }
 
 /** `pkg` without `engines.node`, dropping `engines` once nothing else is left. */
 function omitNodeEngine(pkg: PublishPackageMetadata): PublishPackageMetadata {
 	const { engines, ...rest } = pkg;
-	if (engines?.node === undefined) return pkg;
+	if (engines === undefined || !isJsonObject(engines) || engines.node === undefined) return pkg;
 	const others = Object.entries(engines).filter(([runtime]) => runtime !== "node");
 	return others.length > 0 ? { ...rest, engines: Object.fromEntries(others) } : rest;
 }
@@ -677,7 +526,7 @@ export type DistributeBuildPlan = {
 	validate: boolean;
 	/** Where Extension build hooks write: `.crust/artifacts`. */
 	outDir: string;
-	userPackageJson: JsonValue | undefined;
+	userPackageJson: IdentifiedPackageJson;
 	/** Validated `crust.include` entries; directories staged like Extension artifacts. */
 	include: readonly string[];
 };
@@ -725,7 +574,7 @@ export async function runDistributeBuild<T extends string>(
 	io: InvocationIO,
 	build?: Record<string, BuildReport>,
 ): Promise<BuildArtifact[]> {
-	const sourceMetadata = resolveDistributionMetadata(plan.cwd, plan.userPackageJson);
+	const sourceMetadata = resolveDistributionMetadata(plan.userPackageJson);
 	const commands = plan.entries.map((entry) => entry.command);
 	const table = distribution.table;
 	// A Node binary embeds the Node that engines.node was checked against; its
@@ -809,7 +658,7 @@ export async function runDistributeBuild<T extends string>(
 	if (table) {
 		for (const { command } of plan.entries) {
 			const launcherPath = join(rootBinDir, `${command}.js`);
-			writeFileSync(launcherPath, generateDistributionJsResolver(command, distributionTargets), {
+			writeFileSync(launcherPath, generateLauncher(command, distributionTargets), {
 				mode: 0o755,
 			});
 			produced.push({ kind: "launcher", path: launcherPath, command });
@@ -842,7 +691,7 @@ export async function runDistributeBuild<T extends string>(
 
 	// Written last: `crust publish` treats manifest.json as proof of a complete
 	// build, so a failed compile must not leave one behind.
-	writeDistributionManifest(
+	const manifestPath = writeDistributionManifest(
 		plan.stageDir,
 		metadata,
 		table
@@ -856,7 +705,6 @@ export async function runDistributeBuild<T extends string>(
 		distributionTargets,
 		build,
 	);
-	const manifestPath = join(plan.stageDir, "manifest.json");
 	io.stdout(
 		`\n${green("✓")} Staged ${bold(`${distributionTargets.length + 1}`)} npm package(s) successfully:`,
 	);
@@ -866,177 +714,4 @@ export async function runDistributeBuild<T extends string>(
 	}
 	io.stdout(`\n${dim("Manifest:")} ${manifestPath}`);
 	return produced;
-}
-
-/**
- * `crust.include` directories normalized to cwd-relative POSIX names. They are
- * staged exactly like Extension artifacts.
- */
-function collectIncludeDirs(
-	cwd: string,
-	stageDir: string,
-	include: readonly string[],
-	artifactNames: readonly string[],
-): string[] {
-	const names = [...artifactNames];
-	const includeDirs: string[] = [];
-	for (const entry of include) {
-		const dir = resolve(cwd, entry);
-		const name = relative(cwd, dir);
-		if (isAbsolute(entry) || name === "" || !isWithin(cwd, dir)) {
-			throw new Error(
-				`package.json crust.include entry ${JSON.stringify(entry)} must be a directory inside the project root ${cwd}.`,
-			);
-		}
-		if (!existsSync(dir) || !statSync(dir).isDirectory()) {
-			throw new Error(
-				`package.json crust.include entry ${JSON.stringify(entry)} is not a directory: ${dir}`,
-			);
-		}
-		// The lexical check above passes a symlink to anywhere, and the staged copy
-		// dereferences every symlink it meets, so the directory and everything
-		// reachable inside it must really live inside the project too.
-		assertResolvesInsideProject(cwd, entry, dir);
-		// The build wipes stageDir first, and copying a directory into itself fails midway.
-		if (isWithin(stageDir, dir) || isWithin(dir, stageDir)) {
-			throw new Error(
-				`package.json crust.include entry ${JSON.stringify(entry)} overlaps the build output directory ${stageDir}, which crust build replaces.`,
-			);
-		}
-		// Staged names are compared case-folded: on a case-insensitive destination
-		// `Bin` or `Assets` addresses the same directory as `bin` or `assets`.
-		if (name.toLowerCase().split(sep)[0] === "bin") {
-			throw new Error(
-				`package.json crust.include entry ${JSON.stringify(entry)} conflicts with the generated npm bin directory.\n  Include a directory with a different top-level name.`,
-			);
-		}
-		const posixName = name.replaceAll(sep, "/");
-		const key = posixName.toLowerCase();
-		// A nested include under an artifact name (or vice versa) would silently merge into it.
-		const overlap = names.find((staged) => {
-			const stagedKey = staged.toLowerCase();
-			return (
-				stagedKey === key || stagedKey.startsWith(`${key}/`) || key.startsWith(`${stagedKey}/`)
-			);
-		});
-		if (overlap !== undefined) {
-			throw new Error(
-				`package.json crust.include entry ${JSON.stringify(entry)} overlaps "${overlap}", which is already staged (duplicate include or Extension artifact directory).`,
-			);
-		}
-		names.push(posixName);
-		includeDirs.push(posixName);
-	}
-	return includeDirs;
-}
-
-/**
- * Walks `dir` the way the dereferencing copy will (through symlinked
- * directories) and rejects any path whose real location leaves the project.
- */
-function assertResolvesInsideProject(cwd: string, entry: string, dir: string): void {
-	const realCwd = realpathSync(cwd);
-	const seen = new Set<string>();
-	const walk = (path: string): void => {
-		const real = realpathSync(path);
-		if (!isWithin(realCwd, real)) {
-			throw new Error(
-				`package.json crust.include entry ${JSON.stringify(entry)} resolves outside the project root: ${relative(cwd, path)} -> ${real}`,
-			);
-		}
-		// A symlink back to an ancestor would otherwise recurse forever.
-		if (seen.has(real) || !statSync(path).isDirectory()) return;
-		seen.add(real);
-		for (const child of readdirSync(path)) walk(join(path, child));
-	};
-	walk(dir);
-}
-
-export type ArtifactOwner = { command: string; directory: boolean; path: string };
-
-/**
- * Copies one entry's Extension build hook output into the shared artifact
- * directory. Identically spelled directories merge; case-only directory aliases
- * and a file or file/directory mismatch at a path
- * another entry already produced is an error, so no entry's hooks can replace
- * another's output. `owners` tracks case-folded POSIX-relative paths across
- * entries, including directories so file/ancestor conflicts are portable.
- */
-export function mergeEntryArtifacts(
-	entryOutDir: string,
-	artifactDir: string,
-	command: string,
-	owners: Map<string, ArtifactOwner>,
-): void {
-	const merge = (relativeDir: string): void => {
-		for (const dirent of readdirSync(join(entryOutDir, relativeDir), { withFileTypes: true })) {
-			const relativePath = relativeDir ? `${relativeDir}/${dirent.name}` : dirent.name;
-			if (!dirent.isDirectory() && !dirent.isFile()) {
-				throw new Error(
-					`Build artifact "${relativePath}" from bin ${JSON.stringify(command)} must use regular files and directories, not symlinks or other file types.`,
-				);
-			}
-			const source = join(entryOutDir, relativePath);
-			const destination = join(artifactDir, relativePath);
-			const key = relativePath.toLowerCase();
-			const owner = owners.get(key);
-			const existing = lstatSync(destination, { throwIfNoEntry: false });
-			if (
-				(owner && !(dirent.isDirectory() && owner.directory && owner.path === relativePath)) ||
-				(existing && !(dirent.isDirectory() && existing.isDirectory()))
-			) {
-				throw new Error(
-					`Build artifact "${relativePath}" is written by both bin ${JSON.stringify(owner?.command ?? "an earlier bin")} and ${JSON.stringify(command)}.\n  Extension build hooks of different commands must write distinct paths under ${artifactDir}.`,
-				);
-			}
-			if (!owner) owners.set(key, { command, directory: dirent.isDirectory(), path: relativePath });
-			if (dirent.isDirectory()) {
-				mkdirSync(destination, { recursive: true });
-				merge(relativePath);
-			} else {
-				mkdirSync(dirname(destination), { recursive: true });
-				copyFileSync(source, destination);
-			}
-		}
-	};
-	const root = lstatSync(entryOutDir, { throwIfNoEntry: false });
-	if (root === undefined) return;
-	if (!root.isDirectory()) {
-		throw new Error(
-			`Build artifact directory for bin ${JSON.stringify(command)} must be a directory, not a symlink or other file type: ${entryOutDir}`,
-		);
-	}
-	merge("");
-}
-
-type CollectedArtifacts = { names: string[]; manPages: string[] };
-
-function collectArtifacts(artifactOutDir: string | undefined): CollectedArtifacts {
-	if (!artifactOutDir || !existsSync(artifactOutDir)) {
-		return { names: [], manPages: [] };
-	}
-
-	// Hooks own unique top-level directories; loose files are ignored. Staged
-	// builds clear previous output before hooks run.
-	const names = readdirSync(artifactOutDir, { withFileTypes: true })
-		.filter((entry) => entry.isDirectory())
-		.map((entry) => entry.name)
-		.sort();
-	// Staged packages generate their own bin/ (resolver + platform binaries); a
-	// hook artifact named bin (in any case, for case-insensitive destinations)
-	// would merge into it and could overwrite them.
-	const binName = names.find((name) => name.toLowerCase() === "bin");
-	if (binName !== undefined) {
-		throw new Error(
-			`Artifact directory "${binName}" in ${artifactOutDir} conflicts with the generated npm bin directory.\n  Emit build artifacts under a different top-level name.`,
-		);
-	}
-	const manPages = names.includes("man")
-		? readdirSync(join(artifactOutDir, "man"), { withFileTypes: true })
-				.filter((entry) => entry.isFile())
-				.map((entry) => entry.name)
-				.sort()
-		: [];
-
-	return { names, manPages };
 }
