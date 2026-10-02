@@ -124,6 +124,21 @@ describe("buildCommandDocumentation", () => {
 		expect(model.flags[1]?.spellings).toEqual(["--help"]);
 	});
 
+	it("lists the single-dash form of one-character long spellings after the short", async () => {
+		const model = await docs(
+			new Crust("app")
+				.flags(
+					{ name: "port", type: "number", short: "p", aliases: ["P", "listen"] },
+					{ name: "q", type: "boolean", aliases: ["Q"] },
+				)
+				.action(() => {}),
+		);
+		expect(model.flags.map((flag) => flag.spellings)).toEqual([
+			["-p", "-P", "--port", "--P", "--listen"],
+			["-q", "-Q", "--q", "--Q", "--no-q", "--no-Q"],
+		]);
+	});
+
 	it("retains defaults, choices, and unfiltered sections as renderer-neutral data", async () => {
 		const model = await docs(
 			new Crust("app", {

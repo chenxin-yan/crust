@@ -113,6 +113,18 @@ describe("help", () => {
 		expect(output).toContain("--verbose, --loud, --no-verbose, --no-loud");
 	});
 
+	it("renderHelp shows the single-dash spelling of a one-character alias", async () => {
+		const command = new Crust("app").flags({
+			name: "port",
+			type: "number",
+			short: "p",
+			aliases: ["P", "listen"],
+		});
+
+		const output = stripAnsi(renderHelp(await command.snapshot()));
+		expect(output).toContain("-p, -P, --port, --P, --listen");
+	});
+
 	it("renderHelp hides negation labels when noNegate is set", async () => {
 		const command = new Crust("app").flags({
 			name: "help",
