@@ -80,9 +80,9 @@ function coerceValue(value: string, type: ValueType, label: string) {
 		// Positional booleans arrive as text; option booleans are already native values.
 		return coerceBooleanString(value);
 	}
-	if (type === "url") return coerceUrl(value);
-	if (type === "path") return coercePath(value);
-	if (type === "json") return coerceJson(value);
+	if (type === "url") return coerceUrl(value, label);
+	if (type === "path") return coercePath(value, label);
+	if (type === "json") return coerceJson(value, label);
 	return value;
 }
 
@@ -152,9 +152,9 @@ function resolveDefault(def: ArgDef | FlagDef, label: string) {
 
 	if (def.type === "path") {
 		if (Array.isArray(defaultValue)) {
-			return defaultValue.map((v) => coercePath(String(v)));
+			return defaultValue.map((v) => coercePath(String(v), label));
 		}
-		return coercePath(String(defaultValue));
+		return coercePath(String(defaultValue), label);
 	}
 
 	// Occurrence output is mutable; retained defaults must not be rewritten by an action.
