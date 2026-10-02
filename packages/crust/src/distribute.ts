@@ -47,6 +47,7 @@ type PublishPackageMetadata = {
 	/** npm man field: paths to man pages, e.g. `./man/mycli.1` */
 	man?: string[];
 	bin?: Record<string, string>;
+	// Optional npm metadata, copied from the user's package.json without interpretation.
 } & { [K in (typeof METADATA_KEYS)[number]]?: JsonValue };
 
 type RootPublishPackageJson = PublishPackageMetadata & {
