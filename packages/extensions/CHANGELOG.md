@@ -1,5 +1,12 @@
 # @crustjs/plugins
 
+## 0.5.3
+
+### Patch Changes
+
+- Updated dependencies [[`eca2876`](https://github.com/chenxin-yan/crust/commit/eca287680727e32da4b2770782342969398f7f09)]:
+  - @crustjs/utils@0.2.2
+
 ## 0.5.2
 
 ### Patch Changes
