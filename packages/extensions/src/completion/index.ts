@@ -25,7 +25,7 @@ const COMPLETION: ExtensionId = defineExtensionId("crust:completion");
 /** The set of shells supported by the v1 completion extension. */
 export type CompletionShell = "bash" | "zsh" | "fish";
 
-const SUPPORTED_SHELLS: readonly CompletionShell[] = ["bash", "zsh", "fish"] as const;
+const SUPPORTED_SHELLS = ["bash", "zsh", "fish"] as const satisfies readonly CompletionShell[];
 
 /** Options for the completion Extension. */
 export interface CompletionOptions {
