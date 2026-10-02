@@ -1,6 +1,29 @@
 import { pageSchema } from "fumadocs-core/source/schema";
 
-import { isPackageSlug, MODULE_PACKAGES, PACKAGE_GROUPS, PACKAGES } from "./src/lib/packages.ts";
+import changesetConfig from "../../.changeset/config.json" with { type: "json" };
+import modulesMeta from "./content/docs/modules/meta.json" with { type: "json" };
+import { isPackageSlug, type PackageManifest, PACKAGES } from "./src/lib/packages.ts";
+
+// Build-time only: kept out of src/lib/packages.ts so the client bundle does not ship it.
+export const PACKAGE_GROUPS = ["spine", "add-on", "standalone"] as const;
+
+type PackageGroup = (typeof PACKAGE_GROUPS)[number];
+
+// content/docs/modules/index.mdx states these rules above its tables: the spine is the fixed
+// changeset release group, add-ons peer-depend on Core, and standalone libraries are the rest.
+function packageGroup({ name, peerDependencies }: PackageManifest): PackageGroup {
+	if (changesetConfig.fixed.some((group) => group.includes(name))) return "spine";
+	if (peerDependencies?.["@crustjs/core"] !== undefined) return "add-on";
+	return "standalone";
+}
+
+/** Module packages in sidebar order (modules/meta.json), with their overview group. */
+export const MODULE_PACKAGES = modulesMeta.pages.filter(isPackageSlug).map((slug) => ({
+	slug,
+	name: PACKAGES[slug].name,
+	description: PACKAGES[slug].description,
+	group: packageGroup(PACKAGES[slug]),
+}));
 
 // `modules/<slug>.mdx` or `modules/<slug>/index.mdx`; the slug is only a package page if PACKAGES has it.
 const MODULE_PAGE = /\/modules\/([^/]+?)(?:\/index)?\.mdx$/;

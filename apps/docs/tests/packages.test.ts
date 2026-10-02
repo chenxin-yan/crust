@@ -6,9 +6,14 @@ import { frontmatter } from "fumadocs-core/content/md/frontmatter";
 import { pageSchema } from "fumadocs-core/source/schema";
 import { describe, expect, it } from "vite-plus/test";
 
-import { type MdastNode, packagePageSchema, remarkPackageTable } from "../package-pages";
+import {
+	MODULE_PACKAGES,
+	type MdastNode,
+	packagePageSchema,
+	remarkPackageTable,
+} from "../package-pages";
 import docsConfig, { docs } from "../source.config";
-import { MODULE_PACKAGES, PACKAGES } from "../src/lib/packages";
+import { PACKAGES } from "../src/lib/packages";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const modulesDir = fileURLToPath(new URL("../content/docs/modules/", import.meta.url));
