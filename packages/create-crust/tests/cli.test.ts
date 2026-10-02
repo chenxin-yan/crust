@@ -391,7 +391,28 @@ describe("create-crust CLI", () => {
 
 	// The basename becomes the package name, bin key, and a quoted TS string, so
 	// positional input must meet the same command-name contract as the prompt.
-	it.each(['bad"name', "bad name", ".hidden-cli", "-leading-dash", "__proto__"])(
+	it.each(["my.cli", "my_cli", "cli2"])(
+		"accepts the project name %j",
+		async (dirName) => {
+			const projectDir = join(makeTempRoot("create-crust-name"), dirName);
+
+			const result = await runCreateCrust([
+				projectDir,
+				"--runtime",
+				"bun",
+				"--no-install",
+				"--no-git",
+			]);
+
+			expect(result.exitCode).toBe(0);
+			expect(JSON.parse(readFileSync(join(projectDir, "package.json"), "utf-8")).name).toBe(
+				dirName,
+			);
+		},
+		30_000,
+	);
+
+	it.each(['bad"name', "bad name", ".hidden-cli", "-leading-dash", "_tool", "my~cli", "__proto__"])(
 		"rejects the project directory basename %j before writing anything",
 		async (dirName) => {
 			const tempRoot = makeTempRoot("create-crust-bad-name");

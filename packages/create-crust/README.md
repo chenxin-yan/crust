@@ -24,7 +24,7 @@ The initializer collects the destination, any required overwrite decision, runti
 create-crust [directory] [--runtime bun|node|deno] [--artifact package|binary] [--install|--no-install] [--git|--no-git] [--overwrite|--no-overwrite]
 ```
 
-- `directory` sets the destination; otherwise the directory prompt defaults to `my-cli`. Its basename (the current directory's for `.`) becomes the package and command name, so it must use only letters, digits, `.`, `_`, `~`, and `-`, not starting with `.` or `-`; anything else is rejected before any file is written.
+- `directory` sets the destination; otherwise the directory prompt defaults to `my-cli`. Its basename (the current directory's for `.`) becomes the package and command name, so it must follow the [installed command name rule](https://crustjs.com/docs/modules/core#tooling-subpath): letters, digits, `.`, `_`, and `-`, starting with a letter or digit; anything else is rejected before any file is written.
 - `--runtime` selects the runtime the project develops and builds for: `bun`, `node`, or `deno`. The default is `bun`.
 - `--artifact` selects the build output independently of the runtime: `package` for a JavaScript bundle requiring the user's selected runtime, or `binary` for a standalone executable embedding that runtime. Defaults: `binary` for Bun/Deno, `package` for Node.js. Deno runtime-package bundling is experimental.
 - `--install` / `--no-install` installs or skips dependencies. The default is to install. Deno projects install with `deno install`; the other runtimes use the detected package manager. If installation is skipped, the next steps include the install command.
