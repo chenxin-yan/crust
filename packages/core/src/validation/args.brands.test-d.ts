@@ -1,25 +1,25 @@
 import type { Equal, Expect } from "../../tests/helpers.ts";
-import type { AppendArgsChecks, EmptyArgNameBrand, ValidateVariadicArgs } from "./args.brands.ts";
+import type { AppendArgsChecks, EmptyArgNameBrand, ValidateArgs } from "./args.brands.ts";
 
-// ValidateVariadicArgs type inference
+// ValidateArgs type inference
 {
 	// resolves to identity when variadic is the last arg
 	type Args = readonly [
 		{ name: "name"; type: "string"; required: true },
 		{ name: "files"; type: "string"; variadic: true },
 	];
-	type Result = ValidateVariadicArgs<Args>;
+	type Result = ValidateArgs<Args>;
 	type _check = Expect<Equal<Result, Args>>;
 }
 
 {
 	// brands empty argument names
-	type Result = ValidateVariadicArgs<readonly [{ name: ""; type: "string" }]>;
+	type Result = ValidateArgs<readonly [{ name: ""; type: "string" }]>;
 	type _empty = Expect<Equal<Result[0]["FIX_EMPTY_NAME"], "Argument names must be non-empty">>;
-	type Widened = ValidateVariadicArgs<readonly [{ name: string; type: "string" }]>;
+	type Widened = ValidateArgs<readonly [{ name: string; type: "string" }]>;
 	type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_EMPTY_NAME">, never>>;
 	// an open template member does not hide an empty literal member (#357)
-	type Mixed = ValidateVariadicArgs<readonly [{ name: "" | `p-${string}`; type: "string" }]>;
+	type Mixed = ValidateArgs<readonly [{ name: "" | `p-${string}`; type: "string" }]>;
 	type _mixed = Expect<Equal<Mixed[0]["FIX_EMPTY_NAME"], "Argument names must be non-empty">>;
 	type _mixedDirect = Expect<
 		Equal<
@@ -27,12 +27,10 @@ import type { AppendArgsChecks, EmptyArgNameBrand, ValidateVariadicArgs } from "
 			"Argument names must be non-empty"
 		>
 	>;
-	type MixedValid = ValidateVariadicArgs<
-		readonly [{ name: "pos" | `p-${string}`; type: "string" }]
-	>;
+	type MixedValid = ValidateArgs<readonly [{ name: "pos" | `p-${string}`; type: "string" }]>;
 	type _mixedValid = Expect<Equal<Extract<keyof MixedValid[0], `FIX_${string}`>, never>>;
 	// a definition union: the open variant's `string` must not absorb the literal variant's ""
-	type MixedDefs = ValidateVariadicArgs<
+	type MixedDefs = ValidateArgs<
 		readonly [{ name: ""; type: "string" } | { name: string; type: "number" }]
 	>;
 	type _mixedDefs = Expect<
@@ -46,7 +44,7 @@ import type { AppendArgsChecks, EmptyArgNameBrand, ValidateVariadicArgs } from "
 		{ name: "files"; type: "string"; variadic: true },
 		{ name: "name"; type: "string"; required: true },
 	];
-	type Result = ValidateVariadicArgs<Args>;
+	type Result = ValidateArgs<Args>;
 	// First arg (variadic, non-last) gets branded error
 	type _checkFirst = Expect<
 		Equal<
@@ -63,7 +61,7 @@ import type { AppendArgsChecks, EmptyArgNameBrand, ValidateVariadicArgs } from "
 {
 	// brands a repeated name within one tuple
 	type Args = readonly [{ name: "file"; type: "string" }, { name: "file"; type: "string" }];
-	type Result = ValidateVariadicArgs<Args>;
+	type Result = ValidateArgs<Args>;
 	type _checkFirst = Expect<Equal<Result[0], Args[0]>>;
 	type _checkSecond = Expect<
 		Equal<Result[1]["FIX_DUPLICATE_ARG"], 'Argument name "file" is already defined'>
@@ -85,7 +83,7 @@ import type { AppendArgsChecks, EmptyArgNameBrand, ValidateVariadicArgs } from "
 	type Args = readonly [
 		{ name: "remote"; type: "string"; parse: (raw: string) => Promise<string> },
 	];
-	type Result = ValidateVariadicArgs<Args>;
+	type Result = ValidateArgs<Args>;
 	type _check = Expect<
 		Equal<Result[0]["FIX_ASYNC_PARSE"], "parse must be synchronous; do async work in run()">
 	>;
@@ -96,20 +94,20 @@ import type { AppendArgsChecks, EmptyArgNameBrand, ValidateVariadicArgs } from "
 	// Widened names opt out instead of receiving false-positive duplicate
 	// branding.
 	type Defs = readonly [{ name: string; type: "string" }, { name: string; type: "string" }];
-	type Result = ValidateVariadicArgs<Defs, "file">;
+	type Result = ValidateArgs<Defs, "file">;
 	type _first = Expect<Equal<Extract<keyof Result[0], `FIX_${string}`>, never>>;
 	type _second = Expect<Equal<Extract<keyof Result[1], `FIX_${string}`>, never>>;
 }
 
 {
 	// brands literal defaults outside literal choices
-	type Invalid = ValidateVariadicArgs<
+	type Invalid = ValidateArgs<
 		readonly [{ name: "mode"; type: "string"; choices: ["a", "b"]; default: "z" }]
 	>;
-	type Valid = ValidateVariadicArgs<
+	type Valid = ValidateArgs<
 		readonly [{ name: "mode"; type: "string"; choices: ["a", "b"]; default: "a" }]
 	>;
-	type Widened = ValidateVariadicArgs<
+	type Widened = ValidateArgs<
 		readonly [{ name: "mode"; type: "string"; choices: readonly string[]; default: string }]
 	>;
 	type _invalid = Expect<Equal<Invalid[0]["FIX_DEFAULT_CHOICE"], "default must be one of choices">>;
@@ -120,6 +118,6 @@ import type { AppendArgsChecks, EmptyArgNameBrand, ValidateVariadicArgs } from "
 {
 	// resolves to identity for empty args
 	type Args = readonly [];
-	type Result = ValidateVariadicArgs<Args>;
+	type Result = ValidateArgs<Args>;
 	type _check = Expect<Equal<Result, Args>>;
 }

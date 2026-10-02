@@ -94,7 +94,7 @@ export type EmptyLiteralNameBrand<Name extends string, Err> =
  * union-aware (a sometimes-async `cond ? Promise.resolve(x) : x` parser is
  * caught) while `any`-returning parsers stay unbranded.
  */
-export type AsyncParseBrand<T> = T extends { parse?: (...args: never[]) => infer R }
+type AsyncParseBrand<T> = T extends { parse?: (...args: never[]) => infer R }
 	? Extract<R, Promise<unknown>> extends never
 		? {}
 		: {
@@ -102,8 +102,10 @@ export type AsyncParseBrand<T> = T extends { parse?: (...args: never[]) => infer
 			}
 	: {};
 
+type DefaultChoiceError = { readonly FIX_DEFAULT_CHOICE: "default must be one of choices" };
+
 /** Brand literal defaults that fall outside a literal `choices` tuple. */
-export type DefaultWithinChoicesBrand<T> = T extends {
+type DefaultWithinChoicesBrand<T> = T extends {
 	choices: readonly (infer Choice extends string)[];
 	default: infer Default;
 }
@@ -114,19 +116,18 @@ export type DefaultWithinChoicesBrand<T> = T extends {
 				? {}
 				: Exclude<Default[number], Choice> extends never
 					? {}
-					: {
-							readonly FIX_DEFAULT_CHOICE: "default must be one of choices";
-						}
+					: DefaultChoiceError
 			: Default extends string
 				? string extends Default
 					? {}
 					: Exclude<Default, Choice> extends never
 						? {}
-						: {
-								readonly FIX_DEFAULT_CHOICE: "default must be one of choices";
-							}
+						: DefaultChoiceError
 				: {}
 	: {};
+
+/** `true` only for `any`, which brands treat as widened input owned by runtime checks. */
+export type IsAny<T> = 0 extends 1 & T ? true : false;
 
 /** Finite literal domains have required record keys; infinite templates and branded strings do not.
  * Distribute first so a finite union member cannot hide an open member's index signature.

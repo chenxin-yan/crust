@@ -7,7 +7,7 @@ import type {
 	ContextsOutput,
 } from "../api/context.ts";
 import type { CommandDefinitionData } from "../command/crust.ts";
-import type { CollisionBrand, DefName } from "./shared.ts";
+import type { CollisionBrand, DefName, IsAny } from "./shared.ts";
 
 /** Canonical names claimed by more than one instance in the same `.provide()` call. */
 type DuplicateContextNames<
@@ -153,7 +153,6 @@ export type ValidateContextDeps<
 };
 
 /** Dependency closure carried by command definitions and Extensions. */
-type IsAny<T> = 0 extends 1 & T ? true : false;
 type DeclaredDepsOfMember<T> =
 	IsAny<T> extends true
 		? Record<string, ContextValue>

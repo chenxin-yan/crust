@@ -189,7 +189,7 @@ export type ExtensionCommandDefs<E> = [E] extends [never]
 		: readonly [];
 
 /** An uncertain command collection opens only the child namespace. */
-export type ExtensionCommandSpellings<E> = AttachedCommandSpellings<ExtensionCommandDefs<E>>;
+type ExtensionCommandSpellings<E> = AttachedCommandSpellings<ExtensionCommandDefs<E>>;
 export type ExtensionsCommandSpellings<Es extends readonly unknown[]> =
 	IsStaticTuple<Es> extends true
 		? { [I in keyof Es]: ExtensionCommandSpellings<Es[I]> }[number]
