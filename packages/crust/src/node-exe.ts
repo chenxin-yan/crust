@@ -162,10 +162,12 @@ export async function resolveNodeExeBackend(
 	const readPackage = (path: string): JsonValue => JSON.parse(readFileSync(path, "utf8"));
 	const tsdownPackage = readPackage(packageJsonPath);
 	// Before running any of it: when crust's copy was skipped, the lookup can reach the project's own.
-	for (const [name, path, installed] of [
-		["tsdown", packageJsonPath, tsdownPackage],
-		["@tsdown/exe", exePackageJsonPath, readPackage(exePackageJsonPath)],
+	for (const [name, path] of [
+		["tsdown", packageJsonPath],
+		["@tsdown/exe", exePackageJsonPath],
 	] as const) {
+		// Read @tsdown/exe only after tsdown passes, so a mismatched tsdown reports the guidance first.
+		const installed = name === "tsdown" ? tsdownPackage : readPackage(path);
 		const version = isVersionedPackageJson(installed) ? installed.version : "without a version";
 		const pinned = crustPackage.optionalDependencies[name];
 		if (!satisfies(version, pinned)) {
