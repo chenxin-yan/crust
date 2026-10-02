@@ -1,5 +1,11 @@
 # @crustjs/effect
 
+## 0.2.2
+
+### Patch Changes
+
+- [#480](https://github.com/chenxin-yan/crust/pull/480) [`1463c45`](https://github.com/chenxin-yan/crust/commit/1463c458fa1f48e8ab3769de5b3ab58f9b18b04d) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Support the stable Effect v4 release. The `effect` peer dependency is now `^4.0.0`, so installs of `4.0.0-rc.*` prereleases are no longer in range. Upgrade with `bun add effect@4`.
+
 ## 0.2.1
 
 ### Patch Changes
