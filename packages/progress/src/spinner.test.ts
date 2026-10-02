@@ -1,3 +1,5 @@
+import { setTimeout as tick } from "node:timers/promises";
+
 import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -14,10 +16,6 @@ let writes: string[];
 beforeEach(() => {
 	({ sink, writes } = createFakeSink());
 });
-
-function tick(ms = 10): Promise<void> {
-	return new Promise((r) => setTimeout(r, ms));
-}
 
 describe("spinner — terminal sink", () => {
 	it("hides and restores the cursor in TTY mode", () => {
