@@ -311,7 +311,7 @@ export function renderZsh(spec: CompletionCommand, binName: string, version: str
 	// `compdef`, it also calls the function — but if the user `source`s the
 	// file by hand (the inline `eval` install), nothing has called the
 	// entry function yet. Guard with `compdef` so the autoload path doesn't
-	// double-invoke. Pattern adapted from yargs (research zsh.md §5.2).
+	// double-invoke. Pattern adapted from yargs.
 	// `binName` is validated, so the bare form is safe; we still single-
 	// quote it for readability and as defence-in-depth.
 	lines.push(`if [ "$funcstack[1]" = "_${ident}" ]; then`);

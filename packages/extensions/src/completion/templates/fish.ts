@@ -119,10 +119,8 @@ function posPredicate(
  *      on the path predicate — these surface child names + aliases with
  *      descriptions in the completion menu;
  *   2. one rule per flag of the current node;
- *   3. one rule per positional arg that declares choices (only the first
- *      slot — fish's `complete -a` model is best at offering a single
- *      candidate set; further slots fall through to filename completion
- *      via `-r` on the rule).
+ *   3. per-slot rules for positional args that declare choices or path
+ *      completion, gated on {@link posPredicate}.
  */
 function emitRules(
 	binName: string,
@@ -176,10 +174,9 @@ function emitRules(
 		// Emit a single value-taking rule for `flag`. Branches:
 		//   - choices                       → one rule per literal candidate
 		//   - valueCompletion === "files"   → require parameter + `(__fish_complete_path)`
-		//   - valueCompletion === "none"    → require parameter only; the script's
-		//                                     leading `complete -c <bin> -f` keeps
-		//                                     file completion off
-		//   - free-form                     → require parameter (current behaviour)
+		//   - otherwise (url/json/free-form) → require parameter only; the
+		//                                      script's leading `complete -c <bin> -f`
+		//                                      keeps file completion off
 		const emitValueRule = (rule: RuleParts) => {
 			if (flag.choices !== undefined && flag.choices.length > 0) {
 				emitChoiceFlag(rule, flag.choices);
@@ -450,9 +447,9 @@ export function renderFish(spec: CompletionCommand, binName: string, version: st
 	lines.push(...emitPosHelper(ident));
 	lines.push("");
 
-	// Disable file completion globally for the command. Individual rules
-	// re-enable filesystem completion via `-r` (free-form value flags) or
-	// stay file-less via `-x` (enum flags) as appropriate.
+	// Disable file completion globally for the command. Path flags and
+	// positionals opt back in with `(__fish_complete_path)` candidates;
+	// enum flags use `-x` to stay file-less.
 	lines.push(`complete -c ${fishSingleQuote(binName)} -f`);
 	lines.push("");
 
