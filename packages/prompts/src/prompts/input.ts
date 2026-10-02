@@ -6,7 +6,7 @@ import type { StandardSchema } from "@crustjs/utils/schema";
 
 import type { PromptIO } from "../core/renderer.ts";
 import { runPrompt } from "../core/renderer.ts";
-import { resolveShortCircuit } from "../core/short-circuit.ts";
+import { resolveTextShortCircuit } from "../core/short-circuit.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { createTextSubmitHandler, renderTextWithCursor } from "../core/text-edit.ts";
 import type { TextSubmitState } from "../core/text-edit.ts";
@@ -17,7 +17,6 @@ import type {
 	ValidateFn,
 } from "../core/types.ts";
 import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
-import { parseShortCircuit } from "../core/validate.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -177,15 +176,7 @@ export async function input<Output>(
 	options: InputOptions<Output> = {},
 	io?: PromptIO,
 ): Promise<Output | string> {
-	if (options.schema !== undefined && options.validate !== undefined) {
-		throw new Error('input() cannot combine "schema" with "validate"');
-	}
-	const schema = options.schema;
-	const shortCircuit = schema
-		? await resolveShortCircuit(options, io, (value, source) =>
-				parseShortCircuit(schema, value, source),
-			)
-		: await resolveShortCircuit(options, io);
+	const shortCircuit = await resolveTextShortCircuit("input", options, io);
 	if (shortCircuit.shortCircuited) return shortCircuit.value;
 	const { promptIO } = shortCircuit;
 
