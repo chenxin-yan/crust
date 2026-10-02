@@ -44,7 +44,7 @@ const fish = renderFishCompletion(snapshot);
 
 The renderers accept a root Command Snapshot plus a `version` override. The runtime command, renderers, and build hook require a version from the option or root metadata.
 
-The positional `<shell>` accepts `bash`, `zsh`, or `fish`. `command` changes the contributed command name and the regenerate hint in script headers; the standalone renderers always name `completion`. Every script targets the root command name as the executable, which [`crust build` requires to match the installed command](/docs/modules/crust#commands-and-entries-bin).
+The positional `<shell>` accepts `bash`, `zsh`, or `fish`. `command` changes the contributed command name and the regenerate hint in script headers; the standalone renderers always name `completion`. Every script targets the root command name as the executable, which [`crust build` requires to match the installed command](/docs/modules/crust#commands-and-entries-bin), so it must follow the [installed command name rule](/docs/modules/core#tooling-subpath).
 
 ## Value candidates
 

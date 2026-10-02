@@ -26,6 +26,8 @@
  *    interpolate them safely.
  */
 
+import { INSTALLED_COMMAND_NAME_RULE, isInstalledCommandName } from "@crustjs/core/tooling";
+
 /**
  * Choice-value shape accepted for `flags[].choices` and `args[].choices`.
  *
@@ -70,6 +72,8 @@ export function assertSafeChoiceValue(value: string): string {
  * need bespoke escaping for `case` patterns, `compdef`, and fish
  * predicate code.
  */
+// Matches the installed command name rule today, but names a shell-safety
+// constraint on every completion identifier, not just the root command.
 const IDENT_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /** Throw if `name` is not a safe identifier; otherwise return it. */
@@ -90,24 +94,20 @@ export function toShellIdent(name: string): string {
 }
 
 /**
- * Validate the root command name for use as the program name in generated
- * scripts and as a filesystem basename when `--output-dir` is set.
- *
- * Stricter than {@link assertSafeIdentifier} because the name also
- * becomes a filename and a `complete -F`/`compdef` argument that's
- * easier to break than option names.
+ * Validate the root command name, which is the installed command: the
+ * program name in generated scripts and a filename in `--output-dir` mode.
  */
 export function assertSafeBinName(binName: string): string {
 	if (binName.length === 0) {
 		throw new Error("completion extension: root command name must not be empty");
 	}
-	if (binName.includes("/") || binName.includes("\\") || binName === ".." || binName === ".") {
+	if (!isInstalledCommandName(binName)) {
 		throw new Error(
 			`completion extension: invalid root command name ${JSON.stringify(binName)} — ` +
-				`path separators and "."/".." are not allowed (used as a filename in --output-dir mode).`,
+				`it names the executable and the --output-dir files, so use ${INSTALLED_COMMAND_NAME_RULE}.`,
 		);
 	}
-	return assertSafeIdentifier(binName, "root command name");
+	return binName;
 }
 
 // ── Free-form text sanitisation ────────────────────────────────────────────

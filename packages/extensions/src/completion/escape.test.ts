@@ -44,6 +44,8 @@ describe("assertSafeBinName", () => {
 		expect(assertSafeBinName("mycli")).toBe("mycli");
 		expect(assertSafeBinName("my-cli")).toBe("my-cli");
 		expect(assertSafeBinName("crust.bin")).toBe("crust.bin");
+		expect(assertSafeBinName("my_cli")).toBe("my_cli");
+		expect(assertSafeBinName("cli2")).toBe("cli2");
 	});
 
 	it.each([
@@ -58,6 +60,8 @@ describe("assertSafeBinName", () => {
 		["newline", "foo\necho"],
 		["NUL", "foo\0bar"],
 		["leading hyphen", "-mycli"],
+		["leading underscore", "_tool"],
+		["tilde", "my~cli"],
 	])("rejects %s", (_label, value) => {
 		expect(() => assertSafeBinName(value)).toThrow(/root command name/);
 	});
