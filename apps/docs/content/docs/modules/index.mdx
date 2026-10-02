@@ -7,34 +7,16 @@ Install [`@crustjs/core`](/docs/modules/core) and the capabilities your applicat
 
 ## Framework spine
 
-| Module                                            | Description                                                                           |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| [`@crustjs/core`](/docs/modules/core)             | Command definitions, Contexts, Extensions, execution, and errors                      |
-| [`@crustjs/extensions`](/docs/modules/extensions) | Official Extensions: help, version, completion, typo presentation, color, and updates |
-| [`@crustjs/crust`](/docs/modules/crust)           | Build and distribution CLI                                                            |
-| [`@crustjs/man`](/docs/modules/man)               | Generate mdoc(7) manual pages from Command Snapshots                                  |
-| [`@crustjs/skills`](/docs/modules/skills)         | Package and install agent skills for Crust CLIs                                       |
+<PackageTable group="spine" />
 
 ## Framework add-ons
 
 These packages require `@crustjs/core` as a peer and are versioned independently.
 
-| Module                                      | Description                                                   |
-| ------------------------------------------- | ------------------------------------------------------------- |
-| [`@crustjs/effect`](/docs/modules/effect)   | Effect.ts v4 adaptor: Effect handlers, Layer Contexts, errors |
-| [`@crustjs/env`](/docs/modules/env)         | Typed, validated environment variables as a Context           |
-| [`@crustjs/mcp`](/docs/modules/mcp)         | Serve a Crust CLI as MCP tools over stdio                     |
-| [`@crustjs/testing`](/docs/modules/testing) | Test helpers for Crust applications                           |
+<PackageTable group="add-on" />
 
 ## Standalone libraries
 
 These packages do not depend on `@crustjs/core`.
 
-| Module                                        | Description                                                    |
-| --------------------------------------------- | -------------------------------------------------------------- |
-| [`@crustjs/create`](/docs/modules/create)     | Headless scaffolding engine for create-\* tools                |
-| [`@crustjs/progress`](/docs/modules/progress) | Task-scoped and imperative spinners, plus determinate progress |
-| [`@crustjs/prompts`](/docs/modules/prompts)   | Interactive terminal prompts                                   |
-| [`@crustjs/store`](/docs/modules/store)       | Typed configuration persistence                                |
-| [`@crustjs/style`](/docs/modules/style)       | Terminal styling and layout utilities                          |
-| [`@crustjs/tui`](/docs/modules/tui)           | Bun-only OpenTUI renderer lifecycle adapter                    |
+<PackageTable group="standalone" />
