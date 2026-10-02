@@ -76,8 +76,8 @@ export interface CrustErrorDetailsMap {
  * All possible error codes emitted by Crust.
  *
  * - `DEFINITION` — Runtime recipe, Extension, Context, or documentation definition failure
- * - `VALIDATION` — Missing required arguments or flags
- * - `PARSE` — Argv parsing failures (unknown flags, type coercion)
+ * - `VALIDATION` — Required-value or Standard Schema validation failure
+ * - `PARSE` — Argv syntax, structured `run()` input binding, or built-in value parsing failure
  * - `COMMAND_NOT_FOUND` — Unrecognised subcommand at the current level
  * - `ENV` — Missing or invalid `@crustjs/env` variables (values redacted)
  *
@@ -89,9 +89,6 @@ export interface CrustErrorDetailsMap {
  *   if (err instanceof CrustError) {
  *     switch (err.code) {
  *       case "VALIDATION":
- *         console.error(err.message);
- *         showHelp(cmd);
- *         break;
  *       case "PARSE":
  *         console.error(err.message);
  *         break;

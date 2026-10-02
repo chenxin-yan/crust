@@ -563,7 +563,7 @@ export type InferArgs<A> = A extends ArgsDef ? Simplify<InferArgsTuple<A>> : Rec
  * - **required** or **has default** → `primitive` (non-optional)
  * - otherwise → `primitive | undefined`
  */
-export type InferFlagValue<F extends FlagDef> = F extends {
+type InferFlagValue<F extends FlagDef> = F extends {
 	schema: infer S extends StandardSchema;
 }
 	? InferOutput<S>
@@ -846,10 +846,10 @@ export interface CommandMeta {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Raw token shapes a Standard Schema receives before it runs. */
-export type RawSchemaFlagInput = string | boolean | readonly (string | boolean)[] | undefined;
+type RawSchemaFlagInput = string | boolean | readonly (string | boolean)[] | undefined;
 
 /** One flag value after syntax parsing and before required/schema validation. */
-export type RawFlagValue<D extends FlagDef> = D extends { schema: StandardSchema }
+type RawFlagValue<D extends FlagDef> = D extends { schema: StandardSchema }
 	? RawSchemaFlagInput
 	: InferFlagValue<D> | undefined;
 

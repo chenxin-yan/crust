@@ -1,4 +1,5 @@
 import {
+	contextNameOf,
 	contextSources,
 	type AnyContextFactory,
 	type AnyContextInstance,
@@ -237,7 +238,7 @@ export function createContextResolver(
 	): ContextBag<Deps> => {
 		const bag: Record<string, Promise<ContextValue>> = {};
 		const add = (source: AnyContextFactory | AnyContextInstance): void => {
-			const name = "contextName" in source ? source.contextName : source.name;
+			const name = contextNameOf(source);
 			if (Object.hasOwn(bag, name)) return;
 			Object.defineProperty(bag, name, {
 				enumerable: true,
@@ -246,7 +247,7 @@ export function createContextResolver(
 			// Follow the source's own declared graph: a provided .of() double cuts the
 			// *instance* use list, but the bag must match the factory-typed closure so a
 			// transitive read fails loud (missing-context) instead of yielding undefined.
-			for (const dependency of source.use ?? []) add(dependency);
+			for (const dependency of source.use) add(dependency);
 		};
 		for (const source of sources) add(source);
 		Object.defineProperty(bag, contextSources, { value: Object.freeze([...sources]) });

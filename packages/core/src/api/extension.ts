@@ -364,7 +364,7 @@ export interface Extension<
 /** @internal Broad Extension constraint; contravariance requires the full metadata key set. */
 export type AnyExtension = Extension<any, any, any, any, RootMetaKey>;
 
-export type ExtensionProvidesOutput<E> =
+type ExtensionProvidesOutput<E> =
 	DefiningOf<E> extends ExtensionData<any, infer Provide, any, any, RootMetaKey>
 		? ContextsOutput<Provide>
 		: {};

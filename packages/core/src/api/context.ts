@@ -142,7 +142,7 @@ type NamedOutput<Name extends string, Value> =
 			? Record<string, Awaited<Value>>
 			: { [K in Name]: Awaited<Value> };
 
-export type ContextOutput<C> = C extends AnyContextInstance
+type ContextOutput<C> = C extends AnyContextInstance
 	? DefiningOf<C> extends ContextInstance<infer Name, infer Value, any, any>
 		? NamedOutput<Name, Value>
 		: never
@@ -173,6 +173,11 @@ export type ContextsOwnedFlags<Cs extends readonly AnyContextInstance[]> =
 			? {}
 			: FlagsDef;
 
+/** @internal The Context name a factory or instance provides. */
+export function contextNameOf(source: AnyContextInstance | AnyContextFactory): string {
+	return "contextName" in source ? source.contextName : source.name;
+}
+
 /** Check only declared availability; setup, callback values, and cycles belong to invocation. */
 export function validateContextAvailability(
 	contexts: readonly AnyContextInstance[],
@@ -183,7 +188,7 @@ export function validateContextAvailability(
 	const visit = (source: AnyContextInstance | AnyContextFactory): void => {
 		if (visited.has(source)) return;
 		visited.add(source);
-		const name = "contextName" in source ? source.contextName : source.name;
+		const name = contextNameOf(source);
 		if (!names.has(name)) {
 			throw new CrustError("DEFINITION", `No provider for Context "${name}"`, {
 				subject: "context",
@@ -196,13 +201,13 @@ export function validateContextAvailability(
 	for (const source of sources) visit(source);
 }
 
-export type FactoryOutput<F> = F extends AnyContextFactory
+type FactoryOutput<F> = F extends AnyContextFactory
 	? DefiningOf<F> extends ContextFactory<infer Name, any, infer Value, any, any>
 		? NamedOutput<Name, Value>
 		: never
 	: never;
 
-export type FactoriesOutput<Fs extends readonly AnyContextFactory[]> = Fs extends readonly [
+type FactoriesOutput<Fs extends readonly AnyContextFactory[]> = Fs extends readonly [
 	infer H,
 	...infer T extends readonly AnyContextFactory[],
 ]
