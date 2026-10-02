@@ -1,5 +1,5 @@
 // Dependency-free so callers can validate names without pulling in the
-// filesystem-heavy generate module.
+// filesystem-heavy install module.
 
 /**
  * Agent Skills spec name pattern: 1–64 lowercase alphanumeric characters and

@@ -6,7 +6,7 @@ import { Crust, defineCommand } from "@crustjs/core";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { writeSkills } from "../src/build.ts";
-import { installSkill } from "../src/generate.ts";
+import { installSkill } from "../src/install.ts";
 import { loadPackagedSkills } from "../src/source.ts";
 import { withCwd } from "./fixtures.ts";
 

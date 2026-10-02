@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { withCwd } from "../tests/fixtures.ts";
 import { SkillConflictError } from "./errors.ts";
-import { getSkillStatus, installSkill, uninstallSkill } from "./generate.ts";
+import { getSkillStatus, installSkill, uninstallSkill } from "./install.ts";
 
 let tempRoot: string;
 

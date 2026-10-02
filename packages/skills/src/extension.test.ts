@@ -23,7 +23,7 @@ import { reapBoundedProcesses, runBoundedProcess } from "../../crust/tests/bound
 import { runBuildHooks } from "../../crust/tests/build-hooks.ts";
 import { withCwd } from "../tests/fixtures.ts";
 import { skill } from "./extension.ts";
-import { installSkill } from "./generate.ts";
+import { installSkill } from "./install.ts";
 
 let tempRoot: string;
 let packageRoot: string;

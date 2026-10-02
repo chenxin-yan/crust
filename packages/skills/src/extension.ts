@@ -26,12 +26,7 @@ import {
 } from "./agents.ts";
 import type { AgentTarget, Scope } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
-import {
-	getSkillStatus,
-	groupAgentsByOutputDir,
-	installSkill,
-	uninstallSkill,
-} from "./generate.ts";
+import { getSkillStatus, groupAgentsByOutputDir, installSkill, uninstallSkill } from "./install.ts";
 import { SkillSourceUnavailableError, loadPackagedSkills, type PackagedSkill } from "./source.ts";
 import type { InstallSkillResult, SkillOptions, SkillStatusResult } from "./types.ts";
 
