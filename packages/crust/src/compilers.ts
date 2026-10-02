@@ -89,17 +89,15 @@ export function bunCompileTarget(
 }
 
 /**
- * Refuse the host target when only the `BUN_BE_BUN` fallback runner is
- * available and no `-baseline` alias can stand in for it (arm64 hosts).
- * Pass the selected `runner` to judge that compiler instead of looking up
- * `bun` on PATH again.
+ * Refuse the host target when the selected `runner` is the `BUN_BE_BUN`
+ * fallback and no `-baseline` alias can stand in for it (arm64 hosts).
  */
 export function assertTargetsBuildableWithoutBun(
 	targets: readonly BunTarget[],
+	runner: BuildRunner,
 	host = hostTarget(BUN_TARGETS),
-	runner?: BuildRunner,
 ): void {
-	const externalBun = runner ? runner.env.BUN_BE_BUN !== "1" : which("bun") !== null;
+	const externalBun = runner.env.BUN_BE_BUN !== "1";
 	if (host === null || !targets.includes(host) || bunBaselineAlias(host) !== null || externalBun) {
 		return;
 	}

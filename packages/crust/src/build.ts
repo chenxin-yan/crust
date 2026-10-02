@@ -424,15 +424,12 @@ const IMPLICIT_ARTIFACTS = {
 	node: "package",
 } as const satisfies Record<BuildRuntime, ArtifactKind>;
 
-/** The runtime/artifact combinations this release can build. */
-type ArtifactSelection = { runtime: BuildRuntime; artifact: ArtifactKind };
-
 /** `option` (the `artifact` build option or `--artifact`) > package.json `crust.artifact`; no default. */
 function resolveArtifact(
 	option: ArtifactKind | undefined,
 	config: CrustConfig,
 	runtime: BuildRuntime,
-): ArtifactSelection {
+): ArtifactKind {
 	if (option !== undefined && !isArtifactKind(option)) {
 		throw new Error(
 			`Invalid artifact ${JSON.stringify(option)}. Valid artifacts: ${ARTIFACT_KINDS.join(", ")}`,
@@ -449,40 +446,40 @@ function resolveArtifact(
 		);
 	}
 
-	return { runtime, artifact };
+	return artifact;
 }
 
 export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 	const userPackageJson = readUserPackageJson(cwd);
 	const config = readCrustConfig(userPackageJson);
 	const { runtime, source: runtimeSource } = resolveBuildRuntime(userPackageJson, config, cwd);
-	const selection = resolveArtifact(options.artifact, config, runtime);
+	const artifact = resolveArtifact(options.artifact, config, runtime);
 	const entries = resolveBinEntries(cwd, userPackageJson);
 	validatePackageIdentity(userPackageJson, "package.json");
 	const envFiles = resolveEnvFilePaths(cwd, options.envFiles);
 	const bunPlugins = config.bunPlugins ?? [];
 
-	if (selection.artifact === "package" && options.targets?.length) {
+	if (artifact === "package" && options.targets?.length) {
 		throw new Error(
 			"--target cannot be used with runtime packages (artifact package).\n  A runtime package is one portable JavaScript bundle; drop --target or use artifact binary.",
 		);
 	}
-	if (selection.artifact === "package" && config.targets !== undefined) {
+	if (artifact === "package" && config.targets !== undefined) {
 		throw new Error(
 			'package.json crust.targets is not supported for runtime packages (artifact package).\n  A runtime package is one portable JavaScript bundle; remove crust.targets or set "artifact": "binary".',
 		);
 	}
-	const denoTool = selection.artifact === "binary" ? "deno compile" : "deno bundle";
+	const denoTool = artifact === "binary" ? "deno compile" : "deno bundle";
 	if (runtime === "deno" && options.minify) {
 		throw new Error(
-			selection.artifact === "binary"
+			artifact === "binary"
 				? "--minify is not supported with the deno runtime.\n  deno compile has no minification step; drop the flag."
 				: "--minify is not supported with the deno runtime.\n  crust does not minify Deno runtime packages; drop the flag.",
 		);
 	}
 	if (runtime === "deno" && envFiles.length > 0) {
 		throw new Error(
-			selection.artifact === "binary"
+			artifact === "binary"
 				? "--env-file is not supported with the deno runtime.\n" +
 						"  deno compile embeds every variable from the file into the binary — secrets included —\n" +
 						"  with no PUBLIC_* filter. Load configuration at runtime instead (e.g. deno run --env-file)."
@@ -495,7 +492,7 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 			`package.json crust.bunPlugins is not supported with the deno runtime.\n  ${denoTool} has no Bun bundler; remove crust.bunPlugins or set crust.runtime to bun.`,
 		);
 	}
-	if (runtime === "node" && selection.artifact === "binary" && bunPlugins.length > 0) {
+	if (runtime === "node" && artifact === "binary" && bunPlugins.length > 0) {
 		throw new Error(
 			"package.json crust.bunPlugins is not supported for node standalone binaries.\n  Remove crust.bunPlugins, or use artifact package or the bun runtime.",
 		);
@@ -516,29 +513,27 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 		minify: runtime === "deno" ? false : (options.minify ?? true),
 	};
 
-	if (selection.artifact === "package")
-		return { ...common, runtime: selection.runtime, artifact: selection.artifact };
+	if (artifact === "package") return { ...common, runtime, artifact };
 	const targetInputs = options.targets?.length ? options.targets : config.targets;
-	const { runtime: binaryRuntime, artifact } = selection;
-	if (binaryRuntime === "bun") {
+	if (runtime === "bun") {
 		return {
 			...common,
-			runtime: binaryRuntime,
+			runtime,
 			artifact,
 			targets: resolveTargets(BUN_TARGETS, targetInputs),
 		};
 	}
-	if (binaryRuntime === "node") {
+	if (runtime === "node") {
 		return {
 			...common,
-			runtime: binaryRuntime,
+			runtime,
 			artifact,
 			targets: resolveTargets(NODE_TARGETS, targetInputs),
 		};
 	}
 	return {
 		...common,
-		runtime: binaryRuntime,
+		runtime,
 		artifact,
 		targets: resolveTargets(DENO_TARGETS, targetInputs),
 	};
@@ -643,7 +638,7 @@ async function selectCompilers(plan: BuildPlan, io: InvocationIO): Promise<Selec
 	);
 	printCompiler(compiler);
 	if (plan.runtime === "bun") {
-		assertTargetsBuildableWithoutBun(plan.targets, undefined, compiler.runner);
+		assertTargetsBuildableWithoutBun(plan.targets, compiler.runner);
 		const distribution: Distribution<BunTarget> = {
 			table: BUN_TARGETS,
 			targets: plan.targets,

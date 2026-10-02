@@ -348,61 +348,58 @@ describe("bunCompileTarget", () => {
 });
 
 describe("assertTargetsBuildableWithoutBun", () => {
-	it("refuses the self-copying target and lists the remaining targets when bun is absent", async () => {
-		await withoutBunOnPath(() => {
-			expect(() =>
-				assertTargetsBuildableWithoutBun(BUN_TARGETS.targets, "bun-darwin-arm64"),
-			).toThrow(
-				"Cannot build bun-darwin-arm64 without a separate bun executable on PATH.\n" +
-					"  Bun reuses the running crust executable as the base for its own platform, which yields a binary that crashes on start.\n" +
-					"  Install Bun (https://bun.sh), or pass --target with the other targets (e.g. --target bun-linux-x64 --target bun-linux-arm64 --target bun-linux-x64-musl --target bun-linux-arm64-musl --target bun-darwin-x64 --target bun-windows-x64 --target bun-windows-arm64).",
-			);
-			expect(() =>
-				assertTargetsBuildableWithoutBun(["bun-linux-arm64-musl"], "bun-linux-arm64-musl"),
-			).toThrow("Install Bun (https://bun.sh), or build a different target.");
-		});
-	});
-
-	it("keeps every other target buildable without bun", async () => {
-		await withoutBunOnPath(() => {
-			expect(() =>
-				assertTargetsBuildableWithoutBun(
-					["bun-linux-x64", "bun-darwin-x64", "bun-windows-arm64"],
-					"bun-darwin-arm64",
-				),
-			).not.toThrow();
-			expect(() => assertTargetsBuildableWithoutBun(BUN_TARGETS.targets, null)).not.toThrow();
-		});
-	});
-
-	it("allows an x64 self-copy target without bun because its -baseline alias is downloaded clean", async () => {
-		await withoutBunOnPath(() => {
-			for (const host of [
-				"bun-linux-x64",
-				"bun-linux-x64-musl",
-				"bun-darwin-x64",
-				"bun-windows-x64",
-			] as const) {
-				expect(() => assertTargetsBuildableWithoutBun(BUN_TARGETS.targets, host)).not.toThrow();
-			}
-		});
-	});
-
-	it("judges the pinned runner rather than looking up bun on PATH again", async () => {
+	it("refuses the self-copying target and lists the remaining targets under the fallback runner", () => {
 		expect(() =>
-			assertTargetsBuildableWithoutBun(["bun-darwin-arm64"], "bun-darwin-arm64", fallbackRunner),
+			assertTargetsBuildableWithoutBun(BUN_TARGETS.targets, fallbackRunner, "bun-darwin-arm64"),
+		).toThrow(
+			"Cannot build bun-darwin-arm64 without a separate bun executable on PATH.\n" +
+				"  Bun reuses the running crust executable as the base for its own platform, which yields a binary that crashes on start.\n" +
+				"  Install Bun (https://bun.sh), or pass --target with the other targets (e.g. --target bun-linux-x64 --target bun-linux-arm64 --target bun-linux-x64-musl --target bun-linux-arm64-musl --target bun-darwin-x64 --target bun-windows-x64 --target bun-windows-arm64).",
+		);
+		expect(() =>
+			assertTargetsBuildableWithoutBun(
+				["bun-linux-arm64-musl"],
+				fallbackRunner,
+				"bun-linux-arm64-musl",
+			),
+		).toThrow("Install Bun (https://bun.sh), or build a different target.");
+	});
+
+	it("keeps every other target buildable under the fallback runner", () => {
+		expect(() =>
+			assertTargetsBuildableWithoutBun(
+				["bun-linux-x64", "bun-darwin-x64", "bun-windows-arm64"],
+				fallbackRunner,
+				"bun-darwin-arm64",
+			),
+		).not.toThrow();
+		expect(() =>
+			assertTargetsBuildableWithoutBun(BUN_TARGETS.targets, fallbackRunner, null),
+		).not.toThrow();
+	});
+
+	it("allows an x64 self-copy target under the fallback runner because its -baseline alias is downloaded clean", () => {
+		for (const host of [
+			"bun-linux-x64",
+			"bun-linux-x64-musl",
+			"bun-darwin-x64",
+			"bun-windows-x64",
+		] as const) {
+			expect(() =>
+				assertTargetsBuildableWithoutBun(BUN_TARGETS.targets, fallbackRunner, host),
+			).not.toThrow();
+		}
+	});
+
+	it("judges the selected runner rather than looking up bun on PATH", async () => {
+		expect(which("bun")).not.toBeNull();
+		expect(() =>
+			assertTargetsBuildableWithoutBun(["bun-darwin-arm64"], fallbackRunner, "bun-darwin-arm64"),
 		).toThrow("Cannot build bun-darwin-arm64 without a separate bun executable on PATH.");
 		await withoutBunOnPath(() => {
 			expect(() =>
-				assertTargetsBuildableWithoutBun(["bun-darwin-arm64"], "bun-darwin-arm64", realBunRunner),
+				assertTargetsBuildableWithoutBun(["bun-darwin-arm64"], realBunRunner, "bun-darwin-arm64"),
 			).not.toThrow();
 		});
-	});
-
-	it("allows the self-copying target when bun is on PATH", () => {
-		expect(which("bun")).not.toBeNull();
-		expect(() =>
-			assertTargetsBuildableWithoutBun(BUN_TARGETS.targets, "bun-darwin-arm64"),
-		).not.toThrow();
 	});
 });
