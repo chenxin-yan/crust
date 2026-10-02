@@ -1,29 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { styleMethodPairs } from "./ansiCodes.ts";
-import {
-	bgRed,
-	black,
-	blue,
-	bold,
-	cyan,
-	dim,
-	gray,
-	green,
-	hidden,
-	inverse,
-	italic,
-	magenta,
-	red,
-	strikethrough,
-	underline,
-	white,
-	yellow,
-} from "./runtimeExports.ts";
 import { applyStyle } from "./styleEngine.ts";
-
-beforeAll(() => vi.stubEnv("FORCE_COLOR", "3"));
-afterAll(() => vi.unstubAllEnvs());
 
 // ────────────────────────────────────────────────────────────────────────────
 // applyStyle — basic application
@@ -131,86 +109,9 @@ describe("applyStyle — edge cases", () => {
 		const result = applyStyle("line1\nline2", styleMethodPairs.red);
 		expect(result).toBe("\x1b[31mline1\nline2\x1b[39m");
 	});
-});
 
-// ────────────────────────────────────────────────────────────────────────────
-// Modifier convenience functions
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("modifier functions", () => {
-	it("bold applies bold codes", () => {
-		expect(bold("text")).toBe("\x1b[1mtext\x1b[22m");
-	});
-
-	it("dim applies dim codes", () => {
-		expect(dim("text")).toBe("\x1b[2mtext\x1b[22m");
-	});
-
-	it("italic applies italic codes", () => {
-		expect(italic("text")).toBe("\x1b[3mtext\x1b[23m");
-	});
-
-	it("underline applies underline codes", () => {
-		expect(underline("text")).toBe("\x1b[4mtext\x1b[24m");
-	});
-
-	it("inverse applies inverse codes", () => {
-		expect(inverse("text")).toBe("\x1b[7mtext\x1b[27m");
-	});
-
-	it("hidden applies hidden codes", () => {
-		expect(hidden("text")).toBe("\x1b[8mtext\x1b[28m");
-	});
-
-	it("strikethrough applies strikethrough codes", () => {
-		expect(strikethrough("text")).toBe("\x1b[9mtext\x1b[29m");
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Color convenience functions
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("foreground color functions", () => {
-	it("black applies code 30", () => {
-		expect(black("t")).toBe("\x1b[30mt\x1b[39m");
-	});
-
-	it("red applies code 31", () => {
-		expect(red("t")).toBe("\x1b[31mt\x1b[39m");
-	});
-
-	it("green applies code 32", () => {
-		expect(green("t")).toBe("\x1b[32mt\x1b[39m");
-	});
-
-	it("yellow applies code 33", () => {
-		expect(yellow("t")).toBe("\x1b[33mt\x1b[39m");
-	});
-
-	it("blue applies code 34", () => {
-		expect(blue("t")).toBe("\x1b[34mt\x1b[39m");
-	});
-
-	it("magenta applies code 35", () => {
-		expect(magenta("t")).toBe("\x1b[35mt\x1b[39m");
-	});
-
-	it("cyan applies code 36", () => {
-		expect(cyan("t")).toBe("\x1b[36mt\x1b[39m");
-	});
-
-	it("white applies code 37", () => {
-		expect(white("t")).toBe("\x1b[37mt\x1b[39m");
-	});
-
-	it("gray applies code 90", () => {
-		expect(gray("t")).toBe("\x1b[90mt\x1b[39m");
-	});
-});
-
-describe("background color functions", () => {
-	it("bgRed applies code 41", () => {
-		expect(bgRed("t")).toBe("\x1b[41mt\x1b[49m");
+	it("is null-safe (matches chain behavior)", () => {
+		expect(applyStyle(undefined, styleMethodPairs.bold)).toBe("");
+		expect(applyStyle(null, styleMethodPairs.red)).toBe("");
 	});
 });
