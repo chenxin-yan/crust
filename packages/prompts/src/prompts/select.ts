@@ -131,7 +131,6 @@ function renderSelect<T>(
 
 function renderSubmitted<T>(
 	state: SelectState<T>,
-	_value: T,
 	theme: PromptTheme,
 	message: string | undefined,
 ): string {
@@ -224,7 +223,7 @@ export async function select<T>(options: SelectOptions<T>, io?: PromptIO): Promi
 			theme: options.theme,
 			render: (state, t) => renderSelect(state, t, options.message, maxVisible),
 			handleKey: createHandleKey<T>(maxVisible),
-			renderSubmitted: (state, value, t) => renderSubmitted(state, value, t, options.message),
+			renderSubmitted: (state, _value, t) => renderSubmitted(state, t, options.message),
 		},
 		promptIO,
 	);

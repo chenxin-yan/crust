@@ -22,6 +22,19 @@ import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
 // Types
 // ────────────────────────────────────────────────────────────────────────────
 
+interface InputBaseOptions {
+	/** The prompt message displayed to the user */
+	readonly message?: string;
+	/** Placeholder text shown when the input is empty. Overrides the default value as visual placeholder when both are set. */
+	readonly placeholder?: string;
+	/** Default value used when the user submits an empty input. Also shown as placeholder text when `placeholder` is not set. */
+	readonly default?: string;
+	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
+	readonly initial?: string;
+	/** Per-prompt theme overrides */
+	readonly theme?: PartialPromptTheme;
+}
+
 /**
  * Options for the {@link input} prompt.
  *
@@ -52,19 +65,6 @@ import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
  * // typeof port === "number"
  * ```
  */
-interface InputBaseOptions {
-	/** The prompt message displayed to the user */
-	readonly message?: string;
-	/** Placeholder text shown when the input is empty. Overrides the default value as visual placeholder when both are set. */
-	readonly placeholder?: string;
-	/** Default value used when the user submits an empty input. Also shown as placeholder text when `placeholder` is not set. */
-	readonly default?: string;
-	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
-	readonly initial?: string;
-	/** Per-prompt theme overrides */
-	readonly theme?: PartialPromptTheme;
-}
-
 export type InputOptions<Output = string> = InputBaseOptions & SchemaOrValidate<Output>;
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -104,7 +104,6 @@ function renderInput(
 }
 
 function renderSubmitted<Output>(
-	_state: TextSubmitState,
 	value: Output,
 	theme: PromptTheme,
 	message: string | undefined,
@@ -193,7 +192,7 @@ export async function input<Output>(
 			render: (state, t) =>
 				renderInput(state, t, options.message, options.placeholder, options.default),
 			handleKey: createTextSubmitHandler<Output>(options.schema, options.validate, options.default),
-			renderSubmitted: (state, value, t) => renderSubmitted(state, value, t, options.message),
+			renderSubmitted: (_state, value, t) => renderSubmitted(value, t, options.message),
 		},
 		promptIO,
 	);

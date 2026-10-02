@@ -215,7 +215,6 @@ function renderMultiselect<T>(
 
 function renderSubmitted<T>(
 	state: MultiselectState<T>,
-	_value: T[],
 	theme: PromptTheme,
 	message: string | undefined,
 ): string {
@@ -312,7 +311,7 @@ export async function multiselect<T>(options: MultiselectOptions<T>, io?: Prompt
 			theme: options.theme,
 			render: (state, t) => renderMultiselect(state, t, options.message, maxVisible),
 			handleKey: createHandleKey<T>(maxVisible, options.required, options.min, options.max),
-			renderSubmitted: (state, value, t) => renderSubmitted(state, value, t, options.message),
+			renderSubmitted: (state, _value, t) => renderSubmitted(state, t, options.message),
 		},
 		promptIO,
 	);

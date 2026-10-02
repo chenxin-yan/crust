@@ -193,7 +193,6 @@ function renderMultifilter<T>(
 
 function renderSubmitted<T>(
 	state: MultifilterState<T>,
-	_value: T[],
 	theme: PromptTheme,
 	message: string | undefined,
 ): string {
@@ -259,8 +258,8 @@ export async function multifilter<T>(options: MultifilterOptions<T>, io?: Prompt
 			render: (state, resolvedTheme) =>
 				renderMultifilter(state, resolvedTheme, options.message, options.placeholder, maxVisible),
 			handleKey: createHandleKey<T>(maxVisible, options.required, options.min, options.max),
-			renderSubmitted: (state, value, resolvedTheme) =>
-				renderSubmitted(state, value, resolvedTheme, options.message),
+			renderSubmitted: (state, _value, resolvedTheme) =>
+				renderSubmitted(state, resolvedTheme, options.message),
 		},
 		promptIO,
 	);

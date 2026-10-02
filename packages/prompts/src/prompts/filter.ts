@@ -129,7 +129,6 @@ function renderFilter<T>(
 
 function renderSubmitted<T>(
 	state: FilterState<T>,
-	_value: T,
 	theme: PromptTheme,
 	message: string | undefined,
 ): string {
@@ -226,8 +225,8 @@ export async function filter<T>(options: FilterOptions<T>, io?: PromptIO): Promi
 			render: (state, resolvedTheme) =>
 				renderFilter(state, resolvedTheme, options.message, options.placeholder, maxVisible),
 			handleKey: createHandleKey<T>(maxVisible),
-			renderSubmitted: (state, value, resolvedTheme) =>
-				renderSubmitted(state, value, resolvedTheme, options.message),
+			renderSubmitted: (state, _value, resolvedTheme) =>
+				renderSubmitted(state, resolvedTheme, options.message),
 		},
 		promptIO,
 	);

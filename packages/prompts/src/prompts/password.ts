@@ -22,6 +22,21 @@ import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
 // Types
 // ────────────────────────────────────────────────────────────────────────────
 
+interface PasswordBaseOptions {
+	/** The prompt message displayed to the user */
+	readonly message?: string;
+	/**
+	 * Character used to mask the input.
+	 *
+	 * @default "*"
+	 */
+	readonly mask?: string;
+	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
+	readonly initial?: string;
+	/** Per-prompt theme overrides */
+	readonly theme?: PartialPromptTheme;
+}
+
 /**
  * Options for the {@link password} prompt.
  *
@@ -38,21 +53,6 @@ import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
  * });
  * ```
  */
-interface PasswordBaseOptions {
-	/** The prompt message displayed to the user */
-	readonly message?: string;
-	/**
-	 * Character used to mask the input.
-	 *
-	 * @default "*"
-	 */
-	readonly mask?: string;
-	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
-	readonly initial?: string;
-	/** Per-prompt theme overrides */
-	readonly theme?: PartialPromptTheme;
-}
-
 export type PasswordOptions<Output = string> = PasswordBaseOptions & SchemaOrValidate<Output>;
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -84,13 +84,7 @@ function renderPassword(
 	return output;
 }
 
-function renderSubmitted<Output>(
-	_state: TextSubmitState,
-	_value: Output,
-	theme: PromptTheme,
-	message: string | undefined,
-	mask: string,
-): string {
+function renderSubmitted(theme: PromptTheme, message: string | undefined, mask: string): string {
 	const prefix = theme.success(PREFIX_SUBMITTED);
 	const msg = theme.message(message ?? "Enter a password");
 	// Show a fixed number of mask characters regardless of actual length
@@ -177,7 +171,7 @@ export async function password<Output>(
 			theme: options.theme,
 			render: (state, t) => renderPassword(state, t, options.message, mask),
 			handleKey: createTextSubmitHandler<Output>(options.schema, options.validate),
-			renderSubmitted: (state, value, t) => renderSubmitted(state, value, t, options.message, mask),
+			renderSubmitted: (_state, _value, t) => renderSubmitted(t, options.message, mask),
 		},
 		promptIO,
 	);
