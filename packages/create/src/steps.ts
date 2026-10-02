@@ -3,8 +3,8 @@ import { once } from "node:events";
 
 import { runProcess, which } from "@crustjs/utils/process";
 
+import { detectPackageManager } from "./detect.ts";
 import type { PostScaffoldStep } from "./types.ts";
-import { detectPackageManager } from "./utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Post-Scaffold Step Runner
@@ -84,15 +84,12 @@ async function runGitInit(cwd: string, commit?: string): Promise<void> {
 		throw new Error('"git" was not found on PATH. Install Git and try again.');
 	}
 
-	await spawnChecked([git, "init"], cwd, "git init");
+	await spawnChecked(git, ["init"], cwd, "git init");
 
 	if (commit) {
-		// Ensure git identity is configured for the commit.
-		// CI environments often lack global user.name/user.email config,
-		// so we set local defaults if they are missing.
 		await ensureGitIdentity(cwd, git);
-		await spawnChecked([git, "add", "."], cwd, "git add");
-		await spawnChecked([git, "commit", "-m", commit], cwd, "git commit");
+		await spawnChecked(git, ["add", "."], cwd, "git add");
+		await spawnChecked(git, ["commit", "-m", commit], cwd, "git commit");
 	}
 }
 
@@ -114,9 +111,7 @@ async function runOpenEditor(cwd: string): Promise<void> {
 		});
 		// Don't block the event loop on a long-lived editor process.
 		proc.unref();
-		// Don't wait for the editor to close — it may be a GUI process
-		// Just check that it started without immediately failing
-		// Use a short race to detect spawn failures
+		// GUI editors outlive us: a 500 ms race only catches an immediate failed exit.
 		const raceResult = await Promise.race([
 			once(proc, "close").then(([code]) => ({ kind: "exited" as const, code })),
 			new Promise<{ kind: "timeout" }>((resolve) =>
@@ -153,15 +148,13 @@ async function runCommand(cmd: string, cwd: string): Promise<void> {
  * are not already set at any level (local, global, system).
  */
 async function ensureGitIdentity(cwd: string, git: string): Promise<void> {
-	const hasName = (await gitConfigExitCode(git, "user.name", cwd)) === 0;
-	const hasEmail = (await gitConfigExitCode(git, "user.email", cwd)) === 0;
-
-	if (!hasName) {
-		await spawnChecked([git, "config", "user.name", "Crust"], cwd, "git config user.name");
+	if (!(await hasGitConfig(git, "user.name", cwd))) {
+		await spawnChecked(git, ["config", "user.name", "Crust"], cwd, "git config user.name");
 	}
-	if (!hasEmail) {
+	if (!(await hasGitConfig(git, "user.email", cwd))) {
 		await spawnChecked(
-			[git, "config", "user.email", "crust@scaffolded.project"],
+			git,
+			["config", "user.email", "crust@scaffolded.project"],
 			cwd,
 			"git config user.email",
 		);
@@ -169,20 +162,25 @@ async function ensureGitIdentity(cwd: string, git: string): Promise<void> {
 }
 
 /** Probe a git config key; non-zero exit means it is unset. */
-async function gitConfigExitCode(git: string, key: string, cwd: string): Promise<number | null> {
+async function hasGitConfig(git: string, key: string, cwd: string): Promise<boolean> {
 	const { exitCode } = await runProcess(git, ["config", key], {
 		cwd,
 		stdio: "collect",
 		stdout: "ignore",
 	});
-	return exitCode;
+	return exitCode === 0;
 }
 
 /**
  * Spawn a process and throw a descriptive error if it exits non-zero.
  */
-async function spawnChecked(cmd: string[], cwd: string, label: string): Promise<void> {
-	const { exitCode, stderr } = await runProcess(cmd[0]!, cmd.slice(1), {
+async function spawnChecked(
+	command: string,
+	args: readonly string[],
+	cwd: string,
+	label: string,
+): Promise<void> {
+	const { exitCode, stderr } = await runProcess(command, args, {
 		cwd,
 		stdio: "collect",
 		stdout: "ignore",

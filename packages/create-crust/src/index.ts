@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync, readdirSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
 import { Crust, resolveArtifactDir } from "@crustjs/core";
 import { detectPackageManager, isInGitRepo, runSteps, scaffold } from "@crustjs/create";
@@ -39,8 +39,9 @@ const eta = new Eta({ autoEscape: false, autoTrim: false });
 
 // The resolved basename is spliced into package.json (`name`, `bin` key, `start`
 // script path) and a quoted TS string, whatever its origin: positional argument,
-// prompt, or the cwd for ".". Use the build bin-key subset, excluding Core's
-// reserved command name. This is interpolation safety, not full npm-name validation.
+// prompt, or the cwd for ".". Mirrors the bin-key subset COMMAND_NAME_PATTERN in
+// packages/crust/src/commands/build.ts, excluding Core's reserved command name.
+// This is interpolation safety, not full npm-name validation.
 const PROJECT_NAME_PATTERN = /^[A-Za-z0-9_~][A-Za-z0-9._~-]*$/;
 function validateProjectName(name: string): void {
 	if (name === "__proto__" || !PROJECT_NAME_PATTERN.test(name)) {
@@ -106,7 +107,6 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 		// ── Collect all prompts before any file operations ──────────────
 		// This ensures a mid-prompt Ctrl+C won't leave partially scaffolded files.
 
-		// Determine project directory from positional arg or prompt
 		const targetDir =
 			args.directory ??
 			(await input({
@@ -116,24 +116,24 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 			}));
 
 		const resolvedDir = resolve(process.cwd(), targetDir);
-		const dirName = basename(resolvedDir);
-		validateProjectName(dirName);
-		const runtimeInitial = flags.runtime;
+		const isCwd = resolvedDir === process.cwd();
+		const name = basename(resolvedDir);
+		validateProjectName(name);
 
-		// Ask before writing into an existing destination. The cwd (".") always
-		// exists, so it only needs confirmation when non-empty; a named directory
+		// Ask before writing into an existing destination. The cwd always exists,
+		// so it only needs confirmation when non-empty; any other directory
 		// prompts whenever it already exists.
-		const needsOverwriteConfirm =
-			targetDir === "." ? readdirSync(resolvedDir).length > 0 : existsSync(resolvedDir);
+		const needsOverwriteConfirm = isCwd
+			? readdirSync(resolvedDir).length > 0
+			: existsSync(resolvedDir);
 		let overwrite = false;
 		if (needsOverwriteConfirm) {
 			overwrite = await confirm({
-				message:
-					targetDir === "."
-						? "Current directory is not empty. Overwrite conflicting files?"
-						: `Directory "${dirName}" already exists. Overwrite?`,
+				message: isCwd
+					? "Current directory is not empty. Overwrite conflicting files?"
+					: `Directory "${name}" already exists. Overwrite?`,
 				default: false,
-				...(flags.overwrite !== undefined ? { initial: flags.overwrite } : {}),
+				initial: flags.overwrite,
 			});
 			if (!overwrite) {
 				console.log("Aborted.");
@@ -161,7 +161,7 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 				},
 			],
 			default: "bun",
-			...(runtimeInitial !== undefined ? { initial: runtimeInitial } : {}),
+			initial: flags.runtime,
 		});
 		const artifact = await select<NonNullable<BuildOptions["artifact"]>>({
 			message: "Build output",
@@ -181,12 +181,12 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 				},
 			],
 			default: runtime === "node" ? "package" : "binary",
-			...(flags.artifact !== undefined ? { initial: flags.artifact } : {}),
+			initial: flags.artifact,
 		});
 		const installDeps = await confirm({
 			message: "Install dependencies?",
 			default: true,
-			...(flags.install !== undefined ? { initial: flags.install } : {}),
+			initial: flags.install,
 		});
 
 		// Skip git init prompt if already inside a git repository. Git cannot run
@@ -202,13 +202,10 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 			: await confirm({
 					message: "Initialize a git repository?",
 					default: true,
-					...(flags.git !== undefined ? { initial: flags.git } : {}),
+					initial: flags.git,
 				});
 
 		// ── Execute all file operations after prompts are done ──────────
-
-		// Infer package name from directory
-		const name = dirName;
 
 		const packageManager = runtime === "deno" ? "deno" : detectPackageManager(resolvedDir);
 		// The bundle inlines the sibling package.json imports, so scaffolded projects
@@ -234,7 +231,7 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 					dest: resolvedDir,
 					context,
 					render: (source, data) => eta.renderString(source, data),
-					...(overwrite ? { conflict: "overwrite" } : {}),
+					conflict: overwrite ? "overwrite" : "abort",
 				}),
 		});
 
@@ -255,12 +252,12 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 			});
 		}
 
-		// Print success message
 		console.log(`\nCreated ${name}!\n`);
 		console.log("Next steps:");
-		if (targetDir !== ".") {
-			const relativeDir = targetDir.startsWith("/") ? targetDir : `./${targetDir}`;
-			console.log(`  cd ${relativeDir}`);
+		if (!isCwd) {
+			const cdTarget =
+				isAbsolute(targetDir) || targetDir.startsWith(".") ? targetDir : `./${targetDir}`;
+			console.log(`  cd ${cdTarget}`);
 		}
 		if (!installDeps) console.log(`  ${context.install}`);
 		console.log(`  ${context.run} dev`);
