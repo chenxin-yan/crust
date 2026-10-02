@@ -167,7 +167,7 @@ Plain Linux targets use glibc; Alpine needs Bun's `-musl` targets. The launcher 
 Each `bin` key is an installed command name and each value is the TypeScript entry compiled for it. Every entry becomes `bin/<command>.js` in the root package and, for binaries, a `<command>-<target>` binary in every platform package. A string `bin` names one command after the unscoped package name; without `bin`, the build compiles `src/cli.ts` under that name.
 
 - Entries must be relative paths to existing files inside the project. Containment is checked lexically; symlinks may point elsewhere. Two commands cannot share one entry (compared by real path).
-- Command names use letters, digits, `.`, `_`, `~`, and `-`, cannot start with `.` or `-`, and cannot differ only by case.
+- Command names follow the [installed command name rule](/docs/modules/core#tooling-subpath): letters, digits, `.`, `_`, and `-`, starting with a letter or digit. They cannot differ only by case.
 - A validated build requires each entry's root command to be named after its key, such as `new Crust("my-cli-admin")` for `"my-cli-admin": "src/admin.ts"`. `--no-validate` skips this check.
 - `npm link` runs the source entry directly, so it needs the runtime's shebang (`#!/usr/bin/env bun`, `#!/usr/bin/env node`, or `#!/usr/bin/env -S deno run -A`). `create-crust` templates include it. Link `.crust/root` to exercise the built distribution instead.
 
