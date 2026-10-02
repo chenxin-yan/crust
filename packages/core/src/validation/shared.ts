@@ -2,22 +2,6 @@
 // Shared type helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-export type Awaitable<T> = T | Promise<T>;
-export type Simplify<T> = { [K in keyof T]: T[K] };
-// Flat intersections keep chained composition at constant instantiation depth.
-export type MergeContext<A, B> = A & B;
-
-/** Provider replacement is last-write-wins; an open name may leave any earlier value in place. */
-export type MergeProviders<A, B> = keyof A extends never
-	? B
-	: keyof B extends never
-		? A
-		: string extends keyof B
-			? Record<string, A[keyof A] | B[string]>
-			: [keyof A & keyof B] extends [never]
-				? A & B
-				: Omit<A, keyof B> & B;
-
 /**
  * Extract the narrowed canonical `name` literal from a definition.
  * Open name domains carry no spelling proof; attachment must retain

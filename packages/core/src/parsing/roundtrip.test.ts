@@ -8,14 +8,15 @@ import { resolveTypedPath } from "../command/invocation.ts";
 import type { CommandNode } from "../command/node.ts";
 import { resolveCommand, type CommandRoute } from "../command/router.ts";
 import { CrustError } from "../errors.ts";
-import type { ArgDef, FlagDef, ParseResult, ValidatedInput } from "../types.ts";
-import {
-	parseArgs,
-	parseStructured,
-	type RunInputPayload,
-	type RunInputValue,
-	validateParsed,
-} from "./parser.ts";
+import type {
+	ArgDef,
+	FlagDef,
+	ParseResult,
+	RunInputPayload,
+	RunInputValue,
+	ValidatedInput,
+} from "../types.ts";
+import { parseArgs, parseStructured, validateParsed } from "./parser.ts";
 import { applySchemas } from "./schema.ts";
 import { isFlagNegatable } from "./spellings.ts";
 

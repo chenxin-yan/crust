@@ -1,7 +1,6 @@
 import { parseArgs as nodeParseArgs, type ParseArgsOptionDescriptor } from "node:util";
 import { isPromise } from "node:util/types";
 
-import type { JsonValue } from "@crustjs/utils/json";
 import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
 
 import type { CommandNode } from "../command/node.ts";
@@ -17,31 +16,25 @@ import type {
 	ParsedFlagValue,
 	RawParsedArgs,
 	RawParsedFlags,
+	RunInputPayload,
+	RunInputValue,
 	ValueType,
 } from "../types.ts";
 import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";
 import { applySchemas } from "./schema.ts";
 import { normalizeFlag, type FlagSpelling } from "./spellings.ts";
 
+/** Environment variables consulted by `FlagDef.env`; `process.env` on the terminal path. */
+export type FlagEnvironment = Readonly<Record<string, string | undefined>>;
+
 // ────────────────────────────────────────────────────────────────────────────
 // Internal types
 // ────────────────────────────────────────────────────────────────────────────
-
-export type RunInputValue = URL | JsonValue | readonly RunInputValue[];
-
-export interface RunInputPayload {
-	readonly args?: Readonly<Record<string, RunInputValue | undefined>>;
-	readonly flags?: Readonly<Record<string, RunInputValue | undefined>>;
-	readonly raw?: readonly string[];
-}
 
 /** Values bound from strict Node tokens, tagged before definition/value correlation erases. */
 type ArgvFlagValue =
 	| { readonly kind: "boolean"; value: boolean | boolean[] }
 	| { readonly kind: "string"; value: string | string[] };
-
-/** Environment variables consulted by `FlagDef.env`; `process.env` on the terminal path. */
-export type FlagEnvironment = Readonly<Record<string, string | undefined>>;
 
 /** Element type of `parseArgs(...).tokens` — not exported by `@types/node`. */
 type ParseArgsToken = NonNullable<ReturnType<typeof nodeParseArgs>["tokens"]>[number];

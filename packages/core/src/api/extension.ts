@@ -4,11 +4,13 @@ import { CrustError, type CaughtError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import { ownDefinition, toFlagsRecord } from "../parsing/spellings.ts";
 import type {
+	Awaitable,
 	CommandMeta,
 	RuntimeCommandSectionInput,
 	FlagDef,
 	InferFlags,
 	InvocationIO,
+	MergeProviders,
 	NamedFlagDef,
 	NamedFlagsRecord,
 	ParsedArgValue,
@@ -25,12 +27,7 @@ import type {
 	ProvidedContextSpellings,
 	ValidateLocalFlagDefs,
 } from "../validation/flags.brands.ts";
-import type {
-	Awaitable,
-	HasClosedNames,
-	IsStaticTuple,
-	MergeProviders,
-} from "../validation/shared.ts";
+import type { HasClosedNames, IsStaticTuple } from "../validation/shared.ts";
 import {
 	definingOf,
 	sealHandle,

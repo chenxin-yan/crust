@@ -21,7 +21,6 @@ import type {
 } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
-import type { RunInputPayload } from "../parsing/parser.ts";
 import { normalizeArg } from "../parsing/spellings.ts";
 import { validateCommandSections } from "../sections.ts";
 import type {
@@ -36,8 +35,11 @@ import type {
 	ExecuteOptions,
 	InvocationIO,
 	InvocationOptions,
+	MergeContext,
 	MergeFlags,
+	MergeProviders,
 	NamedFlagDef,
+	RunInputPayload,
 } from "../types.ts";
 import type { AppendArgsChecks, AttachedArgs } from "../validation/args.brands.ts";
 import type {
@@ -78,13 +80,7 @@ import type {
 	LocalSpellingsOf,
 } from "../validation/flags.brands.ts";
 import type { IsClosedName } from "../validation/shared.ts";
-import type {
-	IsStaticTuple,
-	IsUnion,
-	MergeContext,
-	MergeProviders,
-	UnionToIntersection,
-} from "../validation/shared.ts";
+import type { IsStaticTuple, IsUnion, UnionToIntersection } from "../validation/shared.ts";
 import {
 	cloneCommandNode,
 	cloneFlagRegistry,

@@ -14,15 +14,16 @@ import {
 } from "../api/extension.ts";
 import { CrustError, type CaughtError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
-import {
-	parseArgs,
-	parseStructured,
-	validateParsed,
-	type RunInputPayload,
-} from "../parsing/parser.ts";
+import { parseArgs, parseStructured, validateParsed } from "../parsing/parser.ts";
 import { applySchemas } from "../parsing/schema.ts";
 import { isListed } from "../sections.ts";
-import type { ExecuteOptions, InvocationIO, InvocationOptions, ParseResult } from "../types.ts";
+import type {
+	ExecuteOptions,
+	InvocationIO,
+	InvocationOptions,
+	ParseResult,
+	RunInputPayload,
+} from "../types.ts";
 import type { CrustCommandContext, RunOutcome } from "./crust.ts";
 import {
 	applyContextSections,

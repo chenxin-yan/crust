@@ -2,11 +2,13 @@ import { CrustError, type CaughtError } from "../errors.ts";
 import { toFlagsRecord } from "../parsing/spellings.ts";
 import { validateCommandSections } from "../sections.ts";
 import type {
+	Awaitable,
 	CommandSection,
 	FlagsDef,
 	InferFlags,
 	InvocationIO,
 	MergeFlags,
+	MergeProviders,
 	NamedFlagDef,
 	RuntimeCommandSectionInput,
 } from "../types.ts";
@@ -18,8 +20,6 @@ import type {
 	ValidateLocalFlagDefs,
 } from "../validation/flags.brands.ts";
 import type {
-	Awaitable,
-	MergeProviders,
 	IsStaticTuple,
 	IsUnion,
 	IsClosedName,
