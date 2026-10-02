@@ -6,7 +6,7 @@ description: Add shared flags, commands, hooks, and generated files to your CLI.
 Extensions add behavior across your CLI. Start with the built-ins for help, version output, color control, and command suggestions:
 
 <include lang="ts" meta='title="cli.ts"'>
-  ../../../examples/extensions/install.ts
+  ../../../examples/guide/extensions-install.ts
 </include>
 
 ```sh
@@ -30,7 +30,7 @@ Use an Extension when shared behavior needs flags, commands, or lifecycle hooks.
 This Extension adds a preview mode that skips the action:
 
 <include lang="ts" meta='title="deploy.ts"'>
-  ../../../examples/extensions/preview.ts
+  ../../../examples/guide/extensions-preview.ts
 </include>
 
 ```sh
@@ -49,7 +49,7 @@ Builder methods other than `.factory()` return new frozen Extensions; there is n
 For configurable Extensions, chain `.factory()`:
 
 <include lang="ts" meta='title="banner.ts"'>
-  ../../../examples/extensions/factory.ts
+  ../../../examples/guide/extensions-factory.ts
 </include>
 
 Return a chain on the supplied Extension to keep its id. See [`ExtensionBuilder` and `ExtensionFactory`](/docs/api/types#extension-types) for the full contracts.
@@ -61,7 +61,7 @@ The preview flag above is available on every command. Set `recursive: false` on 
 An Extension can also install top-level commands:
 
 <include lang="ts" meta='title="cli.ts"'>
-  ../../../examples/extensions/diagnostics.ts
+  ../../../examples/guide/extensions-diagnostics.ts
 </include>
 
 ```sh
@@ -76,7 +76,7 @@ Contributed commands work like commands added with `.add()`, including typed `ru
 Use `preRun` for work before validation and the action, and `postRun` for work after the invocation settles:
 
 <include lang="ts" meta='title="hooks.ts" twoslash'>
-  ../../../examples/extensions/hooks.ts
+  ../../../examples/guide/extensions-hooks.ts
 </include>
 
 - `preRun` follows `.extend()` order. Returning `ctx.handled()` skips later `preRun` hooks and the action.
@@ -90,7 +90,7 @@ Hook flags are **pre-validation values**, not schema outputs. Check values befor
 Extensions can install [Contexts](/docs/guide/contexts) and use them from hooks:
 
 <include lang="ts" meta='title="cli.ts" twoslash'>
-  ../../../examples/extensions/providers.ts
+  ../../../examples/guide/extensions-providers.ts
 </include>
 
 ```sh
@@ -110,7 +110,7 @@ A flag-owning Context requires successful validation. Use it in the action, or i
 An Extension that needs `version` can require it with `defineExtension<"version">(id)`:
 
 <include lang="ts" meta='title="metadata.ts" twoslash'>
-  ../../../examples/extensions/metadata.ts
+  ../../../examples/guide/extensions-metadata.ts
 </include>
 
 TypeScript rejects `.extend(stamp)` unless the root declares `version`. Bun and Node builds (`bun build`, or `crust build` for those runtimes) skip this check, so run `tsc --noEmit` first. Deno-runtime `crust build` uses `deno compile`, which type-checks local modules by default.
@@ -118,7 +118,7 @@ TypeScript rejects `.extend(stamp)` unless the root declares `version`. Bun and 
 If a factory argument can supply the value instead, build the factory without a metadata requirement and annotate it with overloads. Only calls that omit the argument then require root metadata. The overloads are type-only, so handle a missing value at runtime:
 
 <include lang="ts" meta='title="metadata-optional.ts"'>
-  ../../../examples/extensions/metadata-optional.ts
+  ../../../examples/guide/extensions-metadata-optional.ts
 </include>
 
 [`version()`](/docs/modules/extensions/version) uses this pattern.
@@ -128,7 +128,7 @@ If a factory argument can supply the value instead, build the factory without a 
 Add documentation with `.sections()`. `command: []` targets the root; `command: ["deploy"]` would target a `deploy` command:
 
 <include lang="ts" meta='title="sections.ts"'>
-  ../../../examples/extensions/sections.ts
+  ../../../examples/guide/extensions-sections.ts
 </include>
 
 `my-cli --help` includes:
@@ -145,7 +145,7 @@ The callback receives a snapshot containing contributed commands and flags, but 
 A build hook returns files; Crust writes them. This one saves the frozen Command Snapshot as JSON:
 
 <include lang="ts" meta='title="cli.ts"'>
-  ../../../examples/extensions/build.ts
+  ../../../examples/guide/extensions-build.ts
 </include>
 
 During `crust build`:
@@ -164,7 +164,7 @@ Hooks run in registration order. Section callbacks refresh after each hook, so l
 The built-in `help`, `man`, and `skill` Extensions render sections for different audiences. A custom generator can do the same with `visibleSectionsFor()`:
 
 <include lang="ts" meta='title="web-docs.ts" twoslash'>
-  ../../../examples/extensions/consumer.ts
+  ../../../examples/guide/extensions-consumer.ts
 </include>
 
 The generated `web-docs/docs.md` contains:

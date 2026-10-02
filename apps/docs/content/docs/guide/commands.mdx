@@ -52,7 +52,7 @@ Move a subcommand into its own file with `defineCommand()`, then attach it with 
 ### Define a command
 
 <include lang="ts" meta='title="src/commands/greet.ts"'>
-  ../../../examples/split-files/commands/greet.ts
+  ../../../examples/guide/commands-split-files/commands/greet.ts
 </include>
 
 Importing a command definition does not run its action. The optional second argument supplies metadata, such as the description shown in help. See the [`defineCommand()` options](/docs/api/crust#definecommandname-config-recipe) for aliases, custom usage, additional sections, and hiding commands from listings.
@@ -62,7 +62,7 @@ Importing a command definition does not run its action. The optional second argu
 ### Define the root
 
 <include lang="ts" meta='title="src/app.ts"'>
-  ../../../examples/split-files/app.ts
+  ../../../examples/guide/commands-split-files/app.ts
 </include>
 
 Set the CLI's name and description here, along with shared [Extensions](/docs/guide/extensions) such as `help()`.
@@ -72,7 +72,7 @@ Set the CLI's name and description here, along with shared [Extensions](/docs/gu
 ### Compose and execute
 
 <include lang="ts" meta='title="src/cli.ts"'>
-  ../../../examples/split-files/cli.ts
+  ../../../examples/guide/commands-split-files/cli.ts
 </include>
 
 Add your commands before calling `.execute()`.
@@ -90,7 +90,7 @@ Hello, Ada!
 `.execute()` is the terminal entry point: it parses argv, renders errors, and sets the exit code. To call a command from your own code, such as a script, server, or test, use `.run()` with a typed path and structured input instead.
 
 <include lang="ts" meta='title="src/script.ts"'>
-  ../../../examples/split-files/script.ts
+  ../../../examples/guide/commands-split-files/script.ts
 </include>
 
 `run()` resolves to an outcome with the captured `stdout` and `stderr` and never renders errors, changes `process.exitCode`, or applies flag `env` fallbacks. Check `status` before reading the action's `result`. See the [`run()` reference](/docs/api/crust#runpath-input-options) for input rules and capture behavior, and [Testing](/docs/guide/testing) for using it in tests.

@@ -31,8 +31,8 @@ it("docs and landing hovers explain selected values without builder or boilerpla
 			"../../../examples/guide/arguments-choices.ts": { runtime: 'const runtime: "bun" | "node" | undefined' },
 			"../../../examples/guide/flags-values.ts": { flags: 'flags: { runtime: "bun" | "node"; tag: string | undefined; target: string[] | undefined; }' },
 			"../../../examples/guide/testing.ts#run": { outcome: "const outcome: RunOutcome<number>", result: "result: number" },
-			"../../../examples/guide/contexts-uses.ts": { config: "config: Promise<{ region: string; }>" },
-			"../../../examples/extensions/consumer.ts": { sections: "sections: readonly CommandSection[]" },
+			"../../../examples/guide/contexts-dependencies.ts": { config: "config: Promise<{ region: string; }>" },
+			"../../../examples/guide/extensions-consumer.ts": { sections: "sections: readonly CommandSection[]" },
 			"../../../examples/modules/env.ts#quick-example": { DATABASE_URL: "const DATABASE_URL: URL" },
 			"../../../examples/modules/effect-env.ts#env-example": { PORT: "const PORT: number" },
 		};
