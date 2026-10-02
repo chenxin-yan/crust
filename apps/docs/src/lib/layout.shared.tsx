@@ -2,13 +2,6 @@ import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
 
 import { siteConfig } from "./seo";
 
-// GitHub repository configuration
-export const gitConfig = {
-	user: "chenxin-yan",
-	repo: "crust",
-	branch: "main",
-};
-
 /** GitHub Project tracking what ships next; linked from the nav and the landing hero badge. */
 export const roadmapUrl = "https://github.com/users/chenxin-yan/projects/10";
 
@@ -78,5 +71,5 @@ export const baseOptions: BaseLayoutProps = {
 			external: true,
 		},
 	],
-	githubUrl: `https://github.com/${gitConfig.user}/${gitConfig.repo}`,
+	githubUrl: siteConfig.githubUrl,
 };

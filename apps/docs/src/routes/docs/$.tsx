@@ -10,8 +10,8 @@ import defaultMdxComponents from "fumadocs-ui/mdx";
 import { Suspense } from "react";
 
 import { LLMCopyButton, ViewOptions } from "@/components/ai/page-actions";
-import { baseOptions, gitConfig } from "@/lib/layout.shared";
-import { buildPageMeta } from "@/lib/seo";
+import { baseOptions } from "@/lib/layout.shared";
+import { buildPageMeta, siteConfig } from "@/lib/seo";
 import { source } from "@/lib/source";
 
 export const Route = createFileRoute("/docs/$")({
@@ -58,7 +58,6 @@ const serverLoader = createServerFn({
 const clientLoader = browserCollections.docs.createClientLoader({
 	component(
 		{ toc, frontmatter, default: MDX },
-		// you can define props for the component
 		{
 			url,
 			path,
@@ -79,7 +78,7 @@ const clientLoader = browserCollections.docs.createClientLoader({
 					<LLMCopyButton markdownUrl={`${url}.mdx`} />
 					<ViewOptions
 						markdownUrl={`${url}.mdx`}
-						githubUrl={`https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.branch}/apps/docs/content/docs/${path}`}
+						githubUrl={`${siteConfig.githubUrl}/blob/main/apps/docs/content/docs/${path}`}
 					/>
 				</div>
 				<DocsBody>
