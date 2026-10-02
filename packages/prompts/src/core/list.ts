@@ -63,8 +63,8 @@ export async function setupListPrompt<T, Answer extends T | readonly T[]>(
 	};
 }
 
-/** @internal Re-filter a list prompt after its query changes. */
-export function refilter<
+/** Re-filter a list prompt after its query changes. */
+function refilter<
 	T,
 	S extends {
 		readonly query: string;
