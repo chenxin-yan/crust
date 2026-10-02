@@ -6,7 +6,7 @@
 // units and include ANSI escapes), these measure terminal columns, so escapes
 // are free and CJK/emoji count their real column width.
 
-import { stringWidth } from "../stringWidth.ts";
+import { stringWidth } from "./string-width.ts";
 
 /**
  * Pad a string on the left (right-align) to the given visible width.

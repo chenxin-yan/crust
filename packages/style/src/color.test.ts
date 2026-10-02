@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { styleMethodPairs } from "./ansiCodes.ts";
+import { styleMethodPairs } from "./ansi-codes.ts";
 import { paint } from "./color.ts";
-import { applyStyle } from "./styleEngine.ts";
+import { applyStyle } from "./style-engine.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // fg / bg — direct styling functions

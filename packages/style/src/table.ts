@@ -2,8 +2,8 @@
 // Tables — Column-aligned table rendering with visible width
 // ────────────────────────────────────────────────────────────────────────────
 
-import { stringWidth } from "../stringWidth.ts";
-import { center, padEnd, padStart } from "../text/pad.ts";
+import { center, padEnd, padStart } from "./pad.ts";
+import { stringWidth } from "./string-width.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types

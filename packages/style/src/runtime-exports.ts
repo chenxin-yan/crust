@@ -2,7 +2,7 @@
 // Runtime Exports — Top-level color/modifier helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-import { style } from "./createStyle.ts";
+import { style } from "./create-style.ts";
 import type { ChainableStyleFn, StyleInstance } from "./types.ts";
 
 export const black: ChainableStyleFn = style.black;

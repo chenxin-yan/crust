@@ -1,5 +1,5 @@
-import type { AnsiPair } from "./ansiCodes.ts";
-import { applyStyle } from "./styleEngine.ts";
+import type { AnsiPair } from "./ansi-codes.ts";
+import { applyStyle } from "./style-engine.ts";
 
 const OSC = "\x1b]";
 const ST = "\x1b\\";

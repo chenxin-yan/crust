@@ -2,12 +2,12 @@
 // Create Style — Configurable style instance factory
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { AnsiPair, StyleMethodName } from "./ansiCodes.ts";
-import { isModifierName, styleMethodNames, styleMethodPairs } from "./ansiCodes.ts";
+import type { AnsiPair, StyleMethodName } from "./ansi-codes.ts";
+import { isModifierName, styleMethodNames, styleMethodPairs } from "./ansi-codes.ts";
 import { resolveColorDepth, resolveModifierCapability } from "./capability.ts";
 import { colorPair, paint } from "./color.ts";
 import { linkCode, link as linkDirect } from "./hyperlinks.ts";
-import { applyStyle } from "./styleEngine.ts";
+import { applyStyle } from "./style-engine.ts";
 import type {
 	ChainableStyleFn,
 	ColorDepth,

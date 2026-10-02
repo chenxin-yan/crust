@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { table } from "./tables.ts";
+import { table } from "./table.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Table

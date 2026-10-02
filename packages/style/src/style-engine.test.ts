@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { styleMethodPairs } from "./ansiCodes.ts";
-import { applyStyle } from "./styleEngine.ts";
+import { styleMethodPairs } from "./ansi-codes.ts";
+import { applyStyle } from "./style-engine.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // applyStyle — basic application

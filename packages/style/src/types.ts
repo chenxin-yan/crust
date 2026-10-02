@@ -2,9 +2,9 @@
 // Types — Mode, options, and shared type definitions
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { AnsiPair, StyleMethodName } from "./ansiCodes.ts";
+import type { AnsiPair, StyleMethodName } from "./ansi-codes.ts";
 import type { HyperlinkOptions } from "./hyperlinks.ts";
-import type { NamedColor } from "./namedColorValues.ts";
+import type { NamedColor } from "./named-color-values.ts";
 
 /** Completion hints for supported non-named color strings. */
 type ColorSyntaxHint = "#" | "rgb()";

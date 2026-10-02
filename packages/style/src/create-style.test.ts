@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { createStyle, style } from "./createStyle.ts";
+import { createStyle, style } from "./create-style.ts";
 import { bold, red } from "./index.ts";
 
 const originalStdoutIsTTY = process.stdout.isTTY;

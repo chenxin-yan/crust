@@ -4,10 +4,10 @@
 // Inputs are intentionally limited to hex, `rgb()` strings, rgb triples, and
 // named colors.
 
-import type { AnsiPair } from "./ansiCodes.ts";
-import { namedColorValues } from "./namedColorValues.ts";
-import type { NamedColor } from "./namedColorValues.ts";
-import { applyStyle } from "./styleEngine.ts";
+import type { AnsiPair } from "./ansi-codes.ts";
+import { namedColorValues } from "./named-color-values.ts";
+import type { NamedColor } from "./named-color-values.ts";
+import { applyStyle } from "./style-engine.ts";
 import type { ColorDepth, ColorInput } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────

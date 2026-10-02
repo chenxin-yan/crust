@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { widthCorpus } from "./stringWidth.corpus.ts";
-import { stringWidth, stringWidthJs } from "./stringWidth.ts";
+import { widthCorpus } from "./string-width.corpus.ts";
+import { stringWidth, stringWidthJs } from "./string-width.ts";
 
 describe("stringWidth", () => {
 	it("treats East-Asian-Ambiguous characters as narrow", () => {

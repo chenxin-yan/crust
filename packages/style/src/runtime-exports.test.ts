@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { styleMethodNames } from "./ansiCodes.ts";
-import * as runtimeExports from "./runtimeExports.ts";
+import { styleMethodNames } from "./ansi-codes.ts";
+import * as runtimeExports from "./runtime-exports.ts";
 import {
 	bgRed,
 	black,
@@ -21,7 +21,7 @@ import {
 	underline,
 	white,
 	yellow,
-} from "./runtimeExports.ts";
+} from "./runtime-exports.ts";
 
 afterEach(() => vi.unstubAllEnvs());
 

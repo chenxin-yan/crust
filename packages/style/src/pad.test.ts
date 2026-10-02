@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 
-import { bold } from "../runtimeExports.ts";
 import { center, padEnd, padStart } from "./pad.ts";
+import { bold } from "./runtime-exports.ts";
 
 beforeAll(() => vi.stubEnv("FORCE_COLOR", "3"));
 afterAll(() => vi.unstubAllEnvs());
