@@ -43,6 +43,7 @@
 		"postpack": "rm -f LICENSE"
 	},
 	"dependencies": {
+		"@crustjs/utils": "workspace:^",
 		"@modelcontextprotocol/sdk": "^1.30.1"
 	},
 	"devDependencies": {
