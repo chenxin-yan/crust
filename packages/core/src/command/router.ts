@@ -23,6 +23,23 @@ export interface CommandRoute {
 	commandPath: string[];
 }
 
+/** Build the COMMAND_NOT_FOUND error for an unknown child of `parent`. */
+export function commandNotFound(
+	parent: CommandNode,
+	candidate: string,
+	commandPath: readonly string[],
+): CrustError<"COMMAND_NOT_FOUND"> {
+	const parentCommand = snapshotCommand(parent);
+	return new CrustError("COMMAND_NOT_FOUND", `Unknown command "${candidate}".`, {
+		input: candidate,
+		available: Object.entries(parentCommand.subCommands).flatMap(([name, child]) =>
+			isListed(child) ? [name] : [],
+		),
+		commandPath: [...commandPath],
+		parentCommand,
+	});
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // resolveCommand — Subcommand routing
 // ────────────────────────────────────────────────────────────────────────────
@@ -214,15 +231,7 @@ export function resolveCommand(command: CommandNode, argv: string[]): CommandRou
 		}
 
 		// Parent has no run() — this is an unknown subcommand error.
-		const parentCommand = snapshotCommand(current);
-		throw new CrustError("COMMAND_NOT_FOUND", `Unknown command "${candidate}".`, {
-			input: candidate,
-			available: Object.entries(parentCommand.subCommands).flatMap(([name, child]) =>
-				isListed(child) ? [name] : [],
-			),
-			commandPath: [...path],
-			parentCommand,
-		});
+		throw commandNotFound(current, candidate, path);
 	}
 
 	return {

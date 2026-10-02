@@ -21,7 +21,6 @@ import {
 	type RunInputPayload,
 } from "../parsing/parser.ts";
 import { applySchemas } from "../parsing/schema.ts";
-import { isListed } from "../sections.ts";
 import type { ExecuteOptions, InvocationIO, InvocationOptions, ParseResult } from "../types.ts";
 import type { CrustCommandContext } from "./crust.ts";
 import {
@@ -33,7 +32,7 @@ import {
 	type MaterializeCommandDefinition,
 } from "./extensions-install.ts";
 import type { CommandNode } from "./node.ts";
-import { resolveCommand, type CommandRoute } from "./router.ts";
+import { commandNotFound, resolveCommand, type CommandRoute } from "./router.ts";
 import { snapshotCommand } from "./snapshot.ts";
 import type { RunOutcome } from "./typed-run.ts";
 
@@ -301,16 +300,7 @@ export function resolveTypedPath(root: CommandNode, path: readonly string[]): Co
 	if (route.argv.length > 0) {
 		// An unconsumed path element would otherwise silently run the nearest resolved ancestor.
 		// SAFETY: the enclosing length check proves the first element exists.
-		const candidate = route.argv[0]!;
-		const parentCommand = snapshotCommand(route.command);
-		throw new CrustError("COMMAND_NOT_FOUND", `Unknown command "${candidate}".`, {
-			input: candidate,
-			available: Object.entries(parentCommand.subCommands).flatMap(([name, child]) =>
-				isListed(child) ? [name] : [],
-			),
-			commandPath: route.commandPath,
-			parentCommand,
-		});
+		throw commandNotFound(route.command, route.argv[0]!, route.commandPath);
 	}
 	return route;
 }
