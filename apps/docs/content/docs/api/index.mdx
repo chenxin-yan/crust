@@ -9,18 +9,19 @@ These pages cover the `@crustjs/core` root API. For installation and a quick sta
 
 ## Runtime API
 
-| Export                                                                                    | Description                                                          |
-| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| [`Crust`](/docs/api/crust)                                                                | Immutable, chainable command builder and invocation boundary         |
-| [`defineCommand(name, config?, recipe)`](/docs/api/crust#definecommandname-config-recipe) | Define a named, inert reusable command definition for `.add()`       |
-| [`defineContext(name)`](/docs/api/types#contextbuilder)                                   | Start a fluent Context definition; `.setup()` returns its factory    |
-| [`defineExtension(id)`](/docs/api/types#extensionbuilder)                                 | Start an immutable fluent application-wide Extension definition      |
-| [`defineExtension<MetaKeys>(id)`](/docs/guide/extensions#required-root-metadata)          | Start an Extension that requires root metadata keys                  |
-| [`defineExtensionId(id)`](/docs/api/types#extension)                                      | Mint a branded Extension identity from a non-empty, trimmed string   |
-| [`defineFlag(name, definition)`](/docs/api/types#defineflag-and-definearg)                | Define one named flag, preserving its literal definition             |
-| [`defineArg(name, definition)`](/docs/api/types#defineflag-and-definearg)                 | Define one named positional argument                                 |
-| [`CrustError`](/docs/api/errors)                                                          | Structured framework error with stable codes and typed details       |
-| [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname)                      | Absolute path of an artifact or `crust.include` directory at runtime |
+| Export                                                                                    | Description                                                                                                                     |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| [`Crust`](/docs/api/crust)                                                                | Immutable, chainable command builder and invocation boundary                                                                    |
+| [`defineCommand(name, config?, recipe)`](/docs/api/crust#definecommandname-config-recipe) | Define a named, inert reusable command definition for `.add()`                                                                  |
+| [`defineContext(name)`](/docs/api/types#contextbuilder)                                   | Start a fluent Context definition; `.setup()` returns its factory                                                               |
+| [`defineExtension(id)`](/docs/api/types#extensionbuilder)                                 | Start an immutable fluent application-wide Extension definition                                                                 |
+| [`defineExtension<MetaKeys>(id)`](/docs/guide/extensions#required-root-metadata)          | Start an Extension that requires root metadata keys                                                                             |
+| [`defineExtensionId(id)`](/docs/api/types#extension)                                      | Mint a branded Extension identity from a non-empty, trimmed string                                                              |
+| [`defineFlag(name, definition)`](/docs/api/types#defineflag-and-definearg)                | Define one named flag, preserving its literal definition                                                                        |
+| [`defineArg(name, definition)`](/docs/api/types#defineflag-and-definearg)                 | Define one named positional argument                                                                                            |
+| [`CrustError`](/docs/api/errors)                                                          | Structured framework error with stable codes and typed details                                                                  |
+| [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname)                      | Absolute path of an artifact or `crust.include` directory at runtime                                                            |
+| `contextSources`                                                                          | Symbol key on a `ContextBag` listing the Contexts it was built from; an adapter hook for integrations such as `@crustjs/effect` |
 
 ## Types
 
