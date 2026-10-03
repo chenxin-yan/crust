@@ -22,7 +22,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/
 
 import crustPackage from "../package.json";
 import { build, type BuildResult } from "../src/index.ts";
-import { BUN_TARGETS } from "../src/utils/build-helpers.ts";
+import { BUN_TARGETS } from "../src/targets.ts";
 import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
 import { hostTarget } from "./helpers.ts";
 

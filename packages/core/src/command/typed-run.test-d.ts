@@ -3,13 +3,8 @@ import type { StandardSchema } from "@crustjs/utils/schema";
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineExtensionId } from "../identity.ts";
-import {
-	type CommandPath,
-	type CommandShapeAt,
-	type RunInput,
-	Crust,
-	defineCommand,
-} from "./crust.ts";
+import { Crust, defineCommand } from "./crust.ts";
+import type { CommandPath, CommandShapeAt, RunInput } from "./typed-run.ts";
 
 interface NamedJsonPayload {
 	name: string;

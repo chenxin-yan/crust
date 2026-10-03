@@ -3,7 +3,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Internal helpers
+// Package root lookup
 // ────────────────────────────────────────────────────────────────────────────
 
 /**

@@ -67,6 +67,19 @@ describe("multifilter — non-TTY", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multifilter — interactive", () => {
+	it("renders choice hints", async () => {
+		const prompt = renderPrompt(multifilter, {
+			message: "Search",
+			choices: [{ label: "Bun", value: "bun", hint: "recommended" }],
+		});
+
+		await tick();
+		expect(prompt.screen()).toContain("Bun recommended");
+
+		prompt.keys("return");
+		await prompt.answer;
+	});
+
 	it("Space toggles selection; Enter submits values in choice order", async () => {
 		const prompt = renderPrompt(multifilter, {
 			message: "Search",
@@ -196,30 +209,3 @@ describe("multifilter — interactive", () => {
 		expect(result).toEqual(["gamma"]);
 	});
 });
-
-// ────────────────────────────────────────────────────────────────────────────
-// Type-level inference (compile-time only — never executed at runtime)
-// ────────────────────────────────────────────────────────────────────────────
-
-type Equal<A, B> =
-	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-type Expect<T extends true> = T;
-
-async function _multifilterTypeInferenceTests() {
-	const picks = await multifilter({ message: "?", choices: ["a", "b"] });
-	type _PicksNarrow = Expect<Equal<typeof picks, ("a" | "b")[]>>;
-
-	const ports = await multifilter({
-		message: "?",
-		choices: [
-			{ label: "HTTP", value: 80 },
-			{ label: "HTTPS", value: 443 },
-		],
-	});
-	type _PortsNarrow = Expect<Equal<typeof ports, (80 | 443)[]>>;
-
-	const widened: string[] = ["a", "b"];
-	const loose = await multifilter({ message: "?", choices: widened });
-	type _LooseIsStrings = Expect<Equal<typeof loose, string[]>>;
-}
-void _multifilterTypeInferenceTests;

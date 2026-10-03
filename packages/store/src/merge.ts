@@ -39,9 +39,9 @@ export function setDocumentValue(
  * @param pruneUnknown - Whether to drop persisted keys not in `fields`. Defaults to `true`.
  * @returns A new object with field defaults applied.
  */
-export function applyFieldDefaults<F extends FieldsDef>(
+export function applyFieldDefaults(
 	persisted: Readonly<StoreDocument> | undefined,
-	fields: F,
+	fields: FieldsDef,
 	pruneUnknown = true,
 ): StoreDocument {
 	const result: StoreDocument = {};
@@ -49,7 +49,7 @@ export function applyFieldDefaults<F extends FieldsDef>(
 	for (const [key, def] of Object.entries(fields)) {
 		if (persisted && Object.hasOwn(persisted, key)) {
 			setDocumentValue(result, key, persisted[key]);
-		} else if ("default" in def && def.default !== undefined) {
+		} else if (def.default !== undefined) {
 			setDocumentValue(result, key, structuredClone(def.default));
 		}
 		// else: no persisted value and no default → key not set (field is T | undefined)

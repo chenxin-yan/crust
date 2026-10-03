@@ -23,6 +23,23 @@ export interface CommandRoute {
 	commandPath: string[];
 }
 
+/** Build the COMMAND_NOT_FOUND error for an unknown child of `parent`. */
+export function commandNotFound(
+	parent: CommandNode,
+	candidate: string,
+	commandPath: readonly string[],
+): CrustError<"COMMAND_NOT_FOUND"> {
+	const parentCommand = snapshotCommand(parent);
+	return new CrustError("COMMAND_NOT_FOUND", `Unknown command "${candidate}".`, {
+		input: candidate,
+		available: Object.entries(parentCommand.subCommands).flatMap(([name, child]) =>
+			isListed(child) ? [name] : [],
+		),
+		commandPath: [...commandPath],
+		parentCommand,
+	});
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // resolveCommand — Subcommand routing
 // ────────────────────────────────────────────────────────────────────────────
@@ -104,8 +121,7 @@ function matchKnownFlagToken(
  *     command routing descends into recognizes them with the same token
  *     shape. A flag the subcommand cannot parse (e.g. a parent-local flag)
  *     is a PARSE error at the descend, never a silent forward-then-fail.
- * 4. If no match and the current command has NO `run()`, it signals the caller
- *    should show help (the `showHelp` flag is set in the result)
+ * 4. When argv is exhausted, return the current command, with or without `run()`
  * 5. Unknown subcommands produce a structured COMMAND_NOT_FOUND error whose
  *    `details.available` lists visible canonical sibling names (aliases are
  *    discoverable via `details.parentCommand.subCommands[name].meta.aliases`)
@@ -121,11 +137,11 @@ function matchKnownFlagToken(
  * @throws {CrustError} COMMAND_NOT_FOUND when an unknown subcommand is given and the parent has no run()
  * @throws {CrustError} PARSE when a flag set aside during routing is not parseable by the subcommand being descended into
  */
-export function resolveCommand(command: CommandNode, argv: string[]): CommandRoute {
+export function resolveCommand(command: CommandNode, argv: readonly string[]): CommandRoute {
 	const path = [command.meta.name];
 
 	let current: CommandNode = command;
-	let routedArgv = argv;
+	let routedArgv: readonly string[] = argv;
 	// Known flags (and their values) encountered before a subcommand name are
 	// set aside during routing and re-prepended for the resolved command's
 	// parser, preserving token order.
@@ -215,15 +231,7 @@ export function resolveCommand(command: CommandNode, argv: string[]): CommandRou
 		}
 
 		// Parent has no run() — this is an unknown subcommand error.
-		const parentCommand = snapshotCommand(current);
-		throw new CrustError("COMMAND_NOT_FOUND", `Unknown command "${candidate}".`, {
-			input: candidate,
-			available: Object.entries(parentCommand.subCommands).flatMap(([name, child]) =>
-				isListed(child) ? [name] : [],
-			),
-			commandPath: [...path],
-			parentCommand,
-		});
+		throw commandNotFound(current, candidate, path);
 	}
 
 	return {

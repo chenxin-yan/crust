@@ -2,9 +2,9 @@
 // Types — Mode, options, and shared type definitions
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { AnsiPair, StyleMethodName as RegisteredStyleMethodName } from "./ansiCodes.ts";
+import type { AnsiPair, StyleMethodName } from "./ansi-codes.ts";
 import type { HyperlinkOptions } from "./hyperlinks.ts";
-import type { NamedColor } from "./namedColorValues.ts";
+import type { NamedColor } from "./named-color-values.ts";
 
 /** Completion hints for supported non-named color strings. */
 type ColorSyntaxHint = "#" | "rgb()";
@@ -199,11 +199,6 @@ export interface ChainableStyleFn extends StyleMethodMap, AnsiPair {
 }
 
 /**
- * Style method name used by the chain builder implementation.
- */
-export type StyleMethodName = RegisteredStyleMethodName;
-
-/**
  * A configured style instance with mode-aware styling functions.
  *
  * In `"never"` mode, all functions return plain text without ANSI codes.
@@ -234,8 +229,8 @@ export interface StyleInstance extends StyleMethodMap {
 
 	/**
 	 * Apply a foreground color to text from a hex string, named CSS color,
-	 * `rgb()` string, or `[r, g, b]` tuple. Output is rendered at the depth captured at
-	 * `createStyle()` time — see {@link StyleInstance.colorDepth}.
+	 * `rgb()` string, or `[r, g, b]` tuple. Output is rendered at the instance's
+	 * current {@link StyleInstance.colorDepth}.
 	 *
 	 * Two call shapes:
 	 * - `fg(text, input)` — direct application, returns the styled string.

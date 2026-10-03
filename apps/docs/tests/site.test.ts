@@ -30,7 +30,7 @@ vi.mock("@tanstack/react-start", () => ({
 }));
 
 const { Route: sitemap } = await import("../src/routes/sitemap[.]xml");
-const { SCAFFOLD_COMMANDS } = await import("../src/routes/index");
+const { MODULES, SCAFFOLD_COMMANDS } = await import("../src/routes/index");
 const { source } = await import("../src/lib/source");
 const { absoluteUrl } = await import("../src/lib/seo");
 
@@ -47,6 +47,15 @@ it("sitemap lists each Fumadocs page once, including the docs index", async () =
 		...source.getPages().map((page) => absoluteUrl(page.url)),
 	]);
 	expect(new Set(locations).size).toBe(locations.length);
+});
+
+it("landing module list links every module page", () => {
+	const linked = MODULES.flatMap((m) => (m.doc ? [m.doc] : []));
+	const pages = source
+		.getPages()
+		.filter((page) => page.slugs.length === 2 && page.slugs[0] === "modules")
+		.map((page) => page.slugs.join("/"));
+	expect(linked.sort()).toEqual(pages.sort());
 });
 
 it("every landing snippet the page renders exists on disk", async () => {

@@ -1,21 +1,22 @@
 import { inspect, isDeepStrictEqual } from "node:util";
 
 import type { StandardSchema } from "@crustjs/utils/schema";
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { makeNode } from "../../tests/helpers.ts";
 import { resolveTypedPath } from "../command/invocation.ts";
 import type { CommandNode } from "../command/node.ts";
 import { resolveCommand, type CommandRoute } from "../command/router.ts";
 import { CrustError } from "../errors.ts";
-import type { ArgDef, FlagDef, ParseResult, ValidatedInput } from "../types.ts";
-import {
-	parseArgs,
-	parseStructured,
-	type RunInputPayload,
-	type RunInputValue,
-	validateParsed,
-} from "./parser.ts";
+import type {
+	ArgDef,
+	FlagDef,
+	ParseResult,
+	RunInputPayload,
+	RunInputValue,
+	ValidatedInput,
+} from "../types.ts";
+import { parseArgs, parseStructured, validateParsed } from "./parser.ts";
 import { applySchemas } from "./schema.ts";
 import { isFlagNegatable } from "./spellings.ts";
 
@@ -414,6 +415,10 @@ function fixture(): CommandNode {
 }
 
 describe("structured/argv round trip", () => {
+	afterEach(() => {
+		vi.unstubAllEnvs();
+	});
+
 	it("binds every generated built-in case identically, through the canonical name and an alias", async () => {
 		const root = fixture();
 		expect(await roundTrip(root, ["remote-add"], { runs: 300 })).toEqual({
@@ -600,23 +605,17 @@ describe("structured/argv round trip", () => {
 
 	it("binds env-backed flags to their default on both paths regardless of the process environment", async () => {
 		const name = "CRUST_TEST_ROUNDTRIP_ENV";
-		const previous = process.env[name];
-		process.env[name] = "ambient";
-		try {
-			const root = makeNode({
-				meta: "cli",
-				flags: { home: { type: "string", env: { name }, default: "fallback" } },
-				run: () => {},
-			});
-			expect(await roundTrip(root, [], { runs: 20 })).toMatchObject({ accepted: 20 });
-			expect(await bindArgv(root, [])).toMatchObject({
-				ok: true,
-				bound: { flags: { home: "fallback" } },
-			});
-		} finally {
-			if (previous === undefined) delete process.env[name];
-			else process.env[name] = previous;
-		}
+		vi.stubEnv(name, "ambient");
+		const root = makeNode({
+			meta: "cli",
+			flags: { home: { type: "string", env: { name }, default: "fallback" } },
+			run: () => {},
+		});
+		expect(await roundTrip(root, [], { runs: 20 })).toMatchObject({ accepted: 20 });
+		expect(await bindArgv(root, [])).toMatchObject({
+			ok: true,
+			bound: { flags: { home: "fallback" } },
+		});
 	});
 
 	it("never generates a flag's delimiter inside a value", async () => {

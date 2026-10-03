@@ -1,16 +1,15 @@
-import type { JsonCompatible, JsonValue } from "@crustjs/utils/json";
-
-import { validateContextAvailability, definingOf } from "../api/context.ts";
-import type {
-	AnyContextFactory,
-	ContextBag,
-	ContextDependencies,
-	AnyContextInstance,
-	ContextValue,
-	ContextMap,
-	ContextsOutput,
-	ContextsOwnedFlags,
-	DefiningOf,
+import {
+	validateContextAvailability,
+	definingOf,
+	type AnyContextFactory,
+	type ContextBag,
+	type ContextDependencies,
+	type AnyContextInstance,
+	type ContextValue,
+	type ContextMap,
+	type ContextsOutput,
+	type ContextsOwnedFlags,
+	type DefiningOf,
 } from "../api/context.ts";
 import type {
 	AnyExtension,
@@ -21,7 +20,6 @@ import type {
 } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
-import type { RunInputPayload } from "../parsing/parser.ts";
 import { normalizeArg } from "../parsing/spellings.ts";
 import { validateCommandSections } from "../sections.ts";
 import type {
@@ -31,20 +29,19 @@ import type {
 	FlagsDef,
 	InferArgs,
 	InferFlags,
-	InputArgs,
-	InputFlags,
 	ExecuteOptions,
 	InvocationIO,
 	InvocationOptions,
+	MergeContext,
 	MergeFlags,
+	MergeProviders,
 	NamedFlagDef,
+	RunInputPayload,
 } from "../types.ts";
 import type { AppendArgsChecks, AttachedArgs } from "../validation/args.brands.ts";
 import type {
 	AttachedCommandSpellings,
 	CommandCollisionBrand,
-} from "../validation/commands.brands.ts";
-import type {
 	AliasesOf,
 	CommandDefinitionSpellings,
 	CommandNameBrand,
@@ -56,8 +53,8 @@ import type {
 	ValidateCommandDefinitions,
 	ValidateExtensionCommands,
 } from "../validation/commands.brands.ts";
-import type { KnownContextInstances } from "../validation/contexts.brands.ts";
 import type {
+	KnownContextInstances,
 	MissingDeclaredDependencyBrand,
 	DeclaredDependencyValuesBrand,
 	ValidateContextDeps,
@@ -77,28 +74,43 @@ import type {
 	AttachedSpellings,
 	LocalSpellingsOf,
 } from "../validation/flags.brands.ts";
-import type { IsClosedName } from "../validation/shared.ts";
 import type {
+	IsClosedName,
 	IsStaticTuple,
 	IsUnion,
-	MergeContext,
-	MergeProviders,
 	UnionToIntersection,
 } from "../validation/shared.ts";
-import {
-	cloneCommandNode,
-	cloneFlagRegistry,
-	installExtensionContexts,
-} from "./extensions-install.ts";
+import { installExtensionContexts } from "./extensions-install.ts";
 import {
 	executeInvocation,
 	prepareInvocation,
 	resolveTypedPath,
 	runInvocation,
 } from "./invocation.ts";
-import { type CommandAction, type CommandNode, createCommandNode, registerFlag } from "./node.ts";
+import {
+	type CommandAction,
+	type CommandNode,
+	cloneCommandNode,
+	cloneFlagRegistry,
+	createCommandNode,
+	registerFlag,
+} from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
+import type {
+	CheckedRunInput,
+	CommandHandle,
+	CommandShape,
+	CommandShapeAt,
+	CommandTree,
+	CompatibleRunInput,
+	KnownCommandPath,
+	OmittableRunInput,
+	RunInput,
+	RunOutcome,
+	RunWithoutInputThis,
+	commandProviders,
+} from "./typed-run.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // CrustCommandContext — Runtime context for lifecycle hooks
@@ -135,266 +147,6 @@ export interface CrustCommandContext<
 	command: CommandSnapshot;
 	/** Readonly snapshot of the application root, including Extension contributions */
 	rootCommand: CommandSnapshot;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Typed programmatic invocation
-// ────────────────────────────────────────────────────────────────────────────
-
-declare const commandProviders: unique symbol;
-
-/** Compile-time description of one command's programmatic input and action result. */
-export interface CommandShape<
-	A extends ArgsDef = ArgsDef,
-	F extends FlagsDef = FlagsDef,
-	Children extends object = {},
-	Result = unknown,
-	Providers extends Record<string, ContextValue> = Record<string, ContextValue>,
-> {
-	readonly [commandProviders]?: Providers;
-	readonly args: A;
-	readonly flags: F;
-	readonly children: Children;
-	readonly result: Result;
-}
-
-/** Captured invocation after lifecycle cleanup. */
-export type RunOutcome<Result> = { readonly stdout: string; readonly stderr: string } & (
-	| { readonly status: "completed"; readonly result: Result }
-	| { readonly status: "handled"; readonly by: ExtensionId }
-	| { readonly status: "failed"; readonly error: unknown }
-);
-
-/** Compile-time command tree accumulated by `.add()`. */
-export type CommandTree = Record<string, CommandShape>;
-
-/** Every valid path through a command tree, including the root path (`[]`). */
-export type CommandPath<
-	Tree extends object,
-	Depth extends readonly unknown[] = readonly [],
-	// TypeScript's instantiation limit is lower than the runtime tree limit; paths deeper than
-	// 15 remain callable as strings rather than making otherwise valid large applications fail TS2589.
-> = Depth["length"] extends 15
-	? readonly string[]
-	: string extends keyof Tree
-		? readonly string[]
-		:
-				| readonly []
-				| {
-						[K in keyof Tree & string]: Tree[K] extends CommandShape
-							? readonly [K, ...CommandPath<Tree[K]["children"], readonly [...Depth, unknown]>]
-							: never;
-				  }[keyof Tree & string];
-
-// Editors complete path elements from this type instantiated with the partial literal being
-// typed (e.g. `["remote", ""]`), so an unknown literal path must resolve to the commands under
-// its longest valid prefix rather than `never` or the whole union.
-type CommandPathContinuations<
-	Path extends readonly string[],
-	Tree extends object,
-	Prefix extends readonly string[] = readonly [],
-> = Path extends readonly [infer Head extends string, ...infer Tail extends readonly string[]]
-	? readonly [...Prefix, Head] extends CommandPath<Tree>
-		? CommandPathContinuations<Tail, Tree, readonly [...Prefix, Head]>
-		: Extract<CommandPath<Tree>, readonly [...Prefix, ...string[]]>
-	: Extract<CommandPath<Tree>, readonly [...Prefix, ...string[]]>;
-
-type KnownCommandPath<
-	Path extends readonly string[],
-	Tree extends object,
-> = string extends keyof Tree
-	? Path
-	: IsStaticTuple<Path> extends true
-		? string extends Path[number]
-			? never
-			: [Path] extends [CommandPath<Tree>]
-				? Path
-				: CommandPathContinuations<Path, Tree>
-		: // An uninferred path (`at(|)`) shows every command; union paths stay rejected.
-			number extends Path["length"]
-			? CommandPath<Tree>
-			: never;
-
-/** Resolve the command shape at a typed path. */
-export type CommandShapeAt<
-	Shape extends CommandShape,
-	Path extends readonly string[],
-> = Path extends readonly [infer Head, ...infer Tail extends readonly string[]]
-	? Head extends keyof Shape["children"]
-		? Shape["children"][Head] extends infer Child extends CommandShape
-			? CommandShapeAt<Child, Tail>
-			: never
-		: // A non-literal segment (e.g. a hand-annotated `[string, ...string[]]`
-			// tuple) selects a statically unknowable command, not no command.
-			string extends Head
-			? CommandShape
-			: never
-	: Path extends readonly []
-		? Shape
-		: // A tail widened past the CommandPath depth cap selects a statically
-			// unknowable command, so the shape (and its result) widens too.
-			CommandShape;
-
-type RunSection<Name extends string, Values> = keyof Values extends never
-	? {}
-	: {} extends Values
-		? { [K in Name]?: Values }
-		: { [K in Name]: Values };
-
-/** Structured values bound directly against the selected command's definitions; no argv is produced. */
-export type RunInput<Shape extends CommandShape> = RunSection<
-	"args",
-	ArgsDef extends Shape["args"] ? NonNullable<RunInputPayload["args"]> : InputArgs<Shape["args"]>
-> &
-	RunSection<
-		"flags",
-		FlagsDef extends Shape["flags"]
-			? // `{}` also passes the open-set check; a command with no flags stays closed.
-				[keyof Shape["flags"]] extends [never]
-				? {}
-				: NonNullable<RunInputPayload["flags"]>
-			: InputFlags<Shape["flags"]>
-	> & {
-		readonly raw?: readonly string[];
-	};
-
-// Check each prefix separately so JSON compatibility cannot recombine positional branches.
-type CompatibleRunValue<Expected, Actual> = Actual extends Expected
-	? Actual extends object
-		? Expected extends unknown
-			? Actual extends Expected
-				? Actual & { [K in Exclude<keyof Actual, keyof Expected>]: never } & {
-						[K in keyof Actual & keyof Expected]: CompatibleRunValue<Expected[K], Actual[K]>;
-					}
-				: never
-			: never
-		: Actual
-	: JsonValue extends Expected
-		? Actual extends JsonCompatible<Actual>
-			? Actual
-			: never
-		: Expected extends unknown
-			? CompatibleRunBranch<Expected, Actual>
-			: never;
-
-type CompatibleRunBranch<Expected, Actual> = Actual extends Expected
-	? Actual
-	: Expected extends readonly (infer Item)[]
-		? JsonValue extends Item
-			? Actual extends (
-					Expected extends readonly [unknown, ...unknown[]]
-						? readonly [unknown, ...unknown[]]
-						: readonly unknown[]
-				)
-				? Actual extends JsonCompatible<Actual>
-					? Actual
-					: never
-				: never
-			: never
-		: Actual extends object
-			? string extends keyof Expected
-				? {
-						[K in keyof Actual]: CompatibleRunValue<
-							Exclude<Expected[K & keyof Expected], undefined>,
-							Actual[K]
-						>;
-					}
-				: {
-						[K in keyof Expected]: K extends keyof Actual
-							? CompatibleRunValue<Exclude<Expected[K], undefined>, Actual[K]>
-							: Expected[K];
-					} & { [K in Exclude<keyof Actual, keyof Expected>]: never }
-			: never;
-
-type CompatibleRunInput<Shape extends CommandShape, Input> = CompatibleRunValue<
-	RunInput<Shape>,
-	Input
->;
-
-export type RunInputArguments<Shape extends CommandShape> =
-	{} extends RunInput<Shape>
-		? readonly [input?: RunInput<Shape>]
-		: readonly [input: RunInput<Shape>];
-
-export type RunArguments<Shape extends CommandShape> = readonly [
-	...RunInputArguments<Shape>,
-	options?: InvocationOptions,
-];
-
-type KeysOf<T> = T extends unknown ? keyof T : never;
-
-// Undeclared literal keys may only hold `undefined`, which the runtime treats as omitted. Other
-// values map to `never` rather than `undefined`: a unit-typed conflict would collapse the whole
-// intersection and hide which key is wrong. Non-literal keys (index signatures) cannot be named
-// statically and are left to value checks.
-type UnknownRunKeys<Actual, Known> = {
-	[
-		K in keyof Actual as string extends K
-			? never
-			: number extends K
-				? never
-				: K extends Known
-					? never
-					: K
-	]: Actual[K] extends undefined ? Actual[K] : never;
-};
-
-// Excess-property checks only reach fresh object literals. Closing the keys of the inferred
-// input, per union member, also rejects unknown keys in inputs held in variables.
-type ClosedRunInput<Shape extends CommandShape, Input> = Input extends unknown
-	? UnknownRunKeys<Input, keyof RunInput<Shape>> & {
-			[
-				K in keyof Input as K extends ("args" | "flags") & keyof RunInput<Shape> ? K : never
-			]: UnknownRunKeys<
-				NonNullable<Input[K]>,
-				KeysOf<NonNullable<RunInput<Shape>[K & keyof RunInput<Shape>]>>
-			>;
-		}
-	: never;
-
-// TypeScript infers a union-typed input as only its first member. Checking
-// a passing input against the whole `RunInput` avoids false errors on the other members.
-// Spelled through `RunInputArguments`: a bare `RunInput<Shape>` here makes checking `Crust`
-// instances exceed TypeScript's union size limit (TS2590).
-// ponytail: a variable typed as a union is closed on its first member only; closing every member
-// needs inference to keep the whole union.
-type CheckedRunInput<Shape extends CommandShape, Input> = [Input] extends [
-	ClosedRunInput<Shape, Input>,
-]
-	? NonNullable<RunInputArguments<Shape>[0]>
-	: Input & NoInfer<ClosedRunInput<Shape, Input>>;
-
-// `undefined` input stands for omitted input, so only a command that requires nothing accepts it.
-type OmittableRunInput<Shape extends CommandShape> = {} extends RunInput<Shape> ? undefined : never;
-
-// A path-only call has no input to infer from, so requiredness is checked on the command itself.
-// An unknown path selects no command (`never`); leave that error to the path parameter.
-type RunWithoutInputThis<Shape extends CommandShape, This> = [Shape] extends [never]
-	? This
-	: {} extends RunInput<Shape>
-		? This
-		: This & { readonly FIX_MISSING_INPUT: "Pass the command's required arguments or flags" };
-
-/**
- * Typed invoker bound to one command in an app, returned by {@link Crust.at}.
- *
- * `run` accepts the same structured input and options as `Crust.run` with the
- * path already applied, so a handle can be re-exported as a plain typed function.
- */
-export interface CommandHandle<Shape extends CommandShape> {
-	/** The typed path this handle was created with (`[]` selects the root). */
-	readonly path: readonly string[];
-	run(this: RunWithoutInputThis<Shape, unknown>): Promise<RunOutcome<Shape["result"]>>;
-	run<const Input extends RunInput<Shape> | OmittableRunInput<Shape> = RunInput<Shape>>(
-		input: CheckedRunInput<Shape, Input> | OmittableRunInput<Shape>,
-		options?: InvocationOptions,
-	): Promise<RunOutcome<Shape["result"]>>;
-	run<const Input>(
-		input: Input,
-		...validation: [Input] extends [CompatibleRunInput<Shape, Input>]
-			? readonly [options?: InvocationOptions]
-			: readonly [invalidInput: never]
-	): Promise<RunOutcome<Shape["result"]>>;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -488,16 +240,14 @@ export type CommandDefinitionData<D> = D extends {
 function materializeCommandDefinition(
 	definition: CommandDefinition,
 	parent: CommandNode,
-	extensionName?: string,
+	extensionId?: ExtensionId,
 ): CommandNode {
 	const internal = definition[commandDefinitionInternal];
 	const name = definition.name;
-	const owner = extensionName
-		? `Extension "${extensionName}" command "${name}"`
-		: `Command "${name}"`;
+	const owner = extensionId ? `Extension "${extensionId}" command "${name}"` : `Command "${name}"`;
 	const definitionDetails = (reason: string) => ({
-		subject: extensionName ? ("extension" as const) : ("command" as const),
-		name: extensionName ?? name,
+		subject: extensionId ? ("extension" as const) : ("command" as const),
+		name: extensionId ?? name,
 		reason,
 	});
 
@@ -823,7 +573,7 @@ function resolveCommandName<Name extends string>(
 	return name;
 }
 
-function isCommandRecipe(value: CommandConfig | CommandRecipe): value is CommandRecipe {
+function isCommandRecipe(value: CommandConfig | CommandRecipe | undefined): value is CommandRecipe {
 	return typeof value === "function";
 }
 
@@ -859,13 +609,24 @@ export function defineCommand(
 ): CommandDefinition {
 	const hasConfig = !isCommandRecipe(configOrRecipe);
 	const config: CommandConfig & { readonly version?: unknown } = hasConfig ? configOrRecipe : {};
-	// Authoring overloads require a recipe in both call forms.
-	const recipe = hasConfig ? maybeRecipe! : configOrRecipe;
+	const recipe = hasConfig ? maybeRecipe : configOrRecipe;
 	const name = resolveCommandName(nameInput, config.aliases);
+	// Authoring overloads require a recipe in both call forms; untyped JavaScript can omit it.
+	if (!isCommandRecipe(recipe)) {
+		throw new CrustError("DEFINITION", `Command "${name}" requires a recipe`, {
+			subject: "command",
+			name,
+			reason: "missing-recipe",
+		});
+	}
 
 	for (const alias of config.aliases ?? []) {
 		if (alias === "" || /[ \t\n\r\v\f]/.test(alias) || alias.startsWith("-")) {
-			throw new CrustError("DEFINITION", `Command "${name}" has an invalid alias "${alias}"`);
+			throw new CrustError("DEFINITION", `Command "${name}" has an invalid alias "${alias}"`, {
+				subject: "command",
+				name,
+				reason: "invalid-alias",
+			});
 		}
 	}
 
@@ -896,37 +657,24 @@ function dedupeExtensions(extensions: readonly ExtensionData[]): ExtensionData[]
 	return extensions.filter((e, i) => extensions.findLastIndex((x) => x.id === e.id) === i);
 }
 
+/** Shared runtime body of `Crust.run` and `CommandHandle.run`. */
+async function runAt(
+	node: CommandNode,
+	path: readonly string[],
+	args: readonly unknown[],
+): Promise<RunOutcome<unknown>> {
+	// SAFETY: the public overloads constrain structured input to this runtime value union.
+	const input = (args[0] ?? {}) as RunInputPayload;
+	// SAFETY: the public overloads constrain the second argument to invocation options.
+	const options = args[1] as InvocationOptions | undefined;
+	// Programmatic calls capture failures and never change process status.
+	return await runInvocation(node, { path, input }, options, materializeCommandDefinition);
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Crust — Chainable builder class
 // ────────────────────────────────────────────────────────────────────────────
 
-/**
- * Chainable builder for defining CLI commands with full type inference.
- *
- * Generic parameters:
- * - `Flags` — flags defined locally or installed by provided Contexts
- * - `A` — positional argument definitions
- * - `Ctx` — provided Context values
- * - `Sibs` — sibling command names and aliases already registered
- * - `Sp` — accumulated flag spellings used for collision checks
- * - `Tree` — command shapes accumulated by `.add()` for typed `run()`
- * - `CtxFlags` — Context-owned flags accumulated by `.provide()` and recursive
- *   Extension flags accumulated by `.extend()`, inherited by the shapes of
- *   definitions added afterwards
- * - `Result` — awaited return type of this command's action
- * - `Meta` — authored root metadata available to Extension requirements
- * - `Caps` — root application or configure-only recipe capabilities
- *
- * @example
- * ```ts
- * const app = new Crust("my-cli")
- *   .flags({ name: "verbose", type: "boolean", short: "v" })
- *   .args({ name: "file", type: "string", required: true })
- *   .action(({ args, flags }) => {
- *     console.log(args.file, flags.verbose);
- *   });
- * ```
- */
 type CollisionSpellings<
 	Extensions extends string = never,
 	Tree extends string = never,
@@ -1258,6 +1006,33 @@ type DefinedRootMetaKeys<Meta extends RootCommandMeta | undefined> = {
 	[K in RootMetaKey]: [Meta] extends [Required<Pick<RootCommandMeta, K>>] ? K : never;
 }[RootMetaKey];
 
+/**
+ * Chainable builder for defining CLI commands with full type inference.
+ *
+ * Generic parameters:
+ * - `Flags` — flags defined locally or installed by provided Contexts
+ * - `A` — positional argument definitions
+ * - `Ctx` — provided Context values
+ * - `Sibs` — sibling command names and aliases already registered
+ * - `Sp` — accumulated flag spellings used for collision checks
+ * - `Tree` — command shapes accumulated by `.add()` for typed `run()`
+ * - `CtxFlags` — Context-owned flags accumulated by `.provide()` and recursive
+ *   Extension flags accumulated by `.extend()`, inherited by the shapes of
+ *   definitions added afterwards
+ * - `Result` — awaited return type of this command's action
+ * - `Meta` — authored root metadata available to Extension requirements
+ * - `Caps` — root application or configure-only recipe capabilities
+ *
+ * @example
+ * ```ts
+ * const app = new Crust("my-cli")
+ *   .flags({ name: "verbose", type: "boolean", short: "v" })
+ *   .args({ name: "file", type: "string", required: true })
+ *   .action(({ args, flags }) => {
+ *     console.log(args.file, flags.verbose);
+ *   });
+ * ```
+ */
 export class Crust<
 	Flags extends FlagsDef = {},
 	A extends ArgsDef = [],
@@ -1389,7 +1164,6 @@ export class Crust<
 		>(cloneFlagRegistry(this._node));
 		for (const def of defs) {
 			const { name, ...rest } = def;
-			// SAFETY: removing name from a NamedFlagDef leaves its discriminated FlagDef.
 			registerFlag(cloned._node, name, rest, "local");
 		}
 		return cloned;
@@ -1799,14 +1573,14 @@ export class Crust<
 	 */
 	// `Path` is only constrained to strings, and the parameter is not intersected with `Path`:
 	// either would erase the partial literal editors use for completions (see `KnownCommandPath`).
-	async run<const Path extends readonly string[]>(
+	run<const Path extends readonly string[]>(
 		this: RunWithoutInputThis<
 			CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>,
 			{ readonly _types: { readonly caps: "app" } }
 		>,
 		path: KnownCommandPath<Path, Tree>,
 	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
-	async run<
+	run<
 		const Path extends readonly string[],
 		const Input extends
 			| RunInput<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>>
@@ -1821,7 +1595,7 @@ export class Crust<
 			| OmittableRunInput<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>>,
 		options?: InvocationOptions,
 	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
-	async run<const Path extends readonly string[], const Input>(
+	run<const Path extends readonly string[], const Input>(
 		this: { readonly _types: { readonly caps: "app" } },
 		path: KnownCommandPath<Path, Tree>,
 		input: Input,
@@ -1838,17 +1612,7 @@ export class Crust<
 			: readonly [invalidInput: never]
 	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
 	async run(path: readonly string[], ...args: readonly unknown[]): Promise<RunOutcome<unknown>> {
-		// SAFETY: the public overloads constrain structured input to this runtime value union.
-		const structuredInput = (args[0] ?? {}) as RunInputPayload;
-		// SAFETY: the public overloads constrain the second argument to invocation options.
-		const options = args[1] as InvocationOptions | undefined;
-		// Programmatic calls capture failures and never change process status.
-		return await runInvocation(
-			this._node,
-			{ path, input: structuredInput },
-			options,
-			materializeCommandDefinition,
-		);
+		return await runAt(this._node, path, args);
 	}
 
 	/**
@@ -1874,16 +1638,7 @@ export class Crust<
 		return {
 			path: boundPath,
 			async run(...args: readonly unknown[]): Promise<RunOutcome<unknown>> {
-				// SAFETY: the public overloads constrain structured input to this runtime value union.
-				const structuredInput = (args[0] ?? {}) as RunInputPayload;
-				// SAFETY: the public overloads constrain the second argument to invocation options.
-				const options = args[1] as InvocationOptions | undefined;
-				return await runInvocation(
-					node,
-					{ path: boundPath, input: structuredInput },
-					options,
-					materializeCommandDefinition,
-				);
+				return await runAt(node, boundPath, args);
 			},
 		};
 	}

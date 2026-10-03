@@ -1,4 +1,5 @@
 import type { ArgSnapshot, CommandSnapshot, FlagSnapshot, ValueType } from "@crustjs/core";
+import { isListed } from "@crustjs/core/tooling";
 
 /** JSON Schema fragment for one tool input property. */
 export interface McpPropertySchema {
@@ -73,7 +74,15 @@ function propertySchema(def: ArgSnapshot | FlagSnapshot, list: boolean): McpProp
 	let defaultValue: unknown;
 	if (def.default !== undefined) {
 		try {
-			defaultValue = JSON.parse(JSON.stringify(def.default));
+			defaultValue = JSON.parse(
+				JSON.stringify(def.default, (_key, entry) => {
+					// JSON would publish a non-finite number as `null`, misstating the default.
+					if (entry === Infinity || entry === -Infinity || Number.isNaN(entry)) {
+						throw new TypeError("Non-finite number");
+					}
+					return entry;
+				}),
+			);
 		} catch {
 			// Advisory metadata must not break discovery; run() still owns the actual default.
 		}
@@ -146,7 +155,7 @@ export function toolsFromSnapshot(
 	const owners = new Map<string, readonly string[]>();
 
 	const visit = (command: CommandSnapshot, path: readonly string[]) => {
-		if (command.meta.hidden === true || excluded.has(path.join("\0"))) return;
+		if (!isListed(command) || excluded.has(path.join("\0"))) return;
 		if (command.hasAction) {
 			const name = path.length === 0 ? command.meta.name : path.join("_");
 			if (!TOOL_NAME_PATTERN.test(name)) {

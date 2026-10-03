@@ -53,7 +53,7 @@ export const version: VersionExtension = defineExtension(VERSION).factory(
 			const resolvedVersion =
 				// oxlint-disable-next-line anti-slop/no-runtime-typeof -- discriminating a typed options union.
 				typeof value === "function" ? value() : (value ?? context.rootCommand.meta.version);
-			// Overloads are type-only; Bun and Node builds skip the check.
+			// Overloads are type-only; untyped callers can still reach this.
 			if (resolvedVersion === undefined) {
 				throw new CrustError(
 					"DEFINITION",

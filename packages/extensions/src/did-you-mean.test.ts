@@ -1,37 +1,8 @@
 import { Crust, defineCommand } from "@crustjs/core";
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { captureExecute } from "@crustjs/testing";
+import { describe, expect, it } from "vite-plus/test";
 
 import { didYouMean } from "./did-you-mean.ts";
-
-let stderrChunks: string[];
-let stdoutChunks: string[];
-let originalStderrWrite: typeof process.stderr.write;
-let originalStdoutWrite: typeof process.stdout.write;
-let originalExitCode: typeof process.exitCode;
-
-/** Default IO writes one `text\n` per call; capture each as a line. */
-function captureLines(lines: string[]): typeof process.stdout.write {
-	return (chunk: string | Uint8Array) => {
-		lines.push(String(chunk).replace(/\n$/, ""));
-		return true;
-	};
-}
-
-beforeEach(() => {
-	stderrChunks = [];
-	stdoutChunks = [];
-	originalStderrWrite = process.stderr.write;
-	originalStdoutWrite = process.stdout.write;
-	originalExitCode = process.exitCode;
-	process.stderr.write = captureLines(stderrChunks);
-	process.stdout.write = captureLines(stdoutChunks);
-});
-
-afterEach(() => {
-	process.stderr.write = originalStderrWrite;
-	process.stdout.write = originalStdoutWrite;
-	process.exitCode = originalExitCode ?? 0;
-});
 
 describe("didYouMean", () => {
 	it("suggests the closest command on a typo", async () => {
@@ -40,12 +11,11 @@ describe("didYouMean", () => {
 			.add(defineCommand("build", (cmd) => cmd.action(() => {})))
 			.add(defineCommand("test", (cmd) => cmd.action(() => {})));
 
-		await app.execute({ argv: ["buld"] });
+		const { stderr, exitCode } = await captureExecute(app, ["buld"]);
 
-		const stderr = stderrChunks.join("\n");
 		expect(stderr).toContain('Unknown command "buld"');
 		expect(stderr).toContain('Did you mean "build"?');
-		expect(process.exitCode).toBe(1);
+		expect(exitCode).toBe(1);
 	});
 
 	it.each(["car", "ca"])("breaks tied scores by canonical name for %s", async (input) => {
@@ -54,9 +24,9 @@ describe("didYouMean", () => {
 			.add(defineCommand("zebra", { aliases: ["cap"] }, (cmd) => cmd.action(() => {})))
 			.add(defineCommand("cat", (cmd) => cmd.action(() => {})));
 
-		await app.execute({ argv: [input] });
+		const { stderr } = await captureExecute(app, [input]);
 
-		expect(stderrChunks.join("\n")).toContain('Did you mean "cat"?');
+		expect(stderr).toContain('Did you mean "cat"?');
 	});
 
 	// ──────────────────────────────────────────────────────────────────────────────
@@ -72,13 +42,12 @@ describe("didYouMean", () => {
 		// "issuess" is closest to the alias "issues" (distance 1) than to
 		// "issue" (distance 2). The extension must report the canonical name
 		// regardless of which spelling triggered the match.
-		await app.execute({ argv: ["issuess"] });
+		const { stderr, exitCode } = await captureExecute(app, ["issuess"]);
 
-		const stderr = stderrChunks.join("\n");
 		expect(stderr).toContain('Unknown command "issuess"');
 		expect(stderr).toContain('Did you mean "issue"?');
 		expect(stderr).not.toContain('Did you mean "issues"?');
-		expect(process.exitCode).toBe(1);
+		expect(exitCode).toBe(1);
 	});
 
 	it("prefers the closer canonical over a short colliding alias", async () => {
@@ -90,9 +59,8 @@ describe("didYouMean", () => {
 			.add(defineCommand("issue", { aliases: ["i"] }, (cmd) => cmd.action(() => {})))
 			.add(defineCommand("install", (cmd) => cmd.action(() => {})));
 
-		await app.execute({ argv: ["insall"] });
+		const { stderr } = await captureExecute(app, ["insall"]);
 
-		const stderr = stderrChunks.join("\n");
 		expect(stderr).toContain('Did you mean "install"?');
 		expect(stderr).not.toContain('Did you mean "issue"?');
 	});
@@ -103,9 +71,8 @@ describe("didYouMean", () => {
 			.add(defineCommand("issue", { aliases: ["issues", "i"] }, (cmd) => cmd.action(() => {})))
 			.add(defineCommand("version", (cmd) => cmd.action(() => {})));
 
-		await app.execute({ argv: ["completely-unknown"] });
+		const { stderr } = await captureExecute(app, ["completely-unknown"]);
 
-		const stderr = stderrChunks.join("\n");
 		expect(stderr).toContain("Available commands: issue, version");
 		expect(stderr).not.toContain("issues");
 	});
@@ -115,14 +82,13 @@ describe("didYouMean", () => {
 			.extend(didYouMean({ mode: "help" }))
 			.add(defineCommand("issue", { aliases: ["issues"] }, (cmd) => cmd.action(() => {})));
 
-		await app.execute({ argv: ["issuee"] });
+		const { stdout, stderr, exitCode } = await captureExecute(app, ["issuee"]);
 
-		const stdout = stdoutChunks.join("\n");
 		expect(stdout).toContain('Unknown command "issuee". Did you mean "issue"?');
 		expect(stdout).not.toContain('Did you mean "issues"');
 		expect(stdout).toContain("Usage:");
-		expect(stderrChunks).toEqual([]);
-		expect(process.exitCode).toBe(1);
+		expect(stderr).toBe("");
+		expect(exitCode).toBe(1);
 	});
 
 	it("never suggests a `meta.hidden: true` command, even on a close match", async () => {
@@ -137,9 +103,8 @@ describe("didYouMean", () => {
 		// Typo distance(__complet -> __complete) = 1, well within the
 		// threshold. Distance(__complet -> build) is > 3, so without the
 		// hidden filter the only suggestion would be `__complete`.
-		await app.execute({ argv: ["__complet"] });
+		const { stderr } = await captureExecute(app, ["__complet"]);
 
-		const stderr = stderrChunks.join("\n");
 		expect(stderr).toContain('Unknown command "__complet"');
 		expect(stderr).not.toContain("__complete");
 	});
@@ -157,9 +122,8 @@ describe("didYouMean", () => {
 				),
 			);
 
-		await app.execute({ argv: ["__cmp"] });
+		const { stderr } = await captureExecute(app, ["__cmp"]);
 
-		const stderr = stderrChunks.join("\n");
 		expect(stderr).toContain('Unknown command "__cmp"');
 		expect(stderr).not.toContain("__complete");
 		expect(stderr).not.toContain("__comp");
@@ -173,9 +137,8 @@ describe("didYouMean", () => {
 			.add(defineCommand("__complete", { hidden: true }, (cmd) => cmd.action(() => {})));
 
 		// No close match — we want the "Available commands" line.
-		await app.execute({ argv: ["zzzzz"] });
+		const { stderr } = await captureExecute(app, ["zzzzz"]);
 
-		const stderr = stderrChunks.join("\n");
 		expect(stderr).toContain("Available commands: build, test");
 		expect(stderr).not.toContain("__complete");
 		expect(stderr).not.toContain("Did you mean");

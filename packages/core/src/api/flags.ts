@@ -1,11 +1,8 @@
 import { normalizeFlag, normalizeArg } from "../parsing/spellings.ts";
-import type { ArgDef, FlagDef, NamedFlagDef } from "../types.ts";
+import type { ArgDef, FlagDef, NamedFlagDef, OmitName } from "../types.ts";
 import type { EmptyArgNameBrand } from "../validation/args.brands.ts";
 import type { LocalFlagBrand, LocalFlagNameBrand } from "../validation/flags.brands.ts";
 import type { LocalValueBrand } from "../validation/shared.ts";
-
-/** Distribute `Omit<_, "name">` over the {@link ArgDef} union. */
-type OmitName<T> = T extends { name: string } ? Omit<T, "name"> : never;
 
 /** A positional argument definition without its name — the `defineArg` input shape. */
 export type UnnamedArgDef = OmitName<ArgDef>;

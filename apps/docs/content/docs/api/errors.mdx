@@ -93,7 +93,7 @@ For `preRun`, validation, setup, and action failures, `onError` runs before `pos
 
 Any `Error` whose `name` is `"AbortError"`, including a `DOMException`, is cancellation.
 
-Every invocation carries `ctx.signal`, shared by Context setups, Extension hooks, and the Command Action. It aborts when the caller aborts `execute({ signal })` or `run(path, input, { signal })`, or on the first Ctrl-C during `execute()`. Cancellation is cooperative: once the work settles, `postRun` hooks and Context disposal still run, and work that ignores the signal delays cleanup.
+Every invocation carries a `signal`, shared by Context setups, Extension hooks, and the Command Action. It aborts when the caller aborts `execute({ signal })` or `run(path, input, { signal })`, or on the first Ctrl-C during `execute()`. Cancellation is cooperative: once the work settles, `postRun` hooks and Context disposal still run, and work that ignores the signal delays cleanup.
 
 When work throws the signal's reason, as `signal.throwIfAborted()` does, that error decides the exit path. Ctrl-C and a bare `controller.abort()` supply an `AbortError`, which exits `130` silently; a custom reason such as a `TimeoutError` renders and exits `1`. [`@crustjs/effect`](/docs/modules/effect) turns interruption into an `AbortError` regardless of the reason.
 

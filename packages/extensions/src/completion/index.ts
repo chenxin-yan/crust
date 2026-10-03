@@ -18,14 +18,14 @@ import { assertSafeBinName, sanitizeFreeText } from "./escape.ts";
 import { renderBash } from "./templates/bash.ts";
 import { renderFish } from "./templates/fish.ts";
 import { renderZsh } from "./templates/zsh.ts";
-import { walkCommandNode } from "./walker.ts";
+import { walkCommand } from "./walker.ts";
 
 const COMPLETION: ExtensionId = defineExtensionId("crust:completion");
 
 /** The set of shells supported by the v1 completion extension. */
 export type CompletionShell = "bash" | "zsh" | "fish";
 
-const SUPPORTED_SHELLS: readonly CompletionShell[] = ["bash", "zsh", "fish"] as const;
+const SUPPORTED_SHELLS = ["bash", "zsh", "fish"] as const satisfies readonly CompletionShell[];
 
 /** Options for the completion Extension. */
 export interface CompletionOptions {
@@ -70,7 +70,7 @@ const SHELL_RENDERERS = {
 	fish: renderFish,
 } satisfies Record<CompletionShell, typeof renderBash>;
 
-function prepareRender(root: CommandSnapshot, options: CompletionRenderOptions) {
+function prepareRender(root: CommandSnapshot, options: CompletionOptions) {
 	// Validate the root name before emitting anything so misconfigured CLIs fail loudly.
 	// The walker also re-validates command/flag identifiers when it builds the spec.
 	const binName = assertSafeBinName(root.meta.name);
@@ -84,31 +84,29 @@ function prepareRender(root: CommandSnapshot, options: CompletionRenderOptions) 
 	// `version` flows into header comments only; strip control characters so it
 	// cannot break out of the comment line in the emitted script.
 	return {
-		spec: walkCommandNode(buildCommandDocumentation(root)),
+		spec: walkCommand(buildCommandDocumentation(root)),
 		binName,
 		version: sanitizeFreeText(version),
+		command: options.command ?? "completion",
 	};
 }
 
 /** Every supported shell's drop-in file, named by its autoload convention. */
-function renderCompletionFiles(
-	root: CommandSnapshot,
-	options: CompletionRenderOptions,
-): BuildArtifacts {
-	const { spec, binName, version } = prepareRender(root, options);
+function renderCompletionFiles(root: CommandSnapshot, options: CompletionOptions): BuildArtifacts {
+	const { spec, binName, version, command } = prepareRender(root, options);
 	return SUPPORTED_SHELLS.map((shell) => ({
 		path: filenameForShell(shell, binName),
-		content: SHELL_RENDERERS[shell](spec, binName, version),
+		content: SHELL_RENDERERS[shell](spec, binName, version, command),
 	}));
 }
 
 function renderCompletionScript(
 	shell: CompletionShell,
 	root: CommandSnapshot,
-	options: CompletionRenderOptions = {},
+	options: CompletionOptions = {},
 ): string {
-	const { spec, binName, version } = prepareRender(root, options);
-	return SHELL_RENDERERS[shell](spec, binName, version);
+	const { spec, binName, version, command } = prepareRender(root, options);
+	return SHELL_RENDERERS[shell](spec, binName, version, command);
 }
 
 /** Render a bash completion script from a prepared root Command Snapshot. */

@@ -43,25 +43,33 @@ function getRuntimeEnv(): PlatformEnv {
 // Path validation helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Validates a path input according to its role. */
-function validatePath(value: string, field: "appName" | "name" | "dirPath"): void {
+function validateNonEmpty(value: string, field: "appName" | "name" | "dirPath"): void {
 	if (!value.trim()) {
 		throw new CrustStoreError("PATH", `${field} must be a non-empty string`, { path: value });
 	}
+}
 
-	if (field !== "dirPath" && (value.includes("/") || value.includes("\\"))) {
+/** Validates a single path segment: `appName` or the store `name`. */
+function validateSegment(value: string, field: "appName" | "name"): void {
+	validateNonEmpty(value, field);
+
+	if (value.includes("/") || value.includes("\\")) {
 		throw new CrustStoreError("PATH", `${field} must not contain path separators`, { path: value });
-	}
-
-	if (field === "dirPath" && !win32.isAbsolute(value)) {
-		throw new CrustStoreError("PATH", "dirPath must be an absolute path", { path: value });
 	}
 
 	if (field === "name" && value.endsWith(".json")) {
 		throw new CrustStoreError("PATH", "name must not include the .json extension", { path: value });
 	}
+}
 
-	if (field === "dirPath" && value.endsWith(".json")) {
+function validateDirPath(value: string): void {
+	validateNonEmpty(value, "dirPath");
+
+	if (!win32.isAbsolute(value)) {
+		throw new CrustStoreError("PATH", "dirPath must be an absolute path", { path: value });
+	}
+
+	if (value.endsWith(".json")) {
 		throw new CrustStoreError(
 			"PATH",
 			"dirPath must be a directory path, not a file path (should not end with .json)",
@@ -110,7 +118,7 @@ function resolvePlatformDir(
 	appName: string,
 	env = getRuntimeEnv(),
 ): string {
-	validatePath(appName, "appName");
+	validateSegment(appName, "appName");
 	const config = DIRECTORY_CONFIG[kind];
 
 	if (env.platform === "linux" || env.platform === "darwin") {
@@ -278,7 +286,7 @@ export function cacheDir(appName: string, env?: PlatformEnv): string {
  * @throws {CrustStoreError} `PATH` if `dirPath` or `name` is invalid.
  */
 export function resolveStorePath(dirPath: string, name: string): string {
-	validatePath(dirPath, "dirPath");
-	validatePath(name, "name");
+	validateDirPath(dirPath);
+	validateSegment(name, "name");
 	return join(dirPath, `${name}.json`);
 }

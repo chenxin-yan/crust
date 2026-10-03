@@ -1,0 +1,116 @@
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+
+import { detectPackageManager, isInGitRepo } from "./detect.ts";
+
+// ────────────────────────────────────────────────────────────────────────────
+// detectPackageManager()
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("detectPackageManager", () => {
+	let tempDir: string;
+
+	beforeEach(() => {
+		tempDir = mkdtempSync(join(tmpdir(), "crust-detect-test-"));
+		// Clear the env var so lockfile detection takes priority
+		vi.stubEnv("npm_config_user_agent", undefined);
+	});
+
+	afterEach(() => {
+		rmSync(tempDir, { recursive: true, force: true });
+		vi.unstubAllEnvs();
+	});
+
+	it("detects bun from bun.lock", () => {
+		writeFileSync(join(tempDir, "bun.lock"), "");
+		expect(detectPackageManager(tempDir)).toBe("bun");
+	});
+
+	it("detects bun from bun.lockb", () => {
+		writeFileSync(join(tempDir, "bun.lockb"), "");
+		expect(detectPackageManager(tempDir)).toBe("bun");
+	});
+
+	it("detects pnpm from pnpm-lock.yaml", () => {
+		writeFileSync(join(tempDir, "pnpm-lock.yaml"), "");
+		expect(detectPackageManager(tempDir)).toBe("pnpm");
+	});
+
+	it("detects yarn from yarn.lock", () => {
+		writeFileSync(join(tempDir, "yarn.lock"), "");
+		expect(detectPackageManager(tempDir)).toBe("yarn");
+	});
+
+	it("detects npm from package-lock.json ahead of a conflicting user agent", () => {
+		vi.stubEnv("npm_config_user_agent", "bun/1.0.0");
+		writeFileSync(join(tempDir, "package-lock.json"), "");
+		expect(detectPackageManager(tempDir)).toBe("npm");
+	});
+
+	it("prefers bun.lock over other lockfiles", () => {
+		writeFileSync(join(tempDir, "bun.lock"), "");
+		writeFileSync(join(tempDir, "pnpm-lock.yaml"), "");
+		writeFileSync(join(tempDir, "yarn.lock"), "");
+		writeFileSync(join(tempDir, "package-lock.json"), "");
+		expect(detectPackageManager(tempDir)).toBe("bun");
+	});
+
+	it("prefers pnpm over yarn and npm when bun is absent", () => {
+		vi.stubEnv("npm_config_user_agent", "bun/1.0.0");
+		writeFileSync(join(tempDir, "pnpm-lock.yaml"), "");
+		writeFileSync(join(tempDir, "yarn.lock"), "");
+		writeFileSync(join(tempDir, "package-lock.json"), "");
+		expect(detectPackageManager(tempDir)).toBe("pnpm");
+	});
+
+	it("falls back to npm_config_user_agent for bun", () => {
+		vi.stubEnv("npm_config_user_agent", "bun/1.0.0");
+		expect(detectPackageManager(tempDir)).toBe("bun");
+	});
+
+	it("falls back to npm_config_user_agent for pnpm", () => {
+		vi.stubEnv("npm_config_user_agent", "pnpm/8.0.0 npm/? node/v20.0.0");
+		expect(detectPackageManager(tempDir)).toBe("pnpm");
+	});
+
+	it("falls back to npm_config_user_agent for yarn", () => {
+		vi.stubEnv("npm_config_user_agent", "yarn/4.0.0 npm/? node/v20.0.0");
+		expect(detectPackageManager(tempDir)).toBe("yarn");
+	});
+
+	it("defaults to npm when no signals are present", () => {
+		expect(detectPackageManager(tempDir)).toBe("npm");
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// isInGitRepo()
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("isInGitRepo", () => {
+	it("returns false for a directory outside any git repo", () => {
+		// /tmp is not inside a git repo
+		expect(isInGitRepo(tmpdir())).toBe(false);
+	});
+
+	it("returns true for a subdirectory of a git repo", () => {
+		const repoDir = mkdtempSync(join(tmpdir(), "crust-git-test-"));
+		try {
+			spawnSync("git", ["init"], {
+				cwd: repoDir,
+				stdio: "ignore",
+				timeout: 10_000,
+			});
+			const nested = join(repoDir, "nested");
+			mkdirSync(nested);
+
+			expect(isInGitRepo(nested)).toBe(true);
+		} finally {
+			rmSync(repoDir, { recursive: true, force: true });
+		}
+	});
+});

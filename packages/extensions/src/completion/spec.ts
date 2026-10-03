@@ -1,18 +1,19 @@
 /**
  * Internal data shape produced by the completion-extension walker.
  *
- * The walker traverses the live `CommandNode` tree (built by the user's
- * `Crust` builder) and projects it down to a small, serialisable description
- * of every visible command, flag, and positional argument. Per-shell template
+ * The walker projects Core's `CommandDocumentation` model (from
+ * `@crustjs/core/tooling`) down to a small, serialisable description of
+ * every visible command, flag, and positional argument. Per-shell template
  * renderers (`bash.ts`, `zsh.ts`, `fish.ts`) consume this spec — they never
- * touch `CommandNode` directly. This decoupling keeps the templates pure
- * functions that are easy to snapshot-test.
+ * touch the documentation model directly. This decoupling keeps the
+ * templates pure functions that are easy to snapshot-test.
  *
  * The spec intentionally **excludes** anything a generated shell script
  * cannot use:
  *
- * - Subcommands marked `meta.hidden === true` are dropped during the walk
- *   (the same listing contract the help renderer follows).
+ * - Subcommands marked `meta.hidden === true` are absent, because
+ *   `buildCommandDocumentation` lists only visible children (the same
+ *   listing contract the help renderer follows).
  * - Boolean flags surface with `takesValue: false` so templates know not to
  *   offer value candidates after them.
  * - Description strings have ANSI escape sequences stripped — completion
@@ -27,8 +28,8 @@
 /** Fields shared by every named flag attached to a command. */
 interface CompletionFlagBase {
 	/**
-	 * The canonical long name with **no** leading dashes — the same key used
-	 * in `CommandNode.effectiveFlags`. Templates prepend `--` when emitting.
+	 * The canonical long name with **no** leading dashes — the same key as
+	 * `DocumentationFlag.name`. Templates prepend `--` when emitting.
 	 */
 	name: string;
 	/**
@@ -53,7 +54,7 @@ interface CompletionFlagBase {
 	multiple?: true;
 }
 
-type StringCompletion =
+export type StringCompletion =
 	| { choices: readonly string[]; valueCompletion?: never }
 	| { choices?: never; valueCompletion: "files" | "none" }
 	| { choices?: never; valueCompletion?: never };
@@ -122,9 +123,9 @@ export interface CompletionCommand {
 	/** Human-readable description, ANSI-stripped. */
 	description?: string;
 	/**
-	 * Flags visible on this command. Walker captures `effectiveFlags` (not
-	 * `localFlags`), so propagating flags appear at every depth — matching
-	 * what the parser actually accepts at this level.
+	 * Flags visible on this command. `CommandDocumentation.flags` already
+	 * includes Context-owned and local flags, so propagating flags appear at
+	 * every depth — matching what the parser actually accepts at this level.
 	 */
 	flags: readonly CompletionFlag[];
 	/** Positional arguments declared on this command. */

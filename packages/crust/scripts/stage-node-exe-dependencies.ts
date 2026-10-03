@@ -10,8 +10,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import crustPackage from "../package.json" with { type: "json" };
-import { NODE_EXE_BACKEND_PACKAGES } from "../src/utils/build-helpers.ts";
-import type { DistributionManifest } from "../src/utils/distribute.ts";
+import type { DistributionManifest } from "../src/distribute.ts";
+import { NODE_EXE_BACKEND_PACKAGES } from "../src/node-exe.ts";
 
 /**
  * Adds the backend packages, with their ranges from `optionalDependencies`, to

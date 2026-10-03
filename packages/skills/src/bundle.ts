@@ -15,7 +15,7 @@ import type { RenderedFile } from "./types.ts";
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Filename of the entrypoint markdown file required at the bundle root. */
-const SKILL_MD = "SKILL.md";
+export const SKILL_MD = "SKILL.md";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal — frontmatter probe
@@ -173,6 +173,13 @@ export interface LoadedBundle {
 	readonly frontmatter: RequiredSkillFrontmatter;
 }
 
+function missingSkillMdError(root: string): Error {
+	return new Error(
+		`Extra skill directory is missing SKILL.md at its root "${root}". ` +
+			`Every extra skill directory must contain a top-level SKILL.md file.`,
+	);
+}
+
 /**
  * Loads the contents of a hand-authored skill bundle and extracts the
  * `name`/`description` it declares in its `SKILL.md` frontmatter.
@@ -188,8 +195,6 @@ export interface LoadedBundle {
  * The returned `frontmatter` becomes the source of truth for the build
  * pipeline and output paths. Crust does not rewrite `SKILL.md`; the bundle
  * author owns it.
- *
- * @internal Exported for unit testing.
  */
 export async function loadBundleFiles(sourceDir: string | URL): Promise<LoadedBundle> {
 	const resolved = resolveSourceDir(sourceDir);
@@ -212,13 +217,9 @@ export async function loadBundleFiles(sourceDir: string | URL): Promise<LoadedBu
 	// pointing back to root (e.g. `loop -> .`) is rejected on first descent.
 	const visitedDirs = new Set<string>([canonicalRoot]);
 	const collected = await collectBundleEntries(canonicalRoot, canonicalRoot, "", visitedDirs);
-
-	const skillMd = collected.find((f) => f.relPath === SKILL_MD);
-	if (!skillMd) {
-		throw new Error(
-			`Extra skill directory is missing SKILL.md at its root "${canonicalRoot}". ` +
-				`Every extra skill directory must contain a top-level SKILL.md file.`,
-		);
+	// Check before reading so an unreadable sibling cannot mask the missing entrypoint.
+	if (!collected.some((entry) => entry.relPath === SKILL_MD)) {
+		throw missingSkillMdError(canonicalRoot);
 	}
 
 	const files = await Promise.all(
@@ -228,9 +229,13 @@ export async function loadBundleFiles(sourceDir: string | URL): Promise<LoadedBu
 		})),
 	);
 
+	const skillMd = files.find((f) => f.path === SKILL_MD);
+	if (!skillMd) {
+		throw missingSkillMdError(canonicalRoot);
+	}
 	// Decode the bytes already loaded so frontmatter and returned content
 	// describe the same snapshot of SKILL.md.
-	const skillContent = files[collected.indexOf(skillMd)]!.content.toString("utf-8");
+	const skillContent = skillMd.content.toString("utf-8");
 	const frontmatter = requireSkillFrontmatter(
 		probeFrontmatter(skillContent),
 		`Extra skill SKILL.md at "${join(canonicalRoot, SKILL_MD)}"`,

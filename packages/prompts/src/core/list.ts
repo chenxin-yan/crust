@@ -1,10 +1,16 @@
 import type { FuzzyFilterResult } from "./fuzzy.ts";
 import { fuzzyFilter } from "./fuzzy.ts";
-import type { PromptIO } from "./renderer.ts";
-import { resolveShortCircuit } from "./shortCircuit.ts";
+import type { KeypressEvent, PromptIO } from "./renderer.ts";
+import { resolveShortCircuit } from "./short-circuit.ts";
+import { handleTextEdit } from "./text-edit.ts";
 import type { Choice } from "./types.ts";
 import type { NormalizedChoice } from "./utils.ts";
-import { calculateScrollOffset, DEFAULT_MAX_VISIBLE, normalizeChoices } from "./utils.ts";
+import {
+	calculateScrollOffset,
+	DEFAULT_MAX_VISIBLE,
+	moveCursor,
+	normalizeChoices,
+} from "./utils.ts";
 
 interface ListPromptOptions<T, Answer extends T | readonly T[]> {
 	readonly choices: readonly Choice<T>[];
@@ -28,7 +34,7 @@ type ListPromptSetup<T, Answer extends T | readonly T[]> =
 /** @internal Resolve the shared lifecycle and initial viewport for list prompts. */
 export async function setupListPrompt<T, Answer extends T | readonly T[]>(
 	options: ListPromptOptions<T, Answer>,
-	mode: "single" | "multiple",
+	defaults: readonly T[],
 	io?: PromptIO,
 ): Promise<ListPromptSetup<T, Answer>> {
 	const shortCircuit = await resolveShortCircuit(options, io);
@@ -36,13 +42,6 @@ export async function setupListPrompt<T, Answer extends T | readonly T[]>(
 
 	const choices = normalizeChoices(options.choices);
 	const maxVisible = options.maxVisible ?? DEFAULT_MAX_VISIBLE;
-	// SAFETY: The explicit mode disambiguates scalar array-valued T from multi-answer T[].
-	const defaults: readonly T[] =
-		options.default === undefined
-			? []
-			: mode === "multiple"
-				? (options.default as readonly T[])
-				: [options.default as T];
 	const selected = new Set(
 		defaults.flatMap((value) => {
 			const index = choices.findIndex((choice) => choice.value === value);
@@ -64,8 +63,8 @@ export async function setupListPrompt<T, Answer extends T | readonly T[]>(
 	};
 }
 
-/** @internal Re-filter a list prompt after its query changes. */
-export function refilter<
+/** Re-filter a list prompt after its query changes. */
+function refilter<
 	T,
 	S extends {
 		readonly query: string;
@@ -83,4 +82,38 @@ export function refilter<
 	const listCursor = 0;
 	const scrollOffset = calculateScrollOffset(listCursor, 0, results.length, maxVisible);
 	return { ...state, results, listCursor, scrollOffset };
+}
+
+/**
+ * @internal Handle result navigation and query editing for filter prompts.
+ * Returns `null` for keys it does not handle.
+ */
+export function handleQueryListKey<
+	T,
+	S extends {
+		readonly query: string;
+		readonly cursorPos: number;
+		readonly choices: readonly { readonly label: string; readonly value: T }[];
+		readonly results: readonly FuzzyFilterResult<T>[];
+		readonly listCursor: number;
+		readonly scrollOffset: number;
+	},
+>(key: KeypressEvent, state: S, maxVisible: number): S | null {
+	if (key.name === "up" || key.name === "down") {
+		const delta = key.name === "up" ? -1 : 1;
+		const moved = moveCursor(
+			state.listCursor,
+			state.results.length,
+			delta,
+			state.scrollOffset,
+			maxVisible,
+		);
+		return { ...state, listCursor: moved.cursor, scrollOffset: moved.scrollOffset };
+	}
+
+	const edit = handleTextEdit(key, state.query, state.cursorPos);
+	if (!edit) return null;
+	const next = { ...state, query: edit.text, cursorPos: edit.cursorPos };
+	// Re-filter only when the query text actually changed
+	return edit.text === state.query ? next : refilter(next, maxVisible);
 }

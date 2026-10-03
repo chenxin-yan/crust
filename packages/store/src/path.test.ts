@@ -2,7 +2,6 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vite-plus/test";
 
-import { CrustStoreError } from "./errors.ts";
 import {
 	cacheDir,
 	configDir,
@@ -13,8 +12,16 @@ import {
 } from "./path.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Test helpers — env factories
+// Test helpers
 // ────────────────────────────────────────────────────────────────────────────
+
+function pathError(message: string) {
+	return expect.objectContaining({
+		name: "CrustStoreError",
+		code: "PATH",
+		message: expect.stringContaining(message),
+	});
+}
 
 function linuxEnv(
 	overrides?: Partial<PlatformEnv> & Record<string, string | undefined>,
@@ -65,44 +72,19 @@ function win32Env(
 
 describe("appName validation", () => {
 	it("should reject empty appName", () => {
-		try {
-			configDir("", linuxEnv());
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustStoreError);
-			expect((err as CrustStoreError).code).toBe("PATH");
-			expect((err as CrustStoreError).message).toContain("non-empty");
-		}
+		expect(() => configDir("", linuxEnv())).toThrow(pathError("non-empty"));
 	});
 
 	it("should reject whitespace-only appName", () => {
-		try {
-			configDir("   ", linuxEnv());
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustStoreError);
-			expect((err as CrustStoreError).code).toBe("PATH");
-		}
+		expect(() => configDir("   ", linuxEnv())).toThrow(pathError("non-empty"));
 	});
 
 	it("should reject appName with forward slashes", () => {
-		try {
-			configDir("my/app", linuxEnv());
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustStoreError);
-			expect((err as CrustStoreError).message).toContain("path separators");
-		}
+		expect(() => configDir("my/app", linuxEnv())).toThrow(pathError("path separators"));
 	});
 
 	it("should reject appName with backslashes", () => {
-		try {
-			configDir("my\\app", linuxEnv());
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustStoreError);
-			expect((err as CrustStoreError).message).toContain("path separators");
-		}
+		expect(() => configDir("my\\app", linuxEnv())).toThrow(pathError("path separators"));
 	});
 
 	it("should accept valid appName characters", () => {
@@ -174,15 +156,7 @@ describe("configDir", () => {
 				homedir: "/home/user",
 			};
 
-			try {
-				configDir("my-cli", env);
-				expect.unreachable("should have thrown");
-			} catch (err) {
-				expect(err).toBeInstanceOf(CrustStoreError);
-				const storeErr = err as CrustStoreError;
-				expect(storeErr.code).toBe("PATH");
-				expect(storeErr.message).toContain("freebsd");
-			}
+			expect(() => configDir("my-cli", env)).toThrow(pathError("freebsd"));
 		});
 	});
 
@@ -309,36 +283,17 @@ describe("cacheDir", () => {
 describe("resolveStorePath", () => {
 	describe("dirPath validation", () => {
 		it("should reject empty dirPath", () => {
-			try {
-				resolveStorePath("", "config");
-				expect.unreachable("should have thrown");
-			} catch (err) {
-				expect(err).toBeInstanceOf(CrustStoreError);
-				expect((err as CrustStoreError).code).toBe("PATH");
-				expect((err as CrustStoreError).message).toContain("non-empty");
-			}
+			expect(() => resolveStorePath("", "config")).toThrow(pathError("non-empty"));
 		});
 
 		it("should reject relative dirPath", () => {
-			try {
-				resolveStorePath("relative/path", "config");
-				expect.unreachable("should have thrown");
-			} catch (err) {
-				expect(err).toBeInstanceOf(CrustStoreError);
-				expect((err as CrustStoreError).code).toBe("PATH");
-				expect((err as CrustStoreError).message).toContain("absolute");
-			}
+			expect(() => resolveStorePath("relative/path", "config")).toThrow(pathError("absolute"));
 		});
 
 		it("should reject dirPath ending in .json", () => {
-			try {
-				resolveStorePath("/absolute/path/config.json", "config");
-				expect.unreachable("should have thrown");
-			} catch (err) {
-				expect(err).toBeInstanceOf(CrustStoreError);
-				expect((err as CrustStoreError).code).toBe("PATH");
-				expect((err as CrustStoreError).message).toContain(".json");
-			}
+			expect(() => resolveStorePath("/absolute/path/config.json", "config")).toThrow(
+				pathError(".json"),
+			);
 		});
 
 		it("should accept valid absolute dirPath", () => {
@@ -366,34 +321,21 @@ describe("resolveStorePath", () => {
 		});
 
 		it("should reject empty name", () => {
-			try {
-				resolveStorePath("/home/user/.config/my-cli", "");
-				expect.unreachable("should have thrown");
-			} catch (err) {
-				expect(err).toBeInstanceOf(CrustStoreError);
-				expect((err as CrustStoreError).code).toBe("PATH");
-				expect((err as CrustStoreError).message).toContain("non-empty");
-			}
+			expect(() => resolveStorePath("/home/user/.config/my-cli", "")).toThrow(
+				pathError("non-empty"),
+			);
 		});
 
 		it("should reject name with path separators", () => {
-			try {
-				resolveStorePath("/home/user/.config/my-cli", "my/store");
-				expect.unreachable("should have thrown");
-			} catch (err) {
-				expect(err).toBeInstanceOf(CrustStoreError);
-				expect((err as CrustStoreError).message).toContain("path separators");
-			}
+			expect(() => resolveStorePath("/home/user/.config/my-cli", "my/store")).toThrow(
+				pathError("path separators"),
+			);
 		});
 
 		it("should reject name ending with .json", () => {
-			try {
-				resolveStorePath("/home/user/.config/my-cli", "auth.json");
-				expect.unreachable("should have thrown");
-			} catch (err) {
-				expect(err).toBeInstanceOf(CrustStoreError);
-				expect((err as CrustStoreError).message).toContain(".json");
-			}
+			expect(() => resolveStorePath("/home/user/.config/my-cli", "auth.json")).toThrow(
+				pathError(".json"),
+			);
 		});
 
 		it("should accept valid name characters", () => {

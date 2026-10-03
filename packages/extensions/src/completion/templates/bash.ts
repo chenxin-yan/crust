@@ -1,5 +1,5 @@
 import { bashDoubleQuoteInner, bashSingleQuote, toShellIdent } from "../escape.ts";
-import type { CompletionArg, CompletionCommand, CompletionFlag } from "../spec.ts";
+import type { CompletionCommand, CompletionFlag } from "../spec.ts";
 
 /**
  * Pure-static bash completion script renderer.
@@ -17,7 +17,10 @@ import type { CompletionArg, CompletionCommand, CompletionFlag } from "../spec.t
  * 2. Walks `COMP_WORDS` left-to-right, advancing a `cmd_path` through
  *    the static command tree. Stops walking at the `--` end-of-options
  *    terminator and skips value-taking flag pairs so we don't mistake a
- *    flag value for a subcommand.
+ *    flag value for a subcommand. Only exact value-flag spellings are
+ *    skipped: a short bundle ending in a value short (`-qo out`) is not
+ *    recognised, so its value token stops routing. Fish's
+ *    `__<ident>_takes_value` models Core's bundle matching.
  * 3. Once the path is resolved, picks completion candidates:
  *    - if the user is mid-`--name=value`, splits on `=` and offers the
  *      static value list (or files) for that flag,
@@ -33,12 +36,8 @@ import type { CompletionArg, CompletionCommand, CompletionFlag } from "../spec.t
  */
 
 /**
- * Render the wordlist of subcommand candidates for a single command —
- * each candidate as a bash-quoted shell word so values containing
- * spaces (theoretical: identifier validation rejects them) or shell
- * metacharacters (theoretical: same) survive `compgen -W` splitting.
- *
- * Includes canonical names and any declared aliases.
+ * Render the space-joined wordlist of subcommand candidates for a single
+ * command, including canonical names and any declared aliases.
  */
 function subcmdWordlist(node: CompletionCommand): string {
 	// Names are validated identifiers (`assertSafeIdentifier`), so a
@@ -61,21 +60,17 @@ function subcmdWordlist(node: CompletionCommand): string {
  * boolean flags whose snapshot marks them as negatable.
  */
 function flagWordlist(node: CompletionCommand): string {
-	const words: string[] = [];
-	for (const flag of node.flags) {
-		words.push(`--${flag.name}`);
-		if (flag.short !== undefined) words.push(`-${flag.short}`);
-		if (flag.aliases !== undefined) {
-			for (const alias of flag.aliases) words.push(`--${alias}`);
-		}
-		if (flag.negatable) {
-			words.push(`--no-${flag.name}`);
-			if (flag.aliases !== undefined) {
-				for (const alias of flag.aliases) words.push(`--no-${alias}`);
-			}
-		}
-	}
-	return words.join(" ");
+	return node.flags
+		.flatMap((flag) => [
+			...flagSpellings(flag),
+			...(flag.negatable ? [flag.name, ...(flag.aliases ?? [])].map((name) => `--no-${name}`) : []),
+		])
+		.join(" ");
+}
+
+/** `cmd_path` of `name` under `parentPath`; the root path is `""`. */
+function childPath(parentPath: string, name: string): string {
+	return parentPath === "" ? name : `${parentPath}:${name}`;
 }
 
 interface BashCase {
@@ -102,7 +97,7 @@ interface BashCase {
  */
 function collectPathCases(parentPath: string, parent: CompletionCommand, out: BashCase[]): void {
 	for (const sub of parent.subCommands) {
-		const newPath = parentPath === "" ? sub.name : `${parentPath}:${sub.name}`;
+		const newPath = childPath(parentPath, sub.name);
 		const subcmds = subcmdWordlist(sub);
 		const flags = flagWordlist(sub);
 		const valueFlags = valueFlagWordlist(sub);
@@ -153,7 +148,7 @@ type FlagValueCase = {
 type FlagValueMode =
 	| {
 			kind: "choices";
-			/** Bash-quoted, space-joined value list. */
+			/** Space-joined value list; choices are validated, so no per-word quoting. */
 			values: string;
 	  }
 	| { kind: "path" | "suppress" };
@@ -186,7 +181,7 @@ function collectFlagValueCases(
 		}
 	}
 	for (const sub of node.subCommands) {
-		const subPath = cmdPath === "" ? sub.name : `${cmdPath}:${sub.name}`;
+		const subPath = childPath(cmdPath, sub.name);
 		collectFlagValueCases(subPath, sub, out);
 	}
 }
@@ -212,7 +207,7 @@ interface ArgChoiceEntry {
 	bySlot: ReadonlyArray<string | undefined>;
 	/** Slot index from which `variadicValues` applies, or `undefined`. */
 	variadicFrom?: number;
-	/** Bash-quoted, space-joined value list for the variadic tail. */
+	/** Space-joined value list for the variadic tail (validated, unquoted). */
 	variadicValues?: string;
 }
 
@@ -242,7 +237,7 @@ function collectArgSuppressCases(
 ): void {
 	const slots: number[] = [];
 	let variadicFrom: number | undefined;
-	node.args.forEach((arg: CompletionArg, idx: number) => {
+	node.args.forEach((arg, idx) => {
 		if (arg.valueCompletion !== "none") return;
 		if (arg.variadic) {
 			variadicFrom = idx;
@@ -254,7 +249,7 @@ function collectArgSuppressCases(
 		out.push({ cmdPath, slots, variadicFrom });
 	}
 	for (const sub of node.subCommands) {
-		const subPath = cmdPath === "" ? sub.name : `${cmdPath}:${sub.name}`;
+		const subPath = childPath(cmdPath, sub.name);
 		collectArgSuppressCases(subPath, sub, out);
 	}
 }
@@ -275,7 +270,7 @@ function collectArgChoiceCases(
 	let variadicFrom: number | undefined;
 	let variadicValues: string | undefined;
 	let hasAny = false;
-	node.args.forEach((arg: CompletionArg, idx: number) => {
+	node.args.forEach((arg, idx) => {
 		if (arg.variadic) {
 			if (arg.choices !== undefined) {
 				variadicFrom = idx;
@@ -296,7 +291,7 @@ function collectArgChoiceCases(
 		out.push({ cmdPath, bySlot, variadicFrom, variadicValues });
 	}
 	for (const sub of node.subCommands) {
-		const subPath = cmdPath === "" ? sub.name : `${cmdPath}:${sub.name}`;
+		const subPath = childPath(cmdPath, sub.name);
 		collectArgChoiceCases(subPath, sub, out);
 	}
 }
@@ -332,8 +327,14 @@ function valueFlagWordlist(node: CompletionCommand): string {
  *                 {@link assertSafeBinName} upstream.
  * @param version  Free-form version string for the header comment;
  *                 control characters are stripped before emission.
+ * @param command  Completion subcommand name for the header's regenerate hint.
  */
-export function renderBash(spec: CompletionCommand, binName: string, version: string): string {
+export function renderBash(
+	spec: CompletionCommand,
+	binName: string,
+	version: string,
+	command = "completion",
+): string {
 	const ident = toShellIdent(binName);
 	const fnName = `_${ident}`;
 	const initFn = `__${ident}_init_completion`;
@@ -380,13 +381,13 @@ export function renderBash(spec: CompletionCommand, binName: string, version: st
 	};
 
 	lines.push(
-		`# completion script for ${binName} v${version} — regenerate with: ${binName} completion bash`,
+		`# completion script for ${binName} v${version} — regenerate with: ${binName} ${command} bash`,
 	);
 	lines.push("");
 
 	// Cobra-style init shim. Provides cur/prev/words/cword without depending
-	// on the bash-completion package. Reference: spf13/cobra
-	// bash_completionsV2.go lines 48–54.
+	// on the bash-completion package. Adapted from spf13/cobra's
+	// bash_completionsV2.
 	lines.push(`${initFn}() {`);
 	lines.push("\tCOMPREPLY=()");
 	lines.push('\tcur="${COMP_WORDS[COMP_CWORD]}"');

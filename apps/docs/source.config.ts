@@ -4,7 +4,7 @@ import { defineConfig, defineDocs } from "fumadocs-mdx/config";
 import lastModified from "fumadocs-mdx/plugins/last-modified";
 import { createGenerator, remarkAutoTypeTable } from "fumadocs-typescript";
 
-import { twoslashHovers } from "./twoslash.ts";
+import { CODE_THEMES, twoslashHovers } from "./twoslash.ts";
 
 const typeScriptGenerator = createGenerator({
 	tsconfigPath: "tsconfig.json",
@@ -27,10 +27,7 @@ export default defineConfig({
 		// Auto type table paths are relative to the MDX file that declares them.
 		remarkPlugins: [[remarkAutoTypeTable, { generator: typeScriptGenerator }]],
 		rehypeCodeOptions: {
-			themes: {
-				light: "gruvbox-light-hard",
-				dark: "gruvbox-dark-hard",
-			},
+			themes: CODE_THEMES,
 			// Twoslash popups cannot lazy-load grammars, so every fence grammar used in content/ is preloaded (`text` is built in).
 			langs: ["ts", "tsx", "sh", "json"],
 			transformers: [

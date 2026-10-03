@@ -1,5 +1,4 @@
 import {
-	existsSync,
 	lstatSync,
 	mkdirSync,
 	readdirSync,
@@ -68,15 +67,10 @@ function renameDotfile(relativePath: string): string {
  * Check whether a directory exists and is non-empty.
  */
 function isNonEmptyDir(dirPath: string): boolean {
-	if (!existsSync(dirPath)) {
-		return false;
-	}
-	const stat = statSync(dirPath);
-	if (!stat.isDirectory()) {
-		return false;
-	}
-	const entries = readdirSync(dirPath);
-	return entries.length > 0;
+	return (
+		statSync(dirPath, { throwIfNoEntry: false })?.isDirectory() === true &&
+		readdirSync(dirPath).length > 0
+	);
 }
 
 /**
@@ -165,13 +159,14 @@ export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult
 	const templateDir = template instanceof URL ? fileURLToPath(template) : resolve(template);
 	const destDir = resolve(dest);
 
-	if (!existsSync(templateDir)) {
+	const templateStat = statSync(templateDir, { throwIfNoEntry: false });
+	if (!templateStat) {
 		throw new Error(
 			`Template directory "${templateDir}" does not exist (from template: "${String(template)}").`,
 		);
 	}
 
-	if (!statSync(templateDir).isDirectory()) {
+	if (!templateStat.isDirectory()) {
 		throw new Error(
 			`Template path "${templateDir}" is not a directory (from template: "${String(template)}").`,
 		);

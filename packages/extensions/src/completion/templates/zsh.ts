@@ -1,5 +1,5 @@
 import { toShellIdent, zshArgsDescription, zshDescribeField, bashSingleQuote } from "../escape.ts";
-import type { CompletionCommand, CompletionFlag } from "../spec.ts";
+import type { CompletionArg, CompletionCommand, CompletionFlag } from "../spec.ts";
 
 /**
  * Pure-static zsh completion script renderer.
@@ -24,33 +24,28 @@ import type { CompletionCommand, CompletionFlag } from "../spec.ts";
  * (for the colon-separated `_describe` items).
  */
 
+/**
+ * `_arguments` action for a value-taking flag or positional:
+ *   - choices                         → `(a b c)`
+ *   - path or free-form string        → `_files`
+ *   - url/json, number, boolean       → ` ` (no completion)
+ */
+function valueAction(value: CompletionFlag | CompletionArg): string {
+	// Choice values are validated by `assertSafeChoiceValue` to contain only
+	// `[A-Za-z0-9_.+:@/-]`, so they can be emitted bare inside the `(…)`
+	// action list without further escaping.
+	if (value.choices !== undefined) return `(${value.choices.join(" ")})`;
+	if (value.valueCompletion === "files") return "_files";
+	if (value.valueCompletion === undefined && value.type === "string") return "_files";
+	return " ";
+}
+
 function flagSpecs(flag: CompletionFlag): string[] {
 	const desc = flag.description ?? "";
 	const descPart = `[${zshArgsDescription(desc)}]`;
-
-	// Build the value-action suffix once: empty for booleans, ` :NAME:`
-	// (with `_files` for free-form strings) for value-takers.
-	let valueSuffix = "";
-	if (flag.takesValue) {
-		const valueLabel = flag.name; // shown as the prompt placeholder
-		if (flag.choices !== undefined && flag.choices.length > 0) {
-			// Choice values are validated by `assertSafeChoiceValue` to
-			// contain only `[A-Za-z0-9_.+:@/-]`, so they can be emitted bare
-			// inside the `(…)` action list without further escaping.
-			const opts = flag.choices.join(" ");
-			valueSuffix = `:${valueLabel}:(${opts})`;
-		} else if (flag.valueCompletion === "files") {
-			// Explicit file completion for path flags.
-			valueSuffix = `:${valueLabel}:_files`;
-		} else if (flag.valueCompletion === "none") {
-			// Suppress file completion — url/json values are not paths.
-			valueSuffix = `:${valueLabel}: `;
-		} else if (flag.type === "string") {
-			valueSuffix = `:${valueLabel}:_files`;
-		} else {
-			valueSuffix = `:${valueLabel}: `;
-		}
-	}
+	// Empty for booleans; `:NAME:ACTION` for value-takers, with the flag name
+	// as the prompt placeholder.
+	const valueSuffix = flag.takesValue ? `:${flag.name}:${valueAction(flag)}` : "";
 
 	// Repeatable flags: prefix with `*` per zshcompsys so the spec can
 	// match more than once (otherwise zsh hides used options after the
@@ -90,9 +85,7 @@ function flagSpecs(flag: CompletionFlag): string[] {
 		// The spec is built without an outer wrapper so we can wrap the
 		// whole thing in zsh single quotes after the brace alternation.
 		// Example: '(--help -h)'{-h,--help}'[desc]' — three single-quoted
-		// fragments concatenated. Each fragment is independently safe
-		// because none of the quoted contents contain a single quote
-		// (description quotes are escaped by zshArgsDescription).
+		// fragments concatenated, each quoted by bashSingleQuote.
 		const fragments = [
 			bashSingleQuote(headPrefix),
 			`${repeatBrace}{${altGroup}}`,
@@ -130,32 +123,13 @@ function flagSpecs(flag: CompletionFlag): string[] {
  *
  * Uses the same `'<idx>:NAME:<action>'` shape across leaf and non-leaf
  * helpers. Variadic args expand the `<idx>` to `*` and run the action
- * for every remaining word. Branches mirror {@link flagSpecs}:
- *   - choices                       → `(a b c)`
- *   - valueCompletion === "files"   → `_files`
- *   - valueCompletion === "none"    → ` ` (noop — url/json are not paths)
- *   - free-form string              → `_files`
- *   - number/bool                   → ` ` (noop — rare positional case)
+ * for every remaining word.
  */
 function renderArgSpecs(node: CompletionCommand): string[] {
-	const specs: string[] = [];
-	node.args.forEach((arg, idx) => {
+	return node.args.map((arg, idx) => {
 		const idxToken = arg.variadic ? "*" : String(idx + 1);
-		const label = arg.name;
-		let action: string;
-		if (arg.choices !== undefined && arg.choices.length > 0) {
-			// Validated bare values — see comment in flagSpecs.
-			action = `(${arg.choices.join(" ")})`;
-		} else if (arg.valueCompletion === "none") {
-			action = " ";
-		} else if (arg.valueCompletion === "files" || arg.type === "string") {
-			action = "_files";
-		} else {
-			action = " ";
-		}
-		specs.push(bashSingleQuote(`${idxToken}:${label}:${action}`));
+		return bashSingleQuote(`${idxToken}:${arg.name}:${valueAction(arg)}`);
 	});
-	return specs;
 }
 
 /**
@@ -290,8 +264,14 @@ function renderHelper(
  * @param binName  User-facing binary name; validated upstream via
  *                 {@link assertSafeBinName}.
  * @param version  Free-form version string for the header comment.
+ * @param command  Completion subcommand name for the header's regenerate hint.
  */
-export function renderZsh(spec: CompletionCommand, binName: string, version: string): string {
+export function renderZsh(
+	spec: CompletionCommand,
+	binName: string,
+	version: string,
+	command = "completion",
+): string {
 	const ident = toShellIdent(binName);
 	const lines: string[] = [];
 
@@ -301,7 +281,7 @@ export function renderZsh(spec: CompletionCommand, binName: string, version: str
 	// itself rejects unusual `#compdef` arguments).
 	lines.push(`#compdef ${binName}`);
 	lines.push(
-		`# completion script for ${binName} v${version} — regenerate with: ${binName} completion zsh`,
+		`# completion script for ${binName} v${version} — regenerate with: ${binName} ${command} zsh`,
 	);
 	lines.push("");
 
@@ -313,7 +293,7 @@ export function renderZsh(spec: CompletionCommand, binName: string, version: str
 	// `compdef`, it also calls the function — but if the user `source`s the
 	// file by hand (the inline `eval` install), nothing has called the
 	// entry function yet. Guard with `compdef` so the autoload path doesn't
-	// double-invoke. Pattern adapted from yargs (research zsh.md §5.2).
+	// double-invoke. Pattern adapted from yargs.
 	// `binName` is validated, so the bare form is safe; we still single-
 	// quote it for readability and as defence-in-depth.
 	lines.push(`if [ "$funcstack[1]" = "_${ident}" ]; then`);

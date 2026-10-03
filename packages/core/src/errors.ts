@@ -28,10 +28,17 @@ export interface ValidationErrorDetails {
 
 /** Details for argv syntax or built-in value parsing failures. */
 export interface ParseErrorDetails {
+	/**
+	 * The offending flag. For `"unknown-flag"` it is the supplied name without
+	 * leading dashes (`--nope` and `-x` report `"nope"` and `"x"`); for
+	 * `"flag-not-forwardable"` it is the argv token as written.
+	 */
 	readonly flag?: string;
+	/** The offending argument name, for `"positional-gap"` and `"unknown-argument"`. */
 	readonly argument?: string;
 	/** Retained for compatibility; Core no longer populates this field. */
 	readonly value?: string;
+	/** `"unknown-flag"`, `"unknown-argument"`, `"positional-gap"`, or `"flag-not-forwardable"`. */
 	readonly reason?: string;
 }
 
@@ -69,8 +76,8 @@ export interface CrustErrorDetailsMap {
  * All possible error codes emitted by Crust.
  *
  * - `DEFINITION` — Runtime recipe, Extension, Context, or documentation definition failure
- * - `VALIDATION` — Missing required arguments or flags
- * - `PARSE` — Argv parsing failures (unknown flags, type coercion)
+ * - `VALIDATION` — Required-value or Standard Schema validation failure
+ * - `PARSE` — Argv syntax, structured `run()` input binding, or built-in value parsing failure
  * - `COMMAND_NOT_FOUND` — Unrecognised subcommand at the current level
  * - `ENV` — Missing or invalid `@crustjs/env` variables (values redacted)
  *
@@ -82,9 +89,6 @@ export interface CrustErrorDetailsMap {
  *   if (err instanceof CrustError) {
  *     switch (err.code) {
  *       case "VALIDATION":
- *         console.error(err.message);
- *         showHelp(cmd);
- *         break;
  *       case "PARSE":
  *         console.error(err.message);
  *         break;

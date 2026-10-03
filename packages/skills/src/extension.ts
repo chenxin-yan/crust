@@ -5,11 +5,9 @@ import {
 	type CommandDefinition,
 	type ExtensionBuildContext,
 	type ExtensionFactory,
-	type ExtensionId,
 	type InvocationIO,
 	defineCommand,
 	defineExtension,
-	defineExtensionId,
 } from "@crustjs/core";
 import { spinner } from "@crustjs/progress";
 import { confirm, multiselect, select } from "@crustjs/prompts";
@@ -25,17 +23,12 @@ import {
 	resolveEffectiveScope,
 } from "./agents.ts";
 import type { AgentTarget, Scope } from "./agents.ts";
+import { renderSkills } from "./build.ts";
 import { SkillConflictError } from "./errors.ts";
-import {
-	getSkillStatus,
-	groupAgentsByOutputDir,
-	installSkill,
-	uninstallSkill,
-} from "./generate.ts";
+import { SKILLS } from "./id.ts";
+import { getSkillStatus, groupAgentsByOutputDir, installSkill, uninstallSkill } from "./install.ts";
 import { SkillSourceUnavailableError, loadPackagedSkills, type PackagedSkill } from "./source.ts";
 import type { InstallSkillResult, SkillOptions, SkillStatusResult } from "./types.ts";
-
-export const SKILLS: ExtensionId = defineExtensionId("crust:skills");
 
 const DEFAULT_SKILL_COMMAND_NAME = "skills";
 const SKILLS_SECTION_TITLE = "Agent skills";
@@ -45,9 +38,15 @@ const UNIVERSAL_GROUP = "__universal__";
 
 type SkillIO = Pick<InvocationIO, "stdout" | "stderr">;
 
-async function resolveScope(rawScope: Scope | undefined, options: SkillOptions): Promise<Scope> {
-	if (rawScope) return rawScope;
-	if (options.defaultScope) return options.defaultScope;
+/** `--all` runs never prompt; they fall back to the default scope instead. */
+async function resolveScope(
+	rawScope: Scope | undefined,
+	options: SkillOptions,
+	nonInteractive = false,
+): Promise<Scope> {
+	const scope = rawScope ?? options.defaultScope;
+	if (scope) return scope;
+	if (nonInteractive) return DEFAULT_SKILL_SCOPE;
 	return select<Scope>({
 		message: "Select scope",
 		choices: [
@@ -56,6 +55,16 @@ async function resolveScope(rawScope: Scope | undefined, options: SkillOptions):
 		],
 		default: DEFAULT_SKILL_SCOPE,
 	});
+}
+
+function loadArtifactSkills(): readonly PackagedSkill[] {
+	return loadPackagedSkills(resolveArtifactDir(SKILLS_ARTIFACT));
+}
+
+function conflictWarning(name: string, outputDir: string): string {
+	return yellow(
+		`Skill conflict [${name}]: "${outputDir}" is not owned by this skill. Skipping link repair.`,
+	);
 }
 
 function formatAgentLabels(agents: readonly AgentTarget[]): string[] {
@@ -82,11 +91,7 @@ async function repairInstalledSkill(
 	for (const outputDir of new Set(
 		status.agents.filter((entry) => entry.status === "conflict").map((entry) => entry.outputDir),
 	)) {
-		io.stderr(
-			yellow(
-				`Skill conflict [${packagedSkill.name}]: "${outputDir}" is not owned by this skill. Skipping link repair.`,
-			),
-		);
+		io.stderr(conflictWarning(packagedSkill.name, outputDir));
 	}
 	const stale = status.agents.filter((entry) => entry.status === "dangling");
 	if (stale.length === 0) {
@@ -109,18 +114,14 @@ async function repairInstalledSkill(
 	} catch (error) {
 		// The entry may change hands between the status check and install (TOCTOU).
 		if (!(error instanceof SkillConflictError)) throw error;
-		io.stderr(
-			yellow(
-				`Skill conflict [${packagedSkill.name}]: "${error.details.outputDir}" is not owned by this skill. Skipping link repair.`,
-			),
-		);
+		io.stderr(conflictWarning(packagedSkill.name, error.details.outputDir));
 	}
 }
 
 async function autoRepairSkills(options: SkillOptions, io: SkillIO): Promise<void> {
 	let skills: readonly PackagedSkill[];
 	try {
-		skills = loadPackagedSkills(resolveArtifactDir(SKILLS_ARTIFACT));
+		skills = loadArtifactSkills();
 	} catch (error) {
 		// A missing or invalid packaged asset must not prevent unrelated CLI commands
 		// from running; the explicit skill command surfaces the same failure loudly.
@@ -156,7 +157,7 @@ async function autoRepairSkills(options: SkillOptions, io: SkillIO): Promise<voi
 
 function formatSkillDocumentation(commandName: string, appName: string): string {
 	try {
-		return loadPackagedSkills(resolveArtifactDir(SKILLS_ARTIFACT))
+		return loadArtifactSkills()
 			.map((packagedSkill) => {
 				// Relativizing across unrelated roots yields ../ chains that still spell
 				// out the absolute path; keep the absolute form when outside the cwd.
@@ -182,7 +183,6 @@ async function buildSkills(
 	options: SkillOptions,
 	context: ExtensionBuildContext,
 ): Promise<BuildArtifacts> {
-	const { renderSkills } = await import("./build.ts");
 	const files = await renderSkills(options.generated === false ? undefined : context.snapshot, {
 		version: context.snapshot.meta.version,
 		name: options.name,
@@ -237,7 +237,7 @@ function installedAgents(statusMap: SkillStatusMap): AgentTarget[] {
 
 async function loadStatuses(scope: Scope): Promise<Map<PackagedSkill, SkillStatusMap>> {
 	const statuses = new Map<PackagedSkill, SkillStatusMap>();
-	for (const packagedSkill of loadPackagedSkills(resolveArtifactDir(SKILLS_ARTIFACT))) {
+	for (const packagedSkill of loadArtifactSkills()) {
 		const status = await getSkillStatus({
 			name: packagedSkill.name,
 			sourceDir: packagedSkill.sourceDir,
@@ -284,19 +284,20 @@ async function installSkills(opts: {
 }): Promise<void> {
 	const { installAll, io } = opts;
 	const effectiveScope = resolveEffectiveScope(opts.scope);
-	const statuses = await loadStatuses(effectiveScope);
-	let skills = [...statuses.keys()];
-	if (skills.length === 0) return;
-	if (!installAll && skills.length > 1) {
-		const installedSkills = skills.filter(
-			(packagedSkill) => installedAgents(statuses.get(packagedSkill)!).length > 0,
+	let statuses = [...(await loadStatuses(effectiveScope))];
+	if (statuses.length === 0) return;
+	if (!installAll && statuses.length > 1) {
+		const skills = statuses.map(([packagedSkill]) => packagedSkill);
+		const installedSkills = statuses.flatMap(([packagedSkill, statusMap]) =>
+			installedAgents(statusMap).length > 0 ? [packagedSkill] : [],
 		);
-		skills = await selectSkills(
+		const chosen = await selectSkills(
 			"Select skills to install",
 			skills,
 			installedSkills.length > 0 ? installedSkills : skills,
 		);
-		if (skills.length === 0) {
+		statuses = statuses.filter(([packagedSkill]) => chosen.includes(packagedSkill));
+		if (statuses.length === 0) {
 			io.stdout(dim("No skills selected."));
 			return;
 		}
@@ -304,15 +305,13 @@ async function installSkills(opts: {
 
 	const detected = new Set(await detectInstalledAgents());
 	const universal = getUniversalAgents();
-	const installed = new Set(
-		skills.flatMap((packagedSkill) => installedAgents(statuses.get(packagedSkill)!)),
-	);
+	const installed = new Set(statuses.flatMap(([, statusMap]) => installedAgents(statusMap)));
 	const additional = getAdditionalAgents().filter(
 		(agent) => detected.has(agent) || installed.has(agent),
 	);
 	// Every skill links into the same per-agent skills root; hint the shared root.
 	const rootHint = (agent: AgentTarget) => {
-		const outputDir = statuses.get(skills[0]!)?.get(agent)?.outputDir;
+		const outputDir = statuses[0]?.[1].get(agent)?.outputDir;
 		return outputDir ? dirname(outputDir) : "path unavailable";
 	};
 	const choices: Array<{
@@ -346,10 +345,10 @@ async function installSkills(opts: {
 		if (values.includes(UNIVERSAL_GROUP)) selected.push(...universal);
 	}
 
-	for (const packagedSkill of skills) {
+	for (const [packagedSkill, statusMap] of statuses) {
 		await installSelectedAgents({
 			packagedSkill,
-			statusMap: statuses.get(packagedSkill)!,
+			statusMap,
 			selected,
 			scope: effectiveScope,
 			installAll,
@@ -474,9 +473,7 @@ type SkillActionContext = SkillIO & { flags: { scope?: Scope; all?: boolean } };
 function buildSkillCommand(commandName: string, options: SkillOptions) {
 	const install = async (context: SkillActionContext) => {
 		const installAll = context.flags.all === true;
-		const scope = installAll
-			? (context.flags.scope ?? options.defaultScope ?? DEFAULT_SKILL_SCOPE)
-			: await resolveScope(context.flags.scope, options);
+		const scope = await resolveScope(context.flags.scope, options, installAll);
 		await installSkills({ scope, installAll, io: context });
 	};
 	return defineCommand(
@@ -508,9 +505,7 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 							})
 							.action(async (context) => {
 								const removeAll = context.flags.all === true;
-								const scope = removeAll
-									? (context.flags.scope ?? options.defaultScope ?? DEFAULT_SKILL_SCOPE)
-									: await resolveScope(context.flags.scope, options);
+								const scope = await resolveScope(context.flags.scope, options, removeAll);
 								await uninstallSkills({ scope, removeAll, io: context });
 							}),
 					),
@@ -519,7 +514,7 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 					defineCommand("repair", { description: "Repair installed skill links" }, (sub) =>
 						sub.flags(SCOPE_FLAG).action(async (context) => {
 							const scope = await resolveScope(context.flags.scope, options);
-							for (const packagedSkill of loadPackagedSkills(resolveArtifactDir(SKILLS_ARTIFACT))) {
+							for (const packagedSkill of loadArtifactSkills()) {
 								await repairInstalledSkill(packagedSkill, scope, context, true);
 							}
 						}),

@@ -177,14 +177,7 @@ describe("store.read", () => {
 			fields: BASIC_FIELDS,
 		});
 
-		try {
-			await store.read();
-			expect.unreachable("should have thrown");
-		} catch (__err) {
-			const e = __err as CrustStoreError;
-			expect(e).toBeInstanceOf(CrustStoreError);
-			expect(e.is("PARSE")).toBe(true);
-		}
+		await expect(store.read()).rejects.toMatchObject({ name: "CrustStoreError", code: "PARSE" });
 	});
 
 	it("should run field validators on read", async () => {
@@ -197,19 +190,11 @@ describe("store.read", () => {
 			fields: VALIDATED_FIELDS,
 		});
 
-		try {
-			await store.read();
-			expect.unreachable("should have thrown");
-		} catch (__err) {
-			const e = __err as CrustStoreError;
-			expect(e).toBeInstanceOf(CrustStoreError);
-			expect(e.is("VALIDATION")).toBe(true);
-			if (e.is("VALIDATION")) {
-				expect(e.details.operation).toBe("read");
-				expect(e.details.issues).toHaveLength(1);
-				expect(e.details.issues[0]?.path).toBe("port");
-			}
-		}
+		await expect(store.read()).rejects.toMatchObject({
+			name: "CrustStoreError",
+			code: "VALIDATION",
+			details: { operation: "read", issues: [{ path: "port" }] },
+		});
 	});
 
 	it("should skip validation for undefined optional fields", async () => {
@@ -350,19 +335,14 @@ describe("store.write", () => {
 			fields: VALIDATED_FIELDS,
 		});
 
-		try {
-			await store.write({ port: 99999, host: "localhost" });
-			expect.unreachable("should have thrown");
-		} catch (__err) {
-			const e = __err as CrustStoreError;
-			expect(e).toBeInstanceOf(CrustStoreError);
-			expect(e.is("VALIDATION")).toBe(true);
-			if (e.is("VALIDATION")) {
-				expect(e.details.operation).toBe("write");
-				expect(e.details.issues[0]?.path).toBe("port");
-				expect(e.details.issues[0]?.message).toBe("port must be 1-65535");
-			}
-		}
+		await expect(store.write({ port: 99999, host: "localhost" })).rejects.toMatchObject({
+			name: "CrustStoreError",
+			code: "VALIDATION",
+			details: {
+				operation: "write",
+				issues: [{ path: "port", message: "port must be 1-65535" }],
+			},
+		});
 		expect(existsSync(join(tempDir, "config.json"))).toBe(false);
 	});
 
@@ -504,17 +484,11 @@ describe("store.update", () => {
 			fields: VALIDATED_FIELDS,
 		});
 
-		try {
-			await store.update((current) => ({ ...current, port: -1 }));
-			expect.unreachable("should have thrown");
-		} catch (__err) {
-			const e = __err as CrustStoreError;
-			expect(e).toBeInstanceOf(CrustStoreError);
-			expect(e.is("VALIDATION")).toBe(true);
-			if (e.is("VALIDATION")) {
-				expect(e.details.operation).toBe("update");
-			}
-		}
+		await expect(store.update((current) => ({ ...current, port: -1 }))).rejects.toMatchObject({
+			name: "CrustStoreError",
+			code: "VALIDATION",
+			details: { operation: "update" },
+		});
 	});
 });
 
@@ -571,17 +545,11 @@ describe("store.patch", () => {
 			fields: VALIDATED_FIELDS,
 		});
 
-		try {
-			await store.patch({ port: 0 });
-			expect.unreachable("should have thrown");
-		} catch (__err) {
-			const e = __err as CrustStoreError;
-			expect(e).toBeInstanceOf(CrustStoreError);
-			expect(e.is("VALIDATION")).toBe(true);
-			if (e.is("VALIDATION")) {
-				expect(e.details.operation).toBe("patch");
-			}
-		}
+		await expect(store.patch({ port: 0 })).rejects.toMatchObject({
+			name: "CrustStoreError",
+			code: "VALIDATION",
+			details: { operation: "patch" },
+		});
 	});
 
 	it("should work when no persisted file exists (patches defaults)", async () => {
@@ -871,20 +839,11 @@ describe("field validation", () => {
 			fields,
 		});
 
-		try {
-			await store.write({ port: 0, host: "" });
-			expect.unreachable("should have thrown");
-		} catch (__err) {
-			const e = __err as CrustStoreError;
-			expect(e).toBeInstanceOf(CrustStoreError);
-			expect(e.is("VALIDATION")).toBe(true);
-			if (e.is("VALIDATION")) {
-				expect(e.details.issues).toHaveLength(2);
-				const paths = e.details.issues.map((i: { path: string }) => i.path);
-				expect(paths).toContain("port");
-				expect(paths).toContain("host");
-			}
-		}
+		await expect(store.write({ port: 0, host: "" })).rejects.toMatchObject({
+			name: "CrustStoreError",
+			code: "VALIDATION",
+			details: { issues: [{ path: "port" }, { path: "host" }] },
+		});
 	});
 
 	it("should reject non-finite mutation values before persistence", async () => {
@@ -929,14 +888,10 @@ describe("field validation", () => {
 			fields,
 		});
 
-		try {
-			await store.write({ token: "ab" });
-			expect.unreachable("should have thrown");
-		} catch (__err) {
-			const e = __err as CrustStoreError;
-			expect(e).toBeInstanceOf(CrustStoreError);
-			expect(e.is("VALIDATION")).toBe(true);
-		}
+		await expect(store.write({ token: "ab" })).rejects.toMatchObject({
+			name: "CrustStoreError",
+			code: "VALIDATION",
+		});
 	});
 });
 
@@ -1007,20 +962,15 @@ describe("schema transform persistence", () => {
 			{ schema: z.string(), default: "x" },
 			{ schema: z.string(), validate: () => {} },
 		]) {
-			let caught: unknown;
-			try {
-				const malformedFields: FieldsDef = {};
-				Object.assign(malformedFields, { name: field });
+			const malformedFields: FieldsDef = {};
+			Object.assign(malformedFields, { name: field });
+			expect(() =>
 				createStore({
 					dirPath: tempDir,
 					name: "config",
 					fields: malformedFields,
-				});
-			} catch (error) {
-				caught = error;
-			}
-			expect(caught).toBeInstanceOf(CrustStoreError);
-			expect(caught).toMatchObject({ code: "DEFINITION" });
+				}),
+			).toThrow(expect.objectContaining({ name: "CrustStoreError", code: "DEFINITION" }));
 		}
 	});
 
@@ -1100,24 +1050,15 @@ describe("schema transform persistence", () => {
 
 		const store = createStore({ dirPath: tempDir, name: "config", fields });
 
-		let caught: unknown;
-		try {
-			const malformedConfig: { x: number } = JSON.parse('{"x":"hello"}');
-			await store.write(malformedConfig);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			caught = err;
-		}
-
-		expect(caught).toBeInstanceOf(CrustStoreError);
-		const e = caught as CrustStoreError;
-		expect(e.is("VALIDATION")).toBe(true);
-		if (e.is("VALIDATION")) {
-			expect(e.details.operation).toBe("write");
-			expect(e.details.issues).toHaveLength(1);
-			expect(e.details.issues[0]?.path).toBe("x");
-			expect(e.details.issues[0]?.message).toContain("read-unstable transform");
-		}
+		const malformedConfig: { x: number } = JSON.parse('{"x":"hello"}');
+		await expect(store.write(malformedConfig)).rejects.toMatchObject({
+			name: "CrustStoreError",
+			code: "VALIDATION",
+			details: {
+				operation: "write",
+				issues: [{ path: "x", message: expect.stringContaining("read-unstable transform") }],
+			},
+		});
 
 		// Nothing should have been persisted.
 		const filePath = join(tempDir, "config.json");

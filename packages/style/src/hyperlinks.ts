@@ -1,5 +1,5 @@
-import type { AnsiPair } from "./ansiCodes.ts";
-import { applyStyle } from "./styleEngine.ts";
+import type { AnsiPair } from "./ansi-codes.ts";
+import { applyStyle } from "./style-engine.ts";
 
 const OSC = "\x1b]";
 const ST = "\x1b\\";
@@ -78,7 +78,7 @@ export function linkCode(url: string, options?: HyperlinkOptions): AnsiPair {
  * ```ts
  * import { link } from "@crustjs/style";
  *
- * console.log(link("docs", "https://crustjs.dev"));
+ * console.log(link("docs", "https://crustjs.com"));
  * console.log(link("page 1", "https://example.com/p1", { id: "intro" }));
  * ```
  */

@@ -61,7 +61,7 @@ const flags = {
 } satisfies FlagsDef;
 ```
 
-`env` is consulted by terminal parsing only when the flag has no argv occurrence: argv wins over env, and env wins over `default`. The env value goes through the same conversion as an argv token and satisfies `required`. Help and man pages show `[env: NAME]`, never the value. Structured [`run()`](/docs/api/crust#runpath-input-options) input ignores `env`.
+`env` is consulted by terminal parsing only when the flag has no argv occurrence: argv wins over env, and env wins over `default`. The env value goes through the same conversion as an argv token and satisfies `required`. Help, man pages, and generated skills show `[env: NAME]`, never the value. Structured [`run()`](/docs/api/crust#runpath-input-options) input ignores `env`.
 
 `delimiter` splits string argv occurrences; `env.delimiter` independently splits environment text. Both require `multiple: true` and drop empty segments. Boolean argv switches are never split.
 
@@ -143,7 +143,7 @@ Command Snapshots are frozen, serializable descriptions of the command tree. The
 
 ## Typed invocation
 
-Declared in [`command/crust.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts). These types back [`run()`](/docs/api/crust#runpath-input-options), [`at()`](/docs/api/crust#atpath), and the [`@crustjs/testing`](/docs/modules/testing) helpers.
+Declared in [`command/typed-run.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/typed-run.ts). These types back [`run()`](/docs/api/crust#runpath-input-options), [`at()`](/docs/api/crust#atpath), and the [`@crustjs/testing`](/docs/modules/testing) helpers.
 
 | Type                                 | Role                                                                       |
 | ------------------------------------ | -------------------------------------------------------------------------- |
@@ -175,7 +175,7 @@ The inferred return value of `run()`. Every branch carries readonly captured `st
 - `handled`: the handling Extension id, `by`.
 - `failed`: the original thrown `error`.
 
-See the [source declaration](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts) for the union and [`run()`](/docs/api/crust#runpath-input-options) for a narrowing example and capture behavior. Extension `postRun` hooks receive [`InvocationOutcome`](#invocationoutcome) instead, which carries no output or result.
+See the [source declaration](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/typed-run.ts) for the union and [`run()`](/docs/api/crust#runpath-input-options) for a narrowing example and capture behavior. Extension `postRun` hooks receive [`InvocationOutcome`](#invocationoutcome) instead, which carries no output or result.
 
 ### Parser boundary types
 

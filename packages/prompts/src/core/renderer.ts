@@ -127,13 +127,17 @@ export interface PromptConfig<S, T> {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// ANSI escape sequences
+// Stream guards
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Tracks active prompts so a stream can only drive one prompt at a time. */
 const activeInputs = new WeakSet<PromptInput>();
 /** Tracks active outputs — concurrent frames on one stream would erase each other. */
 const activeOutputs = new WeakSet<PromptOutput>();
+
+// ────────────────────────────────────────────────────────────────────────────
+// ANSI escape sequences
+// ────────────────────────────────────────────────────────────────────────────
 
 const ESC = "\x1B[";
 const HIDE_CURSOR = `${ESC}?25l`;
@@ -243,7 +247,7 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Prom
 	const readlineOutput = output as NodeJS.WritableStream;
 
 	return new Promise<T>((resolve, reject) => {
-		// Guard against concurrent prompts sharing an input stream.
+		// Guard against concurrent prompts sharing an input or output stream.
 		if (activeInputs.has(stdin) || activeOutputs.has(output)) {
 			reject(
 				new Error(
@@ -339,7 +343,6 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Prom
 				ctrl?: boolean;
 				meta?: boolean;
 				shift?: boolean;
-				sequence?: string;
 			},
 		): void {
 			// Ctrl+C → reject with a standard AbortError (handle immediately)
@@ -403,11 +406,7 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Prom
 			stdin.resume();
 			output.write(HIDE_CURSOR);
 
-			// Initial render
-			const initialContent = render(state, theme);
-			output.write(initialContent);
-			const columns = output.columns || 80;
-			prevLineCount = physicalLineCount(initialContent, columns);
+			renderFrame(render(state, theme));
 
 			stdin.on("keypress", onKeypress);
 		} catch (err) {

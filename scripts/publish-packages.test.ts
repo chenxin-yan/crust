@@ -202,8 +202,8 @@ describe("repository release pack", () => {
 		};
 		mkdirSync(join(workspace, "scripts"), { recursive: true });
 		copyFileSync(script, join(workspace, "scripts", "publish-packages.mjs"));
-		mkdirSync(join(workspace, "packages", "crust", "src", "commands"), { recursive: true });
-		writeFileSync(join(workspace, "packages", "crust", "src", "commands", "publish.ts"), "");
+		mkdirSync(join(workspace, "packages", "crust", "src"), { recursive: true });
+		writeFileSync(join(workspace, "packages", "crust", "src", "publish.ts"), "");
 		writeFileSync(join(workspace, "pnpm-workspace.yaml"), "packages:\n  - packages/*\n");
 		writeFileSync(join(workspace, "LICENSE"), "fixture license");
 		writeJson(join(workspace, "package.json"), { name: "fixture-root", private: true });

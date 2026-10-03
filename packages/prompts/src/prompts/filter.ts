@@ -4,14 +4,14 @@
 
 import type { FuzzyFilterResult } from "../core/fuzzy.ts";
 import { fuzzyFilter, highlightMatches } from "../core/fuzzy.ts";
-import { refilter, setupListPrompt } from "../core/list.ts";
+import { handleQueryListKey, setupListPrompt } from "../core/list.ts";
 import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
 import { runPrompt, submit } from "../core/renderer.ts";
 import { CURSOR_INDICATOR, PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
-import { handleTextEdit, renderTextWithCursor } from "../core/textEdit.ts";
+import { renderTextWithCursor } from "../core/text-edit.ts";
 import type { Choice, ChoiceValue, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
-import { formatPromptLine, formatSubmitted, moveCursor, renderChoiceList } from "../core/utils.ts";
+import { formatPromptLine, formatSubmitted, renderChoiceList } from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -76,34 +76,7 @@ function createHandleKey<T>(
 			return state;
 		}
 
-		// Arrow keys — move list cursor with wrapping
-		if (key.name === "up" || key.name === "down") {
-			if (state.results.length === 0) return state;
-			const delta = key.name === "up" ? -1 : 1;
-			const moved = moveCursor(
-				state.listCursor,
-				state.results.length,
-				delta,
-				state.scrollOffset,
-				maxVisible,
-			);
-			return { ...state, listCursor: moved.cursor, scrollOffset: moved.scrollOffset };
-		}
-
-		// Delegate text-editing keys to shared handler
-		const edit = handleTextEdit(key, state.query, state.cursorPos);
-		if (edit) {
-			const queryChanged = edit.text !== state.query;
-			const newState: FilterState<T> = {
-				...state,
-				query: edit.text,
-				cursorPos: edit.cursorPos,
-			};
-			// Re-filter only when the query text actually changed
-			return queryChanged ? refilter(newState, maxVisible) : newState;
-		}
-
-		return state;
+		return handleQueryListKey(key, state, maxVisible) ?? state;
 	};
 }
 
@@ -140,10 +113,12 @@ function renderFilter<T>(
 			state.scrollOffset,
 			maxVisible,
 			(result, resultIndex) => {
+				const hint = state.choices[state.choices.indexOf(result.item)]?.hint;
 				const label = highlightMatches(result.item.label, result.indices, theme);
+				const hintText = hint ? ` ${theme.hint(hint)}` : "";
 				return resultIndex === state.listCursor
-					? `${theme.cursor(CURSOR_INDICATOR)} ${theme.selected(label)}`
-					: `  ${theme.unselected(label)}`;
+					? `${theme.cursor(CURSOR_INDICATOR)} ${theme.selected(label)}${hintText}`
+					: `  ${theme.unselected(label)}${hintText}`;
 			},
 			theme.hint,
 		),
@@ -154,7 +129,6 @@ function renderFilter<T>(
 
 function renderSubmitted<T>(
 	state: FilterState<T>,
-	_value: T,
 	theme: PromptTheme,
 	message: string | undefined,
 ): string {
@@ -227,7 +201,11 @@ export function filter(
 ): Promise<string>;
 export function filter<T>(options: FilterOptions<T>, io?: PromptIO): Promise<T>;
 export async function filter<T>(options: FilterOptions<T>, io?: PromptIO): Promise<T> {
-	const setup = await setupListPrompt<T, T>(options, "single", io);
+	const setup = await setupListPrompt<T, T>(
+		options,
+		options.default === undefined ? [] : [options.default],
+		io,
+	);
 	if (setup.shortCircuited) return setup.value;
 
 	const { choices, cursor, maxVisible, promptIO, scrollOffset } = setup;
@@ -247,8 +225,8 @@ export async function filter<T>(options: FilterOptions<T>, io?: PromptIO): Promi
 			render: (state, resolvedTheme) =>
 				renderFilter(state, resolvedTheme, options.message, options.placeholder, maxVisible),
 			handleKey: createHandleKey<T>(maxVisible),
-			renderSubmitted: (state, value, resolvedTheme) =>
-				renderSubmitted(state, value, resolvedTheme, options.message),
+			renderSubmitted: (state, _value, resolvedTheme) =>
+				renderSubmitted(state, resolvedTheme, options.message),
 		},
 		promptIO,
 	);

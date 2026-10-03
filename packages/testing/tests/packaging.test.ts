@@ -73,20 +73,24 @@ function pack(name: string): void {
 	if (result.status !== 0) {
 		throw new Error(`pnpm pack failed for ${name}:\n${result.stderr.toString()}`);
 	}
-	tarballs.set(name, JSON.parse(result.stdout.toString()).filename);
+	// SAFETY: `pnpm pack --json` reports the tarball path as `filename`; the
+	// toMatch below fails fast if that output shape changes.
+	const { filename } = JSON.parse(result.stdout.toString()) as { filename: string };
+	expect(filename).toMatch(/\.tgz$/);
+	tarballs.set(name, filename);
 }
 
 function createConsumer(label: string, source: string, packages: readonly string[]): string {
 	const dir = join(workRoot, label);
 	const modules = join(dir, "node_modules");
 	for (const name of packages) {
+		const tarball = tarballs.get(name);
+		if (tarball === undefined) throw new Error(`${name} was not packed`);
 		const dest = join(modules, "@crustjs", name);
 		mkdirSync(dest, { recursive: true });
-		const untar = spawnSync(
-			"tar",
-			["-xzf", tarballs.get(name)!, "-C", dest, "--strip-components=1"],
-			{ timeout: 30_000 },
-		);
+		const untar = spawnSync("tar", ["-xzf", tarball, "-C", dest, "--strip-components=1"], {
+			timeout: 30_000,
+		});
 		if (untar.status !== 0) throw new Error(`tar failed for ${name}:\n${untar.stderr.toString()}`);
 	}
 	mkdirSync(join(modules, "@types"), { recursive: true });
@@ -111,9 +115,8 @@ function createConsumer(label: string, source: string, packages: readonly string
 	return dir;
 }
 
-function expectClean(command: string[], cwd: string, expectedStdout: string): void {
-	const [file, ...args] = command;
-	const result = spawnSync(file!, args, { cwd, timeout: 60_000 });
+function expectClean(file: string, args: string[], cwd: string, expectedStdout: string): void {
+	const result = spawnSync(file, args, { cwd, timeout: 60_000 });
 	expect(result.stderr.toString()).toBe("");
 	if (expectedStdout === "") expect(result.stdout.toString()).toBe("");
 	else expect(result.stdout.toString()).toContain(expectedStdout);
@@ -143,8 +146,8 @@ afterAll(() => {
 describe("packed @crustjs/testing", () => {
 	it("root entry runs and typechecks with only @crustjs/core installed", () => {
 		const dir = createConsumer("root", ROOT_CONSUMER, ["utils", "core", "testing"]);
-		expectClean(["bun", "consumer.ts"], dir, "packed-root-ok");
-		expectClean([tscBin, "-p", "."], dir, "");
+		expectClean("bun", ["consumer.ts"], dir, "packed-root-ok");
+		expectClean(tscBin, ["-p", "."], dir, "");
 	});
 
 	it("interactive entry runs and typechecks with core and prompts but no progress", () => {
@@ -155,7 +158,7 @@ describe("packed @crustjs/testing", () => {
 			"prompts",
 			"testing",
 		]);
-		expectClean(["bun", "consumer.ts"], dir, "packed-interactive-ok");
-		expectClean([tscBin, "-p", "."], dir, "");
+		expectClean("bun", ["consumer.ts"], dir, "packed-interactive-ok");
+		expectClean(tscBin, ["-p", "."], dir, "");
 	});
 });

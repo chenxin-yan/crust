@@ -1,11 +1,7 @@
-import {
-	type ExtensionFactory,
-	type ExtensionId,
-	defineExtension,
-	defineExtensionId,
-} from "@crustjs/core";
+import { type ExtensionFactory, defineExtension } from "@crustjs/core";
 
-export const MAN: ExtensionId = defineExtensionId("crust:man");
+import { MAN } from "./id.ts";
+import { renderManPageMdoc } from "./mdoc.ts";
 
 export interface ManOptions {
 	/** Manual section. Defaults to 1. */
@@ -17,7 +13,6 @@ export const man: ExtensionFactory<[options?: ManOptions]> = defineExtension(MAN
 	(extension, options = {}) => {
 		const section = options.section ?? 1;
 		return extension.build(async ({ snapshot }) => {
-			const { renderManPageMdoc } = await import("./mdoc.ts");
 			const { name } = snapshot.meta;
 			// The name is a filename segment; a separator would nest the page where
 			// npm's `man` field and `man -l` would not find it.

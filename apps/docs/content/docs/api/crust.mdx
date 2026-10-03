@@ -3,8 +3,6 @@ title: "Crust"
 description: Immutable command builders, reusable definitions, and execution.
 ---
 
-import { Callout } from "fumadocs-ui/components/callout";
-
 `Crust` builds an executable application root. `defineCommand()` builds inert reusable definitions that become commands only when added. Every fluent method returns a new builder; the original is unchanged.
 
 Exact overloads and generic constraints live in [`command/crust.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts). This page documents behavior; hover types in your editor for the inferred shapes.
@@ -244,7 +242,7 @@ Runs the terminal boundary: parses `process.argv.slice(2)` (or `options.argv`), 
 - Exit codes are `0` on success, `1` on failure, and `130` for cancellation. `process.exitCode` is set on failure.
 - A failure renders once, through Extension `onError` hooks and then Core's renderer. Cancellation is offered to `onError` hooks and renders nothing if none claims it. See [propagation boundaries](/docs/api/errors#propagation-boundaries).
 - `options.io` captures rendered output in tests, including default prompt and progress output. It does not provide prompt input.
-- The first Ctrl-C aborts `ctx.signal` with an `AbortError`. Work that honors the signal stops, then `postRun` hooks and Context cleanup run. A second Ctrl-C removes Core's listener and reaches the runtime's default handling unless another listener still owns the signal.
+- The first Ctrl-C aborts the invocation's `signal` with an `AbortError`. Work that honors the signal stops, then `postRun` hooks and Context cleanup run. A second Ctrl-C removes Core's listener and reaches the runtime's default handling unless another listener still owns the signal.
 
 ### Invocation order
 

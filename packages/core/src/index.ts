@@ -42,19 +42,22 @@ export type {
 	CommandConfig,
 	CommandDefinition,
 	CommandDefinitionBuilder,
+	CrustCommandContext,
+	RootCommandMeta,
+} from "./command/crust.ts";
+export { Crust, defineCommand } from "./command/crust.ts";
+// Typed programmatic invocation
+export type {
 	CommandHandle,
 	CommandPath,
 	CommandShape,
 	CommandShapeAt,
 	CommandTree,
-	CrustCommandContext,
-	RootCommandMeta,
 	RunArguments,
 	RunInput,
 	RunInputArguments,
 	RunOutcome,
-} from "./command/crust.ts";
-export { Crust, defineCommand } from "./command/crust.ts";
+} from "./command/typed-run.ts";
 // Errors
 export type {
 	CommandNotFoundErrorDetails,
@@ -87,6 +90,7 @@ export type {
 	ExecuteOptions,
 	InvocationIO,
 	InvocationOptions,
+	MergeContext,
 	MergeFlags,
 	NamedFlagDef,
 	ParsedArgValue,
@@ -95,4 +99,3 @@ export type {
 	ValidatedInput,
 	ValueType,
 } from "./types.ts";
-export type { MergeContext } from "./validation/shared.ts";

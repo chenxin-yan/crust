@@ -1,12 +1,13 @@
 // ────────────────────────────────────────────────────────────────────────────
 // Dynamic Colors — portable depth-aware `fg` / `bg` helpers.
 // ────────────────────────────────────────────────────────────────────────────
-// Inputs are intentionally limited to hex, rgb triples, and named colors.
+// Inputs are intentionally limited to hex, `rgb()` strings, rgb triples, and
+// named colors.
 
-import type { AnsiPair } from "./ansiCodes.ts";
-import { namedColorValues } from "./namedColorValues.ts";
-import type { NamedColor } from "./namedColorValues.ts";
-import { applyStyle } from "./styleEngine.ts";
+import type { AnsiPair } from "./ansi-codes.ts";
+import { namedColorValues } from "./named-color-values.ts";
+import type { NamedColor } from "./named-color-values.ts";
+import { applyStyle } from "./style-engine.ts";
 import type { ColorDepth, ColorInput } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -111,8 +112,6 @@ function rgbToAnsi256(r: number, g: number, b: number): number {
  * Same algorithm as `ansi-styles` / `chalk`: bucket each channel at 50%,
  * pack into a 3-bit base color, then add 60 for bright when the max
  * channel rounds up. Call sites add `+10` for backgrounds.
- *
- * @internal
  */
 function rgbToAnsi16Param(r: number, g: number, b: number): number {
 	const maxChannel = Math.max(r, g, b);
@@ -130,8 +129,6 @@ function rgbToAnsi16Param(r: number, g: number, b: number): number {
 
 /**
  * Foreground SGR open sequence at `depth`.
- *
- * @internal
  */
 function fgOpen(input: ColorInput, depth: Exclude<ColorDepth, "none">): string {
 	const [r, g, b] = parseRgb(input);
@@ -145,8 +142,6 @@ function fgOpen(input: ColorInput, depth: Exclude<ColorDepth, "none">): string {
  * derived from {@link fgOpen} by swapping the `\x1b[38;` introducer for
  * `\x1b[48;` (both the truecolor and 256-color forms use it). For `16`,
  * quantized directly to a real background SGR.
- *
- * @internal
  */
 function bgOpen(input: ColorInput, depth: Exclude<ColorDepth, "none">): string {
 	if (depth === "16") {
@@ -160,7 +155,7 @@ function bgOpen(input: ColorInput, depth: Exclude<ColorDepth, "none">): string {
 // AnsiPair factories (internal — back the chainable `.fg()` / `.bg()`)
 // ────────────────────────────────────────────────────────────────────────────
 
-function colorPair(kind: "fg" | "bg", input: ColorInput, depth: ColorDepth): AnsiPair {
+export function colorPair(kind: "fg" | "bg", input: ColorInput, depth: ColorDepth): AnsiPair {
 	if (depth === "none") {
 		parseRgb(input); // validate, do not emit
 		return { open: "", close: "" };
@@ -171,71 +166,18 @@ function colorPair(kind: "fg" | "bg", input: ColorInput, depth: ColorDepth): Ans
 	};
 }
 
-/**
- * Depth-aware foreground `AnsiPair` for chain composition. `depth: "none"`
- * returns an empty pair (still validates input). Used by `createStyle()`
- * to back `chainable.fg(input)`.
- *
- * @throws {TypeError} If `input` is not a recognized color.
- * @internal
- */
-export function fgPairAtDepth(input: ColorInput, depth: ColorDepth): AnsiPair {
-	return colorPair("fg", input, depth);
-}
-
-/**
- * Depth-aware background `AnsiPair` for chain composition. Mirrors
- * {@link fgPairAtDepth}.
- *
- * @throws {TypeError} If `input` is not a recognized color.
- * @internal
- */
-export function bgPairAtDepth(input: ColorInput, depth: ColorDepth): AnsiPair {
-	return colorPair("bg", input, depth);
-}
-
 // ────────────────────────────────────────────────────────────────────────────
 // Direct styling functions
 // ────────────────────────────────────────────────────────────────────────────
 
-function paint(kind: "fg" | "bg", text: string, input: ColorInput, depth: ColorDepth): string {
+export function paint(
+	kind: "fg" | "bg",
+	text: string,
+	input: ColorInput,
+	depth: ColorDepth,
+): string {
 	// Validate the color before the empty-string short-circuit so bad inputs
 	// fail consistently even when styling is disabled or text is empty.
 	const pair = colorPair(kind, input, depth);
 	return depth === "none" ? text : applyStyle(text, pair);
-}
-
-/**
- * Apply a foreground color to `text` from any {@link ColorInput}. `depth`
- * selects the output format (`"truecolor"` default, `"256"`, `"16"`, or
- * `"none"`). `"none"` returns `text` unchanged but still validates
- * `input`. Empty `text` short-circuits to `""`.
- *
- * @throws {TypeError} If `input` is not a recognized color.
- *
- * @example
- * ```ts
- * fg("error", "#ff0000");
- * fg("ocean", "rgb(0, 128, 255)");
- * fg("custom", [255, 127, 80]);
- * fg("256-only", "#ff0000", "256"); // \x1b[38;5;196m...
- * ```
- */
-export function fg(text: string, input: ColorInput, depth: ColorDepth = "truecolor"): string {
-	return paint("fg", text, input, depth);
-}
-
-/**
- * Apply a background color to `text`. Mirrors {@link fg}.
- *
- * @throws {TypeError} If `input` is not a recognized color.
- *
- * @example
- * ```ts
- * bg("warning", "#ff8800");
- * bg("info", "rgb(0, 128, 255)");
- * ```
- */
-export function bg(text: string, input: ColorInput, depth: ColorDepth = "truecolor"): string {
-	return paint("bg", text, input, depth);
 }

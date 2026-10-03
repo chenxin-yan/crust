@@ -208,9 +208,6 @@ importers:
       '@tanstack/react-start':
         specifier: 1.168.59
         version: 1.168.59(@voidzero-dev/vite-plus-core@1.0.0(@arethetypeswrong/core@0.18.5)(@types/node@24.19.0)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.24)(typescript@7.0.2)(yaml@2.9.1))(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.11)(supports-color@10.2.2)
-      '@types/hast':
-        specifier: ^3.0.5
-        version: 3.0.5
       fumadocs-core:
         specifier: 16.15.15
         version: 16.15.15(@mdx-js/mdx@3.1.1(supports-color@10.2.2))(@tanstack/react-router@1.170.40(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(@types/estree-jsx@1.0.5)(@types/hast@3.0.5)(@types/mdast@4.0.4)(@types/react@19.3.0)(lucide-react@1.48.0(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)(zod@4.6.5)
@@ -299,6 +296,9 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.3.3
         version: 4.3.3(@voidzero-dev/vite-plus-core@1.0.0(@arethetypeswrong/core@0.18.5)(@types/node@24.19.0)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.24)(typescript@7.0.2)(yaml@2.9.1))
+      '@types/hast':
+        specifier: ^3.0.5
+        version: 3.0.5
       '@types/mdx':
         specifier: ^2.0.14
         version: 2.0.14
@@ -504,6 +504,9 @@ importers:
       '@crustjs/core':
         specifier: workspace:*
         version: link:../core
+      '@crustjs/testing':
+        specifier: workspace:*
+        version: link:../testing
       vite-plus:
         specifier: 'catalog:'
         version: 1.0.0(@arethetypeswrong/core@0.18.5)(@types/node@24.19.0)(@vitest/ui@5.0.1)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.24)(typescript@7.0.2)(yaml@2.9.1)
@@ -523,15 +526,15 @@ importers:
       '@crustjs/extensions':
         specifier: workspace:*
         version: link:../extensions
-      '@crustjs/skills':
-        specifier: workspace:*
-        version: link:../skills
       vite-plus:
         specifier: 'catalog:'
         version: 1.0.0(@arethetypeswrong/core@0.18.5)(@types/node@24.19.0)(@vitest/ui@5.0.1)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.24)(typescript@7.0.2)(yaml@2.9.1)
 
   packages/mcp:
     dependencies:
+      '@crustjs/utils':
+        specifier: workspace:^
+        version: link:../utils
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.1
         version: 1.30.1(supports-color@10.2.2)(zod@4.6.5)
@@ -708,6 +711,9 @@ importers:
       '@crustjs/core':
         specifier: workspace:*
         version: link:../packages/core
+      '@crustjs/crust':
+        specifier: workspace:*
+        version: link:../packages/crust
       vite-plus:
         specifier: 'catalog:'
         version: 1.0.0(@arethetypeswrong/core@0.18.5)(@types/node@24.19.0)(@vitest/ui@5.0.1)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.24)(typescript@7.0.2)(yaml@2.9.1)

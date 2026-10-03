@@ -10,8 +10,6 @@ import {
 	formatDescription,
 	sectionsFor,
 	type CommandDocumentation,
-	type DocumentationArg,
-	type DocumentationFlag,
 	type UsageSegment,
 } from "@crustjs/core/tooling";
 import { bold, cyan, dim, green, padEnd, yellow } from "@crustjs/style";
@@ -22,8 +20,8 @@ const COMMAND_COLUMN_WIDTH = 10;
 
 const HELP: ExtensionId = defineExtensionId("crust:help");
 
-function formatArgToken(arg: DocumentationArg): string {
-	return arg.required ? yellow(arg.token) : dim(yellow(arg.token));
+function formatArgText(text: string, required: boolean): string {
+	return required ? yellow(text) : dim(yellow(text));
 }
 
 function formatUsageSegment(segment: UsageSegment): string {
@@ -35,47 +33,25 @@ function formatUsageSegment(segment: UsageSegment): string {
 		case "options":
 			return cyan(segment.text);
 		case "arg":
-			return segment.required ? yellow(segment.text) : dim(yellow(segment.text));
+			return formatArgText(segment.text, segment.required);
 	}
 }
 
-function formatFlagsSection(flags: readonly DocumentationFlag[]): string[] {
-	if (flags.length === 0) return [];
-	const lines = [bold(cyan("Options:"))];
-	for (const flag of flags) {
-		const rendered = `${padEnd(cyan(flag.spellings.join(", ")), FLAG_COLUMN_WIDTH, " ")} `;
-		lines.push(
-			`  ${rendered}${formatDescription(flag.description, flag.default, flag.choices, dim, flag.env?.name)}`.trimEnd(),
-		);
-	}
-	return lines;
-}
-
-function formatArgsSection(command: CommandDocumentation): string[] {
-	if (command.args.length === 0) return [];
-	const lines = [bold(cyan("Arguments:"))];
-	for (const arg of command.args) {
-		const rendered = `${padEnd(formatArgToken(arg), ARG_COLUMN_WIDTH, " ")} `;
-		lines.push(
-			`  ${rendered}${formatDescription(arg.description, arg.default, arg.choices, dim)}`.trimEnd(),
-		);
-	}
-	return lines;
+function formatSection(
+	title: string,
+	width: number,
+	rows: readonly (readonly [label: string, description: string])[],
+): string[] {
+	if (rows.length === 0) return [];
+	return [
+		bold(cyan(`${title}:`)),
+		...rows.map(([label, description]) => `  ${padEnd(label, width)} ${description}`.trimEnd()),
+	];
 }
 
 function formatCommandLabel(command: CommandDocumentation): string {
 	const name = green(command.name);
 	return command.aliases.length === 0 ? name : `${name} (${command.aliases.join(", ")})`;
-}
-
-function formatCommandsSection(command: CommandDocumentation): string[] {
-	if (command.children.length === 0) return [];
-	const lines = [bold(cyan("Commands:"))];
-	for (const child of command.children) {
-		const rendered = `${padEnd(formatCommandLabel(child), COMMAND_COLUMN_WIDTH, " ")} `;
-		lines.push(`  ${rendered}${child.description ?? ""}`.trimEnd());
-	}
-	return lines;
 }
 
 export function renderHelp(command: CommandSnapshot, path?: readonly string[]): string {
@@ -88,9 +64,33 @@ export function renderHelp(command: CommandSnapshot, path?: readonly string[]): 
 		`  ${model.usageSegments.map(formatUsageSegment).join(" ")}`,
 	];
 	for (const section of [
-		formatCommandsSection(model),
-		formatArgsSection(model),
-		formatFlagsSection(model.flags),
+		formatSection(
+			"Commands",
+			COMMAND_COLUMN_WIDTH,
+			model.children.map((child) => [formatCommandLabel(child), child.description ?? ""] as const),
+		),
+		formatSection(
+			"Arguments",
+			ARG_COLUMN_WIDTH,
+			model.args.map(
+				(arg) =>
+					[
+						formatArgText(arg.token, arg.required),
+						formatDescription(arg.description, arg.default, arg.choices, dim),
+					] as const,
+			),
+		),
+		formatSection(
+			"Options",
+			FLAG_COLUMN_WIDTH,
+			model.flags.map(
+				(flag) =>
+					[
+						cyan(flag.spellings.join(", ")),
+						formatDescription(flag.description, flag.default, flag.choices, dim, flag.env?.name),
+					] as const,
+			),
+		),
 	]) {
 		if (section.length > 0) lines.push("", ...section);
 	}

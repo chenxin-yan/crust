@@ -14,6 +14,7 @@ import { delimiter, join, relative } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
+import { isErrnoException } from "./error.ts";
 import {
 	getWindowsShimCommand,
 	packageManagerFromUserAgent,
@@ -93,8 +94,7 @@ function isRunning(pid: number): boolean {
 		}
 		return true;
 	} catch (error) {
-		const code = (error as NodeJS.ErrnoException).code;
-		return code !== "ESRCH" && code !== "ENOENT";
+		return !isErrnoException(error) || (error.code !== "ESRCH" && error.code !== "ENOENT");
 	}
 }
 
@@ -240,16 +240,14 @@ describe("which", () => {
 
 	describe("PATH scan", () => {
 		let dir: string;
-		let originalPath: string | undefined;
 
 		beforeEach(() => {
 			dir = mkdtempSync(join(tmpdir(), "which-test-"));
-			originalPath = process.env.PATH;
-			process.env.PATH = `${dir}${delimiter}${originalPath ?? ""}`;
+			vi.stubEnv("PATH", `${dir}${delimiter}${process.env.PATH ?? ""}`);
 		});
 
 		afterEach(() => {
-			process.env.PATH = originalPath;
+			vi.unstubAllEnvs();
 			rmSync(dir, { recursive: true, force: true });
 		});
 
@@ -265,7 +263,7 @@ describe("which", () => {
 			() => {
 				writeFileSync(join(dir, "crust-relative-probe"), "#!/bin/sh\n");
 				chmodSync(join(dir, "crust-relative-probe"), 0o755);
-				process.env.PATH = relative(process.cwd(), dir);
+				vi.stubEnv("PATH", relative(process.cwd(), dir));
 				expect(which("crust-relative-probe")).toBe(join(dir, "crust-relative-probe"));
 			},
 		);
@@ -316,8 +314,7 @@ describe("which", () => {
 					[undefined, "probe", null],
 				];
 				for (const [path, command, expected] of cases) {
-					if (path === undefined) delete process.env.PATH;
-					else process.env.PATH = path;
+					vi.stubEnv("PATH", path);
 					expect(which(command), `PATH=${JSON.stringify(path)} ${command}`).toBe(expected);
 				}
 
@@ -328,7 +325,7 @@ describe("which", () => {
 				executable(join(dir, "x", "probe"));
 				executable(join(colonCwd, "probe"));
 				process.chdir(colonCwd);
-				process.env.PATH = "";
+				vi.stubEnv("PATH", "");
 				expect(which("probe")).toBe(join(colonCwd, "probe"));
 			} finally {
 				process.chdir(originalCwd);

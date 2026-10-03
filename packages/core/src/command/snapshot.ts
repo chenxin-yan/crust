@@ -125,14 +125,14 @@ function freezeCompact<T extends object>(obj: T): T {
 	return Object.freeze(obj);
 }
 
+type SerializableDefault = (ArgSnapshot | FlagSnapshot)["default"];
+
 /**
  * URL defaults are the only non-JSON default values; serialize them as
  * strings. Array defaults are recursively copied and frozen. Object-valued
  * JSON defaults, including objects inside arrays, remain shared references
  * and are not frozen; callers must treat them as immutable.
  */
-type SerializableDefault = (ArgSnapshot | FlagSnapshot)["default"];
-
 function serializableDefault(value: DeclaredDefault): SerializableDefault {
 	if (value instanceof URL) return value.href;
 	if (Array.isArray(value)) return Object.freeze(value.map(serializableDefault));

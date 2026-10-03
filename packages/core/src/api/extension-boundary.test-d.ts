@@ -7,8 +7,8 @@ import {
 	type AnyCrust,
 	type CommandDefinition,
 	type CommandDefinitionBuilder,
-	type CommandShape,
 } from "../command/crust.ts";
+import type { CommandShape } from "../command/typed-run.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { RunOutcome } from "../index.ts";
 import { defineContext, type ContextInstance } from "./context.ts";

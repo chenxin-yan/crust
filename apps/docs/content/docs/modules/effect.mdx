@@ -45,7 +45,7 @@ Each `handler()` invocation runs one Effect program, provided with every `layer(
 | `Die` (defect)                   | Rethrown as-is; rendered like a plain thrown error (exit 1)                          |
 | Interruption                     | An `AbortError` is rethrown; Core exits 130 with no output, like prompt cancellation |
 
-The program and Layer builds run with the invocation's `ctx.signal`, so caller cancellation or Ctrl-C interrupts them. Interruption always becomes an `AbortError`, even when the caller aborted with a custom reason such as a `TimeoutError`. Layer finalizers still run; uninterruptible acquisition must settle before cleanup finishes.
+The program and Layer builds run with the invocation's `signal`, so caller cancellation or Ctrl-C interrupts them. Interruption always becomes an `AbortError`, even when the caller aborted with a custom reason such as a `TimeoutError`. Layer finalizers still run; uninterruptible acquisition must settle before cleanup finishes.
 
 ## `layer(name, layer)`
 

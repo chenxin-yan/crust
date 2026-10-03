@@ -1,4 +1,4 @@
-// #region define
+//#region define
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
 
 const verbose = defineFlag("verbose", { type: "boolean" });
@@ -21,9 +21,9 @@ const deploy = defineCommand("deploy", { description: "Deploy an application" },
 			stdout(`${(await ctx.auth).user} deployed ${args.target}`);
 		}),
 );
-// #endregion define
+//#endregion
 
-// #region root
+//#region root
 import { help, version } from "@crustjs/extensions";
 
 const app = new Crust("my-cli", { description: "Deploy tool", version: "1.2.3" })
@@ -31,35 +31,35 @@ const app = new Crust("my-cli", { description: "Deploy tool", version: "1.2.3" }
 	.add(deploy, deploy.as("ship"))
 	.command("status", (command) => command.action(({ stdout }) => stdout("ok")))
 	.extend(version(), help());
-// #endregion root
+//#endregion
 
-// #region run
+//#region run
 const outcome = await app.run(["deploy"], { args: { target: "prod" }, flags: { verbose: true } });
 if (outcome.status === "failed") throw outcome.error;
 if (outcome.status === "completed") console.log(outcome.stdout); // => Ada deployed prod
-// #endregion run
+//#endregion
 
-// #region at
+//#region at
 const ship = app.at(["ship"]);
 const shipped = await ship.run({ args: { target: "staging" } });
 console.log(shipped.status); // => completed
-// #endregion at
+//#endregion
 
-// #region execute
+//#region execute
 const sync = new Crust("sync").action(async ({ signal, stdout }) => {
 	const response = await fetch("https://example.com/export", { signal });
 	stdout(await response.text());
 });
 
 await sync.execute(); // Ctrl-C → exit code 130, nothing rendered
-// #endregion execute
+//#endregion
 
-// #region artifact
+//#region artifact
 import { readdirSync } from "node:fs";
 
 import { resolveArtifactDir } from "@crustjs/core";
 
 const templates = readdirSync(resolveArtifactDir("templates"));
-// #endregion artifact
+//#endregion
 
 export { app, templates };

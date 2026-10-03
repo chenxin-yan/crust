@@ -1,5 +1,5 @@
 // Dependency-free so callers can validate names without pulling in the
-// filesystem-heavy generate module.
+// filesystem-heavy install module.
 
 /**
  * Agent Skills spec name pattern: 1–64 lowercase alphanumeric characters and
@@ -14,5 +14,5 @@ const SKILL_NAME_PATTERN: RegExp = /^[a-z0-9]+(-[a-z0-9]+)*$/;
  * @returns `true` if valid, `false` otherwise
  */
 export function isValidSkillName(name: string): boolean {
-	return name.length >= 1 && name.length <= 64 && SKILL_NAME_PATTERN.test(name);
+	return name.length <= 64 && SKILL_NAME_PATTERN.test(name);
 }

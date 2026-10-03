@@ -4,7 +4,6 @@ import { dirname, join, posix, win32 } from "node:path";
 import { BUILD_OUT_DIR_ENV, isPackagedBuild } from "@crustjs/utils/artifacts";
 import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
 
-import { createContextResolver } from "../api/context.ts";
 import {
 	handledInvocation,
 	type BuildReport,
@@ -14,27 +13,28 @@ import {
 } from "../api/extension.ts";
 import { CrustError, type CaughtError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
-import {
-	parseArgs,
-	parseStructured,
-	validateParsed,
-	type RunInputPayload,
-} from "../parsing/parser.ts";
+import { parseArgs, parseStructured, validateParsed } from "../parsing/parser.ts";
 import { applySchemas } from "../parsing/schema.ts";
-import { isListed } from "../sections.ts";
-import type { ExecuteOptions, InvocationIO, InvocationOptions, ParseResult } from "../types.ts";
-import type { CrustCommandContext, RunOutcome } from "./crust.ts";
+import type {
+	ExecuteOptions,
+	InvocationIO,
+	InvocationOptions,
+	ParseResult,
+	RunInputPayload,
+} from "../types.ts";
+import { createContextResolver } from "./context-resolver.ts";
+import type { CrustCommandContext } from "./crust.ts";
 import {
 	applyContextSections,
 	applyExtensionCommands,
 	applyExtensionFlags,
 	applyExtensionSections,
-	cloneCommandNode,
 	type MaterializeCommandDefinition,
 } from "./extensions-install.ts";
-import type { CommandNode } from "./node.ts";
-import { resolveCommand, type CommandRoute } from "./router.ts";
+import { cloneCommandNode, type CommandNode } from "./node.ts";
+import { commandNotFound, resolveCommand, type CommandRoute } from "./router.ts";
 import { snapshotCommand } from "./snapshot.ts";
+import type { RunOutcome } from "./typed-run.ts";
 
 const ignoreStreamError = () => {};
 
@@ -276,7 +276,7 @@ export function prepareInvocation(
 }
 
 /** An invocation starts from terminal argv or a typed path plus structured values. */
-export type InvocationInput =
+type InvocationInput =
 	| { readonly argv: readonly string[] }
 	| {
 			readonly path: readonly string[];
@@ -290,26 +290,17 @@ interface ResolvedInput {
 }
 
 function resolveArgvInput(root: CommandNode, argv: readonly string[]): ResolvedInput {
-	const route = resolveCommand(root, [...argv]);
+	const route = resolveCommand(root, argv);
 	return { argv, route, parsed: parseArgs(route.command, route.argv) };
 }
 
 /** Resolve a typed path, rejecting any element the router cannot consume as a command. */
 export function resolveTypedPath(root: CommandNode, path: readonly string[]): CommandRoute {
-	const route = resolveCommand(root, [...path]);
+	const route = resolveCommand(root, path);
 	if (route.argv.length > 0) {
 		// An unconsumed path element would otherwise silently run the nearest resolved ancestor.
 		// SAFETY: the enclosing length check proves the first element exists.
-		const candidate = route.argv[0]!;
-		const parentCommand = snapshotCommand(route.command);
-		throw new CrustError("COMMAND_NOT_FOUND", `Unknown command "${candidate}".`, {
-			input: candidate,
-			available: Object.entries(parentCommand.subCommands).flatMap(([name, child]) =>
-				isListed(child) ? [name] : [],
-			),
-			commandPath: route.commandPath,
-			parentCommand,
-		});
+		throw commandNotFound(route.command, route.argv[0]!, route.commandPath);
 	}
 	return route;
 }
@@ -416,21 +407,17 @@ async function dispatch(
 		// trusts below (e.g. flipping "failed" to "completed" to mask an error).
 		Object.freeze(outcome);
 
-		let postRunFailed = false;
-		let postRunError: CaughtError;
+		let postRunFailure: { error: CaughtError } | undefined;
 		for (const extension of extensions.toReversed()) {
 			try {
 				await extension.hooks?.postRun?.(extensionContext, outcome);
 			} catch (error) {
-				if (outcome.status !== "failed" && !postRunFailed) {
-					postRunFailed = true;
-					postRunError = error;
-				}
+				if (outcome.status !== "failed") postRunFailure ??= { error };
 			}
 		}
 
 		if (outcome.status === "failed") throw outcome.error;
-		if (postRunFailed) throw postRunError;
+		if (postRunFailure) throw postRunFailure.error;
 	} finally {
 		// A rejected sibling pull can leave another setup in flight; wait for it
 		// so its value registers its disposer before the disposal scope exits.
@@ -451,39 +438,32 @@ async function renderFailure(
 	extensionContext: ExtensionContext | undefined,
 	silentDefault = false,
 ): Promise<ExtensionId | undefined> {
-	const renderDefault = (): void => {
-		// Cancellation (AbortError) has no default rendering — a user abort
-		// is not an error to report unless an onError hook claims it.
-		if (silentDefault) return;
-		io.stderr(describeFailure(error));
-	};
-
 	// Reuse the dispatch context so per-invocation identity (e.g. WeakMap keys
 	// set in preRun) survives into onError. During dispatch its Contexts remain
 	// live through postRun; errors raised after cleanup see the closed resolver.
 	// The synthetic fallback exists only for failures before a context was built.
-	function unavailable(property: PropertyKey): Promise<never> {
-		return Promise.reject(
-			new CrustError(
-				"DEFINITION",
-				`Context "${String(property)}" cannot be pulled from onError because invocation Contexts have already been disposed.`,
-				{
-					subject: "context",
-					name: String(property),
-					reason: "context-after-disposal",
-				},
-			),
-		);
-	}
-	const unavailableContext = new Proxy(
-		{},
-		{
-			get: (_, property) =>
-				property === "then" || isSymbol(property) ? undefined : unavailable(property),
-		},
-	);
 	let context = extensionContext;
 	if (!context) {
+		function unavailable(property: PropertyKey): Promise<never> {
+			return Promise.reject(
+				new CrustError(
+					"DEFINITION",
+					`Context "${String(property)}" cannot be pulled from onError because invocation Contexts have already been disposed.`,
+					{
+						subject: "context",
+						name: String(property),
+						reason: "context-after-disposal",
+					},
+				),
+			);
+		}
+		const unavailableContext = new Proxy(
+			{},
+			{
+				get: (_, property) =>
+					property === "then" || isSymbol(property) ? undefined : unavailable(property),
+			},
+		);
 		const rootSnapshot = snapshotCommand(prepared.rootNode);
 		context = Object.freeze({
 			argv: [...argv],
@@ -508,7 +488,9 @@ async function renderFailure(
 	} catch {
 		// Rendering must not hide the original invocation failure.
 	}
-	renderDefault();
+	// Cancellation (AbortError) has no default rendering — a user abort
+	// is not an error to report unless an onError hook claims it.
+	if (!silentDefault) io.stderr(describeFailure(error));
 	return undefined;
 }
 
@@ -549,6 +531,74 @@ export async function runInvocation(
 	}
 }
 
+/** Write the Command Snapshot and, when a build output directory is set, Extension artifacts and the Build Report. */
+async function writeSnapshotProtocol(
+	node: CommandNode,
+	snapshotPath: string,
+	materializeCommandDefinition: MaterializeCommandDefinition,
+): Promise<void> {
+	// Commands and flags materialize once so recipes keep their
+	// once-per-`.add()` lifecycle; only section callbacks re-evaluate.
+	const base = buildExtensionTree(node, materializeCommandDefinition);
+	const takeSnapshot = () =>
+		snapshotCommand(applySectionsAndFreeze(cloneCommandNode(base.rootNode), base.extensions));
+	let snapshot = takeSnapshot();
+	const buildOutDir = process.env[BUILD_OUT_DIR_ENV];
+	if (buildOutDir) {
+		const extensions: Array<BuildReport["extensions"][number]> = [];
+		// Keyed case-insensitively: the tree may land on a case-insensitive filesystem
+		// where `Config.json` and `config.json` are one file and the second write wins.
+		const owners = new Map<string, { id: ExtensionId; path: string }>();
+		for (const extension of base.extensions) {
+			if (!extension.build) continue;
+			try {
+				const artifacts = await extension.build({ snapshot });
+				// Every path is checked before any file is written, so a rejected hook leaves nothing behind.
+				const files = artifacts.map((file) => {
+					const path = normalizeArtifactPath(file.path);
+					const key = path.toLowerCase();
+					// A file and a directory cannot share a name, so an ancestor or descendant
+					// of an owned path collides just like an equal one.
+					for (const [ownedKey, owner] of owners) {
+						if (
+							ownedKey === key ||
+							ownedKey.startsWith(`${key}/`) ||
+							key.startsWith(`${ownedKey}/`)
+						) {
+							throw new Error(
+								`Artifact path "${path}" collides with "${owner.path}" produced by Extension "${owner.id}".`,
+							);
+						}
+					}
+					owners.set(key, { id: extension.id, path });
+					return { path, content: file.content };
+				});
+				// ponytail: in-memory files; stream if an extension ever ships large binaries
+				for (const file of files) {
+					const target = join(buildOutDir, file.path);
+					await mkdir(dirname(target), { recursive: true });
+					await writeFile(target, file.content);
+				}
+				extensions.push({ id: extension.id, files: files.map((file) => file.path) });
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				throw new Error(`Extension "${extension.id}" build failed: ${message}`, {
+					cause: error,
+				});
+			}
+			// The hook sees the snapshot from before it starts; re-evaluating sections
+			// after its files are on disk lets later hooks observe its outputs without
+			// mutating the frozen tree.
+			snapshot = takeSnapshot();
+		}
+		await writeFile(
+			join(dirname(snapshotPath), "build-report.json"),
+			JSON.stringify({ extensions } satisfies BuildReport),
+		);
+	}
+	await writeFile(snapshotPath, JSON.stringify(snapshot));
+}
+
 /** Terminal CLI boundary: render failures and set the process exit status. */
 export async function executeInvocation(
 	node: CommandNode,
@@ -572,66 +622,7 @@ export async function executeInvocation(
 
 		if (snapshotPath) {
 			try {
-				// Commands and flags materialize once so recipes keep their
-				// once-per-`.add()` lifecycle; only section callbacks re-evaluate.
-				const base = buildExtensionTree(node, materializeCommandDefinition);
-				const takeSnapshot = () =>
-					snapshotCommand(applySectionsAndFreeze(cloneCommandNode(base.rootNode), base.extensions));
-				let snapshot = takeSnapshot();
-				const buildOutDir = process.env[BUILD_OUT_DIR_ENV];
-				if (buildOutDir) {
-					const extensions: Array<BuildReport["extensions"][number]> = [];
-					// Keyed case-insensitively: the tree may land on a case-insensitive filesystem
-					// where `Config.json` and `config.json` are one file and the second write wins.
-					const owners = new Map<string, { id: ExtensionId; path: string }>();
-					for (const extension of base.extensions) {
-						if (!extension.build) continue;
-						try {
-							const artifacts = await extension.build({ snapshot });
-							// Every path is checked before any file is written, so a rejected hook leaves nothing behind.
-							const files = artifacts.map((file) => {
-								const path = normalizeArtifactPath(file.path);
-								const key = path.toLowerCase();
-								// A file and a directory cannot share a name, so an ancestor or descendant
-								// of an owned path collides just like an equal one.
-								for (const [ownedKey, owner] of owners) {
-									if (
-										ownedKey === key ||
-										ownedKey.startsWith(`${key}/`) ||
-										key.startsWith(`${ownedKey}/`)
-									) {
-										throw new Error(
-											`Artifact path "${path}" collides with "${owner.path}" produced by Extension "${owner.id}".`,
-										);
-									}
-								}
-								owners.set(key, { id: extension.id, path });
-								return { path, content: file.content };
-							});
-							// ponytail: in-memory files; stream if an extension ever ships large binaries
-							for (const file of files) {
-								const target = join(buildOutDir, file.path);
-								await mkdir(dirname(target), { recursive: true });
-								await writeFile(target, file.content);
-							}
-							extensions.push({ id: extension.id, files: files.map((file) => file.path) });
-						} catch (error) {
-							const message = error instanceof Error ? error.message : String(error);
-							throw new Error(`Extension "${extension.id}" build failed: ${message}`, {
-								cause: error,
-							});
-						}
-						// The hook sees the snapshot from before it starts; re-evaluating sections
-						// after its files are on disk lets later hooks observe its outputs without
-						// mutating the frozen tree.
-						snapshot = takeSnapshot();
-					}
-					await writeFile(
-						join(dirname(snapshotPath), "build-report.json"),
-						JSON.stringify({ extensions } satisfies BuildReport),
-					);
-				}
-				await writeFile(snapshotPath, JSON.stringify(snapshot));
+				await writeSnapshotProtocol(node, snapshotPath, materializeCommandDefinition);
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				console.error(message);
@@ -669,8 +660,7 @@ export async function executeInvocation(
 		process.on("SIGINT", onSigint);
 
 		let extensionContext: ExtensionContext | undefined;
-		let renderedInDispatch = false;
-		let renderedError: CaughtError;
+		let rendered: { error: CaughtError } | undefined;
 		try {
 			await dispatch(
 				{ argv },
@@ -681,8 +671,7 @@ export async function executeInvocation(
 					extensionContext = context;
 				},
 				async (error, context) => {
-					renderedInDispatch = true;
-					renderedError = error;
+					rendered = { error };
 					const cancelled = isAbortError(error);
 					process.exitCode = cancelled ? EXIT_CODE_CANCELLED : 1;
 					return renderFailure(error, argv, prepared, io, signal, context, cancelled);
@@ -696,10 +685,10 @@ export async function executeInvocation(
 			let cleanupFailure: { error: unknown } | undefined;
 			try {
 				if (
-					renderedInDispatch &&
-					!Object.is(error, renderedError) &&
+					rendered &&
+					!Object.is(error, rendered.error) &&
 					isSuppressedError(error) &&
-					Object.is(error.suppressed, renderedError)
+					Object.is(error.suppressed, rendered.error)
 				) {
 					cleanupFailure = { error: error.error };
 				}
@@ -710,7 +699,7 @@ export async function executeInvocation(
 			if (isAbortError(error)) {
 				// Cancellation keeps its dedicated exit code while allowing Extension
 				// onError hooks to render a message. Core's default stays silent.
-				if (!renderedInDispatch) {
+				if (!rendered) {
 					await renderFailure(error, argv, prepared, io, signal, extensionContext, true);
 				}
 				process.exitCode = EXIT_CODE_CANCELLED;
@@ -719,7 +708,7 @@ export async function executeInvocation(
 			// Core always preserves a nonzero failure outcome, regardless of
 			// what Extension onError hooks do.
 			process.exitCode = 1;
-			if (!renderedInDispatch) {
+			if (!rendered) {
 				await renderFailure(error, argv, prepared, io, signal, extensionContext);
 			}
 			return 1;

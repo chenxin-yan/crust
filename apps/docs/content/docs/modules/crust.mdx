@@ -3,8 +3,6 @@ title: "Crust"
 description: Build and distribute Crust applications for Bun, Deno, and Node.
 ---
 
-import { Callout } from "fumadocs-ui/components/callout";
-
 `@crustjs/crust` provides the `crust` CLI. `crust build` stages runtime packages or standalone binaries in `.crust/`, together with npm packaging metadata. `crust publish` uploads the npm packages; [other distribution channels](/docs/guide/build-and-distribution#custom-distribution), such as release downloads or Homebrew, use the built binaries directly. The same build is available to scripts as [`build()`](#programmatic-api). The [Build and distribution guide](/docs/guide/build-and-distribution) walks through the workflow; this page is the reference.
 
 ## Install
@@ -86,9 +84,9 @@ crust publish --dry-run
 
 `build(options?)` runs the `crust build` pipeline and resolves to what it staged. See [Programmatic builds](/docs/guide/build-and-distribution#programmatic-builds) for a release-script example.
 
-<auto-type-table path="../../../../../packages/crust/src/commands/build.ts" name="BuildOptions" />
+<auto-type-table path="../../../../../packages/crust/src/build.ts" name="BuildOptions" />
 
-<auto-type-table path="../../../../../packages/crust/src/commands/build.ts" name="BuildResult" />
+<auto-type-table path="../../../../../packages/crust/src/build.ts" name="BuildResult" />
 
 | `BuildArtifact` kind | Path                                               | Extra fields                   |
 | -------------------- | -------------------------------------------------- | ------------------------------ |

@@ -1,5 +1,5 @@
 import { Crust, CrustError } from "@crustjs/core";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { defineEnv, type EnvOptions, type EnvVarsDef } from "./index.ts";
 
@@ -59,11 +59,11 @@ describe("defineEnv", () => {
 	it("defaults the source to process.env, read at first access", async () => {
 		const env = defineEnv("env", { CRUST_ENV_TEST_PORT: { type: "number" } });
 		const app = new Crust("cli").provide(env()).action(async ({ ctx }) => ctx.env);
-		process.env.CRUST_ENV_TEST_PORT = "42";
+		vi.stubEnv("CRUST_ENV_TEST_PORT", "42");
 		try {
 			await expect(app.run([])).resolves.toMatchObject({ result: { CRUST_ENV_TEST_PORT: 42 } });
 		} finally {
-			delete process.env.CRUST_ENV_TEST_PORT;
+			vi.unstubAllEnvs();
 		}
 	});
 

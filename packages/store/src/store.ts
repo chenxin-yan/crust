@@ -1,7 +1,8 @@
-import { isDeepStrictEqual } from "node:util";
 // ────────────────────────────────────────────────────────────────────────────
 // @crustjs/store — createStore factory and async object-store API
 // ────────────────────────────────────────────────────────────────────────────
+
+import { isDeepStrictEqual } from "node:util";
 
 import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
 import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
@@ -69,6 +70,77 @@ function expectedTypeMessage(def: { type: ValueType; array?: true }): string {
 	return `Expected ${def.type}${def.array === true ? "[]" : ""}`;
 }
 
+function coerceByType(value: JsonValue, type: ValueType): JsonValue {
+	// oxlint-disable-next-line anti-slop/no-runtime-typeof -- typed store values are coerced by their declaration.
+	if (type === "number" && typeof value === "string") {
+		return tryCoerceNumber(value) ?? value;
+	}
+
+	// oxlint-disable-next-line anti-slop/no-runtime-typeof -- typed store values are coerced by their declaration.
+	if (type === "boolean" && typeof value === "string") {
+		return coerceBooleanString(value);
+	}
+
+	return value;
+}
+
+/**
+ * Re-validates a changed transform output once. This catches cross-type
+ * transforms like `z.string().transform(Number)` whose output would fail the
+ * schema on the next read.
+ *
+ * @returns The issue message when the next read would see a different value.
+ */
+async function readUnstableTransformMessage(
+	validator: FieldValidator,
+	transformed: JsonValue | undefined,
+): Promise<string | undefined> {
+	let recheck: Awaited<ReturnType<FieldValidator>>;
+	try {
+		recheck = await validator(transformed);
+	} catch (cause) {
+		const message = cause instanceof Error ? cause.message : "re-validation failed";
+		return `read-unstable transform: ${message}`;
+	}
+
+	// Recheck must accept the transformed value: either `void`
+	// (validation-only contract) or `{ value }` that is
+	// structurally stable under another round of the same
+	// transform. Anything else means the next read would see a
+	// different value than the one we'd persist now.
+	if (
+		recheck !== undefined &&
+		(!isFieldValueResult(recheck) || !isDeepStrictEqual(recheck.value, transformed))
+	) {
+		return "read-unstable transform: output would be transformed again on re-read";
+	}
+	return undefined;
+}
+
+/**
+ * Mutations promise to return exactly what the next read() sees, so any
+ * value JSON serialization would alter (NaN/Infinity → null, -0 → 0,
+ * array holes → null, dropped undefined object properties) is rejected.
+ */
+function jsonInstabilityIssues(document: StoreDocument): StoreValidatorIssue[] {
+	const issues: StoreValidatorIssue[] = [];
+	for (const [key, value] of Object.entries(document)) {
+		// Required fields are type-checked separately; optional undefined can be omitted.
+		if (value === undefined) continue;
+		try {
+			if (isDeepStrictEqual(JSON.parse(JSON.stringify(value)), value)) continue;
+		} catch {
+			// Cycles and other serialization failures use the same typed error path.
+		}
+		issues.push({
+			message:
+				"value does not survive JSON serialization (cycles, NaN, Infinity, -0, sparse arrays, or undefined properties)",
+			path: key,
+		});
+	}
+	return issues;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // createStore — Public factory
 // ────────────────────────────────────────────────────────────────────────────
@@ -133,11 +205,7 @@ export function createStore<const F extends FieldsDef>(
 		}
 	}
 
-	// Resolve the config file path once at creation time (synchronous)
 	const filePath = resolveStorePath(dirPath, name);
-
-	// Resolve pruneUnknown — defaults to true when not provided
-	const shouldPrune = pruneUnknown ?? true;
 
 	// Permission bits forwarded to every write (default → platform behavior).
 	const writeOptions: WriteJsonOptions =
@@ -146,24 +214,6 @@ export function createStore<const F extends FieldsDef>(
 			: access === undefined || access === "default"
 				? {}
 				: { fileMode: access.file, directoryMode: access.directory };
-
-	// ──────────────────────────────────────────────────────────────────────
-	// normalizeStateTypes — Coerce values by field `type`
-	// ──────────────────────────────────────────────────────────────────────
-
-	function coerceByType(value: JsonValue, type: ValueType): JsonValue {
-		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- typed store values are coerced by their declaration.
-		if (type === "number" && typeof value === "string") {
-			return tryCoerceNumber(value) ?? value;
-		}
-
-		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- typed store values are coerced by their declaration.
-		if (type === "boolean" && typeof value === "string") {
-			return coerceBooleanString(value);
-		}
-
-		return value;
-	}
 
 	function normalizeStateTypes(state: StoreDocument): StoreDocument {
 		const normalized = { ...state };
@@ -194,10 +244,6 @@ export function createStore<const F extends FieldsDef>(
 
 		return normalized;
 	}
-
-	// ──────────────────────────────────────────────────────────────────────
-	// runFieldValidators — Execute per-field validate functions
-	// ──────────────────────────────────────────────────────────────────────
 
 	async function runFieldValidators(
 		mutableState: StoreDocument,
@@ -253,65 +299,21 @@ export function createStore<const F extends FieldsDef>(
 					continue;
 				}
 
-				// Persist-time path: if the transform changed the value,
-				// re-validate the output once. This catches cross-type
-				// transforms like `z.string().transform(Number)` whose output
-				// would fail the schema on the next read. Compare structurally
-				// because Standard Schema parsers (e.g. Zod arrays/objects)
-				// return fresh references even when contents are identical.
+				// Persist-time path: if the transform changed the value, re-validate
+				// it. Compare structurally because Standard Schema parsers (e.g. Zod
+				// arrays/objects) return fresh references even when contents are identical.
 				if (!isDeepStrictEqual(transformed, value)) {
-					let recheck: Awaited<ReturnType<FieldValidator>>;
-					try {
-						recheck = await validator(transformed);
-					} catch (cause) {
-						const message = cause instanceof Error ? cause.message : "re-validation failed";
-						issues.push({
-							message: `read-unstable transform: ${message}`,
-							path: key,
-						});
+					const unstable = await readUnstableTransformMessage(validator, transformed);
+					if (unstable !== undefined) {
+						issues.push({ message: unstable, path: key });
 						continue;
 					}
-
-					// Recheck must accept the transformed value: either `void`
-					// (validation-only contract) or `{ value }` that is
-					// structurally stable under another round of the same
-					// transform. Anything else means the next read would see a
-					// different value than the one we'd persist now.
-					if (
-						recheck !== undefined &&
-						(!isFieldValueResult(recheck) || !isDeepStrictEqual(recheck.value, transformed))
-					) {
-						issues.push({
-							message: `read-unstable transform: output would be transformed again on re-read`,
-							path: key,
-						});
-						continue;
-					}
-
 					setDocumentValue(mutableState, key, transformed);
 				}
 			}
 		}
 
-		// Mutations promise to return exactly what the next read() sees, so any
-		// value JSON serialization would alter (NaN/Infinity → null, -0 → 0,
-		// array holes → null, dropped undefined object properties) is rejected.
-		if (operation !== "read") {
-			for (const [key, value] of Object.entries(mutableState)) {
-				// Required fields were checked above; optional undefined can be omitted.
-				if (value === undefined) continue;
-				try {
-					if (isDeepStrictEqual(JSON.parse(JSON.stringify(value)), value)) continue;
-				} catch {
-					// Cycles and other serialization failures use the same typed error path.
-				}
-				issues.push({
-					message:
-						"value does not survive JSON serialization (cycles, NaN, Infinity, -0, sparse arrays, or undefined properties)",
-					path: key,
-				});
-			}
-		}
+		if (operation !== "read") issues.push(...jsonInstabilityIssues(mutableState));
 
 		if (issues.length > 0) {
 			const lines = issues.map((i) => `  - ${i.path}: ${i.message}`);
@@ -324,10 +326,6 @@ export function createStore<const F extends FieldsDef>(
 		}
 	}
 
-	// ──────────────────────────────────────────────────────────────────────
-	// readRaw — Load persisted config and apply core defaults
-	// ──────────────────────────────────────────────────────────────────────
-
 	async function readRaw(): Promise<StoreDocument> {
 		const persisted = await readJson(filePath);
 		const persistedObject =
@@ -338,13 +336,9 @@ export function createStore<const F extends FieldsDef>(
 				path: filePath,
 			});
 		}
-		const merged = applyFieldDefaults(persistedObject, fields, shouldPrune);
+		const merged = applyFieldDefaults(persistedObject, fields, pruneUnknown);
 		return normalizeStateTypes(merged);
 	}
-
-	// ──────────────────────────────────────────────────────────────────────
-	// read — Load persisted config, apply field defaults, validate
-	// ──────────────────────────────────────────────────────────────────────
 
 	async function read(): Promise<Config> {
 		const document = await readRaw();
@@ -364,18 +358,10 @@ export function createStore<const F extends FieldsDef>(
 		return normalized as Config;
 	}
 
-	// ──────────────────────────────────────────────────────────────────────
-	// write — Validate then atomically persist full config
-	// ──────────────────────────────────────────────────────────────────────
-
 	async function write(config: Config): Promise<Config> {
 		// SAFETY: field definitions constrain config values and schema outputs to JSON-compatible values.
 		return persist({ ...config } as StoreDocument, "write");
 	}
-
-	// ──────────────────────────────────────────────────────────────────────
-	// update — Read current effective state, apply updater, validate, persist
-	// ──────────────────────────────────────────────────────────────────────
 
 	async function update(updater: StoreUpdater<Config>): Promise<Config> {
 		const current = await read();
@@ -384,18 +370,10 @@ export function createStore<const F extends FieldsDef>(
 		return persist({ ...updated } as StoreDocument, "update");
 	}
 
-	// ──────────────────────────────────────────────────────────────────────
-	// patch — Shallow merge into current config, validate, persist
-	// ──────────────────────────────────────────────────────────────────────
-
 	async function patch(partial: Partial<Config>): Promise<Config> {
 		const current = await readRaw();
 		return persist({ ...current, ...partial }, "patch");
 	}
-
-	// ──────────────────────────────────────────────────────────────────────
-	// reset — Remove persisted config file
-	// ──────────────────────────────────────────────────────────────────────
 
 	async function reset(): Promise<void> {
 		await deleteJson(filePath);

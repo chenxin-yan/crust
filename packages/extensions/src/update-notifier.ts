@@ -12,6 +12,7 @@ import {
 	defineExtensionId,
 } from "@crustjs/core";
 import { bold, cyan, dim, green, padEnd, stringWidth, yellow } from "@crustjs/style";
+import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
 import { packageManagerFromUserAgent } from "@crustjs/utils/process";
 
 const UPDATE_NOTIFIER: ExtensionId = defineExtensionId("crust:update-notifier");
@@ -109,7 +110,8 @@ export interface UpdateNotifierOptions {
 	 * Pass a string for a fixed command, a callback to build one from the
 	 * package name and detected package manager, or a scope to generate the
 	 * package manager's standard local/global command. When omitted, the notice
-	 * does not suggest a command.
+	 * does not suggest a command. Callbacks and package-manager detection run
+	 * only when a notice is shown.
 	 */
 	updateCommand?: string | UpdateCommandResolver | { scope: "global" | "local" };
 
@@ -201,30 +203,6 @@ export function isNewerVersion(current: string, latest: string): boolean {
 // Internal utilities — npm registry fetch
 // ────────────────────────────────────────────────────────────────────────────
 
-type RegistryResponseBody = Awaited<ReturnType<Response["json"]>>;
-
-function hasLatestDistTag(
-	value: RegistryResponseBody,
-): value is { "dist-tags": { latest: string } } {
-	if (
-		typeof value !== "object" ||
-		value === null ||
-		Array.isArray(value) ||
-		!("dist-tags" in value)
-	) {
-		return false;
-	}
-	const tags = value["dist-tags"];
-	return (
-		typeof tags === "object" &&
-		tags !== null &&
-		!Array.isArray(tags) &&
-		"latest" in tags &&
-		typeof tags.latest === "string" &&
-		tags.latest.length > 0
-	);
-}
-
 /**
  * Fetch the `dist-tags.latest` version string for a package from an npm
  * registry.
@@ -250,10 +228,11 @@ export async function fetchLatestVersion(
 
 		if (!response.ok) return null;
 
-		const data = await response.json();
-		if (!hasLatestDistTag(data)) return null;
-
-		return data["dist-tags"].latest;
+		const data: JsonValue = JSON.parse(await response.text());
+		const tags = isJsonObject(data) ? data["dist-tags"] : undefined;
+		const latest = tags !== undefined && isJsonObject(tags) ? tags.latest : undefined;
+		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- parsing registry JSON at its I/O boundary.
+		return typeof latest === "string" && latest.length > 0 ? latest : null;
 	} catch {
 		// Network error, abort, JSON parse failure — all soft failures
 		return null;
@@ -354,29 +333,20 @@ function detectPackageManagerFromExecPath(
 	return null;
 }
 
+// Yarn Berry has no `global`, so global Yarn installs fall back to npm.
+const INSTALL_COMMANDS = {
+	npm: { global: "npm install -g", local: "npm install" },
+	pnpm: { global: "pnpm add -g", local: "pnpm add" },
+	yarn: { global: "npm install -g", local: "yarn add" },
+	bun: { global: "bun add -g", local: "bun add" },
+} as const satisfies Record<UpdateNotifierPackageManager, Record<"global" | "local", string>>;
+
 function defaultUpdateCommand(
 	packageName: string,
 	packageManager: UpdateNotifierPackageManager,
 	scope: "global" | "local",
 ): string {
-	if (packageManager === "pnpm") {
-		return scope === "global"
-			? `pnpm add -g ${packageName}@latest`
-			: `pnpm add ${packageName}@latest`;
-	}
-	if (packageManager === "yarn") {
-		return scope === "global"
-			? `npm install -g ${packageName}@latest`
-			: `yarn add ${packageName}@latest`;
-	}
-	if (packageManager === "bun") {
-		return scope === "global"
-			? `bun add -g ${packageName}@latest`
-			: `bun add ${packageName}@latest`;
-	}
-	return scope === "global"
-		? `npm install -g ${packageName}@latest`
-		: `npm install ${packageName}@latest`;
+	return `${INSTALL_COMMANDS[packageManager][scope]} ${packageName}@latest`;
 }
 
 function resolveUpdateCommand(
@@ -471,7 +441,22 @@ export const updateNotifier: ExtensionFactory<[options: UpdateNotifierOptions]> 
 			// so the next successful write repairs the file instead of permanently
 			// disabling the notifier.
 			const state = normalizeNotifierState(await cacheAdapter.read().catch(() => null));
-			const resolvedUpdateCommand = resolveUpdateCommand(packageName, updateCommand);
+			const notify = (latestVersion: string): boolean => {
+				if (
+					!isNewerVersion(resolvedCurrentVersion, latestVersion) ||
+					state.lastNotifiedVersion === latestVersion
+				) {
+					return false;
+				}
+				emitUpdateNotice(
+					resolvedCurrentVersion,
+					latestVersion,
+					resolveUpdateCommand(packageName, updateCommand),
+					updateDocsUrl,
+					context.stderr,
+				);
+				return true;
+			};
 
 			// ── Cache gate: skip network if within interval ──────────
 			const now = Date.now();
@@ -481,18 +466,7 @@ export const updateNotifier: ExtensionFactory<[options: UpdateNotifierOptions]> 
 			// treated as stale so the refetch rewrites lastCheckedAt.
 			if (cache !== false && elapsed >= 0 && elapsed < intervalMs) {
 				// Cache is still fresh — use cached version if available
-				if (
-					state.latestVersion &&
-					isNewerVersion(resolvedCurrentVersion, state.latestVersion) &&
-					state.lastNotifiedVersion !== state.latestVersion
-				) {
-					emitUpdateNotice(
-						resolvedCurrentVersion,
-						state.latestVersion,
-						resolvedUpdateCommand,
-						updateDocsUrl,
-						context.stderr,
-					);
+				if (state.latestVersion && notify(state.latestVersion)) {
 					await cacheAdapter.write({
 						...state,
 						lastNotifiedVersion: state.latestVersion,
@@ -521,21 +495,16 @@ export const updateNotifier: ExtensionFactory<[options: UpdateNotifierOptions]> 
 			};
 
 			// ── Emit notice if newer and not already notified ─────────
-			if (
-				isNewerVersion(resolvedCurrentVersion, latestVersion) &&
-				state.lastNotifiedVersion !== latestVersion
-			) {
-				emitUpdateNotice(
-					resolvedCurrentVersion,
-					latestVersion,
-					resolvedUpdateCommand,
-					updateDocsUrl,
-					context.stderr,
+			// `finally` records the check even when an `updateCommand` callback
+			// throws, so a broken callback cannot force a refetch on every run.
+			let notified = false;
+			try {
+				notified = notify(latestVersion);
+			} finally {
+				await cacheAdapter.write(
+					notified ? { ...nextState, lastNotifiedVersion: latestVersion } : nextState,
 				);
-				nextState.lastNotifiedVersion = latestVersion;
 			}
-
-			await cacheAdapter.write(nextState);
 		} catch {
 			// Registry, cache, and notification failures must not fail the completed command.
 		}

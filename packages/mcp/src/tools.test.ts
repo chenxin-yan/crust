@@ -124,6 +124,20 @@ describe("toolsFromSnapshot", () => {
 		expect(() => JSON.stringify(tools)).not.toThrow();
 	});
 
+	it("omits defaults containing non-finite numbers, which JSON would publish as null", async () => {
+		const app = new Crust("cli")
+			.flags(
+				{ name: "limit", type: "number", default: Infinity },
+				{ name: "bounds", type: "number", multiple: true, default: [0, -Infinity] },
+				{ name: "config", type: "json", default: { ratio: Number.NaN } },
+			)
+			.action(noop);
+		const properties = toolsFromSnapshot(await app.snapshot())[0]!.inputSchema.properties;
+		for (const name of ["limit", "bounds", "config"]) {
+			expect(properties[name]).not.toHaveProperty("default");
+		}
+	});
+
 	it("maps schema and custom-parse definitions by token type; only declared required is required", async () => {
 		const app = new Crust("cli").add(
 			defineCommand("check", (c) =>

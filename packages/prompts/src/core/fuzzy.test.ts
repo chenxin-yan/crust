@@ -141,4 +141,16 @@ describe("fuzzyFilter", () => {
 		const results = fuzzyFilter("py", items);
 		expect(results[0]?.item).toBe(items[3]);
 	});
+
+	it("sorts results by descending score", () => {
+		// `config` scores higher than `abc` because the match lands at the
+		// start of the string (START_BONUS). `xyz` does not match at all.
+		const results = fuzzyFilter("c", [
+			{ label: "abc", value: "abc" },
+			{ label: "config", value: "config" },
+			{ label: "xyz", value: "xyz" },
+		]);
+
+		expect(results.map((r) => r.item.label)).toEqual(["config", "abc"]);
+	});
 });

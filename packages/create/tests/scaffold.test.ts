@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -16,19 +24,14 @@ let templateDir: string;
 let destDir: string;
 
 beforeEach(() => {
-	tempDir = join(
-		tmpdir(),
-		`crust-scaffold-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-	);
+	tempDir = mkdtempSync(join(tmpdir(), "crust-scaffold-test-"));
 	templateDir = join(tempDir, "template");
 	destDir = join(tempDir, "output");
 	mkdirSync(templateDir, { recursive: true });
 });
 
 afterEach(() => {
-	if (existsSync(tempDir)) {
-		rmSync(tempDir, { recursive: true, force: true });
-	}
+	rmSync(tempDir, { recursive: true, force: true });
 });
 
 /**
