@@ -1,5 +1,24 @@
 # @crustjs/plugins
 
+## 0.5.4
+
+### Patch Changes
+
+- [#484](https://github.com/chenxin-yan/crust/pull/484) [`1f7b266`](https://github.com/chenxin-yan/crust/commit/1f7b26648e412d0c6170c2866fb6ec97aa907f14) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `completion()` now validates the root command name with the installed command name rule shared with `crust build`, and its error states that rule (letters, digits, `.`, `_`, and `-`, starting with a letter or digit). Accepted names are unchanged.
+
+- [#484](https://github.com/chenxin-yan/crust/pull/484) [`1f7b266`](https://github.com/chenxin-yan/crust/commit/1f7b26648e412d0c6170c2866fb6ec97aa907f14) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Shell completion now reads every flag spelling from Core's documentation model. Bash and zsh offer `-P` for a one-character alias and route past its value (`mycli -P 9090 serve <Tab>` completes `serve`'s subcommands), and fish offers `-P` as a short option.
+
+- [#483](https://github.com/chenxin-yan/crust/pull/483) [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Generated completion scripts now name the configured `completion({ command })` subcommand in their "regenerate with" header.
+
+- [#483](https://github.com/chenxin-yan/crust/pull/483) [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Completion validation errors now quote the exact pattern enforced for choice values and identifiers, including the required alphanumeric first character.
+
+- [#483](https://github.com/chenxin-yan/crust/pull/483) [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `updateNotifier` now resolves `updateCommand` (including callbacks and package-manager detection) only when it shows an update notice.
+
+- [#483](https://github.com/chenxin-yan/crust/pull/483) [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Zsh completion now shows flag descriptions containing apostrophes (e.g. "Don't prompt") correctly instead of escaping them twice.
+- Updated dependencies [[`1f7b266`](https://github.com/chenxin-yan/crust/commit/1f7b26648e412d0c6170c2866fb6ec97aa907f14)]:
+  - @crustjs/store@0.4.4
+  - @crustjs/style@0.3.6
+
 ## 0.5.3
 
 ### Patch Changes

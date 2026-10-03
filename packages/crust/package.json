@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/crust",
-	"version": "0.5.3",
+	"version": "0.5.4",
 	"description": "CLI to build and publish Crust apps as npm packages or standalone binaries",
 	"type": "module",
 	"license": "MIT",

@@ -1,5 +1,17 @@
 # @crustjs/skills
 
+## 0.5.4
+
+### Patch Changes
+
+- [#483](https://github.com/chenxin-yan/crust/pull/483) [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Generated command docs now list flag `env` variables and arg/flag `choices`, using the same `[env: …]`, `[default: …]`, and `[choices: …]` annotations as help and man pages. Defaults previously rendered as ``Default: `x` `` now render as `` `[default: x]` ``.
+
+- [#483](https://github.com/chenxin-yan/crust/pull/483) [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Generated `SKILL.md` frontmatter now escapes quotes and backslashes in `metadata.version`, so such versions no longer produce invalid YAML.
+- Updated dependencies [[`1f7b266`](https://github.com/chenxin-yan/crust/commit/1f7b26648e412d0c6170c2866fb6ec97aa907f14), [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444), [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444), [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444)]:
+  - @crustjs/progress@0.1.5
+  - @crustjs/style@0.3.6
+  - @crustjs/prompts@0.2.6
+
 ## 0.5.3
 
 ### Patch Changes

@@ -1,5 +1,18 @@
 # create-crust
 
+## 0.5.4
+
+### Patch Changes
+
+- [#483](https://github.com/chenxin-yan/crust/pull/483) [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Treat any path that resolves to the current directory (such as `./`) like `.`, and stop printing doubled prefixes such as `cd ././my-cli` in the next steps. The generated `.gitignore` no longer labels `node_modules` as Bun-only.
+
+- [#484](https://github.com/chenxin-yan/crust/pull/484) [`1f7b266`](https://github.com/chenxin-yan/crust/commit/1f7b26648e412d0c6170c2866fb6ec97aa907f14) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Reject project names that start with `_` or contain `~`, since the name becomes the installed command and `crust build` and `completion()` reject them. Project names use letters, digits, `.`, `_`, and `-`, starting with a letter or digit. To migrate, choose a directory name such as `tool` instead of `_tool`, or `my-cli` instead of `my~cli`.
+- Updated dependencies [[`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444), [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444), [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444), [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444), [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444), [`1f7b266`](https://github.com/chenxin-yan/crust/commit/1f7b26648e412d0c6170c2866fb6ec97aa907f14), [`1f7b266`](https://github.com/chenxin-yan/crust/commit/1f7b26648e412d0c6170c2866fb6ec97aa907f14), [`1f7b266`](https://github.com/chenxin-yan/crust/commit/1f7b26648e412d0c6170c2866fb6ec97aa907f14), [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444), [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444), [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444)]:
+  - @crustjs/core@0.5.4
+  - @crustjs/create@0.2.2
+  - @crustjs/progress@0.1.5
+  - @crustjs/prompts@0.2.6
+
 ## 0.5.3
 
 ### Patch Changes

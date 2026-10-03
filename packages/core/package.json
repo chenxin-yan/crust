@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/core",
-	"version": "0.5.3",
+	"version": "0.5.4",
 	"description": "Define, parse, route, and run type-safe CLI commands with Contexts and Extensions",
 	"type": "module",
 	"sideEffects": false,
