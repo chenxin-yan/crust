@@ -1,6 +1,6 @@
 # @crustjs/mcp
 
-Serve a Crust CLI as MCP tools over stdio, with no per-command glue.
+Serve a Crust CLI as MCP tools over stdio
 
 `mcpExtension({ app })` adds `<cli> mcp`, which serves every action-bearing, visible command as a tool through typed `app.run()`, and `<cli> mcp config`, which prints the client configuration snippet. `createMcpServer(app)` and `serveStdio(server)` are the headless primitives; `toolsFromSnapshot(snapshot)` is the pure JSON Schema tool manifest.
 

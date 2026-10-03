@@ -1,7 +1,7 @@
 {
 	"name": "@crustjs/progress",
 	"version": "0.1.4",
-	"description": "Progress indicators for the Crust CLI ecosystem",
+	"description": "Spinners and determinate progress indicators for terminal tasks",
 	"type": "module",
 	"sideEffects": false,
 	"license": "MIT",

@@ -1,6 +1,6 @@
 # @crustjs/effect
 
-Effect.ts v4 adaptor for Crust: write Command Actions and Contexts in Effect idiom while Crust stays the runtime.
+Effect.ts v4 adapter for Crust Command Actions, Contexts, and errors
 
 ## Install
 

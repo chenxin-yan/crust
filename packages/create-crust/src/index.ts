@@ -4,6 +4,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
 import { Crust, resolveArtifactDir } from "@crustjs/core";
+import { INSTALLED_COMMAND_NAME_RULE, isInstalledCommandName } from "@crustjs/core/tooling";
 import { detectPackageManager, isInGitRepo, runSteps, scaffold } from "@crustjs/create";
 import type { BuildOptions } from "@crustjs/crust";
 import { spinner } from "@crustjs/progress";
@@ -13,6 +14,7 @@ import { Eta } from "eta/core";
 import corePkg from "../../core/package.json" with { type: "json" };
 import crustPkg from "../../crust/package.json" with { type: "json" };
 import extensionsPkg from "../../extensions/package.json" with { type: "json" };
+import pkg from "../package.json" with { type: "json" };
 
 type Runtime = "bun" | "node" | "deno";
 
@@ -39,14 +41,11 @@ const eta = new Eta({ autoEscape: false, autoTrim: false });
 
 // The resolved basename is spliced into package.json (`name`, `bin` key, `start`
 // script path) and a quoted TS string, whatever its origin: positional argument,
-// prompt, or the cwd. Mirrors the bin-key subset COMMAND_NAME_PATTERN in
-// packages/crust/src/build.ts, excluding Core's reserved command name.
-// This is interpolation safety, not full npm-name validation.
-const PROJECT_NAME_PATTERN = /^[A-Za-z0-9_~][A-Za-z0-9._~-]*$/;
+// prompt, or the cwd. This is interpolation safety, not full npm-name validation.
 function validateProjectName(name: string): void {
-	if (name === "__proto__" || !PROJECT_NAME_PATTERN.test(name)) {
+	if (!isInstalledCommandName(name)) {
 		throw new Error(
-			`Project name ${JSON.stringify(name)} is not safe for the generated project.\n  The directory basename becomes the package and command name: use letters, digits, ".", "_", "~", and "-", not starting with "." or "-"; "__proto__" is reserved.`,
+			`Project name ${JSON.stringify(name)} is not safe for the generated project.\n  The directory basename becomes the package and command name: use ${INSTALLED_COMMAND_NAME_RULE}.`,
 		);
 	}
 }
@@ -68,7 +67,7 @@ function validateProjectDirectory(path: string): void {
 // Command definition
 // ────────────────────────────────────────────────────────────────────────────
 
-const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI project" })
+const app = new Crust("create-crust", { description: pkg.description })
 	.flags(
 		{
 			name: "runtime",

@@ -1,6 +1,5 @@
 ---
 title: "Effect"
-description: Effect.ts v4 adaptor for Command Actions, Contexts, and Core errors.
 ---
 
 `@crustjs/effect` lets you author Command Actions and Contexts in [Effect](https://effect.website) idiom. Crust remains the runtime: routing, parsing, rendering, and cleanup are unchanged. It is a set of helpers, not an Extension, so it registers no flags, commands, or hooks.
@@ -75,7 +74,7 @@ The effective provider on the path must come from the **same factory**, includin
 
 ## Environment variables
 
-Install [`@crustjs/env`](/docs/modules/env) alongside the Effect adaptor. `defineEnv()` returns a plain Crust Context, so the existing `service()` helper provides typed values and catchable errors without an additional Layer or adapter:
+Install [`@crustjs/env`](/docs/modules/env) alongside the Effect adapter. `defineEnv()` returns a plain Crust Context, so the existing `service()` helper provides typed values and catchable errors without an additional Layer or adapter:
 
 <include lang="ts" meta="twoslash">
   ../../../examples/modules/effect-env.ts#env-example

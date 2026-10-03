@@ -1,6 +1,6 @@
 # @crustjs/man
 
-Generate mdoc(7) manual pages from Crust CLI definitions
+Generate mdoc(7) manual pages from Crust command definitions
 
 ## Install
 

@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 
 import type { BuildReport, InvocationIO } from "@crustjs/core";
+import { INSTALLED_COMMAND_NAME_RULE, isInstalledCommandName } from "@crustjs/core/tooling";
 import { dim } from "@crustjs/style";
 import { isErrnoException } from "@crustjs/utils/error";
 import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
@@ -257,13 +258,6 @@ export function resolveEnvFilePaths(
 /** Entry built when package.json has no `bin`. */
 const DEFAULT_ENTRY = "src/cli.ts";
 
-/**
- * Command names become `bin/<command>.js`, `<command>-<target>` binary
- * filenames, and launcher text, so they are restricted to a filename-safe
- * subset of what npm accepts: no separators, dots-only names, or leading `.`/`-`.
- */
-const COMMAND_NAME_PATTERN = /^[A-Za-z0-9_~][A-Za-z0-9._~-]*$/;
-
 const BIN_EXAMPLE = `{ "my-cli": ${JSON.stringify(DEFAULT_ENTRY)} }`;
 
 /**
@@ -324,9 +318,9 @@ export function resolveBinEntries(cwd: string, pkg: JsonObject): BinEntry[] {
 	const commandByLowerName = new Map<string, string>();
 	const commandByRealPath = new Map<string, string>();
 	return declared.map(([command, source]) => {
-		if (!COMMAND_NAME_PATTERN.test(command)) {
+		if (!isInstalledCommandName(command)) {
 			throw new Error(
-				`package.json bin key ${JSON.stringify(command)} is not a valid command name.\n  Use letters, digits, ".", "_", "~", and "-", not starting with "." or "-".`,
+				`package.json bin key ${JSON.stringify(command)} is not a valid command name.\n  Use ${INSTALLED_COMMAND_NAME_RULE}.`,
 			);
 		}
 		const sameName = commandByLowerName.get(command.toLowerCase());

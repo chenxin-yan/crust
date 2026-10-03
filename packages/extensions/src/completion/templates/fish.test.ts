@@ -2,6 +2,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { Crust } from "@crustjs/core";
+import { buildCommandDocumentation } from "@crustjs/core/tooling";
 import { which } from "@crustjs/utils/process";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 
@@ -10,14 +12,15 @@ import {
 	runBoundedProcess,
 } from "../../../../crust/tests/bounded-process.ts";
 import type { CompletionCommand } from "../spec.ts";
+import { walkCommand } from "../walker.ts";
 import { renderFish } from "./fish.ts";
 
 const fixture: CompletionCommand = {
 	name: "mycli",
 	description: "Test CLI",
 	flags: [
-		{ name: "help", short: "h", type: "boolean", takesValue: false, negatable: false },
-		{ name: "version", short: "v", type: "boolean", takesValue: false, negatable: false },
+		{ name: "help", spellings: ["-h", "--help"], type: "boolean", takesValue: false },
+		{ name: "version", spellings: ["-v", "--version"], type: "boolean", takesValue: false },
 	],
 	args: [],
 	subCommands: [
@@ -27,18 +30,15 @@ const fixture: CompletionCommand = {
 			flags: [
 				{
 					name: "release",
-					short: "r",
-					aliases: ["optimized"],
+					spellings: ["-r", "--release", "--optimized", "--no-release", "--no-optimized"],
 					type: "boolean",
 					takesValue: false,
-					negatable: true,
 				},
 				{
 					name: "target",
-					aliases: ["platform"],
+					spellings: ["--target", "--platform"],
 					type: "string",
 					takesValue: true,
-					negatable: false,
 					choices: ["browser", "bun", "node"],
 				},
 			],
@@ -58,9 +58,9 @@ const fixture: CompletionCommand = {
 					flags: [
 						{
 							name: "env",
+							spellings: ["--env"],
 							type: "string",
 							takesValue: true,
-							negatable: false,
 							choices: ["dev", "staging", "prod"],
 						},
 					],
@@ -125,25 +125,21 @@ describe("renderFish", () => {
 		const script = renderFish(fixture, "mycli", "1.0.0");
 		const rules = script
 			.split("\n")
-			.filter((line) => /-l '(?:no-)?(?:release|optimized)'/.test(line));
-		expect(rules.map((line) => line.match(/-l '([^']+)'/)?.[1])).toEqual([
-			"release",
-			"optimized",
-			"no-release",
-			"no-optimized",
-		]);
-		for (const [index, line] of rules.entries()) {
-			expect(line).not.toMatch(/ -(?:r|x)\b/);
-			if (index === 0) expect(line).toContain("-s 'r'");
-			else expect(line).not.toContain("-s ");
-		}
+			.filter((line) => /-[sl] '(?:no-)?(?:r|release|optimized)'/.test(line));
+		expect(
+			rules.map((line) =>
+				line
+					.match(/ -([sl]) '([^']+)'/)
+					?.slice(1)
+					.join(" "),
+			),
+		).toEqual(["s r", "l release", "l optimized", "l no-release", "l no-optimized"]);
+		for (const line of rules) expect(line).not.toMatch(/ -(?:r|x)\b/);
 	});
 
-	it("emits short alias on flags via -s", () => {
+	it("emits short spellings via -s", () => {
 		const script = renderFish(fixture, "mycli", "1.0.0");
-		const helpLine = script.split("\n").find((l) => l.includes("-l 'help'"));
-		expect(helpLine).toBeDefined();
-		expect(helpLine).toContain("-s 'h'");
+		expect(script).toContain("-s 'h' -d ''");
 	});
 
 	it("emits per-slot positional choice rules gated on `__<ident>_path_at_arg`", () => {
@@ -215,15 +211,51 @@ describe("renderFish", () => {
 		).toBe(2);
 	});
 
+	it("offers and routes every doc-model spelling, including one-character aliases", async () => {
+		const app = new Crust("mycli")
+			.flags(
+				{ name: "port", type: "number", short: "p", aliases: ["P", "listen"] },
+				{ name: "q", type: "boolean", aliases: ["Q"] },
+			)
+			.action(() => {});
+		const script = renderFish(
+			walkCommand(buildCommandDocumentation(await app.snapshot())),
+			"mycli",
+			"1.0.0",
+		);
+		expect(script).toContain("printf '%s\\n' '-p' '-P' '--port' '--P' '--listen'");
+		expect(script).toContain("printf '%s\\n' '-q' '-Q'");
+		const options = script.split("\n").flatMap(
+			(line) =>
+				line
+					.match(/ -([sl]) '([^']+)'/)
+					?.slice(1)
+					.join(" ") ?? [],
+		);
+		expect(options).toEqual([
+			"s p",
+			"s P",
+			"l port",
+			"l P",
+			"l listen",
+			"s q",
+			"s Q",
+			"l q",
+			"l Q",
+			"l no-q",
+			"l no-Q",
+		]);
+	});
+
 	it("escapes single quotes in descriptions", () => {
 		const spec: CompletionCommand = {
 			name: "x",
 			flags: [
 				{
 					name: "fancy",
+					spellings: ["--fancy"],
 					type: "string",
 					takesValue: true,
-					negatable: false,
 					description: "it's complicated",
 				},
 			],
@@ -287,24 +319,21 @@ describeIfFish("renderFish · subprocess completion", () => {
 		// only descends into a child that parses earlier flags the same way.
 		const profile: CompletionCommand["flags"][number] = {
 			name: "profile",
-			short: "p",
-			aliases: ["env-name"],
+			spellings: ["-p", "--profile", "--env-name"],
 			type: "string",
 			takesValue: true,
-			negatable: false,
 		};
 		const quiet: CompletionCommand["flags"][number] = {
 			name: "quiet",
-			short: "q",
+			spellings: ["-q", "--quiet"],
 			type: "boolean",
 			takesValue: false,
-			negatable: false,
 		};
 		const region: CompletionCommand["flags"][number] = {
 			name: "region",
+			spellings: ["--region"],
 			type: "string",
 			takesValue: true,
-			negatable: false,
 		};
 		const slot = (name: string, choices: string[]): CompletionCommand["args"][number] => ({
 			name,
@@ -344,7 +373,7 @@ describeIfFish("renderFish · subprocess completion", () => {
 							flags: [
 								valueFlag,
 								quiet,
-								{ name: "region", type: "boolean", takesValue: false, negatable: false },
+								{ name: "region", spellings: ["--region"], type: "boolean", takesValue: false },
 							],
 							args: [slot("target", ["there"])],
 							subCommands: [],
@@ -398,10 +427,10 @@ describeIfFish("renderFish · subprocess completion", () => {
 		// Core accepts one-character canonical names and aliases as both
 		// boolean bundle prefixes and value-taking shorts.
 		for (const [variant, variantQuiet, variantProfile] of [
-			["boolean-canonical", { ...quiet, name: "q", short: undefined }, profile],
-			["boolean-alias", { ...quiet, short: undefined, aliases: ["q"] }, profile],
-			["value-canonical", quiet, { ...profile, name: "p", short: undefined }],
-			["value-alias", quiet, { ...profile, short: undefined, aliases: ["p"] }],
+			["boolean-canonical", { ...quiet, name: "q", spellings: ["-q", "--q"] }, profile],
+			["boolean-alias", { ...quiet, spellings: ["-q", "--quiet", "--q"] }, profile],
+			["value-canonical", quiet, { ...profile, name: "p", spellings: ["-p", "--p", "--env-name"] }],
+			["value-alias", quiet, { ...profile, spellings: ["-p", "--profile", "--env-name", "--p"] }],
 		] as const) {
 			const variantPath = join(tmpDir, `vcli-${variant}.fish`);
 			await writeFile(
@@ -444,26 +473,26 @@ describe("renderFish — url/path/json value-flag handling", () => {
 		flags: [
 			{
 				name: "out",
+				spellings: ["--out"],
 				type: "string",
 				takesValue: true,
-				negatable: false,
 				valueCompletion: "files",
 			},
 			{
 				name: "endpoint",
+				spellings: ["--endpoint"],
 				type: "string",
 				takesValue: true,
-				negatable: false,
 				valueCompletion: "none",
 			},
 			{
 				name: "config",
+				spellings: ["--config"],
 				type: "string",
 				takesValue: true,
-				negatable: false,
 				valueCompletion: "none",
 			},
-			{ name: "name", type: "string", takesValue: true, negatable: false },
+			{ name: "name", spellings: ["--name"], type: "string", takesValue: true },
 		],
 		args: [],
 		subCommands: [],

@@ -1,7 +1,7 @@
 {
 	"name": "@crustjs/store",
 	"version": "0.4.3",
-	"description": "DX-first, typed persistence for CLI apps with config/data/state/cache separation",
+	"description": "Typed JSON persistence for CLI config, data, state, and cache files",
 	"type": "module",
 	"sideEffects": false,
 	"license": "MIT",

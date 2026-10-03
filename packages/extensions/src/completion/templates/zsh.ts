@@ -53,17 +53,16 @@ function flagSpecs(flag: CompletionFlag): string[] {
 	// emitted as separate single-form specs further down.
 	const repeat = flag.multiple === true ? "*" : "";
 
-	// Pre-compute the alias spellings list for the mutual-exclusion prefix.
-	const allLong = [flag.name, ...(flag.aliases ?? [])];
-	const allShort = flag.short !== undefined ? [flag.short] : [];
+	const spellings = flag.spellings.filter((spelling) => !spelling.startsWith("--no-"));
+	const negNames = flag.spellings.filter((spelling) => spelling.startsWith("--no-"));
+	const optionName = (spelling: string) =>
+		flag.takesValue && spelling.startsWith("--") ? `${spelling}=` : spelling;
 
 	const specs: string[] = [];
 
-	if (allShort.length === 0 && allLong.length === 1) {
+	if (spellings.length === 1) {
 		// Single long form — simplest spec.
-		const eq = flag.takesValue ? "=" : "";
-		const body = `${repeat}--${flag.name}${eq}${descPart}${valueSuffix}`;
-		specs.push(bashSingleQuote(body));
+		specs.push(bashSingleQuote(`${repeat}${optionName(spellings[0]!)}${descPart}${valueSuffix}`));
 	} else {
 		// Multiple spellings — emit a mutex group. The standard zsh idiom
 		// (per `man zshcompsys`) is:
@@ -72,11 +71,8 @@ function flagSpecs(flag: CompletionFlag): string[] {
 		// alternation expanding to one option per spelling. We
 		// single-quote-wrap each piece so flag names with `-` survive
 		// shell tokenisation cleanly.
-		const mutex = [...allShort.map((s) => `-${s}`), ...allLong.map((l) => `--${l}`)].join(" ");
-		const altGroup = [
-			...allShort.map((s) => `-${s}`),
-			...allLong.map((l) => `--${l}${flag.takesValue ? "=" : ""}`),
-		].join(",");
+		const mutex = spellings.join(" ");
+		const altGroup = spellings.map(optionName).join(",");
 		// Repeat marker in the brace alternation: `*{-h,--help}` ensures
 		// each member of the alternation can repeat. The mutex prefix
 		// `(...)` is only meaningful for non-repeatable specs.
@@ -97,9 +93,8 @@ function flagSpecs(flag: CompletionFlag): string[] {
 	// `--no-<name>` for boolean toggles (matches the parser's
 	// negation-acceptance contract). Emitted as a separate spec so it
 	// shows up alongside `--<name>` in the menu.
-	if (flag.negatable) {
+	if (negNames.length > 0) {
 		const negDesc = `[${zshArgsDescription(`disable: ${desc}`.trim())}]`;
-		const negNames = allLong.map((l) => `--no-${l}`);
 		if (negNames.length === 1) {
 			specs.push(bashSingleQuote(`${repeat}${negNames[0]}${negDesc}`));
 		} else {

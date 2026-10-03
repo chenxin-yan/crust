@@ -505,12 +505,14 @@ describe("resolveBinEntries", () => {
 			'a"b',
 			"a$b",
 			"café",
+			"my~cli",
+			"_tool",
 		]) {
 			expect(() => entries({ name: "x", bin: { [key]: "src/cli.ts" } })).toThrow(
 				`package.json bin key ${JSON.stringify(key)} is not a valid command name`,
 			);
 		}
-		for (const key of ["my-cli", "MyCli2", "a.b_c~d", "1up"]) {
+		for (const key of ["my-cli", "my.cli", "my_cli", "cli2", "MyCli2", "1up"]) {
 			expect(entries({ name: "x", bin: { [key]: "src/cli.ts" } })[0]?.command).toBe(key);
 		}
 	});

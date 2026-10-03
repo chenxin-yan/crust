@@ -19,7 +19,7 @@ describe("walkCommand", () => {
 		expect(spec.subCommands).toEqual([]);
 	});
 
-	it("captures flat flags with type, short, aliases, description, multiple, and takesValue", async () => {
+	it("captures flat flags with type, spellings, description, multiple, and takesValue", async () => {
 		const app = new Crust("mycli").flags(
 			{ name: "verbose", type: "boolean", short: "v", description: "Verbose output" },
 			{ name: "name", type: "string", description: "Name to greet", aliases: ["nm"] },
@@ -30,26 +30,24 @@ describe("walkCommand", () => {
 
 		expect(byName.verbose).toEqual({
 			name: "verbose",
+			spellings: ["-v", "--verbose", "--no-verbose"],
 			type: "boolean",
-			short: "v",
 			description: "Verbose output",
 			takesValue: false,
-			negatable: true,
 		});
 		expect(byName.name).toEqual({
 			name: "name",
+			spellings: ["--name", "--nm"],
 			type: "string",
-			aliases: ["nm"],
 			description: "Name to greet",
 			takesValue: true,
-			negatable: false,
 		});
 		expect(byName.tag).toEqual({
 			name: "tag",
+			spellings: ["--tag"],
 			type: "string",
 			takesValue: true,
 			multiple: true,
-			negatable: false,
 		});
 	});
 

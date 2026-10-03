@@ -32,7 +32,7 @@ describe("crust CLI entry point", () => {
 			const { stdout: output } = await captureExecute(makeCrustApp(), ["--help"]);
 
 			expect(output).toContain("crust");
-			expect(output).toContain("CLI tooling for the Crust framework");
+			expect(output).toContain(pkg.description);
 			expect(output).toContain("Usage:");
 			expect(output).toContain("Commands:");
 			expect(output).toContain("build");

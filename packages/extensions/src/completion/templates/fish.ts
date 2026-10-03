@@ -169,7 +169,6 @@ function emitRules(
 	// Flag rules.
 	for (const flag of current.flags) {
 		const desc = flag.description ?? "";
-		const spellings = [flag.name, ...(flag.aliases ?? [])];
 
 		// Emit a single value-taking rule for `flag`. Branches:
 		//   - choices                       → one rule per literal candidate
@@ -195,27 +194,24 @@ function emitRules(
 			out.push(renderRule(binName, { ...rule, requireParameter: true }));
 		};
 
-		for (const [index, spelling] of spellings.entries()) {
-			const rule: RuleParts = { condition, long: spelling, description: desc };
-			if (index === 0 && flag.short !== undefined) rule.short = flag.short;
+		for (const spelling of flag.spellings) {
+			if (spelling.startsWith("--no-")) {
+				out.push(
+					renderRule(binName, {
+						condition,
+						long: spelling.slice(2),
+						description: `disable: ${desc}`.trim(),
+					}),
+				);
+				continue;
+			}
+			const rule: RuleParts = spelling.startsWith("--")
+				? { condition, long: spelling.slice(2), description: desc }
+				: { condition, short: spelling.slice(1), description: desc };
 			if (flag.takesValue) {
 				emitValueRule(rule);
 			} else {
 				out.push(renderRule(binName, rule));
-			}
-		}
-
-		// `--no-<name>` for boolean toggles.
-		if (flag.negatable) {
-			const negDesc = `disable: ${desc}`.trim();
-			for (const spelling of spellings) {
-				out.push(
-					renderRule(binName, {
-						condition,
-						long: `no-${spelling}`,
-						description: negDesc,
-					}),
-				);
 			}
 		}
 	}
@@ -268,9 +264,7 @@ function emitRules(
  * Emit the flag-scope helpers used by routing:
  *
  * - `__<ident>_flags <value|bool> <canonical path...>` prints that command's
- *   value-taking spellings (`--name`, `-s`, `--alias`) or boolean
- *   one-character spellings (short, canonical or alias) as `-c`.
- *   Value-taking canonical names and aliases of one character also accept `-c`.
+ *   value-taking spellings or boolean single-dash spellings.
  * - `__<ident>_takes_value <token> <canonical path...>` succeeds when `token`
  *   consumes the next argv token at that command, like Core's
  *   `matchKnownFlagToken`: `--name`/`-s` of a value flag, or a short bundle
@@ -289,31 +283,14 @@ function emitFlagScopeHelpers(ident: string, spec: CompletionCommand): string[] 
 	const visit = (node: CompletionCommand, route: readonly string[]): void => {
 		emitBranch(
 			["value", ...route],
-			node.flags.flatMap((flag) =>
-				flag.takesValue
-					? [
-							`--${flag.name}`,
-							...(flag.short === undefined ? [] : [`-${flag.short}`]),
-							...(flag.aliases ?? []).map((alias) => `--${alias}`),
-							...[flag.name, ...(flag.aliases ?? [])].flatMap((spelling) =>
-								spelling.length === 1 ? [`-${spelling}`] : [],
-							),
-						]
-					: [],
-			),
+			node.flags.flatMap((flag) => (flag.takesValue ? flag.spellings : [])),
 		);
 		emitBranch(
 			["bool", ...route],
 			// Core matches bundle characters against every spelling, so
 			// one-character canonical names and aliases count as shorts.
 			node.flags.flatMap((flag) =>
-				flag.takesValue
-					? []
-					: [
-							flag.name,
-							...(flag.short === undefined ? [] : [flag.short]),
-							...(flag.aliases ?? []),
-						].flatMap((spelling) => (spelling.length === 1 ? [`-${spelling}`] : [])),
+				flag.takesValue ? [] : flag.spellings.filter((spelling) => !spelling.startsWith("--")),
 			),
 		);
 		for (const sub of node.subCommands) visit(sub, [...route, sub.name]);

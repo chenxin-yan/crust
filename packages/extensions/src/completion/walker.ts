@@ -64,11 +64,9 @@ function walkFlag(def: DocumentationFlag): CompletionFlag {
 	const description = normaliseDescription(def.description);
 	const common = {
 		name: def.name,
-		...(def.short === undefined ? {} : { short: def.short }),
-		...(def.aliases.length > 0 ? { aliases: def.aliases } : {}),
+		spellings: def.spellings,
 		...(description === undefined ? {} : { description }),
 		...(def.multiple ? { multiple: true as const } : {}),
-		negatable: def.negatable,
 	};
 
 	const shape = valueShape(def.type, def.choices);

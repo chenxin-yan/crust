@@ -29,23 +29,18 @@
 interface CompletionFlagBase {
 	/**
 	 * The canonical long name with **no** leading dashes — the same key as
-	 * `DocumentationFlag.name`. Templates prepend `--` when emitting.
+	 * `DocumentationFlag.name`. zsh uses it as the value prompt.
 	 */
 	name: string;
 	/**
-	 * Single-character short alias with **no** leading dash, when present.
-	 * Templates prepend `-` when emitting.
+	 * Every accepted spelling with dashes, copied from
+	 * `DocumentationFlag.spellings`: single-dash forms, `--` names and
+	 * aliases, then `--no-` negations. Core reserves the `no-` prefix for
+	 * negation, so templates tell negations apart by it.
 	 */
-	short?: string;
-	/**
-	 * Additional long aliases with **no** leading dashes, when the flag
-	 * definition declares any. Templates prepend `--` when emitting.
-	 */
-	aliases?: readonly string[];
+	spellings: readonly string[];
 	/** Human-readable description, ANSI-stripped, ready to embed verbatim. */
 	description?: string;
-	/** `true` when the flag accepts generated `--no-<name>` spellings. */
-	negatable: boolean;
 	/**
 	 * `true` when the flag is repeatable (`multiple: true` in `FlagDef`).
 	 * Templates use this to relax mutual-exclusion or de-dup logic where

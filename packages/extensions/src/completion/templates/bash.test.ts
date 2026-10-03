@@ -2,6 +2,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { Crust, defineCommand } from "@crustjs/core";
+import { buildCommandDocumentation } from "@crustjs/core/tooling";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 
 import {
@@ -9,6 +11,7 @@ import {
 	runBoundedProcess,
 } from "../../../../crust/tests/bounded-process.ts";
 import type { CompletionCommand } from "../spec.ts";
+import { walkCommand } from "../walker.ts";
 import { renderBash } from "./bash.ts";
 
 // Single-quote a value for bash, escaping embedded single quotes.
@@ -63,8 +66,8 @@ const fixture: CompletionCommand = {
 	name: "mycli",
 	description: "Test CLI",
 	flags: [
-		{ name: "help", short: "h", type: "boolean", takesValue: false, negatable: false },
-		{ name: "version", short: "v", type: "boolean", takesValue: false, negatable: false },
+		{ name: "help", spellings: ["-h", "--help"], type: "boolean", takesValue: false },
+		{ name: "version", spellings: ["-v", "--version"], type: "boolean", takesValue: false },
 	],
 	args: [],
 	subCommands: [
@@ -72,12 +75,12 @@ const fixture: CompletionCommand = {
 			name: "build",
 			description: "Build artifact",
 			flags: [
-				{ name: "release", type: "boolean", takesValue: false, negatable: false },
+				{ name: "release", spellings: ["--release"], type: "boolean", takesValue: false },
 				{
 					name: "target",
+					spellings: ["--target"],
 					type: "string",
 					takesValue: true,
-					negatable: false,
 					choices: ["browser", "bun", "node"],
 				},
 			],
@@ -97,9 +100,9 @@ const fixture: CompletionCommand = {
 					flags: [
 						{
 							name: "env",
+							spellings: ["--env"],
 							type: "string",
 							takesValue: true,
-							negatable: false,
 							choices: ["dev", "staging", "prod"],
 						},
 					],
@@ -321,27 +324,27 @@ describe("renderBash — url/path/json value-flag handling", () => {
 		flags: [
 			{
 				name: "out",
+				spellings: ["--out"],
 				type: "string",
 				takesValue: true,
-				negatable: false,
 				valueCompletion: "files",
 			},
 			{
 				name: "endpoint",
+				spellings: ["--endpoint"],
 				type: "string",
 				takesValue: true,
-				negatable: false,
 				valueCompletion: "none",
 			},
 			{
 				name: "config",
+				spellings: ["--config"],
 				type: "string",
 				takesValue: true,
-				negatable: false,
 				valueCompletion: "none",
 			},
 			// Plain string flag — must not regress to a typed branch.
-			{ name: "name", type: "string", takesValue: true, negatable: false },
+			{ name: "name", spellings: ["--name"], type: "string", takesValue: true },
 		],
 		args: [],
 		subCommands: [],
@@ -485,29 +488,23 @@ describe("renderBash · mixed flag value modes", () => {
 				flags: [
 					{
 						name: "mode",
-						short: "m",
-						aliases: ["flavor"],
+						spellings: ["-m", "--mode", "--flavor"],
 						type: "string",
 						takesValue: true,
-						negatable: false,
 						choices: ["fast", "slow"],
 					},
 					{
 						name: "out",
-						short: "o",
-						aliases: ["output"],
+						spellings: ["-o", "--out", "--output"],
 						type: "string",
 						takesValue: true,
-						negatable: false,
 						valueCompletion: "files",
 					},
 					{
 						name: "endpoint",
-						short: "e",
-						aliases: ["url"],
+						spellings: ["-e", "--endpoint", "--url"],
 						type: "string",
 						takesValue: true,
-						negatable: false,
 						valueCompletion: "none",
 					},
 				],
@@ -559,5 +556,45 @@ describe("renderBash · mixed flag value modes", () => {
 	])("%s", async (_label, words, expected) => {
 		const completions = await runBashCompletion(scriptPath, "_mycli", ["mycli", ...words], cwd);
 		expect(completions).toEqual(expected);
+	});
+});
+
+/** Core accepts a one-character alias with one dash (`-P`); completion reads that from the doc model. */
+describe("renderBash · one-character alias spellings", () => {
+	let tmpDir: string;
+	let scriptPath: string;
+
+	beforeAll(async () => {
+		const app = new Crust("mycli")
+			.flags({ name: "port", type: "number", short: "p", aliases: ["P", "listen"] })
+			.add(
+				defineCommand("serve", (serve) =>
+					serve.add(defineCommand("start", (start) => start.action(() => {}))),
+				),
+			);
+		const spec = walkCommand(buildCommandDocumentation(await app.snapshot()));
+		tmpDir = await mkdtemp(join(tmpdir(), "bash-one-char-"));
+		scriptPath = join(tmpDir, "mycli-completion.bash");
+		await writeFile(scriptPath, renderBash(spec, "mycli", "1.0.0"), "utf8");
+	});
+
+	afterAll(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("offers `-P` beside the other spellings", async () => {
+		expect(await runBashCompletion(scriptPath, "_mycli", ["mycli", "-"])).toEqual([
+			"--P",
+			"--listen",
+			"--port",
+			"-P",
+			"-p",
+		]);
+	});
+
+	it("routes past the value of `-P`", async () => {
+		expect(
+			await runBashCompletion(scriptPath, "_mycli", ["mycli", "-P", "9090", "serve", ""]),
+		).toEqual(["start"]);
 	});
 });

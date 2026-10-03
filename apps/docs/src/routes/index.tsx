@@ -8,6 +8,7 @@ import HIGHLIGHTED from "virtual:landing-twoslash";
 import { Code } from "@/components/landing/Code";
 import Showcase from "@/components/landing/Showcase";
 import { baseOptions, roadmapUrl } from "@/lib/layout.shared";
+import { PACKAGES, type PackageSlug } from "@/lib/packages";
 import { buildPageMeta } from "@/lib/seo";
 
 // A head link, unlike a side-effect import, keeps the landing theme off docs pages.
@@ -50,83 +51,29 @@ type LandingModule =
 	| { pkg: string; desc: string; doc: string; upcoming?: never }
 	| { pkg: string; desc: string; doc?: never; upcoming: true };
 
-// site.test.ts checks that every module page has a linked entry.
+// Descriptions come from package.json; site.test.ts checks that every module page has a linked entry.
+const moduleEntry = (slug: PackageSlug): LandingModule => ({
+	pkg: PACKAGES[slug].name,
+	desc: PACKAGES[slug].description,
+	doc: `modules/${slug}`,
+});
+
 export const MODULES: readonly LandingModule[] = [
-	{
-		pkg: "@crustjs/core",
-		desc: "Commands, Contexts, Extensions, execution",
-		doc: "modules/core",
-	},
-	{
-		pkg: "@crustjs/extensions",
-		desc: "Official Crust Extensions",
-		doc: "modules/extensions",
-	},
-	{
-		pkg: "@crustjs/crust",
-		desc: "CLI build and distribution tooling",
-		doc: "modules/crust",
-	},
-	{
-		pkg: "@crustjs/create",
-		desc: "Scaffolding library for create-* tools",
-		doc: "modules/create",
-	},
-	{
-		pkg: "@crustjs/progress",
-		desc: "Progress indicators",
-		doc: "modules/progress",
-	},
-	{
-		pkg: "@crustjs/tui",
-		desc: "OpenTUI adapter",
-		doc: "modules/tui",
-	},
-	{
-		pkg: "@crustjs/effect",
-		desc: "Effect.ts adaptor",
-		doc: "modules/effect",
-	},
-	{
-		pkg: "@crustjs/env",
-		desc: "Typed, validated environment variables",
-		doc: "modules/env",
-	},
-	{
-		pkg: "@crustjs/prompts",
-		desc: "Interactive prompts",
-		doc: "modules/prompts",
-	},
-	{
-		pkg: "@crustjs/style",
-		desc: "Terminal styling and layout",
-		doc: "modules/style",
-	},
-	{
-		pkg: "@crustjs/store",
-		desc: "Typed config, data, state, and cache persistence",
-		doc: "modules/store",
-	},
-	{
-		pkg: "@crustjs/skills",
-		desc: "Package and install agent skills",
-		doc: "modules/skills",
-	},
-	{
-		pkg: "@crustjs/man",
-		desc: "Generate mdoc(7) manual pages",
-		doc: "modules/man",
-	},
-	{
-		pkg: "@crustjs/testing",
-		desc: "CLI testing helpers",
-		doc: "modules/testing",
-	},
-	{
-		pkg: "@crustjs/mcp",
-		desc: "Serve commands as MCP tools over stdio",
-		doc: "modules/mcp",
-	},
+	moduleEntry("core"),
+	moduleEntry("extensions"),
+	moduleEntry("crust"),
+	moduleEntry("create"),
+	moduleEntry("progress"),
+	moduleEntry("tui"),
+	moduleEntry("effect"),
+	moduleEntry("env"),
+	moduleEntry("prompts"),
+	moduleEntry("style"),
+	moduleEntry("store"),
+	moduleEntry("skills"),
+	moduleEntry("man"),
+	moduleEntry("testing"),
+	moduleEntry("mcp"),
 	{
 		pkg: "@crustjs/render",
 		desc: "Terminal content rendering",

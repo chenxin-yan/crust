@@ -83,8 +83,9 @@ export interface DocumentationFlag {
 	/** Canonical flag name (the key in the flags definition), e.g. `"output"`. */
 	readonly name: string;
 	/**
-	 * All accepted CLI spellings with dashes, ordered short, canonical, aliases,
-	 * then negations — e.g. `["-v", "--verbose", "--no-verbose"]`.
+	 * All accepted CLI spellings with dashes, ordered short, one-dash forms of
+	 * one-character names and aliases, canonical, aliases, then negations —
+	 * e.g. `["-v", "-V", "--verbose", "--V", "--no-verbose", "--no-V"]`.
 	 */
 	readonly spellings: readonly string[];
 	/** Single-character short alias without the dash, e.g. `"v"` for `-v`. */
@@ -169,6 +170,7 @@ function documentationFlags(flags: CommandSnapshot["flags"]): readonly Documenta
 			name,
 			spellings: Object.freeze([
 				...(def.short ? [`-${def.short}`] : []),
+				...long.flatMap((spelling) => (spelling.length === 1 ? [`-${spelling}`] : [])),
 				...long.map((spelling) => `--${spelling}`),
 				...(def.negatable ? long.map((spelling) => `--no-${spelling}`) : []),
 			]),

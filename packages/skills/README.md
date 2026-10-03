@@ -1,6 +1,6 @@
 # @crustjs/skills
 
-Package and install agent skills for AI coding assistants.
+Generate and install agent skills for AI coding assistants from Crust commands
 
 ## Install
 

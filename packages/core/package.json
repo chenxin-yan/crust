@@ -1,7 +1,7 @@
 {
 	"name": "@crustjs/core",
 	"version": "0.5.3",
-	"description": "Core library for the Crust CLI framework",
+	"description": "Define, parse, route, and run type-safe CLI commands with Contexts and Extensions",
 	"type": "module",
 	"sideEffects": false,
 	"license": "MIT",

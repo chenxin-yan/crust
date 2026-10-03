@@ -1,5 +1,5 @@
 // ────────────────────────────────────────────────────────────────────────────
-// @crustjs/progress — Progress indicators for Crust
+// @crustjs/progress
 // ────────────────────────────────────────────────────────────────────────────
 
 export type { ProgressHandle, ProgressOptions } from "./progress.ts";

@@ -1,6 +1,6 @@
 # @crustjs/store
 
-DX-first, typed persistence for CLI apps with config/data/state/cache separation
+Typed JSON persistence for CLI config, data, state, and cache files
 
 ## Install
 

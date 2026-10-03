@@ -73,12 +73,12 @@ describe("--no- negation", () => {
 	const spec: CompletionCommand = {
 		name: "mycli",
 		flags: [
-			{ name: "force", type: "boolean", takesValue: false, negatable: true },
+			{ name: "force", spellings: ["--force", "--no-force"], type: "boolean", takesValue: false },
 			{
 				name: "color",
+				spellings: ["--color"],
 				type: "boolean",
 				takesValue: false,
-				negatable: false,
 			},
 		],
 		args: [],
@@ -118,12 +118,12 @@ describe("renderBash · behavioural · -- and --name=value", () => {
 				flags: [
 					{
 						name: "target",
+						spellings: ["--target"],
 						type: "string",
 						takesValue: true,
-						negatable: false,
 						choices: ["browser", "node"],
 					},
-					{ name: "out", type: "string", takesValue: true, negatable: false },
+					{ name: "out", spellings: ["--out"], type: "string", takesValue: true },
 				],
 				args: [],
 				subCommands: [{ name: "deploy", flags: [], args: [], subCommands: [] }],
@@ -243,7 +243,7 @@ describe("renderFish · ordered subcommand predicate", () => {
 				subCommands: [
 					{
 						name: "deploy", // same word at depth 2 and depth 1 below
-						flags: [{ name: "fast", type: "boolean", takesValue: false, negatable: false }],
+						flags: [{ name: "fast", spellings: ["--fast"], type: "boolean", takesValue: false }],
 						args: [],
 						subCommands: [],
 					},
@@ -251,7 +251,7 @@ describe("renderFish · ordered subcommand predicate", () => {
 			},
 			{
 				name: "deploy", // depth-1 deploy
-				flags: [{ name: "slow", type: "boolean", takesValue: false, negatable: false }],
+				flags: [{ name: "slow", spellings: ["--slow"], type: "boolean", takesValue: false }],
 				args: [],
 				subCommands: [],
 			},

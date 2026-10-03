@@ -1,6 +1,6 @@
 # @crustjs/tui
 
-OpenTUI adapter for Crust commands. This package is Bun-only.
+Bun-only OpenTUI renderer adapter for Crust Command Actions
 
 ## Install
 

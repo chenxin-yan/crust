@@ -1,7 +1,7 @@
 {
 	"name": "create-crust",
 	"version": "0.5.3",
-	"description": "Scaffold a new Crust CLI project.",
+	"description": "Scaffold a new Crust CLI project for Bun, Node.js, or Deno",
 	"type": "module",
 	"sideEffects": false,
 	"license": "MIT",

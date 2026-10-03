@@ -1,6 +1,6 @@
 # @crustjs/env
 
-Typed, validated environment variables as a Crust Context, documented in help and man pages.
+Typed, validated environment variables as a Crust Context, documented in help and man pages
 
 ```ts
 import { defineEnv } from "@crustjs/env";
