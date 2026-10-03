@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/progress",
-	"version": "0.1.4",
+	"version": "0.1.5",
 	"description": "Spinners and determinate progress indicators for terminal tasks",
 	"type": "module",
 	"sideEffects": false,

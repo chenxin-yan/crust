@@ -1,5 +1,23 @@
 # @crustjs/core
 
+## 0.5.4
+
+### Patch Changes
+
+- [#483](https://github.com/chenxin-yan/crust/pull/483) [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Invalid command aliases now throw a `DEFINITION` error with `details` (`reason: "invalid-alias"`), like every other definition error.
+
+- [#483](https://github.com/chenxin-yan/crust/pull/483) [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `defineCommand(name, config)` called from JavaScript without a recipe now throws a `DEFINITION` error (`reason: "missing-recipe"`) instead of a later `TypeError` from `.add()`.
+
+- [#483](https://github.com/chenxin-yan/crust/pull/483) [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - URL, path, and JSON parse errors now name the flag or argument that failed (e.g. `Invalid URL for --base: "x"`, `Path for <dir> cannot be empty`) and keep the original error as `cause`. A `~` path is now expanded correctly when the home directory contains `$`.
+
+- [#483](https://github.com/chenxin-yan/crust/pull/483) [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Dynamic flag and argument definitions with a default outside `choices`, or a multi-character `short`, now throw `DEFINITION` errors that name the definition and carry `details` (`reason: "default-outside-choices"` or `"invalid-short"`).
+
+- [#483](https://github.com/chenxin-yan/crust/pull/483) [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Unknown-flag `PARSE` errors from argv now carry `details: { flag, reason: "unknown-flag" }`, matching structured `run()` input.
+
+- [#484](https://github.com/chenxin-yan/crust/pull/484) [`1f7b266`](https://github.com/chenxin-yan/crust/commit/1f7b26648e412d0c6170c2866fb6ec97aa907f14) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Add `isInstalledCommandName()` and `INSTALLED_COMMAND_NAME_RULE` to `@crustjs/core/tooling`: the one rule for installed command names (letters, digits, `.`, `_`, and `-`, starting with a letter or digit) shared by `crust build`, `create-crust`, and `completion()`.
+
+- [#484](https://github.com/chenxin-yan/crust/pull/484) [`1f7b266`](https://github.com/chenxin-yan/crust/commit/1f7b26648e412d0c6170c2866fb6ec97aa907f14) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `DocumentationFlag.spellings` now lists the single-dash form of one-character names and aliases, which the parser already accepts. `{ name: "port", short: "p", aliases: ["P", "listen"] }` documents `-p, -P, --port, --P, --listen`, so help, man pages, and skills show `-P` too.
+
 ## 0.5.3
 
 ### Patch Changes

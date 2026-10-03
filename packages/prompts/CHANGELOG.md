@@ -1,5 +1,17 @@
 # @crustjs/prompts
 
+## 0.2.6
+
+### Patch Changes
+
+- [#483](https://github.com/chenxin-yan/crust/pull/483) [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - List prompts with no choices no longer render a stray `...` scroll indicator.
+
+- [#483](https://github.com/chenxin-yan/crust/pull/483) [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `filter()` now renders choice `hint`s, matching `select()`, `multiselect()`, and `multifilter()`.
+
+- [#483](https://github.com/chenxin-yan/crust/pull/483) [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `password()` now shows one mask character per typed character, including emoji and other astral code points.
+- Updated dependencies [[`1f7b266`](https://github.com/chenxin-yan/crust/commit/1f7b26648e412d0c6170c2866fb6ec97aa907f14)]:
+  - @crustjs/style@0.3.6
+
 ## 0.2.5
 
 ### Patch Changes

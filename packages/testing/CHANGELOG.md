@@ -1,5 +1,11 @@
 # @crustjs/testing
 
+## 0.1.6
+
+### Patch Changes
+
+- [#483](https://github.com/chenxin-yan/crust/pull/483) [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Require a caret-compatible `@crustjs/prompts` peer (a caret range on the current `@crustjs/prompts` release instead of `0.x`), so installs no longer accept prompts releases older than 0.2.0 that lack the `withTerminalIO` and `@crustjs/prompts/testing` APIs `@crustjs/testing/interactive` imports.
+
 ## 0.1.5
 
 ### Patch Changes

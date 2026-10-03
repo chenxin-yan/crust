@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/extensions",
-	"version": "0.5.3",
+	"version": "0.5.4",
 	"description": "Official Crust Extensions for help, version, completion, typo hints, color, and updates",
 	"type": "module",
 	"sideEffects": false,

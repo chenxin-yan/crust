@@ -1,5 +1,13 @@
 # @crustjs/progress
 
+## 0.1.5
+
+### Patch Changes
+
+- [#484](https://github.com/chenxin-yan/crust/pull/484) [`1f7b266`](https://github.com/chenxin-yan/crust/commit/1f7b26648e412d0c6170c2866fb6ec97aa907f14) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Update the package description shown on npm and in the README.
+- Updated dependencies [[`1f7b266`](https://github.com/chenxin-yan/crust/commit/1f7b26648e412d0c6170c2866fb6ec97aa907f14)]:
+  - @crustjs/style@0.3.6
+
 ## 0.1.4
 
 ### Patch Changes

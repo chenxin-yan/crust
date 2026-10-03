@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/prompts",
-	"version": "0.2.5",
+	"version": "0.2.6",
 	"description": "Interactive input, password, confirm, select, and filter prompts for the terminal",
 	"type": "module",
 	"sideEffects": false,

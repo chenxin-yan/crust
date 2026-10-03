@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/store",
-	"version": "0.4.3",
+	"version": "0.4.4",
 	"description": "Typed JSON persistence for CLI config, data, state, and cache files",
 	"type": "module",
 	"sideEffects": false,

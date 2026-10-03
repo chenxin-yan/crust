@@ -1,5 +1,11 @@
 # @crustjs/mcp
 
+## 0.1.3
+
+### Patch Changes
+
+- [#483](https://github.com/chenxin-yan/crust/pull/483) [`e7db3a0`](https://github.com/chenxin-yan/crust/commit/e7db3a0dec77bd5bff375275daa3c83e5a350444) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Tool input schemas now omit defaults containing `Infinity`, `-Infinity`, or `NaN` instead of advertising them as `null`.
+
 ## 0.1.2
 
 ### Patch Changes

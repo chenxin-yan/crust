@@ -1,5 +1,11 @@
 # @crustjs/man
 
+## 0.5.4
+
+### Patch Changes
+
+- [#484](https://github.com/chenxin-yan/crust/pull/484) [`1f7b266`](https://github.com/chenxin-yan/crust/commit/1f7b26648e412d0c6170c2866fb6ec97aa907f14) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `man()` now validates the root command name with the same installed command name rule as `crust build` (letters, digits, `.`, `_`, and `-`, starting with a letter or digit), instead of only rejecting path separators.
+
 ## 0.5.3
 
 No changes in this release.
