@@ -52,6 +52,14 @@
 					"items": {
 						"type": "string"
 					}
+				},
+				"external": {
+					"description": "Packages left out of a node or bun runtime package's bundle and shipped as `dependencies` of the staged root package with their package.json `dependencies` range, e.g. native addons, packages the CLI reads files from or runs, or very large dependencies. Each must be a `dependencies` key with a publishable range (no workspace:, catalog:, file:, link:, or portal:); @crustjs/* packages are rejected. Rejected for binaries and for Deno.",
+					"type": "array",
+					"uniqueItems": true,
+					"items": {
+						"type": "string"
+					}
 				}
 			}
 		}

@@ -47,6 +47,7 @@ function createPlan(
 		outDir: join(cwd, ".crust", "artifacts"),
 		userPackageJson: packageJson,
 		include: [],
+		external: [],
 		...overrides,
 	};
 }
@@ -436,6 +437,30 @@ describe("runDistributeBuild", () => {
 			),
 		).toMatchObject({ packages: [], publishOrder: ["root"] });
 		expect(readFileSync(join(plan.stageDir, "root", "LICENSE"), "utf8")).toBe("test license\n");
+	});
+
+	it("ships crust.external names as root dependencies, in crust.external order", async () => {
+		const plan = createPlan(
+			tmpDir,
+			{
+				name: "@scope/node-cli",
+				version: "0.3.0",
+				dependencies: {
+					"@crustjs/core": "^1.0.0",
+					"better-sqlite3": "^12.0.0",
+					typescript: "7.0.2",
+				},
+			},
+			{ runtime: "node", external: ["typescript", "better-sqlite3"] },
+		);
+
+		await runDistributeBuild(plan, rootOnlyDistribution, io);
+
+		const { dependencies } = readJson<{ dependencies?: Record<string, string> }>(
+			join(plan.stageDir, "root", "package.json"),
+		);
+		expect(dependencies).toEqual({ typescript: "7.0.2", "better-sqlite3": "^12.0.0" });
+		expect(Object.keys(dependencies ?? {})).toEqual(["typescript", "better-sqlite3"]);
 	});
 
 	it("copies common license variants into every package", async () => {
@@ -886,8 +911,15 @@ describe("runDistributeBuild", () => {
 		await stage({ peerDependencies: { "@crustjs/core": "^0.3.5" } });
 		expect(rootPackage()).not.toHaveProperty("peerDependenciesMeta");
 
-		// Staged manifests publish as written, so workspace and catalog ranges must not leak.
-		for (const range of ["workspace:^", "catalog:", "catalog:peers"]) {
+		// Staged manifests publish as written, so workspace, catalog, and local ranges must not leak.
+		for (const range of [
+			"workspace:^",
+			"catalog:",
+			"catalog:peers",
+			"file:../core",
+			"link:../core",
+			"portal:../core",
+		]) {
 			await expect(stage({ peerDependencies: { "@crustjs/core": range } })).rejects.toThrow(
 				`peerDependencies["@crustjs/core"] must be a publishable range, not ${JSON.stringify(range)}`,
 			);

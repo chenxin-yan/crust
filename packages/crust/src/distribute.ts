@@ -51,6 +51,8 @@ type PublishPackageMetadata = {
 } & { [K in (typeof METADATA_KEYS)[number]]?: JsonValue };
 
 type RootPublishPackageJson = PublishPackageMetadata & {
+	/** The `crust.external` packages, with the user's ranges; absent when there are none. */
+	dependencies?: Record<string, string>;
 	/** Absent for a root-only package: npm treats `{}` and a missing field alike, but the manifest stays honest. */
 	optionalDependencies?: Record<string, string>;
 	/** The user's `exports`, carried only when present and every target is staged; see `validateStagedExports`. */
@@ -89,6 +91,8 @@ type DistributionMetadata = {
 	/** The user's `peerDependencies`/`peerDependenciesMeta`, root package only; publishable ranges. */
 	peerDependencies?: Record<string, string>;
 	peerDependenciesMeta?: JsonObject;
+	/** `crust.external` names with their `dependencies` ranges, in `crust.external` order. */
+	dependencies?: Record<string, string>;
 };
 
 export type DistributionTarget<T extends string = string> = {
@@ -190,6 +194,7 @@ function buildDistributionRootPackageJson(
 		type: "module",
 		files: ["bin", ...artifactDirs],
 		bin: Object.fromEntries(commands.map((command) => [command, `bin/${command}.js`])),
+		dependencies: metadata.dependencies,
 		...(targets.length > 0
 			? {
 					optionalDependencies: Object.fromEntries(
@@ -305,10 +310,27 @@ function validateStagedExports(
 }
 
 /**
+ * The staged manifests go to npm as written, so a range the registry cannot
+ * resolve (a workspace, catalog, or local path protocol) would leak into it.
+ */
+export function assertPublishableRange(
+	range: JsonValue | undefined,
+	label: string,
+): asserts range is string {
+	if (
+		range === undefined ||
+		!isString(range) ||
+		/^(workspace|catalog|file|link|portal):/.test(range)
+	) {
+		throw new Error(
+			`${label} must be a publishable range, not ${JSON.stringify(range)}.\n  crust build publishes the staged root package as written; workspace:, catalog:, file:, link:, and portal: ranges are never rewritten.`,
+		);
+	}
+}
+
+/**
  * Carries `peerDependencies` (and `peerDependenciesMeta`) into the root package
  * so a library `exports` entry can declare what its published types import.
- * Ranges must be publishable as written: the staged manifests go to npm
- * directly, so `workspace:` and `catalog:` ranges would leak into the registry.
  */
 function validatePeerDependencies(
 	peerDependencies: JsonValue,
@@ -319,11 +341,7 @@ function validatePeerDependencies(
 	}
 	const ranges: Record<string, string> = {};
 	for (const [name, range] of Object.entries(peerDependencies)) {
-		if (!isString(range) || /^(workspace|catalog):/.test(range)) {
-			throw new Error(
-				`package.json peerDependencies[${JSON.stringify(name)}] must be a publishable range, not ${JSON.stringify(range)}.\n  crust build publishes the staged root package as written; workspace: and catalog: ranges are never rewritten.`,
-			);
-		}
+		assertPublishableRange(range, `package.json peerDependencies[${JSON.stringify(name)}]`);
 		ranges[name] = range;
 	}
 	if (peerDependenciesMeta === undefined) return { peerDependencies: ranges };
@@ -381,7 +399,28 @@ function validatePackageNameLength(packageName: string): void {
 	}
 }
 
-function resolveDistributionMetadata(pkgJson: IdentifiedPackageJson): DistributionMetadata {
+/** `crust.external` ranges, already validated by `planBuild`; re-asserted for their type. */
+function externalDependencies(
+	pkgJson: IdentifiedPackageJson,
+	external: readonly string[],
+): Record<string, string> {
+	const dependencies =
+		pkgJson.dependencies !== undefined && isJsonObject(pkgJson.dependencies)
+			? pkgJson.dependencies
+			: {};
+	return Object.fromEntries(
+		external.map((name) => {
+			const range = dependencies[name];
+			assertPublishableRange(range, `package.json dependencies[${JSON.stringify(name)}]`);
+			return [name, range];
+		}),
+	);
+}
+
+function resolveDistributionMetadata(
+	pkgJson: IdentifiedPackageJson,
+	external: readonly string[],
+): DistributionMetadata {
 	validatePackageNameLength(pkgJson.name);
 
 	return {
@@ -393,6 +432,7 @@ function resolveDistributionMetadata(pkgJson: IdentifiedPackageJson): Distributi
 		...(pkgJson.peerDependencies !== undefined
 			? validatePeerDependencies(pkgJson.peerDependencies, pkgJson.peerDependenciesMeta)
 			: {}),
+		...(external.length > 0 ? { dependencies: externalDependencies(pkgJson, external) } : {}),
 	};
 }
 
@@ -529,6 +569,8 @@ export type DistributeBuildPlan = {
 	userPackageJson: IdentifiedPackageJson;
 	/** Validated `crust.include` entries; directories staged like Extension artifacts. */
 	include: readonly string[];
+	/** Validated `crust.external` names, shipped as root `dependencies`; empty for binaries. */
+	external: readonly string[];
 };
 
 /**
@@ -574,7 +616,7 @@ export async function runDistributeBuild<T extends string>(
 	io: InvocationIO,
 	build?: Record<string, BuildReport>,
 ): Promise<BuildArtifact[]> {
-	const sourceMetadata = resolveDistributionMetadata(plan.userPackageJson);
+	const sourceMetadata = resolveDistributionMetadata(plan.userPackageJson, plan.external);
 	const commands = plan.entries.map((entry) => entry.command);
 	const table = distribution.table;
 	// A Node binary embeds the Node that engines.node was checked against; its

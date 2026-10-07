@@ -98,7 +98,7 @@ Crust builds Node.js binaries with [tsdown's executable support](https://tsdown.
 
 These are build requirements, not your users' requirements: `engines.node` can keep your own range (for example `>=24`) as long as the build machine's Node.js satisfies it. Binary packages do not repeat `engines.node`, since running the executable needs no Node.js; the npm launcher keeps its usual Node.js requirement. A root package that also publishes library `exports` keeps `engines.node`, because consumers import that code on their own Node.js.
 
-Every command is its own single-entry executable. Bun first bundles it for Node.js exactly like a Node.js runtime package, so `import.meta.main` and `require.main === module` stay true only in the command's own entry (ESM or CommonJS) and env files embed the same `PUBLIC_*` values; tsdown then turns that bundle into the executable. Bun is therefore required even with `--no-validate`, checked before replacing `.crust/`. Application dependencies are bundled into it; a build fails if an import other than a Node.js built-in would be left for the runtime to resolve. Native addons, computed imports, and `crust.bunPlugins` are not supported.
+Every command is its own single-entry executable. Bun first bundles it for Node.js exactly like a Node.js runtime package, so `import.meta.main` and `require.main === module` stay true only in the command's own entry (ESM or CommonJS) and env files embed the same `PUBLIC_*` values; tsdown then turns that bundle into the executable. Bun is therefore required even with `--no-validate`, checked before replacing `.crust/`. Application dependencies are bundled into it; a build fails if an import other than a Node.js built-in would be left for the runtime to resolve. Native addons, computed imports, `crust.bunPlugins`, and `crust.external` are not supported.
 
 For each target, tsdown downloads the official Node.js archive of exactly that version once, verifies its checksum, unpacks it, and caches it. Crust does this for every target before replacing `.crust/`, so a failed download or a missing unpacking tool keeps the previous build. Archives are unpacked with the host's `tar`, except Windows targets on non-Windows hosts, which need `unzip`; GNU tar, as on most Linux hosts, also needs `xz` for Linux targets. On Windows, put the native ZIP-capable `tar` before Git Bash's GNU tar on `PATH` (for example, use PowerShell with the standard Windows path). Cached targets need none of these tools. macOS executables are only code-signed when built on macOS; sign cross-built ones yourself before running them on Apple silicon.
 
@@ -134,7 +134,7 @@ To build, you need:
 - `@crustjs/core` from the same release as `@crustjs/crust`, or newer. The bundle includes your installed core, and older releases do not recognize Crust's Deno package marker: their packages need `--allow-env` and obey build-only snapshot variables.
 - Network access on a cold Deno cache: `deno bundle` downloads its bundler once.
 
-`--minify`, `--env-file`, `crust.bunPlugins`, `--target`, and `crust.targets` are rejected. Load configuration at runtime instead, for example with `deno run --env-file`.
+`--minify`, `--env-file`, `crust.bunPlugins`, `crust.external`, `--target`, and `crust.targets` are rejected. Load configuration at runtime instead, for example with `deno run --env-file`.
 
 Each command becomes `bin/<command>.js`, with no shebang and no permission flags. The declared command retains its `import.meta.main` behavior, so it can guard its `execute()` call; imported dependencies are not main modules. After publishing, users run a command by package and bin name, and grant the permissions it needs:
 
@@ -245,6 +245,36 @@ Runtime packages can also be archived, but must retain the contents/layout of `.
 Create `templates/` in your project, then build. Read the shipped copy with `resolveArtifactDir("templates")` from `@crustjs/core`, rather than a path relative to the working directory. It works from the staged tree, an npm install, or a standalone executable. See [artifact paths](/docs/api/crust#resolveartifactdirname).
 
 Extensions such as `man()`, `skill()`, and `completion()` generate their own directories during build preparation. That step runs entry-module top-level code, but not Command Actions. `--no-validate` skips preparation **and those Extension artifacts**; see [Extension artifacts](/docs/modules/crust#extension-artifacts).
+
+### Keep dependencies external
+
+Runtime packages bundle every dependency by default. `crust.external` keeps the named packages out of the bundle and also ships them: they become `dependencies` of the staged root package, with their ranges from your `dependencies`, so npm installs them beside the bundle.
+
+```json title="package.json (partial)"
+{
+  "dependencies": { "better-sqlite3": "^12.0.0", "typescript": "7.0.2" },
+  "crust": {
+    "runtime": "node",
+    "artifact": "package",
+    "external": ["better-sqlite3", "typescript"]
+  }
+}
+```
+
+Use it for packages the CLI imports, runs, or reads files from at runtime:
+
+- native addons such as `better-sqlite3`, whose compiled binary cannot be bundled;
+- packages the CLI spawns or reads files from, such as resolving `typescript/package.json` and running its `tsc`; these need not be imported at all;
+- very large dependencies you would rather install than bundle.
+
+`crust.external` applies to Node and Bun runtime packages only; binaries and Deno reject it. Each entry must be a `dependencies` key with a publishable range, and `@crustjs/*` packages must stay bundled; see [`package.json` configuration](/docs/modules/crust#packagejson-configuration) for the rules and [staged `package.json` files](/docs/modules/crust#staged-packagejson-files) for the output.
+
+Validation executes each entry under Bun before bundling, with dependencies resolved from your project, so externals must be installed when you build. An entry that does not run a Crust app from `@crustjs/core` has no Command Snapshot and needs `--no-validate`.
+
+Limits:
+
+- A named ESM import of a CommonJS external, such as `import { open } from "some-cjs-package"`, may fail on Node.js. Use the default import (`import pkg from "some-cjs-package"`) or `require()`.
+- A third-party package that depends on `@crustjs/core` should stay bundled; as an external it would load its own copy of core.
 
 ### Environment variables
 

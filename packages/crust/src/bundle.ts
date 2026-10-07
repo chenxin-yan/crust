@@ -47,7 +47,7 @@ type BunPluginDriverBuild = {
 	env: "PUBLIC_*";
 } & (
 	| { target: "bun"; compile: { target: string; outfile: string; autoloadBunfig: false } }
-	| { target: "bun" | "node"; format: "esm" }
+	| { target: "bun" | "node"; format: "esm"; external: readonly string[] }
 );
 
 export type BunPluginDriverOptions = {
@@ -107,6 +107,8 @@ export type BundleSettings = {
 	envFiles: readonly string[];
 	/** Bun bundler plugin specifiers; when present the build runs through the generated `Bun.build` driver. */
 	bunPlugins: readonly string[];
+	/** Package names left as bare imports (`crust.external`); runtime packages only. */
+	external: readonly string[];
 };
 
 async function runBunPluginDriver(
@@ -267,7 +269,7 @@ export async function execScriptBuild(
 	settings: BundleSettings,
 	runner: BuildRunner = resolveBunBuildRunner(),
 ): Promise<void> {
-	const { cwd, minify, envFiles } = settings;
+	const { cwd, minify, envFiles, external } = settings;
 	if (settings.bunPlugins.length > 0) {
 		await runBunPluginDriver(
 			{
@@ -276,6 +278,7 @@ export async function execScriptBuild(
 				env: "PUBLIC_*",
 				target,
 				format: "esm",
+				external,
 			},
 			outfilePath,
 			settings,
@@ -294,6 +297,7 @@ export async function execScriptBuild(
 				target,
 				"--format",
 				"esm",
+				...external.flatMap((name) => ["--external", name]),
 				"--outfile",
 				outfilePath,
 				...(minify ? ["--minify"] : []),

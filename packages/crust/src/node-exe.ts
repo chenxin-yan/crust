@@ -303,7 +303,7 @@ export async function execNodeBinaryBuild(
 	entryPath: string,
 	outfilePath: string,
 	target: NodeTarget,
-	settings: Omit<BundleSettings, "bunPlugins">,
+	settings: Omit<BundleSettings, "bunPlugins" | "external">,
 	compiler: NodeBinaryCompiler,
 	bunRunner: BuildRunner,
 	onWarning: (message: string) => void = () => {},
@@ -319,7 +319,7 @@ export async function execNodeBinaryBuild(
 			"node",
 			resolve(cwd, entryPath),
 			bunBundle,
-			{ ...settings, bunPlugins: [] },
+			{ ...settings, bunPlugins: [], external: [] },
 			bunRunner,
 		);
 		await writeFile(

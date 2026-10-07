@@ -36,6 +36,7 @@ import {
 	CRUST_DIR,
 	type DistributeBuildPlan,
 	type Distribution,
+	assertPublishableRange,
 	validatePackageIdentity,
 	runDistributeBuild,
 } from "./distribute.ts";
@@ -91,6 +92,7 @@ export const CRUST_CONFIG_KEYS = [
 	"targets",
 	"bunPlugins",
 	"include",
+	"external",
 ] as const;
 
 /** The `crust` block of the user's package.json, shape-validated. */
@@ -100,6 +102,7 @@ export type CrustConfig = {
 	targets?: string[];
 	bunPlugins?: string[];
 	include?: string[];
+	external?: string[];
 };
 
 function isBuildRuntime(value: JsonValue): value is BuildRuntime {
@@ -174,6 +177,21 @@ export function readCrustConfig(pkg: JsonObject): CrustConfig {
 		}
 		config.include = crust.include;
 	}
+	const external = crust.external;
+	if (external !== undefined) {
+		if (!isStringArray(external)) {
+			throw new Error(
+				'package.json crust.external must be an array of package names from dependencies, e.g. ["better-sqlite3"].',
+			);
+		}
+		const duplicate = external.find((name, index) => external.indexOf(name) !== index);
+		if (duplicate !== undefined) {
+			throw new Error(
+				`package.json crust.external lists ${JSON.stringify(duplicate)} more than once.`,
+			);
+		}
+		config.external = external;
+	}
 	return config;
 }
 
@@ -181,6 +199,60 @@ function hasDependency(pkg: JsonObject, name: string): boolean {
 	return [pkg.dependencies, pkg.devDependencies].some(
 		(deps) => deps !== undefined && isJsonObject(deps) && name in deps,
 	);
+}
+
+const NON_DEPENDENCY_SECTIONS = [
+	"devDependencies",
+	"optionalDependencies",
+	"peerDependencies",
+] as const;
+
+/**
+ * `crust.external` names ship as root `dependencies` of a Node or Bun runtime
+ * package, so each needs a publishable `dependencies` range. Crust packages
+ * stay bundled: core reads `process.env.CRUST_INTERNAL_BUILD`, which the
+ * bundler defines only in bundled code, and an external `@crustjs/*` package
+ * would load a second copy of core.
+ */
+function validateExternal(
+	external: readonly string[],
+	pkg: JsonObject,
+	runtime: BuildRuntime,
+	artifact: ArtifactKind,
+): void {
+	if (external.length === 0) return;
+	if (artifact === "binary") {
+		throw new Error(
+			"package.json crust.external is not supported for standalone binaries (artifact binary).\n  A binary bundles every dependency; remove crust.external or use artifact package.",
+		);
+	}
+	if (runtime === "deno") {
+		throw new Error(
+			"package.json crust.external is not supported with the deno runtime.\n  crust.external applies to Node and Bun runtime packages; remove crust.external or set crust.runtime to node or bun.",
+		);
+	}
+	const dependencies =
+		pkg.dependencies !== undefined && isJsonObject(pkg.dependencies) ? pkg.dependencies : {};
+	for (const name of external) {
+		const quoted = JSON.stringify(name);
+		if (name.startsWith("@crustjs/")) {
+			throw new Error(
+				`package.json crust.external cannot name ${quoted}.\n  Crust packages must stay bundled: core detects a packaged build through a define the bundler injects, and an external Crust package would load a second copy of core.`,
+			);
+		}
+		if (!Object.hasOwn(dependencies, name)) {
+			const sections = NON_DEPENDENCY_SECTIONS.filter((section) => {
+				const deps = pkg[section];
+				return deps !== undefined && isJsonObject(deps) && Object.hasOwn(deps, name);
+			});
+			throw new Error(
+				sections.length > 0
+					? `package.json crust.external entry ${quoted} is in ${sections.join(" and ")}, not dependencies.\n  Only dependencies ship with the staged package; move ${quoted} to dependencies.`
+					: `package.json crust.external entry ${quoted} is not in package.json dependencies.\n  crust.external names packages from dependencies, which ship with the staged package; add ${quoted} to dependencies.`,
+			);
+		}
+		assertPublishableRange(dependencies[name], `package.json dependencies[${quoted}]`);
+	}
 }
 
 const DENO_CONFIG_FILES = ["deno.json", "deno.jsonc"] as const;
@@ -446,6 +518,7 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 	validatePackageIdentity(userPackageJson, "package.json");
 	const envFiles = resolveEnvFilePaths(cwd, options.envFiles);
 	const bunPlugins = config.bunPlugins ?? [];
+	const external = config.external ?? [];
 
 	if (artifact === "package" && options.targets?.length) {
 		throw new Error(
@@ -485,6 +558,7 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 			"package.json crust.bunPlugins is not supported for node standalone binaries.\n  Remove crust.bunPlugins, or use artifact package or the bun runtime.",
 		);
 	}
+	validateExternal(external, userPackageJson, runtime, artifact);
 
 	const stageDir = resolve(cwd, CRUST_DIR);
 	const common = {
@@ -495,6 +569,7 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 		envFiles,
 		bunPlugins,
 		include: config.include ?? [],
+		external,
 		outDir: join(stageDir, "artifacts"),
 		stageDir,
 		validate: options.validate ?? true,
@@ -692,12 +767,13 @@ async function prepareEntries(
  * `bin` entry, each the command's bundle (artifact `package`) or a Node
  * launcher (artifact `binary`), plus for binaries one platform package per
  * target holding one executable per command. Command names and source entries
- * come from `bin`; the runtime, artifact, Bun plugins, and extra directories
- * from package.json `crust`. Bundling and Command Snapshots run in bun
- * subprocesses (bun on PATH, or the running Bun executable), so this works
- * under Node as well when Bun is installed; Deno binaries and Deno runtime
- * packages (experimental, deno 2.5.0 or newer) need deno on PATH, and Node
- * binaries a node on PATH that Crust's tsdown can build executables with.
+ * come from `bin`; the runtime, artifact, Bun plugins, extra directories, and
+ * external dependencies from package.json `crust`. Bundling and Command
+ * Snapshots run in bun subprocesses (bun on PATH, or the running Bun
+ * executable), so this works under Node as well when Bun is installed; Deno
+ * binaries and Deno runtime packages (experimental, deno 2.5.0 or newer) need
+ * deno on PATH, and Node binaries a node on PATH that Crust's tsdown can build
+ * executables with.
  *
  * Throws on any failure. Planning and compiler-selection failures (bad
  * options or package.json, a missing or hung compiler, an engines mismatch) leave the
