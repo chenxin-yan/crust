@@ -46,7 +46,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup runtimes
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           install_args: bun node pnpm
 
@@ -74,7 +74,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup runtimes
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           install_args: bun node pnpm
           cache: false
@@ -106,7 +106,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup runtimes
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           install_args: bun node pnpm
           cache: false
@@ -147,7 +147,7 @@ jobs:
       # npm >=11.5.1 uses OIDC; every root/platform package needs its own trusted
       # publisher for release.yml and a one-time initial publication on npmjs.com.
       - name: Setup runtimes
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           install_args: bun node
           cache: false
@@ -179,7 +179,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup runtimes
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           install_args: bun node pnpm
           cache: false
@@ -213,7 +213,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup runtimes
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           install_args: bun node pnpm
 
@@ -261,7 +261,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup runtimes
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           install_args: bun node pnpm
 

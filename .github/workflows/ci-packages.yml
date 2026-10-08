@@ -48,7 +48,7 @@ jobs:
 
       # Build on the shared toolchain, then test the exact consumer runtime floor.
       - name: Setup runtimes
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           install_args: bun node pnpm
 
@@ -85,7 +85,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup runtimes
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -175,7 +175,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup runtimes
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
