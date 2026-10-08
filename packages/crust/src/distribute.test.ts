@@ -453,12 +453,23 @@ describe("runDistributeBuild", () => {
 					tilde: "~1.2.0",
 					alias: "npm:other@^1.0.0",
 					hosted: "github:user/repo",
+					hostedRepo: "user/repo.tgz",
+					hostedRef: "npm/cli#release.tar",
 					remote: "https://example.com/remote.tgz",
 				},
 			},
 			{
 				runtime: "node",
-				external: ["typescript", "better-sqlite3", "tilde", "alias", "hosted", "remote"],
+				external: [
+					"typescript",
+					"better-sqlite3",
+					"tilde",
+					"alias",
+					"hosted",
+					"hostedRepo",
+					"hostedRef",
+					"remote",
+				],
 			},
 		);
 
@@ -473,6 +484,8 @@ describe("runDistributeBuild", () => {
 			tilde: "~1.2.0",
 			alias: "npm:other@^1.0.0",
 			hosted: "github:user/repo",
+			hostedRepo: "user/repo.tgz",
+			hostedRef: "npm/cli#release.tar",
 			remote: "https://example.com/remote.tgz",
 		});
 		expect(Object.keys(dependencies ?? {})).toEqual([
@@ -481,6 +494,8 @@ describe("runDistributeBuild", () => {
 			"tilde",
 			"alias",
 			"hosted",
+			"hostedRepo",
+			"hostedRef",
 			"remote",
 		]);
 	});
@@ -932,6 +947,11 @@ describe("runDistributeBuild", () => {
 
 		await stage({ peerDependencies: { "@crustjs/core": "^0.3.5" } });
 		expect(rootPackage()).not.toHaveProperty("peerDependenciesMeta");
+
+		for (const range of ["user/repo.tgz", "npm/cli#release.tar"]) {
+			await stage({ peerDependencies: { hosted: range } });
+			expect(rootPackage().peerDependencies).toEqual({ hosted: range });
+		}
 
 		// Staged manifests publish as written, so workspace, catalog, and local ranges must not leak.
 		for (const range of [

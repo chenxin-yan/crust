@@ -399,6 +399,17 @@ describe("planBuild", () => {
 		}
 	});
 
+	it.each(["user/repo.tgz", "user/repo.tar.gz", "npm/cli#release.tar", "npm/cli#releases/v1.tgz"])(
+		"accepts hosted Git shorthand %s in crust.external",
+		(range) => {
+			writePackageJson({
+				dependencies: { hosted: range },
+				crust: { runtime: "node", external: ["hosted"] },
+			});
+			expect(planBuild(runtimePackage, tmpDir).external).toEqual(["hosted"]);
+		},
+	);
+
 	type ExternalRejectedCase = {
 		name: string;
 		pkg: Record<string, JsonValue>;
@@ -492,6 +503,11 @@ describe("planBuild", () => {
 			"~/native",
 			"C:\\native",
 			"native.tgz",
+			"native.tar.gz",
+			"native.tar",
+			"./vendor/native.tgz",
+			"vendor/packages/native.tgz",
+			"vendor\\native.tgz",
 			1,
 		].map((range): ExternalRejectedCase => ({
 			name: `the dependency range ${JSON.stringify(range)}`,

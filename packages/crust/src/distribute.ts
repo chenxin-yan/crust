@@ -312,8 +312,8 @@ function validateStagedExports(
 /**
  * The staged manifests go to npm as written, so a range the registry cannot
  * resolve (a workspace, catalog, or local path protocol) would leak into it.
- * Bare paths and scheme-less tarball names are local too: npm-package-arg
- * resolves them as file specs, which point at the publishing machine's disk.
+ * Bare paths and scheme-less tarball names are local too, except GitHub
+ * owner/repo[#ref] shorthand: npm resolves hosted Git before its file fallback.
  */
 export function assertPublishableRange(
 	range: JsonValue | undefined,
@@ -323,7 +323,9 @@ export function assertPublishableRange(
 		range === undefined ||
 		!isString(range) ||
 		/^(?:(?:workspace|catalog|file|link|portal):|[.]|~[/\\]|[/\\]|[a-zA-Z]:)/.test(range) ||
-		(!/^[a-z][a-z+]*:/i.test(range) && /[.](?:tgz|tar\.gz|tar)$/i.test(range))
+		(!/^[a-z][a-z+]*:/i.test(range) &&
+			!/^[^@\s/:#\\]+\/[^@\s/:#\\]+(?:#.*)?$/.test(range) &&
+			/[.](?:tgz|tar\.gz|tar)$/i.test(range))
 	) {
 		throw new Error(
 			`${label} must be a publishable range, not ${JSON.stringify(range)}.\n  crust build publishes the staged root package as written; workspace:, catalog:, file:, link:, portal:, and local path ranges are never rewritten.`,
