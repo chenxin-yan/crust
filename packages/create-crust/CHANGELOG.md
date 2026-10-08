@@ -1,5 +1,12 @@
 # create-crust
 
+## 0.5.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @crustjs/core@0.5.5
+
 ## 0.5.4
 
 ### Patch Changes
