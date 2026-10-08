@@ -129,7 +129,7 @@ To ship a library alongside the CLI:
 
 - `exports` targets must be `./` paths to staged files: a `crust.include` file, an Extension artifact, or `./package.json`. Nested conditions and `null` are supported; wildcards, fallback arrays, missing files, and `.`, `..`, `node_modules`, or empty segments are rejected.
 - Included files are copied, not transformed. A CommonJS source package needs an included nested `package.json` such as `dist/package.json` with `{"type":"commonjs"}`, or explicit `.cjs`/`.d.cts` extensions.
-- Peer ranges are published as written: `workspace:`, `catalog:`, `file:`, `link:`, and `portal:` ranges are rejected. `peerDependenciesMeta` entries must name declared peers.
+- Peer ranges are published as written: `workspace:`, `catalog:`, `file:`, `link:`, and `portal:` ranges are rejected, as are local paths (`./native`, `../native`, `/opt/native`, `~/native`) and local tarballs (`native.tgz`). `peerDependenciesMeta` entries must name declared peers.
 
 ## Supported targets
 
@@ -197,7 +197,7 @@ Each `bin` key is an installed command name and each value is the TypeScript ent
 
 `crust.include` entries must be existing directories inside the project, cannot be named `bin`, cannot be inside `.crust`, and cannot reuse an Extension artifact directory name. Names are compared ignoring letter case (`Bin`, `Assets` vs `assets`) because they alias on case-insensitive file systems. Symlinks are copied dereferenced and must resolve inside the project.
 
-Each `crust.external` entry must be listed once and be a key of `dependencies`; a package only in `devDependencies`, `optionalDependencies`, or `peerDependencies` is rejected, as are subpaths and wildcards. Its range must be publishable: `workspace:`, `catalog:`, `file:`, `link:`, and `portal:` ranges are rejected. `@crustjs/*` packages cannot be external: core detects a built package through a value the bundler inlines, and an external Crust package would load a second copy of core. An empty list does nothing. These checks run before `.crust/` is wiped.
+Each `crust.external` entry must be listed once and be a key of `dependencies`; a package only in `devDependencies`, `optionalDependencies`, or `peerDependencies` is rejected, as are subpaths and wildcards. Its range must be publishable, by the same rules as peer ranges above. `@crustjs/*` packages, and npm aliases of them such as `npm:@crustjs/utils@0.2.2`, cannot be external: core detects a built package through a value the bundler inlines, and an external Crust package would load a second copy of core. An empty list does nothing. These checks run before `.crust/` is wiped.
 
 ### Editor completion
 

@@ -441,6 +441,14 @@ describe("planBuild", () => {
 			},
 			error: `package.json crust.external cannot name ${JSON.stringify(name)}`,
 		})),
+		{
+			name: "an npm alias of a Crust package",
+			pkg: {
+				dependencies: { "crust-utils": "npm:@crustjs/utils@0.2.2" },
+				crust: { runtime: "node", artifact: "package", external: ["crust-utils"] },
+			},
+			error: 'package.json crust.external cannot name "crust-utils" (an alias of @crustjs/utils)',
+		},
 		...["devDependencies", "optionalDependencies", "peerDependencies"].map(
 			(section): ExternalRejectedCase => ({
 				name: `a name only in ${section}`,
@@ -478,6 +486,12 @@ describe("planBuild", () => {
 			"file:../native",
 			"link:../native",
 			"portal:../native",
+			"../native",
+			"./native",
+			"/opt/native",
+			"~/native",
+			"C:\\native",
+			"native.tgz",
 			1,
 		].map((range): ExternalRejectedCase => ({
 			name: `the dependency range ${JSON.stringify(range)}`,

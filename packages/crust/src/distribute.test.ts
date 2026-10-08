@@ -449,9 +449,17 @@ describe("runDistributeBuild", () => {
 					"@crustjs/core": "^1.0.0",
 					"better-sqlite3": "^12.0.0",
 					typescript: "7.0.2",
+					// Registry, alias, hosted, and remote tarball specs install anywhere.
+					tilde: "~1.2.0",
+					alias: "npm:other@^1.0.0",
+					hosted: "github:user/repo",
+					remote: "https://example.com/remote.tgz",
 				},
 			},
-			{ runtime: "node", external: ["typescript", "better-sqlite3"] },
+			{
+				runtime: "node",
+				external: ["typescript", "better-sqlite3", "tilde", "alias", "hosted", "remote"],
+			},
 		);
 
 		await runDistributeBuild(plan, rootOnlyDistribution, io);
@@ -459,8 +467,22 @@ describe("runDistributeBuild", () => {
 		const { dependencies } = readJson<{ dependencies?: Record<string, string> }>(
 			join(plan.stageDir, "root", "package.json"),
 		);
-		expect(dependencies).toEqual({ typescript: "7.0.2", "better-sqlite3": "^12.0.0" });
-		expect(Object.keys(dependencies ?? {})).toEqual(["typescript", "better-sqlite3"]);
+		expect(dependencies).toEqual({
+			typescript: "7.0.2",
+			"better-sqlite3": "^12.0.0",
+			tilde: "~1.2.0",
+			alias: "npm:other@^1.0.0",
+			hosted: "github:user/repo",
+			remote: "https://example.com/remote.tgz",
+		});
+		expect(Object.keys(dependencies ?? {})).toEqual([
+			"typescript",
+			"better-sqlite3",
+			"tilde",
+			"alias",
+			"hosted",
+			"remote",
+		]);
 	});
 
 	it("copies common license variants into every package", async () => {
@@ -919,6 +941,8 @@ describe("runDistributeBuild", () => {
 			"file:../core",
 			"link:../core",
 			"portal:../core",
+			"../core",
+			"core.tar.gz",
 		]) {
 			await expect(stage({ peerDependencies: { "@crustjs/core": range } })).rejects.toThrow(
 				`peerDependencies["@crustjs/core"] must be a publishable range, not ${JSON.stringify(range)}`,

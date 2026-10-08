@@ -233,13 +233,14 @@ function validateExternal(
 	}
 	const dependencies =
 		pkg.dependencies !== undefined && isJsonObject(pkg.dependencies) ? pkg.dependencies : {};
+	const rejectCrustPackage = (quoted: string, detail: string): never => {
+		throw new Error(
+			`package.json crust.external cannot name ${quoted}${detail}.\n  Crust packages must stay bundled: core detects a packaged build through a define the bundler injects, and an external Crust package would load a second copy of core.`,
+		);
+	};
 	for (const name of external) {
 		const quoted = JSON.stringify(name);
-		if (name.startsWith("@crustjs/")) {
-			throw new Error(
-				`package.json crust.external cannot name ${quoted}.\n  Crust packages must stay bundled: core detects a packaged build through a define the bundler injects, and an external Crust package would load a second copy of core.`,
-			);
-		}
+		if (name.startsWith("@crustjs/")) rejectCrustPackage(quoted, "");
 		if (!Object.hasOwn(dependencies, name)) {
 			const sections = NON_DEPENDENCY_SECTIONS.filter((section) => {
 				const deps = pkg[section];
@@ -251,7 +252,10 @@ function validateExternal(
 					: `package.json crust.external entry ${quoted} is not in package.json dependencies.\n  crust.external names packages from dependencies, which ship with the staged package; add ${quoted} to dependencies.`,
 			);
 		}
-		assertPublishableRange(dependencies[name], `package.json dependencies[${quoted}]`);
+		const range = dependencies[name];
+		assertPublishableRange(range, `package.json dependencies[${quoted}]`);
+		const aliased = /^npm:(@crustjs\/[^@]+)/.exec(range)?.[1];
+		if (aliased !== undefined) rejectCrustPackage(quoted, ` (an alias of ${aliased})`);
 	}
 }
 
