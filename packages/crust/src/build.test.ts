@@ -378,6 +378,153 @@ describe("planBuild", () => {
 		});
 	});
 
+	it("keeps crust.external names in order for Node and Bun runtime packages and defaults to none", () => {
+		expect(planBuild(runtimePackage, tmpDir).external).toEqual([]);
+		const dependencies = { "better-sqlite3": "^12.0.0", typescript: "7.0.2", unused: "^1.0.0" };
+		for (const runtime of ["node", "bun"]) {
+			writePackageJson({
+				dependencies,
+				crust: { runtime, external: ["typescript", "better-sqlite3"] },
+			});
+			expect(planBuild(runtimePackage, tmpDir)).toMatchObject({
+				runtime,
+				external: ["typescript", "better-sqlite3"],
+			});
+		}
+		// An empty list is a no-op for every runtime and artifact.
+		for (const runtime of ["bun", "node", "deno"]) {
+			writePackageJson({ crust: { runtime, external: [] } });
+			expect(planBuild(binary, tmpDir).external).toEqual([]);
+			expect(planBuild(runtimePackage, tmpDir).external).toEqual([]);
+		}
+	});
+
+	it.each(["user/repo.tgz", "user/repo.tar.gz", "npm/cli#release.tar", "npm/cli#releases/v1.tgz"])(
+		"accepts hosted Git shorthand %s in crust.external",
+		(range) => {
+			writePackageJson({
+				dependencies: { hosted: range },
+				crust: { runtime: "node", external: ["hosted"] },
+			});
+			expect(planBuild(runtimePackage, tmpDir).external).toEqual(["hosted"]);
+		},
+	);
+
+	type ExternalRejectedCase = {
+		name: string;
+		pkg: Record<string, JsonValue>;
+		flags?: BuildOptions;
+		error: string;
+	};
+	const externalRejectedCases: ExternalRejectedCase[] = [
+		...["bun", "node", "deno"].map((runtime): ExternalRejectedCase => ({
+			name: `${runtime} binaries`,
+			pkg: {
+				dependencies: { "fake-native": "^1.0.0" },
+				crust: { runtime, artifact: "binary", external: ["fake-native"] },
+			},
+			error:
+				"package.json crust.external is not supported for standalone binaries (artifact binary)",
+		})),
+		{
+			name: "--artifact binary overriding crust.artifact package",
+			pkg: {
+				dependencies: { "fake-native": "^1.0.0" },
+				crust: { runtime: "node", artifact: "package", external: ["fake-native"] },
+			},
+			flags: { artifact: "binary" },
+			error:
+				"package.json crust.external is not supported for standalone binaries (artifact binary)",
+		},
+		{
+			name: "Deno runtime packages",
+			pkg: {
+				dependencies: { "fake-native": "^1.0.0" },
+				crust: { runtime: "deno", artifact: "package", external: ["fake-native"] },
+			},
+			error: "package.json crust.external is not supported with the deno runtime",
+		},
+		...["@crustjs/core", "@crustjs/style"].map((name): ExternalRejectedCase => ({
+			name,
+			pkg: {
+				dependencies: { [name]: "^0.5.0" },
+				crust: { runtime: "node", artifact: "package", external: [name] },
+			},
+			error: `package.json crust.external cannot name ${JSON.stringify(name)}`,
+		})),
+		{
+			name: "an npm alias of a Crust package",
+			pkg: {
+				dependencies: { "crust-utils": "npm:@crustjs/utils@0.2.2" },
+				crust: { runtime: "node", artifact: "package", external: ["crust-utils"] },
+			},
+			error: 'package.json crust.external cannot name "crust-utils" (an alias of @crustjs/utils)',
+		},
+		...["devDependencies", "optionalDependencies", "peerDependencies"].map(
+			(section): ExternalRejectedCase => ({
+				name: `a name only in ${section}`,
+				pkg: {
+					dependencies: { other: "^1.0.0" },
+					[section]: { "fake-native": "^1.0.0" },
+					crust: { runtime: "node", artifact: "package", external: ["fake-native"] },
+				},
+				error: `package.json crust.external entry "fake-native" is in ${section}, not dependencies.\n  Only dependencies ship with the staged package`,
+			}),
+		),
+		{
+			name: "a name in several non-dependencies sections",
+			pkg: {
+				devDependencies: { "fake-native": "^1.0.0" },
+				peerDependencies: { "fake-native": "^1.0.0" },
+				crust: { runtime: "bun", artifact: "package", external: ["fake-native"] },
+			},
+			error:
+				'package.json crust.external entry "fake-native" is in devDependencies and peerDependencies, not dependencies.',
+		},
+		// Requiring a dependencies key also rejects subpaths and wildcards.
+		...["missing", "fake-native/sub", "fake-*"].map((name): ExternalRejectedCase => ({
+			name: `a name missing from dependencies (${name})`,
+			pkg: {
+				dependencies: { "fake-native": "^1.0.0" },
+				crust: { runtime: "node", artifact: "package", external: ["fake-native", name] },
+			},
+			error: `package.json crust.external entry ${JSON.stringify(name)} is not in package.json dependencies.`,
+		})),
+		...[
+			"workspace:^",
+			"catalog:",
+			"catalog:native",
+			"file:../native",
+			"link:../native",
+			"portal:../native",
+			"../native",
+			"./native",
+			"/opt/native",
+			"~/native",
+			"C:\\native",
+			"native.tgz",
+			"native.tar.gz",
+			"native.tar",
+			"./vendor/native.tgz",
+			"vendor/packages/native.tgz",
+			"vendor\\native.tgz",
+			1,
+		].map((range): ExternalRejectedCase => ({
+			name: `the dependency range ${JSON.stringify(range)}`,
+			pkg: {
+				dependencies: { "fake-native": range },
+				crust: { runtime: "node", artifact: "package", external: ["fake-native"] },
+			},
+			error: `package.json dependencies["fake-native"] must be a publishable range, not ${JSON.stringify(range)}.`,
+		})),
+	];
+	for (const testCase of externalRejectedCases) {
+		it(`rejects crust.external for ${testCase.name}`, () => {
+			writePackageJson(testCase.pkg);
+			expect(() => planBuild({ ...baseFlags, ...testCase.flags }, tmpDir)).toThrow(testCase.error);
+		});
+	}
+
 	// Planning never looks up a compiler: build() selects it once and judges the
 	// host target against that runner (see the build() compiler-selection tests).
 	it.skipIf(host === null)("plans every target when bun is not on PATH", () => {
@@ -567,7 +714,7 @@ describe("resolveBinEntries", () => {
 });
 
 describe("readCrustConfig", () => {
-	it("accepts the five documented keys and nothing else", () => {
+	it("accepts the six documented keys and nothing else", () => {
 		expect(readCrustConfig({ name: "x" })).toEqual({});
 		expect(
 			readCrustConfig({
@@ -577,6 +724,7 @@ describe("readCrustConfig", () => {
 					targets: ["bun-linux-x64"],
 					bunPlugins: ["./p.ts"],
 					include: ["t"],
+					external: ["typescript"],
 				},
 			}),
 		).toEqual({
@@ -585,12 +733,22 @@ describe("readCrustConfig", () => {
 			targets: ["bun-linux-x64"],
 			bunPlugins: ["./p.ts"],
 			include: ["t"],
+			external: ["typescript"],
 		});
-		for (const key of ["bunPlugin", "entry", "target"]) {
+		for (const key of ["bunPlugin", "entry", "target", "externals"]) {
 			expect(() => readCrustConfig({ crust: { [key]: [] } })).toThrow(
-				`Unknown package.json crust key "${key}". Allowed keys: runtime, artifact, targets, bunPlugins, include`,
+				`Unknown package.json crust key "${key}". Allowed keys: runtime, artifact, targets, bunPlugins, include, external`,
 			);
 		}
+		for (const external of ["typescript", ["typescript", 1], { typescript: true }]) {
+			expect(() => readCrustConfig({ crust: { external } })).toThrow(
+				"package.json crust.external must be an array of package names from dependencies",
+			);
+		}
+		expect(() =>
+			readCrustConfig({ crust: { external: ["typescript", "esbuild", "typescript"] } }),
+		).toThrow('package.json crust.external lists "typescript" more than once.');
+		expect(readCrustConfig({ crust: { external: [] } })).toEqual({ external: [] });
 		for (const artifact of ["exe", "standalone", "", 1, null]) {
 			expect(() => readCrustConfig({ crust: { artifact } })).toThrow(
 				`Invalid package.json crust.artifact ${JSON.stringify(artifact)}. Valid artifacts: package, binary`,
@@ -1192,8 +1350,39 @@ describe("buildCommand error handling", () => {
 		expect(
 			await executeBuildError("unknown-key", { crust: { bunPlugin: [] } }, ["--no-validate"]),
 		).toContain(
-			'Unknown package.json crust key "bunPlugin". Allowed keys: runtime, artifact, targets, bunPlugins, include',
+			'Unknown package.json crust key "bunPlugin". Allowed keys: runtime, artifact, targets, bunPlugins, include, external',
 		);
+	});
+
+	it("rejects crust.external problems before wiping the previous stage", async () => {
+		const tmpDir = mkdtempSync(join(tmpdir(), "crust-external-guard-"));
+		mkdirSync(join(tmpDir, ".crust"));
+		writeFileSync(join(tmpDir, ".crust", "previous.txt"), "kept");
+		writeFileSync(join(tmpDir, "cli.ts"), "export {};");
+		try {
+			for (const [range, error] of [
+				["workspace:*", 'package.json dependencies["fake-native"] must be a publishable range'],
+				[
+					undefined,
+					'package.json crust.external entry "fake-native" is not in package.json dependencies',
+				],
+			] as const) {
+				writeFileSync(
+					join(tmpDir, "package.json"),
+					JSON.stringify({
+						name: "tool",
+						version: "1.0.0",
+						bin: { tool: "cli.ts" },
+						dependencies: range === undefined ? {} : { "fake-native": range },
+						crust: { runtime: "node", artifact: "package", external: ["fake-native"] },
+					}),
+				);
+				await expect(build({ cwd: tmpDir, validate: false })).rejects.toThrow(error);
+				expect(readFileSync(join(tmpDir, ".crust", "previous.txt"), "utf8")).toBe("kept");
+			}
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
 	});
 
 	it("requires --artifact or crust.artifact, validates it, and lets the flag win", async () => {

@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import {
+	cpSync,
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
@@ -340,6 +341,124 @@ await new Crust("bun-admin").action(({ stdout }) => {
 			expect(withoutBun.exitCode).not.toBe(0);
 			expect(withoutBun.stdout).not.toContain("hello");
 		}
+	}, 120_000);
+});
+
+// Public build of a Node runtime package with crust.external: the bundle keeps
+// the externals as bare imports and the staged root lists them as dependencies.
+// The consumer layout mirrors what npm installs (the root package beside its
+// dependencies), built by copying, since the fake dependencies are not on a registry.
+describe.skipIf(!which("node") || !which("bun"))("Node runtime package with crust.external", () => {
+	const root = join(tmpdir(), `crust-node-external-${randomBytes(6).toString("hex")}`);
+	const project = join(root, "project");
+	const coreDist = resolve(import.meta.dirname, "../../core/dist/index.js");
+
+	afterAll(async () => {
+		await reapBoundedProcesses();
+		rmSync(root, { recursive: true, force: true });
+	});
+
+	it("keeps externals out of the bundle, ships them as dependencies, and runs under Node", async () => {
+		mkdirSync(join(project, "src"), { recursive: true });
+		// Each dependency's source holds a marker that appears in the bundle only if it was inlined.
+		const fakeDependencies = {
+			"fake-esm": {
+				"package.json": JSON.stringify({ name: "fake-esm", version: "1.2.0", type: "module" }),
+				"index.js": 'export const greeting = "esm-marker";\n',
+			},
+			"fake-cjs": {
+				"package.json": JSON.stringify({ name: "fake-cjs", version: "1.0.0", main: "index.js" }),
+				"index.js": 'module.exports = { value: "cjs-marker" };\n',
+			},
+			"fake-unused": {
+				"package.json": JSON.stringify({ name: "fake-unused", version: "2.0.0" }),
+				"index.js": "",
+			},
+		};
+		for (const [name, files] of Object.entries(fakeDependencies)) {
+			mkdirSync(join(project, "node_modules", name), { recursive: true });
+			for (const [file, content] of Object.entries(files)) {
+				writeFileSync(join(project, "node_modules", name, file), content);
+			}
+		}
+		writeFileSync(
+			join(project, "src", "cli.ts"),
+			`import { Crust } from ${JSON.stringify(coreDist)};
+import { greeting } from "fake-esm";
+const cjs = require("fake-cjs");
+await new Crust("node-tool").action(({ stdout }) => {
+	stdout(JSON.stringify({ greeting, cjs: cjs.value, node: process.versions.bun ? null : process.versions.node }));
+}).execute();
+`,
+		);
+		writeFileSync(
+			join(project, "package.json"),
+			JSON.stringify({
+				name: "@scope/node-package",
+				version: "0.1.0",
+				bin: { "node-tool": "src/cli.ts" },
+				dependencies: {
+					"fake-cjs": "^1.0.0",
+					"fake-esm": "~1.2.0",
+					"fake-unused": "2.0.0",
+					"not-external": "^3.0.0",
+				},
+				crust: {
+					runtime: "node",
+					artifact: "package",
+					external: ["fake-esm", "fake-cjs", "fake-unused"],
+				},
+			}),
+		);
+
+		const app = new Crust("test").add(buildCommand);
+		process.cwd = () => project;
+		try {
+			const result = await captureExecute(app, ["build"]);
+			expect(result.exitCode, result.stderr).toBe(0);
+		} finally {
+			process.cwd = originalCwd;
+		}
+
+		const stagedRoot = join(project, ".crust", "root");
+		const bundle = readFileSync(join(stagedRoot, "bin", "node-tool.js"), "utf8");
+		expect(bundle.startsWith("#!/usr/bin/env node\n")).toBe(true);
+		expect(bundle).toMatch(/from\s*"fake-esm"/);
+		expect(bundle).toMatch(/\("fake-cjs"\)/);
+		expect(bundle).not.toContain("esm-marker");
+		expect(bundle).not.toContain("cjs-marker");
+		const { dependencies } = readJson<{ dependencies?: Record<string, string> }>(
+			join(stagedRoot, "package.json"),
+		);
+		expect(dependencies).toEqual({
+			"fake-esm": "~1.2.0",
+			"fake-cjs": "^1.0.0",
+			"fake-unused": "2.0.0",
+		});
+		expect(Object.keys(dependencies ?? {})).toEqual(["fake-esm", "fake-cjs", "fake-unused"]);
+
+		const consumerModules = join(root, "consumer", "node_modules");
+		const installed = join(consumerModules, "@scope", "node-package");
+		cpSync(stagedRoot, installed, { recursive: true });
+		for (const name of Object.keys(dependencies ?? {})) {
+			cpSync(join(project, "node_modules", name), join(consumerModules, name), { recursive: true });
+		}
+		rmSync(project, { recursive: true, force: true });
+		const nodePath = which("node")!;
+		const nodeVersion = (
+			await runBoundedProcess(nodePath, ["-p", "process.versions.node"], { timeout: 10_000 })
+		).stdout.trim();
+
+		const run = await runBoundedProcess(nodePath, [join(installed, "bin", "node-tool.js")], {
+			cwd: root,
+			timeout: 25_000,
+		});
+		expect(run.exitCode, run.stderr).toBe(0);
+		expect(JSON.parse(run.stdout.trim())).toEqual({
+			greeting: "esm-marker",
+			cjs: "cjs-marker",
+			node: nodeVersion,
+		});
 	}, 120_000);
 });
 

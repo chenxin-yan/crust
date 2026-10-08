@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import {
 	access,
+	mkdir,
 	mkdtemp,
 	readdir,
 	readFile,
@@ -106,7 +107,7 @@ describe("createBunPluginDriverScript", () => {
 		expect(script).toContain("must default-export a Bun bundler plugin ({ name, setup })");
 	});
 
-	it("embeds Node bundle options and refuses to write more than one output", () => {
+	it("embeds Node bundle options with externals and refuses to write more than one output", () => {
 		const options: BunPluginDriverOptions = {
 			plugins: [{ specifier: "./plugin.ts", source: "file:///proj/plugin.ts" }],
 			build: {
@@ -115,6 +116,7 @@ describe("createBunPluginDriverScript", () => {
 				env: "PUBLIC_*",
 				target: "node",
 				format: "esm",
+				external: ["better-sqlite3", "typescript"],
 			},
 			outfile: "/proj/dist/cli.js",
 		};
@@ -152,7 +154,7 @@ describe.skipIf(hostTarget(BUN_TARGETS) === null)("execBuild with crust.bunPlugi
 			join(directory, "cli.ts"),
 			join(directory, "out"),
 			hostTarget(BUN_TARGETS)!,
-			{ cwd: directory, minify: false, envFiles: [], bunPlugins: ["./missing.ts"] },
+			{ cwd: directory, minify: false, envFiles: [], bunPlugins: ["./missing.ts"], external: [] },
 		).catch((cause: unknown) => cause);
 		expect(error).toBeInstanceOf(Error);
 		expect((error as Error).message).toContain(
@@ -176,6 +178,7 @@ describe.skipIf(hostTarget(BUN_TARGETS) === null)("execBuild with crust.bunPlugi
 				minify: false,
 				envFiles: [],
 				bunPlugins: ["./plugin.ts"],
+				external: [],
 			}),
 		).rejects.toThrow(
 			/Build failed for .*out\.js:\nerror: cannot write multiple output files without an output directory/,
@@ -194,6 +197,7 @@ describe.skipIf(hostTarget(BUN_TARGETS) === null)("execBuild with crust.bunPlugi
 				minify: false,
 				envFiles: [],
 				bunPlugins: ["./plugin.ts"],
+				external: [],
 			}),
 		).rejects.toThrow(
 			"crust.bunPlugins entry ./plugin.ts must default-export a Bun bundler plugin ({ name, setup }). Wrap a plugin factory in a module that default-exports the created plugin.",
@@ -212,6 +216,7 @@ describe.skipIf(hostTarget(BUN_TARGETS) === null)("execBuild with crust.bunPlugi
 				minify: false,
 				envFiles: [],
 				bunPlugins: ["./plugin.ts"],
+				external: [],
 			}),
 		).rejects.toThrow(/Build failed for .*out[\s\S]*plugin exploded/);
 		expect(await leftoverDrivers(directory)).toEqual([]);
@@ -273,7 +278,13 @@ describe("execScriptBuild for Bun", () => {
 			"bun",
 			join(directory, "cli.ts"),
 			outfile,
-			{ cwd: directory, minify: false, envFiles: [join(directory, ".env.build")], bunPlugins: [] },
+			{
+				cwd: directory,
+				minify: false,
+				envFiles: [join(directory, ".env.build")],
+				bunPlugins: [],
+				external: [],
+			},
 			pinnedRunner(),
 		);
 
@@ -307,6 +318,7 @@ describe("execScriptBuild for Bun", () => {
 				minify: true,
 				envFiles: [join(directory, ".env.build")],
 				bunPlugins: ["./plugin.ts"],
+				external: [],
 			},
 			pinnedRunner(),
 		);
@@ -326,6 +338,86 @@ describe("execScriptBuild for Bun", () => {
 			[],
 		);
 	});
+});
+
+describe("execScriptBuild with crust.external", () => {
+	const tempDirs: string[] = [];
+
+	afterEach(async () => {
+		await Promise.all(tempDirs.splice(0).map((path) => rm(path, { recursive: true, force: true })));
+	});
+
+	// Each dependency's source holds a marker string that appears in the bundle only if it was inlined.
+	async function project(): Promise<string> {
+		const directory = await mkdtemp(join(tmpdir(), "crust-external-test-"));
+		tempDirs.push(directory);
+		const esm = join(directory, "node_modules", "fake-esm");
+		const cjs = join(directory, "node_modules", "fake-cjs");
+		await mkdir(esm, { recursive: true });
+		await mkdir(cjs, { recursive: true });
+		await writeFile(
+			join(esm, "package.json"),
+			JSON.stringify({
+				name: "fake-esm",
+				version: "1.0.0",
+				type: "module",
+				exports: { ".": "./index.js", "./sub": "./sub.js" },
+			}),
+		);
+		await writeFile(join(esm, "index.js"), 'export const greeting = "esm-marker";\n');
+		await writeFile(join(esm, "sub.js"), 'export default "sub-marker";\n');
+		await writeFile(
+			join(cjs, "package.json"),
+			JSON.stringify({ name: "fake-cjs", version: "1.0.0", main: "index.js" }),
+		);
+		await writeFile(join(cjs, "index.js"), 'module.exports = { value: "cjs-marker" };\n');
+		await writeFile(join(directory, "plugin.ts"), 'export default { name: "noop", setup() {} };\n');
+		await writeFile(
+			join(directory, "cli.ts"),
+			'import { greeting } from "fake-esm";\nimport sub from "fake-esm/sub";\nconst cjs = require("fake-cjs");\nconsole.log(JSON.stringify({ greeting, sub, cjs: cjs.value }));\n',
+		);
+		return directory;
+	}
+
+	for (const target of ["node", "bun"] as const) {
+		for (const bunPlugins of [[], ["./plugin.ts"]]) {
+			const path = bunPlugins.length > 0 ? "the Bun.build driver" : "bun build";
+			it(`keeps externals and their subpaths out of a ${target} bundle built by ${path}`, async () => {
+				const directory = await project();
+				const outfile = join(directory, "out", "cli.js");
+				await execScriptBuild(target, join(directory, "cli.ts"), outfile, {
+					cwd: directory,
+					minify: false,
+					envFiles: [],
+					bunPlugins,
+					// fake-unused is never imported: an external need not be.
+					external: ["fake-esm", "fake-cjs", "fake-unused"],
+				});
+
+				const output = await readFile(outfile, "utf8");
+				expect(output).toContain('from "fake-esm"');
+				expect(output).toContain('from "fake-esm/sub"');
+				expect(output).toContain('require("fake-cjs")');
+				for (const marker of ["esm-marker", "sub-marker", "cjs-marker"]) {
+					expect(output).not.toContain(marker);
+				}
+				const runtime = which(target);
+				if (runtime === null) return;
+				const run = spawnSync(runtime, [outfile], {
+					cwd: directory,
+					env: { PATH: process.env.PATH },
+					encoding: "utf8",
+					timeout: 10_000,
+				});
+				expect(run.stderr).toBe("");
+				expect(JSON.parse(run.stdout)).toEqual({
+					greeting: "esm-marker",
+					sub: "sub-marker",
+					cjs: "cjs-marker",
+				});
+			});
+		}
+	}
 });
 
 describe("createBunCompileArgs", () => {
