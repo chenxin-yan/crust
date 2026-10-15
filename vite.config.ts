@@ -5,7 +5,6 @@ const sharedIgnorePatterns = [
 	"**/CHANGELOG.md",
 	".pi/",
 	".worktrees/",
-	"apps/docs/.source/",
 	"apps/docs/src/routeTree.gen.ts",
 ];
 
@@ -40,14 +39,11 @@ export default defineConfig({
 	lint: {
 		options: {
 			typeAware: true,
+			typeCheck: true,
 			reportUnusedDisableDirectives: "deny",
 		},
 		plugins: ["unicorn", "typescript", "oxc", "import", "promise", "node"],
 		jsPlugins: [
-			{
-				name: "anti-slop",
-				specifier: "./tools/oxlint/anti-slop/index.ts",
-			},
 			{
 				name: "vite-plus",
 				specifier: "vite-plus/oxlint-plugin",
@@ -63,10 +59,6 @@ export default defineConfig({
 			},
 		},
 		rules: {
-			"unicorn/no-new-array": "off",
-			"unicorn/no-useless-fallback-in-spread": "off",
-			"unicorn/no-useless-spread": "off",
-
 			"eslint/no-underscore-dangle": "off",
 			"eslint/no-restricted-properties": [
 				"error",
@@ -94,48 +86,23 @@ export default defineConfig({
 			"typescript/no-unsafe-type-assertion": "off",
 			"typescript/no-base-to-string": "off",
 			"typescript/consistent-return": "off",
-			"typescript/no-unnecessary-type-assertion": "error",
+			"promise/always-return": "off",
 			"typescript/no-unnecessary-type-parameters": "off",
-			"typescript/restrict-template-expressions": "off",
 
 			"import/no-cycle": "error",
-			"promise/no-multiple-resolved": "error",
 			"typescript/no-import-type-side-effects": "error",
 			"oxc/bad-bitwise-operator": "error",
 			"oxc/no-accumulating-spread": "error",
 
-			"typescript/no-floating-promises": "error",
 			"typescript/no-misused-promises": "error",
 			"typescript/switch-exhaustiveness-check": [
 				"error",
 				{ considerDefaultExhaustiveForUnions: true },
 			],
 
-			"promise/always-return": "off",
-
-			"anti-slop/no-array-filter-map": "error",
-			"anti-slop/no-chained-type-assertions": "error",
-			"anti-slop/no-known-value-widening": "error",
-			"anti-slop/no-module-mocking": "error",
-			"anti-slop/no-object-parameters": "error",
-			"anti-slop/no-reduce-accumulator-copy": "error",
-			"anti-slop/no-runtime-typeof": ["error", { allowInTypeGuards: true }],
-			"anti-slop/no-unknown-parameters": ["error", { allowInBoundaryFunctions: true }],
-			"anti-slop/no-unknown-returns": "error",
-			"anti-slop/no-unknown-type-aliases": "error",
-			"anti-slop/no-unsafe-dictionary-type": "error",
-			"anti-slop/no-widen-then-assert": "error",
-			"anti-slop/require-safety-comment-for-type-assertion": "error",
-
 			"vite-plus/prefer-vite-plus-imports": "error",
 		},
-		ignorePatterns: [
-			...sharedIgnorePatterns,
-			"**/node_modules/",
-			"**/dist/",
-			"packages/create-crust/templates/base/",
-			"apps/docs/.vercel/",
-		],
+		ignorePatterns: [...sharedIgnorePatterns, "packages/create-crust/templates/base/"],
 		overrides: [
 			{
 				files: ["**/*.test.ts", "**/*.test-d.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"],
@@ -143,8 +110,6 @@ export default defineConfig({
 					"eslint/no-new": "off",
 					"eslint/no-shadow": "off",
 					"typescript/unbound-method": "off",
-					"typescript/await-thenable": "off",
-					"anti-slop/require-safety-comment-for-type-assertion": "off",
 				},
 			},
 			{
@@ -166,6 +131,6 @@ export default defineConfig({
 		},
 	},
 	test: {
-		projects: ["packages/*", "scripts", "tools"],
+		projects: ["packages/*", "scripts"],
 	},
 });

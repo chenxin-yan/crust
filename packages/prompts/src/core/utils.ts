@@ -206,7 +206,6 @@ export interface NormalizedChoice<T> {
  */
 export function normalizeChoices<T>(choices: readonly Choice<T>[]): NormalizedChoice<T>[] {
 	return choices.map((choice) => {
-		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- Choice is an internal discriminated union, not unparsed input.
 		if (typeof choice === "string") {
 			// A plain-string Choice<T> is `T & string`, so it is its own value.
 			return { label: choice, value: choice };

@@ -60,7 +60,6 @@ function matchesDeclaredType(
 	value: JsonValue | undefined,
 ): boolean {
 	const matches = (item: JsonValue | undefined) => {
-		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- comparing against the declared field type.
 		return typeof item === def.type && (def.type !== "number" || Number.isFinite(item));
 	};
 	return def.array === true ? Array.isArray(value) && value.every(matches) : matches(value);
@@ -71,12 +70,10 @@ function expectedTypeMessage(def: { type: ValueType; array?: true }): string {
 }
 
 function coerceByType(value: JsonValue, type: ValueType): JsonValue {
-	// oxlint-disable-next-line anti-slop/no-runtime-typeof -- typed store values are coerced by their declaration.
 	if (type === "number" && typeof value === "string") {
 		return tryCoerceNumber(value) ?? value;
 	}
 
-	// oxlint-disable-next-line anti-slop/no-runtime-typeof -- typed store values are coerced by their declaration.
 	if (type === "boolean" && typeof value === "string") {
 		return coerceBooleanString(value);
 	}

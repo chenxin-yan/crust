@@ -8,7 +8,6 @@ import type { TuiObservation, TuiScenario } from "../tests/fixtures/run-tui.ts";
 import { NonInteractiveError, runTui } from "./index.ts";
 
 function asReadStream(stream: PassThrough): NodeJS.ReadStream {
-	// oxlint-disable-next-line anti-slop/no-chained-type-assertions -- OpenTUI requires a concrete tty.ReadStream type; this fake implements the runtime surface it uses.
 	return stream as unknown as NodeJS.ReadStream;
 }
 

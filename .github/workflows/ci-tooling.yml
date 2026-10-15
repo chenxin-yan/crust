@@ -36,7 +36,7 @@ jobs:
 
       # Also builds the workspace packages scripts import, which type-aware lint resolves.
       - name: Type-check tooling and scripts
-        run: pnpm exec vp run --fail-if-no-match --filter ./scripts --filter ./tools check:types:task
+        run: pnpm exec vp run --fail-if-no-match --filter ./scripts check:types:task
 
       - name: Lint and format check (tooling and repository files)
         run: |

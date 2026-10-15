@@ -893,7 +893,7 @@ describe("Extension application at prepare time", () => {
 						})
 						.action(({ args, flags, rootCommand }) => {
 							lines.push(
-								`completion:${args.shell}:${(flags as Record<string, ParsedFlagValue>).verbose}:${rootCommand.meta.name}`,
+								`completion:${args.shell}:${String((flags as Record<string, ParsedFlagValue>).verbose)}:${rootCommand.meta.name}`,
 							);
 						}),
 				),
@@ -2333,10 +2333,7 @@ describe("Crust .add() aliases", () => {
 describe("dynamic definition guards (brands own literals; runtime owns config-built defs)", () => {
 	type DynamicDefs = NamedFlagDef[] & ArgsDef;
 	// SAFETY: adversarial fixtures deliberately model definitions received from untyped JavaScript.
-	const asDynamic = (
-		// oxlint-disable-next-line anti-slop/no-unknown-parameters -- test-only unchecked JavaScript fixture, never a production decoder.
-		value: unknown,
-	): DynamicDefs => value as DynamicDefs;
+	const asDynamic = (value: unknown): DynamicDefs => value as DynamicDefs;
 
 	it("rejects duplicate argument names from dynamic defs", () => {
 		const defs = asDynamic([

@@ -1,8 +1,0 @@
-{
-	"extends": "../packages/config/tsconfig.base.json",
-	"compilerOptions": {
-		"declaration": false,
-		"isolatedDeclarations": false
-	},
-	"include": ["oxlint/**/*.ts"]
-}

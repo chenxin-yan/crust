@@ -36,7 +36,6 @@ export function makeNode<
 	subCommands?: Record<string, CommandNode>;
 	run?: CommandAction;
 }): CommandNode & { args: A; effectiveFlags: F } {
-	// oxlint-disable-next-line anti-slop/no-runtime-typeof -- test fixtures intentionally accept either shorthand names or full metadata.
 	const meta = typeof config.meta === "string" ? { name: config.meta } : config.meta;
 	const node = createCommandNode(meta.name);
 	if (meta.description) node.meta.description = meta.description;

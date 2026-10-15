@@ -1130,10 +1130,8 @@ export class Crust<
 		// with fresh copies here so failures stay private to the clone.
 		cloned._node = { ...this._node, ...nodeOverrides };
 		cloned._ancestorOwnedFlags = this._ancestorOwnedFlags;
-		/* oxlint-disable anti-slop/no-chained-type-assertions -- one runtime builder shape is re-parameterized after each matching mutation. */
 		// SAFETY: every caller pairs this generic transition with the matching runtime node mutation.
 		return cloned as unknown as Out;
-		/* oxlint-enable anti-slop/no-chained-type-assertions */
 	}
 
 	/**
@@ -1483,7 +1481,6 @@ export class Crust<
 		Meta,
 		Caps
 	> {
-		/* oxlint-disable anti-slop/no-chained-type-assertions -- inline sugar erases the call-site-seeded recipe generics before delegating to the defineCommand + add runtime. */
 		// SAFETY: the seeded recipe generics restate runtime facts — materialization
 		// seeds the child node from this node's contexts and owned flags.
 		const define = defineCommand as unknown as (
@@ -1492,7 +1489,6 @@ export class Crust<
 		) => CommandDefinition;
 		// SAFETY: the erased recipe still returns the builder it receives; materialization re-validates that at runtime.
 		const definition = define(name, recipe as unknown as CommandRecipe);
-		/* oxlint-enable anti-slop/no-chained-type-assertions */
 		return this._addDefinitions<
 			AfterAdd<
 				Flags,

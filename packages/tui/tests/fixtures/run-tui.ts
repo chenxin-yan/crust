@@ -19,7 +19,6 @@ class TtyInput extends PassThrough {
 
 function asReadStream(stream: PassThrough): NodeJS.ReadStream {
 	// SAFETY: TtyInput implements the tty.ReadStream surface OpenTUI uses (isTTY, setRawMode, data events).
-	// oxlint-disable-next-line anti-slop/no-chained-type-assertions -- OpenTUI requires a concrete tty.ReadStream type; this fake implements the runtime surface it uses.
 	return stream as unknown as NodeJS.ReadStream;
 }
 
@@ -79,7 +78,6 @@ export type TuiObservation = {
 
 async function settle(result: Promise<void>, mountFailure?: Error): Promise<TuiOutcome> {
 	try {
-		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- the observation records the resolved value's type for the test to assert.
 		return { status: "resolved", valueType: typeof (await result) };
 	} catch (error) {
 		// SAFETY: every scenario rejects with an Error (the mount failure, AbortError or NonInteractiveError).

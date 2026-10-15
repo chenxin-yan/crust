@@ -117,7 +117,6 @@ function resolveSpinner(spinnerType: SpinnerType | undefined): SpinnerFrameSet {
 	if (spinnerType === undefined) {
 		return BUILTIN_SPINNERS.dots;
 	}
-	// oxlint-disable-next-line anti-slop/no-runtime-typeof -- SpinnerType is a typed discriminated union, not unparsed input.
 	if (typeof spinnerType === "string") {
 		return BUILTIN_SPINNERS[spinnerType];
 	}
