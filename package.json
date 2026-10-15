@@ -14,7 +14,7 @@
 		"check": "vp run --filter './packages/*' build:task && vp run check:task",
 		"check:fix": "vp run --filter './packages/*' build:task && vp check --fix",
 		"check:types": "vp run -r check:types:task",
-		"test": "vp run --filter './packages/*' --filter ./tools --filter ./scripts test:task",
+		"test": "vp run --filter './packages/*' --filter ./scripts test:task",
 		"changeset": "changeset",
 		"packages:version": "changeset version && pnpm install --lockfile-only --ignore-scripts",
 		"packages:pack": "bun ./scripts/publish-packages.mjs --pack-dir",

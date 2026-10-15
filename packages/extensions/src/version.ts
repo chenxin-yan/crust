@@ -51,7 +51,6 @@ export const version: VersionExtension = defineExtension(VERSION).factory(
 		return extension.flags(...versionFlags).preRun((context) => {
 			if (context.commandPath.length !== 1 || context.flags.version !== true) return;
 			const resolvedVersion =
-				// oxlint-disable-next-line anti-slop/no-runtime-typeof -- discriminating a typed options union.
 				typeof value === "function" ? value() : (value ?? context.rootCommand.meta.version);
 			// Overloads are type-only; untyped callers can still reach this.
 			if (resolvedVersion === undefined) {

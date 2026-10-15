@@ -50,7 +50,6 @@ function parseRgb(input: ColorInput): readonly [number, number, number] {
 		) {
 			return [input[0], input[1], input[2]];
 		}
-		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- ColorInput is a typed discriminated union; this selects its string representation.
 	} else if (typeof input === "string") {
 		const value = input.toLowerCase();
 		if (isNamedColor(value)) {

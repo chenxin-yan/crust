@@ -22,7 +22,6 @@ pnpm install
 - `packages/` — published packages
 - `apps/docs/` — documentation site
 - `scripts/` — private workspace for repository automation and its tests
-- `tools/` — private workspace for lint tooling
 
 Run these commands from the repository root:
 
@@ -30,7 +29,7 @@ Run these commands from the repository root:
 pnpm run build         # Build all packages and the docs site
 pnpm run check         # Build packages, lint, and check formatting
 pnpm run check:types   # Type-check workspaces, scripts, and build configuration
-pnpm run test          # Build and test packages, tooling, and scripts
+pnpm run test          # Build and test packages and scripts
 pnpm run dev:docs      # Start the docs site
 ```
 

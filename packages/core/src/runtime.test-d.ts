@@ -200,7 +200,6 @@ function _broadProviderValueEvidence(name: string) {
 	new Crust("app").provide(numeric()).provide(dependent());
 	new Crust("app").provide(defineContext(name).setup(() => "ok")()).provide(dependent());
 
-	// oxlint-disable-next-line anti-slop/no-unknown-returns, anti-slop/no-known-value-widening -- regression models an explicitly opaque broad provider.
 	const unknownProvider = defineContext(name).setup((): unknown => null);
 	const literalNumeric = defineContext("db").setup(() => 42);
 	// @ts-expect-error -- the literal provider retains its number evidence beside the unknown provider

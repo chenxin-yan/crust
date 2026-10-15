@@ -82,11 +82,9 @@ export function normalizeSection(
 	}
 	const audience = (ids: readonly SectionConsumer[]): readonly [ExtensionId, ...ExtensionId[]] => {
 		// SAFETY: normalization establishes nonemptiness; consumers carry minted IDs.
-		/* oxlint-disable anti-slop/no-runtime-typeof -- SectionConsumer is a typed minted ID or an object carrying one, not unvalidated data. */
 		return Object.freeze(
 			ids.map((consumer) => (typeof consumer === "string" ? consumer : consumer.id)),
 		) as readonly [ExtensionId, ...ExtensionId[]];
-		/* oxlint-enable anti-slop/no-runtime-typeof */
 	};
 	return Object.freeze({
 		title,

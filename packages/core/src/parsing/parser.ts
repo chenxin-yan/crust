@@ -512,7 +512,6 @@ function validateStructuredValue(def: ArgDef | FlagDef, value: RunInputValue, la
 			}
 		}
 	} else {
-		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- structured binding checks the declared primitive kind at the invocation boundary.
 		valid = typeof value === (type === "path" ? "string" : type);
 	}
 	if (!valid) throw new CrustError("PARSE", `Expected ${type} for ${label}`);

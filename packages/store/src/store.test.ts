@@ -1162,6 +1162,7 @@ describe("JSON serialization stability", () => {
 			fields: { nums: { type: "number", array: true } },
 		});
 
+		// oxlint-disable-next-line unicorn/no-new-array -- the sparse hole is the input under test.
 		await expect(store.write({ nums: new Array<number>(1) })).rejects.toMatchObject({
 			code: "VALIDATION",
 			details: { operation: "write", issues: [{ path: "nums" }] },

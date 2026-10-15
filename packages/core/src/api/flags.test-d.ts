@@ -1,4 +1,3 @@
-/* oxlint-disable anti-slop/no-unknown-returns, anti-slop/no-known-value-widening -- compile-only probes deliberately expose unproven parser contracts. */
 import type { StandardSchema } from "@crustjs/utils/schema";
 
 import { Crust, defineCommand } from "../command/crust.ts";

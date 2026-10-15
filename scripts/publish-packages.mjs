@@ -37,7 +37,6 @@ async function loadWorkspacePackages() {
 	if (
 		!Array.isArray(patterns) ||
 		patterns.length === 0 ||
-		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- Validate workspace YAML at its I/O boundary.
 		!patterns.every((pattern) => typeof pattern === "string" && pattern !== "")
 	) {
 		throw new Error("pnpm-workspace.yaml must list workspace package patterns.");
@@ -166,7 +165,6 @@ async function packPackages(directory) {
 	await writeFile(join(directory, "packages.json"), `${JSON.stringify(inventory, null, 2)}\n`);
 }
 
-/* oxlint-disable anti-slop/no-runtime-typeof -- Validate artifact JSON at the upload boundary; the rule cannot see JSDoc type predicates. */
 /**
  * @param {any} pkg
  * @returns {pkg is PackageEntry}
@@ -183,7 +181,6 @@ function isPackageEntry(pkg) {
 		/^\d+\.tgz$/.test(pkg.file)
 	);
 }
-/* oxlint-enable anti-slop/no-runtime-typeof */
 
 /** @param {string} directory */
 async function readInventory(directory) {

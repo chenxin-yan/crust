@@ -79,7 +79,6 @@ export function ViewOptions({
 	githubUrl: string;
 }) {
 	const items = useMemo(() => {
-		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- SSR has no window global; the client branch needs its origin.
 		const browserOrigin = typeof window !== "undefined" ? window.location.origin : null;
 		const fullMarkdownUrl = browserOrigin ? new URL(markdownUrl, browserOrigin) : "loading";
 		const q = `Read ${fullMarkdownUrl}, I want to ask questions about it.`;

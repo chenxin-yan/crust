@@ -7,7 +7,6 @@ on:
       - ".changeset/**"
       - "packages/**"
       - "scripts/**"
-      - "tools/**"
       - "package.json"
       - "mise.toml"
       - "pnpm-lock.yaml"
@@ -187,7 +186,7 @@ jobs:
       # Keep the ordinary local `pnpm run test` unchanged: it still runs every suite.
       - name: Test library and tooling behavior
         run: >-
-          pnpm exec vp run --filter './packages/*' --filter ./tools --filter ./scripts
+          pnpm exec vp run --filter './packages/*' --filter ./scripts
           --filter '!@crustjs/crust' test:task
           --exclude '**/artifacts-runtimes.test.ts'
           --exclude '**/build-marker-bundle.test.ts'

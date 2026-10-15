@@ -1,4 +1,3 @@
-/* oxlint-disable anti-slop/no-unknown-returns, anti-slop/no-known-value-widening -- compile-only probes deliberately model opaque Context value contracts. */
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import {
 	Crust,
