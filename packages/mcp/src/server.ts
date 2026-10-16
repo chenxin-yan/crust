@@ -245,6 +245,8 @@ export async function serveStdio(server: Server): Promise<void> {
 	});
 	// The SDK transport only reads `data`; without this, a client hanging up would
 	// leave the serving Command Action, and the process, waiting forever.
+	// Remove once a v1.x release includes the transport fix
+	// (modelcontextprotocol/typescript-sdk#2911, the backport of #2494).
 	process.stdin.once("end", () => {
 		void server.close();
 	});
