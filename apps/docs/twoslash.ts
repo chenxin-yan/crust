@@ -15,8 +15,6 @@ export function twoslashHovers(explicitTrigger = true): ShikiTransformer[] {
 		transformerTwoslash({
 			explicitTrigger,
 			twoslashOptions: {
-				// TODO(upstream): TS7.0.2 crashes on Crust builder-method hover queries (DataView RangeError).
-				// Keep selections on inferred values until upstream fixes it; never exclude values by name.
 				handbookOptions: { noStaticSemanticInfo: true },
 			},
 			// Separate from the old automatic-hover cache, whose keys include code but not options.
