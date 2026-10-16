@@ -19,20 +19,25 @@ export class NonInteractiveError extends Error {
 /** Mounts an app onto the OpenTUI renderer; may be async. */
 export type TuiMount = (renderer: CliRenderer) => void | Promise<void>;
 
-// Mirrors OpenTUI's own exitOnCtrlC match (exact modifiers, `baseCode` for non-Latin layouts,
-// where it lowercases ASCII uppercase base codes, so 67 "C" matches too);
-// its `matchesKeyBinding` helper is not exported.
+// Mirrors OpenTUI's own exitOnCtrlC match (exact modifiers; `baseCode` only when the typed key is
+// one non-ASCII character, as on non-Latin layouts, where it lowercases ASCII uppercase base codes,
+// so 67 "C" matches too); its `matchesKeyBinding` helper is not exported.
+// TODO: this copy drifted once already (OpenTUI 0.6 changed the rule), and signal exits still
+// resolve instead of aborting. Drop it and the keypress listener once OpenTUI reports why a
+// renderer was destroyed: https://github.com/anomalyco/opentui/issues/1693
 function isCtrlC(event: KeyEvent): boolean {
 	if (!event.ctrl || event.shift || event.meta || event.super) return false;
-	return event.name === "c" || event.baseCode === 99 || event.baseCode === 67;
+	if (event.name === "c") return true;
+	return /^\P{ASCII}$/u.test(event.name) && (event.baseCode === 99 || event.baseCode === 67);
 }
 
 /**
- * Run a full-screen OpenTUI app and resolve once its renderer is destroyed.
+ * Run a full-screen OpenTUI app and resolve once its renderer is destroyed and the terminal is restored.
  *
  * Throws {@link NonInteractiveError} unless stdin and stdout are TTYs. Defaults to the alternate
  * screen, a disabled console, and `exitOnCtrlC: true`; explicit `config` values win. A `mount`
- * error destroys the renderer and is rethrown; Ctrl+C cancellation rejects with an `AbortError`.
+ * error destroys the renderer and is rethrown; an output failure rejects with its error; Ctrl+C
+ * cancellation rejects with an `AbortError`.
  */
 export async function runTui(mount: TuiMount, config: CliRendererConfig = {}): Promise<void> {
 	if (!(config.stdin ?? process.stdin).isTTY || !(config.stdout ?? process.stdout).isTTY) {
@@ -56,6 +61,12 @@ export async function runTui(mount: TuiMount, config: CliRendererConfig = {}): P
 		},
 	});
 
+	// Handled up front: OpenTUI rejects `closed` on output failure, which can precede `destroyed`.
+	const closed = renderer.closed.then(
+		() => undefined,
+		(error: unknown) => ({ error }),
+	);
+
 	const onKeypress = (event: KeyEvent) => {
 		if (isCtrlC(event)) aborted = true;
 	};
@@ -78,6 +89,9 @@ export async function runTui(mount: TuiMount, config: CliRendererConfig = {}): P
 	} finally {
 		renderer.keyInput.off("keypress", onKeypress);
 	}
+	// destroy() restores the terminal asynchronously; settle once callers can write to it again.
+	const closeFailure = await closed;
 	if (mountFailure) throw mountFailure.error;
+	if (closeFailure) throw closeFailure.error;
 	if (aborted) throw Object.assign(new Error("TUI cancelled"), { name: "AbortError" });
 }

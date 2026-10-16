@@ -106,6 +106,29 @@ describe("runTui", () => {
 		});
 	});
 
+	// OpenTUI only falls back to baseCode when the typed key is one non-ASCII character.
+	it("treats a Latin key with a Ctrl+C baseCode as a normal key", () => {
+		expect(observe("ctrl-j-latin-base-code-99").outcome).toEqual({
+			status: "resolved",
+			valueType: "undefined",
+		});
+	});
+
+	it("settles only after the renderer has restored the terminal", () => {
+		const { outcome, closedOnSettle } = observe("waits-for-close");
+
+		expect(outcome).toEqual({ status: "resolved", valueType: "undefined" });
+		expect(closedOnSettle).toBe(true);
+	});
+
+	it("rejects when the output stream fails", () => {
+		expect(observe("output-failure").outcome).toMatchObject({
+			status: "rejected",
+			message: "output failed",
+			isMountFailure: false,
+		});
+	});
+
 	it("does not destroy on Ctrl+C when exitOnCtrlC is false", () => {
 		const { outcome, rendererDestroyed, manualTeardownReached } = observe("ctrl-c-without-exit");
 
