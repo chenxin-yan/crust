@@ -103,7 +103,7 @@ console.log(JSON.stringify({ tsdown: compiler.backend.packageJsonPath, node: com
 			) as DistributionManifest;
 			const platform = manifest.packages[0]!;
 			// Optional beside the root's platform packages, never required.
-			const backend = { tsdown: "0.23.0", "@tsdown/exe": "0.23.0" };
+			const backend = { tsdown: "0.23.1", "@tsdown/exe": "0.23.1" };
 			const staged = (dir: string) =>
 				JSON.parse(readFileSync(join(stageDir, dir, "package.json"), "utf8"));
 			expect(staged("root").optionalDependencies).toEqual({
