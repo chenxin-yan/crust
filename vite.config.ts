@@ -110,6 +110,8 @@ export default defineConfig({
 					"eslint/no-new": "off",
 					"eslint/no-shadow": "off",
 					"typescript/unbound-method": "off",
+					// Type tests assert on `{}` results deliberately.
+					"typescript/no-generated-empty-object-type": "off",
 				},
 			},
 			{

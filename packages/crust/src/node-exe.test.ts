@@ -61,7 +61,7 @@ describe("crustInstallPath", () => {
 
 describe("Node binary compiler", () => {
 	const nodePath = which("node");
-	const backend = { version: "0.23.0", engines: "^22.18.0 || ^24.11.0 || >=26.0.0" };
+	const backend = { version: "0.23.1", engines: "^22.18.0 || ^24.11.0 || >=26.0.0" };
 	const nodeCompiler = (version: string): BuildCompiler => ({
 		runtime: "node",
 		runner: { command: "/opt/node/bin/node", env: {} },
@@ -72,7 +72,7 @@ describe("Node binary compiler", () => {
 		expect(() =>
 			assertNodeExeBackendSupports(nodeCompiler("25.9.0"), { ...backend, seaMinVersion: "25.7.0" }),
 		).toThrow(
-			'Node 25.9.0 (/opt/node/bin/node) is not supported by tsdown 0.23.0, which builds node standalone binaries: its package requires Node "^22.18.0 || ^24.11.0 || >=26.0.0".\n' +
+			'Node 25.9.0 (/opt/node/bin/node) is not supported by tsdown 0.23.1, which builds node standalone binaries: its package requires Node "^22.18.0 || ^24.11.0 || >=26.0.0".\n' +
 				"  Binaries embed the selected node's version; crust does not install or upgrade it.\n" +
 				"  Put a supported node first on PATH (e.g. with your version manager).",
 		);
@@ -82,7 +82,7 @@ describe("Node binary compiler", () => {
 				seaMinVersion: "25.7.0",
 			}),
 		).toThrow(
-			"Node 24.21.0 (/opt/node/bin/node) cannot build standalone executables: tsdown 0.23.0's executable builder requires Node 25.7.0 or later.",
+			"Node 24.21.0 (/opt/node/bin/node) cannot build standalone executables: tsdown 0.23.1's executable builder requires Node 25.7.0 or later.",
 		);
 		expect(() => assertNodeExeBackendSupports(nodeCompiler("24.21.0"), backend)).not.toThrow();
 		expect(() =>
@@ -98,7 +98,7 @@ describe("Node binary compiler", () => {
 		async () => {
 			const compiler = { ...nodeCompiler("24.21.0"), runner: resolveNodeBuildRunner() };
 			await expect(resolveNodeExeBackend(compiler, process.cwd())).rejects.toThrow(
-				`Node 24.21.0 (${nodePath}) cannot build standalone executables: tsdown 0.23.0's executable builder requires Node 25.7.0 or later.`,
+				`Node 24.21.0 (${nodePath}) cannot build standalone executables: tsdown 0.23.1's executable builder requires Node 25.7.0 or later.`,
 			);
 			await expect(
 				resolveNodeExeBackend({ ...compiler, version: "25.9.0" }, process.cwd()),
