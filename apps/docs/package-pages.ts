@@ -1,3 +1,6 @@
+import type { StructuredDataContent } from "fumadocs-core/mdx-plugins";
+import { markdownTable, replaceSource } from "fumadocs-core/mdx-plugins/stringifier";
+import { tableRowToStructuredData } from "fumadocs-core/search";
 import { pageSchema } from "fumadocs-core/source/schema";
 
 import changesetConfig from "../../.changeset/config.json" with { type: "json" };
@@ -56,7 +59,11 @@ export interface MdastNode {
 	value?: string;
 	url?: string;
 	align?: null[];
+	data?: { structuredData?: { contents: StructuredDataContent[] } };
 }
+
+type SourceFile = Parameters<typeof replaceSource>[0];
+type SourceNode = Parameters<typeof replaceSource>[1];
 
 const tableCell = (...children: MdastNode[]): MdastNode => ({ type: "tableCell", children });
 const tableText = (value: string): MdastNode => ({ type: "text", value });
@@ -87,13 +94,34 @@ export function remarkPackageTable() {
 					);
 				}
 			}
+			const header = ["Module", "Description"];
+			const rows = packages.map((pkg) => [
+				`[\`${pkg.name}\`](/docs/modules/${pkg.slug})`,
+				pkg.description,
+			]);
+			// Processed Markdown and search records are sliced from the authored source, so a generated
+			// table node alone only renders: register its Markdown and its rows explicitly.
+			// SAFETY: unified passes the VFile and the authored mdast node; the local types only narrow what this reads.
+			replaceSource(file as SourceFile, node as SourceNode, markdownTable([header, ...rows]));
 			return {
 				type: "table",
 				align: [null, null],
+				data: {
+					structuredData: {
+						// Search records drop links, like those remark-structure slices from authored tables.
+						contents: packages.map((pkg) =>
+							tableRowToStructuredData({
+								table: `package-table-${group}`,
+								header,
+								row: [`\`${pkg.name}\``, pkg.description],
+							}),
+						),
+					},
+				},
 				children: [
 					{
 						type: "tableRow",
-						children: [tableCell(tableText("Module")), tableCell(tableText("Description"))],
+						children: header.map((cell) => tableCell(tableText(cell))),
 					},
 					...packages.map((pkg) => ({
 						type: "tableRow",

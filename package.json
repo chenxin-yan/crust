@@ -24,8 +24,8 @@
 		"@arethetypeswrong/core": "^0.18.5",
 		"@changesets/changelog-github": "^1.0.1",
 		"@changesets/cli": "^3.0.3",
-		"@types/bun": "^1.4.2",
-		"publint": "^0.3.24",
+		"@types/bun": "^1.4.3",
+		"publint": "^0.3.25",
 		"typescript": "^7.0.2",
 		"vite-plus": "catalog:"
 	},

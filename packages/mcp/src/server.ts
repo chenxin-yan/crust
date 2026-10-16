@@ -243,8 +243,9 @@ export async function serveStdio(server: Server): Promise<void> {
 		// oxlint-disable-next-line unicorn/prefer-add-event-listener -- Protocol exposes only the `onclose` property.
 		server.onclose = resolve;
 	});
-	// The SDK transport only reads `data`; without this, a client hanging up would
-	// leave the serving Command Action, and the process, waiting forever.
+	// TODO: the SDK transport only reads `data`; without this, a client hanging up would
+	// leave the serving Command Action, and the process, waiting forever. Drop once a v1.x
+	// release ships modelcontextprotocol/typescript-sdk#2911 (the backport of #2494).
 	process.stdin.once("end", () => {
 		void server.close();
 	});

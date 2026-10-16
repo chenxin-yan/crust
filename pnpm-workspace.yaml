@@ -4,8 +4,10 @@ packages:
   - scripts
 
 catalog:
-  vite: npm:@voidzero-dev/vite-plus-core@1.0.0
-  vite-plus: 1.0.0
+  # The docs examples type-check against @crustjs/effect, so both must resolve one copy.
+  effect: 4.0.4
+  vite: npm:@voidzero-dev/vite-plus-core@1.2.0
+  vite-plus: 1.2.0
 
 overrides:
   # Vite plugins resolve the same Vite+ core that `vp build`/`vp test` run on.

@@ -55,8 +55,8 @@
 		"@crustjs/style": "workspace:^"
 	},
 	"optionalDependencies": {
-		"@tsdown/exe": "0.23.0",
-		"tsdown": "0.23.0"
+		"@tsdown/exe": "0.23.1",
+		"tsdown": "0.23.1"
 	},
 	"peerDependencies": {
 		"@crustjs/core": "^0.5.0"
@@ -67,7 +67,7 @@
 		"@crustjs/testing": "workspace:*",
 		"@crustjs/utils": "workspace:*",
 		"@types/semver": "^7.8.0",
-		"publint": "^0.3.24",
+		"publint": "^0.3.25",
 		"semver": "^7.8.5",
 		"vite-plus": "catalog:"
 	},
