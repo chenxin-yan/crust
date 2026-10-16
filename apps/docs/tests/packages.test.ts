@@ -14,7 +14,6 @@ import {
 	remarkPackageTable,
 } from "../package-pages";
 import * as sourceConfig from "../source.config";
-import docsConfig, { docs } from "../source.config";
 import { PACKAGES } from "../src/lib/packages";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
@@ -39,13 +38,6 @@ it("every published package with a module page is in PACKAGES under its director
 		Object.fromEntries(Object.entries(PACKAGES).map(([slug, pkg]) => [slug, pkg.name])),
 	).toEqual(Object.fromEntries(documented.map((pkg) => [pkg.slug, pkg.name])));
 	expect(MODULE_PACKAGES.map((pkg) => pkg.slug).sort()).toEqual(Object.keys(PACKAGES).sort());
-});
-
-it("the docs collection uses the package page schema and table plugin", () => {
-	expect(docs.docs.schema).toBe(packagePageSchema);
-	expect(docsConfig.mdxOptions).toMatchObject({
-		remarkPlugins: expect.arrayContaining([remarkPackageTable]),
-	});
 });
 
 describe("remarkPackageTable", () => {

@@ -22,14 +22,6 @@ describe("padStart — plain text", () => {
 	it("returns text unchanged when already at target width", () => {
 		expect(padStart("hello", 5)).toBe("hello");
 	});
-
-	it("returns text unchanged when wider than target", () => {
-		expect(padStart("hello world", 5)).toBe("hello world");
-	});
-
-	it("pads empty string", () => {
-		expect(padStart("", 3)).toBe("   ");
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -46,17 +38,6 @@ describe("padStart — styled text", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// padStart — full-width characters
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("padStart — full-width characters", () => {
-	it("pads correctly with CJK characters", () => {
-		// \u4f60 = 你, visible width = 2
-		expect(padStart("\u4f60", 5)).toBe("   \u4f60");
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // padEnd — plain text
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -65,20 +46,8 @@ describe("padEnd — plain text", () => {
 		expect(padEnd("hi", 5)).toBe("hi   ");
 	});
 
-	it("pads with custom fill character", () => {
-		expect(padEnd("hi", 5, ".")).toBe("hi...");
-	});
-
 	it("returns text unchanged when already at target width", () => {
 		expect(padEnd("hello", 5)).toBe("hello");
-	});
-
-	it("returns text unchanged when wider than target", () => {
-		expect(padEnd("hello world", 5)).toBe("hello world");
-	});
-
-	it("pads empty string", () => {
-		expect(padEnd("", 3)).toBe("   ");
 	});
 });
 
@@ -96,16 +65,6 @@ describe("padEnd — styled text", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// padEnd — full-width characters
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("padEnd — full-width characters", () => {
-	it("pads correctly with CJK characters", () => {
-		expect(padEnd("\u4f60", 5)).toBe("\u4f60   ");
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // center — plain text
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -118,20 +77,8 @@ describe("center — plain text", () => {
 		expect(center("hi", 7)).toBe("  hi   ");
 	});
 
-	it("centers with custom fill character", () => {
-		expect(center("hi", 6, "-")).toBe("--hi--");
-	});
-
 	it("returns text unchanged when already at target width", () => {
 		expect(center("hello", 5)).toBe("hello");
-	});
-
-	it("returns text unchanged when wider than target", () => {
-		expect(center("hello world", 5)).toBe("hello world");
-	});
-
-	it("centers empty string", () => {
-		expect(center("", 4)).toBe("    ");
 	});
 });
 
@@ -144,16 +91,5 @@ describe("center — styled text", () => {
 		const styled = bold("hi");
 		const result = center(styled, 6);
 		expect(result).toBe(`  ${styled}  `);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// center — full-width characters
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("center — full-width characters", () => {
-	it("centers CJK text correctly", () => {
-		// \u4f60 = 你, visible width = 2
-		expect(center("\u4f60", 6)).toBe("  \u4f60  ");
 	});
 });

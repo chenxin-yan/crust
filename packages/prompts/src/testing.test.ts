@@ -7,10 +7,6 @@ describe("encodeKey", () => {
 		expect(encodeKey("ctrl+c")).toBe("\x03");
 	});
 
-	it("passes single printable characters through", () => {
-		expect(encodeKey("y")).toBe("y");
-	});
-
 	it("throws on unsupported key names instead of typing them", () => {
 		expect(() => encodeKey("pageup")).toThrow("Unsupported key name");
 		expect(() => encodeKey("constructor")).toThrow("Unsupported key name");

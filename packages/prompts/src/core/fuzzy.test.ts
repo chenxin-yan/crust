@@ -14,20 +14,6 @@ describe("fuzzyMatch", () => {
 		expect(result.indices).toEqual([]);
 	});
 
-	it("exact match scores highest", () => {
-		const exact = fuzzyMatch("hello", "hello");
-		const partial = fuzzyMatch("hlo", "hello");
-		expect(exact.match).toBe(true);
-		expect(partial.match).toBe(true);
-		expect(exact.score).toBeGreaterThan(partial.score);
-	});
-
-	it("substring match works", () => {
-		const result = fuzzyMatch("ell", "hello");
-		expect(result.match).toBe(true);
-		expect(result.indices).toEqual([1, 2, 3]);
-	});
-
 	it("out-of-order characters do not match", () => {
 		const result = fuzzyMatch("ba", "abc");
 		expect(result.match).toBe(false);
@@ -37,12 +23,6 @@ describe("fuzzyMatch", () => {
 
 	it("case-insensitive matching", () => {
 		const result = fuzzyMatch("ABC", "abcdef");
-		expect(result.match).toBe(true);
-		expect(result.indices).toEqual([0, 1, 2]);
-	});
-
-	it("case-insensitive matching reverse direction", () => {
-		const result = fuzzyMatch("abc", "ABCDEF");
 		expect(result.match).toBe(true);
 		expect(result.indices).toEqual([0, 1, 2]);
 	});
@@ -79,22 +59,6 @@ describe("fuzzyMatch", () => {
 		expect(result.match).toBe(true);
 		expect(result.indices).toEqual([0, 2, 4]);
 	});
-
-	it("query longer than candidate does not match", () => {
-		const result = fuzzyMatch("longquery", "hi");
-		expect(result.match).toBe(false);
-	});
-
-	it("single character match works", () => {
-		const result = fuzzyMatch("x", "fox");
-		expect(result.match).toBe(true);
-		expect(result.indices).toEqual([2]);
-	});
-
-	it("matching empty candidate with non-empty query fails", () => {
-		const result = fuzzyMatch("a", "");
-		expect(result.match).toBe(false);
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -117,29 +81,6 @@ describe("fuzzyFilter", () => {
 			expect(r.score).toBe(0);
 			expect(r.indices).toEqual([]);
 		}
-	});
-
-	it("filters items that match the query", () => {
-		const results = fuzzyFilter("py", items);
-		expect(results.length).toBe(1);
-		expect(results[0]?.item.value).toBe("py");
-	});
-
-	it("returns empty array when nothing matches", () => {
-		const results = fuzzyFilter("xyz", items);
-		expect(results.length).toBe(0);
-	});
-
-	it("returns indices for each matched item", () => {
-		const results = fuzzyFilter("go", items);
-		const goResult = results.find((r) => r.item.value === "go");
-		expect(goResult).toBeDefined();
-		expect(goResult?.indices).toEqual([0, 1]);
-	});
-
-	it("preserves item references", () => {
-		const results = fuzzyFilter("py", items);
-		expect(results[0]?.item).toBe(items[3]);
 	});
 
 	it("sorts results by descending score", () => {

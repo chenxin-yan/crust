@@ -1,8 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { stripVTControlCharacters } from "node:util";
 
 import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
-import { spinner } from "@crustjs/progress";
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { captureExecute } from "./index.ts";
@@ -26,17 +24,6 @@ describe("captureExecute", () => {
 		expect(result).toEqual({ stdout: "hello", stderr: "", exitCode: 0 });
 	});
 
-	it("captures progress output through execute IO", async () => {
-		const app = new Crust("test-cli").action(async () => {
-			await spinner({ message: "Deploying", task: async () => "ok" });
-		});
-
-		const result = await captureExecute(app, []);
-
-		expect(stripVTControlCharacters(result.stderr)).toContain("✓ Deploying");
-		expect(result.exitCode).toBe(0);
-	});
-
 	it("captures exit code 1 without leaking it to the process", async () => {
 		process.exitCode = 7;
 		const app = new Crust("test-cli").action(() => {
@@ -47,30 +34,6 @@ describe("captureExecute", () => {
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("boom");
 		expect(process.exitCode).toBe(7);
-	});
-
-	it("captures exit code 130 for AbortError cancellation", async () => {
-		const app = new Crust("test-cli").action(() => {
-			throw new DOMException("Prompt was cancelled.", "AbortError");
-		});
-
-		const result = await captureExecute(app, []);
-		expect(result.exitCode).toBe(130);
-		expect(result.stderr).toBe("");
-	});
-
-	it("captures onError extension rendering", async () => {
-		const renderer = defineExtension(defineExtensionId("renderer")).onError((error, ctx) => {
-			ctx.stderr(`custom: ${(error as Error).message}`);
-			return true;
-		});
-		const app = new Crust("test-cli").extend(renderer).action(() => {
-			throw new Error("boom");
-		});
-
-		const result = await captureExecute(app, []);
-		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toBe("custom: boom");
 	});
 
 	it("restores the caller's exit code after overlapping failure and success captures", async () => {

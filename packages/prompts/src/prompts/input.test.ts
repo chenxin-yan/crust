@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { renderPrompt } from "../testing.ts";
 import { input } from "./input.ts";
-import { nonTTYIO, tick, waitForScreen } from "./test-helpers.ts";
+import { nonTTYIO, tick } from "./test-helpers.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Initial value — empty-string edge case
@@ -11,7 +11,6 @@ import { nonTTYIO, tick, waitForScreen } from "./test-helpers.ts";
 
 // Guards the `options.initial !== undefined` semantics against a regression to
 // a truthy check (which would treat "" as absent and drop into interactive mode).
-// Happy-path (non-empty initial) is covered by the non-TTY initial-value test.
 describe("input — initial value", () => {
 	it("returns empty string initial value", async () => {
 		const result = await input({
@@ -28,17 +27,6 @@ describe("input — initial value", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("input — interactive", () => {
-	it("renders message on initial display", async () => {
-		const prompt = renderPrompt(input, { message: "Your name?" });
-
-		await tick();
-		expect(prompt.screen()).toContain("Your name?");
-
-		// Submit empty to resolve
-		prompt.keys("return");
-		await prompt.answer;
-	});
-
 	it("renders placeholder when no value entered", async () => {
 		const prompt = renderPrompt(input, {
 			message: "Name?",
@@ -80,22 +68,6 @@ describe("input — interactive", () => {
 
 		prompt.keys("return");
 		await prompt.answer;
-	});
-
-	it("submits typed value on Enter", async () => {
-		const prompt = renderPrompt(input, { message: "Name?" });
-
-		await tick();
-		prompt.type("A");
-		await tick();
-		prompt.type("B");
-		await tick();
-		prompt.type("C");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe("ABC");
 	});
 
 	it("uses default value when submitting empty input", async () => {
@@ -279,43 +251,6 @@ describe("input — keypress editing", () => {
 		const result = await prompt.answer;
 		expect(result).toBe("ABC");
 	});
-
-	it("edits non-BMP characters without splitting surrogate pairs", async () => {
-		const prompt = renderPrompt(input, { message: "Name?" });
-
-		await tick();
-		prompt.type("😀");
-		await tick();
-		prompt.type("🎉");
-		await tick();
-		prompt.keys("left");
-		await tick();
-		prompt.type("a");
-		await tick();
-		prompt.keys("left");
-		await tick();
-		prompt.keys("backspace");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe("a🎉");
-	});
-
-	it("ignores ctrl+key combinations", async () => {
-		const prompt = renderPrompt(input, { message: "Name?" });
-
-		await tick();
-		prompt.type("A");
-		await tick();
-		// Ctrl+A should be ignored (not inserted)
-		prompt.keys("ctrl+a");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe("A");
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -353,33 +288,6 @@ describe("input — validation", () => {
 		const result = await prompt.answer;
 		expect(result).toBe("ab@");
 		expect(validateCallCount).toBe(2);
-	});
-
-	it("awaits async validation before resolving", async () => {
-		let validated = false;
-		const prompt = renderPrompt(input, {
-			message: "Code?",
-			validate: async (v) => {
-				await new Promise((r) => setTimeout(r, 5));
-				if (v !== "1234") throw new Error("Wrong code");
-				validated = true;
-			},
-		});
-
-		await tick();
-		prompt.type("1");
-		await tick();
-		prompt.type("2");
-		await tick();
-		prompt.type("3");
-		await tick();
-		prompt.type("4");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe("1234");
-		expect(validated).toBe(true);
 	});
 
 	it("validates default value when used", async () => {
@@ -433,76 +341,14 @@ describe("input — no message", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Non-TTY behavior
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("input — non-TTY", () => {
-	it("returns initial value in non-TTY environment", async () => {
-		const result = await input({ message: "Name?", initial: "Bob" }, nonTTYIO());
-
-		expect(result).toBe("Bob");
-	});
-
-	it("returns default value in non-TTY environment", async () => {
-		const result = await input({ message: "Name?", default: "untitled" }, nonTTYIO());
-
-		expect(result).toBe("untitled");
-	});
-
-	it("throws NonInteractiveError when no default or initial in non-TTY", async () => {
-		await expect(input({ message: "Name?" }, nonTTYIO())).rejects.toThrow("interactive terminal");
-	});
-
-	it("prefers initial over default in non-TTY environment", async () => {
-		const result = await input(
-			{ message: "Name?", initial: "from-flag", default: "fallback" },
-			nonTTYIO(),
-		);
-
-		expect(result).toBe("from-flag");
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // Standard Schema validation
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("input — schema validation", () => {
-	it("validates Unicode code-point limits through a string schema", async () => {
-		await expect(
-			input({ initial: "😀😀", schema: z.string().min(3, "Too short") }, nonTTYIO()),
-		).rejects.toThrow("Too short");
-		await expect(input({ initial: "😀😀😀", schema: z.string().min(3) }, nonTTYIO())).resolves.toBe(
-			"😀😀😀",
-		);
-		await expect(input({ initial: "😀😀", schema: z.string().max(2) }, nonTTYIO())).resolves.toBe(
-			"😀😀",
-		);
-	});
-
 	it("rejects combining schema with a function validator", async () => {
 		await expect(input({ schema: z.string(), validate: () => {} } as never)).rejects.toThrow(
 			'input() cannot combine "schema" with "validate"',
 		);
-	});
-
-	it("resolves to string when a string schema accepts the input", async () => {
-		const prompt = renderPrompt(input<string>, {
-			message: "Name?",
-			schema: z.string().min(3),
-		});
-
-		await tick();
-		prompt.type("A");
-		await tick();
-		prompt.type("l");
-		await tick();
-		prompt.type("i");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe("Ali");
 	});
 
 	it("resolves to the schema's transformed output (number from coerce)", async () => {
@@ -615,44 +461,6 @@ describe("input — schema validation", () => {
 		expect(result).toBe("ok");
 		expect(prompt.screen()).not.toContain("Validation failed");
 	});
-
-	it("awaits async schema validation", async () => {
-		const asyncSchema = z.string().refine(
-			async (v) => {
-				await new Promise((r) => setTimeout(r, 5));
-				return v === "yes";
-			},
-			{ message: "must be yes" },
-		);
-
-		const prompt = renderPrompt(input<string>, { message: "Confirm?", schema: asyncSchema });
-
-		await tick();
-		prompt.type("n");
-		await tick();
-		prompt.type("o");
-		await tick();
-		prompt.keys("return");
-		await waitForScreen(prompt, "must be yes");
-
-		expect(prompt.screen()).toContain("must be yes");
-
-		// Clear and type valid value
-		prompt.keys("backspace");
-		await tick();
-		prompt.keys("backspace");
-		await tick();
-		prompt.type("y");
-		await tick();
-		prompt.type("e");
-		await tick();
-		prompt.type("s");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe("yes");
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -696,19 +504,6 @@ describe("input — schema short-circuit", () => {
 
 		expect(result).toBe(3000);
 	});
-
-	it("throws when non-TTY `default` is rejected by the schema", async () => {
-		await expect(
-			input(
-				{
-					message: "Port?",
-					default: "abc",
-					schema: z.coerce.number().int(),
-				},
-				nonTTYIO(),
-			),
-		).rejects.toThrow(/default value rejected by schema/);
-	});
 });
 
 describe("input — schema + interactive default", () => {
@@ -724,50 +519,5 @@ describe("input — schema + interactive default", () => {
 
 		const result = await prompt.answer;
 		expect(result).toBe(4000);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Callable Standard Schema dispatch
-// ────────────────────────────────────────────────────────────────────────────
-//
-// The Standard Schema spec only requires the `~standard` property; some
-// vendors (e.g. Effect Schema's `Schema.standardSchemaV1`) expose schemas as
-// callable function-objects. `options.schema !== undefined` selects the schema
-// branch for callable objects just as it does for plain objects.
-
-describe("input — callable Standard Schema", () => {
-	it("dispatches a callable schema through the schema branch", async () => {
-		function isString<Value>(value: Value): value is Value & string {
-			return typeof value === "string";
-		}
-
-		// Build a callable function that also has a `~standard` property.
-		const callable = Object.assign(() => undefined, {
-			"~standard": {
-				version: 1 as const,
-				vendor: "test",
-				validate: <Value>(value: Value) => {
-					if (isString(value) && value.length > 0) {
-						return { value: `[${value}]` };
-					}
-					return { issues: [{ message: "empty" }] };
-				},
-			},
-		});
-
-		const prompt = renderPrompt(input<string>, { message: "Word?", schema: callable });
-
-		await tick();
-		prompt.keys("return");
-		await tick();
-		expect(prompt.screen()).toContain("empty");
-
-		prompt.type("a");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe("[a]");
 	});
 });

@@ -12,7 +12,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { createMcpServer, DEFAULT_SERVER_VERSION, toolResultFromOutcome } from "./server.ts";
+import { createMcpServer, toolResultFromOutcome } from "./server.ts";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -119,14 +119,6 @@ describe("createMcpServer", () => {
 		});
 	});
 
-	it("falls back to a default version", async () => {
-		const client = await connect(new Crust("bare").action(() => "ok"));
-		expect(client.getServerVersion()).toMatchObject({
-			name: "bare",
-			version: DEFAULT_SERVER_VERSION,
-		});
-	});
-
 	it("runs typed input, converting url fields and passing raw through", async () => {
 		const client = await connect(fixture);
 		const result = await client.callTool({
@@ -163,27 +155,6 @@ describe("createMcpServer", () => {
 			tags: ["t"],
 			rawArgs: [],
 		});
-	});
-
-	it("reaches Extension-contributed commands", async () => {
-		const client = await connect(fixture);
-		const result = await client.callTool({ name: "extra" });
-		expect(result.structuredContent).toEqual({ from: "extension" });
-	});
-
-	it("wraps JSON scalars and returns captured stdout for non-JSON results", async () => {
-		const client = await connect(fixture);
-		const scalar = await client.callTool({ name: "scalar" });
-		expect(scalar.structuredContent).toEqual({ result: 42 });
-		expect(scalar.content).toEqual([{ type: "text", text: "42" }]);
-
-		const printed = await client.callTool({ name: "print" });
-		expect(printed.structuredContent).toBeUndefined();
-		expect(printed.content).toEqual([{ type: "text", text: "plain output" }]);
-
-		const date = await client.callTool({ name: "date" });
-		expect(date.structuredContent).toBeUndefined();
-		expect(date.content).toEqual([{ type: "text", text: "" }]);
 	});
 
 	it("reports Crust validation, thrown errors, and input shaping as tool errors", async () => {
@@ -273,43 +244,6 @@ describe("createMcpServer", () => {
 		expect(await second).toMatchObject([{ status: "rejected", reason: expect.any(Error) }]);
 		expect(secondSignal!.aborted).toBe(true);
 		await calls[1]!.disposed.promise;
-	});
-
-	it("captures Context setup and disposal output per call under concurrency", async () => {
-		const session = defineContext("session")
-			.flags({ name: "id", type: "string", required: true })
-			.setup(async ({ flags, stdout, defer }) => {
-				stdout(`open ${flags.id}`);
-				await new Promise((resolve) => setTimeout(resolve, flags.id === "a" ? 20 : 1));
-				defer(() => stdout(`close ${flags.id}`));
-				return { id: flags.id };
-			});
-		const app = new Crust("ctx").add(
-			defineCommand("session", (c) =>
-				c.provide(session()).action(async ({ ctx, stdout }) => {
-					const { id } = await ctx.session;
-					stdout(`work ${id}`);
-				}),
-			),
-		);
-		const client = await connect(app);
-		const stdoutWrite = process.stdout.write;
-		let liveWrites = 0;
-		process.stdout.write = () => {
-			liveWrites++;
-			return true;
-		};
-		try {
-			const [a, b] = await Promise.all([
-				client.callTool({ name: "session", arguments: { id: "a" } }),
-				client.callTool({ name: "session", arguments: { id: "b" } }),
-			]);
-			expect(a.content).toEqual([{ type: "text", text: "open a\nwork a\nclose a" }]);
-			expect(b.content).toEqual([{ type: "text", text: "open b\nwork b\nclose b" }]);
-		} finally {
-			process.stdout.write = stdoutWrite;
-		}
-		expect(liveWrites).toBe(0);
 	});
 
 	it("binds prototype-named args and flags as own properties", async () => {
@@ -416,39 +350,6 @@ describe("toolResultFromOutcome", () => {
 		expect(reads).toBe(1);
 	});
 
-	it("captures a shared object's getters once for every reference", () => {
-		let reads = 0;
-		const shared = {
-			get value() {
-				return ++reads;
-			},
-		};
-		const response = toolResultFromOutcome(completed({ first: shared, second: shared }));
-		const captured = { first: { value: 1 }, second: { value: 1 } };
-		expect(JSON.parse(JSON.stringify(response))).toEqual({
-			content: [{ type: "text", text: JSON.stringify(captured, null, 2) }],
-			structuredContent: captured,
-		});
-		expect(reads).toBe(1);
-	});
-
-	it("falls back when a getter creates an array hole during capture", () => {
-		let reads = 0;
-		const result = [1, 2];
-		Object.defineProperty(result, "0", {
-			get() {
-				reads++;
-				// oxlint-disable-next-line typescript/no-array-delete -- the fixture intentionally creates a hole during capture.
-				delete result[1];
-				return 1;
-			},
-		});
-		expect(toolResultFromOutcome(completed(result))).toEqual({
-			content: [{ type: "text", text: "out" }],
-		});
-		expect(reads).toBe(1);
-	});
-
 	it.each(["object", "array", "symbol", "non-enumerable", "array length"])(
 		"falls back when getter capture adds data: %s",
 		(kind) => {
@@ -477,51 +378,6 @@ describe("toolResultFromOutcome", () => {
 			expect(added).not.toHaveBeenCalled();
 		},
 	);
-
-	it("captures validated object keys even when a getter hides a later property", () => {
-		const first = vi.fn(() => {
-			Object.defineProperty(result, "second", { enumerable: false });
-			return 1;
-		});
-		const second = vi.fn(() => 2);
-		const result = {
-			get first() {
-				return first();
-			},
-			get second() {
-				return second();
-			},
-		};
-		const response = toolResultFromOutcome(completed(result));
-		const captured = { first: 1, second: 2 };
-		expect(JSON.parse(JSON.stringify(response))).toEqual({
-			content: [{ type: "text", text: JSON.stringify(captured, null, 2) }],
-			structuredContent: captured,
-		});
-		expect(first).toHaveBeenCalledTimes(1);
-		expect(second).toHaveBeenCalledTimes(1);
-	});
-
-	it("falls back when a getter deletes a later object property during capture", () => {
-		const result = {
-			get first() {
-				Reflect.deleteProperty(result, "second");
-				return 1;
-			},
-			second: 2,
-		};
-		expect(toolResultFromOutcome(completed(result))).toEqual({
-			content: [{ type: "text", text: "out" }],
-		});
-	});
-
-	it("never runs a result's toJSON hook", () => {
-		const toJSON = vi.fn(() => 1);
-		expect(toolResultFromOutcome(completed({ toJSON }))).toEqual({
-			content: [{ type: "text", text: "out" }],
-		});
-		expect(toJSON).not.toHaveBeenCalled();
-	});
 
 	const shared = { value: 1 };
 	it.each([

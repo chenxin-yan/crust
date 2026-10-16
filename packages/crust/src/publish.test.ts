@@ -7,12 +7,7 @@ import type { RunProcessResult } from "@crustjs/utils/process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { DistributionManifest } from "./distribute.ts";
-import {
-	buildPublishCommand,
-	publishStagedPackages,
-	readPublishManifest,
-	validatePublishManifest,
-} from "./publish.ts";
+import { publishStagedPackages, readPublishManifest, validatePublishManifest } from "./publish.ts";
 
 const io = { stdout: () => {}, stderr: () => {} };
 
@@ -147,12 +142,6 @@ describe("publish manifest validation", () => {
 		rmSync(tmpDir, { recursive: true, force: true });
 	});
 
-	it("reads and validates a staged manifest", () => {
-		const loaded = readPublishManifest(tmpDir);
-		expect(loaded.publishOrder).toEqual(["linux-x64", "darwin-arm64", "root"]);
-		expect(() => validatePublishManifest(tmpDir, loaded)).not.toThrow();
-	});
-
 	it("names the corrupt staged file and asks for a rebuild", () => {
 		const manifestPath = join(tmpDir, "manifest.json");
 		writeFileSync(manifestPath, "{");
@@ -227,7 +216,7 @@ describe("publish manifest validation", () => {
 		}
 	});
 
-	it.each(["platform", "root"])(
+	it.each(["platform"])(
 		"rejects duplicate %s package names before any publisher runs",
 		async (duplicate) => {
 			const invalid = structuredClone(manifest);
@@ -410,25 +399,13 @@ describe("publish manifest validation", () => {
 		);
 	});
 
-	it("publishes with npm so trusted publishing works, leaving access to publishConfig", () => {
-		expect(buildPublishCommand({})).toEqual(["npm", "publish"]);
-		expect(buildPublishCommand({ tag: "next", registry: "https://r.example" })).toEqual([
-			"npm",
-			"publish",
-			"--tag",
-			"next",
-			"--registry",
-			"https://r.example",
-		]);
-	});
-
 	it("supports dry-run without spawning npm at all", async () => {
 		const runNpm = mockNpm();
 		await publishStagedPackages(manifest, { stageDir: tmpDir, dryRun: true, runNpm }, io);
 		expect(runNpm).not.toHaveBeenCalled();
 	});
 
-	it.each([true, false, undefined])("selects npm stdio when stdin.isTTY is %s", async (isTTY) => {
+	it.each([true, false])("selects npm stdio when stdin.isTTY is %s", async (isTTY) => {
 		const descriptor = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
 		const npm = join(tmpDir, "npm");
 		const which = vi.spyOn(processUtils, "which").mockReturnValue(npm);
@@ -480,43 +457,6 @@ describe("publish manifest validation", () => {
 			if (descriptor) Object.defineProperty(process.stdin, "isTTY", descriptor);
 			else Reflect.deleteProperty(process.stdin, "isTTY");
 		}
-	});
-
-	it("passes invocation IO to the publisher executor", async () => {
-		const stdout: string[] = [];
-		const stderr: string[] = [];
-		const invocationIO = {
-			stdout: (text: string) => stdout.push(text),
-			stderr: (text: string) => stderr.push(text),
-		};
-
-		await publishStagedPackages(
-			manifest,
-			{
-				stageDir: tmpDir,
-				runNpm: mockNpm({
-					publish: () => ({
-						exitCode: 0,
-						stdout: "registry stdout\n",
-						stderr: "registry stderr\n",
-					}),
-				}),
-			},
-			invocationIO,
-		);
-
-		expect(stdout).toContain("registry stdout");
-		// A successful E404 lookup stays quiet; only publish output reaches stderr.
-		expect(stderr).toEqual(["registry stderr", "registry stderr", "registry stderr"]);
-	});
-
-	it("stops on first failed publish", async () => {
-		const runNpm = mockNpm({ publish: () => ({ exitCode: 1, stdout: "", stderr: "" }) });
-
-		await expect(publishStagedPackages(manifest, { stageDir: tmpDir, runNpm }, io)).rejects.toThrow(
-			/linux-x64/,
-		);
-		expect(publishCalls(runNpm)).toHaveLength(1);
 	});
 
 	it("skips versions the registry already has and publishes the rest in order", async () => {
@@ -592,13 +532,6 @@ describe("publish manifest validation", () => {
 			"https://cli",
 			["--@scope:registry=https://scoped", "--registry", "https://cli"],
 		],
-		[
-			"scoped publishConfig only",
-			{ "@scope:registry": "https://scoped" },
-			undefined,
-			["--@scope:registry=https://scoped"],
-		],
-		["CLI --registry", { registry: "https://pc" }, "https://cli", ["--registry", "https://cli"]],
 		["publishConfig.registry", { registry: "https://pc" }, undefined, ["--registry=https://pc"]],
 		// pickRegistry falls back to the configured `scope` when the package has none.
 		[

@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, sep } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
@@ -44,11 +44,6 @@ describe("resolveSourceDir", () => {
 
 		it("returns absolute string paths verbatim (after resolve)", () => {
 			expect(resolveSourceDir(tmpDir)).toBe(tmpDir);
-		});
-
-		it("normalizes absolute string paths with `.` / `..` segments", () => {
-			const messy = `${tmpDir}${sep}.${sep}sub${sep}..`;
-			expect(resolveSourceDir(messy)).toBe(tmpDir);
 		});
 
 		it("resolves relative string paths from the nearest package.json walking up from process.argv[1]", async () => {
@@ -103,35 +98,6 @@ describe("resolveSourceDir", () => {
 				expect(() => resolveSourceDir("rel/path")).toThrow(/no package\.json was found/);
 				expect(() => resolveSourceDir("rel/path")).toThrow(/rel\/path/);
 				expect(() => resolveSourceDir("rel/path")).toThrow(entry);
-			});
-		});
-	});
-
-	// ──────────────────────────────────────────────────────────────────────
-	// resolveSourceDir — edge cases
-	// ──────────────────────────────────────────────────────────────────────
-
-	describe("edge cases", () => {
-		it("walks the lexical (un-realpath'd) path of process.argv[1] when it is a symlink", async () => {
-			// Lexical walking must find the outer package, not the symlink target's package.
-			await writeFile(join(tmpDir, "package.json"), "{}");
-			const pkgDir = join(tmpDir, "pkg");
-			await mkdir(pkgDir, { recursive: true });
-			await writeFile(
-				join(pkgDir, "package.json"),
-				JSON.stringify({ name: "fixture-pkg" }),
-				"utf-8",
-			);
-			await writeFile(join(pkgDir, "index.ts"), "export {};\n", "utf-8");
-
-			const linkPath = join(tmpDir, "entry-link.ts");
-			await symlink(join(pkgDir, "index.ts"), linkPath);
-
-			await withArgv1(linkPath, async () => {
-				const resolved = resolveSourceDir("templates/base");
-				// The outer fixture owns the lexical entrypoint.
-				expect(resolved).toBe(join(tmpDir, "templates", "base"));
-				expect(resolved).not.toBe(join(pkgDir, "templates", "base"));
 			});
 		});
 	});

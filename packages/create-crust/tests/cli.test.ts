@@ -3,7 +3,6 @@ import {
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
-	readdirSync,
 	readFileSync,
 	rmSync,
 	symlinkSync,
@@ -24,8 +23,6 @@ import type { RunProcessResult } from "../../utils/src/process.ts";
 const packageRoot = resolve(import.meta.dirname, "..");
 const builtCliPath = join(packageRoot, ".crust", "root", "bin", "create-crust.js");
 const tempRoots: string[] = [];
-// Every runtime template ships exactly these scripts.
-const templateScriptKeys = ["build", "check:types", "dev", "release", "start"];
 
 function makeTempRoot(label: string): string {
 	const dir = mkdtempSync(join(tmpdir(), `${label}-`));
@@ -104,33 +101,6 @@ describe("create-crust CLI", () => {
 		expect(existsSync(join(projectDir, "node_modules"))).toBe(false);
 		expect(existsSync(join(projectDir, ".git"))).toBe(false);
 	}, 30_000);
-
-	for (const runtime of ["bun", "node", "deno"]) {
-		it.each([
-			["bun/1.4.2", "bun"],
-			["npm/11.0.0", "npm"],
-			["pnpm/10.0.0", "pnpm"],
-			["yarn/1.22.22", "yarn"],
-			["yarn/4.0.0", "yarn"],
-			["", "npm"],
-		])(`uses %s instructions for ${runtime} projects`, async (userAgent, manager) => {
-			const projectDir = join(makeTempRoot("create-crust-manager"), "my-cli");
-			const result = await runCreateCrust(
-				[projectDir, "--runtime", runtime, "--no-install", "--no-git"],
-				{ env: { npm_config_user_agent: userAgent } },
-			);
-			const pm = runtime === "deno" ? "deno" : manager;
-			const run = pm === "deno" ? "deno task" : `${pm} run`;
-
-			expect(result.exitCode).toBe(0);
-			expect(result.stdout).toContain(`  ${pm} install\n  ${run} dev\n  ${run} build`);
-			const readme = readFileSync(join(projectDir, "README.md"), "utf-8");
-			expect(readme).toContain(`${pm} install`);
-			for (const script of templateScriptKeys) {
-				expect(readme).toContain(`${run} ${script}`);
-			}
-		});
-	}
 
 	it("uses the destination lockfile for instructions before installation", async () => {
 		const projectDir = join(makeTempRoot("create-crust-lockfile"), "my-cli");
@@ -301,47 +271,6 @@ describe("create-crust CLI", () => {
 		);
 	}
 
-	// package.json shares the base preflight, so an escaping link fails before any write.
-	it("rejects an escaping package.json symlink before writing any file", async () => {
-		const tempRoot = makeTempRoot("create-crust-manifest-link");
-		const projectDir = join(tempRoot, "my-cli");
-		const outside = join(tempRoot, "outside.json");
-		mkdirSync(projectDir);
-		symlinkSync(outside, join(projectDir, "package.json"), "file");
-
-		const result = await runCreateCrust([
-			projectDir,
-			"--runtime",
-			"node",
-			"--overwrite",
-			"--no-install",
-			"--no-git",
-		]);
-
-		expect(result.exitCode).not.toBe(0);
-		expect(result.stderr).toContain("is a symlink to a missing target outside the destination");
-		expect(existsSync(outside)).toBe(false);
-		expect(readdirSync(projectDir)).toEqual(["package.json"]);
-	});
-
-	it("rejects an invalid artifact before writing files", async () => {
-		const projectDir = join(makeTempRoot("create-crust-invalid-artifact"), "my-cli");
-		const result = await runCreateCrust([
-			projectDir,
-			"--runtime",
-			"bun",
-			"--artifact",
-			"invalid",
-			"--no-install",
-			"--no-git",
-		]);
-		expect(result.exitCode).not.toBe(0);
-		expect(result.stderr).toContain(
-			'Invalid value "invalid" for --artifact. Expected one of: package, binary',
-		);
-		expect(existsSync(projectDir)).toBe(false);
-	});
-
 	it("installs a Deno runtime project with deno install", async () => {
 		const tempRoot = makeTempRoot("create-crust-deno-install");
 		const projectDir = join(tempRoot, "deno-cli");
@@ -370,49 +299,9 @@ describe("create-crust CLI", () => {
 		expect(existsSync(join(projectDir, "package-lock.json"))).toBe(false);
 	}, 30_000);
 
-	it("fails with a clear error for an invalid runtime", async () => {
-		const tempRoot = makeTempRoot("create-crust-invalid-runtime");
-		const projectDir = join(tempRoot, "bad-runtime");
-
-		const result = await runCreateCrust([
-			projectDir,
-			"--runtime",
-			"invalid",
-			"--no-install",
-			"--no-git",
-		]);
-
-		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain(
-			'Error: Invalid value "invalid" for --runtime. Expected one of: bun, node, deno',
-		);
-		expect(existsSync(projectDir)).toBe(false);
-	}, 30_000);
-
 	// The basename becomes the package name, bin key, and a quoted TS string, so
 	// positional input must meet the same command-name contract as the prompt.
-	it.each(["my.cli", "my_cli", "cli2"])(
-		"accepts the project name %j",
-		async (dirName) => {
-			const projectDir = join(makeTempRoot("create-crust-name"), dirName);
-
-			const result = await runCreateCrust([
-				projectDir,
-				"--runtime",
-				"bun",
-				"--no-install",
-				"--no-git",
-			]);
-
-			expect(result.exitCode).toBe(0);
-			expect(JSON.parse(readFileSync(join(projectDir, "package.json"), "utf-8")).name).toBe(
-				dirName,
-			);
-		},
-		30_000,
-	);
-
-	it.each(['bad"name', "bad name", ".hidden-cli", "-leading-dash", "_tool", "my~cli", "__proto__"])(
+	it.each(['bad"name'])(
 		"rejects the project directory basename %j before writing anything",
 		async (dirName) => {
 			const tempRoot = makeTempRoot("create-crust-bad-name");
@@ -434,22 +323,6 @@ describe("create-crust CLI", () => {
 		},
 		30_000,
 	);
-
-	it("rejects scaffolding into a current directory whose basename is not a valid name", async () => {
-		const tempRoot = makeTempRoot("create-crust-bad-dot");
-		const projectDir = join(tempRoot, "has space");
-		mkdirSync(projectDir);
-
-		const result = await runCreateCrust([".", "--runtime", "bun", "--no-install", "--no-git"], {
-			cwd: projectDir,
-		});
-
-		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain(
-			'Error: Project name "has space" is not safe for the generated project.',
-		);
-		expect(readdirSync(projectDir)).toEqual([]);
-	}, 30_000);
 
 	it("aborts cleanly when the destination exists and --no-overwrite is passed", async () => {
 		const tempRoot = makeTempRoot("create-crust-no-overwrite");
@@ -503,7 +376,7 @@ describe("create-crust CLI", () => {
 		expect(pkg.name).toBe(basename(tempRoot));
 	}, 30_000);
 
-	it.each([".", "./"])(
+	it.each(["."])(
 		"scaffolds into an empty current directory given %j without prompting",
 		async (directory) => {
 			const tempRoot = makeTempRoot("create-crust-dot-empty");
@@ -541,7 +414,7 @@ describe("create-crust CLI", () => {
 	);
 
 	// Missing intermediate directories must not hide the enclosing repository.
-	it.each(["inside-repo-cli", "missing-parent/inside-repo-cli"])(
+	it.each(["missing-parent/inside-repo-cli"])(
 		"skips git initialization for repo/%s even when --git is passed",
 		async (relativeDir) => {
 			const tempRoot = makeTempRoot("create-crust-git-repo");

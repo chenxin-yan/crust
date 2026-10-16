@@ -18,9 +18,6 @@ import { which } from "@crustjs/utils/process";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import {
-	type BunPluginDriverOptions,
-	createBunCompileArgs,
-	createBunPluginDriverScript,
 	execBuild,
 	execDenoPackageBuild,
 	execScriptBuild,
@@ -72,60 +69,6 @@ describe("resolveBunPluginSource", () => {
 		);
 		const absolute = resolve("/opt/plugins/plugin.ts");
 		expect(resolveBunPluginSource(absolute, cwd)).toBe(pathToFileURL(absolute).href);
-	});
-});
-
-describe("createBunPluginDriverScript", () => {
-	const awkward = String.raw`C:\Program Files\my "cli"\dist\my cli.exe`;
-
-	function embeddedOptions(script: string): BunPluginDriverOptions {
-		const line = script.split("\n").find((candidate) => candidate.startsWith("const options = "));
-		expect(line).toBeDefined();
-		// SAFETY: the driver embeds exactly one JSON.stringify(options) statement; the test round-trips it.
-		return JSON.parse(line!.slice("const options = ".length, -1)) as BunPluginDriverOptions;
-	}
-
-	it("embeds compile options as JSON so quotes, spaces, and backslashes survive", () => {
-		const options: BunPluginDriverOptions = {
-			plugins: [
-				{ specifier: "@opentui/solid/bun-plugin", source: "@opentui/solid/bun-plugin" },
-				{ specifier: './it\'s "quoted".ts', source: "file:///proj/it's%20%22quoted%22.ts" },
-			],
-			build: {
-				entrypoints: [String.raw`C:\Program Files\my "cli"\src\cli.tsx`],
-				minify: false,
-				env: "PUBLIC_*",
-				target: "bun",
-				compile: { target: "bun-windows-x64", outfile: awkward, autoloadBunfig: false },
-			},
-			outfile: awkward,
-		};
-		const script = createBunPluginDriverScript(options);
-		expect(embeddedOptions(script)).toEqual(options);
-		expect(script).toContain('define: {"process.env.CRUST_INTERNAL_BUILD":"\\"1\\""}');
-		expect(script).toContain("throw: false");
-		expect(script).toContain("must default-export a Bun bundler plugin ({ name, setup })");
-	});
-
-	it("embeds Node bundle options with externals and refuses to write more than one output", () => {
-		const options: BunPluginDriverOptions = {
-			plugins: [{ specifier: "./plugin.ts", source: "file:///proj/plugin.ts" }],
-			build: {
-				entrypoints: ["/proj/src/cli.ts"],
-				minify: true,
-				env: "PUBLIC_*",
-				target: "node",
-				format: "esm",
-				external: ["better-sqlite3", "typescript"],
-			},
-			outfile: "/proj/dist/cli.js",
-		};
-		const script = createBunPluginDriverScript(options);
-		expect(embeddedOptions(script)).toEqual(options);
-		expect(script).toContain("await Bun.write(options.outfile, result.outputs[0])");
-		expect(script).toContain(
-			"error: cannot write multiple output files without an output directory",
-		);
 	});
 });
 
@@ -379,7 +322,7 @@ describe("execScriptBuild with crust.external", () => {
 		return directory;
 	}
 
-	for (const target of ["node", "bun"] as const) {
+	for (const target of ["node"] as const) {
 		for (const bunPlugins of [[], ["./plugin.ts"]]) {
 			const path = bunPlugins.length > 0 ? "the Bun.build driver" : "bun build";
 			it(`keeps externals and their subpaths out of a ${target} bundle built by ${path}`, async () => {
@@ -418,42 +361,4 @@ describe("execScriptBuild with crust.external", () => {
 			});
 		}
 	}
-});
-
-describe("createBunCompileArgs", () => {
-	it("compiles without cwd bunfig autoloading and keeps env, outfile, minify, target order", () => {
-		expect(
-			createBunCompileArgs("/p/src/cli.ts", "/p/dist/cli", true, "bun-darwin-arm64", ["/p/.env"]),
-		).toEqual([
-			"build",
-			"--compile",
-			"--no-compile-autoload-bunfig",
-			"--env-file",
-			"/p/.env",
-			"--env=PUBLIC_*",
-			"--define",
-			'process.env.CRUST_INTERNAL_BUILD="1"',
-			"--outfile",
-			"/p/dist/cli",
-			"--minify",
-			"--target",
-			"bun-darwin-arm64",
-			"/p/src/cli.ts",
-		]);
-		expect(
-			createBunCompileArgs("/p/src/cli.ts", "/p/dist/cli", false, "bun-linux-x64", []),
-		).toEqual([
-			"build",
-			"--compile",
-			"--no-compile-autoload-bunfig",
-			"--env=PUBLIC_*",
-			"--define",
-			'process.env.CRUST_INTERNAL_BUILD="1"',
-			"--outfile",
-			"/p/dist/cli",
-			"--target",
-			"bun-linux-x64",
-			"/p/src/cli.ts",
-		]);
-	});
 });

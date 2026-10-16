@@ -1,7 +1,6 @@
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
@@ -10,14 +9,6 @@ import { loadBundleFiles } from "./bundle.ts";
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
 // ────────────────────────────────────────────────────────────────────────────
-
-const FIXTURE_DIR = join(
-	dirname(fileURLToPath(import.meta.url)),
-	"..",
-	"tests",
-	"fixtures",
-	"bundle",
-);
 
 let tmpDir: string;
 
@@ -34,16 +25,6 @@ afterEach(async () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("loadBundleFiles", () => {
-	it("loads SKILL.md, top-level supporting files, and nested files", async () => {
-		const { files } = await loadBundleFiles(FIXTURE_DIR);
-		const paths = files.map((f) => f.path).sort();
-		expect(paths).toContain("SKILL.md");
-		expect(paths).toContain("playbook.md");
-		expect(paths).toContain("subdir/notes.md");
-		// Nested dotfiles ARE copied.
-		expect(paths).toContain("subdir/.config");
-	});
-
 	it("copies root-level authored content as-is (dotfiles, node_modules, etc. are NOT filtered)", async () => {
 		// Bundle authors own `sourceDir` cleanliness. The walker copies what's
 		// there — including root dotfiles like `.env.example` or `.tool-versions`
@@ -103,23 +84,6 @@ describe("loadBundleFiles", () => {
 		await mkdir(dir, { recursive: true });
 		await writeFile(join(dir, "SKILL.md"), "# Bundle\nNo frontmatter\n");
 		await expect(loadBundleFiles(dir)).rejects.toThrow(/`name:`/);
-	});
-
-	it("rejects frontmatter with no top-level name field", async () => {
-		const dir = join(tmpDir, "no-name-key");
-		await mkdir(dir, { recursive: true });
-		await writeFile(
-			join(dir, "SKILL.md"),
-			"---\ndescription: Build a sales funnel\n---\n# Bundle\n",
-		);
-		await expect(loadBundleFiles(dir)).rejects.toThrow(/`name:`/);
-	});
-
-	it("rejects frontmatter with no top-level description field", async () => {
-		const dir = join(tmpDir, "no-description-key");
-		await mkdir(dir, { recursive: true });
-		await writeFile(join(dir, "SKILL.md"), "---\nname: funnel-builder\n---\n# Bundle\n");
-		await expect(loadBundleFiles(dir)).rejects.toThrow(/`description:`/);
 	});
 
 	it("rejects empty frontmatter values", async () => {

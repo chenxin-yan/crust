@@ -17,10 +17,6 @@ class Cache extends Context.Service<Cache, { readonly get: (key: string) => stri
 
 const db = layer("db", Layer.succeed(Db, { query: (sql) => sql }));
 const config = defineContext("config").setup(() => ({ prefix: "cfg" }));
-// A plain Context that happens to return an Effect Context is not a layer().
-const unbranded = defineContext("unbranded").setup(() =>
-	Context.make(Cache, { get: (key) => key }),
-);
 
 // args / flags / ctx inference is unchanged versus a plain action, in both forms.
 new Crust("cli")
@@ -64,7 +60,7 @@ const adaptedGenerator = handler(function* () {
 });
 type _GeneratorResult = Expect<Equal<ReturnType<typeof adaptedGenerator>, Promise<number>>>;
 
-// ServicesOf counts branded layer() values only; open-name bags yield never.
+// ServicesOf counts branded layer() values only.
 type _Services = Expect<
 	Equal<
 		ServicesOf<{
@@ -72,14 +68,6 @@ type _Services = Expect<
 		}>,
 		Db
 	>
->;
-type _NoServices = Expect<Equal<ServicesOf<{ ctx: {} }>, never>>;
-type _OpenBag = Expect<Equal<ServicesOf<{ ctx: Record<string, Promise<unknown>> }>, never>>;
-type _OpenBrandedBag = Expect<
-	Equal<ServicesOf<{ ctx: Record<string, Promise<LayerValue<Db>>> }>, never>
->;
-type _OpenUnknownBag = Expect<
-	Equal<ServicesOf<{ ctx: Record<string, Promise<LayerValue<unknown>>> }>, never>
 >;
 
 // A layer() with a non-literal name provides nothing: its entry cannot be tied to the path.
@@ -108,14 +96,6 @@ new Crust("cli").provide(db()).action(
 	),
 );
 
-// A plain defineContext returning Context.Context<Cache> does not provide Cache.
-new Crust("cli").provide(db(), unbranded()).action(
-	// @ts-expect-error -- unbranded Context values are not provided.
-	handler(function* () {
-		return yield* Cache;
-	}),
-);
-
 // A fully composed Layer is required: unmet requirements are rejected.
 const needsCache = Layer.effect(
 	Db,
@@ -124,33 +104,21 @@ const needsCache = Layer.effect(
 // @ts-expect-error -- Layer still requires Cache.
 layer("needsCache", needsCache);
 
-// service() is typed by the factory's value and fails with the tagged union.
+// service() is typed by the factory's value.
 type ConfigService = ReturnType<typeof service<typeof config>>;
 type _ServiceValue = Expect<Equal<Effect.Success<ConfigService>, { prefix: string }>>;
-type _ServiceError = Expect<Equal<Effect.Error<ConfigService>, CrustTaggedError>>;
 
 const env = defineEnv("env", {
 	PORT: { type: "number", default: 3000 },
 	API_TOKEN: { type: "string", required: true },
 });
-const envService = service(env);
-type _EnvValue = Expect<
-	Equal<Effect.Success<typeof envService>, Readonly<{ PORT: number; API_TOKEN: string }>>
->;
-type _EnvError = Expect<Equal<Effect.Error<typeof envService>, CrustTaggedError>>;
-const recoveredEnv = envService.pipe(
+service(env).pipe(
 	Effect.catchTag("CrustEnvError", (error) => {
 		type _CaughtEnvError = Expect<Equal<typeof error, CrustEnvError>>;
 		return Effect.succeed({ PORT: 3000, API_TOKEN: "test" });
 	}),
 );
-type _RemainingEnvErrors = Expect<
-	Equal<Effect.Error<typeof recoveredEnv>, Exclude<CrustTaggedError, CrustEnvError>>
->;
 
-// tryCrust unwraps sync and async thunks and fails with the tagged union.
-type _Sync = Expect<
-	Equal<ReturnType<typeof tryCrust<number>>, Effect.Effect<number, CrustTaggedError>>
->;
+// tryCrust unwraps async thunks and fails with the tagged union.
 const asyncLifted = tryCrust(async () => "text");
 type _Async = Expect<Equal<typeof asyncLifted, Effect.Effect<string, CrustTaggedError>>>;

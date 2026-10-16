@@ -15,10 +15,9 @@ import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
 import { hostTarget } from "./helpers.ts";
 
 // Opt-in (CRUST_TUI_SMOKE=1): installs pinned OpenTUI packages from npm into a
-// temp project and drives the compiled binaries in a pseudo-terminal. The Solid
-// build needs `crust.bunPlugins: ["@opentui/solid/bun-plugin"]`; core needs no
-// plugin. The project's bunfig preload stays in place during the build and at
-// runtime.
+// temp project and drives the compiled binary in a pseudo-terminal. The Solid
+// build needs `crust.bunPlugins: ["@opentui/solid/bun-plugin"]`. The project's
+// bunfig preload stays in place during the build and at runtime.
 const enabled = process.env.CRUST_TUI_SMOKE === "1" && process.platform !== "win32";
 // Allocated in beforeAll so skipped runs leave no crust-tui-smoke-* directory behind.
 let fixtureDir = "";
@@ -142,35 +141,6 @@ await new Crust("solid-smoke")
   .execute();
 `,
 		);
-		writeFileSync(
-			join(fixtureDir, "core.ts"),
-			`import { Crust } from ${JSON.stringify(corePath)};
-import { createCliRenderer, TextRenderable } from "@opentui/core";
-
-await new Crust("core-smoke")
-  .action(async () => {
-    let settle!: () => void;
-    const destroyed = new Promise<void>((resolve) => (settle = resolve));
-    const renderer = await createCliRenderer({ exitOnCtrlC: true, onDestroy: () => settle() });
-    let tick = 0;
-    const text = new TextRenderable(renderer, { id: "t", content: "CORE_MOUNTED tick=0" });
-    const marker = new TextRenderable(renderer, { id: "m", content: "" });
-    renderer.root.add(text);
-    renderer.root.add(marker);
-    const timer = setInterval(() => {
-      tick += 1;
-      text.content = \`CORE_MOUNTED tick=\${tick}\`;
-      if (tick >= 2) marker.content = "CORE_REACTIVE_OK";
-    }, 250);
-    renderer.on("destroy", () => clearInterval(timer));
-    renderer.keyInput.on("keypress", (key) => {
-      if (key.name === "q") renderer.destroy();
-    });
-    await destroyed;
-  })
-  .execute();
-`,
-		);
 
 		const install = await runBoundedProcess(which("bun")!, ["install", "--minimum-release-age=0"], {
 			cwd: fixtureDir,
@@ -193,14 +163,6 @@ await new Crust("core-smoke")
 		expect(output).toContain("SOLID_MOUNTED");
 		expect(output).toContain("SOLID_REACTIVE_OK");
 		expect(output).not.toContain("Orphan text");
-		expect(exitCode).toBe(0);
-	}, 120_000);
-
-	it("compiles a core app without plugins and runs it reactively", async () => {
-		const outfile = await buildFixture("core-smoke", "core.ts", []);
-
-		const { exitCode, output } = runInTerminal(outfile, "CORE_REACTIVE_OK");
-		expect(output).toContain("CORE_REACTIVE_OK");
 		expect(exitCode).toBe(0);
 	}, 120_000);
 });

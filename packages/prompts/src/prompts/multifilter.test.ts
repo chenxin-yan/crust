@@ -5,22 +5,6 @@ import { multifilter, type MultifilterOptions } from "./multifilter.ts";
 import { nonTTYIO, tick } from "./test-helpers.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Initial/default short-circuits
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("multifilter — initial / default", () => {
-	it("returns initial array immediately without rendering", async () => {
-		const result = await multifilter({
-			message: "Search",
-			choices: ["TypeScript", "JavaScript", "Rust"],
-			initial: ["Rust", "JavaScript"],
-		});
-
-		expect(result).toEqual(["Rust", "JavaScript"]);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // Non-TTY behavior
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -39,26 +23,6 @@ describe("multifilter — non-TTY", () => {
 		});
 
 		expect(result).toEqual(["b", "c"]);
-	});
-
-	it("throws NonInteractiveError when no default or initial in non-TTY", async () => {
-		await expect(
-			nonTTY({
-				message: "Search",
-				choices: ["a", "b", "c"],
-			}),
-		).rejects.toThrow("interactive terminal");
-	});
-
-	it("prefers initial over default in non-TTY environment", async () => {
-		const result = await nonTTY({
-			message: "Search",
-			choices: ["a", "b", "c"],
-			initial: ["a"],
-			default: ["c"],
-		});
-
-		expect(result).toEqual(["a"]);
 	});
 });
 

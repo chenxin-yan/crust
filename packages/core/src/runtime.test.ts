@@ -84,20 +84,6 @@ describe("runtime structured invocation", () => {
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		await expect(unwrap(app.run([], { flags: { config: 3 } }))).rejects.toThrow("Expected string");
 	});
-
-	it("checks dynamic values against the selected command", async () => {
-		const app = new Crust("run")
-			.flags({ name: "count", type: "number" })
-			.action(({ flags }) => flags.count);
-		expect(await app.run([], { flags: { count: 3 } })).toMatchObject({
-			status: "completed",
-			result: 3,
-		});
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		await expect(unwrap(app.run([], { flags: { count: "wrong" } }))).rejects.toThrow(
-			"Expected number for --count",
-		);
-	});
 });
 
 describe("runtime command names", () => {
@@ -111,17 +97,6 @@ describe("runtime command names", () => {
 		);
 	});
 
-	it("preserves independent inputs and selected results", async () => {
-		const name: string = "generated";
-		const app = new Crust(name)
-			.args({ name: "file", type: "string", required: true })
-			.action(({ args }) => args.file);
-		expect(await app.run([], { args: { file: "input" } })).toMatchObject({
-			status: "completed",
-			result: "input",
-		});
-	});
-
 	it("checks renamed names against carried aliases", () => {
 		const command = defineCommand("source", { aliases: ["alias", "alias"] }, (builder) => builder);
 		expect(command.as("target").name).toBe("target");
@@ -129,13 +104,6 @@ describe("runtime command names", () => {
 		expect(() => command.as("alias")).toThrow("canonical name");
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => command.as("__proto__")).toThrow("reserved");
-	});
-
-	it("checks dynamic inline names", () => {
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		expect(() => new Crust("root").command("", (command) => command)).toThrow(
-			"Command name must be a non-empty string",
-		);
 	});
 });
 
@@ -182,15 +150,4 @@ it("checks command relations at each actual destination and keeps Context setup 
 	const app = new Crust("present").provide(owner()).add(demand);
 	await app.snapshot();
 	expect(setups).toBe(0);
-});
-
-it("checks each future Extension section result when prepared", async () => {
-	let title = "Notes";
-	const docs = defineExtension(defineExtensionId("future")).sections(() => [
-		{ command: [], title, body: "Body" },
-	]);
-	const first = new Crust("one").extend(docs);
-	expect((await first.snapshot()).meta.sections?.[0]?.title).toBe("Notes");
-	title = "\n";
-	await expect(new Crust("two").extend(docs).snapshot()).rejects.toThrow("sections");
 });

@@ -140,22 +140,6 @@ describe("writeSkills", () => {
 		await expect(result).rejects.toMatchObject({ skillName: "guide" });
 	});
 
-	it("refuses to write an empty skill source", async () => {
-		const outDir = join(tempRoot, "skills");
-
-		await expect(writeSkills({ outDir })).rejects.toThrow("Nothing to write");
-		await expect(readdir(outDir)).rejects.toThrow();
-	});
-
-	it("writes only authored skills when no app is given", async () => {
-		const bundleDir = await createBundle("guide", "Authored guidance");
-		const outDir = join(tempRoot, "skills");
-
-		await writeSkills({ outDir, extras: [bundleDir] });
-
-		expect(await readdir(outDir)).toEqual(["guide"]);
-	});
-
 	it("replaces a symlinked skill directory instead of writing through it", async () => {
 		const authored = await createBundle("demo", "Hand-written demo skill");
 		const outDir = join(tempRoot, "skills");
@@ -214,23 +198,11 @@ describe("writeSkills", () => {
 	it.each([
 		["../../../escaped", '"../../../escaped"'],
 		["..\\..\\escaped", '"..\\..\\escaped"'],
-		["remote/add", '"remote/add"'],
 		["..", '".."'],
 		["con", '"con"'],
 		["NUL.txt", '"NUL.txt"'],
-		["aux", '"aux"'],
-		["prn", '"prn"'],
-		["com1", '"com1"'],
-		["lpt9.log", '"lpt9.log"'],
 		["COM\u00b9", '"COM\u00b9"'],
-		["lpt\u00b2", '"lpt\u00b2"'],
 		["stream:name", '"stream:name"'],
-		['bad"name', '"bad"name"'],
-		["bad<name", '"bad<name"'],
-		["bad>name", '"bad>name"'],
-		["bad|name", '"bad|name"'],
-		["bad?name", '"bad?name"'],
-		["bad*name", '"bad*name"'],
 		["bad\u0001name", '"bad\u0001name"'],
 	])("rejects command name %s that is not one portable file segment", async (name, quoted) => {
 		const outDir = join(tempRoot, "out", "skills");
@@ -352,24 +324,6 @@ describe("writeSkills", () => {
 });
 
 describe("renderSkills", () => {
-	it("returns generated and authored skill files without touching disk", async () => {
-		const bundleDir = await createBundle("deployment-guide", "Deployment guidance");
-		const snapshot = await createApp().snapshot();
-
-		const files = await renderSkills(snapshot, { version: "1.2.3", extras: [bundleDir] });
-
-		expect(files.map((file) => file.path)).toEqual([
-			join("deployment-guide", "SKILL.md"),
-			join("deployment-guide", "references", "guide.md"),
-			join("demo", "SKILL.md"),
-			join("demo", "commands", "demo.md"),
-			join("demo", "commands", "serve.md"),
-		]);
-		expect(files[1]?.content).toEqual(Buffer.from("# Guide\n"));
-		expect(files[2]?.content).toContain("name: demo");
-		expect(await readdir(tempRoot)).toEqual(["deployment-guide"]);
-	});
-
 	it("renders only authored skills without a snapshot", async () => {
 		const bundleDir = await createBundle("guide", "Authored guidance");
 

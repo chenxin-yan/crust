@@ -1,5 +1,4 @@
 import type {
-	AnyCrust,
 	ArgDef,
 	CommandDefinition,
 	CommandSection,
@@ -54,10 +53,7 @@ function fixtureDefinition(fixture: CommandFixture): CommandDefinition<any, any,
 	});
 }
 
-export async function snapshotFixture(
-	fixture: CommandFixture | AnyCrust,
-): Promise<CommandSnapshot> {
-	if ("snapshot" in fixture) return await fixture.snapshot();
+export async function snapshotFixture(fixture: CommandFixture): Promise<CommandSnapshot> {
 	const { name, hidden: _hidden, ...meta } = fixture.meta;
 	const root = new Crust(name, meta)
 		.args(...(fixture.args ?? []))

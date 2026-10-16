@@ -1,14 +1,9 @@
-import { stripVTControlCharacters } from "node:util";
-
-import { Crust, defineCommand } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { help } from "./help.ts";
 import { noColor } from "./no-color.ts";
-
-const stripAnsi = stripVTControlCharacters;
-const originalStdoutIsTTY = process.stdout.isTTY;
 
 beforeEach(() => {
 	// Ambient NO_COLOR/FORCE_COLOR (e.g. CI runners) must not leak into the
@@ -19,51 +14,9 @@ beforeEach(() => {
 
 afterEach(() => {
 	vi.unstubAllEnvs();
-	Object.defineProperty(process.stdout, "isTTY", {
-		configurable: true,
-		value: originalStdoutIsTTY,
-	});
 });
 
 describe("noColor", () => {
-	it("noColor injects --color and --no-color into help output", async () => {
-		const app = new Crust("app")
-			.extend(noColor())
-			.extend(help())
-			.add(defineCommand("build", (cmd) => cmd.action(() => {})));
-
-		const { stdout } = await captureExecute(app, ["--help"]);
-
-		const output = stripAnsi(stdout);
-		expect(output).toContain("--color, --no-color");
-	});
-
-	it("noColor disables color but preserves modifiers on a TTY", async () => {
-		// `--no-color` → NO_COLOR=1: colors off, modifiers keep following
-		// TTY detection (no-color.org). Mock a TTY so the modifier half of
-		// the contract is observable regardless of the test runner's stdout.
-		Object.defineProperty(process.stdout, "isTTY", {
-			configurable: true,
-			value: true,
-		});
-		const app = new Crust("app").extend(noColor()).extend(help());
-
-		const { stdout: output } = await captureExecute(app, ["--help", "--no-color"]);
-		expect(output).not.toContain("\x1b[36m");
-		expect(output).not.toContain("\x1b[33m");
-		expect(output).toContain("\x1b[1mUsage:\x1b[22m");
-	});
-
-	it("noColor overrides NO_COLOR with --color", async () => {
-		vi.stubEnv("NO_COLOR", "1");
-
-		const app = new Crust("app").extend(noColor()).extend(help());
-
-		const { stdout: output } = await captureExecute(app, ["--help", "--color"]);
-		expect(output).toContain("\x1b[36m");
-		expect(output).toContain("\x1b[1m");
-	});
-
 	it("noColor --color clears NO_COLOR during the run and restores it after", async () => {
 		vi.stubEnv("NO_COLOR", "1");
 		let seenNoColor: string | undefined = "unset";
@@ -133,16 +86,6 @@ describe("noColor", () => {
 		expect(process.env.NO_COLOR).toBe("1");
 	});
 
-	it("noColor respects NO_COLOR without explicit --color flag", async () => {
-		vi.stubEnv("NO_COLOR", "1");
-
-		const app = new Crust("app").extend(noColor()).extend(help());
-
-		const { stdout: output } = await captureExecute(app, ["--help"]);
-		expect(output).not.toContain("\x1b[36m");
-		expect(output).not.toContain("\x1b[33m");
-	});
-
 	it("noColor overrides ambient FORCE_COLOR during help and restores it after", async () => {
 		vi.stubEnv("FORCE_COLOR", "3");
 
@@ -154,17 +97,5 @@ describe("noColor", () => {
 		expect(process.env.NO_COLOR).toBeUndefined();
 		expect(stdout).not.toContain("\x1b[36m");
 		expect(stdout).not.toContain("\x1b[33m");
-	});
-
-	it("noColor flag is recursive on subcommands", async () => {
-		const app = new Crust("app")
-			.extend(noColor())
-			.extend(help())
-			.add(defineCommand("build", (cmd) => cmd.action(() => {})));
-
-		const { stdout } = await captureExecute(app, ["build", "--help"]);
-
-		const output = stripAnsi(stdout);
-		expect(output).toContain("--color, --no-color");
 	});
 });

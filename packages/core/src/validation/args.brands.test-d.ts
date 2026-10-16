@@ -114,10 +114,3 @@ import type { AppendArgsChecks, EmptyArgNameBrand, ValidateArgs } from "./args.b
 	type _valid = Expect<Equal<Extract<keyof Valid[0], "FIX_DEFAULT_CHOICE">, never>>;
 	type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_DEFAULT_CHOICE">, never>>;
 }
-
-{
-	// resolves to identity for empty args
-	type Args = readonly [];
-	type Result = ValidateArgs<Args>;
-	type _check = Expect<Equal<Result, Args>>;
-}

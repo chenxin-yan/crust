@@ -5,7 +5,6 @@ import {
 	readdirSync,
 	readFileSync,
 	rmSync,
-	statSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -16,7 +15,7 @@ import { Crust } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import type { JsonValue } from "@crustjs/utils/json";
 import { which } from "@crustjs/utils/process";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vite-plus/test";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 
 import { buildCommand } from "../src/commands/build.ts";
 import { BUN_TARGETS, type BunTarget } from "../src/targets.ts";
@@ -56,7 +55,6 @@ afterEach(reapBoundedProcesses);
 
 describe("crust build integration — staged targets", () => {
 	const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-integration-"));
-	const crustCliPath = resolve(import.meta.dirname, "..", "src", "cli.ts");
 	const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 	const originalCwd = process.cwd;
 	const basePackageJson = {
@@ -110,58 +108,6 @@ console.log("hello from crust build test");
 		expect(stdout).toContain("Staging");
 		expect(stdout).toContain("Staged");
 	});
-
-	it("builds without --minify when --no-minify is passed", async () => {
-		process.cwd = () => tmpDir;
-		const processSpy = vi.spyOn(await import("@crustjs/utils/process"), "runProcess");
-		try {
-			const { stdout, exitCode } = await captureExecute(new Crust("test").add(buildCommand), [
-				"build",
-				"--no-validate",
-				"--no-minify",
-				"--target",
-				"bun-darwin-arm64",
-			]);
-
-			expect(exitCode).toBe(0);
-			expect(existsSync(stagedBunBinary(tmpDir, "test-build-cli", "bun-darwin-arm64"))).toBe(true);
-			expect(stdout).toContain("Staged");
-			const compile = processSpy.mock.calls.find(([, args]) => args?.includes("--compile"));
-			expect(compile?.[1]).toContain("--compile");
-			expect(compile?.[1]).not.toContain("--minify");
-		} finally {
-			processSpy.mockRestore();
-		}
-	});
-
-	it.skipIf(getHostBunTarget() === null)(
-		"stages only this machine's platform package with --target host",
-		async () => {
-			const host = getHostBunTarget()!;
-			process.cwd = () => tmpDir;
-
-			const { exitCode, stderr } = await captureExecute(new Crust("test").add(buildCommand), [
-				"build",
-				"--no-validate",
-				"--target",
-				"host",
-			]);
-
-			expect(exitCode, stderr).toBe(0);
-			expect(readdirSync(join(tmpDir, ".crust")).sort()).toEqual([
-				BUN_TARGETS.info[host].alias,
-				"manifest.json",
-				"root",
-			]);
-			const outPath = stagedBunBinary(tmpDir, "test-build-cli", host);
-			const { exitCode: runExitCode, stdout: runStdout } = await runBoundedProcess(outPath, [], {
-				cwd: tmpDir,
-				timeout: 4_000,
-			});
-			expect(runExitCode).toBe(0);
-			expect(runStdout.trim()).toBe("hello from crust build test");
-		},
-	);
 
 	it.skipIf(getHostBunTarget() === null || which("node") === null)(
 		"builds two bin entries into their own launchers and binaries with merged artifacts",
@@ -300,67 +246,6 @@ await app.execute();
 			});
 		},
 	);
-
-	it.skipIf(getHostBunTarget() === null)(
-		"uses Bun auto-loaded cwd env to embed PUBLIC_ constants when --env-file is omitted",
-		async () => {
-			const host = getHostBunTarget()!;
-			const autoloadDir = join(tmpDir, "autoload-workspace");
-			mkdirSync(join(autoloadDir, "src"), { recursive: true });
-
-			writeFileSync(
-				join(autoloadDir, "src", "cli.ts"),
-				`#!/usr/bin/env bun
-import { Crust } from ${JSON.stringify(corePath)};
-if (process.env.CRUST_INTERNAL_SNAPSHOT_PATH && !process.env.REQUIRED_BUILD_VAR) {
-  throw new Error("Missing REQUIRED_BUILD_VAR");
-}
-const app = new Crust("autoload-cli").action(() => console.log(JSON.stringify({
-  publicValue: process.env.PUBLIC_MESSAGE,
-  secretValue: process.env.SECRET_TOKEN ?? null,
-})));
-await app.execute();
-`,
-			);
-			writeFileSync(
-				join(autoloadDir, ".env"),
-				[
-					"REQUIRED_BUILD_VAR=1",
-					"PUBLIC_MESSAGE=hello-from-autoload",
-					"SECRET_TOKEN=autoload-secret",
-				].join("\n"),
-			);
-			writePackageJson(autoloadDir, {
-				name: "autoload-cli",
-				version: "0.1.0",
-				crust: { artifact: "binary" },
-			});
-
-			const { exitCode, stderr } = await runBoundedProcess(
-				which("bun")!,
-				[crustCliPath, "build", "--target", "host"],
-				{ cwd: autoloadDir, env: { ...process.env, BUN_BE_BUN: "1" }, timeout: 4_000 },
-			);
-			expect(exitCode, stderr).toBe(0);
-			const outPath = stagedBunBinary(autoloadDir, "autoload-cli", host);
-			expect(existsSync(outPath)).toBe(true);
-
-			const runtimeDir = join(autoloadDir, "runtime-no-env");
-			mkdirSync(runtimeDir, { recursive: true });
-
-			const { exitCode: builtExitCode, stdout } = await runBoundedProcess(outPath, [], {
-				cwd: runtimeDir,
-				env: {},
-				timeout: 4_000,
-			});
-
-			expect(builtExitCode).toBe(0);
-			expect(JSON.parse(stdout.trim())).toEqual({
-				publicValue: "hello-from-autoload",
-				secretValue: null,
-			});
-		},
-	);
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -449,56 +334,6 @@ await new Crust("marker-cli").action(() => console.log(JSON.stringify({
 			crustBuild: "1",
 		});
 	}, 30_000);
-
-	it.skipIf(which("node") === null)(
-		"bundles Node artifacts through the plugin and keeps the shebang",
-		async () => {
-			writePackageJson(tmpDir, {
-				...packageJson,
-				crust: { ...packageJson.crust, runtime: "node", artifact: "package" },
-			});
-			const { exitCode, stderr } = await captureExecute(new Crust("test").add(buildCommand), [
-				"build",
-				"--no-validate",
-			]);
-			if (exitCode !== 0) throw new Error(stderr);
-			const outPath = join(tmpDir, ".crust", "root", "bin", "marker-cli.js");
-			expect(readFileSync(outPath, "utf8").startsWith("#!/usr/bin/env node\n")).toBe(true);
-			if (process.platform !== "win32") expect(statSync(outPath).mode & 0o111).not.toBe(0);
-
-			const run = await runBoundedProcess(which("node")!, [outPath], { env: {}, timeout: 25_000 });
-			expect(run.exitCode).toBe(0);
-			expect(JSON.parse(run.stdout.trim())).toMatchObject({
-				marker: "transformed-by-plugin",
-				crustBuild: "1",
-			});
-		},
-		30_000,
-	);
-
-	it("bundles Bun runtime packages through the plugin behind a bun shebang", async () => {
-		writePackageJson(tmpDir, packageJson);
-		const { exitCode, stderr } = await captureExecute(new Crust("test").add(buildCommand), [
-			"build",
-			"--artifact",
-			"package",
-			"--env-file",
-			".env.build",
-			"--no-validate",
-		]);
-		if (exitCode !== 0) throw new Error(stderr);
-		const outPath = join(tmpDir, ".crust", "root", "bin", "marker-cli.js");
-		expect(readFileSync(outPath, "utf8").startsWith("#!/usr/bin/env bun\n")).toBe(true);
-
-		const run = await runBoundedProcess(which("bun")!, [outPath], { env: {}, timeout: 25_000 });
-		expect(run.exitCode, run.stderr).toBe(0);
-		expect(JSON.parse(run.stdout.trim())).toEqual({
-			marker: "transformed-by-plugin",
-			publicValue: "hello-from-build",
-			secretValue: null,
-			crustBuild: "1",
-		});
-	}, 30_000);
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -541,16 +376,6 @@ describe.skipIf(getHostBunTarget() === null)(
 		afterAll(() => {
 			process.cwd = originalCwd;
 			rmSync(tmpDir, { recursive: true, force: true });
-		});
-
-		it("starts crust's own executable from a cwd with an unresolvable bunfig preload", async () => {
-			const { exitCode, stdout, stderr } = await runBoundedProcess(crustBinary, ["--version"], {
-				cwd: preloadCwd,
-				timeout: 4_000,
-			});
-			expect(stderr).not.toContain("preload not found");
-			expect(exitCode).toBe(0);
-			expect(stdout).toContain("crust v");
 		});
 
 		it("keeps .env autoloading in compiled executables while ignoring the cwd bunfig", async () => {

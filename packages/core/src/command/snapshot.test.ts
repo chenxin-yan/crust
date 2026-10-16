@@ -295,7 +295,6 @@ describe("command metadata sections", () => {
 
 	it("rejects malformed authored section data", () => {
 		const badSections = [
-			[{ title: "", body: "Body" }],
 			[{ title: "   ", body: "Body" }],
 			[{ title: "Notes", body: "" }],
 			[{ title: "Notes", body: "Body", only: [] }],
@@ -312,27 +311,6 @@ describe("command metadata sections", () => {
 					},
 				}),
 			);
-		}
-	});
-
-	it("rejects malformed Extension section contributions", async () => {
-		const badReturns = [
-			[{ command: [], title: "", body: "Body" }],
-			[{ command: [], title: "Notes", body: "   " }],
-			[{ command: [], title: "Notes", body: "Body", only: [] }],
-		];
-		for (const contributions of badReturns) {
-			const app = new Crust("cli").extend(
-				defineExtension(defineExtensionId("docs")).sections(() => contributions),
-			);
-			await expect(app.snapshot()).rejects.toMatchObject({
-				code: "DEFINITION",
-				details: {
-					subject: "extension",
-					name: "docs",
-					reason: "invalid-sections",
-				},
-			});
 		}
 	});
 

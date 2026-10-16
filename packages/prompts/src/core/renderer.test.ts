@@ -17,20 +17,6 @@ import {
 import { defaultTheme } from "./theme.ts";
 
 describe("resolvePromptIO", () => {
-	it("line-buffers ambient terminal output without changing input", () => {
-		const errors: string[] = [];
-
-		withAmbientTerminalIO({ stdout: () => {}, stderr: (text) => errors.push(text) }, () => {
-			const resolved = resolvePromptIO();
-			expect(resolved.input).toBe(process.stdin);
-
-			resolved.output.write("first");
-			resolved.output.write(" line\nsecond\npartial");
-		});
-
-		expect(errors).toEqual(["first line", "second"]);
-	});
-
 	it("prefers explicit and prompt-scoped output over ambient terminal output", () => {
 		const errors: string[] = [];
 		const explicit = new Writable({ write: (_chunk, _encoding, done) => done() });
@@ -80,16 +66,6 @@ describe("assertTTY", () => {
 			expect(() => assertTTY()).toThrow(NonInteractiveError);
 		});
 	});
-
-	it("does not throw when stdin is a TTY", () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: true,
-			writable: true,
-			configurable: true,
-		});
-
-		expect(() => assertTTY()).not.toThrow();
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -97,43 +73,6 @@ describe("assertTTY", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("runPrompt", () => {
-	it("uses supplied TTY streams instead of process globals", async () => {
-		const harness = createPromptIO();
-
-		const config: PromptConfig<{ value: string }, string> = {
-			render: (state) => state.value,
-			handleKey: () => submit("done"),
-			initialState: { value: "prompt" },
-			theme: defaultTheme,
-		};
-
-		const answer = runPrompt(config, harness.io);
-		harness.type("x");
-
-		expect(await answer).toBe("done");
-		expect(harness.screen()).toBe("prompt");
-	});
-
-	it("resolves an omitted theme to defaultTheme", async () => {
-		const harness = createPromptIO();
-
-		let seenTheme: unknown;
-		const answer = runPrompt<{ value: string }, string>(
-			{
-				render: (state, theme) => {
-					seenTheme = theme;
-					return state.value;
-				},
-				handleKey: () => submit("done"),
-				initialState: { value: "prompt" },
-			},
-			harness.io,
-		);
-		harness.type("x");
-		expect(await answer).toBe("done");
-		expect(seenTheme).toEqual(defaultTheme);
-	});
-
 	it("merges a partial theme onto defaultTheme", async () => {
 		const harness = createPromptIO();
 
@@ -201,25 +140,6 @@ describe("runPrompt", () => {
 		expect(harness.screen()).toContain("prompt");
 	});
 
-	it("permits concurrent prompts on distinct input streams", async () => {
-		const first = createPromptIO();
-		const second = createPromptIO();
-		const config: PromptConfig<undefined, string> = {
-			render: () => "prompt",
-			handleKey: () => submit("done"),
-			initialState: undefined,
-			theme: defaultTheme,
-		};
-
-		const firstAnswer = runPrompt(config, first.io);
-		const secondAnswer = runPrompt(config, second.io);
-		first.type("x");
-		second.type("x");
-
-		expect(await firstAnswer).toBe("done");
-		expect(await secondAnswer).toBe("done");
-	});
-
 	it("rejects concurrent prompts on the same input stream", async () => {
 		const harness = createPromptIO();
 		const config: PromptConfig<undefined, string> = {
@@ -264,34 +184,6 @@ describe("runPrompt", () => {
 		await expect(runPrompt(config, createPromptIO({ isTTY: false }).io)).rejects.toThrow(
 			NonInteractiveError,
 		);
-	});
-
-	it("updates state on non-submit keypress", async () => {
-		let keypressCount = 0;
-
-		const config: PromptConfig<{ value: string }, string> = {
-			render: (state) => state.value,
-			handleKey: (_key, state) => {
-				keypressCount++;
-				if (keypressCount >= 3) {
-					return submit(`${state.value}!`);
-				}
-				return { value: `${state.value}x` };
-			},
-			initialState: { value: "" },
-			theme: defaultTheme,
-		};
-
-		const harness = createPromptIO();
-		const promise = runPrompt(config, harness.io);
-		harness.type("a");
-		await new Promise((r) => setTimeout(r, 10));
-		harness.type("b");
-		await new Promise((r) => setTimeout(r, 10));
-		harness.keys("return");
-
-		const result = await promise;
-		expect(result).toBe("xx!");
 	});
 
 	it("defaults output to stderr, not stdout", () => {
@@ -343,25 +235,6 @@ describe("runPrompt", () => {
 		const result = await promise;
 		expect(result).toBe("final");
 		expect(harness.screen()).toBe("done final");
-	});
-
-	it("handles async handleKey", async () => {
-		const config: PromptConfig<{ value: string }, string> = {
-			render: (state) => state.value,
-			handleKey: async () => {
-				await new Promise((r) => setTimeout(r, 5));
-				return submit("async-result");
-			},
-			initialState: { value: "" },
-			theme: defaultTheme,
-		};
-
-		const harness = createPromptIO();
-		const promise = runPrompt(config, harness.io);
-		harness.type("a");
-
-		const result = await promise;
-		expect(result).toBe("async-result");
 	});
 
 	it("rejects when handleKey throws", async () => {

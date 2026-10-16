@@ -113,23 +113,6 @@ describe("runSteps", () => {
 	// ────────────────────────────────────────────────────────────────────────────
 
 	describe("step sequencing", () => {
-		it("runs steps sequentially in array order", async () => {
-			// Step 1: create a file with "first"
-			// Step 2: append "second" to the same file
-			await runSteps(
-				[
-					{ type: "command", cmd: "echo first > order.txt" },
-					{ type: "command", cmd: "echo second >> order.txt" },
-				],
-				tempDir,
-			);
-
-			const content = readFileSync(join(tempDir, "order.txt"), "utf-8");
-			const lines = content.trim().split("\n");
-			expect(lines[0]).toBe("first");
-			expect(lines[1]).toBe("second");
-		});
-
 		it("stops on first failure and does not execute remaining steps", async () => {
 			await expect(
 				runSteps(

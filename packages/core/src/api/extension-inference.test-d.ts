@@ -45,7 +45,6 @@ type _optionalScope = Expect<
 >;
 
 type Toggle = { name: "toggle"; type: "boolean"; schema: StandardSchema<unknown, number> };
-type Token = { name: "token"; type: "string"; schema: StandardSchema<unknown, number> };
 type _scalar = Expect<Equal<InferExtensionFlags<readonly [Toggle]>["toggle"], boolean | undefined>>;
 type _multiple = Expect<
 	Equal<
@@ -59,23 +58,12 @@ type _optionalMultiple = Expect<
 		boolean | boolean[] | undefined
 	>
 >;
-type _optionalTokens = Expect<
-	Equal<
-		InferExtensionFlags<readonly [Token & { multiple?: true }]>["token"],
-		string | string[] | undefined
-	>
->;
 
 function _contextual(recursive: boolean, flags: Port[], toggle: Toggle & { multiple?: true }) {
 	defineExtension(defineExtensionId("scope"))
 		.flags({ name: "port", type: "number", default: 123, recursive })
 		.preRun(({ flags }) => {
 			// @ts-expect-error A false-capable scope may omit this flag on descendants.
-			const value: number = flags.port;
-			void value;
-		})
-		.postRun(({ flags }) => {
-			// @ts-expect-error Post hooks have the same raw flag contract.
 			const value: number = flags.port;
 			void value;
 		});

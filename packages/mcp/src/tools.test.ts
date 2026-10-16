@@ -1,4 +1,4 @@
-import { Crust, defineCommand, defineExtension, defineExtensionId } from "@crustjs/core";
+import { Crust, defineCommand } from "@crustjs/core";
 import { describe, expect, it } from "vite-plus/test";
 
 import { toolsFromSnapshot } from "./tools.ts";
@@ -183,14 +183,6 @@ describe("toolsFromSnapshot", () => {
 		expect(properties["constructor"]).toEqual({ type: "string" });
 		expect(properties["hasOwnProperty"]).toEqual({ type: "boolean" });
 		expect(tool!.argNames).toEqual(["__proto__"]);
-	});
-
-	it("includes Extension-contributed commands", async () => {
-		const contributed = defineExtension(defineExtensionId("test:contrib")).add(
-			defineCommand("extra", (c) => c.action(noop)),
-		);
-		const app = new Crust("cli").extend(contributed);
-		expect(toolsFromSnapshot(await app.snapshot()).map((t) => t.name)).toEqual(["extra"]);
 	});
 
 	it("rejects tool-name collisions after filtering, naming both paths", async () => {

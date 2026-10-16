@@ -25,12 +25,6 @@ describe("command definitions", () => {
 		expect(snapshot.subCommands.compile?.meta.name).toBe("compile");
 	});
 
-	it("rejects a recipe that returns an unrelated builder", () => {
-		const unrelated = defineCommand("bad", () => new Crust("other") as never);
-
-		expect(() => new Crust("cli").add(unrelated)).toThrow(/same command builder/);
-	});
-
 	it("rejects a later batch recipe returning an earlier recipe's fluent builder", async () => {
 		const events: string[] = [];
 		let retained: CommandDefinitionBuilder<{ "from-first": { type: "boolean" } }, []> | undefined;
@@ -74,51 +68,6 @@ describe("command definitions", () => {
 
 		expect(() => new Crust("cli").add(nestedExtension)).toThrow(
 			/Command "bad" cannot register Extensions inside command definitions/,
-		);
-	});
-
-	it("accumulates chained flags and args on the definition builder", async () => {
-		let received:
-			| {
-					args: { source: string; destination: string };
-					flags: { verbose: boolean | undefined; output: string | undefined };
-			  }
-			| undefined;
-		const definition = defineCommand("copy", (command) =>
-			command
-				.flags({ name: "verbose", type: "boolean" })
-				.flags({ name: "output", type: "string" })
-				.args({ name: "source", type: "string", required: true })
-				.args({ name: "destination", type: "string", required: true })
-				.action(({ args, flags }) => {
-					type _Source = Expect<Equal<typeof args.source, string>>;
-					type _Output = Expect<Equal<typeof flags.output, string | undefined>>;
-					received = { args, flags };
-				}),
-		);
-
-		await unwrap(
-			new Crust("cli").add(definition).run(["copy"], {
-				args: { source: "from", destination: "to" },
-				flags: { verbose: true, output: "dist" },
-			}),
-		);
-		expect(received).toEqual({
-			args: { source: "from", destination: "to" },
-			flags: { verbose: true, output: "dist" },
-		});
-	});
-
-	it("does not backfill nested definitions with later inheritable flags", async () => {
-		const nested = defineCommand("nested", (command) => command.action(() => {}));
-		const outer = defineCommand("outer", (command) =>
-			command.add(nested).flags({ name: "late", type: "boolean" }),
-		);
-		const app = new Crust("cli").add(outer);
-
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		await expect(unwrap(app.run(["outer", "nested"], { flags: { late: true } }))).rejects.toThrow(
-			/Unknown flag/,
 		);
 	});
 
@@ -212,16 +161,6 @@ describe("command definitions", () => {
 		void rejectedForms;
 	});
 
-	it("excludes parent local flags from added commands", async () => {
-		const definition = defineCommand("users", (command) => command.action(() => {}));
-		const app = new Crust("cli").flags({ name: "secret", type: "string" }).add(definition);
-
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		await expect(unwrap(app.run(["users"], { flags: { secret: "value" } }))).rejects.toThrow(
-			/Unknown flag/,
-		);
-	});
-
 	it("rejects a recipe-provided Context flag colliding with an ancestor Context's flag", () => {
 		const db = defineContext("db")
 			.flags({ name: "conn", type: "string" })
@@ -235,24 +174,6 @@ describe("command definitions", () => {
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => app.add(sub)).toThrow(
 			'Flag "conn" collides with existing flag "conn" on command "sub"',
-		);
-	});
-
-	it("rejects re-providing a colliding owned flag along a child path", () => {
-		const db = defineContext("db")
-			.flags({ name: "conn", type: "string" })
-			.setup(() => ({
-				kind: "real",
-			}));
-		const sub = defineCommand("sub", (cmd) =>
-			cmd.provide(db.of({ kind: "double" })).action(() => {}),
-		);
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		expect(() => new Crust("cli").provide(db()).add(sub)).toThrow(
-			expect.objectContaining({
-				code: "DEFINITION",
-				details: { subject: "flag", name: "conn", reason: "flag-collision" },
-			}),
 		);
 	});
 

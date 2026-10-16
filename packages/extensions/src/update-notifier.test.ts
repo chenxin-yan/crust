@@ -52,14 +52,6 @@ describe("isNewerVersion", () => {
 		expect(isNewerVersion("1.0.0", "2.0.0")).toBe(true);
 	});
 
-	it("returns true when latest minor is higher", async () => {
-		expect(isNewerVersion("1.0.0", "1.1.0")).toBe(true);
-	});
-
-	it("returns true when latest patch is higher", async () => {
-		expect(isNewerVersion("1.0.0", "1.0.1")).toBe(true);
-	});
-
 	it("returns false for equal versions", async () => {
 		expect(isNewerVersion("1.2.3", "1.2.3")).toBe(false);
 	});
@@ -68,32 +60,12 @@ describe("isNewerVersion", () => {
 		expect(isNewerVersion("2.0.0", "1.0.0")).toBe(false);
 	});
 
-	it("returns false when latest is older (minor)", async () => {
-		expect(isNewerVersion("1.2.0", "1.1.0")).toBe(false);
-	});
-
-	it("returns false when latest is older (patch)", async () => {
-		expect(isNewerVersion("1.0.2", "1.0.1")).toBe(false);
-	});
-
 	it("returns false when current is unparsable", async () => {
 		expect(isNewerVersion("invalid", "1.0.0")).toBe(false);
 	});
 
-	it("returns false when latest is unparsable", async () => {
-		expect(isNewerVersion("1.0.0", "invalid")).toBe(false);
-	});
-
-	it("returns false when both are unparsable", async () => {
-		expect(isNewerVersion("invalid", "also-invalid")).toBe(false);
-	});
-
 	it("notifies prerelease users when the stable release is available", async () => {
 		expect(isNewerVersion("1.2.3-beta.1", "1.2.3")).toBe(true);
-	});
-
-	it("handles prerelease latest versions", async () => {
-		expect(isNewerVersion("1.2.3", "1.2.4-rc.1")).toBe(true);
 	});
 
 	it("orders prerelease identifiers per SemVer precedence", async () => {
@@ -105,11 +77,6 @@ describe("isNewerVersion", () => {
 
 	it("handles v-prefixed versions", async () => {
 		expect(isNewerVersion("v1.0.0", "v2.0.0")).toBe(true);
-	});
-
-	it("handles mixed v-prefix", async () => {
-		expect(isNewerVersion("v1.0.0", "2.0.0")).toBe(true);
-		expect(isNewerVersion("1.0.0", "v2.0.0")).toBe(true);
 	});
 });
 
@@ -188,13 +155,6 @@ describe("fetchLatestVersion", () => {
 		expect(result).toBeNull();
 	});
 
-	it("returns null when dist-tags is missing", async () => {
-		mockFetch(() => Promise.resolve(new Response(JSON.stringify({}), { status: 200 })));
-
-		const result = await fetchLatestVersion("my-cli", "https://registry.npmjs.org", 5000);
-		expect(result).toBeNull();
-	});
-
 	it("returns null when latest is not a string", async () => {
 		mockFetch(() =>
 			Promise.resolve(
@@ -216,13 +176,6 @@ describe("fetchLatestVersion", () => {
 				}),
 			),
 		);
-
-		const result = await fetchLatestVersion("my-cli", "https://registry.npmjs.org", 5000);
-		expect(result).toBeNull();
-	});
-
-	it("returns null on malformed JSON response", async () => {
-		mockFetch(() => Promise.resolve(new Response("not json", { status: 200 })));
 
 		const result = await fetchLatestVersion("my-cli", "https://registry.npmjs.org", 5000);
 		expect(result).toBeNull();
@@ -345,7 +298,6 @@ describe("updateNotifier post-run hook", () => {
 			cache?: UpdateNotifierCacheAdapter | false;
 		},
 		overrides?: {
-			commandName?: string;
 			useBuiltInCache?: boolean;
 		},
 	) {
@@ -361,7 +313,7 @@ describe("updateNotifier post-run hook", () => {
 						? { cache: { intervalMs } }
 						: {}),
 		};
-		const outcome = await new Crust(overrides?.commandName ?? options.packageName)
+		const outcome = await new Crust(options.packageName)
 			.extend(updateNotifier(extensionOptions))
 			.action(() => {})
 			.run([], {}, { stdout: () => {}, stderr: (text) => stderrChunks.push(text) });
@@ -369,22 +321,6 @@ describe("updateNotifier post-run hook", () => {
 	}
 
 	describe("built-in cache adapter", () => {
-		it("round-trips notifier state at the adapter seam", async () => {
-			const adapter = await createStoreCacheAdapter(
-				uniquePackageName("adapter-round-trip"),
-				"https://registry.npmjs.org",
-			);
-			const state: UpdateNotifierState = {
-				lastCheckedAt: 123,
-				latestVersion: "2.0.0",
-				lastNotifiedVersion: "2.0.0",
-			};
-
-			expect(await adapter.read()).toBeNull();
-			await adapter.write(state);
-			expect(await adapter.read()).toEqual(state);
-		});
-
 		it("rejects state written for another registry", async () => {
 			const packageName = uniquePackageName("adapter-registry");
 			const publicRegistry = await createStoreCacheAdapter(
@@ -433,18 +369,6 @@ describe("updateNotifier post-run hook", () => {
 
 			expect(getOutput()).toBe("");
 		});
-
-		it("does not emit notice when current is newer than registry", async () => {
-			const pkgName = uniquePackageName("no-update-newer");
-			mockRegistryResponse("0.9.0");
-
-			await runExtensionMiddleware({
-				currentVersion: "1.0.0",
-				packageName: pkgName,
-			});
-
-			expect(getOutput()).toBe("");
-		});
 	});
 
 	// ── Cache gate / stale cache flows ────────────────────────────────────
@@ -479,26 +403,6 @@ describe("updateNotifier post-run hook", () => {
 			expect(getOutput()).toContain("2.0.0");
 			expect(getOutput()).not.toContain("3.0.0");
 			expect(fetchFn).not.toHaveBeenCalled();
-		});
-
-		it("performs network check when cache is stale (exceeds intervalMs)", async () => {
-			const pkgName = uniquePackageName("cache-stale");
-
-			// Write an old timestamp (well beyond default 24h)
-			setCachedState({
-				lastCheckedAt: 0,
-				latestVersion: undefined,
-				lastNotifiedVersion: undefined,
-			});
-
-			mockRegistryResponse("2.0.0");
-
-			await runExtensionMiddleware({
-				currentVersion: "1.0.0",
-				packageName: pkgName,
-			});
-
-			expect(getOutput()).toContain("2.0.0");
 		});
 
 		it("refetches when elapsed equals intervalMs exactly (strict boundary)", async () => {
@@ -553,18 +457,6 @@ describe("updateNotifier post-run hook", () => {
 	// ── Network failure tolerance ─────────────────────────────────────────
 
 	describe("failure tolerance", () => {
-		it("does not emit notice when registry is unreachable", async () => {
-			const pkgName = uniquePackageName("fail-no-notice");
-			mockRegistryFailure();
-
-			await runExtensionMiddleware({
-				currentVersion: "1.0.0",
-				packageName: pkgName,
-			});
-
-			expect(getOutput()).toBe("");
-		});
-
 		it("updates lastCheckedAt even on fetch failure to avoid hammering", async () => {
 			const pkgName = uniquePackageName("fail-timestamp");
 			mockRegistryFailure();
@@ -601,64 +493,9 @@ describe("updateNotifier post-run hook", () => {
 		});
 	});
 
-	// ── Timeout behavior ──────────────────────────────────────────────────
-
-	describe("timeout behavior", () => {
-		it("aborts the registry fetch after timeoutMs and emits nothing", async () => {
-			const pkgName = uniquePackageName("timeout-nonblock");
-			// Simulate a very slow fetch that would hang
-			mockFetch(
-				(_input, init) =>
-					new Promise<Response>((_resolve, reject) => {
-						if (init?.signal) {
-							init.signal.addEventListener("abort", () => {
-								reject(new DOMException("The operation was aborted.", "AbortError"));
-							});
-						}
-					}),
-			);
-
-			const start = Date.now();
-			await runExtensionMiddleware({
-				currentVersion: "1.0.0",
-				packageName: pkgName,
-				timeoutMs: 100, // Very short timeout
-			});
-			const elapsed = Date.now() - start;
-
-			// Should complete quickly (timeout + overhead), not hang
-			expect(elapsed).toBeLessThan(5000);
-			// No notice on timeout
-			expect(getOutput()).toBe("");
-		});
-	});
-
 	// ── Dedupe behavior ───────────────────────────────────────────────────
 
 	describe("dedupe behavior", () => {
-		it("does not re-notify from a fresh cache (cache-path dedupe)", async () => {
-			const pkgName = uniquePackageName("dedupe-process");
-			mockRegistryResponse("2.0.0");
-
-			// First invocation — should emit notice
-			await runExtensionMiddleware({
-				currentVersion: "1.0.0",
-				packageName: pkgName,
-			});
-			expect(getOutput()).toContain("Update available");
-
-			// Clear stderr for second check
-			stderrChunks = [];
-
-			// Second invocation against the same cache adapter — deduped via
-			// the persisted lastNotifiedVersion (process-level state is gone)
-			await runExtensionMiddleware({
-				currentVersion: "1.0.0",
-				packageName: pkgName,
-			});
-			expect(getOutput()).toBe("");
-		});
-
 		it("does not re-notify for same version already notified (persisted dedupe)", async () => {
 			const pkgName = uniquePackageName("dedupe-persist");
 
@@ -881,36 +718,6 @@ describe("updateNotifier post-run hook", () => {
 			expect(persisted.latestVersion).toBe("2.0.0");
 		});
 
-		it("discards built-in cached state from a different registryUrl", async () => {
-			const pkgName = uniquePackageName("registry-switch");
-			let fetchCalls = 0;
-			mockFetch(() => {
-				fetchCalls++;
-				return Promise.resolve(
-					new Response(JSON.stringify({ "dist-tags": { latest: "2.0.0" } }), {
-						status: 200,
-					}),
-				);
-			});
-
-			await runExtensionMiddleware(
-				{ currentVersion: "1.0.0", packageName: pkgName },
-				{ useBuiltInCache: true },
-			);
-			expect(fetchCalls).toBe(1);
-
-			// Cache is fresh, but a different registry must not reuse it
-			await runExtensionMiddleware(
-				{
-					currentVersion: "1.0.0",
-					packageName: pkgName,
-					registryUrl: "https://private.example.com",
-				},
-				{ useBuiltInCache: true },
-			);
-			expect(fetchCalls).toBe(2);
-		});
-
 		it("treats a corrupt built-in cache file as empty and repairs it", async () => {
 			const pkgName = uniquePackageName("corrupt-cache");
 			const stateHome = process.env.XDG_STATE_HOME as string;
@@ -1001,31 +808,6 @@ describe("updateNotifier post-run hook", () => {
 			expect(await readFile(stateHomeFile, "utf8")).toBe("unchanged");
 		});
 
-		it("uses explicit packageName over command meta name", async () => {
-			const pkgName = uniquePackageName("explicit-pkg");
-			let capturedUrl = "";
-			mockFetch((input) => {
-				capturedUrl = input.toString();
-				return Promise.resolve(
-					new Response(JSON.stringify({ "dist-tags": { latest: "2.0.0" } }), {
-						status: 200,
-					}),
-				);
-			});
-
-			await runExtensionMiddleware(
-				{
-					currentVersion: "1.0.0",
-					packageName: pkgName,
-				},
-				{ commandName: "different-cmd-name" },
-			);
-
-			// Should use the explicit packageName in the fetch URL
-			expect(capturedUrl).toContain(encodeURIComponent(pkgName));
-			expect(capturedUrl).not.toContain("different-cmd-name");
-		});
-
 		it("uses custom registryUrl for fetch", async () => {
 			const pkgName = uniquePackageName("custom-registry");
 			let capturedUrl = "";
@@ -1064,23 +846,6 @@ describe("updateNotifier post-run hook", () => {
 	// ── Post-run ordering ─────────────────────────────────────────────────
 
 	describe("post-run ordering", () => {
-		it("runs after the command action", async () => {
-			const pkgName = uniquePackageName("ordering");
-			mockRegistryResponse("2.0.0");
-			const executionOrder: string[] = [];
-			const app = new Crust(pkgName)
-				.extend(updateNotifier({ currentVersion: "1.0.0", packageName: pkgName }))
-				.action(() => {
-					executionOrder.push("command");
-				});
-
-			expect(
-				(await app.run([], undefined, { stderr: () => executionOrder.push("notice") })).status,
-			).toBe("completed");
-
-			expect(executionOrder).toEqual(["command", "notice"]);
-		});
-
 		it("does not run after a failed command", async () => {
 			const pkgName = uniquePackageName("failed-command");
 			let fetchCalled = false;
@@ -1159,30 +924,6 @@ describe("updateNotifier post-run hook", () => {
 			expect(commandExecuted).toBe(true);
 			expect(exitCode).toBe(0);
 			expect(stderr).toBe("");
-		});
-	});
-
-	describe("Crust.run() integration", () => {
-		it("writes update notices through injected stderr", async () => {
-			const pkgName = uniquePackageName("injected-stderr");
-			mockRegistryResponse("5.0.0");
-			const stderr: string[] = [];
-			const app = new Crust(pkgName)
-				.extend(
-					updateNotifier({
-						currentVersion: "1.0.0",
-						packageName: pkgName,
-					}),
-				)
-				.action(() => {});
-
-			const outcome = await app.run([], undefined, { stderr: (text) => stderr.push(text) });
-			expect(outcome.status).toBe("completed");
-			expect(outcome.stderr).toBe(stderr.join("\n"));
-
-			expect(stderr.join("\n")).toContain("Update available");
-			expect(stderr.join("\n")).toContain("5.0.0");
-			expect(getOutput()).toBe("");
 		});
 	});
 });

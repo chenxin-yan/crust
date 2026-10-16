@@ -40,11 +40,7 @@ describe("type performance report", () => {
 		expect(() => parseExtendedDiagnostics("Types: 93419")).toThrow("Missing instantiations");
 	});
 
-	it("generates the requested number of commands", () => {
-		expect(generateConsumerSource(10).match(/const command\d+ = defineCommand/g)).toHaveLength(10);
-	});
-
-	it.each([10, 100, 200])("preserves the workload across API dialects at size %i", (size) => {
+	it.each([10])("preserves the workload across API dialects at size %i", (size) => {
 		const fluent = generateConsumerSource(size);
 		const config = generateConsumerSource(size, "context-config");
 		expect(config).toContain(

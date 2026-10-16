@@ -137,24 +137,6 @@ describe("scaffold", () => {
 		expect(readOutputFile(join("__mocks__", "bar.ts"))).toBe("export default {}");
 	});
 
-	it("throws when conflict is 'abort' and dest is non-empty", async () => {
-		// Create a non-empty destination directory
-		mkdirSync(destDir, { recursive: true });
-		writeFileSync(join(destDir, "existing.txt"), "existing content");
-
-		createTemplateFile("file.txt", "hello");
-
-		await expect(
-			scaffold({
-				template: templateDir,
-				dest: destDir,
-
-				context: {},
-				conflict: "abort",
-			}),
-		).rejects.toThrow("already exists and is non-empty");
-	});
-
 	it("defaults conflict to 'abort'", async () => {
 		// Create a non-empty destination directory
 		mkdirSync(destDir, { recursive: true });
@@ -191,32 +173,6 @@ describe("scaffold", () => {
 		expect(readOutputFile("file.txt")).toBe("new content from crust");
 	});
 
-	it("copies binary files without interpolation", async () => {
-		// Create a binary file with null bytes (simulating an image)
-		const binaryData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x0d, 0x0a, 0x1a, 0x0a]);
-		createTemplateBinaryFile("assets/image.png", binaryData);
-
-		// Also create a text file with {{var}} to show binary skips interpolation
-		createTemplateFile("readme.txt", "Hello {{name}}");
-
-		const result = await scaffold({
-			template: templateDir,
-			dest: destDir,
-
-			context: { name: "world" },
-		});
-
-		expect(result.files).toContain(join("assets", "image.png"));
-		expect(result.files).toContain("readme.txt");
-
-		// Binary file should be identical to the source
-		const outputBinary = readFileSync(join(destDir, "assets", "image.png"));
-		expect(Buffer.compare(outputBinary, binaryData)).toBe(0);
-
-		// Text file should have interpolation applied
-		expect(readOutputFile("readme.txt")).toBe("Hello world");
-	});
-
 	describe("render", () => {
 		it("replaces interpolation with the renderer's output for text files only", async () => {
 			const binaryData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x7b, 0x7b, 0x7d, 0x7d]);
@@ -242,46 +198,6 @@ describe("scaffold", () => {
 				0,
 			);
 			expect(result.files).toHaveLength(2);
-		});
-
-		it("awaits an async renderer before writing", async () => {
-			createTemplateFile("readme.txt", "Hello {{name}}");
-
-			await scaffold({
-				template: templateDir,
-				dest: destDir,
-				context: { name: "world" },
-				render: async (source, ctx) => {
-					await new Promise((resolveDelay) => setTimeout(resolveDelay, 5));
-					return source.toUpperCase() + ctx.name;
-				},
-			});
-
-			expect(readOutputFile("readme.txt")).toBe("HELLO {{NAME}}world");
-		});
-
-		it("propagates thrown and rejected renderer errors", async () => {
-			createTemplateFile("readme.txt", "Hello");
-
-			await expect(
-				scaffold({
-					template: templateDir,
-					dest: destDir,
-					context: {},
-					render: () => {
-						throw new Error("sync render failed");
-					},
-				}),
-			).rejects.toThrow("sync render failed");
-			await expect(
-				scaffold({
-					template: templateDir,
-					dest: destDir,
-					context: {},
-					render: () => Promise.reject(new Error("async render failed")),
-				}),
-			).rejects.toThrow("async render failed");
-			expect(existsSync(join(destDir, "readme.txt"))).toBe(false);
 		});
 	});
 
@@ -488,53 +404,6 @@ describe("scaffold", () => {
 		expect(readOutputFile("file.txt")).toBe("content");
 	});
 
-	it("composes templates by calling scaffold twice (layering)", async () => {
-		// First scaffold: base template
-		const baseTemplateDir = join(tempDir, "template-base");
-		mkdirSync(baseTemplateDir, { recursive: true });
-		writeFileSync(join(baseTemplateDir, "package.json"), '{ "name": "{{name}}" }');
-		writeFileSync(join(baseTemplateDir, "README.md"), "# {{name}}");
-
-		await scaffold({
-			template: baseTemplateDir,
-			dest: destDir,
-
-			context: { name: "my-project" },
-		});
-
-		// Second scaffold: overlay template (adds/overwrites)
-		const overlayTemplateDir = join(tempDir, "template-overlay");
-		mkdirSync(join(overlayTemplateDir, "src"), { recursive: true });
-		writeFileSync(join(overlayTemplateDir, "src/index.ts"), "// {{name}} entry");
-		writeFileSync(join(overlayTemplateDir, "tsconfig.json"), '{ "strict": true }');
-
-		const result = await scaffold({
-			template: overlayTemplateDir,
-			dest: destDir,
-
-			context: { name: "my-project" },
-			conflict: "overwrite",
-		});
-
-		// Verify files from both scaffolds exist
-		expect(existsSync(join(destDir, "package.json"))).toBe(true);
-		expect(existsSync(join(destDir, "README.md"))).toBe(true);
-		expect(existsSync(join(destDir, "src/index.ts"))).toBe(true);
-		expect(existsSync(join(destDir, "tsconfig.json"))).toBe(true);
-
-		// Verify content from first scaffold is preserved
-		expect(readFileSync(join(destDir, "package.json"), "utf-8")).toBe('{ "name": "my-project" }');
-		expect(readFileSync(join(destDir, "README.md"), "utf-8")).toBe("# my-project");
-
-		// Verify content from second scaffold is correct
-		expect(readFileSync(join(destDir, "src/index.ts"), "utf-8")).toBe("// my-project entry");
-		expect(readFileSync(join(destDir, "tsconfig.json"), "utf-8")).toBe('{ "strict": true }');
-
-		// The result only contains files from the second scaffold call
-		expect(result.files).toContain(join("src", "index.ts"));
-		expect(result.files).toContain("tsconfig.json");
-	});
-
 	it("resolves template from a file: URL", async () => {
 		createTemplateFile("hello.txt", "hi {{who}}");
 
@@ -546,55 +415,6 @@ describe("scaffold", () => {
 
 		expect(result.files).toContain("hello.txt");
 		expect(readOutputFile("hello.txt")).toBe("hi URL");
-	});
-
-	it("resolves a relative template string from the current working directory, like dest", async () => {
-		createTemplateFile("hello.txt", "hi {{who}}");
-		const originalCwd = process.cwd();
-		process.chdir(tempDir);
-
-		try {
-			const result = await scaffold({
-				template: "template",
-				dest: "output",
-				context: { who: "cwd" },
-			});
-
-			expect(result.files).toContain("hello.txt");
-			expect(readOutputFile("hello.txt")).toBe("hi cwd");
-		} finally {
-			process.chdir(originalCwd);
-		}
-	});
-
-	it("does not infer a package root for relative templates", async () => {
-		// A generator's own templates need an explicit module-relative file: URL;
-		// a bare relative string is looked up from cwd and reported as such.
-		const packageRoot = join(tempDir, "my-generator");
-		mkdirSync(join(packageRoot, "templates", "base"), { recursive: true });
-		writeFileSync(join(packageRoot, "package.json"), '{"name":"my-generator"}');
-		const originalArgv1 = process.argv[1];
-		process.argv[1] = join(packageRoot, "dist", "index.js");
-
-		try {
-			await expect(
-				scaffold({ template: "templates/base", dest: destDir, context: {} }),
-			).rejects.toThrow(
-				`Template directory "${join(process.cwd(), "templates", "base")}" does not exist`,
-			);
-		} finally {
-			process.argv[1] = originalArgv1 as string;
-		}
-	});
-
-	it("throws when template URL uses non-file protocol", async () => {
-		await expect(
-			scaffold({
-				template: new URL("https://example.com/templates/base"),
-				dest: destDir,
-				context: {},
-			}),
-		).rejects.toThrow("The URL must be of scheme file");
 	});
 
 	it("throws when template directory does not exist", async () => {

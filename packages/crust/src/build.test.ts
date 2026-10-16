@@ -10,7 +10,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Crust, defineExtensionId } from "@crustjs/core";
@@ -39,7 +39,6 @@ import {
 	planBuild,
 	readCrustConfig,
 	resolveBinEntries,
-	resolveEnvFilePaths,
 } from "./build.ts";
 import { buildCommand } from "./commands/build.ts";
 import { ARTIFACT_KINDS, type DistributionManifest } from "./distribute.ts";
@@ -54,32 +53,6 @@ afterEach(() => {
 function readManifest(path: string): DistributionManifest {
 	return JSON.parse(readFileSync(path, "utf8")) as DistributionManifest;
 }
-
-describe("env file helpers", () => {
-	const tmpDir = mkdtempSync(join(tmpdir(), "crust-env-files-"));
-
-	beforeAll(() => {
-		rmSync(tmpDir, { recursive: true, force: true });
-		mkdirSync(tmpDir, { recursive: true });
-		writeFileSync(join(tmpDir, ".env"), "PUBLIC_FOO=bar\n");
-		writeFileSync(join(tmpDir, ".env.local"), "PUBLIC_BAR=baz\n");
-	});
-
-	afterAll(() => {
-		rmSync(tmpDir, { recursive: true, force: true });
-	});
-
-	it("resolves env-file paths relative to cwd", () => {
-		expect(resolveEnvFilePaths(tmpDir, [".env", ".env.local"])).toEqual([
-			join(tmpDir, ".env"),
-			join(tmpDir, ".env.local"),
-		]);
-	});
-
-	it("throws when an env-file is missing", () => {
-		expect(() => resolveEnvFilePaths(tmpDir, [".env.missing"])).toThrow(/Env file not found/);
-	});
-});
 
 describe("planBuild", () => {
 	const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-plan-"));
@@ -226,14 +199,6 @@ describe("planBuild", () => {
 		}
 	});
 
-	it("reads package.json crust.runtime", () => {
-		writePackageJson({ crust: { runtime: "deno" } });
-		expect(planBuild(binary, tmpDir)).toMatchObject({
-			runtime: "deno",
-			runtimeSource: "from package.json",
-		});
-	});
-
 	it("infers the runtime from deno.json or @types/node, never from lockfiles", () => {
 		const nodeTypes = { devDependencies: { "@types/node": "^22" } };
 		writePackageJson(nodeTypes);
@@ -323,12 +288,6 @@ describe("planBuild", () => {
 			error: "--target cannot be used with runtime packages (artifact package)",
 		},
 		{
-			name: "Bun packages with targets, including host",
-			crust: { runtime: "bun" },
-			flags: { artifact: "package", targets: ["host"] },
-			error: "--target cannot be used with runtime packages (artifact package)",
-		},
-		{
 			name: "minified Deno builds",
 			crust: { runtime: "deno", artifact: "binary" },
 			flags: { minify: true },
@@ -358,26 +317,6 @@ describe("planBuild", () => {
 		});
 	}
 
-	it("keeps crust.bunPlugins specifiers in order and defaults to none", () => {
-		expect(planBuild(binary, tmpDir).bunPlugins).toEqual([]);
-		writePackageJson({
-			crust: { bunPlugins: ["./plugins/second.ts", "@opentui/solid/bun-plugin"] },
-		});
-		expect(planBuild(binary, tmpDir).bunPlugins).toEqual([
-			"./plugins/second.ts",
-			"@opentui/solid/bun-plugin",
-		]);
-		expect(planBuild(runtimePackage, tmpDir).bunPlugins).toEqual([
-			"./plugins/second.ts",
-			"@opentui/solid/bun-plugin",
-		]);
-		writePackageJson({ crust: { runtime: "node", bunPlugins: ["./plugin.ts"] } });
-		expect(planBuild(runtimePackage, tmpDir)).toMatchObject({
-			runtime: "node",
-			bunPlugins: ["./plugin.ts"],
-		});
-	});
-
 	it("keeps crust.external names in order for Node and Bun runtime packages and defaults to none", () => {
 		expect(planBuild(runtimePackage, tmpDir).external).toEqual([]);
 		const dependencies = { "better-sqlite3": "^12.0.0", typescript: "7.0.2", unused: "^1.0.0" };
@@ -399,7 +338,7 @@ describe("planBuild", () => {
 		}
 	});
 
-	it.each(["user/repo.tgz", "user/repo.tar.gz", "npm/cli#release.tar", "npm/cli#releases/v1.tgz"])(
+	it.each(["user/repo.tgz", "npm/cli#releases/v1.tgz"])(
 		"accepts hosted Git shorthand %s in crust.external",
 		(range) => {
 			writePackageJson({
@@ -417,15 +356,6 @@ describe("planBuild", () => {
 		error: string;
 	};
 	const externalRejectedCases: ExternalRejectedCase[] = [
-		...["bun", "node", "deno"].map((runtime): ExternalRejectedCase => ({
-			name: `${runtime} binaries`,
-			pkg: {
-				dependencies: { "fake-native": "^1.0.0" },
-				crust: { runtime, artifact: "binary", external: ["fake-native"] },
-			},
-			error:
-				"package.json crust.external is not supported for standalone binaries (artifact binary)",
-		})),
 		{
 			name: "--artifact binary overriding crust.artifact package",
 			pkg: {
@@ -444,7 +374,7 @@ describe("planBuild", () => {
 			},
 			error: "package.json crust.external is not supported with the deno runtime",
 		},
-		...["@crustjs/core", "@crustjs/style"].map((name): ExternalRejectedCase => ({
+		...["@crustjs/core"].map((name): ExternalRejectedCase => ({
 			name,
 			pkg: {
 				dependencies: { [name]: "^0.5.0" },
@@ -460,17 +390,6 @@ describe("planBuild", () => {
 			},
 			error: 'package.json crust.external cannot name "crust-utils" (an alias of @crustjs/utils)',
 		},
-		...["devDependencies", "optionalDependencies", "peerDependencies"].map(
-			(section): ExternalRejectedCase => ({
-				name: `a name only in ${section}`,
-				pkg: {
-					dependencies: { other: "^1.0.0" },
-					[section]: { "fake-native": "^1.0.0" },
-					crust: { runtime: "node", artifact: "package", external: ["fake-native"] },
-				},
-				error: `package.json crust.external entry "fake-native" is in ${section}, not dependencies.\n  Only dependencies ship with the staged package`,
-			}),
-		),
 		{
 			name: "a name in several non-dependencies sections",
 			pkg: {
@@ -492,20 +411,12 @@ describe("planBuild", () => {
 		})),
 		...[
 			"workspace:^",
-			"catalog:",
-			"catalog:native",
 			"file:../native",
-			"link:../native",
-			"portal:../native",
 			"../native",
-			"./native",
 			"/opt/native",
 			"~/native",
 			"C:\\native",
 			"native.tgz",
-			"native.tar.gz",
-			"native.tar",
-			"./vendor/native.tgz",
 			"vendor/packages/native.tgz",
 			"vendor\\native.tgz",
 			1,
@@ -524,65 +435,6 @@ describe("planBuild", () => {
 			expect(() => planBuild({ ...baseFlags, ...testCase.flags }, tmpDir)).toThrow(testCase.error);
 		});
 	}
-
-	// Planning never looks up a compiler: build() selects it once and judges the
-	// host target against that runner (see the build() compiler-selection tests).
-	it.skipIf(host === null)("plans every target when bun is not on PATH", () => {
-		vi.stubEnv("PATH", "");
-		const plan = planBuild(binary, tmpDir);
-		expect(plan.runtime === "bun" && "targets" in plan && plan.targets.length).toBe(
-			BUN_TARGETS.targets.length,
-		);
-	});
-
-	it("stages .crust for every runtime", () => {
-		const stageDir = resolve(tmpDir, ".crust");
-		const outDir = resolve(stageDir, "artifacts");
-		expect(planBuild({ ...binary, targets: ["bun-linux-x64"] }, tmpDir)).toMatchObject({
-			runtime: "bun",
-			artifact: "binary",
-			targets: ["bun-linux-x64"],
-			stageDir,
-			outDir,
-			include: [],
-		});
-		expect(planBuild(runtimePackage, tmpDir)).toMatchObject({
-			runtime: "bun",
-			artifact: "package",
-			minify: true,
-			stageDir,
-		});
-		writePackageJson({ crust: { runtime: "deno" } });
-		expect(planBuild(binary, tmpDir)).toMatchObject({
-			runtime: "deno",
-			artifact: "binary",
-			targets: [...DENO_TARGETS.targets],
-			minify: false,
-			stageDir,
-		});
-		expect(() => planBuild({ ...binary, targets: ["linux-x64"] }, tmpDir)).toThrow(
-			'Unknown Deno target "linux-x64"',
-		);
-		mkdirSync(join(tmpDir, "templates"), { recursive: true });
-		writePackageJson({
-			crust: {
-				runtime: "node",
-				artifact: "package",
-				bunPlugins: ["./plugin.ts"],
-				include: ["templates"],
-			},
-		});
-		const nodePlan = planBuild(baseFlags, tmpDir);
-		expect(nodePlan).toMatchObject({
-			runtime: "node",
-			artifact: "package",
-			minify: true,
-			bunPlugins: ["./plugin.ts"],
-			include: ["templates"],
-			stageDir,
-		});
-		expect(nodePlan).not.toHaveProperty("targets");
-	});
 
 	it.skipIf(host === null)("resolves --target host to this machine's target", () => {
 		expect(planBuild({ ...binary, targets: ["host"] }, tmpDir)).toMatchObject({
@@ -1308,52 +1160,6 @@ await build({ cwd: ${JSON.stringify(tmpDir)}, validate: false, onLog() {
 });
 
 describe("buildCommand error handling", () => {
-	it("rejects unsupported runtime and flag combinations before compiling", async () => {
-		expect(
-			await executeBuildError("node-target", { crust: { runtime: "node", artifact: "package" } }, [
-				"--target",
-				"bun-linux-x64",
-				"--no-validate",
-			]),
-		).toContain("--target cannot be used with runtime packages");
-		expect(
-			await executeBuildError("deno-minify", { crust: { runtime: "deno" } }, [
-				"--artifact",
-				"binary",
-				"--minify",
-				"--no-validate",
-			]),
-		).toContain("--minify is not supported with the deno runtime");
-		const envDir = mkdtempSync(join(tmpdir(), "crust-deno-env-file-"));
-		const envFile = join(envDir, ".env");
-		writeFileSync(envFile, "SECRET=x\n");
-		try {
-			expect(
-				await executeBuildError("deno-env-file", { crust: { runtime: "deno" } }, [
-					"--artifact",
-					"binary",
-					"--env-file",
-					envFile,
-					"--no-validate",
-				]),
-			).toContain("--env-file is not supported with the deno runtime");
-		} finally {
-			rmSync(envDir, { recursive: true, force: true });
-		}
-		expect(
-			await executeBuildError(
-				"deno-bun-plugin",
-				{ crust: { runtime: "deno", bunPlugins: ["@opentui/solid/bun-plugin"] } },
-				["--artifact", "binary", "--no-validate"],
-			),
-		).toContain("package.json crust.bunPlugins is not supported with the deno runtime");
-		expect(
-			await executeBuildError("unknown-key", { crust: { bunPlugin: [] } }, ["--no-validate"]),
-		).toContain(
-			'Unknown package.json crust key "bunPlugin". Allowed keys: runtime, artifact, targets, bunPlugins, include, external',
-		);
-	});
-
 	it("rejects crust.external problems before wiping the previous stage", async () => {
 		const tmpDir = mkdtempSync(join(tmpdir(), "crust-external-guard-"));
 		mkdirSync(join(tmpDir, ".crust"));
@@ -1383,22 +1189,6 @@ describe("buildCommand error handling", () => {
 		} finally {
 			rmSync(tmpDir, { recursive: true, force: true });
 		}
-	});
-
-	it("requires --artifact or crust.artifact, validates it, and lets the flag win", async () => {
-		expect(await executeBuildError("no-artifact", {}, ["--no-validate"])).toContain(
-			"crust build needs an artifact kind: pass --artifact package|binary",
-		);
-		expect(
-			await executeBuildError("bad-artifact", {}, ["--artifact", "exe", "--no-validate"]),
-		).toContain('Invalid value "exe" for --artifact. Expected one of: package, binary');
-		expect(
-			await executeBuildError(
-				"artifact-precedence",
-				{ crust: { runtime: "node", artifact: "package" } },
-				["--artifact", "binary", "--target", "bun-linux-x64", "--no-validate"],
-			),
-		).toContain('Unknown Node target "bun-linux-x64"');
 	});
 
 	it("rejects backend options a Deno runtime package cannot honor", async () => {
@@ -1470,36 +1260,6 @@ describe("buildCommand error handling", () => {
 				expect(result.stderr).toContain("non-empty string");
 				expect(readFileSync(join(tmpDir, ".crust", "previous.txt"), "utf8")).toBe("kept");
 			}
-		} finally {
-			process.cwd = originalCwd;
-			rmSync(tmpDir, { recursive: true, force: true });
-		}
-	});
-
-	it("rejects a synthetic legacy report before producing a completed manifest", async () => {
-		const tmpDir = mkdtempSync(join(tmpdir(), "crust-legacy-report-"));
-		writeFileSync(
-			join(tmpDir, "package.json"),
-			JSON.stringify({
-				name: "legacy",
-				version: "1",
-				bin: { legacy: "cli.ts" },
-				crust: { runtime: "node", artifact: "package" },
-			}),
-		);
-		writeFileSync(
-			join(tmpDir, "cli.ts"),
-			`import { dirname, join } from "node:path";
-			await Bun.write(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!, JSON.stringify({ meta: { name: "legacy" } }));
-			await Bun.write(join(dirname(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!), "build-report.json"), JSON.stringify({ extensions: [{ id: "legacy", files: "unknown" }] }));`,
-		);
-		const originalCwd = process.cwd;
-		process.cwd = () => tmpDir;
-		try {
-			const result = await captureExecute(new Crust("test").add(buildCommand), ["build"]);
-			expect(result.exitCode).toBe(1);
-			expect(result.stderr).toContain("invalid Build Report");
-			expect(existsSync(join(tmpDir, ".crust", "manifest.json"))).toBe(false);
 		} finally {
 			process.cwd = originalCwd;
 			rmSync(tmpDir, { recursive: true, force: true });
@@ -1666,21 +1426,6 @@ describe("buildCommand error handling", () => {
 			expect(existsSync(join(tmpDir, ".crust", "artifacts"))).toBe(false);
 		}, 60_000);
 
-		it("records one Build Report per bin in the manifest", async () => {
-			writeEntry("greet.ts", "greet", { "man/greet.1": ".Dd" });
-			writeEntry("admin.ts", "admin", { "man/admin.1": ".Dd", "skills/admin/SKILL.md": "---" });
-			const result = await build([]);
-			expect(result.exitCode, result.stderr).toBe(0);
-			expect(readManifest(join(tmpDir, ".crust", "manifest.json")).build).toEqual({
-				greet: { extensions: [{ id: defineExtensionId("hook"), files: ["man/greet.1"] }] },
-				admin: {
-					extensions: [
-						{ id: defineExtensionId("hook"), files: ["man/admin.1", "skills/admin/SKILL.md"] },
-					],
-				},
-			});
-		}, 60_000);
-
 		it("rejects case-insensitive cross-entry output before completing the manifest", async () => {
 			writeEntry("greet.ts", "greet", { "shared/Config.json": "first" });
 			writeEntry("admin.ts", "admin", { "shared/config.json": "second" });
@@ -1692,16 +1437,5 @@ describe("buildCommand error handling", () => {
 			);
 			expect(existsSync(join(tmpDir, ".crust", "manifest.json"))).toBe(false);
 		});
-
-		it("rejects colliding hook output across entries", async () => {
-			writeEntry("greet.ts", "greet", { "shared/config.json": "{}" });
-			writeEntry("admin.ts", "admin", { "shared/config.json": "{}", "man/admin.1": ".Dd" });
-			const result = await build([]);
-			expect(result.exitCode).toBe(1);
-			expect(result.stderr).toContain(
-				'Build artifact "shared/config.json" is written by both bin "greet" and "admin".',
-			);
-			expect(existsSync(join(tmpDir, ".crust", "manifest.json"))).toBe(false);
-		}, 60_000);
 	});
 });

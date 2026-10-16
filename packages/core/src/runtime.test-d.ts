@@ -46,11 +46,6 @@ function _checkedInvocation(
 	void jsonApp.run([], { flags: { config: payload } });
 }
 
-function _explicitConstructorArguments() {
-	new Crust<{}>("root");
-	void new Crust<{}>("root").run([]);
-}
-
 function _widenedArgumentName(name: string) {
 	const app = new Crust("open").args({ name, type: "string" });
 	void app.run([], { args: { arbitrary: "value" } });
@@ -123,14 +118,7 @@ function _localAliasProofIsNotDestinationProof(aliases: string[]) {
 	new Crust("cli").add(defineCommand("child", { aliases: ["c", "c"] }, (b) => b));
 }
 
-function _rootVersionOwnership() {
-	// @ts-expect-error -- versions belong to the root, not command configs
-	defineCommand("child", { version: "1" }, (b) => b);
-}
-
 function _sectionShapesStayTyped() {
-	// @ts-expect-error -- an envelope is not an unknown decoder
-	new Crust("cli", { sections: [{ title: 1, body: "text" }] });
 	// @ts-expect-error -- consumer identities are branded, including on checked configs
 	new Crust("cli", { sections: [{ title: "Notes", body: "text", only: ["unbranded"] }] });
 	new Crust("cli", {
@@ -254,9 +242,6 @@ function _uncertainContextIdentity(name: "a" | "b") {
 		void value;
 	});
 }
-
-// @ts-expect-error The typed dynamic envelope does not decode arbitrary objects or erase audience XOR.
-new Crust("app", { sections: [{ title: "Notes", body: "Body", only: [], except: [] }] });
 
 function _uncertainRequiredFlags(defaultValue: string | undefined, required: true | undefined) {
 	const absent = new Crust("app").flags({

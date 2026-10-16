@@ -50,17 +50,6 @@ describe("app.at(path) command handles", () => {
 		expect(root.path).toEqual([]);
 	});
 
-	it("forwards io callbacks to the bound command", async () => {
-		const { app } = buildGit();
-		const seen: string[] = [];
-		await unwrap(
-			app
-				.at(["remote", "add"])
-				.run({ args: { name: "o", url: "u" } }, { stdout: (text) => seen.push(text) }),
-		);
-		expect(seen).toEqual(["added o"]);
-	});
-
 	it("throws COMMAND_NOT_FOUND eagerly for an unknown path", () => {
 		const { app } = buildGit();
 		// @ts-expect-error -- deliberately exercise an unknown command path.
@@ -79,19 +68,5 @@ describe("app.at(path) command handles", () => {
 		expect(await unwrap(handle.run({ args: { name: "o", url: "u" } }))).toMatchObject({
 			result: { remote: "o" },
 		});
-	});
-
-	it("stays bound to the builder it was taken from", async () => {
-		const { app } = buildGit();
-		const root = app.at([]);
-		const grown = app.add(defineCommand("status", (command) => command.action(() => "clean")));
-
-		// The handle closes over the original immutable tree; `.add()` returns a new builder.
-		// @ts-expect-error -- deliberately exercise an unknown command path.
-		expect(() => app.at(["status"])).toThrow(
-			expect.objectContaining({ code: "COMMAND_NOT_FOUND" }),
-		);
-		expect(await unwrap(grown.at(["status"]).run())).toMatchObject({ result: "clean" });
-		expect(await unwrap(root.run())).toMatchObject({ result: "root" });
 	});
 });

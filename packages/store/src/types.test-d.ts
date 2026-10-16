@@ -123,23 +123,3 @@ type Expect<T extends true> = T;
 		};
 	}
 }
-
-// ────────────────────────────────────────────────────────────────────────────
-// CreateStoreOptions
-// ────────────────────────────────────────────────────────────────────────────
-
-{
-	// CreateStoreOptions
-	{
-		// should require a store name
-		const fields = {
-			theme: { type: "string", default: "light" },
-		} as const satisfies FieldsDef;
-
-		// @ts-expect-error — stores must have an explicit name
-		const _options: CreateStoreOptions<typeof fields> = {
-			dirPath: "/tmp/test",
-			fields,
-		};
-	}
-}

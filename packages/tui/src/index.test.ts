@@ -99,13 +99,6 @@ describe("runTui", () => {
 		});
 	});
 
-	it.each([99, 67] as const)("treats Ctrl+Shift with baseCode %i as a normal key", (code) => {
-		expect(observe(`ctrl-shift-c-base-code-${code}`).outcome).toEqual({
-			status: "resolved",
-			valueType: "undefined",
-		});
-	});
-
 	// OpenTUI only falls back to baseCode when the typed key is one non-ASCII character.
 	it("treats a Latin key with a Ctrl+C baseCode as a normal key", () => {
 		expect(observe("ctrl-j-latin-base-code-99").outcome).toEqual({

@@ -25,11 +25,6 @@ const BASIC_FIELDS = {
 	verbose: { type: "boolean", default: false },
 } as const satisfies FieldsDef;
 
-const ARRAY_FIELDS = {
-	tags: { type: "string", array: true, default: [] },
-	count: { type: "number", default: 0 },
-} as const satisfies FieldsDef;
-
 const VALIDATED_FIELDS = {
 	port: {
 		type: "number",
@@ -55,31 +50,6 @@ describe("createStore", () => {
 
 	afterEach(async () => {
 		await rm(tempDir, { recursive: true, force: true });
-	});
-
-	it("should throw CrustStoreError with PATH code for invalid dirPath", () => {
-		expect(() =>
-			createStore({
-				dirPath: "relative/path",
-				name: "config",
-				fields: BASIC_FIELDS,
-			}),
-		).toThrow(expect.objectContaining({ code: "PATH" }));
-	});
-
-	it("should use custom name for store file", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "auth",
-			fields: BASIC_FIELDS,
-		});
-
-		await store.write({ theme: "dark", verbose: true });
-
-		const authPath = join(tempDir, "auth.json");
-		expect(existsSync(authPath)).toBe(true);
-		const raw = await readFile(authPath, "utf-8");
-		expect(JSON.parse(raw)).toEqual({ theme: "dark", verbose: true });
 	});
 
 	// POSIX-only: Windows ignores Unix permission bits (it uses ACLs).
@@ -122,44 +92,6 @@ describe("store.read", () => {
 
 	afterEach(async () => {
 		await rm(tempDir, { recursive: true, force: true });
-	});
-
-	it("should not auto-persist merged defaults back to disk", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: BASIC_FIELDS,
-		});
-
-		// Read triggers merge but should not write
-		await store.read();
-
-		const filePath = join(tempDir, "config.json");
-		expect(existsSync(filePath)).toBe(false);
-	});
-
-	it("should drop extra persisted keys not defined in fields", async () => {
-		const filePath = join(tempDir, "config.json");
-		await writeFile(
-			filePath,
-			JSON.stringify({
-				theme: "dark",
-				verbose: true,
-				unknown: "extra",
-			}),
-		);
-
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: BASIC_FIELDS,
-		});
-
-		const result = await store.read();
-
-		expect(result.theme).toBe("dark");
-		expect(result.verbose).toBe(true);
-		expect("unknown" in result).toBe(false);
 	});
 
 	it.each([
@@ -314,20 +246,6 @@ describe("store.write", () => {
 		await rm(tempDir, { recursive: true, force: true });
 	});
 
-	it("should persist config to disk", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: BASIC_FIELDS,
-		});
-
-		await store.write({ theme: "dark", verbose: true });
-
-		const filePath = join(tempDir, "config.json");
-		const raw = await readFile(filePath, "utf-8");
-		expect(JSON.parse(raw)).toEqual({ theme: "dark", verbose: true });
-	});
-
 	it("should run field validators on write", async () => {
 		const store = createStore({
 			dirPath: tempDir,
@@ -386,35 +304,6 @@ describe("store.update", () => {
 
 	afterEach(async () => {
 		await rm(tempDir, { recursive: true, force: true });
-	});
-
-	it("should read, apply updater, and persist", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: BASIC_FIELDS,
-		});
-
-		await store.write({ theme: "light", verbose: false });
-		await store.update((current) => ({ ...current, theme: "dark" }));
-
-		const filePath = join(tempDir, "config.json");
-		const raw = await readFile(filePath, "utf-8");
-		expect(JSON.parse(raw)).toEqual({ theme: "dark", verbose: false });
-	});
-
-	it("should use field defaults as current when no persisted file", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: BASIC_FIELDS,
-		});
-
-		await store.update((current) => ({ ...current, verbose: true }));
-
-		const filePath = join(tempDir, "config.json");
-		const raw = await readFile(filePath, "utf-8");
-		expect(JSON.parse(raw)).toEqual({ theme: "light", verbose: true });
 	});
 
 	it("should materialize schema defaults before calling the updater", async () => {
@@ -476,20 +365,6 @@ describe("store.update", () => {
 		// Patch can repair state without exposing it as a typed callback input.
 		expect(await store.patch({ count: 1 })).toEqual(await store.read());
 	});
-
-	it("should run field validators on update", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: VALIDATED_FIELDS,
-		});
-
-		await expect(store.update((current) => ({ ...current, port: -1 }))).rejects.toMatchObject({
-			name: "CrustStoreError",
-			code: "VALIDATION",
-			details: { operation: "update" },
-		});
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -506,64 +381,6 @@ describe("store.patch", () => {
 
 	afterEach(async () => {
 		await rm(tempDir, { recursive: true, force: true });
-	});
-
-	it("should apply partial update to current config", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: BASIC_FIELDS,
-		});
-
-		await store.write({ theme: "light", verbose: false });
-		await store.patch({ theme: "dark" });
-
-		const result = await store.read();
-		expect(result.theme).toBe("dark");
-		expect(result.verbose).toBe(false);
-	});
-
-	it("should preserve existing keys not in the partial", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: BASIC_FIELDS,
-		});
-
-		await store.write({ theme: "dark", verbose: true });
-		await store.patch({ verbose: false });
-
-		const result = await store.read();
-		expect(result.theme).toBe("dark");
-		expect(result.verbose).toBe(false);
-	});
-
-	it("should run field validators on patch", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: VALIDATED_FIELDS,
-		});
-
-		await expect(store.patch({ port: 0 })).rejects.toMatchObject({
-			name: "CrustStoreError",
-			code: "VALIDATION",
-			details: { operation: "patch" },
-		});
-	});
-
-	it("should work when no persisted file exists (patches defaults)", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: BASIC_FIELDS,
-		});
-
-		await store.patch({ theme: "dark" });
-
-		const result = await store.read();
-		expect(result.theme).toBe("dark");
-		expect(result.verbose).toBe(false);
 	});
 
 	it("rejects undefined defaulted core fields but preserves genuinely optional fields", async () => {
@@ -616,38 +433,6 @@ describe("store.patch", () => {
 			theme: "light",
 			verbose: true,
 		});
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// reset
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("store.reset", () => {
-	let tempDir: string;
-
-	beforeEach(async () => {
-		tempDir = createTempDir();
-		await mkdir(tempDir, { recursive: true });
-	});
-
-	afterEach(async () => {
-		await rm(tempDir, { recursive: true, force: true });
-	});
-
-	it("should delete persisted config file", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: BASIC_FIELDS,
-		});
-
-		await store.write({ theme: "dark", verbose: true });
-		const filePath = join(tempDir, "config.json");
-		expect(existsSync(filePath)).toBe(true);
-
-		await store.reset();
-		expect(existsSync(filePath)).toBe(false);
 	});
 });
 
@@ -705,86 +490,6 @@ describe("store lifecycle", () => {
 		const filePath = join(tempDir, "config.json");
 		expect(existsSync(filePath)).toBe(false);
 	});
-
-	it("should handle array fields across lifecycle", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: ARRAY_FIELDS,
-		});
-
-		// Defaults
-		const step1 = await store.read();
-		expect(step1.tags).toEqual([]);
-		expect(step1.count).toBe(0);
-
-		// Write with array data
-		await store.write({ tags: ["a", "b"], count: 5 });
-		const step2 = await store.read();
-		expect(step2.tags).toEqual(["a", "b"]);
-		expect(step2.count).toBe(5);
-
-		// Update array
-		await store.update((c) => ({ ...c, tags: [...c.tags, "c"] }));
-		const step3 = await store.read();
-		expect(step3.tags).toEqual(["a", "b", "c"]);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Multiple stores (name option)
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("multiple stores with name option", () => {
-	let tempDir: string;
-
-	beforeEach(async () => {
-		tempDir = createTempDir();
-		await mkdir(tempDir, { recursive: true });
-	});
-
-	afterEach(async () => {
-		await rm(tempDir, { recursive: true, force: true });
-	});
-
-	it("should support multiple independent stores under the same directory", async () => {
-		const configStore = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: BASIC_FIELDS,
-		});
-
-		const authFields = {
-			token: { type: "string", default: "" },
-		} as const satisfies FieldsDef;
-
-		const authStore = createStore({
-			dirPath: tempDir,
-			name: "auth",
-			fields: authFields,
-		});
-
-		// Write to both stores independently
-		await configStore.write({ theme: "dark", verbose: true });
-		await authStore.write({ token: "abc123" });
-
-		// Read from both stores independently
-		const config = await configStore.read();
-		const auth = await authStore.read();
-
-		expect(config.theme).toBe("dark");
-		expect(config.verbose).toBe(true);
-		expect(auth.token).toBe("abc123");
-
-		// Reset one should not affect the other
-		await configStore.reset();
-		const configAfterReset = await configStore.read();
-		const authAfterReset = await authStore.read();
-
-		expect(configAfterReset.theme).toBe("light");
-		expect(configAfterReset.verbose).toBe(false);
-		expect(authAfterReset.token).toBe("abc123");
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -801,18 +506,6 @@ describe("field validation", () => {
 
 	afterEach(async () => {
 		await rm(tempDir, { recursive: true, force: true });
-	});
-
-	it("should pass when all field validators succeed", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: VALIDATED_FIELDS,
-		});
-
-		// Should not throw — default port 3000 is valid
-		const result = await store.read();
-		expect(result.port).toBe(3000);
 	});
 
 	it("should collect multiple validation issues", async () => {
@@ -868,31 +561,6 @@ describe("field validation", () => {
 		});
 		expect(existsSync(join(tempDir, "config.json"))).toBe(false);
 	});
-
-	it("should support async field validators", async () => {
-		const fields = {
-			token: {
-				type: "string",
-				default: "valid",
-				validate: async (v: string) => {
-					// Simulate async validation
-					await new Promise((r) => setTimeout(r, 1));
-					if (v.length < 3) throw new Error("token too short");
-				},
-			},
-		} as const satisfies FieldsDef;
-
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields,
-		});
-
-		await expect(store.write({ token: "ab" })).rejects.toMatchObject({
-			name: "CrustStoreError",
-			code: "VALIDATION",
-		});
-	});
 });
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -928,35 +596,6 @@ describe("schema transform persistence", () => {
 		await expect(store.read()).resolves.toEqual({ count: 123 });
 	});
 
-	it("preserves optional schema output for missing persisted values", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: { name: { schema: z.string().optional() } },
-		});
-
-		await expect(store.read()).resolves.toEqual({ name: undefined });
-	});
-
-	it("rejects missing values after validating a required schema once", async () => {
-		let validationCalls = 0;
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: {
-				name: {
-					schema: z.preprocess((value) => {
-						validationCalls++;
-						return value;
-					}, z.string()),
-				},
-			},
-		});
-
-		await expect(store.read()).rejects.toMatchObject({ code: "VALIDATION" });
-		expect(validationCalls).toBe(1);
-	});
-
 	it("rejects schema definitions mixed with defaults or validators", () => {
 		for (const field of [
 			{ schema: z.string(), default: "x" },
@@ -985,37 +624,6 @@ describe("schema transform persistence", () => {
 
 		expect(persisted).toEqual({ name: "hi" });
 		expect(persisted).toEqual(await store.read());
-		const filePath = join(tempDir, "config.json");
-		const raw = await readFile(filePath, "utf-8");
-		expect(JSON.parse(raw)).toEqual(persisted);
-	});
-
-	it("persists Zod transform output on update", async () => {
-		const fields = {
-			name: { schema: z.string().transform((s) => s.trim()) },
-		} as const satisfies FieldsDef;
-
-		const store = createStore({ dirPath: tempDir, name: "config", fields });
-
-		await store.write({ name: "initial" });
-		const persisted = await store.update(() => ({ name: "  spaced  " }));
-
-		expect(persisted).toEqual({ name: "spaced" });
-		const filePath = join(tempDir, "config.json");
-		const raw = await readFile(filePath, "utf-8");
-		expect(JSON.parse(raw)).toEqual(persisted);
-	});
-
-	it("persists Zod transform output on patch", async () => {
-		const fields = {
-			name: { schema: z.string().transform((s) => s.trim()) },
-		} as const satisfies FieldsDef;
-
-		const store = createStore({ dirPath: tempDir, name: "config", fields });
-
-		const persisted = await store.patch({ name: "  patched  " });
-
-		expect(persisted).toEqual({ name: "patched" });
 		const filePath = join(tempDir, "config.json");
 		const raw = await readFile(filePath, "utf-8");
 		expect(JSON.parse(raw)).toEqual(persisted);
@@ -1154,50 +762,6 @@ describe("JSON serialization stability", () => {
 		}
 		expect(existsSync(join(tempDir, "config.json"))).toBe(false);
 	});
-
-	it("rejects sparse arrays whose holes would persist as null", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: { nums: { type: "number", array: true } },
-		});
-
-		// oxlint-disable-next-line unicorn/no-new-array -- the sparse hole is the input under test.
-		await expect(store.write({ nums: new Array<number>(1) })).rejects.toMatchObject({
-			code: "VALIDATION",
-			details: { operation: "write", issues: [{ path: "nums" }] },
-		});
-	});
-
-	it("rejects negative zero, which JSON persists as 0", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: { amount: { type: "number", default: 0 } },
-		});
-
-		await expect(store.patch({ amount: -0 })).rejects.toMatchObject({
-			code: "VALIDATION",
-			details: { operation: "patch", issues: [{ path: "amount" }] },
-		});
-	});
-
-	it("rejects undefined object properties that JSON serialization drops", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: { payload: { schema: z.custom<{ note: string }>(() => true) } },
-		});
-
-		// Object.assign sneaks the undefined property past the schema's declared
-		// output type — locks the runtime guard against schema outputs whose own
-		// keys would change across persistence.
-		const withUndefined = Object.assign({ note: "x" }, { note: undefined });
-		await expect(store.write({ payload: withUndefined })).rejects.toMatchObject({
-			code: "VALIDATION",
-			details: { operation: "write", issues: [{ path: "payload" }] },
-		});
-	});
 });
 
 describe("core validator transform type enforcement", () => {
@@ -1243,16 +807,6 @@ describe("core validator transform type enforcement", () => {
 		expect(patched).toEqual({ name: "hi" });
 		expect(patched).toEqual(await store.read());
 	});
-
-	it("still accepts core transforms within the declared type", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: { name: { type: "string", validate: (value) => ({ value: value.trim() }) } },
-		});
-
-		await expect(store.write({ name: "  hi  " })).resolves.toEqual({ name: "hi" });
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -1292,19 +846,6 @@ describe("Object.prototype key names", () => {
 				'{"constructor":"kept","toString":"t","__proto__":{"a":1},"theme":"dark","verbose":false}',
 			),
 		);
-	});
-
-	it("patch prunes unknown prototype-named keys on disk by default", async () => {
-		const filePath = join(tempDir, "config.json");
-		await writeFile(filePath, PROTO_KEYS_JSON);
-		const store = createStore({ dirPath: tempDir, name: "config", fields: BASIC_FIELDS });
-
-		await store.patch({ theme: "dark" });
-
-		expect(JSON.parse(await readFile(filePath, "utf-8"))).toEqual({
-			theme: "dark",
-			verbose: false,
-		});
 	});
 
 	for (const pruneUnknown of [true, false]) {

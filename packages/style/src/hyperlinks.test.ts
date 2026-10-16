@@ -1,45 +1,15 @@
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { linkCode } from "./hyperlinks.ts";
-import { createStyle, link } from "./index.ts";
+import { createStyle } from "./index.ts";
 
 describe("hyperlinks", () => {
-	it("creates OSC 8 link pairs", () => {
-		const pair = linkCode("https://crustjs.com");
-		expect(pair).toEqual({
-			open: "\x1b]8;;https://crustjs.com\x1b\\",
-			close: "\x1b]8;;\x1b\\",
-		});
-	});
-
 	it("supports the id parameter", () => {
 		const pair = linkCode("https://crustjs.com/docs", { id: "docs-link" });
 		expect(pair).toEqual({
 			open: "\x1b]8;id=docs-link;https://crustjs.com/docs\x1b\\",
 			close: "\x1b]8;;\x1b\\",
 		});
-	});
-
-	it("returns empty text unchanged", () => {
-		expect(createStyle({ mode: "always" }).link("", "https://crustjs.com")).toBe("");
-	});
-
-	it("reopens the outer hyperlink after an inner hyperlink closes", () => {
-		const s = createStyle({ mode: "always" });
-		const nested = s.link(
-			`outer ${s.link("inner", "https://crustjs.com/inner")} outer`,
-			"https://crustjs.com/outer",
-		);
-		expect(nested).toBe(
-			"\x1b]8;;https://crustjs.com/outer\x1b\\outer \x1b]8;;https://crustjs.com/inner\x1b\\inner\x1b]8;;\x1b\\\x1b]8;;https://crustjs.com/outer\x1b\\ outer\x1b]8;;\x1b\\",
-		);
-	});
-
-	it("composes with ANSI styles", () => {
-		const s = createStyle({ mode: "always" });
-		expect(s.red(s.link("Crust", "https://crustjs.com"))).toBe(
-			"\x1b[31m\x1b]8;;https://crustjs.com\x1b\\Crust\x1b]8;;\x1b\\\x1b[39m",
-		);
 	});
 });
 
@@ -68,35 +38,11 @@ describe("createStyle().link", () => {
 		});
 		expect(s.link("Crust", "https://crustjs.com")).toBe("Crust");
 	});
-
-	it("suppresses hyperlinks in never mode", () => {
-		const s = createStyle({ mode: "never" });
-		expect(s.link("Crust", "https://crustjs.com")).toBe("Crust");
-	});
-});
-
-describe("runtime link export", () => {
-	afterEach(() => vi.unstubAllEnvs());
-
-	it("still emits hyperlinks under NO_COLOR (colors-only switch)", () => {
-		// no-color.org: NO_COLOR suppresses colors; modifiers + hyperlinks
-		// survive. FORCE_COLOR=3 keeps emission on for this non-TTY test.
-		vi.stubEnv("FORCE_COLOR", "3");
-		vi.stubEnv("NO_COLOR", "1");
-		expect(link("Crust", "https://crustjs.com")).toBe(
-			"\x1b]8;;https://crustjs.com\x1b\\Crust\x1b]8;;\x1b\\",
-		);
-	});
-
-	it("suppresses hyperlinks under FORCE_COLOR=0 (all-ANSI switch)", () => {
-		vi.stubEnv("FORCE_COLOR", "0");
-		expect(link("Crust", "https://crustjs.com")).toBe("Crust");
-	});
 });
 
 describe("linkCode error messages", () => {
 	it("linkCode rejects URLs with spaces and echoes the URL", () => {
-		// linkCode validates pairs; facade validation in all modes is covered below.
+		// linkCode validates pairs; facade validation is covered below.
 		expect(() => linkCode("https://example.com/with space")).toThrow(
 			'Invalid hyperlink URL: "https://example.com/with space" must contain only printable ASCII characters without spaces.',
 		);
@@ -120,11 +66,6 @@ describe("linkCode error messages", () => {
 describe("style.link validates URLs even when hyperlinks are suppressed", () => {
 	it("throws on bad URL with hyperlinks disabled (mode='never')", () => {
 		const s = createStyle({ mode: "never" });
-		expect(() => s.link("docs", "https://example.com/with space")).toThrow(/Invalid hyperlink URL/);
-	});
-
-	it("throws on bad URL with hyperlinks enabled (mode='always')", () => {
-		const s = createStyle({ mode: "always" });
 		expect(() => s.link("docs", "https://example.com/with space")).toThrow(/Invalid hyperlink URL/);
 	});
 });

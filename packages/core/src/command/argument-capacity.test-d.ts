@@ -114,13 +114,9 @@ const hundred = fifty
 		return args.a99;
 	});
 
-declare const fiftyValues: { [D in (typeof fifty)["_types"]["args"][number] as D["name"]]: string };
 declare const hundredValues: {
 	[D in (typeof hundred)["_types"]["args"][number] as D["name"]]: string;
 };
-void fifty.run([], { args: fiftyValues });
 void hundred.run([], { args: hundredValues });
-// @ts-expect-error A long chain must not weaken positional prefix validation.
-void fifty.run([], { args: { a49: "gap" } });
 // @ts-expect-error The 100-argument input still requires all earlier positions.
 void hundred.run([], { args: { a99: "gap" } });

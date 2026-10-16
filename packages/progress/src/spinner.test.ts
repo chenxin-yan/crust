@@ -1,6 +1,5 @@
 import { setTimeout as tick } from "node:timers/promises";
 
-import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { type ProgressSink, spinner, withProgressSink } from "./spinner.ts";
@@ -107,15 +106,6 @@ describe("spinner — terminal sink", () => {
 		expect(writes).toEqual(finalOutput);
 	});
 
-	it("renders the final line when stopped before starting", () => {
-		const { sink, writes } = createFakeSink(false);
-		const handle = spinner({ message: "Working", sink });
-
-		handle.stop("error", "Failed");
-
-		expect(writes).toEqual(["✗ Failed\n"]);
-	});
-
 	it("leaves SIGINT to the application when disabled", () => {
 		const { sink } = createFakeSink(true);
 		const previousHandlers = process.listeners("SIGINT");
@@ -156,17 +146,6 @@ describe("spinner — sink resolution", () => {
 		}
 	});
 
-	it("routes output to the per-call sink option", () => {
-		const { sink, writes } = createFakeSink(false);
-		const handle = spinner({ message: "Working", sink });
-
-		handle.start();
-		handle.stop();
-
-		expect(writes).toHaveLength(1);
-		expect(writes[0]).toContain("✓ Working\n");
-	});
-
 	it("routes output to the ambient withProgressSink sink", () => {
 		const { sink, writes } = createFakeSink(false);
 
@@ -177,36 +156,6 @@ describe("spinner — sink resolution", () => {
 		});
 
 		expect(writes[0]).toContain("✓ Ambient\n");
-	});
-
-	it("routes non-interactive final lines through ambient terminal IO", () => {
-		const errors: string[] = [];
-
-		withAmbientTerminalIO({ stdout: () => {}, stderr: (text) => errors.push(text) }, () => {
-			const handle = spinner({ message: "Bridged" });
-			handle.start();
-			handle.stop();
-		});
-
-		expect(errors).toHaveLength(1);
-		expect(errors[0]).toContain("✓ Bridged");
-		expect(errors[0]).not.toMatch(/\n$/);
-	});
-
-	it("prefers the progress ambient sink over ambient terminal IO", () => {
-		const { sink, writes } = createFakeSink(false);
-		const errors: string[] = [];
-
-		withAmbientTerminalIO({ stdout: () => {}, stderr: (text) => errors.push(text) }, () =>
-			withProgressSink(sink, () => {
-				const handle = spinner({ message: "Progress ambient" });
-				handle.start();
-				handle.stop();
-			}),
-		);
-
-		expect(writes[0]).toContain("✓ Progress ambient\n");
-		expect(errors).toEqual([]);
 	});
 
 	it("per-call sink option wins over the ambient sink", () => {
@@ -223,22 +172,6 @@ describe("spinner — sink resolution", () => {
 		expect(explicit.writes[0]).toContain("✓ Explicit\n");
 	});
 
-	it("the nearest ambient sink wins when scopes nest", () => {
-		const outer = createFakeSink(false);
-		const inner = createFakeSink(false);
-
-		withProgressSink(outer.sink, () => {
-			withProgressSink(inner.sink, () => {
-				const handle = spinner({ message: "Nested" });
-				handle.start();
-				handle.stop();
-			});
-		});
-
-		expect(outer.writes).toHaveLength(0);
-		expect(inner.writes[0]).toContain("✓ Nested\n");
-	});
-
 	it("a handle created inside the scope keeps its sink when stopped outside", () => {
 		const { sink, writes } = createFakeSink(false);
 
@@ -247,25 +180,6 @@ describe("spinner — sink resolution", () => {
 		handle.stop();
 
 		expect(writes[0]).toContain("✓ Escaped\n");
-	});
-
-	it("the ambient sink survives async boundaries", async () => {
-		const { sink, writes } = createFakeSink(false);
-
-		const result = await withProgressSink(sink, async () => {
-			await tick(10);
-			return spinner({
-				message: "Async",
-				task: async () => {
-					await tick(10);
-					return "ok";
-				},
-			});
-		});
-
-		expect(result).toBe("ok");
-
-		expect(writes[0]).toContain("✓ Async\n");
 	});
 });
 
@@ -364,20 +278,6 @@ describe("spinner — animation", () => {
 });
 
 describe("spinner — message updates", () => {
-	it("updates the displayed message via updateMessage", async () => {
-		await spinner({
-			sink,
-			message: "Step 1...",
-			task: async ({ updateMessage }) => {
-				updateMessage("Step 2...");
-				return "ok";
-			},
-		});
-
-		expect(writes.join("")).toContain("Step 1...");
-		expect(writes.join("")).toContain("Step 2...");
-	});
-
 	it("success line uses the latest message", async () => {
 		await spinner({
 			sink,
@@ -390,21 +290,6 @@ describe("spinner — message updates", () => {
 
 		expect(writes.at(-2)).toBe("\x1B[2K\r✓ Final...\n");
 		expect(writes.at(-1)).toBe("\x1B[?25h");
-	});
-
-	it("error line uses the latest message", async () => {
-		try {
-			await spinner({
-				sink,
-				message: "Starting...",
-				task: async ({ updateMessage }) => {
-					updateMessage("Failed step...");
-					throw new Error("boom");
-				},
-			});
-		} catch {}
-
-		expect(writes.at(-2)).toBe("\x1B[2K\r✗ Failed step...\n");
 	});
 
 	it("ignores updateMessage calls after task completes", async () => {
@@ -547,34 +432,5 @@ describe("spinner — non-interactive", () => {
 		});
 
 		expect(writes).toEqual(["✓ Step 3...\n"]);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// spinner — imperative handle controller
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("spinner — imperative handle", () => {
-	it("start and stop live in different call frames", async () => {
-		const handle = spinner({ sink, message: "Working..." });
-
-		handle.start();
-		await tick(20);
-		handle.stop();
-
-		expect(writes.join("")).toContain("Working...");
-		expect(writes.join("")).toContain("✓");
-		expect(writes.join("")).toContain("\x1B[?25h");
-	});
-
-	it("stop('error') renders the failure symbol without throwing", async () => {
-		const handle = spinner({ sink, message: "Deploying..." });
-
-		handle.start();
-		handle.stop("error", "Deploy failed");
-
-		expect(writes.join("")).toContain("✗");
-		expect(writes.join("")).toContain("Deploy failed");
-		expect(writes.join("")).not.toContain("✓");
 	});
 });

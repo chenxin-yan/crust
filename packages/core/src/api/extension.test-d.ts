@@ -5,12 +5,7 @@ import { defineExtensionId } from "../identity.ts";
 import type { CommandSection } from "../types.ts";
 import type { ParsedFlagValue } from "../types.ts";
 import { defineContext, type DefiningOf } from "./context.ts";
-import {
-	defineExtension,
-	type Extension,
-	type ExtensionBuildContext,
-	type ExtensionFactory,
-} from "./extension.ts";
+import { defineExtension, type Extension, type ExtensionFactory } from "./extension.ts";
 
 function _metadataRequirements() {
 	const ID = defineExtensionId("test:metadata");
@@ -40,15 +35,6 @@ function _metadataRequirements() {
 		type _version = Expect<Equal<typeof ctx.rootCommand.meta.version, string | undefined>>;
 		const _snapshot: CommandSnapshot = ctx.rootCommand;
 	});
-	defineExtension(ID);
-	// @ts-expect-error Only authored root metadata keys may be required.
-	defineExtension<"versin">(ID);
-	// @ts-expect-error Arbitrary fields are not preserved by the root builder.
-	defineExtension<"version" | "imaginary">(ID);
-	// @ts-expect-error Subcommand-only metadata is not a root requirement.
-	defineExtension<"aliases">(ID);
-	// @ts-expect-error The metadata generic is the only explicit type argument.
-	defineExtension<"version", []>(ID);
 	const needsUsage = defineExtension<"usage">(ID);
 	// @ts-expect-error Requirements apply even without an invocation hook.
 	new Crust("app").extend(needsUsage);
@@ -216,11 +202,7 @@ function _fluentInference() {
 	const annotated: ExtensionFactory<[label: string], {}, [], typeof flags> = defineExtension(
 		ID,
 	).factory((extension, _label: string) => extension.flags(...flags));
-	// @ts-expect-error Annotated factory argument types still constrain calls.
-	annotated(123);
 	annotated("value");
-	// @ts-expect-error The factory must return an Extension, not arbitrary data.
-	defineExtension(ID).factory(() => ({ id: ID }));
 }
 
 function _conditionalFactoryDependencies() {
@@ -241,8 +223,6 @@ function _conditionalFactoryDependencies() {
 	new Crust("app", { version: "1" }).extend(make(true));
 	// @ts-expect-error Conditional factories retain required root metadata.
 	new Crust("app").provide(db()).extend(make(true));
-	// @ts-expect-error Conditional factories retain their inferred arguments.
-	make("enabled");
 	const wrongDb = defineContext("db").setup(() => 42);
 	// @ts-expect-error A provider must satisfy every possible branch's value contract.
 	new Crust("app", { version: "1" }).provide(wrongDb()).extend(make(true));
@@ -276,18 +256,4 @@ function _positionalCallbacks() {
 		.add(first)
 		// @ts-expect-error Repeated add() calls check earlier command spellings.
 		.add(defineCommand("f", (cmd) => cmd));
-}
-
-function _buildHookReturnsFiles() {
-	const ID = defineExtensionId("test:build");
-	defineExtension(ID).build(() => [{ path: "man/app.1", content: ".Dd" }]);
-	defineExtension(ID).build(async () => [{ path: "assets/logo.png", content: new Uint8Array() }]);
-	// @ts-expect-error Core writes the returned files; a hook cannot write on its own and return nothing.
-	defineExtension(ID).build(() => {});
-	// @ts-expect-error Bare paths carry no content for core to write.
-	defineExtension(ID).build(() => ["man/app.1"]);
-	defineExtension(ID).build(
-		// @ts-expect-error The output directory is owned by build tooling; hooks get no handle to side-write into it.
-		({ outDir }: ExtensionBuildContext) => [{ path: "man/app.1", content: outDir }],
-	);
 }

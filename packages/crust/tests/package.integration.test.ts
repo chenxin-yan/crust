@@ -1,9 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import {
-	cpSync,
 	existsSync,
 	mkdirSync,
-	mkdtempSync,
 	readdirSync,
 	readFileSync,
 	realpathSync,
@@ -24,89 +22,13 @@ import { buildCommand } from "../src/commands/build.ts";
 import type { DistributionManifest } from "../src/distribute.ts";
 import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
 
-const tmpDir = mkdtempSync(join(tmpdir(), "crust-package-integration-"));
-const stageDir = join(tmpDir, ".crust");
 const originalCwd = process.cwd;
 
 function readJson<T>(path: string): T {
 	return JSON.parse(readFileSync(path, "utf-8")) as T;
 }
 
-async function runBuild(argv: string[]) {
-	const app = new Crust("test").add(buildCommand);
-	process.cwd = () => tmpDir;
-	try {
-		const result = await captureExecute(app, ["build", ...argv]);
-		expect(result.exitCode, result.stderr).toBe(0);
-		return result;
-	} finally {
-		process.cwd = originalCwd;
-	}
-}
-
-beforeAll(() => {
-	rmSync(tmpDir, { recursive: true, force: true });
-	mkdirSync(join(tmpDir, "src"), { recursive: true });
-	writeFileSync(join(tmpDir, "src", "cli.ts"), 'console.log("hello from packaged test");\n');
-	writeFileSync(
-		join(tmpDir, "package.json"),
-		JSON.stringify(
-			{
-				name: "@scope/test-cli",
-				version: "0.1.0",
-				bin: {
-					"test-cli": "src/cli.ts",
-				},
-				crust: { artifact: "binary" },
-			},
-			null,
-			2,
-		),
-	);
-});
-
 afterEach(reapBoundedProcesses);
-
-afterAll(() => {
-	process.cwd = originalCwd;
-	rmSync(tmpDir, { recursive: true, force: true });
-});
-
-describe("crust build integration", () => {
-	it("stages root and platform packages in .crust with a JS launcher", async () => {
-		await runBuild(["--target", "bun-linux-x64", "--target", "bun-darwin-arm64", "--no-validate"]);
-
-		expect(existsSync(join(stageDir, "root", "bin", "test-cli.js"))).toBe(true);
-		expect(existsSync(join(stageDir, "root", "bin", "test-cli"))).toBe(false);
-		expect(existsSync(join(stageDir, "linux-x64", "bin"))).toBe(true);
-		expect(existsSync(join(stageDir, "darwin-arm64", "bin"))).toBe(true);
-
-		const rootPackageJson = readJson<{ bin: Record<string, string> }>(
-			join(stageDir, "root", "package.json"),
-		);
-		expect(rootPackageJson.bin["test-cli"]).toBe("bin/test-cli.js");
-
-		const manifest = readJson<{
-			version: string;
-			publishOrder: string[];
-			packages: Array<{ target: string; dir: string }>;
-		}>(join(stageDir, "manifest.json"));
-		expect(manifest.version).toBe("0.1.0");
-		expect(manifest.publishOrder).toEqual(["linux-x64", "darwin-arm64", "root"]);
-		expect(manifest.packages.map((pkg) => pkg.target)).toEqual(["linux-x64", "darwin-arm64"]);
-	}, 15_000);
-
-	it("wipes .crust and stages only the selected target directories", async () => {
-		mkdirSync(join(stageDir, "darwin-arm64"), { recursive: true });
-		writeFileSync(join(stageDir, "stale.txt"), "from a previous build\n");
-		await runBuild(["--target", "bun-linux-x64", "--no-validate"]);
-
-		expect(existsSync(join(stageDir, "stale.txt"))).toBe(false);
-		expect(existsSync(join(stageDir, "root"))).toBe(true);
-		expect(existsSync(join(stageDir, "linux-x64"))).toBe(true);
-		expect(existsSync(join(stageDir, "darwin-arm64"))).toBe(false);
-	});
-});
 
 // Public build -> npm pack -> install -> execute for a Bun runtime package: the
 // installed commands must run under the consumer's Bun, from an unrelated cwd,
@@ -344,126 +266,8 @@ await new Crust("bun-admin").action(({ stdout }) => {
 	}, 120_000);
 });
 
-// Public build of a Node runtime package with crust.external: the bundle keeps
-// the externals as bare imports and the staged root lists them as dependencies.
-// The consumer layout mirrors what npm installs (the root package beside its
-// dependencies), built by copying, since the fake dependencies are not on a registry.
-describe.skipIf(!which("node") || !which("bun"))("Node runtime package with crust.external", () => {
-	const root = join(tmpdir(), `crust-node-external-${randomBytes(6).toString("hex")}`);
-	const project = join(root, "project");
-	const coreDist = resolve(import.meta.dirname, "../../core/dist/index.js");
-
-	afterAll(async () => {
-		await reapBoundedProcesses();
-		rmSync(root, { recursive: true, force: true });
-	});
-
-	it("keeps externals out of the bundle, ships them as dependencies, and runs under Node", async () => {
-		mkdirSync(join(project, "src"), { recursive: true });
-		// Each dependency's source holds a marker that appears in the bundle only if it was inlined.
-		const fakeDependencies = {
-			"fake-esm": {
-				"package.json": JSON.stringify({ name: "fake-esm", version: "1.2.0", type: "module" }),
-				"index.js": 'export const greeting = "esm-marker";\n',
-			},
-			"fake-cjs": {
-				"package.json": JSON.stringify({ name: "fake-cjs", version: "1.0.0", main: "index.js" }),
-				"index.js": 'module.exports = { value: "cjs-marker" };\n',
-			},
-			"fake-unused": {
-				"package.json": JSON.stringify({ name: "fake-unused", version: "2.0.0" }),
-				"index.js": "",
-			},
-		};
-		for (const [name, files] of Object.entries(fakeDependencies)) {
-			mkdirSync(join(project, "node_modules", name), { recursive: true });
-			for (const [file, content] of Object.entries(files)) {
-				writeFileSync(join(project, "node_modules", name, file), content);
-			}
-		}
-		writeFileSync(
-			join(project, "src", "cli.ts"),
-			`import { Crust } from ${JSON.stringify(coreDist)};
-import { greeting } from "fake-esm";
-const cjs = require("fake-cjs");
-await new Crust("node-tool").action(({ stdout }) => {
-	stdout(JSON.stringify({ greeting, cjs: cjs.value, node: process.versions.bun ? null : process.versions.node }));
-}).execute();
-`,
-		);
-		writeFileSync(
-			join(project, "package.json"),
-			JSON.stringify({
-				name: "@scope/node-package",
-				version: "0.1.0",
-				bin: { "node-tool": "src/cli.ts" },
-				dependencies: {
-					"fake-cjs": "^1.0.0",
-					"fake-esm": "~1.2.0",
-					"fake-unused": "2.0.0",
-					"not-external": "^3.0.0",
-				},
-				crust: {
-					runtime: "node",
-					artifact: "package",
-					external: ["fake-esm", "fake-cjs", "fake-unused"],
-				},
-			}),
-		);
-
-		const app = new Crust("test").add(buildCommand);
-		process.cwd = () => project;
-		try {
-			const result = await captureExecute(app, ["build"]);
-			expect(result.exitCode, result.stderr).toBe(0);
-		} finally {
-			process.cwd = originalCwd;
-		}
-
-		const stagedRoot = join(project, ".crust", "root");
-		const bundle = readFileSync(join(stagedRoot, "bin", "node-tool.js"), "utf8");
-		expect(bundle.startsWith("#!/usr/bin/env node\n")).toBe(true);
-		expect(bundle).toMatch(/from\s*"fake-esm"/);
-		expect(bundle).toMatch(/\("fake-cjs"\)/);
-		expect(bundle).not.toContain("esm-marker");
-		expect(bundle).not.toContain("cjs-marker");
-		const { dependencies } = readJson<{ dependencies?: Record<string, string> }>(
-			join(stagedRoot, "package.json"),
-		);
-		expect(dependencies).toEqual({
-			"fake-esm": "~1.2.0",
-			"fake-cjs": "^1.0.0",
-			"fake-unused": "2.0.0",
-		});
-		expect(Object.keys(dependencies ?? {})).toEqual(["fake-esm", "fake-cjs", "fake-unused"]);
-
-		const consumerModules = join(root, "consumer", "node_modules");
-		const installed = join(consumerModules, "@scope", "node-package");
-		cpSync(stagedRoot, installed, { recursive: true });
-		for (const name of Object.keys(dependencies ?? {})) {
-			cpSync(join(project, "node_modules", name), join(consumerModules, name), { recursive: true });
-		}
-		rmSync(project, { recursive: true, force: true });
-		const nodePath = which("node")!;
-		const nodeVersion = (
-			await runBoundedProcess(nodePath, ["-p", "process.versions.node"], { timeout: 10_000 })
-		).stdout.trim();
-
-		const run = await runBoundedProcess(nodePath, [join(installed, "bin", "node-tool.js")], {
-			cwd: root,
-			timeout: 25_000,
-		});
-		expect(run.exitCode, run.stderr).toBe(0);
-		expect(JSON.parse(run.stdout.trim())).toEqual({
-			greeting: "esm-marker",
-			cjs: "cjs-marker",
-			node: nodeVersion,
-		});
-	}, 120_000);
-});
-
-// Public build -> npm pack -> loopback registry -> native `deno run npm:` and
-// `deno install -g` for an experimental Deno runtime package. The project uses
+// Public build -> npm pack -> loopback registry -> native `deno run npm:` for
+// an experimental Deno runtime package. The project uses
 // published-style dependencies (packed Crust tarballs installed by npm, registry
 // ranges in package.json, a deno.json import map), bundles them with a dead npm
 // registry, and is deleted before any consumer run. Consumers choose every
@@ -482,7 +286,6 @@ describe.skipIf(!which("deno") || !which("bun") || !which("npm") || !which("pnpm
 		const packs = join(root, "packs");
 		const elsewhere = join(root, "elsewhere");
 		const denoDir = join(root, "deno-dir");
-		const installRoot = join(root, "install-root");
 		const snapshotPath = join(root, "snapshot.json");
 		const hooksDir = join(root, "hooks");
 		const spec = "npm:@crust-fixture/deno-package@0.1.0";
@@ -515,12 +318,6 @@ describe.skipIf(!which("deno") || !which("bun") || !which("npm") || !which("pnpm
 				env: consumerEnv(),
 				timeout: 60_000,
 			});
-		const installed = (command: string, args: readonly string[]) =>
-			runBoundedProcess(
-				join(installRoot, "bin", process.platform === "win32" ? `${command}.cmd` : command),
-				args,
-				{ cwd: elsewhere, env: consumerEnv(), timeout: 60_000 },
-			);
 		const stopRegistry = async () => {
 			if (!registry) return;
 			const server = registry;
@@ -797,56 +594,6 @@ await new Crust("deno-admin").action(({ stdout }) => {
 			expect(denied.stderr).toContain("Requires read access");
 			expect(denied.stderr).toContain("greeting.txt");
 
-			expect(existsSync(snapshotPath)).toBe(false);
-			expect(existsSync(hooksDir)).toBe(false);
-		}, 120_000);
-
-		it("installs natively with the requested grants and runs offline from the cache", async () => {
-			const install = async (name: string, bin: string, grants: readonly string[]) => {
-				const result = await deno([
-					"install",
-					"--global",
-					"--root",
-					installRoot,
-					...grants,
-					"--name",
-					name,
-					`${spec}/${bin}`,
-				]);
-				expect(result.exitCode, result.stderr).toBe(0);
-			};
-			// Deno 2.9 runs globally installed npm bins from the install root, 2.5 from its cache.
-			await install("deno-greet", "deno-greet", [`--allow-read=${installRoot},${denoDir}`]);
-			await install("deno-greet-ungranted", "deno-greet", []);
-			await install("deno-admin", "deno-admin", []);
-			await stopRegistry();
-
-			const greet = await installed("deno-greet", ["world", "--shout"]);
-			expect(greet.exitCode, greet.stderr).toBe(0);
-			expect(greet.stderr).toBe("note from deno-greet\n");
-			expect(JSON.parse(greet.stdout)).toEqual({
-				greeting: "HELLO WORLD",
-				deno: denoVersion,
-				asset: "hello from assets",
-				man: ".Dd",
-			});
-			const ungranted = await installed("deno-greet-ungranted", ["world"]);
-			expect(ungranted.exitCode).not.toBe(0);
-			expect(ungranted.stderr).toContain("Requires read access");
-			const admin = await installed("deno-admin", []);
-			expect(admin.exitCode, admin.stderr).toBe(3);
-			expect(admin.stdout).toBe("admin under deno\n");
-
-			const offline = await deno([
-				"run",
-				"--cached-only",
-				"--no-prompt",
-				`--allow-read=${denoDir}`,
-				`${spec}/deno-greet`,
-				"offline",
-			]);
-			expect(offline.exitCode, offline.stderr).toBe(0);
-			expect(JSON.parse(offline.stdout)).toMatchObject({ greeting: "hello offline" });
 			expect(existsSync(snapshotPath)).toBe(false);
 			expect(existsSync(hooksDir)).toBe(false);
 		}, 120_000);

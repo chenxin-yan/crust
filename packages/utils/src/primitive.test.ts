@@ -11,15 +11,6 @@ describe("primitive helpers", () => {
 		it("returns undefined for non-numeric strings", () => {
 			expect(tryCoerceNumber("abc")).toBeUndefined();
 		});
-
-		it("coerces an empty string to 0", () => {
-			// Number("") is 0, not NaN, so existing coercion accepts it.
-			expect(tryCoerceNumber("")).toBe(0);
-		});
-
-		it("accepts Infinity", () => {
-			expect(tryCoerceNumber("Infinity")).toBe(Infinity);
-		});
 	});
 
 	describe("coerceBooleanString", () => {

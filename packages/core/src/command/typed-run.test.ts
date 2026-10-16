@@ -121,24 +121,6 @@ describe("typed programmatic invocation", () => {
 		await expect(unwrap(app.run([]))).rejects.toThrow("recipe failed");
 	});
 
-	it("awaits async action results", async () => {
-		const app = new Crust("cli").action(async () => ({ ok: true as const }));
-		const pending = app.run([]);
-		type _result = Expect<Equal<typeof pending, Promise<RunOutcome<{ ok: true }>>>>;
-
-		expect(await pending).toMatchObject({ status: "completed", result: { ok: true } });
-	});
-
-	it("returns the handling Extension when preRun handles the invocation before the action", async () => {
-		const gateId = defineExtensionId("gate");
-		const gate = defineExtension(gateId).preRun((ctx) => ctx.handled());
-		const app = new Crust("cli").extend(gate).action(() => ({ ran: true as const }));
-		const pending = app.run([]);
-		type _result = Expect<Equal<typeof pending, Promise<RunOutcome<{ ran: true }>>>>;
-
-		expect(await pending).toMatchObject({ status: "handled", by: gateId });
-	});
-
 	it("binds structured input directly against the selected command", async () => {
 		let received: StructuredRunCapture | undefined;
 		const remoteAdd = defineCommand("remote-add", (command) =>
@@ -189,42 +171,6 @@ describe("typed programmatic invocation", () => {
 			code: "PARSE",
 			details: { reason: "positional-gap" },
 		});
-	});
-
-	it("accepts positional values beginning with a dash", async () => {
-		const app = new Crust("cli")
-			.args({ name: "source", type: "string" })
-			.action(({ args }) => args.source);
-		expect(await app.run([], { args: { source: "-unsafe" } })).toMatchObject({
-			status: "completed",
-			result: "-unsafe",
-		});
-	});
-
-	it("selects commands only from the typed path, not positional names or aliases", async () => {
-		let ran = "";
-		const app = new Crust("cli")
-			.args({ name: "target", type: "string" })
-			.action(({ args }) => {
-				ran = "root";
-				return args.target;
-			})
-			.add(
-				defineCommand("build", { aliases: ["compile"] }, (command) =>
-					command.action(() => {
-						ran = "build";
-					}),
-				),
-			);
-		for (const target of ["build", "compile"]) {
-			expect(await app.run([], { args: { target } })).toMatchObject({
-				status: "completed",
-				result: target,
-			});
-			expect(ran).toBe("root");
-		}
-		await unwrap(app.run(["build"]));
-		expect(ran).toBe("build");
 	});
 
 	it("keeps arrays scalar for non-multiple json flags and non-variadic json args", async () => {

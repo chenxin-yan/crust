@@ -674,9 +674,6 @@ importers:
       '@crustjs/core':
         specifier: workspace:*
         version: link:../core
-      '@crustjs/progress':
-        specifier: workspace:*
-        version: link:../progress
       '@crustjs/prompts':
         specifier: workspace:*
         version: link:../prompts

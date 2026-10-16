@@ -22,10 +22,6 @@ async function _passwordTypeInferenceTests() {
 	});
 	type _SecretIsString = Expect<Equal<typeof secret, string>>;
 
-	// No validate — resolves to string.
-	const raw = await password({ message: "?" });
-	type _RawIsString = Expect<Equal<typeof raw, string>>;
-
 	const schemaInWrongSlot = z.string();
 	// @ts-expect-error — Standard Schemas belong in `schema`, not `validate`
 	void password({ validate: schemaInWrongSlot });

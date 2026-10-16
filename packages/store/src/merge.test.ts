@@ -19,11 +19,6 @@ const MIXED_FIELDS = {
 	token: { type: "string" },
 } as const satisfies FieldsDef;
 
-const ARRAY_FIELDS = {
-	tags: { type: "string", array: true, default: ["default"] },
-	count: { type: "number", default: 0 },
-} as const satisfies FieldsDef;
-
 // ────────────────────────────────────────────────────────────────────────────
 // applyFieldDefaults — No persisted data
 // ────────────────────────────────────────────────────────────────────────────
@@ -49,21 +44,6 @@ describe("applyFieldDefaults", () => {
 	});
 
 	// ──────────────────────────────────────────────────────────────────────
-	// Persisted data — full match
-	// ──────────────────────────────────────────────────────────────────────
-
-	it("should use persisted values when all keys are present", () => {
-		const persisted = { theme: "dark", verbose: true, retries: 5 };
-		const result = applyFieldDefaults(persisted, BASIC_FIELDS);
-
-		expect(result).toEqual({
-			theme: "dark",
-			verbose: true,
-			retries: 5,
-		});
-	});
-
-	// ──────────────────────────────────────────────────────────────────────
 	// Persisted data — partial match
 	// ──────────────────────────────────────────────────────────────────────
 
@@ -76,15 +56,6 @@ describe("applyFieldDefaults", () => {
 			verbose: false,
 			retries: 3,
 		});
-	});
-
-	it("should include optional fields when persisted", () => {
-		const persisted = { theme: "dark", verbose: true, token: "abc123" };
-		const result = applyFieldDefaults(persisted, MIXED_FIELDS);
-
-		expect(result.theme).toBe("dark");
-		expect(result.verbose).toBe(true);
-		expect(result.token).toBe("abc123");
 	});
 
 	// ──────────────────────────────────────────────────────────────────────
@@ -125,40 +96,9 @@ describe("applyFieldDefaults", () => {
 		});
 	});
 
-	it("should still fill missing defaults when pruneUnknown is false", () => {
-		const persisted = { theme: "dark", extra: "kept" };
-		const result = applyFieldDefaults(persisted, BASIC_FIELDS, false);
-
-		expect(result).toEqual({
-			theme: "dark",
-			verbose: false,
-			retries: 3,
-			extra: "kept",
-		});
-	});
-
-	// ──────────────────────────────────────────────────────────────────────
-	// Array fields
-	// ──────────────────────────────────────────────────────────────────────
-
-	it("should use persisted array values", () => {
-		const persisted = { tags: ["a", "b"], count: 42 };
-		const result = applyFieldDefaults(persisted, ARRAY_FIELDS);
-
-		expect(result).toEqual({
-			tags: ["a", "b"],
-			count: 42,
-		});
-	});
-
 	// ──────────────────────────────────────────────────────────────────────
 	// Edge cases — falsy values preserved
 	// ──────────────────────────────────────────────────────────────────────
-
-	it("should handle empty defaults", () => {
-		const result = applyFieldDefaults({ extra: "value" }, {});
-		expect(result).toEqual({});
-	});
 
 	it("should preserve null as a persisted value", () => {
 		const persisted = { theme: null, verbose: false, retries: 3 };

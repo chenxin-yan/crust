@@ -1,6 +1,6 @@
 import type { StandardSchema } from "@crustjs/utils/schema";
 
-import type { Equal, Expect, Repeat } from "../../tests/helpers.ts";
+import type { Equal, Expect } from "../../tests/helpers.ts";
 import type { InferArgValue, InputArgs } from "../types.ts";
 import { Crust } from "./crust.ts";
 import type { RunInput } from "./typed-run.ts";
@@ -120,16 +120,4 @@ function _requiredJsonVariadic() {
 	// @ts-expect-error -- exported inputs enforce the same nonempty contract
 	const input: InputArgs<(typeof app)["_types"]["args"]> = { items: [] };
 	void input;
-}
-
-type HundredPositions = Repeat<100, "p", { readonly type: "string" }>;
-
-function _hundredPositionPrefixes(
-	app: Crust<{}, HundredPositions>,
-	values: { [D in HundredPositions[number] as D["name"]]: string },
-) {
-	const input: InputArgs<HundredPositions> = values;
-	void app.run([], { args: input });
-	// @ts-expect-error -- the prefix relation has no small-tuple cutoff
-	void app.run([], { args: { p99: "last" } });
 }

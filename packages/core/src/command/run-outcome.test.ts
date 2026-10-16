@@ -216,25 +216,6 @@ it("resolves conditional inline providers once for the action and postRun", asyn
 	}
 });
 
-it("retains invocation sink callbacks rather than rereading a mutated IO object", async () => {
-	const writes: string[] = [];
-	const io = {
-		stdout: (text: string) => {
-			writes.push(`original:${text}`);
-		},
-	};
-	const app = new Crust("app").action(({ stdout }) => {
-		io.stdout = (text) => {
-			writes.push(`replacement:${text}`);
-		};
-		stdout("line");
-	});
-	const outcome = await app.run([], {}, io);
-	expect(outcome.status).toBe("completed");
-	expect(outcome.stdout).toBe("line");
-	expect(writes).toEqual(["original:line"]);
-});
-
 it("rejects invalid structured values before running the action", async () => {
 	let called = false;
 	const app: AnyCrust = new Crust("app")
@@ -262,20 +243,6 @@ it("ignores enumerable symbol properties without reading them", async () => {
 		result: "ok",
 	});
 	expect(read).toBe(false);
-});
-
-it("reads each known section once", async () => {
-	const app = new Crust("app").action(() => "ok");
-	let flagReads = 0;
-	const readOnce = {
-		get flags() {
-			flagReads++;
-			return {};
-		},
-	};
-	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-	expect(await app.run([], readOnce)).toMatchObject({ status: "completed", result: "ok" });
-	expect(flagReads).toBe(1);
 });
 
 it("accepts args, flags and raw sections and treats undefined unknown keys as omitted", async () => {

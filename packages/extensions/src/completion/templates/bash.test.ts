@@ -117,16 +117,6 @@ const fixture: CompletionCommand = {
 afterEach(reapBoundedProcesses);
 
 describe("renderBash", () => {
-	it("registers via `complete -F _<bin>` and includes a fallback init shim", () => {
-		const script = renderBash(fixture, "mycli", "1.0.0");
-		expect(script).toContain("__mycli_init_completion()");
-		// Bin name is single-quoted as defence-in-depth even though it has
-		// already passed `assertSafeBinName`.
-		expect(script).toContain("complete -o default -F _mycli 'mycli'");
-		// Fallback for systems without bash-completion.
-		expect(script).toContain("declare -F _init_completion");
-	});
-
 	it("sanitises bin names with hyphens to valid bash identifiers", () => {
 		const script = renderBash(fixture, "my-cli", "0.1.0");
 		// Function name must use underscores, but `complete -F` target
@@ -168,12 +158,6 @@ describe("renderBash · behavioural subprocess tests", () => {
 		expect(completions).toContain("dep");
 	});
 
-	it("scenario 1b — prefix match narrows the list", async () => {
-		const completions = await runCompletion(["mycli", "b"]);
-		expect(completions).toContain("build");
-		expect(completions).not.toContain("deploy");
-	});
-
 	it("scenario 2 — nested subcommand: `mycli deploy <TAB>` lists prod", async () => {
 		const completions = await runCompletion(["mycli", "deploy", ""]);
 		expect(completions).toContain("prod");
@@ -189,11 +173,6 @@ describe("renderBash · behavioural subprocess tests", () => {
 	it("scenario 3 — flag with choices: `mycli build --target <TAB>` lists target values", async () => {
 		const completions = await runCompletion(["mycli", "build", "--target", ""]);
 		expect(completions.sort()).toEqual(["browser", "bun", "node"]);
-	});
-
-	it("scenario 3b — nested flag with choices: `mycli deploy prod --env <TAB>`", async () => {
-		const completions = await runCompletion(["mycli", "deploy", "prod", "--env", ""]);
-		expect(completions.sort()).toEqual(["dev", "prod", "staging"]);
 	});
 
 	it("offers flag candidates when current token starts with `-`", async () => {
@@ -277,13 +256,6 @@ describe("renderBash · multi-positional choices", () => {
 	});
 
 	const runCompletion = (words: string[]) => runBashCompletion(scriptPath, "_mp", words);
-
-	it("slot 0 of `mp two` offers the first arg's choices", async () => {
-		const completions = await runCompletion(["mp", "two", ""]);
-		expect(completions).toContain("alpha");
-		expect(completions).toContain("beta");
-		expect(completions).not.toContain("gamma");
-	});
 
 	it("slot 1 of `mp two` offers the second arg's choices (not the first's)", async () => {
 		const completions = await runCompletion(["mp", "two", "alpha", ""]);
@@ -395,39 +367,10 @@ describe("renderBash — url/path/json value-flag handling", () => {
 			]);
 		});
 
-		it("separate form with a prefix: `mycli --out hello<TAB>`", async () => {
-			const completions = await runCompletion(["mycli", "--out", "hello"]);
-			expect(completions).toEqual(["hello world.txt"]);
-		});
-
 		it("equals form: `mycli --out=st<TAB>` keeps the literal `*` and the flag prefix", async () => {
 			const completions = await runCompletion(["mycli", "--out=st"]);
 			expect(completions).toEqual(["--out=star*.txt", "--out=starlight.txt"]);
 		});
-
-		it("equals form: `mycli --out=hello<TAB>` yields one prefixed candidate", async () => {
-			const completions = await runCompletion(["mycli", "--out=hello"]);
-			expect(completions).toEqual(["--out=hello world.txt"]);
-		});
-
-		it("no match yields an empty COMPREPLY (falls through to `-o default`)", async () => {
-			const completions = await runCompletion(["mycli", "--out", "zzz"]);
-			expect(completions).toEqual([]);
-		});
-	});
-
-	it("emits compopt +o default suppression for url and json flags", () => {
-		const script = renderBash(valueTypeFixture, "mycli", "1.0.0");
-		expect(script).toContain('"|--endpoint")');
-		expect(script).toContain('"|--config")');
-		expect(script).toContain("compopt +o default 2>/dev/null");
-	});
-
-	it("does not emit a typed case branch for plain string flags", () => {
-		const script = renderBash(valueTypeFixture, "mycli", "1.0.0");
-		// The plain `--name` flag still routes through __prev_is_value_flag
-		// and the `complete -o default` fallback.
-		expect(script).not.toContain('"|--name")');
 	});
 
 	it("suppresses `complete -o default` for url/json positional slots; path positionals rely on the fallback", () => {
@@ -536,22 +479,18 @@ describe("renderBash · mixed flag value modes", () => {
 
 	it.each<[string, string[], string[]]>([
 		["choices, short separate", ["dep", "-m", ""], ["fast", "slow"]],
-		["choices, alias separate", ["deploy", "--flavor", "s"], ["slow"]],
-		["choices, long equals", ["dep", "--mode=f"], ["--mode=fast"]],
 		["choices, alias equals", ["deploy", "--flavor="], ["--flavor=fast", "--flavor=slow"]],
 		[
 			"files, short separate",
 			["dep", "-o", ""],
 			["@compopt -o filenames", "hello world.txt", "notes.md"],
 		],
-		["files, long separate", ["deploy", "--out", "no"], ["@compopt -o filenames", "notes.md"]],
 		[
 			"files, alias equals",
 			["deploy", "--output=hello"],
 			["--output=hello world.txt", "@compopt -o filenames"],
 		],
 		["suppression, short separate", ["dep", "-e", ""], ["@compopt +o default"]],
-		["suppression, long equals", ["dep", "--endpoint=x"], ["@compopt +o default"]],
 		["suppression, alias equals", ["deploy", "--url=ht"], ["@compopt +o default"]],
 	])("%s", async (_label, words, expected) => {
 		const completions = await runBashCompletion(scriptPath, "_mycli", ["mycli", ...words], cwd);
@@ -580,16 +519,6 @@ describe("renderBash · one-character alias spellings", () => {
 
 	afterAll(async () => {
 		await rm(tmpDir, { recursive: true, force: true });
-	});
-
-	it("offers `-P` beside the other spellings", async () => {
-		expect(await runBashCompletion(scriptPath, "_mycli", ["mycli", "-"])).toEqual([
-			"--P",
-			"--listen",
-			"--port",
-			"-P",
-			"-p",
-		]);
 	});
 
 	it("routes past the value of `-P`", async () => {

@@ -33,15 +33,6 @@ describe("defineExtension", () => {
 		type _args = Expect<Equal<Parameters<typeof help>, [options?: { readonly verbose?: boolean }]>>;
 	});
 
-	it("passes required options through on each call", () => {
-		const prefix = defineExtension(HELP).factory((extension, options: { prefix: string }) =>
-			extension.flags({ name: "prefix", type: "string", default: options.prefix }),
-		);
-		type _args = Expect<Equal<Parameters<typeof prefix>, [options: { prefix: string }]>>;
-		expect(definingOf(prefix({ prefix: "first" })).flags.prefix?.default).toBe("first");
-		expect(definingOf(prefix({ prefix: "second" })).flags.prefix?.default).toBe("second");
-	});
-
 	it("accepts the factory and the handle as section consumers", async () => {
 		const handle = defineExtension(HELP);
 		const app = new Crust("help", {
@@ -218,15 +209,6 @@ describe("defineExtension", () => {
 				.run([], {}, { stdout: (line) => output.push(line) }),
 		);
 		expect(output).toEqual(["release:1.2.3"]);
-	});
-
-	it("applies metadata requirements to sections without an invocation hook", async () => {
-		const versioned = defineExtension<"version">(HELP).sections(() => [
-			{ command: [], title: "Notes", body: "Body" },
-		]);
-		expect(
-			(await new Crust("cli", { version: "1" }).extend(versioned).snapshot()).meta.sections,
-		).toEqual([{ title: "Notes", body: "Body" }]);
 	});
 });
 

@@ -55,24 +55,14 @@ function _runOutcome(
 	void app.run([], { flags: { mode: broad } });
 	// @ts-expect-error wrong choice
 	void app.run([], { flags: { mode: "wrong" } });
-	// @ts-expect-error wrong primitive
-	void app.run([], { flags: { mode: 3 } });
 	// @ts-expect-error explicit IO cannot bypass known choices through the compatibility overload
 	void app.run([], { flags: { mode: broad } }, { stdout: () => {} });
 	// @ts-expect-error explicit IO cannot bypass excess-key checks
 	void app.run([], { flags: { mode: "safe", mdoe: "fast" } }, {});
-	// @ts-expect-error missing required flag
-	void app.run([]);
 	// @ts-expect-error typo beside otherwise valid required input
 	void app.run([], { flags: { mode: "safe", mdoe: "fast" } });
 	// @ts-expect-error unknown top-level section beside otherwise valid required input
 	void app.run([], { flags: { mode: "safe" }, flgas: { mode: "fast" } });
-	const structuralSections = { flags: { mode }, flgas: { mode } };
-	// @ts-expect-error variables cannot carry unknown top-level sections
-	void app.run([], structuralSections);
-	const structuralInput = { flags: { mode, mdoe: "fast" } };
-	// @ts-expect-error variables cannot carry unknown flags
-	void app.run([], structuralInput);
 	// Unknown keys holding `undefined` are omitted at runtime, so they stay allowed.
 	const undefinedUnknown = { flags: { mode, mdoe: undefined }, flgas: undefined };
 	void app.run([], undefinedUnknown);

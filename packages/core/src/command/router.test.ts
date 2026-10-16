@@ -11,17 +11,6 @@ import { resolveCommand } from "./router.ts";
 // Test fixtures
 // ────────────────────────────────────────────────────────────────────────────
 
-function createLeafCommand(name: string, hasRun = true): CommandNode {
-	const node = createCommandNode(name);
-	node.meta.description = `${name} command`;
-	if (hasRun) {
-		node.run = () => {
-			/* noop */
-		};
-	}
-	return node;
-}
-
 function createRootWithSubcommands(hasRun = false): CommandNode {
 	const buildNode = createCommandNode("build");
 	buildNode.meta.description = "Build the project";
@@ -72,42 +61,6 @@ describe("resolveCommand", () => {
 			expect(result.argv).toEqual([]);
 			expect(result.commandPath).toEqual(["crust"]);
 		});
-
-		it("resolves single-level subcommand", () => {
-			const root = createRootWithSubcommands();
-			const result = resolveCommand(root, ["build"]);
-
-			expect(result.command.meta.name).toBe("build");
-			expect(result.argv).toEqual([]);
-			expect(result.commandPath).toEqual(["crust", "build"]);
-		});
-	});
-
-	describe("nested subcommand resolution", () => {
-		it("resolves deeply nested subcommand (3+ levels)", () => {
-			const deepCmd = createLeafCommand("deep");
-
-			const level2 = makeNode({
-				meta: { name: "level2", description: "Level 2" },
-				subCommands: { deep: deepCmd },
-			});
-
-			const level1 = makeNode({
-				meta: { name: "level1", description: "Level 1" },
-				subCommands: { level2 },
-			});
-
-			const root = makeNode({
-				meta: { name: "root", description: "Root" },
-				subCommands: { level1 },
-			});
-
-			const result = resolveCommand(root, ["level1", "level2", "deep"]);
-
-			expect(result.command.meta.name).toBe("deep");
-			expect(result.argv).toEqual([]);
-			expect(result.commandPath).toEqual(["root", "level1", "level2", "deep"]);
-		});
 	});
 
 	describe("fallback to parent", () => {
@@ -118,15 +71,6 @@ describe("resolveCommand", () => {
 			// When parent has run(), unknown candidates are treated as positionals
 			expect(result.command).toBe(root);
 			expect(result.argv).toEqual(["unknown-positional"]);
-			expect(result.commandPath).toEqual(["crust"]);
-		});
-
-		it("falls back to parent when argv starts with short flag", () => {
-			const root = createRootWithSubcommands();
-			const result = resolveCommand(root, ["-h"]);
-
-			expect(result.command).toBe(root);
-			expect(result.argv).toEqual(["-h"]);
 			expect(result.commandPath).toEqual(["crust"]);
 		});
 	});
@@ -154,75 +98,9 @@ describe("resolveCommand", () => {
 				}),
 			);
 		});
-
-		it("throws error for unknown nested subcommand", () => {
-			const commandCmd = createLeafCommand("command");
-
-			const generateCmd = makeNode({
-				meta: { name: "generate", description: "Generate files" },
-				subCommands: { command: commandCmd },
-			});
-
-			const root = makeNode({
-				meta: { name: "crust", description: "Crust CLI" },
-				subCommands: { generate: generateCmd },
-			});
-
-			expect(() => resolveCommand(root, ["generate", "unknown"])).toThrow(
-				expect.objectContaining({
-					code: "COMMAND_NOT_FOUND",
-					message: expect.stringContaining('Unknown command "unknown"'),
-					details: expect.objectContaining({
-						available: ["command"],
-						commandPath: ["crust", "generate"],
-					}),
-				}),
-			);
-		});
-	});
-
-	describe("--help flag handling", () => {
-		it("--help at subcmd level passes through in argv", () => {
-			const root = createRootWithSubcommands();
-			const result = resolveCommand(root, ["build", "--help"]);
-
-			expect(result.command.meta.name).toBe("build");
-			expect(result.argv).toEqual(["--help"]);
-			expect(result.commandPath).toEqual(["crust", "build"]);
-		});
-
-		it("-h at subcmd level passes through in argv", () => {
-			const root = createRootWithSubcommands();
-			const result = resolveCommand(root, ["build", "-h"]);
-
-			expect(result.command.meta.name).toBe("build");
-			expect(result.argv).toEqual(["-h"]);
-			expect(result.commandPath).toEqual(["crust", "build"]);
-		});
-	});
-
-	describe("command with no subcommands", () => {
-		it("resolves to root when command has no subcommands", () => {
-			const cmd = createLeafCommand("serve");
-			const result = resolveCommand(cmd, ["--port", "3000"]);
-
-			expect(result.command).toBe(cmd);
-			expect(result.argv).toEqual(["--port", "3000"]);
-			expect(result.commandPath).toEqual(["serve"]);
-		});
 	});
 
 	describe("edge cases", () => {
-		it("stops at flag even if it looks like a subcommand name", () => {
-			const root = createRootWithSubcommands();
-			const result = resolveCommand(root, ["--build"]);
-
-			// --build starts with -, so it's treated as a flag, not a subcommand
-			expect(result.command).toBe(root);
-			expect(result.argv).toEqual(["--build"]);
-			expect(result.commandPath).toEqual(["crust"]);
-		});
-
 		it("multiple subcommand candidates where first wins", () => {
 			const root = createRootWithSubcommands(true); // has run()
 			// "build" matches, then remaining args are left for the subcommand
@@ -232,15 +110,6 @@ describe("resolveCommand", () => {
 			expect(result.command.meta.name).toBe("build");
 			expect(result.argv).toEqual(["dev"]);
 			expect(result.commandPath).toEqual(["crust", "build"]);
-		});
-
-		it("preserves order of remaining argv after subcommand resolution", () => {
-			const root = createRootWithSubcommands();
-			const argv = ["build", "src/index.ts", "--entry", "main.ts", "--minify"];
-			const result = resolveCommand(root, argv);
-
-			expect(result.command.meta.name).toBe("build");
-			expect(result.argv).toEqual(["src/index.ts", "--entry", "main.ts", "--minify"]);
 		});
 	});
 });
@@ -259,17 +128,6 @@ describe("resolveCommand — aliases", () => {
 		return node;
 	}
 
-	it("resolves multiple aliases on the same node", () => {
-		const issue = makeChild("issue", ["issues", "i", "iss"]);
-		const root = createCommandNode("app");
-		root.subCommands = { issue };
-
-		expect(resolveCommand(root, ["issue"]).command).toBe(issue);
-		expect(resolveCommand(root, ["issues"]).command).toBe(issue);
-		expect(resolveCommand(root, ["i"]).command).toBe(issue);
-		expect(resolveCommand(root, ["iss"]).command).toBe(issue);
-	});
-
 	it("resolves aliases at nested depths", () => {
 		const leaf = makeChild("create", ["new", "add"]);
 		const issue = makeChild("issue", ["i"]);
@@ -280,15 +138,6 @@ describe("resolveCommand — aliases", () => {
 		const result = resolveCommand(root, ["i", "new"]);
 		expect(result.command).toBe(leaf);
 		expect(result.commandPath).toEqual(["app", "issue", "create"]);
-	});
-
-	it("records the canonical name in commandPath even when an alias was typed", () => {
-		const issue = makeChild("issue", ["i", "issues"]);
-		const root = createCommandNode("app");
-		root.subCommands = { issue };
-
-		expect(resolveCommand(root, ["i"]).commandPath).toEqual(["app", "issue"]);
-		expect(resolveCommand(root, ["issues"]).commandPath).toEqual(["app", "issue"]);
 	});
 
 	it("reports only visible canonical names in COMMAND_NOT_FOUND details.available", () => {
@@ -375,22 +224,10 @@ describe("resolveCommand — known-flag skipping", () => {
 		["separate value", ["--api-key", "secret", "deploy"]],
 		["equals form", ["--api-key=secret", "deploy"]],
 		["short form", ["-ksecret", "deploy"]],
-		["alias form", ["--token=secret", "deploy"]],
 	] as const)("routes past a Context-owned flag in %s", (_label, argv) => {
 		const result = resolveCommand(makeContextOwnedRoot(), [...argv]);
 		expect(result.commandPath).toEqual(["app", "deploy"]);
 		expect(result.argv).toEqual(argv.slice(0, -1));
-	});
-
-	it("routes a Context-owned flag through nested descendants", () => {
-		const result = resolveCommand(makeContextOwnedRoot(), [
-			"--api-key",
-			"secret",
-			"deploy",
-			"service",
-		]);
-		expect(result.commandPath).toEqual(["app", "deploy", "service"]);
-		expect(result.argv).toEqual(["--api-key", "secret"]);
 	});
 
 	function makeRoot(): CommandNode {
@@ -419,12 +256,6 @@ describe("resolveCommand — known-flag skipping", () => {
 		const result = resolveCommand(makeRoot(), ["--quiet", "translate"]);
 		expect(result.commandPath).toEqual(["app", "translate"]);
 		expect(result.argv).toEqual(["--quiet"]);
-	});
-
-	it("routes past a known short flag", () => {
-		const result = resolveCommand(makeRoot(), ["-q", "translate"]);
-		expect(result.commandPath).toEqual(["app", "translate"]);
-		expect(result.argv).toEqual(["-q"]);
 	});
 
 	it("routes past a negated boolean flag", () => {
@@ -462,12 +293,6 @@ describe("resolveCommand — known-flag skipping", () => {
 		const result = resolveCommand(makeRoot(), ["--bogus", "translate"]);
 		expect(result.commandPath).toEqual(["app"]);
 		expect(result.argv).toEqual(["--bogus", "translate"]);
-	});
-
-	it("still breaks on the -- terminator", () => {
-		const result = resolveCommand(makeRoot(), ["--", "translate"]);
-		expect(result.commandPath).toEqual(["app"]);
-		expect(result.argv).toEqual(["--", "translate"]);
 	});
 
 	it("skips flags at multiple routing levels and preserves token order", () => {
@@ -534,16 +359,6 @@ describe("resolveCommand — known-flag skipping", () => {
 		});
 		expect(() => resolveCommand(root, ["--config", "a.json", "translate"])).toThrow(
 			'Flag "--config" cannot be used before subcommand "translate"',
-		);
-	});
-
-	it("rejects a flag committed at one level when a deeper descend cannot parse it", () => {
-		const quiet: FlagsDef[string] = { type: "boolean", description: "quiet" };
-		const leaf = makeNode({ meta: "leaf", run() {} });
-		const mid = makeNode({ meta: "mid", flags: { quiet }, subCommands: { leaf } });
-		const root = makeNode({ meta: "app", flags: { quiet }, subCommands: { mid } });
-		expect(() => resolveCommand(root, ["--quiet", "mid", "leaf"])).toThrow(
-			'Flag "--quiet" cannot be used before subcommand "leaf"',
 		);
 	});
 

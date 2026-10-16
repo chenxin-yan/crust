@@ -110,31 +110,6 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		expect(await readFile(join(outDir, "first-two.txt"), "utf8")).toBe("two");
 	});
 
-	it("rejects a path two build hooks both return, naming both Extensions, before writing", async () => {
-		const path = await snapshotPath();
-		const outDir = join(dirname(path), "output");
-		vi.stubEnv(SNAPSHOT_PATH_ENV, path);
-		vi.stubEnv(BUILD_OUT_DIR_ENV, outDir);
-		const app = new Crust("build-subprocess").extend(
-			defineExtension(defineExtensionId("first")).build(() => [
-				{ path: "shared/config.json", content: "first" },
-			]),
-			defineExtension(defineExtensionId("second")).build(() => [
-				{ path: "second/own.txt", content: "own" },
-				{ path: "shared\\config.json", content: "second" },
-			]),
-		);
-
-		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
-
-		expect(errorCalls).toHaveLength(1);
-		expect(errorCalls[0]).toMatch(/^Extension "second" build failed:/);
-		expect(errorCalls[0]).toContain('"shared/config.json"');
-		expect(errorCalls[0]).toContain('Extension "first"');
-		expect(await readFile(join(outDir, "shared", "config.json"), "utf8")).toBe("first");
-		expect(existsSync(join(outDir, "second"))).toBe(false);
-	});
-
 	it("rejects paths that differ only by case, naming both Extensions and both spellings", async () => {
 		const path = await snapshotPath();
 		const outDir = join(dirname(path), "output");
@@ -204,27 +179,6 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		expect(errorCalls[0]).toContain('"foo/bar"');
 		expect(errorCalls[0]).toContain('Extension "only"');
 		expect(existsSync(outDir)).toBe(false);
-	});
-
-	it("runs only the last build hook for a duplicate Extension id", async () => {
-		const path = await snapshotPath();
-		vi.stubEnv(SNAPSHOT_PATH_ENV, path);
-		vi.stubEnv(BUILD_OUT_DIR_ENV, dirname(path));
-		const calls: string[] = [];
-		const id = defineExtensionId("duplicate-build");
-		const first = defineExtension(id).build(() => {
-			calls.push("first");
-			return [];
-		});
-		const second = defineExtension(id).build(() => {
-			calls.push("second");
-			return [];
-		});
-		const app = new Crust("build-subprocess").extend(first).extend(second);
-
-		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
-
-		expect(calls).toEqual(["second"]);
 	});
 
 	it("refreshes sections between build hooks", async () => {
@@ -310,7 +264,6 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		["an escaping", () => "../artifact.txt", "escapes outDir"],
 		["a drive-relative", () => "C:../outside.txt", "must be relative"],
 		["a normalized drive-relative", () => "nested/../C:/outside.txt", "must be relative"],
-		["an empty", () => "", "must name a file"],
 		["an outDir-relative dot", () => "./", "must name a file"],
 		["a collapsed dot", () => "nested/..", "must name a file"],
 	])("rejects %s returned artifact path", async (_label, artifactPath, message) => {

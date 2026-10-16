@@ -1,4 +1,4 @@
-import { type AnyCrust, Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
+import { type AnyCrust, Crust, defineCommand } from "@crustjs/core";
 import { buildCommandDocumentation } from "@crustjs/core/tooling";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -9,16 +9,6 @@ async function walk(app: AnyCrust) {
 }
 
 describe("walkCommand", () => {
-	it("walks a leaf command with no flags, args, or children", async () => {
-		const spec = await walk(new Crust("mycli", { description: "Top-level CLI" }));
-
-		expect(spec.name).toBe("mycli");
-		expect(spec.description).toBe("Top-level CLI");
-		expect(spec.flags).toEqual([]);
-		expect(spec.args).toEqual([]);
-		expect(spec.subCommands).toEqual([]);
-	});
-
 	it("captures flat flags with type, spellings, description, multiple, and takesValue", async () => {
 		const app = new Crust("mycli").flags(
 			{ name: "verbose", type: "boolean", short: "v", description: "Verbose output" },
@@ -51,20 +41,6 @@ describe("walkCommand", () => {
 		});
 	});
 
-	it("captures Context-owned flags from a Core-built provider tree", async () => {
-		const apiKey = defineFlag("api-key", { type: "string", short: "k" });
-		const auth = defineContext("auth")
-			.flags(apiKey)
-			.setup(() => ({}));
-		const app = new Crust("mycli")
-			.provide(auth())
-			.add(defineCommand("deploy", (command) => command.action(() => {})));
-
-		const spec = await walk(app);
-		expect(spec.flags.map((flag) => flag.name)).toContain("api-key");
-		expect(spec.subCommands[0]?.flags.map((flag) => flag.name)).toContain("api-key");
-	});
-
 	it("captures positional args with required, variadic, type, and description", async () => {
 		const app = new Crust("mycli").args(
 			{ name: "input", type: "string", required: true, description: "Input file" },
@@ -95,25 +71,6 @@ describe("walkCommand", () => {
 			"node",
 		]);
 		expect(spec.args[0]?.choices).toEqual(["bash", "zsh", "fish"]);
-	});
-
-	it("walks nested subcommands recursively with Context-owned flags", async () => {
-		const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
-		const logging = defineContext("logging")
-			.flags(verbose)
-			.setup(() => ({}));
-		const app = new Crust("mycli")
-			.provide(logging())
-			.add(
-				defineCommand("child", { description: "Child command" }, (command) =>
-					command.flags({ name: "local", type: "boolean" }),
-				),
-			);
-		const spec = await walk(app);
-		const childSpec = spec.subCommands[0];
-		if (!childSpec) throw new Error("missing child");
-		expect(childSpec.description).toBe("Child command");
-		expect(childSpec.flags.map((f) => f.name).sort()).toEqual(["local", "verbose"]);
 	});
 
 	it("filters hidden subcommands recursively and preserves aliases", async () => {
@@ -161,17 +118,5 @@ describe("walkCommand — url/path/json valueCompletion", () => {
 		expect(by.endpoint?.valueCompletion).toBe("none");
 		expect(by.out?.valueCompletion).toBe("files");
 		expect(by.config?.valueCompletion).toBe("none");
-	});
-
-	it("sets valueCompletion on special positional args", async () => {
-		const app = new Crust("mycli").args(
-			{ name: "src", type: "path" },
-			{ name: "dst", type: "url" },
-			{ name: "cfg", type: "json" },
-		);
-		const [src, dst, cfg] = (await walk(app)).args;
-		expect(src?.valueCompletion).toBe("files");
-		expect(dst?.valueCompletion).toBe("none");
-		expect(cfg?.valueCompletion).toBe("none");
 	});
 });

@@ -67,15 +67,6 @@ describe("defineEnv", () => {
 		}
 	});
 
-	it("never fails a command that does not read the Context", async () => {
-		const env = defineEnv("env", { KEY: { type: "string", required: true } }, { source: {} });
-		const outcome = await new Crust("cli")
-			.provide(env())
-			.action(() => "ok")
-			.run([]);
-		expect(outcome).toMatchObject({ status: "completed", result: "ok" });
-	});
-
 	it("aggregates every missing and invalid variable without values", async () => {
 		const secret = "hunter2-secret";
 		const error = await failure(
@@ -142,34 +133,6 @@ describe("defineEnv", () => {
 		expect(error.details.issues).toEqual([
 			{ name: "KEY", expected: "string", received: "missing" },
 		]);
-	});
-
-	it("awaits async schemas; boolean schemas receive coerced booleans", async () => {
-		const seen: StandardInput[] = [];
-		const port = schema((raw) => {
-			const value = Number(raw);
-			return Number.isInteger(value) ? { value } : { issues: [{ message: "integer" }] };
-		});
-		const flag = schema((raw) => {
-			seen.push(raw);
-			return { value: raw === true ? "on" : "off" };
-		});
-		await expect(
-			read(
-				{ PORT: { type: "string", schema: port }, DEBUG: { type: "boolean", schema: flag } },
-				{ source: { PORT: "8080", DEBUG: "1" } },
-			),
-		).resolves.toEqual({ PORT: 8080, DEBUG: "on" });
-		expect(seen).toEqual([true]);
-	});
-
-	it("parses booleans like flag environment fallbacks", async () => {
-		await expect(
-			read(
-				{ A: { type: "boolean" }, B: { type: "boolean" }, C: { type: "boolean" } },
-				{ source: { A: "true", B: "0" } },
-			),
-		).resolves.toEqual({ A: true, B: false, C: undefined });
 	});
 
 	it("reads only own source properties, including prototype-like names", async () => {

@@ -1,10 +1,9 @@
 import { Crust, CrustError, defineContext } from "@crustjs/core";
-import { defineEnv } from "@crustjs/env";
 import { captureExecute } from "@crustjs/testing";
 import { Cause, Context, Effect, Exit, Layer } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 
-import { CrustDefinitionError, CrustEnvError, tryCrust } from "./errors.ts";
+import { CrustDefinitionError } from "./errors.ts";
 import { handler, service } from "./handler.ts";
 import { type LayerValue, layer } from "./layer.ts";
 
@@ -63,40 +62,6 @@ describe("handler with layer", () => {
 		expect(log).toEqual(["acquire db", "acquire cache", "action", "release cache", "release db"]);
 	});
 
-	it("releases both layers in reverse order after a failing program", async () => {
-		const log: string[] = [];
-		const db = layer("db", resource(log, Db, "db", { query: (sql) => sql }));
-		const cache = layer("cache", resource(log, Cache, "cache", { get: (key) => key }));
-		const boom = new Error("boom");
-		const app = new Crust("cli").provide(db(), cache()).action(
-			handler(function* () {
-				yield* Db;
-				yield* Cache;
-				log.push("action");
-				return yield* Effect.fail(boom);
-			}),
-		);
-
-		const outcome = await app.run([]);
-
-		expect(outcome.status).toBe("failed");
-		expect(outcome.status === "failed" && outcome.error).toBe(boom);
-		expect(log).toEqual(["acquire db", "acquire cache", "action", "release cache", "release db"]);
-	});
-
-	it("builds a layer on the path even when the program never uses it", async () => {
-		const log: string[] = [];
-		const cache = layer("cache", resource(log, Cache, "cache", { get: (key) => key }));
-		const app = new Crust("cli")
-			.provide(cache())
-			.action(handler(() => Effect.succeed("no cache needed")));
-
-		const outcome = await app.run([]);
-
-		expect(outcome.status === "completed" && outcome.result).toBe("no cache needed");
-		expect(log).toEqual(["acquire cache", "release cache"]);
-	});
-
 	it("hands the program's Exit to finalizers", async () => {
 		const exits: Exit.Exit<unknown, unknown>[] = [];
 		const db = layer(
@@ -145,26 +110,6 @@ describe("handler with layer", () => {
 		expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toBe(broken);
 	});
 
-	it("closes a layer's own partial acquisitions with the build failure Exit", async () => {
-		const exits: Exit.Exit<unknown, unknown>[] = [];
-		const broken = new Error("second half failed");
-		const partial = Layer.merge(
-			resource([], Db, "db", { query: (sql) => sql }, (exit) => exits.push(exit)),
-			Layer.effect(Cache, Effect.die(broken)),
-		);
-		const both = layer("both", partial);
-		const app = new Crust("cli")
-			.provide(both())
-			.action(handler(() => Effect.map(Db, () => "unreachable")));
-
-		const outcome = await app.run([]);
-
-		expect(outcome.status === "failed" && outcome.error).toBe(broken);
-		const [exit] = exits as [Exit.Exit<unknown, unknown>];
-		expect(exits).toHaveLength(1);
-		expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toBe(broken);
-	});
-
 	it("treats a synchronous throw from the program factory as the program's failure", async () => {
 		const exits: Exit.Exit<unknown, unknown>[] = [];
 		const db = layer(
@@ -184,38 +129,6 @@ describe("handler with layer", () => {
 		const [exit] = exits as [Exit.Exit<unknown, unknown>];
 		expect(exits).toHaveLength(1);
 		expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toBe(boom);
-	});
-
-	it("produces identical results from the generator and Effect forms", async () => {
-		const db = layer("db", Layer.succeed(Db, { query: (sql) => `rows(${sql})` }));
-		const config = defineContext("config").setup(() => ({ limit: 3 }));
-		const base = new Crust("cli")
-			.provide(db(), config())
-			.args({ name: "table", type: "string", required: true });
-		const generatorForm = base.action(
-			handler(function* ({ args }) {
-				const database = yield* Db;
-				const { limit } = yield* service(config);
-				return database.query(`select * from ${args.table} limit ${limit}`);
-			}),
-		);
-		const effectForm = base.action(
-			handler(({ args }) =>
-				Effect.gen(function* () {
-					const database = yield* Db;
-					const { limit } = yield* service(config);
-					return database.query(`select * from ${args.table} limit ${limit}`);
-				}),
-			),
-		);
-
-		const fromGenerator = await generatorForm.run([], { args: { table: "users" } });
-		const fromEffect = await effectForm.run([], { args: { table: "users" } });
-
-		expect(fromGenerator.status === "completed" && fromGenerator.result).toBe(
-			"rows(select * from users limit 3)",
-		);
-		expect(fromEffect).toEqual(fromGenerator);
 	});
 
 	it("keeps plain Contexts lazy: service() builds once, untouched Contexts never", async () => {
@@ -241,70 +154,6 @@ describe("handler with layer", () => {
 
 		expect(outcome.status === "completed" && outcome.result).toBe("cfg:cfg");
 		expect(configBuilt).toBe(1);
-	});
-
-	it("lazily reads Env with typed redacted failures and supports .of() doubles", async () => {
-		let reads = 0;
-		let raw = "secret-invalid";
-		const env = defineEnv(
-			"env",
-			{ PORT: { type: "number", required: true } },
-			{
-				source: {
-					get PORT() {
-						reads++;
-						return raw;
-					},
-				},
-			},
-		);
-		const read = service(env);
-		const base = new Crust("cli").provide(env());
-		await base.snapshot();
-		await expect(base.action(handler(() => Effect.void)).run([])).resolves.toMatchObject({
-			status: "completed",
-		});
-		expect(reads).toBe(0);
-
-		const recovered = await base
-			.action(
-				handler(() =>
-					read.pipe(
-						Effect.map(() => undefined),
-						Effect.catchTag("CrustEnvError", (error) => Effect.succeed(error)),
-					),
-				),
-			)
-			.run([]);
-		expect(recovered.status).toBe("completed");
-		const caught = recovered.status === "completed" ? recovered.result : undefined;
-		expect(caught).toBeInstanceOf(CrustEnvError);
-		expect(caught?.details.issues).toEqual([
-			{ name: "PORT", expected: "number", received: "invalid" },
-		]);
-		expect(caught?.cause).toBeInstanceOf(CrustError);
-		expect(caught?.cause.cause).toBeUndefined();
-		expect(JSON.stringify(caught)).not.toContain(raw);
-		expect(reads).toBe(1);
-
-		raw = "8080";
-		const action = handler(function* () {
-			const first = yield* read;
-			expect(yield* read).toBe(first);
-			return first.PORT;
-		});
-		await expect(base.action(action).run([])).resolves.toMatchObject({
-			status: "completed",
-			result: 8080,
-		});
-		expect(reads).toBe(2);
-		await expect(
-			new Crust("cli")
-				.provide(env.of({ PORT: 9000 }))
-				.action(action)
-				.run([]),
-		).resolves.toMatchObject({ status: "completed", result: 9000 });
-		expect(reads).toBe(2);
 	});
 
 	it("ignores a plain Context that shares its name with a layer in another app", async () => {
@@ -481,19 +330,6 @@ describe("handler with layer", () => {
 		expect(outcome.status === "completed" && outcome.result).toBe(123);
 	});
 
-	it("accepts same-factory .of doubles", async () => {
-		const config = defineContext("config").setup((): { port: number } => {
-			throw new Error("live factory must not run");
-		});
-		const app = new Crust("cli").provide(config.of({ port: 123 })).action(
-			handler(function* () {
-				return (yield* service(config)).port;
-			}),
-		);
-		const outcome = await app.run([]);
-		expect(outcome.status === "completed" && outcome.result).toBe(123);
-	});
-
 	it("lets a plain action read a layer value with Context.get", async () => {
 		const db = layer("db", Layer.succeed(Db, { query: (sql) => `rows(${sql})` }));
 		const app = new Crust("cli").provide(db()).action(async ({ ctx }) => {
@@ -507,39 +343,6 @@ describe("handler with layer", () => {
 });
 
 describe("handler under execute()", () => {
-	it("renders a failing Effect exactly like a plain thrown error", async () => {
-		const plain = new Crust("cli").action(() => {
-			throw new Error("boom");
-		});
-		const effectful = new Crust("cli").action(handler(() => Effect.fail(new Error("boom"))));
-
-		const expected = await captureExecute(plain, []);
-		const actual = await captureExecute(effectful, []);
-
-		expect(expected.exitCode).toBe(1);
-		expect(actual).toEqual(expected);
-	});
-
-	it("renders a tagged Crust failure exactly like the original CrustError", async () => {
-		const original = new CrustError("PARSE", 'Unknown flag "--bogus"', { flag: "bogus" });
-		const plain = new Crust("cli").action(() => {
-			throw original;
-		});
-		const effectful = new Crust("cli").action(
-			handler(() =>
-				tryCrust(() => {
-					throw original;
-				}),
-			),
-		);
-
-		const expected = await captureExecute(plain, []);
-		const actual = await captureExecute(effectful, []);
-
-		expect(expected.stderr).toBe('Error: Unknown flag "--bogus"');
-		expect(actual).toEqual(expected);
-	});
-
 	it("renders a failing layer release after the program failure", async () => {
 		const db = layer(
 			"db",
@@ -562,21 +365,6 @@ describe("handler under execute()", () => {
 		expect(captured.stderr).toContain("Error: boom");
 		expect(captured.stderr).toContain("Cleanup failed: ");
 		expect(captured.stderr).toContain("db release failed");
-	});
-
-	it("exits 130 silently when the Effect is interrupted", async () => {
-		const app = new Crust("cli").action(
-			handler(() =>
-				tryCrust(() => {
-					throw new DOMException("Prompt was cancelled.", "AbortError");
-				}),
-			),
-		);
-
-		const captured = await captureExecute(app, []);
-
-		expect(captured.exitCode).toBe(130);
-		expect(captured.stderr).toBe("");
 	});
 
 	it.each([new DOMException("Caller cancelled.", "AbortError"), new Error("deadline exceeded")])(

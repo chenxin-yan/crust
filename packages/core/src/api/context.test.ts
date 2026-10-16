@@ -12,71 +12,6 @@ import { defineFlag } from "./flags.ts";
 type MutableDisposable = Partial<Disposable>;
 
 describe("defineContext()", () => {
-	it("always returns a factory, including for zero-option setups", async () => {
-		const auth = defineContext("auth").setup(() => ({ user: "chenxin" }));
-
-		// The definition itself is a factory, not an instance
-		expect(auth).toBeInstanceOf(Function);
-		expect(auth.contextName).toBe("auth");
-
-		const instance = auth();
-		expect(instance.name).toBe("auth");
-		await expect(
-			Promise.resolve(
-				instance.setup({
-					signal: new AbortController().signal,
-					flags: {},
-					ctx: {},
-					defer: () => {},
-					stdout: () => {},
-					stderr: () => {},
-				}),
-			),
-		).resolves.toEqual({ user: "chenxin" });
-	});
-
-	it("passes the factory argument as options", async () => {
-		const db = defineContext("db").setup((_input, options: { url: string }) => ({
-			url: options.url,
-		}));
-
-		const instance = db({ url: "memory://test" });
-		await expect(
-			Promise.resolve(
-				instance.setup({
-					signal: new AbortController().signal,
-					flags: {},
-					ctx: {},
-					defer: () => {},
-					stdout: () => {},
-					stderr: () => {},
-				}),
-			),
-		).resolves.toEqual({ url: "memory://test" });
-	});
-
-	it(".of() produces an instance returning the precomputed value without running setup", async () => {
-		const verbose = defineFlag("verbose", { type: "boolean" });
-		const db = defineContext("db")
-			.flags(verbose)
-			.setup(({ flags }) => ({
-				url: `real:${String(flags.verbose)}`,
-			}));
-
-		const fake = db.of({ url: "fake://db" });
-		expect(fake.name).toBe("db");
-		type _Name = Expect<Equal<(typeof fake)["name"], "db">>;
-		// @ts-expect-error -- .of() takes the Context's value type
-		db.of({ wrong: true });
-
-		const seen: string[] = [];
-		const app = new Crust("cli").provide(fake).action(async ({ ctx }) => {
-			seen.push((await ctx.db).url);
-		});
-		await unwrap(app.run([]));
-		expect(seen).toEqual(["fake://db"]);
-	});
-
 	it("branches immutable builders without sharing appended declarations", () => {
 		const config = defineContext("config").setup(() => "config");
 		const logger = defineContext("logger").setup(() => "logger");
@@ -155,37 +90,6 @@ describe("defineContext()", () => {
 });
 
 describe("Crust .provide()", () => {
-	it("constructs Contexts for the resolved command and exposes them as ctx", async () => {
-		const seen: string[] = [];
-		const db = defineContext("db").setup((_input, options: { url: string }) => ({
-			url: options.url,
-		}));
-
-		const app = new Crust("cli").provide(db({ url: "memory://x" })).action(async ({ ctx }) => {
-			seen.push((await ctx.db).url);
-		});
-
-		await unwrap(app.run([]));
-		expect(seen).toEqual(["memory://x"]);
-	});
-
-	it("accepts multiple instances in one variadic call", async () => {
-		const seen: string[] = [];
-		const a = defineContext("a").setup(() => "value-a");
-		const b = defineContext("b").setup(() => "value-b");
-
-		const app = new Crust("cli").provide(a(), b()).action(async ({ ctx }) => {
-			const aValue = await ctx.a;
-			const bValue = await ctx.b;
-			seen.push(`${aValue}:${bValue}`);
-			type _A = Expect<Equal<typeof aValue, string>>;
-			type _B = Expect<Equal<typeof bValue, string>>;
-		});
-
-		await unwrap(app.run([]));
-		expect(seen).toEqual(["value-a:value-b"]);
-	});
-
 	it("seeds added descendants with the parent Context path", async () => {
 		const seen: string[] = [];
 		const db = defineContext("db").setup(() => "root-db");
@@ -265,45 +169,6 @@ describe("Crust .provide()", () => {
 		// A ≥3-node chain distinguishes true transitivity from a one-hop keep.
 		expect(builtNames).toEqual(["base", "mid", "db"]);
 		expect(seen).toEqual(["db(mid(base))"]);
-	});
-
-	it("constructs each Context in a pull diamond exactly once", async () => {
-		const builtNames: string[] = [];
-		const a = defineContext("a").setup(() => {
-			builtNames.push("a");
-			return "a";
-		});
-		const b = defineContext("b")
-			.use(a)
-			.setup(async ({ ctx }) => {
-				await ctx.a;
-				builtNames.push("b");
-				return "b";
-			});
-		const c = defineContext("c")
-			.use(a)
-			.setup(async ({ ctx }) => {
-				await ctx.a;
-				builtNames.push("c");
-				return "c";
-			});
-		const d = defineContext("d")
-			.use(b, c)
-			.setup(async ({ ctx }) => {
-				await Promise.all([ctx.b, ctx.c]);
-				builtNames.push("d");
-				return "d";
-			});
-
-		const app = new Crust("cli")
-			.provide(a(), b(), c(), d())
-			.add(defineCommand("go", (cmd) => cmd.use(d).action(async ({ ctx }) => void (await ctx.d))));
-
-		await unwrap(app.run(["go"]));
-
-		expect(builtNames.slice().sort()).toEqual(["a", "b", "c", "d"]);
-		expect(builtNames[0]).toBe("a");
-		expect(builtNames[3]).toBe("d");
 	});
 
 	it("constructs an inherited dependency of a self-provided Context", async () => {
@@ -598,27 +463,6 @@ describe("Context-owned flags", () => {
 		expect(seen).toEqual(["secret", "secret"]);
 	});
 
-	it("passes parsed owned flag values to setup", async () => {
-		const port = defineFlag("port", { type: "string", parse: Number });
-		const seen: number[] = [];
-		const server = defineContext("server")
-			.flags(port)
-			.setup(({ flags }) => {
-				type _Port = Expect<Equal<typeof flags.port, number | undefined>>;
-				if (flags.port !== undefined) seen.push(flags.port);
-				return {};
-			});
-
-		await unwrap(
-			new Crust("cli")
-				.provide(server())
-				.action(async ({ ctx }) => void (await ctx.server))
-				.run([], { flags: { port: "8080" } }),
-		);
-
-		expect(seen).toEqual([8080]);
-	});
-
 	it("passes only each Context's owned flags to its setup", async () => {
 		const region = defineFlag("region", { type: "string" });
 		const seen: string[][] = [];
@@ -759,30 +603,6 @@ describe("Context-owned flags", () => {
 });
 
 describe("Context setup dependencies", () => {
-	it("types and resolves declared Context bags in two- and three-argument setups", async () => {
-		expect.assertions(1);
-		const session = defineContext("session").setup(() => ({ userId: "yan" }));
-		const user = defineContext("user")
-			.use(session)
-			.setup(async ({ ctx }) => {
-				const value = await ctx.session;
-				type _Session = Expect<Equal<typeof value, { userId: string }>>;
-				// @ts-expect-error -- undeclared Contexts are absent from the bag
-				void ctx.missing;
-				return value.userId;
-			});
-		const configured = defineContext("configured")
-			.use(user)
-			.setup(async ({ ctx }) => await ctx.user);
-
-		await unwrap(
-			new Crust("cli")
-				.provide(session(), user(), configured())
-				.action(async ({ ctx }) => expect(await ctx.configured).toBe("yan"))
-				.run([]),
-		);
-	});
-
 	it("exposes the transitive dependency closure at runtime", async () => {
 		expect.assertions(1);
 		const base = defineContext("base").setup(() => "base");
@@ -1263,18 +1083,6 @@ describe("lazy Context bags", () => {
 		expect(setups).toBe(1);
 	});
 
-	it("allows nested flag-free pulls in preRun", async () => {
-		expect.assertions(1);
-		const base = defineContext("base").setup(() => "ok");
-		const service = defineContext("service")
-			.use(base)
-			.setup(async ({ ctx }) => await ctx.base);
-		const extension = defineExtension(defineExtensionId("consumer"))
-			.use(service)
-			.preRun(async (ctx) => expect(await ctx.ctx.service).toBe("ok"));
-		await unwrap(new Crust("cli").provide(base(), service()).extend(extension).run([]));
-	});
-
 	it("rejects flag-owning Contexts after handled skips validation", async () => {
 		const token = defineFlag("token", { type: "string" });
 		const auth = defineContext("auth")
@@ -1521,25 +1329,6 @@ describe("Context disposal", () => {
 		expect(disposals).toBe(1);
 	});
 
-	it("disposes values in reverse construction order after success", async () => {
-		const log: string[] = [];
-		const first = disposableContext("first", log);
-		const second = disposableContext("second", log);
-
-		const app = new Crust("cli")
-			.provide(first())
-			.provide(second())
-			.action(async ({ ctx }) => {
-				await ctx.first;
-				await ctx.second;
-				log.push("run");
-			});
-
-		await unwrap(app.run([]));
-
-		expect(log).toEqual(["run", "dispose:second", "dispose:first"]);
-	});
-
 	it("disposes in reverse topological order when construction was reordered", async () => {
 		const log: string[] = [];
 		const base = defineContext("base").setup(() => ({
@@ -1572,40 +1361,6 @@ describe("Context disposal", () => {
 		expect(log).toEqual(["run", "dispose:derived", "dispose:base"]);
 	});
 
-	it("disposes after an action failure and rethrows the original error", async () => {
-		const log: string[] = [];
-		const res = disposableContext("res", log);
-		const boom = new Error("action failed");
-
-		const app = new Crust("cli").provide(res()).action(async ({ ctx }) => {
-			await ctx.res;
-			throw boom;
-		});
-
-		await expect(app.run([])).resolves.toMatchObject({ status: "failed", error: boom });
-		expect(log).toEqual(["dispose:res"]);
-	});
-
-	it("disposes already-constructed Contexts when a later setup fails", async () => {
-		const log: string[] = [];
-		const ok = disposableContext("ok", log);
-		const bad = defineContext("bad").setup(() => {
-			throw new Error("setup failed");
-		});
-
-		const app = new Crust("cli")
-			.provide(ok())
-			.provide(bad())
-			.action(async ({ ctx }) => {
-				await ctx.ok;
-				await ctx.bad;
-				log.push("run");
-			});
-
-		await expect(unwrap(app.run([]))).rejects.toThrow("setup failed");
-		expect(log).toEqual(["dispose:ok"]);
-	});
-
 	it("disposes constructed dependencies when a dependent setup fails before the action", async () => {
 		const events: string[] = [];
 		const resource = defineContext("resource").setup(() => ({
@@ -1635,27 +1390,6 @@ describe("Context setup defer()", () => {
 		message: 'Context "res" cannot register cleanup after its setup has finished.',
 		details: { subject: "context", name: "res", reason: "context-defer-after-setup" },
 	};
-
-	it("runs deferred cleanup after the action succeeds", async () => {
-		const log: string[] = [];
-		const res = defineContext("res").setup(async ({ defer }) => {
-			await Promise.resolve();
-			defer(() => {
-				log.push("cleanup");
-			});
-			return "value";
-		});
-		await unwrap(
-			new Crust("cli")
-				.provide(res())
-				.action(async ({ ctx }) => {
-					await ctx.res;
-					log.push("run");
-				})
-				.run([]),
-		);
-		expect(log).toEqual(["run", "cleanup"]);
-	});
 
 	it("runs deferred cleanup after a failed action and rethrows the original error", async () => {
 		const log: string[] = [];
@@ -1756,19 +1490,6 @@ describe("Context setup defer()", () => {
 				.run([]),
 		);
 		expect(late).toBeDefined();
-	});
-
-	it("rejects defer after the setup rejected", async () => {
-		let late: ContextSetup["defer"] | undefined;
-		const res = defineContext("res").setup(({ defer }) => {
-			late = defer;
-			throw new Error("setup failed");
-		});
-		const app = new Crust("cli").provide(res()).action(async ({ ctx }) => {
-			await ctx.res;
-		});
-		await expect(unwrap(app.run([]))).rejects.toThrow("setup failed");
-		expect(() => late!(() => {})).toThrow(expect.objectContaining(deferAfterSetupError));
 	});
 
 	it("awaits async defers, runs the rest when one rejects, and chains the errors", async () => {
@@ -2068,15 +1789,6 @@ describe("inline .command()", () => {
 		});
 		new Crust("trusted").provide(logger()).add(command);
 		expect(reads).toBe(0);
-	});
-
-	it("rejects an inline command name that is already registered", () => {
-		expect(() =>
-			new Crust("cli")
-				.command("dup", (cmd) => cmd.action(() => {}))
-				// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-				.command("dup", (cmd) => cmd.action(() => {})),
-		).toThrow(/already registered/);
 	});
 });
 

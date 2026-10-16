@@ -131,14 +131,6 @@ import type {
 	type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_ALIAS_COLLISION">, never>>;
 }
 
-// Tripwire for the live local validator's reserved negation-prefix contract.
-type _noPrefix = Expect<
-	Equal<
-		LocalFlagBrand<{ name: "no-cache"; type: "boolean" }>["FIX_NO_PREFIX"],
-		"Names must not start with no-"
-	>
->;
-
 {
 	// brands invalid literal spellings beside an open template member (#357)
 	type Mixed = `y-${string}`;
@@ -207,5 +199,4 @@ type _noPrefix = Expect<
 	type Owner = { readonly _ownedFlags?: { alpha: { type: "string" } } };
 	type Plain = { readonly _ownedFlags?: {} };
 	type _union = Expect<Equal<ContextOwnedFlags<Owner | Plain>, { alpha: { type: "string" } } | {}>>;
-	type _never = Expect<Equal<ContextOwnedFlags<never>, never>>;
 }

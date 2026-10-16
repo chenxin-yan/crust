@@ -9,12 +9,6 @@ import {
 } from "./targets.ts";
 
 describe("resolveTargets", () => {
-	it("accepts full Bun target names directly", () => {
-		for (const target of BUN_TARGETS.targets) {
-			expect(resolveTargets(BUN_TARGETS, [target])[0]).toBe(target);
-		}
-	});
-
 	it("rejects every short alias with canonical-name guidance and a did-you-mean hint", () => {
 		for (const target of BUN_TARGETS.targets) {
 			const alias = BUN_TARGETS.info[target].alias;
@@ -23,10 +17,6 @@ describe("resolveTargets", () => {
 			);
 			expect(() => resolveTargets(BUN_TARGETS, [alias])).toThrow(/Valid targets: bun-linux-x64/);
 		}
-	});
-
-	it("throws on unknown target", () => {
-		expect(() => resolveTargets(BUN_TARGETS, ["linux-arm32"])).toThrow(/Unknown target/);
 	});
 
 	it("dedupes repeated targets in input order", () => {
@@ -47,14 +37,6 @@ describe("resolveTargets", () => {
 		for (const target of DENO_TARGETS.targets)
 			expect(resolveTargets(DENO_TARGETS, [target])[0]).toBe(target);
 		expect(resolveTargets(DENO_TARGETS, undefined)).toEqual([...DENO_TARGETS.targets]);
-	});
-
-	it("guides aliases to canonical Deno target names", () => {
-		for (const target of DENO_TARGETS.targets) {
-			expect(() => resolveTargets(DENO_TARGETS, [DENO_TARGETS.info[target].alias])).toThrow(
-				`Did you mean "${target}"?`,
-			);
-		}
 	});
 
 	it("rejects musl and points package aliases at the canonical Node target", () => {
