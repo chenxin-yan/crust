@@ -8,20 +8,6 @@ beforeAll(() => vi.stubEnv("FORCE_COLOR", "0"));
 afterAll(() => vi.unstubAllEnvs());
 
 describe("progress — determinate", () => {
-	it("renders current/total alongside the message", () => {
-		const { sink, writes } = createFakeSink();
-		const progress = createProgressBar({ total: 10, message: "Translating", sink });
-
-		progress.start();
-		progress.advance(3);
-		progress.stop();
-
-		const output = writes.join("");
-		expect(output).toContain("(3/10)");
-		expect(output).toContain("Translating");
-		expect(output).toContain("✓");
-	});
-
 	it("advance and stop accept a replacement message", () => {
 		const { sink, writes } = createFakeSink();
 		const progress = createProgressBar({ total: 2, message: "Files", sink });

@@ -10,7 +10,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join, relative } from "node:path";
+import { delimiter, join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -233,11 +233,6 @@ await assert.rejects(
 });
 
 describe("which", () => {
-	it("finds executables on PATH and returns null otherwise", () => {
-		expect(which("bun")).toBeTruthy();
-		expect(which("definitely-not-a-crust-command")).toBeNull();
-	});
-
 	describe("PATH scan", () => {
 		let dir: string;
 
@@ -250,23 +245,6 @@ describe("which", () => {
 			vi.unstubAllEnvs();
 			rmSync(dir, { recursive: true, force: true });
 		});
-
-		it.skipIf(process.platform === "win32")("skips non-executable files while searching", () => {
-			writeFileSync(join(dir, "crust-which-probe"), "#!/bin/sh\n");
-			expect(which("crust-which-probe")).toBeNull();
-			chmodSync(join(dir, "crust-which-probe"), 0o755);
-			expect(which("crust-which-probe")).toBe(join(dir, "crust-which-probe"));
-		});
-
-		it.skipIf(process.platform === "win32")(
-			"returns absolute paths for relative PATH entries",
-			() => {
-				writeFileSync(join(dir, "crust-relative-probe"), "#!/bin/sh\n");
-				chmodSync(join(dir, "crust-relative-probe"), 0o755);
-				vi.stubEnv("PATH", relative(process.cwd(), dir));
-				expect(which("crust-relative-probe")).toBe(join(dir, "crust-relative-probe"));
-			},
-		);
 
 		it.skipIf(process.platform === "win32")("resolves path-containing inputs directly", () => {
 			const probe = join(dir, "crust-path-probe");

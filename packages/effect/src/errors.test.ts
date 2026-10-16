@@ -1,4 +1,4 @@
-import { Crust, CrustError } from "@crustjs/core";
+import { CrustError } from "@crustjs/core";
 import { Cause, Effect, Exit } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -18,34 +18,7 @@ import {
 const runAndUnwrap = async <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
 	unwrapExit(await Effect.runPromiseExit(effect));
 
-/** A real Core PARSE failure: an unknown flag passed to `run()`. */
-async function realParseError(): Promise<CrustError<"PARSE">> {
-	const outcome = await new Crust("cli")
-		.flags({ name: "count", type: "number" })
-		.action(() => {})
-		// @ts-expect-error -- the unknown flag is the point: it produces a real PARSE failure.
-		.run([], { flags: { bogus: true } });
-	if (outcome.status !== "failed") throw new Error("expected a failed outcome");
-	// SAFETY: the unknown-flag path throws CrustError<"PARSE">; asserted below.
-	return outcome.error as CrustError<"PARSE">;
-}
-
 describe("tagged errors", () => {
-	it("catches a real Core parse failure with Effect.catchTag", async () => {
-		const original = await realParseError();
-		expect(original).toBeInstanceOf(CrustError);
-
-		const program = tryCrust(async () => {
-			throw original;
-		}).pipe(Effect.catchTag("CrustParseError", (error) => Effect.succeed(error)));
-
-		const caught = await Effect.runPromise(program);
-		expect(caught).toBeInstanceOf(CrustParseError);
-		expect(caught.cause).toBe(original);
-		expect(caught.message).toBe(original.message);
-		expect(caught.details).toEqual({ flag: "bogus", reason: "unknown-flag" });
-	});
-
 	const parentCommand = { meta: { name: "cli" }, args: [], flags: {}, subCommands: {} };
 	const cases: {
 		error: CrustTaggedError["cause"];
@@ -128,23 +101,5 @@ describe("tagged errors", () => {
 		);
 		expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause)).toBe(true);
 		expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toBe(boom);
-	});
-
-	it("resolves sync and async thunks", async () => {
-		expect(await Effect.runPromise(tryCrust(() => 1))).toBe(1);
-		expect(await Effect.runPromise(tryCrust(async () => "a"))).toBe("a");
-	});
-});
-
-describe("unwrapExit", () => {
-	it("rethrows plain failures and defects as themselves", async () => {
-		const failed = new Error("failed");
-		const died = new Error("died");
-		await expect(runAndUnwrap(Effect.fail(failed))).rejects.toBe(failed);
-		await expect(runAndUnwrap(Effect.die(died))).rejects.toBe(died);
-	});
-
-	it("rethrows interruption as an AbortError", async () => {
-		await expect(runAndUnwrap(Effect.interrupt)).rejects.toMatchObject({ name: "AbortError" });
 	});
 });

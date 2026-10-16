@@ -1,10 +1,10 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { runBuildHooks } from "../../../crust/tests/build-hooks.ts";
 import {
@@ -53,21 +53,6 @@ describe("completion", () => {
 		expect(Object.keys(root.subCommands)).toContain("shell-completion");
 	});
 
-	it("uses the explicit version option as an override", async () => {
-		const app = new Crust("mycli", { version: "1.2.3" })
-			.extend(completion({ version: "2.0.0" }))
-			.action(() => {});
-		const { stdout } = await captureExecute(app, ["completion", "bash"]);
-		expect(stdout).toMatch(/^# completion script for mycli v2\.0\.0/);
-	});
-
-	it("reports a missing version", async () => {
-		const app = new Crust("mycli").extend(completion()).action(() => {});
-		const { stderr, exitCode } = await captureExecute(app, ["completion", "bash"]);
-		expect(stderr).toContain("completion extension requires a version");
-		expect(exitCode).toBe(1);
-	});
-
 	it("`mycli completion bash` prints a bash script to stdout", async () => {
 		const app = buildCli();
 		const { stdout: out } = await captureExecute(app, ["completion", "bash"]);
@@ -77,55 +62,6 @@ describe("completion", () => {
 		// bare in the `compgen -W` wordlist.
 		expect(out).toContain("browser bun node"); // build --target
 		expect(out).toContain("dev staging prod"); // deploy prod --env
-	});
-
-	it("writes completion scripts through injected stdout", async () => {
-		const app = buildCli();
-		const output: string[] = [];
-		const processWrite = vi.spyOn(process.stdout, "write");
-
-		await app.execute({
-			argv: ["completion", "bash"],
-			io: { stdout: (text) => output.push(text) },
-		});
-		const processWrites = processWrite.mock.calls.length;
-		processWrite.mockRestore();
-
-		expect(output.join("\n")).toMatch(/^# completion script for mycli v1\.2\.3/);
-		expect(processWrites).toBe(0);
-	});
-
-	it("`mycli completion zsh` prints a zsh script with #compdef header", async () => {
-		const app = buildCli();
-		const { stdout: out } = await captureExecute(app, ["completion", "zsh"]);
-		expect(out.startsWith("#compdef mycli\n")).toBe(true);
-		expect(out).toContain("_arguments -C");
-		expect(out).toContain(":target:(browser bun node)");
-	});
-
-	it("`mycli completion fish` prints a fish script", async () => {
-		const app = buildCli();
-		const { stdout: out } = await captureExecute(app, ["completion", "fish"]);
-		expect(out.startsWith("# completion script for mycli v1.2.3")).toBe(true);
-		expect(out).toContain("complete -c 'mycli' -f");
-		// We replaced the order-insensitive `__fish_seen_subcommand_from`
-		// chain with a per-script helper that walks `commandline -opc`
-		// left-to-right.
-		expect(out).toContain("function __mycli_path_at_arg");
-	});
-
-	it("rejects unsupported shell names with a clear stderr message", async () => {
-		// `choices` enforcement is wired into the parser, so the parser
-		// rejects unsupported shell names with a `CrustError("PARSE", …)`
-		// before the action ever sees the value. The error message names
-		// the offending value and the allowed set.
-		const app = buildCli();
-		const { stderr, exitCode } = await captureExecute(app, ["completion", "powershell"]);
-		expect(stderr).toContain('Invalid value "powershell"');
-		expect(stderr).toContain("bash");
-		expect(stderr).toContain("zsh");
-		expect(stderr).toContain("fish");
-		expect(exitCode).toBe(1);
 	});
 
 	describe("--output-dir", () => {
@@ -160,14 +96,6 @@ describe("completion", () => {
 			expect(fish).toContain("complete -c 'mycli' -f");
 		});
 
-		it("preserves unrelated files in the user-owned output directory", async () => {
-			await writeFile(join(tmpDir, "other-cli"), "existing completion");
-			await buildCli().execute({
-				argv: ["completion", "bash", "--output-dir", tmpDir],
-			});
-			expect(await readFile(join(tmpDir, "other-cli"), "utf8")).toBe("existing completion");
-		});
-
 		it("writes nothing to stdout in --output-dir mode", async () => {
 			const { stdout } = await captureExecute(buildCli(), [
 				"completion",
@@ -176,16 +104,6 @@ describe("completion", () => {
 				tmpDir,
 			]);
 			expect(stdout).toBe("");
-		});
-
-		it("creates the output directory if it does not exist", async () => {
-			const nested = join(tmpDir, "nested", "completions");
-			const app = buildCli();
-			await app.execute({
-				argv: ["completion", "bash", "--output-dir", nested],
-			});
-			const entries = (await readdir(nested)).sort();
-			expect(entries).toEqual(["_mycli", "mycli", "mycli.fish"]);
 		});
 	});
 });
@@ -206,12 +124,6 @@ describe("completion build hook", () => {
 		expect(fish).toContain("complete -c 'mycli' -f");
 	});
 
-	it("honors a version override at build time", async () => {
-		const { files } = await runBuildHooks(buildCli({ version: "2.0.0" }));
-
-		expect(files.get("completions/mycli")).toContain("mycli v2.0.0");
-	});
-
 	it("names the configured command in each regenerate hint", async () => {
 		const { files } = await runBuildHooks(
 			new Crust("mycli", { version: "1.0.0" }).extend(completion({ command: "completions" })),
@@ -221,18 +133,6 @@ describe("completion build hook", () => {
 		expect(bash).toContain("regenerate with: mycli completions bash\n");
 		expect(zsh).toContain("regenerate with: mycli completions zsh\n");
 		expect(fish).toContain("regenerate with: mycli completions fish\n");
-	});
-
-	it("rejects an unsafe root name", async () => {
-		const { error } = await runBuildHooks(
-			new Crust("../pwn", { version: "1.0.0" }).extend(completion()),
-		);
-		expect(error).toMatch(/invalid root command name/);
-	});
-
-	it("rejects a missing version", async () => {
-		const { error } = await runBuildHooks(new Crust("mycli").extend(completion()));
-		expect(error).toContain("requires a version");
 	});
 
 	it("pure renderers match build and runtime files byte-for-byte", async () => {

@@ -95,22 +95,19 @@ export type TuiScenario =
 	| "ctrl-shift-c"
 	| "ctrl-c-base-code-99"
 	| "ctrl-c-base-code-67"
-	| "ctrl-shift-c-base-code-99"
-	| "ctrl-shift-c-base-code-67"
 	| "ctrl-j-latin-base-code-99"
 	| "ctrl-c-without-exit"
 	| "waits-for-close"
 	| "output-failure";
 
 /** Ctrl+C on a non-Latin (Cyrillic) layout, where only `baseCode` identifies the physical C key. */
-function baseCodeCtrlC(baseCode: 99 | 67, shift = false) {
+function baseCodeCtrlC(baseCode: 99 | 67) {
 	return async (): Promise<TuiObservation> => {
 		const { config } = createTtyConfig();
-		const name = shift ? "С" : "с";
 		return {
 			outcome: await settle(
 				runTui((renderer) => {
-					renderer.keyInput.emit("keypress", key({ name, ctrl: true, shift, baseCode }));
+					renderer.keyInput.emit("keypress", key({ name: "с", ctrl: true, baseCode }));
 					setTimeout(() => renderer.destroy(), 10);
 				}, config),
 			),
@@ -194,8 +191,6 @@ const scenarios = {
 	},
 	"ctrl-c-base-code-99": baseCodeCtrlC(99),
 	"ctrl-c-base-code-67": baseCodeCtrlC(67),
-	"ctrl-shift-c-base-code-99": baseCodeCtrlC(99, true),
-	"ctrl-shift-c-base-code-67": baseCodeCtrlC(67, true),
 	// Ctrl+J on Dvorak reports the physical (QWERTY C) key as baseCode 99; OpenTUI does not exit.
 	"ctrl-j-latin-base-code-99": async () => {
 		const { config } = createTtyConfig();

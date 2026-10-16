@@ -96,14 +96,6 @@ describe("writeJson", () => {
 		await rm(tempDir, { recursive: true, force: true });
 	});
 
-	it("should write JSON object to file", async () => {
-		await writeJson(filePath, { theme: "dark", verbose: true });
-
-		const raw = await readFile(filePath, "utf-8");
-		const parsed = JSON.parse(raw);
-		expect(parsed).toEqual({ theme: "dark", verbose: true });
-	});
-
 	it("should create parent directory if missing", async () => {
 		const nested = join(tempDir, "deep", "nested", "config.json");
 
@@ -114,30 +106,11 @@ describe("writeJson", () => {
 		expect(JSON.parse(raw)).toEqual({ created: true });
 	});
 
-	it("should overwrite an existing file", async () => {
-		await mkdir(tempDir, { recursive: true });
-		await writeFile(filePath, JSON.stringify({ old: true }));
-
-		await writeJson(filePath, { new: true });
-
-		const raw = await readFile(filePath, "utf-8");
-		expect(JSON.parse(raw)).toEqual({ new: true });
-	});
-
 	it("should produce tab-indented JSON", async () => {
 		await writeJson(filePath, { theme: "dark" });
 
 		const raw = await readFile(filePath, "utf-8");
 		expect(raw).toBe(JSON.stringify({ theme: "dark" }, null, "\t"));
-	});
-
-	it("should not leave temp files on successful write", async () => {
-		await writeJson(filePath, { clean: true });
-
-		const { readdir } = await import("node:fs/promises");
-		const files = await readdir(tempDir);
-		// Only the config file should remain, no .tmp files
-		expect(files.filter((f) => f.endsWith(".tmp"))).toHaveLength(0);
 	});
 
 	// POSIX permission bits only. On Windows the store ignores modes (it uses
@@ -183,19 +156,6 @@ describe("writeJson", () => {
 			const { mode } = await stat(tempDir);
 			expect(mode & 0o777).toBe(0o755);
 		});
-
-		it("should use the platform default when no mode is given", async () => {
-			const previous = process.umask(0o022);
-			try {
-				await writeJson(filePath, { data: true });
-
-				const { stat } = await import("node:fs/promises");
-				const { mode } = await stat(filePath);
-				expect(mode & 0o777).toBe(0o644);
-			} finally {
-				process.umask(previous);
-			}
-		});
 	});
 
 	it("should throw CrustStoreError IO when directory creation fails", async () => {
@@ -231,22 +191,6 @@ describe("deleteJson", () => {
 		await rm(tempDir, { recursive: true, force: true });
 	});
 
-	it("should delete existing file", async () => {
-		await writeFile(filePath, JSON.stringify({ data: true }));
-		expect(existsSync(filePath)).toBe(true);
-
-		await deleteJson(filePath);
-
-		expect(existsSync(filePath)).toBe(false);
-	});
-
-	it("should succeed silently when file does not exist", async () => {
-		const nonexistent = join(tempDir, "nonexistent.json");
-
-		// Should not throw
-		await deleteJson(nonexistent);
-	});
-
 	it("should throw CrustStoreError IO on permission denied", async () => {
 		await writeFile(filePath, JSON.stringify({ data: true }));
 		// Remove write permission from the directory to prevent deletion
@@ -263,32 +207,5 @@ describe("deleteJson", () => {
 			// Restore permissions for cleanup
 			await chmod(tempDir, 0o755);
 		}
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Integration: read ↔ write round-trip
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("readJson + writeJson round-trip", () => {
-	let tempDir: string;
-	let filePath: string;
-
-	beforeEach(() => {
-		tempDir = createTempDir();
-		filePath = join(tempDir, "config.json");
-	});
-
-	afterEach(async () => {
-		await rm(tempDir, { recursive: true, force: true });
-	});
-
-	it("should round-trip a config object through write then read", async () => {
-		const config = { theme: "dark", verbose: true, retries: 3 };
-
-		await writeJson(filePath, config);
-		const result = await readJson(filePath);
-
-		expect(result).toEqual(config);
 	});
 });

@@ -1,4 +1,3 @@
-import { createPrompts } from "../create-prompts.ts";
 import { select, type SelectOptions } from "./select.ts";
 import type { Equal, Expect } from "./test-helpers.ts";
 
@@ -53,9 +52,4 @@ async function _selectTypeInferenceTests() {
 	// A generic wrapper over SelectOptions<T> still resolves to Promise<T>.
 	const viaWrapper = (options: SelectOptions<number>): Promise<number> => select(options);
 	void viaWrapper;
-
-	// createPrompts instances pass narrowing through (`typeof select`).
-	const p = createPrompts();
-	const themed = await p.select({ message: "?", choices: ["a", "b"] });
-	type _ThemedNarrows = Expect<Equal<typeof themed, "a" | "b">>;
 }

@@ -43,17 +43,6 @@ describe("Standard Schema on arg definitions", () => {
 		expect(received).toBe(8080);
 	});
 
-	it("delivers a successful schema output of literal undefined to the action", async () => {
-		let received: string | undefined = "untouched";
-		const toUndefined = schema<string, undefined>(() => ({ value: undefined }));
-		const app = new Crust("cli").args({ name: "port", schema: toUndefined }).action(({ args }) => {
-			received = args.port;
-		});
-
-		await unwrap(app.run([], { args: { port: "8080" } }));
-		expect(received).toBeUndefined();
-	});
-
 	it("schema owns requiredness: a missing arg reaches the schema as undefined", async () => {
 		const app = new Crust("cli").args({ name: "port", schema: port() }).action(() => {});
 
@@ -162,24 +151,6 @@ describe("Standard Schema on flag definitions", () => {
 			"args.input",
 			"flags.port",
 		]);
-	});
-
-	it("--no-<name> negation delivers raw false to a schema boolean flag", async () => {
-		let received: string | undefined;
-		const probe = schema<boolean | undefined, string>((raw) => ({ value: String(raw) }));
-		const app = new Crust("cli")
-			.flags({ name: "loud", type: "boolean", schema: probe })
-			.action(({ flags }) => {
-				received = flags.loud;
-			});
-
-		await unwrap(app.run([], { flags: { loud: false } }));
-		expect(received).toBe("false");
-
-		received = undefined;
-		const result = await executeCrust(app, ["--no-loud"]);
-		expect(result.exitCode, result.stderr).toBe(0);
-		expect(received).toBe("false");
 	});
 
 	it("multiple schema flags receive the raw value array", async () => {

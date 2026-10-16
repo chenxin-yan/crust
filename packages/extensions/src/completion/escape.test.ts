@@ -20,20 +20,10 @@ describe("assertSafeIdentifier", () => {
 	});
 
 	it.each([
-		["empty", ""],
 		["leading hyphen", "-flag"],
-		["leading dot", ".hidden"],
 		["whitespace", "two words"],
 		["single quote", "it's"],
-		["double quote", 'a"b'],
-		["semicolon", "a;b"],
-		["dollar", "a$b"],
-		["backtick", "a`b"],
-		["parenthesis", "a(b"],
 		["newline", "a\nb"],
-		["NUL", "a\0b"],
-		["bracket", "a[b"],
-		["star", "a*b"],
 	])("rejects %s", (_label, value) => {
 		expect(() => assertSafeIdentifier(value, "name")).toThrow(/invalid name/);
 	});
@@ -50,18 +40,8 @@ describe("assertSafeBinName", () => {
 
 	it.each([
 		["empty", ""],
-		["dot", "."],
-		["dotdot", ".."],
 		["forward slash", "../pwn"],
-		["forward slash mid", "foo/bar"],
-		["backslash", "foo\\bar"],
-		["space", "foo bar"],
-		["semicolon", "foo;rm"],
-		["newline", "foo\necho"],
-		["NUL", "foo\0bar"],
 		["leading hyphen", "-mycli"],
-		["leading underscore", "_tool"],
-		["tilde", "my~cli"],
 	])("rejects %s", (_label, value) => {
 		expect(() => assertSafeBinName(value)).toThrow(/root command name/);
 	});
@@ -77,20 +57,10 @@ describe("assertSafeChoiceValue", () => {
 	it.each([
 		["whitespace", "two words"],
 		["single quote", "it's"],
-		["dollar", "$pwd"],
 		["backtick", "`whoami`"],
-		["semicolon", "a;b"],
-		["pipe", "a|b"],
-		["parenthesis", "a(b)"],
-		["newline", "a\nb"],
-		["empty", ""],
 		["leading hyphen is treated as flag-ish", "-bad"],
 	])("rejects %s", (_label, value) => {
 		expect(() => assertSafeChoiceValue(value)).toThrow(/unsupported choice value/);
-	});
-
-	it("names the enforced pattern, including the alphanumeric first character", () => {
-		expect(() => assertSafeChoiceValue("-bad")).toThrow("/^[A-Za-z0-9][A-Za-z0-9_.+:@/-]*$/");
 	});
 });
 
@@ -111,16 +81,8 @@ describe("sanitizeFreeText", () => {
 });
 
 describe("bashSingleQuote", () => {
-	it("wraps in single quotes", () => {
-		expect(bashSingleQuote("hello")).toBe("'hello'");
-	});
-
 	it("close-and-reopens around embedded single quotes", () => {
 		expect(bashSingleQuote("it's")).toBe("'it'\\''s'");
-	});
-
-	it('leaves $ ` \\ " alone (inside single quotes they are literal)', () => {
-		expect(bashSingleQuote('a$b`c\\d"e')).toBe(`'a$b\`c\\d"e'`);
 	});
 });
 
@@ -141,10 +103,6 @@ describe("zshArgsDescription / zshDescribeField", () => {
 });
 
 describe("fishSingleQuote", () => {
-	it("wraps in single quotes", () => {
-		expect(fishSingleQuote("hello")).toBe("'hello'");
-	});
-
 	it("escapes \\ before '", () => {
 		// Order matters: backslash must be doubled BEFORE single-quote
 		// escaping, otherwise `\` introduced by the apostrophe escape

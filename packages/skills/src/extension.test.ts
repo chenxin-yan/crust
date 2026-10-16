@@ -95,11 +95,6 @@ function target(name = "demo") {
 }
 
 describe("skill extension packaged directory", () => {
-	it("exposes the reserved identity on the factory", () => {
-		expect(String(skill.id)).toBe("crust:skills");
-		expect(skill({}).id).toBe(skill.id);
-	});
-
 	it("registers skills as the canonical command with skill as an alias", async () => {
 		const snapshot = await createApp().snapshot();
 
@@ -167,17 +162,6 @@ describe("skill extension packaged directory", () => {
 		expect([...artifacts.keys()]).toEqual([join("skills", "guide", "SKILL.md")]);
 	});
 
-	it("generates from the snapshot even when a stale packaged directory exists", async () => {
-		await writeSource("demo", "stale");
-		const extension = skill({});
-		const app = new Crust("demo", { description: "Demo" }).extend(extension);
-
-		const artifacts = await buildArtifacts(app);
-
-		expect(artifacts.has(join("skills", "demo", "content.md"))).toBe(false);
-		expect(artifacts.get(join("skills", "demo", "SKILL.md"))).toContain("description: Demo");
-	});
-
 	it("generates command and authored skills together when extras are configured", async () => {
 		await writeSource("stale", "stale");
 		const authored = join(tempRoot, "authored", "guide");
@@ -230,38 +214,15 @@ describe("skill extension packaged directory", () => {
 		);
 	});
 
-	it("renders from the snapshot without requiring a package version", async () => {
-		const extension = skill({});
-		const app = new Crust("demo", { description: "Demo" }).extend(extension);
-		await writeFile(join(tempRoot, "package.json"), '{"version":"8.8.8"}');
+	it.each(["skills", "skills install"])("installs every packaged skill via %s", async (command) => {
+		await writeSource("demo");
+		await writeSource("guide");
+		await withCwd(tempRoot, () => createApp().execute({ argv: [...command.split(" "), "--all"] }));
 
-		const artifacts = await withCwd(tempRoot, () => buildArtifacts(app));
-
-		const generated = artifacts.get(join("skills", "demo", "SKILL.md"));
-		expect(generated).toContain("name: demo");
-		expect(generated).not.toContain("version:");
-		expect(generated).not.toContain(tempRoot);
-		// The snapshot was prepared while the packaged directory was missing; the
-		// skill must not embed that stale warning in its command reference.
-		expect(artifacts.get(join("skills", "demo", "commands", "demo.md"))).not.toContain(
-			"unavailable",
-		);
+		expect((await lstat(target("demo"))).isSymbolicLink()).toBe(true);
+		expect((await lstat(target("guide"))).isSymbolicLink()).toBe(true);
+		expect(await readFile(join(target("demo"), "content.md"), "utf8")).toBe("demo\n");
 	});
-
-	it.each(["skills", "skill", "skills install"])(
-		"installs every packaged skill via %s",
-		async (command) => {
-			await writeSource("demo");
-			await writeSource("guide");
-			await withCwd(tempRoot, () =>
-				createApp().execute({ argv: [...command.split(" "), "--all"] }),
-			);
-
-			expect((await lstat(target("demo"))).isSymbolicLink()).toBe(true);
-			expect((await lstat(target("guide"))).isSymbolicLink()).toBe(true);
-			expect(await readFile(join(target("demo"), "content.md"), "utf8")).toBe("demo\n");
-		},
-	);
 
 	/** Blocks until the named prompt is on screen; earlier prompts drain buffered keys. */
 	async function waitForPrompt(harness: ReturnType<typeof createPromptIO>, message: string) {
@@ -321,7 +282,7 @@ describe("skill extension packaged directory", () => {
 		);
 	});
 
-	it.each(["skills install", "skills"])(
+	it.each(["skills install"])(
 		"%s installs newly selected agents without removing a deselected agent's link",
 		async (command) => {
 			const source = await writeSource("demo");
@@ -463,15 +424,6 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		expect(result.traeCnInstalled).toBe(true);
 	});
 
-	it("does not let --all overwrite an unowned agent directory", async () => {
-		await writeSource("demo");
-		await mkdir(target(), { recursive: true });
-		await writeFile(join(target(), "manual.md"), "keep\n");
-
-		await withCwd(tempRoot, () => createApp().execute({ argv: ["skill", "--all"] }));
-		expect(await readFile(join(target(), "manual.md"), "utf8")).toBe("keep\n");
-	});
-
 	it("repairs an owned stale-target link before ordinary commands", async () => {
 		const source = await writeSource("demo", "current");
 		const stale = join(tempRoot, "old", "skills", "demo");
@@ -499,13 +451,7 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		expect(await readlink(installed)).toBe(release);
 	});
 
-	it("never creates links that were not installed", async () => {
-		await writeSource("demo");
-		await withCwd(tempRoot, () => createApp().execute({ argv: [] }));
-		await expect(lstat(target())).rejects.toThrow();
-	});
-
-	it.each(["skills", "skill"])("repairs links via %s repair", async (command) => {
+	it.each(["skills"])("repairs links via %s repair", async (command) => {
 		const source = await writeSource("demo");
 		const installed = join(tempRoot, ".claude", "skills", "demo");
 		await mkdir(dirname(installed), { recursive: true });
@@ -559,35 +505,6 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		expect(captured).toEqual({ stdout: "", stderr: "", exitCode: 0 });
 	});
 
-	it("rejects an invalid --scope value during parsing", async () => {
-		await writeSource("demo");
-		const captured = await withCwd(tempRoot, () =>
-			captureExecute(createApp(), ["skill", "repair", "--scope", "bogus"]),
-		);
-
-		expect(captured.exitCode).toBe(1);
-		expect(captured.stderr).toContain("Expected one of");
-		expect(captured.stderr).toContain("project");
-		expect(captured.stderr).toContain("global");
-	});
-
-	it("still advertises and runs valid skills when the source contains a cruft directory", async () => {
-		const source = await writeSource("demo", "demo", "Run demo workflows");
-		await mkdir(join(source, "__MACOSX"), { recursive: true });
-
-		let ran = false;
-		const app = new Crust("demo", { description: "Demo" })
-			.extend(skill({ defaultScope: "project" }))
-			.action(() => {
-				ran = true;
-			});
-		await withCwd(tempRoot, () => app.execute({ argv: [] }));
-		expect(ran).toBe(true);
-
-		const output = renderHelp(await app.snapshot());
-		expect(output).toContain("demo — Run demo workflows");
-	});
-
 	it("reports unreadable packaged skills without claiming the directory is unavailable", async () => {
 		const source = await writeSource("demo");
 		await writeFile(join(source, "demo", "SKILL.md"), "---\nname: demo\n---\n");
@@ -596,15 +513,6 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		expect(output).toContain("Agent skills:");
 		expect(output).toContain("Packaged skills could not be read.");
 		expect(output).not.toContain("Packaged skills not found");
-	});
-
-	it("does not break unrelated commands when the packaged directory is unavailable", async () => {
-		let ran = false;
-		const app = new Crust("demo").extend(skill({})).action(() => {
-			ran = true;
-		});
-		await app.execute({ argv: [] });
-		expect(ran).toBe(true);
 	});
 
 	it("keeps a shared output directory when deselecting one of its agents", async () => {

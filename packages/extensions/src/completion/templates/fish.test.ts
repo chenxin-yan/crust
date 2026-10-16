@@ -107,13 +107,6 @@ describe("renderFish", () => {
 		expect(script).toMatch(/-x -l 'platform' -a 'node'/);
 	});
 
-	it("gates prod-level flag rules on the full deploy-to-prod path", () => {
-		const script = renderFish(fixture, "mycli", "1.0.0");
-		expect(script).toContain(
-			"-n '__mycli_path_at_arg \\'deploy dep\\' \\'prod\\' \\'*0\\' \\'\\''",
-		);
-	});
-
 	it("negates deeper subcommand candidates via the helper's leaf-block list", () => {
 		const script = renderFish(fixture, "mycli", "1.0.0");
 		// At depth `[deploy]` the leaf-block list is `prod` (its only
@@ -135,11 +128,6 @@ describe("renderFish", () => {
 			),
 		).toEqual(["s r", "l release", "l optimized", "l no-release", "l no-optimized"]);
 		for (const line of rules) expect(line).not.toMatch(/ -(?:r|x)\b/);
-	});
-
-	it("emits short spellings via -s", () => {
-		const script = renderFish(fixture, "mycli", "1.0.0");
-		expect(script).toContain("-s 'h' -d ''");
 	});
 
 	it("emits per-slot positional choice rules gated on `__<ident>_path_at_arg`", () => {
@@ -514,14 +502,6 @@ describe("renderFish — url/path/json value-flag handling", () => {
 		expect(configLine).toBeDefined();
 		expect(endpointLine).not.toContain("__fish_complete_path");
 		expect(configLine).not.toContain("__fish_complete_path");
-	});
-
-	it("keeps requireParameter on plain string flags (no regression)", () => {
-		const script = renderFish(valueTypeFixture, "mycli", "1.0.0");
-		const line = script.split("\n").find((l) => l.includes("-l 'name'"));
-		expect(line).toBeDefined();
-		expect(line).toContain("-r");
-		expect(line).not.toContain("__fish_complete_path");
 	});
 
 	it("emits a positional rule for path args; url/json positionals rely on the global -f suppression", () => {

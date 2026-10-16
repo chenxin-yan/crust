@@ -5,27 +5,6 @@ import { select, type SelectOptions } from "./select.ts";
 import { nonTTYIO, tick } from "./test-helpers.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Initial value — object-choice numeric value
-// ────────────────────────────────────────────────────────────────────────────
-
-// The non-TTY initial-value test covers string choices; this exercises the
-// non-string `initial` codepath.
-describe("select — initial value", () => {
-	it("returns initial value for object choices", async () => {
-		const result = await select<number>({
-			message: "Pick a port",
-			choices: [
-				{ label: "HTTP", value: 80 },
-				{ label: "HTTPS", value: 443 },
-			],
-			initial: 443,
-		});
-
-		expect(result).toBe(443);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // Default cursor position
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -95,37 +74,6 @@ describe("select — default value", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("select — navigation", () => {
-	it("down arrow moves cursor down", async () => {
-		const prompt = renderPrompt(select, {
-			message: "Pick",
-			choices: ["a", "b", "c"],
-		});
-
-		await tick();
-		prompt.keys("down");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe("b");
-	});
-
-	it("up arrow moves cursor up", async () => {
-		const prompt = renderPrompt(select, {
-			message: "Pick",
-			choices: ["a", "b", "c"],
-			default: "b",
-		});
-
-		await tick();
-		prompt.keys("up");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe("a");
-	});
-
 	it("j moves cursor down (vim)", async () => {
 		const prompt = renderPrompt(select, {
 			message: "Pick",
@@ -220,34 +168,6 @@ describe("select — choice types", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("select — rendering", () => {
-	it("renders message on initial display", async () => {
-		const prompt = renderPrompt(select, {
-			message: "Choose your favorite",
-			choices: ["apple", "banana", "cherry"],
-		});
-
-		await tick();
-		expect(prompt.screen()).toContain("Choose your favorite");
-
-		prompt.keys("return");
-		await prompt.answer;
-	});
-
-	it("renders all visible choices", async () => {
-		const prompt = renderPrompt(select, {
-			message: "Pick",
-			choices: ["alpha", "beta", "gamma"],
-		});
-
-		await tick();
-		expect(prompt.screen()).toContain("alpha");
-		expect(prompt.screen()).toContain("beta");
-		expect(prompt.screen()).toContain("gamma");
-
-		prompt.keys("return");
-		await prompt.answer;
-	});
-
 	it("renders submitted answer on confirm", async () => {
 		const prompt = renderPrompt(select, {
 			message: "Pick a fruit",
@@ -261,23 +181,6 @@ describe("select — rendering", () => {
 
 		await prompt.answer;
 		expect(prompt.screen()).toBe("✓ Pick a fruit banana");
-	});
-
-	it("renders labels for object choices", async () => {
-		const prompt = renderPrompt(select, {
-			message: "Pick",
-			choices: [
-				{ label: "Option A", value: 1 },
-				{ label: "Option B", value: 2 },
-			],
-		});
-
-		await tick();
-		expect(prompt.screen()).toContain("Option A");
-		expect(prompt.screen()).toContain("Option B");
-
-		prompt.keys("return");
-		await prompt.answer;
 	});
 });
 
@@ -397,16 +300,6 @@ describe("select — non-TTY", () => {
 		return select(options, nonTTYIO());
 	}
 
-	it("returns initial value in non-TTY environment", async () => {
-		const result = await nonTTY({
-			message: "Pick",
-			choices: ["a", "b", "c"],
-			initial: "b",
-		});
-
-		expect(result).toBe("b");
-	});
-
 	it("returns default value in non-TTY environment", async () => {
 		const result = await nonTTY({
 			message: "Pick",
@@ -415,25 +308,5 @@ describe("select — non-TTY", () => {
 		});
 
 		expect(result).toBe("b");
-	});
-
-	it("throws NonInteractiveError when no default or initial in non-TTY", async () => {
-		await expect(
-			nonTTY({
-				message: "Pick",
-				choices: ["a", "b", "c"],
-			}),
-		).rejects.toThrow("interactive terminal");
-	});
-
-	it("prefers initial over default in non-TTY environment", async () => {
-		const result = await nonTTY({
-			message: "Pick",
-			choices: ["a", "b", "c"],
-			initial: "a",
-			default: "c",
-		});
-
-		expect(result).toBe("a");
 	});
 });

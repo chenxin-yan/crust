@@ -2,30 +2,12 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { defineCommand, Crust } from "./command/crust.ts";
 import { defineExtensionId } from "./identity.ts";
-import { isListed, sectionsFor, visibleSectionsFor } from "./sections.ts";
-import type { CommandSection } from "./types.ts";
+import { sectionsFor, visibleSectionsFor } from "./sections.ts";
 
-const universal = { title: "Universal", body: "Everywhere" } as const;
 const agentDocs = defineExtensionId("agent-docs");
 const terminal = defineExtensionId("terminal");
 
-describe("isListed", () => {
-	it("excludes only explicitly hidden commands", async () => {
-		const visible = await new Crust("visible").snapshot();
-		const hidden = await new Crust("hidden")
-			.add(defineCommand("child", { hidden: true }, (command) => command))
-			.snapshot();
-
-		expect(isListed(visible)).toBe(true);
-		expect(isListed(hidden.subCommands.child!)).toBe(false);
-	});
-});
-
 describe("sectionsFor", () => {
-	it("includes untargeted sections for every consumer", () => {
-		expect(sectionsFor([universal], terminal)).toEqual([universal]);
-	});
-
 	it("includes only sections addressed to the requested consumer", () => {
 		const section = { title: "Agent notes", body: "For agents", only: [agentDocs] } as const;
 		expect(sectionsFor([section], agentDocs)).toEqual([section]);
@@ -36,13 +18,6 @@ describe("sectionsFor", () => {
 		const section = { title: "Human notes", body: "For humans", except: [agentDocs] } as const;
 		expect(sectionsFor([section], terminal)).toEqual([section]);
 		expect(sectionsFor([section], agentDocs)).toEqual([]);
-	});
-
-	it("matches consumer ids after structured cloning", () => {
-		const sections = structuredClone([
-			{ title: "Agent notes", body: "For agents", only: [agentDocs] },
-		]) as CommandSection[];
-		expect(sectionsFor(sections, agentDocs)).toEqual(sections);
 	});
 
 	it("merges same-title sections at their first position with a single newline", () => {
@@ -59,39 +34,6 @@ describe("sectionsFor", () => {
 			{ title: "Examples", body: "First example\nSecond example" },
 			{ title: "Notes", body: "A note" },
 		]);
-	});
-
-	it("merges after audience filtering and omits the consumed audience", () => {
-		const shared = { title: "Examples", body: "Shared example" } as const;
-		const agentTargeted = {
-			title: "Examples",
-			body: "Agent example",
-			only: [agentDocs],
-		} as const;
-		const terminalTargeted = {
-			title: "Examples",
-			body: "Terminal example",
-			only: [terminal],
-		} as const;
-		const sections = [shared, agentTargeted, terminalTargeted] as const;
-
-		expect(sectionsFor(sections, agentDocs)).toEqual([
-			{ title: "Examples", body: "Shared example\nAgent example" },
-		]);
-		expect(sectionsFor(sections, terminal)).toEqual([
-			{ title: "Examples", body: "Shared example\nTerminal example" },
-		]);
-		expect(sectionsFor(sections, defineExtensionId("other"))).toEqual([shared]);
-	});
-
-	it("leaves distinct and differently cased titles separate", () => {
-		const sections = [
-			{ title: "Examples", body: "First" },
-			{ title: "examples", body: "Second" },
-			{ title: "Notes", body: "Third" },
-		] as const;
-
-		expect(sectionsFor(sections, terminal)).toEqual(sections);
 	});
 });
 

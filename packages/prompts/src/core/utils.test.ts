@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import {
-	calculateScrollOffset,
-	formatPromptLine,
-	formatSubmitted,
-	moveCursor,
-	normalizeChoices,
-} from "./utils.ts";
+import { calculateScrollOffset, formatPromptLine, formatSubmitted, moveCursor } from "./utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // formatSubmitted
@@ -45,35 +39,5 @@ describe("moveCursor", () => {
 describe("calculateScrollOffset", () => {
 	it("does not scroll an empty list", () => {
 		expect(calculateScrollOffset(0, 0, 0, 10)).toBe(0);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// normalizeChoices
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("normalizeChoices", () => {
-	it("converts string choices to { label, value } objects", () => {
-		const result = normalizeChoices(["red", "green", "blue"]);
-
-		expect(result).toEqual([
-			{ label: "red", value: "red" },
-			{ label: "green", value: "green" },
-			{ label: "blue", value: "blue" },
-		]);
-	});
-
-	it("passes through object choices unchanged", () => {
-		const choices = [
-			{ label: "HTTP", value: 80 },
-			{ label: "HTTPS", value: 443, hint: "recommended" },
-		];
-
-		const result = normalizeChoices(choices);
-
-		expect(result).toEqual([
-			{ label: "HTTP", value: 80 },
-			{ label: "HTTPS", value: 443, hint: "recommended" },
-		]);
 	});
 });

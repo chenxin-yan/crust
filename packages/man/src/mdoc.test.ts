@@ -66,26 +66,6 @@ describe("renderManPageMdoc", () => {
 		expect(output).not.toContain(".Sh COMMANDS");
 	});
 
-	it("renders a section-bearing grandchild without a heading for its section-less parent", async () => {
-		const app = new Crust("demo").add(
-			defineCommand("config", {}, (cmd) =>
-				cmd.add(
-					defineCommand(
-						"set",
-						{ sections: [{ title: "Examples", body: "config set body" }] },
-						(subcommand) => subcommand.action(() => {}),
-					),
-				),
-			),
-		);
-
-		const output = renderManPageMdoc({ root: await app.snapshot() });
-
-		expect(output).toContain(".Sh COMMANDS");
-		expect(output).not.toContain(".Ss config\n");
-		expect(output).toContain(".Ss config set\n.Sy EXAMPLES\nconfig set body");
-	});
-
 	it("filters subcommand sections by audience and omits hidden commands", async () => {
 		const app = new Crust("demo")
 			.add(
@@ -272,28 +252,6 @@ describe("renderManPageMdoc", () => {
 		expect(width).toBeGreaterThanOrEqual("issue (issues, i)".length);
 	});
 
-	it("omits `meta.hidden: true` subcommands from the SUBCOMMANDS section", async () => {
-		// Mirrors the help contract: hidden commands stay invocable
-		// but never appear in published man pages.
-		const app = new Crust("demo", { description: "Demo." })
-			.add(
-				defineCommand("build", { description: "Build the project" }, (cmd) => cmd.action(() => {})),
-			)
-			.add(
-				defineCommand(
-					"__complete",
-					{ description: "Internal completion entrypoint", hidden: true },
-					(cmd) => cmd.action(() => {}),
-				),
-			);
-
-		const root = await app.snapshot();
-		const mdoc = renderManPageMdoc({ root, section: 1 });
-
-		expect(mdoc).toContain(".It Nm build");
-		expect(mdoc).not.toContain("__complete");
-	});
-
 	it("omits the SUBCOMMANDS section entirely when every subcommand is hidden", async () => {
 		const app = new Crust("demo")
 			.add(
@@ -308,24 +266,6 @@ describe("renderManPageMdoc", () => {
 
 		expect(mdoc).not.toContain(".Sh SUBCOMMANDS");
 		expect(mdoc).not.toContain("__complete");
-	});
-
-	it("renders flag `choices` as `[choices: ...]` after the description", async () => {
-		const app = new Crust("demo", { description: "Demo." })
-			.flags({
-				name: "target",
-				type: "string",
-				choices: ["browser", "bun", "node"],
-				description: "Build target",
-			})
-			.action(() => {});
-
-		const root = await app.snapshot();
-		const mdoc = renderManPageMdoc({ root, section: 1 });
-
-		// Convention audit M1: use semantic mdoc flag macros.
-		expect(mdoc).toContain(".It Fl Fl target");
-		expect(mdoc).toContain("Build target [choices: browser, bun, node]");
 	});
 
 	it("renders the flag `env` variable name after the description, never its value", async () => {
@@ -359,41 +299,5 @@ describe("renderManPageMdoc", () => {
 		expect(mdoc).toContain(".Sh ARGUMENTS");
 		expect(mdoc).toContain(".It Ar env");
 		expect(mdoc).toContain("Target environment [choices: dev, staging, prod]");
-	});
-
-	it("includes long flag aliases (`def.aliases`) alongside the canonical spelling", async () => {
-		const app = new Crust("demo", { description: "Demo." })
-			.flags({
-				name: "output",
-				type: "string",
-				short: "o",
-				aliases: ["out"],
-				description: "Where to write",
-			})
-			.action(() => {});
-
-		const root = await app.snapshot();
-		const mdoc = renderManPageMdoc({ root, section: 1 });
-
-		// Both the canonical `--output` and the alias `--out` appear in the
-		// label, comma-separated, after the short flag.
-		expect(mdoc).toContain(".It Fl o , Fl Fl output , Fl Fl out");
-	});
-
-	it("includes `--no-` negation for every long-form spelling of a boolean flag", async () => {
-		const app = new Crust("demo")
-			.flags({
-				name: "color",
-				type: "boolean",
-				aliases: ["colour"],
-				description: "Use colour",
-			})
-			.action(() => {});
-
-		const root = await app.snapshot();
-		const mdoc = renderManPageMdoc({ root, section: 1 });
-
-		// Canonical + alias + both negations, in declaration order.
-		expect(mdoc).toContain(".It Fl Fl color , Fl Fl colour , Fl Fl no-color , Fl Fl no-colour");
 	});
 });

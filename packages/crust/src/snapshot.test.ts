@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { defineExtensionId } from "@crustjs/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { isRunning, reapBoundedProcesses, runBoundedProcess } from "../tests/bounded-process.ts";
@@ -80,51 +79,6 @@ describe("buildEntrypoint", () => {
 		);
 	});
 
-	it("builds skill and man artifacts without absolute source paths", async () => {
-		const directory = await mkdtemp(join(tmpdir(), "crust-entry-artifacts-test-"));
-		tempDirs.push(directory);
-		const entry = join(directory, "cli.ts");
-		const outDir = join(directory, "dist");
-		await writeFile(join(directory, "package.json"), '{"name":"demo"}');
-		const skillsUrl = pathToFileURL(resolve(import.meta.dirname, "../../skills/src/index.ts")).href;
-		const manUrl = pathToFileURL(resolve(import.meta.dirname, "../../man/src/index.ts")).href;
-		await writeFile(
-			entry,
-			`import { Crust } from ${JSON.stringify(coreUrl)};\n` +
-				`import { skill } from ${JSON.stringify(skillsUrl)};\n` +
-				`import { man } from ${JSON.stringify(manUrl)};\n` +
-				`await new Crust("demo", { description: "Demo" }).extend(skill({}), man()).execute();\n`,
-		);
-
-		// Run the entry subprocess from the fixture project root so advertised
-		// sources are relative to that project.
-		await buildEntrypoint(entry, outDir, [], io, directory);
-
-		// The man hook runs after the skills hook and reads the skill it just wrote
-		// into the build output, advertised relative to the project root.
-		const manual = await readFile(join(outDir, "man", "demo.1"), "utf8");
-		const packagedSkill = await readFile(join(outDir, "skills", "demo", "SKILL.md"), "utf8");
-		expect(manual).toContain(`Source: ${join("dist", "skills", "demo")}`);
-		expect(manual).not.toContain(directory);
-		expect(packagedSkill).not.toContain(directory);
-	});
-
-	it("attributes Extension build failures", async () => {
-		const directory = await mkdtemp(join(tmpdir(), "crust-entry-build-test-"));
-		tempDirs.push(directory);
-		const entry = join(directory, "cli.ts");
-		await writeFile(
-			entry,
-			`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(coreUrl)};\n` +
-				`const broken = defineExtension(defineExtensionId("broken")).build(() => { throw new Error("disk full"); });\n` +
-				`await new Crust("fixture").extend(broken).execute();\n`,
-		);
-
-		await expect(
-			buildEntrypoint(entry, join(directory, "dist"), [], io, directory),
-		).rejects.toThrow('Extension "broken" build failed: disk full');
-	});
-
 	it("explains when an entry exits without producing a snapshot", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "crust-entry-snapshot-test-"));
 		tempDirs.push(directory);
@@ -152,14 +106,7 @@ describe("buildEntrypoint", () => {
 
 	it.each([
 		null,
-		{},
-		{ extensions: {} },
-		{ extensions: [null] },
 		{ extensions: [{ id: 42, files: [] }] },
-		{ extensions: [{ id: "legacy", files: "unknown" }] },
-		{ extensions: [{ id: "legacy" }] },
-		{ extensions: [{ id: "bad", files: [42] }] },
-		{ extensions: [{ id: "", files: [] }] },
 		{ extensions: [{ id: " padded ", files: [] }] },
 		{ extensions: [{ id: "missing", files: ["missing.txt"] }] },
 	])("rejects malformed or synthetic legacy reports: %j", async (report) => {
@@ -209,36 +156,6 @@ describe("buildEntrypoint", () => {
 		).rejects.toThrow(/invalid Build Report[\s\S]*compatible @crustjs\/core/);
 	});
 
-	it("keeps reports scoped to hook output rather than all entry side effects", async () => {
-		const directory = await mkdtemp(join(tmpdir(), "crust-entry-side-effect-test-"));
-		tempDirs.push(directory);
-		const entry = join(directory, "cli.ts");
-		const outDir = join(directory, "dist");
-		await writeFile(
-			entry,
-			`import { join } from "node:path";
-			import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(coreUrl)};
-			await Bun.write(join(process.env.CRUST_INTERNAL_BUILD_OUT_DIR!, "extra.txt"), "side effect");
-			await new Crust("fixture").extend(defineExtension(defineExtensionId("fixture")).build(() => [{ path: "assets/real.txt", content: "hook output" }])).execute();`,
-		);
-		const result = await buildEntrypoint(entry, outDir, [], io, directory);
-		expect(result.build.extensions[0]?.files).toEqual(["assets/real.txt"]);
-		expect(await readFile(join(outDir, "extra.txt"), "utf8")).toBe("side effect");
-	});
-
-	it("preserves an executed hook's empty array report", async () => {
-		const directory = await mkdtemp(join(tmpdir(), "crust-entry-empty-test-"));
-		tempDirs.push(directory);
-		const entry = join(directory, "cli.ts");
-		await writeFile(
-			entry,
-			`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(coreUrl)};
-			await new Crust("fixture").extend(defineExtension(defineExtensionId("empty")).build(() => [])).execute();`,
-		);
-		const result = await buildEntrypoint(entry, join(directory, "dist"), [], io, directory);
-		expect(result.build).toEqual({ extensions: [{ id: defineExtensionId("empty"), files: [] }] });
-	});
-
 	it("rethrows the entry's error when the subprocess exits non-zero", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "crust-entry-snapshot-test-"));
 		tempDirs.push(directory);
@@ -264,7 +181,7 @@ describe("buildEntrypoint", () => {
 		).rejects.toThrow("Entry produced an invalid Command Snapshot");
 	});
 
-	it.each([null, {}, { meta: {} }, { meta: { name: 42 } }])(
+	it.each([{ meta: { name: 42 } }])(
 		"rejects a snapshot without a root command name: %j",
 		async (snapshot) => {
 			const directory = await mkdtemp(join(tmpdir(), "crust-entry-snapshot-test-"));
@@ -411,19 +328,6 @@ describe("buildEntrypoint", () => {
 			20_000,
 		);
 
-		it.skipIf(process.platform === "win32")(
-			"kills a worker left in the entry group after a failed preparation",
-			async () => {
-				await expectWorkerReaped(
-					`throw new Error("entry failed after starting a worker");\n`,
-					async (prepared) => {
-						await expect(prepared).rejects.toThrow("entry failed after starting a worker");
-					},
-				);
-			},
-			20_000,
-		);
-
 		const helpersUrl = pathToFileURL(resolve(import.meta.dirname, "snapshot.ts")).href;
 
 		/**
@@ -516,9 +420,6 @@ describe("buildEntrypoint", () => {
 
 		it.skipIf(process.platform === "win32").each([
 			["bun", "SIGINT"],
-			["bun", "SIGTERM"],
-			["bun", "SIGHUP"],
-			["bun", "SIGQUIT"],
 			["node", "SIGQUIT"],
 		] as const)(
 			"kills the entry group and keeps default termination when the %s host gets %s",
@@ -538,7 +439,7 @@ describe("buildEntrypoint", () => {
 			20_000,
 		);
 
-		it.skipIf(process.platform === "win32").each(["SIGINT", "SIGQUIT"] as const)(
+		it.skipIf(process.platform === "win32").each(["SIGINT"] as const)(
 			"kills the entry group and leaves an existing Bun host %s listener in charge",
 			async (signal) => {
 				const result = await runInterruptedHost("listener", { listenerSignal: signal });

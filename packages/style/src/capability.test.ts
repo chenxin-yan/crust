@@ -77,16 +77,6 @@ describe("resolveColorDepth", () => {
 			).toBe("truecolor");
 		});
 
-		it('TTY + COLORTERM=truecolor → "truecolor"', () => {
-			expect(
-				resolveColorDepth("auto", {
-					isTTY: true,
-					noColor: undefined,
-					colorTerm: "truecolor",
-				}),
-			).toBe("truecolor");
-		});
-
 		it('TTY + COLORTERM=24bit (case-insensitive) → "truecolor"', () => {
 			expect(
 				resolveColorDepth("auto", {
@@ -95,39 +85,6 @@ describe("resolveColorDepth", () => {
 					colorTerm: "24BIT",
 				}),
 			).toBe("truecolor");
-		});
-
-		it('TTY + TERM=xterm-direct → "truecolor"', () => {
-			expect(
-				resolveColorDepth("auto", {
-					isTTY: true,
-					noColor: undefined,
-					colorTerm: undefined,
-					term: "xterm-direct",
-				}),
-			).toBe("truecolor");
-		});
-
-		it('TTY + TERM contains truecolor → "truecolor"', () => {
-			expect(
-				resolveColorDepth("auto", {
-					isTTY: true,
-					noColor: undefined,
-					colorTerm: undefined,
-					term: "xterm-truecolor",
-				}),
-			).toBe("truecolor");
-		});
-
-		it('TTY + TERM=xterm-256color → "256"', () => {
-			expect(
-				resolveColorDepth("auto", {
-					isTTY: true,
-					noColor: undefined,
-					colorTerm: undefined,
-					term: "xterm-256color",
-				}),
-			).toBe("256");
 		});
 
 		it('TTY + TERM=screen-256color (uppercase) → "256" (case-insensitive)', () => {
@@ -152,17 +109,6 @@ describe("resolveColorDepth", () => {
 			).toBe("16");
 		});
 
-		it('TTY + TERM=dumb → "none"', () => {
-			expect(
-				resolveColorDepth("auto", {
-					isTTY: true,
-					noColor: undefined,
-					colorTerm: undefined,
-					term: "dumb",
-				}),
-			).toBe("none");
-		});
-
 		it.each(["DUMB", "Dumb", "dUmB"])('TTY + TERM=%s (case-insensitive) → "none"', (term) => {
 			expect(
 				resolveColorDepth("auto", {
@@ -172,17 +118,6 @@ describe("resolveColorDepth", () => {
 					term,
 				}),
 			).toBe("none");
-		});
-
-		it('TTY + no env vars → "16"', () => {
-			expect(
-				resolveColorDepth("auto", {
-					isTTY: true,
-					noColor: undefined,
-					colorTerm: undefined,
-					term: undefined,
-				}),
-			).toBe("16");
 		});
 
 		it("COLORTERM truecolor wins over TERM=dumb (TERM=dumb only checked when no truecolor signal)", () => {

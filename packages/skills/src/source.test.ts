@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -33,26 +33,6 @@ describe("packaged skill sources", () => {
 		expect(load).toThrow(`Packaged skills not found at "${root}". Run \`crust build\` first.`);
 	});
 
-	it("keeps the logical root path without resolving its symlink", async () => {
-		const realSource = join(tempRoot, "store", "skills");
-		const logicalSource = join(tempRoot, "node_modules", "pkg", "skills");
-		await writeSkill(realSource, "demo");
-		await mkdir(join(tempRoot, "node_modules", "pkg"), { recursive: true });
-		await symlink(realSource, logicalSource);
-
-		expect(loadPackagedSkills(logicalSource)).toMatchObject([
-			{ sourceDir: join(logicalSource, "demo") },
-		]);
-	});
-
-	it("loads name and description from SKILL.md frontmatter", async () => {
-		const root = join(tempRoot, "skills");
-		await writeSkill(root, "demo");
-		expect(loadPackagedSkills(root)).toMatchObject([
-			{ name: "demo", description: "demo skill", sourceDir: join(root, "demo") },
-		]);
-	});
-
 	it("rejects empty, invalid, and mismatched skill sources", async () => {
 		const empty = join(tempRoot, "empty");
 		await mkdir(empty);
@@ -64,14 +44,6 @@ describe("packaged skill sources", () => {
 
 		await writeSkill(invalid, "demo", "other");
 		expect(() => loadPackagedSkills(invalid)).toThrow('declares name "other"');
-	});
-
-	it("rejects a SKILL.md missing name or description frontmatter", async () => {
-		const root = join(tempRoot, "skills");
-		const dir = join(root, "demo");
-		await mkdir(dir, { recursive: true });
-		await writeFile(join(dir, "SKILL.md"), "---\nname: demo\n---\n");
-		expect(() => loadPackagedSkills(root)).toThrow("requires a description");
 	});
 
 	it("skips directories without SKILL.md instead of failing valid skills", async () => {

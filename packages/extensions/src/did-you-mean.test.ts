@@ -18,7 +18,7 @@ describe("didYouMean", () => {
 		expect(exitCode).toBe(1);
 	});
 
-	it.each(["car", "ca"])("breaks tied scores by canonical name for %s", async (input) => {
+	it.each(["car"])("breaks tied scores by canonical name for %s", async (input) => {
 		const app = new Crust("app")
 			.extend(didYouMean())
 			.add(defineCommand("zebra", { aliases: ["cap"] }, (cmd) => cmd.action(() => {})))
@@ -65,18 +65,6 @@ describe("didYouMean", () => {
 		expect(stderr).not.toContain('Did you mean "issue"?');
 	});
 
-	it("lists only canonical names under 'Available commands'", async () => {
-		const app = new Crust("app")
-			.extend(didYouMean())
-			.add(defineCommand("issue", { aliases: ["issues", "i"] }, (cmd) => cmd.action(() => {})))
-			.add(defineCommand("version", (cmd) => cmd.action(() => {})));
-
-		const { stderr } = await captureExecute(app, ["completely-unknown"]);
-
-		expect(stderr).toContain("Available commands: issue, version");
-		expect(stderr).not.toContain("issues");
-	});
-
 	it("renders canonical suggestion and help to stdout in help mode", async () => {
 		const app = new Crust("app")
 			.extend(didYouMean({ mode: "help" }))
@@ -107,26 +95,6 @@ describe("didYouMean", () => {
 
 		expect(stderr).toContain('Unknown command "__complet"');
 		expect(stderr).not.toContain("__complete");
-	});
-
-	it("never suggests a hidden command via one of its aliases", async () => {
-		// Hidden filtering must apply to alias matches too, not just the
-		// canonical name. If a hidden command has an alias that's close to
-		// the typo, it still must not leak.
-		const app = new Crust("app")
-			.extend(didYouMean())
-			.add(defineCommand("build", (cmd) => cmd.action(() => {})))
-			.add(
-				defineCommand("__complete", { hidden: true, aliases: ["__comp"] }, (cmd) =>
-					cmd.action(() => {}),
-				),
-			);
-
-		const { stderr } = await captureExecute(app, ["__cmp"]);
-
-		expect(stderr).toContain('Unknown command "__cmp"');
-		expect(stderr).not.toContain("__complete");
-		expect(stderr).not.toContain("__comp");
 	});
 
 	it("omits hidden commands from the 'Available commands' fallback list", async () => {

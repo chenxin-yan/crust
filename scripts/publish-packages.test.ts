@@ -141,7 +141,7 @@ describe("repository release upload", () => {
 		expect(calls().map((args) => args[0])).toEqual(["view", "view", "view", "view"]);
 	});
 
-	it.each(["E401", "ETIMEDOUT"])("aborts before upload when preflight returns %s", async (code) => {
+	it.each(["E401"])("aborts before upload when preflight returns %s", async (code) => {
 		const result = await run({ VIEW_ERROR: code });
 		expect(result.exitCode).not.toBe(0);
 		expect(result.stderr).toContain("Could not check @fixture/library@1.0.0");

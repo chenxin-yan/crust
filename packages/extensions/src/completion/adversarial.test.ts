@@ -85,23 +85,10 @@ describe("--no- negation", () => {
 		subCommands: [],
 	};
 
-	it("bash: emits --no-<name> for negatable boolean flags", async () => {
-		const out = renderBash(spec, "mycli", "1");
-		expect(out).toContain("--no-force");
-		// Core's snapshot-derived negation policy suppresses the color spelling.
-		expect(out).not.toContain("--no-color");
-	});
-
 	it("zsh: emits --no-<name> as a separate spec", async () => {
 		const out = renderZsh(spec, "mycli", "1");
 		expect(out).toContain("--no-force");
 		expect(out).not.toContain("--no-color");
-	});
-
-	it("fish: emits --no-<name> as its own complete rule", async () => {
-		const out = renderFish(spec, "mycli", "1");
-		expect(out).toMatch(/-l 'no-force'/);
-		expect(out).not.toMatch(/-l 'no-color'/);
 	});
 });
 

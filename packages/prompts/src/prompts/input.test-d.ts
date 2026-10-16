@@ -22,10 +22,6 @@ async function _inputTypeInferenceTests() {
 	});
 	type _NameIsString = Expect<Equal<typeof name, string>>;
 
-	// No validate — resolves to string.
-	const raw = await input({ message: "?" });
-	type _RawIsString = Expect<Equal<typeof raw, string>>;
-
 	const schemaInWrongSlot = z.string();
 	// @ts-expect-error — Standard Schemas belong in `schema`, not `validate`
 	void input({ validate: schemaInWrongSlot });

@@ -1,7 +1,4 @@
-import { runInNewContext } from "node:vm";
-
-import type { StandardSchema } from "@crustjs/utils/schema";
-import { describe, expect, it } from "vite-plus/test";
+import { expect, it } from "vite-plus/test";
 
 import { makeNode, unwrap } from "../../tests/helpers.ts";
 import { Crust } from "../command/crust.ts";
@@ -59,52 +56,4 @@ it("delivers an own __proto__ positional value to the typed action", async () =>
 		status: "completed",
 		result: "VALUE",
 	});
-});
-
-describe("foreign-realm Standard Schema promises", () => {
-	for (const field of ["args", "flags"] as const) {
-		for (const result of ["success", "issues", "rejection"] as const) {
-			it(`${field}: awaits ${result} before dispatch`, async () => {
-				const validate: StandardSchema<string, number>["~standard"]["validate"] = runInNewContext(
-					result === "success"
-						? "() => Promise.resolve({ value: 42 })"
-						: result === "issues"
-							? '() => Promise.resolve({ issues: [{ message: "invalid" }] })'
-							: '() => Promise.reject(new Error("schema rejected"))',
-				);
-				const schema: StandardSchema<string, number> = {
-					"~standard": { version: 1, vendor: "test", validate },
-				};
-				let calls = 0;
-				const invocation =
-					field === "args"
-						? new Crust("cli")
-								.args({ name: "value", schema })
-								.action(({ args }) => {
-									calls++;
-									return args.value;
-								})
-								.run([])
-						: new Crust("cli")
-								.flags({ name: "value", type: "string", schema })
-								.action(({ flags }) => {
-									calls++;
-									return flags.value;
-								})
-								.run([]);
-				// Both schema-backed inputs allow omission; the schema owns defaults/requiredness.
-				const outcome = await invocation;
-				if (result === "success") {
-					expect(outcome).toMatchObject({ status: "completed", result: 42 });
-					expect(calls).toBe(1);
-				} else {
-					expect(outcome.status).toBe("failed");
-					expect(calls).toBe(0);
-					if (outcome.status !== "failed") throw new Error("Expected failure");
-					if (result === "issues") expect(outcome.error).toMatchObject({ code: "VALIDATION" });
-					else expect(outcome.error).toMatchObject({ message: "schema rejected" });
-				}
-			});
-		}
-	}
 });

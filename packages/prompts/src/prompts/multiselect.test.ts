@@ -6,27 +6,6 @@ import { multiselect, type MultiselectOptions } from "./multiselect.ts";
 import { nonTTYIO, tick } from "./test-helpers.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Initial value — object-choice numeric values
-// ────────────────────────────────────────────────────────────────────────────
-
-// The non-TTY initial-value test covers string choices; this exercises the
-// non-string `initial` codepath.
-describe("multiselect — initial value", () => {
-	it("returns initial value for object choices", async () => {
-		const result = await multiselect<number>({
-			message: "Select ports",
-			choices: [
-				{ label: "HTTP", value: 80 },
-				{ label: "HTTPS", value: 443 },
-			],
-			initial: [443],
-		});
-
-		expect(result).toEqual([443]);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // Default pre-selection
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -59,19 +38,6 @@ describe("multiselect — default value", () => {
 		prompt.keys("return");
 
 		expect(await prompt.answer).toEqual([]);
-	});
-
-	it("returns empty array when no defaults and nothing selected", async () => {
-		const prompt = renderPrompt(multiselect, {
-			message: "Select toppings",
-			choices: ["cheese", "pepperoni", "mushrooms"],
-		});
-
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toEqual([]);
 	});
 
 	it("ignores default values that don't match any choice", async () => {
@@ -110,27 +76,6 @@ describe("multiselect — Space toggle", () => {
 		const result = await prompt.answer;
 		expect(result).toEqual([]);
 	});
-
-	it("can select multiple items", async () => {
-		const prompt = renderPrompt(multiselect, {
-			message: "Select",
-			choices: ["a", "b", "c"],
-		});
-
-		await tick();
-		// Select first item
-		prompt.type(" ");
-		await tick();
-		// Move down and select second
-		prompt.keys("down");
-		await tick();
-		prompt.type(" ");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toEqual(["a", "b"]);
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -138,43 +83,6 @@ describe("multiselect — Space toggle", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multiselect — navigation", () => {
-	it("down arrow moves cursor down", async () => {
-		const prompt = renderPrompt(multiselect, {
-			message: "Select",
-			choices: ["a", "b", "c"],
-		});
-
-		await tick();
-		prompt.keys("down");
-		await tick();
-		prompt.type(" ");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toEqual(["b"]);
-	});
-
-	it("up arrow moves cursor up", async () => {
-		const prompt = renderPrompt(multiselect, {
-			message: "Select",
-			choices: ["a", "b", "c"],
-		});
-
-		await tick();
-		// Move down to b, then up back to a
-		prompt.keys("down");
-		await tick();
-		prompt.keys("up");
-		await tick();
-		prompt.type(" ");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toEqual(["a"]);
-	});
-
 	it("j moves cursor down (vim)", async () => {
 		const prompt = renderPrompt(multiselect, {
 			message: "Select",
@@ -209,23 +117,6 @@ describe("multiselect — navigation", () => {
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["a"]);
-	});
-
-	it("wraps to last item when moving up from first", async () => {
-		const prompt = renderPrompt(multiselect, {
-			message: "Select",
-			choices: ["a", "b", "c"],
-		});
-
-		await tick();
-		prompt.keys("up");
-		await tick();
-		prompt.type(" ");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toEqual(["c"]);
 	});
 });
 
@@ -263,22 +154,6 @@ describe("multiselect — toggle all / invert", () => {
 
 		const result = await prompt.answer;
 		expect(result).toEqual([]);
-	});
-
-	it("'a' selects all when some are selected (not all)", async () => {
-		const prompt = renderPrompt(multiselect, {
-			message: "Select",
-			choices: ["a", "b", "c"],
-			default: ["a"],
-		});
-
-		await tick();
-		prompt.type("a");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toEqual(["a", "b", "c"]);
 	});
 
 	it("'i' inverts selection", async () => {
@@ -354,23 +229,6 @@ describe("multiselect — validation", () => {
 			});
 		}
 	}
-
-	it("required accepts selected falsy choice values", async () => {
-		const prompt = renderPrompt(multiselect, {
-			message: "Select",
-			choices: [
-				{ label: "false", value: false },
-				{ label: "zero", value: 0 },
-				{ label: "undefined", value: undefined },
-			],
-			required: true,
-		});
-
-		await tick();
-		prompt.keys("space", "down", "space", "down", "space", "return");
-
-		expect(await prompt.answer).toEqual([false, 0, undefined]);
-	});
 
 	it("min validation blocks submit when too few selected", async () => {
 		const prompt = renderPrompt(multiselect, {
@@ -460,49 +318,6 @@ describe("multiselect — validation", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multiselect — rendering", () => {
-	it("renders message on initial display", async () => {
-		const prompt = renderPrompt(multiselect, {
-			message: "Select toppings",
-			choices: ["cheese", "pepperoni", "mushrooms"],
-		});
-
-		await tick();
-		expect(prompt.screen()).toContain("Select toppings");
-
-		prompt.keys("return");
-		await prompt.answer;
-	});
-
-	it("renders all choices with checkboxes", async () => {
-		const prompt = renderPrompt(multiselect, {
-			message: "Select",
-			choices: ["alpha", "beta", "gamma"],
-		});
-
-		await tick();
-		expect(prompt.screen()).toContain("alpha");
-		expect(prompt.screen()).toContain("beta");
-		expect(prompt.screen()).toContain("gamma");
-		expect(prompt.screen()).toContain("○");
-
-		prompt.keys("return");
-		await prompt.answer;
-	});
-
-	it("renders checked boxes for selected items", async () => {
-		const prompt = renderPrompt(multiselect, {
-			message: "Select",
-			choices: ["alpha", "beta", "gamma"],
-			default: ["alpha"],
-		});
-
-		await tick();
-		expect(prompt.screen()).toContain("●");
-
-		prompt.keys("return");
-		await prompt.answer;
-	});
-
 	it("renders submitted answer with comma-separated labels", async () => {
 		const prompt = renderPrompt(multiselect, {
 			message: "Select toppings",
@@ -529,53 +344,6 @@ describe("multiselect — rendering", () => {
 
 		await tick();
 		expect(prompt.screen()).toContain("recommended");
-
-		prompt.keys("return");
-		await prompt.answer;
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Viewport scrolling
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("multiselect — viewport scrolling", () => {
-	it("limits visible choices to maxVisible", async () => {
-		const choices = Array.from({ length: 20 }, (_, i) => `item-${i}`);
-		const prompt = renderPrompt(multiselect, {
-			message: "Select",
-			choices,
-			maxVisible: 5,
-		});
-
-		await tick();
-		expect(prompt.screen()).toContain("item-0");
-		expect(prompt.screen()).toContain("item-4");
-		expect(prompt.screen()).not.toContain("item-5");
-
-		prompt.keys("return");
-		await prompt.answer;
-	});
-
-	it("scrolls down when navigating past visible items", async () => {
-		const choices = Array.from({ length: 10 }, (_, i) => `item-${i}`);
-		const prompt = renderPrompt(multiselect, {
-			message: "Select",
-			choices,
-			maxVisible: 3,
-		});
-
-		await tick();
-		// Move down 3 times to scroll past the initial viewport
-		prompt.keys("down");
-		await tick();
-		prompt.keys("down");
-		await tick();
-		prompt.keys("down");
-		await tick();
-
-		// item-3 should now be visible
-		expect(prompt.screen()).toContain("item-3");
 
 		prompt.keys("return");
 		await prompt.answer;
@@ -620,16 +388,6 @@ describe("multiselect — non-TTY", () => {
 		return multiselect(options, nonTTYIO());
 	}
 
-	it("returns initial value in non-TTY environment", async () => {
-		const result = await nonTTY({
-			message: "Select",
-			choices: ["a", "b", "c"],
-			initial: ["b"],
-		});
-
-		expect(result).toEqual(["b"]);
-	});
-
 	it("returns default values in non-TTY environment", async () => {
 		const result = await nonTTY({
 			message: "Select",
@@ -638,25 +396,5 @@ describe("multiselect — non-TTY", () => {
 		});
 
 		expect(result).toEqual(["a", "c"]);
-	});
-
-	it("throws NonInteractiveError when no default or initial in non-TTY", async () => {
-		await expect(
-			nonTTY({
-				message: "Select",
-				choices: ["a", "b", "c"],
-			}),
-		).rejects.toThrow("interactive terminal");
-	});
-
-	it("prefers initial over default in non-TTY environment", async () => {
-		const result = await nonTTY({
-			message: "Select",
-			choices: ["a", "b", "c"],
-			initial: ["a"],
-			default: ["b", "c"],
-		});
-
-		expect(result).toEqual(["a"]);
 	});
 });

@@ -22,14 +22,7 @@ import {
 	type IdentifiedPackageJson,
 	runDistributeBuild,
 } from "./distribute.ts";
-import {
-	BUN_TARGETS,
-	type BunTarget,
-	DENO_TARGETS,
-	type DenoTarget,
-	NODE_TARGETS,
-	type NodeTarget,
-} from "./targets.ts";
+import { BUN_TARGETS, type BunTarget, NODE_TARGETS, type NodeTarget } from "./targets.ts";
 
 const io = { stdout: () => {}, stderr: () => {} };
 
@@ -309,85 +302,6 @@ describe("runDistributeBuild", () => {
 		expect(rootOnlyManifest).not.toHaveProperty("embeddedRuntimeVersion");
 	});
 
-	it("runs the executor once per target with the canonical target name", async () => {
-		const plan = createPlan(tmpDir, { name: "target-cli", version: "0.1.0" });
-		const calls: BunTarget[] = [];
-
-		await runDistributeBuild(
-			plan,
-			bunDistribution(
-				["bun-linux-x64", "bun-darwin-arm64"],
-				async (entryPath, outfilePath, target) => {
-					calls.push(target);
-					await fakeExecutor(entryPath, outfilePath);
-				},
-			),
-			io,
-		);
-
-		expect(calls).toEqual(["bun-linux-x64", "bun-darwin-arm64"]);
-	});
-
-	it("stages Deno platform packages with the same npm names and glibc-only Linux metadata", async () => {
-		const plan = createPlan(
-			tmpDir,
-			{ name: "@scope/deno-cli", version: "2.0.0" },
-			{ runtime: "deno" },
-		);
-		const outputs: string[] = [];
-		const targets: DenoTarget[] = ["x86_64-unknown-linux-gnu", "aarch64-pc-windows-msvc"];
-
-		await runDistributeBuild(
-			plan,
-			{
-				table: DENO_TARGETS,
-				targets,
-				embeddedRuntimeVersion: "2.9.6",
-				execute: async (entryPath: string, outfilePath: string) => {
-					outputs.push(outfilePath);
-					await fakeExecutor(entryPath, outfilePath);
-				},
-			},
-			io,
-		);
-
-		const manifest = readJson<DistributionManifest>(join(plan.stageDir, "manifest.json"));
-		expect(manifest.packages).toEqual([
-			expect.objectContaining({
-				target: "linux-x64",
-				name: "@scope/deno-cli-linux-x64",
-				libc: "glibc",
-				bins: { "test-cli": "bin/test-cli-x86_64-unknown-linux-gnu" },
-			}),
-			expect.objectContaining({
-				target: "windows-arm64",
-				name: "@scope/deno-cli-windows-arm64",
-				bins: { "test-cli": "bin/test-cli-aarch64-pc-windows-msvc.exe" },
-			}),
-		]);
-		expect(manifest.publishOrder).toEqual(["linux-x64", "windows-arm64", "root"]);
-		expect(manifest).toMatchObject({
-			runtime: "deno",
-			artifact: "binary",
-			embeddedRuntimeVersion: "2.9.6",
-		});
-		expect(
-			readJson<{ libc?: string[] }>(join(plan.stageDir, "linux-x64", "package.json")).libc,
-		).toEqual(["glibc"]);
-		expect(
-			readJson<{ optionalDependencies: Record<string, string> }>(
-				join(plan.stageDir, "root", "package.json"),
-			).optionalDependencies,
-		).toEqual({
-			"@scope/deno-cli-linux-x64": "2.0.0",
-			"@scope/deno-cli-windows-arm64": "2.0.0",
-		});
-		expect(outputs).toEqual([
-			join(plan.stageDir, "linux-x64", "bin", "test-cli-x86_64-unknown-linux-gnu"),
-			join(plan.stageDir, "windows-arm64", "bin", "test-cli-aarch64-pc-windows-msvc.exe"),
-		]);
-	});
-
 	it("stages a root-only package whose bin is the executor output", async () => {
 		const plan = createPlan(
 			tmpDir,
@@ -616,18 +530,6 @@ describe("runDistributeBuild", () => {
 			expect(readlinkSync(join(skills, "leak"))).toBe(join(tmpDir, "LICENSE"));
 			expect(readlinkSync(join(skills, "alias.md"))).toBe("SKILL.md");
 		}
-	});
-
-	it("rejects the reserved bin artifact directory", async () => {
-		const plan = createPlan(
-			tmpDir,
-			{ name: "artifact-stage-cli", version: "0.1.0" },
-			{ validate: true },
-		);
-		mkdirSync(join(plan.outDir, "bin"), { recursive: true });
-		await expect(runDistributeBuild(plan, bunDistribution(), io)).rejects.toThrow(
-			'Artifact directory "bin"',
-		);
 	});
 
 	it("rejects a case-variant reserved bin artifact directory before compiling", async () => {

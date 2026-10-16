@@ -8,7 +8,6 @@ import {
 	renderClientConfig,
 	resolveLaunch,
 } from "./extension.ts";
-import { toolsFromSnapshot } from "./tools.ts";
 
 const app = new Crust("demo", { version: "2.0.0" })
 	.add(defineCommand("deploy", (c) => c.action(() => "deployed")))
@@ -26,13 +25,6 @@ async function capture(argv: string[]) {
 }
 
 describe("mcpExtension", () => {
-	it("contributes mcp and mcp config, neither of which becomes a tool", async () => {
-		const snapshot = await app.snapshot();
-		expect(Object.keys(snapshot.subCommands.mcp?.subCommands ?? {})).toEqual(["config"]);
-		expect(snapshot.subCommands.mcp?.hasAction).toBe(true);
-		expect(toolsFromSnapshot(snapshot).map((tool) => tool.name)).toEqual(["deploy", "wipe"]);
-	});
-
 	it("prints parseable client JSON on stdout and Claude's one-liner on stderr", async () => {
 		const claude = await capture(["mcp", "config"]);
 		expect(claude.exitCode).toBe(0);

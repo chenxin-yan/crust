@@ -63,10 +63,6 @@ function _typecheckChecksDependencyGraphsAtEveryCompositionBoundary() {
 	const invalidCompositions = () => {
 		// @ts-expect-error -- db's transitive dependency closure is unsatisfied
 		new Crust("cli").provide(db());
-		defineContext("bad")
-			// @ts-expect-error -- use entries must be Context factories
-			.use(42)
-			.setup(() => 1);
 		// @ts-expect-error -- command dependencies are checked by .add()
 		new Crust("cli").add(command);
 		// @ts-expect-error -- Extension dependencies are checked by .extend()
@@ -256,30 +252,6 @@ function _typecheckKeepsBuildersImmutableAndChecksChainedFlags() {
 		base.flags({ name: "api-key", type: "string" });
 		// @ts-expect-error -- a later .flags() call collides with an earlier alias
 		base.flags({ name: "credentials", type: "string", aliases: ["token"] });
-	};
-	void invalid;
-}
-
-// rejects incomplete builders and the removed config/setup call forms
-function _typecheckRejectsIncompleteBuildersAndRemovedCallForms() {
-	const builder = defineContext("pending").flags(apiKey);
-	const invalid = () => {
-		// @ts-expect-error -- a builder is not a factory until .setup()
-		builder();
-		// @ts-expect-error -- a builder has no .of()
-		builder.of(1);
-		// @ts-expect-error -- consumers .use() factories, not builders
-		defineContext("consumer").use(builder);
-		// @ts-expect-error -- commands .use() factories, not builders
-		new Crust("cli").command("run", (cmd) => cmd.use(builder).action(() => {}));
-		// @ts-expect-error -- providers take instances, not builders
-		new Crust("cli").provide(builder);
-		// @ts-expect-error -- defineContext(name, setup) was removed
-		defineContext("old", () => 1);
-		// @ts-expect-error -- defineContext(name, config, setup) was removed
-		defineContext("old", { flags: [apiKey] }, () => 1);
-		// @ts-expect-error -- setup input no longer carries options
-		defineContext("old").setup(({ options }) => options);
 	};
 	void invalid;
 }

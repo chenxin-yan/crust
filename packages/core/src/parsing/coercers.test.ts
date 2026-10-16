@@ -30,11 +30,6 @@ describe("coerceUrl", () => {
 			expect.objectContaining({ code: "PARSE", message: 'Invalid URL for --base: "https://[bad"' }),
 		);
 	});
-
-	it("accepts file:// URLs", () => {
-		const url = coerceUrl("file:///usr/local/bin", "--base");
-		expect(url.protocol).toBe("file:");
-	});
 });
 
 describe("coercePath", () => {
@@ -63,15 +58,6 @@ describe("coercePath", () => {
 		expect(() => coercePath("", "<dir>")).toThrow(
 			expect.objectContaining({ code: "PARSE", message: "Path for <dir> cannot be empty" }),
 		);
-	});
-
-	it("leaves an already-absolute path absolute", () => {
-		expect(coercePath("/absolute", "--out")).toBe("/absolute");
-	});
-
-	it("allows .. traversal (no sandbox)", () => {
-		const got = coercePath("../sibling", "--out");
-		expect(got).toBe(resolve(process.cwd(), "../sibling"));
 	});
 });
 

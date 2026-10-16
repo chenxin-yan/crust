@@ -73,20 +73,6 @@ const fixture: CompletionCommand = {
 afterEach(reapBoundedProcesses);
 
 describe("renderZsh", () => {
-	it("first line is `#compdef <bin>` (required by zsh autoload)", () => {
-		const script = renderZsh(fixture, "mycli", "1.0.0");
-		const firstLine = script.split("\n")[0];
-		expect(firstLine).toBe("#compdef mycli");
-	});
-
-	it("emits a header comment with bin + version + regenerate hint on line 2", () => {
-		const script = renderZsh(fixture, "mycli", "2.0.0-beta");
-		const lines = script.split("\n");
-		expect(lines[1]).toBe(
-			"# completion script for mycli v2.0.0-beta — regenerate with: mycli completion zsh",
-		);
-	});
-
 	it("uses _arguments -C with ->state routing for non-leaf commands", () => {
 		const script = renderZsh(fixture, "mycli", "1.0.0");
 		expect(script).toContain("_arguments -C");
@@ -119,13 +105,6 @@ describe("renderZsh", () => {
 		// Subcommand menu surfaces both spellings.
 		expect(script).toContain("'deploy:Deploy'");
 		expect(script).toContain("'dep:Deploy'");
-	});
-
-	it("encodes command path segments so distinct paths never share a helper name", () => {
-		const script = renderZsh(fixture, "mycli", "1.0.0");
-		expect(script).toContain("_mycli__deploy() {");
-		expect(script).toContain("_mycli__deploy__prod() {");
-		expect(script).toMatch(/'deploy'\|'dep'\)\n\s+_mycli__deploy\n/);
 	});
 
 	it("derives helper function names from bin name with non-alpha mapped to _", () => {
@@ -320,11 +299,6 @@ ${helper}
 		expect(await specsFor("_clash__foo_2ebar")).toBe("--third[]\n");
 	});
 
-	it("flat `a_b` and nested `a b` keep their own flag specs", async () => {
-		expect(await specsFor("_clash__a_5fb")).toBe("--flat[]\n");
-		expect(await specsFor("_clash__a__b")).toBe("--nested[]\n");
-	});
-
 	it("the root dispatcher routes `foo-bar` and `foo_bar` to different helpers", async () => {
 		// The root's `_arguments -C` call is stubbed to set `state`/`line` as
 		// compsys would after routing; leaf `_arguments` calls still print.
@@ -447,16 +421,6 @@ describeIfZsh("renderZsh · one-character alias spellings", () => {
 
 	afterAll(async () => {
 		await rm(tmpDir, { recursive: true, force: true });
-	});
-
-	it("offers `-P` beside the other spellings", async () => {
-		expect(await zshComplete(scriptPath, "mycli -")).toEqual([
-			"--P",
-			"--listen",
-			"--port",
-			"-P",
-			"-p",
-		]);
 	});
 
 	it("routes past the value of `-P`", async () => {

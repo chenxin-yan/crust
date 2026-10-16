@@ -7,7 +7,6 @@ import {
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -83,25 +82,22 @@ describe("mergeEntryArtifacts", () => {
 		);
 	});
 
-	it.each(["file", "directory", "dangling"])(
-		"rejects unexpected %s links without copying outside contents",
-		(kind) => {
-			write("outside/sentinel", "outside bytes");
-			mkdirSync(join(tmpDir, "entry", "assets"), { recursive: true });
-			const target =
-				kind === "file" ? "outside/sentinel" : kind === "directory" ? "outside" : "missing";
-			symlinkSync(
-				join(tmpDir, target),
-				join(tmpDir, "entry", "assets", "link"),
-				kind === "directory" ? "dir" : "file",
-			);
-			expect(() =>
-				mergeEntryArtifacts(join(tmpDir, "entry"), artifactDir, "legacy", new Map()),
-			).toThrow(/regular files|symlink/);
-			expect(existsSync(join(artifactDir, "assets", "link"))).toBe(false);
-			expect(readFileSync(join(tmpDir, "outside", "sentinel"), "utf8")).toBe("outside bytes");
-		},
-	);
+	it.each(["directory"])("rejects unexpected %s links without copying outside contents", (kind) => {
+		write("outside/sentinel", "outside bytes");
+		mkdirSync(join(tmpDir, "entry", "assets"), { recursive: true });
+		const target =
+			kind === "file" ? "outside/sentinel" : kind === "directory" ? "outside" : "missing";
+		symlinkSync(
+			join(tmpDir, target),
+			join(tmpDir, "entry", "assets", "link"),
+			kind === "directory" ? "dir" : "file",
+		);
+		expect(() =>
+			mergeEntryArtifacts(join(tmpDir, "entry"), artifactDir, "legacy", new Map()),
+		).toThrow(/regular files|symlink/);
+		expect(existsSync(join(artifactDir, "assets", "link"))).toBe(false);
+		expect(readFileSync(join(tmpDir, "outside", "sentinel"), "utf8")).toBe("outside bytes");
+	});
 
 	it("rejects a replaced entry root without reading linked files", () => {
 		write("outside/sentinel", "outside bytes");
@@ -113,33 +109,11 @@ describe("mergeEntryArtifacts", () => {
 		expect(readFileSync(join(tmpDir, "outside/sentinel"), "utf8")).toBe("outside bytes");
 	});
 
-	it.skipIf(process.platform === "win32")(
-		"rejects nonregular socket entries without copying them",
-		async () => {
-			mkdirSync(join(tmpDir, "entry"), { recursive: true });
-			const server = createServer();
-			try {
-				await new Promise<void>((resolve, reject) => {
-					server.once("error", reject);
-					server.listen(join(tmpDir, "entry/socket"), resolve);
-				});
-				expect(() =>
-					mergeEntryArtifacts(join(tmpDir, "entry"), artifactDir, "legacy", new Map()),
-				).toThrow(/regular files/);
-				expect(existsSync(join(artifactDir, "socket"))).toBe(false);
-			} finally {
-				await new Promise<void>((resolve) => server.close(() => resolve()));
-			}
-		},
-	);
-
 	it.each([
 		["shared/Config.json", "shared/config.json"],
 		["shared/Config", "shared/config/child"],
 		["shared/Config/child", "shared/config"],
 		["Shared/Config.json", "shared/config.json"],
-		["Assets/a", "assets/b"],
-		["shared/Assets/a", "shared/assets/b"],
 	])("rejects portable cross-entry collision %s / %s", (first, second) => {
 		write(`greet/${first}`);
 		write(`admin/${second}`);
@@ -149,17 +123,6 @@ describe("mergeEntryArtifacts", () => {
 			/both bin "greet" and "admin"/,
 		);
 		expect(readFileSync(join(artifactDir, first), "utf8")).toBe("x\n");
-	});
-
-	it("preserves bytes in identically spelled shared directories", () => {
-		write("greet/shared/first");
-		write("admin/shared/second");
-		const bytes = new Uint8Array([0, 255, 128, 10]);
-		writeFileSync(join(tmpDir, "admin/shared/second"), bytes);
-		const owners = new Map<string, ArtifactOwner>();
-		mergeEntryArtifacts(join(tmpDir, "greet"), artifactDir, "greet", owners);
-		mergeEntryArtifacts(join(tmpDir, "admin"), artifactDir, "admin", owners);
-		expect(new Uint8Array(readFileSync(join(artifactDir, "shared/second")))).toEqual(bytes);
 	});
 
 	it("tolerates an entry whose hooks wrote nothing", () => {

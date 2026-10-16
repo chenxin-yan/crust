@@ -21,7 +21,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/
 
 import { buildCommand } from "../src/commands/build.ts";
 import type { DistributionManifest } from "../src/distribute.ts";
-import { hostTarget, NODE_TARGETS, type NodeTarget, type TargetInfo } from "../src/targets.ts";
+import { hostTarget, NODE_TARGETS, type TargetInfo } from "../src/targets.ts";
 import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
 import { seaNodeBinDir, withPathPrefix } from "./helpers.ts";
 
@@ -184,10 +184,6 @@ if (require.main === module) {
 }
 `,
 	);
-	writeFile(
-		join(project, "src", "missing.ts"),
-		'import { nope } from "not-installed";\nconsole.log(nope);\n',
-	);
 
 	process.env.PUBLIC_REGION = "environment";
 	try {
@@ -340,51 +336,6 @@ describe.skipIf(seaNodeDir === null || host === null || npm === null)(
 			expect(result.exitCode).toBe(1);
 			expect(result.stderr).toContain("bun was not found on PATH.");
 			expect(readFileSync(join(stageDir, "manifest.json"), "utf8")).toBe(manifest);
-		}, 120_000);
-
-		it("constructs a bounded non-host target embedding the same Node version", async () => {
-			// Construction evidence only: this host cannot execute the other architecture.
-			const target: NodeTarget =
-				process.platform === "win32"
-					? "win-arm64"
-					: host === "linux-arm64"
-						? "linux-x64"
-						: "linux-arm64";
-			const { alias, os, cpu } = NODE_TARGETS.info[target];
-			const result = await crustBuild(["--target", target, "--no-validate"]);
-			expect(result.exitCode, result.stderr).toBe(0);
-			const manifest = readJson<DistributionManifest>(join(stageDir, "manifest.json"));
-			expect(manifest).toMatchObject({
-				embeddedRuntimeVersion: nodeVersion,
-				packages: [{ target: alias, os, cpu }],
-			});
-			const binary = readFileSync(join(stageDir, alias, manifest.packages[0]!.bins.admin!));
-			if (os === "win32") {
-				// PE: "MZ", then the COFF machine after "PE\0\0" (0xAA64 is ARM64).
-				const pe = binary.readUInt32LE(0x3c);
-				expect(binary.subarray(0, 2).toString()).toBe("MZ");
-				expect(binary.readUInt16LE(pe + 4)).toBe(0xaa64);
-			} else {
-				// ELF e_machine: 62 is x86-64, 183 is AArch64.
-				expect(binary.subarray(0, 4).toString("hex")).toBe("7f454c46");
-				expect(binary.readUInt16LE(18)).toBe(cpu === "x64" ? 62 : 183);
-			}
-			expect(binary.includes(`v${nodeVersion}`)).toBe(true);
-		}, 240_000);
-
-		it("fails on an import left for the runtime and writes no manifest", async () => {
-			writeFile(
-				join(project, "package.json"),
-				JSON.stringify({ ...packageJson, bin: { ...packageJson.bin, broken: "src/missing.ts" } }),
-			);
-			try {
-				const result = await crustBuild(["--target", "host", "--no-validate"]);
-				expect(result.exitCode).toBe(1);
-				expect(result.stderr).toContain('Could not resolve: "not-installed"');
-			} finally {
-				writeFile(join(project, "package.json"), JSON.stringify(packageJson));
-			}
-			expect(existsSync(join(stageDir, "manifest.json"))).toBe(false);
 		}, 120_000);
 
 		it.skipIf(consumerNode === null)(

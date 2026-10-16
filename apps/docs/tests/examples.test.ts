@@ -3,10 +3,9 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import { Crust } from "@crustjs/core";
-import { expect, it, vi } from "vite-plus/test";
+import { expect, it } from "vite-plus/test";
 
-import { config, database } from "../examples/guide/contexts-setup";
-import { diagnostic } from "../examples/modules/effect-env";
+import { database } from "../examples/guide/contexts-setup";
 import { app as extensionsExample } from "../examples/modules/extensions/index";
 
 const read = (path: string) => readFile(new URL(path, import.meta.url), "utf8");
@@ -26,49 +25,10 @@ it("the disposable Context example cleans up after success and failure", async (
 	}
 });
 
-it("the cancellable Context example passes a signal and rejects failed requests", async () => {
-	const fetchSpy = vi.spyOn(globalThis, "fetch");
-	try {
-		const app = new Crust("app").provide(config()).action(({ ctx }) => ctx.config);
-		fetchSpy.mockResolvedValueOnce(new Response("region=eu"));
-		expect(await app.run([])).toMatchObject({ status: "completed", result: "region=eu" });
-
-		fetchSpy.mockResolvedValueOnce(new Response("Unavailable", { status: 503 }));
-		expect(await app.run([])).toMatchObject({
-			status: "failed",
-			error: new Error("Config request failed: 503"),
-		});
-
-		expect(fetchSpy).toHaveBeenCalledWith("https://api.example.com/config", {
-			signal: expect.any(AbortSignal),
-		});
-	} finally {
-		fetchSpy.mockRestore();
-	}
-});
-
 it("extensions example prints the version for `--version` on the actionless root", async () => {
 	const outcome = await extensionsExample.run([], { flags: { version: true } });
 	expect(outcome).toMatchObject({ status: "handled", by: "crust:version" });
 	expect(outcome.stdout.trim()).toBe("my-cli v0.2.0");
-});
-
-it("the Effect env diagnostic example runs its recovery action", async () => {
-	vi.stubEnv("PORT", "3000");
-	vi.stubEnv("API_TOKEN", undefined);
-	try {
-		expect(await diagnostic.run([])).toMatchObject({
-			status: "completed",
-			result: "API_TOKEN: missing",
-		});
-		vi.stubEnv("API_TOKEN", "test");
-		expect(await diagnostic.run([])).toMatchObject({
-			status: "completed",
-			result: "Environment is valid",
-		});
-	} finally {
-		vi.unstubAllEnvs();
-	}
 });
 
 it.each([

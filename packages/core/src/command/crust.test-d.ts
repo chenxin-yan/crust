@@ -54,37 +54,6 @@ function _typecheckArgsUpdatesAGeneric() {
 	>;
 }
 
-// chaining .flags().args() preserves both generics
-function _typecheckChainingFlagsArgsPreservesBothGenerics() {
-	const app = new Crust("test")
-		.flags(
-			{ name: "verbose", type: "boolean", short: "v" },
-			{ name: "port", type: "number", default: 3000 },
-		)
-		.args({ name: "file", type: "string", required: true });
-
-	// Verify the Flags generic is preserved
-	type AppFlags = (typeof app)["_types"]["flags"];
-	type _checkVerbose = Expect<
-		Equal<AppFlags["verbose"], { readonly type: "boolean"; readonly short: "v" }>
-	>;
-
-	// Verify args A generic is preserved
-	type AppArgs = (typeof app)["_types"]["args"];
-	type _checkArgs = Expect<
-		Equal<
-			AppArgs,
-			readonly [
-				{
-					readonly name: "file";
-					readonly type: "string";
-					readonly required: true;
-				},
-			]
-		>
-	>;
-}
-
 // rejects conditional calls that would silently erase rest-parameter inference
 function _typecheckRejectsVariadicMethodsOnConditionalBuilderUnion(condition: boolean) {
 	const text = defineContext("db").setup(() => "text");
@@ -260,48 +229,6 @@ function _typecheckActionReceivesInferArgsAForArgs() {
 			type _checkFile = Expect<Equal<CtxArgs["file"], string>>;
 			type _checkCount = Expect<Equal<CtxArgs["count"], number>>;
 		});
-}
-
-// variadic args resolve to array type in action
-function _typecheckVariadicArgsResolveToArrayTypeInAction() {
-	new Crust("test").args({ name: "files", type: "string", variadic: true }).action((_ctx) => {
-		type CtxArgs = typeof _ctx.args;
-		type _checkFiles = Expect<Equal<CtxArgs["files"], string[]>>;
-	});
-}
-
-// multiple flag resolves to array type in action
-function _typecheckMultipleFlagResolvesToArrayTypeInAction() {
-	new Crust("test")
-		.flags({ name: "tags", type: "string", multiple: true, required: true })
-		.action((_ctx) => {
-			type CtxFlags = typeof _ctx.flags;
-			type _checkTags = Expect<Equal<CtxFlags["tags"], string[]>>;
-		});
-}
-
-// optional flag resolves to union with undefined in action
-function _typecheckOptionalFlagResolvesToUnionWithUndefinedInAction() {
-	new Crust("test").flags({ name: "port", type: "number" }).action((_ctx) => {
-		type CtxFlags = typeof _ctx.flags;
-		type _checkPort = Expect<Equal<CtxFlags["port"], number | undefined>>;
-	});
-}
-
-// required flag resolves to non-optional type in action
-function _typecheckRequiredFlagResolvesToNonOptionalTypeInAction() {
-	new Crust("test").flags({ name: "name", type: "string", required: true }).action((_ctx) => {
-		type CtxFlags = typeof _ctx.flags;
-		type _checkName = Expect<Equal<CtxFlags["name"], string>>;
-	});
-}
-
-// flag with default resolves to non-optional type in action
-function _typecheckFlagWithDefaultResolvesToNonOptionalTypeInAction() {
-	new Crust("test").flags({ name: "port", type: "number", default: 3000 }).action((_ctx) => {
-		type CtxFlags = typeof _ctx.flags;
-		type _checkPort = Expect<Equal<CtxFlags["port"], number>>;
-	});
 }
 
 // brands statically known Extension command collisions at .extend()

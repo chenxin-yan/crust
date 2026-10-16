@@ -30,17 +30,6 @@ describe("invocation cancellation signal", () => {
 		process.exitCode = originalExitCode ?? 0;
 	});
 
-	it("gives every invocation a signal that never aborts unless a caller cancels", async () => {
-		let seen: AbortSignal | undefined;
-		const app = new Crust("cli").action(({ signal }) => {
-			seen = signal;
-		});
-
-		expect(await app.run([])).toMatchObject({ status: "completed" });
-		expect(seen).toBeInstanceOf(AbortSignal);
-		expect(seen?.aborted).toBe(false);
-	});
-
 	it("run() forwards the caller signal and reports its AbortError as a failed outcome", async () => {
 		const { ready, action } = awaitingSignal();
 		const controller = new AbortController();

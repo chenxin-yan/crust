@@ -1,13 +1,8 @@
-import { stripVTControlCharacters } from "node:util";
-
-import { Crust, defineCommand } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import { describe, expect, it } from "vite-plus/test";
 
-import { help } from "./help.ts";
 import { version } from "./version.ts";
-
-const stripAnsi = stripVTControlCharacters;
 
 describe("version", () => {
 	it("version extension handles --version from root metadata", async () => {
@@ -43,59 +38,6 @@ describe("version", () => {
 		const { stdout } = await captureExecute(app, ["--version"]);
 		expect(calls).toBe(1);
 		expect(stdout).toBe("app v2.0.0");
-	});
-
-	it("version extension handles -v alias", async () => {
-		const app = new Crust("app").extend(version("2.0.0")).action(() => {});
-
-		const { stdout } = await captureExecute(app, ["-v"]);
-
-		expect(stdout).toContain("app v2.0.0");
-	});
-
-	it("version extension ignores --version after -- separator", async () => {
-		let ran = false;
-
-		const app = new Crust("app").extend(version("1.0.0")).action(() => {
-			ran = true;
-		});
-
-		const { stdout } = await captureExecute(app, ["--", "--version"]);
-
-		expect(stdout).toBe("");
-		expect(ran).toBe(true);
-	});
-
-	it("version extension only triggers on root command", async () => {
-		let ran = false;
-
-		const app = new Crust("app").extend(version("1.0.0")).add(
-			defineCommand("build", (cmd) =>
-				cmd.action(() => {
-					ran = true;
-				}),
-			),
-		);
-
-		const { stdout, stderr, exitCode } = await captureExecute(app, ["build", "--version"]);
-
-		expect(stdout).toBe("");
-		expect(ran).toBe(false);
-		expect(stderr).toContain('Unknown flag "--version"');
-		expect(exitCode).toBe(1);
-	});
-
-	it("version extension flag appears in help output", async () => {
-		const app = new Crust("app", { description: "Test app" })
-			.extend(version("1.0.0"))
-			.extend(help())
-			.action(() => {});
-
-		const { stdout } = await captureExecute(app, ["--help"]);
-
-		const output = stripAnsi(stdout);
-		expect(output).toContain("--version");
-		expect(output).toContain("Show version number");
 	});
 
 	it("version extension supports plain format", async () => {

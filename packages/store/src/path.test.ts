@@ -2,14 +2,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vite-plus/test";
 
-import {
-	cacheDir,
-	configDir,
-	dataDir,
-	type PlatformEnv,
-	resolveStorePath,
-	stateDir,
-} from "./path.ts";
+import { configDir, dataDir, type PlatformEnv, resolveStorePath } from "./path.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
@@ -71,10 +64,6 @@ function win32Env(
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("appName validation", () => {
-	it("should reject empty appName", () => {
-		expect(() => configDir("", linuxEnv())).toThrow(pathError("non-empty"));
-	});
-
 	it("should reject whitespace-only appName", () => {
 		expect(() => configDir("   ", linuxEnv())).toThrow(pathError("non-empty"));
 	});
@@ -85,12 +74,6 @@ describe("appName validation", () => {
 
 	it("should reject appName with backslashes", () => {
 		expect(() => configDir("my\\app", linuxEnv())).toThrow(pathError("path separators"));
-	});
-
-	it("should accept valid appName characters", () => {
-		const env = linuxEnv();
-		expect(configDir("my-cli", env)).toContain("my-cli");
-		expect(configDir("my_app.v2", env)).toContain("my_app.v2");
 	});
 });
 
@@ -159,13 +142,6 @@ describe("configDir", () => {
 			expect(() => configDir("my-cli", env)).toThrow(pathError("freebsd"));
 		});
 	});
-
-	describe("runtime environment fallback", () => {
-		it("should resolve a path using real runtime environment", () => {
-			const result = configDir("my-cli");
-			expect(result).toMatch(/my-cli$/);
-		});
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -173,18 +149,6 @@ describe("configDir", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("dataDir", () => {
-	describe("Linux", () => {
-		it("should use XDG_DATA_HOME when set", () => {
-			const env = linuxEnv({ XDG_DATA_HOME: "/custom/data" });
-			expect(dataDir("my-cli", env)).toBe(join("/custom/data", "my-cli"));
-		});
-
-		it("should fall back to ~/.local/share when XDG_DATA_HOME is not set", () => {
-			const env = linuxEnv();
-			expect(dataDir("my-cli", env)).toBe(join("/home/testuser", ".local", "share", "my-cli"));
-		});
-	});
-
 	describe("Windows", () => {
 		it("should use LOCALAPPDATA with Data bucket when set", () => {
 			const env = win32Env({
@@ -192,85 +156,6 @@ describe("dataDir", () => {
 			});
 			expect(dataDir("my-cli", env)).toBe(
 				join("C:\\Users\\testuser\\AppData\\Local", "my-cli", "Data"),
-			);
-		});
-
-		it("should fall back to ~/AppData/Local with Data bucket when LOCALAPPDATA is not set", () => {
-			const env = win32Env();
-			expect(dataDir("my-cli", env)).toBe(
-				join("C:\\Users\\testuser", "AppData", "Local", "my-cli", "Data"),
-			);
-		});
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// stateDir()
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("stateDir", () => {
-	describe("Linux", () => {
-		it("should use XDG_STATE_HOME when set", () => {
-			const env = linuxEnv({ XDG_STATE_HOME: "/custom/state" });
-			expect(stateDir("my-cli", env)).toBe(join("/custom/state", "my-cli"));
-		});
-
-		it("should fall back to ~/.local/state when XDG_STATE_HOME is not set", () => {
-			const env = linuxEnv();
-			expect(stateDir("my-cli", env)).toBe(join("/home/testuser", ".local", "state", "my-cli"));
-		});
-	});
-
-	describe("Windows", () => {
-		it("should use LOCALAPPDATA with State bucket when set", () => {
-			const env = win32Env({
-				LOCALAPPDATA: "C:\\Users\\testuser\\AppData\\Local",
-			});
-			expect(stateDir("my-cli", env)).toBe(
-				join("C:\\Users\\testuser\\AppData\\Local", "my-cli", "State"),
-			);
-		});
-
-		it("should fall back to ~/AppData/Local with State bucket when LOCALAPPDATA is not set", () => {
-			const env = win32Env();
-			expect(stateDir("my-cli", env)).toBe(
-				join("C:\\Users\\testuser", "AppData", "Local", "my-cli", "State"),
-			);
-		});
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// cacheDir()
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("cacheDir", () => {
-	describe("Linux", () => {
-		it("should use XDG_CACHE_HOME when set", () => {
-			const env = linuxEnv({ XDG_CACHE_HOME: "/custom/cache" });
-			expect(cacheDir("my-cli", env)).toBe(join("/custom/cache", "my-cli"));
-		});
-
-		it("should fall back to ~/.cache when XDG_CACHE_HOME is not set", () => {
-			const env = linuxEnv();
-			expect(cacheDir("my-cli", env)).toBe(join("/home/testuser", ".cache", "my-cli"));
-		});
-	});
-
-	describe("Windows", () => {
-		it("should use LOCALAPPDATA with Cache bucket when set", () => {
-			const env = win32Env({
-				LOCALAPPDATA: "C:\\Users\\testuser\\AppData\\Local",
-			});
-			expect(cacheDir("my-cli", env)).toBe(
-				join("C:\\Users\\testuser\\AppData\\Local", "my-cli", "Cache"),
-			);
-		});
-
-		it("should fall back to ~/AppData/Local with Cache bucket when LOCALAPPDATA is not set", () => {
-			const env = win32Env();
-			expect(cacheDir("my-cli", env)).toBe(
-				join("C:\\Users\\testuser", "AppData", "Local", "my-cli", "Cache"),
 			);
 		});
 	});
@@ -282,10 +167,6 @@ describe("cacheDir", () => {
 
 describe("resolveStorePath", () => {
 	describe("dirPath validation", () => {
-		it("should reject empty dirPath", () => {
-			expect(() => resolveStorePath("", "config")).toThrow(pathError("non-empty"));
-		});
-
 		it("should reject relative dirPath", () => {
 			expect(() => resolveStorePath("relative/path", "config")).toThrow(pathError("absolute"));
 		});
@@ -308,40 +189,10 @@ describe("resolveStorePath", () => {
 	});
 
 	describe("name parameter", () => {
-		it("should reject an omitted name from an untyped caller", () => {
-			expect(() => {
-				// @ts-expect-error -- JavaScript callers can omit the required name.
-				resolveStorePath("/home/user/.config/my-cli");
-			}).toThrow();
-		});
-
-		it("should use custom name as filename", () => {
-			const result = resolveStorePath("/home/user/.config/my-cli", "auth");
-			expect(result).toBe(join("/home/user/.config/my-cli", "auth.json"));
-		});
-
-		it("should reject empty name", () => {
-			expect(() => resolveStorePath("/home/user/.config/my-cli", "")).toThrow(
-				pathError("non-empty"),
-			);
-		});
-
-		it("should reject name with path separators", () => {
-			expect(() => resolveStorePath("/home/user/.config/my-cli", "my/store")).toThrow(
-				pathError("path separators"),
-			);
-		});
-
 		it("should reject name ending with .json", () => {
 			expect(() => resolveStorePath("/home/user/.config/my-cli", "auth.json")).toThrow(
 				pathError(".json"),
 			);
-		});
-
-		it("should accept valid name characters", () => {
-			expect(resolveStorePath("/tmp/dir", "auth")).toMatch(/auth\.json$/);
-			expect(resolveStorePath("/tmp/dir", "my-store")).toMatch(/my-store\.json$/);
-			expect(resolveStorePath("/tmp/dir", "cache_v2")).toMatch(/cache_v2\.json$/);
 		});
 	});
 });

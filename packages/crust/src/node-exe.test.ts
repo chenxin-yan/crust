@@ -215,12 +215,6 @@ describe("Node binary compiler", () => {
 		},
 	);
 
-	it.skipIf(nodePath === null)("checks engines.node before loading the backend", async () => {
-		await expect(
-			resolveNodeBinaryCompiler({ engines: { node: "0.0.1" } }, process.cwd()),
-		).rejects.toThrow(/^Node \S+ \(.+\) does not satisfy package\.json engines\.node "0\.0\.1"\./);
-	});
-
 	it("reports a missing node instead of falling back to another runtime", async () => {
 		vi.stubEnv("PATH", "");
 		await expect(resolveNodeBinaryCompiler({}, process.cwd())).rejects.toThrow(

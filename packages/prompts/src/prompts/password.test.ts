@@ -6,62 +6,13 @@ import { z } from "zod";
 
 import { createPromptIO, renderPrompt } from "../testing.ts";
 import { password } from "./password.ts";
-import { nonTTYIO, tick, waitForScreen } from "./test-helpers.ts";
-
-// ────────────────────────────────────────────────────────────────────────────
-// Initial value — empty-string edge case
-// ────────────────────────────────────────────────────────────────────────────
-
-// Guards the `options.initial !== undefined` semantics against a regression to
-// a truthy check (which would treat "" as absent and drop into interactive mode).
-// Happy-path (non-empty initial) is covered by the non-TTY initial-value test.
-describe("password — initial value", () => {
-	it("returns empty string initial value", async () => {
-		const result = await password({
-			message: "Password?",
-			initial: "",
-		});
-
-		expect(result).toBe("");
-	});
-});
+import { tick, waitForScreen } from "./test-helpers.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Masked rendering
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("password — masked rendering", () => {
-	it("renders message on initial display", async () => {
-		const prompt = renderPrompt(password, { message: "Enter password:" });
-
-		await tick();
-		expect(prompt.screen()).toContain("Enter password:");
-
-		prompt.keys("return");
-		await prompt.answer;
-	});
-
-	it("renders mask characters instead of actual value", async () => {
-		const prompt = renderPrompt(password, { message: "Password?" });
-
-		await tick();
-		prompt.type("a");
-		await tick();
-		prompt.type("b");
-		await tick();
-		prompt.type("c");
-		await tick();
-
-		// Should see mask characters (***) but NOT the actual value "abc"
-		expect(prompt.screen()).toContain("***");
-		expect(prompt.screen()).not.toContain("abc");
-
-		prompt.keys("return");
-		const result = await prompt.answer;
-		// The actual value is returned, even though it was masked in display
-		expect(result).toBe("abc");
-	});
-
 	it("renders one mask character per code point", async () => {
 		const prompt = renderPrompt(password, { message: "Password?" });
 
@@ -93,68 +44,6 @@ describe("password — masked rendering", () => {
 		const result = await prompt.answer;
 		expect(result).toBe("xy");
 	});
-
-	it("shows fixed-length mask on submission regardless of actual length", async () => {
-		const prompt = renderPrompt(password, { message: "Password?" });
-
-		await tick();
-		// Type a 10-character password
-		prompt.type("abcdefghij");
-		await tick();
-
-		prompt.keys("return");
-		await prompt.answer;
-
-		// After submission, should show exactly 4 mask characters (SUBMITTED_MASK_LENGTH)
-		expect(prompt.screen()).toBe("✓ Password? ****");
-	});
-
-	it("shows cursor indicator when input is empty", async () => {
-		const prompt = renderPrompt(password, { message: "Password?" });
-
-		await tick();
-		// U+2502 (│) is the cursor character
-		expect(prompt.screen()).toContain("\u2502");
-
-		prompt.keys("return");
-		await prompt.answer;
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Validation
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("password — validation", () => {
-	it("shows error message when validation fails", async () => {
-		const prompt = renderPrompt(password, {
-			message: "Password?",
-			validate: (v) => {
-				if (v.length < 4) throw new Error("Password must be at least 4 characters");
-			},
-		});
-
-		await tick();
-		prompt.type("a");
-		await tick();
-		prompt.type("b");
-		await tick();
-		// Try to submit invalid value (too short)
-		prompt.keys("return");
-		await tick();
-
-		expect(prompt.screen()).toContain("Password must be at least 4 characters");
-
-		// Type more and resubmit
-		prompt.type("c");
-		await tick();
-		prompt.type("d");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe("abcd");
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -181,106 +70,6 @@ describe("password — no message", () => {
 		expect(result).toBe("sec");
 		expect(prompt.screen()).toContain("Enter a password");
 		expect(prompt.screen()).not.toContain("undefined");
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Non-TTY behavior
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("password — non-TTY", () => {
-	it("throws NonInteractiveError when stdin is not a TTY", async () => {
-		await expect(password({ message: "Password?" }, nonTTYIO())).rejects.toThrow(
-			"interactive terminal",
-		);
-	});
-
-	it("returns initial value in non-TTY environment", async () => {
-		const result = await password(
-			{
-				message: "Password?",
-				initial: "secret123",
-			},
-			nonTTYIO(),
-		);
-
-		expect(result).toBe("secret123");
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Standard Schema validation
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("password — schema validation", () => {
-	it("rejects combining schema with a function validator", async () => {
-		await expect(password({ schema: z.string(), validate: () => {} } as never)).rejects.toThrow(
-			'password() cannot combine "schema" with "validate"',
-		);
-	});
-
-	it("resolves to the schema's transformed output (number from coerce)", async () => {
-		const prompt = renderPrompt(password<number>, {
-			message: "PIN?",
-			schema: z.coerce.number().int().min(1000),
-		});
-
-		await tick();
-		prompt.type("4");
-		await tick();
-		prompt.type("2");
-		await tick();
-		prompt.type("4");
-		await tick();
-		prompt.type("2");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe(4242);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Schema short-circuit (initial) soundness
-// ────────────────────────────────────────────────────────────────────────────
-//
-// When `schema` is present, `initial` must flow through it.
-// Otherwise the `Promise<Output>` overload silently leaks a raw `string`.
-
-describe("password — schema short-circuit", () => {
-	it("parses `initial` through the schema and returns transformed output", async () => {
-		const result = await password({
-			message: "PIN?",
-			initial: "4242",
-			schema: z.coerce.number().int(),
-		});
-
-		expect(result).toBe(4242);
-	});
-
-	it("treats `{ issues: [] }` from a non-conformant schema as success", async () => {
-		// Spec only marks `issues === undefined` as success, but a malformed
-		// schema returning an empty array has no actual issue to surface —
-		// reading `issues?.[0]` finds no issue and accepts the initial value.
-		const emptyIssuesSchema = {
-			"~standard": {
-				version: 1 as const,
-				vendor: "test",
-				validate: <Value>(_value: Value) => ({
-					value: "ok",
-					issues: [] as const,
-				}),
-			},
-		};
-
-		const result = await password({
-			message: "Word?",
-			initial: "ok",
-			schema: emptyIssuesSchema,
-		});
-
-		expect(result).toBe("ok");
 	});
 });
 

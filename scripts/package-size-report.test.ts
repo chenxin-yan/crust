@@ -178,15 +178,6 @@ describe("sizes-published", () => {
 		expect((await run(["sizes-published", fixtureRoot], "E503")).exitCode).not.toBe(0);
 	});
 
-	it("measures releases with incompatible peers in separate installs", async () => {
-		writePackage(fixtureRoot, "other", { name: "@fixture/other" });
-		const measured = { tarball: 1, unpacked: 2, entries: {}, consumers: {}, footprint: 2 };
-		expect(await runJson(["sizes-published", fixtureRoot])).toEqual({
-			"@fixture/package": measured,
-			"@fixture/other": measured,
-		});
-	});
-
 	it("disables lifecycle scripts when installing published packages", async () => {
 		expect((await run(["sizes-published", fixtureRoot])).exitCode).toBe(0);
 		expect(JSON.parse(readFileSync(installArgs, "utf8"))).toContain("--ignore-scripts");

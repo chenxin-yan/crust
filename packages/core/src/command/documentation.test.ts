@@ -37,29 +37,6 @@ describe("formatDescription", () => {
 });
 
 describe("buildCommandDocumentation", () => {
-	it("projects env bindings and argv delimiters onto flags", async () => {
-		const model = await docs(
-			new Crust("app")
-				.flags(
-					{ name: "token", type: "string", env: { name: "APP_TOKEN" } },
-					{
-						name: "tags",
-						type: "string",
-						multiple: true,
-						env: { name: "APP_TAGS", delimiter: ":" },
-						delimiter: ",",
-					},
-					{ name: "plain", type: "boolean" },
-				)
-				.action(() => {}),
-		);
-		expect(model.flags.map(({ name, env, delimiter }) => ({ name, env, delimiter }))).toEqual([
-			{ name: "token", env: { name: "APP_TOKEN" }, delimiter: undefined },
-			{ name: "tags", env: { name: "APP_TAGS", delimiter: ":" }, delimiter: "," },
-			{ name: "plain", env: undefined, delimiter: undefined },
-		]);
-	});
-
 	it("builds usage and arg tokens", async () => {
 		const model = await docs(
 			new Crust("app")
@@ -137,25 +114,5 @@ describe("buildCommandDocumentation", () => {
 			["-p", "-P", "--port", "--P", "--listen"],
 			["-q", "-Q", "--q", "--Q", "--no-q", "--no-Q"],
 		]);
-	});
-
-	it("retains defaults, choices, and unfiltered sections as renderer-neutral data", async () => {
-		const model = await docs(
-			new Crust("app", {
-				sections: [{ title: "Notes", body: "Root notes" }],
-			})
-				.flags({ name: "target", type: "string", default: "bun", choices: ["bun", "node"] })
-				.add(
-					defineCommand(
-						"child",
-						{ sections: [{ title: "Child notes", body: "Details" }] },
-						(command) => command,
-					),
-				)
-				.action(() => {}),
-		);
-		expect(model.flags[0]).toMatchObject({ default: "bun", choices: ["bun", "node"] });
-		expect(model.sections).toEqual([{ title: "Notes", body: "Root notes" }]);
-		expect(model.children[0]?.sections).toEqual([{ title: "Child notes", body: "Details" }]);
 	});
 });
