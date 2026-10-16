@@ -33,7 +33,7 @@ npm install @opentui/react react
 
 `runTui()` requires both the configured (or process) stdin and stdout to be TTYs. It throws a `NonInteractiveError` before creating a renderer otherwise. Match this portable convention with `error.name === "NonInteractiveError"`.
 
-The renderer defaults to `screenMode: "alternate-screen"`, `consoleMode: "disabled"`, and `exitOnCtrlC: true`; explicit config values win. The promise resolves when the renderer is destroyed: call `renderer.destroy()` to quit (in components, via `useRenderer()` from `@opentui/solid` or `@opentui/react`). This also covers destruction while `mount` is still pending. A mounting error destroys the renderer before being rethrown.
+The renderer defaults to `screenMode: "alternate-screen"`, `consoleMode: "disabled"`, and `exitOnCtrlC: true`; explicit config values win. The promise resolves once the renderer is destroyed and has restored the terminal, so the command can write to stdout right after it: call `renderer.destroy()` to quit (in components, via `useRenderer()` from `@opentui/solid` or `@opentui/react`). This also covers destruction while `mount` is still pending. A mounting error destroys the renderer before being rethrown. If the output stream fails, the renderer destroys itself and the promise rejects with that error.
 
 With the default Ctrl+C handling, cancellation destroys the renderer and rejects with an error named `"AbortError"`. Crust `execute()` maps that cancellation to exit code 130 without default error output. Set `exitOnCtrlC: false` when the application owns cancellation.
 

@@ -37,14 +37,13 @@ function key(overrides: Partial<ParsedKey> & Pick<ParsedKey, "name">): KeyEvent 
 	});
 }
 
-function createTtyConfig(overrides: CliRendererConfig = {}) {
+function createTtyConfig(
+	overrides: CliRendererConfig = {},
+	write: Writable["_write"] = (_chunk, _encoding, callback) => callback(),
+) {
 	const stdin = new TtyInput();
 	const stdout = Object.assign(
-		new Writable({
-			write(_chunk, _encoding, callback) {
-				callback();
-			},
-		}),
+		new Writable({ write }),
 		{ isTTY: true, columns: 80, rows: 24 },
 	);
 
@@ -74,6 +73,7 @@ export type TuiObservation = {
 	keypressListenersBefore?: number;
 	keypressListenersAfter?: number;
 	stdinDataListeners?: number;
+	closedOnSettle?: boolean;
 };
 
 async function settle(result: Promise<void>, mountFailure?: Error): Promise<TuiOutcome> {
@@ -97,7 +97,10 @@ export type TuiScenario =
 	| "ctrl-c-base-code-67"
 	| "ctrl-shift-c-base-code-99"
 	| "ctrl-shift-c-base-code-67"
-	| "ctrl-c-without-exit";
+	| "ctrl-j-latin-base-code-99"
+	| "ctrl-c-without-exit"
+	| "waits-for-close"
+	| "output-failure";
 
 /** Ctrl+C on a non-Latin (Cyrillic) layout, where only `baseCode` identifies the physical C key. */
 function baseCodeCtrlC(baseCode: 99 | 67, shift = false) {
@@ -193,6 +196,49 @@ const scenarios = {
 	"ctrl-c-base-code-67": baseCodeCtrlC(67),
 	"ctrl-shift-c-base-code-99": baseCodeCtrlC(99, true),
 	"ctrl-shift-c-base-code-67": baseCodeCtrlC(67, true),
+	// Ctrl+J on Dvorak reports the physical (QWERTY C) key as baseCode 99; OpenTUI does not exit.
+	"ctrl-j-latin-base-code-99": async () => {
+		const { config } = createTtyConfig();
+		return {
+			outcome: await settle(
+				runTui((renderer) => {
+					renderer.keyInput.emit("keypress", key({ name: "j", ctrl: true, baseCode: 99 }));
+					setTimeout(() => renderer.destroy(), 10);
+				}, config),
+			),
+		};
+	},
+	"waits-for-close": async () => {
+		// Slow writes keep the terminal restoration pending after onDestroy.
+		const { config } = createTtyConfig({}, (_chunk, _encoding, callback) => {
+			setTimeout(callback, 5);
+		});
+		let closed = false;
+		const outcome = await settle(
+			runTui((renderer) => {
+				void renderer.closed.then(() => {
+					closed = true;
+				});
+				setTimeout(() => renderer.destroy(), 10);
+			}, config),
+		);
+		return { outcome, closedOnSettle: closed };
+	},
+	"output-failure": async () => {
+		let failing = false;
+		// Streams frames to stdout, where a write error reaches the renderer; "memory" output does not.
+		const { config } = createTtyConfig({ bufferedOutput: undefined }, (_chunk, _encoding, callback) => {
+			callback(failing ? new Error("output failed") : null);
+		});
+		return {
+			outcome: await settle(
+				runTui((renderer) => {
+					failing = true;
+					renderer.requestRender();
+				}, config),
+			),
+		};
+	},
 	"ctrl-c-without-exit": async () => {
 		const { config, stdin } = createTtyConfig({ exitOnCtrlC: false });
 		let renderer: CliRenderer | undefined;
