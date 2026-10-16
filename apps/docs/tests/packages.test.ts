@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { frontmatter } from "fumadocs-core/content/md/frontmatter";
 import { pageSchema } from "fumadocs-core/source/schema";
+import { dynamic } from "fumadocs-mdx/runtime/dynamic";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -12,6 +13,7 @@ import {
 	packagePageSchema,
 	remarkPackageTable,
 } from "../package-pages";
+import * as sourceConfig from "../source.config";
 import docsConfig, { docs } from "../source.config";
 import { PACKAGES } from "../src/lib/packages";
 
@@ -89,6 +91,35 @@ describe("remarkPackageTable", () => {
 			"add-on": ["effect", "env", "mcp", "testing"].map(expectedRow),
 			standalone: ["create", "progress", "prompts", "store", "style", "tui"].map(expectedRow),
 		});
+	});
+
+	it("keeps every package row in processed Markdown and search records", async () => {
+		const create = await dynamic(sourceConfig, {
+			environment: "dynamic",
+			root: "",
+			configPath: "source.config.ts",
+			outDir: ".source",
+		});
+		const [page] = (
+			await create.docs("docs", "content/docs", {}, [
+				{
+					info: { path: "modules/index.mdx", fullPath: `${modulesDir}index.mdx` },
+					data: { title: "Overview" },
+				},
+			])
+		).docs;
+		const processed = await page.getText("processed");
+		const { structuredData } = await page.load();
+
+		expect(processed).not.toContain("<PackageTable");
+		for (const { name, slug, description } of MODULE_PACKAGES) {
+			expect(processed).toContain(`[\`${name}\`](/docs/modules/${slug})`);
+			const records = structuredData.contents.filter(({ content }) =>
+				content.includes(description),
+			);
+			expect(records).toHaveLength(1);
+			expect(records[0]?.content).toContain(`| \`${name}\` `);
+		}
 	});
 
 	it("keeps other nodes and rejects an unknown group", () => {
