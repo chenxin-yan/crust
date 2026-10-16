@@ -22,6 +22,8 @@ export type TuiMount = (renderer: CliRenderer) => void | Promise<void>;
 // Mirrors OpenTUI's own exitOnCtrlC match (exact modifiers; `baseCode` only when the typed key is
 // one non-ASCII character, as on non-Latin layouts, where it lowercases ASCII uppercase base codes,
 // so 67 "C" matches too); its `matchesKeyBinding` helper is not exported.
+// TODO: this copy drifted once already (OpenTUI 0.6 changed the rule). Drop it and the keypress
+// listener once OpenTUI reports why a renderer was destroyed (Ctrl+C, signal, output, destroy()).
 function isCtrlC(event: KeyEvent): boolean {
 	if (!event.ctrl || event.shift || event.meta || event.super) return false;
 	if (event.name === "c") return true;
