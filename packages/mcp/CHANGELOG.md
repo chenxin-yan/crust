@@ -1,5 +1,11 @@
 # @crustjs/mcp
 
+## 0.1.4
+
+### Patch Changes
+
+- [#494](https://github.com/chenxin-yan/crust/pull/494) [`f88cb79`](https://github.com/chenxin-yan/crust/commit/f88cb7961993b0db60fe2376bd33ae1d8e34837d) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Require `@modelcontextprotocol/sdk` ^1.32.1.
+
 ## 0.1.3
 
 ### Patch Changes

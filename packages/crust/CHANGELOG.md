@@ -1,5 +1,14 @@
 # @crustjs/crust
 
+## 0.5.6
+
+### Patch Changes
+
+- [#494](https://github.com/chenxin-yan/crust/pull/494) [`f88cb79`](https://github.com/chenxin-yan/crust/commit/f88cb7961993b0db60fe2376bd33ae1d8e34837d) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Update the bundled Node executable backend to `tsdown` and `@tsdown/exe` 0.23.1.
+- Updated dependencies []:
+  - @crustjs/core@0.5.6
+  - @crustjs/extensions@0.5.6
+
 ## 0.5.5
 
 ### Patch Changes
