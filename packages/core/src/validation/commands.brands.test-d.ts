@@ -34,7 +34,7 @@ type Def<Name extends string, Aliases extends readonly string[] = readonly []> =
 	type Across = ValidateCommandDefinitions<readonly [Def<"info", readonly ["i"]>], "issue" | "i">;
 	type _across = Expect<
 		Equal<
-			Across[0]["FIX_COMMAND_COLLISION"],
+			Across["FIX_COMMAND_COLLISION"],
 			'Command name or alias "i" collides with a sibling command'
 		>
 	>;
@@ -42,8 +42,17 @@ type Def<Name extends string, Aliases extends readonly string[] = readonly []> =
 	type Within = ValidateCommandDefinitions<readonly [Def<"build", readonly ["b"]>, Def<"b">]>;
 	type _within = Expect<
 		Equal<
-			Within[1]["FIX_COMMAND_COLLISION"],
+			Within["FIX_COMMAND_COLLISION"],
 			'Command name or alias "b" collides with a sibling command'
+		>
+	>;
+
+	// reports only the first collision: two same-key literals would intersect to never
+	type Twice = ValidateCommandDefinitions<readonly [Def<"a">, Def<"a">, Def<"b">, Def<"b">]>;
+	type _twice = Expect<
+		Equal<
+			Twice["FIX_COMMAND_COLLISION"],
+			'Command name or alias "a" collides with a sibling command'
 		>
 	>;
 }
@@ -82,11 +91,9 @@ type Def<Name extends string, Aliases extends readonly string[] = readonly []> =
 	type Empty = ValidateCommandDefinitions<readonly [Def<"">]>;
 	type Valid = ValidateCommandDefinitions<readonly [Def<"issue">]>;
 	type Widened = ValidateCommandDefinitions<readonly [Def<string>]>;
-	type _empty = Expect<
-		Equal<Empty[0]["FIX_EMPTY_NAME"], "Command name must be a non-empty string">
-	>;
-	type _valid = Expect<Equal<Extract<keyof Valid[0], "FIX_EMPTY_NAME">, never>>;
-	type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_EMPTY_NAME">, never>>;
+	type _empty = Expect<Equal<Empty["FIX_EMPTY_NAME"], "Command name must be a non-empty string">>;
+	type _valid = Expect<Equal<Extract<keyof Valid, "FIX_EMPTY_NAME">, never>>;
+	type _widened = Expect<Equal<Extract<keyof Widened, "FIX_EMPTY_NAME">, never>>;
 }
 
 {
@@ -95,21 +102,19 @@ type Def<Name extends string, Aliases extends readonly string[] = readonly []> =
 	type Empty = ValidateCommandDefinitions<readonly [Def<"" | Mixed>]>;
 	type Reserved = ValidateCommandDefinitions<readonly [Def<"__proto__" | Mixed>]>;
 	type Valid = ValidateCommandDefinitions<readonly [Def<"fixed" | Mixed>]>;
-	type _empty = Expect<
-		Equal<Empty[0]["FIX_EMPTY_NAME"], "Command name must be a non-empty string">
-	>;
+	type _empty = Expect<Equal<Empty["FIX_EMPTY_NAME"], "Command name must be a non-empty string">>;
 	type _reserved = Expect<
-		Equal<Reserved[0]["FIX_RESERVED_NAME"], 'Command name "__proto__" is reserved'>
+		Equal<Reserved["FIX_RESERVED_NAME"], 'Command name "__proto__" is reserved'>
 	>;
-	type _valid = Expect<Equal<Extract<keyof Valid[0], `FIX_${string}`>, never>>;
+	type _valid = Expect<Equal<Extract<keyof Valid, `FIX_${string}`>, never>>;
 	// a definition union: the open variant's `string` must not absorb the literal variant's name
 	type EmptyDefs = ValidateCommandDefinitions<readonly [Def<""> | Def<string>]>;
 	type ReservedDefs = ValidateCommandDefinitions<readonly [Def<"__proto__"> | Def<string>]>;
 	type _emptyDefs = Expect<
-		Equal<EmptyDefs[0]["FIX_EMPTY_NAME"], "Command name must be a non-empty string">
+		Equal<EmptyDefs["FIX_EMPTY_NAME"], "Command name must be a non-empty string">
 	>;
 	type _reservedDefs = Expect<
-		Equal<ReservedDefs[0]["FIX_RESERVED_NAME"], 'Command name "__proto__" is reserved'>
+		Equal<ReservedDefs["FIX_RESERVED_NAME"], 'Command name "__proto__" is reserved'>
 	>;
 
 	type EmptyAlias = ValidateCommandConfig<"issue", { aliases: readonly ["", Mixed] }>;
@@ -141,7 +146,7 @@ type Def<Name extends string, Aliases extends readonly string[] = readonly []> =
 	>;
 	type _selfAlias = Expect<
 		Equal<
-			SelfAlias[0]["FIX_ALIAS_SHAPE"],
+			SelfAlias["FIX_ALIAS_SHAPE"],
 			'Command "i" must not list its own canonical name as an alias'
 		>
 	>;
@@ -149,14 +154,14 @@ type Def<Name extends string, Aliases extends readonly string[] = readonly []> =
 	type CrossAlias = ValidateCommandDefinitions<
 		readonly [Def<"x", readonly ["y"]> | Def<"y", readonly ["x"]>]
 	>;
-	type _crossAlias = Expect<Equal<keyof Omit<CrossAlias[0], "name" | "_aliases">, never>>;
+	type _crossAlias = Expect<Equal<keyof CrossAlias, never>>;
 	// a valid variant does not absorb a self-aliased sibling's brand
 	type OneSelfAliased = ValidateCommandDefinitions<
 		readonly [Def<"x", readonly ["x"]> | Def<"y", readonly ["z"]>]
 	>;
 	type _oneSelfAliased = Expect<
 		Equal<
-			OneSelfAliased[0]["FIX_ALIAS_SHAPE"],
+			OneSelfAliased["FIX_ALIAS_SHAPE"],
 			'Command "x" must not list its own canonical name as an alias'
 		>
 	>;
@@ -178,7 +183,7 @@ type Def<Name extends string, Aliases extends readonly string[] = readonly []> =
 	>;
 	type _selfAlias = Expect<
 		Equal<
-			SelfAlias[0]["FIX_ALIAS_SHAPE"],
+			SelfAlias["FIX_ALIAS_SHAPE"],
 			'Command "i" must not list its own canonical name as an alias'
 		>
 	>;

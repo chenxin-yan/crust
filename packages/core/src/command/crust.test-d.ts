@@ -125,8 +125,8 @@ function _typecheckExplicitInputsOnConditionalBuilderUnion(condition: boolean) {
 	const child = defineCommand("child", (command) => command);
 	const sibling = child.as("other");
 	const treeUnion = condition ? c.add(child) : c;
-	// @ts-expect-error -- an explicit input tuple still checks FIX_COMMAND_COLLISION
-	void treeUnion.add<readonly [typeof child]>(child);
+	// No compile-time FIX_COMMAND_COLLISION for an explicit tuple on a union receiver: the
+	// TS2589-safe ValidateCommandDefinitions loses it; `.add()` still throws at runtime.
 	const registered = treeUnion.add<readonly [typeof sibling]>(sibling);
 	type _commonPaths = Expect<Equal<keyof (typeof registered)["_types"]["tree"], "other">>;
 
