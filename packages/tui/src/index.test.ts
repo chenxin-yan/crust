@@ -13,7 +13,7 @@ function asReadStream(stream: PassThrough): NodeJS.ReadStream {
 
 const fixture = fileURLToPath(new URL("../tests/fixtures/run-tui.ts", import.meta.url));
 
-/** OpenTUI's native renderer is unavailable on the pinned Node 24, so the scenario runs on Bun. */
+/** @crustjs/tui supports Bun only (see engines), so the scenario runs on Bun, not the Node test runner. */
 function observe(scenario: TuiScenario): TuiObservation {
 	const result = spawnSync("bun", [fixture, scenario], { encoding: "utf8", timeout: 10_000 });
 	expect(result.status, result.stderr).toBe(0);
