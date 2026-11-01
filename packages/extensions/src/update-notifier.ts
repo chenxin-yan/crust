@@ -376,6 +376,17 @@ function resolveUpdateCommand(
 // Extension factory
 // ────────────────────────────────────────────────────────────────────────────
 
+type UpdateNotifierRegistration<K extends RootMetaKey> = Extension<{}, [], [], [], K>;
+
+/** An explicit `currentVersion` supplies the version; omitting it requires root metadata. */
+export interface UpdateNotifierExtension {
+	(options: UpdateNotifierOptions & { currentVersion: string }): UpdateNotifierRegistration<never>;
+	(options: UpdateNotifierOptions): UpdateNotifierRegistration<"version">;
+	readonly id: ExtensionId;
+}
+
+// The builder requires no metadata so one factory serves both overloads; the
+// `UpdateNotifierExtension` annotation narrows omitted versions to require root `version`.
 /**
  * Creates an update notifier extension that checks the npm registry after a
  * successful command action and displays a notice when a newer version is available.
@@ -413,17 +424,6 @@ function resolveUpdateCommand(
  * await app.execute();
  * ```
  */
-type UpdateNotifierRegistration<K extends RootMetaKey> = Extension<{}, [], [], [], K>;
-
-/** An explicit `currentVersion` supplies the version; omitting it requires root metadata. */
-export interface UpdateNotifierExtension {
-	(options: UpdateNotifierOptions & { currentVersion: string }): UpdateNotifierRegistration<never>;
-	(options: UpdateNotifierOptions): UpdateNotifierRegistration<"version">;
-	readonly id: ExtensionId;
-}
-
-// The builder requires no metadata so one factory serves both overloads; the
-// `UpdateNotifierExtension` annotation narrows omitted versions to require root `version`.
 export const updateNotifier: UpdateNotifierExtension = /* @__PURE__ */ defineExtension(
 	UPDATE_NOTIFIER,
 ).factory((extension, options: UpdateNotifierOptions) => {
