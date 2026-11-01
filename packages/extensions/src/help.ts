@@ -18,7 +18,7 @@ const FLAG_COLUMN_WIDTH = 28;
 const ARG_COLUMN_WIDTH = 18;
 const COMMAND_COLUMN_WIDTH = 10;
 
-const HELP: ExtensionId = defineExtensionId("crust:help");
+const HELP: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:help");
 
 function formatArgText(text: string, required: boolean): string {
 	return required ? yellow(text) : dim(yellow(text));
@@ -55,7 +55,19 @@ function formatCommandLabel(command: CommandDocumentation): string {
 }
 
 export function renderHelp(command: CommandSnapshot, path?: readonly string[]): string {
-	const model = buildCommandDocumentation(command, path);
+	// Help lists children by name only, so skip documenting the rest of the subtree.
+	const model = buildCommandDocumentation(
+		{
+			...command,
+			subCommands: Object.fromEntries(
+				Object.entries(command.subCommands).map(([name, child]) => [
+					name,
+					{ ...child, subCommands: {} },
+				]),
+			),
+		},
+		path,
+	);
 	const heading = model.path.join(" ");
 	const lines = [
 		model.description ? `${bold(heading)} - ${dim(model.description)}` : bold(heading),
@@ -108,11 +120,12 @@ const helpFlags = [
 	{ name: "help", type: "boolean", short: "h", noNegate: true, description: "Show help" },
 ] as const;
 
-export const help: ExtensionFactory<[], {}, [], typeof helpFlags> = defineExtension(HELP).factory(
-	(extension) =>
-		extension.flags(...helpFlags).preRun((context) => {
-			if (context.flags.help !== true && context.command.hasAction) return;
-			context.stdout(renderHelp(context.command, context.commandPath));
-			return context.handled();
-		}),
+export const help: ExtensionFactory<[], {}, [], typeof helpFlags> = /* @__PURE__ */ defineExtension(
+	HELP,
+).factory((extension) =>
+	extension.flags(...helpFlags).preRun((context) => {
+		if (context.flags.help !== true && context.command.hasAction) return;
+		context.stdout(renderHelp(context.command, context.commandPath));
+		return context.handled();
+	}),
 );

@@ -6,18 +6,19 @@ import { basename } from "node:path";
 
 import {
 	CrustError,
-	type ExtensionFactory,
+	type Extension,
 	type ExtensionId,
+	type RootMetaKey,
 	defineExtension,
 	defineExtensionId,
 } from "@crustjs/core";
 import { bold, cyan, dim, green, padEnd, stringWidth, yellow } from "@crustjs/style";
 import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
-import { packageManagerFromUserAgent } from "@crustjs/utils/process";
+import { type PackageManager, packageManagerFromUserAgent } from "@crustjs/utils/process";
 
-const UPDATE_NOTIFIER: ExtensionId = defineExtensionId("crust:update-notifier");
+const UPDATE_NOTIFIER: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:update-notifier");
 
-export type UpdateNotifierPackageManager = "npm" | "pnpm" | "yarn" | "bun";
+export type UpdateNotifierPackageManager = PackageManager;
 
 export type UpdateCommandResolver = (info: {
 	packageName: string;
@@ -348,6 +349,16 @@ function defaultUpdateCommand(
 	return `${INSTALL_COMMANDS[packageManager][scope]} ${packageName}@latest`;
 }
 
+/** CI runs, redirected stderr, and the user's opt-out skip the check entirely. */
+function isUpdateCheckSuppressed(): boolean {
+	const ci = process.env.CI;
+	return (
+		(!!ci && ci !== "0" && ci.toLowerCase() !== "false") ||
+		!!process.env.NO_UPDATE_NOTIFIER ||
+		!process.stderr?.isTTY
+	);
+}
+
 function resolveUpdateCommand(
 	packageName: string,
 	updateCommand: UpdateNotifierOptions["updateCommand"],
@@ -379,6 +390,9 @@ function resolveUpdateCommand(
  * - `timeoutMs` bounds only the network request, defaulting to 5 seconds.
  * - Network, cache, and parsing errors are silently swallowed. A missing
  *   current version throws a DEFINITION error before that recovery block.
+ * - The check is skipped, with no cache or network access, when `CI` is set
+ *   (other than `"0"`/`"false"`), when `NO_UPDATE_NOTIFIER` is non-empty, or
+ *   when `process.stderr` is not a TTY.
  * - Update notices are intentionally written to the invocation's stderr callback.
  * - Duplicate notifications for the same version are suppressed.
  *
@@ -399,9 +413,20 @@ function resolveUpdateCommand(
  * await app.execute();
  * ```
  */
-export const updateNotifier: ExtensionFactory<[options: UpdateNotifierOptions]> = defineExtension(
+type UpdateNotifierRegistration<K extends RootMetaKey> = Extension<{}, [], [], [], K>;
+
+/** An explicit `currentVersion` supplies the version; omitting it requires root metadata. */
+export interface UpdateNotifierExtension {
+	(options: UpdateNotifierOptions & { currentVersion: string }): UpdateNotifierRegistration<never>;
+	(options: UpdateNotifierOptions): UpdateNotifierRegistration<"version">;
+	readonly id: ExtensionId;
+}
+
+// The builder requires no metadata so one factory serves both overloads; the
+// `UpdateNotifierExtension` annotation narrows omitted versions to require root `version`.
+export const updateNotifier: UpdateNotifierExtension = /* @__PURE__ */ defineExtension(
 	UPDATE_NOTIFIER,
-).factory((extension, options) => {
+).factory((extension, options: UpdateNotifierOptions) => {
 	const {
 		currentVersion,
 		packageName,
@@ -417,12 +442,14 @@ export const updateNotifier: ExtensionFactory<[options: UpdateNotifierOptions]> 
 		if (outcome.status !== "completed") return;
 
 		const resolvedCurrentVersion = currentVersion ?? context.rootCommand.meta.version;
+		// Overloads are type-only; untyped callers can still reach this.
 		if (resolvedCurrentVersion === undefined) {
 			throw new CrustError(
 				"DEFINITION",
 				"The update notifier extension requires a version in new Crust(name, { version }) or currentVersion",
 			);
 		}
+		if (isUpdateCheckSuppressed()) return;
 
 		try {
 			let cacheAdapter: UpdateNotifierCacheAdapter = NO_CACHE_ADAPTER;

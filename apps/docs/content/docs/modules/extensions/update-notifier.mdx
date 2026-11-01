@@ -22,6 +22,16 @@ When the registry reports version `2.0.0`, the action writes `Done` to stdout an
 
 The hook checks only after a completed Command Action. Network, registry, cache, and response failures do not change a successful outcome.
 
+## When checks are skipped
+
+The hook skips the check entirely (no cache read, no network request, no notice) when:
+
+- `CI` is set to anything other than an empty string, `0`, or `false`
+- `NO_UPDATE_NOTIFIER` is set to any non-empty value, so users can opt out
+- `process.stderr` is not a TTY, for example when stderr is redirected to a file or pipe
+
+The TTY check reads `process.stderr` even when `run()` or `execute()` receives custom IO callbacks.
+
 ## API
 
 <auto-type-table
@@ -29,7 +39,7 @@ The hook checks only after a completed Command Action. Network, registry, cache,
   name="UpdateNotifierOptions"
 />
 
-The current version must come from `currentVersion` or root metadata. If neither exists, the hook throws `DEFINITION` before network or cache work.
+The current version must come from `currentVersion` or root metadata. Without a string `currentVersion`, `.extend()` rejects the extension at compile time unless the root declares `version`. Untyped callers that supply neither get a `DEFINITION` error from the hook before network or cache work, even when the check would be skipped.
 
 The network timeout does not bound cache operations or the whole hook. Version comparison follows SemVer precedence, and notices for the same latest version are suppressed across sequential cached invocations.
 

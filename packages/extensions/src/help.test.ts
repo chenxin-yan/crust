@@ -232,6 +232,36 @@ describe("help", () => {
 		expect(plain).toContain("Manage issues");
 	});
 
+	it("renderHelp documents only direct children, never grandchildren", async () => {
+		const snapshot = await new Crust("app")
+			.add(
+				defineCommand("remote", { description: "Manage remotes" }, (cmd) =>
+					cmd.add(defineCommand("add", {}, (sub) => sub.action(() => {}))),
+				),
+			)
+			.snapshot();
+		const remote = snapshot.subCommands.remote!;
+		const grandchildReads = vi.fn();
+		const tracked = {
+			...snapshot,
+			subCommands: {
+				remote: {
+					...remote,
+					subCommands: {
+						get add() {
+							grandchildReads();
+							return remote.subCommands.add!;
+						},
+					},
+				},
+			},
+		};
+
+		const plain = stripAnsi(renderHelp(tracked));
+		expect(plain).toContain("Manage remotes");
+		expect(grandchildReads).not.toHaveBeenCalled();
+	});
+
 	it("renderHelp omits the COMMANDS section when every subcommand is hidden", async () => {
 		const command = new Crust("app")
 			.add(

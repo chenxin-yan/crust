@@ -18,6 +18,7 @@ export type {
 	UpdateCommandResolver,
 	UpdateNotifierCacheAdapter,
 	UpdateNotifierCacheConfig,
+	UpdateNotifierExtension,
 	UpdateNotifierPackageManager,
 	UpdateNotifierOptions,
 	UpdateNotifierState,
