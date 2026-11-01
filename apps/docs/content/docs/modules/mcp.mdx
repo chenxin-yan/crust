@@ -27,7 +27,7 @@ The package has a peer dependency on `@crustjs/core` and depends on `@modelconte
 
 ### Client configuration
 
-`mcp config` derives the launch command from the running process. A compiled executable launches itself with `args: ["mcp"]`; a Node or Bun source entry or Node bundle relaunches through `process.execPath` with `process.execArgv` before the entry path. Claude Code, Claude Desktop, and Cursor read `mcpServers`; VS Code's `.vscode/mcp.json` reads `servers`.
+`mcp config` derives the launch command from the running process. A compiled executable (`bun build --compile` or a Node single executable application) launches itself with `args: ["mcp"]`; a Node or Bun source entry or Node bundle relaunches through `process.execPath` with `process.execArgv` before the entry path. Claude Code, Claude Desktop, and Cursor read `mcpServers`; VS Code's `.vscode/mcp.json` reads `servers`.
 
 Set `launch: { command, args }` to override it; `args` must include `mcp`.
 
@@ -50,7 +50,7 @@ Nothing is written into client configuration files; paste the snippet or run the
 
 ## Tools
 
-A command becomes a tool when it is visible (not `hidden`, nor under a hidden command), has a Command Action, is not the `mcp` command, and is not under an `exclude` path. The root is a tool only when it has an action.
+A command becomes a tool when it is visible (not `hidden`, nor under a hidden command), has a Command Action, is not the `mcp` command, and is not under an `exclude` path. The root is a tool only when it has an action. Every `exclude` path must be a canonical command path (hidden commands and paths under another excluded command count); a misspelled path or an alias throws, listing each unknown path, instead of leaving the command exposed.
 
 The tool name is the canonical command path joined with `_` (`deploy api` becomes `deploy_api`); the root uses its own name, and aliases never become tools. That join is not injective, so `toolsFromSnapshot` throws when two commands map to one name (`a_b` and `a b`, or the root and a subcommand named after it), naming both paths. It also throws when a name falls outside the MCP tool-name rule (1–128 characters of `A-Z a-z 0-9 _ - .`).
 

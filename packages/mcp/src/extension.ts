@@ -8,6 +8,7 @@ import {
 	type ExtensionFactory,
 	type ExtensionId,
 } from "@crustjs/core";
+import { isCompiledExecutable } from "@crustjs/utils/artifacts";
 
 import { createMcpServer, serveStdio } from "./server.ts";
 import { MCP_COMMAND_NAME, type McpToolsOptions } from "./tools.ts";
@@ -36,7 +37,7 @@ export interface McpLaunch {
 }
 
 /**
- * Compiled executables (`bun build --compile`) are their own
+ * Compiled executables (`bun build --compile`, Node SEA) are their own
  * launcher; source files and Node bundles relaunch through the runtime running
  * them, with runtime options before the entry path.
  */
@@ -51,18 +52,9 @@ export function resolveLaunch(
 		: { command: execPath, args: [...execArgv, entry, MCP_COMMAND_NAME] };
 }
 
-/** Bun serves a compiled entry from `/$bunfs/` (POSIX) or `<drive>:/~BUN/` (Windows). */
-function isCompiledExecutable(entry: string | undefined): boolean {
-	return (
-		entry?.startsWith("/$bunfs/") === true ||
-		(entry !== undefined && /^[A-Za-z]:[\\/]~BUN[\\/]/.test(entry))
-	);
-}
-
 /** Launch identity of the current process. */
 export function currentLaunch(): McpLaunch {
-	const entry = process.argv[1];
-	return resolveLaunch(process.execPath, entry, isCompiledExecutable(entry), process.execArgv);
+	return resolveLaunch(process.execPath, process.argv[1], isCompiledExecutable(), process.execArgv);
 }
 
 /**

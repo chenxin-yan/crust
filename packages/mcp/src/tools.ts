@@ -33,7 +33,7 @@ export interface McpTool {
 }
 
 export interface McpToolsOptions {
-	/** Canonical command paths to leave out, including everything under them. */
+	/** Canonical command paths to leave out, including everything under them; an unknown path or alias throws. */
 	readonly exclude?: readonly (readonly string[])[];
 }
 
@@ -143,13 +143,28 @@ function toolInput(command: CommandSnapshot, path: readonly string[]): ToolInput
  * only when it has an action. Tool names join the canonical path with `_`
  * (the root uses its own name), which is not injective: `a b_c` and `a_b c`
  * collide, and this throws naming both paths rather than renaming either.
- * Also throws when a name violates the MCP tool-name character set.
+ * Also throws when a name violates the MCP tool-name character set, or when an
+ * `exclude` path is not a canonical command path (a typo or alias would
+ * otherwise leave the command exposed).
  */
 export function toolsFromSnapshot(
 	snapshot: CommandSnapshot,
 	options: McpToolsOptions = {},
 ): readonly McpTool[] {
 	const excluded = new Set((options.exclude ?? []).map((path) => path.join("\0")));
+	// Walk the whole tree, not the pruned one below: a path under a hidden or excluded parent is valid.
+	const known = new Set<string>();
+	const collect = (command: CommandSnapshot, path: readonly string[]) => {
+		known.add(path.join("\0"));
+		for (const [name, sub] of Object.entries(command.subCommands)) collect(sub, [...path, name]);
+	};
+	collect(snapshot, []);
+	const unknown = (options.exclude ?? []).filter((path) => !known.has(path.join("\0")));
+	if (unknown.length > 0) {
+		throw new Error(
+			`Unknown MCP exclude paths ${unknown.map((path) => `"${formatPath(path)}"`).join(", ")}; exclude takes canonical command paths`,
+		);
+	}
 	excluded.add(MCP_COMMAND_NAME);
 	const tools: McpTool[] = [];
 	const owners = new Map<string, readonly string[]>();
