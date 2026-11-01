@@ -960,6 +960,31 @@ describe("Extension named hooks", () => {
 			expect(onErrorContext).toBe(preRunContext);
 		});
 
+		it("shows Extension-owned defaulted flags as unset to preRun and postRun", async () => {
+			const seen: unknown[] = [];
+			const owner = defineExtension(defineExtensionId("owner"))
+				.flags({ name: "port", type: "number", default: 3000 })
+				.preRun(({ flags }) => void seen.push(["pre", flags.port]))
+				.postRun(({ flags }, outcome) => void seen.push(["post", flags.port, outcome.status]));
+			const gate = defineExtension(defineExtensionId("gate")).preRun((ctx) =>
+				ctx.argv.includes("--stop") ? ctx.handled() : undefined,
+			);
+			const app = new Crust("cli")
+				.flags({ name: "stop", type: "boolean" })
+				.extend(owner, gate)
+				.action(() => void seen.push("action"));
+			const io = { stdout: () => {}, stderr: () => {} };
+
+			expect(await app.execute({ argv: ["--port", "abc", "--stop"], io })).toBe(0);
+			expect(await app.execute({ argv: ["--port", "abc"], io })).toBe(1);
+			expect(seen).toEqual([
+				["pre", undefined],
+				["post", undefined, "handled"],
+				["pre", undefined],
+				["post", undefined, "failed"],
+			]);
+		});
+
 		it("keeps structural argv errors ahead of preRun", async () => {
 			const { execute, seen } = deferringApp();
 			expect(await execute(["--port", "--stop"])).toMatchObject({

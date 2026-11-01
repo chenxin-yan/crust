@@ -254,12 +254,25 @@ type InferPreSchemaExtensionFlag<F extends ExtensionFlagDef> = F extends {
 						: never
 					: never)
 			| undefined
-	: F extends { required: true }
-		? F extends { default: unknown }
-			? InferFlags<{ value: F }>["value"]
-			: // Hooks run before validation enforces `required`, so the value may be absent.
-				InferFlags<{ value: F }>["value"] | undefined
+	: F extends { required: true } | { default: unknown }
+		? // Hooks run before validation enforces `required` and reports invalid values, which
+			// stay unset (not defaulted), so a required or defaulted value may still be absent.
+			| InferFlags<{ value: F }>["value"]
+			| (F extends { default: unknown }
+					? MayHoldInvalidValue<F> extends true
+						? undefined
+						: never
+					: undefined)
 		: InferFlags<{ value: F }>["value"];
+
+/** Value flags can fail coercion; a boolean only through an env `false` under `noNegate`. */
+type MayHoldInvalidValue<F extends ExtensionFlagDef> = F extends { type: "boolean" }
+	? "noNegate" extends keyof F
+		? "env" extends keyof F
+			? true
+			: false
+		: false
+	: true;
 
 type InferExtensionFlag<F> = F extends ExtensionFlagDef
 	?
