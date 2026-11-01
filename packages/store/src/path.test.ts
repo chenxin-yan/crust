@@ -97,11 +97,21 @@ describe("configDir", () => {
 			const env = linuxEnv({ XDG_CONFIG_HOME: "   " });
 			expect(configDir("my-cli", env)).toBe(join("/home/testuser", ".config", "my-cli"));
 		});
+
+		it("should ignore a relative XDG_CONFIG_HOME", () => {
+			const env = linuxEnv({ XDG_CONFIG_HOME: "relative/config" });
+			expect(configDir("my-cli", env)).toBe(join("/home/testuser", ".config", "my-cli"));
+		});
 	});
 
 	describe("macOS (XDG convention)", () => {
 		it("should fall back to ~/.config (XDG default)", () => {
 			const env = darwinEnv();
+			expect(configDir("my-cli", env)).toBe(join("/Users/testuser", ".config", "my-cli"));
+		});
+
+		it("should ignore a relative XDG_CONFIG_HOME", () => {
+			const env = darwinEnv({ XDG_CONFIG_HOME: "./config" });
 			expect(configDir("my-cli", env)).toBe(join("/Users/testuser", ".config", "my-cli"));
 		});
 	});

@@ -130,7 +130,7 @@ describe("create-crust CLI", () => {
 			writeFileSync(join(tempRoot, "package.json"), '{"name":"launcher-cache"}', "utf-8");
 			const shim = join(binDir, mode === "source" ? "create-crust" : "create-crust.mjs");
 			if (mode === "source") {
-				symlinkSync(join(packageRoot, "src", "index.ts"), shim, "file");
+				symlinkSync(join(packageRoot, "src", "cli.ts"), shim, "file");
 			} else {
 				writeFileSync(shim, `await import(${JSON.stringify(pathToFileURL(builtCliPath).href)});\n`);
 			}

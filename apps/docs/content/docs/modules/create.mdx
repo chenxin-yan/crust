@@ -96,6 +96,8 @@ Steps run in order and stop at the first error.
 | `open-editor` | Open `$EDITOR` or VS Code; warn instead of failing when unavailable   |
 | `command`     | Run `cmd` through the platform shell, optionally in a different `cwd` |
 
+If Git has no `user.name` or `user.email`, `git-init` uses `Crust` / `crust@scaffolded.project` for the missing field on the initial commit only. Nothing is written to the repository config.
+
 ## Utilities
 
 ```ts

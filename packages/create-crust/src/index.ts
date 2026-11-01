@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import { existsSync, readdirSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
@@ -64,7 +62,7 @@ function validateProjectDirectory(path: string): void {
 // Command definition
 // ────────────────────────────────────────────────────────────────────────────
 
-const app = new Crust("create-crust", { description: pkg.description })
+export const app = new Crust("create-crust", { description: pkg.description })
 	.flags(
 		{
 			name: "runtime",
@@ -245,5 +243,3 @@ const app = new Crust("create-crust", { description: pkg.description })
 		console.log(`  ${context.run} dev`);
 		console.log(`  ${context.run} build`);
 	});
-
-await app.execute();

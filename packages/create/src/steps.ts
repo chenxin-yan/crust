@@ -87,9 +87,9 @@ async function runGitInit(cwd: string, commit?: string): Promise<void> {
 	await spawnChecked(git, ["init"], cwd, "git init");
 
 	if (commit) {
-		await ensureGitIdentity(cwd, git);
+		const identityArgs = await fallbackGitIdentityArgs(cwd, git);
 		await spawnChecked(git, ["add", "."], cwd, "git add");
-		await spawnChecked(git, ["commit", "-m", commit], cwd, "git commit");
+		await spawnChecked(git, [...identityArgs, "commit", "-m", commit], cwd, "git commit");
 	}
 }
 
@@ -141,24 +141,21 @@ async function runCommand(cmd: string, cwd: string): Promise<void> {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Ensure git `user.name` and `user.email` are configured locally.
+ * Build `-c` arguments that fill in a missing git `user.name` / `user.email`.
  *
  * CI environments often lack global git config, which causes `git commit`
- * to fail. This sets sensible local-repo defaults only when the values
- * are not already set at any level (local, global, system).
+ * to fail. The fallback applies to the initial commit only and is never
+ * written to the repo config, so later commits use the user's own identity.
  */
-async function ensureGitIdentity(cwd: string, git: string): Promise<void> {
+async function fallbackGitIdentityArgs(cwd: string, git: string): Promise<string[]> {
+	const args: string[] = [];
 	if (!(await hasGitConfig(git, "user.name", cwd))) {
-		await spawnChecked(git, ["config", "user.name", "Crust"], cwd, "git config user.name");
+		args.push("-c", "user.name=Crust");
 	}
 	if (!(await hasGitConfig(git, "user.email", cwd))) {
-		await spawnChecked(
-			git,
-			["config", "user.email", "crust@scaffolded.project"],
-			cwd,
-			"git config user.email",
-		);
+		args.push("-c", "user.email=crust@scaffolded.project");
 	}
+	return args;
 }
 
 /** Probe a git config key; non-zero exit means it is unset. */
