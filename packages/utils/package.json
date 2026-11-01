@@ -31,6 +31,10 @@
 			"types": "./dist/json.d.ts",
 			"import": "./dist/json.js"
 		},
+		"./package-manager": {
+			"types": "./dist/package-manager.d.ts",
+			"import": "./dist/package-manager.js"
+		},
 		"./path": {
 			"types": "./dist/path.d.ts",
 			"import": "./dist/path.js"

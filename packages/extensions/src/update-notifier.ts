@@ -14,7 +14,7 @@ import {
 } from "@crustjs/core";
 import { bold, cyan, dim, green, padEnd, stringWidth, yellow } from "@crustjs/style";
 import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
-import { type PackageManager, packageManagerFromUserAgent } from "@crustjs/utils/process";
+import { type PackageManager, packageManagerFromUserAgent } from "@crustjs/utils/package-manager";
 
 const UPDATE_NOTIFIER: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:update-notifier");
 
