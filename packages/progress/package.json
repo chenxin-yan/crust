@@ -57,6 +57,7 @@
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
+		"@xterm/headless": "^6.0.0",
 		"vite-plus": "catalog:"
 	},
 	"engines": {

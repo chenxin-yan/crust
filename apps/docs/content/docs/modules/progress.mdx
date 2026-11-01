@@ -34,6 +34,8 @@ await spinner({ message: "Building", task: async () => build() });
 
 `task` may return a value or a promise; `spinner({ task })` always returns a promise. A failed task prints the error line, then rejects with the task error. Non-TTY output omits animation and cursor-control sequences.
 
+Interactive spinners and progress indicators reserve a blank cursor line below the active frame. On terminals that reflow completed lines during resize, redraws and `stop()` clear the previous frame at the current width, whether or not the terminal reflows its cursor line.
+
 <auto-type-table path="../../../../../packages/progress/src/spinner.ts" name="SpinnerOptions" />
 
 ### Imperative spinner

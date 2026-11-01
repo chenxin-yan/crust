@@ -18,7 +18,6 @@ import type { PartialProgressTheme, ProgressTheme } from "./theme.ts";
 const ESC = "\x1B[";
 const HIDE_CURSOR = `${ESC}?25l`;
 const SHOW_CURSOR = `${ESC}?25h`;
-const ERASE_LINE = `${ESC}2K`;
 const ERASE_DOWN = `${ESC}J`;
 const CURSOR_TO_START = "\r";
 
@@ -157,13 +156,6 @@ function rowCount(text: string, columns: number): number {
 	return rows;
 }
 
-/** Return to the first row of the previous frame and clear it and every wrapped row below. */
-function eraseFrame(rows: number): string {
-	return rows > 1
-		? `${ESC}${rows - 1}A${CURSOR_TO_START}${ERASE_DOWN}`
-		: ERASE_LINE + CURSOR_TO_START;
-}
-
 function renderFinal(
 	message: string,
 	theme: ProgressTheme,
@@ -200,15 +192,23 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 	let frameIndex = 0;
 	let started = false;
 	let finished = false;
-	let frameRows = 1;
+	let previousFrame: string | undefined;
 	let timerId: ReturnType<typeof setInterval> | undefined;
 	let sigintHandler: (() => void) | undefined;
 	let exitHandler: (() => void) | undefined;
 
+	function eraseFrame(): string {
+		const rewind =
+			previousFrame === undefined ? "" : `${ESC}${rowCount(previousFrame, sink.columns || 80)}A`;
+		return rewind + CURSOR_TO_START + ERASE_DOWN;
+	}
+
 	function drawFrame(): void {
 		const line = `${theme.spinner(frameAt(frames, frameIndex))} ${theme.message(currentMessage)}`;
-		sink.write(eraseFrame(frameRows) + line);
-		frameRows = rowCount(line, sink.columns || 80);
+		// Keep the cursor on a separate logical line so the frame can reflow even
+		// on terminals that do not reflow the cursor line. Recount it when erasing.
+		sink.write(eraseFrame() + line + "\r\n");
+		previousFrame = line;
 	}
 
 	function cleanup(): void {
@@ -278,7 +278,7 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 			// restore. The first failure wins; boxed because any value (even undefined) can be thrown.
 			let renderFailure: { error: unknown } | undefined;
 			try {
-				const erase = started && isInteractive ? eraseFrame(frameRows) : "";
+				const erase = started && isInteractive ? eraseFrame() : "";
 				sink.write(renderFinal(currentMessage, theme, outcome, erase));
 			} catch (error) {
 				renderFailure = { error };

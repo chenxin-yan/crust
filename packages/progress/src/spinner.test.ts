@@ -145,11 +145,11 @@ describe("spinner — terminal sink", () => {
 
 		expect(writes).toEqual([
 			"\x1B[?25l",
-			"\x1B[2K\r⠋ abcdefghijklmnop",
-			// Back to the first wrapped row, then clear it and everything below.
-			"\x1B[1A\r\x1B[J⠋ short",
-			"\x1B[2K\r⠋ again",
-			"\x1B[2K\r✓ abcdefghijklmnop\n",
+			// Park below the frame, on a separate logical line.
+			"\r\x1B[J⠋ abcdefghijklmnop\r\n",
+			"\x1B[2A\r\x1B[J⠋ short\r\n",
+			"\x1B[1A\r\x1B[J⠋ again\r\n",
+			"\x1B[1A\r\x1B[J✓ abcdefghijklmnop\n",
 			"\x1B[?25h",
 		]);
 	});
@@ -163,7 +163,7 @@ describe("spinner — terminal sink", () => {
 		handle.updateMessage("short");
 		handle.stop();
 
-		expect(writes[2]).toBe("\x1B[2A\r\x1B[J⠋ short");
+		expect(writes[2]).toBe("\x1B[3A\r\x1B[J⠋ short\r\n");
 	});
 
 	it("erases wrapped rows before the final line", () => {
@@ -174,7 +174,7 @@ describe("spinner — terminal sink", () => {
 		handle.stop("error", "failed");
 
 		// 26 columns → 3 rows.
-		expect(writes.at(-2)).toBe("\x1B[2A\r\x1B[J✗ failed\n");
+		expect(writes.at(-2)).toBe("\x1B[3A\r\x1B[J✗ failed\n");
 	});
 });
 
@@ -396,7 +396,7 @@ describe("spinner — message updates", () => {
 			},
 		});
 
-		expect(writes.at(-2)).toBe("\x1B[2K\r✓ Final...\n");
+		expect(writes.at(-2)).toBe("\x1B[1A\r\x1B[J✓ Final...\n");
 		expect(writes.at(-1)).toBe("\x1B[?25h");
 	});
 
