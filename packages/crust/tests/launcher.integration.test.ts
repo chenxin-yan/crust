@@ -1,8 +1,9 @@
 // The generated npm launcher stands between the user's shell and the platform
 // binary, so it must keep the child's signal lifecycle: PID-directed SIGTERM is
 // forwarded, terminal Ctrl-C (SIGINT to the whole process group) is left to the
-// child, and the launcher exits only after the child, with its exit status.
-import { spawn } from "node:child_process";
+// child, PID-directed SIGINT is forwarded only without a controlling terminal,
+// and the launcher exits only after the child, with its exit status.
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import {
 	chmodSync,
@@ -46,6 +47,25 @@ setTimeout(() => process.exit(0), ${TIMEOUT});
 log("ready " + process.pid);
 `;
 
+// Runs the launcher as a session leader on a fresh pty, so it has a controlling
+// terminal, and writes stdin to the pty master: "\x03" is a real terminal Ctrl-C.
+// Exits the way the launcher did.
+const PTY_HOST = `
+import os, pty, signal, sys
+pid, master = pty.fork()
+if pid == 0:
+    os.execv(sys.argv[1], sys.argv[1:])
+os.write(master, sys.stdin.buffer.read(1))
+status = os.waitpid(pid, 0)[1]
+if os.WIFSIGNALED(status):
+    signal.signal(os.WTERMSIG(status), signal.SIG_DFL)
+    os.kill(os.getpid(), os.WTERMSIG(status))
+sys.exit(os.WEXITSTATUS(status))
+`;
+const hasPty =
+	process.platform !== "win32" &&
+	spawnSync("python3", ["-c", "import pty"], { timeout: TIMEOUT }).status === 0;
+
 let tmpDir: string | undefined;
 
 afterEach(() => {
@@ -87,15 +107,26 @@ function readLog(logPath: string): string[] {
 	return existsSync(logPath) ? readFileSync(logPath, "utf8").trim().split("\n") : [];
 }
 
-/** Runs the launcher in its own process group, signals it once the child is ready, and returns how it exited. */
-async function runSignaled(mode: "trap" | "plain", deliver: (launcherPid: number) => void) {
+/**
+ * Runs the launcher in its own session (no controlling terminal), or under PTY_HOST
+ * with `terminal`, signals it once the child is ready, and returns how it exited.
+ */
+async function runSignaled(
+	mode: "trap" | "plain",
+	deliver: (launcher: ChildProcess) => void,
+	terminal = false,
+) {
 	tmpDir = mkdtempSync(join(tmpdir(), "crust-launcher-test-"));
 	const logPath = join(tmpDir, "child.log");
-	const launcher = spawn(process.execPath, [stageLauncher(tmpDir), mode], {
-		// A group leader, so a negative PID reaches the launcher and child together like Ctrl-C.
+	const launcherArgs = [stageLauncher(tmpDir), mode];
+	const [command, args] = terminal
+		? ["python3", ["-c", PTY_HOST, process.execPath, ...launcherArgs]]
+		: [process.execPath, launcherArgs];
+	const launcher = spawn(command, args, {
+		// Its own session and process group: no controlling terminal, and a negative PID reaches the whole tree.
 		detached: true,
 		env: { ...process.env, LAUNCHER_TEST_LOG: logPath },
-		stdio: "ignore",
+		stdio: [terminal ? "pipe" : "ignore", "ignore", "ignore"],
 	});
 	const exited = once(launcher, "exit") as Promise<[number | null, NodeJS.Signals | null]>;
 	const timer = setTimeout(() => {
@@ -109,7 +140,7 @@ async function runSignaled(mode: "trap" | "plain", deliver: (launcherPid: number
 			if (Date.now() > deadline) throw new Error("The platform binary never started.");
 			await new Promise((resolve) => setTimeout(resolve, 20));
 		}
-		deliver(launcher.pid!);
+		deliver(launcher);
 		const [exitCode, signal] = await exited;
 		// The child wrote its log before exiting, so this is everything it did before the launcher exited.
 		return { exitCode, signal, log: readLog(logPath).slice(1) };
@@ -122,16 +153,25 @@ describe.skipIf(process.platform === "win32")("generated npm launcher signals", 
 	it(
 		"forwards SIGTERM sent to the launcher PID and exits with the child's code",
 		async () => {
-			const result = await runSignaled("trap", (pid) => process.kill(pid, "SIGTERM"));
+			const result = await runSignaled("trap", ({ pid }) => process.kill(pid!, "SIGTERM"));
 			expect(result).toEqual({ exitCode: 3, signal: null, log: ["got SIGTERM", "cleanup done"] });
 		},
 		TIMEOUT * 2,
 	);
 
 	it(
-		"leaves terminal-group SIGINT to the child and waits for its cleanup",
+		"forwards SIGINT sent to the launcher PID when no terminal is attached",
 		async () => {
-			const result = await runSignaled("trap", (pid) => process.kill(-pid, "SIGINT"));
+			const result = await runSignaled("trap", ({ pid }) => process.kill(pid!, "SIGINT"));
+			expect(result).toEqual({ exitCode: 3, signal: null, log: ["got SIGINT", "cleanup done"] });
+		},
+		TIMEOUT * 2,
+	);
+
+	it.skipIf(!hasPty)(
+		"leaves terminal Ctrl-C to the child and waits for its cleanup",
+		async () => {
+			const result = await runSignaled("trap", ({ stdin }) => stdin!.write("\x03"), true);
 			// Exactly one SIGINT: a forwarded duplicate would force-quit a Crust CLI.
 			expect(result).toEqual({ exitCode: 3, signal: null, log: ["got SIGINT", "cleanup done"] });
 		},
@@ -141,7 +181,7 @@ describe.skipIf(process.platform === "win32")("generated npm launcher signals", 
 	it(
 		"re-raises the signal that terminated the child",
 		async () => {
-			const result = await runSignaled("plain", (pid) => process.kill(pid, "SIGTERM"));
+			const result = await runSignaled("plain", ({ pid }) => process.kill(pid!, "SIGTERM"));
 			expect(result).toEqual({ exitCode: null, signal: "SIGTERM", log: [] });
 		},
 		TIMEOUT * 2,
