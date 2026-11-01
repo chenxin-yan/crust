@@ -463,13 +463,13 @@ describe("renderSkill", () => {
 			}
 		});
 
-		it("flattens multi-line descriptions within table cells", async () => {
+		it.each(["\n", "\r\n", "\r"])("flattens %j line breaks within table cells", async (eol) => {
 			const cmd = makeCommand({
 				meta: { name: "test" },
 				flags: {
 					format: {
 						type: "string",
-						description: "Output format.\nOne of json or text",
+						description: `Output format.${eol}One of json or text`,
 					},
 				},
 				run() {},

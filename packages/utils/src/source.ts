@@ -60,8 +60,10 @@ export function findNearestPackageRoot(startPath: string): string | null {
  * - **Absolute string path** — returned as `path.resolve(input)`.
  * - **Relative string path** — resolved against the nearest `package.json`
  *   directory walking up from `process.argv[1]` (symlinks resolved). This makes
- *   `"templates/base"` resolve to `<consumer-package-root>/templates/base`
- *   regardless of cwd.
+ *   `"templates/base"` resolve to `<entrypoint-package-root>/templates/base`
+ *   regardless of cwd. For a linked bin (`node_modules/.bin/<cli>`), that is
+ *   the package owning the real entrypoint file, not the project that
+ *   installed it.
  *
  * Three failure modes throw descriptive `Error`s:
  * - URL with non-`file:` protocol — message names the offending protocol.
@@ -85,7 +87,7 @@ export function findNearestPackageRoot(startPath: string): string | null {
  * // 2. Absolute path
  * const b = resolveSourceDir("/abs/path/to/templates/base");
  *
- * // 3. Relative path — resolved from the consuming package's root
+ * // 3. Relative path — resolved from the entrypoint's package root
  * const c = resolveSourceDir("templates/base");
  * ```
  */

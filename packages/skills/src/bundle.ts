@@ -71,8 +71,9 @@ export function probeFrontmatter(content: string, subject: string): BundleFrontm
 		const key = match?.[1];
 		const value = match?.[2];
 		if ((key === "name" || key === "description") && value !== undefined) {
-			// A plain scalar cannot start with `|` or `>`: this is a block scalar `parseScalar` cannot read.
-			if (/^[|>]/.test(value)) {
+			// A plain scalar cannot start with `|`, `>`, `!`, or `&`: optional tag/anchor properties then
+			// `|`/`>` is a block scalar `parseScalar` cannot read.
+			if (/^(?:[!&]\S*\s+)*[|>]/.test(value)) {
 				throw new Error(
 					`${subject} uses a YAML block scalar for \`${key}:\` in SKILL.md frontmatter, which is not supported. ` +
 						`Write the value on one line, quoted if it contains special characters.`,

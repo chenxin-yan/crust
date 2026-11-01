@@ -174,7 +174,7 @@ describe("loadBundleFiles", () => {
 		expect(frontmatter.name).toBe("funnel-builder");
 	});
 
-	it.each([">-", "|", ">", "|+"])(
+	it.each([">-", "|", ">", "|+", "!!str |-", "&desc >", "!!str &desc |"])(
 		"rejects a `%s` YAML block scalar instead of reading the indicator as the value",
 		async (indicator) => {
 			const dir = join(tmpDir, "block-scalar");

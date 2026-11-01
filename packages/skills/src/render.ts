@@ -45,7 +45,7 @@ function escapeYaml(value: string): string {
  */
 function escapeTableCell(value: string): string {
 	// Replace | that is NOT preceded by \
-	return value.replace(/(?<!\\)\|/g, "\\|").replace(/\s*\r?\n\s*/g, " ");
+	return value.replace(/(?<!\\)\|/g, "\\|").replace(/\s*[\r\n]\s*/g, " ");
 }
 
 // ────────────────────────────────────────────────────────────────────────────
