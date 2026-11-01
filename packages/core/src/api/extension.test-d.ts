@@ -94,17 +94,30 @@ function _metadataRequirements() {
 	type MissingVersion = Parameters<typeof unversioned.extend<[typeof plain, typeof needsVersion]>>;
 	type _missingVersion = Expect<
 		Equal<
-			MissingVersion[1]["FIX_ROOT_META"],
+			Extract<MissingVersion[1], { readonly FIX_ROOT_META: unknown }>["FIX_ROOT_META"],
 			'Extension requires root metadata "version"; pass it to new Crust(name, { version })'
 		>
 	>;
 	type _plainOk = Expect<Equal<Extract<keyof MissingVersion[0], "FIX_ROOT_META">, never>>;
-	type MissingBoth = Parameters<typeof unversioned.extend<[typeof multi]>>[0]["FIX_ROOT_META"];
+	type MissingBoth = Extract<
+		Parameters<typeof unversioned.extend<[typeof multi]>>[0],
+		{ readonly FIX_ROOT_META: unknown }
+	>["FIX_ROOT_META"];
 	type _missingBoth = Expect<
 		Equal<
 			MissingBoth,
 			| 'Extension requires root metadata "version"; pass it to new Crust(name, { version })'
 			| 'Extension requires root metadata "description"; pass it to new Crust(name, { description })'
+		>
+	>;
+	type MissingDescription = Extract<
+		Parameters<typeof app.extend<[typeof multi]>>[0],
+		{ readonly FIX_ROOT_META: unknown }
+	>["FIX_ROOT_META"];
+	type _missingDescription = Expect<
+		Equal<
+			MissingDescription,
+			'Extension requires root metadata "description"; pass it to new Crust(name, { description })'
 		>
 	>;
 	// @ts-expect-error Structural assignment must not manufacture metadata.
@@ -168,6 +181,40 @@ function _metadataRequirements() {
 	// @ts-expect-error Factory products retain the metadata requirement.
 	unversioned.extend(versionedFactory());
 	app.extend(versionedFactory());
+}
+
+function _genericMetadataRequirements<K extends "version">(
+	extension: Extension<{}, [], [], [], K>,
+) {
+	const app = new Crust("app", { version: "1" });
+	const unversioned = new Crust("app");
+	const plain = defineExtension(defineExtensionId("test:generic-metadata")).flags({
+		name: "verbose",
+		type: "boolean",
+	});
+	app.extend(extension);
+	const conditional = Math.random() ? plain : extension;
+	const tuple = [plain, extension] as const;
+	const list = [plain, extension];
+	app.extend(conditional);
+	app.extend(...tuple);
+	app.extend(...list);
+	// @ts-expect-error The generic requirement may include version.
+	unversioned.extend(extension);
+	// @ts-expect-error Generic unions retain their metadata requirements.
+	unversioned.extend(conditional);
+	// @ts-expect-error Generic tuple spreads retain their metadata requirements.
+	unversioned.extend(...tuple);
+	// @ts-expect-error Generic array spreads retain their metadata requirements.
+	unversioned.extend(...list);
+}
+
+function _genericMultipleMetadataRequirements<K extends "version" | "description">(
+	extension: Extension<{}, [], [], [], K>,
+) {
+	new Crust("app", { version: "1", description: "app" }).extend(extension);
+	// @ts-expect-error The root must guarantee every key the generic may require.
+	new Crust("app", { version: "1" }).extend(extension);
 }
 
 function _fluentInference() {

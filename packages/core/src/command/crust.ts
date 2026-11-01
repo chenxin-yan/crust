@@ -1014,14 +1014,15 @@ type MissingRootMetaMessage<K extends RootMetaKey> = K extends unknown
 	? `Extension requires root metadata "${K}"; pass it to new Crust(name, { ${K} })`
 	: never;
 
-/** Name the root metadata an Extension requires but the constructor does not define. */
-type MissingRootMetaBrand<E, Defined extends RootMetaKey> = [E] extends [
-	Extension<any, any, any, any, Defined>,
-]
-	? {}
-	: {
-			readonly FIX_ROOT_META: MissingRootMetaMessage<Exclude<ExtensionMetaKeys<E>, Defined>>;
-		};
+/** Name missing metadata while accepting generic requirements covered by the root. */
+type MissingRootMetaBrand<E, Defined extends RootMetaKey> =
+	// Structural assignability still works when the conditional defers on generic metadata keys.
+	| Extension<any, any, any, any, Defined>
+	| ([E] extends [Extension<any, any, any, any, Defined>]
+			? {}
+			: {
+					readonly FIX_ROOT_META: MissingRootMetaMessage<Exclude<ExtensionMetaKeys<E>, Defined>>;
+				});
 
 /**
  * Chainable builder for defining CLI commands with full type inference.
