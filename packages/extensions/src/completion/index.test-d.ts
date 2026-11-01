@@ -49,3 +49,13 @@ function _typecheckDynamicNameOpensTree(command: string) {
 	void app.run([command]);
 	void app.run(["deploy"], { flags: { force: true } });
 }
+
+// the name stays `completion` unless a `command` is guaranteed present
+function _typecheckOmittedNameKeepsDefault(options: { command?: "completions" }) {
+	const app = host().extend(completion({ command: undefined }));
+	void app.run(["completion"], { args: { shell: "zsh" } });
+	// @ts-expect-error -- an explicit name argument cannot rename the runtime default
+	completion<"completions">();
+	// An optional literal may be absent at runtime, so the tree stays open.
+	void host().extend(completion(options)).run(["completion"]);
+}

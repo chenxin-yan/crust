@@ -259,11 +259,19 @@ type SkillCommands<Command extends string> = string extends Command
 	? readonly CommandDefinition<any, any, any, any>[]
 	: readonly [SkillCommandDefinition<Command>];
 
-/** {@link skill}'s signature: the literal `command` name flows into the host's command tree. */
+/**
+ * {@link skill}'s signature: a `command` that is always present flows into the host's
+ * command tree, an absent one is `skills`, and a possibly absent one stays open.
+ */
 export interface SkillExtension {
-	<const Command extends string = typeof DEFAULT_SKILL_COMMAND_NAME>(
-		options: SkillOptions<Command>,
+	<const Command extends string>(
+		options: SkillOptions & { command: Command },
 	): Extension<{}, [], [], SkillCommands<Command>>;
+	(
+		options: SkillOptions & { command?: undefined },
+	): Extension<{}, [], [], readonly [SkillCommandDefinition]>;
+	// Omitted `Commands` is the open command namespace.
+	(options: SkillOptions): Extension<{}, [], []>;
 	readonly id: ExtensionId;
 }
 
@@ -300,7 +308,7 @@ const skillFactory: ExtensionFactory<
 	);
 });
 
-// SAFETY: the runtime command name is `options.command ?? "skills"`, which is the inferred `Command`,
+// SAFETY: the runtime command name is `options.command ?? "skills"`, which each overload's name restates,
 // and only the default name carries the `skill` alias.
 export const skill = skillFactory as SkillExtension;
 

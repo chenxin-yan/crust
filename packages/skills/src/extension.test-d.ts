@@ -52,3 +52,13 @@ function _typecheckDynamicNameOpensTree(command: string) {
 	void app.run([command]);
 	void app.run(["deploy"], { flags: { force: true } });
 }
+
+// the name stays `skills` unless a `command` is guaranteed present
+function _typecheckOmittedNameKeepsDefault(options: { command?: "agents" }) {
+	const app = host().extend(skill({ command: undefined }));
+	void app.run(["skill", "repair"]);
+	// @ts-expect-error -- an explicit name argument cannot rename the runtime default
+	skill<"agents">({});
+	// An optional literal may be absent at runtime, so the tree stays open.
+	void host().extend(skill(options)).run(["skills"]);
+}

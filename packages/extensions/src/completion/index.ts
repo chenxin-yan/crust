@@ -30,14 +30,14 @@ export type CompletionShell = "bash" | "zsh" | "fish";
 const SUPPORTED_SHELLS = ["bash", "zsh", "fish"] as const satisfies readonly CompletionShell[];
 
 /** Options for the completion Extension. */
-export interface CompletionOptions<Name extends string = string> {
+export interface CompletionOptions {
 	/**
 	 * Subcommand name. Override only if the default conflicts with an existing user-defined command.
 	 * A literal name keeps the host's command tree type-checked; a dynamic `string` opens it.
 	 *
 	 * @default "completion"
 	 */
-	command?: Name;
+	command?: string;
 	/**
 	 * Free-form version string embedded in generated script headers. The
 	 * walker does not parse it.
@@ -89,11 +89,19 @@ type CompletionCommands<Name extends string> = string extends Name
 	? readonly CommandDefinition<any, any, any, any>[]
 	: readonly [CompletionCommandDefinition<Name>];
 
-/** {@link completion}'s signature: the literal `command` name flows into the host's command tree. */
+/**
+ * {@link completion}'s signature: a `command` that is always present flows into the host's
+ * command tree, an absent one is `completion`, and a possibly absent one stays open.
+ */
 export interface CompletionExtension {
-	<const Name extends string = "completion">(
-		options?: CompletionOptions<Name>,
+	<const Name extends string>(
+		options: CompletionOptions & { command: Name },
 	): Extension<{}, [], [], CompletionCommands<Name>>;
+	(
+		options?: CompletionOptions & { command?: undefined },
+	): Extension<{}, [], [], readonly [CompletionCommandDefinition]>;
+	// Omitted `Commands` is the open command namespace.
+	(options?: CompletionOptions): Extension<{}, [], []>;
 	readonly id: ExtensionId;
 }
 
@@ -264,5 +272,5 @@ const completionFactory: ExtensionFactory<
  * the root package and each platform package's `bin/`. Scripts target the
  * root command name as the installed binary.
  */
-// SAFETY: the runtime command name is `options.command ?? "completion"`, which is the inferred `Name`.
+// SAFETY: the runtime command name is `options.command ?? "completion"`, which each overload's name restates.
 export const completion = completionFactory as CompletionExtension;
