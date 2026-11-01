@@ -1580,10 +1580,16 @@ export class Crust<
 		const Path extends readonly string[],
 		// Resolving the shape once here keeps contextual typing of a literal `input` from
 		// re-walking the whole tree on every pass.
-		S extends CommandShape = CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>,
+		S extends CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path> = CommandShapeAt<
+			CommandShape<A, Flags, Tree, Result>,
+			Path
+		>,
 		const Input extends RunInput<S> | OmittableRunInput<S> = RunInput<S>,
 	>(
-		this: { readonly _types: { readonly caps: "app" } },
+		// The reverse check also rejects explicit subtypes that narrow results or add flags.
+		this: [CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>] extends [S]
+			? { readonly _types: { readonly caps: "app" } }
+			: never,
 		path: KnownCommandPath<Path, Tree>,
 		input: CheckedRunInput<S, Input> | OmittableRunInput<S>,
 		options?: InvocationOptions,

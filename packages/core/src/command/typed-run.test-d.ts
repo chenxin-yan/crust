@@ -367,6 +367,37 @@ function _typecheckResolvesActionResultsForLiteralPathsPastTheDepthCap() {
 	>;
 }
 
+// explicit cached shapes cannot replace or narrow the selected command's contract
+function _typecheckRejectsSubstitutedRunShapes() {
+	const app = new Crust("cli").add(
+		defineCommand("build", (command) =>
+			command.flags({ name: "count", type: "number", required: true }).action(() => 123),
+		),
+	);
+	type Path = readonly ["build"];
+	type Shape = CommandShapeAt<(typeof app)["_types"]["shape"], Path>;
+	type Fake = Omit<Shape, "result"> & { result: "fake" };
+	type Empty = { args: []; flags: {}; children: {}; result: number };
+	type Narrow = Shape & { result: 123 };
+	type Extra = Shape & { flags: { extra: { type: "string" } } };
+
+	// @ts-expect-error -- the action does not return the substituted result type
+	void app.run<Path, Fake>(["build"], { flags: { count: 1 } });
+	// @ts-expect-error -- an explicit shape cannot remove required flags
+	void app.run<Path, Empty>(["build"], {});
+	// @ts-expect-error -- a subtype cannot narrow the action result
+	void app.run<Path, Narrow>(["build"], { flags: { count: 1 } });
+	// @ts-expect-error -- a subtype cannot add undeclared flags
+	void app.run<Path, Extra>(["build"], { flags: { count: 1, extra: "value" } });
+
+	const inferred = app.run(["build"], { flags: { count: 1 } });
+	const pathOnly = app.run<Path>(["build"], { flags: { count: 1 } });
+	const explicit = app.run<Path, Shape>(["build"], { flags: { count: 1 } });
+	type _inferred = Expect<Equal<Awaited<typeof inferred>, RunOutcome<number>>>;
+	type _pathOnly = Expect<Equal<Awaited<typeof pathOnly>, RunOutcome<number>>>;
+	type _explicit = Expect<Equal<Awaited<typeof explicit>, RunOutcome<number>>>;
+}
+
 // binds valid paths on apps with ~1,000 commands without TS2590 (failed from ~600 path members)
 function _typecheckBindsValidPathsOnLargeAppsWithoutTS2590() {
 	type Digit = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
