@@ -53,6 +53,10 @@ describe("toolsFromSnapshot", () => {
 		expect(() => toolsFromSnapshot(snapshot, { exclude: [["dpeloy"], ["d"], ["deploy"]] })).toThrow(
 			'Unknown MCP exclude paths "dpeloy", "d"; exclude takes canonical command paths',
 		);
+		// [""] is not the root path [], so it must not exclude the whole tree.
+		expect(() => toolsFromSnapshot(snapshot, { exclude: [[""]] })).toThrow(
+			"Unknown MCP exclude paths",
+		);
 		// Paths under an excluded parent or a hidden command are still real commands.
 		expect(
 			toolsFromSnapshot(snapshot, {

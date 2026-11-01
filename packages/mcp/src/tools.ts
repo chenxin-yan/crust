@@ -151,26 +151,28 @@ export function toolsFromSnapshot(
 	snapshot: CommandSnapshot,
 	options: McpToolsOptions = {},
 ): readonly McpTool[] {
-	const excluded = new Set((options.exclude ?? []).map((path) => path.join("\0")));
+	// JSON keys are injective; join("\0") maps [""] onto the root's [].
+	const pathKey = (path: readonly string[]) => JSON.stringify(path);
+	const excluded = new Set((options.exclude ?? []).map(pathKey));
 	// Walk the whole tree, not the pruned one below: a path under a hidden or excluded parent is valid.
 	const known = new Set<string>();
 	const collect = (command: CommandSnapshot, path: readonly string[]) => {
-		known.add(path.join("\0"));
+		known.add(pathKey(path));
 		for (const [name, sub] of Object.entries(command.subCommands)) collect(sub, [...path, name]);
 	};
 	collect(snapshot, []);
-	const unknown = (options.exclude ?? []).filter((path) => !known.has(path.join("\0")));
+	const unknown = (options.exclude ?? []).filter((path) => !known.has(pathKey(path)));
 	if (unknown.length > 0) {
 		throw new Error(
 			`Unknown MCP exclude paths ${unknown.map((path) => `"${formatPath(path)}"`).join(", ")}; exclude takes canonical command paths`,
 		);
 	}
-	excluded.add(MCP_COMMAND_NAME);
+	excluded.add(pathKey([MCP_COMMAND_NAME]));
 	const tools: McpTool[] = [];
 	const owners = new Map<string, readonly string[]>();
 
 	const visit = (command: CommandSnapshot, path: readonly string[]) => {
-		if (!isListed(command) || excluded.has(path.join("\0"))) return;
+		if (!isListed(command) || excluded.has(pathKey(path))) return;
 		if (command.hasAction) {
 			const name = path.length === 0 ? command.meta.name : path.join("_");
 			if (!TOOL_NAME_PATTERN.test(name)) {
