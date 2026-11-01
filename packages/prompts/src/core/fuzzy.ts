@@ -95,18 +95,21 @@ function matchLowered(queryLower: string, candidate: string): FuzzyMatchResult {
 	let score = 0;
 	let queryIdx = 0;
 	let prevMatchIdx = -2; // -2 so first match isn't falsely consecutive
-	let lowerIdx = 0; // offset into the virtual lowercased candidate
+	// Compare against the whole lowercased string (context-sensitive, e.g. final
+	// sigma, like the query), but walk original code points so indices map back:
+	// lowercasing can change length (e.g. "İ" → "i̇").
+	const candidateLower = candidate.toLowerCase();
+	let lowerIdx = 0; // offset into `candidateLower`
 	let candIdx = 0; // offset of `char` in the original candidate
 
-	// Lowercase per code point: whole-string lowercasing can change length
-	// (e.g. "İ" → "i̇"), and its indices would land on the wrong original characters.
 	for (const char of candidate) {
 		if (queryIdx >= queryLower.length) break;
-		const lower = char.toLowerCase();
+		// Mapping length is context-free even where the mapping itself is not.
+		const lowerLength = char.toLowerCase().length;
 		let charMatched = false;
 
-		for (let k = 0; k < lower.length && queryIdx < queryLower.length; k++, lowerIdx++) {
-			if (lower[k] !== queryLower[queryIdx]) continue;
+		for (let k = 0; k < lowerLength && queryIdx < queryLower.length; k++, lowerIdx++) {
+			if (candidateLower[lowerIdx] !== queryLower[queryIdx]) continue;
 
 			score += MATCH_SCORE;
 

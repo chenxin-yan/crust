@@ -72,6 +72,12 @@ describe("fuzzyMatch", () => {
 		);
 	});
 
+	it("lowercases candidates in context like the query (Greek final sigma)", () => {
+		// "ΟΣ".toLowerCase() is "ος"; lowercasing "Σ" alone gives "σ".
+		expect(fuzzyMatch("ΟΣ", "ΟΣ")).toMatchObject({ match: true, indices: [0, 1] });
+		expect(fuzzyMatch("ος", "ΟΣ")).toMatchObject({ match: true, indices: [0, 1] });
+	});
+
 	it("applies the word boundary bonus from the original previous character", () => {
 		// Lowercased indices are shifted by "İ", so the bonus must read "-" from the original label.
 		expect(fuzzyMatch("b", "İ-b").score).toBe(fuzzyMatch("b", "x-b").score);
