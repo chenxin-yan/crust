@@ -1,10 +1,46 @@
 import { Crust } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { version } from "./version.ts";
 
+afterEach(() => {
+	vi.unstubAllEnvs();
+});
+
 describe("version", () => {
+	it("version extension prints the version instead of an invalid flag value from argv or env", async () => {
+		let ran = false;
+		const app = new Crust("app")
+			.extend(version("1.2.3"))
+			.flags({ name: "port", type: "number", default: 3000, env: { name: "PORT" } })
+			.action(() => {
+				ran = true;
+			});
+
+		for (const argv of [
+			["--port", "abc", "--version"],
+			["--version", "--port", "abc"],
+		]) {
+			expect(await captureExecute(app, argv), argv.join(" ")).toMatchObject({
+				stdout: "app v1.2.3",
+				stderr: "",
+				exitCode: 0,
+			});
+		}
+
+		vi.stubEnv("PORT", "abc");
+		expect(await captureExecute(app, ["--version"])).toMatchObject({
+			stdout: "app v1.2.3",
+			stderr: "",
+			exitCode: 0,
+		});
+		const failed = await captureExecute(app, []);
+		expect(failed.stderr).toContain('Expected number for --port, got "abc"');
+		expect(failed.exitCode).toBe(1);
+		expect(ran).toBe(false);
+	});
+
 	it("version extension handles --version from root metadata", async () => {
 		const app = new Crust("app", { version: "1.2.3" }).extend(version()).action(() => {});
 

@@ -152,7 +152,8 @@ export interface ExtensionContext<
 	/**
 	 * Bound positional values for the resolved command, before validation: parsed from
 	 * argv tokens for `execute()`, taken as-is from the structured input for typed `run()`
-	 * (URL/JSON values keep their identity).
+	 * (URL/JSON values keep their identity). An argument whose argv value is invalid is
+	 * `undefined`, as for {@link ExtensionContext.flags}.
 	 *
 	 * @example `{ target: "api" }`
 	 */
@@ -160,6 +161,8 @@ export interface ExtensionContext<
 	/**
 	 * Bound own flags plus unknown flags from the resolved command, before validation;
 	 * parsed from argv tokens for `execute()`, taken as-is from the structured input for typed `run()`.
+	 * A flag whose argv or environment value failed conversion, `choices`, or `parse` is
+	 * `undefined` (not its default); the error surfaces at validation.
 	 *
 	 * @example `{ trace: true }`
 	 */
@@ -200,7 +203,8 @@ export interface ExtensionHooks<
 	 * Runs after routing and input binding (argv parsing for `execute()`, structured
 	 * binding for typed `run()`), before validation, in `.extend()` order.
 	 * Return `ctx.handled()` to end the invocation successfully; later pre-run hooks,
-	 * validation, schemas, Contexts, and the Command Action do not run.
+	 * validation (including invalid argv and environment values), schemas, Contexts,
+	 * and the Command Action do not run.
 	 */
 	readonly preRun?: (ctx: ExtensionContext<Defs, Deps, MetaKeys>) => Awaitable<void | Handled>;
 	/**

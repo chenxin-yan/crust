@@ -31,10 +31,25 @@ export type FlagEnvironment = Readonly<Record<string, string | undefined>>;
 // Internal types
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Values bound from strict Node tokens, tagged before definition/value correlation erases. */
+/**
+ * Values bound from strict Node tokens, tagged before definition/value correlation erases.
+ * `invalid` is an environment value already rejected; coercion rethrows it so it defers like the rest.
+ */
 type ArgvFlagValue =
 	| { readonly kind: "boolean"; value: boolean | boolean[] }
-	| { readonly kind: "string"; value: string | string[] };
+	| { readonly kind: "string"; value: string | string[] }
+	| { readonly kind: "invalid"; readonly error: CrustError };
+
+/** Records a value error instead of throwing it; see {@link parseArgs}. */
+type DeferValueError = (error: CrustError) => void;
+
+/** {@link ParseResult} plus the first argv/env value error, which {@link validateParsed} throws. */
+export interface ArgvParseResult<
+	A extends ArgsDef = ArgsDef,
+	F extends FlagsDef = FlagsDef,
+> extends ParseResult<A, F> {
+	valueError?: CrustError;
+}
 
 /** Element type of `parseArgs(...).tokens` — not exported by `@types/node`. */
 type ParseArgsToken = NonNullable<ReturnType<typeof nodeParseArgs>["tokens"]>[number];
@@ -180,8 +195,24 @@ function coerceToken(
 	return coerceValue(raw, def.type, label);
 }
 
+/**
+ * Run one definition's coercion. With `defer`, a `CrustError` is recorded and the
+ * definition stays unset (not defaulted) so the invocation can still reach `preRun`.
+ */
+function coerceOrDefer<T>(coerce: () => T, defer: DeferValueError | undefined): T | undefined {
+	if (!defer) return coerce();
+	try {
+		return coerce();
+	} catch (error) {
+		if (!(error instanceof CrustError)) throw error;
+		defer(error);
+		return undefined;
+	}
+}
+
 /** Coerce a single flag's parsed value; multi-value flags coerce per element. */
 function coerceFlagValue(name: string, def: FlagDef, parsed: ArgvFlagValue): ParsedFlagValue {
+	if (parsed.kind === "invalid") throw parsed.error;
 	if (parsed.kind === "boolean") return parsed.value;
 	const label = `--${name}`;
 	return Array.isArray(parsed.value)
@@ -244,10 +275,13 @@ function envFlagValue(name: string, def: FlagDef, raw: string): ArgvFlagValue | 
 	}
 	const values = occurrences.map(coerceBooleanString);
 	if ("noNegate" in def && def.noNegate && values.includes(false)) {
-		throw new CrustError(
-			"PARSE",
-			`Flag "--${name}" does not support negation (from ${def.env?.name})`,
-		);
+		return {
+			kind: "invalid",
+			error: new CrustError(
+				"PARSE",
+				`Flag "--${name}" does not support negation (from ${def.env?.name})`,
+			),
+		};
 	}
 	return { kind: "boolean", value: def.multiple ? values : coerceBooleanString(raw) };
 }
@@ -301,6 +335,7 @@ function resolveFlags<F extends FlagsDef, V>(
 	flagsDef: F,
 	values: Readonly<Record<string, V | undefined>>,
 	coerce: (name: string, def: FlagDef, value: V) => ParsedFlagValue,
+	defer?: DeferValueError,
 ): RawParsedFlags<F> {
 	const resolved: Record<string, ParsedFlagValue> = {};
 	for (const [name, def] of Object.entries(flagsDef)) {
@@ -311,7 +346,7 @@ function resolveFlags<F extends FlagsDef, V>(
 			parsedValue === undefined ||
 			(def.multiple && Array.isArray(parsedValue) && parsedValue.length === 0);
 		if (!absent) {
-			resolved[name] = coerce(name, def, parsedValue);
+			resolved[name] = coerceOrDefer(() => coerce(name, def, parsedValue), defer);
 			continue;
 		}
 
@@ -364,6 +399,7 @@ function resolveArgs<A extends ArgsDef, V>(
 	argsDef: A,
 	positionals: readonly V[],
 	coerce: (def: ArgDef, value: V, label: string, index?: number) => ParsedArgValue,
+	defer?: DeferValueError,
 ) {
 	const resolved: Record<string, ParsedArgValue> = {};
 	let index = 0;
@@ -385,11 +421,11 @@ function resolveArgs<A extends ArgsDef, V>(
 			resolved[name] =
 				remaining.length === 0 && def.default !== undefined
 					? [resolveDefault(def, label)]
-					: remaining.map((v, i) => coerce(def, v, label, i));
+					: coerceOrDefer(() => remaining.map((v, i) => coerce(def, v, label, i)), defer);
 			index = positionals.length;
 		} else if (index < positionals.length) {
 			// SAFETY: the bounds check above proves this positional exists.
-			resolved[name] = coerce(def, positionals[index] as V, label);
+			resolved[name] = coerceOrDefer(() => coerce(def, positionals[index] as V, label), defer);
 			index++;
 		} else {
 			resolved[name] = resolveDefault(def, label);
@@ -552,9 +588,10 @@ function bind<A extends ArgsDef, F extends FlagsDef, V, W>(
 	flagValues: Readonly<Record<string, W | undefined>>,
 	coerceArg: (def: ArgDef, value: V, label: string, index?: number) => ParsedArgValue,
 	coerceFlag: (name: string, def: FlagDef, value: W) => ParsedFlagValue,
+	defer?: DeferValueError,
 ) {
-	const flags = resolveFlags(command.effectiveFlags, flagValues, coerceFlag);
-	return { ...resolveArgs(command.args, positionals, coerceArg), flags };
+	const flags = resolveFlags(command.effectiveFlags, flagValues, coerceFlag, defer);
+	return { ...resolveArgs(command.args, positionals, coerceArg, defer), flags };
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -568,30 +605,41 @@ function bind<A extends ArgsDef, F extends FlagsDef, V, W>(
  * positional arg mapping, type coercion, alias expansion, default values,
  * variadic args, and strict mode.
  *
- * Never throws for missing required values. Use {@link validateParsed} to
- * enforce required constraints after extensions have had a chance to handle
- * an invocation (e.g. `--help`).
+ * Never throws for missing required values or for invalid values (type
+ * coercion, `choices`, `parse`, env fallbacks). The first value error is
+ * returned as `valueError`, its definition is left unset (not defaulted), and
+ * {@link validateParsed} throws it after extensions have had a chance to
+ * handle an invocation (e.g. `--help`, `--version`).
  *
  * @param command - The command whose arg/flag definitions drive the parsing
  * @param argv - The argv array to parse (typically `process.argv.slice(2)`)
  * @param env - Environment consulted for `FlagDef.env` fallbacks; pass `{}` to parse without one
- * @returns Parsed args, flags, excessArgs (positionals before `--` not consumed by a declared argument), and rawArgs (everything after `--`)
- * @throws {CrustError} On unknown flags or type coercion failure
+ * @returns Parsed args, flags, excessArgs (positionals before `--` not consumed by a declared argument), rawArgs (everything after `--`), and any deferred valueError
+ * @throws {CrustError} On malformed argv: unknown flags, a missing option value, or a negated `noNegate` flag
  */
 export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
 	command: CommandNode & { args: A; effectiveFlags: F },
 	argv: string[],
 	env: FlagEnvironment = process.env,
-): ParseResult<A, F> {
+): ArgvParseResult<A, F> {
 	const { positionals, flagValues, rawArgs } = tokenizeArgv(command, argv);
+	const valueErrors: CrustError[] = [];
 	const { args, flags, consumed } = bind(
 		command,
 		positionals,
 		applyEnvAndDelimiter(command.effectiveFlags, flagValues, env),
 		coerceToken,
 		coerceFlagValue,
+		(error) => valueErrors.push(error),
 	);
-	return { args, flags, excessArgs: positionals.slice(consumed), rawArgs };
+	const [valueError] = valueErrors;
+	return {
+		args,
+		flags,
+		excessArgs: positionals.slice(consumed),
+		rawArgs,
+		...(valueError && { valueError }),
+	};
 }
 
 /**
@@ -694,19 +742,22 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 }
 
 /**
- * Validate a parse result against its command's required-value constraints.
+ * Validate a parse result: its deferred value error first, then the command's
+ * positional and required-value constraints.
  *
  * Separated from {@link parseArgs} so that middleware (e.g. `--help`) can
  * inspect the parse result before validation errors are surfaced.
  *
  * @param command - The command whose definitions drive the validation
  * @param parsed - The parse result from {@link parseArgs}
- * @throws {CrustError} On missing required args or flags
+ * @throws {CrustError} The deferred `valueError` (`PARSE`), or `VALIDATION` on
+ *   unexpected positionals or missing required args or flags
  */
 export function validateParsed<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
 	command: CommandNode & { args: A; effectiveFlags: F },
-	parsed: ParseResult<A, F>,
+	parsed: ArgvParseResult<A, F>,
 ): void {
+	if (parsed.valueError) throw parsed.valueError;
 	if (parsed.excessArgs.length > 0) {
 		throw new CrustError(
 			"VALIDATION",

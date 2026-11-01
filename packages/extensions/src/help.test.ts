@@ -200,6 +200,48 @@ describe("help", () => {
 		expect(exitCode).toBe(0);
 	});
 
+	it("help extension shows help instead of an invalid flag value from argv or env", async () => {
+		const actions: string[] = [];
+		const port = { name: "port", type: "number", default: 3000, env: { name: "PORT" } } as const;
+		const app = new Crust("app")
+			.extend(help())
+			.flags(port)
+			.add(
+				defineCommand("serve", (cmd) =>
+					cmd
+						.flags(port, { name: "mode", type: "string", choices: ["fast", "safe"] })
+						.action(() => void actions.push("serve")),
+				),
+			)
+			.action(() => void actions.push("root"));
+
+		const cases = [
+			["--port", "abc", "--help"],
+			["--help", "--port", "abc"],
+			["serve", "--port", "abc", "--help"],
+			["serve", "--help", "--mode", "slow"],
+		];
+		for (const argv of cases) {
+			const { stdout, stderr, exitCode } = await captureExecute(app, argv);
+			expect(stripAnsi(stdout), argv.join(" ")).toContain("Usage:");
+			expect(stderr).toBe("");
+			expect(exitCode).toBe(0);
+		}
+
+		vi.stubEnv("PORT", "abc");
+		for (const argv of [["--help"], ["serve", "--help"]]) {
+			const { stdout, stderr, exitCode } = await captureExecute(app, argv);
+			expect(stripAnsi(stdout), argv.join(" ")).toContain("Usage:");
+			expect(stderr).toBe("");
+			expect(exitCode).toBe(0);
+		}
+
+		const failed = await captureExecute(app, ["serve"]);
+		expect(failed.stderr).toContain('Expected number for --port, got "abc"');
+		expect(failed.exitCode).toBe(1);
+		expect(actions).toEqual([]);
+	});
+
 	it("help extension supports subcommands injected after its setup", async () => {
 		const app = new Crust("app")
 			.extend(help())

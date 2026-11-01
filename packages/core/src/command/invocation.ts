@@ -13,15 +13,14 @@ import {
 } from "../api/extension.ts";
 import { CrustError, type CaughtError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
-import { parseArgs, parseStructured, validateParsed } from "../parsing/parser.ts";
+import {
+	parseArgs,
+	parseStructured,
+	validateParsed,
+	type ArgvParseResult,
+} from "../parsing/parser.ts";
 import { applySchemas } from "../parsing/schema.ts";
-import type {
-	ExecuteOptions,
-	InvocationIO,
-	InvocationOptions,
-	ParseResult,
-	RunInputPayload,
-} from "../types.ts";
+import type { ExecuteOptions, InvocationIO, InvocationOptions, RunInputPayload } from "../types.ts";
 import { createContextResolver } from "./context-resolver.ts";
 import type { CrustCommandContext } from "./crust.ts";
 import {
@@ -284,7 +283,7 @@ type InvocationInput =
 interface ResolvedInput {
 	argv: readonly string[];
 	route: CommandRoute;
-	parsed: ParseResult;
+	parsed: ArgvParseResult;
 }
 
 function resolveArgvInput(root: CommandNode, argv: readonly string[]): ResolvedInput {
@@ -323,7 +322,8 @@ async function dispatch(
 ): Promise<{ status: "completed"; result: unknown } | { status: "handled"; by: ExtensionId }> {
 	const { rootNode, extensions } = prepared;
 
-	// Routing and syntax parsing — failures flow directly to the caller.
+	// Routing and syntax parsing — failures flow directly to the caller. Value errors
+	// wait in `parsed.valueError` for `terminal()`, so a preRun `--help` still wins.
 	const { argv, route, parsed } =
 		"argv" in input
 			? resolveArgvInput(rootNode, input.argv)

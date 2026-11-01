@@ -12,6 +12,11 @@ import { parseArgs, parseFlagValues, parseStructured, validateParsed } from "./p
 
 type DynamicParser = NonNullable<Extract<ArgDef, { type: "string" }>["parse"]>;
 
+/** Surface a deferred value error the way the invocation's terminal step does. */
+function parseAndValidate(...[command, argv, env]: Parameters<typeof parseArgs>): void {
+	validateParsed(command, parseArgs(command, argv, env));
+}
+
 it("leaves required variadics empty until required validation", () => {
 	const command = {
 		...createCommandNode("raw"),
@@ -40,9 +45,41 @@ describe("parseArgs — number flags", () => {
 	});
 
 	it("throws CrustError with PARSE code on non-numeric value", () => {
-		expect(() => parseArgs(cmd, ["--port", "abc"])).toThrow(
+		expect(() => parseAndValidate(cmd, ["--port", "abc"])).toThrow(
 			expect.objectContaining({ code: "PARSE", message: 'Expected number for --port, got "abc"' }),
 		);
+	});
+
+	it("rejects blank values from argv and env instead of coercing them to 0", () => {
+		const envCmd = makeNode({
+			meta: "test",
+			flags: { port: { type: "number", default: 3000, env: { name: "PORT" } } },
+		});
+		for (const raw of ["", "  "]) {
+			const message = `Expected number for --port, got "${raw}"`;
+			expect(() => parseAndValidate(envCmd, ["--port", raw], {})).toThrow(message);
+			expect(() => parseAndValidate(envCmd, [`--port=${raw}`], {})).toThrow(message);
+			expect(() => parseAndValidate(envCmd, [], { PORT: raw })).toThrow(message);
+		}
+	});
+
+	it("defers a value error to validateParsed and leaves the flag unset, not defaulted", () => {
+		const deferred = makeNode({
+			meta: "test",
+			flags: {
+				port: { type: "number", default: 3000 },
+				token: { type: "string", required: true },
+			},
+		});
+		const parsed = parseArgs(deferred, ["--port", "abc"], {});
+		expect(parsed.flags.port).toBeUndefined();
+		expect(parsed.valueError).toMatchObject({
+			code: "PARSE",
+			message: 'Expected number for --port, got "abc"',
+		});
+		// A value error outranks missing-required, as when it was thrown during parsing.
+		expect(() => validateParsed(deferred, parsed)).toThrow(parsed.valueError);
+		expect(parseArgs(deferred, ["--port", "80"], {})).not.toHaveProperty("valueError");
 	});
 });
 
@@ -594,7 +631,7 @@ describe("parseArgs — parse escape hatch", () => {
 				},
 			},
 		});
-		expect(() => parseArgs(cmd, ["--n", "x"])).toThrow(
+		expect(() => parseAndValidate(cmd, ["--n", "x"])).toThrow(
 			expect.objectContaining({ code: "PARSE", message: "Failed to parse --n: custom failure" }),
 		);
 	});
@@ -612,7 +649,7 @@ describe("parseArgs — choices enforcement", () => {
 		});
 		let err: unknown;
 		try {
-			parseArgs(cmd, ["--mode", "c"]);
+			parseAndValidate(cmd, ["--mode", "c"]);
 		} catch (e) {
 			err = e;
 		}
@@ -635,7 +672,7 @@ describe("parseArgs — choices enforcement", () => {
 				},
 			},
 		});
-		expect(() => parseArgs(cmd, ["--n", "3"])).toThrow(CrustError);
+		expect(() => parseAndValidate(cmd, ["--n", "3"])).toThrow(CrustError);
 		expect(parseCalled).toBe(false);
 	});
 
@@ -652,7 +689,7 @@ describe("parseArgs — choices enforcement", () => {
 		});
 		const ok = parseArgs(cmd, ["--tags", "a", "--tags", "b"]);
 		expect(ok.flags.tags).toEqual(["a", "b"]);
-		expect(() => parseArgs(cmd, ["--tags", "a", "--tags", "z"])).toThrow(CrustError);
+		expect(() => parseAndValidate(cmd, ["--tags", "a", "--tags", "z"])).toThrow(CrustError);
 	});
 });
 
@@ -834,10 +871,10 @@ describe("parseArgs \u2014 env fallback", () => {
 		expect(parsed.flags.level).toBe("INFO");
 		expect(parsed.flags.home).toEqual(new URL("https://example.com"));
 
-		expect(() => parseArgs(cmd, [], { APP_PORT: "nope" })).toThrow(
+		expect(() => parseAndValidate(cmd, [], { APP_PORT: "nope" })).toThrow(
 			'Expected number for --port, got "nope"',
 		);
-		expect(() => parseArgs(cmd, [], { APP_MODE: "test" })).toThrow(
+		expect(() => parseAndValidate(cmd, [], { APP_MODE: "test" })).toThrow(
 			'Invalid value "test" for --mode. Expected one of: dev, prod',
 		);
 	});
@@ -889,7 +926,7 @@ describe("parseArgs \u2014 env fallback", () => {
 			flags: { color: { type: "boolean", env: { name: "APP_COLOR" }, noNegate: true } },
 		});
 		expect(parseArgs(cmd, [], { APP_COLOR: "1" }).flags.color).toBe(true);
-		expect(() => parseArgs(cmd, [], { APP_COLOR: "0" })).toThrow(
+		expect(() => parseAndValidate(cmd, [], { APP_COLOR: "0" })).toThrow(
 			'Flag "--color" does not support negation',
 		);
 	});
@@ -999,7 +1036,7 @@ describe("parseArgs \u2014 delimiter", () => {
 		const parsed = parseArgs(cmd, [], { APP_TAGS: "a,,b", APP_PORTS: "80:443" });
 		expect(parsed.flags.tags).toEqual(["a", "b"]);
 		expect(parsed.flags.ports).toEqual([80, 443]);
-		expect(() => parseArgs(cmd, [], { APP_PORTS: "80:nope" })).toThrow(
+		expect(() => parseAndValidate(cmd, [], { APP_PORTS: "80:nope" })).toThrow(
 			'Expected number for --ports, got "nope"',
 		);
 	});
@@ -1287,6 +1324,12 @@ describe("parseFlagValues", () => {
 		await expect(
 			parseFlagValues({ port: { type: "number", env: { name: "PORT" } } }, { PORT: "x" }),
 		).rejects.toMatchObject({ code: "PARSE" });
+		await expect(
+			parseFlagValues(
+				{ port: { type: "number", default: 1, env: { name: "PORT" } } },
+				{ PORT: "" },
+			),
+		).rejects.toMatchObject({ code: "PARSE", message: 'Expected number for --port, got ""' });
 		await expect(
 			parseFlagValues({ key: { type: "string", required: true, env: { name: "KEY" } } }, {}),
 		).rejects.toMatchObject({ code: "VALIDATION" });
