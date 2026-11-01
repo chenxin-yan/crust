@@ -65,9 +65,10 @@ jobs:
           bun --version
           deno --version
 
-      - name: Select Node 26 for the Node binary scaffold
+      # The smoke host below is Node 24.0.0; Node binaries compile with mise.toml's Node 26.
+      - name: Select the toolchain Node for the Node binary scaffold
         shell: bash
-        run: echo "CRUST_TEST_SEA_NODE=$(mise exec node@26.10.0 -- node -p process.execPath)" >> "$GITHUB_ENV"
+        run: echo "CRUST_TEST_SEA_NODE=$(node -p process.execPath)" >> "$GITHUB_ENV"
 
       # Keep compatibility runtimes separate from the shared build toolchain.
       - name: Run create-crust smoke test
