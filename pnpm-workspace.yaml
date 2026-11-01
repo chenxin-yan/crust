@@ -5,7 +5,7 @@ packages:
 
 catalog:
   # The docs examples type-check against @crustjs/effect, so both must resolve one copy.
-  effect: 4.0.4
+  effect: 4.1.1
   vite: npm:@voidzero-dev/vite-plus-core@1.4.0
   vite-plus: 1.4.0
 
