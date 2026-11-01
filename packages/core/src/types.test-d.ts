@@ -1,7 +1,14 @@
 import type { StandardSchema } from "@crustjs/utils/schema";
 
 import type { Equal, Expect } from "../tests/helpers.ts";
-import type { ArgDef, ArgsDef, InferArgValue, InferArgs, InferFlags } from "./types.ts";
+import type {
+	ArgDef,
+	ArgsDef,
+	ExecuteOptions,
+	InferArgValue,
+	InferArgs,
+	InferFlags,
+} from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // InferArgs type-level tests
@@ -245,4 +252,11 @@ import type { ArgDef, ArgsDef, InferArgValue, InferArgs, InferFlags } from "./ty
 	type _equivalent = Expect<Equal<Results[number], true>>;
 	// Explicit incompatible duplicates stay impossible rather than becoming a scalar union.
 	type _duplicate = Expect<Equal<InferArgs<readonly [Text, Number]>, { x: never }>>;
+}
+
+{
+	// ExecuteOptions.argv accepts readonly arrays such as `as const` fixtures
+	const argv = ["build", "--watch"] as const;
+	const options: ExecuteOptions = { argv };
+	void options;
 }

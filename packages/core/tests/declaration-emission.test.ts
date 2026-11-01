@@ -155,11 +155,35 @@ beforeAll(() => {
 			include: ["consumer.ts"],
 		}),
 	);
+	// Strictest consumer settings: shipped declarations are checked, not skipped.
+	writeFileSync(
+		join(fixtureDir, "tsconfig.exact.json"),
+		JSON.stringify({
+			extends: "./tsconfig.json",
+			compilerOptions: {
+				declaration: false,
+				emitDeclarationOnly: false,
+				noEmit: true,
+				exactOptionalPropertyTypes: true,
+				skipLibCheck: false,
+			},
+		}),
+	);
 });
 
 describe("declaration emission for consumers", () => {
 	it("emits declarations for exported inferred builder types without TS2742/TS4058", () => {
 		const result = spawnSync(tscBin, ["-p", "."], { cwd: fixtureDir, timeout: 60_000 });
+		const output = result.stdout.toString() + result.stderr.toString();
+		expect(output).toBe("");
+		expect(result.status).toBe(0);
+	});
+
+	it("type-checks shipped declarations under exactOptionalPropertyTypes", () => {
+		const result = spawnSync(tscBin, ["-p", "tsconfig.exact.json"], {
+			cwd: fixtureDir,
+			timeout: 60_000,
+		});
 		const output = result.stdout.toString() + result.stderr.toString();
 		expect(output).toBe("");
 		expect(result.status).toBe(0);

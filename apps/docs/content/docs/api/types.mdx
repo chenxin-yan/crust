@@ -267,7 +267,7 @@ The awaited value a factory produces: `FactoryValueOf<typeof config>` is what `a
 
 ### `ContextMap` and `MergeContext`
 
-`ContextMap` is the upper bound for Context registries inferred by `.provide()`; consumer-defined shapes need no index signature. `MergeContext<A, B>` is `A & B`. `AnyContextFactory` accepts any Context factory.
+`ContextMap` is the upper bound for Context registries inferred by `.provide()`; consumer-defined shapes need no index signature. `MergeContext<A, B>` is `A & B`. `AnyContextFactory` accepts any Context factory, and `AnyContextInstance` any Context instance; annotate an `ExtensionFactory` with `readonly AnyContextInstance[]` to leave its provided Contexts open.
 
 ## Extension types
 

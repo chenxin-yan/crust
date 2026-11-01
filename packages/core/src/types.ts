@@ -29,7 +29,7 @@ export interface InvocationOptions extends Partial<InvocationIO> {
  */
 export interface ExecuteOptions {
 	/** Arguments to parse; defaults to `process.argv.slice(2)`. */
-	argv?: string[];
+	argv?: readonly string[];
 	/** Captured `stdout(text)` / `stderr(text)` callbacks (e.g. in-process tests). */
 	io?: Partial<InvocationIO>;
 	/**

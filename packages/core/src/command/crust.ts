@@ -693,14 +693,15 @@ type CollisionSpellings<
 	readonly providers: Providers;
 };
 
+// Explicit `| undefined`: mapped types over these members (e.g. `Omit`) keep it under exactOptionalPropertyTypes.
 type AnyCollisionSpellings = {
-	readonly actionDeps?: ContextMap;
+	readonly actionDeps?: ContextMap | undefined;
 	readonly pending: string;
 	readonly demands: ContextMap;
 	readonly extension: string;
 	readonly tree: string;
-	readonly recipeDeps?: ContextMap;
-	readonly providers?: Record<string, ContextValue>;
+	readonly recipeDeps?: ContextMap | undefined;
+	readonly providers?: Record<string, ContextValue> | undefined;
 };
 
 type RecipeDepsOf<S extends AnyCollisionSpellings> = S extends {
