@@ -1,4 +1,5 @@
-const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+let segmenter: Intl.Segmenter | undefined;
+const nonPrintableAscii = /[^\x20-\x7e]/;
 const zeroWidth = /[\p{Cc}\p{Cf}\p{Mn}\p{Me}]/u;
 // Wide iff rendered with emoji presentation: default-emoji code points, or
 // any Emoji code point forced emoji by VS16 (covers keycaps like "1\uFE0F\u20E3").
@@ -58,10 +59,14 @@ function isZeroWidth(code: number): boolean {
  * combining marks); exotic clusters may measure differently.
  */
 export function stringWidthJs(input: string): number {
-	// Printable ASCII has one column per code unit; controls/ANSI still use the fallback.
-	if (!/[^\x20-\x7e]/.test(input)) return input.length;
+	// Printable ASCII, raw or once ANSI is stripped, has one column per code unit;
+	// controls and non-ASCII still need grapheme segmentation.
+	if (!nonPrintableAscii.test(input)) return input.length;
+	const plain = input.replace(ansi, "");
+	if (!nonPrintableAscii.test(plain)) return plain.length;
+	segmenter ??= new Intl.Segmenter(undefined, { granularity: "grapheme" });
 	let width = 0;
-	for (const { segment } of segmenter.segment(input.replace(ansi, ""))) {
+	for (const { segment } of segmenter.segment(plain)) {
 		if (emoji.test(segment)) {
 			// A lone regional indicator (no flag pair) renders in one column.
 			const code = segment.codePointAt(0)!;

@@ -107,4 +107,4 @@ A per-call `sink` wins over ambient terminal output, which wins over `process.st
 
 A non-TTY sink gets one final line with no animation or cursor-control sequences. `updateMessage()` still determines the final message.
 
-Styling depends on [`@crustjs/style` color control](/docs/modules/style#color-control), not `sink.isTTY`. Use plain theme functions when captured output must contain no ANSI escapes.
+Default theme slots decide color from `sink.isTTY`, applying the `NO_COLOR` and `FORCE_COLOR` rules from [`@crustjs/style` color control](/docs/modules/style#color-control). Theme functions you pass, such as `@crustjs/style` imports, keep their own detection, which checks stdout.

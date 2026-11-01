@@ -4,8 +4,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vite-
 
 import { type ProgressSink, spinner, withProgressSink } from "./spinner.ts";
 import { createFakeSink } from "./test-helpers.ts";
+import { defaultTheme, defaultThemeFor } from "./theme.ts";
 
-// Sink TTY controls animation, not the default theme's process-wide ANSI styling.
+// Keep frames plain; the default theme follows the sink's TTY state (see "default theme color").
 beforeAll(() => vi.stubEnv("FORCE_COLOR", "0"));
 afterAll(() => vi.unstubAllEnvs());
 
@@ -180,6 +181,51 @@ describe("spinner — sink resolution", () => {
 		handle.stop();
 
 		expect(writes[0]).toContain("✓ Escaped\n");
+	});
+});
+
+describe("spinner — default theme color", () => {
+	const originalIsTTY = process.stdout.isTTY;
+
+	function withStdoutTTY(isTTY: boolean, fn: () => void): void {
+		vi.stubEnv("FORCE_COLOR", undefined);
+		vi.stubEnv("NO_COLOR", undefined);
+		Object.defineProperty(process.stdout, "isTTY", { value: isTTY, configurable: true });
+		try {
+			fn();
+		} finally {
+			Object.defineProperty(process.stdout, "isTTY", { value: originalIsTTY, configurable: true });
+			vi.stubEnv("FORCE_COLOR", "0");
+		}
+	}
+
+	it("styles a TTY sink when stdout is piped", () => {
+		const { sink, writes } = createFakeSink(true);
+		withStdoutTTY(false, () => {
+			const handle = spinner({ message: "Colored", sigint: false, sink });
+			handle.start();
+			handle.stop();
+		});
+
+		expect(writes.join("")).toContain("\x1B[32m✓\x1B[39m \x1B[1mColored\x1B[22m\n");
+	});
+
+	it("keeps a redirected sink plain when stdout is a TTY", () => {
+		const { sink, writes } = createFakeSink(false);
+		withStdoutTTY(true, () => {
+			const handle = spinner({ message: "Plain", sink });
+			handle.start();
+			handle.stop();
+		});
+
+		expect(writes).toEqual(["✓ Plain\n"]);
+	});
+
+	it("reuses the late-bound defaultTheme when the sink and stdout agree", () => {
+		withStdoutTTY(true, () => {
+			expect(defaultThemeFor({ isTTY: true })).toBe(defaultTheme);
+			expect(defaultThemeFor({ isTTY: false })).not.toBe(defaultTheme);
+		});
 	});
 });
 
