@@ -39,6 +39,35 @@ function _instanceofKeepsSubclass(error: unknown) {
 	}
 }
 
+// Structurally CrustError-compatible subclasses must keep their own members.
+class OptionalMemberError extends CrustError {
+	hint?: string;
+}
+
+class PrivateConstructorError extends CrustError<"PARSE"> {
+	private constructor() {
+		super("PARSE", "private");
+	}
+}
+
+class ProtectedConstructorError extends CrustError<"PARSE"> {
+	protected constructor() {
+		super("PARSE", "protected");
+	}
+}
+
+function _instanceofSubclassShapes(error: unknown) {
+	if (error instanceof OptionalMemberError) {
+		type _hint = Expect<Equal<typeof error.hint, string | undefined>>;
+	}
+	if (error instanceof PrivateConstructorError) {
+		type _private = Expect<Equal<typeof error, PrivateConstructorError>>;
+	}
+	if (error instanceof ProtectedConstructorError) {
+		type _protected = Expect<Equal<typeof error, ProtectedConstructorError>>;
+	}
+}
+
 function _reasonsAutocompleteButStayOpen() {
 	type _parse = Expect<
 		Equal<ParseErrorDetails["reason"], ParseErrorReason | (string & {}) | undefined>

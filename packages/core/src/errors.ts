@@ -195,13 +195,17 @@ export class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error
 		this.details = details[0] as CrustErrorDetails<C>;
 	}
 
-	// A class's `instanceof` narrowing otherwise yields `CrustError<any>`. The
-	// predicate yields one member per code, so checking `code` narrows `details`,
-	// and still narrows to subclasses.
-	static override [Symbol.hasInstance]<T>(
-		this: abstract new (...args: any[]) => T,
+	// A class's `instanceof` narrowing otherwise yields `CrustError<any>`. On
+	// `CrustError` itself the predicate yields one member per code, so checking
+	// `code` narrows `details`. Subclasses narrow to their prototype: an identity
+	// check (not assignability) and `prototype` (not a public construct signature)
+	// keep structurally compatible subclasses and non-public constructors working.
+	static override [Symbol.hasInstance]<Ctor extends { readonly prototype: unknown }>(
+		this: Ctor,
 		value: unknown,
-	): value is CrustError extends T ? AnyCrustError : T {
+	): value is (<X>() => X extends Ctor ? 1 : 2) extends <X>() => X extends typeof CrustError ? 1 : 2
+		? AnyCrustError
+		: Ctor["prototype"] {
 		return Function.prototype[Symbol.hasInstance].call(this, value);
 	}
 
