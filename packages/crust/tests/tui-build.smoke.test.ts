@@ -23,8 +23,8 @@ const enabled = process.env.CRUST_TUI_SMOKE === "1" && process.platform !== "win
 let fixtureDir = "";
 const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 
-const OPENTUI_VERSION = "0.6.6";
-const SOLID_VERSION = "1.9.15";
+const OPENTUI_VERSION = "0.8.0";
+const SOLID_VERSION = "1.9.16";
 
 const FIXTURE_PACKAGE_JSON = {
 	name: "tui-smoke",
@@ -142,11 +142,19 @@ await new Crust("solid-smoke")
 `,
 		);
 
-		const install = await runBoundedProcess(which("bun")!, ["install", "--minimum-release-age=0"], {
-			cwd: fixtureDir,
-			env: { ...process.env, BUN_BE_BUN: "1" },
-			timeout: 170_000,
-		});
+		// TODO: OpenTUI's Bun loader picks the libc package at runtime, so compiling must resolve
+		// both while package managers install only the host's. Drop `--libc *` here and the Linux
+		// `--libc` note in apps/docs/content/docs/modules/tui.mdx once this ships:
+		// https://github.com/anomalyco/opentui/issues/1909
+		const install = await runBoundedProcess(
+			which("bun")!,
+			["install", "--minimum-release-age=0", "--libc", "*"],
+			{
+				cwd: fixtureDir,
+				env: { ...process.env, BUN_BE_BUN: "1" },
+				timeout: 170_000,
+			},
+		);
 		if (install.exitCode !== 0) throw new Error(`bun install failed:\n${install.stderr}`);
 	}, 180_000);
 

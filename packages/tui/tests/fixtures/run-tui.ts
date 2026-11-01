@@ -1,6 +1,6 @@
 // Runs one runTui scenario on Bun and prints what it observed; src/index.test.ts
-// spawns this per test and owns every assertion. OpenTUI's native renderer is
-// unavailable on the pinned Node 24, where the test runner lives.
+// spawns this per test and owns every assertion. @crustjs/tui supports Bun only,
+// while the test runner lives on Node.
 import { PassThrough, Writable } from "node:stream";
 
 import { type CliRenderer, type CliRendererConfig, KeyEvent, type ParsedKey } from "@opentui/core";

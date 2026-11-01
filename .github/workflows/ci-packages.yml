@@ -47,7 +47,7 @@ jobs:
 
       # Build on the shared toolchain, then test the exact consumer runtime floor.
       - name: Setup runtimes
-        uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
+        uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
         with:
           install_args: bun node pnpm
 
@@ -84,7 +84,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup runtimes
-        uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
+        uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -97,11 +97,6 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: pnpm exec vp run --fail-if-no-match --filter ./packages/crust build:task
 
-      # The test host stays on Node 24; only the executable compiler needs 26.
-      - name: Select Node 26 for Node binary builds
-        shell: bash
-        run: echo "CRUST_TEST_SEA_NODE=$(mise exec node@26.10.0 -- node -p process.execPath)" >> "$GITHUB_ENV"
-
       # Runtime-gated suites must not pass merely because a required tool is missing.
       - name: Print required tool versions
         shell: bash
@@ -111,7 +106,6 @@ jobs:
           pnpm --version
           bun --version
           deno --version
-          "$CRUST_TEST_SEA_NODE" --version
 
       - name: Test Windows process cleanup and command-shim arguments
         if: matrix.os == 'windows-latest'
@@ -148,10 +142,10 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: pnpm --dir packages/core exec vp test run tests/build-marker-bundle.test.ts tests/deno-packaged-bundle.test.ts
 
-      # A Node 26 test host enables the real SEA case alongside Bun/Deno source paths.
+      # mise.toml's Node 26 enables the real SEA case alongside Bun/Deno source paths.
       - name: Test artifact paths across runtimes (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: mise exec node@26.10.0 -- pnpm --dir packages/utils exec vp test run tests/artifacts-runtimes.test.ts
+        run: pnpm --dir packages/utils exec vp test run tests/artifacts-runtimes.test.ts
 
       - name: Test application installs and compiler-backend delivery (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -174,7 +168,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup runtimes
-        uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
+        uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
