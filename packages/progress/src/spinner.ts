@@ -145,6 +145,11 @@ function rowCount(text: string, columns: number): number {
 		let column = 0;
 		// Walk graphemes: a wide character that does not fit wraps whole, leaving the row's last cell unused.
 		for (const { segment } of graphemes.segment(line)) {
+			// A carriage return rewinds to the start of the current row; the text after it overwrites.
+			if (segment === "\r") {
+				column = 0;
+				continue;
+			}
 			const width = stringWidth(segment);
 			if (column + width > columns) {
 				rows++;
@@ -236,7 +241,18 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 			// `process.exit()` skips stop(); "exit" listeners run synchronously, so restore here.
 			exitHandler = () => sink.write(SHOW_CURSOR);
 			process.once("exit", exitHandler);
-			drawFrame();
+			try {
+				drawFrame();
+			} catch (error) {
+				// A throwing theme or sink must not leak the exit listener or leave the cursor hidden.
+				cleanup();
+				try {
+					sink.write(SHOW_CURSOR);
+				} catch {
+					// The draw failure wins.
+				}
+				throw error;
+			}
 
 			timerId = setInterval(() => {
 				frameIndex = (frameIndex + 1) % frames.length;

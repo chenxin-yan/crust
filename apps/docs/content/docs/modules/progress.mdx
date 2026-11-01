@@ -73,7 +73,7 @@ Calling `advance()` before `start()` changes the count without repainting. The u
 const handle = spinner({ message: "Working", sigint: false });
 ```
 
-`SpinnerSigintPolicy` is `"exit" | false`. The default `"exit"` policy restores the cursor and re-raises `SIGINT` when no other listener remains. Use `false` when the application owns cleanup, and call `stop()` from that cleanup. Calling `process.exit()` while a spinner is running restores the cursor under either policy.
+`SpinnerSigintPolicy` is `"exit" | false`. The default `"exit"` policy restores the cursor and re-raises `SIGINT` when no other listener remains. Use `false` when the application owns cleanup, and call `stop()` from that cleanup. Calling `process.exit()` while an interactive spinner is running restores the cursor under either policy when the sink writes synchronously.
 
 ### Custom spinner frames
 

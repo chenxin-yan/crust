@@ -37,6 +37,13 @@ describe("createPromptIO screen", () => {
 		expect(harness.screen()).toBe(`${"a".repeat(79)}\n界x`);
 	});
 
+	it("blanks the rest of a wide character when either half is overwritten", () => {
+		const harness = createPromptIO();
+		harness.io.output.write("界x\ra\n界y\x1B[2Gb");
+
+		expect(harness.screen()).toBe("a x\n by");
+	});
+
 	it("parses an escape sequence split across writes", () => {
 		const harness = createPromptIO();
 		harness.io.output.write("\x1B[");

@@ -166,6 +166,18 @@ describe("spinner — terminal sink", () => {
 		expect(writes[2]).toBe("\x1B[3A\r\x1B[J⠋ short\r\n");
 	});
 
+	it("does not count text a carriage return rewinds over as a wrapped row", () => {
+		const writes: string[] = [];
+		const sink = { isTTY: true, columns: 10, write: (text: string) => void writes.push(text) };
+		// "⠋ abcdef" fills 8 columns; "\r" rewinds, so "ghijkl" overwrites the same row.
+		const handle = spinner({ message: "abcdef\rghijkl", sigint: false, sink });
+		handle.start();
+		handle.updateMessage("short");
+		handle.stop();
+
+		expect(writes[2]).toBe("\x1B[1A\r\x1B[J⠋ short\r\n");
+	});
+
 	it("erases wrapped rows before the final line", () => {
 		const writes: string[] = [];
 		const sink = { isTTY: true, columns: 10, write: (text: string) => void writes.push(text) };
@@ -432,6 +444,27 @@ describe("spinner — cleanup", () => {
 		await tick(200);
 
 		expect(writes.join("")).toBe(outputAfterComplete);
+	});
+
+	it("restores the cursor and removes the exit listener when the first frame throws", () => {
+		const { sink, writes } = createFakeSink(true);
+		const previousExit = process.listeners("exit");
+		const previousSigint = process.listeners("SIGINT");
+		const themeError = new Error("theme boom");
+		const handle = spinner({
+			message: "Working",
+			sink,
+			theme: {
+				spinner: () => {
+					throw themeError;
+				},
+			},
+		});
+
+		expect(() => handle.start()).toThrow(themeError);
+		expect(writes.at(-1)).toBe("\x1B[?25h");
+		expect(process.listeners("exit")).toEqual(previousExit);
+		expect(process.listeners("SIGINT")).toEqual(previousSigint);
 	});
 
 	it("restores the cursor and cleans up when the final theme throws", async () => {

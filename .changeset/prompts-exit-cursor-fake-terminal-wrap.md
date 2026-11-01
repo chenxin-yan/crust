@@ -2,7 +2,7 @@
 "@crustjs/prompts": patch
 ---
 
-`process.exit()` while a prompt is active restores the cursor and raw mode.
+`process.exit()` while a prompt is active restores raw mode and, for synchronous output sinks, the cursor.
 
 The fake terminal behind `createPromptIO()` and `renderPrompt()` (`@crustjs/prompts/testing`) now wraps text at its 80 columns by display width, so `screen()` matches a real terminal for long lines and wide characters.
 

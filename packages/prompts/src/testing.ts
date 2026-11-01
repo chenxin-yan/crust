@@ -151,6 +151,9 @@ class FakeTerminal {
 		}
 		const cells = this.lines[this.row] ?? [];
 		while (cells.length < this.column) cells.push(" ");
+		// Overwriting either half of a wide character ("" marks its second cell) blanks the other half.
+		if (cells[this.column] === "") cells[this.column - 1] = " ";
+		if (cells[this.column + width] === "") cells[this.column + width] = " ";
 		cells[this.column] = char;
 		if (width === 2) cells[this.column + 1] = "";
 		this.column += width;
