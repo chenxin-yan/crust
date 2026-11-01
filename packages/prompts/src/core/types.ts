@@ -100,11 +100,12 @@ export type ChoiceValue<C extends readonly Choice<unknown>[]> = C[number] extend
 /**
  * @internal Rejects a literal non-empty choices tuple. Fallback overloads use
  * it so a `default` or `initial` outside literal choices fails instead of
- * widening the result.
+ * widening the result. Arrays have no explicit `"0"` property, so this
+ * structural constraint also accepts unresolved generic array types.
  */
-export type NotChoiceTuple<C> = C extends readonly [unknown, ...unknown[]]
-	? "FIX_DEFAULT_CHOICE: default and initial must be one of choices"
-	: C;
+export type NotChoiceTuple<C extends readonly unknown[]> = {
+	readonly "0"?: C extends readonly [unknown, ...unknown[]] ? never : C[number];
+};
 
 // ────────────────────────────────────────────────────────────────────────────
 // Validation

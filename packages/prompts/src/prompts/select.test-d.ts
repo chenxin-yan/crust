@@ -28,6 +28,10 @@ async function _selectTypeInferenceTests() {
 		choices: [{ label: "HTTP", value: 80 }],
 	});
 	type _ExplicitWins = Expect<Equal<typeof explicit, number>>;
+	const explicitUnion = await select<"dev" | "prod">({
+		choices: [{ label: "Development", value: "dev" }, "prod"],
+	});
+	type _ExplicitUnionIsPreserved = Expect<Equal<typeof explicitUnion, "dev" | "prod">>;
 
 	// An explicit non-string type argument rejects plain-string choices, which
 	// would otherwise submit a string where the caller was promised a number.
@@ -52,6 +56,16 @@ async function _selectTypeInferenceTests() {
 	// A generic wrapper over SelectOptions<T> still resolves to Promise<T>.
 	const viaWrapper = (options: SelectOptions<number>): Promise<number> => select(options);
 	void viaWrapper;
+
+	const viaGenericChoices = <C extends readonly string[]>(choices: C) => select({ choices });
+	type _GenericChoicesReturnString = Expect<
+		Equal<ReturnType<typeof viaGenericChoices>, Promise<string>>
+	>;
+	const viaGenericObjects = <C extends readonly { label: string; value: number }[]>(choices: C) =>
+		select({ choices });
+	type _GenericObjectsReturnNumber = Expect<
+		Equal<ReturnType<typeof viaGenericObjects>, Promise<number>>
+	>;
 
 	// A default or initial outside literal choices is rejected instead of
 	// widening the result through a fallback overload.

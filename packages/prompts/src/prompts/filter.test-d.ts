@@ -9,6 +9,20 @@ async function _filterTypeInferenceTests() {
 	const widened: string[] = ["a", "b"];
 	const loose = await filter({ message: "?", choices: widened });
 	type _LooseIsString = Expect<Equal<typeof loose, string>>;
+	const explicitUnion = await filter<"dev" | "prod">({
+		choices: [{ label: "Development", value: "dev" }, "prod"],
+	});
+	type _ExplicitUnionIsPreserved = Expect<Equal<typeof explicitUnion, "dev" | "prod">>;
+
+	const viaGenericChoices = <C extends readonly string[]>(choices: C) => filter({ choices });
+	type _GenericChoicesReturnString = Expect<
+		Equal<ReturnType<typeof viaGenericChoices>, Promise<string>>
+	>;
+	const viaGenericObjects = <C extends readonly { label: string; value: number }[]>(choices: C) =>
+		filter({ choices });
+	type _GenericObjectsReturnNumber = Expect<
+		Equal<ReturnType<typeof viaGenericObjects>, Promise<number>>
+	>;
 
 	// @ts-expect-error "biome" is not one of the literal choices
 	void filter({ message: "?", choices: ["prettier", "eslint"], default: "biome" });
