@@ -22,6 +22,24 @@ describe("runInteractive", () => {
 		expect(run.screen()).toContain("Hello, Ada!");
 	});
 
+	it("captures stdout separately from the screen", async () => {
+		const app = new Crust("test-cli").action(async ({ stdout }) => {
+			const name = await input({ message: "Name?" });
+			stdout(`Hello, ${name}!`);
+			stdout("Bye");
+		});
+
+		const run = runInteractive(app, []);
+		await run.waitFor(/Name\?/);
+		expect(run.stdout()).toBe("");
+		run.type("Ada");
+		run.keys("return");
+		await run.done;
+
+		expect(run.stdout()).toBe("Hello, Ada!\nBye");
+		expect(run.screen()).not.toContain("Hello, Ada!");
+	});
+
 	it("waitFor rethrows the application error instead of hanging", async () => {
 		const error = new Error("boom");
 		const app = new Crust("test-cli").action(() => {

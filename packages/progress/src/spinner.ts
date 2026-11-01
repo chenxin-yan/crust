@@ -2,6 +2,7 @@
 // Spinner — Animated progress spinner for @crustjs/progress
 // ────────────────────────────────────────────────────────────────────────────
 
+import { stringWidth } from "@crustjs/style";
 import {
 	getTerminalIO,
 	type TerminalIO as SharedTerminalIO,
@@ -16,6 +17,7 @@ const ESC = "\x1B[";
 const HIDE_CURSOR = `${ESC}?25l`;
 const SHOW_CURSOR = `${ESC}?25h`;
 const ERASE_LINE = `${ESC}2K`;
+const ERASE_DOWN = `${ESC}J`;
 const CURSOR_TO_START = "\r";
 
 interface SpinnerFrameSet {
@@ -109,8 +111,8 @@ export interface SpinnerHandle {
 }
 
 export interface SpinnerOptions<T> extends SpinnerHandleOptions {
-	/** The async task to run while the spinner is displayed. */
-	readonly task: (controller: Pick<SpinnerHandle, "updateMessage">) => Promise<T>;
+	/** The task to run while the spinner is displayed; it may return a value or a promise. */
+	readonly task: (controller: Pick<SpinnerHandle, "updateMessage">) => T | Promise<T>;
 }
 
 function resolveSpinner(spinnerType: SpinnerType | undefined): SpinnerFrameSet {
@@ -131,20 +133,29 @@ function frameAt(frames: readonly string[], index: number): string {
 	return frame;
 }
 
-function renderFrame(frame: string, message: string, theme: ProgressTheme): string {
-	return `${ERASE_LINE}${CURSOR_TO_START}${theme.spinner(frame)} ${theme.message(message)}`;
+/** Physical rows `text` occupies once the terminal wraps it at `columns`. */
+function rowCount(text: string, columns: number): number {
+	let rows = 0;
+	for (const line of text.split("\n")) rows += Math.max(1, Math.ceil(stringWidth(line) / columns));
+	return rows;
+}
+
+/** Return to the first row of the previous frame and clear it and every wrapped row below. */
+function eraseFrame(rows: number): string {
+	return rows > 1
+		? `${ESC}${rows - 1}A${CURSOR_TO_START}${ERASE_DOWN}`
+		: ERASE_LINE + CURSOR_TO_START;
 }
 
 function renderFinal(
 	message: string,
 	theme: ProgressTheme,
 	outcome: SpinnerOutcome,
-	erase: boolean,
+	erase: string,
 ): string {
 	const symbol = outcome === "success" ? SUCCESS_SYMBOL : ERROR_SYMBOL;
 	const styleSymbol = outcome === "success" ? theme.success : theme.error;
-	const line = `${styleSymbol(symbol)} ${theme.message(message)}\n`;
-	return erase ? ERASE_LINE + CURSOR_TO_START + line : line;
+	return `${erase}${styleSymbol(symbol)} ${theme.message(message)}\n`;
 }
 
 /** Terminal IO shared by prompts, spinners, and progress indicators. */
@@ -153,10 +164,7 @@ export type TerminalIO = SharedTerminalIO;
 /** Writable-compatible output driven by spinners and progress indicators. */
 export type ProgressSink = TerminalOutput;
 
-/** Run a function with terminal streams available to UI created in its async scope. */
-export function withTerminalIO<T>(io: TerminalIO, fn: () => T): T {
-	return withSharedTerminalIO(io, fn);
-}
+export { withTerminalIO } from "@crustjs/utils/terminal";
 
 /** Run a function with an ambient output sink for progress indicators. */
 export function withProgressSink<T>(sink: ProgressSink, fn: () => T): T {
@@ -175,8 +183,16 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 	let frameIndex = 0;
 	let started = false;
 	let finished = false;
+	let frameRows = 1;
 	let timerId: ReturnType<typeof setInterval> | undefined;
 	let sigintHandler: (() => void) | undefined;
+	let exitHandler: (() => void) | undefined;
+
+	function drawFrame(): void {
+		const line = `${theme.spinner(frameAt(frames, frameIndex))} ${theme.message(currentMessage)}`;
+		sink.write(eraseFrame(frameRows) + line);
+		frameRows = rowCount(line, sink.columns || 80);
+	}
 
 	function cleanup(): void {
 		if (timerId !== undefined) {
@@ -187,6 +203,10 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 			process.removeListener("SIGINT", sigintHandler);
 			sigintHandler = undefined;
 		}
+		if (exitHandler) {
+			process.removeListener("exit", exitHandler);
+			exitHandler = undefined;
+		}
 	}
 
 	return {
@@ -196,11 +216,14 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 			if (!isInteractive) return;
 
 			sink.write(HIDE_CURSOR);
-			sink.write(renderFrame(frameAt(frames, 0), currentMessage, theme));
+			// `process.exit()` skips stop(); "exit" listeners run synchronously, so restore here.
+			exitHandler = () => sink.write(SHOW_CURSOR);
+			process.once("exit", exitHandler);
+			drawFrame();
 
 			timerId = setInterval(() => {
 				frameIndex = (frameIndex + 1) % frames.length;
-				sink.write(renderFrame(frameAt(frames, frameIndex), currentMessage, theme));
+				drawFrame();
 			}, interval);
 
 			if (sigint === "exit") {
@@ -225,7 +248,7 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 			if (finished) return;
 			currentMessage = message;
 			if (started && isInteractive) {
-				sink.write(renderFrame(frameAt(frames, frameIndex), currentMessage, theme));
+				drawFrame();
 			}
 		},
 
@@ -238,7 +261,8 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 			// restore. The first failure wins; boxed because any value (even undefined) can be thrown.
 			let renderFailure: { error: unknown } | undefined;
 			try {
-				sink.write(renderFinal(currentMessage, theme, outcome, started && isInteractive));
+				const erase = started && isInteractive ? eraseFrame(frameRows) : "";
+				sink.write(renderFinal(currentMessage, theme, outcome, erase));
 			} catch (error) {
 				renderFailure = { error };
 			}
@@ -255,7 +279,7 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 }
 
 /**
- * Display a spinner while running an async task. The final line renders `✓`
+ * Display a spinner while running a task. The final line renders `✓`
  * when the task resolves and `✗` when it throws (the error is re-thrown).
  */
 export function spinner<T>(options: SpinnerOptions<T>): Promise<T>;
@@ -266,7 +290,9 @@ export function spinner<T>(options: SpinnerOptions<T>): Promise<T>;
  * Non-interactive stderr renders no animation frames — only the final
  * `✓`/`✗` line on `stop()`.
  */
-export function spinner(options: SpinnerHandleOptions): SpinnerHandle;
+export function spinner(
+	options: SpinnerHandleOptions & { readonly task?: undefined },
+): SpinnerHandle;
 export function spinner<T>(
 	options: SpinnerHandleOptions & { task?: SpinnerOptions<T>["task"] },
 ): Promise<T> | SpinnerHandle {

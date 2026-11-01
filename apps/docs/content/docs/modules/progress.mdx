@@ -32,7 +32,7 @@ await spinner({ message: "Building", task: async () => build() });
 // failure: ✗ Building
 ```
 
-A failed task prints the error line, then rejects with the task error. Non-TTY output omits animation and cursor-control sequences.
+`task` may return a value or a promise; `spinner({ task })` always returns a promise. A failed task prints the error line, then rejects with the task error. Non-TTY output omits animation and cursor-control sequences.
 
 <auto-type-table path="../../../../../packages/progress/src/spinner.ts" name="SpinnerOptions" />
 
@@ -71,7 +71,7 @@ Calling `advance()` before `start()` changes the count without repainting. The u
 const handle = spinner({ message: "Working", sigint: false });
 ```
 
-`SpinnerSigintPolicy` is `"exit" | false`. The default `"exit"` policy restores the cursor and re-raises `SIGINT` when no other listener remains. Use `false` when the application owns cleanup, and call `stop()` from that cleanup.
+`SpinnerSigintPolicy` is `"exit" | false`. The default `"exit"` policy restores the cursor and re-raises `SIGINT` when no other listener remains. Use `false` when the application owns cleanup, and call `stop()` from that cleanup. Calling `process.exit()` while a spinner is running restores the cursor under either policy.
 
 ### Custom spinner frames
 

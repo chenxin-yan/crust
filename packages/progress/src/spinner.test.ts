@@ -116,6 +116,54 @@ describe("spinner — terminal sink", () => {
 		expect(process.listeners("SIGINT")).toEqual(previousHandlers);
 		handle.stop();
 	});
+
+	it("restores the cursor on process exit and removes the exit listener on stop", () => {
+		const { sink, writes } = createFakeSink(true);
+		const previousHandlers = new Set(process.listeners("exit"));
+		const handle = spinner({ message: "Working", sigint: false, sink });
+		handle.start();
+		const added = process.listeners("exit").filter((listener) => !previousHandlers.has(listener));
+
+		expect(added).toHaveLength(1);
+		// Invoke directly — emitting a real "exit" would run the test runner's listeners.
+		added[0]?.(0);
+		expect(writes.at(-1)).toBe("\x1B[?25h");
+
+		handle.stop();
+		expect(new Set(process.listeners("exit"))).toEqual(previousHandlers);
+	});
+
+	it("erases every wrapped row of a message wider than the terminal", () => {
+		const writes: string[] = [];
+		const sink = { isTTY: true, columns: 10, write: (text: string) => void writes.push(text) };
+		// "⠋ " + 16 characters = 18 columns → 2 rows at 10 columns.
+		const handle = spinner({ message: "abcdefghijklmnop", sigint: false, sink });
+		handle.start();
+		handle.updateMessage("short");
+		handle.updateMessage("again");
+		handle.stop("success", "abcdefghijklmnop");
+
+		expect(writes).toEqual([
+			"\x1B[?25l",
+			"\x1B[2K\r⠋ abcdefghijklmnop",
+			// Back to the first wrapped row, then clear it and everything below.
+			"\x1B[1A\r\x1B[J⠋ short",
+			"\x1B[2K\r⠋ again",
+			"\x1B[2K\r✓ abcdefghijklmnop\n",
+			"\x1B[?25h",
+		]);
+	});
+
+	it("erases wrapped rows before the final line", () => {
+		const writes: string[] = [];
+		const sink = { isTTY: true, columns: 10, write: (text: string) => void writes.push(text) };
+		const handle = spinner({ message: "abcdefghijklmnopqrstuvwx", sigint: false, sink });
+		handle.start();
+		handle.stop("error", "failed");
+
+		// 26 columns → 3 rows.
+		expect(writes.at(-2)).toBe("\x1B[2A\r\x1B[J✗ failed\n");
+	});
 });
 
 describe("spinner — sink resolution", () => {

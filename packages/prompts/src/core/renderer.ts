@@ -10,7 +10,6 @@ import {
 	type TerminalIO,
 	type TerminalInput,
 	type TerminalOutput,
-	withTerminalIO as withSharedTerminalIO,
 } from "@crustjs/utils/terminal";
 
 import { defaultThemeFor } from "./theme.ts";
@@ -29,15 +28,7 @@ export type PromptOutput = TerminalOutput;
 /** Streams used to render and receive input for a prompt. */
 export type PromptIO = TerminalIO;
 
-/** Run a function with terminal streams available to UI created in its async scope. */
-export function withTerminalIO<T>(io: PromptIO, fn: () => T): T {
-	return withSharedTerminalIO(io, fn);
-}
-
-/** Run a function with prompt streams available to prompts created in its async scope. */
-export function withPromptIO<T>(io: PromptIO, fn: () => T): T {
-	return withSharedTerminalIO(io, fn);
-}
+export { withTerminalIO, withTerminalIO as withPromptIO } from "@crustjs/utils/terminal";
 
 /** Resolve explicit, ambient, then process-global streams. */
 export function resolvePromptIO(io?: PromptIO): Required<PromptIO> {
@@ -271,6 +262,7 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Prom
 		function cleanup(): void {
 			if (isCleanedUp) return;
 			isCleanedUp = true;
+			process.removeListener("exit", cleanup);
 			activeInputs.delete(stdin);
 			activeOutputs.delete(output);
 
@@ -407,6 +399,8 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Prom
 			}
 			stdin.resume();
 			output.write(HIDE_CURSOR);
+			// `process.exit()` skips submit/cancel; "exit" listeners run synchronously, so restore here.
+			process.once("exit", cleanup);
 
 			renderFrame(render(state, theme));
 
