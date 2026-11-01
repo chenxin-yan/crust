@@ -89,11 +89,13 @@ import {
 	runInvocation,
 } from "./invocation.ts";
 import {
+	type AddedChild,
 	type CommandAction,
 	type CommandNode,
 	cloneCommandNode,
 	cloneFlagRegistry,
 	createCommandNode,
+	childEntriesOf,
 	registerFlag,
 } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
@@ -237,6 +239,28 @@ export type CommandDefinitionData<D> = D extends {
 }
 	? Data
 	: D;
+
+/**
+ * Sibling spellings keyed by children-list head. The next `.add()` on that head
+ * takes (removes) the set before extending it, so only one builder ever mutates
+ * a given set; any other builder sharing the head rebuilds its own.
+ */
+const spellingIndexes = new WeakMap<AddedChild, Set<string>>();
+
+function takeSpellingIndex(node: CommandNode): Set<string> {
+	const head = node.addedChildren;
+	const owned = head === undefined ? undefined : spellingIndexes.get(head);
+	if (owned !== undefined) {
+		spellingIndexes.delete(head!);
+		return owned;
+	}
+	const index = new Set<string>();
+	for (const { meta } of childEntriesOf(node)) {
+		index.add(meta.name);
+		for (const alias of meta.aliases ?? []) index.add(alias);
+	}
+	return index;
+}
 
 function materializeCommandDefinition(
 	definition: CommandDefinition,
@@ -1542,16 +1566,12 @@ export class Crust<
 	}
 
 	private _addDefinitions<Out>(definitions: readonly CommandDefinition[]): Out {
-		// Keep partial additions private if a duplicate or recipe throws. Every
-		// recipe inherits from the original parent, never from earlier siblings.
-		const subCommands = { ...this._node.subCommands };
-		// One spelling index per batch keeps large `.add(...)` calls linear.
-		const siblingSpellings = new Set<string>();
-		const indexSpellings = (child: CommandNode) => {
-			siblingSpellings.add(child.meta.name);
-			for (const alias of child.meta.aliases ?? []) siblingSpellings.add(alias);
-		};
-		for (const sibling of Object.values(subCommands)) indexSpellings(sibling);
+		// Keep partial additions private if a duplicate throws. Recipes run later, on
+		// first use (see ChildEntry), each against this builder as its parent, never
+		// an earlier sibling; builders are immutable, so capturing the node is safe.
+		let head = this._node.addedChildren;
+		const siblingSpellings = takeSpellingIndex(this._node);
+		const parent = this._node;
 		for (const definition of definitions) {
 			// FIX_COMMAND_COLLISION owns literal names; this owns dynamic `.add()`,
 			// where a silent replacement makes the earlier command unreachable.
@@ -1571,12 +1591,18 @@ export class Crust<
 					},
 				);
 			}
-			const childNode = materializeCommandDefinition(definition, this._node);
-			subCommands[definition.name] = childNode;
-			indexSpellings(childNode);
+			let childNode: CommandNode | undefined;
+			head = {
+				name: definition.name,
+				meta: { name: definition.name, ...definition[commandDefinitionInternal].meta },
+				resolve: () => (childNode ??= materializeCommandDefinition(definition, parent)),
+				next: head,
+			};
+			for (const spelling of spellings) siblingSpellings.add(spelling);
 		}
 
-		return this._clone<Out>({ subCommands });
+		if (head !== undefined) spellingIndexes.set(head, siblingSpellings);
+		return this._clone<Out>({ addedChildren: head });
 	}
 
 	/**

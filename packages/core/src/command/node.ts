@@ -44,8 +44,10 @@ export interface CommandNode {
 	flagSpellings: Map<string, FlagSpelling>;
 	/** Positional argument definitions */
 	args: ArgsDef;
-	/** Named subcommands keyed by name */
+	/** Named subcommands keyed by name; read builder nodes through {@link subCommandsOf}. */
 	subCommands: Record<string, CommandNode>;
+	/** Builder-only children added by `.add()`, newest first, on top of `subCommands`. */
+	addedChildren?: AddedChild;
 	/** Contexts available to this command in provide order (construction order is pull-driven). */
 	contexts: CommandContext[];
 	/** Contexts `.provide()`d on this command itself; preparation installs their sections here. */
@@ -131,10 +133,97 @@ export function cloneFlagRegistry(
 	};
 }
 
+/**
+ * A persistent list cell: `.add()` prepends one per child instead of copying the
+ * whole record, which made long `.add()` chains quadratic. Builders sharing a tail
+ * stay independent because cells are never mutated.
+ */
+export interface AddedChild extends ChildEntry {
+	readonly next: AddedChild | undefined;
+}
+
+/**
+ * A child known by name and metadata before its node exists. `.add()` records
+ * definitions this way so recipes run only when an invocation, snapshot, or
+ * documentation pass first needs that command.
+ */
+export interface ChildEntry {
+	readonly name: string;
+	readonly meta: CommandMeta;
+	/** Materializes the child once; a throwing recipe throws again on the next call. */
+	readonly resolve: () => CommandNode;
+}
+
+/** The node's children in insertion order, without materializing pending ones. */
+export function childEntriesOf(node: CommandNode): ChildEntry[] {
+	const entries: ChildEntry[] = Object.entries(node.subCommands).map(([name, child]) => ({
+		name,
+		meta: child.meta,
+		resolve: () => child,
+	}));
+	const added: AddedChild[] = [];
+	for (let cell = node.addedChildren; cell; cell = cell.next) added.push(cell);
+	for (let i = added.length - 1; i >= 0; i--) entries.push(added[i]!);
+	return entries;
+}
+
+const childRecords = new WeakMap<AddedChild, Record<string, CommandNode>>();
+
+/**
+ * The node's children in insertion order, materializing pending ones; the result
+ * is shared and must not be mutated.
+ */
+export function subCommandsOf(node: CommandNode): Record<string, CommandNode> {
+	const head = node.addedChildren;
+	if (head === undefined) return node.subCommands;
+	let record = childRecords.get(head);
+	if (record === undefined) {
+		record = {};
+		for (const entry of childEntriesOf(node)) record[entry.name] = entry.resolve();
+		childRecords.set(head, record);
+	}
+	return record;
+}
+
+const lazyChildMeta = new WeakMap<object, ReadonlyMap<string, CommandMeta>>();
+
+/**
+ * A frozen children record whose nodes are built on first property access, so an
+ * invocation prepares only the commands it routes through. Whole-tree readers
+ * (`Object.entries`, spread, snapshots) still see and build every child.
+ */
+export function lazyChildRecord(
+	entries: Iterable<ChildEntry>,
+	build: (entry: ChildEntry) => CommandNode,
+): Record<string, CommandNode> {
+	const record: Record<string, CommandNode> = {};
+	const meta = new Map<string, CommandMeta>();
+	for (const entry of entries) {
+		let built: CommandNode | undefined;
+		Object.defineProperty(record, entry.name, {
+			enumerable: true,
+			get: () => (built ??= build(entry)),
+		});
+		meta.set(entry.name, entry.meta);
+	}
+	lazyChildMeta.set(record, meta);
+	return Object.freeze(record);
+}
+
+/** Child metadata by name, read without building children when the record is lazy. */
+export function childMetaOf(
+	subCommands: Record<string, CommandNode>,
+): Iterable<[string, CommandMeta]> {
+	return (
+		lazyChildMeta.get(subCommands) ??
+		Object.entries(subCommands).map(([name, child]): [string, CommandMeta] => [name, child.meta])
+	);
+}
+
 /** Deep-clone a command subtree without mutating the builder graph. */
 export function cloneCommandNode(node: CommandNode): CommandNode {
 	const subCommands: Record<string, CommandNode> = {};
-	for (const [name, sub] of Object.entries(node.subCommands)) {
+	for (const [name, sub] of Object.entries(subCommandsOf(node))) {
 		subCommands[name] = cloneCommandNode(sub);
 	}
 
@@ -147,6 +236,7 @@ export function cloneCommandNode(node: CommandNode): CommandNode {
 		...cloneFlagRegistry(node),
 		args: [...node.args],
 		subCommands,
+		addedChildren: undefined,
 		contexts: node.contexts.map((context) => ({ ...context })),
 		providedContexts: [...node.providedContexts],
 		demands: [...node.demands],

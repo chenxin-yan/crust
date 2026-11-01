@@ -10,7 +10,7 @@ import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { ArgsDef, NamedFlagDef, ParsedFlagValue } from "../types.ts";
 import { type AnyCrust, type CommandConfig, Crust, defineCommand } from "./crust.ts";
-import { cloneCommandNode } from "./node.ts";
+import { cloneCommandNode, subCommandsOf } from "./node.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -90,7 +90,7 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 		expect(await app.snapshot()).toEqual(before);
 	});
 
-	it("copies exactly the containers a builder method changes", () => {
+	it("copies exactly the containers a builder method changes", async () => {
 		const auth = defineContext("auth")
 			.flags({ name: "api-key", type: "string" })
 			.setup(() => ({}))();
@@ -118,8 +118,9 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 		expect(Object.keys(withContext._node.effectiveFlags)).toEqual(["verbose", "api-key"]);
 
 		const withChild = base.add(defineCommand("added", (command) => command));
-		expect(withChild._node.subCommands).not.toBe(base._node.subCommands);
-		expect(Object.keys(withChild._node.subCommands)).toEqual(["existing", "added"]);
+		expect(withChild._node.addedChildren).not.toBe(base._node.addedChildren);
+		expect(Object.keys(subCommandsOf(withChild._node))).toEqual(["existing", "added"]);
+		expect(Object.keys(subCommandsOf(base._node))).toEqual(["existing"]);
 
 		const withAction = base.action(() => {});
 		expect(withAction._node.run).toBeDefined();
@@ -137,23 +138,26 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 		] as const) {
 			expect(withExtension._node[key]).not.toBe(base._node[key]);
 		}
-		expect(withExtension._node.subCommands.existing).not.toBe(base._node.subCommands.existing);
+		expect(withExtension._node.subCommands.existing).not.toBe(subCommandsOf(base._node).existing);
 		expect(withExtension._node.contexts.map(({ instance }) => instance.name)).toEqual(["db"]);
 
 		let demandsChecked = false;
-		new Crust("test").provide(db()).add(
-			defineCommand("child", (command) => {
-				const withDemand = command.use(db);
-				expect(withDemand._node.demands).not.toBe(command._node.demands);
-				expect(command._node.demands).toEqual([]);
-				expect(withDemand._node.demands).toEqual([db]);
-				demandsChecked = true;
-				return withDemand;
-			}),
-		);
+		await new Crust("test")
+			.provide(db())
+			.add(
+				defineCommand("child", (command) => {
+					const withDemand = command.use(db);
+					expect(withDemand._node.demands).not.toBe(command._node.demands);
+					expect(command._node.demands).toEqual([]);
+					expect(withDemand._node.demands).toEqual([db]);
+					demandsChecked = true;
+					return withDemand;
+				}),
+			)
+			.snapshot();
 		expect(demandsChecked).toBe(true);
 
-		expect(base._node).toEqual(baseNode);
+		expect(cloneCommandNode(base._node)).toEqual(baseNode);
 	});
 
 	it("shares flag spelling entries across fluent clones while keeping the tables independent", async () => {
@@ -331,7 +335,7 @@ describe("Crust .add() with inline definitions", () => {
 		});
 	});
 
-	it("rejects a nested definition with a missing Context demand", () => {
+	it("rejects a nested definition with a missing Context demand", async () => {
 		const db = defineContext("db").setup(() => "db");
 		const nested = defineCommand("grandchild", (command) => command.use(db));
 		const definition = defineCommand("child", (command) =>
@@ -339,7 +343,9 @@ describe("Crust .add() with inline definitions", () => {
 			command.add(nested),
 		);
 
-		expect(() => new Crust("cli").add(definition)).toThrow('No provider for Context "db"');
+		await expect(new Crust("cli").add(definition).snapshot()).rejects.toThrow(
+			'No provider for Context "db"',
+		);
 	});
 });
 

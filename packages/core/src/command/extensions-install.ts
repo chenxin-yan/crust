@@ -98,45 +98,56 @@ export function applyExtensionSections(
  * command only, Extension providers once on the root. Unlike Extension section
  * contributions, a title already on the command is a `DEFINITION` error.
  */
+/** Merge the effective provided Contexts' sections into one node's documentation. */
+export function applyNodeContextSections(
+	node: CommandNode,
+	path: string,
+	instances: readonly AnyContextInstance[],
+): void {
+	// Match Context resolution: the last provider for a name replaces earlier ones.
+	const effective = [...new Map(instances.map((instance) => [instance.name, instance])).values()];
+	if (!effective.some((instance) => instance.sections.length > 0)) return;
+	const titles = new Set((node.meta.sections ?? []).map(({ title }) => title));
+	for (const instance of effective) {
+		for (const { title } of instance.sections) {
+			if (titles.has(title)) {
+				throw new CrustError(
+					"DEFINITION",
+					`Context "${instance.name}" section "${title}" duplicates a section on command "${path}"`,
+					{ subject: "context", name: instance.name, reason: "duplicate-section" },
+				);
+			}
+		}
+		// One Context may repeat its own titles, like a command's static sections.
+		for (const { title } of instance.sections) titles.add(title);
+	}
+	node.meta.sections = [
+		...(node.meta.sections ?? []),
+		...effective.flatMap((instance) => instance.sections),
+	];
+}
+
+/** Context instances whose sections document `node`: its own providers, plus Extension providers at the root. */
+export function sectionContextsFor(
+	node: CommandNode,
+	extensions: readonly ExtensionData[] | undefined,
+): readonly AnyContextInstance[] {
+	return extensions === undefined
+		? node.providedContexts
+		: [...node.providedContexts, ...extensions.flatMap((extension) => extension.provide)];
+}
+
 export function applyContextSections(
 	root: CommandNode,
 	extensions: readonly ExtensionData[],
 ): void {
-	const visit = (
-		node: CommandNode,
-		path: string,
-		instances: readonly AnyContextInstance[],
-	): void => {
-		// Match Context resolution: the last provider for a name replaces earlier ones.
-		const effective = [...new Map(instances.map((instance) => [instance.name, instance])).values()];
-		if (effective.some((instance) => instance.sections.length > 0)) {
-			const titles = new Set((node.meta.sections ?? []).map(({ title }) => title));
-			for (const instance of effective) {
-				for (const { title } of instance.sections) {
-					if (titles.has(title)) {
-						throw new CrustError(
-							"DEFINITION",
-							`Context "${instance.name}" section "${title}" duplicates a section on command "${path}"`,
-							{ subject: "context", name: instance.name, reason: "duplicate-section" },
-						);
-					}
-				}
-				// One Context may repeat its own titles, like a command's static sections.
-				for (const { title } of instance.sections) titles.add(title);
-			}
-			node.meta.sections = [
-				...(node.meta.sections ?? []),
-				...effective.flatMap((instance) => instance.sections),
-			];
-		}
+	const visit = (node: CommandNode, path: string, isRoot: boolean): void => {
+		applyNodeContextSections(node, path, sectionContextsFor(node, isRoot ? extensions : undefined));
 		for (const [name, child] of Object.entries(node.subCommands)) {
-			visit(child, `${path} ${name}`, child.providedContexts);
+			visit(child, `${path} ${name}`, false);
 		}
 	};
-	visit(root, root.meta.name, [
-		...root.providedContexts,
-		...extensions.flatMap((extension) => extension.provide),
-	]);
+	visit(root, root.meta.name, true);
 }
 
 export function installExtensionContexts(

@@ -1,7 +1,7 @@
 import { CrustError } from "../errors.ts";
 import type { FlagSpelling } from "../parsing/spellings.ts";
 import { isListed } from "../sections.ts";
-import type { CommandNode } from "./node.ts";
+import { childMetaOf, type CommandNode } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -57,11 +57,11 @@ function findAliasMatch(
 	subCommands: Record<string, CommandNode>,
 	candidate: string,
 ): { canonicalName: string; node: CommandNode } | null {
-	for (const [name, node] of Object.entries(subCommands)) {
-		const aliases = node.meta.aliases;
-		if (!aliases) continue;
-		if (aliases.includes(candidate)) {
-			return { canonicalName: name, node };
+	// Metadata only: building every child to read its aliases would defeat lazy preparation.
+	for (const [name, meta] of childMetaOf(subCommands)) {
+		if (meta.aliases?.includes(candidate)) {
+			// SAFETY: childMetaOf yields only names present in the record.
+			return { canonicalName: name, node: subCommands[name]! };
 		}
 	}
 	return null;
