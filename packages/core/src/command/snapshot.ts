@@ -13,7 +13,8 @@ import type { CommandNode } from "./node.ts";
  * schemas never cross the boundary.
  *
  * Fields with `undefined` values are dropped entirely (see `freezeCompact`),
- * so absent means "not declared".
+ * so absent means "not declared" — except `required`, which is omitted when a
+ * declared default makes the value optional.
  *
  * @example
  * For `{ name: "port", type: "number", default: 3000 }`:
