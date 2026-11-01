@@ -320,28 +320,38 @@ describe("Invocation pipeline — root snapshot reuse", () => {
 		expect(roots[2]).toBe(roots[0]);
 	});
 
-	it("keeps re-projecting when a mutable default would make a reused snapshot stale", async () => {
+	it("keeps re-projecting when a URL default would make a reused snapshot stale", async () => {
 		const endpoint = new URL("https://a.example/v1");
-		const json = ["a"];
 		const { observer, roots } = rootObserver();
 		const app = new Crust("app")
 			.extend(observer)
-			.flags(
-				{ name: "endpoint", type: "url", default: endpoint },
-				{ name: "data", type: "json", default: json },
-			)
+			.flags({ name: "endpoint", type: "url", default: endpoint })
 			.action(({ flags }) => flags.endpoint.href);
 
 		await app.run([]);
 		endpoint.pathname = "/v2";
-		json.push("b");
 		const second = await app.run([]);
 
 		// The action and the snapshot must agree on the shared URL default.
 		expect(second).toMatchObject({ status: "completed", result: "https://a.example/v2" });
-		expect(roots.map(({ flags }) => [flags.endpoint?.default, flags.data?.default])).toEqual([
-			["https://a.example/v1", ["a"]],
-			["https://a.example/v2", ["a", "b"]],
+		expect(roots.map(({ flags }) => flags.endpoint?.default)).toEqual([
+			"https://a.example/v1",
+			"https://a.example/v2",
 		]);
+	});
+
+	it("keeps re-projecting when a JSON default would make a reused snapshot stale", async () => {
+		const json = ["a"];
+		const { observer, roots } = rootObserver();
+		const app = new Crust("app")
+			.extend(observer)
+			.flags({ name: "data", type: "json", default: json })
+			.action(() => {});
+
+		await app.run([]);
+		json.push("b");
+		await app.run([]);
+
+		expect(roots.map(({ flags }) => flags.data?.default)).toEqual([["a"], ["a", "b"]]);
 	});
 });
