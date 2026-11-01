@@ -89,6 +89,9 @@ function isTemplateStringsArray(
 	return Array.isArray(value) && "raw" in value && Array.isArray(value.raw);
 }
 
+const chainSteps = Symbol("crust.style.steps");
+type ChainFunction = ChainableStyleFn & { readonly [chainSteps]: readonly ChainStep[] };
+
 function buildChainableStyleFactory(
 	resolveCapabilities: () => ResolvedStyleCapabilities,
 	runtime: boolean,
@@ -99,6 +102,46 @@ function buildChainableStyleFactory(
 	const cache = new Map<string, ChainableStyleFn>();
 
 	const pairDepth = runtime ? "truecolor" : resolveCapabilities().colorDepth;
+
+	// Chain methods live on one shared prototype instead of being defined on every
+	// chain function: the default instance builds ~40 chains at import, and
+	// per-function properties made importing @crustjs/style cost ~25M instructions.
+	const chainPrototype = Object.create(Function.prototype) as Record<PropertyKey, unknown>;
+	for (const name of styleMethodNames) {
+		Object.defineProperty(chainPrototype, name, {
+			enumerable: true,
+			get(this: ChainFunction) {
+				return createChainableStyle([...this[chainSteps], { kind: "named", name }]);
+			},
+		});
+	}
+	for (const kind of dynamicColorKinds) {
+		Object.defineProperty(chainPrototype, kind, {
+			enumerable: true,
+			get(this: ChainFunction) {
+				const steps = this[chainSteps];
+				return (input: ColorInput): ChainableStyleFn =>
+					createChainableStyle([...steps, colorStep(kind, input)]);
+			},
+		});
+	}
+	// `open` / `close` let a chain double as an `AnsiPair`. Composition rule: open
+	// in declaration order, close in reverse, matching what `applyChain` emits.
+	for (const edge of ["open", "close"] as const) {
+		Object.defineProperty(chainPrototype, edge, {
+			enumerable: true,
+			get(this: ChainFunction) {
+				let open = "";
+				let close = "";
+				for (const step of this[chainSteps]) {
+					const pair = stepPair(step, pairDepth);
+					open += pair.open;
+					close = pair.close + close;
+				}
+				return edge === "open" ? open : close;
+			},
+		});
+	}
 
 	function createChainableStyle(steps: readonly ChainStep[]): ChainableStyleFn {
 		const key = steps
@@ -113,7 +156,7 @@ function buildChainableStyleFactory(
 		//   chain(text)                          — direct
 		//   chain`tagged ${value} template`      — tagged template
 		//   chain(undefined | null)               — defensive (returns "")
-		// SAFETY: every ChainableStyleFn property is defined below before the frozen function is returned.
+		// SAFETY: chainPrototype supplies every ChainableStyleFn property; steps are attached below.
 		const styleFn = ((first?: StyleInput | TemplateStringsArray, ...rest: unknown[]) => {
 			if (isTemplateStringsArray(first)) {
 				let text = "";
@@ -129,51 +172,8 @@ function buildChainableStyleFactory(
 		if (cache.size >= 1024) cache.delete(cache.keys().next().value!);
 		cache.set(key, styleFn);
 
-		// Registered chain methods (bold, red, bgYellow, ...)
-		for (const name of styleMethodNames) {
-			Object.defineProperty(styleFn, name, {
-				configurable: false,
-				enumerable: true,
-				get() {
-					return createChainableStyle([...steps, { kind: "named", name }]);
-				},
-			});
-		}
-
-		for (const kind of dynamicColorKinds) {
-			Object.defineProperty(styleFn, kind, {
-				configurable: false,
-				enumerable: true,
-				value: (input: ColorInput): ChainableStyleFn =>
-					createChainableStyle([...steps, colorStep(kind, input)]),
-				writable: false,
-			});
-		}
-
-		// Attach `open` / `close` so the chainable doubles as an `AnsiPair`.
-		// Composition rule: open in declaration order, close in reverse —
-		// matches what `applyChain` actually emits (innermost wraps first,
-		// then walks outward).
-		let open = "";
-		let close = "";
-		for (const step of steps) {
-			const pair = stepPair(step, pairDepth);
-			open += pair.open;
-			close = pair.close + close;
-		}
-		Object.defineProperty(styleFn, "open", {
-			value: open,
-			writable: false,
-			configurable: false,
-			enumerable: true,
-		});
-		Object.defineProperty(styleFn, "close", {
-			value: close,
-			writable: false,
-			configurable: false,
-			enumerable: true,
-		});
-
+		Object.defineProperty(styleFn, chainSteps, { value: steps });
+		Object.setPrototypeOf(styleFn, chainPrototype);
 		return Object.freeze(styleFn);
 	}
 
