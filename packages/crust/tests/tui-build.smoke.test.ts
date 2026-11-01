@@ -142,8 +142,10 @@ await new Crust("solid-smoke")
 `,
 		);
 
-		// TODO(upstream): drop `--libc *` once OpenTUI's Bun loader stops importing both
-		// `@opentui/core-linux-*` libc packages by name; Bun 1.4.4+ installs only the host's.
+		// TODO: OpenTUI's Bun loader picks the libc package at runtime, so compiling must resolve
+		// both while package managers install only the host's. Drop `--libc *` here and the Linux
+		// `--libc` note in apps/docs/content/docs/modules/tui.mdx once this ships:
+		// https://github.com/anomalyco/opentui/issues/1909
 		const install = await runBoundedProcess(
 			which("bun")!,
 			["install", "--minimum-release-age=0", "--libc", "*"],
