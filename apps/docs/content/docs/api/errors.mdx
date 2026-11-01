@@ -35,11 +35,13 @@ With `execute()`, an unmatched subcommand token becomes a positional argument if
 
 <auto-type-table path="../../../../../packages/core/src/errors.ts" name="DefinitionErrorDetails" />
 
-`reason` is typed as Core's known values (`DefinitionErrorReason`, `ParseErrorReason`) but stays open to any string, since other packages add their own. Context failures set `reason`: `missing-context` for an unprovided Context, `context-cycle` for a dependency cycle, `flags-before-validation` when a flag-owning Context is pulled before validation, `context-during-disposal` when a never-built Context is pulled once cleanup has begun, and `context-after-disposal` for any pull after disposal.
+`reason` is typed as Core's known values (`DefinitionErrorReason`) but stays open to any string, since other packages add their own. Context failures set `reason`: `missing-context` for an unprovided Context, `context-cycle` for a dependency cycle, `flags-before-validation` when a flag-owning Context is pulled before validation, `context-during-disposal` when a never-built Context is pulled once cleanup has begun, and `context-after-disposal` for any pull after disposal.
 
 ### `ParseErrorDetails`
 
 <auto-type-table path="../../../../../packages/core/src/errors.ts" name="ParseErrorDetails" />
+
+`reason` is typed as Core's known values (`ParseErrorReason`) but stays open to any string, since other packages add their own.
 
 `value` is retained for compatibility; Core no longer populates it.
 
