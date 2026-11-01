@@ -313,7 +313,12 @@ describe("Invocation pipeline — root snapshot reuse", () => {
 		await app.run([]);
 		await app.run(["sub"]);
 		// An unknown flag fails before dispatch builds a context.
-		expect(await app.execute({ argv: ["--nope"], io: { stderr: () => {} } })).toBe(1);
+		const originalExitCode = process.exitCode;
+		try {
+			expect(await app.execute({ argv: ["--nope"], io: { stderr: () => {} } })).toBe(1);
+		} finally {
+			process.exitCode = originalExitCode ?? 0;
+		}
 
 		expect(roots).toHaveLength(3);
 		expect(roots[1]).toBe(roots[0]);
