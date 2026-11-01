@@ -77,7 +77,7 @@ export interface SkillStatusResult {
  * Options for the skills extension. Packaged skills are read at runtime from
  * `resolveArtifactDir("skills")` (`@crustjs/core`), the directory `crust build` stages.
  */
-export interface SkillOptions {
+export interface SkillOptions<Command extends string = string> {
 	/** Hand-authored skill directories (URL, absolute, or package-root-relative path) built alongside the generated skill. */
 	extras?: readonly (string | URL)[];
 	/** Generated command skill name. Defaults to the root command name. */
@@ -99,6 +99,10 @@ export interface SkillOptions {
 	 * checkout does not take over an installed CLI's links. @default true
 	 */
 	autoUpdate?: boolean;
-	/** Name of the interactive management command. The default includes a `skill` alias. @default "skills" */
-	command?: string;
+	/**
+	 * Name of the interactive management command. The default includes a `skill` alias.
+	 * A literal name keeps the host's command tree type-checked; a dynamic `string` opens it.
+	 * @default "skills"
+	 */
+	command?: Command;
 }
