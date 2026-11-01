@@ -90,13 +90,15 @@ type SuccessValue<R> = R extends { readonly issues: ReadonlyArray<unknown> }
 
 /**
  * Infer the output type produced by a Standard Schema on success: the
- * phantom `types.output` when declared, otherwise the awaited successful
- * `validate()` result, since `types` is optional in the spec. Distributes so
+ * phantom `types.output` when available, otherwise the awaited successful
+ * `validate()` result, since `types` may be omitted or undefined. Distributes so
  * each member of a schema union keeps its own precedence.
  */
 export type InferOutput<S extends StandardSchema> = S extends unknown
 	? "types" extends keyof S["~standard"]
-		? NonNullable<S["~standard"]["types"]>["output"]
+		? [NonNullable<S["~standard"]["types"]>] extends [never]
+			? SuccessValue<Awaited<ReturnType<S["~standard"]["validate"]>>>
+			: NonNullable<S["~standard"]["types"]>["output"]
 		: SuccessValue<Awaited<ReturnType<S["~standard"]["validate"]>>>
 	: never;
 

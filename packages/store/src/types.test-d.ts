@@ -164,6 +164,64 @@ type Expect<T extends true> = T;
 	}
 
 	{
+		// Undefined phantom types fall back to validate(), including in schema unions.
+		const requiredUndefined = {
+			"~standard": {
+				version: 1 as const,
+				vendor: "d",
+				types: undefined,
+				validate: (_value: unknown) => ({ value: new Date() }),
+			},
+		};
+		const optionalUndefined: {
+			"~standard": {
+				version: 1;
+				vendor: string;
+				types?: undefined;
+				validate: (value: unknown) => Promise<{ value: Date }>;
+			};
+		} = {
+			"~standard": {
+				version: 1,
+				vendor: "d",
+				validate: async (_value) => ({ value: new Date() }),
+			},
+		};
+		const numberSchema = {
+			"~standard": {
+				version: 1 as const,
+				vendor: "d",
+				validate: (value: unknown) => ({ value: Number(value) }),
+			},
+		};
+		const fields = {
+			requiredUndefined: { schema: requiredUndefined },
+			optionalUndefined: { schema: optionalUndefined },
+			mixedRequired: { schema: Math.random() < 0.5 ? requiredUndefined : numberSchema },
+			mixedOptional: { schema: Math.random() < 0.5 ? optionalUndefined : numberSchema },
+		} satisfies FieldsDef;
+		type Config = InferStoreConfig<typeof fields>;
+		type _RequiredUndefined = Expect<Equal<Config["requiredUndefined"], Date>>;
+		type _OptionalUndefined = Expect<Equal<Config["optionalUndefined"], Date>>;
+		type _MixedRequired = Expect<Equal<Config["mixedRequired"], Date | number>>;
+		type _MixedOptional = Expect<Equal<Config["mixedOptional"], Date | number>>;
+		const _options: CreateStoreOptions<typeof fields> = {
+			dirPath: "/tmp",
+			name: "undefined-phantom",
+			fields: {
+				// @ts-expect-error -- Date outputs require the JSON compatibility brand
+				requiredUndefined: fields.requiredUndefined,
+				// @ts-expect-error -- optional undefined phantom types also fall back
+				optionalUndefined: fields.optionalUndefined,
+				// @ts-expect-error -- unions must retain their non-JSON output member
+				mixedRequired: fields.mixedRequired,
+				// @ts-expect-error -- optional undefined phantom types also retain union members
+				mixedOptional: fields.mixedOptional,
+			},
+		};
+	}
+
+	{
 		// rejects mixing schema with core value options
 		const _fields: FieldsDef = {
 			// @ts-expect-error — schema exclusively owns defaults
