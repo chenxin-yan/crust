@@ -42,6 +42,47 @@ export type RunProcessResult = {
 };
 
 const LIFETIME_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const;
+
+type LifetimeBinding = { onSignal: (signal: NodeJS.Signals) => void; onExit: () => void };
+// One shared listener per event for all bindings, so concurrency never trips MaxListeners.
+const bindings = new Set<LifetimeBinding>();
+
+// Re-raise only when no other listener owns the signal, like Core's SIGINT handling.
+function onLifetimeSignal(signal: NodeJS.Signals): void {
+	const pending = [...bindings];
+	bindings.clear();
+	removeLifetimeListeners();
+	for (const binding of pending) binding.onSignal(signal);
+	if (process.listenerCount(signal) === 0) process.kill(process.pid, signal);
+}
+
+function onLifetimeExit(): void {
+	for (const binding of bindings) binding.onExit();
+}
+
+function removeLifetimeListeners(): void {
+	for (const signal of LIFETIME_SIGNALS) process.removeListener(signal, onLifetimeSignal);
+	process.removeListener("exit", onLifetimeExit);
+}
+
+/**
+ * Ties a detached POSIX child group to this process, which the group no longer shares
+ * terminal signals with. Until the returned release runs, SIGINT, SIGTERM, SIGHUP or SIGQUIT
+ * calls `onSignal` once and is then re-raised when no other listener handles it, and a
+ * synchronous exit (`process.exit`, an uncaught error) calls `onExit`. SIGKILL and native
+ * crashes cannot be observed and still orphan the group.
+ */
+export function bindToProcessLifetime(binding: LifetimeBinding): () => void {
+	if (bindings.size === 0) {
+		for (const signal of LIFETIME_SIGNALS) process.prependListener(signal, onLifetimeSignal);
+		process.on("exit", onLifetimeExit);
+	}
+	bindings.add(binding);
+	return () => {
+		if (bindings.delete(binding) && bindings.size === 0) removeLifetimeListeners();
+	};
+}
+
 const WINDOWS_SHELL_UNSAFE = /[\0\r\n"%!^`<>&|]/;
 const WINDOWS_SHELL_META = /([()\][%!^"`<>&|;, *?])/g;
 
@@ -170,30 +211,18 @@ export async function runProcess(
 					() => stop(`${commandLine} did not exit within ${timeout} ms and was killed.`, "timeout"),
 					timeout,
 				);
-	// The detached group no longer receives terminal signals and the deadline dies with this
-	// process, so the group stops with it. Like snapshot preparation, re-raise only when no
-	// other listener owns the signal. SIGKILL and native crashes still orphan the group.
-	const onSignal = (signal: NodeJS.Signals): void => {
-		removeLifetimeListeners();
-		stop(`${commandLine} was interrupted by ${signal}.`, signal);
-		if (process.listenerCount(signal) === 0) process.kill(process.pid, signal);
-	};
-	// Synchronous exits (process.exit, uncaught errors) skip the awaited cleanup.
-	const killOnExit = (): void => {
-		try {
-			killProcessTree(proc);
-		} catch {
-			// Best effort: the exiting process takes precedence.
-		}
-	};
-	const removeLifetimeListeners = (): void => {
-		for (const signal of LIFETIME_SIGNALS) process.removeListener(signal, onSignal);
-		process.removeListener("exit", killOnExit);
-	};
-	if (detached) {
-		for (const signal of LIFETIME_SIGNALS) process.prependListener(signal, onSignal);
-		process.on("exit", killOnExit);
-	}
+	const release = detached
+		? bindToProcessLifetime({
+				onSignal: (signal) => stop(`${commandLine} was interrupted by ${signal}.`, signal),
+				onExit: () => {
+					try {
+						killProcessTree(proc);
+					} catch {
+						// Best effort: the exiting process takes precedence.
+					}
+				},
+			})
+		: () => {};
 
 	try {
 		const [stdout, stderr, [exitCode]] = await Promise.race([
@@ -207,7 +236,7 @@ export async function runProcess(
 		return { exitCode, stdout, stderr };
 	} finally {
 		clearTimeout(timer);
-		removeLifetimeListeners();
+		release();
 	}
 }
 

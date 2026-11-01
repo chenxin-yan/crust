@@ -12,13 +12,12 @@ import { yellow } from "@crustjs/style";
 import { isErrnoException } from "@crustjs/utils/error";
 import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
 import { isWithin } from "@crustjs/utils/path";
-import { killProcessTree } from "@crustjs/utils/process";
+import { bindToProcessLifetime, killProcessTree } from "@crustjs/utils/process";
 
 import { toBunEnvFileArgs } from "./bundle.ts";
 import { type BuildRunner, resolveBunBuildRunner } from "./compilers.ts";
 
 const SNAPSHOT_TIMEOUT_MS = 30_000;
-const SNAPSHOT_FORWARDED_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const;
 
 function isBuildReport(value: JsonValue): value is JsonObject & BuildReport {
 	return (
@@ -111,15 +110,6 @@ export async function buildEntrypoint(
 				),
 			timeoutMs,
 		);
-		// The detached group no longer receives terminal signals, so the entry stops with this
-		// process. Like Core's SIGINT handling, re-raise only when no other listener owns the signal.
-		// SIGKILL and native crashes cannot be observed and still orphan the entry.
-		const onSignal = (signal: NodeJS.Signals): void => {
-			removeLifetimeListeners();
-			stop(`Command Snapshot preparation was interrupted by ${signal}.`);
-			if (process.listenerCount(signal) === 0) process.kill(process.pid, signal);
-		};
-		// Also runs on synchronous exits (process.exit, uncaught errors), which skip the awaited cleanup.
 		const killRemainingGroup = (): void => {
 			try {
 				killProcessTree(proc);
@@ -127,20 +117,18 @@ export async function buildEntrypoint(
 				// Best effort: the preparation outcome (or the exiting process) takes precedence.
 			}
 		};
-		const removeLifetimeListeners = (): void => {
-			for (const signal of SNAPSHOT_FORWARDED_SIGNALS) process.removeListener(signal, onSignal);
-			process.removeListener("exit", killRemainingGroup);
-		};
-		if (detached) {
-			for (const signal of SNAPSHOT_FORWARDED_SIGNALS) process.prependListener(signal, onSignal);
-			process.on("exit", killRemainingGroup);
-		}
+		const release = detached
+			? bindToProcessLifetime({
+					onSignal: (signal) => stop(`Command Snapshot preparation was interrupted by ${signal}.`),
+					onExit: killRemainingGroup,
+				})
+			: () => {};
 		const [rawStderr, [exitCode]] = await Promise.race([
 			Promise.all([text(proc.stderr), once(proc, "close")]),
 			stopped,
 		]).finally(() => {
 			clearTimeout(timer);
-			removeLifetimeListeners();
+			release();
 			// Workers the entry left behind in its detached group would escape terminal signals.
 			if (detached) killRemainingGroup();
 		});

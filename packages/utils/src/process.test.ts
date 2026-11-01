@@ -178,6 +178,17 @@ ${exitParent ? "process.exit(0);" : "setTimeout(() => {}, 20000);"}`;
 		expect(listenerCounts()).toEqual(before);
 	}, 15_000);
 
+	it("shares one parent-lifetime listener per event across concurrent timed runs", async () => {
+		const before = listenerCounts();
+		const runs = Array.from({ length: 12 }, () =>
+			runProcess(process.execPath, ["-e", ""], { timeout: 5_000 }),
+		);
+		const shared = process.platform === "win32" ? 0 : 1;
+		expect(listenerCounts()).toEqual(before.map((count) => count + shared));
+		await Promise.all(runs);
+		expect(listenerCounts()).toEqual(before);
+	}, 15_000);
+
 	describe.skipIf(process.platform === "win32")("parent lifetime", () => {
 		/**
 		 * Runs a Node host whose timed children (each with a pipe-holding descendant) are alive
