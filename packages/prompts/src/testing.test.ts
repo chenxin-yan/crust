@@ -37,6 +37,15 @@ describe("createPromptIO screen", () => {
 		expect(harness.screen()).toBe(`${"a".repeat(79)}\n界x`);
 	});
 
+	it("parses an escape sequence split across writes", () => {
+		const harness = createPromptIO();
+		harness.io.output.write("\x1B[");
+		harness.io.output.write("31mred");
+		harness.io.output.write("\x1B[0m");
+
+		expect(harness.screen()).toBe("red");
+	});
+
 	it("gives hyperlink escape sequences no width", () => {
 		const harness = createPromptIO();
 		harness.io.output.write(`\x1B]8;;https://example.com/${"p".repeat(80)}\x07link\x1B]8;;\x07`);

@@ -154,6 +154,18 @@ describe("spinner — terminal sink", () => {
 		]);
 	});
 
+	it("counts rows a wide character wraps onto before the last column", () => {
+		const writes: string[] = [];
+		const sink = { isTTY: true, columns: 10, write: (text: string) => void writes.push(text) };
+		// "⠋ aaaaaaa" fills 9 columns, so each two-column "界" starts a new row: 3 rows, not 20/10.
+		const handle = spinner({ message: "aaaaaaa界bbbbbbb界", sigint: false, sink });
+		handle.start();
+		handle.updateMessage("short");
+		handle.stop();
+
+		expect(writes[2]).toBe("\x1B[2A\r\x1B[J⠋ short");
+	});
+
 	it("erases wrapped rows before the final line", () => {
 		const writes: string[] = [];
 		const sink = { isTTY: true, columns: 10, write: (text: string) => void writes.push(text) };

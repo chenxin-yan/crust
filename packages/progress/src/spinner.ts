@@ -2,6 +2,8 @@
 // Spinner — Animated progress spinner for @crustjs/progress
 // ────────────────────────────────────────────────────────────────────────────
 
+import { stripVTControlCharacters } from "node:util";
+
 import { stringWidth } from "@crustjs/style";
 import {
 	getTerminalIO,
@@ -133,10 +135,25 @@ function frameAt(frames: readonly string[], index: number): string {
 	return frame;
 }
 
+let graphemes: Intl.Segmenter | undefined;
+
 /** Physical rows `text` occupies once the terminal wraps it at `columns`. */
 function rowCount(text: string, columns: number): number {
+	graphemes ??= new Intl.Segmenter();
 	let rows = 0;
-	for (const line of text.split("\n")) rows += Math.max(1, Math.ceil(stringWidth(line) / columns));
+	for (const line of stripVTControlCharacters(text).split("\n")) {
+		rows++;
+		let column = 0;
+		// Walk graphemes: a wide character that does not fit wraps whole, leaving the row's last cell unused.
+		for (const { segment } of graphemes.segment(line)) {
+			const width = stringWidth(segment);
+			if (column + width > columns) {
+				rows++;
+				column = 0;
+			}
+			column += width;
+		}
+	}
 	return rows;
 }
 

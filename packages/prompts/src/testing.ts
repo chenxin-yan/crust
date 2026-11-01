@@ -60,10 +60,14 @@ class FakeTerminal {
 	// Equal to `columns` after the last column is written: the wrap waits for the next character.
 	private column = 0;
 	private readonly graphemes = new Intl.Segmenter();
+	// An escape sequence cut off at the end of a write, completed by the next one.
+	private pending = "";
 
 	constructor(private readonly columns: number) {}
 
-	write(text: string): void {
+	write(chunk: string): void {
+		const text = this.pending + chunk;
+		this.pending = "";
 		let index = 0;
 		while (index < text.length) {
 			const rest = text.slice(index);
@@ -79,6 +83,12 @@ class FakeTerminal {
 			if (osc) {
 				index += osc[0].length;
 				continue;
+			}
+
+			// oxlint-disable-next-line no-control-regex -- an unterminated CSI or OSC prefix
+			if (/^\x1B(?:\[[0-?]*[ -/]*|\][^\x07\x1B]*\x1B?)?$/.test(rest)) {
+				this.pending = rest;
+				return;
 			}
 
 			const char = text[index] ?? "";
