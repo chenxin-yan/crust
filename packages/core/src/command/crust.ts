@@ -1578,19 +1578,16 @@ export class Crust<
 	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
 	run<
 		const Path extends readonly string[],
-		const Input extends
-			| RunInput<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>>
-			| OmittableRunInput<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>> = RunInput<
-			CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>
-		>,
+		// Resolving the shape once here keeps contextual typing of a literal `input` from
+		// re-walking the whole tree on every pass.
+		S extends CommandShape = CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>,
+		const Input extends RunInput<S> | OmittableRunInput<S> = RunInput<S>,
 	>(
 		this: { readonly _types: { readonly caps: "app" } },
 		path: KnownCommandPath<Path, Tree>,
-		input:
-			| CheckedRunInput<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>, Input>
-			| OmittableRunInput<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>>,
+		input: CheckedRunInput<S, Input> | OmittableRunInput<S>,
 		options?: InvocationOptions,
-	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
+	): Promise<RunOutcome<S["result"]>>;
 	run<const Path extends readonly string[], const Input>(
 		this: { readonly _types: { readonly caps: "app" } },
 		path: KnownCommandPath<Path, Tree>,

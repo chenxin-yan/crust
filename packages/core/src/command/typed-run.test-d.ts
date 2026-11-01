@@ -4,7 +4,7 @@ import type { Equal, Expect } from "../../tests/helpers.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineExtensionId } from "../identity.ts";
 import { Crust, defineCommand } from "./crust.ts";
-import type { CommandPath, CommandShapeAt, RunInput } from "./typed-run.ts";
+import type { CommandPath, CommandShapeAt, RunInput, RunOutcome } from "./typed-run.ts";
 
 interface NamedJsonPayload {
 	name: string;
@@ -365,6 +365,64 @@ function _typecheckResolvesActionResultsForLiteralPathsPastTheDepthCap() {
 	type _widenedHead = Expect<
 		Equal<CommandShapeAt<Root, readonly [string, ...string[]]>["result"], unknown>
 	>;
+}
+
+// binds valid paths on apps with ~1,000 commands without TS2590 (failed from ~600 path members)
+function _typecheckBindsValidPathsOnLargeAppsWithoutTS2590() {
+	type Digit = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+	type Leaf = { args: []; flags: {}; children: {}; result: "leaf" };
+	type LargeTree = { [K in `command-${Digit}${Digit}${Digit}`]: Leaf } & {
+		group: {
+			args: [];
+			flags: { mode: { type: "string"; required: true } };
+			children: { add: Leaf };
+			result: void;
+		};
+	};
+	const app = {} as Crust<{}, [], {}, never, never, LargeTree>;
+
+	const handle = app.at(["command-071"]);
+	type _handleResult = Expect<Equal<Awaited<ReturnType<typeof handle.run>>, RunOutcome<"leaf">>>;
+	void app.at(["group", "add"]);
+	void app.run(["command-999"]);
+	void app.run(["group"], { flags: { mode: "fast" } });
+	// @ts-expect-error -- unknown path
+	void app.at(["command-1000"]);
+	// @ts-expect-error -- unknown subcommand under a valid prefix
+	void app.run(["group", "nope"], { flags: { mode: "fast" } });
+
+	type PathAt<Path extends readonly string[]> = Parameters<typeof app.at<Path>>[0];
+	type _nested = Expect<
+		Equal<PathAt<readonly ["group", ""]>, readonly ["group"] | readonly ["group", "add"]>
+	>;
+}
+
+// suggests continuations under an invalid segment of a tree deeper than the depth cap
+function _typecheckSuggestsContinuationsInTreesDeeperThanTheDepthCap() {
+	type Nest<Depth extends number, Acc extends readonly unknown[] = []> = Acc["length"] extends Depth
+		? { args: []; flags: {}; children: {}; result: void }
+		: {
+				args: [];
+				flags: {};
+				children: { next: Nest<Depth, readonly [...Acc, unknown]> };
+				result: void;
+			};
+	const app = {} as Crust<{}, [], {}, never, never, { root: Nest<30> }>;
+
+	// @ts-expect-error -- a typo below the cap is still rejected
+	void app.at(["root", "next", "nope"]);
+
+	type PathAt<Path extends readonly string[]> = Parameters<typeof app.at<Path>>[0];
+	type SeventeenDeep = readonly [...FifteenDeep, "next", "next"];
+	type _deepValid = Expect<Equal<PathAt<SeventeenDeep>, SeventeenDeep>>;
+	type Continuations = PathAt<readonly ["root", "next", "nope"]>;
+	type _keepsValidPrefix = Expect<
+		readonly ["root", "next", "next"] extends Continuations ? true : false
+	>;
+	type _rejectsTypo = Expect<
+		Equal<readonly ["root", "next", "nope"] extends Continuations ? true : false, false>
+	>;
+	type _noSiblingsOfPrefix = Expect<Equal<readonly [] extends Continuations ? true : false, false>>;
 }
 
 // narrows each sibling added by one variadic .add() to its own shape

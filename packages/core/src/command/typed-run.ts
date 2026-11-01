@@ -60,15 +60,18 @@ export type CommandPath<
 // Editors complete path elements from this type instantiated with the partial literal being
 // typed (e.g. `["remote", ""]`), so an unknown literal path must resolve to the commands under
 // its longest valid prefix rather than `never` or the whole union.
+// Walks the tree by key: relating each prefix against the whole CommandPath union fails TS2590
+// on large applications.
 type CommandPathContinuations<
 	Path extends readonly string[],
 	Tree extends object,
-	Prefix extends readonly string[] = readonly [],
 > = Path extends readonly [infer Head extends string, ...infer Tail extends readonly string[]]
-	? readonly [...Prefix, Head] extends CommandPath<Tree>
-		? CommandPathContinuations<Tail, Tree, readonly [...Prefix, Head]>
-		: Extract<CommandPath<Tree>, readonly [...Prefix, ...string[]]>
-	: Extract<CommandPath<Tree>, readonly [...Prefix, ...string[]]>;
+	? Head extends keyof Tree
+		? Tree[Head] extends CommandShape
+			? readonly [Head, ...CommandPathContinuations<Tail, Tree[Head]["children"]>]
+			: never
+		: CommandPath<Tree>
+	: CommandPath<Tree>;
 
 export type KnownCommandPath<
 	Path extends readonly string[],
