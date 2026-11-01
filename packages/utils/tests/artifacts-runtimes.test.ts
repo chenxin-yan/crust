@@ -96,7 +96,7 @@ describe.skipIf(!canBuildSea)("resolveArtifactDir in a Node single executable ap
 				text: "adjacent",
 			});
 		}
-	});
+	}, 60_000);
 });
 
 // A static `node:sea` import fails to load on runtimes without that built-in.

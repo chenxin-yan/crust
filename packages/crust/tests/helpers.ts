@@ -17,8 +17,8 @@ export function hostDenoTarget() {
 /**
  * Directory of a node able to build Node standalone binaries with the pinned
  * tsdown: `CRUST_TEST_SEA_NODE` (a node executable; must qualify), else the
- * node on PATH. Null skips those tests; the repository's pinned Node 24 does
- * not qualify. >=26 is the verified intersection of tsdown 0.23's engines and
+ * node on PATH. Null skips those tests; the repository's pinned Node 26
+ * qualifies. >=26 is the verified intersection of tsdown 0.23's engines and
  * executable minimum; the build itself reads both from the installed tsdown.
  */
 export function seaNodeBinDir(): string | null {
