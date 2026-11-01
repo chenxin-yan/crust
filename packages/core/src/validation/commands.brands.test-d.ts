@@ -47,6 +47,15 @@ type Def<Name extends string, Aliases extends readonly string[] = readonly []> =
 		>
 	>;
 
+	// a valid input-tuple variant does not erase a colliding variant's error
+	type UnionInput = ValidateCommandDefinitions<readonly [Def<"a">, Def<"a">] | readonly [Def<"b">]>;
+	type _unionInput = Expect<
+		Equal<
+			UnionInput["FIX_COMMAND_COLLISION"],
+			'Command name or alias "a" collides with a sibling command'
+		>
+	>;
+
 	// reports only the first collision: two same-key literals would intersect to never
 	type Twice = ValidateCommandDefinitions<readonly [Def<"a">, Def<"a">, Def<"b">, Def<"b">]>;
 	type _twice = Expect<
