@@ -78,6 +78,12 @@ describe("fuzzyMatch", () => {
 		expect(fuzzyMatch("ος", "ΟΣ")).toMatchObject({ match: true, indices: [0, 1] });
 	});
 
+	it("keeps both UTF-16 units of astral characters in indices", () => {
+		// Deseret U+10400 lowercases to U+10428; both are surrogate pairs.
+		expect(fuzzyMatch("\u{10428}b", "\u{10400}b").indices).toEqual([0, 1, 2]);
+		expect(fuzzyMatch("b", "\u{1F600}b").indices).toEqual([2]);
+	});
+
 	it("applies the word boundary bonus from the original previous character", () => {
 		// Lowercased indices are shifted by "İ", so the bonus must read "-" from the original label.
 		expect(fuzzyMatch("b", "İ-b").score).toBe(fuzzyMatch("b", "x-b").score);
