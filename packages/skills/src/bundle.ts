@@ -49,8 +49,11 @@ function parseScalar(raw: string): string {
 	return raw.replace(/(^|\s)#.*$/, "").trim();
 }
 
-/** Reads top-level `name` and `description` from leading YAML frontmatter. */
-export function probeFrontmatter(content: string): BundleFrontmatter {
+/**
+ * Reads top-level `name` and `description` from leading YAML frontmatter.
+ * `subject` names the SKILL.md in the error for unsupported block scalars.
+ */
+export function probeFrontmatter(content: string, subject: string): BundleFrontmatter {
 	const result: BundleFrontmatter = { name: null, description: null };
 	const normalized = content.startsWith("\uFEFF") ? content.slice(1) : content;
 	const lines = normalized.split(/\r?\n/);
@@ -68,6 +71,13 @@ export function probeFrontmatter(content: string): BundleFrontmatter {
 		const key = match?.[1];
 		const value = match?.[2];
 		if ((key === "name" || key === "description") && value !== undefined) {
+			// A plain scalar cannot start with `|` or `>`: this is a block scalar `parseScalar` cannot read.
+			if (/^[|>]/.test(value)) {
+				throw new Error(
+					`${subject} uses a YAML block scalar for \`${key}:\` in SKILL.md frontmatter, which is not supported. ` +
+						`Write the value on one line, quoted if it contains special characters.`,
+				);
+			}
 			result[key] = parseScalar(value);
 		}
 	}
@@ -236,10 +246,8 @@ export async function loadBundleFiles(sourceDir: string | URL): Promise<LoadedBu
 	// Decode the bytes already loaded so frontmatter and returned content
 	// describe the same snapshot of SKILL.md.
 	const skillContent = skillMd.content.toString("utf-8");
-	const frontmatter = requireSkillFrontmatter(
-		probeFrontmatter(skillContent),
-		`Extra skill SKILL.md at "${join(canonicalRoot, SKILL_MD)}"`,
-	);
+	const subject = `Extra skill SKILL.md at "${join(canonicalRoot, SKILL_MD)}"`;
+	const frontmatter = requireSkillFrontmatter(probeFrontmatter(skillContent, subject), subject);
 
 	return { files, frontmatter };
 }

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -54,6 +54,20 @@ describe("resolveSourceDir", () => {
 			await withArgv1(fakeEntry, async () => {
 				const resolved = resolveSourceDir("templates/base");
 				expect(resolved).toBe(join(tmpDir, "templates", "base"));
+			});
+		});
+
+		it("resolves relative string paths from the package owning a symlinked process.argv[1]", async () => {
+			const root = await realpath(tmpDir);
+			await mkdir(join(root, "cli", "dist"), { recursive: true });
+			await writeFile(join(root, "cli", "package.json"), "{}");
+			await writeFile(join(root, "cli", "dist", "index.js"), "export {};\n");
+			await mkdir(join(root, "consumer", "node_modules", ".bin"), { recursive: true });
+			await writeFile(join(root, "consumer", "package.json"), "{}");
+			const bin = join(root, "consumer", "node_modules", ".bin", "cli");
+			await symlink(join(root, "cli", "dist", "index.js"), bin);
+			await withArgv1(bin, async () => {
+				expect(resolveSourceDir("skills/demo")).toBe(join(root, "cli", "skills", "demo"));
 			});
 		});
 

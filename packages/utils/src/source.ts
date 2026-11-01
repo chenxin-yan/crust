@@ -1,4 +1,4 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -59,7 +59,7 @@ export function findNearestPackageRoot(startPath: string): string | null {
  *   `new URL("./relative/path", import.meta.url)`.
  * - **Absolute string path** — returned as `path.resolve(input)`.
  * - **Relative string path** — resolved against the nearest `package.json`
- *   directory walking up from `process.argv[1]`. This makes
+ *   directory walking up from `process.argv[1]` (symlinks resolved). This makes
  *   `"templates/base"` resolve to `<consumer-package-root>/templates/base`
  *   regardless of cwd.
  *
@@ -109,7 +109,10 @@ export function resolveSourceDir(input: string | URL): string {
 		);
 	}
 
-	const packageRoot = findNearestPackageRoot(resolve(entrypoint));
+	// Node keeps a linked bin's consumer-side .bin path in argv[1]; the package owning the real file is meant.
+	const packageRoot = findNearestPackageRoot(
+		existsSync(entrypoint) ? realpathSync(entrypoint) : resolve(entrypoint),
+	);
 	if (!packageRoot) {
 		throw new Error(
 			`Could not resolve relative sourceDir "${input}" from entrypoint "${entrypoint}" ` +

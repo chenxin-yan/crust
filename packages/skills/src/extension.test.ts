@@ -424,18 +424,43 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		expect(result.traeCnInstalled).toBe(true);
 	});
 
-	it("repairs an owned stale-target link before ordinary commands", async () => {
+	it("repairs an owned broken link before ordinary commands", async () => {
 		const source = await writeSource("demo", "current");
-		const stale = join(tempRoot, "old", "skills", "demo");
-		await mkdir(stale, { recursive: true });
-		await writeFile(join(stale, "content.md"), "stale\n");
 		const installed = join(tempRoot, ".claude", "skills", "demo");
 		await mkdir(dirname(installed), { recursive: true });
-		await symlink(stale, installed);
+		await symlink(join(tempRoot, "missing", "skills", "demo"), installed);
 
 		await asInstalled(() => withCwd(tempRoot, () => createApp().execute({ argv: [] })));
 		expect(resolve(dirname(installed), await readlink(installed))).toBe(join(source, "demo"));
 		expect(await readFile(join(installed, "content.md"), "utf8")).toBe("current\n");
+	});
+
+	// Two installed copies (global + project-local, npx) would otherwise take the link from each other on every run.
+	it("leaves an owned link to another live copy alone before ordinary commands", async () => {
+		await writeSource("demo", "current");
+		const other = join(tempRoot, "other", "skills", "demo");
+		await mkdir(other, { recursive: true });
+		await writeFile(join(other, "content.md"), "other\n");
+		const installed = join(tempRoot, ".claude", "skills", "demo");
+		await mkdir(dirname(installed), { recursive: true });
+		await symlink(other, installed);
+
+		await asInstalled(() => withCwd(tempRoot, () => createApp().execute({ argv: [] })));
+		expect(await readlink(installed)).toBe(other);
+	});
+
+	it("re-points an owned link to another live copy via skills repair", async () => {
+		const source = await writeSource("demo", "current");
+		const other = join(tempRoot, "other", "skills", "demo");
+		await mkdir(other, { recursive: true });
+		const installed = join(tempRoot, ".claude", "skills", "demo");
+		await mkdir(dirname(installed), { recursive: true });
+		await symlink(other, installed);
+
+		await withCwd(tempRoot, () =>
+			createApp().execute({ argv: ["skills", "repair", "--scope", "project"] }),
+		);
+		expect(resolve(dirname(installed), await readlink(installed))).toBe(join(source, "demo"));
 	});
 
 	it("leaves an installed CLI's links alone when running from source", async () => {

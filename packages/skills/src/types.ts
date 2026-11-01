@@ -17,7 +17,7 @@ export interface InstallSkillOptions {
 	/** Package directory `skills/<name>` containing the skill's SKILL.md. */
 	sourceDir: string | URL;
 	/** Agent targets. Omit to use universal plus PATH-detected agents. */
-	agents?: AgentTarget[];
+	agents?: readonly AgentTarget[];
 	/** Agent-directory scope. @default "global" */
 	scope?: Scope;
 	/** Allow replacing a directory that is not owned by this skill. @default false */
@@ -41,7 +41,7 @@ export interface InstallSkillResult {
 
 export interface UninstallSkillOptions {
 	name: string;
-	agents?: AgentTarget[];
+	agents?: readonly AgentTarget[];
 	scope?: Scope;
 }
 
@@ -58,7 +58,7 @@ export interface SkillStatusOptions {
 	name: string;
 	/** Expected source used to identify stale-target links. */
 	sourceDir: string | URL;
-	agents?: AgentTarget[];
+	agents?: readonly AgentTarget[];
 	scope?: Scope;
 }
 
@@ -94,7 +94,8 @@ export interface SkillOptions {
 	 */
 	defaultScope?: Scope;
 	/**
-	 * Repair stale or dangling owned links before commands run. Never runs from source, so a
+	 * Repair owned links whose target no longer exists before commands run. A link to another
+	 * live installed copy is left alone (`skills repair` re-points it). Never runs from source, so a
 	 * checkout does not take over an installed CLI's links. @default true
 	 */
 	autoUpdate?: boolean;

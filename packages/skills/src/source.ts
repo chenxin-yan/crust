@@ -27,10 +27,8 @@ export function readSkillFrontmatter(
 		if (!isErrnoException(error) || error.code !== "ENOENT") throw error;
 		throw new Error(`Skill source directory "${sourceDir}" is missing SKILL.md.`, { cause: error });
 	}
-	return requireSkillFrontmatter(
-		probeFrontmatter(content),
-		`Skill source directory "${sourceDir}"`,
-	);
+	const subject = `Skill source directory "${sourceDir}"`;
+	return requireSkillFrontmatter(probeFrontmatter(content, subject), subject);
 }
 
 /**

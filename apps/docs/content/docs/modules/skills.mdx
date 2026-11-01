@@ -14,7 +14,7 @@ npm install @crustjs/skills
 
 <include lang="ts">../../../examples/modules/skills.ts#write</include>
 
-`writeSkills()` generates one skill directory from `app` (a `SKILL.md` plus one file per command under `commands/`) and copies any authored `extras`. It replaces a dedicated output directory named `skills` and returns paths relative to it. An authored skill with the generated skill's name replaces the generated one.
+`writeSkills()` generates one skill directory from `app` (a `SKILL.md` plus one file per command under `commands/`) and copies any authored `extras`. It replaces a dedicated output directory named `skills` and returns paths relative to it. An authored skill with the generated skill's name replaces the generated one. An authored `SKILL.md` must give `name` and `description` as one-line plain or quoted YAML values; block scalars (`|`, `>-`) are rejected.
 
 Command file names are trimmed and lowercased: each command renders to `<name>.md`, and each nested command group also gets a `<name>` directory. Before replacing output, generation rejects command names containing path separators or equal to `.` or `..`, and generated file or directory names with control characters, Windows-reserved characters, device names (such as `con.md` or `nul.txt.md`), or a trailing dot (so a `trailing.` group fails, while a `trailing.` command renders to `trailing..md`). It also rejects file/file and file/directory collisions after lowercasing and canonical Unicode normalization, including composed/decomposed spellings that alias on macOS. Unicode normalization is only used for collision checks; generated paths and command invocations retain their original Unicode spelling.
 
@@ -55,7 +55,7 @@ project: .agents/skills/my-cli -> ../../node_modules/my-cli/skills/my-cli
 global:  ~/.agents/skills/my-cli -> /usr/lib/node_modules/my-cli/skills/my-cli
 ```
 
-Project links are relative and global links are absolute. The pre-run hook of an installed CLI repairs stale or dangling Crust-owned links unless `autoUpdate: false`; it does not create links that were never installed. Running from source (`bun run`, `node`) skips it, so trying a checkout never moves an installed CLI's links to that checkout's build. Run `skills repair` there to relink deliberately.
+Project links are relative and global links are absolute. The pre-run hook of an installed CLI repairs Crust-owned links whose target no longer exists unless `autoUpdate: false`; it does not create links that were never installed, and it leaves a link to another live installed copy of the CLI (global versus project-local, `npx`) alone so the copies do not take it from each other. `skills repair` re-points such a link to the running copy. Running from source (`bun run`, `node`) skips it, so trying a checkout never moves an installed CLI's links to that checkout's build. Run `skills repair` there to relink deliberately.
 
 A link is Crust-owned when its textual target ends in `skills/<name>`. Real directories and foreign links conflict unless `force: true` is passed to low-level installation.
 
