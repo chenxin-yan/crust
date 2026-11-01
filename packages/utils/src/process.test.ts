@@ -1,5 +1,7 @@
+import { spawnSync } from "node:child_process";
 import {
 	chmodSync,
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
@@ -9,6 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -162,6 +165,119 @@ ${exitParent ? "process.exit(0);" : "setTimeout(() => {}, 20000);"}`;
 			15_000,
 		);
 	}
+
+	const lifetimeEvents = ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT", "exit"] as const;
+	const listenerCounts = () => lifetimeEvents.map((event) => process.listenerCount(event));
+
+	it("removes its parent-lifetime listeners once a timed run settles", async () => {
+		const before = listenerCounts();
+		await runProcess(process.execPath, ["-e", ""], { timeout: 5_000 });
+		await expect(
+			runProcess(process.execPath, ["-e", "setTimeout(() => {}, 20000)"], { timeout: 500 }),
+		).rejects.toThrow("was killed");
+		expect(listenerCounts()).toEqual(before);
+	}, 15_000);
+
+	describe.skipIf(process.platform === "win32")("parent lifetime", () => {
+		/**
+		 * Runs a Node host whose timed children (each with a pipe-holding descendant) are alive
+		 * when the host interrupts itself as `mode` describes; `concurrent` runs two and sends SIGINT.
+		 */
+		function runInterruptedHost(mode: "SIGTERM" | "exit" | "listener" | "concurrent") {
+			const dir = mkdtempSync(join(tmpdir(), "run-process-lifetime-"));
+			const pidFiles = (mode === "concurrent" ? ["first", "second"] : ["only"]).map((name) =>
+				join(dir, `${name}.json`),
+			);
+			const child = (pidFile: string) => `const { spawn } = require("node:child_process");
+const fs = require("node:fs");
+const descendant = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "inherit" });
+fs.writeFileSync(${JSON.stringify(`${pidFile}.tmp`)}, JSON.stringify([process.pid, descendant.pid]));
+fs.renameSync(${JSON.stringify(`${pidFile}.tmp`)}, ${JSON.stringify(pidFile)});
+setInterval(() => {}, 1000);`;
+			const host = join(dir, "host.mjs");
+			writeFileSync(
+				host,
+				`import { existsSync } from "node:fs";
+import { runProcess } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "process.ts")).href)};
+const mode = ${JSON.stringify(mode)};
+if (mode === "listener") process.on("SIGINT", () => console.log("host listener"));
+const runs = ${JSON.stringify(pidFiles.map(child))}.map((script) => runProcess(process.execPath, ["-e", script], { timeout: 60000 }));
+const poll = setInterval(() => {
+  if (!${JSON.stringify(pidFiles)}.every((pidFile) => existsSync(pidFile))) return;
+  clearInterval(poll);
+  if (mode === "exit") process.exit(3);
+  process.kill(process.pid, mode === "SIGTERM" ? "SIGTERM" : "SIGINT");
+}, 20);
+for (const run of runs) {
+  await run.catch((error) => console.log(error.message, ${JSON.stringify(lifetimeEvents)}.map((event) => process.listenerCount(event)).join()));
+}
+process.exit(0);
+`,
+			);
+			const pids: number[] = [];
+			try {
+				const result = spawnSync(process.execPath, [host], { encoding: "utf8", timeout: 10_000 });
+				for (const pidFile of pidFiles) {
+					if (existsSync(pidFile))
+						pids.push(...(JSON.parse(readFileSync(pidFile, "utf8")) as number[]));
+				}
+				return { result, pids };
+			} finally {
+				rmSync(dir, { recursive: true, force: true });
+			}
+		}
+
+		const leftovers: number[] = [];
+
+		afterEach(() => {
+			for (const pid of leftovers.splice(0)) {
+				try {
+					process.kill(pid, "SIGKILL");
+				} catch {
+					// Already exited.
+				}
+			}
+		});
+
+		async function expectInterruptedHost(mode: Parameters<typeof runInterruptedHost>[0]) {
+			const { result, pids } = runInterruptedHost(mode);
+			leftovers.push(...pids);
+			expect(pids).toHaveLength(mode === "concurrent" ? 4 : 2);
+			await vi.waitFor(() => expect(pids.filter(isRunning)).toEqual([]), { timeout: 5_000 });
+			return result;
+		}
+
+		it("kills timed children and keeps default termination when the parent gets SIGTERM", async () => {
+			expect(await expectInterruptedHost("SIGTERM")).toMatchObject({
+				status: null,
+				signal: "SIGTERM",
+				stdout: "",
+			});
+		}, 20_000);
+
+		it("kills timed children when the parent exits synchronously", async () => {
+			expect(await expectInterruptedHost("exit")).toMatchObject({ status: 3, signal: null });
+		}, 20_000);
+
+		it("kills timed children and leaves an existing parent SIGINT listener in charge", async () => {
+			expect(await expectInterruptedHost("listener")).toMatchObject({
+				status: 0,
+				signal: null,
+				// The host listener still ran and remains the only lifetime listener.
+				stdout: expect.stringMatching(
+					/^host listener\n.* was interrupted by SIGINT\. 1,0,0,0,0\n$/s,
+				),
+			});
+		}, 20_000);
+
+		it("kills concurrent timed children and still terminates by SIGINT", async () => {
+			expect(await expectInterruptedHost("concurrent")).toMatchObject({
+				status: null,
+				signal: "SIGINT",
+				stdout: "",
+			});
+		}, 20_000);
+	});
 
 	it.skipIf(process.platform !== "win32")(
 		"round-trips arguments through Windows forwarding shims",

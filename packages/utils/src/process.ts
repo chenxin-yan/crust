@@ -28,6 +28,9 @@ export type RunProcessOptions = {
 	/**
 	 * Milliseconds before process-tree cleanup and rejection. POSIX descendants
 	 * must remain in the child's group; Windows requires a live parent.
+	 * On POSIX, SIGINT, SIGTERM, SIGHUP, SIGQUIT or a synchronous exit of this process
+	 * also kills the group; a signal rejects the call and is re-raised when no other
+	 * listener handles it.
 	 */
 	timeout?: number;
 };
@@ -38,6 +41,7 @@ export type RunProcessResult = {
 	stderr: string;
 };
 
+const LIFETIME_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const;
 const WINDOWS_SHELL_UNSAFE = /[\0\r\n"%!^`<>&|]/;
 const WINDOWS_SHELL_META = /([()\][%!^"`<>&|;, *?])/g;
 
@@ -131,35 +135,65 @@ export async function runProcess(
 	const windowsShimCommand = getWindowsShimCommand(command, args, options.shell);
 	const collect = (options.stdio ?? "collect") === "collect";
 	const collectStdout = collect && options.stdout !== "ignore";
+	// Only timed calls need a group; untimed interactive children keep terminal semantics.
+	const detached = options.timeout !== undefined && process.platform !== "win32";
 	const proc = spawn(windowsShimCommand?.command ?? command, windowsShimCommand?.args ?? args, {
 		cwd: options.cwd,
 		env: options.env,
 		shell: options.shell,
 		stdio: collect ? ["ignore", collectStdout ? "pipe" : "ignore", "pipe"] : "inherit",
-		// Only timed calls need a group; untimed interactive children keep terminal semantics.
-		detached: options.timeout !== undefined && process.platform !== "win32",
+		detached,
 		windowsVerbatimArguments: windowsShimCommand?.windowsVerbatimArguments,
 	});
 
-	let timer: NodeJS.Timeout | undefined;
-	const deadline = new Promise<never>((_, reject) => {
-		if (options.timeout === undefined) return;
-		const timeout = options.timeout;
-		timer = setTimeout(() => {
-			let failure = new Error(
-				`${[command, ...args].join(" ")} did not exit within ${timeout} ms and was killed.`,
-			);
+	const commandLine = [command, ...args].join(" ");
+	let stop!: (message: string, reason: string) => void;
+	const stopped = new Promise<never>((_, reject) => {
+		stop = (message, reason) => {
+			let failure = new Error(message);
 			try {
 				killProcessTree(proc);
 			} catch (cause) {
-				failure = new Error("Process-tree cleanup failed after timeout.", { cause });
+				failure = new Error(`Process-tree cleanup failed after ${reason}.`, { cause });
 			}
 			// Escaped descendants must not hold the timeout open through inherited pipes.
 			proc.stdout?.destroy();
 			proc.stderr?.destroy();
 			reject(failure);
-		}, timeout);
+		};
 	});
+	const timeout = options.timeout;
+	const timer =
+		timeout === undefined
+			? undefined
+			: setTimeout(
+					() => stop(`${commandLine} did not exit within ${timeout} ms and was killed.`, "timeout"),
+					timeout,
+				);
+	// The detached group no longer receives terminal signals and the deadline dies with this
+	// process, so the group stops with it. Like snapshot preparation, re-raise only when no
+	// other listener owns the signal. SIGKILL and native crashes still orphan the group.
+	const onSignal = (signal: NodeJS.Signals): void => {
+		removeLifetimeListeners();
+		stop(`${commandLine} was interrupted by ${signal}.`, signal);
+		if (process.listenerCount(signal) === 0) process.kill(process.pid, signal);
+	};
+	// Synchronous exits (process.exit, uncaught errors) skip the awaited cleanup.
+	const killOnExit = (): void => {
+		try {
+			killProcessTree(proc);
+		} catch {
+			// Best effort: the exiting process takes precedence.
+		}
+	};
+	const removeLifetimeListeners = (): void => {
+		for (const signal of LIFETIME_SIGNALS) process.removeListener(signal, onSignal);
+		process.removeListener("exit", killOnExit);
+	};
+	if (detached) {
+		for (const signal of LIFETIME_SIGNALS) process.prependListener(signal, onSignal);
+		process.on("exit", killOnExit);
+	}
 
 	try {
 		const [stdout, stderr, [exitCode]] = await Promise.race([
@@ -168,11 +202,12 @@ export async function runProcess(
 				collect ? text(proc.stderr!) : "",
 				once(proc, "close"),
 			]),
-			deadline,
+			stopped,
 		]);
 		return { exitCode, stdout, stderr };
 	} finally {
 		clearTimeout(timer);
+		removeLifetimeListeners();
 	}
 }
 
