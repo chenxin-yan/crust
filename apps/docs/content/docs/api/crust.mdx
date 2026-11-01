@@ -162,7 +162,7 @@ The action receives typed `args` and `flags`, the lazy `ctx` bag, `rawArgs` afte
 
 Materializes definitions as fresh child commands under their carried names. See the [root example](#constructor), which adds `deploy` twice with `.as()`.
 
-Sibling names and aliases must not collide. A definition can itself add definitions; nested ones access inherited Contexts by declaring them with `.use()`. An added command accepts the Context-owned flags already provided on its parent path, but not the parent's local flags.
+Sibling names and aliases must not collide. Each call copies the existing children, so for many commands prefer one batched `.add(a, b, c)` over long chains of `.add()` or `.command()` calls. A definition can itself add definitions; nested ones access inherited Contexts by declaring them with `.use()`. An added command accepts the Context-owned flags already provided on its parent path, but not the parent's local flags.
 
 <Callout type="info">
   A later `.provide()` does not reach an already-added definition. Register a definition's providers

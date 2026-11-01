@@ -1545,6 +1545,13 @@ export class Crust<
 		// Keep partial additions private if a duplicate or recipe throws. Every
 		// recipe inherits from the original parent, never from earlier siblings.
 		const subCommands = { ...this._node.subCommands };
+		// One spelling index per batch keeps large `.add(...)` calls linear.
+		const siblingSpellings = new Set<string>();
+		const indexSpellings = (child: CommandNode) => {
+			siblingSpellings.add(child.meta.name);
+			for (const alias of child.meta.aliases ?? []) siblingSpellings.add(alias);
+		};
+		for (const sibling of Object.values(subCommands)) indexSpellings(sibling);
 		for (const definition of definitions) {
 			// FIX_COMMAND_COLLISION owns literal names; this owns dynamic `.add()`,
 			// where a silent replacement makes the earlier command unreachable.
@@ -1553,25 +1560,20 @@ export class Crust<
 				definition.name,
 				...(definition[commandDefinitionInternal].meta.aliases ?? []),
 			];
-			for (const sibling of Object.values(subCommands)) {
-				if (
-					[sibling.meta.name, ...(sibling.meta.aliases ?? [])].some((name) =>
-						spellings.includes(name),
-					)
-				) {
-					throw new CrustError(
-						"DEFINITION",
-						`Command name "${definition.name}" is already registered on this command`,
-						{
-							subject: "command",
-							name: definition.name,
-							reason: "command-collision",
-						},
-					);
-				}
+			if (spellings.some((spelling) => siblingSpellings.has(spelling))) {
+				throw new CrustError(
+					"DEFINITION",
+					`Command name "${definition.name}" is already registered on this command`,
+					{
+						subject: "command",
+						name: definition.name,
+						reason: "command-collision",
+					},
+				);
 			}
 			const childNode = materializeCommandDefinition(definition, this._node);
 			subCommands[definition.name] = childNode;
+			indexSpellings(childNode);
 		}
 
 		return this._clone<Out>({ subCommands });
