@@ -23,8 +23,8 @@ const enabled = process.env.CRUST_TUI_SMOKE === "1" && process.platform !== "win
 let fixtureDir = "";
 const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 
-const OPENTUI_VERSION = "0.6.6";
-const SOLID_VERSION = "1.9.15";
+const OPENTUI_VERSION = "0.8.0";
+const SOLID_VERSION = "1.9.16";
 
 const FIXTURE_PACKAGE_JSON = {
 	name: "tui-smoke",
