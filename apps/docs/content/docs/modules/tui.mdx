@@ -85,6 +85,6 @@ new Crust("app").action(() =>
 
 The entry is the [`bin`](/docs/modules/crust#commands-and-entries-bin) value. Solid needs OpenTUI's JSX transform at compile time, so list `@opentui/solid/bun-plugin` in [`crust.bunPlugins`](/docs/guide/build-and-distribution#add-bun-bundler-plugins); the `bunfig.toml` preload covers `bun run` and build validation, not compilation. React and core apps compile with a plain `crust build`.
 
-Cross-compiling needs every platform's native OpenTUI package installed: `bun install --os "*" --cpu "*"`.
+On Linux, compiling needs both the glibc and musl native OpenTUI packages, which `bun install` skips by default since Bun 1.4.4: `bun install --libc "*"`. Cross-compiling needs every platform's native OpenTUI package installed: `bun install --os "*" --cpu "*" --libc "*"`.
 
 Compiled binaries do not load the `bunfig.toml` of the directory they start in, so the development preload cannot crash a compiled app (or `crust` itself) run from your project directory.

@@ -142,11 +142,17 @@ await new Crust("solid-smoke")
 `,
 		);
 
-		const install = await runBoundedProcess(which("bun")!, ["install", "--minimum-release-age=0"], {
-			cwd: fixtureDir,
-			env: { ...process.env, BUN_BE_BUN: "1" },
-			timeout: 170_000,
-		});
+		// TODO(upstream): drop `--libc *` once OpenTUI's Bun loader stops importing both
+		// `@opentui/core-linux-*` libc packages by name; Bun 1.4.4+ installs only the host's.
+		const install = await runBoundedProcess(
+			which("bun")!,
+			["install", "--minimum-release-age=0", "--libc", "*"],
+			{
+				cwd: fixtureDir,
+				env: { ...process.env, BUN_BE_BUN: "1" },
+				timeout: 170_000,
+			},
+		);
 		if (install.exitCode !== 0) throw new Error(`bun install failed:\n${install.stderr}`);
 	}, 180_000);
 
