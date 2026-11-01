@@ -84,12 +84,31 @@ const child = spawn(binPath, process.argv.slice(2), {
 \tstdio: "inherit",
 });
 
+// Ctrl-C already reaches the child through the shared process group, and a
+// forwarded duplicate would be the second SIGINT that force-quits a Crust CLI;
+// the cost is that a SIGINT sent only to this PID is dropped.
+function relaySignals(child) {
+\tconst ignore = () => {};
+\tconst forward = (signal) => child.kill(signal);
+\tprocess.on("SIGINT", ignore);
+\tprocess.on("SIGTERM", forward);
+\tprocess.on("SIGHUP", forward);
+\treturn () => {
+\t\tprocess.off("SIGINT", ignore);
+\t\tprocess.off("SIGTERM", forward);
+\t\tprocess.off("SIGHUP", forward);
+\t};
+}
+const releaseSignals = relaySignals(child);
+
 child.on("error", (error) => {
 \tconsole.error("[" + NAME + "] Failed to launch binary: " + error.message);
 \tprocess.exit(1);
 });
 
 child.on("exit", (code, signal) => {
+\t// Released first so the re-raised signal below takes its default action.
+\treleaseSignals();
 \tif (signal) {
 \t\ttry {
 \t\t\tprocess.kill(process.pid, signal);

@@ -7,7 +7,12 @@ import type { RunProcessResult } from "@crustjs/utils/process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { DistributionManifest } from "./distribute.ts";
-import { publishStagedPackages, readPublishManifest, validatePublishManifest } from "./publish.ts";
+import {
+	assertStageMatchesProject,
+	publishStagedPackages,
+	readPublishManifest,
+	validatePublishManifest,
+} from "./publish.ts";
 
 const io = { stdout: () => {}, stderr: () => {} };
 
@@ -153,6 +158,29 @@ describe("publish manifest validation", () => {
 		writeFileSync(packageJsonPath, "");
 		expect(() => validatePublishManifest(tmpDir, manifest)).toThrow(
 			`Invalid JSON in ${packageJsonPath}: `,
+		);
+	});
+
+	it("rejects a stage whose name or version no longer matches the project package.json", () => {
+		const projectDir = join(tmpDir, "project");
+		mkdirSync(projectDir);
+		const writeProject = (pkg: object) =>
+			writeFileSync(join(projectDir, "package.json"), JSON.stringify(pkg));
+
+		writeProject({ name: "@scope/demo", version: "1.2.3", private: false });
+		expect(() => assertStageMatchesProject(projectDir, manifest)).not.toThrow();
+
+		writeProject({ name: "@scope/demo", version: "1.2.4" });
+		expect(() => assertStageMatchesProject(projectDir, manifest)).toThrow(
+			"Stage is stale: .crust/ holds @scope/demo@1.2.3, but package.json is @scope/demo@1.2.4.\n  Run `crust build` before `crust publish`.",
+		);
+
+		writeProject({ name: "@scope/renamed", version: "1.2.3" });
+		expect(() => assertStageMatchesProject(projectDir, manifest)).toThrow("Stage is stale");
+
+		rmSync(join(projectDir, "package.json"));
+		expect(() => assertStageMatchesProject(projectDir, manifest)).toThrow(
+			`Could not read ${join(projectDir, "package.json")} to check the staged packages against it`,
 		);
 	});
 
