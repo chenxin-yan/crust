@@ -66,10 +66,16 @@ function codePointLengthBefore(text: string, pos: number): number {
 	return pos >= 2 && (text.codePointAt(pos - 2) ?? 0) > 0xffff ? 2 : 1;
 }
 
-/** True when `char` is exactly one complete code point (no lone surrogate). */
-function isSingleCodePoint(char: string): boolean {
+/** True when `char` is exactly one complete, non-control code point (no lone surrogate). */
+function isPrintableCodePoint(char: string): boolean {
 	const cp = char.codePointAt(0);
-	return cp !== undefined && char.length === (cp > 0xffff ? 2 : 1) && (cp < 0xd800 || cp > 0xdfff);
+	return (
+		cp !== undefined &&
+		char.length === (cp > 0xffff ? 2 : 1) &&
+		(cp < 0xd800 || cp > 0xdfff) &&
+		cp >= 0x20 &&
+		(cp < 0x7f || cp > 0x9f)
+	);
 }
 
 /**
@@ -124,7 +130,7 @@ export function handleTextEdit(
 	}
 
 	// Printable character — insert at cursor position
-	if (isSingleCodePoint(key.char) && !key.ctrl && !key.meta) {
+	if (isPrintableCodePoint(key.char) && !key.ctrl && !key.meta) {
 		const before = text.slice(0, cursorPos);
 		const after = text.slice(cursorPos);
 		return { text: before + key.char + after, cursorPos: cursorPos + key.char.length };

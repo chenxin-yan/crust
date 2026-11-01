@@ -15,7 +15,13 @@ import {
 	PREFIX_SYMBOL,
 } from "../core/symbols.ts";
 import { renderTextWithCursor } from "../core/text-edit.ts";
-import type { Choice, ChoiceValue, PartialPromptTheme, PromptTheme } from "../core/types.ts";
+import type {
+	Choice,
+	ChoiceValue,
+	NotChoiceTuple,
+	PartialPromptTheme,
+	PromptTheme,
+} from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
 import {
 	formatPromptLine,
@@ -228,11 +234,14 @@ export function multifilter<const C extends readonly [Choice<unknown>, ...Choice
 	options: MultifilterOptions<ChoiceValue<C>> & { readonly choices: C },
 	io?: PromptIO,
 ): Promise<ChoiceValue<C>[]>;
-export function multifilter(
-	options: MultifilterOptions<string> & { readonly choices: readonly string[] },
+export function multifilter<const C extends readonly string[]>(
+	options: MultifilterOptions<string> & { readonly choices: C & NotChoiceTuple<C> },
 	io?: PromptIO,
 ): Promise<string[]>;
-export function multifilter<T>(options: MultifilterOptions<T>, io?: PromptIO): Promise<T[]>;
+export function multifilter<T, const C extends readonly Choice<T>[] = readonly Choice<T>[]>(
+	options: MultifilterOptions<T> & { readonly choices: C & NotChoiceTuple<C> },
+	io?: PromptIO,
+): Promise<T[]>;
 export async function multifilter<T>(options: MultifilterOptions<T>, io?: PromptIO): Promise<T[]> {
 	const setup = await setupListPrompt<T, readonly T[]>(options, options.default ?? [], io);
 	if (setup.shortCircuited) return [...setup.value];

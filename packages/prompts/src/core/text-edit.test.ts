@@ -29,3 +29,11 @@ describe("handleTextEdit — supplementary code points", () => {
 		expect(handleTextEdit(key("", "😀", { meta: true }), "", 0)).toBeNull();
 	});
 });
+
+describe("handleTextEdit — control characters", () => {
+	it("does not insert C0, DEL, or C1 control characters", () => {
+		for (const char of ["\t", "\n", "\r", "\x1B", "\x7F", "\x85"]) {
+			expect(handleTextEdit(key("", char), "ab", 1)).toBeNull();
+		}
+	});
+});

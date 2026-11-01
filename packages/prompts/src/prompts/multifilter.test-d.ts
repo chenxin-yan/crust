@@ -9,4 +9,9 @@ async function _multifilterTypeInferenceTests() {
 	const widened: string[] = ["a", "b"];
 	const loose = await multifilter({ message: "?", choices: widened });
 	type _LooseIsStrings = Expect<Equal<typeof loose, string[]>>;
+
+	// @ts-expect-error "c" is not one of the literal choices
+	void multifilter({ message: "?", choices: ["a", "b"], default: ["c"] });
+	const looseDefault = await multifilter({ message: "?", choices: widened, default: ["c"] });
+	type _LooseDefaultIsStrings = Expect<Equal<typeof looseDefault, string[]>>;
 }

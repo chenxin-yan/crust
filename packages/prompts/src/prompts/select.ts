@@ -6,7 +6,13 @@ import { setupListPrompt } from "../core/list.ts";
 import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
 import { runPrompt, submit } from "../core/renderer.ts";
 import { CURSOR_INDICATOR, PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
-import type { Choice, ChoiceValue, PartialPromptTheme, PromptTheme } from "../core/types.ts";
+import type {
+	Choice,
+	ChoiceValue,
+	NotChoiceTuple,
+	PartialPromptTheme,
+	PromptTheme,
+} from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
 import { formatSubmitted, moveCursor, renderChoiceList } from "../core/utils.ts";
 
@@ -160,7 +166,7 @@ function renderSubmitted<T>(
  *
  * @param options - Select prompt configuration
  * @returns The value of the selected choice
- * @throws {NonInteractiveError} when stdin is not a TTY and no `initial` or `default` is provided
+ * @throws {NonInteractiveError} when the input or output is not a TTY and no `initial` or `default` is provided
  *
  * @example
  * ```ts
@@ -197,15 +203,20 @@ function renderSubmitted<T>(
 // `string`. Non-tuple `readonly Choice<T>[]` (e.g. generic wrappers over
 // SelectOptions<T>) matches neither and falls through to the generic
 // overload, so `select(options)` inside a wrapper stays `Promise<T>`.
+// Both fallbacks reject literal tuples, so a `default`/`initial` outside the
+// literal choices is an error instead of silently widening the result.
 export function select<const C extends readonly [Choice<unknown>, ...Choice<unknown>[]]>(
 	options: SelectOptions<ChoiceValue<C>> & { readonly choices: C },
 	io?: PromptIO,
 ): Promise<ChoiceValue<C>>;
-export function select(
-	options: SelectOptions<string> & { readonly choices: readonly string[] },
+export function select<const C extends readonly string[]>(
+	options: SelectOptions<string> & { readonly choices: C & NotChoiceTuple<C> },
 	io?: PromptIO,
 ): Promise<string>;
-export function select<T>(options: SelectOptions<T>, io?: PromptIO): Promise<T>;
+export function select<T, const C extends readonly Choice<T>[] = readonly Choice<T>[]>(
+	options: SelectOptions<T> & { readonly choices: C & NotChoiceTuple<C> },
+	io?: PromptIO,
+): Promise<T>;
 export async function select<T>(options: SelectOptions<T>, io?: PromptIO): Promise<T> {
 	const setup = await setupListPrompt<T, T>(
 		options,

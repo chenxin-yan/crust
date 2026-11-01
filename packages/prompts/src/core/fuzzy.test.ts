@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { fuzzyFilter, fuzzyMatch } from "./fuzzy.ts";
+import { fuzzyFilter, fuzzyMatch, highlightMatches } from "./fuzzy.ts";
+import type { PromptTheme } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // fuzzyMatch
@@ -58,6 +59,22 @@ describe("fuzzyMatch", () => {
 		const result = fuzzyMatch("ace", "abcde");
 		expect(result.match).toBe(true);
 		expect(result.indices).toEqual([0, 2, 4]);
+	});
+
+	it("keeps indices on the original label when lowercasing changes its length", () => {
+		// "İ".toLowerCase() is two UTF-16 units ("i" + U+0307).
+		expect(fuzzyMatch("s", "İstanbul").indices).toEqual([1]);
+		expect(fuzzyMatch("ist", "İstanbul").indices).toEqual([0, 1, 2]);
+		expect(fuzzyMatch("İs", "İstanbul").indices).toEqual([0, 1]);
+		const theme = { filterMatch: (text: string) => `[${text}]` } as PromptTheme;
+		expect(highlightMatches("İstanbul", fuzzyMatch("s", "İstanbul").indices, theme)).toBe(
+			"İ[s]tanbul",
+		);
+	});
+
+	it("applies the word boundary bonus from the original previous character", () => {
+		// Lowercased indices are shifted by "İ", so the bonus must read "-" from the original label.
+		expect(fuzzyMatch("b", "İ-b").score).toBe(fuzzyMatch("b", "x-b").score);
 	});
 });
 

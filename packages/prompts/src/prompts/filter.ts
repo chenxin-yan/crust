@@ -9,7 +9,13 @@ import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts"
 import { runPrompt, submit } from "../core/renderer.ts";
 import { CURSOR_INDICATOR, PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { renderTextWithCursor } from "../core/text-edit.ts";
-import type { Choice, ChoiceValue, PartialPromptTheme, PromptTheme } from "../core/types.ts";
+import type {
+	Choice,
+	ChoiceValue,
+	NotChoiceTuple,
+	PartialPromptTheme,
+	PromptTheme,
+} from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
 import { formatPromptLine, formatSubmitted, renderChoiceList } from "../core/utils.ts";
 
@@ -51,7 +57,7 @@ interface FilterState<T> {
 	/** All normalized choices (unfiltered) */
 	readonly choices: readonly NormalizedChoice<T>[];
 	/** Filtered results matching the current query */
-	readonly results: readonly FuzzyFilterResult<T>[];
+	readonly results: readonly FuzzyFilterResult<T, NormalizedChoice<T>>[];
 	/** Cursor position in the filtered results list */
 	readonly listCursor: number;
 	/** Scroll offset for the filtered results viewport */
@@ -113,7 +119,7 @@ function renderFilter<T>(
 			state.scrollOffset,
 			maxVisible,
 			(result, resultIndex) => {
-				const hint = state.choices[state.choices.indexOf(result.item)]?.hint;
+				const hint = result.item.hint;
 				const label = highlightMatches(result.item.label, result.indices, theme);
 				const hintText = hint ? ` ${theme.hint(hint)}` : "";
 				return resultIndex === state.listCursor
@@ -158,7 +164,7 @@ function renderSubmitted<T>(
  *
  * @param options - Filter prompt configuration
  * @returns The value of the selected choice
- * @throws {NonInteractiveError} when stdin is not a TTY and no `initial` or `default` is provided
+ * @throws {NonInteractiveError} when the input or output is not a TTY and no `initial` or `default` is provided
  *
  * @example
  * ```ts
@@ -195,11 +201,14 @@ export function filter<const C extends readonly [Choice<unknown>, ...Choice<unkn
 	options: FilterOptions<ChoiceValue<C>> & { readonly choices: C },
 	io?: PromptIO,
 ): Promise<ChoiceValue<C>>;
-export function filter(
-	options: FilterOptions<string> & { readonly choices: readonly string[] },
+export function filter<const C extends readonly string[]>(
+	options: FilterOptions<string> & { readonly choices: C & NotChoiceTuple<C> },
 	io?: PromptIO,
 ): Promise<string>;
-export function filter<T>(options: FilterOptions<T>, io?: PromptIO): Promise<T>;
+export function filter<T, const C extends readonly Choice<T>[] = readonly Choice<T>[]>(
+	options: FilterOptions<T> & { readonly choices: C & NotChoiceTuple<C> },
+	io?: PromptIO,
+): Promise<T>;
 export async function filter<T>(options: FilterOptions<T>, io?: PromptIO): Promise<T> {
 	const setup = await setupListPrompt<T, T>(
 		options,

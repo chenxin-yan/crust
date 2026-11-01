@@ -23,9 +23,15 @@ export interface FuzzyMatchResult {
 /**
  * A fuzzy-filtered item with its match metadata.
  */
-export interface FuzzyFilterResult<T> {
-	/** The original item */
-	readonly item: { readonly label: string; readonly value: T };
+export interface FuzzyFilterResult<
+	T,
+	Item extends { readonly label: string; readonly value: T } = {
+		readonly label: string;
+		readonly value: T;
+	},
+> {
+	/** The original item, with its full type (e.g. a choice's `hint`) */
+	readonly item: Item;
 	/** Match quality score */
 	readonly score: number;
 	/** Indices of matched characters in the label */
@@ -80,44 +86,58 @@ export function fuzzyMatch(query: string, candidate: string): FuzzyMatchResult {
 		return { match: true, score: 0, indices: [] };
 	}
 
-	const queryLower = query.toLowerCase();
-	const candidateLower = candidate.toLowerCase();
+	return matchLowered(query.toLowerCase(), candidate);
+}
 
+/** Match an already-lowercased, non-empty query so filtering normalizes it once per pass. */
+function matchLowered(queryLower: string, candidate: string): FuzzyMatchResult {
 	const indices: number[] = [];
 	let score = 0;
 	let queryIdx = 0;
 	let prevMatchIdx = -2; // -2 so first match isn't falsely consecutive
+	let lowerIdx = 0; // offset into the virtual lowercased candidate
+	let candIdx = 0; // offset of `char` in the original candidate
 
-	for (
-		let candIdx = 0;
-		candIdx < candidateLower.length && queryIdx < queryLower.length;
-		candIdx++
-	) {
-		if (candidateLower[candIdx] === queryLower[queryIdx]) {
-			indices.push(candIdx);
+	// Lowercase per code point: whole-string lowercasing can change length
+	// (e.g. "İ" → "i̇"), and its indices would land on the wrong original characters.
+	for (const char of candidate) {
+		if (queryIdx >= queryLower.length) break;
+		const lower = char.toLowerCase();
+		let charMatched = false;
+
+		for (let k = 0; k < lower.length && queryIdx < queryLower.length; k++, lowerIdx++) {
+			if (lower[k] !== queryLower[queryIdx]) continue;
+
 			score += MATCH_SCORE;
 
 			// Consecutive match bonus
-			if (candIdx === prevMatchIdx + 1) {
+			if (lowerIdx === prevMatchIdx + 1) {
 				score += CONSECUTIVE_BONUS;
 			}
 
 			// Start-of-string bonus
-			if (candIdx === 0) {
+			if (lowerIdx === 0) {
 				score += START_BONUS;
 			}
 
 			// Word boundary bonus (character after a separator)
-			if (candIdx > 0) {
+			if (k === 0 && candIdx > 0) {
 				const prevChar = candidate[candIdx - 1];
 				if (prevChar === " " || prevChar === "-" || prevChar === "_" || prevChar === ".") {
 					score += WORD_BOUNDARY_BONUS;
 				}
 			}
 
-			prevMatchIdx = candIdx;
+			if (!charMatched) {
+				for (let unit = 0; unit < char.length; unit++) indices.push(candIdx + unit);
+				charMatched = true;
+			}
+
+			prevMatchIdx = lowerIdx;
 			queryIdx++;
 		}
+
+		candIdx += char.length;
 	}
 
 	// All query characters must be matched
@@ -140,7 +160,7 @@ export function fuzzyMatch(query: string, candidate: string): FuzzyMatchResult {
  *
  * @param query - The search query
  * @param items - Array of items with `label` and `value` properties
- * @returns Matched items sorted by score (highest first)
+ * @returns Matched items, as the same objects passed in, sorted by score (highest first)
  *
  * @example
  * ```ts
@@ -152,18 +172,22 @@ export function fuzzyMatch(query: string, candidate: string): FuzzyMatchResult {
  * // Returns TypeScript and Rust (both contain "t" then "s")
  * ```
  */
-export function fuzzyFilter<T>(
-	query: string,
-	items: readonly { readonly label: string; readonly value: T }[],
-): FuzzyFilterResult<T>[] {
+export function fuzzyFilter<
+	T,
+	Item extends { readonly label: string; readonly value: T } = {
+		readonly label: string;
+		readonly value: T;
+	},
+>(query: string, items: readonly Item[]): FuzzyFilterResult<T, Item>[] {
 	if (query.length === 0) {
 		return items.map((item) => ({ item, score: 0, indices: [] }));
 	}
 
-	const results: FuzzyFilterResult<T>[] = [];
+	const queryLower = query.toLowerCase();
+	const results: FuzzyFilterResult<T, Item>[] = [];
 
 	for (const item of items) {
-		const result = fuzzyMatch(query, item.label);
+		const result = matchLowered(queryLower, item.label);
 		if (result.match) {
 			results.push({
 				item,

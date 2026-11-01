@@ -1,7 +1,7 @@
 import type { PromptIO } from "./renderer.ts";
 import { isTTY, resolvePromptIO } from "./renderer.ts";
 import type { SchemaOrValidate } from "./types.ts";
-import { validateWithSchema } from "./validate.ts";
+import { validateSubmitValue } from "./validate.ts";
 
 type ShortCircuitOptions<Input> = {
 	readonly initial?: Input;
@@ -35,7 +35,8 @@ export async function resolveShortCircuit<Input, Answer>(
 	}
 
 	const promptIO = resolvePromptIO(io);
-	if (!isTTY(promptIO.input) && options.default !== undefined) {
+	// A prompt drawn into a redirected output would hang invisibly, so both streams must be TTYs.
+	if (!(isTTY(promptIO.input) && isTTY(promptIO.output)) && options.default !== undefined) {
 		return {
 			shortCircuited: true,
 			value: parse ? await parse(options.default, "default") : options.default,
@@ -47,7 +48,7 @@ export async function resolveShortCircuit<Input, Answer>(
 
 /**
  * @internal Resolve short-circuit values for text prompts, parsing them
- * through `schema` when one is set.
+ * through `schema` or checking them with `validate` when one is set.
  */
 export async function resolveTextShortCircuit<Output>(
 	promptName: string,
@@ -57,11 +58,13 @@ export async function resolveTextShortCircuit<Output>(
 	if (options.schema !== undefined && options.validate !== undefined) {
 		throw new Error(`${promptName}() cannot combine "schema" with "validate"`);
 	}
-	const schema = options.schema;
-	if (!schema) return resolveShortCircuit(options, io);
+	const { schema, validate } = options;
+	if (!schema && !validate) return resolveShortCircuit(options, io);
 	return resolveShortCircuit(options, io, async (value, source) => {
-		const result = await validateWithSchema(schema, value);
-		if (!result.ok) throw new Error(`${source} value rejected by schema: ${result.error}`);
+		const result = await validateSubmitValue(value, schema, validate);
+		if (!result.ok) {
+			throw new Error(`${source} value rejected${schema ? " by schema" : ""}: ${result.error}`);
+		}
 		return result.value;
 	});
 }

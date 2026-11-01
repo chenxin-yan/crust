@@ -97,6 +97,15 @@ export type ChoiceValue<C extends readonly Choice<unknown>[]> = C[number] extend
 		: E
 	: never;
 
+/**
+ * @internal Rejects a literal non-empty choices tuple. Fallback overloads use
+ * it so a `default` or `initial` outside literal choices fails instead of
+ * widening the result.
+ */
+export type NotChoiceTuple<C> = C extends readonly [unknown, ...unknown[]]
+	? "FIX_DEFAULT_CHOICE: default and initial must be one of choices"
+	: C;
+
 // ────────────────────────────────────────────────────────────────────────────
 // Validation
 // ────────────────────────────────────────────────────────────────────────────

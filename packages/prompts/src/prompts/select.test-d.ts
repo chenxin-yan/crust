@@ -52,4 +52,21 @@ async function _selectTypeInferenceTests() {
 	// A generic wrapper over SelectOptions<T> still resolves to Promise<T>.
 	const viaWrapper = (options: SelectOptions<number>): Promise<number> => select(options);
 	void viaWrapper;
+
+	// A default or initial outside literal choices is rejected instead of
+	// widening the result through a fallback overload.
+	// @ts-expect-error "staging" is not one of the literal choices
+	void select({ message: "?", choices: ["dev", "prod"], default: "staging" });
+	// @ts-expect-error 2 is not one of the literal choice values
+	void select({ message: "?", choices: [{ label: "one", value: 1 }], initial: 2 });
+	const flag: string = "dev";
+	// @ts-expect-error a widened string may be outside the literal choices
+	void select({ message: "?", choices: ["dev", "prod"], initial: flag });
+
+	// Dynamic collections still accept any default of their value type.
+	const looseDefault = await select({ message: "?", choices: widened, default: "c" });
+	type _LooseDefaultIsString = Expect<Equal<typeof looseDefault, string>>;
+	const ports: { label: string; value: number }[] = [];
+	const dynamic = await select({ message: "?", choices: ports, default: 443 });
+	type _DynamicIsNumber = Expect<Equal<typeof dynamic, number>>;
 }
