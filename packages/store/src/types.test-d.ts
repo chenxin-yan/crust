@@ -153,11 +153,14 @@ type Expect<T extends true> = T;
 			omitted: { schema: omitted },
 			asyncWithFailure: { schema: asyncWithFailure },
 			annotated: { schema: annotated },
+			// phantom precedence holds per member of a schema union
+			mixed: { schema: Math.random() < 0.5 ? annotated : omitted },
 		} satisfies FieldsDef;
 		type Config = InferStoreConfig<typeof fields>;
 		type _Omitted = Expect<Equal<Config["omitted"], number>>;
 		type _AsyncWithFailure = Expect<Equal<Config["asyncWithFailure"], string>>;
 		type _Annotated = Expect<Equal<Config["annotated"], "a" | "b">>;
+		type _Mixed = Expect<Equal<Config["mixed"], "a" | "b" | number>>;
 	}
 
 	{

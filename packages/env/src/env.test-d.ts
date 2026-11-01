@@ -147,8 +147,17 @@ function _typecheckInfersSchemaOutputWithoutPhantomTypes() {
 				typeof value === "string" ? { value } : { issues: [{ message: "missing" }] },
 		},
 	};
+	const annotated: {
+		readonly "~standard": {
+			readonly version: 1;
+			readonly vendor: string;
+			readonly validate: (value: StandardInput) => { value: string };
+			readonly types?: { readonly input: string | undefined; readonly output: "a" | "b" };
+		};
+	} = { "~standard": { version: 1, vendor: "d", validate: (value) => ({ value: String(value) }) } };
 	const env = defineEnv("env", {
 		PORT: { type: "string", schema: omitted },
+		MIXED: { type: "string", schema: Math.random() < 0.5 ? annotated : omitted },
 		NAME: { type: "string", schema: asyncWithFailure },
 		LENGTH: { type: "string", schema: upper },
 	});
@@ -157,4 +166,6 @@ function _typecheckInfersSchemaOutputWithoutPhantomTypes() {
 	type _Name = Expect<Equal<Value["NAME"], string>>;
 	// explicit phantom types still win
 	type _Length = Expect<Equal<Value["LENGTH"], number>>;
+	// phantom precedence holds per member of a schema union
+	type _Mixed = Expect<Equal<Value["MIXED"], "a" | "b" | number>>;
 }
