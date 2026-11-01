@@ -39,5 +39,6 @@ export const defaultTheme: PromptTheme = themeFromStyle(style);
 export function defaultThemeFor(output: { readonly isTTY?: boolean }): PromptTheme {
 	// Same TTY state as stdout: the late-bound default already decides, without building a style.
 	if ((output.isTTY ?? false) === (process.stdout?.isTTY ?? false)) return defaultTheme;
+	// Env is snapshotted once per prompt/spinner here; changing it mid-render is not a real use case.
 	return themeFromStyle(createStyle({ overrides: { isTTY: output.isTTY } }));
 }

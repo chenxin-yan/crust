@@ -84,6 +84,8 @@ describe("runPrompt — default theme color", () => {
 	async function renderDefaultTheme(outputIsTTY: boolean, stdoutIsTTY: boolean): Promise<string> {
 		vi.stubEnv("FORCE_COLOR", undefined);
 		vi.stubEnv("NO_COLOR", undefined);
+		vi.stubEnv("COLORTERM", undefined);
+		vi.stubEnv("TERM", undefined);
 		Object.defineProperty(process.stdout, "isTTY", { value: stdoutIsTTY, configurable: true });
 		const harness = createPromptIO();
 		let written = "";

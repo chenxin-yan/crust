@@ -190,6 +190,8 @@ describe("spinner — default theme color", () => {
 	function withStdoutTTY(isTTY: boolean, fn: () => void): void {
 		vi.stubEnv("FORCE_COLOR", undefined);
 		vi.stubEnv("NO_COLOR", undefined);
+		vi.stubEnv("COLORTERM", undefined);
+		vi.stubEnv("TERM", undefined);
 		Object.defineProperty(process.stdout, "isTTY", { value: isTTY, configurable: true });
 		try {
 			fn();
