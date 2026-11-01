@@ -2,13 +2,21 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-const scalingSizes = [10, 100, 200] as const;
+const fixtures = [
+	{ name: "10", size: 10, wideAdd: false },
+	{ name: "100", size: 100, wideAdd: false },
+	{ name: "200", size: 200, wideAdd: false },
+	// Core used to hit TS2589 at ~44 definitions in one `.add(...)` call.
+	{ name: "50 in one .add()", size: 50, wideAdd: true },
+] as const;
+type FixtureName = (typeof fixtures)[number]["name"];
 type FixtureApi = "context-config" | "fluent";
 
 export interface TypePerfReport {
 	typescriptVersion: string;
 	fixtureApi: FixtureApi;
-	instantiations: Record<(typeof scalingSizes)[number], number>;
+	/** `error` is the first TypeScript error code of a fixture measured with `--allow-compile-errors`. */
+	instantiations: Record<FixtureName, number | { error: string }>;
 }
 
 export function parseExtendedDiagnostics(output: string): number {
@@ -35,11 +43,17 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
 	return [
 		"| Top-level commands | Base instantiations | PR merge instantiations | Δ |",
 		"|---:|---:|---:|---:|",
-		...scalingSizes.map((size) => {
-			const before = base.instantiations[size];
-			const after = head.instantiations[size];
+		...fixtures.map(({ name }) => {
+			const before = base.instantiations[name];
+			const after = head.instantiations[name];
+			if (typeof after !== "number") {
+				throw new Error(`PR merge fixture ${name} failed to compile: ${after.error}`);
+			}
+			if (typeof before !== "number") {
+				return `| ${name} | n/a (base failed: ${before.error}) | ${number.format(after)} | n/a |`;
+			}
 			const warn = after > before * 1.1 ? " ⚠️" : "";
-			return `| ${size}${warn} | ${number.format(before)} | ${number.format(after)} | ${signed(after - before)} (${percentage(before, after)}) |`;
+			return `| ${name}${warn} | ${number.format(before)} | ${number.format(after)} | ${signed(after - before)} (${percentage(before, after)}) |`;
 		}),
 		"",
 		`TypeScript ${head.typescriptVersion} · \`--checkers 1\` · ⚠️ marks increases above the repository's advisory 10% threshold.`,
@@ -56,9 +70,16 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
  * Generate a deterministic downstream app with `size` top-level sibling commands.
  * Each command has three chained flags and two chained args. Context count is
  * max(3, ceil(size / 10)); every tenth command also owns one nested subcommand.
+ * The app adds commands one `.add()` at a time, or all in one call when `wideAdd`
+ * is set, then makes five literal typed `app.run(path, { args, flags })` calls
+ * and one `app.at(path)` call.
  * The context-config dialect supports comparisons across the fluent-Context API transition.
  */
-export function generateConsumerSource(size: number, fixtureApi: FixtureApi = "fluent"): string {
+export function generateConsumerSource(
+	size: number,
+	fixtureApi: FixtureApi = "fluent",
+	wideAdd = false,
+): string {
 	if (!Number.isInteger(size) || size < 1) throw new Error("size must be a positive integer");
 	const contextCount = Math.max(3, Math.ceil(size / 10));
 	const lines = [
@@ -127,8 +148,17 @@ export function generateConsumerSource(size: number, fixtureApi: FixtureApi = "f
 		`\t.provide(${Array.from({ length: contextCount }, (_, index) => `context${index}()`).join(", ")})`,
 		"\t.extend(extension)",
 	);
-	for (let index = 0; index < size; index++) lines.push(`\t.add(command${index})`);
+	const commands = Array.from({ length: size }, (_, index) => `command${index}`);
+	if (wideAdd) lines.push(`\t.add(${commands.join(", ")})`);
+	else for (const command of commands) lines.push(`\t.add(${command})`);
 	lines.push("\t.action(() => {});", "");
+	for (let call = 0; call < 5; call++) {
+		const index = Math.floor((call * size) / 5);
+		lines.push(
+			`void app.run(["command-${index}"], { args: { "source-${index}": "src" }, flags: { "command-${index}-force": true } });`,
+		);
+	}
+	lines.push('void app.at(["cmd-0", "n-0"]);', "");
 	return lines.join("\n");
 }
 
@@ -137,6 +167,7 @@ export function generateConsumerFixture(
 	rootDir: string,
 	size: number,
 	fixtureApi: FixtureApi = "fluent",
+	wideAdd = false,
 ): void {
 	const fixtureDir = resolve(outputDir);
 	const root = resolve(rootDir);
@@ -149,7 +180,7 @@ export function generateConsumerFixture(
 			"dir",
 		);
 	}
-	writeFileSync(join(fixtureDir, "consumer.ts"), generateConsumerSource(size, fixtureApi));
+	writeFileSync(join(fixtureDir, "consumer.ts"), generateConsumerSource(size, fixtureApi, wideAdd));
 	writeFileSync(
 		join(fixtureDir, "tsconfig.json"),
 		`${JSON.stringify(
@@ -190,7 +221,7 @@ function parseTypePerfReport(content: string): TypePerfReport {
 	return JSON.parse(content) as TypePerfReport;
 }
 
-function measure(outputPath: string, rootDir = "."): void {
+function measure(outputPath: string, rootDir = ".", allowCompileErrors = false): void {
 	const root = resolve(rootDir);
 	// Probe the built target API before compilation, never retry a failed fixture.
 	const fixtureApi = run(
@@ -211,28 +242,37 @@ console.log(api);`,
 	// Both trees use the harness's compiler, even when their lockfiles differ.
 	const tsc = resolve(import.meta.dir, "../node_modules/.bin/tsc");
 	const version = run([tsc, "--version"], root).replace(/^Version\s+/, "");
-	const instantiations: TypePerfReport["instantiations"] = { 10: 0, 100: 0, 200: 0 };
+	// SAFETY: the loop assigns every fixture or throws
+	const instantiations = {} as TypePerfReport["instantiations"];
 	const fixtureRoot = mkdtempSync(join(tmpdir(), "crust-type-perf-"));
 	try {
-		for (const size of scalingSizes) {
-			const fixtureDir = join(fixtureRoot, String(size));
-			generateConsumerFixture(fixtureDir, root, size, fixtureApi);
-			const diagnostics = run(
-				[
-					tsc,
-					"--noEmit",
-					"--incremental",
-					"false",
-					"--checkers",
-					"1",
-					"--extendedDiagnostics",
-					"-p",
-					fixtureDir,
-				],
-				root,
-			);
-			// Failure on either tree invalidates the comparison, including API incompatibility.
-			instantiations[size] = parseExtendedDiagnostics(diagnostics);
+		for (const [index, { name, size, wideAdd }] of fixtures.entries()) {
+			const fixtureDir = join(fixtureRoot, String(index));
+			generateConsumerFixture(fixtureDir, root, size, fixtureApi, wideAdd);
+			let diagnostics: string;
+			try {
+				diagnostics = run(
+					[
+						tsc,
+						"--noEmit",
+						"--incremental",
+						"false",
+						"--checkers",
+						"1",
+						"--extendedDiagnostics",
+						"-p",
+						fixtureDir,
+					],
+					root,
+				);
+			} catch (error) {
+				// A failing PR merge invalidates the comparison; an older base may predate a fixed limit.
+				const code = allowCompileErrors ? String(error).match(/error (TS\d+):/)?.[1] : undefined;
+				if (code === undefined) throw error;
+				instantiations[name] = { error: code };
+				continue;
+			}
+			instantiations[name] = parseExtendedDiagnostics(diagnostics);
 		}
 	} finally {
 		rmSync(fixtureRoot, { recursive: true, force: true });
@@ -245,8 +285,10 @@ console.log(api);`,
 if (import.meta.main) {
 	const [mode, ...args] = process.argv.slice(2);
 	try {
-		if (mode === "measure" && args[0]) {
-			measure(args[0], args[1]);
+		const allowCompileErrors = args.includes("--allow-compile-errors");
+		const positional = args.filter((arg) => arg !== "--allow-compile-errors");
+		if (mode === "measure" && positional[0]) {
+			measure(positional[0], positional[1], allowCompileErrors);
 		} else if (mode === "compare" && args.length === 2) {
 			const reports = args.map((path) => parseTypePerfReport(readFileSync(path, "utf8")));
 			const base = reports[0];
@@ -255,7 +297,7 @@ if (import.meta.main) {
 			console.log(formatComparison(base, head));
 		} else {
 			throw new Error(
-				"usage: bun scripts/type-perf-report.ts measure <output.json> [rootDir] | compare <base.json> <head.json>",
+				"usage: bun scripts/type-perf-report.ts measure <output.json> [rootDir] [--allow-compile-errors] | compare <base.json> <head.json>",
 			);
 		}
 	} catch (error) {

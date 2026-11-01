@@ -62,7 +62,8 @@ jobs:
           cd ..
           # Use the PR merge's harness and compiler for both declaration sets.
           # The harness selects equivalent fixture syntax for the target's Context API.
-          bun scripts/type-perf-report.ts measure "$RUNNER_TEMP/base.json" base
+          # A base that cannot compile a newer fixture reports the error instead of failing.
+          bun scripts/type-perf-report.ts measure "$RUNNER_TEMP/base.json" base --allow-compile-errors
 
       - name: Write type performance report
         env:

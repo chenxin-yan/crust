@@ -15,18 +15,24 @@ import {
 	type TypePerfReport,
 } from "./type-perf-report.ts";
 
-const report = (small: number, large: number, stress: number): TypePerfReport => ({
+type Measured = TypePerfReport["instantiations"]["10"];
+const report = (
+	small: Measured,
+	large: Measured,
+	stress: Measured,
+	wide: Measured = 1_000,
+): TypePerfReport => ({
 	typescriptVersion: "7.0.2",
 	fixtureApi: "fluent",
-	instantiations: { 10: small, 100: large, 200: stress },
+	instantiations: { 10: small, 100: large, 200: stress, "50 in one .add()": wide },
 });
 
 const repoRoot = resolve(import.meta.dirname, "..");
 const script = join(repoRoot, "scripts/type-perf-report.ts");
 
 // Below the 30s measurement test timeout; afterEach reaps shorter tests' children.
-function measure(root: string, output: string) {
-	return runBoundedProcess("bun", [script, "measure", output, root], {
+function measure(root: string, output: string, ...flags: string[]) {
+	return runBoundedProcess("bun", [script, "measure", output, root, ...flags], {
 		cwd: repoRoot,
 		timeout: 25_000,
 	});
@@ -54,6 +60,21 @@ describe("type performance report", () => {
 		expect(withoutContexts(config)).toBe(withoutContexts(fluent));
 	});
 
+	it("exercises typed run()/at() and adds commands one call at a time unless wide", () => {
+		const chained = generateConsumerSource(10);
+		expect(chained.match(/^void app\.run\(\[/gm)).toHaveLength(5);
+		expect(chained).toContain(
+			'void app.run(["command-8"], { args: { "source-8": "src" }, flags: { "command-8-force": true } });',
+		);
+		expect(chained).toContain('void app.at(["cmd-0", "n-0"]);');
+		expect(chained).toContain("\t.add(command0)\n\t.add(command1)\n");
+
+		const wide = generateConsumerSource(50, "fluent", true);
+		const commands = Array.from({ length: 50 }, (_, index) => `command${index}`).join(", ");
+		expect(wide).toContain(`\t.add(${commands})\n`);
+		expect(wide).not.toContain("\t.add(command0)\n");
+	});
+
 	it("measures all consumer sizes using the harness compiler, not the target tree's compiler", async () => {
 		const root = mkdtempSync(join(tmpdir(), "crust-type-perf-test-"));
 		try {
@@ -66,8 +87,14 @@ describe("type performance report", () => {
 			expect(result.stdout + result.stderr).toBe("");
 			expect(result.exitCode).toBe(0);
 			const measured = JSON.parse(readFileSync(output, "utf8"));
-			expect(Object.keys(measured.instantiations)).toEqual(["10", "100", "200"]);
+			expect(Object.keys(measured.instantiations)).toEqual([
+				"10",
+				"100",
+				"200",
+				"50 in one .add()",
+			]);
 			expect(measured.instantiations[10]).toBeGreaterThan(0);
+			expect(measured.instantiations["50 in one .add()"]).toBeGreaterThan(0);
 			expect(measured.instantiations[100]).toBeGreaterThan(measured.instantiations[10]);
 			expect(measured.instantiations[200]).toBeGreaterThan(measured.instantiations[100]);
 			expect(measured.typescriptVersion).toBeTruthy();
@@ -94,9 +121,35 @@ describe("type performance report", () => {
 			expect(result.exitCode).toBe(1);
 			expect(result.stderr).toContain("has no exported member");
 			expect(() => readFileSync(output)).toThrow();
+
+			const tolerated = await measure(root, output, "--allow-compile-errors");
+			expect(tolerated.stdout + tolerated.stderr).toBe("");
+			expect(tolerated.exitCode).toBe(0);
+			expect(JSON.parse(readFileSync(output, "utf8")).instantiations).toEqual({
+				10: { error: "TS2305" },
+				100: { error: "TS2305" },
+				200: { error: "TS2305" },
+				"50 in one .add()": { error: "TS2305" },
+			});
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}
+	}, 30_000);
+
+	it("reports base compile errors as n/a and rejects a failing PR merge", () => {
+		const output = formatComparison(
+			report(10_000, 50_000, { error: "TS2590" }, { error: "TS2589" }),
+			report(11_000, 60_000, 120_000, 2_000),
+		);
+		expect(output).toContain("| 200 | n/a (base failed: TS2590) | 120,000 | n/a |");
+		expect(output).toContain("| 50 in one .add() | n/a (base failed: TS2589) | 2,000 | n/a |");
+		expect(output).toContain("| 10 | 10,000 | 11,000 | +1,000 (+10.0%) |");
+		expect(() =>
+			formatComparison(
+				report(10_000, 50_000, 100_000),
+				report(10_000, 50_000, 100_000, { error: "TS2589" }),
+			),
+		).toThrow("PR merge fixture 50 in one .add() failed to compile: TS2589");
 	});
 
 	it("labels comparisons across the Context API transition", () => {
