@@ -402,7 +402,7 @@ export interface UpdateNotifierExtension {
  * - Network, cache, and parsing errors are silently swallowed. A missing
  *   current version throws a DEFINITION error before that recovery block.
  * - The check is skipped, with no cache or network access, when `CI` is set
- *   (other than `"0"`/`"false"`), when `NO_UPDATE_NOTIFIER` is non-empty, or
+ *   (other than `"0"` or `"false"` in any letter case), when `NO_UPDATE_NOTIFIER` is non-empty, or
  *   when `process.stderr` is not a TTY.
  * - Update notices are intentionally written to the invocation's stderr callback.
  * - Duplicate notifications for the same version are suppressed.

@@ -26,7 +26,7 @@ The hook checks only after a completed Command Action. Network, registry, cache,
 
 The hook skips the check entirely (no cache read, no network request, no notice) when:
 
-- `CI` is set to anything other than an empty string, `0`, or `false`
+- `CI` is set to anything other than an empty string, `0`, or `false` in any letter case
 - `NO_UPDATE_NOTIFIER` is set to any non-empty value, so users can opt out
 - `process.stderr` is not a TTY, for example when stderr is redirected to a file or pipe
 
