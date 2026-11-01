@@ -1,0 +1,5 @@
+---
+"@crustjs/core": patch
+---
+
+`error instanceof CrustError` now types `code` as the union of error codes and `details` as the matching details union instead of `any`; checking `error.code` narrows `details` like `.is(code)` does. Code that read code-specific `details` fields right after `instanceof` must narrow first. `details.reason` now autocompletes Core's reasons (exported as `DefinitionErrorReason` and `ParseErrorReason`) and still accepts any string. A `.flags()` brand error now names the offending flag (`Property '"--port"' is missing … { FIX_DEFAULT_CHOICE: … }`), and one `.flags()` call with two different spelling collisions is now rejected instead of compiling. `.extend()` of an Extension that needs root metadata the constructor lacks, such as `version()` without `new Crust(name, { version })`, now reports `FIX_ROOT_META: Extension requires root metadata "version"; …` instead of an internal `[defining].sections` variance error.

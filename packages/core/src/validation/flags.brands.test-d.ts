@@ -208,6 +208,29 @@ import type {
 }
 
 {
+	// .flags() tuple errors are keyed by the offending flag's spelling
+	type Bad = { name: "c"; type: "string"; choices: ["x", "y"]; default: "z" };
+	type Named = ValidateLocalFlagDefs<readonly [{ name: "a"; type: "boolean" }, Bad], never>;
+	type _named = Expect<Equal<Named["--c"]["FIX_DEFAULT_CHOICE"], "default must be one of choices">>;
+	type _clean = Expect<Equal<Extract<keyof Named, "--a" | `FIX_${string}`>, never>>;
+
+	// distinct messages on different flags must not reduce the errors to never and pass
+	type Collisions = readonly [
+		{ name: "a"; type: "boolean"; short: "z" },
+		{ name: "b"; type: "boolean"; short: "z" },
+		{ name: "c"; type: "boolean"; short: "a" },
+	];
+	type Checked = ValidateLocalFlagDefs<Collisions, never>;
+	type _b = Expect<
+		Equal<Checked["--b"]["FIX_ALIAS_COLLISION"], 'Flag spelling "z" collides with an existing flag'>
+	>;
+	type _c = Expect<
+		Equal<Checked["--c"]["FIX_ALIAS_COLLISION"], 'Flag spelling "a" collides with an existing flag'>
+	>;
+	type _rejected = Expect<Equal<Collisions extends Checked ? true : false, false>>;
+}
+
+{
 	// distributes over a Context union: one flagless member must not erase the others' owned flags
 	type Owner = { readonly _ownedFlags?: { alpha: { type: "string" } } };
 	type Plain = { readonly _ownedFlags?: {} };

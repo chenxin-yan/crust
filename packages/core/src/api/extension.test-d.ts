@@ -90,6 +90,23 @@ function _metadataRequirements() {
 	const _broad: AnyCrust = app;
 	const unversioned = new Crust("app");
 	const _broadPlain: AnyCrust = unversioned;
+	// A missing key reports a readable brand instead of internal snapshot variance.
+	type MissingVersion = Parameters<typeof unversioned.extend<[typeof plain, typeof needsVersion]>>;
+	type _missingVersion = Expect<
+		Equal<
+			MissingVersion[1]["FIX_ROOT_META"],
+			'Extension requires root metadata "version"; pass it to new Crust(name, { version })'
+		>
+	>;
+	type _plainOk = Expect<Equal<Extract<keyof MissingVersion[0], "FIX_ROOT_META">, never>>;
+	type MissingBoth = Parameters<typeof unversioned.extend<[typeof multi]>>[0]["FIX_ROOT_META"];
+	type _missingBoth = Expect<
+		Equal<
+			MissingBoth,
+			| 'Extension requires root metadata "version"; pass it to new Crust(name, { version })'
+			| 'Extension requires root metadata "description"; pass it to new Crust(name, { description })'
+		>
+	>;
 	// @ts-expect-error Structural assignment must not manufacture metadata.
 	const _laundered: typeof app = unversioned;
 	const VersionedCrust = Crust<

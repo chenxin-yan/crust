@@ -11,7 +11,7 @@ Framework definition, routing, parsing, and validation failures use `CrustError`
   ../../../examples/api/errors.ts#handle
 </include>
 
-`.is(code)` narrows `details` to that code's shape. `.withCause(cause)` sets `cause` and returns the error. `toJSON()` returns `code`, `message`, and `details`, and omits `cause`. The constructor's details argument is required for `COMMAND_NOT_FOUND` and `ENV`. See the [declaration](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/errors.ts) for the exact generic contract.
+After `instanceof CrustError`, `code` is the union of codes, and checking `code` or calling `.is(code)` narrows `details` to that code's shape. `.withCause(cause)` sets `cause` and returns the error. `toJSON()` returns `code`, `message`, and `details`, and omits `cause`. The constructor's details argument is required for `COMMAND_NOT_FOUND` and `ENV`. See the [declaration](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/errors.ts) for the exact generic contract.
 
 ## Codes
 
@@ -35,7 +35,7 @@ With `execute()`, an unmatched subcommand token becomes a positional argument if
 
 <auto-type-table path="../../../../../packages/core/src/errors.ts" name="DefinitionErrorDetails" />
 
-Context failures set `reason`: `missing-context` for an unprovided Context, `context-cycle` for a dependency cycle, `flags-before-validation` when a flag-owning Context is pulled before validation, `context-during-disposal` when a never-built Context is pulled once cleanup has begun, and `context-after-disposal` for any pull after disposal.
+`reason` is typed as Core's known values (`DefinitionErrorReason`, `ParseErrorReason`) but stays open to any string, since other packages add their own. Context failures set `reason`: `missing-context` for an unprovided Context, `context-cycle` for a dependency cycle, `flags-before-validation` when a flag-owning Context is pulled before validation, `context-during-disposal` when a never-built Context is pulled once cleanup has begun, and `context-after-disposal` for any pull after disposal.
 
 ### `ParseErrorDetails`
 
@@ -47,7 +47,7 @@ Context failures set `reason`: `missing-context` for an unprovided Context, `con
 
 <auto-type-table path="../../../../../packages/core/src/errors.ts" name="ValidationErrorDetails" />
 
-Every schema failure in one invocation is aggregated into one `VALIDATION` error. Issue paths are normalized under `args.<name>` or `flags.<name>`.
+Every schema failure in one invocation is aggregated into one `VALIDATION` error. Issue paths are normalized under `args.<name>` or `flags.<name>`. Missing required values and unexpected positionals report `VALIDATION` without `details`.
 
 ### `CommandNotFoundErrorDetails`
 

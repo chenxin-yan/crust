@@ -7,7 +7,7 @@ export const stamp = defineExtension<"version">(defineExtensionId("acme:stamp"))
 });
 
 // new Crust("my-cli").extend(stamp);
-// Type error: the root metadata does not guarantee "version".
+// Type error (FIX_ROOT_META): Extension requires root metadata "version"; pass it to new Crust(name, { version })
 
 // [!code highlight]
 const app = new Crust("my-cli", { version: "1.2.3" }).extend(stamp).action(() => {});
