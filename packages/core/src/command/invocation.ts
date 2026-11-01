@@ -32,7 +32,7 @@ import {
 } from "./extensions-install.ts";
 import { cloneCommandNode, type CommandNode } from "./node.ts";
 import { commandNotFound, resolveCommand, type CommandRoute } from "./router.ts";
-import { snapshotCommand } from "./snapshot.ts";
+import { snapshotCommand, type CommandSnapshot } from "./snapshot.ts";
 import type { RunOutcome } from "./typed-run.ts";
 
 const ignoreStreamError = () => {};
@@ -311,6 +311,19 @@ function resolveStructuredInput(
 	return { argv: path, route, parsed: parseStructured(route.command, input) };
 }
 
+/**
+ * The root projection already contains the resolved subtree; walk to it along
+ * the canonical route instead of projecting the same nodes a second time.
+ */
+function routedSnapshot(rootSnapshot: CommandSnapshot, route: CommandRoute): CommandSnapshot {
+	let commandSnapshot = rootSnapshot;
+	for (const name of route.commandPath.slice(1)) {
+		// SAFETY: the router only records canonical names of children it descended into.
+		commandSnapshot = commandSnapshot.subCommands[name]!;
+	}
+	return commandSnapshot;
+}
+
 /** Resolve, parse, and run one invocation without rendering failures. */
 async function dispatch(
 	input: InvocationInput,
@@ -336,17 +349,10 @@ async function dispatch(
 	const resolver = createContextResolver(contexts, io, disposal, signal);
 
 	const rootSnapshot = snapshotCommand(rootNode);
-	// The root projection already contains the resolved subtree; walk to it along
-	// the canonical route instead of projecting the same nodes a second time.
-	let commandSnapshot = rootSnapshot;
-	for (const name of route.commandPath.slice(1)) {
-		// SAFETY: the router only records canonical names of children it descended into.
-		commandSnapshot = commandSnapshot.subCommands[name]!;
-	}
 	const extensionContext: ExtensionContext = Object.freeze({
 		argv: [...argv],
 		rootCommand: rootSnapshot,
-		command: commandSnapshot,
+		command: routedSnapshot(rootSnapshot, route),
 		commandPath: Object.freeze([...route.commandPath]),
 		args: parsed.args,
 		flags: parsed.flags,
@@ -463,11 +469,18 @@ async function renderFailure(
 			},
 		);
 		const rootSnapshot = snapshotCommand(prepared.rootNode);
+		// Routing is pure, so redoing it recovers the command whose argv failed to parse.
+		let route: CommandRoute | undefined;
+		try {
+			route = resolveCommand(prepared.rootNode, argv);
+		} catch {
+			// Routing itself failed: the root stands in, as documented on `ExtensionContext.command`.
+		}
 		context = Object.freeze({
 			argv: [...argv],
 			rootCommand: rootSnapshot,
-			command: rootSnapshot,
-			commandPath: Object.freeze([prepared.rootNode.meta.name]),
+			command: route ? routedSnapshot(rootSnapshot, route) : rootSnapshot,
+			commandPath: Object.freeze(route ? [...route.commandPath] : [prepared.rootNode.meta.name]),
 			args: Object.freeze({}),
 			flags: Object.freeze({}),
 			rawArgs: [],

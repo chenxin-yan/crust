@@ -573,6 +573,21 @@ function resolveCommandName<Name extends string>(
 	return name;
 }
 
+/** Child names are routed from argv, where a leading `-` makes the token a flag. */
+function resolveChildCommandName<Name extends string>(
+	name: Name,
+	aliases: readonly string[] = [],
+): Name {
+	if (name.startsWith("-")) {
+		throw new CrustError("DEFINITION", `Command name "${name}" must not start with "-"`, {
+			subject: "command",
+			name,
+			reason: "invalid-name",
+		});
+	}
+	return resolveCommandName(name, aliases);
+}
+
 function isCommandRecipe(value: CommandConfig | CommandRecipe | undefined): value is CommandRecipe {
 	return typeof value === "function";
 }
@@ -610,7 +625,7 @@ export function defineCommand(
 	const hasConfig = !isCommandRecipe(configOrRecipe);
 	const config: CommandConfig & { readonly version?: unknown } = hasConfig ? configOrRecipe : {};
 	const recipe = hasConfig ? maybeRecipe : configOrRecipe;
-	const name = resolveCommandName(nameInput, config.aliases);
+	const name = resolveChildCommandName(nameInput, config.aliases);
 	// Authoring overloads require a recipe in both call forms; untyped JavaScript can omit it.
 	if (!isCommandRecipe(recipe)) {
 		throw new CrustError("DEFINITION", `Command "${name}" requires a recipe`, {
@@ -646,7 +661,7 @@ export function defineCommand(
 		return Object.freeze({
 			name: defName,
 			as: <const NewName extends string>(newName: NewName) =>
-				named(resolveCommandName(newName, meta.aliases)),
+				named(resolveChildCommandName(newName, meta.aliases)),
 			[commandDefinitionInternal]: Object.freeze({ ...internal, name: defName }),
 		});
 	};

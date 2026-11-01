@@ -57,6 +57,18 @@ describe("buildCommandDocumentation", () => {
 		]);
 	});
 
+	it("documents a required arg or flag with a default as optional, like the parser", async () => {
+		const model = await docs(
+			new Crust("app")
+				.args({ name: "target", type: "string", required: true, default: "prod" })
+				.flags({ name: "region", type: "string", required: true, default: "us" })
+				.action(() => {}),
+		);
+		expect(model.usage).toBe("app [target] [options]");
+		expect(model.args).toMatchObject([{ token: "[target]", required: false }]);
+		expect(model.flags).toMatchObject([{ name: "region", required: false }]);
+	});
+
 	it("uses explicit usage unchanged", async () => {
 		const model = await docs(new Crust("app", { usage: "app FILE" }).action(() => {}));
 		expect(model.usage).toBe("app FILE");

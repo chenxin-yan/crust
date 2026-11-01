@@ -19,7 +19,7 @@ Exact overloads and generic constraints live in [`command/crust.ts`](https://git
 
 <auto-type-table path="../../../../../packages/core/src/command/crust.ts" name="CommandConfig" />
 
-Application `version` belongs only in the root `Crust` constructor. Aliases must be non-empty, contain no whitespace, not start with `-`, and differ from the canonical name. Blank names and `__proto__` fail typecheck.
+Application `version` belongs only in the root `Crust` constructor. Aliases must be non-empty, contain no whitespace, not start with `-`, and differ from the canonical name. Blank names and `__proto__` fail typecheck. A command name, including one given to `.as()`, must not start with `-`; `defineCommand()` and `.as()` throw a `DEFINITION` error.
 
 `.use(logging)` declares demand for a factory; `.provide(logging())` supplies an instance. A reusable definition sees only the Contexts it declares with `.use()`, and those demands are checked against the providers available where it is added.
 

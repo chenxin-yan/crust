@@ -139,12 +139,17 @@ function serializableDefault(value: DeclaredDefault): SerializableDefault {
 	return value;
 }
 
+/** The parser fills a missing value from its default, so a defaulted def is never required. */
+function effectiveRequired(def: ArgDef | FlagDef): boolean | undefined {
+	return def.default === undefined ? def.required : undefined;
+}
+
 function snapshotArg(def: ArgDef): ArgSnapshot {
 	return freezeCompact({
 		name: def.name,
 		type: def.type,
 		description: def.description,
-		required: def.required,
+		required: effectiveRequired(def),
 		variadic: def.variadic,
 		choices: def.choices ? Object.freeze([...def.choices]) : undefined,
 		default: serializableDefault(def.default),
@@ -157,7 +162,7 @@ function snapshotFlag(def: FlagDef): FlagSnapshot {
 		description: def.description,
 		short: def.short,
 		aliases: def.aliases ? Object.freeze([...def.aliases]) : undefined,
-		required: def.required,
+		required: effectiveRequired(def),
 		multiple: def.multiple,
 		negatable: isFlagNegatable(def),
 		noNegate: "noNegate" in def ? def.noNegate : undefined,
