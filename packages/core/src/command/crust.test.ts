@@ -860,8 +860,15 @@ describe("Extension named hooks", () => {
 	});
 
 	describe("deferred flag and argument value errors", () => {
+		let originalExitCode: typeof process.exitCode;
+
+		beforeEach(() => {
+			originalExitCode = process.exitCode;
+		});
+
 		afterEach(() => {
 			vi.unstubAllEnvs();
+			process.exitCode = originalExitCode ?? 0;
 		});
 
 		function deferringApp() {

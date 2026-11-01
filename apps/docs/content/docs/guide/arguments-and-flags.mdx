@@ -92,7 +92,7 @@ $ serve --port nope
 Error: Expected number for --port, got "nope"
 ```
 
-Invalid values are reported with missing required values, after [`preRun` hooks](/docs/guide/extensions#hooks), so `serve --port nope --help` still prints help. Malformed argv, such as an unknown flag or `serve --port --help`, fails before any hook runs.
+Invalid values are reported after [`preRun` hooks](/docs/guide/extensions#hooks) and take precedence over missing required values, so `serve --port nope --help` still prints help. Malformed argv, such as an unknown flag or `serve --port --help`, fails before any hook runs.
 
 ### Required and defaulted values
 
