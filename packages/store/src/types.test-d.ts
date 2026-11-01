@@ -111,6 +111,53 @@ type Expect<T extends true> = T;
 			fields: invalidFields,
 		};
 		void invalidOptions;
+
+		// The rejection names the problem instead of collapsing to `never`.
+		type _Brand = Expect<
+			Equal<
+				CreateStoreOptions<typeof invalidFields>["fields"]["payload"]["FIX_JSON_OUTPUT"],
+				"store schema output must be JSON-compatible data (no Date, Map, bigint, or functions)"
+			>
+		>;
+	}
+
+	{
+		// infers schema output from validate() when the optional `types` member is omitted
+		const omitted = {
+			"~standard": {
+				version: 1 as const,
+				vendor: "d",
+				validate: (value: unknown) => ({ value: Number(value) }),
+			},
+		};
+		const asyncWithFailure = {
+			"~standard": {
+				version: 1 as const,
+				vendor: "d",
+				validate: async (value: unknown) =>
+					typeof value === "string" ? { value } : { issues: [{ message: "expected string" }] },
+			},
+		};
+		// explicit phantom types win over the validate() return type
+		const annotated: {
+			readonly "~standard": {
+				readonly version: 1;
+				readonly vendor: string;
+				readonly validate: (value: unknown) => { value: string };
+				readonly types?: { readonly input: unknown; readonly output: "a" | "b" };
+			};
+		} = {
+			"~standard": { version: 1, vendor: "d", validate: (value) => ({ value: String(value) }) },
+		};
+		const fields = {
+			omitted: { schema: omitted },
+			asyncWithFailure: { schema: asyncWithFailure },
+			annotated: { schema: annotated },
+		} satisfies FieldsDef;
+		type Config = InferStoreConfig<typeof fields>;
+		type _Omitted = Expect<Equal<Config["omitted"], number>>;
+		type _AsyncWithFailure = Expect<Equal<Config["asyncWithFailure"], string>>;
+		type _Annotated = Expect<Equal<Config["annotated"], "a" | "b">>;
 	}
 
 	{

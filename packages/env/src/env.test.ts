@@ -15,7 +15,7 @@ function schema(
 	};
 }
 
-async function read<V extends EnvVarsDef>(vars: V, options?: EnvOptions) {
+async function read(vars: EnvVarsDef, options?: EnvOptions) {
 	const env = defineEnv("env", vars, options);
 	const outcome = await new Crust("cli")
 		.provide(env())
@@ -191,6 +191,7 @@ describe("defineEnv definitions", () => {
 	it("rejects a default outside choices and an empty delimiter when defined", () => {
 		expect(
 			definitionError(() =>
+				// @ts-expect-error -- rejected at compile time too; the runtime guard covers definitions the types cannot see, such as a value typed EnvVarsDef
 				defineEnv("env", { LEVEL: { type: "string", choices: ["ok"], default: "bad" } }),
 			).message,
 		).toContain('"LEVEL"');

@@ -4,6 +4,7 @@ import { Context, Effect, Layer } from "effect";
 
 import { type CrustEnvError, type CrustTaggedError, tryCrust } from "./errors.ts";
 import { handler, type ServicesOf, service } from "./handler.ts";
+import type { HandlerInput } from "./index.ts";
 import { layer, type LayerValue } from "./layer.ts";
 
 type Equal<A, B> =
@@ -107,6 +108,8 @@ layer("needsCache", needsCache);
 // service() is typed by the factory's value.
 type ConfigService = ReturnType<typeof service<typeof config>>;
 type _ServiceValue = Expect<Equal<Effect.Success<ConfigService>, { prefix: string }>>;
+// Its requirement is nameable, so reusable programs can be annotated.
+type _ServiceRequirement = Expect<Equal<Effect.Services<ConfigService>, HandlerInput>>;
 
 const env = defineEnv("env", {
 	PORT: { type: "number", default: 3000 },

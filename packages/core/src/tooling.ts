@@ -25,3 +25,4 @@ export { INSTALLED_COMMAND_NAME_RULE, isInstalledCommandName } from "./installed
 export { parseFlagValues } from "./parsing/parser.ts";
 export type { FlagEnvironment } from "./parsing/parser.ts";
 export { isListed, sectionsFor, visibleSectionsFor } from "./sections.ts";
+export type { LocalValueBrand } from "./validation/shared.ts";
