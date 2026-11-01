@@ -2,7 +2,7 @@
 "@crustjs/prompts": patch
 ---
 
-`input()` and `password()` now run `validate` on `initial` and non-interactive `default` values, throwing `initial value rejected: …` / `default value rejected: …` like the `schema` path already did.
+`input()` and `password()` now run `validate` on `initial` values; `input()` also validates non-interactive `default` values, throwing `initial value rejected: …` / `default value rejected: …` like the `schema` path already did.
 
 Prompts render only when both their input and their output are TTYs. With a redirected output (for example `mycli 2> log.txt`, or `app.run()` without injected terminal IO) they return `default` or reject with `NonInteractiveError` instead of drawing into the stream and waiting for keys. Custom outputs must set `isTTY: true` to render prompts.
 
