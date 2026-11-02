@@ -3,7 +3,7 @@ title: "Crust"
 description: Immutable command builders, reusable definitions, and execution.
 ---
 
-`Crust` builds an executable application root. `defineCommand()` builds inert reusable definitions that become commands only when added. Every fluent method returns a new builder; the original is unchanged.
+`Crust` builds an executable application root. `defineCommand()` builds inert reusable definitions that are registered when added and materialized on first use. Every fluent method returns a new builder; the original is unchanged.
 
 Exact overloads and generic constraints live in [`command/crust.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts). This page documents behavior; hover types in your editor for the inferred shapes.
 
@@ -15,13 +15,13 @@ Exact overloads and generic constraints live in [`command/crust.ts`](https://git
   ../../../examples/api/crust.ts#define
 </include>
 
-`defineCommand()` returns a frozen `CommandDefinition`: a name, static config, and a recipe. It has no command node and no `run()` or `execute()`. The recipe receives a `CommandDefinitionBuilder`, the configure-only form of `Crust`, and runs once for each `.add()`, not when the definition is created. Side effects in a recipe therefore repeat for every addition.
+`defineCommand()` returns a frozen `CommandDefinition`: a name, static config, and a recipe. It has no command node and no `run()` or `execute()`. The recipe receives a `CommandDefinitionBuilder`, the configure-only form of `Crust`. Neither `defineCommand()` nor `.add()` runs it: each addition materializes independently when first needed by an invocation, snapshot, or documentation pass. Successful materialization is cached; a recipe that throws may run again on a later attempt. Avoid relying on recipe side effects at registration time.
 
 <auto-type-table path="../../../../../packages/core/src/command/crust.ts" name="CommandConfig" />
 
 Application `version` belongs only in the root `Crust` constructor. A child command name, including one given to `.command()` or `.as()`, and each alias is matched as one argv token: it must be non-empty, contain no whitespace, and not start with `-`. Literal names and aliases that break this, blank names, and `__proto__` fail typecheck; dynamic ones make `defineCommand()`, `.command()`, and `.as()` throw a `DEFINITION` error: `empty-name` for a blank name, `reserved-name` for `__proto__`, `invalid-name` for any other bad name, and `invalid-alias` for a bad alias in `defineCommand()` config. Aliases must also differ from the canonical name. The root name given to `new Crust()` is never an argv token, so only the blank and `__proto__` rules apply to it.
 
-`.use(logging)` declares demand for a factory; `.provide(logging())` supplies an instance. A reusable definition sees only the Contexts it declares with `.use()`, and those demands are checked against the providers available where it is added.
+`.use(logging)` declares demand for a factory; `.provide(logging())` supplies an instance. A reusable definition sees only the Contexts it declares with `.use()`. At runtime, those demands are checked when the recipe materializes, against the providers available where it was added.
 
 `definition.as(name)` returns the same definition under another name, so one definition can be added twice. Its configured aliases travel with it and must stay unique among siblings.
 
@@ -41,7 +41,7 @@ Metadata is optional unless an installed Extension [requires it](/docs/guide/ext
 
 ## Chaining semantics
 
-`.flags()`, `.args()`, `.provide()`, `.add()`, and `.extend()` are variadic, accept dynamic collections, and accumulate across calls. TypeScript rejects statically known invalid definitions and collisions; dynamically assembled definitions are checked when the builder consumes them and throw a `DEFINITION` [error](/docs/api/errors).
+`.flags()`, `.args()`, `.provide()`, `.add()`, and `.extend()` are variadic, accept dynamic collections, and accumulate across calls. TypeScript rejects statically known invalid definitions and collisions. Runtime checks throw a `DEFINITION` [error](/docs/api/errors): direct builder inputs and sibling name/alias collisions are checked at the builder call, while recipe validation, inherited-flag collisions, and Context demands for added definitions are checked on first use. Use `await app.snapshot()` to validate the full tree without running Command Actions.
 
 ### Conditional chains
 
@@ -98,7 +98,7 @@ const serve = new Crust("serve").flags(
 
 ## `.use(...factories)`
 
-Recipe-only. Declares the Context factories a reusable definition consumes, without providing instances. The call requires at least one factory; repeated calls accumulate. The demands and their transitive dependencies are checked when the definition reaches `.add()`.
+Recipe-only. Declares the Context factories a reusable definition consumes, without providing instances. The call requires at least one factory; repeated calls accumulate. At runtime, the demands and their transitive dependencies are checked when the definition materializes, not at `.add()`.
 
 ## `.provide(...instances)`
 
@@ -160,9 +160,9 @@ The action receives typed `args` and `flags`, the lazy `ctx` bag, `rawArgs` afte
 
 ## `.add(...definitions)`
 
-Materializes definitions as fresh child commands under their carried names. See the [root example](#constructor), which adds `deploy` twice with `.as()`.
+Registers definitions under their carried names, deferring their recipes until first use. Each addition materializes as a fresh child command. See the [root example](#constructor), which adds `deploy` twice with `.as()`.
 
-Sibling names and aliases must not collide. Each call copies the existing children, so for many commands prefer one batched `.add(a, b, c)` over long chains of `.add()` or `.command()` calls. A definition can itself add definitions; nested ones access inherited Contexts by declaring them with `.use()`. An added command accepts the Context-owned flags already provided on its parent path, but not the parent's local flags.
+Sibling names and aliases must not collide; `.add()` checks them immediately without running recipes. Recipe validation, inherited-flag collisions, and Context-demand checks are deferred until materialization. Chained `.add()` and `.command()` calls share persistent child lists rather than copying existing children, so batching is not required to avoid those copies. A definition can itself add definitions; nested ones access inherited Contexts by declaring them with `.use()`. An added command accepts the Context-owned flags already provided on its parent path, but not the parent's local flags.
 
 <Callout type="info">
   A later `.provide()` does not reach an already-added definition. Register a definition's providers
@@ -186,7 +186,7 @@ The recipe sees the Contexts and Context-owned flags available before the call, 
 
 ## `.snapshot()`
 
-Resolves to a frozen [`CommandSnapshot`](/docs/api/types#commandsnapshot) for tooling such as help, man-page, skill, and build generators. It materializes Extension contributions and validates Extension sections, without calling Command Actions.
+Resolves to a frozen [`CommandSnapshot`](/docs/api/types#commandsnapshot) for tooling such as help, man-page, skill, and build generators. It materializes all pending command recipes and Extension contributions and validates the full tree, including inherited flags, Context demands, and documentation sections, without calling Command Actions. Use it to catch deferred definition errors before accepting invocations; it rejects if validation fails.
 
 ```ts
 const snapshot = await app.snapshot();
@@ -214,11 +214,11 @@ Editors complete command names, argument and flag names, and the action's result
 
 `run()` resolves after cleanup to a [`RunOutcome`](/docs/api/types#runoutcomeresult), with captured output and a `completed`, `handled`, or `failed` status.
 
-- `run()` never renders errors, calls `onError`, or changes `process.exitCode`. Authoring errors still throw where the builder consumes them.
+- `run()` never renders errors, calls `onError`, or changes `process.exitCode`. Eager authoring checks throw at the builder call; deferred definition errors encountered during `run()` produce a `failed` outcome.
 - Captured writes are joined with `"\n"`. `stdout` and `stderr` are captured separately, so their relative order is not preserved.
 - Default `@crustjs/prompts` and `@crustjs/progress` output is captured into `stderr`. Direct `console` or `process` writes, subprocesses, and files are not captured.
 - `options.stdout` / `options.stderr` also receive writes live. `options.signal` cancels the invocation. `run()` never installs a `SIGINT` handler.
-- Preparation runs once per builder and is shared by later `run()`, `execute()`, and `snapshot()` calls on it.
+- Preparation is cached per builder and shared by later `run()`, `execute()`, and `snapshot()` calls on it. Pending commands materialize as needed; `snapshot()` visits the full tree.
 
 For terminal interaction in tests, use `execute()` or [`runInteractive`](/docs/modules/testing#runinteractiveapp-path-input).
 
@@ -230,7 +230,7 @@ Binds a typed command path into a reusable `CommandHandle`. `handle.run(input?, 
   ../../../examples/api/crust.ts#at
 </include>
 
-`at()` validates the path immediately and throws `COMMAND_NOT_FOUND` with the same details as a failed `run()`. Aliases are accepted and `handle.path` keeps the caller's spelling. `at([])` binds the root. A handle belongs to the builder it was taken from, so take it from the finished application.
+`at()` validates the path immediately and throws `COMMAND_NOT_FOUND` with the same details as a failed `run()`. This can materialize pending commands and throw deferred definition errors. Aliases are accepted and `handle.path` keeps the caller's spelling. `at([])` binds the root. A handle belongs to the builder it was taken from, so take it from the finished application.
 
 ## `.execute(options?)`
 
@@ -249,8 +249,8 @@ Runs the terminal boundary: parses `process.argv.slice(2)` (or `options.argv`), 
 
 `.execute()` and `.run()` follow the same sequence. Routing or parse failures skip steps 4 through 10.
 
-1. Prepare the command tree: apply Extensions, recipes, flags, and sections.
-2. Route the command path.
+1. Prepare the application: apply Extensions, flags, and sections, deferring pending commands until needed. Extension section callbacks that read the authored tree require full-tree preparation.
+2. Route the command path, materializing pending commands as needed.
 3. Parse argv (`execute()`) or bind structured input (`run()`).
 4. Run Extension `preRun` hooks in registration order; `ctx.handled()` ends the invocation with a `handled` outcome.
 5. Check required values and positional structure.

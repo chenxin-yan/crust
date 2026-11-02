@@ -11,6 +11,8 @@ import {
 import type { ArgsDef, CommandMeta, FlagDef, FlagsDef } from "../types.ts";
 import type { CrustCommandContext } from "./crust.ts";
 
+export const commandDefinitionInternal: unique symbol = Symbol.for("crust.commandDefinition");
+
 /** Runtime-erased Command Action; typed builders and run() own the specific result contract. */
 export type CommandAction = (ctx: CrustCommandContext) => unknown;
 
@@ -156,10 +158,11 @@ export interface ChildEntry {
 
 /** The node's children in insertion order, without materializing pending ones. */
 export function childEntriesOf(node: CommandNode): ChildEntry[] {
-	const entries: ChildEntry[] = Object.entries(node.subCommands).map(([name, child]) => ({
+	const subCommands = node.subCommands;
+	const entries: ChildEntry[] = [...childMetaOf(subCommands)].map(([name, meta]) => ({
 		name,
-		meta: child.meta,
-		resolve: () => child,
+		meta,
+		resolve: () => subCommands[name]!,
 	}));
 	const added: AddedChild[] = [];
 	for (let cell = node.addedChildren; cell; cell = cell.next) added.push(cell);
@@ -220,13 +223,8 @@ export function childMetaOf(
 	);
 }
 
-/** Deep-clone a command subtree without mutating the builder graph. */
+/** Clone a command subtree on access without mutating the builder graph. */
 export function cloneCommandNode(node: CommandNode): CommandNode {
-	const subCommands: Record<string, CommandNode> = {};
-	for (const [name, sub] of Object.entries(subCommandsOf(node))) {
-		subCommands[name] = cloneCommandNode(sub);
-	}
-
 	// Spread first, then override every structural field with a decoupled copy.
 	return {
 		...node,
@@ -235,7 +233,9 @@ export function cloneCommandNode(node: CommandNode): CommandNode {
 		meta: { ...node.meta },
 		...cloneFlagRegistry(node),
 		args: [...node.args],
-		subCommands,
+		subCommands: lazyChildRecord(childEntriesOf(node), (entry) =>
+			cloneCommandNode(entry.resolve()),
+		),
 		addedChildren: undefined,
 		contexts: node.contexts.map((context) => ({ ...context })),
 		providedContexts: [...node.providedContexts],

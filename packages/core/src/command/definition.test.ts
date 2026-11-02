@@ -3,7 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { unwrap } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
-import { defineExtension } from "../api/extension.ts";
+import { defineExtension, type Extension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { defineExtensionId } from "../identity.ts";
 import { type CommandDefinitionBuilder, Crust, defineCommand } from "./crust.ts";
@@ -283,6 +283,114 @@ describe("command definitions", () => {
 		await expect(app.snapshot()).rejects.toBe(failure);
 		expect(await unwrap(app.run(["good"]))).toMatchObject({ status: "completed", result: "ok" });
 		expect(configured).toEqual(["good", "bad", "bad"]);
+	});
+
+	it("keeps nested siblings deferred through recipe cloning and alias routing", async () => {
+		const configured: string[] = [];
+		const failure = new Error("broken nested recipe");
+		const app = new Crust("cli").command("group", (command) =>
+			command.add(
+				defineCommand("good", { aliases: ["g"] }, (child) => {
+					configured.push("good");
+					return child.action(() => "ok");
+				}),
+				defineCommand("bad", () => {
+					configured.push("bad");
+					throw failure;
+				}),
+			),
+		);
+
+		expect(await unwrap(app.run(["group", "g"]))).toMatchObject({ result: "ok" });
+		expect(configured).toEqual(["good"]);
+		expect(await app.run(["group", "bad"])).toMatchObject({ status: "failed", error: failure });
+		await expect(app.snapshot()).rejects.toBe(failure);
+	});
+
+	it("keeps recipes deferred through extension provider replacement and descendant shadowing", async () => {
+		const configured: string[] = [];
+		const context = defineContext("value").setup((_, value: string) => value);
+		const options = defineContext("options")
+			.flags({ name: "value", type: "string" })
+			.setup(({ flags }) => flags.value);
+		const id = defineExtensionId("provider");
+		const group = defineCommand("group", (command) => {
+			configured.push("group");
+			return command
+				.use(context, options)
+				.command("inherited", (child) => {
+					configured.push("inherited");
+					return child
+						.use(context, options)
+						.action(async ({ ctx }) => `${await ctx.value}:${await ctx.options}`);
+				})
+				.command("shadowed", (child) => {
+					configured.push("shadowed");
+					return child
+						.provide(context("local"))
+						.use(options)
+						.action(async ({ ctx }) => `${await ctx.value}:${await ctx.options}`);
+				})
+				.command("bad", () => {
+					configured.push("bad");
+					throw new Error("broken recipe");
+				});
+		});
+		const base = new Crust("cli")
+			.extend(defineExtension(id).provide(context("old"), options()))
+			.add(group);
+		const app = base
+			.extend(defineExtension(defineExtensionId("noop")))
+			// @ts-expect-error -- branded ids cannot prove same-id replacement at compile time.
+			.extend(defineExtension(id).provide(context("new"), options()));
+
+		expect(configured).toEqual([]);
+		expect(
+			await unwrap(app.run(["group", "inherited"], { flags: { value: "flag" } })),
+		).toMatchObject({
+			result: "new:flag",
+		});
+		expect(configured).toEqual(["group", "inherited"]);
+		expect(
+			await unwrap(app.run(["group", "shadowed"], { flags: { value: "flag" } })),
+		).toMatchObject({
+			result: "local:flag",
+		});
+		expect(
+			await unwrap(base.run(["group", "inherited"], { flags: { value: "flag" } })),
+		).toMatchObject({
+			result: "old:flag",
+		});
+		expect(configured).toEqual(["group", "inherited", "shadowed"]);
+		await expect(app.snapshot()).rejects.toThrow("broken recipe");
+	});
+
+	it("defers unused and overridden Extension command recipes", async () => {
+		const configured: string[] = [];
+		const replacement: Extension = defineExtension(defineExtensionId("last")).add(
+			defineCommand("good", { aliases: ["g"] }, (command) => {
+				configured.push("good");
+				return command.action(() => "ok");
+			}),
+		);
+		const app = new Crust("cli").extend(
+			defineExtension(defineExtensionId("first")).add(
+				defineCommand("good", () => {
+					throw new Error("overridden recipe");
+				}),
+				defineCommand("bad", () => {
+					configured.push("bad");
+					throw new Error("broken Extension recipe");
+				}),
+			),
+			replacement,
+		);
+
+		expect(configured).toEqual([]);
+		expect(await app.execute({ argv: ["g"] })).toBe(0);
+		expect(await app.execute({ argv: ["good"] })).toBe(0);
+		expect(configured).toEqual(["good"]);
+		await expect(app.snapshot()).rejects.toThrow("broken Extension recipe");
 	});
 
 	it("projects rootCommand on demand, sharing the routed command's snapshot", async () => {

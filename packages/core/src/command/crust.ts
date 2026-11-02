@@ -94,6 +94,7 @@ import {
 	type CommandNode,
 	cloneCommandNode,
 	cloneFlagRegistry,
+	commandDefinitionInternal,
 	createCommandNode,
 	childEntriesOf,
 	registerFlag,
@@ -188,8 +189,6 @@ export type AnyCommandDefinitionBuilder = Crust<
 type CommandRecipe<Builder extends AnyCommandDefinitionBuilder = AnyCommandDefinitionBuilder> = (
 	command: CommandDefinitionBuilder<{}, [], {}, never, never>,
 ) => Builder;
-
-const commandDefinitionInternal: unique symbol = Symbol.for("crust.commandDefinition");
 
 interface CommandDefinitionInternal {
 	readonly name: string;
@@ -1449,9 +1448,13 @@ export class Crust<
 	}
 
 	/**
-	 * Materialize and register inert reusable command definitions, each
+	 * Register inert reusable command definitions, each
 	 * under its own carried name (use `.as(name)` to rename).
 	 *
+	 * Sibling names and aliases are checked immediately. Recipes materialize
+	 * on first use, when inherited-flag collisions and Context demands are
+	 * also checked. Use `await app.snapshot()` to validate the full tree
+	 * without running Command Actions.
 	 */
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[] = never>(
 		...definitions: Ds &

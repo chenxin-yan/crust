@@ -35,6 +35,7 @@ import {
 	childEntriesOf,
 	cloneCommandNode,
 	cloneFlagRegistry,
+	commandDefinitionInternal,
 	lazyChildRecord,
 	registerFlag,
 	type ChildEntry,
@@ -271,15 +272,15 @@ function buildExtensionTree(
 			childEntriesOf(source).map((entry) => [entry.name, entry]),
 		);
 		if (isRoot) {
-			// Extension commands are few, so they materialize here; they keep
-			// documented last-write-wins over same-name children.
+			// Preserve last-write-wins without evaluating unused or replaced recipes.
 			for (const extension of extensions) {
 				for (const definition of extension.commands) {
-					const child = materializeCommandDefinition(definition, source, extension.id);
+					let child: CommandNode | undefined;
 					entries.set(definition.name, {
 						name: definition.name,
-						meta: child.meta,
-						resolve: () => child,
+						meta: { name: definition.name, ...definition[commandDefinitionInternal].meta },
+						resolve: () =>
+							(child ??= materializeCommandDefinition(definition, source, extension.id)),
 					});
 				}
 			}

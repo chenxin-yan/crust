@@ -5,7 +5,14 @@ import type { ExtensionId } from "../identity.ts";
 import { normalizeSection, type SectionOwner } from "../sections.ts";
 import type { FlagDef, FlagsDef } from "../types.ts";
 import type { CommandDefinition } from "./crust.ts";
-import { cloneCommandNode, registerFlag, type CommandContext, type CommandNode } from "./node.ts";
+import {
+	childEntriesOf,
+	cloneCommandNode,
+	lazyChildRecord,
+	registerFlag,
+	type CommandContext,
+	type CommandNode,
+} from "./node.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
 
 export type MaterializeCommandDefinition = (
@@ -93,11 +100,6 @@ export function applyExtensionSections(
 	}
 }
 
-/**
- * Install Context sections where each Context is provided: `.provide()` on its own
- * command only, Extension providers once on the root. Unlike Extension section
- * contributions, a title already on the command is a `DEFINITION` error.
- */
 /** Merge the effective provided Contexts' sections into one node's documentation. */
 export function applyNodeContextSections(
 	node: CommandNode,
@@ -137,6 +139,11 @@ export function sectionContextsFor(
 		: [...node.providedContexts, ...extensions.flatMap((extension) => extension.provide)];
 }
 
+/**
+ * Install Context sections where each Context is provided: `.provide()` on its own
+ * command only, Extension providers once on the root. Unlike Extension section
+ * contributions, a title already on the command is a `DEFINITION` error.
+ */
 export function applyContextSections(
 	root: CommandNode,
 	extensions: readonly ExtensionData[],
@@ -184,7 +191,11 @@ export function installExtensionContexts(
 			const flags = source === "owned" ? ownedFlags : localFlags;
 			if (Object.hasOwn(flags, name)) registerFlag(target, name, flags[name]!, source);
 		}
-		for (const child of Object.values(target.subCommands)) prune(child);
+		target.subCommands = lazyChildRecord(childEntriesOf(target), (entry) => {
+			const child = entry.resolve();
+			prune(child);
+			return child;
+		});
 	};
 	prune(cloned);
 
@@ -207,13 +218,15 @@ export function installExtensionContexts(
 			// A Context provided locally on a descendant is more specific than a
 			// root-wide install: skip same-name instances for that subtree.
 			const inherited = new WeakSet(target.contexts.map(({ instance }) => instance));
-			for (const child of Object.values(target.subCommands)) {
+			target.subCommands = lazyChildRecord(childEntriesOf(target), (entry) => {
+				const child = entry.resolve();
 				const childSkip = new Set(skip);
 				for (const { instance } of child.contexts) {
 					if (!inherited.has(instance)) childSkip.add(instance.name);
 				}
 				walk(child, childSkip);
-			}
+				return child;
+			});
 		};
 		walk(cloned, new Set());
 	}
