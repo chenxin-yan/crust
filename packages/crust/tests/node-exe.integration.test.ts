@@ -255,14 +255,16 @@ describe.skipIf(seaNodeDir === null || host === null || npm === null)(
 				bin: { greet: "bin/greet.js", admin: "bin/admin.js" },
 				optionalDependencies: { [`@scope/node-exe-${alias}`]: "0.1.0" },
 			});
-			// Dependencies are bundled, and engines.node constrained the builder, not the users.
-			for (const staged of [
-				rootPackage,
-				readJson<Record<string, JsonValue>>(join(stageDir, alias, "package.json")),
-			]) {
+			// Dependencies are bundled, and engines.node constrained the builder, not the users:
+			// only the root's launcher needs a Node, one with execve.
+			const platformPackage = readJson<Record<string, JsonValue>>(
+				join(stageDir, alias, "package.json"),
+			);
+			for (const staged of [rootPackage, platformPackage]) {
 				expect(staged).not.toHaveProperty("dependencies");
-				expect(staged).not.toHaveProperty("engines");
 			}
+			expect(rootPackage.engines).toEqual({ node: ">=22.15.0" });
+			expect(platformPackage).not.toHaveProperty("engines");
 			for (const bin of Object.values(bins)) {
 				expect(existsSync(join(stageDir, alias, bin))).toBe(true);
 			}

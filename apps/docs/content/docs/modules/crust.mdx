@@ -144,7 +144,7 @@ Targets apply to binaries. `--target` overrides `crust.targets`; without either,
 
 Node.js targets use Node.js's own release names. Cross-platform builds download that target's official Node.js archive of the same version; see [Node.js binaries](/docs/guide/build-and-distribution#nodejs-binaries) for the unpacking tools and macOS signing.
 
-Each platform package contains `bin/<command>-<target>` (`.exe` on Windows) per command. The launcher supports only the targets included in the build. It forwards `SIGTERM` and `SIGHUP` to the binary and exits with the binary's exit code or signal. Ctrl-C reaches the binary through the terminal; on POSIX, a `SIGINT` sent to the launcher's PID is forwarded only when no controlling terminal is attached. On Windows it never forwards `SIGINT`: the console delivers Ctrl-C to the binary directly.
+Each platform package contains `bin/<command>-<target>` (`.exe` on Windows) per command. The launcher supports only the targets included in the build. On POSIX it replaces itself with the binary (`process.execve`), so every signal and the exit status belong to the binary, as if it ran directly; this needs Node.js 22.15 or later, which the root package declares in `engines.node`. Windows has no `execve`: there the launcher starts the binary, forwards `SIGTERM` and `SIGHUP`, never forwards `SIGINT` (the console delivers Ctrl-C to the binary directly), and exits with the binary's exit code or signal.
 
 ### Linux glibc and musl
 

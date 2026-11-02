@@ -181,14 +181,27 @@ function platformBinMap(
 	);
 }
 
+/** The launcher becomes the binary with `process.execve`, added in Node.js 22.15. */
+const LAUNCHER_NODE_RANGE = ">=22.15.0";
+
 function buildDistributionRootPackageJson(
 	metadata: DistributionMetadata,
 	commands: readonly string[],
 	targets: readonly DistributionTarget[],
 	{ artifactDirs, manPages }: StagingOptions,
 ): RootPublishPackageJson {
+	// Library exports keep the project's range: their consumers import them on their own Node.
+	const { engines } = metadata.rootPackageJson;
+	const launcherEngines =
+		targets.length > 0 && metadata.exports === undefined
+			? {
+					...(engines !== undefined && isJsonObject(engines) ? engines : {}),
+					node: LAUNCHER_NODE_RANGE,
+				}
+			: undefined;
 	const rootPackageJson: RootPublishPackageJson = {
 		...metadata.rootPackageJson,
+		...(launcherEngines ? { engines: launcherEngines } : {}),
 		name: metadata.rootPackageName,
 		version: metadata.version,
 		type: "module",
