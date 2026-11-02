@@ -264,7 +264,8 @@ open(os.environ["LAUNCHER_TEST_LOG"], "a").write("nonblocking " + ",".join("1" i
 			{ env, encoding: "utf8", timeout: TIMEOUT },
 		);
 		expect(result.status).toBe(0);
-		expect(JSON.parse(result.stdout)).toEqual(env);
+		// A subset: some Node builds (e.g. Nix wrappers) add variables of their own.
+		expect(JSON.parse(result.stdout)).toMatchObject(env);
 	});
 
 	it("tells users of a Node.js without execve which version it needs", () => {
