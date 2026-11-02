@@ -38,7 +38,7 @@ import type {
 	NamedFlagDef,
 	RunInputPayload,
 } from "../types.ts";
-import type { AppendArgsChecks, AttachedArgs } from "../validation/args.brands.ts";
+import type { AppendArgsErrors, AttachedArgs } from "../validation/args.brands.ts";
 import type {
 	AttachedCommandSpellings,
 	CommandCollisionBrand,
@@ -402,6 +402,27 @@ type ShapeWithInheritedFlags<S, CF extends FlagsDef> = keyof CF extends never
 		: never;
 
 type DefinitionsTree<
+	Ds extends readonly CommandDefinition<any, any, any, any>[],
+	CtxFlags extends FlagsDef = {},
+> = [Ds] extends [
+	readonly [
+		{
+			readonly name: infer N extends string;
+			readonly [commandDefinitionInternal]: {
+				readonly _aliases?: infer Al extends readonly string[];
+				readonly _shape?: infer S;
+			};
+		},
+	],
+]
+	? IsUnion<N> extends true
+		? DefinitionsTreeSlow<Ds, CtxFlags>
+		: [IsClosedName<N>, IsClosedName<Al[number]>] extends [true, true]
+			? { [K in N | Al[number]]: ShapeWithInheritedFlags<S, CtxFlags> }
+			: DefinitionsTreeSlow<Ds, CtxFlags>
+	: DefinitionsTreeSlow<Ds, CtxFlags>;
+
+type DefinitionsTreeSlow<
 	Ds extends readonly CommandDefinition<any, any, any, any>[],
 	CtxFlags extends FlagsDef = {},
 > =
@@ -1005,7 +1026,8 @@ type DescendantValuesBrand<Tree, Deps> = keyof Deps extends never
 type DefinitionDescendantValuesBrand<
 	Ds extends readonly CommandDefinition<any, any, any, any>[],
 	Deps,
-> = DescendantValuesBrand<DefinitionsTree<Ds>, Deps>;
+	// Guard first: alias arguments are instantiated eagerly, even on the `{}` branch.
+> = keyof Deps extends never ? {} : DescendantValuesBrand<DefinitionsTree<Ds>, Deps>;
 
 // Inline recipes validate demands after return-type inference, like sealed definitions.
 // Descendant checks constrain the recipe itself: a return intersection can lose conditional branches.
@@ -1227,7 +1249,7 @@ export class Crust<
 	 * @returns A new `Crust` instance with the combined args
 	 */
 	args<const NewA extends ArgsDef, _Union extends this = never>(
-		...defs: NewA & AppendArgsChecks<A, NewA>
+		...defs: NewA & AppendArgsErrors<A, NewA>
 	): AfterArgs<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, NewA, Meta, Caps>;
 
 	args<const NewA extends ArgsDef>(

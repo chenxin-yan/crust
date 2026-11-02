@@ -28,7 +28,14 @@ export type UnionToIntersection<U> = (U extends unknown ? (x: U) => void : never
 	? I
 	: never;
 
-export type IsUnion<T> = [T] extends [UnionToIntersection<T>] ? false : true;
+// A union is a type some member of which does not cover the whole. Cheaper than
+// comparing against `UnionToIntersection<T>`, which builds a function type per member.
+export type IsUnion<T> = [T] extends [never]
+	? false
+	: true extends IsUnionWorker<T, T>
+		? true
+		: false;
+type IsUnionWorker<T, U> = T extends unknown ? ([U] extends [T] ? false : true) : never;
 
 /**
  * `true` only for a single statically known fixed-length tuple whose members

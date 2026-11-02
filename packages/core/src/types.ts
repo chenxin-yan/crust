@@ -442,9 +442,7 @@ export type OmitName<D> = D extends unknown ? Omit<D, "name"> : never;
  */
 export type NamedFlagsRecord<Defs extends readonly NamedFlagDef[]> = {
 	[K in Defs[number]["name"]]: OmitName<Extract<Defs[number], { name: K }>>;
-} extends infer R extends FlagsDef
-	? R
-	: never;
+};
 
 // ────────────────────────────────────────────────────────────────────────────
 // Merge utility types
