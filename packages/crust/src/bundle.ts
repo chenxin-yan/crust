@@ -43,7 +43,12 @@ type BunPluginDriverBuild = {
 	minify: boolean;
 	env: "PUBLIC_*";
 } & (
-	| { target: "bun"; compile: { target: string; outfile: string; autoloadBunfig: false } }
+	| {
+			target: "bun";
+			compile: { target: string; outfile: string; autoloadBunfig: false };
+			bytecode?: true;
+			format?: "esm";
+	  }
 	| { target: "bun" | "node"; format: "esm"; external: readonly string[] }
 );
 
@@ -102,6 +107,11 @@ export type BundleSettings = {
 	minify: boolean;
 	/** Env files whose `PUBLIC_*` values are inlined. */
 	envFiles: readonly string[];
+	/**
+	 * Precompile Bun standalone executables to bytecode (`--bytecode`). Bun embeds
+	 * it with its own runtime, so it always matches; Node cannot read it.
+	 */
+	bytecode?: boolean;
 	/** Bun bundler plugin specifiers; when present the build runs through the generated `Bun.build` driver. */
 	bunPlugins: readonly string[];
 	/** Package names left as bare imports (`crust.external`); runtime packages only. */
@@ -169,6 +179,8 @@ export async function execBuild(
 					outfile: outfilePath,
 					autoloadBunfig: false,
 				},
+				// Bytecode defaults to CommonJS output, which rejects top-level await in entry files.
+				...(settings.bytecode ? { bytecode: true, format: "esm" } : {}),
 			},
 			outfilePath,
 			settings,
@@ -182,6 +194,7 @@ export async function execBuild(
 		settings.minify,
 		compileTarget,
 		settings.envFiles,
+		settings.bytecode,
 	);
 	await runBuildProcess(runner, args, outfilePath, settings.cwd);
 }
@@ -192,6 +205,7 @@ export function createBunCompileArgs(
 	minify: boolean,
 	target: string,
 	envFiles: readonly string[] = [],
+	bytecode = false,
 ): string[] {
 	return [
 		"build",
@@ -207,6 +221,8 @@ export function createBunCompileArgs(
 		"--outfile",
 		outfilePath,
 		...(minify ? ["--minify"] : []),
+		// Bytecode defaults to CommonJS output, which rejects top-level await in entry files.
+		...(bytecode ? ["--bytecode", "--format=esm"] : []),
 		"--target",
 		target,
 		entryPath,
