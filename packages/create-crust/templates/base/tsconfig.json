@@ -1,6 +1,6 @@
 {
 	"compilerOptions": {
-		"lib": [<%~ it.tsLib %>],
+		"lib": ["ESNext"],
 		"types": [<%~ it.tsTypes %>],
 		"target": "ESNext",
 		"module": "Preserve",

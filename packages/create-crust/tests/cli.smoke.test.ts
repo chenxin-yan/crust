@@ -17,7 +17,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/
 import { reapBoundedProcesses, runBoundedProcess } from "../../crust/tests/bounded-process.ts";
 import { type RunProcessResult, which } from "../../utils/src/process.ts";
 
-type Runtime = "bun" | "node" | "deno";
+type Runtime = "bun" | "node";
 type Artifact = NonNullable<BuildOptions["artifact"]>;
 
 const builtCliPath = resolve(import.meta.dirname, "..", ".crust", "root", "bin", "create-crust.js");
@@ -25,13 +25,6 @@ const repoRoot = resolve(import.meta.dirname, "..", "..", "..");
 const smokeRoot = join(process.env.RUNNER_TEMP ?? tmpdir(), "create-crust-smoke");
 const localPackageDir = join(smokeRoot, "local-packages");
 const smokeEnabled = process.env.CREATE_CRUST_SMOKE === "1";
-// Resolved path so Windows spawns deno.exe without a shell; also the presence probe.
-const denoPath = which("deno");
-// Deno is optional locally but mandatory in CI, where a missing binary must fail loudly.
-const denoSkipReason =
-	denoPath === null && !process.env.CI
-		? "deno is not on PATH; skipping the Deno smoke case (set CI=1 to make it mandatory)"
-		: null;
 
 const localDependencyPackages = [
 	{
@@ -78,13 +71,6 @@ function npmArgv(args: string[]): string[] {
 		return ["cmd", "/c", "npm", ...args];
 	}
 	return ["npm", ...args];
-}
-
-function denoArgv(args: string[]): string[] {
-	if (denoPath === null) {
-		throw new Error("deno is required on PATH for the Deno smoke case but was not found.");
-	}
-	return [denoPath, ...args];
 }
 
 function run(
@@ -300,11 +286,6 @@ async function smokeRuntime(runtime: Runtime, artifact: Artifact): Promise<void>
 	const name = basename(sampleDir);
 	const commands = [name, addSecondEntry(sampleDir, name)];
 	useLocalDependencyPackages(sampleDir, localSpecs);
-	// npm installs every runtime's project, including Deno's. create-crust itself
-	// runs `deno install` for Deno projects, but `deno install` treats the smoke's
-	// `file:` tarball specs as directory links (it symlinks the .tgz path), so the
-	// install step is test infrastructure here; `deno check` and `deno compile`
-	// then consume the npm-populated node_modules as Deno's default BYONM layout.
 	// Audit/funding lookups hit registry endpoints the smoke test does not need;
 	// when they degrade, npm blocks on them and the test times out.
 	const installCommand = npmArgv(["install", "--no-audit", "--no-fund"]);
@@ -324,8 +305,7 @@ async function smokeRuntime(runtime: Runtime, artifact: Artifact): Promise<void>
 	expect(existsSync(join(sampleDir, "package-lock.json"))).toBe(true);
 
 	// Run the template's own check:types script the way its users do.
-	const checkTypesCommand =
-		runtime === "deno" ? denoArgv(["task", "check:types"]) : npmArgv(["run", "check:types"]);
+	const checkTypesCommand = npmArgv(["run", "check:types"]);
 	const checkTypes = await run(checkTypesCommand, sampleDir);
 	assertSuccess("generated project type-check", checkTypesCommand, sampleDir, checkTypes);
 
@@ -379,13 +359,10 @@ async function smokeRuntime(runtime: Runtime, artifact: Artifact): Promise<void>
 	}
 
 	// Run the template's own `start` script the way its users do, so the
-	// launcher is exercised under the template's runtime (bun/node/deno) and the
+	// launcher is exercised under the template's runtime (bun/node) and the
 	// script's project-name path is verified. `--silent` drops npm's script banner,
 	// which would otherwise satisfy the `name` assertion by itself.
-	const startCommand =
-		runtime === "deno"
-			? denoArgv(["task", "start", "--help"])
-			: npmArgv(["run", "--silent", "start", "--", "--help"]);
+	const startCommand = npmArgv(["run", "--silent", "start", "--", "--help"]);
 	const start = await run(startCommand, sampleDir);
 	assertSuccess("generated project start", startCommand, sampleDir, start);
 	expect(start.stdout).toContain(name);
@@ -395,22 +372,12 @@ async function smokeRuntime(runtime: Runtime, artifact: Artifact): Promise<void>
 	// the staged launcher/bundle. Both consumers live under a path with spaces.
 	const linkRoot = join(smokeRoot, "link consumers", `${runtime}-${artifact}`);
 	await linkAndRunCommands("source link", sampleDir, join(linkRoot, "source"), commands);
-	if (runtime === "deno" && artifact === "package") {
-		// Deno packages deliberately have no shebang: npm link is not their runner.
-		for (const command of commands) {
-			const argv = denoArgv(["run", "-A", join(crustDir, "root", "bin", `${command}.js`), "Ada"]);
-			const result = await run(argv, smokeRoot);
-			assertSuccess("Deno package action", argv, smokeRoot, result);
-			expect(result.stdout.trim()).toBe("Hello, Ada!");
-		}
-	} else {
-		await linkAndRunCommands(
-			"staged link",
-			join(crustDir, "root"),
-			join(linkRoot, "staged"),
-			commands,
-		);
-	}
+	await linkAndRunCommands(
+		"staged link",
+		join(crustDir, "root"),
+		join(linkRoot, "staged"),
+		commands,
+	);
 }
 
 function smokeCase(runtime: Runtime, artifact: Artifact): () => Promise<void> {
@@ -446,9 +413,6 @@ describe.skipIf(!smokeEnabled)("create-crust smoke test", () => {
 				`Built CLI not found at ${builtCliPath}. Run the package build before test:smoke.`,
 			);
 		}
-		if (denoSkipReason !== null) {
-			console.warn(denoSkipReason);
-		}
 
 		// Below the 10s default hook timeout.
 		commandDeadline = Date.now() + 9_000;
@@ -456,10 +420,10 @@ describe.skipIf(!smokeEnabled)("create-crust smoke test", () => {
 	});
 
 	// Generous timeouts: each case installs from the registry and compiles a
-	// binary; `deno compile` also downloads a denort runtime on a cold cache.
-	for (const runtime of ["bun", "node", "deno"] as const) {
+	// binary.
+	for (const runtime of ["bun", "node"] as const) {
 		for (const artifact of ["package", "binary"] as const) {
-			it.skipIf(runtime === "deno" && denoSkipReason !== null)(
+			it(
 				`${runtime} ${artifact}: scaffolds, installs, type-checks, builds, and runs`,
 				smokeCase(runtime, artifact),
 				300_000,
