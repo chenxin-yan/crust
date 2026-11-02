@@ -11,7 +11,7 @@ mise trust
 mise install
 ```
 
-Activate mise in your shell, or prefix the commands below with `mise exec --`. mise provides Node, Bun, Deno, and the pnpm version pinned in `package.json#packageManager`.
+Activate mise in your shell, or prefix the commands below with `mise exec --`. mise provides Node, Bun, and the pnpm version pinned in `package.json#packageManager`.
 
 ```sh
 pnpm install

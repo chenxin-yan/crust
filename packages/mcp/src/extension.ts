@@ -25,7 +25,7 @@ export interface McpExtensionOptions extends McpToolsOptions {
 	 * The return annotation keeps TypeScript from seeing a self-referential initializer.
 	 */
 	readonly app: () => AnyCrust;
-	/** Explicit client launch, including `mcp`; use for Deno source entries or custom runtime setup. */
+	/** Explicit client launch, including `mcp`; use for custom runtime setup. */
 	readonly launch?: McpLaunch;
 }
 
@@ -36,7 +36,7 @@ export interface McpLaunch {
 }
 
 /**
- * Compiled executables (`bun build --compile`, `deno compile`) are their own
+ * Compiled executables (`bun build --compile`) are their own
  * launcher; source files and Node bundles relaunch through the runtime running
  * them, with runtime options before the entry path.
  */
@@ -51,18 +51,11 @@ export function resolveLaunch(
 		: { command: execPath, args: [...execArgv, entry, MCP_COMMAND_NAME] };
 }
 
-type StandaloneGlobals = {
-	Deno?: { build?: { standalone?: boolean } };
-};
-
-/** Bun serves a compiled entry from `/$bunfs/` (POSIX) or `<drive>:/~BUN/` (Windows); Deno flags standalone builds. */
+/** Bun serves a compiled entry from `/$bunfs/` (POSIX) or `<drive>:/~BUN/` (Windows). */
 function isCompiledExecutable(entry: string | undefined): boolean {
-	// SAFETY: the global is optional and every access is optional-chained.
-	const { Deno } = globalThis as StandaloneGlobals;
 	return (
 		entry?.startsWith("/$bunfs/") === true ||
-		(entry !== undefined && /^[A-Za-z]:[\\/]~BUN[\\/]/.test(entry)) ||
-		Deno?.build?.standalone === true
+		(entry !== undefined && /^[A-Za-z]:[\\/]~BUN[\\/]/.test(entry))
 	);
 }
 

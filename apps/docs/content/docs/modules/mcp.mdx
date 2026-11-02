@@ -31,7 +31,6 @@ The package has a peer dependency on `@crustjs/core` and depends on `@modelconte
 
 Set `launch: { command, args }` to override it; `args` must include `mcp`.
 
-- Deno source entries need the override, with `run` and their permission flags, because Deno does not expose them through `process.execArgv`.
 - Use it to drop development-only flags such as inspectors or watch mode.
 - The working directory and environment such as `NODE_OPTIONS` are not preserved. Use absolute paths and configure the client's environment separately.
 

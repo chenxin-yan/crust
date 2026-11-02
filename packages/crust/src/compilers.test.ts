@@ -1,7 +1,4 @@
 import { spawnSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 import { which } from "@crustjs/utils/process";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
@@ -11,10 +8,8 @@ import {
 	assertTargetsBuildableWithoutBun,
 	type BuildCompiler,
 	bunCompileTarget,
-	DENO_PACKAGE_MIN_VERSION,
 	resolveBinaryCompiler,
 	resolveBunBuildRunner,
-	resolveDenoPackageBundler,
 } from "./compilers.ts";
 import { BUN_TARGETS } from "./targets.ts";
 
@@ -68,7 +63,7 @@ describe("assertCompilerSatisfiesEngines", () => {
 
 	it.each([
 		["no engines", { name: "cli" }],
-		["another runtime's engines only", { engines: { node: ">=99", deno: "not a range" } }],
+		["another runtime's engines only", { engines: { node: ">=99" } }],
 		["a satisfied range", { engines: { bun: ">=1.4.0 <2" } }],
 	])("accepts %s", (_label, userPackageJson) => {
 		expect(check(userPackageJson)).not.toThrow();
@@ -100,71 +95,13 @@ describe("assertCompilerSatisfiesEngines", () => {
 
 describe("resolveBinaryCompiler", () => {
 	it("selects bun on PATH and validates its actual version", async () => {
-		const compiler = await resolveBinaryCompiler(
-			"bun",
-			{ engines: { bun: bunVersion } },
-			process.cwd(),
-		);
+		const compiler = await resolveBinaryCompiler({ engines: { bun: bunVersion } }, process.cwd());
 		expect(compiler).toMatchObject({ runtime: "bun", version: bunVersion });
 		expect(compiler.runner.command).toBe(which("bun"));
 		await expect(
-			resolveBinaryCompiler("bun", { engines: { bun: "0.0.1" } }, process.cwd()),
+			resolveBinaryCompiler({ engines: { bun: "0.0.1" } }, process.cwd()),
 		).rejects.toThrow(
 			`Bun ${bunVersion} (${which("bun")}) does not satisfy package.json engines.bun "0.0.1".`,
-		);
-	});
-
-	it("reports a missing deno instead of falling back to another compiler", async () => {
-		vi.stubEnv("PATH", "");
-		await expect(resolveBinaryCompiler("deno", {}, process.cwd())).rejects.toThrow(
-			"Deno is required for the deno runtime but was not found on PATH.",
-		);
-	});
-});
-
-describe("resolveDenoPackageBundler", () => {
-	const tempDirs: string[] = [];
-
-	afterEach(async () => {
-		await Promise.all(tempDirs.splice(0).map((path) => rm(path, { recursive: true, force: true })));
-	});
-
-	/** A deno stand-in that only answers `--version`, reporting `version`. */
-	async function fakeDeno(version: string): Promise<string> {
-		const directory = await mkdtemp(join(tmpdir(), "crust-fake-deno-"));
-		tempDirs.push(directory);
-		const line = `deno ${version} (stable, release, x86_64-unknown-linux-gnu)`;
-		if (process.platform === "win32") {
-			const command = join(directory, "deno.cmd");
-			await writeFile(command, `@echo ${line}\r\n`);
-			return command;
-		}
-		const command = join(directory, "deno");
-		await writeFile(command, `#!/bin/sh\necho "${line}"\n`, { mode: 0o755 });
-		return command;
-	}
-
-	it("accepts deno 2.5.0 and rejects the 2.4 bundler, reading the version in the project directory", async () => {
-		const accepted = await fakeDeno("2.5.0");
-		expect(
-			await resolveDenoPackageBundler(process.cwd(), { command: accepted, env: process.env }),
-		).toEqual({
-			runtime: "deno",
-			runner: { command: accepted, env: process.env },
-			version: "2.5.0",
-		});
-
-		const old = await fakeDeno("2.4.5");
-		await expect(
-			resolveDenoPackageBundler(process.cwd(), { command: old, env: process.env }),
-		).rejects.toThrow(
-			`Deno 2.4.5 (${old}) cannot bundle a Deno runtime package; deno ${DENO_PACKAGE_MIN_VERSION} or newer is required.`,
-		);
-	});
-
-	it("rejects a runner that does not report a Deno version", async () => {
-		await expect(resolveDenoPackageBundler(process.cwd(), resolveBunBuildRunner())).rejects.toThrow(
-			`Could not read the Deno version from ${which("bun")} --version (exit 0):\n${bunVersion}`,
 		);
 	});
 });

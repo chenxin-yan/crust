@@ -22,7 +22,7 @@
 
 ## What is Crust?
 
-Crust is a TypeScript CLI framework for humans and agents. Define a command once with full type inference, and it runs as a CLI, packages as an agent skill, and can be exposed over MCP. Composable modules add prompts, progress, TUI, styling, persistence, man pages, and testing helpers as you need them. It runs on Bun, Node.js, and Deno, with native Bun integrations.
+Crust is a TypeScript CLI framework for humans and agents. Define a command once with full type inference, and it runs as a CLI, packages as an agent skill, and can be exposed over MCP. Composable modules add prompts, progress, TUI, styling, persistence, man pages, and testing helpers as you need them. It runs on Bun and Node.js, with native Bun integrations.
 
 ## Who uses Crust?
 
@@ -63,14 +63,6 @@ cd my-cli
 yarn run dev
 ```
 
-### Deno
-
-```sh
-deno run -A npm:create-crust@latest my-cli --runtime deno
-cd my-cli
-deno task dev
-```
-
 ## Packages
 
 | Package                                                                    | Description                                                                                 | Version                                                                                                       | Downloads                                                                                                            |
@@ -90,4 +82,4 @@ deno task dev
 | [`@crustjs/skills`](https://www.npmjs.com/package/@crustjs/skills)         | Generate and install agent skills for AI coding assistants from Crust commands              | [![npm](https://img.shields.io/npm/v/@crustjs/skills)](https://www.npmjs.com/package/@crustjs/skills)         | [![downloads](https://img.shields.io/npm/dm/@crustjs/skills)](https://www.npmjs.com/package/@crustjs/skills)         |
 | [`@crustjs/mcp`](https://www.npmjs.com/package/@crustjs/mcp)               | Serve a Crust CLI as MCP tools over stdio                                                   | [![npm](https://img.shields.io/npm/v/@crustjs/mcp)](https://www.npmjs.com/package/@crustjs/mcp)               | [![downloads](https://img.shields.io/npm/dm/@crustjs/mcp)](https://www.npmjs.com/package/@crustjs/mcp)               |
 | [`@crustjs/create`](https://www.npmjs.com/package/@crustjs/create)         | Headless scaffolding engine for building project generators                                 | [![npm](https://img.shields.io/npm/v/@crustjs/create)](https://www.npmjs.com/package/@crustjs/create)         | [![downloads](https://img.shields.io/npm/dm/@crustjs/create)](https://www.npmjs.com/package/@crustjs/create)         |
-| [`create-crust`](https://www.npmjs.com/package/create-crust)               | Scaffold a new Crust CLI project for Bun, Node.js, or Deno                                  | [![npm](https://img.shields.io/npm/v/create-crust)](https://www.npmjs.com/package/create-crust)               | [![downloads](https://img.shields.io/npm/dm/create-crust)](https://www.npmjs.com/package/create-crust)               |
+| [`create-crust`](https://www.npmjs.com/package/create-crust)               | Scaffold a new Crust CLI project for Bun or Node.js                                         | [![npm](https://img.shields.io/npm/v/create-crust)](https://www.npmjs.com/package/create-crust)               | [![downloads](https://img.shields.io/npm/dm/create-crust)](https://www.npmjs.com/package/create-crust)               |

@@ -108,9 +108,9 @@ To add Crust without the scaffolder, follow the steps below from your project di
 <Step>
 ### Choose your runtime
 
-The runtime runs your CLI; the package manager installs dependencies. For Bun and Node.js, use whichever package-manager tab you prefer.
+The runtime runs your CLI; the package manager installs dependencies. Use whichever package-manager tab you prefer.
 
-<Tabs items={["Bun", "Node.js", "Deno"]} groupId="quick-start-runtime" persist>
+<Tabs items={["Bun", "Node.js"]} groupId="quick-start-runtime" persist>
 <Tab value="Bun">
 
 Use Bun 1.4 or later.
@@ -184,26 +184,13 @@ Set the module format in `package.json`, keeping the dependencies added above:
 ```
 
 </Tab>
-<Tab value="Deno">
-
-Use Deno 2.8 or later. Deno installs npm packages and checks TypeScript itself:
-
-```sh
-deno add npm:@crustjs/core npm:@crustjs/extensions
-```
-
-For a new Deno-only project, this creates the dependency mappings in `deno.json`; no `package.json`, `tsconfig.json`, or separate TypeScript installation is needed. In an existing npm-based project, Deno can use its `package.json` dependencies instead.
-
-If your project already has a `tsconfig.json`, preserve Deno's globals with `"lib": ["ESNext", "deno.window"]` and `"types": []` in its `compilerOptions`.
-
-</Tab>
 </Tabs>
 
 </Step>
 <Step>
 ### Create the entrypoint
 
-Create `src/cli.ts`. The same code works on all three runtimes:
+Create `src/cli.ts`. The same code works on both runtimes:
 
 <include lang="ts" meta='title="src/cli.ts"'>
   ../../examples/quick-start/manual.ts
@@ -213,7 +200,7 @@ Create `src/cli.ts`. The same code works on all three runtimes:
 <Step>
 ### Run and check it
 
-<Tabs items={["Bun", "Node.js", "Deno"]} groupId="quick-start-runtime" persist>
+<Tabs items={["Bun", "Node.js"]} groupId="quick-start-runtime" persist>
 <Tab value="Bun">
 
 ```sh
@@ -230,17 +217,6 @@ node src/cli.ts Ada
 node src/cli.ts --help
 npx tsc --noEmit
 ```
-
-</Tab>
-<Tab value="Deno">
-
-```sh
-deno run --allow-env src/cli.ts Ada
-deno run --allow-env src/cli.ts --help
-deno check src/cli.ts
-```
-
-`--allow-env` lets Crust read environment variables for execution and terminal styling. As your CLI adds file, network, or subprocess access, grant the additional [Deno permissions](/docs/guide/runtime-support#deno-permissions) it needs.
 
 </Tab>
 </Tabs>

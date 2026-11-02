@@ -16,19 +16,16 @@ import crustPkg from "../../crust/package.json" with { type: "json" };
 import extensionsPkg from "../../extensions/package.json" with { type: "json" };
 import pkg from "../package.json" with { type: "json" };
 
-type Runtime = "bun" | "node" | "deno";
+type Runtime = "bun" | "node";
 
-// `tsLib`/`tsTypes` are spliced into tsconfig arrays, so they carry their own JSON quoting.
-// Deno reads the project tsconfig and a supplied `lib` replaces its default `deno.window`,
-// which would drop `Deno`, `console`, and `process` from `deno check`.
+// `tsTypes` is spliced into a tsconfig array, so it carries its own JSON quoting.
 // `shebang` heads src/cli.ts: package.json `bin` points at the source, so a linked
 // command must start the project's runtime itself. The runtime's package.json
 // differences live in templates/base/package.json.
 const RUNTIMES = {
-	bun: { shebang: "#!/usr/bin/env bun", tsLib: '"ESNext"', tsTypes: '"bun"' },
-	node: { shebang: "#!/usr/bin/env node", tsLib: '"ESNext"', tsTypes: '"node"' },
-	deno: { shebang: "#!/usr/bin/env -S deno run -A", tsLib: '"ESNext", "deno.window"', tsTypes: "" },
-} satisfies Record<Runtime, { shebang: string; tsLib: string; tsTypes: string }>;
+	bun: { shebang: "#!/usr/bin/env bun", tsTypes: '"bun"' },
+	node: { shebang: "#!/usr/bin/env node", tsTypes: '"node"' },
+} satisfies Record<Runtime, { shebang: string; tsTypes: string }>;
 
 // `eta/core` renders template strings only: no file loading or includes. Templates
 // are trusted package code, not sandboxed. Generated files are never HTML, so output
@@ -72,8 +69,8 @@ const app = new Crust("create-crust", { description: pkg.description })
 		{
 			name: "runtime",
 			type: "string",
-			choices: ["bun", "node", "deno"],
-			description: 'Runtime to develop and build for ("bun", "node", or "deno")',
+			choices: ["bun", "node"],
+			description: 'Runtime to develop and build for ("bun" or "node")',
 		},
 		{
 			name: "artifact",
@@ -153,11 +150,6 @@ const app = new Crust("create-crust", { description: pkg.description })
 					value: "node",
 					hint: "Node.js APIs and ecosystem",
 				},
-				{
-					label: "Deno",
-					value: "deno",
-					hint: "Deno APIs and permission model",
-				},
 			],
 			default: "bun",
 			initial: flags.runtime,
@@ -173,10 +165,7 @@ const app = new Crust("create-crust", { description: pkg.description })
 				{
 					label: "Runtime package",
 					value: "package",
-					hint:
-						runtime === "deno"
-							? "Requires Deno installed; experimental bundling"
-							: "JavaScript bundle; requires the selected runtime installed",
+					hint: "JavaScript bundle; requires the selected runtime installed",
 				},
 			],
 			default: runtime === "node" ? "package" : "binary",
@@ -206,14 +195,14 @@ const app = new Crust("create-crust", { description: pkg.description })
 
 		// ── Execute all file operations after prompts are done ──────────
 
-		const packageManager = runtime === "deno" ? "deno" : detectPackageManager(resolvedDir);
+		const packageManager = detectPackageManager(resolvedDir);
 		// The bundle inlines the sibling package.json imports, so scaffolded projects
 		// pin the Crust versions from the build that produced create-crust.
 		const context = {
 			name,
 			runtime,
 			artifact,
-			run: packageManager === "deno" ? "deno task" : `${packageManager} run`,
+			run: `${packageManager} run`,
 			install: `${packageManager} install`,
 			...RUNTIMES[runtime],
 			coreVersion: corePkg.version,
@@ -235,13 +224,7 @@ const app = new Crust("create-crust", { description: pkg.description })
 		});
 
 		if (installDeps) {
-			// The generic install step only detects npm-style package managers and falls
-			// back to npm, which a Deno-only machine lacks; Deno installs package.json
-			// dependencies itself.
-			await runSteps(
-				[runtime === "deno" ? { type: "command", cmd: "deno install" } : { type: "install" }],
-				resolvedDir,
-			);
+			await runSteps([{ type: "install" }], resolvedDir);
 		}
 
 		if (initGit) {
