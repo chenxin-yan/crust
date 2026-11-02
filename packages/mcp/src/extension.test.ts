@@ -44,8 +44,8 @@ describe("mcpExtension", () => {
 
 	it("uses an explicit launch for both client JSON and the Claude command", async () => {
 		const launch = {
-			command: "/usr/bin/deno",
-			args: ["run", "--allow-env=APP_MODE", "/proj/cli.ts", "mcp"],
+			command: "/usr/bin/node",
+			args: ["--env-file=/proj/.env", "/proj/cli.ts", "mcp"],
 		};
 		const custom = new Crust("custom").extend(
 			mcpExtension({ app: (): AnyCrust => custom, launch }),
