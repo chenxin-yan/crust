@@ -101,21 +101,16 @@ describe.skipIf(!canBuildSea)("resolveArtifactDir in a Node single executable ap
 
 // A static `node:sea` import fails to load on runtimes without that built-in.
 describe("resolveArtifactDir loads from source on other runtimes", () => {
-	for (const [runtime, args] of [
-		["bun", ["run"]],
-		["deno", ["run", "--allow-read", "--allow-env"]],
-	] as const) {
-		it.skipIf(!which(runtime))(runtime, () => {
-			writeFileSync(join(root, "package.json"), "{}");
-			writeFileSync(join(root, "probe.ts"), probeSource);
-			writeTemplates(join(root, ".crust", "root"), "source");
-			const result = run(runtime, [...args, join(root, "probe.ts")], root);
-			expect(result.stderr).toBe("");
-			expect(result.status).toBe(0);
-			expect(JSON.parse(result.stdout)).toEqual({
-				dir: join(root, ".crust", "root", "templates"),
-				text: "source",
-			});
+	it.skipIf(!which("bun"))("bun", () => {
+		writeFileSync(join(root, "package.json"), "{}");
+		writeFileSync(join(root, "probe.ts"), probeSource);
+		writeTemplates(join(root, ".crust", "root"), "source");
+		const result = run("bun", ["run", join(root, "probe.ts")], root);
+		expect(result.stderr).toBe("");
+		expect(result.status).toBe(0);
+		expect(JSON.parse(result.stdout)).toEqual({
+			dir: join(root, ".crust", "root", "templates"),
+			text: "source",
 		});
-	}
+	});
 });

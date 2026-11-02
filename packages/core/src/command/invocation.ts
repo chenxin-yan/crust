@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, posix, win32 } from "node:path";
 
-import { BUILD_OUT_DIR_ENV, isPackagedBuild } from "@crustjs/utils/artifacts";
+import { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
 import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
 
 import {
@@ -87,9 +87,7 @@ interface PreparedInvocation {
  * without dispatching a Command Action. In-process callers use `Crust.snapshot()`.
  *
  * Only source entries run by `crust build` honor it: finished Bun/Node bundles carry
- * `process.env.CRUST_INTERNAL_BUILD === "1"` as a literal and compile the protocol out;
- * packaged Deno bundles set the `isPackagedBuild()` marker and skip it without
- * reading the environment.
+ * `process.env.CRUST_INTERNAL_BUILD === "1"` as a literal and compile the protocol out.
  */
 export const SNAPSHOT_PATH_ENV = "CRUST_INTERNAL_SNAPSHOT_PATH";
 const EXIT_CODE_CANCELLED = 130;
@@ -612,24 +610,20 @@ export async function executeInvocation(
 	const signal = options?.signal
 		? AbortSignal.any([options.signal, controller.signal])
 		: controller.signal;
-	// A packaged Deno bundle must not read `process.env`, so its marker gates the
-	// block; folding it into the ternary would stop Bun inlining the `const` below.
-	if (!isPackagedBuild()) {
-		// Literal property access, no destructuring: `crust build` defines the marker
-		// as `"1"`, so bundlers fold this to `undefined` and drop the snapshot branch.
-		const snapshotPath =
-			process.env.CRUST_INTERNAL_BUILD === "1" ? undefined : process.env[SNAPSHOT_PATH_ENV];
+	// Literal property access, no destructuring: `crust build` defines the marker
+	// as `"1"`, so bundlers fold this to `undefined` and drop the snapshot branch.
+	const snapshotPath =
+		process.env.CRUST_INTERNAL_BUILD === "1" ? undefined : process.env[SNAPSHOT_PATH_ENV];
 
-		if (snapshotPath) {
-			try {
-				await writeSnapshotProtocol(node, snapshotPath, materializeCommandDefinition);
-			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
-				console.error(message);
-				return process.exit(1);
-			}
-			return process.exit(0);
+	if (snapshotPath) {
+		try {
+			await writeSnapshotProtocol(node, snapshotPath, materializeCommandDefinition);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			console.error(message);
+			return process.exit(1);
 		}
+		return process.exit(0);
 	}
 
 	const invoke = async (): Promise<number> => {

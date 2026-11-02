@@ -21,7 +21,7 @@ import { HOST_TARGET } from "../targets.ts";
  */
 export const buildCommand = defineCommand(
 	"build",
-	{ description: "Build your CLI for Bun, Deno, or Node" },
+	{ description: "Build your CLI for Bun or Node" },
 	(command) =>
 		command
 			.flags(
@@ -55,9 +55,8 @@ export const buildCommand = defineCommand(
 				{
 					name: "minify",
 					type: "boolean",
-					// No default: deno builds must distinguish an explicit --minify (error)
-					// from the implicit bun/node default (true, applied by `build`).
-					description: "Minify the output (default for bun and node; unsupported for deno)",
+					description: "Minify the output",
+					default: true,
 				},
 			)
 			.action(async ({ flags, stdout, stderr }) => {

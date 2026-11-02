@@ -4,13 +4,7 @@ import { join, resolve } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import {
-	BUILD_OUT_DIR_ENV,
-	isPackagedBuild,
-	isSourceRun,
-	PACKAGED_BUILD_KEY,
-	resolveArtifactDir,
-} from "./artifacts.ts";
+import { BUILD_OUT_DIR_ENV, isSourceRun, resolveArtifactDir } from "./artifacts.ts";
 
 let tmpDir: string;
 let originalArgv1: string | undefined;
@@ -29,16 +23,7 @@ afterEach(async () => {
 	await rm(tmpDir, { recursive: true, force: true });
 });
 
-function withDenoGlobal<T>(value: { build: { standalone: boolean } }, run: () => T): T {
-	Object.defineProperty(globalThis, "Deno", { value, configurable: true, writable: true });
-	try {
-		return run();
-	} finally {
-		delete (globalThis as { Deno?: unknown }).Deno;
-	}
-}
-
-// Tests run on Node, which has no Bun global; stand one in the way withDenoGlobal does.
+// Tests run on Node, which has no Bun global; stand one in.
 function withBunMain<T>(value: string, run: () => T): T {
 	Object.defineProperty(globalThis, "Bun", {
 		value: { main: value },
@@ -49,25 +34,6 @@ function withBunMain<T>(value: string, run: () => T): T {
 		return run();
 	} finally {
 		delete (globalThis as { Bun?: unknown }).Bun;
-	}
-}
-
-/** Sets the packaged marker and makes every `process.env` read throw, like Deno without --allow-env. */
-function asPackagedBuildWithoutEnv<T>(run: () => T): T {
-	const marker = Symbol.for(PACKAGED_BUILD_KEY);
-	const envDescriptor = Object.getOwnPropertyDescriptor(process, "env")!;
-	const deniedEnv = new Proxy(process.env, {
-		get: (_target, key) => {
-			throw new Error(`env read: ${String(key)}`);
-		},
-	});
-	Object.defineProperty(globalThis, marker, { value: true, configurable: true });
-	Object.defineProperty(process, "env", { ...envDescriptor, value: deniedEnv });
-	try {
-		return run();
-	} finally {
-		Object.defineProperty(process, "env", envDescriptor);
-		Reflect.deleteProperty(globalThis, marker);
 	}
 }
 
@@ -128,32 +94,13 @@ describe("resolveArtifactDir", () => {
 		expect(result).toBe(join(tmpDir, "bin", "skills"));
 	});
 
-	it("resolves next to the executable inside a Deno compiled binary", () => {
-		process.argv[1] = join(tmpDir, "bin", "cli");
-		const result = withExecPath(join(tmpDir, "bin", "cli"), () =>
-			withDenoGlobal({ build: { standalone: true } }, () => resolveArtifactDir("templates")),
-		);
-		expect(result).toBe(join(tmpDir, "bin", "templates"));
-	});
-
-	it("resolves next to the bundle's bin/ in a packaged build, ignoring build-only env", async () => {
+	it("resolves next to the bundle's bin/ in a Crust-built bundle, ignoring build-only env", async () => {
 		await writeFile(join(tmpDir, "package.json"), "{}");
 		process.argv[1] = join(tmpDir, "src", "cli.ts");
+		vi.stubEnv("CRUST_INTERNAL_BUILD", "1");
 		vi.stubEnv(BUILD_OUT_DIR_ENV, join(tmpDir, "stale-build-output"));
-		const result = asPackagedBuildWithoutEnv(() => resolveArtifactDir("skills"));
-		// Same layout as the Bun/Node define: `<artifacts.ts dir>/../skills`.
-		expect(result).toBe(resolve(import.meta.dirname, "..", "skills"));
-	});
-
-	it("treats only a true packaged marker as packaged", () => {
-		const marker = Symbol.for(PACKAGED_BUILD_KEY);
-		expect(isPackagedBuild()).toBe(false);
-		Object.defineProperty(globalThis, marker, { value: "1", configurable: true });
-		try {
-			expect(isPackagedBuild()).toBe(false);
-		} finally {
-			Reflect.deleteProperty(globalThis, marker);
-		}
+		// `<artifacts.ts dir>/../skills`, as `<bundle>/bin/cli.js` resolves `<bundle>/skills`.
+		expect(resolveArtifactDir("skills")).toBe(resolve(import.meta.dirname, "..", "skills"));
 	});
 
 	it("resolves .crust/root under the nearest package root of argv[1] when running from source", async () => {
@@ -216,10 +163,8 @@ describe("isSourceRun", () => {
 	});
 
 	it("is false in Crust-built bundles and compiled executables", () => {
-		expect(asPackagedBuildWithoutEnv(isSourceRun)).toBe(false);
 		expect(withNodeSea(isSourceRun)).toBe(false);
 		expect(withBunMain("/$bunfs/root/cli", isSourceRun)).toBe(false);
-		expect(withDenoGlobal({ build: { standalone: true } }, isSourceRun)).toBe(false);
 		process.env.CRUST_INTERNAL_BUILD = "1";
 		expect(isSourceRun()).toBe(false);
 	});

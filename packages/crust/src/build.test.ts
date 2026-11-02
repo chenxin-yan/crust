@@ -42,7 +42,7 @@ import {
 } from "./build.ts";
 import { buildCommand } from "./commands/build.ts";
 import { ARTIFACT_KINDS, type DistributionManifest } from "./distribute.ts";
-import { BUILD_RUNTIMES, BUN_TARGETS, DENO_TARGETS, hostTarget, NODE_TARGETS } from "./targets.ts";
+import { BUILD_RUNTIMES, BUN_TARGETS, hostTarget, NODE_TARGETS } from "./targets.ts";
 
 const host = hostTarget(BUN_TARGETS);
 
@@ -96,10 +96,6 @@ describe("planBuild", () => {
 		writePackageJson({ devDependencies: { "@types/node": "^22" } });
 		expect(() => planBuild(baseFlags, tmpDir)).toThrow(
 			'Earlier versions built a package for the node runtime implicitly; set "artifact": "package"',
-		);
-		writePackageJson({ crust: { runtime: "deno" } });
-		expect(() => planBuild(baseFlags, tmpDir)).toThrow(
-			"Earlier versions built a binary for the deno runtime implicitly",
 		);
 		// Checked before bin entries, so the migration error is what an old project sees first.
 		writePackageJson({ bin: { cli: "src/missing.ts" } });
@@ -168,16 +164,6 @@ describe("planBuild", () => {
 		});
 	});
 
-	it("reports runtime/artifact combinations that are not available yet", () => {
-		writePackageJson({ crust: { runtime: "deno" } });
-		expect(planBuild(runtimePackage, tmpDir)).toMatchObject({
-			runtime: "deno",
-			artifact: "package",
-			minify: false,
-		});
-		expect(planBuild(runtimePackage, tmpDir)).not.toHaveProperty("targets");
-	});
-
 	it("stages package.json crust.targets unless --target is passed", () => {
 		writePackageJson({ crust: { targets: ["bun-linux-x64", "bun-darwin-arm64"] } });
 		expect(planBuild(binary, tmpDir)).toMatchObject({
@@ -191,7 +177,7 @@ describe("planBuild", () => {
 		expect(() => planBuild(binary, tmpDir)).toThrow(
 			'Unknown target "linux-x64". Targets must use canonical Bun names. Did you mean "bun-linux-x64"?',
 		);
-		for (const runtime of ["node", "bun", "deno"]) {
+		for (const runtime of ["node", "bun"]) {
 			writePackageJson({ crust: { runtime, artifact: "package", targets: ["bun-linux-x64"] } });
 			expect(() => planBuild(baseFlags, tmpDir)).toThrow(
 				"package.json crust.targets is not supported for runtime packages (artifact package)",
@@ -199,7 +185,7 @@ describe("planBuild", () => {
 		}
 	});
 
-	it("infers the runtime from deno.json or @types/node, never from lockfiles", () => {
+	it("infers the runtime from @types/node, never from lockfiles", () => {
 		const nodeTypes = { devDependencies: { "@types/node": "^22" } };
 		writePackageJson(nodeTypes);
 		expect(planBuild(runtimePackage, tmpDir)).toMatchObject({
@@ -215,25 +201,21 @@ describe("planBuild", () => {
 		});
 
 		writeFileSync(join(tmpDir, "bun.lock"), "");
-		writeFileSync(join(tmpDir, "deno.jsonc"), "{}");
 		try {
-			// deno.json wins over @types/node; the lockfile is not a signal.
+			// The lockfile is not a signal.
 			writePackageJson(nodeTypes);
 			expect(planBuild(binary, tmpDir)).toMatchObject({
-				runtime: "deno",
-				runtimeSource: "inferred from deno.jsonc",
+				runtime: "node",
+				runtimeSource: "inferred from @types/node",
 			});
 			// Explicit configuration beats inference.
-			writePackageJson({ crust: { runtime: "bun" } });
+			writePackageJson({ ...nodeTypes, crust: { runtime: "bun" } });
 			expect(planBuild(binary, tmpDir)).toMatchObject({
 				runtime: "bun",
 				runtimeSource: "from package.json",
 			});
-			writePackageJson({});
-			expect(planBuild(binary, tmpDir).runtime).toBe("deno");
 		} finally {
 			rmSync(join(tmpDir, "bun.lock"));
-			rmSync(join(tmpDir, "deno.jsonc"));
 		}
 	});
 
@@ -287,28 +269,6 @@ describe("planBuild", () => {
 			flags: { targets: ["bun-linux-x64"] },
 			error: "--target cannot be used with runtime packages (artifact package)",
 		},
-		{
-			name: "minified Deno builds",
-			crust: { runtime: "deno", artifact: "binary" },
-			flags: { minify: true },
-			error: "--minify is not supported with the deno runtime",
-		},
-		{
-			name: "Deno builds with env files",
-			crust: { runtime: "deno", artifact: "binary" },
-			flags: { envFiles: [".env"] },
-			error: "--env-file is not supported with the deno runtime",
-		},
-		{
-			name: "Deno builds with Bun bundler plugins",
-			crust: {
-				runtime: "deno",
-				artifact: "binary",
-				bunPlugins: ["@opentui/solid/bun-plugin"],
-			},
-			flags: {},
-			error: "package.json crust.bunPlugins is not supported with the deno runtime",
-		},
 	];
 	for (const testCase of rejectedCases) {
 		it(`rejects ${testCase.name}`, () => {
@@ -331,7 +291,7 @@ describe("planBuild", () => {
 			});
 		}
 		// An empty list is a no-op for every runtime and artifact.
-		for (const runtime of ["bun", "node", "deno"]) {
+		for (const runtime of ["bun", "node"]) {
 			writePackageJson({ crust: { runtime, external: [] } });
 			expect(planBuild(binary, tmpDir).external).toEqual([]);
 			expect(planBuild(runtimePackage, tmpDir).external).toEqual([]);
@@ -365,14 +325,6 @@ describe("planBuild", () => {
 			flags: { artifact: "binary" },
 			error:
 				"package.json crust.external is not supported for standalone binaries (artifact binary)",
-		},
-		{
-			name: "Deno runtime packages",
-			pkg: {
-				dependencies: { "fake-native": "^1.0.0" },
-				crust: { runtime: "deno", artifact: "package", external: ["fake-native"] },
-			},
-			error: "package.json crust.external is not supported with the deno runtime",
 		},
 		...["@crustjs/core"].map((name): ExternalRejectedCase => ({
 			name,
@@ -444,18 +396,6 @@ describe("planBuild", () => {
 		expect(
 			planBuild({ ...binary, targets: ["host", host!, "bun-linux-x64", "host"] }, tmpDir),
 		).toMatchObject({ targets: host === "bun-linux-x64" ? [host] : [host, "bun-linux-x64"] });
-		const denoHost = hostTarget(DENO_TARGETS);
-		writePackageJson({ crust: { runtime: "deno" } });
-		if (denoHost !== null) {
-			expect(planBuild({ ...binary, targets: ["host"] }, tmpDir)).toMatchObject({
-				runtime: "deno",
-				targets: [denoHost],
-			});
-		} else {
-			expect(() => planBuild({ ...binary, targets: ["host"] }, tmpDir)).toThrow(
-				/No Deno target matches this machine \(linux-(x64|arm64)-musl\)/,
-			);
-		}
 	});
 });
 
@@ -633,31 +573,6 @@ describe("readCrustConfig", () => {
 // ────────────────────────────────────────────────────────────────────────────
 // Error handling tests
 // ────────────────────────────────────────────────────────────────────────────
-
-async function executeBuildError(
-	name: string,
-	pkg: Record<string, JsonValue>,
-	argv: string[],
-): Promise<string> {
-	const originalCwd = process.cwd;
-	const tmpDir = mkdtempSync(join(tmpdir(), `crust-${name}-`));
-	rmSync(tmpDir, { recursive: true, force: true });
-	mkdirSync(join(tmpDir, "src"), { recursive: true });
-	writeFileSync(join(tmpDir, "src", "cli.ts"), "console.log('hi');");
-	writeFileSync(
-		join(tmpDir, "package.json"),
-		JSON.stringify({ name: "error-cli", version: "1.0.0", ...pkg }),
-	);
-	process.cwd = () => tmpDir;
-	try {
-		const result = await captureExecute(new Crust("test").add(buildCommand), ["build", ...argv]);
-		expect(result.exitCode).toBe(1);
-		return result.stderr;
-	} finally {
-		process.cwd = originalCwd;
-		rmSync(tmpDir, { recursive: true, force: true });
-	}
-}
 
 describe("build", () => {
 	const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-api-"));
@@ -923,92 +838,6 @@ await build({ cwd: ${JSON.stringify(tmpDir)}, validate: false, onLog() {
 		});
 	}, 30_000);
 
-	it.skipIf(which("deno") === null)(
-		"stages an experimental root-only Deno runtime package bundled by deno bundle",
-		async () => {
-			writeProject(
-				{
-					name: "deno-pkg",
-					crust: { runtime: "deno", artifact: "package" },
-					engines: { deno: ">=99" },
-				},
-				'console.log(JSON.stringify({ deno: typeof Deno === "undefined" ? null : Deno.version.deno }));\n',
-			);
-			const logged: Array<[string, string]> = [];
-			const result = await build({
-				cwd: tmpDir,
-				validate: false,
-				onLog: (line, stream) => logged.push([line, stream]),
-			});
-			const bundlePath = join(stageDir, "root", "bin", "deno-pkg.js");
-			expect(result.artifacts).toEqual([
-				{ kind: "package-json", path: join(stageDir, "root", "package.json") },
-				{ kind: "bundle", path: bundlePath, command: "deno-pkg" },
-			]);
-			expect(readFileSync(bundlePath, "utf8").startsWith("#!")).toBe(false);
-			const manifest = readManifest(join(stageDir, "manifest.json"));
-			expect(manifest).toMatchObject({ runtime: "deno", artifact: "package", packages: [] });
-			expect(manifest).not.toHaveProperty("embeddedRuntimeVersion");
-			// engines.deno is the consumer's requirement; the bundler is not checked against it.
-			expect(
-				JSON.parse(readFileSync(join(stageDir, "root", "package.json"), "utf8")),
-			).toMatchObject({ engines: { deno: ">=99" }, bin: { "deno-pkg": "bin/deno-pkg.js" } });
-			const denoPath = which("deno")!;
-			const denoVersion = /^deno (\S+)/.exec(
-				execFileSync(denoPath, ["--version"], { encoding: "utf8", timeout: 10_000 }),
-			)![1];
-			expect(logged).toContainEqual([
-				`Compiler: deno ${denoVersion} (${denoPath}, deno bundle)`,
-				"stdout",
-			]);
-			expect(logged).toContainEqual([
-				expect.stringContaining("Deno runtime packages are experimental"),
-				"stderr",
-			]);
-			const run = execFileSync(denoPath, ["run", "--no-prompt", bundlePath], {
-				encoding: "utf8",
-				timeout: 30_000,
-			});
-			expect(JSON.parse(run)).toEqual({ deno: denoVersion });
-		},
-		60_000,
-	);
-
-	it.skipIf(process.platform === "win32")(
-		"checks the Deno bundler before wiping the previous stage and writes no manifest when bundling fails",
-		async () => {
-			const shimDir = mkdtempSync(join(tmpdir(), "crust-deno-shim-"));
-			vi.stubEnv("PATH", `${shimDir}:${process.env.PATH}`);
-			const fakeDeno = (version: string) =>
-				writeFileSync(
-					join(shimDir, "deno"),
-					`#!/bin/sh\nif [ "$1" = --version ]; then echo "deno ${version} (stable)"; exit 0; fi\necho "bundle exploded" >&2\nexit 1\n`,
-					{ mode: 0o755 },
-				);
-			try {
-				writeProject(
-					{ name: "deno-pkg", crust: { runtime: "deno", artifact: "package" } },
-					'console.log("hi");\n',
-				);
-				mkdirSync(stageDir);
-				writeFileSync(join(stageDir, "kept.txt"), "kept\n");
-				fakeDeno("2.4.0");
-				await expect(build({ cwd: tmpDir, validate: false })).rejects.toThrow(
-					`Deno 2.4.0 (${join(shimDir, "deno")}) cannot bundle a Deno runtime package; deno 2.5.0 or newer is required.`,
-				);
-				expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
-
-				fakeDeno("2.9.0");
-				await expect(build({ cwd: tmpDir, validate: false })).rejects.toThrow("bundle exploded");
-				expect(existsSync(join(stageDir, "root", "package.json"))).toBe(true);
-				expect(existsSync(join(stageDir, "manifest.json"))).toBe(false);
-			} finally {
-				rmSync(shimDir, { recursive: true, force: true });
-			}
-		},
-		30_000,
-	);
-
 	it("selects and validates the binary compiler before wiping the previous stage", async () => {
 		writeProject({ name: "engine-cli", engines: { bun: "0.0.1" } }, 'console.log("hi");\n');
 		mkdirSync(stageDir);
@@ -1189,45 +1018,6 @@ describe("buildCommand error handling", () => {
 		} finally {
 			rmSync(tmpDir, { recursive: true, force: true });
 		}
-	});
-
-	it("rejects backend options a Deno runtime package cannot honor", async () => {
-		const denoPackage = { crust: { runtime: "deno", artifact: "package" } };
-		expect(
-			await executeBuildError("deno-package-target", denoPackage, [
-				"--target",
-				"x86_64-unknown-linux-gnu",
-				"--no-validate",
-			]),
-		).toContain("--target cannot be used with runtime packages");
-		expect(
-			await executeBuildError("deno-package-minify", denoPackage, ["--minify", "--no-validate"]),
-		).toContain(
-			"--minify is not supported with the deno runtime.\n  crust does not minify Deno runtime packages",
-		);
-		const envDir = mkdtempSync(join(tmpdir(), "crust-deno-package-env-file-"));
-		const envFile = join(envDir, ".env");
-		writeFileSync(envFile, "SECRET=x\n");
-		try {
-			expect(
-				await executeBuildError("deno-package-env-file", denoPackage, [
-					"--env-file",
-					envFile,
-					"--no-validate",
-				]),
-			).toContain(
-				"--env-file is not supported with the deno runtime.\n  deno bundle has no PUBLIC_* build-time constants",
-			);
-		} finally {
-			rmSync(envDir, { recursive: true, force: true });
-		}
-		expect(
-			await executeBuildError(
-				"deno-package-bun-plugin",
-				{ crust: { ...denoPackage.crust, bunPlugins: ["./plugin.ts"] } },
-				["--no-validate"],
-			),
-		).toContain("deno bundle has no Bun bundler");
 	});
 
 	it("rejects invalid identity before wiping the previous stage, even with --no-validate", async () => {

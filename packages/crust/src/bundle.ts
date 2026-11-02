@@ -3,7 +3,6 @@ import { chmod, readFile, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { PACKAGED_BUILD_KEY } from "@crustjs/utils/artifacts";
 import { runProcess } from "@crustjs/utils/process";
 
 import {
@@ -11,9 +10,8 @@ import {
 	bunCompileTarget,
 	processOutput,
 	resolveBunBuildRunner,
-	resolveDenoBuildRunner,
 } from "./compilers.ts";
-import type { BunTarget, DenoTarget } from "./targets.ts";
+import type { BunTarget } from "./targets.ts";
 
 export function toBunEnvFileArgs(envFiles: readonly string[]): string[] {
 	return envFiles.flatMap((envFile) => ["--env-file", envFile]);
@@ -34,8 +32,7 @@ export function resolveBunPluginSource(specifier: string, cwd: string): string {
 /**
  * Marks every Bun/Node bundle crust produces so `resolveArtifactDir` (core)
  * can tell a staged bundle from source at runtime. Not a `PUBLIC_*` variable:
- * it is internal to crust, never user-set. Deno compile has no define, but
- * standalone Deno binaries are detected directly.
+ * it is internal to crust, never user-set.
  */
 const CRUST_BUILD_DEFINE = { "process.env.CRUST_INTERNAL_BUILD": '"1"' } as const;
 // The value keeps its quotes so bun inlines a string literal, not a number.
@@ -216,29 +213,6 @@ export function createBunCompileArgs(
 	];
 }
 
-function createDenoCompileArgs(
-	entryPath: string,
-	outfilePath: string,
-	target: DenoTarget,
-): string[] {
-	// No --env-file: `deno compile` embeds EVERY variable from the file into the
-	// binary (verified empirically on Deno 2.9 — secrets included), with no
-	// equivalent of bun's --env=PUBLIC_* filter. The build command rejects
-	// --env-file for the deno runtime instead of leaking secrets.
-	return [
-		"compile",
-		// -A: Crust core reads process.env before dispatch, so a sandboxed binary
-		// crashes with NotCapable on startup. Full grants also match Bun compile,
-		// which has no sandbox. A permission passthrough flag can narrow this later.
-		"-A",
-		"--output",
-		outfilePath,
-		"--target",
-		target,
-		entryPath,
-	];
-}
-
 /** Runs one compiler step; returns its output, which a successful step may still print (warnings). */
 export async function runBuildProcess(
 	runner: BuildRunner,
@@ -312,58 +286,4 @@ export async function execScriptBuild(
 	const shebang = `#!/usr/bin/env ${target}\n`;
 	await writeFile(outfilePath, shebang + output.replace(/^#![^\n]*(?:\n|$)/, ""));
 	if (process.platform !== "win32") await chmod(outfilePath, 0o755);
-}
-
-export async function execDenoBuild(
-	entryPath: string,
-	outfilePath: string,
-	target: DenoTarget,
-	cwd: string,
-	runner: BuildRunner = resolveDenoBuildRunner(),
-): Promise<void> {
-	await runBuildProcess(
-		runner,
-		createDenoCompileArgs(entryPath, outfilePath, target),
-		outfilePath,
-		cwd,
-	);
-}
-
-/**
- * Bundle a Deno runtime package entry with native `deno bundle`, which resolves
- * dependencies through the project's own Deno setup (deno.json imports,
- * package.json with its installed node_modules) and inlines them into one file.
- *
- * Bundle the declared command directly so Deno preserves its `import.meta.main`
- * semantics without making dependencies main. Prepend the packaged-build marker
- * (`PACKAGED_BUILD_KEY`) to the bundled code so it runs before the inlined
- * application graph. The output has no shebang or permission flags: consumers
- * choose grants with `deno run` / `deno install`.
- * No env files or plugins: `deno bundle` has no PUBLIC_* filter or Bun plugins.
- */
-export async function execDenoPackageBuild(
-	entryPath: string,
-	outfilePath: string,
-	cwd: string,
-	runner: BuildRunner = resolveDenoBuildRunner(),
-): Promise<void> {
-	await runBuildProcess(
-		runner,
-		[
-			"bundle",
-			"--platform=deno",
-			"--packages=bundle",
-			"--output",
-			outfilePath,
-			resolve(cwd, entryPath),
-		],
-		outfilePath,
-		cwd,
-	);
-	const output = await readFile(outfilePath, "utf8");
-	await writeFile(
-		outfilePath,
-		`globalThis[Symbol.for(${JSON.stringify(PACKAGED_BUILD_KEY)})] = true;\n` +
-			output.replace(/^#![^\n]*(?:\n|$)/, ""),
-	);
 }
