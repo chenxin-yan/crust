@@ -285,7 +285,7 @@ Declared in [`api/extension.ts`](https://github.com/chenxin-yan/crust/blob/main/
 `defineExtension(id)` starts an immutable fluent definition; `defineExtension<MetaKeys>(id)` also [requires root metadata](#rootmetakey). Every method except `.factory()` returns a new frozen handle, and every handle is an `Extension` accepted by `.extend()`. There is no final build step.
 
 - Collection methods append on repeated calls. `.use()` declares Contexts the hooks consume. `.provide()` installs Context instances application-wide regardless of chain position; hooks see them only if also declared with `.use()`. `.flags()` owns flags. `.add()` contributes `defineCommand()` definitions at the root.
-- Lifecycle setters replace the previous callback: `.preRun()`, `.postRun()`, and `.onError()` set the [hooks](#extensionhooks); `.sections(snapshot)` returns [section contributions](#extensionsectioncontribution); `.build(ctx)` returns [`BuildArtifacts`](#buildartifacts) for build tooling to write.
+- Lifecycle setters replace the previous callback: `.preRun()`, `.noAction()`, `.postRun()`, and `.onError()` set the [hooks](#extensionhooks); `.sections(snapshot)` returns [section contributions](#extensionsectioncontribution); `.build(ctx)` returns [`BuildArtifacts`](#buildartifacts) for build tooling to write.
 - Each callback is typed by the declarations made before it in the chain.
 - Flag spellings and contributed command names are checked for collisions by TypeScript and when the method runs.
 
@@ -332,6 +332,7 @@ The flag values an Extension's hooks see. They are pre-validation values, not sc
 />
 
 - `preRun` runs in `.extend()` order after routing and input binding, before validation. Return `ctx.handled()` to end the invocation successfully. Pulling a flag-owning Context here rejects, because its flags are not validated yet. An argv or environment value that fails conversion, `choices`, or `parse` reads as `undefined` here (not its default); its error surfaces at validation, after every `preRun` hook.
+- `noAction` runs only when the routed command has no Command Action, after every `preRun` hook declined, in `.extend()` order and with the same context. Use it for fallbacks such as help for a command group, so they never shadow another Extension's `preRun`. Return `ctx.handled()` to end the invocation; otherwise validation runs and the invocation completes without a result.
 - `onError` runs for `execute()` only. Return `true` after rendering to stop the chain, or a falsy value to fall through to Core's renderer.
 - `postRun` runs in reverse `.extend()` order after every completed, handled, or failed invocation that reached hooks, like `finally`. Contexts remain available until it completes. Preparation, routing, and parse failures skip it.
 
@@ -341,7 +342,7 @@ See [propagation boundaries](/docs/api/errors#propagation-boundaries) for hook t
 
 <auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Handled" />
 
-The opaque token returned by `ctx.handled()`. Return that exact value from `preRun`.
+The opaque token returned by `ctx.handled()`. Return that exact value from `preRun` or `noAction`.
 
 ### `InvocationOutcome`
 

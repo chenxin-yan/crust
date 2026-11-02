@@ -208,6 +208,15 @@ export interface ExtensionHooks<
 	 */
 	readonly preRun?: (ctx: ExtensionContext<Defs, Deps, MetaKeys>) => Awaitable<void | Handled>;
 	/**
+	 * Runs in place of a missing Command Action: only when the routed command has
+	 * none, after every `preRun` hook declined, in `.extend()` order. A fallback
+	 * here, such as help for a command group, cannot shadow another Extension's
+	 * `preRun`, whatever the registration order. Return `ctx.handled()` to end the
+	 * invocation like `preRun`; if no hook does, validation runs and the invocation
+	 * completes without a result.
+	 */
+	readonly noAction?: (ctx: ExtensionContext<Defs, Deps, MetaKeys>) => Awaitable<void | Handled>;
+	/**
 	 * Runs after the invocation settles, in reverse `.extend()` order. This is the
 	 * `finally` slot for cleanup and post-run side effects.
 	 */
@@ -440,7 +449,7 @@ type ExtensionHook<
 /**
  * Immutable fluent Extension authoring handle returned by {@link defineExtension}.
  * Every method returns a new handle. Collection methods (`use`, `provide`,
- * `flags`, `add`) append; lifecycle setters (`preRun`, `postRun`, `onError`,
+ * `flags`, `add`) append; lifecycle setters (`preRun`, `noAction`, `postRun`, `onError`,
  * `sections`, `build`) replace the previous callback. Callbacks are typed by the
  * declarations made before them.
  */
@@ -483,6 +492,10 @@ export interface ExtensionBuilder<
 	/** See {@link ExtensionHooks.preRun}. */
 	preRun(
 		hook: ExtensionHook<"preRun", Use, Defs, MetaKeys>,
+	): ExtensionBuilder<Use, Provide, Defs, Commands, MetaKeys>;
+	/** See {@link ExtensionHooks.noAction}. */
+	noAction(
+		hook: ExtensionHook<"noAction", Use, Defs, MetaKeys>,
 	): ExtensionBuilder<Use, Provide, Defs, Commands, MetaKeys>;
 	/** See {@link ExtensionHooks.postRun}. */
 	postRun(
@@ -551,6 +564,8 @@ function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 		add: (...definitions: readonly CommandDefinition<any, any, any, any>[]) =>
 			next({ commands: [...state.commands, ...definitions] }),
 		preRun: (preRun: ExtensionHooks["preRun"]) => next({ hooks: { ...state.hooks, preRun } }),
+		noAction: (noAction: ExtensionHooks["noAction"]) =>
+			next({ hooks: { ...state.hooks, noAction } }),
 		postRun: (postRun: ExtensionHooks["postRun"]) => next({ hooks: { ...state.hooks, postRun } }),
 		onError: (onError: ExtensionHooks["onError"]) => next({ hooks: { ...state.hooks, onError } }),
 		sections: (sections: ExtensionData["sections"]) => next({ sections }),

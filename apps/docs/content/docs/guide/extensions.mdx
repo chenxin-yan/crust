@@ -80,6 +80,7 @@ Use `preRun` for work before validation and the action, and `postRun` for work a
 </include>
 
 - `preRun` follows `.extend()` order. Returning `ctx.handled()` skips later `preRun` hooks and the action.
+- `noAction` runs only for a command without an action, after every `preRun` hook declined. Put fallbacks there, such as showing help for a command group, so they cannot shadow another Extension's flag, whatever the `.extend()` order.
 - `postRun` runs in reverse order, including after an Extension handles the invocation early or a failure once hooks start. Preparation, routing, and input-binding failures happen before hooks and skip it. Context cleanup runs afterwards.
 - `onError` handles terminal errors from `.execute()`; see [Error handling](/docs/guide/error-handling).
 

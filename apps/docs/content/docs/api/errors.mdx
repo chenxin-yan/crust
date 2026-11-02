@@ -72,14 +72,14 @@ One `ENV` error aggregates every missing or invalid variable of a `defineEnv()` 
 
 ## Propagation boundaries
 
-| Failure                                                     | `run()`                                | `execute()`                                   |
-| ----------------------------------------------------------- | -------------------------------------- | --------------------------------------------- |
-| Eager builder checks (direct inputs, sibling names/aliases) | Throws at the builder call             | Throws at the builder call                    |
-| Deferred recipe, inherited-flag, or Context-demand checks   | `failed` outcome when encountered      | Rendered when encountered; exit `1`           |
-| Preparation                                                 | `failed` outcome; no hooks run         | Rendered directly; exit `1`                   |
-| Routing, argv syntax, structured input binding              | `failed` outcome; no hooks run         | Rendered via `onError`; exit `1`              |
-| `preRun`, validation, Context setup, Command Action         | `failed` outcome after `postRun` hooks | Rendered via `onError`; exit `1`              |
-| Cancellation (`AbortError`)                                 | `failed` outcome                       | Offered to `onError`, else silent; exit `130` |
+| Failure                                                        | `run()`                                | `execute()`                                   |
+| -------------------------------------------------------------- | -------------------------------------- | --------------------------------------------- |
+| Eager builder checks (direct inputs, sibling names/aliases)    | Throws at the builder call             | Throws at the builder call                    |
+| Deferred recipe, inherited-flag, or Context-demand checks      | `failed` outcome when encountered      | Rendered when encountered; exit `1`           |
+| Preparation                                                    | `failed` outcome; no hooks run         | Rendered directly; exit `1`                   |
+| Routing, argv syntax, structured input binding                 | `failed` outcome; no hooks run         | Rendered via `onError`; exit `1`              |
+| `preRun`/`noAction`, validation, Context setup, Command Action | `failed` outcome after `postRun` hooks | Rendered via `onError`; exit `1`              |
+| Cancellation (`AbortError`)                                    | `failed` outcome                       | Offered to `onError`, else silent; exit `130` |
 
 `.add()` checks sibling names and aliases immediately, but does not run recipes or validate their inherited flags and Context demands. Those checks happen when commands materialize on first use. `await app.snapshot()` materializes and validates the full tree without running Command Actions, rejecting with any deferred definition or preparation error. `at()` can also throw deferred definition errors while resolving a path. Context setup and Command Action failures are not wrapped in `CrustError`.
 
@@ -90,7 +90,7 @@ One `ENV` error aggregates every missing or invalid variable of a `defineEnv()` 
 
 `execute()` renders a failure once. Extension `onError` hooks are presentation only and cannot turn a failure into success: they run in registration order until one returns a truthy value. If none claims the failure, Core's renderer writes one `Error: message` line per underlying failure (each member of a `SuppressedError` chain or `AggregateError`). If cleanup fails after a failure was already rendered, Core writes `Cleanup failed: message` lines without calling `onError` again.
 
-For `preRun`, validation, setup, and action failures, `onError` runs before `postRun` while Contexts are live. A `postRun` or disposal failure reaches `onError` after cleanup, when Context pulls reject. Routing and parse failures receive empty `args` and `flags` and no Contexts; `command` is the routed command when routing succeeded and the root otherwise. Argv syntax failures are unknown flags, missing option values, and negating a `noNegate` flag; an invalid argv or environment value (conversion, `choices`, `parse`) keeps code `PARSE` but surfaces during validation, after `preRun` and with live Contexts, so `preRun` can handle `--help` first. See [error handling](/docs/guide/error-handling) for worked examples.
+For `preRun`, `noAction`, validation, setup, and action failures, `onError` runs before `postRun` while Contexts are live. A `postRun` or disposal failure reaches `onError` after cleanup, when Context pulls reject. Routing and parse failures receive empty `args` and `flags` and no Contexts; `command` is the routed command when routing succeeded and the root otherwise. Argv syntax failures are unknown flags, missing option values, and negating a `noNegate` flag; an invalid argv or environment value (conversion, `choices`, `parse`) keeps code `PARSE` but surfaces during validation, after `preRun` and with live Contexts, so `preRun` can handle `--help` first. See [error handling](/docs/guide/error-handling) for worked examples.
 
 ## Cancellation
 
