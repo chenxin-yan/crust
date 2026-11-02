@@ -393,7 +393,7 @@ describe("command definitions", () => {
 		await expect(app.snapshot()).rejects.toThrow("broken Extension recipe");
 	});
 
-	it("projects rootCommand on demand, sharing the routed command's snapshot", async () => {
+	it("projects rootCommand children on read, sharing the routed command's snapshot", async () => {
 		const configured: string[] = [];
 		const command = (name: string) =>
 			defineCommand(name, (c) => {
@@ -402,14 +402,25 @@ describe("command definitions", () => {
 				return c.action((context) => {
 					const before = [...configured];
 					const same = context.rootCommand.subCommands[name] === context.command;
-					return { before, same, after: [...configured] };
+					const afterRead = [...configured];
+					const listed = Object.keys(context.rootCommand.subCommands);
+					const afterKeys = [...configured];
+					void Object.values(context.rootCommand.subCommands);
+					return { before, same, afterRead, listed, afterKeys, afterWalk: [...configured] };
 				});
 			});
 		const app = new Crust("cli").add(command("a"), command("b"), command("c"));
 
 		expect(await unwrap(app.run(["b"]))).toMatchObject({
 			status: "completed",
-			result: { before: ["b"], same: true, after: ["b", "a", "c"] },
+			result: {
+				before: ["b"],
+				same: true,
+				afterRead: ["b"],
+				listed: ["a", "b", "c"],
+				afterKeys: ["b"],
+				afterWalk: ["b", "a", "c"],
+			},
 		});
 	});
 

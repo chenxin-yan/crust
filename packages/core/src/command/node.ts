@@ -192,6 +192,7 @@ export function subCommandsOf(node: CommandNode): Record<string, CommandNode> {
 }
 
 const lazyChildMeta = new WeakMap<object, ReadonlyMap<string, CommandMeta>>();
+const lazyChildBuilt = new WeakMap<object, ReadonlyMap<string, CommandNode>>();
 
 /**
  * A frozen children record whose nodes are built on first property access, so an
@@ -204,15 +205,20 @@ export function lazyChildRecord(
 ): Record<string, CommandNode> {
 	const record: Record<string, CommandNode> = {};
 	const meta = new Map<string, CommandMeta>();
+	const built = new Map<string, CommandNode>();
 	for (const entry of entries) {
-		let built: CommandNode | undefined;
 		Object.defineProperty(record, entry.name, {
 			enumerable: true,
-			get: () => (built ??= build(entry)),
+			get: () => {
+				let child = built.get(entry.name);
+				if (!child) built.set(entry.name, (child = build(entry)));
+				return child;
+			},
 		});
 		meta.set(entry.name, entry.meta);
 	}
 	lazyChildMeta.set(record, meta);
+	lazyChildBuilt.set(record, built);
 	return Object.freeze(record);
 }
 
@@ -224,6 +230,14 @@ export function childMetaOf(
 		lazyChildMeta.get(subCommands) ??
 		Object.entries(subCommands).map(([name, child]): [string, CommandMeta] => [name, child.meta])
 	);
+}
+
+/** The node's children if every one is already built, else `undefined`; never builds one. */
+export function builtChildrenOf(node: CommandNode): CommandNode[] | undefined {
+	if (node.addedChildren) return undefined;
+	const built = lazyChildBuilt.get(node.subCommands);
+	if (!built) return Object.values(node.subCommands);
+	return built.size === lazyChildMeta.get(node.subCommands)!.size ? [...built.values()] : undefined;
 }
 
 /** Clone a command subtree on access without mutating the builder graph. */

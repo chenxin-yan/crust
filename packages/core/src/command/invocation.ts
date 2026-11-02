@@ -42,12 +42,7 @@ import {
 	type CommandNode,
 } from "./node.ts";
 import { commandNotFound, resolveCommand, type CommandRoute } from "./router.ts";
-import {
-	createSnapshotCache,
-	snapshotCommand,
-	type CommandSnapshot,
-	type SnapshotCache,
-} from "./snapshot.ts";
+import { createSnapshotProjector, snapshotCommand, type CommandSnapshot } from "./snapshot.ts";
 import type { RunOutcome } from "./typed-run.ts";
 
 const ignoreStreamError = () => {};
@@ -90,8 +85,6 @@ const DEFAULT_IO: InvocationIO = {
 interface PreparedInvocation {
 	rootNode: CommandNode;
 	extensions: readonly ExtensionData[];
-	/** Projections of subtrees without mutable defaults, reused across invocations. */
-	snapshots: WeakMap<CommandNode, CommandSnapshot>;
 }
 
 /**
@@ -313,7 +306,7 @@ function buildExtensionTree(
 		return prepared;
 	};
 
-	return { rootNode: prepare(node, node.meta.name, true), extensions, snapshots: new WeakMap() };
+	return { rootNode: prepare(node, node.meta.name, true), extensions };
 }
 
 /** Install Context sections, evaluate Extension section callbacks, and freeze the tree. */
@@ -349,11 +342,6 @@ export function prepareInvocation(
 	if (eager) applySectionsAndFreeze(prepared.rootNode, prepared.extensions);
 	preparedInvocations.set(node, prepared);
 	return prepared;
-}
-
-/** Projections for one invocation: stable subtrees come from the prepared tree's cache. */
-function invocationSnapshots(prepared: PreparedInvocation): SnapshotCache {
-	return createSnapshotCache(prepared.snapshots);
 }
 
 /** An invocation starts from terminal argv or a typed path plus structured values. */
@@ -397,23 +385,22 @@ function resolveStructuredInput(
 
 /**
  * Lazy `rootCommand` / `command` projections. Most invocations read only the routed
- * command (help checks `hasAction`), so the whole tree is projected (and its pending
- * recipes run) only when something reads `rootCommand`. Both share one cache, so the
- * routed snapshot is the same object inside the root projection.
+ * command (help checks `hasAction`) or root metadata (version, update checks), so
+ * `rootCommand` projects its children, and runs their pending recipes, only when they
+ * are read. Both share one cache, so the routed snapshot is the same object inside
+ * the root projection.
  */
 function lazySnapshots(
 	prepared: PreparedInvocation,
 	command: CommandNode,
 ): { readonly rootCommand: CommandSnapshot; readonly command: CommandSnapshot } {
-	const cache = invocationSnapshots(prepared);
-	let root: CommandSnapshot | undefined;
-	let routed: CommandSnapshot | undefined;
+	const project = createSnapshotProjector();
 	return {
 		get rootCommand() {
-			return (root ??= snapshotCommand(prepared.rootNode, cache));
+			return project(prepared.rootNode);
 		},
 		get command() {
-			return (routed ??= snapshotCommand(command, cache));
+			return project(command);
 		},
 	};
 }

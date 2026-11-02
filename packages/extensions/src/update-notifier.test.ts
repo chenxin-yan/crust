@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Crust } from "@crustjs/core";
+import { Crust, defineCommand } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -426,6 +426,24 @@ describe("updateNotifier post-run hook", () => {
 		it("skips the check when stderr is not a TTY", async () => {
 			setStderrIsTTY(false);
 			await expectSkipped();
+		});
+
+		it("reads the root version without building sibling commands", async () => {
+			vi.stubEnv("CI", "true");
+			const built: string[] = [];
+			const command = (name: string) =>
+				defineCommand(name, (c) => {
+					built.push(name);
+					return c.action(() => {});
+				});
+			const pkgName = uniquePackageName("lazy-root-version");
+			const outcome = await new Crust(pkgName, { version: "1.0.0" })
+				.extend(updateNotifier({ packageName: pkgName }))
+				.add(command("a"), command("b"))
+				.run(["a"]);
+
+			expect(outcome).toMatchObject({ status: "completed" });
+			expect(built).toEqual(["a"]);
 		});
 
 		it("still reports a missing version when suppressed", async () => {

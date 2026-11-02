@@ -292,7 +292,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 	});
 });
 
-describe("Invocation pipeline — root snapshot reuse", () => {
+describe("Invocation pipeline — snapshot projection", () => {
 	function rootObserver() {
 		const roots: CommandSnapshot[] = [];
 		const observer = defineExtension(defineExtensionId("observer"))
@@ -304,15 +304,20 @@ describe("Invocation pipeline — root snapshot reuse", () => {
 		return { observer, roots };
 	}
 
-	it("reuses one root snapshot across dispatches and fallback failure rendering", async () => {
+	it("keeps one rootCommand per invocation, including fallback failure rendering", async () => {
 		const { observer, roots } = rootObserver();
+		const seen: CommandSnapshot[] = [];
 		const app = new Crust("app")
 			.extend(observer)
-			.flags({ name: "tag", type: "string", multiple: true, default: ["a"] })
-			.add(defineCommand("sub", (c) => c.action(() => {})))
+			.add(
+				defineCommand("sub", (c) =>
+					c.action(({ rootCommand, command }) => {
+						seen.push(rootCommand, command);
+					}),
+				),
+			)
 			.action(() => {});
 
-		await app.run([]);
 		await app.run(["sub"]);
 		// An unknown flag fails before dispatch builds a context.
 		const originalExitCode = process.exitCode;
@@ -322,9 +327,32 @@ describe("Invocation pipeline — root snapshot reuse", () => {
 			process.exitCode = originalExitCode ?? 0;
 		}
 
-		expect(roots).toHaveLength(3);
-		expect(roots[1]).toBe(roots[0]);
-		expect(roots[2]).toBe(roots[0]);
+		expect(roots).toHaveLength(2);
+		// The action and the preRun hook see one projection, whose child is the routed command.
+		expect(seen[0]).toBe(roots[0]);
+		expect(roots[0]!.subCommands.sub).toBe(seen[1]);
+		expect(roots[1]!.subCommands.sub?.meta.name).toBe("sub");
+	});
+
+	it("reuses rootCommand across invocations once every command is built", async () => {
+		const { observer, roots } = rootObserver();
+		const built: string[] = [];
+		const command = (name: string) =>
+			defineCommand(name, (c) => {
+				built.push(name);
+				return c.action(() => {});
+			});
+		const app = new Crust("app").extend(observer).add(command("a"), command("b"));
+
+		await app.run(["a"]);
+		await app.run(["a"]);
+		// Deciding reuse must not build the pending sibling.
+		expect(built).toEqual(["a"]);
+		expect(roots[1]).not.toBe(roots[0]);
+
+		await app.run(["b"]);
+		await app.run(["b"]);
+		expect(roots[3]).toBe(roots[2]);
 	});
 
 	it("keeps re-projecting when a URL default would make a reused snapshot stale", async () => {
