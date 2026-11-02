@@ -51,6 +51,10 @@
 			"types": "./dist/schema.d.ts",
 			"import": "./dist/schema.js"
 		},
+		"./signals": {
+			"types": "./dist/signals.d.ts",
+			"import": "./dist/signals.js"
+		},
 		"./terminal": {
 			"types": "./dist/terminal.d.ts",
 			"import": "./dist/terminal.js"

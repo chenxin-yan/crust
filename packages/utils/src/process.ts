@@ -5,6 +5,7 @@ import { delimiter, extname, join, resolve, sep, win32 } from "node:path";
 import { text } from "node:stream/consumers";
 
 import { isErrnoException } from "./error.ts";
+import { isSignalIgnored } from "./signals.ts";
 
 export type PackageManager = "npm" | "pnpm" | "bun" | "yarn";
 
@@ -70,11 +71,14 @@ function removeLifetimeListeners(): void {
  * terminal signals with. Until the returned release runs, SIGINT, SIGTERM, SIGHUP or SIGQUIT
  * calls `onSignal` once and is then re-raised when no other listener handles it, and a
  * synchronous exit (`process.exit`, an uncaught error) calls `onExit`. SIGKILL and native
- * crashes cannot be observed and still orphan the group.
+ * crashes cannot be observed and still orphan the group. A signal this process inherited as
+ * ignored (Bun on Linux, such as SIGHUP under `nohup`) stays ignored and is never listened for.
  */
 export function bindToProcessLifetime(binding: LifetimeBinding): () => void {
 	if (bindings.size === 0) {
-		for (const signal of LIFETIME_SIGNALS) process.prependListener(signal, onLifetimeSignal);
+		for (const signal of LIFETIME_SIGNALS) {
+			if (!isSignalIgnored(signal)) process.prependListener(signal, onLifetimeSignal);
+		}
 		process.on("exit", onLifetimeExit);
 	}
 	bindings.add(binding);

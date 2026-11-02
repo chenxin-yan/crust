@@ -290,6 +290,41 @@ process.exit(0);
 		}, 20_000);
 	});
 
+	// Bun keeps an inherited SIG_IGN (Node resets it at startup). The real executable, not a
+	// version-manager shim that may reset signals before exec.
+	const bunPath =
+		process.platform === "linux"
+			? spawnSync("bun", ["-e", "console.log(process.execPath)"], {
+					encoding: "utf8",
+				}).stdout?.trim()
+			: undefined;
+
+	it.skipIf(!bunPath)(
+		"keeps an inherited SIGHUP ignore after a timed call on Bun",
+		() => {
+			const dir = mkdtempSync(join(tmpdir(), "run-process-ignored-"));
+			const probe = join(dir, "probe.ts");
+			writeFileSync(
+				probe,
+				`import { runProcess } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "process.ts")).href)};
+await runProcess(process.execPath, ["-e", ""], { timeout: 5000 });
+process.kill(process.pid, "SIGHUP");
+await new Promise((resolve) => setTimeout(resolve, 200));
+console.log("alive");`,
+			);
+			try {
+				const result = spawnSync("sh", ["-c", 'trap "" HUP; exec "$0" "$1"', bunPath!, probe], {
+					encoding: "utf8",
+					timeout: 10_000,
+				});
+				expect(result).toMatchObject({ status: 0, stdout: "alive\n" });
+			} finally {
+				rmSync(dir, { recursive: true, force: true });
+			}
+		},
+		15_000,
+	);
+
 	it.skipIf(process.platform !== "win32")(
 		"round-trips arguments through Windows forwarding shims",
 		async () => {

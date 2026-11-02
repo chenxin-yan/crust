@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, posix, win32 } from "node:path";
 
 import { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
+import { isSignalIgnored } from "@crustjs/utils/signals";
 import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
 
 import {
@@ -678,7 +679,8 @@ export async function executeInvocation(
 			process.removeListener("SIGINT", onSigint);
 			if (process.listenerCount("SIGINT") === 0) process.kill(process.pid, "SIGINT");
 		};
-		process.on("SIGINT", onSigint);
+		// An inherited ignore (background job) stays: listening would make SIGINT fatal again.
+		if (!isSignalIgnored("SIGINT")) process.on("SIGINT", onSigint);
 
 		let extensionContext: ExtensionContext | undefined;
 		let rendered: { error: CaughtError } | undefined;
