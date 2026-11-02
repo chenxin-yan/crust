@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach } from "vite-plus/test";
+import { describe, expect, it, beforeEach, afterEach, onTestFinished, vi } from "vite-plus/test";
 
 import { Crust, defineContext, defineExtension, defineExtensionId } from "../index.ts";
 
@@ -132,6 +132,8 @@ describe("invocation cancellation signal", () => {
 	});
 
 	it("a second SIGINT removes Core's listener and leaves termination to any remaining listener", async () => {
+		vi.useFakeTimers({ toFake: ["performance"] });
+		onTestFinished(() => void vi.useRealTimers());
 		// Guard listener: without it Core would re-raise SIGINT into the test runner.
 		const guard = () => {};
 		process.on("SIGINT", guard);
@@ -151,6 +153,7 @@ describe("invocation cancellation signal", () => {
 			const core = process.listeners("SIGINT").at(-1)!;
 			core("SIGINT");
 			expect(process.listenerCount("SIGINT")).toBe(before + 1);
+			vi.advanceTimersByTime(51);
 			core("SIGINT");
 			expect(process.listenerCount("SIGINT")).toBe(before);
 			expect(process.listeners("SIGINT")).toContain(guard);
@@ -159,6 +162,37 @@ describe("invocation cancellation signal", () => {
 		} finally {
 			process.removeListener("SIGINT", guard);
 		}
+	});
+
+	it("treats a SIGINT within 50 ms of the first as the same Ctrl-C relayed by a parent", async () => {
+		vi.useFakeTimers({ toFake: ["performance"] });
+		onTestFinished(() => void vi.useRealTimers());
+		const guard = () => {};
+		process.on("SIGINT", guard);
+		onTestFinished(() => void process.removeListener("SIGINT", guard));
+		const before = process.listenerCount("SIGINT");
+		const { ready, action } = awaitingSignal();
+		const released = Promise.withResolvers<void>();
+		const app = new Crust("cli").action(async (ctx) => {
+			try {
+				await action(ctx);
+			} finally {
+				await released.promise;
+			}
+		});
+		const exitCode = app.execute({ argv: [], io: quiet });
+		await ready;
+		const core = process.listeners("SIGINT").at(-1)!;
+		core("SIGINT");
+		// `npm run` relays the terminal's SIGINT: the same press arrives again immediately.
+		vi.advanceTimersByTime(1);
+		core("SIGINT");
+		expect(process.listenerCount("SIGINT")).toBe(before + 1);
+		vi.advanceTimersByTime(200);
+		core("SIGINT");
+		expect(process.listenerCount("SIGINT")).toBe(before);
+		released.resolve();
+		expect(await exitCode).toBe(130);
 	});
 
 	it("shares one signal between Context setups, Extension hooks and the action, including the onError fallback context", async () => {

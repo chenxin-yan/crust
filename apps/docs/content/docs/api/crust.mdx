@@ -243,7 +243,7 @@ Runs the terminal boundary: parses `process.argv.slice(2)` (or `options.argv`), 
 - Exit codes are `0` on success, `1` on failure, and `130` for cancellation. `process.exitCode` is set on failure.
 - A failure renders once, through Extension `onError` hooks and then Core's renderer. Cancellation is offered to `onError` hooks and renders nothing if none claims it. See [propagation boundaries](/docs/api/errors#propagation-boundaries).
 - `options.io` captures rendered output in tests, including default prompt and progress output. It does not provide prompt input.
-- The first Ctrl-C aborts the invocation's `signal` with an `AbortError`. Work that honors the signal stops, then `postRun` hooks and Context cleanup run. A second Ctrl-C removes Core's listener and reaches the runtime's default handling unless another listener still owns the signal.
+- The first Ctrl-C aborts the invocation's `signal` with an `AbortError`. Work that honors the signal stops, then `postRun` hooks and Context cleanup run. A second Ctrl-C removes Core's listener and reaches the runtime's default handling unless another listener still owns the signal. A SIGINT within 50 ms of the first counts as the same Ctrl-C: `npm run`, `npx`, and `bun run` relay the terminal's SIGINT, so one press can arrive twice.
 
 ### Invocation order
 

@@ -25,7 +25,9 @@ export interface InvocationOptions extends Partial<InvocationIO> {
 /**
  * Caller options for the terminal `execute()` boundary. While an invocation
  * runs, the first `SIGINT` (Ctrl-C) aborts its `ctx.signal` with an `AbortError`
- * and a second `SIGINT` terminates unless another listener owns the signal.
+ * and a second `SIGINT` terminates unless another listener owns the signal. A
+ * `SIGINT` within 50 ms of the first is treated as the same Ctrl-C, relayed by a
+ * parent process such as `npm run` or `npx`.
  */
 export interface ExecuteOptions {
 	/** Arguments to parse; defaults to `process.argv.slice(2)`. */

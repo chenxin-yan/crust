@@ -92,6 +92,9 @@ interface PreparedInvocation {
  * `process.env.CRUST_INTERNAL_BUILD === "1"` as a literal and compile the protocol out.
  */
 export const SNAPSHOT_PATH_ENV = "CRUST_INTERNAL_SNAPSHOT_PATH";
+
+/** A SIGINT this soon after the first is the same Ctrl-C relayed by a parent process. */
+const RELAYED_SIGINT_WINDOW_MS = 50;
 const EXIT_CODE_CANCELLED = 130;
 
 function isAbortError(error: CaughtError): boolean {
@@ -671,11 +674,17 @@ export async function executeInvocation(
 		}
 
 		// Persistent, not `once`: spinner-style one-shot listeners re-raise SIGINT only when nobody listens.
+		let interruptedAt = Number.NEGATIVE_INFINITY;
 		const onSigint = (): void => {
 			if (!controller.signal.aborted) {
+				interruptedAt = performance.now();
 				controller.abort(new DOMException("Interrupted by SIGINT.", "AbortError"));
 				return;
 			}
+			// `npm run`, `npx`, and `bun run` relay the terminal's SIGINT to their child as well
+			// (npm/cli#8164), so one Ctrl-C arrives twice within a millisecond; a person pressing
+			// twice takes far longer.
+			if (performance.now() - interruptedAt < RELAYED_SIGINT_WINDOW_MS) return;
 			process.removeListener("SIGINT", onSigint);
 			if (process.listenerCount("SIGINT") === 0) process.kill(process.pid, "SIGINT");
 		};
