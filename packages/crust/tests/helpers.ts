@@ -4,14 +4,10 @@ import { delimiter, dirname } from "node:path";
 import { which } from "@crustjs/utils/process";
 import satisfies from "semver/functions/satisfies.js";
 
-import { BUN_TARGETS, DENO_TARGETS, hostTarget as resolveHostTarget } from "../src/targets.ts";
+import { BUN_TARGETS, hostTarget as resolveHostTarget } from "../src/targets.ts";
 
 export function hostTarget() {
 	return resolveHostTarget(BUN_TARGETS);
-}
-
-export function hostDenoTarget() {
-	return resolveHostTarget(DENO_TARGETS);
 }
 
 /**

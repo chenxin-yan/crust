@@ -17,43 +17,13 @@ import { pathToFileURL } from "node:url";
 import { which } from "@crustjs/utils/process";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
-import {
-	execBuild,
-	execDenoPackageBuild,
-	execScriptBuild,
-	resolveBunPluginSource,
-} from "./bundle.ts";
+import { execBuild, execScriptBuild, resolveBunPluginSource } from "./bundle.ts";
 import { BUN_TARGETS, hostTarget } from "./targets.ts";
 
 const bunVersion = spawnSync(which("bun")!, ["--version"], {
 	encoding: "utf8",
 	timeout: 10_000,
 }).stdout.trim();
-const denoPath = which("deno");
-
-describe.skipIf(denoPath === null)("execDenoPackageBuild", () => {
-	const tempDirs: string[] = [];
-
-	afterEach(async () => {
-		await Promise.all(tempDirs.splice(0).map((path) => rm(path, { recursive: true, force: true })));
-	});
-
-	it("fails with deno's diagnostics without leaving a bundle or temporary inputs", async () => {
-		const directory = await mkdtemp(join(tmpdir(), "crust-deno-package-test-"));
-		tempDirs.push(directory);
-		await writeFile(join(directory, "cli.ts"), 'import "./missing.ts";\n');
-		const outfile = join(directory, "out", "bin", "cli.js");
-
-		await expect(
-			execDenoPackageBuild(join(directory, "cli.ts"), outfile, directory, {
-				command: denoPath!,
-				env: process.env,
-			}),
-		).rejects.toThrow(/^Build failed for .*cli\.js:\n[\s\S]*missing\.ts/);
-		await expect(access(outfile)).rejects.toThrow();
-		expect(await readdir(directory)).toEqual(["cli.ts"]);
-	}, 60_000);
-});
 
 describe("resolveBunPluginSource", () => {
 	it("imports bare specifiers from the project and paths as file URLs", () => {

@@ -19,14 +19,13 @@ import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/js
 import { isWithin } from "@crustjs/utils/path";
 
 import { type ArtifactOwner, mergeEntryArtifacts } from "./artifacts.ts";
-import { execBuild, execDenoBuild, execDenoPackageBuild, execScriptBuild } from "./bundle.ts";
+import { execBuild, execScriptBuild } from "./bundle.ts";
 import {
 	assertTargetsBuildableWithoutBun,
 	type BuildCompiler,
 	type BuildRunner,
 	resolveBinaryCompiler,
 	resolveBunBuildRunner,
-	resolveDenoPackageBundler,
 } from "./compilers.ts";
 import {
 	ARTIFACT_KINDS,
@@ -51,8 +50,6 @@ import {
 	type BuildRuntime,
 	BUN_TARGETS,
 	type BunTarget,
-	DENO_TARGETS,
-	type DenoTarget,
 	NODE_TARGETS,
 	type NodeTarget,
 	resolveTargets,
@@ -226,11 +223,6 @@ function validateExternal(
 			"package.json crust.external is not supported for standalone binaries (artifact binary).\n  A binary bundles every dependency; remove crust.external or use artifact package.",
 		);
 	}
-	if (runtime === "deno") {
-		throw new Error(
-			"package.json crust.external is not supported with the deno runtime.\n  crust.external applies to Node and Bun runtime packages; remove crust.external or set crust.runtime to node or bun.",
-		);
-	}
 	const dependencies =
 		pkg.dependencies !== undefined && isJsonObject(pkg.dependencies) ? pkg.dependencies : {};
 	const rejectCrustPackage = (quoted: string, detail: string): never => {
@@ -259,27 +251,19 @@ function validateExternal(
 	}
 }
 
-const DENO_CONFIG_FILES = ["deno.json", "deno.jsonc"] as const;
-
 /** Where the build runtime came from, printed as `Runtime: <runtime> (<source>)`. */
-type RuntimeSource =
-	| "from package.json"
-	| `inferred from ${(typeof DENO_CONFIG_FILES)[number]}`
-	| "inferred from @types/node"
-	| "default";
+type RuntimeSource = "from package.json" | "inferred from @types/node" | "default";
 
 type ResolvedRuntime = { runtime: BuildRuntime; source: RuntimeSource };
 
 /**
  * package.json `crust.runtime` > inference > Bun. Inference uses only
- * unambiguous signals: a Deno config file, or `@types/node` without
- * `@types/bun`. Lockfiles say which package manager installed dependencies,
- * not which runtime runs the CLI, so they are not consulted.
+ * unambiguous signals: `@types/node` without `@types/bun`. Lockfiles say which
+ * package manager installed dependencies, not which runtime runs the CLI, so
+ * they are not consulted.
  */
-function resolveBuildRuntime(pkg: JsonObject, config: CrustConfig, cwd: string): ResolvedRuntime {
+function resolveBuildRuntime(pkg: JsonObject, config: CrustConfig): ResolvedRuntime {
 	if (config.runtime !== undefined) return { runtime: config.runtime, source: "from package.json" };
-	const denoConfig = DENO_CONFIG_FILES.find((file) => existsSync(join(cwd, file)));
-	if (denoConfig) return { runtime: "deno", source: `inferred from ${denoConfig}` };
 	if (hasDependency(pkg, "@types/node") && !hasDependency(pkg, "@types/bun")) {
 		return { runtime: "node", source: "inferred from @types/node" };
 	}
@@ -441,9 +425,9 @@ export type BuildOptions = {
 	 * binary compiler. Rejected for runtime packages.
 	 */
 	targets?: readonly string[];
-	/** Env files inlining `PUBLIC_*` build-time constants, resolved against `cwd`. Rejected for deno. */
+	/** Env files inlining `PUBLIC_*` build-time constants, resolved against `cwd`. */
 	envFiles?: readonly string[];
-	/** Minify the output. Default: true for bun and node; an explicit `true` is rejected for deno. */
+	/** Minify the output. Default: true. */
 	minify?: boolean;
 	/** Materialize Command Snapshots and run Extension build hooks before compiling. Default: true. */
 	validate?: boolean;
@@ -476,7 +460,6 @@ type CommonBuildPlan = DistributeBuildPlan & {
 export type BuildPlan = CommonBuildPlan &
 	(
 		| { runtime: "bun"; artifact: "binary"; targets: BunTarget[] }
-		| { runtime: "deno"; artifact: "binary"; targets: DenoTarget[] }
 		| { runtime: "node"; artifact: "binary"; targets: NodeTarget[] }
 		| { runtime: BuildRuntime; artifact: "package" }
 	);
@@ -484,7 +467,6 @@ export type BuildPlan = CommonBuildPlan &
 /** What earlier releases built for each runtime without being asked; quoted in the migration error. */
 const IMPLICIT_ARTIFACTS = {
 	bun: "binary",
-	deno: "binary",
 	node: "package",
 } as const satisfies Record<BuildRuntime, ArtifactKind>;
 
@@ -516,7 +498,7 @@ function resolveArtifact(
 export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 	const userPackageJson = readUserPackageJson(cwd);
 	const config = readCrustConfig(userPackageJson);
-	const { runtime, source: runtimeSource } = resolveBuildRuntime(userPackageJson, config, cwd);
+	const { runtime, source: runtimeSource } = resolveBuildRuntime(userPackageJson, config);
 	const artifact = resolveArtifact(options.artifact, config, runtime);
 	const entries = resolveBinEntries(cwd, userPackageJson);
 	validatePackageIdentity(userPackageJson, "package.json");
@@ -532,29 +514,6 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 	if (artifact === "package" && config.targets !== undefined) {
 		throw new Error(
 			'package.json crust.targets is not supported for runtime packages (artifact package).\n  A runtime package is one portable JavaScript bundle; remove crust.targets or set "artifact": "binary".',
-		);
-	}
-	const denoTool = artifact === "binary" ? "deno compile" : "deno bundle";
-	if (runtime === "deno" && options.minify) {
-		throw new Error(
-			artifact === "binary"
-				? "--minify is not supported with the deno runtime.\n  deno compile has no minification step; drop the flag."
-				: "--minify is not supported with the deno runtime.\n  crust does not minify Deno runtime packages; drop the flag.",
-		);
-	}
-	if (runtime === "deno" && envFiles.length > 0) {
-		throw new Error(
-			artifact === "binary"
-				? "--env-file is not supported with the deno runtime.\n" +
-						"  deno compile embeds every variable from the file into the binary — secrets included —\n" +
-						"  with no PUBLIC_* filter. Load configuration at runtime instead (e.g. deno run --env-file)."
-				: "--env-file is not supported with the deno runtime.\n" +
-						"  deno bundle has no PUBLIC_* build-time constants. Load configuration at runtime instead (e.g. deno run --env-file).",
-		);
-	}
-	if (runtime === "deno" && bunPlugins.length > 0) {
-		throw new Error(
-			`package.json crust.bunPlugins is not supported with the deno runtime.\n  ${denoTool} has no Bun bundler; remove crust.bunPlugins or set crust.runtime to bun.`,
 		);
 	}
 	if (runtime === "node" && artifact === "binary" && bunPlugins.length > 0) {
@@ -577,7 +536,7 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 		outDir: join(stageDir, "artifacts"),
 		stageDir,
 		validate: options.validate ?? true,
-		minify: runtime === "deno" ? false : (options.minify ?? true),
+		minify: options.minify ?? true,
 	};
 
 	if (artifact === "package") return { ...common, runtime, artifact };
@@ -590,25 +549,17 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 			targets: resolveTargets(BUN_TARGETS, targetInputs),
 		};
 	}
-	if (runtime === "node") {
-		return {
-			...common,
-			runtime,
-			artifact,
-			targets: resolveTargets(NODE_TARGETS, targetInputs),
-		};
-	}
 	return {
 		...common,
 		runtime,
 		artifact,
-		targets: resolveTargets(DENO_TARGETS, targetInputs),
+		targets: resolveTargets(NODE_TARGETS, targetInputs),
 	};
 }
 
 type SelectedCompilers = {
-	/** Bun runner for Command Snapshots; absent only when a Deno build skips them. */
-	snapshotRunner: BuildRunner | undefined;
+	/** Bun runner for Command Snapshots. */
+	snapshotRunner: BuildRunner;
 	/** Stages the distribution with the compilers selected here. */
 	stage: (reports: Record<string, BuildReport> | undefined) => Promise<BuildArtifact[]>;
 };
@@ -619,34 +570,10 @@ type SelectedCompilers = {
  * the selected compiler's own version (`resolveBinaryCompiler`, or
  * `resolveNodeBinaryCompiler` with tsdown's requirements for node, whose
  * targets' embedded Node binaries are also provisioned here); runtime
- * packages are bundled by Bun (or, for Deno, by `deno bundle`) and embed no
- * runtime, so engines stay a consumer requirement there and are not checked
- * against the bundler.
+ * packages are bundled by Bun and embed no runtime, so engines stay a consumer
+ * requirement there and are not checked against the bundler.
  */
 async function selectCompilers(plan: BuildPlan, io: InvocationIO): Promise<SelectedCompilers> {
-	if (plan.artifact === "package" && plan.runtime === "deno") {
-		const bundler = await resolveDenoPackageBundler(plan.cwd);
-		io.stdout(
-			`${dim("Compiler:")} deno ${bundler.version} ${dim(`(${bundler.runner.command}, deno bundle)`)}`,
-		);
-		io.stderr(
-			"Deno runtime packages are experimental: they are bundled with deno bundle, which Deno marks experimental.",
-		);
-		return {
-			// Command Snapshots always run under Bun, as for Deno binaries.
-			snapshotRunner: plan.validate ? resolveBunBuildRunner() : undefined,
-			stage: (reports) =>
-				runDistributeBuild(
-					plan,
-					{
-						execute: (entry, outfile) =>
-							execDenoPackageBuild(entry, outfile, plan.cwd, bundler.runner),
-					},
-					io,
-					reports,
-				),
-		};
-	}
 	if (plan.artifact === "package") {
 		const runner = resolveBunBuildRunner();
 		const target = plan.runtime === "bun" ? "bun" : "node";
@@ -687,35 +614,17 @@ async function selectCompilers(plan: BuildPlan, io: InvocationIO): Promise<Selec
 			stage: (reports) => runDistributeBuild(plan, distribution, io, reports),
 		};
 	}
-	const compiler: BuildCompiler = await resolveBinaryCompiler(
-		plan.runtime,
-		plan.userPackageJson,
-		plan.cwd,
-	);
+	const compiler: BuildCompiler = await resolveBinaryCompiler(plan.userPackageJson, plan.cwd);
 	printCompiler(compiler);
-	if (plan.runtime === "bun") {
-		assertTargetsBuildableWithoutBun(plan.targets, compiler.runner);
-		const distribution: Distribution<BunTarget> = {
-			table: BUN_TARGETS,
-			targets: plan.targets,
-			embeddedRuntimeVersion: compiler.version,
-			execute: (entry, outfile, target) => execBuild(entry, outfile, target, plan, compiler.runner),
-		};
-		return {
-			snapshotRunner: compiler.runner,
-			stage: (reports) => runDistributeBuild(plan, distribution, io, reports),
-		};
-	}
-	const distribution: Distribution<DenoTarget> = {
-		table: DENO_TARGETS,
+	assertTargetsBuildableWithoutBun(plan.targets, compiler.runner);
+	const distribution: Distribution<BunTarget> = {
+		table: BUN_TARGETS,
 		targets: plan.targets,
 		embeddedRuntimeVersion: compiler.version,
-		execute: (entry, outfile, target) =>
-			execDenoBuild(entry, outfile, target, plan.cwd, compiler.runner),
+		execute: (entry, outfile, target) => execBuild(entry, outfile, target, plan, compiler.runner),
 	};
 	return {
-		// Command Snapshots always run under Bun, even for Deno binaries.
-		snapshotRunner: plan.validate ? resolveBunBuildRunner() : undefined,
+		snapshotRunner: compiler.runner,
 		stage: (reports) => runDistributeBuild(plan, distribution, io, reports),
 	};
 }
@@ -730,7 +639,7 @@ async function selectCompilers(plan: BuildPlan, io: InvocationIO): Promise<Selec
 async function prepareEntries(
 	plan: BuildPlan,
 	io: InvocationIO,
-	runner: BuildRunner | undefined,
+	runner: BuildRunner,
 ): Promise<Record<string, BuildReport>> {
 	const owners = new Map<string, ArtifactOwner>();
 	const reports: Record<string, BuildReport> = {};
@@ -774,10 +683,8 @@ async function prepareEntries(
  * come from `bin`; the runtime, artifact, Bun plugins, extra directories, and
  * external dependencies from package.json `crust`. Bundling and Command
  * Snapshots run in bun subprocesses (bun on PATH, or the running Bun
- * executable), so this works under Node as well when Bun is installed; Deno
- * binaries and Deno runtime packages (experimental, deno 2.5.0 or newer) need
- * deno on PATH, and Node binaries a node on PATH that Crust's tsdown can build
- * executables with.
+ * executable), so this works under Node as well when Bun is installed; Node
+ * binaries need a node on PATH that Crust's tsdown can build executables with.
  *
  * Throws on any failure. Planning and compiler-selection failures (bad
  * options or package.json, a missing or hung compiler, an engines mismatch) leave the
