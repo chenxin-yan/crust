@@ -46,9 +46,12 @@ export interface CommandNode {
 	flagSpellings: Map<string, FlagSpelling>;
 	/** Positional argument definitions */
 	args: ArgsDef;
-	/** Named subcommands keyed by name; read builder nodes through {@link subCommandsOf}. */
+	/**
+	 * Children of a materialized or prepared node, keyed by name: a lazy record whose
+	 * children build on first read. Empty on builder nodes; read those through {@link subCommandsOf}.
+	 */
 	subCommands: Record<string, CommandNode>;
-	/** Builder-only children added by `.add()`, newest first, on top of `subCommands`. */
+	/** Builder-stage children from `.add()` and `.command()`, newest first; cleared when the node is materialized or prepared. */
 	addedChildren?: AddedChild;
 	/** Contexts available to this command in provide order (construction order is pull-driven). */
 	contexts: CommandContext[];

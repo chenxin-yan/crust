@@ -249,7 +249,7 @@ Runs the terminal boundary: parses `process.argv.slice(2)` (or `options.argv`), 
 
 `.execute()` and `.run()` follow the same sequence. Routing or parse failures skip steps 4 through 10.
 
-1. Prepare the application: apply Extensions, flags, and sections, deferring pending commands until needed. Extension section callbacks that read the authored tree require full-tree preparation.
+1. Prepare the application: apply Extensions, flags, and sections, deferring pending commands until needed. An Extension with a `sections` callback, such as `skill()`, makes every invocation prepare the full tree.
 2. Route the command path, materializing pending commands as needed.
 3. Parse argv (`execute()`) or bind structured input (`run()`).
 4. Run Extension `preRun` hooks in registration order; `ctx.handled()` ends the invocation with a `handled` outcome.
