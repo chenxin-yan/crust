@@ -437,12 +437,16 @@ export type OmitName<D> = D extends unknown ? Omit<D, "name"> : never;
  * definitions: each definition's `name` literal becomes a key, its value
  * the definition without `name`.
  *
- * The `extends infer R extends FlagsDef` step defers evaluation so the
- * result satisfies `FlagsDef` in generic positions.
+ * The `extends infer R extends FlagsDef` step resolves the record eagerly, so it
+ * satisfies `FlagsDef` in generic positions and inferred builder types show the
+ * plain record: declaration emit in a consumer cannot name this alias, which
+ * lives in an internal chunk of the published types.
  */
 export type NamedFlagsRecord<Defs extends readonly NamedFlagDef[]> = {
 	[K in Defs[number]["name"]]: OmitName<Extract<Defs[number], { name: K }>>;
-};
+} extends infer R extends FlagsDef
+	? R
+	: never;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Merge utility types

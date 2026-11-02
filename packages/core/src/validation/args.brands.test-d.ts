@@ -1,5 +1,10 @@
 import type { Equal, Expect } from "../../tests/helpers.ts";
-import type { AppendArgsChecks, EmptyArgNameBrand, ValidateArgs } from "./args.brands.ts";
+import type {
+	AppendArgsChecks,
+	AppendArgsErrors,
+	EmptyArgNameBrand,
+	ValidateArgs,
+} from "./args.brands.ts";
 
 // ValidateArgs type inference
 {
@@ -111,6 +116,26 @@ import type { AppendArgsChecks, EmptyArgNameBrand, ValidateArgs } from "./args.b
 		readonly [{ name: "mode"; type: "string"; choices: readonly string[]; default: string }]
 	>;
 	type _invalid = Expect<Equal<Invalid[0]["FIX_DEFAULT_CHOICE"], "default must be one of choices">>;
+	// an error on one branch of a conditional tuple still surfaces through AppendArgsErrors
+	type Conditional = AppendArgsErrors<
+		[],
+		| readonly [{ name: "mode"; type: "string" }]
+		| readonly [{ name: "mode"; type: "string"; choices: ["a"]; default: "z" }]
+	>;
+	// Checks for the brand itself: `unknown` (no errors) and `never` (every call rejected) both fail.
+	type _conditional = Expect<
+		Equal<
+			[
+				Extract<
+					Conditional[number],
+					{ readonly FIX_DEFAULT_CHOICE: "default must be one of choices" }
+				>,
+			] extends [never]
+				? false
+				: true,
+			true
+		>
+	>;
 	type _valid = Expect<Equal<Extract<keyof Valid[0], "FIX_DEFAULT_CHOICE">, never>>;
 	type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_DEFAULT_CHOICE">, never>>;
 }
