@@ -33,9 +33,6 @@ jobs:
           - runtime: node
             label: Node
             smoke: mise exec node@24.0.0 -- node scripts/smoke-runtimes/smoke.mjs
-          - runtime: deno
-            label: Deno
-            smoke: mise exec deno@2.8.0 -- deno run --allow-env --allow-read --allow-write --allow-run --config scripts/smoke-runtimes/deno.json scripts/smoke-runtimes/smoke.mjs
           - runtime: bun
             label: Bun
             smoke: mise exec bun@1.4.0 -- bun scripts/smoke-runtimes/smoke.mjs
@@ -105,7 +102,6 @@ jobs:
           npm --version
           pnpm --version
           bun --version
-          deno --version
 
       - name: Test Windows process cleanup and command-shim arguments
         if: matrix.os == 'windows-latest'
@@ -130,19 +126,15 @@ jobs:
         if: matrix.os != 'ubuntu-latest'
         run: pnpm --dir packages/crust exec vp test run tests/package.integration.test.ts -t "Bun runtime package"
 
-      - name: Bundle, pack, serve, run, and install a Deno runtime package
-        if: matrix.os != 'ubuntu-latest'
-        run: pnpm --dir packages/crust exec vp test run tests/package.integration.test.ts -t "Deno runtime package"
-
-      - name: Build, install, and run a Node package, Bun binary, and Deno binary
+      - name: Build, install, and run a Node package and Bun binary
         if: matrix.os != 'ubuntu-latest'
         run: pnpm --dir packages/crust exec vp test run tests/host-artifacts.integration.test.ts
 
       - name: Test packaged build markers (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: pnpm --dir packages/core exec vp test run tests/build-marker-bundle.test.ts tests/deno-packaged-bundle.test.ts
+        run: pnpm --dir packages/core exec vp test run tests/build-marker-bundle.test.ts
 
-      # mise.toml's Node 26 enables the real SEA case alongside Bun/Deno source paths.
+      # mise.toml's Node 26 enables the real SEA case alongside Bun source paths.
       - name: Test artifact paths across runtimes (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: pnpm --dir packages/utils exec vp test run tests/artifacts-runtimes.test.ts
@@ -184,7 +176,6 @@ jobs:
           --filter '!@crustjs/crust' test:task
           --exclude '**/artifacts-runtimes.test.ts'
           --exclude '**/build-marker-bundle.test.ts'
-          --exclude '**/deno-packaged-bundle.test.ts'
 
       - name: Test build-tool source behavior
         run: pnpm --dir packages/crust run test src

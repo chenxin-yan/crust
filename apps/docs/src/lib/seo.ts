@@ -92,7 +92,7 @@ export function buildSiteJsonLd(): HeadScript[] {
 				url: siteConfig.siteUrl,
 				codeRepository: siteConfig.githubUrl,
 				programmingLanguage: "TypeScript",
-				runtimePlatform: ["Bun", "Node.js", "Deno"],
+				runtimePlatform: ["Bun", "Node.js"],
 				license: "https://opensource.org/licenses/MIT",
 			}),
 		},

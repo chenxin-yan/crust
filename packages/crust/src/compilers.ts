@@ -113,17 +113,6 @@ export function assertTargetsBuildableWithoutBun(
 	);
 }
 
-/** The external `deno` on PATH; Deno has no embedded fallback. */
-export function resolveDenoBuildRunner(): BuildRunner {
-	const denoPath = which("deno");
-	if (!denoPath) {
-		throw new Error(
-			"Deno is required for the deno runtime but was not found on PATH.\n  Install Deno from https://deno.com/ and try again.",
-		);
-	}
-	return { command: denoPath, env: { ...process.env } };
-}
-
 /** The external `node` on PATH, which runs tsdown's executable builder; there is no embedded fallback. */
 export function resolveNodeBuildRunner(): BuildRunner {
 	const nodePath = which("node");
@@ -139,7 +128,7 @@ export function resolveNodeBuildRunner(): BuildRunner {
 // Binary compiler versions
 // ────────────────────────────────────────────────────────────────────────────
 
-const RUNTIME_LABELS = { bun: "Bun", deno: "Deno", node: "Node" } as const;
+const RUNTIME_LABELS = { bun: "Bun", node: "Node" } as const;
 
 /** The compiler selected once for a build and the runtime version it embeds. */
 export type BuildCompiler = {
@@ -152,8 +141,8 @@ const COMPILER_VERSION_TIMEOUT_MS = 30_000;
 
 /**
  * Runtime version reported by the runner itself (`<command> --version`), never
- * the runtime hosting this process: `bun` prints `1.4.2`, `deno` prints
- * `deno 2.9.6 (…)`, `node` prints `v24.21.0`. Under the `BUN_BE_BUN` fallback
+ * the runtime hosting this process: `bun` prints `1.4.2`, `node` prints
+ * `v24.21.0`. Under the `BUN_BE_BUN` fallback
  * this is the embedded Bun, which is the compiler. `cwd` must be the directory
  * compilation runs in: a version-manager shim picks its runtime from it. A
  * probe still running after {@link COMPILER_VERSION_TIMEOUT_MS} is killed and
@@ -171,8 +160,7 @@ export async function readCompilerVersion(
 		timeout: COMPILER_VERSION_TIMEOUT_MS,
 	});
 	const stdout = result.stdout.trim();
-	const reported = runtime === "deno" ? /^deno (\S+)/.exec(stdout)?.[1] : stdout;
-	const version = result.exitCode === 0 && reported !== undefined ? validVersion(reported) : null;
+	const version = result.exitCode === 0 ? validVersion(stdout) : null;
 	if (version === null) {
 		const output = processOutput(result);
 		throw new Error(
@@ -219,52 +207,21 @@ export function assertCompilerSatisfiesEngines(
 }
 
 /**
- * Select the binary compiler once for a build: the Bun runner (external bun
- * first, then the embedded fallback) or the external deno. Returns its actual
- * version, read in the project directory `cwd`, after validating it against
- * `engines`. Pass `runner` and the same `cwd` on to the `exec*`/`buildEntrypoint`
+ * Select the Bun binary compiler once for a build: external bun first, then
+ * the embedded fallback. Returns its actual version, read in the project
+ * directory `cwd`, after validating it against `engines`. Pass `runner` and the same `cwd` on to the `exec*`/`buildEntrypoint`
  * helpers so every step uses this same compiler.
  */
 export async function resolveBinaryCompiler(
-	runtime: "bun" | "deno",
 	userPackageJson: JsonObject,
 	cwd: string,
 ): Promise<BuildCompiler> {
-	const runner = runtime === "bun" ? resolveBunBuildRunner() : resolveDenoBuildRunner();
-	const compiler = { runtime, runner, version: await readCompilerVersion(runtime, runner, cwd) };
+	const runner = resolveBunBuildRunner();
+	const compiler: BuildCompiler = {
+		runtime: "bun",
+		runner,
+		version: await readCompilerVersion("bun", runner, cwd),
+	};
 	assertCompilerSatisfiesEngines(compiler, userPackageJson);
 	return compiler;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Deno runtime packages (native `deno bundle`)
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Oldest `deno` accepted to bundle a Deno runtime package. Deno 2.4 resolves a
- * package.json project's npm dependencies from the registry instead of its
- * installed node_modules, so it can bundle a different Crust than the project
- * installed. Tested on Linux x64 with Deno 2.5.0 through 2.9.6.
- */
-export const DENO_PACKAGE_MIN_VERSION = "2.5.0";
-
-/**
- * Select the external deno that bundles a Deno runtime package, reading its
- * version in the project directory `cwd`. Call it before staging is replaced.
- * A runtime package embeds no Deno, so `engines.deno` stays a consumer
- * requirement and is not checked against this bundler.
- */
-export async function resolveDenoPackageBundler(
-	cwd: string,
-	runner: BuildRunner = resolveDenoBuildRunner(),
-): Promise<BuildCompiler> {
-	const version = await readCompilerVersion("deno", runner, cwd);
-	if (!satisfies(version, `>=${DENO_PACKAGE_MIN_VERSION}`, { includePrerelease: true })) {
-		throw new Error(
-			`Deno ${version} (${runner.command}) cannot bundle a Deno runtime package; deno ${DENO_PACKAGE_MIN_VERSION} or newer is required.\n` +
-				"  Older deno bundle resolves package.json dependencies from the npm registry instead of the installed node_modules.\n" +
-				"  crust does not install or upgrade Deno; put a newer deno first on PATH (e.g. with your version manager).",
-		);
-	}
-	return { runtime: "deno", runner, version };
 }

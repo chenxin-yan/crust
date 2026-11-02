@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 
-export const BUILD_RUNTIMES = ["bun", "deno", "node"] as const;
+export const BUILD_RUNTIMES = ["bun", "node"] as const;
 export type BuildRuntime = (typeof BUILD_RUNTIMES)[number];
 
 export type TargetInfo = {
@@ -13,7 +13,7 @@ export type TargetInfo = {
 };
 
 export type TargetTable<T extends string> = {
-	runtime: "Bun" | "Deno" | "Node";
+	runtime: "Bun" | "Node";
 	targets: readonly T[];
 	info: Record<T, TargetInfo>;
 };
@@ -89,62 +89,6 @@ export const BUN_TARGETS = {
 		},
 	},
 } as const satisfies TargetTable<BunTarget>;
-
-const DENO_TARGET_NAMES = [
-	"x86_64-unknown-linux-gnu",
-	"aarch64-unknown-linux-gnu",
-	"x86_64-apple-darwin",
-	"aarch64-apple-darwin",
-	"x86_64-pc-windows-msvc",
-	"aarch64-pc-windows-msvc",
-] as const;
-
-export type DenoTarget = (typeof DENO_TARGET_NAMES)[number];
-
-export const DENO_TARGETS = {
-	runtime: "Deno",
-	targets: DENO_TARGET_NAMES,
-	info: {
-		"x86_64-unknown-linux-gnu": {
-			alias: "linux-x64",
-			platformKey: "linux-x64",
-			os: "linux",
-			cpu: "x64",
-			libc: "glibc",
-		},
-		"aarch64-unknown-linux-gnu": {
-			alias: "linux-arm64",
-			platformKey: "linux-arm64",
-			os: "linux",
-			cpu: "arm64",
-			libc: "glibc",
-		},
-		"x86_64-apple-darwin": {
-			alias: "darwin-x64",
-			platformKey: "darwin-x64",
-			os: "darwin",
-			cpu: "x64",
-		},
-		"aarch64-apple-darwin": {
-			alias: "darwin-arm64",
-			platformKey: "darwin-arm64",
-			os: "darwin",
-			cpu: "arm64",
-		},
-		"x86_64-pc-windows-msvc": {
-			alias: "windows-x64",
-			platformKey: "win32-x64",
-			os: "win32",
-			cpu: "x64",
-		},
-		"aarch64-pc-windows-msvc": {
-			alias: "windows-arm64",
-			platformKey: "win32-arm64",
-			os: "win32",
-			cpu: "arm64",
-		},
-	},
-} as const satisfies TargetTable<DenoTarget>;
 
 // Node's own release platform names (`node-v26.10.0-win-x64`), which tsdown's
 // executable builder accepts as `{ platform, arch }`. It has no libc variant:

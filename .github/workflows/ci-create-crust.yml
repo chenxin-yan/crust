@@ -38,8 +38,7 @@ jobs:
           - macos-latest
           - windows-latest
     runs-on: ${{ matrix.os }}
-    # Six runtime/artifact cases run sequentially; binary cases compile and
-    # `deno compile` downloads a denort runtime on a cold cache.
+    # Four runtime/artifact cases run sequentially; binary cases compile.
     timeout-minutes: 25
     steps:
       - name: Checkout
@@ -63,7 +62,6 @@ jobs:
           npm --version
           pnpm --version
           bun --version
-          deno --version
 
       # The smoke host below is Node 24.0.0; Node binaries compile with mise.toml's Node 26.
       - name: Select the toolchain Node for the Node binary scaffold
@@ -72,7 +70,7 @@ jobs:
 
       # Keep compatibility runtimes separate from the shared build toolchain.
       - name: Run create-crust smoke test
-        run: mise exec node@24.0.0 deno@2.8.0 -- pnpm --dir packages/create-crust run test:smoke
+        run: mise exec node@24.0.0 -- pnpm --dir packages/create-crust run test:smoke
         env:
           CREATE_CRUST_SMOKE: "1"
 

@@ -12,32 +12,8 @@ import { findNearestPackageRoot } from "./source.ts";
  */
 export const BUILD_OUT_DIR_ENV = "CRUST_INTERNAL_BUILD_OUT_DIR";
 
-/**
- * `Symbol.for` registry key of the packaged-build marker, for bundlers without a
- * `define` option (native `deno bundle`). `crust build` prepends
- * `globalThis[Symbol.for(PACKAGED_BUILD_KEY)] = true` to the command bundle,
- * before the inlined application graph, so every bundled copy sees it.
- * The registry key is shared across module copies; the value is never read from
- * the environment, so detection needs no Deno env permission.
- */
-export const PACKAGED_BUILD_KEY = "crustjs.packagedBuild";
-
-const packagedBuildMarker: unique symbol = Symbol.for(PACKAGED_BUILD_KEY);
-type PackagedBuildGlobals = { [packagedBuildMarker]?: unknown };
-
-/**
- * True inside a finished bundle marked through {@link PACKAGED_BUILD_KEY}. Such a
- * bundle resolves artifacts from its installed layout and never runs the snapshot
- * protocol. Bun/Node bundles use the `process.env.CRUST_INTERNAL_BUILD` define instead.
- */
-export function isPackagedBuild(): boolean {
-	// SAFETY: the marker is an optional global; any value but `true` means unmarked.
-	return (globalThis as PackagedBuildGlobals)[packagedBuildMarker] === true;
-}
-
 type StandaloneGlobals = {
 	Bun?: { main?: string };
-	Deno?: { build?: { standalone?: boolean } };
 };
 
 type SeaProcess = {
@@ -45,42 +21,39 @@ type SeaProcess = {
 };
 
 /**
- * True inside a `bun build --compile` or `deno compile` executable, or a Node
- * single executable application.
+ * True inside a `bun build --compile` executable or a Node single executable
+ * application.
  */
 function isCompiledExecutable(): boolean {
-	// SAFETY: both globals are optional and every access below is optional-chained.
-	const { Bun, Deno } = globalThis as StandaloneGlobals;
+	// SAFETY: the global is optional and every access below is optional-chained.
+	const { Bun } = globalThis as StandaloneGlobals;
 	// Bun serves the embedded entry from a virtual filesystem (`/$bunfs/` on POSIX,
-	// `B:/~BUN/` on Windows); Deno flags the standalone build directly. Neither
-	// leaves a real source path to walk from.
+	// `B:/~BUN/` on Windows), which leaves no real source path to walk from.
 	const bunMain = Bun?.main ?? "";
 	return (
 		bunMain.startsWith("/$bunfs/") ||
 		/^[A-Za-z]:[\\/]~BUN[\\/]/.test(bunMain) ||
-		Deno?.build?.standalone === true ||
-		// A static `node:sea` import would fail to load on Bun and Deno. A SEA's
+		// A static `node:sea` import would fail to load on Bun. A SEA's
 		// `import.meta.url` is the executable (or undefined after GC), never the
 		// bundle layout below.
-		// SAFETY: Node added getBuiltinModule in 22.3 and Bun/Deno return undefined
+		// SAFETY: Node added getBuiltinModule in 22.3 and Bun returns undefined
 		// for `node:sea`; both are optional-chained.
 		(process as SeaProcess).getBuiltinModule?.("node:sea")?.isSea() === true
 	);
 }
 
 /**
- * True inside a Bun/Node bundle produced by `crust build` or a packaged Deno bundle.
- * `crust build` defines `process.env.CRUST_INTERNAL_BUILD` as a literal in every Bun/Node
- * bundle so a staged bundle can be told apart from source; it is kept as a literal property
- * access so the bundler can replace it. The packaged marker is checked first: a Deno package
- * must not touch `process.env` without an env permission.
+ * True inside a Bun/Node bundle produced by `crust build`. `crust build` defines
+ * `process.env.CRUST_INTERNAL_BUILD` as a literal in every Bun/Node bundle so a staged
+ * bundle can be told apart from source; it is kept as a literal property access so the
+ * bundler can replace it.
  */
 function isCrustBundle(): boolean {
-	return isPackagedBuild() || process.env.CRUST_INTERNAL_BUILD === "1";
+	return process.env.CRUST_INTERNAL_BUILD === "1";
 }
 
 /**
- * True when the CLI runs from source (`bun run`, `node`, `deno run`), including the entry
+ * True when the CLI runs from source (`bun run`, `node`), including the entry
  * `crust build` runs to prepare its snapshot: neither a compiled executable nor a Crust-built
  * bundle. Artifacts then come from a checkout's last build, not from an installed CLI.
  */
@@ -93,14 +66,14 @@ export function isSourceRun(): boolean {
  * this CLI. `name` is a top-level directory name such as `"skills"`.
  *
  * The artifact path is computed from how the CLI is running — never probed:
- * - Compiled executable (Bun, Deno, or Node SEA): `<dir of the executable>/<name>`, which
+ * - Compiled executable (Bun or Node SEA): `<dir of the executable>/<name>`, which
  *   is a platform package's `bin/` or wherever the binary was placed.
- * - Crust-built Bun/Node bundle or packaged Deno bundle: `<name>` next to the
- *   bundle's `bin/` directory, i.e. `.crust/root/<name>` in place and
- *   `<installed root>/<name>` after install. Build-only environment is ignored.
+ * - Crust-built Bun/Node bundle: `<name>` next to the bundle's `bin/` directory,
+ *   i.e. `.crust/root/<name>` in place and `<installed root>/<name>` after install.
+ *   Build-only environment is ignored.
  * - Snapshot preparation inside `crust build`: `<build output dir>/<name>`, the
  *   artifacts earlier Extension build hooks wrote in this same build.
- * - Source (`bun run`, `node`, `deno run`): `.crust/root/<name>` under the
+ * - Source (`bun run`, `node`): `.crust/root/<name>` under the
  *   nearest package root of the real `process.argv[1]` entrypoint (following source
  *   links) — the output of the last `crust build`.
  *

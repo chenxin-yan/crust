@@ -1,7 +1,7 @@
 {
 	"name": "create-crust",
 	"version": "0.5.6",
-	"description": "Scaffold a new Crust CLI project for Bun, Node.js, or Deno",
+	"description": "Scaffold a new Crust CLI project for Bun or Node.js",
 	"type": "module",
 	"sideEffects": false,
 	"license": "MIT",
@@ -60,7 +60,6 @@
 	},
 	"engines": {
 		"bun": ">=1.4.0",
-		"node": ">=24",
-		"deno": ">=2.8"
+		"node": ">=24"
 	}
 }

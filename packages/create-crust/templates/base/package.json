@@ -1,9 +1,7 @@
 <%
-/* `dev` runs the source and `start` runs the built bin with the selected runtime.
-   Deno type-checks natively, so it needs no TypeScript packages. */
-const dev = { bun: "bun run src/cli.ts", node: "node src/cli.ts", deno: "deno run -A src/cli.ts" }[it.runtime];
-const startRunner = { bun: "bun", node: "node", deno: "deno run -A" }[it.runtime];
-const checkTypes = it.runtime === "deno" ? "deno check src/cli.ts" : "tsc --noEmit";
+/* `dev` runs the source and `start` runs the built bin with the selected runtime. */
+const dev = { bun: "bun run src/cli.ts", node: "node src/cli.ts" }[it.runtime];
+const startRunner = { bun: "bun", node: "node" }[it.runtime];
 -%>
 {
 	"$schema": "./node_modules/@crustjs/crust/schema/package.json",
@@ -24,7 +22,7 @@ const checkTypes = it.runtime === "deno" ? "deno check src/cli.ts" : "tsc --noEm
 		"build": "crust build",
 		"release": "crust publish",
 		"start": <%~ JSON.stringify(`${startRunner} .crust/root/bin/${it.name}.js`) %>,
-		"check:types": <%~ JSON.stringify(checkTypes) %>
+		"check:types": "tsc --noEmit"
 	},
 <% if (it.runtime === "node") { -%>
 	"engines": {
@@ -44,8 +42,6 @@ const checkTypes = it.runtime === "deno" ? "deno check src/cli.ts" : "tsc --noEm
 		"@crustjs/crust": <%~ JSON.stringify(`^${it.crustVersion}`) %>,
 		"@types/node": "^24",
 		"typescript": "^7.0.2"
-<% } else { -%>
-		"@crustjs/crust": <%~ JSON.stringify(`^${it.crustVersion}`) %>
 <% } -%>
 	}
 }

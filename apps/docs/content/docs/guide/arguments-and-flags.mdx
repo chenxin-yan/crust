@@ -51,8 +51,8 @@ Use a final variadic argument when the command accepts any number of values in t
 </include>
 
 ```sh
-$ run deno
-Error: Invalid value "deno" for <runtime>. Expected one of: bun, node
+$ run python
+Error: Invalid value "python" for <runtime>. Expected one of: bun, node
 ```
 
 Use `choices` when the accepted strings are known in advance. The Command Action gets their string union, plus `undefined` here because the argument is neither required nor defaulted, and an invalid value fails before the action runs.
@@ -167,8 +167,8 @@ targets=undefined runtime=node tag=undefined
 An invalid value fails before the action runs:
 
 ```sh
-$ serve --runtime deno
-Error: Invalid value "deno" for --runtime. Expected one of: bun, node
+$ serve --runtime python
+Error: Invalid value "python" for --runtime. Expected one of: bun, node
 $ echo $?
 1
 ```

@@ -1,5 +1,5 @@
 // Host artifact acceptance: public build -> npm pack -> npm install -> execute
-// for the Node package, Bun binary, and Deno binary modes, on this host only
+// for the Node package and Bun binary modes, on this host only
 // (no cross-target builds), so it runs natively on Linux, macOS, and Windows.
 // Each app is a real Crust command with a bundled application dependency and a
 // crust.include asset, built from published-style installed dependencies, and
@@ -19,24 +19,20 @@ import { buildCommand } from "../src/commands/build.ts";
 import type { ArtifactKind, DistributionManifest } from "../src/distribute.ts";
 import type { BuildRuntime } from "../src/targets.ts";
 import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
-import { hostDenoTarget, hostTarget } from "./helpers.ts";
+import { hostTarget } from "./helpers.ts";
 
 // Shared by every mode: dispatch (required arg + flag), a bare-specifier
 // dependency that exists only in the source project, and a shipped asset.
-// getBuiltinModule instead of node: imports, which \`deno compile\` only
-// type-checks with @types/node installed; global process keeps Bun's
-// PUBLIC_* inlining (it rewrites only the global \`process.env.X\`).
-const ENTRY = `import { Crust, resolveArtifactDir } from "@crustjs/core";
+// Global process keeps Bun's PUBLIC_* inlining (it rewrites only the global
+// \`process.env.X\`).
+const ENTRY = `import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { Crust, resolveArtifactDir } from "@crustjs/core";
 import { punctuation } from "fixture-punctuation";
 
-const { readFileSync } = process.getBuiltinModule("node:fs");
-const { join } = process.getBuiltinModule("node:path");
-const deno = (globalThis as { Deno?: { version: { deno: string } } }).Deno;
-const runtime = deno
-	? "deno " + deno.version.deno
-	: process.versions.bun
-		? "bun " + process.versions.bun
-		: "node " + process.versions.node;
+const runtime = process.versions.bun
+	? "bun " + process.versions.bun
+	: "node " + process.versions.node;
 await new Crust("greet", { version: "0.1.0" })
 	.args({ name: "name", type: "string", required: true })
 	.flags({ name: "shout", type: "boolean" })
@@ -127,7 +123,7 @@ async function buildProject(
 			Object.entries(tarballs).map(([name, path]) => [name, fileSpec(project, path)]),
 		),
 	);
-	// As if installed from the registry: Deno checks these ranges against node_modules.
+	// As if installed from the registry.
 	writeFileSync(
 		join(project, "package.json"),
 		JSON.stringify({
@@ -299,74 +295,55 @@ describe("host artifact acceptance", () => {
 
 	// Direct native binary and root launcher: `.bin` may select the platform
 	// binary itself (both packages are direct dependencies), bypassing the resolver.
-	for (const mode of [
-		{
-			name: "Bun binary",
-			dir: "bun-binary",
+	it("Bun binary: installed native binary and root launcher run with the embedded runtime", async () => {
+		const node = requireTool("node");
+		const runtimeVersion = await toolVersion("bun", /^(\S+)/);
+		const target = hostTarget();
+		if (!target) throw new Error(`Unsupported bun host: ${process.platform}-${process.arch}`);
+		const { project, stdout, manifest } = await buildProject(
+			"bun-binary",
+			{ runtime: "bun", artifact: "binary" },
+			["--target", "host"],
+		);
+		expect(stdout).toContain("Runtime: bun");
+		expect(stdout).toContain("Artifact: binary");
+		const [platform] = manifest.packages;
+		expect(manifest).toMatchObject({
 			runtime: "bun",
-			target: hostTarget,
-			version: () => toolVersion("bun", /^(\S+)/),
-		},
-		{
-			name: "Deno binary",
-			dir: "deno-binary",
-			runtime: "deno",
-			target: hostDenoTarget,
-			version: () => toolVersion("deno", /^deno (\S+)/),
-		},
-	] as const) {
-		it(`${mode.name}: installed native binary and root launcher run with the embedded runtime`, async () => {
-			const node = requireTool("node");
-			const runtimeVersion = await mode.version();
-			const target = mode.target();
-			if (!target)
-				throw new Error(`Unsupported ${mode.runtime} host: ${process.platform}-${process.arch}`);
-			const { project, stdout, manifest } = await buildProject(
-				mode.dir,
-				{ runtime: mode.runtime, artifact: "binary" },
-				["--target", "host"],
-			);
-			expect(stdout).toContain(`Runtime: ${mode.runtime}`);
-			expect(stdout).toContain("Artifact: binary");
-			const [platform] = manifest.packages;
-			expect(manifest).toMatchObject({
-				runtime: mode.runtime,
-				artifact: "binary",
-				embeddedRuntimeVersion: runtimeVersion,
-				publishOrder: [platform!.dir, "root"],
-			});
-			expect(manifest.packages).toHaveLength(1);
-			const expected = {
-				greeting: "HELLO WORLD!",
-				runtime: `${mode.runtime} ${runtimeVersion}`,
-				asset: "hello from assets",
-				publicMessage: null,
-				secretMessage: null,
-			};
-			// In place, as a project's `start` script runs it: the launcher finds the sibling stage.
-			expect(await greet(node, [join(project, ".crust", "root", "bin", "greet.js")])).toEqual(
-				expected,
-			);
+			artifact: "binary",
+			embeddedRuntimeVersion: runtimeVersion,
+			publishOrder: [platform!.dir, "root"],
+		});
+		expect(manifest.packages).toHaveLength(1);
+		const expected = {
+			greeting: "HELLO WORLD!",
+			runtime: `bun ${runtimeVersion}`,
+			asset: "hello from assets",
+			publicMessage: null,
+			secretMessage: null,
+		};
+		// In place, as a project's `start` script runs it: the launcher finds the sibling stage.
+		expect(await greet(node, [join(project, ".crust", "root", "bin", "greet.js")])).toEqual(
+			expected,
+		);
 
-			const consumer = await installStaged(mode.dir, project, manifest);
-			const platformDir = join(consumer, "node_modules", platform!.name);
-			const platformBin = readJson<{ bin: Record<string, string> }>(
-				join(platformDir, "package.json"),
-			).bin.greet!;
-			expect(platformBin).toBe(`bin/greet-${target}${process.platform === "win32" ? ".exe" : ""}`);
-			const binary = join(platformDir, platformBin);
-			const launcher = join(
-				consumer,
-				"node_modules",
-				"@crust-fixture",
-				mode.dir,
-				"bin",
-				"greet.js",
-			);
-			expect(await greet(binary, [])).toEqual(expected);
-			expect(await greet(node, [launcher])).toEqual(expected);
-			await expectUnknownFlag(binary, []);
-			await expectUnknownFlag(node, [launcher]);
-		}, 240_000);
-	}
+		const consumer = await installStaged("bun-binary", project, manifest);
+		const platformDir = join(consumer, "node_modules", platform!.name);
+		const platformBin = readJson<{ bin: Record<string, string> }>(join(platformDir, "package.json"))
+			.bin.greet!;
+		expect(platformBin).toBe(`bin/greet-${target}${process.platform === "win32" ? ".exe" : ""}`);
+		const binary = join(platformDir, platformBin);
+		const launcher = join(
+			consumer,
+			"node_modules",
+			"@crust-fixture",
+			"bun-binary",
+			"bin",
+			"greet.js",
+		);
+		expect(await greet(binary, [])).toEqual(expected);
+		expect(await greet(node, [launcher])).toEqual(expected);
+		await expectUnknownFlag(binary, []);
+		await expectUnknownFlag(node, [launcher]);
+	}, 240_000);
 });

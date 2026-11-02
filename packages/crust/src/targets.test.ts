@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import {
-	BUN_TARGETS,
-	DENO_TARGETS,
-	NODE_TARGETS,
-	resolveTargets,
-	type TargetTable,
-} from "./targets.ts";
+import { BUN_TARGETS, NODE_TARGETS, resolveTargets, type TargetTable } from "./targets.ts";
 
 describe("resolveTargets", () => {
 	it("rejects every short alias with canonical-name guidance and a did-you-mean hint", () => {
@@ -31,12 +25,6 @@ describe("resolveTargets", () => {
 		expect(() => resolveTargets(empty, ["host"])).toThrow(
 			/No Bun target matches this machine \(\w+-\w+(-musl)?\)/,
 		);
-	});
-
-	it("accepts exactly the targets supported by deno compile", () => {
-		for (const target of DENO_TARGETS.targets)
-			expect(resolveTargets(DENO_TARGETS, [target])[0]).toBe(target);
-		expect(resolveTargets(DENO_TARGETS, undefined)).toEqual([...DENO_TARGETS.targets]);
 	});
 
 	it("rejects musl and points package aliases at the canonical Node target", () => {

@@ -15,16 +15,15 @@
 			"additionalProperties": false,
 			"properties": {
 				"runtime": {
-					"description": "Runtime the CLI is built for. Without it: deno.json/deno.jsonc selects deno; @types/node without @types/bun selects node; otherwise bun.",
+					"description": "Runtime the CLI is built for. Without it: @types/node without @types/bun selects node; otherwise bun.",
 					"type": "string",
 					"enum": [
 						"bun",
-						"deno",
 						"node"
 					]
 				},
 				"artifact": {
-					"description": "What `crust build` distributes; the --artifact flag overrides it. `package`: a root-only runtime package whose commands are JavaScript bundles run by the consumer's installed runtime (bun, node, or experimental deno, bundled with deno bundle; Deno consumers choose permissions with deno run / deno install). `binary`: standalone executables in per-platform npm packages behind a Node launcher (bun, deno, or node; node binaries are built by tsdown with a node on PATH that meets its executable requirements, Node 26 or later for the bundled tsdown 0.23).",
+					"description": "What `crust build` distributes; the --artifact flag overrides it. `package`: a root-only runtime package whose commands are JavaScript bundles run by the consumer's installed runtime (bun or node). `binary`: standalone executables in per-platform npm packages behind a Node launcher (bun or node; node binaries are built by tsdown with a node on PATH that meets its executable requirements, Node 26 or later for the bundled tsdown 0.23).",
 					"type": "string",
 					"enum": [
 						"package",
@@ -32,7 +31,7 @@
 					]
 				},
 				"targets": {
-					"description": "Canonical compiler targets `crust build` stages for binaries when no --target flag is passed, or `host` for the building machine (e.g. bun-linux-x64, x86_64-unknown-linux-gnu, or linux-x64 for node); without it every target of the compiler is staged. Rejected for runtime packages.",
+					"description": "Canonical compiler targets `crust build` stages for binaries when no --target flag is passed, or `host` for the building machine (e.g. bun-linux-x64, or linux-x64 for node); without it every target of the compiler is staged. Rejected for runtime packages.",
 					"type": "array",
 					"minItems": 1,
 					"items": {
@@ -40,7 +39,7 @@
 					}
 				},
 				"bunPlugins": {
-					"description": "Bun bundler plugin modules applied to Bun binaries and runtime packages (bun or node), in order: bare names resolve from node_modules, paths from the project root; each must default-export the plugin. Rejected for Deno and for node binaries.",
+					"description": "Bun bundler plugin modules applied to Bun binaries and runtime packages (bun or node), in order: bare names resolve from node_modules, paths from the project root; each must default-export the plugin. Rejected for node binaries.",
 					"type": "array",
 					"items": {
 						"type": "string"
@@ -54,7 +53,7 @@
 					}
 				},
 				"external": {
-					"description": "Packages left out of a node or bun runtime package's bundle and shipped as `dependencies` of the staged root package with their package.json `dependencies` range, e.g. native addons, packages the CLI reads files from or runs, or very large dependencies. Each must be a `dependencies` key with a publishable range (no workspace:, catalog:, file:, link:, portal:, local paths, or local tarballs); @crustjs/* packages and npm aliases of them are rejected. Rejected for binaries and for Deno.",
+					"description": "Packages left out of a node or bun runtime package's bundle and shipped as `dependencies` of the staged root package with their package.json `dependencies` range, e.g. native addons, packages the CLI reads files from or runs, or very large dependencies. Each must be a `dependencies` key with a publishable range (no workspace:, catalog:, file:, link:, portal:, local paths, or local tarballs); @crustjs/* packages and npm aliases of them are rejected. Rejected for binaries.",
 					"type": "array",
 					"uniqueItems": true,
 					"items": {

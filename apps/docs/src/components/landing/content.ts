@@ -19,7 +19,6 @@ export type Runtime = { key: string; label: string; run: (file: string) => strin
 export const RUNTIMES: readonly Runtime[] = [
 	{ key: "bun", label: "Bun", run: (file) => `bun run ${file}` },
 	{ key: "node", label: "Node.js", run: (file) => `node ${file}` },
-	{ key: "deno", label: "Deno", run: (file) => `deno run -A ${file}` },
 ];
 
 export type Feature = {
