@@ -88,7 +88,8 @@ if (process.platform === "win32") {
 \t// Node ignores SIGPIPE and SIGXFSZ, and ignored signals survive execve; handled ones reset.
 \tprocess.on("SIGPIPE", () => {});
 \tprocess.on("SIGXFSZ", () => {});
-\tprocess.execve(binPath, [binPath, ...process.argv.slice(2)]);
+\t// Early execve versions (e.g. Node 24.0.0) default to an empty environment.
+\tprocess.execve(binPath, [binPath, ...process.argv.slice(2)], process.env);
 }
 
 // Windows has no execve. Its console delivers Ctrl-C to the binary directly, and

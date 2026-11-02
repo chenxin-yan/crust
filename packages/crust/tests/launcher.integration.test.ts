@@ -242,6 +242,31 @@ open(os.environ["LAUNCHER_TEST_LOG"], "a").write("nonblocking " + ",".join("1" i
 		expect(readLog(logPath)).toEqual(["nonblocking 0,0,0"]);
 	});
 
+	it("preserves the environment when execve defaults to an empty environment", () => {
+		tmpDir = mkdtempSync(join(tmpdir(), "crust-launcher-test-"));
+		const launcher = stageLauncher(
+			tmpDir,
+			`#!${process.execPath}\nconsole.log(JSON.stringify(process.env));`,
+		);
+		const env = {
+			PATH: process.env.PATH!,
+			LAUNCHER_TEST_VALUE: "value with spaces=kept",
+			LAUNCHER_TEST_EMPTY: "",
+		};
+		// Reproduce early execve defaults (e.g. Node 24.0.0) on newer test hosts too.
+		const result = spawnSync(
+			process.execPath,
+			[
+				"--import",
+				"data:text/javascript,const execve = process.execve; process.execve = (file, args, env = {}) => execve(file, args, env);",
+				launcher,
+			],
+			{ env, encoding: "utf8", timeout: TIMEOUT },
+		);
+		expect(result.status).toBe(0);
+		expect(JSON.parse(result.stdout)).toEqual(env);
+	});
+
 	it("tells users of a Node.js without execve which version it needs", () => {
 		tmpDir = mkdtempSync(join(tmpdir(), "crust-launcher-test-"));
 		const result = spawnSync(
