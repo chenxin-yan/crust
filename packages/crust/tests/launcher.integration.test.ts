@@ -268,16 +268,19 @@ open(os.environ["LAUNCHER_TEST_LOG"], "a").write("nonblocking " + ",".join("1" i
 		expect(JSON.parse(result.stdout)).toMatchObject(env);
 	});
 
-	it("tells users of a Node.js without execve which version it needs", () => {
-		tmpDir = mkdtempSync(join(tmpdir(), "crust-launcher-test-"));
-		const result = spawnSync(
-			process.execPath,
-			["--import", "data:text/javascript,delete process.execve", stageLauncher(tmpDir)],
-			{ encoding: "utf8", timeout: TIMEOUT },
-		);
-		expect(result.status).toBe(1);
-		expect(result.stderr).toContain("[app] Requires Node.js 22.15 or later");
-	});
+	it.each(["getBuiltinModule", "execve"])(
+		"tells users of a Node.js without %s which version it needs",
+		(api) => {
+			tmpDir = mkdtempSync(join(tmpdir(), "crust-launcher-test-"));
+			const result = spawnSync(
+				process.execPath,
+				["--import", `data:text/javascript,delete process.${api}`, stageLauncher(tmpDir)],
+				{ encoding: "utf8", timeout: TIMEOUT },
+			);
+			expect(result.status).toBe(1);
+			expect(result.stderr).toContain("[app] Requires Node.js ^22.15.0 || >=23.11.0");
+		},
+	);
 
 	it(
 		"re-raises the signal that terminated the child",

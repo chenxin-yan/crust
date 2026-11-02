@@ -181,8 +181,8 @@ function platformBinMap(
 	);
 }
 
-/** The launcher becomes the binary with `process.execve`, added in Node.js 22.15. */
-const LAUNCHER_NODE_RANGE = ">=22.15.0";
+/** The launcher becomes the binary with `process.execve`, added in Node.js 22.15 and 23.11. */
+const LAUNCHER_NODE_RANGE = "^22.15.0 || >=23.11.0";
 
 function buildDistributionRootPackageJson(
 	metadata: DistributionMetadata,

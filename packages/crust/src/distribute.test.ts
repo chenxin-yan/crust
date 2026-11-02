@@ -13,6 +13,7 @@ import { join } from "node:path";
 
 import { type BuildReport, defineExtensionId } from "@crustjs/core";
 import type { JsonValue } from "@crustjs/utils/json";
+import { satisfies } from "semver";
 import { afterAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import {
@@ -915,12 +916,12 @@ describe("runDistributeBuild", () => {
 			readJson<Record<string, JsonValue>>(join(stageDir, dir, "package.json"));
 
 		// engines.node constrained the builder Node that every binary embeds; users need only the
-		// launcher's Node, which execve requires to be 22.15 or later.
+		// launcher's Node, which needs execve (22.15+ on Node 22, or 23.11+).
 		const engines = { node: ">=20", bun: ">=1.4.0" };
 		const source = { engines, description: "CLI", license: "MIT" };
 		await stage(source);
 		expect(staged("root")).toMatchObject({
-			engines: { bun: ">=1.4.0", node: ">=22.15.0" },
+			engines: { bun: ">=1.4.0", node: "^22.15.0 || >=23.11.0" },
 			description: "CLI",
 			license: "MIT",
 		});
@@ -933,8 +934,19 @@ describe("runDistributeBuild", () => {
 			expect(staged(dir).engines).not.toHaveProperty("node");
 		}
 		expect(engines).toEqual({ node: ">=20", bun: ">=1.4.0" });
+		const { node: launcherRange } = staged("root").engines as { node: string };
+		for (const [version, supported] of [
+			["22.14.0", false],
+			["22.15.0", true],
+			["23.0.0", false],
+			["23.10.0", false],
+			["23.11.0", true],
+			["24.0.0", true],
+		] as const) {
+			expect(satisfies(version, launcherRange), version).toBe(supported);
+		}
 		await stage({ engines: { node: ">=20" } });
-		expect(staged("root").engines).toEqual({ node: ">=22.15.0" });
+		expect(staged("root").engines).toEqual({ node: "^22.15.0 || >=23.11.0" });
 		expect(staged("linux-x64")).not.toHaveProperty("engines");
 
 		// A library's consumers import the staged exports on their own Node, so the root keeps its range.
@@ -951,7 +963,7 @@ describe("runDistributeBuild", () => {
 			bunDistribution(["bun-linux-x64"]),
 			io,
 		);
-		expect(staged("root").engines).toEqual({ ...engines, node: ">=22.15.0" });
+		expect(staged("root").engines).toEqual({ ...engines, node: "^22.15.0 || >=23.11.0" });
 		expect(staged("linux-x64").engines).toEqual(engines);
 	});
 });
