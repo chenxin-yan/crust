@@ -15,7 +15,7 @@ const name = await input({
 		if (!value.trim()) throw new Error("Name is required");
 	},
 });
-const runtime = await select({ message: "Runtime?", choices: ["bun", "node", "deno"] });
+const runtime = await select({ message: "Runtime?", choices: ["bun", "node"] });
 const features = await multiselect({
 	message: "Features?",
 	choices: ["lint", "test", "release"],

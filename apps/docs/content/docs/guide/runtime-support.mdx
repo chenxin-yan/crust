@@ -1,9 +1,9 @@
 ---
 title: Runtime support
-description: Run the same CLI on Bun, Node.js, and Deno, and know where they differ.
+description: Run the same CLI on Bun and Node.js, and know where they differ.
 ---
 
-Crust's command API works on Bun, Node.js, and Deno. Start with the same entrypoint; change the command that runs it.
+Crust's command API works on Bun and Node.js. Start with the same entrypoint; change the command that runs it.
 
 ## Run the same CLI
 
@@ -13,13 +13,12 @@ After [installing Crust](/docs/quick-start#manual-setup), save this as `src/cli.
   ../../../examples/quick-start/manual.ts
 </include>
 
-| Runtime | Library minimum | Run the TypeScript example            |
-| ------- | --------------- | ------------------------------------- |
-| Bun     | 1.4+            | `bun run src/cli.ts Ada`              |
-| Node.js | 24+             | `node src/cli.ts Ada`                 |
-| Deno    | 2.8+            | `deno run --allow-env src/cli.ts Ada` |
+| Runtime | Library minimum | Run the TypeScript example |
+| ------- | --------------- | -------------------------- |
+| Bun     | 1.4+            | `bun run src/cli.ts Ada`   |
+| Node.js | 24+             | `node src/cli.ts Ada`      |
 
-All three print:
+Both print:
 
 ```text
 Hello, Ada!
@@ -33,34 +32,14 @@ Node.js 24+ can run both the published libraries and the TypeScript command abov
 npx create-crust@latest my-cli --runtime node
 ```
 
-This selects Node.js for the generated `dev` script, TypeScript settings, and target runtime. The next wizard question selects the build output independently; pass `--artifact package` or `--artifact binary` to skip it. All six combinations are supported, with experimental Deno package bundling. Defaults are Node.js packages and Bun/Deno binaries. Use `--runtime bun` or `--runtime deno` instead; Bun is the default runtime. See [package setup](/docs/guide/build-and-distribution#set-up-packagejson) for the build and release scripts.
+This selects Node.js for the generated `dev` script, TypeScript settings, and target runtime. The next wizard question selects the build output independently; pass `--artifact package` or `--artifact binary` to skip it. All four combinations are supported. Defaults are Node.js packages and Bun binaries. Pass `--runtime bun` for Bun, the default runtime. See [package setup](/docs/guide/build-and-distribution#set-up-packagejson) for the build and release scripts.
 
-**The package manager does not choose the runtime.** npm, pnpm, Yarn, and Bun can install dependencies for either Bun or Node.js projects. The Deno scaffold uses `deno install`; for manual setup, use `deno add npm:@crustjs/core npm:@crustjs/extensions`.
-
-## Deno permissions
-
-The example above grants `--allow-env` because Crust reads environment variables during execution and terminal styling. Add permissions for the work your CLI does:
-
-| Your CLI needs to…                | Add this flag before `src/cli.ts` |
-| --------------------------------- | --------------------------------- |
-| Read files in the current project | `--allow-read=.`                  |
-| Write generated files to `dist`   | `--allow-write=./dist`            |
-| Call an API                       | `--allow-net=api.example.com`     |
-| Run Git                           | `--allow-run=git`                 |
-
-These grants apply to library code too. Subprocesses run outside Deno's sandbox, so only allow trusted executables. See [Deno permissions](https://docs.deno.com/runtime/fundamentals/security/) for scoping and other permission types.
-
-<Callout type="warn" title="Scaffolded Deno projects grant all permissions">
-  The generated `dev` and `start` scripts use `-A` (all permissions). For sandboxed source
-  execution, replace `-A` in `dev` with only the grants you need. Deno executables produced by
-  `crust build` are also compiled with `-A`; choosing Deno does not make those binaries sandboxed.
-  Deno runtime packages carry no grants: their users choose them with `deno run` or `deno install`.
-</Callout>
+**The package manager does not choose the runtime.** npm, pnpm, Yarn, and Bun can install dependencies for either Bun or Node.js projects.
 
 ## Build separately from running
 
-You don't need Bun to run Node.js or Deno source. **`crust build` is separate, Bun-powered tooling**, even when producing Node.js or Deno output. The packaged CLI can use its embedded Bun runtime; Deno binaries and Deno runtime packages additionally require `deno` on `PATH`, and Node.js binaries a `node` on `PATH` that meets [tsdown's executable requirements](/docs/guide/build-and-distribution#nodejs-binaries) (Node.js 26+ with the bundled tsdown).
+You don't need Bun to run Node.js source. **`crust build` is separate, Bun-powered tooling**, even when producing Node.js output. The packaged CLI can use its embedded Bun runtime; Node.js binaries additionally require a `node` on `PATH` that meets [tsdown's executable requirements](/docs/guide/build-and-distribution#nodejs-binaries) (Node.js 26+ with the bundled tsdown).
 
-The runtime does not choose the output: `crust.artifact` does. A runtime package is JavaScript for the user's installed Bun, Node.js, or Deno (experimental); a standalone binary embeds Bun, Deno, or Node.js and needs no separately installed JavaScript runtime.
+The runtime does not choose the output: `crust.artifact` does. A runtime package is JavaScript for the user's installed Bun or Node.js; a standalone binary embeds Bun or Node.js and needs no separately installed JavaScript runtime.
 
 The distribution channel is a separate choice. npm's generated launcher needs Node.js to select and start a binary; [direct downloads, Homebrew, or other installers](/docs/guide/build-and-distribution#custom-distribution) can run that same binary without the launcher or Node.js. `crust publish` handles npm only. Continue to [Build and distribution](/docs/guide/build-and-distribution) for targets and release layouts.
