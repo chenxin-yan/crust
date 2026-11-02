@@ -138,7 +138,7 @@ Environment:
   Set DEPLOY_TOKEN before running.
 ```
 
-The callback receives a snapshot containing contributed commands and flags, but no Extension-contributed sections. See [`ExtensionSectionContribution`](/docs/api/types#extensionsectioncontribution) for validation and audience rules.
+The callback runs when the application prepares and receives a snapshot containing contributed commands and flags, but no Extension-contributed sections. Commands it reads are built on demand, so a callback that reads only root metadata leaves the rest of the tree unbuilt. See [`ExtensionSectionContribution`](/docs/api/types#extensionsectioncontribution) for validation and audience rules.
 
 ## Build hooks
 

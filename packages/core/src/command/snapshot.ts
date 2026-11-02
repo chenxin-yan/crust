@@ -1,5 +1,12 @@
 import { isFlagNegatable } from "../parsing/spellings.ts";
-import type { ArgDef, CommandMeta, DeclaredDefault, FlagDef, ValueType } from "../types.ts";
+import type {
+	ArgDef,
+	CommandMeta,
+	CommandSection,
+	DeclaredDefault,
+	FlagDef,
+	ValueType,
+} from "../types.ts";
 import { builtChildrenOf, type CommandNode } from "./node.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -199,6 +206,18 @@ function isMutableDefault(value: DeclaredDefault): boolean {
 	return false;
 }
 
+/**
+ * Extension section contributions by target node. They live beside the frozen
+ * prepared nodes instead of in their `meta`, so applying them never builds or
+ * unfreezes the tree; projections append them after the node's own sections.
+ */
+const contributedSections = new WeakMap<CommandNode, readonly CommandSection[]>();
+
+/** Record one Extension section contribution for `node`, after earlier ones. */
+export function contributeSection(node: CommandNode, section: CommandSection): void {
+	contributedSections.set(node, [...(contributedSections.get(node) ?? []), section]);
+}
+
 /** Verdicts for prepared subtrees, which never change once every command is built. */
 const reusable = new WeakMap<CommandNode, boolean>();
 /** Projections of reusable prepared subtrees, shared across invocations. */
@@ -237,8 +256,14 @@ function isReusable(node: CommandNode): boolean | undefined {
  * projections across invocations. Otherwise the entire invocation stays local,
  * even if its reads or another invocation make the tree reusable later. This keeps
  * `rootCommand.subCommands.x` the same object as a routed `command`.
+ *
+ * An `authored` projector omits Extension section contributions, even ones applied
+ * after it was created, and never shares: shared projections include them.
  */
-export function createSnapshotProjector(root: CommandNode): (node: CommandNode) => CommandSnapshot {
+export function createSnapshotProjector(
+	root: CommandNode,
+	authored = false,
+): (node: CommandNode) => CommandSnapshot {
 	const projected = new Map<CommandNode, CommandSnapshot>();
 	let reuse: boolean | undefined;
 	const share = (node: CommandNode): CommandSnapshot => {
@@ -252,7 +277,7 @@ export function createSnapshotProjector(root: CommandNode): (node: CommandNode) 
 	};
 	const project = (node: CommandNode): CommandSnapshot => {
 		// Never mix invocation-local snapshots with a shared ancestor or descendant.
-		reuse ??= isReusable(root) === true;
+		reuse ??= !authored && isReusable(root) === true;
 		if (reuse) return share(node);
 		const existing = projected.get(node);
 		if (existing) return existing;
@@ -265,7 +290,7 @@ export function createSnapshotProjector(root: CommandNode): (node: CommandNode) 
 				get: () => (child ??= project(node.subCommands[name]!)),
 			});
 		}
-		const snapshot = projectNode(node, snapshotFlags(node), Object.freeze(subCommands));
+		const snapshot = projectNode(node, snapshotFlags(node), Object.freeze(subCommands), authored);
 		projected.set(node, snapshot);
 		return snapshot;
 	};
@@ -284,15 +309,20 @@ function projectNode(
 	node: CommandNode,
 	flags: Record<string, FlagSnapshot>,
 	subCommands: Readonly<Record<string, CommandSnapshot>>,
+	authored = false,
 ): CommandSnapshot {
+	const contributed = authored ? undefined : contributedSections.get(node);
+	const sections = contributed
+		? [...(node.meta.sections ?? []), ...contributed]
+		: node.meta.sections;
 	return Object.freeze({
 		meta: freezeCompact({
 			name: node.meta.name,
 			description: node.meta.description,
 			version: node.meta.version,
 			usage: node.meta.usage,
-			sections: node.meta.sections
-				? Object.freeze(node.meta.sections.map((section) => Object.freeze({ ...section })))
+			sections: sections
+				? Object.freeze(sections.map((section) => Object.freeze({ ...section })))
 				: undefined,
 			aliases: node.meta.aliases ? Object.freeze([...node.meta.aliases]) : undefined,
 			hidden: node.meta.hidden,

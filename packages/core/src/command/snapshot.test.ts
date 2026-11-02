@@ -282,15 +282,88 @@ describe("command metadata sections", () => {
 				)
 				.add(defineCommand("build", { aliases: ["b"] }, (builder) => builder));
 
-			await expect(app.snapshot()).rejects.toMatchObject({
+			const rejection = {
 				code: "DEFINITION",
 				details: {
 					subject: "extension",
 					name: "docs",
 					reason: "invalid-section-path",
 				},
-			});
+			};
+			await expect(app.snapshot()).rejects.toMatchObject(rejection);
+			// Contributions are validated at preparation, so an ordinary run fails too.
+			expect(await app.run(["build"])).toMatchObject({ status: "failed", error: rejection });
 		}
+	});
+
+	it("prepares only the routed path when an Extension contributes sections", async () => {
+		const configured: string[] = [];
+		const failure = new Error("broken recipe");
+		const app = new Crust("cli")
+			.extend(
+				defineExtension(defineExtensionId("docs")).sections((snapshot) => [
+					{ command: ["good"], title: "About", body: snapshot.meta.name },
+				]),
+			)
+			.add(
+				defineCommand("good", (command) => {
+					configured.push("good");
+					return command.action(({ command }) => command.meta.sections);
+				}),
+				defineCommand("bad", () => {
+					configured.push("bad");
+					throw failure;
+				}),
+			);
+
+		expect(await app.run(["good"])).toMatchObject({
+			status: "completed",
+			result: [{ title: "About", body: "cli" }],
+		});
+		expect(configured).toEqual(["good"]);
+		await expect(app.snapshot()).rejects.toBe(failure);
+	});
+
+	it("keeps Extension sections out of the authored snapshot, even when read later", async () => {
+		let authored: CommandSnapshot | undefined;
+		const seen: CommandSnapshot[] = [];
+		const app = new Crust("cli", { sections: [{ title: "Root guide", body: "Root body" }] })
+			.extend(
+				defineExtension(defineExtensionId("docs"))
+					.sections((snapshot) => {
+						authored = snapshot;
+						return [
+							{ command: [], title: "Root extra", body: "x" },
+							{ command: ["build"], title: "Build extra", body: "y" },
+						];
+					})
+					.preRun((ctx) => {
+						seen.push(ctx.rootCommand);
+					}),
+			)
+			.add(defineCommand("build", (command) => command.action(() => {})));
+
+		// Twice: the second run may reuse projections across invocations.
+		await app.run(["build"]);
+		await app.run(["build"]);
+
+		for (const root of seen) {
+			expect(root.meta.sections?.map(({ title }) => title)).toEqual(["Root guide", "Root extra"]);
+			expect(root.subCommands.build?.meta.sections).toEqual([{ title: "Build extra", body: "y" }]);
+		}
+		expect(authored?.meta.sections).toEqual([{ title: "Root guide", body: "Root body" }]);
+		expect(authored?.subCommands.build?.meta.sections).toBeUndefined();
+
+		// A childless root is fully built at preparation, so it is eligible for shared projections.
+		const solo = new Crust("solo").extend(
+			defineExtension(defineExtensionId("docs"))
+				.sections(() => [{ command: [], title: "Root extra", body: "x" }])
+				.preRun((ctx) => {
+					seen.push(ctx.rootCommand);
+				}),
+		);
+		await solo.run([]);
+		expect(seen.at(-1)?.meta.sections).toEqual([{ title: "Root extra", body: "x" }]);
 	});
 
 	it("rejects malformed authored section data", () => {

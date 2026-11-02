@@ -20,7 +20,6 @@ import type { ExecuteOptions, InvocationIO, InvocationOptions, RunInputPayload }
 import { createContextResolver } from "./context-resolver.ts";
 import type { CrustCommandContext } from "./crust.ts";
 import {
-	applyContextSections,
 	applyExtensionSections,
 	applyNodeContextSections,
 	sectionContextsFor,
@@ -36,7 +35,7 @@ import {
 	type CommandNode,
 } from "./node.ts";
 import { commandNotFound, resolveCommand, type CommandRoute } from "./router.ts";
-import { createSnapshotProjector, snapshotCommand, type CommandSnapshot } from "./snapshot.ts";
+import { createSnapshotProjector, type CommandSnapshot } from "./snapshot.ts";
 import type { RunOutcome } from "./typed-run.ts";
 
 const ignoreStreamError = () => {};
@@ -188,12 +187,6 @@ function describeFailure(error: CaughtError, label = "Error"): string {
 	return messages.map((message) => `${label}: ${message}`).join("\n");
 }
 
-function freezeTree(node: CommandNode): void {
-	freezeNode(node);
-	for (const sub of Object.values(node.subCommands)) freezeTree(sub);
-	Object.freeze(node.subCommands);
-}
-
 function freezeNode(node: CommandNode): void {
 	Object.freeze(node);
 	Object.freeze(node.localFlags);
@@ -217,12 +210,11 @@ const preparedInvocations = new WeakMap<CommandNode, PreparedInvocation>();
  * Clone the builder tree and apply Extension commands and flags. Nodes are built
  * on first access (see `lazyChildRecord`): an invocation prepares only the path it
  * routes through, while whole-tree readers (snapshots, docs) still build every
- * node. With `finish`, each node also gets its Context sections and is frozen.
+ * node. Each node gets its Context sections and is frozen as it is built.
  */
 export function buildExtensionTree(
 	node: CommandNode,
 	materializeCommandDefinition: MaterializeCommandDefinition,
-	finish = false,
 ): PreparedInvocation {
 	const extensions = Object.freeze([...node.extensions]);
 	const extensionFlags = extensions.flatMap((extension) =>
@@ -268,37 +260,16 @@ export function buildExtensionTree(
 		for (const { name, def, recursive } of extensionFlags) {
 			if (isRoot || recursive) registerFlag(prepared, name, def, "owned");
 		}
-		if (finish) {
-			applyNodeContextSections(
-				prepared,
-				path,
-				sectionContextsFor(prepared, isRoot ? extensions : undefined),
-			);
-			freezeNode(prepared);
-		}
+		applyNodeContextSections(
+			prepared,
+			path,
+			sectionContextsFor(prepared, isRoot ? extensions : undefined),
+		);
+		freezeNode(prepared);
 		return prepared;
 	};
 
 	return { rootNode: prepare(node, node.meta.name, true), extensions };
-}
-
-/** Install Context sections, evaluate Extension section callbacks, and freeze the tree. */
-export function applySectionsAndFreeze(
-	rootNode: CommandNode,
-	extensions: readonly ExtensionData[],
-): CommandNode {
-	// Before the authored snapshot, so Extension section callbacks observe Context sections.
-	applyContextSections(rootNode, extensions);
-	// The authored snapshot exists only to feed section callbacks; projecting the
-	// whole tree when nothing consumes it is wasted work on every fresh preparation.
-	if (extensions.some((extension) => extension.sections !== undefined)) {
-		const authoredSnapshot = snapshotCommand(rootNode);
-		for (const extension of extensions) {
-			applyExtensionSections(rootNode, extension, authoredSnapshot);
-		}
-	}
-	freezeTree(rootNode);
-	return rootNode;
 }
 
 /** Clone, apply Extensions and sections, freeze, and cache ordinary invocation preparation. */
@@ -309,10 +280,8 @@ export function prepareInvocation(
 	const cached = preparedInvocations.get(node);
 	if (cached) return cached;
 
-	// Extension section callbacks read the whole authored tree, so they keep eager preparation.
-	const eager = node.extensions.some((extension) => extension.sections !== undefined);
-	const prepared = buildExtensionTree(node, materializeCommandDefinition, !eager);
-	if (eager) applySectionsAndFreeze(prepared.rootNode, prepared.extensions);
+	const prepared = buildExtensionTree(node, materializeCommandDefinition);
+	applyExtensionSections(prepared.rootNode, prepared.extensions);
 	preparedInvocations.set(node, prepared);
 	return prepared;
 }
