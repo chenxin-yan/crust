@@ -46,7 +46,7 @@ assert(style.red("crust") === "\x1b[31mcrust\x1b[39m", "expected red ANSI output
 assert(stringWidth("abc") === 3, "expected ASCII width 3");
 assert(stringWidth("界") === 2, "expected CJK width 2");
 assert(stringWidth("👋") === 2, "expected emoji width 2");
-// Exercise the built fallback through layout consumers on Node and Deno, not just Bun.
+// Exercise the built fallback through layout consumers on Node, not just Bun.
 for (const [input, width] of [
 	["\u{1F1E6}", 1],
 	["\x1b[38:2::1:2:3mX\x1b[0m", 1],

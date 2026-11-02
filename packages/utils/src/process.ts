@@ -28,8 +28,6 @@ export type RunProcessOptions = {
 	/**
 	 * Milliseconds before process-tree cleanup and rejection. POSIX descendants
 	 * must remain in the child's group; Windows requires a live parent.
-	 * Deno requires unrestricted `--allow-run` for POSIX group cleanup; a scoped
-	 * grant still permits direct-child termination, but group cleanup is reported as failed.
 	 */
 	timeout?: number;
 };
@@ -111,7 +109,6 @@ export function killProcessTree(child: ChildProcess): void {
 		process.kill(-child.pid, "SIGKILL");
 	} catch (error) {
 		if (isErrnoException(error) && error.code === "ESRCH") return;
-		// Deno's child handle can still be killed with executable-scoped run permission.
 		child.kill("SIGKILL");
 		throw error;
 	}
