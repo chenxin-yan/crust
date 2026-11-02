@@ -10,7 +10,7 @@ const emoji = /\p{Emoji_Presentation}|\p{Emoji}\uFE0F/u;
 // byte (colon SGR parameters included) or to the end of the string; OSC runs to
 // BEL/ST, DCS/SOS/PM/APC to ST only, each else to the end of the string; nF and
 // two-byte ESC sequences drop their trailing byte(s). CAN, SUB and C1 ST abort a sequence.
-const ansi = new RegExp(
+const ansi = /* @__PURE__ */ new RegExp(
 	[
 		String.raw`(?:\x1b\[|\x9b)[^\x1b\x18\x1a\x9c\x40-\x7e]*[\x40-\x7e\x18\x1a\x9c]?`,
 		String.raw`(?:\x1b\]|\x9d)[^\x07\x1b\x18\x1a\x9c]*(?:\x07|\x1b\\|[\x18\x1a\x9c])?`,

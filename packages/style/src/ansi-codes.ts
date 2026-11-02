@@ -73,20 +73,21 @@ export type StyleMethodName = keyof typeof modifierCodes | keyof typeof colorCod
 
 const styleMethodCodes = { ...modifierCodes, ...colorCodes };
 
-export const styleMethodNames: readonly StyleMethodName[] = Object.freeze(
+export const styleMethodNames: readonly StyleMethodName[] = /* @__PURE__ */ Object.freeze(
 	// SAFETY: Object.keys returns exactly the own keys of the literal code tables.
 	Object.keys(styleMethodCodes) as StyleMethodName[],
 );
 
-export const styleMethodPairs: Readonly<Record<StyleMethodName, AnsiPair>> = Object.freeze(
-	// SAFETY: the entries map every registered style method name to its pair.
-	Object.fromEntries(
-		styleMethodNames.map((name) => {
-			const [open, close] = styleMethodCodes[name];
-			return [name, { open: `\x1b[${open}m`, close: `\x1b[${close}m` }];
-		}),
-	) as Record<StyleMethodName, AnsiPair>,
-);
+export const styleMethodPairs: Readonly<Record<StyleMethodName, AnsiPair>> =
+	/* @__PURE__ */ Object.freeze(
+		// SAFETY: the entries map every registered style method name to its pair.
+		Object.fromEntries(
+			styleMethodNames.map((name) => {
+				const [open, close] = styleMethodCodes[name];
+				return [name, { open: `\x1b[${open}m`, close: `\x1b[${close}m` }];
+			}),
+		) as Record<StyleMethodName, AnsiPair>,
+	);
 
 export function isModifierName(name: StyleMethodName): boolean {
 	return Object.hasOwn(modifierCodes, name);
