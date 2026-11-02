@@ -53,11 +53,11 @@ const app = new Crust("cli").add(...names.map((name) => defineCommand(name, reci
 // for (const name of names) app = app.add(defineCommand(name, recipe));
 ```
 
-`.flags()`, `.args()`, `.action()`, `.add()`, and `.command()` infer their type arguments from the builder they are called on. Passing explicit type arguments, such as `.action<void>(…)`, is a compile error (`FIX_EXPLICIT_TYPE_ARGUMENTS`).
+`.flags()`, `.args()`, `.add()`, and `.command()` infer their type arguments from the builder they are called on. Passing explicit type arguments, such as `.add<readonly [typeof deploy]>(deploy)`, is a compile error (`FIX_EXPLICIT_TYPE_ARGUMENTS`).
 
 ### Conditional chains
 
-Each call returns a builder whose type records what was added so far, so a conditional can produce a union of builder types that the next call cannot infer from. Crust rejects such calls instead of silently losing types. `.add()` and `.command()` are the exception: they accept a builder union, and the result types only the command paths every branch has, plus the ones the call adds.
+Each call returns a builder whose type records what was added so far, so a conditional can produce a union of builder types that the next call cannot infer from. Crust rejects such calls instead of silently losing types:
 
 ```ts
 // Compile error: inputs cannot be inferred from this builder union.
