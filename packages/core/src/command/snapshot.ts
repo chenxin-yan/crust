@@ -233,15 +233,16 @@ function isReusable(node: CommandNode): boolean | undefined {
  * when first read, and its children only when they are read. An invocation that
  * reads root metadata (`rootCommand.meta.version`) or the routed command projects,
  * and builds, just those nodes, while walking `subCommands` still sees every child.
- * Fully built subtrees without mutable defaults reuse one projection across
- * invocations; the rest re-read mutable defaults (such as a `URL`) every time. One
- * projector per invocation keeps `rootCommand.subCommands.x` the same object as a
- * routed `command`.
+ * Trees that are fully built and have no mutable defaults at the first read reuse
+ * projections across invocations. Otherwise the entire invocation stays local,
+ * even if its reads or another invocation make the tree reusable later. This keeps
+ * `rootCommand.subCommands.x` the same object as a routed `command`.
  */
-export function createSnapshotProjector(): (node: CommandNode) => CommandSnapshot {
+export function createSnapshotProjector(root: CommandNode): (node: CommandNode) => CommandSnapshot {
 	const projected = new Map<CommandNode, CommandSnapshot>();
+	let reuse: boolean | undefined;
 	const share = (node: CommandNode): CommandSnapshot => {
-		const existing = shared.get(node) ?? projected.get(node);
+		const existing = shared.get(node);
 		if (existing) return existing;
 		const subCommands: Record<string, CommandSnapshot> = {};
 		for (const [name, sub] of Object.entries(node.subCommands)) subCommands[name] = share(sub);
@@ -250,9 +251,11 @@ export function createSnapshotProjector(): (node: CommandNode) => CommandSnapsho
 		return snapshot;
 	};
 	const project = (node: CommandNode): CommandSnapshot => {
-		const existing = shared.get(node) ?? projected.get(node);
+		// Never mix invocation-local snapshots with a shared ancestor or descendant.
+		reuse ??= isReusable(root) === true;
+		if (reuse) return share(node);
+		const existing = projected.get(node);
 		if (existing) return existing;
-		if (isReusable(node)) return share(node);
 		const subCommands: Record<string, CommandSnapshot> = {};
 		// Object.keys does not build lazily prepared children.
 		for (const name of Object.keys(node.subCommands)) {

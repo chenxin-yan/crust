@@ -394,7 +394,7 @@ function lazySnapshots(
 	prepared: PreparedInvocation,
 	command: CommandNode,
 ): { readonly rootCommand: CommandSnapshot; readonly command: CommandSnapshot } {
-	const project = createSnapshotProjector();
+	const project = createSnapshotProjector(prepared.rootNode);
 	return {
 		get rootCommand() {
 			return project(prepared.rootNode);

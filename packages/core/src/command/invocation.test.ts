@@ -355,6 +355,58 @@ describe("Invocation pipeline — snapshot projection", () => {
 		expect(roots[3]).toBe(roots[2]);
 	});
 
+	it("keeps routed snapshot identity when reading a pending child makes the root reusable", async () => {
+		const app = new Crust("app").add(
+			defineCommand("group", (c) =>
+				c.add(defineCommand("leaf", (leaf) => leaf.action(() => {}))).action((ctx) => {
+					const command = ctx.command;
+					void command.subCommands.leaf;
+					return ctx.rootCommand.subCommands.group === command && ctx.command === command;
+				}),
+			),
+		);
+
+		for (let invocation = 0; invocation < 3; invocation++) {
+			expect(await app.run(["group"])).toMatchObject({ status: "completed", result: true });
+		}
+	});
+
+	it("keeps exposed snapshots stable while an overlapping invocation populates shared snapshots", async () => {
+		const started = Promise.withResolvers<void>();
+		const resume = Promise.withResolvers<void>();
+		let first = true;
+		const app = new Crust("app").add(
+			defineCommand("group", (c) =>
+				c.add(defineCommand("leaf", (leaf) => leaf.action(() => {}))).action(async (ctx) => {
+					const root = ctx.rootCommand;
+					const command = ctx.command;
+					const nested = root.subCommands.group;
+					void command.subCommands.leaf;
+					if (first) {
+						first = false;
+						started.resolve();
+						await resume.promise;
+					}
+					return (
+						ctx.rootCommand === root &&
+						ctx.command === command &&
+						nested === command &&
+						root.subCommands.group === command
+					);
+				}),
+			),
+		);
+
+		const pending = app.run(["group"]);
+		try {
+			await started.promise;
+			expect(await app.run(["group"])).toMatchObject({ status: "completed", result: true });
+		} finally {
+			resume.resolve();
+		}
+		expect(await pending).toMatchObject({ status: "completed", result: true });
+	});
+
 	it("keeps re-projecting when a URL default would make a reused snapshot stale", async () => {
 		const endpoint = new URL("https://a.example/v1");
 		const { observer, roots } = rootObserver();
