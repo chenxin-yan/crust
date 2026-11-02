@@ -15,7 +15,7 @@ Exact overloads and generic constraints live in [`command/crust.ts`](https://git
   ../../../examples/api/crust.ts#define
 </include>
 
-`defineCommand()` returns a frozen `CommandDefinition`: a name, static config, and a recipe. It has no command node and no `run()` or `execute()`. The recipe receives a `CommandDefinitionBuilder`, the configure-only form of `Crust`. Neither `defineCommand()` nor `.add()` runs it: each addition materializes independently when first needed by an invocation, snapshot, or documentation pass. Successful materialization is cached; a recipe that throws may run again on a later attempt. Avoid relying on recipe side effects at registration time.
+`defineCommand()` returns a frozen `CommandDefinition`: a name, static config, and a recipe. It has no command node and no `run()` or `execute()`. The recipe receives a `CommandDefinitionBuilder`, the configure-only form of `Crust`. Neither `defineCommand()` nor `.add()` runs it: each addition materializes independently when first needed by an invocation, snapshot, or documentation pass. Listing a command in help or typo suggestions reads only its config, never its recipe. Successful materialization is cached; a recipe that throws may run again on a later attempt. Avoid relying on recipe side effects at registration time.
 
 <auto-type-table path="../../../../../packages/core/src/command/crust.ts" name="CommandConfig" />
 

@@ -146,6 +146,33 @@ describe("help", () => {
 		expect(output).not.toContain("--no-help");
 	});
 
+	it("lists every command without building any, even when a sibling recipe throws", async () => {
+		const built: string[] = [];
+		const app = new Crust("app").extend(help()).add(
+			defineCommand("build", { description: "Build it", aliases: ["b"] }, (cmd) => {
+				built.push("build");
+				return cmd.action(() => {});
+			}),
+			defineCommand("broken", { description: "Broken recipe" }, () => {
+				built.push("broken");
+				throw new Error("broken recipe");
+			}),
+			defineCommand("secret", { hidden: true }, (cmd) => {
+				built.push("secret");
+				return cmd;
+			}),
+		);
+
+		const { stdout, exitCode } = await captureExecute(app, ["--help"]);
+
+		const output = stripAnsi(stdout);
+		expect(exitCode).toBe(0);
+		expect(output).toMatch(/build \(b\)\s+Build it/);
+		expect(output).toMatch(/broken\s+Broken recipe/);
+		expect(output).not.toContain("secret");
+		expect(built).toEqual([]);
+	});
+
 	it("renders the current command's metadata sections after Options", async () => {
 		const app = new Crust("app", {
 			sections: [{ title: "Root notes", body: "Root body" }],

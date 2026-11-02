@@ -2,7 +2,7 @@ import { CrustError } from "../errors.ts";
 import type { FlagSpelling } from "../parsing/spellings.ts";
 import { isListed } from "../sections.ts";
 import { childMetaOf, type CommandNode } from "./node.ts";
-import { snapshotCommand } from "./snapshot.ts";
+import { createSnapshotProjector } from "./snapshot.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // CommandRoute — Output of resolveCommand
@@ -29,7 +29,9 @@ export function commandNotFound(
 	candidate: string,
 	commandPath: readonly string[],
 ): CrustError<"COMMAND_NOT_FOUND"> {
-	const parentCommand = snapshotCommand(parent);
+	// Lazy: listing siblings reads only their static metadata, so an unrelated
+	// broken recipe cannot replace this error.
+	const parentCommand = createSnapshotProjector(parent)(parent);
 	return new CrustError("COMMAND_NOT_FOUND", `Unknown command "${candidate}".`, {
 		input: candidate,
 		available: Object.entries(parentCommand.subCommands).flatMap(([name, child]) =>

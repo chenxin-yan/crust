@@ -58,7 +58,7 @@ Every schema failure in one invocation is aggregated into one `VALIDATION` error
   name="CommandNotFoundErrorDetails"
 />
 
-`available` lists visible children only; `parentCommand` is a serializable snapshot.
+`available` lists visible children only; `parentCommand` is a serializable snapshot. Both read only the children's static metadata, so a sibling whose recipe throws cannot replace this error; reading a child's body from `parentCommand` builds it.
 
 ### `EnvErrorDetails`
 

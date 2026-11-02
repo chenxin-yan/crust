@@ -51,14 +51,26 @@ export function renderHelpText(
 	path: readonly string[] | undefined,
 	consumer: ExtensionId,
 ): string {
-	// Help lists children by name only, so skip documenting the rest of the subtree.
+	// Help lists children by static metadata only; reading anything else from a
+	// child would build it, running its recipe.
 	const model = buildCommandDocumentation(
 		{
 			...command,
 			subCommands: Object.fromEntries(
-				Object.entries(command.subCommands).map(([name, child]) => [
+				Object.entries(command.subCommands).map(([name, { meta }]) => [
 					name,
-					{ ...child, subCommands: {} },
+					{
+						meta: {
+							name: meta.name,
+							description: meta.description,
+							aliases: meta.aliases,
+							hidden: meta.hidden,
+						},
+						hasAction: false,
+						args: [],
+						flags: {},
+						subCommands: {},
+					},
 				]),
 			),
 		},
