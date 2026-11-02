@@ -46,7 +46,7 @@ crust build --artifact binary --target bun-linux-x64
 | `-t, --target`                | string, repeatable  | none    | Canonical compiler target(s) for binaries, or `host` for this machine. Omit to stage `crust.targets`, or every target of the compiler. Rejected for runtime packages |
 | `--env-file`                  | string, repeatable  | none    | Explicit env file(s) used for build-time constants                                                                                                                   |
 | `--validate`, `--no-validate` | boolean             | `true`  | Materialize command definitions before compiling; `--no-validate` also skips Extension build hooks                                                                   |
-| `--minify`, `--no-minify`     | boolean             | none    | Minify the output; on unless `--no-minify`                                                                                                                           |
+| `--minify`, `--no-minify`     | boolean             | `true`  | Minify the output; on unless `--no-minify`                                                                                                                           |
 
 Command names, entry files, runtime, default targets, Bun bundler plugins, extra directories, and external dependencies are not flags: they come from [`bin`](#commands-and-entries-bin) and the [`crust` block](#packagejson-configuration) in `package.json`.
 
