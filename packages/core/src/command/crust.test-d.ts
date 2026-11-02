@@ -65,7 +65,7 @@ function _typecheckRejectsVariadicMethodsOnConditionalBuilderUnion(condition: bo
 	// @ts-expect-error -- union of distinct builders is not callable via .flags()
 	void (condition ? c.provide(text()) : c).flags({ name: "verbose", type: "boolean" });
 
-	// flags-only unions share Ctx; the phantom parameter must bind to `this` to reject them
+	// flags-only unions share Ctx; the union check must inspect the whole receiver to reject them
 	const flagsUnion = condition ? c.flags({ name: "first", type: "boolean" }) : c;
 	// @ts-expect-error -- union of builders differing only in Flags is not callable via .flags()
 	void flagsUnion.flags({ name: "second", type: "boolean" });
@@ -76,7 +76,7 @@ function _typecheckRejectsVariadicMethodsOnConditionalBuilderUnion(condition: bo
 
 	const child = defineCommand("child", (command) => command);
 	const treeUnion = condition ? c.add(child) : c;
-	// @ts-expect-error -- .add() rejects failed input inference on a tree-only union
+	// Accepted: `.add()` has no receiver union check; one costs O(tree) on every call.
 	void treeUnion.add(child.as("other"));
 
 	const extension = defineExtension(defineExtensionId("conditional"));
@@ -104,6 +104,23 @@ function _typecheckRejectsVariadicMethodsOnConditionalBuilderUnion(condition: bo
 	});
 }
 
+// Builder methods read their state off an inferred `this`; explicit type arguments would skip
+// that inference and type the call against no builder state, so they are rejected.
+function _typecheckRejectsExplicitTypeArgumentsOnStateMethods() {
+	const app = new Crust("cli").flags({ name: "verbose", type: "boolean" });
+	const child = defineCommand("child", (command) => command);
+	// @ts-expect-error -- FIX_EXPLICIT_TYPE_ARGUMENTS
+	void app.flags<readonly [{ name: "force"; type: "boolean" }]>({ name: "force", type: "boolean" });
+	// @ts-expect-error -- FIX_EXPLICIT_TYPE_ARGUMENTS
+	void app.args<[{ name: "target"; type: "string" }]>({ name: "target", type: "string" });
+	// @ts-expect-error -- FIX_EXPLICIT_TYPE_ARGUMENTS
+	void app.action<void>(() => {});
+	// @ts-expect-error -- FIX_EXPLICIT_TYPE_ARGUMENTS
+	void app.add<readonly [typeof child]>(child);
+	// @ts-expect-error -- FIX_EXPLICIT_TYPE_ARGUMENTS
+	void app.command<"inline", any>("inline", (command) => command);
+}
+
 // explicit registration inputs preserve inference without bypassing collision checks
 function _typecheckExplicitInputsOnConditionalBuilderUnion(condition: boolean) {
 	const text = defineContext("db").setup(() => "text");
@@ -125,9 +142,8 @@ function _typecheckExplicitInputsOnConditionalBuilderUnion(condition: boolean) {
 	const child = defineCommand("child", (command) => command);
 	const sibling = child.as("other");
 	const treeUnion = condition ? c.add(child) : c;
-	// No compile-time FIX_COMMAND_COLLISION for an explicit tuple on a union receiver: the
-	// TS2589-safe ValidateCommandDefinitions loses it; `.add()` still throws at runtime.
-	const registered = treeUnion.add<readonly [typeof sibling]>(sibling);
+	// `.add()` infers the union receiver itself, so no explicit tuple is needed.
+	const registered = treeUnion.add(sibling);
 	type _commonPaths = Expect<Equal<keyof (typeof registered)["_types"]["tree"], "other">>;
 
 	defineCommand("explicit", (command) => {
@@ -163,7 +179,7 @@ function _typecheckRejectsSiblingCommandSpellingCollisionsAtTheCallSite() {
 	const defs = Math.random() > 0.5 ? ([build, build] as const) : ([build] as const);
 	// @ts-expect-error -- the [build, build] variant collides within the batch
 	new Crust("cli").add(...defs);
-	// @ts-expect-error -- an explicit tuple union is validated per variant too
+	// @ts-expect-error -- explicit type arguments are rejected (FIX_EXPLICIT_TYPE_ARGUMENTS)
 	new Crust("cli").add<typeof defs>(...defs);
 	// @ts-expect-error -- Extension commands share the same batch validation
 	defineExtension(defineExtensionId("ext")).add(...defs);

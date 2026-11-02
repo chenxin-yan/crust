@@ -301,9 +301,11 @@ describe("writeSkills", () => {
 	it("preserves noncolliding Unicode paths and accepts nonreserved Windows names", async () => {
 		const outDir = join(tempRoot, "skills");
 		const names = ["e\u0301", "console", "com10", "lpt0"];
-		let app = createApp();
-		for (const name of names)
-			app = app.add(defineCommand(name, (command) => command.action(() => {})));
+		// A reassigned `let app` cannot absorb new sibling names (builder state is structural),
+		// so add the dynamic definitions in one call.
+		const app = createApp().add(
+			...names.map((name) => defineCommand(name, (command) => command.action(() => {}))),
+		);
 
 		const artifacts = await writeSkills({ app, outDir });
 		for (const name of names) {

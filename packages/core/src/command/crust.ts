@@ -1039,6 +1039,26 @@ type ValidateInlineCommandDeps<Ctx extends ContextMap, B> = MissingDeclaredDepen
 > &
 	DeclaredDependencyValuesBrand<DepsOfBuilder<B>, Ctx>;
 
+// A generic method that names any class parameter is instantiated through a composite
+// class+method mapper, which re-instantiates every object-valued argument on each call
+// (O(n^2) over an `.add()` chain). Signatures that read all state off an inferred `this`
+// name no class parameter and resolve it by property lookup instead. Cost: the state is
+// now structural, so formerly phantom parameters (Sibs, Sp, CollisionSp) take part in
+// assignability.
+// The constraint is `any` on purpose: checking an inferred receiver against a structural
+// constraint relates (and normalizes) its whole tree intersection on every call, O(n^2).
+type StateCarrier = { readonly _state: any };
+// Explicit type arguments skip `this` inference and bind `Self` to this default. Rejecting
+// the receiver beats typing the call against a broad state that drops every accumulated type.
+type ExplicitTypeArgumentsError = {
+	readonly _state: never;
+	readonly FIX_EXPLICIT_TYPE_ARGUMENTS: "Builder methods infer their type arguments; remove the explicit type arguments";
+};
+type St<Self extends StateCarrier> = Self["_state"];
+// Builders differing in state cannot share contextual input inference; reject the union receiver.
+// Only on recipe-sized builders: a conditional over a whole application receiver costs O(tree).
+type SingleReceiver<Self, Input> = IsUnion<Self> extends true ? never : Input;
+
 /** Completed applications expose inspection and invocation, not authoring after erasure. */
 export type AnyCrust = Pick<
 	Crust<
@@ -1137,6 +1157,21 @@ export class Crust<
 		) => void;
 	};
 
+	/** @internal — builder state read through `this` so method signatures never name class parameters. */
+	declare readonly _state: {
+		readonly flags: Flags;
+		readonly args: A;
+		readonly ctx: Ctx;
+		readonly sibs: Sibs;
+		readonly sp: Sp;
+		readonly tree: Tree;
+		readonly ctxFlags: CtxFlags;
+		readonly collision: CollisionSp;
+		readonly result: Result;
+		readonly meta: Meta;
+		readonly caps: Caps;
+	};
+
 	/** Supported type-level seam exposing the application's inferred command types. */
 	declare readonly _types: {
 		flags: Flags;
@@ -1219,12 +1254,28 @@ export class Crust<
 	 */
 	// Combined union signatures can lose rest-tuple inference. Registration inputs
 	// (use/provide/add) default to never to reject that fallback without mapping the
-	// receiver. flags/args/extend need contextual input inference, so a this-bound
-	// phantom rejects differing builder states instead. Its never default avoids
-	// instantiating the whole receiver as an unused type argument.
-	flags<const Defs extends readonly NamedFlagDef[], _Union extends this = never>(
-		...defs: ValidateLocalFlagDefs<Defs, Sp>
-	): AfterFlags<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Defs, Meta, Caps>;
+	// receiver. flags/args need contextual input inference, so `SingleReceiver` rejects
+	// differing builder states instead; extend keeps a this-bound phantom.
+	flags<
+		const Defs extends readonly NamedFlagDef[],
+		Self extends StateCarrier = ExplicitTypeArgumentsError,
+	>(
+		this: Self,
+		...defs: SingleReceiver<Self, ValidateLocalFlagDefs<Defs, St<Self>["sp"]>>
+	): AfterFlags<
+		St<Self>["flags"],
+		St<Self>["args"],
+		St<Self>["ctx"],
+		St<Self>["sibs"],
+		St<Self>["sp"],
+		St<Self>["tree"],
+		St<Self>["ctxFlags"],
+		St<Self>["collision"],
+		St<Self>["result"],
+		Defs,
+		St<Self>["meta"],
+		St<Self>["caps"]
+	>;
 
 	flags<const Defs extends readonly NamedFlagDef[]>(
 		...defs: Defs
@@ -1250,13 +1301,25 @@ export class Crust<
 	 * @param defs - Positional argument definitions, in positional order
 	 * @returns A new `Crust` instance with the combined args
 	 */
-	args<const NewA extends ArgsDef, _Union extends this = never>(
-		...defs: NewA & AppendArgsErrors<A, NewA>
-	): AfterArgs<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, NewA, Meta, Caps>;
+	args<const NewA extends ArgsDef, Self extends StateCarrier = ExplicitTypeArgumentsError>(
+		this: Self,
+		...defs: SingleReceiver<Self, NewA & AppendArgsErrors<St<Self>["args"], NewA>>
+	): AfterArgs<
+		St<Self>["flags"],
+		St<Self>["args"],
+		St<Self>["ctx"],
+		St<Self>["sibs"],
+		St<Self>["sp"],
+		St<Self>["tree"],
+		St<Self>["ctxFlags"],
+		St<Self>["collision"],
+		St<Self>["result"],
+		NewA,
+		St<Self>["meta"],
+		St<Self>["caps"]
+	>;
 
-	args<const NewA extends ArgsDef>(
-		...defs: NewA
-	): AfterArgs<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, NewA, Meta, Caps> {
+	args<const NewA extends ArgsDef>(...defs: NewA): unknown {
 		const combined = [...this._node.args, ...defs.map(normalizeArg)];
 
 		const seen = new Set<string>();
@@ -1377,6 +1440,25 @@ export class Crust<
 	 * @param action - The Command Action function
 	 * @returns A new `Crust` instance with the action registered
 	 */
+	action<R, Self extends StateCarrier = ExplicitTypeArgumentsError>(
+		this: Self,
+		action: (
+			ctx: NoInfer<CrustCommandContext<St<Self>["args"], St<Self>["flags"], St<Self>["ctx"]>>,
+		) => R,
+	): AfterAction<
+		St<Self>["flags"],
+		St<Self>["args"],
+		St<Self>["ctx"],
+		St<Self>["sibs"],
+		St<Self>["sp"],
+		St<Self>["tree"],
+		St<Self>["ctxFlags"],
+		St<Self>["collision"],
+		R,
+		St<Self>["meta"],
+		St<Self>["caps"]
+	>;
+
 	action<R>(
 		action: (ctx: NoInfer<CrustCommandContext<A, Flags, Ctx>>) => R,
 	): AfterAction<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, R, Meta, Caps> {
@@ -1477,17 +1559,37 @@ export class Crust<
 	 * also checked. Use `await app.snapshot()` to validate the full tree
 	 * without running Command Actions.
 	 */
-	add<const Ds extends readonly CommandDefinition<any, any, any, any>[] = never>(
+	add<
+		const Ds extends readonly CommandDefinition<any, any, any, any>[] = never,
+		Self extends StateCarrier = ExplicitTypeArgumentsError,
+	>(
+		this: Self,
 		...definitions: Ds &
-			ValidateCommandDefinitions<Ds, Sibs> &
-			ValidateDeclaredDeps<Ctx, Ds> &
-			DefinitionDescendantValuesBrand<Ds, CollisionSp["demands"]> &
-			ValidateDefinitionFlags<Ds, CollisionSp["extension"] | LocalSpellingsOf<CtxFlags>>
-	): AfterAdd<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Ds, Meta, Caps>;
+			ValidateCommandDefinitions<Ds, St<Self>["sibs"]> &
+			ValidateDeclaredDeps<St<Self>["ctx"], Ds> &
+			DefinitionDescendantValuesBrand<Ds, St<Self>["collision"]["demands"]> &
+			ValidateDefinitionFlags<
+				Ds,
+				St<Self>["collision"]["extension"] | LocalSpellingsOf<St<Self>["ctxFlags"]>
+			>
+	): AfterAdd<
+		St<Self>["flags"],
+		St<Self>["args"],
+		St<Self>["ctx"],
+		St<Self>["sibs"],
+		St<Self>["sp"],
+		St<Self>["tree"],
+		St<Self>["ctxFlags"],
+		St<Self>["collision"],
+		St<Self>["result"],
+		Ds,
+		St<Self>["meta"],
+		St<Self>["caps"]
+	>;
 
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
 		...definitions: Ds
-	): AfterAdd<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Ds, Meta, Caps> {
+	): unknown {
 		return this._addDefinitions<
 			AfterAdd<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Ds, Meta, Caps>
 		>(definitions);
@@ -1504,36 +1606,43 @@ export class Crust<
 	 * `.provide()`. Extract to `defineCommand` when a command needs its own file
 	 * or reuse.
 	 */
-	command<const N extends string, B extends AnyCommandDefinitionBuilder>(
-		name: N & ChildCommandNameBrand<N> & CommandCollisionBrand<N, Sibs>,
+	command<
+		const N extends string,
+		B extends AnyCommandDefinitionBuilder,
+		Self extends StateCarrier = ExplicitTypeArgumentsError,
+	>(
+		this: Self,
+		name: N & ChildCommandNameBrand<N> & CommandCollisionBrand<N, St<Self>["sibs"]>,
 		recipe: ((
 			command: CommandDefinitionBuilder<
 				{},
 				[],
-				Ctx,
+				St<Self>["ctx"],
 				never,
-				LocalSpellingsOf<CtxFlags>,
+				LocalSpellingsOf<St<Self>["ctxFlags"]>,
 				{},
-				CtxFlags
+				St<Self>["ctxFlags"]
 			>,
 		) => B &
 			// Include nested children, whose flags are not in the seeded spelling set.
-			ShapeFlagCollisionBrand<ShapeOfBuilder<B>, CollisionSp["extension"]> &
-			ValidateInlineCommandDeps<Ctx, NoInfer<B>>) &
-			NoInfer<DescendantValuesBrand<{ child: ShapeOfBuilder<B> }, CollisionSp["demands"]>>,
+			ShapeFlagCollisionBrand<ShapeOfBuilder<B>, St<Self>["collision"]["extension"]> &
+			ValidateInlineCommandDeps<St<Self>["ctx"], NoInfer<B>>) &
+			NoInfer<
+				DescendantValuesBrand<{ child: ShapeOfBuilder<B> }, St<Self>["collision"]["demands"]>
+			>,
 	): AfterAdd<
-		Flags,
-		A,
-		Ctx,
-		Sibs,
-		Sp,
-		Tree,
-		CtxFlags,
-		CollisionSp,
-		Result,
+		St<Self>["flags"],
+		St<Self>["args"],
+		St<Self>["ctx"],
+		St<Self>["sibs"],
+		St<Self>["sp"],
+		St<Self>["tree"],
+		St<Self>["ctxFlags"],
+		St<Self>["collision"],
+		St<Self>["result"],
 		readonly [CommandDefinition<N, readonly [], ShapeOfBuilder<B>, DepsOfBuilder<B>>],
-		Meta,
-		Caps
+		St<Self>["meta"],
+		St<Self>["caps"]
 	>;
 
 	command<const N extends string, B extends AnyCommandDefinitionBuilder>(
@@ -1549,20 +1658,7 @@ export class Crust<
 				CtxFlags
 			>,
 		) => B,
-	): AfterAdd<
-		Flags,
-		A,
-		Ctx,
-		Sibs,
-		Sp,
-		Tree,
-		CtxFlags,
-		CollisionSp,
-		Result,
-		readonly [CommandDefinition<N, readonly [], ShapeOfBuilder<B>, DepsOfBuilder<B>>],
-		Meta,
-		Caps
-	> {
+	): unknown {
 		// SAFETY: the seeded recipe generics restate runtime facts — materialization
 		// seeds the child node from this node's contexts and owned flags.
 		const define = defineCommand as unknown as (

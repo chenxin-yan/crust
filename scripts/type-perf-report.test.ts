@@ -11,6 +11,7 @@ import {
 import {
 	formatComparison,
 	generateConsumerSource,
+	parseCheckSeconds,
 	parseExtendedDiagnostics,
 	type TypePerfReport,
 } from "./type-perf-report.ts";
@@ -22,6 +23,7 @@ const report = (
 	stress: Measured,
 	wide: Measured = 1_000,
 	contexts: Measured = 1_000,
+	[check200, check400] = [1, 2],
 ): TypePerfReport => ({
 	typescriptVersion: "7.0.2",
 	fixtureApi: "fluent",
@@ -29,28 +31,32 @@ const report = (
 		10: small,
 		100: large,
 		200: stress,
+		400: typeof stress === "number" ? stress * 2 : stress,
 		"50 in one .add()": wide,
 		"60 Contexts in one call": contexts,
 	},
+	checkSeconds: { 200: check200, 400: check400 },
 });
 
 const repoRoot = resolve(import.meta.dirname, "..");
 const script = join(repoRoot, "scripts/type-perf-report.ts");
 
-// Below the 30s measurement test timeout; afterEach reaps shorter tests' children.
+// Below the 60s measurement test timeout; afterEach reaps shorter tests' children.
 function measure(root: string, output: string, ...flags: string[]) {
 	return runBoundedProcess("bun", [script, "measure", output, root, ...flags], {
 		cwd: repoRoot,
-		timeout: 25_000,
+		timeout: 55_000,
 	});
 }
 
 afterEach(reapBoundedProcesses);
 
 describe("type performance report", () => {
-	it("requires only the instantiation count from extended diagnostics", () => {
+	it("reads the instantiation count and check time from extended diagnostics", () => {
 		expect(parseExtendedDiagnostics("Instantiations: 282284")).toBe(282_284);
 		expect(() => parseExtendedDiagnostics("Types: 93419")).toThrow("Missing instantiations");
+		expect(parseCheckSeconds("Check time:       1.647s")).toBe(1.647);
+		expect(() => parseCheckSeconds("Bind time: 0.1s")).toThrow("Missing check time");
 	});
 
 	it.each([10])("preserves the workload across API dialects at size %i", (size) => {
@@ -116,6 +122,7 @@ describe("type performance report", () => {
 				"10",
 				"100",
 				"200",
+				"400",
 				"50 in one .add()",
 				"60 Contexts in one call",
 			]);
@@ -126,12 +133,15 @@ describe("type performance report", () => {
 			);
 			expect(measured.instantiations[100]).toBeGreaterThan(measured.instantiations[10]);
 			expect(measured.instantiations[200]).toBeGreaterThan(measured.instantiations[100]);
+			expect(measured.instantiations[400]).toBeGreaterThan(measured.instantiations[200]);
+			expect(Object.keys(measured.checkSeconds)).toEqual(Object.keys(measured.instantiations));
+			expect(measured.checkSeconds[400]).toBeGreaterThan(0);
 			expect(measured.typescriptVersion).toBeTruthy();
 			expect(measured.fixtureApi).toBe("fluent");
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}
-	}, 30_000);
+	}, 60_000);
 
 	it("fails measurement when a consumer cannot compile instead of publishing missing data", async () => {
 		const root = mkdtempSync(join(tmpdir(), "crust-type-perf-failure-"));
@@ -158,13 +168,14 @@ describe("type performance report", () => {
 				10: { error: "TS2305" },
 				100: { error: "TS2305" },
 				200: { error: "TS2305" },
+				400: { error: "TS2305" },
 				"50 in one .add()": { error: "TS2305" },
 				"60 Contexts in one call": { error: "TS2305" },
 			});
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}
-	}, 30_000);
+	}, 60_000);
 
 	it("reports base compile errors as n/a and rejects a failing PR merge", () => {
 		const output = formatComparison(
@@ -202,10 +213,23 @@ describe("type performance report", () => {
 		expect(output).toContain("| 200 ⚠️ | 100,000 | 120,000 | +20,000 (+20.0%) |");
 		expect(output).toContain("PR merge");
 		expect(output).toContain("TypeScript 7.0.2");
-		expect(output).not.toContain("Check time");
 		expect(output).not.toContain("Editor latency");
-		expect(output).not.toContain("scaling ratio");
 		expect(output).not.toContain("API transition");
+	});
+
+	it("flags check-time scaling only when it grows more than 20% above base", () => {
+		const base = report(10_000, 50_000, 100_000, 1_000, 1_000, [1, 2.3]);
+		expect(
+			formatComparison(base, report(10_000, 50_000, 100_000, 1_000, 1_000, [2, 5.5])),
+		).toContain("Check-time scaling (400 ÷ 200 commands): base 2.30× · PR merge 2.75×");
+		expect(
+			formatComparison(base, report(10_000, 50_000, 100_000, 1_000, 1_000, [1, 3.1])),
+		).toContain("Check-time scaling (400 ÷ 200 commands) ⚠️: base 2.30× · PR merge 3.10×");
+		const failedBase = report(10_000, 50_000, { error: "TS2590" });
+		failedBase.checkSeconds = {};
+		expect(formatComparison(failedBase, report(10_000, 50_000, 100_000))).toContain(
+			"Check-time scaling (400 ÷ 200 commands): base n/a · PR merge 2.00×",
+		);
 	});
 
 	it("does not flag improved workloads when their ratio increases", () => {

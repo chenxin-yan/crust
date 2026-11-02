@@ -45,9 +45,19 @@ Metadata is optional unless an installed Extension [requires it](/docs/guide/ext
 
 Runtime checks throw a `DEFINITION` [error](/docs/api/errors): direct builder inputs and sibling name/alias collisions are checked at the builder call, while recipe validation, inherited-flag collisions, and Context demands for added definitions are checked on first use. `.extend()` only records Extensions: collisions between Extension-provided flags and the app's flags, Extension command names or aliases that collide with the app's commands or another Extension's, and missing Contexts for an Extension's `.use()` or `.provide()`, are checked when the app prepares (first run, `snapshot()`, or `at()`). Use `await app.snapshot()` to validate the full tree without running Command Actions.
 
+Each call returns a builder of a new type, so register a dynamic list in one call instead of reassigning a variable in a loop:
+
+```ts
+const app = new Crust("cli").add(...names.map((name) => defineCommand(name, recipe)));
+// Compile error: the result of .add() is not the type of `app`.
+// for (const name of names) app = app.add(defineCommand(name, recipe));
+```
+
+`.flags()`, `.args()`, `.action()`, `.add()`, and `.command()` infer their type arguments from the builder they are called on. Passing explicit type arguments, such as `.action<void>(…)`, is a compile error (`FIX_EXPLICIT_TYPE_ARGUMENTS`).
+
 ### Conditional chains
 
-Each call returns a builder whose type records what was added so far, so a conditional can produce a union of builder types that the next call cannot infer from. Crust rejects such calls instead of silently losing types:
+Each call returns a builder whose type records what was added so far, so a conditional can produce a union of builder types that the next call cannot infer from. Crust rejects such calls instead of silently losing types. `.add()` and `.command()` are the exception: they accept a builder union, and the result types only the command paths every branch has, plus the ones the call adds.
 
 ```ts
 // Compile error: inputs cannot be inferred from this builder union.
