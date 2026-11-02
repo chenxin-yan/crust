@@ -417,9 +417,11 @@ type DefinitionsTree<
 ]
 	? IsUnion<N> extends true
 		? DefinitionsTreeSlow<Ds, CtxFlags>
-		: [IsClosedName<N>, IsClosedName<Al[number]>] extends [true, true]
-			? { [K in N | Al[number]]: ShapeWithInheritedFlags<S, CtxFlags> }
-			: DefinitionsTreeSlow<Ds, CtxFlags>
+		: IsUnion<Ds[number]> extends true
+			? DefinitionsTreeSlow<Ds, CtxFlags>
+			: [IsClosedName<N>, IsClosedName<Al[number]>] extends [true, true]
+				? { [K in N | Al[number]]: ShapeWithInheritedFlags<S, CtxFlags> }
+				: DefinitionsTreeSlow<Ds, CtxFlags>
 	: DefinitionsTreeSlow<Ds, CtxFlags>;
 
 type DefinitionsTreeSlow<

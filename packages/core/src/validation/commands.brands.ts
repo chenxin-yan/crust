@@ -311,7 +311,8 @@ export type LocalSectionsBrand<C> = "sections" extends keyof C
 export type LocalCommandConfigBrand<N extends string, C> = ValidateCommandConfig<N, C> &
 	LocalSectionsBrand<C>;
 
-// Fast path for the common `.add(def)`: one definition with a closed, non-union name.
+// Fast path for the common `.add(def)`: one definition with a closed, non-union name. A
+// conditional definition keeps the slow path even when its variants share a name.
 export type AttachedCommandSpellings<Ds extends readonly unknown[]> = [Ds] extends [
 	readonly [
 		{
@@ -324,11 +325,13 @@ export type AttachedCommandSpellings<Ds extends readonly unknown[]> = [Ds] exten
 ]
 	? IsUnion<N> extends true
 		? AttachedCommandSpellingsSlow<Ds>
-		: IsClosedName<N> extends true
-			? IsClosedName<Al[number]> extends true
-				? N | Al[number]
-				: string
-			: AttachedCommandSpellingsSlow<Ds>
+		: IsUnion<Ds[number]> extends true
+			? AttachedCommandSpellingsSlow<Ds>
+			: IsClosedName<N> extends true
+				? IsClosedName<Al[number]> extends true
+					? N | Al[number]
+					: string
+				: AttachedCommandSpellingsSlow<Ds>
 	: AttachedCommandSpellingsSlow<Ds>;
 
 type AttachedCommandSpellingsSlow<Ds extends readonly unknown[]> = [Ds] extends [readonly []]
