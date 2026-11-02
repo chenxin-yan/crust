@@ -1,9 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { join, resolve as resolvePath } from "node:path";
-
 import {
-	CrustError,
-	type BuildArtifacts,
 	type CommandDefinition,
 	type CommandShape,
 	type CommandSnapshot,
@@ -14,13 +9,10 @@ import {
 	defineExtension,
 	defineExtensionId,
 } from "@crustjs/core";
-import { buildCommandDocumentation } from "@crustjs/core/tooling";
 
-import { assertSafeBinName, sanitizeFreeText } from "./escape.ts";
-import { renderBash } from "./templates/bash.ts";
-import { renderFish } from "./templates/fish.ts";
-import { renderZsh } from "./templates/zsh.ts";
-import { walkCommand } from "./walker.ts";
+// Renderers, templates and file writing load on first use (see render.ts), so
+// registering completion() costs nothing until a script is generated.
+const loadRenderer = () => import("./render.ts");
 
 const COMPLETION: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:completion");
 
@@ -105,90 +97,28 @@ export interface CompletionExtension {
 	readonly id: ExtensionId;
 }
 
-/** Filename convention for each shell's drop-in completion file. */
-function filenameForShell(shell: CompletionShell, binName: string): string {
-	switch (shell) {
-		case "bash":
-			// bash-completion expects the file named exactly after the command
-			// (no extension) under
-			// `~/.local/share/bash-completion/completions/`.
-			return binName;
-		case "zsh":
-			// zsh's `compinit` autoloads files named `_<command>` from $fpath.
-			return `_${binName}`;
-		case "fish":
-			// fish auto-loads `~/.config/fish/completions/<command>.fish`.
-			return `${binName}.fish`;
-	}
-}
-
-const SHELL_RENDERERS = {
-	bash: renderBash,
-	zsh: renderZsh,
-	fish: renderFish,
-} satisfies Record<CompletionShell, typeof renderBash>;
-
-function prepareRender(root: CommandSnapshot, options: CompletionOptions) {
-	// Validate the root name before emitting anything so misconfigured CLIs fail loudly.
-	// The walker also re-validates command/flag identifiers when it builds the spec.
-	const binName = assertSafeBinName(root.meta.name);
-	const version = options.version ?? root.meta.version;
-	if (version === undefined) {
-		throw new CrustError(
-			"DEFINITION",
-			"The completion extension requires a version in new Crust(name, { version }) or completion({ version })",
-		);
-	}
-	// `version` flows into header comments only; strip control characters so it
-	// cannot break out of the comment line in the emitted script.
-	return {
-		spec: walkCommand(buildCommandDocumentation(root)),
-		binName,
-		version: sanitizeFreeText(version),
-		command: options.command ?? "completion",
-	};
-}
-
-/** Every supported shell's drop-in file, named by its autoload convention. */
-function renderCompletionFiles(root: CommandSnapshot, options: CompletionOptions): BuildArtifacts {
-	const { spec, binName, version, command } = prepareRender(root, options);
-	return SUPPORTED_SHELLS.map((shell) => ({
-		path: filenameForShell(shell, binName),
-		content: SHELL_RENDERERS[shell](spec, binName, version, command),
-	}));
-}
-
-function renderCompletionScript(
-	shell: CompletionShell,
-	root: CommandSnapshot,
-	options: CompletionOptions = {},
-): string {
-	const { spec, binName, version, command } = prepareRender(root, options);
-	return SHELL_RENDERERS[shell](spec, binName, version, command);
-}
-
 /** Render a bash completion script from a prepared root Command Snapshot. */
-export function renderBashCompletion(
+export async function renderBashCompletion(
 	root: CommandSnapshot,
 	options?: CompletionRenderOptions,
-): string {
-	return renderCompletionScript("bash", root, options);
+): Promise<string> {
+	return (await loadRenderer()).renderCompletionScript("bash", root, options);
 }
 
 /** Render a zsh completion script from a prepared root Command Snapshot. */
-export function renderZshCompletion(
+export async function renderZshCompletion(
 	root: CommandSnapshot,
 	options?: CompletionRenderOptions,
-): string {
-	return renderCompletionScript("zsh", root, options);
+): Promise<string> {
+	return (await loadRenderer()).renderCompletionScript("zsh", root, options);
 }
 
 /** Render a fish completion script from a prepared root Command Snapshot. */
-export function renderFishCompletion(
+export async function renderFishCompletion(
 	root: CommandSnapshot,
 	options?: CompletionRenderOptions,
-): string {
-	return renderCompletionScript("fish", root, options);
+): Promise<string> {
+	return (await loadRenderer()).renderCompletionScript("fish", root, options);
 }
 
 const completionFactory: ExtensionFactory<
@@ -218,10 +148,11 @@ const completionFactory: ExtensionFactory<
 					description: OUTPUT_DIR_DESCRIPTION,
 				})
 				.action(async (context) => {
+					const renderer = await loadRenderer();
 					const outputDir = context.flags["output-dir"];
 					if (outputDir === undefined) {
 						context.stdout(
-							renderCompletionScript(context.args.shell, context.rootCommand, options),
+							renderer.renderCompletionScript(context.args.shell, context.rootCommand, options),
 						);
 						return;
 					}
@@ -230,18 +161,22 @@ const completionFactory: ExtensionFactory<
 					// the packaging-time use case — distributors generate every
 					// supported file in one invocation regardless of which
 					// shell they nominally requested.
-					const dir = resolvePath(outputDir);
-					const files = renderCompletionFiles(context.rootCommand, options);
-					await mkdir(dir, { recursive: true });
-					for (const file of files) await writeFile(join(dir, file.path), file.content);
+					await renderer.writeCompletionFiles(
+						outputDir,
+						context.rootCommand,
+						options,
+						SUPPORTED_SHELLS,
+					);
 				}),
 	);
 
-	return extension.add(completionCommand).build(({ snapshot }) =>
-		renderCompletionFiles(snapshot, options).map((file) => ({
-			...file,
-			path: `completions/${file.path}`,
-		})),
+	return extension.add(completionCommand).build(async ({ snapshot }) =>
+		(await loadRenderer())
+			.renderCompletionFiles(snapshot, options, SUPPORTED_SHELLS)
+			.map((file) => ({
+				...file,
+				path: `completions/${file.path}`,
+			})),
 	);
 });
 

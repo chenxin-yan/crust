@@ -36,7 +36,7 @@ describe("help", () => {
 				{ title: "Not help", body: "hidden", except: [help] },
 			],
 		}).snapshot();
-		const output = stripAnsi(renderHelp(snapshot));
+		const output = stripAnsi(await renderHelp(snapshot));
 		expect(output).toContain("Help only:");
 		expect(output).not.toContain("Other only:");
 		expect(output).not.toContain("Not help:");
@@ -72,7 +72,7 @@ describe("help", () => {
 			})
 			.add(defineCommand("build", { description: "Build the project" }, (cmd) => cmd));
 
-		const output = renderHelp(await command.snapshot());
+		const output = await renderHelp(await command.snapshot());
 		const plain = stripAnsi(output);
 
 		expect(output).toContain("\x1b[");
@@ -119,7 +119,7 @@ describe("help", () => {
 				default: ".",
 			});
 
-		const lines = stripAnsi(renderHelp(await command.snapshot())).split("\n");
+		const lines = stripAnsi(await renderHelp(await command.snapshot())).split("\n");
 
 		const verboseLine = lines.find((line) => line.includes("--verbose"));
 		const portLine = lines.find((line) => line.includes("--port"));
@@ -268,7 +268,7 @@ describe("help", () => {
 			),
 		);
 
-		const plain = stripAnsi(renderHelp(await command.snapshot()));
+		const plain = stripAnsi(await renderHelp(await command.snapshot()));
 		expect(plain).toContain("Commands:");
 		expect(plain).toContain("issue (issues, i)");
 		expect(plain).toContain("Manage issues");
@@ -299,7 +299,7 @@ describe("help", () => {
 			},
 		};
 
-		const plain = stripAnsi(renderHelp(tracked));
+		const plain = stripAnsi(await renderHelp(tracked));
 		expect(plain).toContain("Manage remotes");
 		expect(grandchildReads).not.toHaveBeenCalled();
 	});
@@ -313,7 +313,7 @@ describe("help", () => {
 			)
 			.action(() => {});
 
-		const plain = stripAnsi(renderHelp(await command.snapshot()));
+		const plain = stripAnsi(await renderHelp(await command.snapshot()));
 		expect(plain).not.toContain("Commands:");
 		expect(plain).not.toContain("__complete");
 	});
@@ -328,7 +328,7 @@ describe("help", () => {
 				description: "API token",
 			})
 			.action(() => {});
-		const plain = stripAnsi(renderHelp(await command.snapshot()));
+		const plain = stripAnsi(await renderHelp(await command.snapshot()));
 		const tokenLine = plain.split("\n").find((l) => l.includes("--token"));
 		expect(tokenLine).toContain('API token [env: HOME] [default: "anon"]');
 		// HOME is set in every test environment; help must show the name only.

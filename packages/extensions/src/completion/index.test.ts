@@ -149,7 +149,7 @@ describe("completion build hook", () => {
 				["_mycli", renderZshCompletion],
 				["mycli.fish", renderFishCompletion],
 			] as const) {
-				const script = render(snapshot, options);
+				const script = await render(snapshot, options);
 				expect(files.get(`completions/${filename}`)).toBe(script);
 				expect(script).toBe(await readFile(join(tmpDir, filename), "utf8"));
 			}
@@ -162,9 +162,9 @@ describe("completion build hook", () => {
 describe("completion renderers", () => {
 	it("uses snapshot metadata by default and honors a version override", async () => {
 		const snapshot = await buildCli().snapshot();
-		expect(renderBashCompletion(snapshot)).toMatch(/^# completion script for mycli v1\.2\.3/);
-		expect(renderZshCompletion(snapshot)).toMatch(/^#compdef mycli\n/);
-		expect(renderFishCompletion(snapshot, { version: "9.9.9" })).toMatch(
+		expect(await renderBashCompletion(snapshot)).toMatch(/^# completion script for mycli v1\.2\.3/);
+		expect(await renderZshCompletion(snapshot)).toMatch(/^#compdef mycli\n/);
+		expect(await renderFishCompletion(snapshot, { version: "9.9.9" })).toMatch(
 			/^# completion script for mycli v9\.9\.9/,
 		);
 	});
@@ -173,9 +173,9 @@ describe("completion renderers", () => {
 		const snapshot = await new Crust("mycli").snapshot();
 		const unsafe = await new Crust("../pwn").snapshot();
 		for (const render of [renderBashCompletion, renderZshCompletion, renderFishCompletion]) {
-			expect(() => render(unsafe, { version: "1" })).toThrow(/invalid root command name/);
-			expect(() => render(snapshot)).toThrow("completion extension requires a version");
-			expect(render(snapshot, { version: "1\ninjected" })).not.toContain("\ninjected");
+			await expect(render(unsafe, { version: "1" })).rejects.toThrow(/invalid root command name/);
+			await expect(render(snapshot)).rejects.toThrow("completion extension requires a version");
+			expect(await render(snapshot, { version: "1\ninjected" })).not.toContain("\ninjected");
 		}
 	});
 });

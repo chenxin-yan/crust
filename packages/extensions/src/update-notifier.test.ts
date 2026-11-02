@@ -10,6 +10,8 @@ import {
 	createStoreCacheAdapter,
 	fetchLatestVersion,
 	isNewerVersion,
+} from "./update-notifier-check.ts";
+import {
 	type UpdateNotifierCacheAdapter,
 	type UpdateNotifierOptions,
 	type UpdateNotifierState,
@@ -211,7 +213,7 @@ describe("lazy store import", () => {
 	it("never imports @crustjs/store statically", async () => {
 		// The env-sandbox tests can't detect an eager import (env is read at call
 		// time), so pin the deferred-import invariant against the source itself.
-		const source = await readFile(new URL("./update-notifier.ts", import.meta.url), "utf8");
+		const source = await readFile(new URL("./update-notifier-check.ts", import.meta.url), "utf8");
 		expect(source).not.toMatch(/^import[^;]*["']@crustjs\/store["']/m);
 		expect(source).toContain('await import("@crustjs/store")');
 	});
