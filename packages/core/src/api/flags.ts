@@ -18,16 +18,24 @@ type Frozen<T> = {
 };
 
 // Preserve conditional fields before mapping the normalized readonly definition.
+type Owned<D> = D extends unknown ? Frozen<D> : never;
 type Named<N extends string, D> = D extends unknown ? Frozen<{ name: N } & D> : never;
 
-/** Define and own one flag locally, including its readonly env binding; attachment checks destination collisions. */
+/**
+ * Define one reusable flag, including its readonly env binding. The key it is
+ * attached under names it (`.flags({ format })`); attachment checks the name and collisions.
+ */
+export function defineFlag<const D extends FlagDef>(def: D & LocalFlagBrand<D>): Owned<D>;
+/** Define and own one named flag for the variadic `.flags(...defs)` form. */
 export function defineFlag<const N extends string, const D extends FlagDef>(
 	name: N & LocalFlagNameBrand<N>,
 	def: D & LocalFlagBrand<{ name: N } & D>,
 ): Named<N, D>;
 
-export function defineFlag(name: string, def: FlagDef): NamedFlagDef {
-	return normalizeFlag(name, { ...def, name });
+export function defineFlag(nameOrDef: string | FlagDef, def?: FlagDef): FlagDef | NamedFlagDef {
+	if (typeof nameOrDef !== "string") return normalizeFlag(undefined, nameOrDef);
+	// SAFETY: the named overload requires a definition.
+	return normalizeFlag(nameOrDef, { ...(def as FlagDef), name: nameOrDef });
 }
 
 /** Define and own one positional argument; layout belongs to its consuming command. */

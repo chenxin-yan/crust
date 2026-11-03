@@ -10,6 +10,7 @@ import type {
 	IsAny,
 	IsStaticTuple,
 	IsClosedName,
+	IsUnion,
 	LocalValueBrand,
 	DefNameMembers,
 	UnionToIntersection,
@@ -166,14 +167,24 @@ type ContextFlagCollisionBrand<C, Existing extends string> = ExistingSpellingCol
 // Extension flag validation (compile-time, per-extension granularity)
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Declared flag literals carried by an Extension's `_flagDefs` phantom; widened Extensions opt out. */
-type ExtensionFlagDefsOf<E> = [E] extends [never]
-	? readonly []
-	: DefiningOf<E> extends {
-				readonly _flagDefs?: infer D extends readonly NamedFlagDef[];
-		  }
-		? D
-		: readonly NamedFlagDef[];
+/**
+ * Declared flags carried by an Extension's `_flagDefs` phantom. Widened Extensions and
+ * unions of Extensions (whose flags may be absent) opt out.
+ */
+export type ExtensionFlagDefsOf<E> = [E] extends [never]
+	? {}
+	: EachExtensionFlags<E> extends infer F extends FlagsDef
+		? IsUnion<F> extends true
+			? FlagsDef
+			: F
+		: never;
+
+// Distributed, not inferred from the union: inference would reduce `{} | { out: … }` to `{}`.
+type EachExtensionFlags<E> = E extends unknown
+	? DefiningOf<E> extends { readonly _flagDefs?: infer F extends FlagsDef }
+		? F
+		: FlagsDef
+	: never;
 
 /** All statically known owned-flag spellings across a tuple of Context instances. */
 export type ProvidedContextSpellings<
@@ -187,7 +198,7 @@ export type ProvidedContextSpellings<
 
 /** All statically known flag spellings an Extension contributes: declared flags plus provided Context-owned flags. */
 type ExtensionSpellings<E> =
-	| AttachedSpellings<ExtensionFlagDefsOf<E>>
+	| LocalSpellingsOf<ExtensionFlagDefsOf<E>>
 	| ([E] extends [never]
 			? never
 			: DefiningOf<E> extends { readonly provide?: infer P extends readonly unknown[] }
@@ -384,6 +395,89 @@ type LocalFlagTupleChecks<
 	: Defs extends readonly []
 		? Errors
 		: Errors & LocalFlagBrand<Defs[number]>;
+
+/**
+ * Errors-only validation for a flag record (`.flags({ out: { type: "string" } })`):
+ * `unknown` when valid; otherwise each offending key carries its brands, so the diagnostic
+ * lands on that flag's object literal. Each flag is checked against `Existing` and against
+ * every other flag in the record. An index signature (a dynamic record) is left to runtime
+ * checks, but literal keys beside it are still validated, including against each other.
+ */
+export type FlagRecordErrors<F, Existing extends string> = RecordErrors<
+	F,
+	[KnownFlagKey<keyof F>] extends [never]
+		? // An index signature absorbs literal keys in `keyof`; mapping per key recovers them.
+			keyof { [K in keyof F as KnownFlagKey<K>]: 0 } & string
+		: KnownFlagKey<keyof F> & string,
+	Existing
+>;
+
+// Every short and alias in the record, computed once: a flag without its own short or aliases
+// only needs this union, which keeps a large record of plain flags linear instead of quadratic.
+type RecordErrors<
+	F,
+	Names extends string,
+	Existing extends string,
+	AllAliases extends string = ExtractAllAliases<F[Names & keyof F]>,
+> = DropEmpty<{
+	[K in keyof F as KnownFlagKey<K>]: K extends string
+		? IntegerLikeBrand<K> & RecordFlagBrand<F, K, Names, Existing, AllAliases>
+		: K extends number
+			? // Builders keep `keyof F` as is, so a number key would hide its runtime spelling from collision checks.
+				{ readonly FIX_NUMBER_KEY: "Flag names must be string keys; quote a numeric name" }
+			: { readonly FIX_SYMBOL_KEY: "Flag names must be string keys; .flags() ignores symbol keys" };
+}>;
+
+// Only index signatures are dropped; number and symbol keys stay so they can be rejected.
+type KnownFlagKey<K> = string extends K ? never : number extends K ? never : K;
+
+type IntegerLikeMessage = "Flag names must not be integer-like; JavaScript lists such keys first";
+
+// Mirrors the runtime `^(0|[1-9]\d*)$` check, which covers every canonical decimal integer, not
+// only array indexes.
+// Written inline (not an alias) so diagnostics print the message.
+type IntegerLikeBrand<K extends string> = K extends `${bigint}`
+	? K extends `-${string}` | `0${string}`
+		? K extends "0"
+			? { readonly FIX_INTEGER_LIKE_NAME: IntegerLikeMessage }
+			: {}
+		: { readonly FIX_INTEGER_LIKE_NAME: IntegerLikeMessage }
+	: {};
+
+// Only these fields can make one flag invalid on its own; other flags need name checks only.
+type RiskyFlagField = "short" | "aliases" | "choices" | "parse";
+
+type RecordFlagBrand<
+	F,
+	K extends keyof F & string,
+	Names extends string,
+	Existing extends string,
+	AllAliases extends string,
+> = (KeysOfAnyBranch<F[K]> & RiskyFlagField extends never
+	? RecordNameBrand<K>
+	: LocalFlagBrand<F[K] & { name: K }>) &
+	ExistingSpellingCollisionBrand<
+		K | ExtractAllAliases<F[K]>,
+		| Existing
+		// A flag without a known short or alias can only collide with another flag's alias.
+		| ([ExtractAllAliases<F[K]>] extends [never]
+				? AllAliases
+				:
+						| Exclude<Names, K>
+						| { [O in Exclude<Names, K>]: ExtractAllAliases<F[O & keyof F]> }[Exclude<Names, K>])
+	>;
+
+// `keyof` a union lists only shared keys, so a risky field in one branch would skip its checks.
+type KeysOfAnyBranch<D> = D extends unknown ? keyof D : never;
+
+type RecordNameBrand<K extends string> = NoPrefixBrand<K> &
+	EmptyFlagSpellingBrand<K> &
+	ReservedSpellingBrand<{ name: K }>;
+
+// `unknown` when nothing is wrong: an empty `{}` left in `F & Errors` makes every call relate
+// its record to the intersection, which measurably slows checking.
+type DropEmpty<M> = NonEmpty<{ [K in keyof M as {} extends M[K] ? never : K]: M[K] }>;
+type NonEmpty<M> = keyof M extends never ? unknown : M;
 
 /** An open collection is not an empty or guaranteed-present flag record. */
 type KnownNamedFlag<D> = D extends NamedFlagDef

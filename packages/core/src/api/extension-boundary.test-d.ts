@@ -86,7 +86,7 @@ function _holderErasure() {
 	const erasedCommand: CommandDefinition<"demand", readonly [], CommandShape<[], {}>> = command;
 	const extension = defineExtension(id).use(db);
 	// @ts-expect-error An empty Extension holder cannot erase demands.
-	const erasedExtension: Extension<{}, [], [], []> = extension;
+	const erasedExtension: Extension<{}, [], {}, []> = extension;
 	const instance = defineContext("owned")
 		.flags({ name: "token", type: "string" })
 		.setup(() => 1)();
@@ -280,7 +280,7 @@ function _hookDemandProofCannotBeErased() {
 	const text = defineContext("db").setup(() => "db");
 	const extension = defineExtension(id).use(text);
 	// @ts-expect-error Keeping aggregate demands cannot erase separately retained hook demands.
-	const erased: Extension<{ db: string }, [], [], [], never, {}> = extension;
+	const erased: Extension<{ db: string }, [], {}, [], never, {}> = extension;
 	const root = new Crust("app").provide(text()).extend(extension);
 	const empty = new Crust("app").provide(text());
 	// @ts-expect-error Application holders cannot erase retained hook obligations.

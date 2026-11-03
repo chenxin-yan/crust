@@ -228,6 +228,47 @@ describe("Crust .flags()", () => {
 	});
 });
 
+describe("Crust .flags() records", () => {
+	it("registers keys in insertion order across calls, matching the named form", async () => {
+		const record = new Crust("test")
+			.flags({ zeta: { type: "boolean", short: "z" }, "dry-run": { type: "boolean" } })
+			.flags({ alpha: { type: "string", aliases: ["a-alias"] } });
+		const named = new Crust("test")
+			.flags({ name: "zeta", type: "boolean", short: "z" }, { name: "dry-run", type: "boolean" })
+			.flags({ name: "alpha", type: "string", aliases: ["a-alias"] });
+		const snapshot = await record.snapshot();
+		expect(Object.keys(snapshot.flags)).toEqual(["zeta", "dry-run", "alpha"]);
+		expect(snapshot).toEqual(await named.snapshot());
+	});
+
+	it("copies each definition and ignores symbol keys TypeScript did not see", async () => {
+		const out = { type: "string" as const, short: "o" };
+		const hidden = Symbol("hidden");
+		// @ts-expect-error -- TypeScript rejects symbol keys; untyped callers get them ignored
+		const app = new Crust("test").flags({ out, [hidden]: { type: "boolean" } });
+		out.short = "x";
+		expect((await app.snapshot()).flags).toEqual({
+			out: { type: "string", short: "o", negatable: false },
+		});
+	});
+
+	it("treats a one-key record keyed `name` as a flag named name", async () => {
+		const app = new Crust("test").flags({ name: { type: "string" } });
+		expect(Object.keys((await app.snapshot()).flags)).toEqual(["name"]);
+	});
+
+	it("rejects colliding keys in one record", () => {
+		expect(() =>
+			new Crust("test").flags({
+				out: { type: "string", short: "o" },
+				...({ open: { type: "boolean", short: "o" } } as {}),
+			}),
+		).toThrow(
+			expect.objectContaining({ details: expect.objectContaining({ reason: "flag-collision" }) }),
+		);
+	});
+});
+
 // ────────────────────────────────────────────────────────────────────────────
 // .args()
 // ────────────────────────────────────────────────────────────────────────────
@@ -2144,6 +2185,56 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 				}),
 			);
 		}
+	});
+
+	it("rejects malformed .flags() records on commands, Contexts, and Extensions", () => {
+		const attach = [
+			(input: unknown) => new Crust("cli").flags(asDynamic(input)[0]!),
+			(input: unknown) => defineContext("cfg").flags(asDynamic(input)[0]!),
+			(input: unknown) => defineExtension(defineExtensionId("cfg-ext")).flags(asDynamic(input)[0]!),
+		];
+		const cases: [unknown, string, string | undefined][] = [
+			[[null], "invalid-flags", undefined],
+			[[[{ type: "string" }]], "invalid-flags", undefined],
+			[["out"], "invalid-flags", undefined],
+			[[{ out: "string" }], "invalid-flags", "out"],
+			[[{ out: null }], "invalid-flags", "out"],
+			// A literal `__proto__` key sets the record's prototype instead of naming a flag.
+			[[{ __proto__: { type: "string" } }], "invalid-flags", undefined],
+			[[{ ["__proto__"]: { type: "string" } }], "reserved-spelling", "__proto__"],
+			[[{ 2: { type: "string" } }], "integer-like-name", "2"],
+			[[{ "0": { type: "string" } }], "integer-like-name", "0"],
+			[[{ out: { type: "string" }, 10: { type: "string" } }], "integer-like-name", "10"],
+			// Past the array-index range, matching the type-level rule.
+			[[{ "4294967295": { type: "string" } }], "integer-like-name", "4294967295"],
+		];
+		for (const add of attach) {
+			for (const [input, reason, name] of cases) {
+				expect(() => add(input), `${reason} ${String(name)}`).toThrow(
+					expect.objectContaining({
+						code: "DEFINITION",
+						details: { subject: "flag", ...(name === undefined ? {} : { name }), reason },
+					}),
+				);
+			}
+		}
+		// Two records: the named form requires a string `name` on every definition.
+		expect(() =>
+			new Crust("cli").flags(...asDynamic([{ a: { type: "string" } }, { b: { type: "string" } }])),
+		).toThrow(
+			expect.objectContaining({ details: expect.objectContaining({ reason: "invalid-flags" }) }),
+		);
+		// Not array indexes: they keep insertion order.
+		for (const name of ["01", "-1", "2fa", "1.5"]) {
+			expect(() =>
+				new Crust("cli").flags(asDynamic([{ [name]: { type: "string" } }])[0]!),
+			).not.toThrow();
+		}
+		expect(() =>
+			new Crust("cli").flags(
+				asDynamic([Object.assign(Object.create(null), { out: { type: "string" } })])[0]!,
+			),
+		).not.toThrow();
 	});
 
 	it("rejects empty env names and delimiters from dynamic defs", () => {

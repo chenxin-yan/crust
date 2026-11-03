@@ -41,7 +41,7 @@ Metadata is optional unless an installed Extension [requires it](/docs/guide/ext
 
 ## Chaining semantics
 
-`.flags()`, `.args()`, `.provide()`, `.add()`, and `.extend()` are variadic, accept dynamic collections, and accumulate across calls. TypeScript rejects statically known invalid definitions and collisions. Runtime checks cover what the types can't fully see, such as a name typed `string`, a spread array, a `Record` of definitions, or properties hidden by a structural view. Checks enforcing TypeScript-only constraints, such as requiring a command recipe, are omitted; callers using `as never`, `any`, or plain JavaScript cannot rely on those checks. Retained runtime checks still apply to all inputs, including conflicting section audiences, malformed flag `env` bindings, and delimiters on scalar flags.
+`.flags()` takes one record keyed by flag name; `.args()`, `.provide()`, `.add()`, and `.extend()` are variadic. All of them accept dynamic collections and accumulate across calls. TypeScript rejects statically known invalid definitions and collisions. Runtime checks cover what the types can't fully see, such as a name typed `string`, a spread array, a `Record` of definitions, or properties hidden by a structural view. Checks enforcing TypeScript-only constraints, such as requiring a command recipe, are omitted; callers using `as never`, `any`, or plain JavaScript cannot rely on those checks. Retained runtime checks still apply to all inputs, including conflicting section audiences, malformed flag `env` bindings, and delimiters on scalar flags.
 
 Runtime checks throw a `DEFINITION` [error](/docs/api/errors): direct builder inputs and sibling name/alias collisions are checked at the builder call, while recipe validation, inherited-flag collisions, and Context demands for added definitions are checked on first use. `.extend()` only records Extensions: collisions between Extension-provided flags and the app's flags, Extension command names or aliases that collide with the app's commands or another Extension's, and missing Contexts for an Extension's `.use()` or `.provide()`, are checked when the app prepares (first run, `snapshot()`, or `at()`). Use `await app.snapshot()` to validate the full tree without running Command Actions.
 
@@ -93,18 +93,24 @@ const copy = new Crust("copy").args(
 
 Names must be unique, custom `parse` functions must be synchronous, and only the last argument across all calls may be variadic. A schema-backed argument receives the raw string (`string[]` when variadic, `undefined` when absent); its schema owns coercion, defaults, requiredness, and validation, so it cannot also set `type`, `default`, `required`, `choices`, or `parse`.
 
-## `.flags(...defs)`
+## `.flags(flags)`
 
-Defines flags local to this command. Definitions come from `defineFlag(name, def)` or inline literals carrying `name`; names omit the `--` prefix. See [`FlagDef`](/docs/api/types#flagdef).
+Defines flags local to this command from one record: each key is a flag's name without the `--` prefix, and each value is its [`FlagDef`](/docs/api/types#flagdef), written inline or created with [`defineFlag(def)`](/docs/api/types#defineflag-and-definearg). Quote names that are not identifiers, and read them the same way: `flags["dry-run"]`.
 
 ```ts
-const serve = new Crust("serve").flags(
-  { name: "verbose", type: "boolean", short: "v" },
-  { name: "port", type: "number", default: 3000 },
-  { name: "include", type: "string", multiple: true },
-);
+const serve = new Crust("serve").flags({
+  verbose: { type: "boolean", short: "v" },
+  port: { type: "number", default: 3000 },
+  include: { type: "string", multiple: true },
+  "dry-run": { type: "boolean" },
+});
 ```
 
+The variadic named form, `.flags({ name: "verbose", type: "boolean" })` or `.flags(defineFlag("verbose", def))`, is still accepted.
+
+- Only own enumerable string keys are flags; TypeScript rejects symbol keys and unquoted number keys, so write `"1.5"` rather than `1.5`. Integer-like names (`"0"`, or digits without a leading zero such as `"2"`) are rejected at any length, because JavaScript lists array-index keys first and would reorder help. A record whose prototype is not `Object.prototype` or `null`, such as one written with a literal `__proto__` key, throws a `DEFINITION` error.
+- A key written after a spread (`{ ...shared, out }`) silently replaces the spread's flag of the same name. Attach shared sets in their own `.flags()` call: collisions across calls are checked.
+- A record with an index signature, such as one built with `Object.fromEntries()`, is checked when the call runs; literal keys beside it are still checked by TypeScript.
 - Long names, aliases, and `short` spellings must not collide with other flags visible on the command.
 - One-character names and aliases accept one or two dashes: `aliases: ["P"]` accepts `-P` and `--P`. Help, completion, man, and skills output list both.
 - Boolean flags accept `--no-<spelling>` for the name and every long alias. `noNegate: true` rejects negation with a `PARSE` error and hides it from help, completion, and man output. Names and aliases beginning with `no-` are reserved.

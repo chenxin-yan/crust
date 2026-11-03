@@ -19,13 +19,12 @@ let baseForceColor: string | undefined;
 let baseNoColor: string | undefined;
 const colorRuns = new WeakSet<ExtensionContext>();
 
-const colorFlags = [
-	{
-		name: "color",
+const colorFlags = {
+	color: {
 		type: "boolean",
 		description: "Enable colored output",
 	},
-] as const;
+} as const;
 
 /**
  * Adds a recursive `--color` / `--no-color` flag pair that scopes the
@@ -50,7 +49,7 @@ const colorFlags = [
 export const noColor: ExtensionFactory<[], {}, [], typeof colorFlags> =
 	/* @__PURE__ */ defineExtension(NO_COLOR).factory((extension) =>
 		extension
-			.flags(...colorFlags)
+			.flags(colorFlags)
 			.preRun((context) => {
 				const flagValue = context.flags.color;
 				if (flagValue !== true && flagValue !== false) return;

@@ -112,7 +112,7 @@ export const mcpExtension: ExtensionFactory<
 	[options: McpExtensionOptions],
 	{},
 	[],
-	[],
+	{},
 	readonly [McpCommandDefinition]
 > = defineExtension(MCP).factory((extension, options) =>
 	extension.add(

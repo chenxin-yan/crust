@@ -88,12 +88,12 @@ type CompletionCommands<Name extends string> = string extends Name
 export interface CompletionExtension {
 	<const Name extends string>(
 		options: CompletionOptions & { command: Name },
-	): Extension<{}, [], [], CompletionCommands<Name>>;
+	): Extension<{}, [], {}, CompletionCommands<Name>>;
 	(
 		options?: CompletionOptions & { command?: undefined },
-	): Extension<{}, [], [], readonly [CompletionCommandDefinition]>;
+	): Extension<{}, [], {}, readonly [CompletionCommandDefinition]>;
 	// Omitted `Commands` is the open command namespace.
-	(options?: CompletionOptions): Extension<{}, [], []>;
+	(options?: CompletionOptions): Extension<{}, [], {}>;
 	readonly id: ExtensionId;
 }
 
@@ -125,7 +125,7 @@ const completionFactory: ExtensionFactory<
 	[options?: CompletionOptions],
 	{},
 	[],
-	[],
+	{},
 	readonly [CompletionCommandDefinition<string>]
 > = /* @__PURE__ */ defineExtension(COMPLETION).factory((extension, options = {}) => {
 	const subcommandName = options.command ?? "completion";

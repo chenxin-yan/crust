@@ -219,7 +219,7 @@ describe("defineExtension", () => {
 		const _broad: Extension<
 			{ logger: { info: () => void } },
 			readonly [typeof provided],
-			readonly [{ readonly name: "verbose"; readonly type: "boolean" }],
+			{ readonly verbose: { readonly type: "boolean" } },
 			readonly [typeof command]
 		> = logging;
 		expect(definingOf(logging).commands).toEqual([command]);

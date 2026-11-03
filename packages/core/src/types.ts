@@ -422,10 +422,11 @@ export type FlagsDef = Record<string, FlagDef>;
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * A flag definition that carries its own name — the authoring shape
- * produced by `defineFlag(name, def)` or written inline as an object
- * literal (`{ name: "dry-run", type: "boolean" }`) and attached with the
- * variadic `.flags(...defs)`.
+ * A flag definition that carries its own name — the shape produced by
+ * `defineFlag(name, def)` or written inline as an object literal
+ * (`{ name: "dry-run", type: "boolean" }`) for the variadic named form of
+ * `.flags(...defs)`. The record form (`.flags({ "dry-run": { type: "boolean" } })`)
+ * takes names from its keys instead.
  */
 export type NamedFlagDef = FlagDef & { readonly name: string };
 
@@ -600,8 +601,9 @@ type InferFlagValue<F extends FlagDef> = F extends {
  * // Result = { verbose: boolean | undefined; port: number }
  * ```
  */
+// `-readonly`: record literals inferred through `const` type parameters are readonly.
 export type InferFlags<F> = F extends FlagsDef
-	? { [K in keyof F]: InferFlagValue<F[K]> }
+	? { -readonly [K in keyof F]: InferFlagValue<F[K]> }
 	: Record<string, never>;
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -871,7 +873,7 @@ export type ParsedFlagValue = RawFlagValue<FlagDef>;
 /** Runtime-erased syntax-parsed positional value. */
 export type ParsedArgValue = RawArgValue<ArgDef>;
 
-export type RawParsedFlags<F extends FlagsDef> = { [K in keyof F]: RawFlagValue<F[K]> };
+export type RawParsedFlags<F extends FlagsDef> = { -readonly [K in keyof F]: RawFlagValue<F[K]> };
 export type RawParsedArgs<A extends ArgsDef> = number extends A["length"]
 	? Record<string, ParsedArgValue>
 	: { [D in A[number] as D["name"]]: RawArgValue<D> };

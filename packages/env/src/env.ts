@@ -36,8 +36,8 @@ export interface EnvOptions {
 	readonly emptyStringAsUndefined?: boolean;
 }
 
-/** Validated values, inferred exactly as the equivalent flags would be (`InferFlags`). */
-export type InferEnv<V extends EnvVarsDef> = ValidatedInput<[], V>["flags"];
+/** Validated values, inferred exactly as the equivalent flags would be (`InferFlags`), read-only. */
+export type InferEnv<V extends EnvVarsDef> = Readonly<ValidatedInput<[], V>["flags"]>;
 
 /** `skipValidation` values: declared names only, raw text or unset. */
 export type RawEnv<V extends EnvVarsDef> = { [K in keyof V]: string | undefined };
