@@ -271,7 +271,8 @@ describe("Extension Context declarations", () => {
 		);
 		expect(seen).toEqual(["app logger"]);
 		// @ts-expect-error A consumed Context still needs an application provider.
-		expect(() => new Crust("app").extend(consumer)).toThrow('No provider for Context "logger"');
+		const missing = new Crust("app").extend(consumer);
+		await expect(missing.snapshot()).rejects.toThrow('No provider for Context "logger"');
 	});
 
 	it("provided Contexts are not exposed to the Extension's own hooks without use", async () => {

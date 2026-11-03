@@ -3,16 +3,8 @@ import type { ExtensionData } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import { normalizeSection, type SectionOwner } from "../sections.ts";
-import type { FlagsDef } from "../types.ts";
 import type { CommandDefinition } from "./crust.ts";
-import {
-	childEntriesOf,
-	cloneCommandNode,
-	lazyChildRecord,
-	registerFlag,
-	type CommandContext,
-	type CommandNode,
-} from "./node.ts";
+import { registerFlag, type CommandContext, type CommandNode } from "./node.ts";
 import { contributeSection, createSnapshotProjector } from "./snapshot.ts";
 
 export type MaterializeCommandDefinition = (
@@ -98,88 +90,62 @@ export function applyNodeContextSections(
 	];
 }
 
-/** Context instances whose sections document `node`: its own providers, plus Extension providers at the root. */
+/**
+ * Context instances whose sections document `node`: its own providers. The
+ * prepared root's Contexts are exactly its own and the Extensions' providers, in
+ * resolution order, so the provider that wins a name also supplies its sections.
+ */
 export function sectionContextsFor(
 	node: CommandNode,
-	extensions: readonly ExtensionData[] | undefined,
+	isRoot: boolean,
 ): readonly AnyContextInstance[] {
-	return extensions === undefined
-		? node.providedContexts
-		: [...node.providedContexts, ...extensions.flatMap((extension) => extension.provide)];
+	return isRoot ? node.contexts.map(({ instance }) => instance) : node.providedContexts;
 }
 
-export function installExtensionContexts(
-	node: CommandNode,
-	extensions: readonly ExtensionData[],
-	reRegisteredIds: ReadonlySet<ExtensionData["id"]>,
-): CommandNode {
-	// Rebuild Extension providers from the deduplicated list so replacing an id
-	// cannot leave the earlier registration's eager Context installs behind.
-	// Registrations that survive dedup unchanged stay at their original
-	// positions: Context resolution is last-write-wins and documentation
-	// promises flag definition order, so pruning in place (instead of
-	// regrouping locals before Extensions) keeps both observable orders.
-	const cloned = cloneCommandNode(node);
-	const kept = new Set(
-		extensions.flatMap((e) =>
-			!reRegisteredIds.has(e.id) && node.extensions.includes(e) ? [e.id] : [],
-		),
-	);
-	const prune = (target: CommandNode): void => {
-		target.contexts = target.contexts.filter(
-			(context) => context.extensionId === undefined || kept.has(context.extensionId),
-		);
-		const effectiveNames = Object.keys(target.effectiveFlags);
-		const localFlags = target.localFlags;
-		const ownedFlags: FlagsDef = {};
-		for (const { instance } of target.contexts) Object.assign(ownedFlags, instance.ownedFlags);
-		target.localFlags = {};
-		target.ownedFlags = {};
-		target.effectiveFlags = {};
-		target.flagSpellings = new Map();
-		for (const name of effectiveNames) {
-			const source = Object.hasOwn(ownedFlags, name) ? "owned" : "local";
-			const flags = source === "owned" ? ownedFlags : localFlags;
-			if (Object.hasOwn(flags, name)) registerFlag(target, name, flags[name]!, source);
-		}
-		target.subCommands = lazyChildRecord(childEntriesOf(target), (entry) => {
-			const child = entry.resolve();
-			prune(child);
-			return child;
-		});
-	};
-	prune(cloned);
+/** An Extension-provided Context and its Extension's `extensionPositions` entry. */
+export interface ExtensionProvider {
+	readonly instance: AnyContextInstance;
+	readonly position: number;
+}
 
-	for (const extension of extensions) {
-		if (kept.has(extension.id)) continue;
-		const instances = extension.provide;
-		if (instances.length === 0) continue;
-		const walk = (target: CommandNode, skip: ReadonlySet<string>): void => {
-			const installed = instances.filter((instance) => !skip.has(instance.name));
-			const registrations: CommandContext[] = installed.map((instance) => ({
-				instance,
-				extensionId: extension.id,
-			}));
-			target.contexts.push(...registrations);
-			for (const instance of installed) {
-				for (const [name, def] of Object.entries(instance.ownedFlags)) {
-					registerFlag(target, name, def, "owned");
-				}
-			}
-			// A Context provided locally on a descendant is more specific than a
-			// root-wide install: skip same-name instances for that subtree.
-			const inherited = new WeakSet(target.contexts.map(({ instance }) => instance));
-			target.subCommands = lazyChildRecord(childEntriesOf(target), (entry) => {
-				const child = entry.resolve();
-				const childSkip = new Set(skip);
-				for (const { instance } of child.contexts) {
-					if (!inherited.has(instance)) childSkip.add(instance.name);
-				}
-				walk(child, childSkip);
-				return child;
-			});
-		};
-		walk(cloned, new Set());
+/**
+ * A copy of `parent`, the root or its `.add()`-time state, with Extension
+ * providers installed. Context resolution is last-write-wins, as the types infer:
+ * each provider follows the root Contexts provided before its Extension's last
+ * `.extend()` and precedes later ones, so a command's own `.provide()` always wins.
+ * Their owned flags precede the parent's flags.
+ */
+export function installExtensionProviders(
+	parent: CommandNode,
+	providers: readonly ExtensionProvider[],
+): CommandNode {
+	if (providers.length === 0) return parent;
+	// Root Contexts only append, so `parent`'s are a prefix of the final root's, and
+	// positions never decrease along the final Extension list.
+	const contexts: CommandContext[] = [];
+	let next = 0;
+	for (const { instance, position } of providers) {
+		while (next < position && next < parent.contexts.length) {
+			contexts.push({ ...parent.contexts[next++]! });
+		}
+		contexts.push({ instance });
 	}
-	return cloned;
+	for (const context of parent.contexts.slice(next)) contexts.push({ ...context });
+	const node: CommandNode = {
+		...parent,
+		localFlags: {},
+		ownedFlags: {},
+		effectiveFlags: {},
+		flagSpellings: new Map(),
+		contexts,
+	};
+	for (const { instance } of providers) {
+		for (const [name, def] of Object.entries(instance.ownedFlags)) {
+			registerFlag(node, name, def, "owned");
+		}
+	}
+	for (const [name, def] of Object.entries(parent.effectiveFlags)) {
+		registerFlag(node, name, def, Object.hasOwn(parent.localFlags, name) ? "local" : "owned");
+	}
+	return node;
 }

@@ -150,7 +150,11 @@ export interface CommandDocumentation {
 	readonly hasAction: boolean;
 	/** Positional arguments in declaration order. */
 	readonly args: readonly DocumentationArg[];
-	/** Effective flags (Context-owned + local), in definition order. */
+	/**
+	 * Effective flags (Context-owned + local), in definition order: flags owned by
+	 * Extension-provided Contexts first, then the command path's own Context-owned
+	 * and local flags, then Extension flags.
+	 */
 	readonly flags: readonly DocumentationFlag[];
 	/** Unfiltered command-authored and Extension-contributed documentation sections. */
 	readonly sections: readonly CommandSection[];

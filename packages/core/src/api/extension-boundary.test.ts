@@ -8,7 +8,7 @@ import { defineExtension, type Extension } from "./extension.ts";
 import { defineFlag } from "./flags.ts";
 
 describe("checked Extension attachment", () => {
-	it("checks declared dependencies without running setup", () => {
+	it("checks declared dependencies at preparation without running setup", async () => {
 		let calls = 0;
 		const db = defineContext("db").setup(() => {
 			calls++;
@@ -16,7 +16,8 @@ describe("checked Extension attachment", () => {
 		});
 		const extension = defineExtension(defineExtensionId("db")).use(db);
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		expect(() => new Crust("app").extend(extension)).toThrow("No provider for Context");
+		const app = new Crust("app").extend(extension);
+		await expect(app.snapshot()).rejects.toThrow("No provider for Context");
 		expect(calls).toBe(0);
 	});
 	it("checks delayed command demands when the recipe is consumed", async () => {
@@ -511,11 +512,12 @@ it("retires actually inherited provider flags even below a later Context shadow"
 	await expect(
 		unwrap(original.extend(defineExtension(id)).run(["child"], { flags: { inherited: "value" } })),
 	).rejects.toThrow('Unknown flag "--inherited"');
-	// Reinstalling the root provider still skips a more specific child Context.
+	// Re-registering the same provider changes nothing: a child Context shadows the
+	// value, not the flags it inherits.
 	const widened: Extension = old;
-	await expect(
-		unwrap(original.extend(widened).run(["child"], { flags: { inherited: "value" } })),
-	).rejects.toThrow('Unknown flag "--inherited"');
+	expect(
+		await original.extend(widened).run(["child"], { flags: { inherited: "value" } }),
+	).toMatchObject({ status: "completed", result: "child" });
 	expect(await original.run(["child"], { flags: { inherited: "value" } })).toMatchObject({
 		status: "completed",
 		result: "child",

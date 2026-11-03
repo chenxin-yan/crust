@@ -81,7 +81,6 @@ import type {
 	IsUnion,
 	UnionToIntersection,
 } from "../validation/shared.ts";
-import { installExtensionContexts } from "./extensions-install.ts";
 import {
 	executeInvocation,
 	prepareInvocation,
@@ -1321,13 +1320,18 @@ export class Crust<
 	): AfterProvide<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Cs, Meta, Caps> {
 		const instances = inputs.map(definingOf);
 		validateContextAvailability(
-			[...this._node.contexts.map(({ instance }) => instance), ...instances],
+			[
+				// Applied only at preparation, but already available to this node.
+				...this._node.extensions.flatMap((extension) => extension.provide),
+				...this._node.contexts.map(({ instance }) => instance),
+				...instances,
+			],
 			instances,
 		);
 
 		// Positional by design: providers reach only this node and children added
 		// afterwards (flag scoping; see definition.test.ts). Extension `.provide()`
-		// differ deliberately — they are application-wide and walk the whole tree.
+		// differ deliberately: they are application-wide, applied to every command at preparation.
 		const cloned = this._clone<
 			AfterProvide<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Cs, Meta, Caps>
 		>({
@@ -1383,6 +1387,15 @@ export class Crust<
 	 * Required root metadata keys are checked against the constructor's inferred
 	 * metadata by TypeScript, not at runtime.
 	 * Recipe builders cannot call this root-only method.
+	 *
+	 * This only records the list. The app applies the final list when it prepares
+	 * (first run, `snapshot()`, `at()`, or `crust build`), so commands added before
+	 * and after `.extend()` get Extensions alike. An Extension-provided Context
+	 * replaces a same-name root `.provide()` made before this call, not one made
+	 * after it, and never a command's own. Flags owned by Extension-provided
+	 * Contexts come before each command's own. Flag collisions and missing Contexts
+	 * are `DEFINITION` errors at preparation, so a later same-id registration can
+	 * replace a conflicting earlier one.
 	 */
 	extend<const Es extends readonly AnyExtension[], _Union extends this = never>(
 		this: { readonly _types: { readonly caps: "app" } },
@@ -1428,23 +1441,16 @@ export class Crust<
 			...this._node.extensions,
 			...extensions,
 		] as ExtensionData[]);
-		const node = installExtensionContexts(
-			this._node,
-			activeExtensions,
-			new Set(extensions.map((extension) => extension.id)),
-		);
-
-		validateContextAvailability(
-			node.contexts.map(({ instance }) => instance),
-			activeExtensions.flatMap((extension) => [...extension.use, ...extension.provide]),
-		);
-
+		// Root `.provide()` only appends, so the Context count marks this call's position.
+		const extensionPositions = new Map(this._node.extensionPositions);
+		for (const extension of extensions) {
+			extensionPositions.set(extension.id, this._node.contexts.length);
+		}
+		// Only recorded: preparation applies the final list (see buildExtensionTree), so a
+		// later same-id registration can still replace a conflicting earlier one.
 		return this._clone<
 			AfterExtend<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Es, Meta, Caps>
-		>({
-			...node,
-			extensions: activeExtensions,
-		});
+		>({ extensions: activeExtensions, extensionPositions });
 	}
 
 	/**
@@ -1600,6 +1606,8 @@ export class Crust<
 				meta: { name: definition.name, ...definition[commandDefinitionInternal].meta },
 				resolve: () => (childNode ??= materializeCommandDefinition(definition, parent)),
 				next: head,
+				definition,
+				parent,
 			};
 			for (const spelling of spellings) siblingSpellings.add(spelling);
 		}
