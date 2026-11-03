@@ -370,6 +370,7 @@ describe("Invocation pipeline — inherited SIGINT ignore", () => {
 		process.platform === "linux"
 			? spawnSync("bun", ["-e", "console.log(process.execPath)"], {
 					encoding: "utf8",
+					timeout: 10_000,
 				}).stdout?.trim()
 			: undefined;
 

@@ -296,6 +296,7 @@ process.exit(0);
 		process.platform === "linux"
 			? spawnSync("bun", ["-e", "console.log(process.execPath)"], {
 					encoding: "utf8",
+					timeout: 10_000,
 				}).stdout?.trim()
 			: undefined;
 
