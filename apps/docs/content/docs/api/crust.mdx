@@ -48,9 +48,12 @@ Runtime checks throw a `DEFINITION` [error](/docs/api/errors): direct builder in
 Each call returns a builder of a new type, so register a dynamic list in one call instead of reassigning a variable in a loop:
 
 ```ts
-const app = new Crust("cli").add(...names.map((name) => defineCommand(name, recipe)));
-// Compile error: the result of .add() is not the type of `app`.
-// for (const name of names) app = app.add(defineCommand(name, recipe));
+const names = ["build", "deploy"];
+const app = new Crust("cli").add(...names.map((name) => defineCommand(name, (command) => command)));
+
+// Compile error: the result of .add() is not the type of `looped`.
+// let looped = new Crust("cli");
+// for (const name of names) looped = looped.add(defineCommand(name, (command) => command));
 ```
 
 `.flags()`, `.args()`, `.add()`, and `.command()` infer their type arguments from the builder they are called on. Passing explicit type arguments, such as `.add<readonly [typeof deploy]>(deploy)`, is a compile error (`FIX_EXPLICIT_TYPE_ARGUMENTS`).
