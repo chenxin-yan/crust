@@ -148,6 +148,18 @@ type ContextOutput<C> = C extends AnyContextInstance
 		: never
 	: never;
 
+// `[...Init, Last]` never matches a tuple with an optional tail (`[A, B?]`), so such tuples
+// fold over their required prefix, which head-first recursion used to visit. Tuples that end
+// in a required element skip the extra pass.
+type FoldableContexts<Cs extends readonly unknown[]> = Cs extends readonly [...unknown[], unknown]
+	? Cs
+	: RequiredPrefix<Cs>;
+
+type RequiredPrefix<
+	Cs extends readonly unknown[],
+	Acc extends unknown[] = [],
+> = Cs extends readonly [infer H, ...infer T] ? RequiredPrefix<T, [...Acc, H]> : Acc;
+
 // Folds from the last Context so the tail-recursive walk keeps last-write-wins
 // nesting while one `.provide()` takes 46+ Contexts without TS2589.
 type StaticContextsOutput<Cs extends readonly unknown[], Acc = {}> = Cs extends readonly [
@@ -159,7 +171,7 @@ type StaticContextsOutput<Cs extends readonly unknown[], Acc = {}> = Cs extends 
 
 export type ContextsOutput<Cs extends readonly AnyContextInstance[]> =
 	IsStaticTuple<Cs> extends true
-		? StaticContextsOutput<Cs>
+		? StaticContextsOutput<FoldableContexts<Cs>>
 		: Cs[number] extends never
 			? {}
 			: Record<
@@ -180,7 +192,7 @@ type StaticContextsOwnedFlags<
 
 export type ContextsOwnedFlags<Cs extends readonly AnyContextInstance[]> =
 	IsStaticTuple<Cs> extends true
-		? StaticContextsOwnedFlags<Cs>
+		? StaticContextsOwnedFlags<FoldableContexts<Cs>>
 		: keyof UnionToIntersection<ContextOwnedFlags<Cs[number]>> extends never
 			? {}
 			: FlagsDef;
