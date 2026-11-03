@@ -7,9 +7,6 @@ import { text } from "node:stream/consumers";
 import { isErrnoException } from "./error.ts";
 import { isSignalIgnored } from "./signals.ts";
 
-// Kept out of this module so callers that only parse the user agent avoid loading child_process.
-export { packageManagerFromUserAgent, type PackageManager } from "./package-manager.ts";
-
 export type RunProcessOptions = {
 	cwd?: string;
 	env?: NodeJS.ProcessEnv;
