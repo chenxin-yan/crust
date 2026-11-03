@@ -623,16 +623,17 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 	env: FlagEnvironment = process.env,
 ): ArgvParseResult<A, F> {
 	const { positionals, flagValues, rawArgs } = tokenizeArgv(command, argv);
-	const valueErrors: CrustError[] = [];
+	let valueError: CrustError | undefined;
 	const { args, flags, consumed } = bind(
 		command,
 		positionals,
 		applyEnvAndDelimiter(command.effectiveFlags, flagValues, env),
 		coerceToken,
 		coerceFlagValue,
-		(error) => valueErrors.push(error),
+		(error) => {
+			valueError ??= error;
+		},
 	);
-	const [valueError] = valueErrors;
 	return {
 		args,
 		flags,
