@@ -681,7 +681,7 @@ export async function executeInvocation(
 				controller.abort(new DOMException("Interrupted by SIGINT.", "AbortError"));
 				return;
 			}
-			// `npm run`, `npx`, and `bun run` relay the terminal's SIGINT to their child as well
+			// `npm run`, `npx`, `bun run`, and pnpm relay the terminal's SIGINT to their child as well
 			// (npm/cli#8164), so one Ctrl-C arrives twice within a millisecond; a person pressing
 			// twice takes far longer.
 			if (performance.now() - interruptedAt < RELAYED_SIGINT_WINDOW_MS) return;
