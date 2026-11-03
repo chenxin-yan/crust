@@ -113,7 +113,7 @@ function toolInput(command: CommandSnapshot, path: readonly string[]): ToolInput
 			);
 		}
 		properties[name] = propertySchema(def, list);
-		if (def.required === true && def.default === undefined) required.push(name);
+		if (def.required === true) required.push(name);
 		if (def.type === "url") urlFields.push(name);
 	};
 	for (const arg of command.args) claim(arg.name, arg, arg.variadic === true);
