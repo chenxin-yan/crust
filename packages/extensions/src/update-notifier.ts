@@ -239,18 +239,22 @@ export const updateNotifier: UpdateNotifierExtension = /* @__PURE__ */ defineExt
 		}
 		if (isUpdateCheckSuppressed()) return;
 
-		// The registry check, cache, and notice (with @crustjs/style) load only when a check runs.
-		const { runUpdateCheck } = await import("./update-notifier-check.ts");
-		await runUpdateCheck({
-			currentVersion: resolvedCurrentVersion,
-			packageName,
-			timeoutMs,
-			registryUrl,
-			intervalMs,
-			updateCommand,
-			updateDocsUrl,
-			cache,
-			stderr: context.stderr,
-		});
+		try {
+			// The registry check, cache, and notice (with @crustjs/style) load only when a check runs.
+			const { runUpdateCheck } = await import("./update-notifier-check.ts");
+			await runUpdateCheck({
+				currentVersion: resolvedCurrentVersion,
+				packageName,
+				timeoutMs,
+				registryUrl,
+				intervalMs,
+				updateCommand,
+				updateDocsUrl,
+				cache,
+				stderr: context.stderr,
+			});
+		} catch {
+			// A check chunk that fails to load (e.g. replaced by an upgrade mid-run) must not fail the completed command.
+		}
 	});
 });
