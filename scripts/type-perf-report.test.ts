@@ -21,10 +21,17 @@ const report = (
 	large: Measured,
 	stress: Measured,
 	wide: Measured = 1_000,
+	contexts: Measured = 1_000,
 ): TypePerfReport => ({
 	typescriptVersion: "7.0.2",
 	fixtureApi: "fluent",
-	instantiations: { 10: small, 100: large, 200: stress, "50 in one .add()": wide },
+	instantiations: {
+		10: small,
+		100: large,
+		200: stress,
+		"50 in one .add()": wide,
+		"60 Contexts in one call": contexts,
+	},
 });
 
 const repoRoot = resolve(import.meta.dirname, "..");
@@ -56,8 +63,15 @@ describe("type performance report", () => {
 			'defineContext("context-1").flags(contextFlag1).use(context0).setup(async',
 		);
 		expect(fluent).not.toMatch(/defineContext\("[^"]+", /);
-		const withoutContexts = (source: string) => source.replace(/^const context\d+ = .+$/gm, "");
+		const withoutContexts = (source: string) =>
+			source.replace(/^const (context|wide)\d+ = .+$/gm, "");
 		expect(withoutContexts(config)).toBe(withoutContexts(fluent));
+
+		const wideFluent = generateConsumerSource(size, "fluent", false, true);
+		const wideConfig = generateConsumerSource(size, "context-config", false, true);
+		expect(wideConfig).toContain('const wide59 = defineContext("wide-59", () => 59);');
+		expect(wideFluent).toContain('const wide59 = defineContext("wide-59").setup(() => 59);');
+		expect(withoutContexts(wideConfig)).toBe(withoutContexts(wideFluent));
 	});
 
 	it("exercises typed run()/at() and adds commands one call at a time unless wide", () => {
@@ -73,6 +87,17 @@ describe("type performance report", () => {
 		const commands = Array.from({ length: 50 }, (_, index) => `command${index}`).join(", ");
 		expect(wide).toContain(`\t.add(${commands})\n`);
 		expect(wide).not.toContain("\t.add(command0)\n");
+	});
+
+	it("passes 60 Contexts in one call to .provide(), a command's .use(), and an extended Extension", () => {
+		expect(generateConsumerSource(10)).not.toContain("wide");
+		const source = generateConsumerSource(10, "fluent", false, true);
+		const factories = Array.from({ length: 60 }, (_, index) => `wide${index}`);
+		const instances = factories.map((factory) => `${factory}()`).join(", ");
+		expect(source).toContain(`command.use(${factories.join(", ")})`);
+		expect(source).toContain(`.provide(${instances});\n`);
+		expect(source).toContain(`\t.provide(${instances})\n\t.add(wideCommand)\n`);
+		expect(source).toContain('new Crust("type-perf-wide").extend(wideExtension)');
 	});
 
 	it("measures all consumer sizes using the harness compiler, not the target tree's compiler", async () => {
@@ -92,9 +117,13 @@ describe("type performance report", () => {
 				"100",
 				"200",
 				"50 in one .add()",
+				"60 Contexts in one call",
 			]);
 			expect(measured.instantiations[10]).toBeGreaterThan(0);
 			expect(measured.instantiations["50 in one .add()"]).toBeGreaterThan(0);
+			expect(measured.instantiations["60 Contexts in one call"]).toBeGreaterThan(
+				measured.instantiations[10],
+			);
 			expect(measured.instantiations[100]).toBeGreaterThan(measured.instantiations[10]);
 			expect(measured.instantiations[200]).toBeGreaterThan(measured.instantiations[100]);
 			expect(measured.typescriptVersion).toBeTruthy();
@@ -130,6 +159,7 @@ describe("type performance report", () => {
 				100: { error: "TS2305" },
 				200: { error: "TS2305" },
 				"50 in one .add()": { error: "TS2305" },
+				"60 Contexts in one call": { error: "TS2305" },
 			});
 		} finally {
 			rmSync(root, { recursive: true, force: true });
@@ -138,8 +168,11 @@ describe("type performance report", () => {
 
 	it("reports base compile errors as n/a and rejects a failing PR merge", () => {
 		const output = formatComparison(
-			report(10_000, 50_000, { error: "TS2590" }, { error: "TS2589" }),
-			report(11_000, 60_000, 120_000, 2_000),
+			report(10_000, 50_000, { error: "TS2590" }, { error: "TS2589" }, { error: "TS2589" }),
+			report(11_000, 60_000, 120_000, 2_000, 3_000),
+		);
+		expect(output).toContain(
+			"| 60 Contexts in one call | n/a (base failed: TS2589) | 3,000 | n/a |",
 		);
 		expect(output).toContain("| 200 | n/a (base failed: TS2590) | 120,000 | n/a |");
 		expect(output).toContain("| 50 in one .add() | n/a (base failed: TS2589) | 2,000 | n/a |");
