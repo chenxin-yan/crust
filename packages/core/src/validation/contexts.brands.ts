@@ -13,9 +13,10 @@ import type { CollisionBrand, DefName, IsAny } from "./shared.ts";
 type DuplicateContextNames<
 	Cs extends readonly AnyContextInstance[],
 	Seen extends string = never,
+	Dups extends string = never,
 > = Cs extends readonly [infer Head, ...infer Tail extends readonly AnyContextInstance[]]
-	? (DefName<Head> & Seen) | DuplicateContextNames<Tail, Seen | DefName<Head>>
-	: never;
+	? DuplicateContextNames<Tail, Seen | DefName<Head>, Dups | (DefName<Head> & Seen)>
+	: Dups;
 
 type DuplicateContextBrand<C, Existing extends string> = CollisionBrand<
 	DefName<C>,
@@ -45,12 +46,12 @@ export type ValidateContextNames<
 	[I in keyof Cs]: Cs[I] & DuplicateContextBrand<Cs[I], Existing | Dups>;
 };
 
-type InstanceNames<P extends readonly unknown[]> = P extends readonly [
+type InstanceNames<P extends readonly unknown[], Acc extends string = never> = P extends readonly [
 	infer H,
 	...infer T extends readonly unknown[],
 ]
-	? DefName<H> | InstanceNames<T>
-	: never;
+	? InstanceNames<T, Acc | DefName<H>>
+	: Acc;
 
 /** Statically known names of an Extension's provided Contexts; widened Extensions opt out. */
 type ExtensionProvidedNames<E> =

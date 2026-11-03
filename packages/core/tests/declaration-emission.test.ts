@@ -155,6 +155,20 @@ beforeAll(() => {
 			include: ["consumer.ts"],
 		}),
 	);
+	writeFileSync(join(fixtureDir, "optional-tail.ts"), OPTIONAL_TAIL_SOURCE);
+	writeFileSync(
+		join(fixtureDir, "tsconfig.loose.json"),
+		JSON.stringify({
+			extends: "./tsconfig.json",
+			compilerOptions: {
+				declaration: false,
+				emitDeclarationOnly: false,
+				noEmit: true,
+				strictNullChecks: false,
+			},
+			include: ["optional-tail.ts"],
+		}),
+	);
 	// Strictest consumer settings: shipped declarations are checked, not skipped.
 	writeFileSync(
 		join(fixtureDir, "tsconfig.exact.json"),
@@ -171,6 +185,30 @@ beforeAll(() => {
 	);
 });
 
+// Without strictNullChecks, an explicit provider tuple can end in an optional element; the
+// required Contexts before it must still type the action's ctx and flags.
+const OPTIONAL_TAIL_SOURCE = `import { Crust, defineContext, defineExtension, defineExtensionId, defineFlag } from "@crustjs/core";
+
+const a = defineContext("a").flags(defineFlag("verbose", { type: "boolean" })).setup(() => 1);
+const b = defineContext("b").setup(() => "b");
+type Contexts = readonly [ReturnType<typeof a>, ReturnType<typeof b>?];
+
+export function direct(contexts: Contexts) {
+	return new Crust("app").provide<Contexts>(...contexts).action(({ ctx, flags }) => {
+		const value: Promise<number> = ctx.a;
+		void [value, flags.verbose];
+	});
+}
+
+export function viaExtension(contexts: Contexts) {
+	const extension = defineExtension(defineExtensionId("optional-tail")).provide<Contexts>(...contexts);
+	return new Crust("app").extend(extension).action(({ ctx, flags }) => {
+		const value: Promise<number> = ctx.a;
+		void [value, flags.verbose];
+	});
+}
+`;
+
 describe("declaration emission for consumers", () => {
 	it("emits declarations for exported inferred builder types without TS2742/TS4058", () => {
 		const result = spawnSync(tscBin, ["-p", "."], { cwd: fixtureDir, timeout: 60_000 });
@@ -181,6 +219,16 @@ describe("declaration emission for consumers", () => {
 
 	it("type-checks shipped declarations under exactOptionalPropertyTypes", () => {
 		const result = spawnSync(tscBin, ["-p", "tsconfig.exact.json"], {
+			cwd: fixtureDir,
+			timeout: 60_000,
+		});
+		const output = result.stdout.toString() + result.stderr.toString();
+		expect(output).toBe("");
+		expect(result.status).toBe(0);
+	});
+
+	it("keeps required Contexts before an optional provider tuple tail", () => {
+		const result = spawnSync(tscBin, ["-p", "tsconfig.loose.json"], {
 			cwd: fixtureDir,
 			timeout: 60_000,
 		});

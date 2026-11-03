@@ -3,11 +3,13 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 const fixtures = [
-	{ name: "10", size: 10, wideAdd: false },
-	{ name: "100", size: 100, wideAdd: false },
-	{ name: "200", size: 200, wideAdd: false },
+	{ name: "10", size: 10, wideAdd: false, wideContexts: false },
+	{ name: "100", size: 100, wideAdd: false, wideContexts: false },
+	{ name: "200", size: 200, wideAdd: false, wideContexts: false },
 	// Core used to hit TS2589 at ~44 definitions in one `.add(...)` call.
-	{ name: "50 in one .add()", size: 50, wideAdd: true },
+	{ name: "50 in one .add()", size: 50, wideAdd: true, wideContexts: false },
+	// Core used to hit TS2589 at ~46 Contexts in one `.provide()`, `.extend()` or `.use()` call.
+	{ name: "60 Contexts in one call", size: 10, wideAdd: false, wideContexts: true },
 ] as const;
 type FixtureName = (typeof fixtures)[number]["name"];
 type FixtureApi = "context-config" | "fluent";
@@ -72,13 +74,16 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
  * max(3, ceil(size / 10)); every tenth command also owns one nested subcommand.
  * The app adds commands one `.add()` at a time, or all in one call when `wideAdd`
  * is set, then makes five literal typed `app.run(path, { args, flags })` calls
- * and one `app.at(path)` call.
+ * and one `app.at(path)` call. `wideContexts` adds 60 Contexts passed in one call each
+ * to the app's `.provide()`, a command's `.use()`, and an Extension's `.provide()`
+ * that a second app `.extend()`s.
  * The context-config dialect supports comparisons across the fluent-Context API transition.
  */
 export function generateConsumerSource(
 	size: number,
 	fixtureApi: FixtureApi = "fluent",
 	wideAdd = false,
+	wideContexts = false,
 ): string {
 	if (!Number.isInteger(size) || size < 1) throw new Error("size must be a positive integer");
 	const contextCount = Math.max(3, Math.ceil(size / 10));
@@ -106,6 +111,26 @@ export function generateConsumerSource(
 		);
 	}
 	lines.push("");
+
+	const wide = Array.from({ length: wideContexts ? 60 : 0 }, (_, index) => `wide${index}`);
+	const wideInstances = wide.map((name) => `${name}()`).join(", ");
+	if (wideContexts) {
+		for (const [index, name] of wide.entries()) {
+			lines.push(
+				`const ${name} = ${
+					fixtureApi === "fluent"
+						? `defineContext("wide-${index}").setup(() => ${index})`
+						: `defineContext("wide-${index}", () => ${index})`
+				};`,
+			);
+		}
+		lines.push(
+			`const wideCommand = defineCommand("wide-command", (command) => command.use(${wide.join(", ")}).action(async ({ ctx }) => { void await ctx["wide-59"]; }));`,
+			`const wideExtension = defineExtension(defineExtensionId("type-perf-wide-extension")).provide(${wideInstances});`,
+			'export const wideApp = new Crust("type-perf-wide").extend(wideExtension).action(async ({ ctx }) => { void await ctx["wide-59"]; });',
+			"",
+		);
+	}
 
 	for (let index = 0; index < size; index++) {
 		const contextIndex = index % contextCount;
@@ -148,6 +173,9 @@ export function generateConsumerSource(
 		`\t.provide(${Array.from({ length: contextCount }, (_, index) => `context${index}()`).join(", ")})`,
 		"\t.extend(extension)",
 	);
+	if (wideContexts) {
+		lines.push(`\t.provide(${wideInstances})`, "\t.add(wideCommand)");
+	}
 	const commands = Array.from({ length: size }, (_, index) => `command${index}`);
 	if (wideAdd) lines.push(`\t.add(${commands.join(", ")})`);
 	else for (const command of commands) lines.push(`\t.add(${command})`);
@@ -168,6 +196,7 @@ export function generateConsumerFixture(
 	size: number,
 	fixtureApi: FixtureApi = "fluent",
 	wideAdd = false,
+	wideContexts = false,
 ): void {
 	const fixtureDir = resolve(outputDir);
 	const root = resolve(rootDir);
@@ -180,7 +209,10 @@ export function generateConsumerFixture(
 			"dir",
 		);
 	}
-	writeFileSync(join(fixtureDir, "consumer.ts"), generateConsumerSource(size, fixtureApi, wideAdd));
+	writeFileSync(
+		join(fixtureDir, "consumer.ts"),
+		generateConsumerSource(size, fixtureApi, wideAdd, wideContexts),
+	);
 	writeFileSync(
 		join(fixtureDir, "tsconfig.json"),
 		`${JSON.stringify(
@@ -246,9 +278,9 @@ console.log(api);`,
 	const instantiations = {} as TypePerfReport["instantiations"];
 	const fixtureRoot = mkdtempSync(join(tmpdir(), "crust-type-perf-"));
 	try {
-		for (const [index, { name, size, wideAdd }] of fixtures.entries()) {
+		for (const [index, { name, size, wideAdd, wideContexts }] of fixtures.entries()) {
 			const fixtureDir = join(fixtureRoot, String(index));
-			generateConsumerFixture(fixtureDir, root, size, fixtureApi, wideAdd);
+			generateConsumerFixture(fixtureDir, root, size, fixtureApi, wideAdd, wideContexts);
 			let diagnostics: string;
 			try {
 				diagnostics = run(

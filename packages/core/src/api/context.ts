@@ -148,11 +148,30 @@ type ContextOutput<C> = C extends AnyContextInstance
 		: never
 	: never;
 
+// `[...Init, Last]` never matches a tuple with an optional tail (`[A, B?]`), so such tuples
+// fold over their required prefix, which head-first recursion used to visit. Tuples that end
+// in a required element skip the extra pass.
+type FoldableContexts<Cs extends readonly unknown[]> = Cs extends readonly [...unknown[], unknown]
+	? Cs
+	: RequiredPrefix<Cs>;
+
+type RequiredPrefix<
+	Cs extends readonly unknown[],
+	Acc extends unknown[] = [],
+> = Cs extends readonly [infer H, ...infer T] ? RequiredPrefix<T, [...Acc, H]> : Acc;
+
+// Folds from the last Context so the tail-recursive walk keeps last-write-wins
+// nesting while one `.provide()` takes 46+ Contexts without TS2589.
+type StaticContextsOutput<Cs extends readonly unknown[], Acc = {}> = Cs extends readonly [
+	...infer Init,
+	infer Last,
+]
+	? StaticContextsOutput<Init, MergeProviders<ContextOutput<Last>, Acc>>
+	: Acc;
+
 export type ContextsOutput<Cs extends readonly AnyContextInstance[]> =
 	IsStaticTuple<Cs> extends true
-		? Cs extends readonly [infer H, ...infer T extends readonly AnyContextInstance[]]
-			? MergeProviders<ContextOutput<H>, ContextsOutput<T>>
-			: {}
+		? StaticContextsOutput<FoldableContexts<Cs>>
 		: Cs[number] extends never
 			? {}
 			: Record<
@@ -164,11 +183,16 @@ export type ContextsOutput<Cs extends readonly AnyContextInstance[]> =
 						: never
 				>;
 
+type StaticContextsOwnedFlags<
+	Cs extends readonly unknown[],
+	Acc extends FlagsDef = {},
+> = Cs extends readonly [...infer Init, infer Last]
+	? StaticContextsOwnedFlags<Init, MergeFlags<ContextOwnedFlags<Last>, Acc>>
+	: Acc;
+
 export type ContextsOwnedFlags<Cs extends readonly AnyContextInstance[]> =
 	IsStaticTuple<Cs> extends true
-		? Cs extends readonly [infer H, ...infer T extends readonly AnyContextInstance[]]
-			? MergeFlags<ContextOwnedFlags<H>, ContextsOwnedFlags<T>>
-			: {}
+		? StaticContextsOwnedFlags<FoldableContexts<Cs>>
 		: keyof UnionToIntersection<ContextOwnedFlags<Cs[number]>> extends never
 			? {}
 			: FlagsDef;
@@ -207,24 +231,25 @@ type FactoryOutput<F> = F extends AnyContextFactory
 		: never
 	: never;
 
-type FactoriesOutput<Fs extends readonly AnyContextFactory[]> = Fs extends readonly [
+// Tail-recursive accumulators let one `.use()` take 46+ Contexts without TS2589.
+type FactoriesOutput<Fs extends readonly AnyContextFactory[], Acc = {}> = Fs extends readonly [
 	infer H,
 	...infer T extends readonly AnyContextFactory[],
 ]
-	? FactoryOutput<H> & FactoriesOutput<T>
-	: {};
+	? FactoriesOutput<T, Acc & FactoryOutput<H>>
+	: Acc;
 
 type FactoryDeps<F> = F extends AnyContextFactory
 	? DefiningOf<F> extends ContextFactory<any, any, any, any, infer Deps>
 		? Deps
 		: {}
 	: {};
-type FactoriesDeps<Fs extends readonly AnyContextFactory[]> = Fs extends readonly [
+type FactoriesDeps<Fs extends readonly AnyContextFactory[], Acc = {}> = Fs extends readonly [
 	infer H,
 	...infer T extends readonly AnyContextFactory[],
 ]
-	? FactoryDeps<H> & FactoriesDeps<T>
-	: {};
+	? FactoriesDeps<T, Acc & FactoryDeps<H>>
+	: Acc;
 
 export type ContextDependencies<Use extends readonly AnyContextFactory[]> =
 	IsStaticTuple<Use> extends true
@@ -236,12 +261,13 @@ export type ContextDepsOf<C> = C extends AnyContextInstance
 		? Deps
 		: {}
 	: {};
-export type ContextsDependencies<Cs extends readonly AnyContextInstance[]> = Cs extends readonly [
-	infer H,
-	...infer T extends readonly AnyContextInstance[],
-]
-	? ContextDepsOf<H> & ContextsDependencies<T>
-	: {};
+// Tail-recursive so `.extend()` of an Extension providing 46+ Contexts avoids TS2589.
+export type ContextsDependencies<
+	Cs extends readonly AnyContextInstance[],
+	Acc = {},
+> = Cs extends readonly [infer H, ...infer T extends readonly AnyContextInstance[]]
+	? ContextsDependencies<T, Acc & ContextDepsOf<H>>
+	: Acc;
 
 /** Factory options inferred from a setup callback's optional second parameter. */
 type ContextOptionsOf<Args extends readonly unknown[]> = Args extends readonly [] ? void : Args[0];

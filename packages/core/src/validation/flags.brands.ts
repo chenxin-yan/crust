@@ -176,14 +176,14 @@ type ExtensionFlagDefsOf<E> = [E] extends [never]
 		: readonly NamedFlagDef[];
 
 /** All statically known owned-flag spellings across a tuple of Context instances. */
-export type ProvidedContextSpellings<P extends readonly unknown[]> = P extends readonly [
-	infer H,
-	...infer T extends readonly unknown[],
-]
-	? LocalSpellingsOf<ContextOwnedFlags<H>> | ProvidedContextSpellings<T>
+export type ProvidedContextSpellings<
+	P extends readonly unknown[],
+	Acc extends string = never,
+> = P extends readonly [infer H, ...infer T extends readonly unknown[]]
+	? ProvidedContextSpellings<T, Acc | LocalSpellingsOf<ContextOwnedFlags<H>>>
 	: [P[number]] extends [never]
-		? never
-		: LocalSpellingsOf<ContextOwnedFlags<P[number]>>;
+		? Acc
+		: Acc | LocalSpellingsOf<ContextOwnedFlags<P[number]>>;
 
 /** All statically known flag spellings an Extension contributes: declared flags plus provided Context-owned flags. */
 type ExtensionSpellings<E> =
@@ -293,15 +293,20 @@ export type ExtensionsSpellings<Es extends readonly unknown[]> = Es extends read
  * the batch check a same-call collision silently resolves last-write-wins,
  * and a required flag shadowed by a peer's alias becomes impossible to supply.
  */
-export type ProvideChecks<Sp extends string, Cs extends readonly unknown[]> = Cs extends readonly [
-	infer H,
-	...infer T extends readonly unknown[],
-]
-	? readonly [
-			H & ContextFlagCollisionBrand<H, Sp>,
-			...ProvideChecks<Sp | LocalSpellingsOf<ContextOwnedFlags<H>>, T>,
-		]
-	: Cs;
+export type ProvideChecks<
+	Sp extends string,
+	Cs extends readonly unknown[],
+	// Accumulating in tail position lets one `.provide()` take 46+ Contexts without TS2589.
+	Acc extends readonly unknown[] = readonly [],
+> = Cs extends readonly [infer H, ...infer T extends readonly unknown[]]
+	? ProvideChecks<
+			Sp | LocalSpellingsOf<ContextOwnedFlags<H>>,
+			T,
+			readonly [...Acc, H & ContextFlagCollisionBrand<H, Sp>]
+		>
+	: Acc extends readonly []
+		? Cs
+		: readonly [...Acc, ...Cs];
 
 // ────────────────────────────────────────────────────────────────────────────
 
