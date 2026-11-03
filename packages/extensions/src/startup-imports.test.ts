@@ -59,9 +59,16 @@ describe("startup import graph", () => {
 		);
 		expect(lazyEntries.length).toBeGreaterThan(0);
 		for (const entry of lazyEntries) {
-			const shared = [...staticGraph(entry).modules].filter((file) => root.modules.has(file));
+			const graph = staticGraph(entry);
+			const shared = [...graph.modules].filter((file) => root.modules.has(file));
 			expect(
 				shared.map((file) => relative(srcDir, file)),
+				relative(srcDir, entry),
+			).toEqual([]);
+			// A static `node:*` import evaluates every lazy getter on the built-in;
+			// `process.getBuiltinModule()` at the call site skips that.
+			expect(
+				[...graph.external].filter((specifier) => specifier.startsWith("node:")),
 				relative(srcDir, entry),
 			).toEqual([]);
 		}

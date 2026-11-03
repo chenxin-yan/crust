@@ -1,8 +1,4 @@
-import { type ChildProcess, spawn, spawnSync } from "node:child_process";
-import { once } from "node:events";
-import { accessSync, constants, statSync } from "node:fs";
-import { delimiter, extname, join, resolve, sep, win32 } from "node:path";
-import { text } from "node:stream/consumers";
+import type { ChildProcess } from "node:child_process";
 
 import { isErrnoException } from "./error.ts";
 import { isSignalIgnored } from "./signals.ts";
@@ -103,7 +99,7 @@ export function getWindowsShimCommand(
 	// Preserve the exact executable the caller resolved (e.g. via which());
 	// passing a bare name would let cmd.exe re-resolve it from cwd/PATH and
 	// potentially run a different same-named command.
-	const shimCommand = win32.normalize(command);
+	const shimCommand = process.getBuiltinModule("node:path").win32.normalize(command);
 	for (const [index, value] of [shimCommand, ...args].entries()) {
 		if (WINDOWS_SHELL_UNSAFE.test(value)) {
 			const label = index === 0 ? "command" : `argument ${index}`;
@@ -135,6 +131,7 @@ export function killProcessTree(child: ChildProcess): void {
 		// An exited child's PID may be reused, and taskkill only walks live parents.
 		// ponytail: Windows orphans escape cleanup; use Job Objects if supported tools leave workers behind.
 		if (child.exitCode === null && child.signalCode === null) {
+			const { spawnSync } = process.getBuiltinModule("node:child_process");
 			const result = spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
 				stdio: "ignore",
 				timeout: 10_000,
@@ -172,6 +169,7 @@ export async function runProcess(
 	const collectStdout = collect && options.stdout !== "ignore";
 	// Only timed calls need a group; untimed interactive children keep terminal semantics.
 	const detached = options.timeout !== undefined && process.platform !== "win32";
+	const { spawn } = process.getBuiltinModule("node:child_process");
 	const proc = spawn(windowsShimCommand?.command ?? command, windowsShimCommand?.args ?? args, {
 		cwd: options.cwd,
 		env: options.env,
@@ -218,6 +216,8 @@ export async function runProcess(
 			})
 		: () => {};
 
+	const { text } = process.getBuiltinModule("node:stream/consumers");
+	const { once } = process.getBuiltinModule("node:events");
 	try {
 		const [stdout, stderr, [exitCode]] = await Promise.race([
 			Promise.all([
@@ -235,6 +235,7 @@ export async function runProcess(
 }
 
 function isExecutableFile(path: string): boolean {
+	const { accessSync, constants, statSync } = process.getBuiltinModule("node:fs");
 	try {
 		accessSync(path, constants.X_OK);
 		return statSync(path).isFile();
@@ -246,6 +247,7 @@ function isExecutableFile(path: string): boolean {
 
 /** Resolve a bare executable name from PATH (and PATHEXT on Windows). */
 export function which(command: string): string | null {
+	const { delimiter, extname, join, resolve, sep } = process.getBuiltinModule("node:path");
 	// Path-containing inputs would produce garbage when joined onto PATH
 	// entries; resolve them directly instead.
 	if (command.includes(sep) || command.includes("/")) {

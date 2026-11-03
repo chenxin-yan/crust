@@ -1,6 +1,3 @@
-import { homedir } from "node:os";
-import { resolve } from "node:path";
-
 import type { JsonValue } from "@crustjs/utils/json";
 
 import { CrustError } from "../errors.ts";
@@ -43,8 +40,8 @@ export function coercePath(raw: string, label: string): string {
 		throw new CrustError("PARSE", `Path for ${label} cannot be empty`);
 	}
 	// A replacer function keeps `$` sequences in the home directory literal.
-	const expanded = raw.replace(/^~(?=\/|$)/, () => homedir());
-	return resolve(process.cwd(), expanded);
+	const expanded = raw.replace(/^~(?=\/|$)/, () => process.getBuiltinModule("node:os").homedir());
+	return process.getBuiltinModule("node:path").resolve(process.cwd(), expanded);
 }
 
 /**

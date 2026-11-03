@@ -1,6 +1,5 @@
-import { AsyncLocalStorage } from "node:async_hooks";
+import type { AsyncLocalStorage } from "node:async_hooks";
 import type { Readable } from "node:stream";
-import { Writable } from "node:stream";
 
 /** A readable stream available to terminal libraries. */
 export type TerminalInput = Readable & {
@@ -37,17 +36,22 @@ type TerminalGlobals = {
 // SAFETY: only declares the optional symbol slots read and initialized below.
 const globals = globalThis as TerminalGlobals;
 
-/** Bundled copies in Core, Prompts, and Progress share process-wide terminal state. */
-const storage = (globals[STORAGE_KEY] ??= new AsyncLocalStorage<TerminalIO>());
-const ambientCallbacks = (globals[AMBIENT_CALLBACKS_KEY] ??= new WeakMap<
-	TerminalOutput,
-	AmbientTerminalIO
->());
+// Bundled copies in Core, Prompts, and Progress share process-wide terminal state. Both
+// slots are created on first use: a top-level global write is a side effect bundlers keep.
+function storage(): AsyncLocalStorage<TerminalIO> {
+	return (globals[STORAGE_KEY] ??= new (process.getBuiltinModule(
+		"node:async_hooks",
+	).AsyncLocalStorage)<TerminalIO>());
+}
+
+function ambientCallbacks(): WeakMap<TerminalOutput, AmbientTerminalIO> {
+	return (globals[AMBIENT_CALLBACKS_KEY] ??= new WeakMap());
+}
 
 /** Run a function with terminal streams available in its async scope. */
 export function withTerminalIO<T>(io: TerminalIO, fn: () => T): T {
-	const current = storage.getStore();
-	return storage.run(
+	const current = storage().getStore();
+	return storage().run(
 		{
 			input: io.input ?? current?.input,
 			output: io.output ?? current?.output,
@@ -58,12 +62,13 @@ export function withTerminalIO<T>(io: TerminalIO, fn: () => T): T {
 
 /** Return the terminal streams in the current async scope, if any. */
 export function getTerminalIO(): TerminalIO | undefined {
-	return storage.getStore();
+	return storage().getStore();
 }
 
 function lineBufferedOutput(io: AmbientTerminalIO): TerminalOutput {
 	let pending = "";
-	const output = new Writable({
+	// Only injected IO needs a stream; loading `node:stream` eagerly costs Bun startup.
+	const output = new (process.getBuiltinModule("node:stream").Writable)({
 		decodeStrings: false,
 		write(chunk, _encoding, callback) {
 			pending += chunk.toString();
@@ -76,19 +81,19 @@ function lineBufferedOutput(io: AmbientTerminalIO): TerminalOutput {
 			callback();
 		},
 	});
-	ambientCallbacks.set(output, io);
+	ambientCallbacks().set(output, io);
 	return output;
 }
 
 /** Run a function with Core's line-oriented output bridged into the terminal stream scope. */
 export function withAmbientTerminalIO<T>(io: AmbientTerminalIO, fn: () => T): T {
-	const current = storage.getStore();
+	const current = storage().getStore();
 	return withTerminalIO(
 		{
 			input: current?.input,
 			// Replace an enclosing invocation's bridge, but preserve explicitly supplied terminal streams.
 			output:
-				current?.output && !ambientCallbacks.has(current.output)
+				current?.output && !ambientCallbacks().has(current.output)
 					? current.output
 					: lineBufferedOutput(io),
 		},
@@ -98,6 +103,6 @@ export function withAmbientTerminalIO<T>(io: AmbientTerminalIO, fn: () => T): T 
 
 /** Return Core's line-oriented terminal output in the current async scope, if any. */
 export function getAmbientTerminalIO(): AmbientTerminalIO | undefined {
-	const output = storage.getStore()?.output;
-	return output === undefined ? undefined : ambientCallbacks.get(output);
+	const output = storage().getStore()?.output;
+	return output === undefined ? undefined : ambientCallbacks().get(output);
 }

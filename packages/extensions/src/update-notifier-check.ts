@@ -2,8 +2,6 @@
 // @crustjs/extensions — Update notifier check (loaded only when a check runs)
 // ────────────────────────────────────────────────────────────────────────────
 
-import { basename } from "node:path";
-
 import { bold, cyan, dim, green, padEnd, stringWidth, yellow } from "@crustjs/style";
 import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
 import { packageManagerFromUserAgent } from "@crustjs/utils/package-manager";
@@ -199,7 +197,7 @@ function detectPackageManagerFromExecPath(
 ): UpdateNotifierPackageManager | null {
 	if (!execPath) return null;
 
-	const executable = basename(execPath).toLowerCase();
+	const executable = process.getBuiltinModule("node:path").basename(execPath).toLowerCase();
 	if (executable === "bun" || executable.startsWith("bun-")) return "bun";
 	if (executable === "pnpm" || executable.startsWith("pnpm-")) return "pnpm";
 	if (executable === "yarn" || executable.startsWith("yarn-")) return "yarn";

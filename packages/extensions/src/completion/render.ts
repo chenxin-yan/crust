@@ -1,6 +1,3 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { join, resolve as resolvePath } from "node:path";
-
 import { CrustError, type BuildArtifacts, type CommandSnapshot } from "@crustjs/core";
 import { buildCommandDocumentation } from "@crustjs/core/tooling";
 
@@ -84,7 +81,9 @@ export async function writeCompletionFiles(
 	options: CompletionOptions,
 	shells: readonly CompletionShell[],
 ): Promise<void> {
-	const dir = resolvePath(outputDir);
+	const { mkdir, writeFile } = process.getBuiltinModule("node:fs/promises");
+	const { join, resolve } = process.getBuiltinModule("node:path");
+	const dir = resolve(outputDir);
 	const files = renderCompletionFiles(root, options, shells);
 	await mkdir(dir, { recursive: true });
 	for (const file of files) await writeFile(join(dir, file.path), file.content);
