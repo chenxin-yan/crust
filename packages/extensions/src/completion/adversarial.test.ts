@@ -30,9 +30,15 @@ import { walkCommand } from "./walker.ts";
 describe("walker · validation", () => {
 	it("rejects command names containing whitespace", async () => {
 		const cli = new Crust("bad")
-			.add(defineCommand("two words", (c) => c.action(() => {})))
+			.add(defineCommand("ok", (c) => c.action(() => {})))
 			.action(() => {});
-		const model = buildCommandDocumentation(await cli.snapshot());
+		const snapshot = await cli.snapshot();
+		const ok = snapshot.subCommands.ok!;
+		// Core rejects this name; the walker still guards snapshots that come from elsewhere.
+		const model = buildCommandDocumentation({
+			...snapshot,
+			subCommands: { "two words": { ...ok, meta: { ...ok.meta, name: "two words" } } },
+		});
 		expect(() => walkCommand(model)).toThrow(/invalid command name/);
 	});
 

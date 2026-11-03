@@ -55,6 +55,7 @@ export type DefinitionErrorReason =
 	| "foreign-command-builder"
 	| "invalid-alias"
 	| "invalid-env"
+	| "invalid-name"
 	| "invalid-section-path"
 	| "invalid-sections"
 	| "invalid-short"

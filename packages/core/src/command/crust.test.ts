@@ -2211,7 +2211,7 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 		);
 	});
 
-	it("rejects flag-shaped child command names, including .as() renames", () => {
+	it("rejects child command names that are not one argv token, including .as() renames", () => {
 		const invalidName = (name: string) =>
 			expect.objectContaining({
 				code: "DEFINITION",
@@ -2222,6 +2222,9 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 		expect(() => new Crust("cli").command(dynamicName, (cmd) => cmd)).toThrow(invalidName("-x"));
 		const deploy = defineCommand("deploy", (cmd) => cmd);
 		expect(() => deploy.as("--deploy")).toThrow(invalidName("--deploy"));
+		const spacedName: string = "my cmd";
+		expect(() => defineCommand(spacedName, (cmd) => cmd)).toThrow(invalidName("my cmd"));
+		expect(() => deploy.as("de\tploy")).toThrow(invalidName("de\tploy"));
 	});
 
 	it("rejects __proto__ as a command name", () => {

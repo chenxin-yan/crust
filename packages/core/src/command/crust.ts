@@ -573,19 +573,27 @@ function resolveCommandName<Name extends string>(
 	return name;
 }
 
-/** Child names are routed from argv, where a leading `-` makes the token a flag. */
+/**
+ * Child names and aliases are matched against a single argv token: one without
+ * whitespace that does not start with `-`, which would make it a flag.
+ */
+function isCommandToken(token: string): boolean {
+	return token !== "" && !/[ \t\n\r\v\f]/.test(token) && !token.startsWith("-");
+}
+
 function resolveChildCommandName<Name extends string>(
 	name: Name,
 	aliases: readonly string[] = [],
 ): Name {
-	if (name.startsWith("-")) {
-		throw new CrustError("DEFINITION", `Command name "${name}" must not start with "-"`, {
-			subject: "command",
-			name,
-			reason: "invalid-name",
-		});
+	resolveCommandName(name, aliases);
+	if (!isCommandToken(name)) {
+		throw new CrustError(
+			"DEFINITION",
+			`Command name "${name}" must not contain whitespace or start with "-"`,
+			{ subject: "command", name, reason: "invalid-name" },
+		);
 	}
-	return resolveCommandName(name, aliases);
+	return name;
 }
 
 function isCommandRecipe(value: CommandConfig | CommandRecipe | undefined): value is CommandRecipe {
@@ -636,7 +644,7 @@ export function defineCommand(
 	}
 
 	for (const alias of config.aliases ?? []) {
-		if (alias === "" || /[ \t\n\r\v\f]/.test(alias) || alias.startsWith("-")) {
+		if (!isCommandToken(alias)) {
 			throw new CrustError("DEFINITION", `Command "${name}" has an invalid alias "${alias}"`, {
 				subject: "command",
 				name,
