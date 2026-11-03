@@ -1059,7 +1059,8 @@ export class Crust<
 	const Name extends string = string,
 	Caps extends "app" | "recipe" = "app",
 > {
-	declare private readonly _contextProof: (
+	/** @internal — not `private`: declaration emit erases private member types, dropping the proof from dist. */
+	declare readonly _contextProof: (
 		state: [Flags, A, Ctx, CtxFlags, CollisionSp["demands"], ActionDepsOf<CollisionSp>, Caps],
 	) => void;
 

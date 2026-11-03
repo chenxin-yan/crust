@@ -127,6 +127,32 @@ ${Array.from(
 ;
 `;
 
+// Demand checks must hold against dist exactly as in source; each directive
+// turns into TS2578 if the shipped declarations stop rejecting its line.
+const DEMAND_PROOF_SOURCE = `import { Crust, defineCommand, defineContext, defineExtension, defineExtensionId } from "@crustjs/core";
+
+const db = defineContext("db").setup(() => "ok");
+const extension = defineExtension(defineExtensionId("demands"))
+	.use(db)
+	.preRun(async ({ ctx }) => void (await ctx.db).toUpperCase());
+const base = new Crust("app").provide(db());
+const extended = base.extend(extension);
+// @ts-expect-error -- Extension demands make the builder no longer a plain provider root
+export const substituted: typeof base = extended;
+
+const config = defineContext("config").setup(() => ({ url: "memory://" }));
+const pool = defineContext("pool")
+	.use(config)
+	.setup(async ({ ctx }) => await ctx.config);
+const query = defineCommand("query", (cmd) =>
+	cmd.use(pool).action(async ({ ctx }) => void (await ctx.pool)),
+);
+// @ts-expect-error -- pool's transitive config dependency is unmet at .add()
+new Crust("cli").provide(pool.of({ url: "fake" })).add(query);
+// @ts-expect-error -- inline .use(pool) demand is unmet at the call site
+new Crust("cli").command("query", (cmd) => cmd.use(pool).action(() => {}));
+`;
+
 let fixtureDir: string;
 
 beforeAll(() => {
@@ -140,6 +166,7 @@ beforeAll(() => {
 	symlinkSync(corePkg, join(fixtureDir, "node_modules/@crustjs/core"));
 
 	writeFileSync(join(fixtureDir, "consumer.ts"), CONSUMER_SOURCE);
+	writeFileSync(join(fixtureDir, "demand-proof.ts"), DEMAND_PROOF_SOURCE);
 	writeFileSync(
 		join(fixtureDir, "tsconfig.json"),
 		JSON.stringify({
@@ -181,6 +208,14 @@ beforeAll(() => {
 				exactOptionalPropertyTypes: true,
 				skipLibCheck: false,
 			},
+		}),
+	);
+	writeFileSync(
+		join(fixtureDir, "tsconfig.demands.json"),
+		JSON.stringify({
+			extends: "./tsconfig.json",
+			compilerOptions: { declaration: false, emitDeclarationOnly: false, noEmit: true },
+			include: ["demand-proof.ts"],
 		}),
 	);
 });
@@ -229,6 +264,16 @@ describe("declaration emission for consumers", () => {
 
 	it("keeps required Contexts before an optional provider tuple tail", () => {
 		const result = spawnSync(tscBin, ["-p", "tsconfig.loose.json"], {
+			cwd: fixtureDir,
+			timeout: 60_000,
+		});
+		const output = result.stdout.toString() + result.stderr.toString();
+		expect(output).toBe("");
+		expect(result.status).toBe(0);
+	});
+
+	it("rejects unmet Context and Extension demands against shipped declarations", () => {
+		const result = spawnSync(tscBin, ["-p", "tsconfig.demands.json"], {
 			cwd: fixtureDir,
 			timeout: 60_000,
 		});
