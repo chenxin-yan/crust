@@ -125,23 +125,6 @@ function buildChainableStyleFactory(
 			},
 		});
 	}
-	// `open` / `close` let a chain double as an `AnsiPair`. Composition rule: open
-	// in declaration order, close in reverse, matching what `applyChain` emits.
-	for (const edge of ["open", "close"] as const) {
-		Object.defineProperty(chainPrototype, edge, {
-			enumerable: true,
-			get(this: ChainFunction) {
-				let open = "";
-				let close = "";
-				for (const step of this[chainSteps]) {
-					const pair = stepPair(step, pairDepth);
-					open += pair.open;
-					close = pair.close + close;
-				}
-				return edge === "open" ? open : close;
-			},
-		});
-	}
 
 	function createChainableStyle(steps: readonly ChainStep[]): ChainableStyleFn {
 		const key = steps
@@ -156,7 +139,7 @@ function buildChainableStyleFactory(
 		//   chain(text)                          — direct
 		//   chain`tagged ${value} template`      — tagged template
 		//   chain(undefined | null)               — defensive (returns "")
-		// SAFETY: chainPrototype supplies every ChainableStyleFn property; steps are attached below.
+		// SAFETY: chainPrototype supplies the methods; steps, open, and close are attached below.
 		const styleFn = ((first?: StyleInput | TemplateStringsArray, ...rest: unknown[]) => {
 			if (isTemplateStringsArray(first)) {
 				let text = "";
@@ -172,6 +155,20 @@ function buildChainableStyleFactory(
 		if (cache.size >= 1024) cache.delete(cache.keys().next().value!);
 		cache.set(key, styleFn);
 
+		// `open` / `close` let a chain double as an `AnsiPair`. Composition rule: open
+		// in declaration order, close in reverse, matching what `applyChain` emits.
+		// Own data properties, not prototype getters, so reads stay cheap and
+		// `{ ...chain }` copies a plain pair; plain assignment keeps import cost flat.
+		let open = "";
+		let close = "";
+		for (const step of steps) {
+			const pair = stepPair(step, pairDepth);
+			open += pair.open;
+			close = pair.close + close;
+		}
+		const pairFn = styleFn as { open: string; close: string };
+		pairFn.open = open;
+		pairFn.close = close;
 		Object.defineProperty(styleFn, chainSteps, { value: steps });
 		Object.setPrototypeOf(styleFn, chainPrototype);
 		return Object.freeze(styleFn);

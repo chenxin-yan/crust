@@ -244,6 +244,12 @@ describe("ChainableStyleFn extends AnsiPair", () => {
 		const indirect = `${always.bold.red.open}X${always.bold.red.close}`;
 		expect(direct).toBe(indirect);
 	});
+
+	it("copies into a plain AnsiPair via spread", () => {
+		const chain = always.bold.fg("#ff0000");
+		expect({ ...chain }).toEqual({ open: chain.open, close: chain.close });
+		expect(chain.open).toBe("\x1b[1m\x1b[38;2;255;0;0m");
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
