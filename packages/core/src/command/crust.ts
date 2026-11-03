@@ -42,6 +42,7 @@ import type { AppendArgsChecks, AttachedArgs } from "../validation/args.brands.t
 import type {
 	AttachedCommandSpellings,
 	CommandCollisionBrand,
+	ChildCommandNameBrand,
 	AliasesOf,
 	CommandDefinitionSpellings,
 	CommandNameBrand,
@@ -215,7 +216,7 @@ export interface CommandDefinition<
 	readonly name: Name;
 	/** The same definition under a different name; configured aliases travel with it. */
 	as<const N extends string>(
-		name: N & CommandNameBrand<N> & ValidateCommandConfig<N, { aliases: Aliases }>,
+		name: N & ChildCommandNameBrand<N> & ValidateCommandConfig<N, { aliases: Aliases }>,
 	): CommandDefinition<N, Aliases, Shape, Deps>;
 	/** @internal */
 	readonly [commandDefinitionInternal]: CommandDefinitionInternal & {
@@ -612,7 +613,7 @@ export function defineCommand<
 	const Name extends string,
 	Builder extends AnyCommandDefinitionBuilder,
 >(
-	name: Name & CommandNameBrand<Name>,
+	name: Name & ChildCommandNameBrand<Name>,
 	recipe: CommandRecipe<Builder>,
 ): CommandDefinition<Name, readonly [], ShapeOfBuilder<Builder>, DepsOfBuilder<Builder>>;
 export function defineCommand<
@@ -620,7 +621,7 @@ export function defineCommand<
 	const C extends CommandConfig,
 	Builder extends AnyCommandDefinitionBuilder,
 >(
-	name: Name & CommandNameBrand<Name>,
+	name: Name & ChildCommandNameBrand<Name>,
 	config: C & LocalCommandConfigBrand<Name, C>,
 	recipe: CommandRecipe<Builder>,
 ): CommandDefinition<Name, AliasesOf<C>, ShapeOfBuilder<Builder>, DepsOfBuilder<Builder>>;
@@ -1456,7 +1457,7 @@ export class Crust<
 	 * or reuse.
 	 */
 	command<const N extends string, B extends AnyCommandDefinitionBuilder>(
-		name: N & CommandNameBrand<N> & CommandCollisionBrand<N, Sibs>,
+		name: N & ChildCommandNameBrand<N> & CommandCollisionBrand<N, Sibs>,
 		recipe: ((
 			command: CommandDefinitionBuilder<
 				{},

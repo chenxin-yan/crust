@@ -30,15 +30,18 @@ type NarrowAliases<A extends readonly string[]> =
 // Spelling grammar: each literal member is independently provable.
 type AliasMembers<A extends readonly string[]> = ClosedMembers<A[number]>;
 
+// Whitespace that runtime `isCommandToken` rejects in child names and aliases.
+type SpacedToken =
+	| `${string} ${string}`
+	| `${string}\t${string}`
+	| `${string}\n${string}`
+	| `${string}\r${string}`
+	| `${string}\v${string}`
+	| `${string}\f${string}`;
+
 type AliasShapeError<Name extends string, Alias extends string> = Alias extends ""
 	? `Subcommand "${Name}" has an invalid alias: must be a non-empty string`
-	: Alias extends
-				| `${string} ${string}`
-				| `${string}\t${string}`
-				| `${string}\n${string}`
-				| `${string}\r${string}`
-				| `${string}\v${string}`
-				| `${string}\f${string}`
+	: Alias extends SpacedToken
 		? `Subcommand "${Name}" alias "${Alias}" must not contain whitespace`
 		: Alias extends `-${string}`
 			? `Subcommand "${Name}" alias "${Alias}" must not start with "-" (reserved for flags)`
@@ -111,6 +114,25 @@ export type CommandNameBrand<Name extends string> =
 			? { readonly FIX_RESERVED_NAME: 'Command name "__proto__" is reserved' }
 			: {};
 
+type NameShapeError<Name extends string> = Name extends SpacedToken
+	? `Command name "${Name}" must not contain whitespace`
+	: Name extends `-${string}`
+		? `Command name "${Name}" must not start with "-" (reserved for flags)`
+		: never;
+
+/**
+ * Child names are also matched against one argv token, like aliases. The root
+ * name never is, so `new Crust()` keeps {@link CommandNameBrand} alone.
+ */
+export type ChildCommandNameBrand<Name extends string> =
+	CommandNameBrand<Name> extends infer Brand
+		? {} extends Brand
+			? [NameShapeError<ClosedMembers<Name>>] extends [never]
+				? {}
+				: { readonly FIX_NAME_SHAPE: NameShapeError<ClosedMembers<Name>> }
+			: Brand
+		: never;
+
 type DefinitionAliases<D> =
 	CommandDefinitionData<D> extends {
 		readonly _aliases?: infer A extends readonly string[];
@@ -181,7 +203,7 @@ type CommandDefinitionsErrors<
 > = Ds extends readonly [infer Head, ...infer Tail]
 	? CommandDefinitionSpellings<Head> extends infer Spellings extends string
 		? CommandCollisionBrand<Spellings, Existing> &
-				CommandNameBrand<DefNameMembers<Head>> &
+				ChildCommandNameBrand<DefNameMembers<Head>> &
 				SelfAliasBrand<Head> extends infer Errors
 			? {} extends Errors
 				? CommandDefinitionsErrors<Tail, Existing | Spellings>

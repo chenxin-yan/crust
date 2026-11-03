@@ -2221,10 +2221,12 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 		expect(() => defineCommand(dynamicName, (cmd) => cmd)).toThrow(invalidName("-x"));
 		expect(() => new Crust("cli").command(dynamicName, (cmd) => cmd)).toThrow(invalidName("-x"));
 		const deploy = defineCommand("deploy", (cmd) => cmd);
-		expect(() => deploy.as("--deploy")).toThrow(invalidName("--deploy"));
+		const dashedRename: string = "--deploy";
+		expect(() => deploy.as(dashedRename)).toThrow(invalidName("--deploy"));
 		const spacedName: string = "my cmd";
 		expect(() => defineCommand(spacedName, (cmd) => cmd)).toThrow(invalidName("my cmd"));
-		expect(() => deploy.as("de\tploy")).toThrow(invalidName("de\tploy"));
+		const tabbedRename: string = "de\tploy";
+		expect(() => deploy.as(tabbedRename)).toThrow(invalidName("de\tploy"));
 	});
 
 	it("rejects __proto__ as a command name", () => {

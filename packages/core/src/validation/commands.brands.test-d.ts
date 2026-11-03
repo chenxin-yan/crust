@@ -1,6 +1,8 @@
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import type {
+	ChildCommandNameBrand,
 	CommandDefinitionSpellings,
+	CommandNameBrand,
 	LocalSectionsBrand,
 	ValidateCommandConfig,
 	ValidateCommandDefinitions,
@@ -103,6 +105,42 @@ type Def<Name extends string, Aliases extends readonly string[] = readonly []> =
 	type _empty = Expect<Equal<Empty["FIX_EMPTY_NAME"], "Command name must be a non-empty string">>;
 	type _valid = Expect<Equal<Extract<keyof Valid, "FIX_EMPTY_NAME">, never>>;
 	type _widened = Expect<Equal<Extract<keyof Widened, "FIX_EMPTY_NAME">, never>>;
+}
+
+{
+	// brands child names that are not one argv token; the root name is exempt
+	type Dash = ChildCommandNameBrand<"-x">;
+	type DoubleDash = ChildCommandNameBrand<"--x">;
+	type Space = ChildCommandNameBrand<"my cmd">;
+	type Tab = ChildCommandNameBrand<"my\tcmd">;
+	type Mixed = ChildCommandNameBrand<"-x" | `mode-${string}`>;
+	type Added = ValidateCommandDefinitions<readonly [Def<"-x">]>;
+	type _dash = Expect<
+		Equal<Dash["FIX_NAME_SHAPE"], 'Command name "-x" must not start with "-" (reserved for flags)'>
+	>;
+	type _doubleDash = Expect<
+		Equal<
+			DoubleDash["FIX_NAME_SHAPE"],
+			'Command name "--x" must not start with "-" (reserved for flags)'
+		>
+	>;
+	type _space = Expect<
+		Equal<Space["FIX_NAME_SHAPE"], 'Command name "my cmd" must not contain whitespace'>
+	>;
+	type _tab = Expect<
+		Equal<Tab["FIX_NAME_SHAPE"], 'Command name "my\tcmd" must not contain whitespace'>
+	>;
+	type _mixed = Expect<
+		Equal<Mixed["FIX_NAME_SHAPE"], 'Command name "-x" must not start with "-" (reserved for flags)'>
+	>;
+	type _added = Expect<
+		Equal<Added["FIX_NAME_SHAPE"], 'Command name "-x" must not start with "-" (reserved for flags)'>
+	>;
+	// blank names keep their own brand rather than also reporting whitespace
+	type _blank = Expect<Equal<keyof ChildCommandNameBrand<" \t">, "FIX_EMPTY_NAME">>;
+	type _widened = Expect<Equal<keyof ChildCommandNameBrand<string>, never>>;
+	type _valid = Expect<Equal<keyof ChildCommandNameBrand<"deploy">, never>>;
+	type _root = Expect<Equal<keyof CommandNameBrand<"-x" | "my cmd">, never>>;
 }
 
 {
