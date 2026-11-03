@@ -19,7 +19,7 @@ Available commands: deploy
 # exit 1
 ```
 
-`help()` adds `-h` and `--help` and shows help when this actionless root is invoked. Registration order matters: `noColor()` configures color before output hooks, and `version()` handles `--version` before `help()` can handle the invocation.
+`help()` adds `-h` and `--help` and shows help when this actionless root is invoked. Registration order matters for `noColor()`, which configures color before output hooks. `version()` and `help()` work in either order: help for an actionless command runs from `noAction`, after every `preRun`.
 
 Call `.extend()` on the root builder, not inside a command recipe. See [built-in Extensions](/docs/modules/extensions) for the full list.
 

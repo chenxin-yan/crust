@@ -212,8 +212,8 @@ export interface ExtensionHooks<
 	 * none, after every `preRun` hook declined, in `.extend()` order. A fallback
 	 * here, such as help for a command group, cannot shadow another Extension's
 	 * `preRun`, whatever the registration order. Return `ctx.handled()` to end the
-	 * invocation like `preRun`; if no hook does, validation runs and the invocation
-	 * completes without a result.
+	 * invocation like `preRun`; if no hook does, validation runs and, if it succeeds,
+	 * the invocation completes without a result.
 	 */
 	readonly noAction?: (ctx: ExtensionContext<Defs, Deps, MetaKeys>) => Awaitable<void | Handled>;
 	/**

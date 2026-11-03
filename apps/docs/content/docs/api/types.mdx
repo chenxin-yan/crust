@@ -332,7 +332,7 @@ The flag values an Extension's hooks see. They are pre-validation values, not sc
 />
 
 - `preRun` runs in `.extend()` order after routing and input binding, before validation. Return `ctx.handled()` to end the invocation successfully. Pulling a flag-owning Context here rejects, because its flags are not validated yet. An argv or environment value that fails conversion, `choices`, or `parse` reads as `undefined` here (not its default); its error surfaces at validation, after every `preRun` hook.
-- `noAction` runs only when the routed command has no Command Action, after every `preRun` hook declined, in `.extend()` order and with the same context. Use it for fallbacks such as help for a command group, so they never shadow another Extension's `preRun`. Return `ctx.handled()` to end the invocation; otherwise validation runs and the invocation completes without a result.
+- `noAction` runs only when the routed command has no Command Action, after every `preRun` hook declined, in `.extend()` order and with the same context. Use it for fallbacks such as help for a command group, so they never shadow another Extension's `preRun`. Return `ctx.handled()` to end the invocation; otherwise validation runs and, if it succeeds, the invocation completes without a result.
 - `onError` runs for `execute()` only. Return `true` after rendering to stop the chain, or a falsy value to fall through to Core's renderer.
 - `postRun` runs in reverse `.extend()` order after every completed, handled, or failed invocation that reached hooks, like `finally`. Contexts remain available until it completes. Preparation, routing, and parse failures skip it.
 
