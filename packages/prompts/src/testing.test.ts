@@ -44,6 +44,15 @@ describe("createPromptIO screen", () => {
 		expect(harness.screen()).toBe("a x\n by");
 	});
 
+	it("attaches a separately written combining mark to a wide character's first cell", () => {
+		const harness = createPromptIO();
+		harness.io.output.write("界");
+		harness.io.output.write("\u0301");
+		harness.io.output.write("\rX");
+
+		expect(harness.screen()).toBe("X ");
+	});
+
 	it("parses an escape sequence split across writes", () => {
 		const harness = createPromptIO();
 		harness.io.output.write("\x1B[");

@@ -141,7 +141,9 @@ class FakeTerminal {
 		this.ensureLine();
 		if (width === 0) {
 			const cells = this.lines[this.row] ?? [];
-			if (this.column > 0) cells[this.column - 1] = `${cells[this.column - 1] ?? ""}${char}`;
+			// After a wide character the previous cell is its "" marker; the mark belongs to its first cell.
+			const target = cells[this.column - 1] === "" ? this.column - 2 : this.column - 1;
+			if (target >= 0) cells[target] = `${cells[target] ?? ""}${char}`;
 			return;
 		}
 		if (this.column + width > this.columns) {
