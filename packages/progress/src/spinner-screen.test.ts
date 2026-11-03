@@ -80,13 +80,24 @@ describe.each([false, true])("spinner resize (reflowCursorLine: %s)", (reflowCur
 
 describe("spinner frame wider than the row", () => {
 	const frames = (...list: string[]) => ({ frames: list, interval: 60_000 });
-	it.each<[string, number, (sink: ProgressSink) => { start(): void; redraw(): void }, string]>([
+	it.each<
+		[
+			string,
+			number,
+			(sink: ProgressSink) => { start(): void; redraw(): void; stop(): void },
+			string,
+		]
+	>([
 		[
 			"a CRLF line break in the message",
 			20,
 			(sink) => {
 				const handle = spinner({ message: "ab\r\ncd", spinner: frames("-"), sigint: false, sink });
-				return { start: handle.start, redraw: () => handle.updateMessage("ab\r\ncd") };
+				return {
+					start: handle.start,
+					redraw: () => handle.updateMessage("ab\r\ncd"),
+					stop: () => handle.stop(),
+				};
 			},
 			"- ab…",
 		],
@@ -101,7 +112,7 @@ describe("spinner frame wider than the row", () => {
 					sigint: false,
 					sink,
 				});
-				return { start: handle.start, redraw: () => handle.advance(0) };
+				return { start: handle.start, redraw: () => handle.advance(0), stop: () => handle.stop() };
 			},
 			"-  (0/10…",
 		],
@@ -116,7 +127,7 @@ describe("spinner frame wider than the row", () => {
 					sigint: false,
 					sink,
 				});
-				return { start: handle.start, redraw: () => handle.advance(0) };
+				return { start: handle.start, redraw: () => handle.advance(0), stop: () => handle.stop() };
 			},
 			"-  (0/…",
 		],
@@ -131,7 +142,11 @@ describe("spinner frame wider than the row", () => {
 					sigint: false,
 					sink,
 				});
-				return { start: handle.start, redraw: () => handle.updateMessage("abcdefg") };
+				return {
+					start: handle.start,
+					redraw: () => handle.updateMessage("abcdefg"),
+					stop: () => handle.stop(),
+				};
 			},
 			"- [abcd…]",
 		],
@@ -145,7 +160,11 @@ describe("spinner frame wider than the row", () => {
 					sigint: false,
 					sink,
 				});
-				return { start: handle.start, redraw: () => handle.updateMessage("Building") };
+				return {
+					start: handle.start,
+					redraw: () => handle.updateMessage("Building"),
+					stop: () => handle.stop(),
+				};
 			},
 			"ABCDEFGH…",
 		],
@@ -159,18 +178,22 @@ describe("spinner frame wider than the row", () => {
 					sigint: false,
 					sink,
 				});
-				return { start: handle.start, redraw: () => handle.updateMessage("Building") };
+				return {
+					start: handle.start,
+					redraw: () => handle.updateMessage("Building"),
+					stop: () => handle.stop(),
+				};
 			},
 			"a…",
 		],
 	])("keeps one row with %s", async (_, columns, create, frame) => {
 		const terminal = new Terminal({ cols: columns, rows: 20, allowProposedApi: true });
+		const indicator = create({
+			isTTY: true,
+			columns,
+			write: (text: string) => terminal.write(text),
+		});
 		try {
-			const indicator = create({
-				isTTY: true,
-				columns,
-				write: (text: string) => terminal.write(text),
-			});
 			indicator.start();
 			indicator.redraw();
 			indicator.redraw();
@@ -182,6 +205,8 @@ describe("spinner frame wider than the row", () => {
 			);
 			expect(rows.filter(Boolean)).toEqual([frame]);
 		} finally {
+			// Clears the redraw interval and the exit listener before the terminal goes away.
+			indicator.stop();
 			terminal.dispose();
 		}
 	});
