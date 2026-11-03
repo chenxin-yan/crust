@@ -26,7 +26,7 @@ Use `writeSkillsFromSnapshot()` when a prepared Command Snapshot is available. O
 
 <include lang="ts">../../../examples/modules/skills.ts#extension</include>
 
-The Extension registers `my-cli skills` (alias `skill`) with `install`, `uninstall`, and `repair` subcommands; bare `my-cli skills` is shorthand for `skills install`. A custom `command` name replaces the default command without adding the alias. Pass it as a string literal so `app.run()` keeps type-checking command paths and flags; a `command` typed as `string` leaves the command tree unchecked. It also contributes an `Agent skills` root section, excluded from the generated skills with `except: [skill]`, that lists each packaged skill and its source directory.
+The Extension registers `my-cli skills` (alias `skill`) with `install`, `uninstall`, and `repair` subcommands; bare `my-cli skills` is shorthand for `skills install`. A custom `command` name replaces the default command without adding the alias. Pass it as a string literal so `app.run()` keeps type-checking command paths and flags; a `command` typed as `string` leaves the command tree unchecked, and if it collides with an app command the app fails with a `DEFINITION` error when it prepares. It also contributes an `Agent skills` root section, excluded from the generated skills with `except: [skill]`, that lists each packaged skill and its source directory.
 
 During `crust build`, the Extension's build hook renders generated and authored skills under `skills/`, recorded as artifacts owned by `crust:skills`. At runtime the commands read them from [`resolveArtifactDir("skills")`](/docs/api/crust#resolveartifactdirname), so run `crust build` before using them; until then help shows a note instead of failing.
 

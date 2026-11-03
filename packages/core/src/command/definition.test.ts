@@ -3,7 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { unwrap } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
-import { defineExtension, type Extension } from "../api/extension.ts";
+import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
@@ -429,25 +429,21 @@ describe("command definitions", () => {
 		expect(configured).toBe(1);
 	});
 
-	it("defers unused and overridden Extension command recipes", async () => {
+	it("defers unused Extension command recipes", async () => {
 		const configured: string[] = [];
-		const replacement: Extension = defineExtension(defineExtensionId("last")).add(
-			defineCommand("good", { aliases: ["g"] }, (command) => {
-				configured.push("good");
-				return command.action(() => "ok");
-			}),
-		);
 		const app = new Crust("cli").extend(
 			defineExtension(defineExtensionId("first")).add(
-				defineCommand("good", () => {
-					throw new Error("overridden recipe");
-				}),
 				defineCommand("bad", () => {
 					configured.push("bad");
 					throw new Error("broken Extension recipe");
 				}),
 			),
-			replacement,
+			defineExtension(defineExtensionId("last")).add(
+				defineCommand("good", { aliases: ["g"] }, (command) => {
+					configured.push("good");
+					return command.action(() => "ok");
+				}),
+			),
 		);
 
 		expect(configured).toEqual([]);

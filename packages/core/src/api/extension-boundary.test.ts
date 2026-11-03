@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { unwrap } from "../../tests/helpers.ts";
 import { Crust, defineCommand } from "../command/crust.ts";
 import { defineExtensionId } from "../identity.ts";
+import type { ExecuteOptions } from "../types.ts";
 import { type AnyContextInstance, defineContext } from "./context.ts";
 import { defineExtension, type Extension } from "./extension.ts";
 import { defineFlag } from "./flags.ts";
@@ -127,28 +128,69 @@ it("locally proven helper results cannot be rewritten before checked consumption
 	).toMatchObject({ status: "completed", result: "safe" });
 });
 
-it("keeps canonical precedence and earliest-alias routing under checked replacement", async () => {
-	const old = defineCommand("old", { aliases: ["shared"] }, (c) => c.action(() => 42));
-	const incoming = defineCommand("incoming", { aliases: ["shared", "old"] }, (c) =>
-		c.action(() => "new"),
-	);
-	const aliasExtension: Extension = defineExtension(defineExtensionId("alias")).add(incoming);
-	const app = new Crust("app").add(old).extend(aliasExtension);
-	expect(await app.run(["shared"], {})).toMatchObject({ status: "completed", result: 42 });
-	expect(await app.run(["old"], {})).toMatchObject({ status: "completed", result: 42 });
-	const canonicalExtension: Extension = defineExtension(defineExtensionId("canonical")).add(
-		defineCommand("shared", (c) => c.action(() => true)),
-	);
-	const canonical = new Crust("app").add(old).extend(canonicalExtension);
-	expect(await canonical.run(["shared"])).toMatchObject({ status: "completed", result: true });
-	const replacementExtension: Extension = defineExtension(defineExtensionId("replace")).add(
-		defineCommand("old", (c) => c.action(() => "replacement")),
-	);
-	const replaced = new Crust("app").add(old).extend(replacementExtension);
-	await expect(unwrap(replaced.run(["shared"]))).rejects.toMatchObject({
-		code: "COMMAND_NOT_FOUND",
+it("rejects dynamically named Extension commands that collide with another root command at preparation", async () => {
+	let configured = 0;
+	// A factory with a caller-chosen name, like `skills({ command })`.
+	const contribute = (id: string, name: string, aliases: string[] = []) =>
+		defineExtension(defineExtensionId(id)).add(
+			defineCommand(name, { aliases }, (c) => {
+				configured++;
+				return c.action(() => "extension");
+			}),
+		);
+	const deploy = defineCommand("deploy", { aliases: ["d"] }, (c) => {
+		configured++;
+		return c.action(() => "app");
 	});
-	expect(await replaced.run(["old"])).toMatchObject({ status: "completed", result: "replacement" });
+	const collision = (name: string) =>
+		expect.objectContaining({
+			code: "DEFINITION",
+			details: { subject: "command", name, reason: "command-collision" },
+		});
+	// Structural so differently shaped apps share one check; `run()` takes any path here.
+	type Prepared = {
+		snapshot(): Promise<unknown>;
+		run(path: readonly string[]): Promise<unknown>;
+		execute(options: ExecuteOptions): Promise<number>;
+	};
+	const expectCollision = async (app: Prepared, name: string) => {
+		await expect(app.snapshot()).rejects.toThrow(collision(name));
+		expect(await app.run(["deploy"])).toMatchObject({ status: "failed", error: collision(name) });
+		const stderr: string[] = [];
+		const originalExitCode = process.exitCode;
+		try {
+			const io = { stdout: () => {}, stderr: (text: string) => stderr.push(text) };
+			expect(await app.execute({ argv: ["deploy"], io })).toBe(1);
+		} finally {
+			process.exitCode = originalExitCode ?? 0;
+		}
+		expect(stderr.join("\n")).toContain("collides with an existing command");
+	};
+	await expectCollision(
+		new Crust("app").add(deploy).extend(contribute("name", "deploy")),
+		"deploy",
+	);
+	await expectCollision(new Crust("app").add(deploy).extend(contribute("onto-alias", "d")), "d");
+	await expectCollision(
+		new Crust("app").add(deploy).extend(contribute("alias", "ship", ["deploy"])),
+		"ship",
+	);
+	// Added after `.extend()`, as the types also reject.
+	await expectCollision(
+		new Crust("app").extend(contribute("before-add", "deploy")).add(deploy),
+		"deploy",
+	);
+	// Two Extensions with different ids.
+	await expectCollision(
+		new Crust("app").extend(contribute("first", "lint")).extend(contribute("second", "lint")),
+		"lint",
+	);
+	expect(configured).toBe(0);
+	// Registering the same id again replaces its commands instead of colliding.
+	const replaced = new Crust("app")
+		.extend(contribute("same", "lint"))
+		.extend(contribute("same", "lint", ["l"]));
+	expect(await replaced.run(["l"])).toMatchObject({ status: "completed", result: "extension" });
 });
 
 it("owns the checked parser function instead of rereading the mutable author object", async () => {
@@ -280,41 +322,6 @@ it("checked Extensions validate earlier pending commands against new flags and p
 			"collides",
 		);
 	}
-});
-
-it("allows an Extension flag when its command replaces the colliding app child", async () => {
-	// Dynamic names bypass the closed tuple's transient collision proof; preparation checks the final tree.
-	const child: string = "child";
-	const token: string = "token";
-	const replacement = defineExtension(defineExtensionId("replacement"))
-		.flags({ name: token, type: "string" })
-		.add(defineCommand(child, (c) => c.action(() => "replacement")));
-	const root = new Crust("app").add(
-		defineCommand(child, (c) => c.flags({ name: token, type: "string" }).action(() => "old")),
-	);
-	const app = root.extend(replacement);
-	await expect(app.snapshot()).resolves.toBeDefined();
-	expect(await app.run(["child"])).toMatchObject({ status: "completed", result: "replacement" });
-});
-
-it("validates extension flags against the final replaced command tree", async () => {
-	const first = defineExtension(defineExtensionId("first")).add(
-		defineCommand("child", (c) => c.flags({ name: "token", type: "boolean" })),
-	);
-	const recursive = defineExtension(defineExtensionId("recursive-token")).flags({
-		name: "token",
-		type: "string",
-		recursive: true,
-	});
-	const replacement = defineExtension(defineExtensionId("replacement")).add(
-		defineCommand("child", (c) => c.action(() => "replacement")),
-	);
-	// @ts-expect-error -- static tuples reject the transient collision; runtime validates the final replaced tree.
-	const app = new Crust("app").extend(first, recursive, replacement);
-	expect(await app.run(["child"])).toMatchObject({
-		status: "completed",
-		result: "replacement",
-	});
 });
 
 it("checked inputs validate open inherited flags without changing positional provider scope", async () => {

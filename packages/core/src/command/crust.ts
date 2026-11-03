@@ -1575,7 +1575,7 @@ export class Crust<
 		for (const definition of definitions) {
 			// FIX_COMMAND_COLLISION owns literal names; this owns dynamic `.add()`,
 			// where a silent replacement makes the earlier command unreachable.
-			// Extension-contributed commands keep documented last-write-wins.
+			// Extension commands are checked when the app prepares (`buildExtensionTree`).
 			const spellings = [
 				definition.name,
 				...(definition[commandDefinitionInternal].meta.aliases ?? []),
