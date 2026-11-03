@@ -75,8 +75,7 @@ export function normalizeSection(
 		/[\r\n]/.test(title) ||
 		!body.trim() ||
 		only?.length === 0 ||
-		except?.length === 0 ||
-		(only !== undefined && except !== undefined)
+		except?.length === 0
 	) {
 		throw invalidSections(owner);
 	}

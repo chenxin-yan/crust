@@ -49,17 +49,6 @@ describe("version", () => {
 		expect(stdout).toContain("app v1.2.3");
 	});
 
-	it("version extension reports missing root metadata when types are bypassed", async () => {
-		// @ts-expect-error Omitted values require root version metadata.
-		const app = new Crust("app").extend(version()).action(() => {});
-
-		const { stdout, stderr, exitCode } = await captureExecute(app, ["--version"]);
-
-		expect(stdout).toBe("");
-		expect(stderr).toContain("version extension requires a version");
-		expect(exitCode).toBe(1);
-	});
-
 	it("evaluates a version provider only when the root version flag is handled", async () => {
 		let calls = 0;
 		const extension = version(() => {

@@ -3,7 +3,6 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import {
-	CrustError,
 	type Extension,
 	type ExtensionId,
 	type RootMetaKey,
@@ -187,8 +186,7 @@ export interface UpdateNotifierExtension {
  * - The postRun hook awaits the network check and cache reads and writes,
  *   delaying invocation completion after the action.
  * - `timeoutMs` bounds only the network request, defaulting to 5 seconds.
- * - Network, cache, and parsing errors are silently swallowed. A missing
- *   current version throws a DEFINITION error before that recovery block.
+ * - Network, cache, and parsing errors are silently swallowed.
  * - The check is skipped, with no cache or network access, when `CI` is set
  *   (other than `"0"` or `"false"` in any letter case), when `NO_UPDATE_NOTIFIER` is non-empty, or
  *   when `process.stderr` is not a TTY.
@@ -229,14 +227,8 @@ export const updateNotifier: UpdateNotifierExtension = /* @__PURE__ */ defineExt
 	return extension.postRun(async (context, outcome) => {
 		if (outcome.status !== "completed") return;
 
-		const resolvedCurrentVersion = currentVersion ?? context.rootCommand.meta.version;
-		// Overloads are type-only; untyped callers can still reach this.
-		if (resolvedCurrentVersion === undefined) {
-			throw new CrustError(
-				"DEFINITION",
-				"The update notifier extension requires a version in new Crust(name, { version }) or currentVersion",
-			);
-		}
+		// SAFETY: the `UpdateNotifierExtension` overloads require root `version` metadata without `currentVersion`.
+		const resolvedCurrentVersion = currentVersion ?? context.rootCommand.meta.version!;
 		if (isUpdateCheckSuppressed()) return;
 
 		try {

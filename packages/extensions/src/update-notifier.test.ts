@@ -445,18 +445,6 @@ describe("updateNotifier post-run hook", () => {
 			expect(outcome).toMatchObject({ status: "completed" });
 			expect(built).toEqual(["a"]);
 		});
-
-		it("still reports a missing version when suppressed", async () => {
-			vi.stubEnv("CI", "true");
-			const pkgName = uniquePackageName("suppressed-missing-version");
-			const outcome = await new Crust(pkgName)
-				// @ts-expect-error Untyped callers can omit both version sources.
-				.extend(updateNotifier({ packageName: pkgName }))
-				.action(() => {})
-				.run([]);
-
-			expect(outcome).toMatchObject({ status: "failed", error: { code: "DEFINITION" } });
-		});
 	});
 
 	// ── No update flow ────────────────────────────────────────────────────
@@ -1011,19 +999,6 @@ describe("updateNotifier post-run hook", () => {
 			expect(commandExecuted).toBe(true);
 			expect(stderr).toContain("Update available");
 			expect(stderr).toContain("5.0.0");
-		});
-
-		it("reports a missing application version", async () => {
-			const pkgName = uniquePackageName("missing-version");
-			const app = new Crust(pkgName)
-				// @ts-expect-error Untyped callers can omit both version sources.
-				.extend(updateNotifier({ packageName: pkgName }))
-				.action(() => {});
-
-			const { stderr, exitCode } = await captureExecute(app, []);
-
-			expect(stderr).toContain("update notifier extension requires a version");
-			expect(exitCode).toBe(1);
 		});
 
 		it("does not break command execution when registry is down", async () => {

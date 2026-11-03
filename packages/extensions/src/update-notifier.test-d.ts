@@ -1,4 +1,4 @@
-import { Crust } from "@crustjs/core";
+import { Crust, type RootCommandMeta } from "@crustjs/core";
 
 import { updateNotifier } from "./update-notifier.ts";
 
@@ -13,4 +13,11 @@ function _updateNotifierVersionRequirements() {
 	new Crust("app", { version: "1" }).extend(
 		updateNotifier({ packageName: "app", currentVersion: maybe }),
 	);
+	// @ts-expect-error A root version that may be undefined is not guaranteed.
+	new Crust("app", { version: maybe }).extend(updateNotifier({ packageName: "app" }));
+}
+
+function _updateNotifierRequiresGuaranteedRootMeta(meta: RootCommandMeta) {
+	// @ts-expect-error Optional root metadata does not guarantee a version.
+	new Crust("app", meta).extend(updateNotifier({ packageName: "app" }));
 }

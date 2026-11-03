@@ -360,7 +360,7 @@ The opaque token returned by `ctx.handled()`. Return that exact value from `preR
   name="ExtensionSectionContribution"
 />
 
-One entry returned by `.sections(snapshot)`: a section plus the canonical `command` path it targets, relative to the root (`[]` is the root). Contributions append to the target's `meta.sections` in Extension registration order. The callback receives a snapshot without Extension-contributed sections. Blank or multi-line titles, blank bodies, empty audiences, both `only` and `except`, and unknown command paths fail preparation with a `DEFINITION` error.
+One entry returned by `.sections(snapshot)`: a section plus the canonical `command` path it targets, relative to the root (`[]` is the root). Contributions append to the target's `meta.sections` in Extension registration order. The callback receives a snapshot without Extension-contributed sections. Blank or multi-line titles, blank bodies, empty audiences, and unknown command paths fail preparation with a `DEFINITION` error.
 
 ### `ExtensionBuildContext`
 
