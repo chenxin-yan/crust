@@ -91,7 +91,7 @@ When `package.json` declares `engines.bun` or `engines.node`, that compiler must
 
 ### Bun binary startup
 
-Bun binaries are precompiled to [bytecode](https://bun.com/docs/compiler/bytecode) by default, so they start without parsing their JavaScript: roughly twice as fast for a typical CLI, for about 2% more binary size. The bytecode is embedded next to the exact Bun runtime that produced it, so it always matches. Pass `--no-bytecode` to opt out.
+Bun binaries are precompiled to [bytecode](https://bun.com/docs/compiler/bytecode) by default, so they start without parsing their JavaScript. In one benchmark, a 30-command CLI on Linux x64 started in 11.7 ms instead of 21.6 ms, for about 2% more binary size. The bytecode is embedded next to the exact Bun runtime that produced it, so it always matches. Cross-compiled targets need Bun 1.4.1 or later to embed bytecode; older versions build them without it. Pass `--no-bytecode` to opt out.
 
 Bytecode applies only to Bun binaries. Runtime packages run on whatever Bun the user has installed, which would ignore bytecode from another version, and Node.js uses a different engine, so `--bytecode` is rejected for both.
 
