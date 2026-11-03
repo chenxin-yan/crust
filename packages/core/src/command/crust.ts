@@ -704,24 +704,16 @@ type AnyCollisionSpellings = {
 	readonly providers?: Record<string, ContextValue> | undefined;
 };
 
-type RecipeDepsOf<S extends AnyCollisionSpellings> = S extends {
-	readonly recipeDeps: infer Deps extends ContextMap;
-}
-	? Deps
-	: {};
+// Indexed access, not `infer`: `AnyCommandDefinitionBuilder`'s `any` spellings must yield `any`,
+// not `object | {}`. A builder whose action returns `never` misses the variance shortcut (`any`
+// is not assignable to `never`), and the structural fallback compares these contravariant proof slots.
+// `Exclude`, not `NonNullable`: its `& {}` hit TS2589 on long `.add()` chains.
+type RecipeDepsOf<S extends AnyCollisionSpellings> = Exclude<S["recipeDeps"], undefined>;
 
-type ProvidersOf<S extends AnyCollisionSpellings> = S extends {
-	readonly providers: infer Providers extends Record<string, ContextValue>;
-}
-	? Providers
-	: {};
+type ProvidersOf<S extends AnyCollisionSpellings> = Exclude<S["providers"], undefined>;
 
 /** Obligations of this node's stored action, never inherited by descendants. */
-type ActionDepsOf<S extends AnyCollisionSpellings> = S extends {
-	readonly actionDeps: infer Deps extends ContextMap;
-}
-	? Deps
-	: {};
+type ActionDepsOf<S extends AnyCollisionSpellings> = Exclude<S["actionDeps"], undefined>;
 
 type AfterFlags<
 	Flags extends FlagsDef,
