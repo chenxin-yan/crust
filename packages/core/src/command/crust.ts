@@ -18,7 +18,7 @@ import type {
 	ExtensionsProvidesOutput,
 	RootMetaKey,
 } from "../api/extension.ts";
-import { CrustError } from "../errors.ts";
+import { CrustError, type DefinitionErrorReason } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import { normalizeArg } from "../parsing/spellings.ts";
 import { validateCommandSections } from "../sections.ts";
@@ -245,7 +245,7 @@ function materializeCommandDefinition(
 	const internal = definition[commandDefinitionInternal];
 	const name = definition.name;
 	const owner = extensionId ? `Extension "${extensionId}" command "${name}"` : `Command "${name}"`;
-	const definitionDetails = (reason: string) => ({
+	const definitionDetails = (reason: DefinitionErrorReason) => ({
 		subject: extensionId ? ("extension" as const) : ("command" as const),
 		name: extensionId ?? name,
 		reason,
@@ -1007,6 +1007,23 @@ type DefinedRootMetaKeys<Meta extends RootCommandMeta | undefined> = {
 	[K in RootMetaKey]: [Meta] extends [Required<Pick<RootCommandMeta, K>>] ? K : never;
 }[RootMetaKey];
 
+type ExtensionMetaKeys<E> =
+	DefiningOf<E> extends ExtensionData<any, any, any, any, infer K> ? K : never;
+
+type MissingRootMetaMessage<K extends RootMetaKey> = K extends unknown
+	? `Extension requires root metadata "${K}"; pass it to new Crust(name, { ${K} })`
+	: never;
+
+/** Name missing metadata while accepting generic requirements covered by the root. */
+type MissingRootMetaBrand<E, Defined extends RootMetaKey> =
+	// Structural assignability still works when the conditional defers on generic metadata keys.
+	| Extension<any, any, any, any, Defined>
+	| ([E] extends [Extension<any, any, any, any, Defined>]
+			? {}
+			: {
+					readonly FIX_ROOT_META: MissingRootMetaMessage<Exclude<ExtensionMetaKeys<E>, Defined>>;
+				});
+
 /**
  * Chainable builder for defining CLI commands with full type inference.
  *
@@ -1327,10 +1344,7 @@ export class Crust<
 	 * metadata by TypeScript, not at runtime.
 	 * Recipe builders cannot call this root-only method.
 	 */
-	extend<
-		const Es extends readonly Extension<any, any, any, any, DefinedRootMetaKeys<Meta>>[],
-		_Union extends this = never,
-	>(
+	extend<const Es extends readonly AnyExtension[], _Union extends this = never>(
 		this: { readonly _types: { readonly caps: "app" } },
 		...extensions: Es & {
 			[I in keyof Es]: (ExtensionCommandDefs<Es[I]> extends ValidateDefinitionFlags<
@@ -1359,7 +1373,9 @@ export class Crust<
 					I
 				> &
 				ExtensionCheckAt<ValidateExtensionCommands<Es, Sibs>, I> &
-				ExtensionCheckAt<ValidateExtensionProvides<Es, Ctx>, I>;
+				ExtensionCheckAt<ValidateExtensionProvides<Es, Ctx>, I> &
+				// Checked here, not in the constraint, so a missing key gets a readable brand.
+				MissingRootMetaBrand<Es[I], DefinedRootMetaKeys<Meta>>;
 		}
 	): AfterExtend<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Es, Meta, Caps>;
 

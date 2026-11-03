@@ -345,6 +345,16 @@ export type ValidateLocalFlagDefs<
 	Existing extends string,
 > = Defs & UnionToIntersection<LocalFlagTupleChecks<Defs, Existing>>;
 
+/**
+ * Key a closed-name flag's errors by its spelling: the diagnostic then names the
+ * flag, and two flags' distinct messages under one brand key cannot intersect to `never`.
+ */
+type NamedFlagErrors<F, Errors> = [DefName<F>] extends [never]
+	? Errors
+	: [keyof Errors] extends [never]
+		? {}
+		: { readonly [K in `--${DefName<F>}`]: Errors };
+
 // Accumulate only errors: rebuilding a validated tuple forces structural comparison
 // of every FlagDef variant during inference. The tail also rejects optional/rest slots.
 type LocalFlagTupleChecks<
@@ -358,7 +368,8 @@ type LocalFlagTupleChecks<
 	? LocalFlagTupleChecks<
 			Tail,
 			Existing | DefName<Head> | ExtractAllAliases<Head>,
-			Errors & LocalFlagBrand<Head> & ExistingFlagCollisionBrand<Head, Existing>
+			Errors &
+				NamedFlagErrors<Head, LocalFlagBrand<Head> & ExistingFlagCollisionBrand<Head, Existing>>
 		>
 	: Defs extends readonly []
 		? Errors

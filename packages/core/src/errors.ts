@@ -19,11 +19,52 @@ export interface CommandNotFoundErrorDetails {
 	parentCommand: CommandSnapshot;
 }
 
-/** Aggregated Standard Schema and required-value validation failures. */
+/** Aggregated Standard Schema validation failures; required-value failures carry no details. */
 export interface ValidationErrorDetails {
 	/** Issues normalized under `args.<name>` or `flags.<name>`. */
 	issues: readonly { readonly message: string; readonly path: string }[];
 }
+
+/** `details.reason` values Core sets on `PARSE` errors. */
+export type ParseErrorReason =
+	| "unknown-flag"
+	| "unknown-argument"
+	| "positional-gap"
+	| "flag-not-forwardable";
+
+/** `details.reason` values Core sets on `DEFINITION` errors. */
+export type DefinitionErrorReason =
+	| "alias-collision"
+	| "command-collision"
+	| "context-after-disposal"
+	| "context-cycle"
+	| "context-defer-after-setup"
+	| "context-during-disposal"
+	| "default-outside-choices"
+	| "delimiter-without-multiple"
+	| "duplicate-arg"
+	| "duplicate-section"
+	| "empty-delimiter"
+	| "empty-env"
+	| "empty-id"
+	| "empty-name"
+	| "empty-spelling"
+	| "factory-id-mismatch"
+	| "flag-collision"
+	| "flags-before-validation"
+	| "foreign-command-builder"
+	| "invalid-alias"
+	| "invalid-env"
+	| "invalid-section-path"
+	| "invalid-sections"
+	| "invalid-short"
+	| "missing-context"
+	| "missing-recipe"
+	| "nested-command-extension"
+	| "reserved-name"
+	| "reserved-no-prefix"
+	| "reserved-spelling"
+	| "variadic-position";
 
 /** Details for argv syntax or built-in value parsing failures. */
 export interface ParseErrorDetails {
@@ -37,15 +78,16 @@ export interface ParseErrorDetails {
 	readonly argument?: string;
 	/** Retained for compatibility; Core no longer populates this field. */
 	readonly value?: string;
-	/** `"unknown-flag"`, `"unknown-argument"`, `"positional-gap"`, or `"flag-not-forwardable"`. */
-	readonly reason?: string;
+	/** Open so other packages can add reasons; `string & {}` keeps Core's literals in autocomplete. */
+	readonly reason?: ParseErrorReason | (string & {});
 }
 
 /** Details for runtime recipe, Extension, Context, and documentation failures. */
 export interface DefinitionErrorDetails {
 	readonly subject?: "command" | "context" | "extension" | "flag" | "argument";
 	readonly name?: string;
-	readonly reason?: string;
+	/** Open so other packages can add reasons; `string & {}` keeps Core's literals in autocomplete. */
+	readonly reason?: DefinitionErrorReason | (string & {});
 }
 
 /** One environment variable that failed; its value is never recorded. */
@@ -105,6 +147,9 @@ export interface CrustErrorJson<C extends CrustErrorCode> {
 	details: CrustErrorDetails<C>;
 }
 
+/** A `CrustError` of each code; checking `code` narrows `details`. */
+type AnyCrustError = { [C in CrustErrorCode]: CrustError<C> }[CrustErrorCode];
+
 // ────────────────────────────────────────────────────────────────────────────
 // CrustError — Custom error class
 // ────────────────────────────────────────────────────────────────────────────
@@ -148,6 +193,20 @@ export class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error
 		this.code = code;
 		// SAFETY: the details tuple is empty only when this error code permits undefined.
 		this.details = details[0] as CrustErrorDetails<C>;
+	}
+
+	// A class's `instanceof` narrowing otherwise yields `CrustError<any>`. On
+	// `CrustError` itself the predicate yields one member per code, so checking
+	// `code` narrows `details`. Subclasses narrow to their prototype: an identity
+	// check (not assignability) and `prototype` (not a public construct signature)
+	// keep structurally compatible subclasses and non-public constructors working.
+	static override [Symbol.hasInstance]<Ctor extends { readonly prototype: unknown }>(
+		this: Ctor,
+		value: unknown,
+	): value is (<X>() => X extends Ctor ? 1 : 2) extends <X>() => X extends typeof CrustError ? 1 : 2
+		? AnyCrustError
+		: Ctor["prototype"] {
+		return Function.prototype[Symbol.hasInstance].call(this, value);
 	}
 
 	is<T extends CrustErrorCode>(code: T): this is CrustError<T> {

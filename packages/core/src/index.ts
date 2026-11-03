@@ -67,9 +67,11 @@ export type {
 	CrustErrorJson,
 	CrustErrorDetailsMap,
 	DefinitionErrorDetails,
+	DefinitionErrorReason,
 	EnvErrorDetails,
 	EnvIssue,
 	ParseErrorDetails,
+	ParseErrorReason,
 	ValidationErrorDetails,
 } from "./errors.ts";
 export { CrustError } from "./errors.ts";
