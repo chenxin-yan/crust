@@ -263,7 +263,7 @@ describe.skipIf(seaNodeDir === null || host === null || npm === null)(
 			for (const staged of [rootPackage, platformPackage]) {
 				expect(staged).not.toHaveProperty("dependencies");
 			}
-			expect(rootPackage.engines).toEqual({ node: "^22.15.0 || >=23.11.0" });
+			expect(rootPackage.engines).toEqual({ node: ">=24" });
 			expect(platformPackage).not.toHaveProperty("engines");
 			for (const bin of Object.values(bins)) {
 				expect(existsSync(join(stageDir, alias, bin))).toBe(true);

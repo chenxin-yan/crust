@@ -278,7 +278,7 @@ open(os.environ["LAUNCHER_TEST_LOG"], "a").write("nonblocking " + ",".join("1" i
 				{ encoding: "utf8", timeout: TIMEOUT },
 			);
 			expect(result.status).toBe(1);
-			expect(result.stderr).toContain("[app] Requires Node.js ^22.15.0 || >=23.11.0");
+			expect(result.stderr).toContain("[app] Requires Node.js >=24");
 		},
 	);
 

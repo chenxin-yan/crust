@@ -1,5 +1,8 @@
 import type { DistributionTarget } from "./distribute.ts";
 
+/** Node.js the launcher needs for `process.execve`: the same floor as every Crust package. */
+export const LAUNCHER_NODE_RANGE = ">=24";
+
 /** Platform binary filename: `<command>-<target>`, `.exe` on Windows. */
 export function binaryFilename(command: string, target: DistributionTarget): string {
 	return `${command}-${target.target}${target.os === "win32" ? ".exe" : ""}`;
@@ -26,7 +29,7 @@ export function generateLauncher(command: string, targets: readonly Distribution
 const NAME = ${JSON.stringify(command)};
 if (typeof process.getBuiltinModule !== "function" ||
 	(process.platform !== "win32" && typeof process.execve !== "function")) {
-	console.error("[" + NAME + "] Requires Node.js ^22.15.0 || >=23.11.0 (found " + process.version + ").");
+	console.error("[" + NAME + "] Requires Node.js ${LAUNCHER_NODE_RANGE} (found " + process.version + ").");
 	process.exit(1);
 }
 

@@ -7,7 +7,7 @@ import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/js
 import { isWithin } from "@crustjs/utils/path";
 
 import { collectArtifacts, collectIncludeDirs } from "./artifacts.ts";
-import { binaryFilename, generateLauncher } from "./launcher.ts";
+import { binaryFilename, generateLauncher, LAUNCHER_NODE_RANGE } from "./launcher.ts";
 import type { BuildRuntime, TargetInfo, TargetTable } from "./targets.ts";
 
 /** Project-relative directory that `crust build` owns: wiped per build, read by `crust publish`. */
@@ -180,9 +180,6 @@ function platformBinMap(
 		commands.map((command) => [command, `bin/${binaryFilename(command, target)}`]),
 	);
 }
-
-/** The launcher becomes the binary with `process.execve`, added in Node.js 22.15 and 23.11. */
-const LAUNCHER_NODE_RANGE = "^22.15.0 || >=23.11.0";
 
 function buildDistributionRootPackageJson(
 	metadata: DistributionMetadata,
