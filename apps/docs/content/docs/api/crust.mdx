@@ -142,7 +142,7 @@ import { help, version } from "@crustjs/extensions";
 const app = new Crust("my-cli", { version: "1.2.3" }).extend(version(), help());
 ```
 
-Extensions apply to every command, including definitions added before `.extend()`. Contexts an Extension provides reach the root and existing descendants while more-specific local providers win. Extension commands are built on first use, like added definitions, and Extension flags are registered on each command as it is built. Extensions must come from `defineExtension()`.
+Extensions apply to every command, including definitions added before `.extend()`. Contexts an Extension provides reach the root and existing descendants while more-specific local providers win. Extension commands are built on first use, like added definitions, and recursive Extension flags (the default) are registered on each command as it is built; flags with `recursive: false` are registered only on the root. Extensions must come from `defineExtension()`.
 
 ## `.action(action)`
 
