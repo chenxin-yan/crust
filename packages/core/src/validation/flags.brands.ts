@@ -211,12 +211,17 @@ type ExtensionFlagCollisionBrand<E, Existing extends string> = CollisionBrand<
 export type ValidateExtensionFlags<
 	Es extends readonly unknown[],
 	Existing extends string,
+	// Accumulating in tail position lets one `.extend()` take 45+ Extensions without TS2589.
+	Acc extends readonly unknown[] = readonly [],
 > = Es extends readonly [infer H, ...infer T extends readonly unknown[]]
-	? readonly [
-			H & ExtensionFlagCollisionBrand<H, Existing>,
-			...ValidateExtensionFlags<T, Existing | ExtensionSpellings<H>>,
-		]
-	: Es;
+	? ValidateExtensionFlags<
+			T,
+			Existing | ExtensionSpellings<H>,
+			readonly [...Acc, H & ExtensionFlagCollisionBrand<H, Existing>]
+		>
+	: Acc extends readonly []
+		? Es
+		: readonly [...Acc, ...Es];
 
 // ────────────────────────────────────────────────────────────────────────────
 // Command-tree flag spellings (for Extension-vs-subcommand collision checks)
@@ -278,13 +283,13 @@ export type ValidateDefinitionFlags<Ds extends readonly unknown[], Ext extends s
 };
 
 /** Union of every statically known flag spelling contributed by a tuple of Extensions. */
-export type ExtensionsSpellings<Es extends readonly unknown[]> = Es extends readonly [
-	infer H,
-	...infer T extends readonly unknown[],
-]
-	? ExtensionSpellings<H> | ExtensionsSpellings<T>
+export type ExtensionsSpellings<
+	Es extends readonly unknown[],
+	Acc extends string = never,
+> = Es extends readonly [infer H, ...infer T extends readonly unknown[]]
+	? ExtensionsSpellings<T, Acc | ExtensionSpellings<H>>
 	: ExtensionSpellings<Es[number]> extends never
-		? never
+		? Acc
 		: string;
 
 /**

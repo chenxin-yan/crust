@@ -394,18 +394,32 @@ type ExtensionProvidesOutput<E> =
 	DefiningOf<E> extends ExtensionData<any, infer Provide, any, any, RootMetaKey>
 		? ContextsOutput<Provide>
 		: {};
-export type ExtensionsProvidesOutput<Es extends readonly AnyExtension[]> = Es extends readonly [
-	infer H,
-	...infer T extends readonly AnyExtension[],
+type ExtensionsRestProvidesOutput<Es extends readonly AnyExtension[]> = Es extends readonly []
+	? {}
+	: DefiningOf<Es[number]> extends ExtensionData<any, infer P, any, any, RootMetaKey>
+		? P[number] extends never
+			? {}
+			: Record<string, ContextValue>
+		: {};
+
+// Folds from the last leading Extension onto the rest's output, so the tail-recursive walk keeps
+// last-write-wins nesting while one `.extend()` takes 45+ Extensions without TS2589.
+type FoldExtensionsProvidesOutput<Es extends readonly unknown[], Acc> = Es extends readonly [
+	...infer Init,
+	infer Last,
 ]
-	? MergeProviders<ExtensionProvidesOutput<H>, ExtensionsProvidesOutput<T>>
-	: Es extends readonly []
-		? {}
-		: DefiningOf<Es[number]> extends ExtensionData<any, infer P, any, any, RootMetaKey>
-			? P[number] extends never
-				? {}
-				: Record<string, ContextValue>
-			: {};
+	? FoldExtensionsProvidesOutput<Init, MergeProviders<ExtensionProvidesOutput<Last>, Acc>>
+	: Acc;
+
+type LeadingExtensionsProvidesOutput<
+	Es extends readonly AnyExtension[],
+	Leading extends readonly unknown[],
+> = Es extends readonly [infer H, ...infer T extends readonly AnyExtension[]]
+	? LeadingExtensionsProvidesOutput<T, [...Leading, H]>
+	: FoldExtensionsProvidesOutput<Leading, ExtensionsRestProvidesOutput<Es>>;
+
+export type ExtensionsProvidesOutput<Es extends readonly AnyExtension[]> =
+	LeadingExtensionsProvidesOutput<Es, []>;
 
 /**
  * A callable Extension constructor whose identity is also a section consumer.

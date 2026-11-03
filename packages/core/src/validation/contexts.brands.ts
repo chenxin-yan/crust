@@ -72,12 +72,17 @@ type ExtensionContextBrand<E, Existing extends string> = CollisionBrand<
 type ValidateExtensionProvidesWorker<
 	Es extends readonly unknown[],
 	Existing extends string,
+	// Accumulating in tail position lets one `.extend()` take 45+ Extensions without TS2589.
+	Acc extends readonly unknown[] = readonly [],
 > = Es extends readonly [infer H, ...infer T extends readonly unknown[]]
-	? readonly [
-			H & ExtensionContextBrand<H, Existing>,
-			...ValidateExtensionProvidesWorker<T, Existing | ExtensionProvidedNames<H>>,
-		]
-	: Es;
+	? ValidateExtensionProvidesWorker<
+			T,
+			Existing | ExtensionProvidedNames<H>,
+			readonly [...Acc, H & ExtensionContextBrand<H, Existing>]
+		>
+	: Acc extends readonly []
+		? Es
+		: readonly [...Acc, ...Es];
 
 /**
  * Brand Extensions whose provided Context names replace one already on the
