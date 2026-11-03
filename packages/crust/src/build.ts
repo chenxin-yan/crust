@@ -617,7 +617,7 @@ async function selectCompilers(plan: BuildPlan, io: InvocationIO): Promise<Selec
 		const compiler = await resolveNodeBinaryCompiler(plan.userPackageJson, plan.cwd);
 		printCompiler(compiler);
 		// Downloads and unpacks each target's Node now, so a missing tar/xz/unzip keeps the stage.
-		await provisionNodeExeTargets(plan.targets, plan.cwd, compiler);
+		const useCodeCache = await provisionNodeExeTargets(plan.targets, plan.cwd, compiler);
 		// Bun bundles every command before tsdown, even without Command Snapshots.
 		const bunRunner = resolveBunBuildRunner();
 		const distribution: Distribution<NodeTarget> = {
@@ -625,7 +625,16 @@ async function selectCompilers(plan: BuildPlan, io: InvocationIO): Promise<Selec
 			targets: plan.targets,
 			embeddedRuntimeVersion: compiler.version,
 			execute: (entry, outfile, target) =>
-				execNodeBinaryBuild(entry, outfile, target, plan, compiler, bunRunner, io.stderr),
+				execNodeBinaryBuild(
+					entry,
+					outfile,
+					target,
+					plan,
+					compiler,
+					bunRunner,
+					io.stderr,
+					useCodeCache[target] === true,
+				),
 		};
 		return {
 			snapshotRunner: bunRunner,
