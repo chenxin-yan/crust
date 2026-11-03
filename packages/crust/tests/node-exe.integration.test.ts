@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import {
 	existsSync,
 	mkdirSync,
@@ -391,16 +392,22 @@ describe.skipIf(seaNodeDir === null || host === null || npm === null)(
 				expect(JSON.parse(direct.stdout)).toEqual(expected);
 				// Only a builder Node that is the exact embedded binary, without
 				// NODE_OPTIONS, writes a code cache V8 accepts; any other gets none
-				// rather than a rejected one.
+				// rather than a rejected one. Ask the Node for its execPath, as the
+				// build does: on PATH it may be a version-manager shim.
+				const builderNode = spawnSync(join(seaNodeDir!, `node${exe}`), ["-p", "process.execPath"], {
+					encoding: "utf8",
+					timeout: 10_000,
+				}).stdout.trim();
 				const embedsBuilder =
 					!process.env.NODE_OPTIONS &&
 					readFileSync(getCachedBinaryPath(nodeExeTarget(host!, nodeVersion))).equals(
-						readFileSync(realpathSync(join(seaNodeDir!, `node${exe}`))),
+						readFileSync(builderNode),
 					);
 				const traced = await runWithoutNode(greetBinary, ["ada"], { NODE_DEBUG_NATIVE: "SEA" });
 				expect(traced.exitCode, traced.stderr).toBe(0);
 				expect(traced.stderr).not.toContain("rejected");
 				expect(traced.stderr.includes("SEA module code cache accepted")).toBe(embedsBuilder);
+				expect(hostBuild.stdout).toContain(embedsBuilder ? "Code cache: on" : "Code cache: off (");
 
 				const help = await runWithoutNode(greetBinary, ["--help"]);
 				expect(help.exitCode, help.stderr).toBe(0);

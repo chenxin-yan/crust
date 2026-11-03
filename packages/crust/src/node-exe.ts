@@ -377,12 +377,17 @@ for (const { name, target } of ${JSON.stringify(targets)}) {
 	// rejects it (with a warning on every start) unless the embedded Node is this
 	// exact binary with the same V8 flags, so another platform's or a distro build
 	// of the same version, or NODE_OPTIONS such as --jitless, gets none. Decided
-	// once per build: comparing reads both ~100 MB binaries.
+	// once per build: comparing reads both ~150 MB binaries.
 	const embedded = getCachedBinaryPath(target);
-	useCodeCache[name] =
-		!process.env.NODE_OPTIONS &&
-		statSync(embedded, { throwIfNoEntry: false })?.size === statSync(process.execPath).size &&
-		readFileSync(embedded).equals(readFileSync(process.execPath));
+	const host = (process.platform === "win32" ? "win" : process.platform) + "-" + process.arch;
+	useCodeCache[name] = process.env.NODE_OPTIONS
+		? "NODE_OPTIONS is set"
+		: target.platform + "-" + target.arch !== host
+			? "cross-built"
+			: statSync(embedded, { throwIfNoEntry: false })?.size === statSync(process.execPath).size &&
+				  readFileSync(embedded).equals(readFileSync(process.execPath))
+				? true
+				: "the build's node is not the official v" + target.nodeVersion + " binary";
 }
 console.log(JSON.stringify(useCodeCache));
 `;
@@ -398,16 +403,16 @@ console.log(JSON.stringify(useCodeCache));
  * download, or a checksum mismatch therefore fails here, before `.crust/` is
  * replaced; cached targets need nothing.
  *
- * @returns Per target, whether {@link execNodeBinaryBuild} may embed a V8 code
- *   cache: only when the selected Node is byte-identical to the binary the
- *   target embeds and `NODE_OPTIONS` is unset
+ * @returns Per target, `true` when {@link execNodeBinaryBuild} may embed a V8 code
+ *   cache (the selected Node is byte-identical to the binary the target embeds and
+ *   `NODE_OPTIONS` is unset), or the reason it may not
  * @throws {Error} If a target cannot be provisioned
  */
 export async function provisionNodeExeTargets(
 	targets: readonly NodeTarget[],
 	cwd: string,
 	compiler: NodeBinaryCompiler,
-): Promise<Partial<Record<NodeTarget, boolean>>> {
+): Promise<CodeCacheDecisions> {
 	const provision = await runGeneratedScript(
 		compiler.runner,
 		"provision",
@@ -428,6 +433,26 @@ export async function provisionNodeExeTargets(
 	const decided: JsonValue = JSON.parse(provision.stdout.trim().split("\n").at(-1) || "{}");
 	// Callers enable the cache only for `=== true`, so any other value means no cache.
 	return isJsonObject(decided) ? decided : {};
+}
+
+/** Per target, `true` when the V8 code cache is embedded, or why it is not. */
+export type CodeCacheDecisions = Partial<Record<NodeTarget, true | string>>;
+
+/** The build log's `Code cache:` value: `on`, `off (reason)`, or per-target groups when they differ. */
+export function formatCodeCache(decisions: CodeCacheDecisions): string {
+	const groups = new Map<true | string, string[]>();
+	for (const [target, decision] of Object.entries(decisions)) {
+		groups.set(decision, [...(groups.get(decision) ?? []), target]);
+	}
+	const entries = [...groups];
+	if (entries.length === 1) return entries[0]![0] === true ? "on" : `off (${entries[0]![0]})`;
+	return entries
+		.map(([decision, targets]) =>
+			decision === true
+				? `on for ${targets.join(", ")}`
+				: `off for ${targets.join(", ")} (${decision})`,
+		)
+		.join("; ");
 }
 
 /** Runs a generated `<name>.mjs` with `runner` from a temporary directory that is removed afterwards. */

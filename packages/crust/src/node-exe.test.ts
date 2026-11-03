@@ -11,6 +11,7 @@ import { type BuildCompiler, resolveNodeBuildRunner } from "./compilers.ts";
 import {
 	assertNodeExeBackendSupports,
 	crustInstallPath,
+	formatCodeCache,
 	NODE_EXE_BACKEND_PACKAGES,
 	nodeExeTarget,
 	resolveNodeBinaryCompiler,
@@ -44,6 +45,25 @@ describe("nodeExeTarget", () => {
 		]);
 		// Official Node Linux builds link glibc; npm must skip them on musl.
 		expect(NODE_TARGETS.info["linux-arm64"].libc).toBe("glibc");
+	});
+});
+
+describe("formatCodeCache", () => {
+	it("says on, or off with the reason, and groups targets only when they differ", () => {
+		expect(formatCodeCache({ "linux-x64": true })).toBe("on");
+		expect(
+			formatCodeCache({
+				"linux-x64": "NODE_OPTIONS is set",
+				"darwin-arm64": "NODE_OPTIONS is set",
+			}),
+		).toBe("off (NODE_OPTIONS is set)");
+		expect(
+			formatCodeCache({
+				"linux-x64": true,
+				"darwin-arm64": "cross-built",
+				"win-x64": "cross-built",
+			}),
+		).toBe("on for linux-x64; off for darwin-arm64, win-x64 (cross-built)");
 	});
 });
 

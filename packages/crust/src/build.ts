@@ -41,6 +41,7 @@ import {
 } from "./distribute.ts";
 import {
 	execNodeBinaryBuild,
+	formatCodeCache,
 	provisionNodeExeTargets,
 	resolveNodeBinaryCompiler,
 } from "./node-exe.ts";
@@ -618,6 +619,7 @@ async function selectCompilers(plan: BuildPlan, io: InvocationIO): Promise<Selec
 		printCompiler(compiler);
 		// Downloads and unpacks each target's Node now, so a missing tar/xz/unzip keeps the stage.
 		const useCodeCache = await provisionNodeExeTargets(plan.targets, plan.cwd, compiler);
+		io.stdout(`${dim("Code cache:")} ${formatCodeCache(useCodeCache)}`);
 		// Bun bundles every command before tsdown, even without Command Snapshots.
 		const bunRunner = resolveBunBuildRunner();
 		const distribution: Distribution<NodeTarget> = {
