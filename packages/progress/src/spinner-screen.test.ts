@@ -1,7 +1,8 @@
 import { Terminal } from "@xterm/headless";
 import { describe, expect, it } from "vite-plus/test";
 
-import { spinner } from "./spinner.ts";
+import { progress } from "./progress.ts";
+import { spinner, type ProgressSink } from "./spinner.ts";
 
 /** A spinner drawing into an xterm screen, plus that screen's logical lines. */
 function setup(columns: number, reflowCursorLine: boolean, message: string) {
@@ -74,6 +75,115 @@ describe.each([false, true])("spinner resize (reflowCursorLine: %s)", (reflowCur
 				dispose();
 			}
 		});
+	});
+});
+
+describe("spinner frame wider than the row", () => {
+	const frames = (...list: string[]) => ({ frames: list, interval: 60_000 });
+	it.each<[string, number, (sink: ProgressSink) => { start(): void; redraw(): void }, string]>([
+		[
+			"a CRLF line break in the message",
+			20,
+			(sink) => {
+				const handle = spinner({ message: "ab\r\ncd", spinner: frames("-"), sigint: false, sink });
+				return { start: handle.start, redraw: () => handle.updateMessage("ab\r\ncd") };
+			},
+			"- ab…",
+		],
+		[
+			"a count wider than the row",
+			10,
+			(sink) => {
+				const handle = progress({
+					total: 1_000_000,
+					message: "Files",
+					spinner: frames("-"),
+					sigint: false,
+					sink,
+				});
+				return { start: handle.start, redraw: () => handle.advance(0) };
+			},
+			"-  (0/10…",
+		],
+		[
+			"a symbol and count that leave no room for the message",
+			8,
+			(sink) => {
+				const handle = progress({
+					total: 2,
+					message: "X",
+					spinner: frames("-"),
+					sigint: false,
+					sink,
+				});
+				return { start: handle.start, redraw: () => handle.advance(0) };
+			},
+			"-  (0/…",
+		],
+		[
+			"text a theme adds to the message",
+			10,
+			(sink) => {
+				const handle = spinner({
+					message: "abcdefg",
+					spinner: frames("-"),
+					theme: { message: (text) => `[${text}]` },
+					sigint: false,
+					sink,
+				});
+				return { start: handle.start, redraw: () => handle.updateMessage("abcdefg") };
+			},
+			"- [abcd…]",
+		],
+		[
+			"a spinner frame wider than the row",
+			10,
+			(sink) => {
+				const handle = spinner({
+					message: "Building",
+					spinner: frames("ABCDEFGHIJ"),
+					sigint: false,
+					sink,
+				});
+				return { start: handle.start, redraw: () => handle.updateMessage("Building") };
+			},
+			"ABCDEFGH…",
+		],
+		[
+			"a multi-line spinner frame",
+			20,
+			(sink) => {
+				const handle = spinner({
+					message: "Building",
+					spinner: frames("a\nb"),
+					sigint: false,
+					sink,
+				});
+				return { start: handle.start, redraw: () => handle.updateMessage("Building") };
+			},
+			"a…",
+		],
+	])("keeps one row with %s", async (_, columns, create, frame) => {
+		const terminal = new Terminal({ cols: columns, rows: 20, allowProposedApi: true });
+		try {
+			const indicator = create({
+				isTTY: true,
+				columns,
+				write: (text: string) => terminal.write(text),
+			});
+			indicator.start();
+			indicator.redraw();
+			indicator.redraw();
+			await new Promise<void>((resolve) => terminal.write("", resolve));
+
+			const rows = Array.from(
+				{ length: terminal.rows },
+				(_, index) => terminal.buffer.active.getLine(index)?.translateToString(true) ?? "",
+			);
+			expect(rows.filter(Boolean)).toEqual([frame]);
+		} finally {
+			terminal.dispose();
+		}
 	});
 });
 

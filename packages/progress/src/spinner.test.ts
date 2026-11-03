@@ -183,6 +183,22 @@ describe("spinner — terminal sink", () => {
 
 		expect(writes[1]).toBe("\x1B[2K\r⠋ ab…");
 	});
+
+	it("keeps the styles a cut frame opened closed", () => {
+		const writes: string[] = [];
+		const sink = { isTTY: true, columns: 10, write: (text: string) => void writes.push(text) };
+		const handle = spinner({
+			message: "Building",
+			spinner: { frames: ["ABCDEFGHIJ"], interval: 60_000 },
+			theme: { spinner: (frame) => `\x1B[35m${frame}\x1B[39m`, message: (text) => text },
+			sigint: false,
+			sink,
+		});
+		handle.start();
+		handle.stop();
+
+		expect(writes[1]).toBe("\x1B[2K\r\x1B[35mABCDEFGH…\x1B[39m");
+	});
 });
 
 describe("spinner — sink resolution", () => {

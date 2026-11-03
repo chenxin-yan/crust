@@ -2,8 +2,6 @@
 // Spinner — Animated progress spinner for @crustjs/progress
 // ────────────────────────────────────────────────────────────────────────────
 
-import { stripVTControlCharacters } from "node:util";
-
 import { stringWidth } from "@crustjs/style";
 import {
 	getTerminalIO,
@@ -136,21 +134,37 @@ function frameAt(frames: readonly string[], index: number): string {
 
 let graphemes: Intl.Segmenter | undefined;
 
-/** `text` if it fits one row of `width` columns; otherwise its plain text cut to fit, ending in "…". */
+// CSI (SGR styles) and OSC (hyperlinks) sequences. Anything else is measured as text, which
+// can only overcount the row and cut early.
+// oxlint-disable-next-line no-control-regex -- matching escape sequences
+const ESCAPE = /\x1B\[[0-?]*[ -/]*[@-~]|\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)/g;
+// Controls that move the cursor down a row (terminals treat VT and FF as LF), alone or in a
+// cluster such as "\r\n".
+const LINE_BREAK = /[\n\v\f\x85]/;
+
+/**
+ * `text` if it fits one row of `width` columns; otherwise cut to fit, ending in "…". A cut keeps
+ * every escape sequence, so styles the kept part opened are still closed.
+ */
 function fitRow(text: string, width: number): string {
 	graphemes ??= new Intl.Segmenter();
-	const plain = stripVTControlCharacters(text);
 	let column = 0;
 	let cut = 0;
-	// Walk graphemes: a wide character that does not fit is cut whole.
-	for (const { segment, index } of graphemes.segment(plain)) {
-		// A carriage return rewinds to the start of the current row; the text after it overwrites.
-		if (segment === "\r") column = 0;
-		else if (segment === "\n" || column + stringWidth(segment) > width)
-			return `${plain.slice(0, cut)}…`;
-		else column += stringWidth(segment);
-		// Leave a column for the ellipsis.
-		if (column < width) cut = index + segment.length;
+	let start = 0;
+	for (const escape of [...text.matchAll(ESCAPE), undefined]) {
+		const end = escape?.index ?? text.length;
+		// Walk graphemes: a wide character that does not fit is cut whole.
+		for (const { segment, index } of graphemes.segment(text.slice(start, end))) {
+			// A carriage return rewinds to the start of the current row; the text after it overwrites.
+			if (segment === "\r") column = 0;
+			else if (LINE_BREAK.test(segment) || (column += stringWidth(segment)) > width) {
+				const escapes = text.slice(cut).match(ESCAPE)?.join("") ?? "";
+				return `${text.slice(0, cut)}${width > 0 ? "…" : ""}${escapes}`;
+			}
+			// Leave a column for the ellipsis.
+			if (column < width) cut = start + index + segment.length;
+		}
+		if (escape) start = end + escape[0].length;
 	}
 	return text;
 }
@@ -202,14 +216,17 @@ export function createSpinnerHandle(
 	let exitHandler: (() => void) | undefined;
 
 	function drawFrame(): void {
+		const width = (sink.columns || 80) - 1;
 		const symbol = `${theme.spinner(frameAt(frames, frameIndex))} `;
 		const tail = suffix();
+		// Cut the message first, so the count survives; text the theme adds counts against it.
+		const room = width - stringWidth(symbol + theme.message(tail));
+		const frame = symbol + theme.message(fitRow(currentMessage, room) + tail);
 		// The frame fits one row, short of the last column, and the cursor stays at its end, so a
 		// redraw only erases the cursor's row. The terminal does not report where the cursor is:
-		// rewinding over wrapped rows would erase lines the task printed between frames.
-		const room = (sink.columns || 80) - 1 - stringWidth(symbol) - stringWidth(tail);
-		const message = theme.message(fitRow(currentMessage, room) + tail);
-		sink.write(ERASE_LINE + CURSOR_TO_START + symbol + message);
+		// rewinding over wrapped rows would erase lines the task printed between frames. When the
+		// symbol and count alone overflow the row, the whole frame is cut, count included.
+		sink.write(ERASE_LINE + CURSOR_TO_START + fitRow(frame, width));
 	}
 
 	function cleanup(): void {
