@@ -381,7 +381,7 @@ export type AttachedSpellings<Defs extends readonly NamedFlagDef[]> =
 	IsStaticTuple<Defs> extends true
 		? false extends { [I in keyof Defs]: HasClosedFlagSpellings<Defs[I]> }[number]
 			? string
-			: SpellingsOf<NamedFlagsRecord<Defs>>
+			: Defs[number]["name"] | ExtractAllAliases<Defs[number]>
 		: string;
 
 export type LocalFlagNameBrand<N extends string> = EmptyFlagSpellingBrand<N> &

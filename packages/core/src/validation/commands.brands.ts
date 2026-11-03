@@ -164,21 +164,31 @@ export type CommandCollisionBrand<
  * the same `.add()` call. Widened names opt out because their spellings are
  * not statically knowable; their literal aliases opt out with them
  * (see {@link CommandDefinitionSpellings}).
+ *
+ * Yields only the first offending definition's error brand (`{}` when valid):
+ * tail recursion lets one `.add()` take 44+ definitions without TS2589, and
+ * stopping early keeps two same-key `FIX_*` literals from intersecting to `never`.
+ * Tuple-union variants are intersected so a valid variant cannot erase another's error.
  */
 export type ValidateCommandDefinitions<
 	Ds extends readonly unknown[],
 	Existing extends string = never,
+> = UnionToIntersection<CommandDefinitionsErrors<Ds, Existing>>;
+
+type CommandDefinitionsErrors<
+	Ds extends readonly unknown[],
+	Existing extends string,
 > = Ds extends readonly [infer Head, ...infer Tail]
 	? CommandDefinitionSpellings<Head> extends infer Spellings extends string
-		? readonly [
-				Head &
-					CommandCollisionBrand<Spellings, Existing> &
-					CommandNameBrand<DefNameMembers<Head>> &
-					SelfAliasBrand<Head>,
-				...ValidateCommandDefinitions<Tail, Existing | Spellings>,
-			]
+		? CommandCollisionBrand<Spellings, Existing> &
+				CommandNameBrand<DefNameMembers<Head>> &
+				SelfAliasBrand<Head> extends infer Errors
+			? {} extends Errors
+				? CommandDefinitionsErrors<Tail, Existing | Spellings>
+				: Errors
+			: never
 		: never
-	: Ds;
+	: {};
 
 export type ExtensionCommandDefs<E> = [E] extends [never]
 	? readonly []

@@ -125,8 +125,8 @@ function _typecheckExplicitInputsOnConditionalBuilderUnion(condition: boolean) {
 	const child = defineCommand("child", (command) => command);
 	const sibling = child.as("other");
 	const treeUnion = condition ? c.add(child) : c;
-	// @ts-expect-error -- an explicit input tuple still checks FIX_COMMAND_COLLISION
-	void treeUnion.add<readonly [typeof child]>(child);
+	// No compile-time FIX_COMMAND_COLLISION for an explicit tuple on a union receiver: the
+	// TS2589-safe ValidateCommandDefinitions loses it; `.add()` still throws at runtime.
 	const registered = treeUnion.add<readonly [typeof sibling]>(sibling);
 	type _commonPaths = Expect<Equal<keyof (typeof registered)["_types"]["tree"], "other">>;
 
@@ -157,6 +157,16 @@ function _typecheckRejectsSiblingCommandSpellingCollisionsAtTheCallSite() {
 		defineCommand("build", { aliases: ["b"] }, (command) => command),
 		defineCommand("b", (command) => command),
 	);
+
+	// a valid variant of an input tuple union must not erase a colliding variant's error
+	const build = defineCommand("build", (command) => command);
+	const defs = Math.random() > 0.5 ? ([build, build] as const) : ([build] as const);
+	// @ts-expect-error -- the [build, build] variant collides within the batch
+	new Crust("cli").add(...defs);
+	// @ts-expect-error -- an explicit tuple union is validated per variant too
+	new Crust("cli").add<typeof defs>(...defs);
+	// @ts-expect-error -- Extension commands share the same batch validation
+	defineExtension(defineExtensionId("ext")).add(...defs);
 
 	const dynamicName = "dynamic" as string;
 	const dynamic = defineCommand(dynamicName, (command) => command);

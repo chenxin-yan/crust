@@ -1,6 +1,7 @@
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import type { NamedFlagDef } from "../types.ts";
 import type {
+	AttachedSpellings,
 	ContextOwnedFlags,
 	DefinitionTreeSpellings,
 	ProvideChecks,
@@ -22,6 +23,18 @@ import type {
 	type _check = Expect<
 		Equal<SpellingsOf<Existing>, "verbose" | "v" | "output" | "out" | "destination">
 	>;
+}
+
+{
+	// derives attached spellings from closed flag definitions
+	type Attached = AttachedSpellings<
+		readonly [
+			{ name: "verbose"; type: "boolean"; short: "v" },
+			{ name: "output"; type: "string"; short: "o"; aliases: ["out"] },
+		]
+	>;
+	type _check = Expect<Equal<Attached, "verbose" | "v" | "output" | "o" | "out">>;
+	type _open = Expect<Equal<AttachedSpellings<readonly NamedFlagDef[]>, string>>;
 }
 
 {
