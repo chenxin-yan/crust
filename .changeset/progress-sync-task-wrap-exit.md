@@ -6,6 +6,6 @@
 
 Also fixes:
 
-- A spinner or progress message wider than the terminal no longer adds a line on every frame: redraws and the final line erase every wrapped row. The cursor rests on a separate blank line below the frame so resizing terminals that reflow completed lines can redraw safely with or without cursor-line reflow.
+- A spinner or progress message wider than the terminal no longer adds a line on every frame: the animated frame is cut to one row with `…` (`progress()` keeps its count), and the final line prints the full message. Redraws still erase only the spinner's row, so lines the task logs to the same terminal stay on screen.
 - `process.exit()` while an interactive spinner is running restores the cursor when the sink writes synchronously.
 - A theme or sink that throws while drawing the first frame no longer leaves the cursor hidden or an `exit` listener behind.

@@ -133,60 +133,55 @@ describe("spinner — terminal sink", () => {
 		expect(new Set(process.listeners("exit"))).toEqual(previousHandlers);
 	});
 
-	it("erases every wrapped row of a message wider than the terminal", () => {
+	it("cuts a message wider than the terminal to one row and prints it whole when done", () => {
 		const writes: string[] = [];
 		const sink = { isTTY: true, columns: 10, write: (text: string) => void writes.push(text) };
-		// "⠋ " + 16 characters = 18 columns → 2 rows at 10 columns.
+		// "⠋ " leaves 7 of the 9 usable columns: 6 characters and "…".
 		const handle = spinner({ message: "abcdefghijklmnop", sigint: false, sink });
 		handle.start();
 		handle.updateMessage("short");
-		handle.updateMessage("again");
 		handle.stop("success", "abcdefghijklmnop");
 
 		expect(writes).toEqual([
 			"\x1B[?25l",
-			// Park below the frame, on a separate logical line.
-			"\r\x1B[J⠋ abcdefghijklmnop\r\n",
-			"\x1B[2A\r\x1B[J⠋ short\r\n",
-			"\x1B[1A\r\x1B[J⠋ again\r\n",
-			"\x1B[1A\r\x1B[J✓ abcdefghijklmnop\n",
+			"\x1B[2K\r⠋ abcdef…",
+			"\x1B[2K\r⠋ short",
+			"\x1B[2K\r✓ abcdefghijklmnop\n",
 			"\x1B[?25h",
 		]);
 	});
 
-	it("counts rows a wide character wraps onto before the last column", () => {
+	it("cuts a wide character that would cross the edge whole", () => {
 		const writes: string[] = [];
 		const sink = { isTTY: true, columns: 10, write: (text: string) => void writes.push(text) };
-		// "⠋ aaaaaaa" fills 9 columns, so each two-column "界" starts a new row: 3 rows, not 20/10.
-		const handle = spinner({ message: "aaaaaaa界bbbbbbb界", sigint: false, sink });
+		const handle = spinner({ message: "aaaaa界", sigint: false, sink });
 		handle.start();
-		handle.updateMessage("short");
+		handle.updateMessage("aaaaaa界");
 		handle.stop();
 
-		expect(writes[2]).toBe("\x1B[3A\r\x1B[J⠋ short\r\n");
+		// "aaaaa界" fills the 7 columns exactly; one more "a" pushes "界" past them.
+		expect(writes.slice(1, 3)).toEqual(["\x1B[2K\r⠋ aaaaa界", "\x1B[2K\r⠋ aaaaaa…"]);
 	});
 
-	it("does not count text a carriage return rewinds over as a wrapped row", () => {
+	it("does not count text a carriage return rewinds over toward the row width", () => {
 		const writes: string[] = [];
 		const sink = { isTTY: true, columns: 10, write: (text: string) => void writes.push(text) };
-		// "⠋ abcdef" fills 8 columns; "\r" rewinds, so "ghijkl" overwrites the same row.
+		// "abcdef" and "ghijkl" overwrite each other within the 7 columns left.
 		const handle = spinner({ message: "abcdef\rghijkl", sigint: false, sink });
 		handle.start();
-		handle.updateMessage("short");
 		handle.stop();
 
-		expect(writes[2]).toBe("\x1B[1A\r\x1B[J⠋ short\r\n");
+		expect(writes[1]).toBe("\x1B[2K\r⠋ abcdef\rghijkl");
 	});
 
-	it("erases wrapped rows before the final line", () => {
+	it("cuts a multi-line message at its first line break", () => {
 		const writes: string[] = [];
 		const sink = { isTTY: true, columns: 10, write: (text: string) => void writes.push(text) };
-		const handle = spinner({ message: "abcdefghijklmnopqrstuvwx", sigint: false, sink });
+		const handle = spinner({ message: "ab\ncd", sigint: false, sink });
 		handle.start();
-		handle.stop("error", "failed");
+		handle.stop();
 
-		// 26 columns → 3 rows.
-		expect(writes.at(-2)).toBe("\x1B[3A\r\x1B[J✗ failed\n");
+		expect(writes[1]).toBe("\x1B[2K\r⠋ ab…");
 	});
 });
 
@@ -408,7 +403,7 @@ describe("spinner — message updates", () => {
 			},
 		});
 
-		expect(writes.at(-2)).toBe("\x1B[1A\r\x1B[J✓ Final...\n");
+		expect(writes.at(-2)).toBe("\x1B[2K\r✓ Final...\n");
 		expect(writes.at(-1)).toBe("\x1B[?25h");
 	});
 

@@ -37,22 +37,17 @@ export function progress(options: ProgressOptions): ProgressHandle {
 	let current = 0;
 	let message = options.message;
 
-	const format = (msg: string): string => `${msg} (${current}/${total})`;
-
-	const handle: SpinnerHandle = createSpinnerHandle({
-		...options,
-		message: format(message),
-	});
+	const handle: SpinnerHandle = createSpinnerHandle(options, () => ` (${current}/${total})`);
 
 	return {
 		start: handle.start,
 		advance(amount = 1, nextMessage?: string) {
 			current += amount;
 			if (nextMessage !== undefined) message = nextMessage;
-			handle.updateMessage(format(message));
+			handle.updateMessage(message);
 		},
 		stop(outcome: SpinnerOutcome = "success", finalMessage?: string) {
-			handle.stop(outcome, format(finalMessage ?? message));
+			handle.stop(outcome, finalMessage);
 		},
 	};
 }

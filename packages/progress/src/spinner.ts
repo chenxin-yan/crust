@@ -18,7 +18,7 @@ import type { PartialProgressTheme, ProgressTheme } from "./theme.ts";
 const ESC = "\x1B[";
 const HIDE_CURSOR = `${ESC}?25l`;
 const SHOW_CURSOR = `${ESC}?25h`;
-const ERASE_DOWN = `${ESC}J`;
+const ERASE_LINE = `${ESC}2K`;
 const CURSOR_TO_START = "\r";
 
 interface SpinnerFrameSet {
@@ -136,29 +136,23 @@ function frameAt(frames: readonly string[], index: number): string {
 
 let graphemes: Intl.Segmenter | undefined;
 
-/** Physical rows `text` occupies once the terminal wraps it at `columns`. */
-function rowCount(text: string, columns: number): number {
+/** `text` if it fits one row of `width` columns; otherwise its plain text cut to fit, ending in "…". */
+function fitRow(text: string, width: number): string {
 	graphemes ??= new Intl.Segmenter();
-	let rows = 0;
-	for (const line of stripVTControlCharacters(text).split("\n")) {
-		rows++;
-		let column = 0;
-		// Walk graphemes: a wide character that does not fit wraps whole, leaving the row's last cell unused.
-		for (const { segment } of graphemes.segment(line)) {
-			// A carriage return rewinds to the start of the current row; the text after it overwrites.
-			if (segment === "\r") {
-				column = 0;
-				continue;
-			}
-			const width = stringWidth(segment);
-			if (column + width > columns) {
-				rows++;
-				column = 0;
-			}
-			column += width;
-		}
+	const plain = stripVTControlCharacters(text);
+	let column = 0;
+	let cut = 0;
+	// Walk graphemes: a wide character that does not fit is cut whole.
+	for (const { segment, index } of graphemes.segment(plain)) {
+		// A carriage return rewinds to the start of the current row; the text after it overwrites.
+		if (segment === "\r") column = 0;
+		else if (segment === "\n" || column + stringWidth(segment) > width)
+			return `${plain.slice(0, cut)}…`;
+		else column += stringWidth(segment);
+		// Leave a column for the ellipsis.
+		if (column < width) cut = index + segment.length;
 	}
-	return rows;
+	return text;
 }
 
 function renderFinal(
@@ -185,8 +179,14 @@ export function withProgressSink<T>(sink: ProgressSink, fn: () => T): T {
 	return withSharedTerminalIO({ output: sink }, fn);
 }
 
-/** Internal handle constructor shared by both `spinner()` modes and `progress()`. */
-export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandle {
+/**
+ * Internal handle constructor shared by both `spinner()` modes and `progress()`.
+ * `suffix` follows the message and is never cut when a frame is fitted to one row.
+ */
+export function createSpinnerHandle(
+	options: SpinnerHandleOptions,
+	suffix: () => string = () => "",
+): SpinnerHandle {
 	const sink = options.sink ?? getTerminalIO()?.output ?? process.stderr;
 	const theme = { ...defaultThemeFor(sink), ...options.theme };
 	const isInteractive = sink.isTTY ?? false;
@@ -197,23 +197,19 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 	let frameIndex = 0;
 	let started = false;
 	let finished = false;
-	let previousFrame: string | undefined;
 	let timerId: ReturnType<typeof setInterval> | undefined;
 	let sigintHandler: (() => void) | undefined;
 	let exitHandler: (() => void) | undefined;
 
-	function eraseFrame(): string {
-		const rewind =
-			previousFrame === undefined ? "" : `${ESC}${rowCount(previousFrame, sink.columns || 80)}A`;
-		return rewind + CURSOR_TO_START + ERASE_DOWN;
-	}
-
 	function drawFrame(): void {
-		const line = `${theme.spinner(frameAt(frames, frameIndex))} ${theme.message(currentMessage)}`;
-		// Keep the cursor on a separate logical line so the frame can reflow even
-		// on terminals that do not reflow the cursor line. Recount it when erasing.
-		sink.write(eraseFrame() + line + "\r\n");
-		previousFrame = line;
+		const symbol = `${theme.spinner(frameAt(frames, frameIndex))} `;
+		const tail = suffix();
+		// The frame fits one row, short of the last column, and the cursor stays at its end, so a
+		// redraw only erases the cursor's row. The terminal does not report where the cursor is:
+		// rewinding over wrapped rows would erase lines the task printed between frames.
+		const room = (sink.columns || 80) - 1 - stringWidth(symbol) - stringWidth(tail);
+		const message = theme.message(fitRow(currentMessage, room) + tail);
+		sink.write(ERASE_LINE + CURSOR_TO_START + symbol + message);
 	}
 
 	function cleanup(): void {
@@ -294,8 +290,8 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 			// restore. The first failure wins; boxed because any value (even undefined) can be thrown.
 			let renderFailure: { error: unknown } | undefined;
 			try {
-				const erase = started && isInteractive ? eraseFrame() : "";
-				sink.write(renderFinal(currentMessage, theme, outcome, erase));
+				const erase = started && isInteractive ? ERASE_LINE + CURSOR_TO_START : "";
+				sink.write(renderFinal(currentMessage + suffix(), theme, outcome, erase));
 			} catch (error) {
 				renderFailure = { error };
 			}

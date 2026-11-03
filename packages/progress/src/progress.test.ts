@@ -23,6 +23,24 @@ describe("progress — determinate", () => {
 		expect(output).toContain("All files done (2/2)");
 	});
 
+	it("keeps the count when a message wider than the terminal is cut", () => {
+		const writes: string[] = [];
+		const sink = { isTTY: true, columns: 20, write: (text: string) => void writes.push(text) };
+		const progress = createProgressBar({
+			total: 2,
+			message: "Uploading a long file name",
+			sigint: false,
+			sink,
+		});
+
+		progress.start();
+		progress.advance();
+		progress.stop();
+
+		expect(writes[2]).toBe("\x1B[2K\r⠋ Uploading … (1/2)");
+		expect(writes[3]).toBe("\x1B[2K\r✓ Uploading a long file name (1/2)\n");
+	});
+
 	it("stop('error') renders the failure symbol", () => {
 		const { sink, writes } = createFakeSink();
 		const progress = createProgressBar({ total: 5, message: "Uploading", sink });

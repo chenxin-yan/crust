@@ -34,7 +34,7 @@ await spinner({ message: "Building", task: async () => build() });
 
 `task` may return a value or a promise; `spinner({ task })` always returns a promise. A failed task prints the error line, then rejects with the task error. Non-TTY output omits animation and cursor-control sequences.
 
-Interactive spinners and progress indicators reserve a blank cursor line below the active frame. On terminals that reflow completed lines during resize, redraws and `stop()` clear the previous frame at the current width, whether or not the terminal reflows its cursor line.
+Interactive spinners and progress indicators keep the animated frame on one row: a message wider than the terminal is cut with `…` (`progress()` keeps its count), and the final `✓`/`✗` line prints it in full. Each redraw erases only the spinner's row, so complete lines the task writes to the same terminal, such as `console.log()` output while the spinner draws on stderr, stay on screen after the frame they interrupted. A write without a trailing newline shares the spinner's row and is erased by the next frame. Narrowing a terminal that also reflows the cursor's row can leave the start of the previous frame above the spinner.
 
 <auto-type-table path="../../../../../packages/progress/src/spinner.ts" name="SpinnerOptions" />
 
