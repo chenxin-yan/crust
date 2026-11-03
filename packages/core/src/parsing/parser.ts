@@ -607,7 +607,7 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
  *   coercion or requiredness failure, or `VALIDATION` aggregating schema issues. Messages
  *   may quote raw values.
  */
-export async function parseFlagValues<F extends FlagsDef>(
+export async function parseFlagValues<const F extends FlagsDef>(
 	flags: F,
 	env: FlagEnvironment,
 ): Promise<InferFlags<F>> {

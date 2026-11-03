@@ -4,10 +4,12 @@ import type { Equal, Expect, Repeat } from "../tests/helpers.ts";
 import {
 	Crust,
 	defineCommand,
+	type AnyContextInstance,
 	type AnyCrust,
 	type ArgsDef,
 	type CommandShape,
 	type ContextInstance,
+	type ExtensionFactory,
 	type InputArgs,
 	type InputFlags,
 	type RunInput,
@@ -854,4 +856,14 @@ function _conditionalHelperReadonlyCollections(condition: boolean) {
 		: { type: "json" };
 	const data = defineFlag("data", json);
 	if ("default" in data) data.default.value = 2; // Payload mutability is not definition proof.
+}
+
+function _openProviderNamespace() {
+	// The `ExtensionFactory` JSDoc's open provider form is writable from the package entry.
+	const logger = defineContext("logger").setup(() => "logger");
+	const optionalLogger: ExtensionFactory<[enabled: boolean], {}, readonly AnyContextInstance[]> =
+		defineExtension(defineExtensionId("test:open-providers")).factory(
+			(extension, enabled: boolean) => (enabled ? extension.provide(logger()) : extension),
+		);
+	void optionalLogger;
 }

@@ -93,7 +93,7 @@ export interface ContextInstance<
 	readonly _deps?: Deps;
 }
 
-/** @internal Existential registry constraint; never evidence for trusted attachment. */
+/** Any Context instance: the open bound for provider lists; never evidence for trusted attachment. */
 export type AnyContextInstance = ContextInstance<string, unknown, any, any>;
 
 /** Whatever a Context setup produces, erased at the runtime registry. */
