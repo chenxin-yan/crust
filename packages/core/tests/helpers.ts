@@ -58,7 +58,7 @@ export function makeNode<
  */
 export function ensureDist(): void {
 	const corePkg = resolve(import.meta.dirname, "..");
-	// Core dist imports utils dist, so both must exist.
+	// Core's build bundles utils dist, so utils is built first.
 	for (const [pkg, marker] of [
 		[resolve(corePkg, "../utils"), "dist/artifacts.js"],
 		[corePkg, "dist/index.d.ts"],
