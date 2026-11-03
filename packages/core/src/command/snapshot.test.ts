@@ -85,9 +85,9 @@ describe("snapshotCommand", () => {
 	});
 
 	it("projects Context-owned flags at the provider and later descendants", async () => {
-		const apiKey = defineFlag("api-key", { type: "string", short: "k" });
+		const apiKey = defineFlag({ type: "string", short: "k" });
 		const auth = defineContext("auth")
-			.flags(apiKey)
+			.flags({ "api-key": apiKey })
 			.setup(() => ({}));
 		const app = new Crust("cli")
 			.provide(auth())
@@ -204,9 +204,7 @@ describe("command metadata sections", () => {
 				return [{ command: [], title: name, body: `${name} body` }];
 			});
 		const plain = new Crust("cli", { sections: authored })
-			.extend(
-				defineExtension(defineExtensionId("silent")).flags({ name: "extra", type: "boolean" }),
-			)
+			.extend(defineExtension(defineExtensionId("silent")).flags({ extra: { type: "boolean" } }))
 			.add(defineCommand("build", (command) => command.action(() => {})));
 		const contributed = plain.extend(contribute("first")).extend(contribute("second"));
 

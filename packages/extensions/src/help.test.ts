@@ -49,21 +49,19 @@ describe("help", () => {
 		vi.stubEnv("FORCE_COLOR", "3");
 
 		const command = new Crust("app", { description: "Test app" })
-			.flags(
-				{
-					name: "verbose",
+			.flags({
+				verbose: {
 					type: "boolean",
 					short: "v",
 					description: "Enable verbose logging",
 					default: true,
 				},
-				{
-					name: "port",
+				port: {
 					type: "number",
 					description: "Port number",
 					default: 3000,
 				},
-			)
+			})
 			.args({
 				name: "dir",
 				type: "string",
@@ -96,22 +94,20 @@ describe("help", () => {
 
 	it("renderHelp keeps stripped columns aligned with styled labels", async () => {
 		const command = new Crust("app")
-			.flags(
-				{
-					name: "verbose",
+			.flags({
+				verbose: {
 					type: "boolean",
 					short: "v",
 					description: "Enable verbose logging",
 					default: true,
 				},
-				{
-					name: "port",
+				port: {
 					type: "number",
 					short: "p",
 					description: "Port number",
 					default: 3000,
 				},
-			)
+			})
 			.args({
 				name: "dir",
 				type: "string",
@@ -229,14 +225,14 @@ describe("help", () => {
 
 	it("help extension shows help instead of an invalid flag value from argv or env", async () => {
 		const actions: string[] = [];
-		const port = { name: "port", type: "number", default: 3000, env: { name: "PORT" } } as const;
+		const port = { type: "number", default: 3000, env: { name: "PORT" } } as const;
 		const app = new Crust("app")
 			.extend(help())
-			.flags(port)
+			.flags({ port })
 			.add(
 				defineCommand("serve", (cmd) =>
 					cmd
-						.flags(port, { name: "mode", type: "string", choices: ["fast", "safe"] })
+						.flags({ port, mode: { type: "string", choices: ["fast", "safe"] } })
 						.action(() => void actions.push("serve")),
 				),
 			)
@@ -348,11 +344,12 @@ describe("help", () => {
 	it("renderHelp surfaces the `env` variable name after the description, never its value", async () => {
 		const command = new Crust("app")
 			.flags({
-				name: "token",
-				type: "string",
-				env: { name: "HOME" },
-				default: "anon",
-				description: "API token",
+				token: {
+					type: "string",
+					env: { name: "HOME" },
+					default: "anon",
+					description: "API token",
+				},
 			})
 			.action(() => {});
 		const plain = stripAnsi(await renderHelp(await command.snapshot()));

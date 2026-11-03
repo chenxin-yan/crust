@@ -43,10 +43,7 @@ describe("typed programmatic invocation", () => {
 
 	it("runs statically known Extension commands, aliases, flags, and typed results", async () => {
 		const tools = defineExtension(defineExtensionId("tools"))
-			.flags(
-				{ name: "trace", type: "boolean" },
-				{ name: "version", type: "boolean", recursive: false },
-			)
+			.flags({ trace: { type: "boolean" }, version: { type: "boolean", recursive: false } })
 			.add(
 				defineCommand("inspect", { aliases: ["scan"] }, (command) =>
 					command.action(() => ({ kind: "extension" as const })),
@@ -132,12 +129,12 @@ describe("typed programmatic invocation", () => {
 					{ name: "count", type: "number", required: true },
 					{ name: "files", type: "string", variadic: true },
 				)
-				.flags(
-					{ name: "fetch", type: "boolean" },
-					{ name: "tag", type: "string", multiple: true },
-					{ name: "config", type: "json" },
-					{ name: "offset", type: "number" },
-				)
+				.flags({
+					fetch: { type: "boolean" },
+					tag: { type: "string", multiple: true },
+					config: { type: "json" },
+					offset: { type: "number" },
+				})
 				.action(({ args, flags, rawArgs }) => {
 					received = { args, flags, rawArgs };
 				}),
@@ -179,7 +176,7 @@ describe("typed programmatic invocation", () => {
 		let received: JsonRunCapture | undefined;
 		const app = new Crust("cli")
 			.args({ name: "payload", type: "json" })
-			.flags({ name: "config", type: "json" })
+			.flags({ config: { type: "json" } })
 			.action(({ args, flags }) => {
 				received = { args, flags };
 			});
@@ -196,7 +193,7 @@ describe("typed programmatic invocation", () => {
 
 	it("passes JSON values through by reference and treats undefined as omitted", async () => {
 		const app = new Crust("cli")
-			.flags({ name: "config", type: "json" })
+			.flags({ config: { type: "json" } })
 			.action(({ flags }) => flags.config);
 		await expect(app.run([], { flags: { config: undefined } })).resolves.toMatchObject({
 			status: "completed",
@@ -210,17 +207,17 @@ describe("typed programmatic invocation", () => {
 
 	it("treats empty multiple flag arrays as omitted", async () => {
 		const app = new Crust("cli")
-			.flags(
-				{ name: "optional", type: "string", multiple: true },
-				{ name: "defaulted", type: "string", multiple: true, default: ["fallback"] },
-			)
+			.flags({
+				optional: { type: "string", multiple: true },
+				defaulted: { type: "string", multiple: true, default: ["fallback"] },
+			})
 			.action(({ flags }) => flags);
 		expect(await app.run([], { flags: { optional: [], defaulted: [] } })).toMatchObject({
 			status: "completed",
 			result: { optional: undefined, defaulted: ["fallback"] },
 		});
 		const required = new Crust("cli")
-			.flags({ name: "tag", type: "string", multiple: true, required: true })
+			.flags({ tag: { type: "string", multiple: true, required: true } })
 			.action(() => {});
 		await expect(unwrap(required.run([], { flags: { tag: [] } }))).rejects.toThrow(
 			'Missing required flag "--tag"',

@@ -19,10 +19,10 @@ import { executeCrust, type Equal, type Expect } from "./helpers.ts";
 
 describe("integration: .execute() full pipeline with argv override", () => {
 	it("full pipeline: root flags + args + subcommand routing + execution", async () => {
-		const env = defineFlag("env", { type: "string", default: "staging" });
-		const dryRun = defineFlag("dryRun", { type: "boolean" });
+		const env = defineFlag({ type: "string", default: "staging" });
+		const dryRun = defineFlag({ type: "boolean" });
 		const deployment = defineContext("deployment")
-			.flags(env, dryRun)
+			.flags({ env, dryRun })
 			.setup(({ flags }) => flags);
 		const app = new Crust("deploy").provide(deployment()).add(
 			defineCommand("service", (cmd) =>
@@ -51,14 +51,14 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 				validate: (value) => ({ value: Number(value) }),
 			},
 		};
-		const apiKey = defineFlag("api-key", {
+		const apiKey = defineFlag({
 			type: "string",
 			short: "k",
 			aliases: ["token"],
 			schema,
 		});
 		const auth = defineContext("auth")
-			.flags(apiKey)
+			.flags({ "api-key": apiKey })
 			.setup(({ flags }) => ({
 				credential: flags["api-key"],
 			}));
@@ -76,14 +76,14 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 	});
 
 	it("routes Context-owned flags at a mid-path position without propagating parent locals", async () => {
-		const verbose = defineFlag("verbose", { type: "boolean" });
+		const verbose = defineFlag({ type: "boolean" });
 		const logging = defineContext("logging")
-			.flags(verbose)
+			.flags({ verbose })
 			.setup(({ flags }) => ({
 				verbose: flags.verbose === true,
 			}));
 		const app = new Crust("cli")
-			.flags({ name: "root-only", type: "boolean" })
+			.flags({ "root-only": { type: "boolean" } })
 			.provide(logging())
 			.add(
 				defineCommand("group", (group) =>
@@ -110,9 +110,9 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 	});
 
 	it("enforces a required Context-owned flag on a descendant", async () => {
-		const token = defineFlag("token", { type: "string", required: true });
+		const token = defineFlag({ type: "string", required: true });
 		const auth = defineContext("auth")
-			.flags(token)
+			.flags({ token })
 			.setup(() => ({}));
 		const app = new Crust("cli")
 			.provide(auth())
@@ -125,9 +125,9 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 
 	it("accepts an owned flag of an unrequired Context without constructing it", async () => {
 		let built = 0;
-		const token = defineFlag("token", { type: "string" });
+		const token = defineFlag({ type: "string" });
 		const auth = defineContext("auth")
-			.flags(token)
+			.flags({ token })
 			.setup(({ flags }) => {
 				built++;
 				return flags;
@@ -172,13 +172,13 @@ describe("integration: Extension hooks around subcommand action", () => {
 
 describe("integration: nested added definitions end-to-end", () => {
 	it("3-level nested definitions execute correctly", async () => {
-		const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
-		const timeout = defineFlag("timeout", { type: "number", default: 30 });
+		const verbose = defineFlag({ type: "boolean", short: "v" });
+		const timeout = defineFlag({ type: "number", default: 30 });
 		const logging = defineContext("logging")
-			.flags(verbose)
+			.flags({ verbose })
 			.setup(({ flags }) => flags);
 		const remoteConfig = defineContext("remote-config")
-			.flags(timeout)
+			.flags({ timeout })
 			.setup(({ flags }) => flags);
 		const app = new Crust("git").provide(logging()).add(
 			defineCommand("remote", (cmd) =>
@@ -215,14 +215,14 @@ describe("integration: nested added definitions end-to-end", () => {
 });
 
 describe("integration: split-file definitions end-to-end", () => {
-	const verbose = defineFlag("verbose", { type: "boolean" });
+	const verbose = defineFlag({ type: "boolean" });
 	const logging = defineContext("logging")
-		.flags(verbose)
+		.flags({ verbose })
 		.setup(({ flags }) => flags);
 	const listCommand = defineCommand("list", (command) =>
 		command
 			.use(logging)
-			.flags({ name: "format", type: "string", default: "table" })
+			.flags({ format: { type: "string", default: "table" } })
 			.args({ name: "resource", type: "string", required: true })
 			.action(async ({ args, flags, ctx, stdout }) => {
 				stdout(
@@ -234,7 +234,7 @@ describe("integration: split-file definitions end-to-end", () => {
 	it("reuses a definition across satisfying parents, renamed via .as()", async () => {
 		const first = new Crust("first").provide(logging()).add(listCommand);
 		const defaultLogging = defineContext("logging")
-			.flags({ ...verbose, default: true })
+			.flags({ verbose: { ...verbose, default: true } })
 			.setup(({ flags }) => flags);
 		const second = new Crust("second").provide(defaultLogging()).add(listCommand.as("show"));
 
@@ -246,7 +246,7 @@ describe("integration: split-file definitions end-to-end", () => {
 describe("integration: public API", () => {
 	it("infers pulled Context values in added definitions", async () => {
 		const calls: string[] = [];
-		const verbose = defineFlag("verbose", { type: "boolean" });
+		const verbose = defineFlag({ type: "boolean" });
 		const db = defineContext("db").setup((_input, options: { url: string }) => ({
 			url: options.url,
 			query(sql: string) {
@@ -255,7 +255,7 @@ describe("integration: public API", () => {
 		}));
 
 		const logging = defineContext("logging")
-			.flags(verbose)
+			.flags({ verbose })
 			.setup(({ flags }) => ({
 				verbose: flags.verbose === true,
 			}));
@@ -264,7 +264,7 @@ describe("integration: public API", () => {
 				.use(logging)
 				.use(db)
 				.args({ name: "target", type: "string", required: true })
-				.flags({ name: "env", type: "string", default: "prod" })
+				.flags({ env: { type: "string", default: "prod" } })
 				.action(async ({ args, flags, ctx }) => {
 					const log = await ctx.logging;
 					const database = await ctx.db;
@@ -291,7 +291,7 @@ describe("integration: public API", () => {
 		let actionVersion: unknown;
 		let wrapperCalled = false;
 		const version = defineExtension(defineExtensionId("version"))
-			.flags({ name: "version", type: "boolean" })
+			.flags({ version: { type: "boolean" } })
 			.preRun(() => {
 				wrapperCalled = true;
 			});

@@ -10,10 +10,10 @@ import { Crust, defineCommand } from "./crust.ts";
 // Compile-time regression checks; intentionally never invoked.
 // .flags() updates Flags generic
 function _typecheckFlagsUpdatesFlagsGeneric() {
-	const app = new Crust("test").flags(
-		{ name: "verbose", type: "boolean", short: "v" },
-		{ name: "port", type: "number", default: 3000 },
-	);
+	const app = new Crust("test").flags({
+		verbose: { type: "boolean", short: "v" },
+		port: { type: "number", default: 3000 },
+	});
 
 	// Extract the Flags type from the phantom _types property
 	type AppFlags = (typeof app)["_types"]["flags"];
@@ -63,12 +63,12 @@ function _typecheckRejectsVariadicMethodsOnConditionalBuilderUnion(condition: bo
 	// @ts-expect-error -- .provide() rejects failed input inference on a builder union
 	void (condition ? c.provide(text()) : c).provide(text());
 	// @ts-expect-error -- union of distinct builders is not callable via .flags()
-	void (condition ? c.provide(text()) : c).flags({ name: "verbose", type: "boolean" });
+	void (condition ? c.provide(text()) : c).flags({ verbose: { type: "boolean" } });
 
 	// flags-only unions share Ctx; the union check must inspect the whole receiver to reject them
-	const flagsUnion = condition ? c.flags({ name: "first", type: "boolean" }) : c;
+	const flagsUnion = condition ? c.flags({ first: { type: "boolean" } }) : c;
 	// @ts-expect-error -- union of builders differing only in Flags is not callable via .flags()
-	void flagsUnion.flags({ name: "second", type: "boolean" });
+	void flagsUnion.flags({ second: { type: "boolean" } });
 	// @ts-expect-error -- union of distinct builders is not callable via .args()
 	void flagsUnion.args({ name: "target", type: "string" });
 	// @ts-expect-error -- .provide() rejects failed inference even when both branches share Ctx
@@ -110,10 +110,10 @@ function _typecheckRejectsVariadicMethodsOnConditionalBuilderUnion(condition: bo
 // that inference and type the call against no builder state, so they are rejected.
 // `.action()` keeps class parameters and accepts them.
 function _typecheckRejectsExplicitTypeArgumentsOnStateMethods() {
-	const app = new Crust("cli").flags({ name: "verbose", type: "boolean" });
+	const app = new Crust("cli").flags({ verbose: { type: "boolean" } });
 	const child = defineCommand("child", (command) => command);
 	// @ts-expect-error -- FIX_EXPLICIT_TYPE_ARGUMENTS
-	void app.flags<readonly [{ name: "force"; type: "boolean" }]>({ name: "force", type: "boolean" });
+	void app.flags<readonly [{ name: "force"; type: "boolean" }]>({ force: { type: "boolean" } });
 	// @ts-expect-error -- FIX_EXPLICIT_TYPE_ARGUMENTS
 	void app.args<[{ name: "target"; type: "string" }]>({ name: "target", type: "string" });
 	void app.action<void>(() => {});
@@ -131,14 +131,14 @@ function _typecheckAcceptsGenericAndPolymorphicThisReceivers() {
 		void c.add(child);
 		void c.command("inline", (command) => command);
 		void c.action(() => {});
-		return c.flags({ name: "verbose", type: "boolean" });
+		return c.flags({ verbose: { type: "boolean" } });
 	}
 	type _flags = Expect<
 		Equal<keyof ReturnType<typeof withEverything<Crust>>["_types"]["flags"], "verbose">
 	>;
 	class CustomApp extends Crust {
 		verbose() {
-			return this.flags({ name: "verbose", type: "boolean" });
+			return this.flags({ verbose: { type: "boolean" } });
 		}
 		target() {
 			return this.args({ name: "target", type: "string" });
@@ -279,14 +279,14 @@ function _typecheckSameNameConditionalDefinitionsStayRuntimeOnly(condition: bool
 
 // types pulled capabilities and local values in actions
 function _typecheckTypesPulledCapabilitiesAndLocalValuesInActions() {
-	const verbose = defineFlag("verbose", { type: "boolean" });
+	const verbose = defineFlag({ type: "boolean" });
 	const logging = defineContext("logging")
-		.flags(verbose)
+		.flags({ verbose })
 		.setup(({ flags }) => ({
 			verbose: flags.verbose === true,
 		}));
 	new Crust("cli")
-		.flags({ name: "rootOnly", type: "string" })
+		.flags({ rootOnly: { type: "string" } })
 		.provide(logging())
 		.add(
 			defineCommand("level1", (command) =>
@@ -380,22 +380,20 @@ function _typecheckBrandsDuplicateCommandSpellingsWithinOneExtensionAtDefineExte
 // infers Extension-owned flags in hook contexts
 function _typecheckExtensionOwnedHookFlags() {
 	defineExtension(defineExtensionId("typed-flags"))
-		.flags(
-			{ name: "verbose", type: "boolean", default: false },
-			{ name: "rootPort", type: "number", default: 3000, recursive: false },
-			{ name: "token", type: "string", required: true },
-			{
-				name: "endpoint",
+		.flags({
+			verbose: { type: "boolean", default: false },
+			rootPort: { type: "number", default: 3000, recursive: false },
+			token: { type: "string", required: true },
+			endpoint: {
 				type: "string",
 				schema: {} as StandardSchema<string | undefined, URL>,
 			},
-			{
-				name: "tags",
+			tags: {
 				type: "string",
 				multiple: true,
 				schema: {} as StandardSchema<string[], string[]>,
 			},
-		)
+		})
 		.preRun((ctx) => {
 			type _verbose = Expect<Equal<typeof ctx.flags.verbose, boolean>>;
 			type _rootPort = Expect<Equal<typeof ctx.flags.rootPort, number | undefined>>;
@@ -412,9 +410,9 @@ function _typecheckExtensionOwnedHookFlags() {
 
 // infers defineFlag() values attached to an Extension
 function _typecheckDefinedExtensionFlags() {
-	const trace = defineFlag("trace", { type: "boolean", default: false });
+	const trace = defineFlag({ type: "boolean", default: false });
 	defineExtension(defineExtensionId("defined-flags"))
-		.flags(trace)
+		.flags({ trace })
 		.preRun((ctx) => {
 			type _trace = Expect<Equal<typeof ctx.flags.trace, boolean>>;
 		});

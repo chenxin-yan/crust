@@ -10,17 +10,17 @@ import {
 import { defineExtension } from "./extension.ts";
 import { defineFlag } from "./flags.ts";
 
-const apiKey = defineFlag("api-key", { type: "string", short: "k", aliases: ["token"] });
+const apiKey = defineFlag({ type: "string", short: "k", aliases: ["token"] });
 
 // Compile-time regression checks; intentionally never invoked.
 // merges owned flag types from multiple Contexts in one provide call
 function _typecheckMergesOwnedFlagTypesFromMultipleContextsInOneProvideCall() {
 	const auth = defineContext("auth")
-		.flags(apiKey)
+		.flags({ "api-key": apiKey })
 		.setup(() => ({}));
-	const format = defineFlag("format", { type: "string", choices: ["json", "text"] });
+	const format = defineFlag({ type: "string", choices: ["json", "text"] });
 	const output = defineContext("output")
-		.flags(format)
+		.flags({ format })
 		.setup(() => ({}));
 	const app = new Crust("cli").provide(auth(), output());
 
@@ -128,16 +128,18 @@ function _typecheckKeepsUseBrandParityForDefineCommandAtAddAndExtend() {
 // brands inline flags that collide with registered Extension flags, matching .add()
 function _typecheckBrandsInlineFlagsThatCollideWithRegisteredExtensionFlagsMatchingAdd() {
 	const tracer = defineExtension(defineExtensionId("tracer")).flags({
-		name: "trace",
-		type: "boolean",
+		trace: {
+			type: "boolean",
+		},
 	});
 	const rootOnly = defineExtension(defineExtensionId("root-only")).flags({
-		name: "depth",
-		type: "string",
-		recursive: false,
+		depth: {
+			type: "string",
+			recursive: false,
+		},
 	});
 	const nestedColliding = defineCommand("child", (cmd) =>
-		cmd.flags({ name: "trace", type: "boolean" }).action(() => {}),
+		cmd.flags({ trace: { type: "boolean" } }).action(() => {}),
 	);
 
 	// Collision-free recipes compose cleanly after .extend().
@@ -151,7 +153,7 @@ function _typecheckBrandsInlineFlagsThatCollideWithRegisteredExtensionFlagsMatch
 		new Crust("cli")
 			.extend(rootOnly)
 			// @ts-expect-error -- inline "depth" collides with a registered Extension flag (parity with .add())
-			.command("query", (cmd) => cmd.flags({ name: "depth", type: "string" }).action(() => {}));
+			.command("query", (cmd) => cmd.flags({ depth: { type: "string" } }).action(() => {}));
 	};
 	void invalidCompositions;
 }
@@ -163,9 +165,9 @@ function _typecheckInfersOptionsCtxFlagsAndValueTogether() {
 	const db = defineContext("db")
 		.use(config)
 		.sections({ title: "Config", body: "Configuration" })
-		.flags(apiKey)
+		.flags({ "api-key": apiKey })
 		.use(logger)
-		.flags({ name: "pool", type: "number", default: 4 })
+		.flags({ pool: { type: "number", default: 4 } })
 		.setup(async ({ ctx, flags }, options: { schema: string }) => {
 			type _Key = Expect<Equal<(typeof flags)["api-key"], string | undefined>>;
 			type _Pool = Expect<Equal<typeof flags.pool, number>>;
@@ -233,9 +235,9 @@ function _typecheckInfersFactoryOptionsFromTheSecondSetupParameter() {
 
 // keeps fluent builders immutable and checks owned flags across chained calls
 function _typecheckKeepsBuildersImmutableAndChecksChainedFlags() {
-	const base = defineContext("auth").flags(apiKey);
-	const withRegion = base.flags({ name: "region", type: "string" });
-	const withTrace = base.flags({ name: "trace", type: "boolean" });
+	const base = defineContext("auth").flags({ "api-key": apiKey });
+	const withRegion = base.flags({ region: { type: "string" } });
+	const withTrace = base.flags({ trace: { type: "boolean" } });
 	withRegion.setup(({ flags }) => {
 		void flags.region;
 		// @ts-expect-error -- sibling branch flags never leak
@@ -249,9 +251,9 @@ function _typecheckKeepsBuildersImmutableAndChecksChainedFlags() {
 
 	const invalid = () => {
 		// @ts-expect-error -- a later .flags() call collides with an earlier canonical name
-		base.flags({ name: "api-key", type: "string" });
+		base.flags({ "api-key": { type: "string" } });
 		// @ts-expect-error -- a later .flags() call collides with an earlier alias
-		base.flags({ name: "credentials", type: "string", aliases: ["token"] });
+		base.flags({ credentials: { type: "string", aliases: ["token"] } });
 	};
 	void invalid;
 }

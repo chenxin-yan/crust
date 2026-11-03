@@ -18,7 +18,7 @@ function _typecheckKeepsHostCommandTreePrecise() {
 	const deploy = defineCommand("deploy", (command) =>
 		command
 			.args({ name: "target", type: "string", required: true })
-			.flags({ name: "dry-run", type: "boolean" })
+			.flags({ "dry-run": { type: "boolean" } })
 			.action(({ args }) => ({ target: args.target })),
 	);
 	const app = new Crust("cli").add(deploy).extend(mcpExtension({ app: (): AnyCrust => app }));

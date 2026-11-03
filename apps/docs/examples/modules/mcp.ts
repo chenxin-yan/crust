@@ -5,7 +5,7 @@ import { mcpExtension } from "@crustjs/mcp";
 const deploy = defineCommand("deploy", { description: "Deploy the app" }, (command) =>
 	command
 		.args({ name: "target", type: "string", required: true, choices: ["staging", "prod"] })
-		.flags({ name: "dry-run", type: "boolean" })
+		.flags({ "dry-run": { type: "boolean" } })
 		.action(({ args, flags }) => ({ target: args.target, dryRun: flags["dry-run"] === true })),
 );
 

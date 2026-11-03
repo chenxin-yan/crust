@@ -7,7 +7,7 @@ const app = new Crust("demo", { description: "MCP fixture", version: "0.1.0" })
 		defineCommand("greet", { description: "Greet someone" }, (command) =>
 			command
 				.args({ name: "name", type: "string", required: true })
-				.flags({ name: "shout", type: "boolean" })
+				.flags({ shout: { type: "boolean" } })
 				.action(({ args, flags, stdout }) => {
 					// Logged through the invocation IO, so serving over stdio captures it instead of leaking protocol bytes.
 					stdout("greeting");

@@ -20,7 +20,7 @@ function _runOutcome(
 	mode: "safe" | "fast",
 ) {
 	const app = new Crust("app")
-		.flags({ name: "mode", type: "string", choices: ["safe", "fast"], required: true })
+		.flags({ mode: { type: "string", choices: ["safe", "fast"], required: true } })
 		.action(({ flags }) => flags.mode);
 	const valid: Promise<RunOutcome<"safe" | "fast">> = app.run([], {
 		flags: { mode: "safe" },
@@ -31,7 +31,7 @@ function _runOutcome(
 		condition ? { flags: { mode: "safe" } } : { flags: { mode: "fast" } },
 	);
 	void validUnion;
-	const jsonApp = app.flags({ name: "config", type: "json" });
+	const jsonApp = app.flags({ config: { type: "json" } });
 	void jsonApp.run(
 		[],
 		condition
@@ -80,15 +80,17 @@ function _runOutcome(
 	});
 	void unknownResult;
 	// @ts-expect-error erased inspection view is not authoring authority
-	erased.flags({ name: "other", type: "boolean" });
-	const dynamicFlag = defineFlag(broad, { type: "string" });
-	new Crust(broad).flags(dynamicFlag);
+	erased.flags({ other: { type: "boolean" } });
+	const dynamicFlag = defineFlag({ type: "string" });
+	new Crust(broad).flags({ [broad]: dynamicFlag });
 
-	const partial = new Crust("partial").flags(dynamicFlag, {
-		name: "mode",
-		type: "string",
-		choices: ["safe", "fast"],
-		required: true,
+	const partial = new Crust("partial").flags({
+		[broad]: dynamicFlag,
+		mode: {
+			type: "string",
+			choices: ["safe", "fast"],
+			required: true,
+		},
 	});
 	void partial.run([], { flags: { mode: "safe", other: "dynamic" } });
 	// @ts-expect-error an open neighbor cannot erase a known required flag

@@ -201,10 +201,10 @@ describe("renderFish", () => {
 
 	it("offers and routes every doc-model spelling, including one-character aliases", async () => {
 		const app = new Crust("mycli")
-			.flags(
-				{ name: "port", type: "number", short: "p", aliases: ["P", "listen"] },
-				{ name: "q", type: "boolean", aliases: ["Q"] },
-			)
+			.flags({
+				port: { type: "number", short: "p", aliases: ["P", "listen"] },
+				q: { type: "boolean", aliases: ["Q"] },
+			})
 			.action(() => {});
 		const script = renderFish(
 			walkCommand(buildCommandDocumentation(await app.snapshot())),

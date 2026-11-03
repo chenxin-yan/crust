@@ -1,9 +1,9 @@
 //#region define
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
 
-const verbose = defineFlag("verbose", { type: "boolean" });
+const verbose = defineFlag({ type: "boolean" });
 const logging = defineContext("logging")
-	.flags(verbose)
+	.flags({ verbose })
 	.setup(({ flags, stderr }) => ({
 		debug(message: string) {
 			if (flags.verbose) stderr(message);

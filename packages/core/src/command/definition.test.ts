@@ -15,7 +15,7 @@ describe("command definitions", () => {
 		let configured = 0;
 		const definition = defineCommand("build", (command) => {
 			configured++;
-			return command.flags({ name: "output", type: "string" });
+			return command.flags({ output: { type: "string" } });
 		});
 
 		expect(configured).toBe(0);
@@ -37,7 +37,7 @@ describe("command definitions", () => {
 		const receiver = base.add(defineCommand("existing", (command) => command));
 		const first = defineCommand("first", (command) => {
 			events.push("first");
-			retained = command.flags({ name: "from-first", type: "boolean" }).action(() => {});
+			retained = command.flags({ "from-first": { type: "boolean" } }).action(() => {});
 			return retained;
 		});
 		const second = defineCommand("second", () => {
@@ -78,9 +78,9 @@ describe("command definitions", () => {
 
 	it("propagates Context-owned flags only to definitions added after provide()", async () => {
 		const calls: string[] = [];
-		const apiKey = defineFlag("api-key", { type: "string" });
+		const apiKey = defineFlag({ type: "string" });
 		const auth = defineContext("auth")
-			.flags(apiKey)
+			.flags({ "api-key": apiKey })
 			.setup(({ flags }) => ({
 				apiKey: flags["api-key"],
 			}));
@@ -105,9 +105,9 @@ describe("command definitions", () => {
 
 	it("inherits capabilities through nested definitions", async () => {
 		const calls: string[] = [];
-		const verbose = defineFlag("verbose", { type: "boolean" });
+		const verbose = defineFlag({ type: "boolean" });
 		const logging = defineContext("logging")
-			.flags(verbose)
+			.flags({ verbose })
 			.setup(({ flags }) => ({
 				verbose: flags.verbose === true,
 			}));
@@ -168,10 +168,10 @@ describe("command definitions", () => {
 
 	it("rejects a recipe-provided Context flag colliding with an ancestor Context's flag", async () => {
 		const db = defineContext("db")
-			.flags({ name: "conn", type: "string" })
+			.flags({ conn: { type: "string" } })
 			.setup(() => ({}));
 		const cache = defineContext("cache")
-			.flags({ name: "conn", type: "number" })
+			.flags({ conn: { type: "number" } })
 			.setup(() => ({}));
 		// Checked attachment validates the sealed recipe against this destination.
 		const sub = defineCommand("sub", (cmd) => cmd.provide(cache()).action(() => {}));

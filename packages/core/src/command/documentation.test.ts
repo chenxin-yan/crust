@@ -44,7 +44,7 @@ describe("buildCommandDocumentation", () => {
 					{ name: "file", type: "string", required: true },
 					{ name: "rest", type: "string", variadic: true },
 				)
-				.flags({ name: "verbose", type: "boolean" })
+				.flags({ verbose: { type: "boolean" } })
 				.action(() => {}),
 		);
 		expect(model.usage).toBe("app <file> [rest...] [options]");
@@ -61,7 +61,7 @@ describe("buildCommandDocumentation", () => {
 		const model = await docs(
 			new Crust("app")
 				.args({ name: "target", type: "string", required: true, default: "prod" })
-				.flags({ name: "region", type: "string", required: true, default: "us" })
+				.flags({ region: { type: "string", required: true, default: "us" } })
 				.action(() => {}),
 		);
 		expect(model.usage).toBe("app [target] [options]");
@@ -93,16 +93,15 @@ describe("buildCommandDocumentation", () => {
 	it("resolves every flag spelling and negation from the parser spelling table", async () => {
 		const model = await docs(
 			new Crust("app")
-				.flags(
-					{
-						name: "color",
+				.flags({
+					color: {
 						type: "boolean",
 						short: "c",
 						aliases: ["colour"],
 						required: true,
 					},
-					{ name: "help", type: "boolean", noNegate: true },
-				)
+					help: { type: "boolean", noNegate: true },
+				})
 				.action(() => {}),
 		);
 		expect(model.flags[0]).toMatchObject({
@@ -116,10 +115,10 @@ describe("buildCommandDocumentation", () => {
 	it("lists the single-dash form of one-character long spellings after the short", async () => {
 		const model = await docs(
 			new Crust("app")
-				.flags(
-					{ name: "port", type: "number", short: "p", aliases: ["P", "listen"] },
-					{ name: "q", type: "boolean", aliases: ["Q"] },
-				)
+				.flags({
+					port: { type: "number", short: "p", aliases: ["P", "listen"] },
+					q: { type: "boolean", aliases: ["Q"] },
+				})
 				.action(() => {}),
 		);
 		expect(model.flags.map((flag) => flag.spellings)).toEqual([

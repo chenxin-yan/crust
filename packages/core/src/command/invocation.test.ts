@@ -448,7 +448,7 @@ describe("Invocation pipeline — snapshot projection", () => {
 		const { observer, roots } = rootObserver();
 		const app = new Crust("app")
 			.extend(observer)
-			.flags({ name: "endpoint", type: "url", default: endpoint })
+			.flags({ endpoint: { type: "url", default: endpoint } })
 			.action(({ flags }) => flags.endpoint.href);
 
 		await app.run([]);
@@ -468,7 +468,7 @@ describe("Invocation pipeline — snapshot projection", () => {
 		const { observer, roots } = rootObserver();
 		const app = new Crust("app")
 			.extend(observer)
-			.flags({ name: "data", type: "json", default: json })
+			.flags({ data: { type: "json", default: json } })
 			.action(() => {});
 
 		await app.run([]);

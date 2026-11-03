@@ -517,243 +517,243 @@ function _typecheckUsesSixtyContextsInOneCall() {
 
 // 45+ Extensions in one `.extend()` call must not hit TS2589 (excessively deep instantiation)
 const e0 = defineExtension(defineExtensionId("e0"))
-	.flags({ name: "f0", type: "boolean" })
+	.flags({ f0: { type: "boolean" } })
 	.provide(p0())
 	.add(defineCommand("ec0", (command) => command));
 const e1 = defineExtension(defineExtensionId("e1"))
-	.flags({ name: "f1", type: "boolean" })
+	.flags({ f1: { type: "boolean" } })
 	.provide(p1())
 	.add(defineCommand("ec1", (command) => command));
 const e2 = defineExtension(defineExtensionId("e2"))
-	.flags({ name: "f2", type: "boolean" })
+	.flags({ f2: { type: "boolean" } })
 	.provide(p2())
 	.add(defineCommand("ec2", (command) => command));
 const e3 = defineExtension(defineExtensionId("e3"))
-	.flags({ name: "f3", type: "boolean" })
+	.flags({ f3: { type: "boolean" } })
 	.provide(p3())
 	.add(defineCommand("ec3", (command) => command));
 const e4 = defineExtension(defineExtensionId("e4"))
-	.flags({ name: "f4", type: "boolean" })
+	.flags({ f4: { type: "boolean" } })
 	.provide(p4())
 	.add(defineCommand("ec4", (command) => command));
 const e5 = defineExtension(defineExtensionId("e5"))
-	.flags({ name: "f5", type: "boolean" })
+	.flags({ f5: { type: "boolean" } })
 	.provide(p5())
 	.add(defineCommand("ec5", (command) => command));
 const e6 = defineExtension(defineExtensionId("e6"))
-	.flags({ name: "f6", type: "boolean" })
+	.flags({ f6: { type: "boolean" } })
 	.provide(p6())
 	.add(defineCommand("ec6", (command) => command));
 const e7 = defineExtension(defineExtensionId("e7"))
-	.flags({ name: "f7", type: "boolean" })
+	.flags({ f7: { type: "boolean" } })
 	.provide(p7())
 	.add(defineCommand("ec7", (command) => command));
 const e8 = defineExtension(defineExtensionId("e8"))
-	.flags({ name: "f8", type: "boolean" })
+	.flags({ f8: { type: "boolean" } })
 	.provide(p8())
 	.add(defineCommand("ec8", (command) => command));
 const e9 = defineExtension(defineExtensionId("e9"))
-	.flags({ name: "f9", type: "boolean" })
+	.flags({ f9: { type: "boolean" } })
 	.provide(p9())
 	.add(defineCommand("ec9", (command) => command));
 const e10 = defineExtension(defineExtensionId("e10"))
-	.flags({ name: "f10", type: "boolean" })
+	.flags({ f10: { type: "boolean" } })
 	.provide(p10())
 	.add(defineCommand("ec10", (command) => command));
 const e11 = defineExtension(defineExtensionId("e11"))
-	.flags({ name: "f11", type: "boolean" })
+	.flags({ f11: { type: "boolean" } })
 	.provide(p11())
 	.add(defineCommand("ec11", (command) => command));
 const e12 = defineExtension(defineExtensionId("e12"))
-	.flags({ name: "f12", type: "boolean" })
+	.flags({ f12: { type: "boolean" } })
 	.provide(p12())
 	.add(defineCommand("ec12", (command) => command));
 const e13 = defineExtension(defineExtensionId("e13"))
-	.flags({ name: "f13", type: "boolean" })
+	.flags({ f13: { type: "boolean" } })
 	.provide(p13())
 	.add(defineCommand("ec13", (command) => command));
 const e14 = defineExtension(defineExtensionId("e14"))
-	.flags({ name: "f14", type: "boolean" })
+	.flags({ f14: { type: "boolean" } })
 	.provide(p14())
 	.add(defineCommand("ec14", (command) => command));
 const e15 = defineExtension(defineExtensionId("e15"))
-	.flags({ name: "f15", type: "boolean" })
+	.flags({ f15: { type: "boolean" } })
 	.provide(p15())
 	.add(defineCommand("ec15", (command) => command));
 const e16 = defineExtension(defineExtensionId("e16"))
-	.flags({ name: "f16", type: "boolean" })
+	.flags({ f16: { type: "boolean" } })
 	.provide(p16())
 	.add(defineCommand("ec16", (command) => command));
 const e17 = defineExtension(defineExtensionId("e17"))
-	.flags({ name: "f17", type: "boolean" })
+	.flags({ f17: { type: "boolean" } })
 	.provide(p17())
 	.add(defineCommand("ec17", (command) => command));
 const e18 = defineExtension(defineExtensionId("e18"))
-	.flags({ name: "f18", type: "boolean" })
+	.flags({ f18: { type: "boolean" } })
 	.provide(p18())
 	.add(defineCommand("ec18", (command) => command));
 const e19 = defineExtension(defineExtensionId("e19"))
-	.flags({ name: "f19", type: "boolean" })
+	.flags({ f19: { type: "boolean" } })
 	.provide(p19())
 	.add(defineCommand("ec19", (command) => command));
 const e20 = defineExtension(defineExtensionId("e20"))
-	.flags({ name: "f20", type: "boolean" })
+	.flags({ f20: { type: "boolean" } })
 	.provide(p20())
 	.add(defineCommand("ec20", (command) => command));
 const e21 = defineExtension(defineExtensionId("e21"))
-	.flags({ name: "f21", type: "boolean" })
+	.flags({ f21: { type: "boolean" } })
 	.provide(p21())
 	.add(defineCommand("ec21", (command) => command));
 const e22 = defineExtension(defineExtensionId("e22"))
-	.flags({ name: "f22", type: "boolean" })
+	.flags({ f22: { type: "boolean" } })
 	.provide(p22())
 	.add(defineCommand("ec22", (command) => command));
 const e23 = defineExtension(defineExtensionId("e23"))
-	.flags({ name: "f23", type: "boolean" })
+	.flags({ f23: { type: "boolean" } })
 	.provide(p23())
 	.add(defineCommand("ec23", (command) => command));
 const e24 = defineExtension(defineExtensionId("e24"))
-	.flags({ name: "f24", type: "boolean" })
+	.flags({ f24: { type: "boolean" } })
 	.provide(p24())
 	.add(defineCommand("ec24", (command) => command));
 const e25 = defineExtension(defineExtensionId("e25"))
-	.flags({ name: "f25", type: "boolean" })
+	.flags({ f25: { type: "boolean" } })
 	.provide(p25())
 	.add(defineCommand("ec25", (command) => command));
 const e26 = defineExtension(defineExtensionId("e26"))
-	.flags({ name: "f26", type: "boolean" })
+	.flags({ f26: { type: "boolean" } })
 	.provide(p26())
 	.add(defineCommand("ec26", (command) => command));
 const e27 = defineExtension(defineExtensionId("e27"))
-	.flags({ name: "f27", type: "boolean" })
+	.flags({ f27: { type: "boolean" } })
 	.provide(p27())
 	.add(defineCommand("ec27", (command) => command));
 const e28 = defineExtension(defineExtensionId("e28"))
-	.flags({ name: "f28", type: "boolean" })
+	.flags({ f28: { type: "boolean" } })
 	.provide(p28())
 	.add(defineCommand("ec28", (command) => command));
 const e29 = defineExtension(defineExtensionId("e29"))
-	.flags({ name: "f29", type: "boolean" })
+	.flags({ f29: { type: "boolean" } })
 	.provide(p29())
 	.add(defineCommand("ec29", (command) => command));
 const e30 = defineExtension(defineExtensionId("e30"))
-	.flags({ name: "f30", type: "boolean" })
+	.flags({ f30: { type: "boolean" } })
 	.provide(p30())
 	.add(defineCommand("ec30", (command) => command));
 const e31 = defineExtension(defineExtensionId("e31"))
-	.flags({ name: "f31", type: "boolean" })
+	.flags({ f31: { type: "boolean" } })
 	.provide(p31())
 	.add(defineCommand("ec31", (command) => command));
 const e32 = defineExtension(defineExtensionId("e32"))
-	.flags({ name: "f32", type: "boolean" })
+	.flags({ f32: { type: "boolean" } })
 	.provide(p32())
 	.add(defineCommand("ec32", (command) => command));
 const e33 = defineExtension(defineExtensionId("e33"))
-	.flags({ name: "f33", type: "boolean" })
+	.flags({ f33: { type: "boolean" } })
 	.provide(p33())
 	.add(defineCommand("ec33", (command) => command));
 const e34 = defineExtension(defineExtensionId("e34"))
-	.flags({ name: "f34", type: "boolean" })
+	.flags({ f34: { type: "boolean" } })
 	.provide(p34())
 	.add(defineCommand("ec34", (command) => command));
 const e35 = defineExtension(defineExtensionId("e35"))
-	.flags({ name: "f35", type: "boolean" })
+	.flags({ f35: { type: "boolean" } })
 	.provide(p35())
 	.add(defineCommand("ec35", (command) => command));
 const e36 = defineExtension(defineExtensionId("e36"))
-	.flags({ name: "f36", type: "boolean" })
+	.flags({ f36: { type: "boolean" } })
 	.provide(p36())
 	.add(defineCommand("ec36", (command) => command));
 const e37 = defineExtension(defineExtensionId("e37"))
-	.flags({ name: "f37", type: "boolean" })
+	.flags({ f37: { type: "boolean" } })
 	.provide(p37())
 	.add(defineCommand("ec37", (command) => command));
 const e38 = defineExtension(defineExtensionId("e38"))
-	.flags({ name: "f38", type: "boolean" })
+	.flags({ f38: { type: "boolean" } })
 	.provide(p38())
 	.add(defineCommand("ec38", (command) => command));
 const e39 = defineExtension(defineExtensionId("e39"))
-	.flags({ name: "f39", type: "boolean" })
+	.flags({ f39: { type: "boolean" } })
 	.provide(p39())
 	.add(defineCommand("ec39", (command) => command));
 const e40 = defineExtension(defineExtensionId("e40"))
-	.flags({ name: "f40", type: "boolean" })
+	.flags({ f40: { type: "boolean" } })
 	.provide(p40())
 	.add(defineCommand("ec40", (command) => command));
 const e41 = defineExtension(defineExtensionId("e41"))
-	.flags({ name: "f41", type: "boolean" })
+	.flags({ f41: { type: "boolean" } })
 	.provide(p41())
 	.add(defineCommand("ec41", (command) => command));
 const e42 = defineExtension(defineExtensionId("e42"))
-	.flags({ name: "f42", type: "boolean" })
+	.flags({ f42: { type: "boolean" } })
 	.provide(p42())
 	.add(defineCommand("ec42", (command) => command));
 const e43 = defineExtension(defineExtensionId("e43"))
-	.flags({ name: "f43", type: "boolean" })
+	.flags({ f43: { type: "boolean" } })
 	.provide(p43())
 	.add(defineCommand("ec43", (command) => command));
 const e44 = defineExtension(defineExtensionId("e44"))
-	.flags({ name: "f44", type: "boolean" })
+	.flags({ f44: { type: "boolean" } })
 	.provide(p44())
 	.add(defineCommand("ec44", (command) => command));
 const e45 = defineExtension(defineExtensionId("e45"))
-	.flags({ name: "f45", type: "boolean" })
+	.flags({ f45: { type: "boolean" } })
 	.provide(p45())
 	.add(defineCommand("ec45", (command) => command));
 const e46 = defineExtension(defineExtensionId("e46"))
-	.flags({ name: "f46", type: "boolean" })
+	.flags({ f46: { type: "boolean" } })
 	.provide(p46())
 	.add(defineCommand("ec46", (command) => command));
 const e47 = defineExtension(defineExtensionId("e47"))
-	.flags({ name: "f47", type: "boolean" })
+	.flags({ f47: { type: "boolean" } })
 	.provide(p47())
 	.add(defineCommand("ec47", (command) => command));
 const e48 = defineExtension(defineExtensionId("e48"))
-	.flags({ name: "f48", type: "boolean" })
+	.flags({ f48: { type: "boolean" } })
 	.provide(p48())
 	.add(defineCommand("ec48", (command) => command));
 const e49 = defineExtension(defineExtensionId("e49"))
-	.flags({ name: "f49", type: "boolean" })
+	.flags({ f49: { type: "boolean" } })
 	.provide(p49())
 	.add(defineCommand("ec49", (command) => command));
 const e50 = defineExtension(defineExtensionId("e50"))
-	.flags({ name: "f50", type: "boolean" })
+	.flags({ f50: { type: "boolean" } })
 	.provide(p50())
 	.add(defineCommand("ec50", (command) => command));
 const e51 = defineExtension(defineExtensionId("e51"))
-	.flags({ name: "f51", type: "boolean" })
+	.flags({ f51: { type: "boolean" } })
 	.provide(p51())
 	.add(defineCommand("ec51", (command) => command));
 const e52 = defineExtension(defineExtensionId("e52"))
-	.flags({ name: "f52", type: "boolean" })
+	.flags({ f52: { type: "boolean" } })
 	.provide(p52())
 	.add(defineCommand("ec52", (command) => command));
 const e53 = defineExtension(defineExtensionId("e53"))
-	.flags({ name: "f53", type: "boolean" })
+	.flags({ f53: { type: "boolean" } })
 	.provide(p53())
 	.add(defineCommand("ec53", (command) => command));
 const e54 = defineExtension(defineExtensionId("e54"))
-	.flags({ name: "f54", type: "boolean" })
+	.flags({ f54: { type: "boolean" } })
 	.provide(p54())
 	.add(defineCommand("ec54", (command) => command));
 const e55 = defineExtension(defineExtensionId("e55"))
-	.flags({ name: "f55", type: "boolean" })
+	.flags({ f55: { type: "boolean" } })
 	.provide(p55())
 	.add(defineCommand("ec55", (command) => command));
 const e56 = defineExtension(defineExtensionId("e56"))
-	.flags({ name: "f56", type: "boolean" })
+	.flags({ f56: { type: "boolean" } })
 	.provide(p56())
 	.add(defineCommand("ec56", (command) => command));
 const e57 = defineExtension(defineExtensionId("e57"))
-	.flags({ name: "f57", type: "boolean" })
+	.flags({ f57: { type: "boolean" } })
 	.provide(p57())
 	.add(defineCommand("ec57", (command) => command));
 const e58 = defineExtension(defineExtensionId("e58"))
-	.flags({ name: "f58", type: "boolean" })
+	.flags({ f58: { type: "boolean" } })
 	.provide(p58())
 	.add(defineCommand("ec58", (command) => command));
 const e59 = defineExtension(defineExtensionId("e59"))
-	.flags({ name: "f59", type: "boolean" })
+	.flags({ f59: { type: "boolean" } })
 	.provide(p59())
 	.add(defineCommand("ec59", (command) => command));
 function _typecheckExtendsSixtyExtensionsInOneCall() {

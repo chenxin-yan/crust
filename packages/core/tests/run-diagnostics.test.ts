@@ -14,10 +14,10 @@ it("diagnoses broad choice input without exhausting type instantiation", () => {
 		writeFileSync(
 			join(fixture, "input.ts"),
 			`import { Crust } from ${JSON.stringify(join(import.meta.dirname, "../src/index.ts"))};
-const app = new Crust("app").flags(
-	{ name: "mode", type: "string", choices: ["safe", "fast"], required: true },
-	{ name: "verbose", type: "boolean" },
-).action(({ flags }) => flags.mode);
+const app = new Crust("app").flags({
+	mode: { type: "string", choices: ["safe", "fast"], required: true },
+	verbose: { type: "boolean" },
+}).action(({ flags }) => flags.mode);
 declare const broad: string;
 void app.run([], { flags: { mode: broad } });
 `,

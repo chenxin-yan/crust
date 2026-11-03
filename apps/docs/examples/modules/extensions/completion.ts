@@ -6,7 +6,7 @@ const app = new Crust("my-cli", { version: "1.2.3" })
 	.add(
 		defineCommand("build", (command) =>
 			command
-				.flags({ name: "target", type: "string", choices: ["browser", "bun", "node"] })
+				.flags({ target: { type: "string", choices: ["browser", "bun", "node"] } })
 				.action(() => {}),
 		),
 	)

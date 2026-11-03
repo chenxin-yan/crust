@@ -83,14 +83,14 @@ describe("toolsFromSnapshot", () => {
 						{ name: "level", type: "string", choices: ["low", "high"], default: "low" },
 						{ name: "files", type: "path", variadic: true },
 					)
-					.flags(
-						{ name: "count", type: "number", required: true, default: 1 },
-						{ name: "dry-run", type: "boolean" },
-						{ name: "origin", type: "url", multiple: true },
-						{ name: "payload", type: "json", description: "Any JSON" },
-						{ name: "port", type: "string", parse: Number },
-						{ name: "mode", type: "string", schema: passthrough },
-					)
+					.flags({
+						count: { type: "number", required: true, default: 1 },
+						"dry-run": { type: "boolean" },
+						origin: { type: "url", multiple: true },
+						payload: { type: "json", description: "Any JSON" },
+						port: { type: "string", parse: Number },
+						mode: { type: "string", schema: passthrough },
+					})
 					.action(noop),
 			),
 		);
@@ -129,13 +129,13 @@ describe("toolsFromSnapshot", () => {
 		};
 		const ordinary = { value: 1 };
 		const app = new Crust("cli")
-			.flags(
-				{ name: "cycle", type: "json", default: cycle },
-				{ name: "bigint", type: "json", default: 1n, required: true },
-				{ name: "throwing", type: "json", default: throwing },
-				{ name: "ordinary", type: "json", default: ordinary },
-				{ name: "url", type: "url", default: new URL("https://example.com/") },
-			)
+			.flags({
+				cycle: { type: "json", default: cycle },
+				bigint: { type: "json", default: 1n, required: true },
+				throwing: { type: "json", default: throwing },
+				ordinary: { type: "json", default: ordinary },
+				url: { type: "url", default: new URL("https://example.com/") },
+			})
 			.action(noop);
 		const tools = toolsFromSnapshot(await app.snapshot());
 		const properties = tools[0]!.inputSchema.properties;
@@ -151,11 +151,11 @@ describe("toolsFromSnapshot", () => {
 
 	it("omits defaults containing non-finite numbers, which JSON would publish as null", async () => {
 		const app = new Crust("cli")
-			.flags(
-				{ name: "limit", type: "number", default: Infinity },
-				{ name: "bounds", type: "number", multiple: true, default: [0, -Infinity] },
-				{ name: "config", type: "json", default: { ratio: Number.NaN } },
-			)
+			.flags({
+				limit: { type: "number", default: Infinity },
+				bounds: { type: "number", multiple: true, default: [0, -Infinity] },
+				config: { type: "json", default: { ratio: Number.NaN } },
+			})
 			.action(noop);
 		const properties = toolsFromSnapshot(await app.snapshot())[0]!.inputSchema.properties;
 		for (const name of ["limit", "bounds", "config"]) {
@@ -168,12 +168,12 @@ describe("toolsFromSnapshot", () => {
 			defineCommand("check", (c) =>
 				c
 					.args({ name: "id", schema: passthrough })
-					.flags(
-						{ name: "mode", type: "string", schema: passthrough },
-						{ name: "on", type: "boolean", schema: passthrough },
-						{ name: "port", type: "string", parse: Number },
-						{ name: "level", type: "string", parse: Number, required: true },
-					)
+					.flags({
+						mode: { type: "string", schema: passthrough },
+						on: { type: "boolean", schema: passthrough },
+						port: { type: "string", parse: Number },
+						level: { type: "string", parse: Number, required: true },
+					})
 					.action(noop),
 			),
 		);
@@ -194,10 +194,7 @@ describe("toolsFromSnapshot", () => {
 			defineCommand("probe", (c) =>
 				c
 					.args({ name: "__proto__", type: "string" })
-					.flags(
-						{ name: "constructor", type: "string" },
-						{ name: "hasOwnProperty", type: "boolean" },
-					)
+					.flags({ constructor: { type: "string" }, hasOwnProperty: { type: "boolean" } })
 					.action(noop),
 			),
 		);
@@ -242,7 +239,7 @@ describe("toolsFromSnapshot", () => {
 			defineCommand("x", (c) =>
 				c
 					.args({ name: "name", type: "string" })
-					.flags({ name: "name", type: "string" })
+					.flags({ name: { type: "string" } })
 					.action(noop),
 			),
 		);
@@ -251,7 +248,7 @@ describe("toolsFromSnapshot", () => {
 			'Command "x" declares "name" more than once',
 		);
 		const raw = new Crust("cli").add(
-			defineCommand("y", (c) => c.flags({ name: "raw", type: "string" }).action(noop)),
+			defineCommand("y", (c) => c.flags({ raw: { type: "string" } }).action(noop)),
 		);
 		const rawSnapshot = await raw.snapshot();
 		expect(() => toolsFromSnapshot(rawSnapshot)).toThrow('declares "raw" more than once');

@@ -143,9 +143,10 @@ const completionFactory: ExtensionFactory<
 					choices: SUPPORTED_SHELLS,
 				})
 				.flags({
-					name: "output-dir",
-					type: "string",
-					description: OUTPUT_DIR_DESCRIPTION,
+					"output-dir": {
+						type: "string",
+						description: OUTPUT_DIR_DESCRIPTION,
+					},
 				})
 				.action(async (context) => {
 					const renderer = await loadRenderer();

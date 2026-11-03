@@ -3,6 +3,6 @@
 import { Crust, defineFlag } from "@crustjs/core";
 
 await new Crust("probe")
-	.flags(defineFlag("name", { type: "string", default: "world" }))
+	.flags({ name: defineFlag({ type: "string", default: "world" }) })
 	.action(({ flags, stdout }) => stdout(`Hello ${flags.name}`))
 	.execute();

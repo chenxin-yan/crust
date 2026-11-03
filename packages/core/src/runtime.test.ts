@@ -14,10 +14,10 @@ describe("runtime structured invocation", () => {
 	it("checks choices, negation, and positional order", async () => {
 		const app = new Crust("run")
 			.args({ name: "first", type: "string" }, { name: "rest", type: "json", variadic: true })
-			.flags(
-				{ name: "tag", type: "string", multiple: true, choices: ["ok"] },
-				{ name: "yes", type: "boolean", noNegate: true },
-			);
+			.flags({
+				tag: { type: "string", multiple: true, choices: ["ok"] },
+				yes: { type: "boolean", noNegate: true },
+			});
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		await expect(unwrap(app.run([], { flags: { tag: ["wrong"] } }))).rejects.toThrow(
 			"Expected one of: ok",
@@ -34,7 +34,7 @@ describe("runtime structured invocation", () => {
 
 	it("preserves URL and JSON identity and rejects wrong value kinds", async () => {
 		const app = new Crust("values")
-			.flags({ name: "endpoint", type: "url" }, { name: "config", type: "json" })
+			.flags({ endpoint: { type: "url" }, config: { type: "json" } })
 			.action(({ flags }) => flags);
 		const endpoint = new URL("https://example.com");
 		const config = { nested: [true, null, 3] };
@@ -61,15 +61,16 @@ describe("runtime structured invocation", () => {
 		const app = new Crust("handled")
 			.args({ name: "file", type: "string", required: true })
 			.flags({
-				name: "config",
-				type: "string",
-				schema: {
-					"~standard": {
-						version: 1,
-						vendor: "test",
-						validate: () => {
-							schemas++;
-							return { value: "parsed" };
+				config: {
+					type: "string",
+					schema: {
+						"~standard": {
+							version: 1,
+							vendor: "test",
+							validate: () => {
+								schemas++;
+								return { value: "parsed" };
+							},
 						},
 					},
 				},
@@ -112,7 +113,7 @@ describe("local metadata boundaries", () => {
 		const title = "Notes" as string;
 		const audience = [defineExtensionId("help")];
 		const config = { sections: [{ title, body: "text", only: audience }] };
-		const app = new Crust("cli", config).flags({ name: "verbose", type: "boolean" });
+		const app = new Crust("cli", config).flags({ verbose: { type: "boolean" } });
 		audience.length = 0;
 		expect((await app.snapshot()).meta.sections?.[0]?.only?.map(String)).toEqual(["help"]);
 		expect(() => new Crust("cli", config)).toThrow("invalid documentation sections");
@@ -135,10 +136,10 @@ describe("local metadata boundaries", () => {
 it("checks command relations at each actual destination and keeps Context setup lazy", async () => {
 	let setups = 0;
 	const owner = defineContext("owner")
-		.flags({ name: "token", type: "string" })
+		.flags({ token: { type: "string" } })
 		.setup(() => ++setups);
 	const definition = defineCommand("child", (command) =>
-		command.flags({ name: "token", type: "number" }),
+		command.flags({ token: { type: "number" } }),
 	);
 	const definitions = [definition];
 	expect(() => new Crust("first").add(...definitions)).not.toThrow();

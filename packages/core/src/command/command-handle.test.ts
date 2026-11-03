@@ -13,7 +13,7 @@ function buildGit() {
 				{ name: "name", type: "string", required: true },
 				{ name: "url", type: "string", required: true },
 			)
-			.flags({ name: "fetch", type: "boolean" })
+			.flags({ fetch: { type: "boolean" } })
 			.action(({ args, flags, stdout }) => {
 				received.push({ args, flags });
 				stdout(`added ${args.name}`);

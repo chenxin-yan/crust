@@ -7,9 +7,9 @@ import { createContextResolver } from "./context-resolver.ts";
 
 describe("createContextResolver", () => {
 	it("pre-handles early bag rejections so enumeration cannot crash the process", async () => {
-		const token = defineFlag("token", { type: "string" });
+		const token = defineFlag({ type: "string" });
 		const gate = defineContext("gate")
-			.flags(token)
+			.flags({ token })
 			.setup(() => "gate");
 		let unhandled: CaughtError;
 		const onUnhandled = (error: CaughtError) => {

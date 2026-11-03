@@ -10,7 +10,7 @@ declare function port(): StandardSchema<string | undefined, number>;
 function _typecheckTheSchemaOutputTypeReachesTheCommandAction() {
 	new Crust("cli")
 		.args({ name: "port", schema: port() })
-		.flags({ name: "tag", type: "string", schema: port() })
+		.flags({ tag: { type: "string", schema: port() } })
 		.action((_ctx) => {
 			type _argOutput = Expect<Equal<(typeof _ctx.args)["port"], number>>;
 			type _flagOutput = Expect<Equal<(typeof _ctx.flags)["tag"], number>>;

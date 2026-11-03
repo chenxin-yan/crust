@@ -581,7 +581,7 @@ describe("parseArgs — parse escape hatch", () => {
 			throw new Error("boom");
 		};
 		for (const parse of [asyncParse, rejecting]) {
-			const app = new Crust("test").flags({ name: "n", type: "string", parse });
+			const app = new Crust("test").flags({ n: { type: "string", parse } });
 			await expect(unwrap(app.run([], { flags: { n: "42" } }))).rejects.toThrow(
 				"parse must be synchronous",
 			);
@@ -747,15 +747,16 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 	it("checks dynamic defaults against choices when definitions are consumed", () => {
 		const choices: string[] = ["a", "b"];
 		expect(() =>
-			new Crust("test").flags({ name: "mode", type: "string", choices, default: "z" }),
+			new Crust("test").flags({ mode: { type: "string", choices, default: "z" } }),
 		).toThrow("default must be one of choices");
 		expect(() =>
 			new Crust("test").flags({
-				name: "tags",
-				type: "string",
-				multiple: true,
-				choices,
-				default: ["a", "z"],
+				tags: {
+					type: "string",
+					multiple: true,
+					choices,
+					default: ["a", "z"],
+				},
 			}),
 		).toThrow("default must be one of choices");
 		expect(() =>
@@ -772,7 +773,7 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 	it("names the flag whose dynamic definition is invalid", () => {
 		const choices: string[] = ["a", "b"];
 		expect(() =>
-			new Crust("test").flags({ name: "mode", type: "string", choices, default: "z" }),
+			new Crust("test").flags({ mode: { type: "string", choices, default: "z" } }),
 		).toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",
@@ -781,7 +782,7 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 			}),
 		);
 		const short: string = "vv";
-		expect(() => new Crust("test").flags({ name: "verbose", type: "boolean", short })).toThrow(
+		expect(() => new Crust("test").flags({ verbose: { type: "boolean", short } })).toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",
 				message: 'Flag "verbose" short "vv" must be one character',

@@ -23,7 +23,7 @@ const config = defineContext("config").setup(() => ({ prefix: "cfg" }));
 new Crust("cli")
 	.provide(db(), config())
 	.args({ name: "table", type: "string", required: true })
-	.flags({ name: "limit", type: "number" })
+	.flags({ limit: { type: "number" } })
 	.action(
 		handler(function* ({ args, flags, ctx }) {
 			type _Args = Expect<Equal<typeof args.table, string>>;
@@ -38,7 +38,7 @@ new Crust("cli")
 new Crust("cli")
 	.provide(db(), config())
 	.args({ name: "table", type: "string", required: true })
-	.flags({ name: "limit", type: "number" })
+	.flags({ limit: { type: "number" } })
 	.action(
 		handler(({ args, flags, ctx }) =>
 			Effect.gen(function* () {

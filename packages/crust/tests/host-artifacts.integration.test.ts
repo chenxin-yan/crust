@@ -35,7 +35,7 @@ const runtime = process.versions.bun
 	: "node " + process.versions.node;
 await new Crust("greet", { version: "0.1.0" })
 	.args({ name: "name", type: "string", required: true })
-	.flags({ name: "shout", type: "boolean" })
+	.flags({ shout: { type: "boolean" } })
 	.action(({ args, flags, stdout }) => {
 		const greeting = "hello " + args.name + punctuation;
 		stdout(JSON.stringify({

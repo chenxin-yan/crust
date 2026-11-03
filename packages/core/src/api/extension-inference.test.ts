@@ -8,7 +8,7 @@ import { defineExtension } from "./extension.ts";
 it("false-capable scope can omit defaulted flags from both descendant hooks", async () => {
 	function extension(recursive: boolean) {
 		return defineExtension(defineExtensionId("scope"))
-			.flags({ name: "port", type: "number", default: 123, recursive })
+			.flags({ port: { type: "number", default: 123, recursive } })
 			.preRun(({ flags }) => {
 				seen.push(flags.port);
 			})
@@ -28,18 +28,19 @@ it("false-capable scope can omit defaulted flags from both descendant hooks", as
 });
 
 it("uncertain flag collections may be empty or leave the name to another extension", async () => {
-	const flags: { name: "port"; type: "number"; default: number }[] = [];
+	const flags: Record<string, { type: "number"; default: number }> = {};
 	const seen: unknown[] = [];
 	const observer = defineExtension(defineExtensionId("observer"))
-		.flags(...flags)
+		.flags(flags)
 		.preRun(({ flags }) => {
 			seen.push(flags.port);
 		});
 	expect((await new Crust("cli").extend(observer).run([])).status).toBe("completed");
 	const supplier = defineExtension(defineExtensionId("supplier")).flags({
-		name: "port",
-		type: "string",
-		default: "text",
+		port: {
+			type: "string",
+			default: "text",
+		},
 	});
 	expect((await new Crust("cli").extend(observer, supplier).run([])).status).toBe("completed");
 	expect(seen).toEqual([undefined, "text"]);
@@ -49,16 +50,15 @@ it("optional schema multiplicity exposes raw arrays in hooks, not validated outp
 	const schema: StandardSchema<unknown, number> = {
 		"~standard": { version: 1, vendor: "test", validate: () => ({ value: 42 }) },
 	};
-	type OptionalToggle = { name: "toggle"; type: "boolean"; schema: typeof schema; multiple?: true };
+	type OptionalToggle = { type: "boolean"; schema: typeof schema; multiple?: true };
 	const toggle: OptionalToggle = {
-		name: "toggle",
 		type: "boolean",
 		schema,
 		multiple: true,
 	};
 	const seen: unknown[] = [];
 	const ext = defineExtension(defineExtensionId("schema"))
-		.flags(toggle)
+		.flags({ toggle })
 		.preRun(({ flags }) => {
 			seen.push(flags.toggle);
 		})

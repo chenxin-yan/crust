@@ -74,7 +74,7 @@ const man = defineExtension(defineExtensionId("man")).build(() => [{ path: "man/
 await new Crust("bun-greet", { description: "Greets under Bun" })
 	.extend(man, help())
 	.args({ name: "name", type: "string", required: true })
-	.flags({ name: "shout", type: "boolean" })
+	.flags({ shout: { type: "boolean" } })
 	.action(async ({ args, flags, stdout }) => {
 		await new Promise((done) => setTimeout(done, 5));
 		const greeting = \`hello \${args.name}\${punctuation}\`;

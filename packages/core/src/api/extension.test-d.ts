@@ -71,7 +71,7 @@ function _metadataRequirements() {
 	app.extend(needsVersion, plain);
 	app.extend(plain, needsVersion);
 	app.extend(plain).extend(needsVersion);
-	app.flags({ name: "verbose", type: "boolean" }).extend(needsVersion);
+	app.flags({ verbose: { type: "boolean" } }).extend(needsVersion);
 	app.args({ name: "file", type: "string" }).extend(needsVersion);
 	app.action(() => 42).extend(needsVersion);
 	const logger = defineContext("logger").setup(() => ({ info: () => {} }));
@@ -80,7 +80,7 @@ function _metadataRequirements() {
 	app.add(sub).extend(needsVersion);
 	app.command("child", (cmd) => cmd.action(() => 42)).extend(needsVersion);
 	app
-		.flags({ name: "verbose", type: "boolean" })
+		.flags({ verbose: { type: "boolean" } })
 		.args({ name: "file", type: "string" })
 		.provide(logger())
 		.add(sub)
@@ -176,7 +176,7 @@ function _metadataRequirements() {
 	// @ts-expect-error Structural copies retain the private metadata requirement.
 	unversioned.extend({ ...needsVersion });
 	// @ts-expect-error Later chain steps retain the metadata requirement.
-	unversioned.extend(needsVersion.flags({ name: "trace", type: "boolean" }));
+	unversioned.extend(needsVersion.flags({ trace: { type: "boolean" } }));
 	const versionedFactory = defineExtension<"version">(ID).factory((extension) => extension);
 	// @ts-expect-error Factory products retain the metadata requirement.
 	unversioned.extend(versionedFactory());
@@ -189,8 +189,9 @@ function _genericMetadataRequirements<K extends "version">(
 	const app = new Crust("app", { version: "1" });
 	const unversioned = new Crust("app");
 	const plain = defineExtension(defineExtensionId("test:generic-metadata")).flags({
-		name: "verbose",
-		type: "boolean",
+		verbose: {
+			type: "boolean",
+		},
 	});
 	app.extend(extension);
 	const conditional = Math.random() ? plain : extension;
@@ -226,7 +227,7 @@ function _fluentInference() {
 		.use(logger)
 		.provide(instance)
 		.add(command)
-		.flags({ name: "verbose", type: "boolean", short: "v" })
+		.flags({ verbose: { type: "boolean", short: "v" } })
 		.factory((extension, _label: string) =>
 			extension.preRun(async ({ rootCommand, ctx, flags }) => {
 				const _version: string = rootCommand.meta.version;
@@ -247,13 +248,13 @@ function _fluentInference() {
 		const _value: { info: () => void } = await ctx.logger;
 	});
 	// @ts-expect-error The contributed flag still participates in collisions.
-	app.flags({ name: "verbose", type: "string" });
+	app.flags({ verbose: { type: "string" } });
 	const needsLogger = defineExtension<"version">(ID).use(logger);
 	// @ts-expect-error Metadata requirements must not erase Context requirements.
 	new Crust("app", { version: "1" }).extend(needsLogger);
 	new Crust("app", { version: "1" }).provide(logger()).extend(needsLogger);
 	const ordinary = defineExtension(ID).factory((extension, label: string) =>
-		extension.flags({ name: "label", type: "string", default: label }),
+		extension.flags({ label: { type: "string", default: label } }),
 	);
 	type _ordinaryArgs = Expect<Equal<Parameters<typeof ordinary>, [label: string]>>;
 	const optional = defineExtension(ID).factory((extension, options: { a?: 1 } = {}) => {
@@ -307,7 +308,7 @@ function _positionalCallbacks() {
 			type _trace = Expect<Equal<typeof flags.trace, ParsedFlagValue>>;
 		})
 		.use(logger)
-		.flags({ name: "trace", type: "boolean" })
+		.flags({ trace: { type: "boolean" } })
 		.preRun(async ({ ctx, flags }) => {
 			const _logger: string = await ctx.logger;
 			type _trace = Expect<Equal<typeof flags.trace, boolean | undefined>>;

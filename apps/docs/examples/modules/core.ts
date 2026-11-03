@@ -2,7 +2,7 @@
 import { Crust } from "@crustjs/core";
 
 const app = new Crust("hello")
-	.flags({ name: "verbose", type: "boolean", short: "v" })
+	.flags({ verbose: { type: "boolean", short: "v" } })
 	.action(({ flags, stdout }) => stdout(flags.verbose ? "hello!" : "hello"))
 	.command("wave", (command) => command.action(({ stdout }) => stdout("o/")));
 
@@ -13,9 +13,9 @@ console.log(outcome.stdout); // => hello!
 //#region context
 import { Crust as ContextApp, defineContext, defineFlag } from "@crustjs/core";
 
-const apiKey = defineFlag("api-key", { type: "string", required: true });
+const apiKey = defineFlag({ type: "string", required: true });
 const api = defineContext("api")
-	.flags(apiKey)
+	.flags({ "api-key": apiKey })
 	.setup(({ flags }) => ({
 		apiKey: flags["api-key"],
 	}));

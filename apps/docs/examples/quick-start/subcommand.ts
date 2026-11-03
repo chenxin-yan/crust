@@ -12,11 +12,12 @@ const app = new Crust("my-cli", { description: "A CLI built with Crust", version
 		default: "world",
 	})
 	.flags({
-		name: "greet",
-		type: "string",
-		description: "Greeting to use",
-		default: "Hello",
-		short: "g",
+		greet: {
+			type: "string",
+			description: "Greeting to use",
+			default: "Hello",
+			short: "g",
+		},
 	})
 	.action(({ args, flags, stdout }) => {
 		stdout(`${flags.greet}, ${args.name}!`);
@@ -24,7 +25,7 @@ const app = new Crust("my-cli", { description: "A CLI built with Crust", version
 	// [!code ++:5]
 	.command("build", (command) =>
 		command
-			.flags({ name: "minify", type: "boolean", description: "Minify output" })
+			.flags({ minify: { type: "boolean", description: "Minify output" } })
 			.action(({ flags, stdout }) => stdout(`minify: ${flags.minify ?? false}`)),
 	);
 

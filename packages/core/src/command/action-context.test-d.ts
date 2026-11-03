@@ -42,7 +42,7 @@ root.command("transitions", (c) =>
 	c
 		.action(async ({ ctx }) => (await ctx.db).toUpperCase())
 		.args({ name: "input", type: "string" })
-		.flags({ name: "verbose", type: "boolean" })
+		.flags({ verbose: { type: "boolean" } })
 		.add(
 			defineCommand("nested", (c) =>
 				c.provide(numeric()).action(async ({ ctx }) => (await ctx.db).toFixed()),

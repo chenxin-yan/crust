@@ -407,7 +407,7 @@ describeIfZsh("renderZsh · one-character alias spellings", () => {
 
 	beforeAll(async () => {
 		const app = new Crust("mycli")
-			.flags({ name: "port", type: "number", short: "p", aliases: ["P", "listen"] })
+			.flags({ port: { type: "number", short: "p", aliases: ["P", "listen"] } })
 			.add(
 				defineCommand("serve", (serve) =>
 					serve.add(defineCommand("start", (start) => start.action(() => {}))),

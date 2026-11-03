@@ -69,7 +69,7 @@ describe("captured run outcomes", () => {
 	});
 	it("handles the invocation before required validation and captures hook output", async () => {
 		const id = defineExtensionId("handled");
-		const app = new Crust("app").flags({ name: "mode", type: "string", required: true }).extend(
+		const app = new Crust("app").flags({ mode: { type: "string", required: true } }).extend(
 			defineExtension(id).preRun((ctx) => {
 				ctx.stdout("help");
 				return ctx.handled();
@@ -219,7 +219,7 @@ it("resolves conditional inline providers once for the action and postRun", asyn
 it("rejects invalid structured values before running the action", async () => {
 	let called = false;
 	const app: AnyCrust = new Crust("app")
-		.flags({ name: "mode", type: "string", choices: ["safe", "fast"], required: true })
+		.flags({ mode: { type: "string", choices: ["safe", "fast"], required: true } })
 		.action(() => {
 			called = true;
 		});
@@ -248,7 +248,7 @@ it("ignores enumerable symbol properties without reading them", async () => {
 it("accepts args, flags and raw sections and treats undefined unknown keys as omitted", async () => {
 	const app = new Crust("app")
 		.args({ name: "file", type: "string", required: true })
-		.flags({ name: "mode", type: "string", required: true })
+		.flags({ mode: { type: "string", required: true } })
 		.action(({ args, flags, rawArgs }) => ({ args, flags, rawArgs }));
 	const input = {
 		args: { file: "file.txt", unknown: undefined },

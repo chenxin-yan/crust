@@ -3,11 +3,12 @@ import { Crust } from "@crustjs/core";
 //#region validation
 export const declared = new Crust("greet")
 	.flags({
-		name: "name",
-		type: "string",
-		// [!code highlight:2]
-		required: true,
-		choices: ["Ada", "Grace"],
+		name: {
+			type: "string",
+			// [!code highlight:2]
+			required: true,
+			choices: ["Ada", "Grace"],
+		},
 	})
 	.action(({ flags, stdout }) => stdout(`Hello, ${flags.name}`));
 //#endregion

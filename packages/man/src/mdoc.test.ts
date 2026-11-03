@@ -115,10 +115,11 @@ describe("renderManPageMdoc", () => {
 		const app = new Crust("demo", { description: "Demo CLI for tests." })
 			.extend(help())
 			.flags({
-				name: "verbose",
-				type: "boolean",
-				short: "v",
-				description: "Verbose",
+				verbose: {
+					type: "boolean",
+					short: "v",
+					description: "Verbose",
+				},
 			})
 			.add(defineCommand("ping", { description: "Ping" }, (cmd) => cmd.action(() => {})));
 
@@ -166,7 +167,7 @@ describe("renderManPageMdoc", () => {
 					},
 				]),
 			)
-			.flags({ name: "verbose", type: "boolean" })
+			.flags({ verbose: { type: "boolean" } })
 			.action(() => {});
 
 		const root = await app.snapshot();
@@ -188,7 +189,7 @@ describe("renderManPageMdoc", () => {
 			usage: "x \\fB[options]\n.x --help",
 			sections: [{ title: "Notes", body: "\\fBliteral\\fR text" }],
 		})
-			.flags({ name: "path", type: "string", description: "Path like \\n", default: "C:\\x" })
+			.flags({ path: { type: "string", description: "Path like \\n", default: "C:\\x" } })
 			.action(() => {});
 		const root = await app.snapshot();
 		const mdoc = renderManPageMdoc({ root });
@@ -270,7 +271,7 @@ describe("renderManPageMdoc", () => {
 
 	it("renders the flag `env` variable name after the description, never its value", async () => {
 		const app = new Crust("demo", { description: "Demo." })
-			.flags({ name: "token", type: "string", env: { name: "HOME" }, description: "API token" })
+			.flags({ token: { type: "string", env: { name: "HOME" }, description: "API token" } })
 			.action(() => {});
 
 		const root = await app.snapshot();

@@ -3,7 +3,7 @@ import { Crust, CrustError } from "@crustjs/core";
 import { z } from "zod";
 
 const app = new Crust("serve")
-	.flags({ name: "port", type: "string", schema: z.coerce.number().int().min(1) })
+	.flags({ port: { type: "string", schema: z.coerce.number().int().min(1) } })
 	.action(({ flags, stdout }) => stdout(`listening on ${flags.port}`));
 
 const outcome = await app.run([], { flags: { port: "0" } });

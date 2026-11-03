@@ -5,7 +5,7 @@ import { skill } from "./extension.ts";
 
 function host() {
 	const deploy = defineCommand("deploy", (command) =>
-		command.flags({ name: "force", type: "boolean" }).action(() => {}),
+		command.flags({ force: { type: "boolean" } }).action(() => {}),
 	);
 	return new Crust("cli").add(deploy);
 }
