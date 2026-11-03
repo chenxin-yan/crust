@@ -953,6 +953,10 @@ describe("runDistributeBuild", () => {
 		await stage({ ...source, exports: { ".": "./dist/index.js" } });
 		expect(staged("root").engines).toEqual(engines);
 		expect(staged("linux-x64").engines).toEqual({ bun: ">=1.4.0" });
+		// Node resolves `exports: null` like no exports, so the root is still binary-only.
+		await stage({ ...source, exports: null });
+		expect(staged("root").engines).toEqual({ bun: ">=1.4.0", node: "^22.15.0 || >=23.11.0" });
+		expect(staged("root")).not.toHaveProperty("exports");
 
 		// Node runtime packages and other runtimes' binaries keep engines as written.
 		await stage(source, "node", { execute: fakeExecutor });

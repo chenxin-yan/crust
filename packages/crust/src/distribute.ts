@@ -446,7 +446,10 @@ function resolveDistributionMetadata(
 		version: pkgJson.version,
 		rootPackageJson: pickRootMetadata(pkgJson),
 		sourceType: pkgJson.type,
-		...(pkgJson.exports !== undefined ? { exports: pkgJson.exports } : {}),
+		// Node resolves `exports: null` like an absent field, so it publishes no library.
+		...(pkgJson.exports !== undefined && pkgJson.exports !== null
+			? { exports: pkgJson.exports }
+			: {}),
 		...(pkgJson.peerDependencies !== undefined
 			? validatePeerDependencies(pkgJson.peerDependencies, pkgJson.peerDependenciesMeta)
 			: {}),
