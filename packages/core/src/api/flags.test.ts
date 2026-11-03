@@ -8,13 +8,13 @@ describe("defineFlag", () => {
 	it("rejects a malformed env hidden by a structural view", () => {
 		const options = { description: "Token", env: "TOKEN" };
 		function token(def: { description: string }) {
-			return defineFlag("token", { ...def, type: "string" });
+			return defineFlag({ ...def, type: "string" });
 		}
 
 		expect(() => token(options)).toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",
-				details: { subject: "flag", name: "token", reason: "invalid-env" },
+				details: { subject: "flag", reason: "invalid-env" },
 			}),
 		);
 	});
@@ -22,13 +22,13 @@ describe("defineFlag", () => {
 	it("rejects an env delimiter hidden by a structural view on a scalar flag", () => {
 		const binding = { name: "TAGS", delimiter: "," };
 		function scalar(env: { name: string }) {
-			return defineFlag("tag", { type: "string", env });
+			return defineFlag({ type: "string", env });
 		}
 
 		expect(() => scalar(binding)).toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",
-				details: { subject: "flag", name: "tag", reason: "delimiter-without-multiple" },
+				details: { subject: "flag", reason: "delimiter-without-multiple" },
 			}),
 		);
 	});
@@ -36,31 +36,33 @@ describe("defineFlag", () => {
 	it("rejects a delimiter hidden by a structural view on a scalar flag", () => {
 		const options = { description: "Tags", delimiter: "," };
 		function scalar(def: { description: string }) {
-			return defineFlag("tag", { ...def, type: "string" });
+			return defineFlag({ ...def, type: "string" });
 		}
 
 		expect(() => scalar(options)).toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",
-				details: { subject: "flag", name: "tag", reason: "delimiter-without-multiple" },
+				details: { subject: "flag", reason: "delimiter-without-multiple" },
 			}),
 		);
 	});
 
-	it("returns the named definition with literal types preserved", () => {
-		const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
+	it("returns the definition with literal types preserved", () => {
+		const verbose = defineFlag({ type: "boolean", short: "v" });
 
-		expect(verbose).toEqual({ name: "verbose", type: "boolean", short: "v" });
-		type _Flag = Expect<
-			Equal<
-				typeof verbose,
-				{
-					readonly name: "verbose";
-					readonly type: "boolean";
-					readonly short: "v";
-				}
-			>
-		>;
+		expect(verbose).toEqual({ type: "boolean", short: "v" });
+		type _Flag = Expect<Equal<typeof verbose, { readonly type: "boolean"; readonly short: "v" }>>;
+	});
+
+	it("rejects the removed name argument from untyped callers", () => {
+		// SAFETY: models an untyped JavaScript caller; the runtime guard owns this input.
+		const untyped = defineFlag as unknown as (...input: unknown[]) => unknown;
+		expect(() => untyped("verbose", { type: "boolean" })).toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				details: { subject: "flag", reason: "invalid-flags" },
+			}),
+		);
 	});
 
 	it("feeds .flags() with the same record typing as an inline literal", async () => {
@@ -159,7 +161,7 @@ describe("checked local definitions", () => {
 		aliases.push("later");
 		expect(flag.aliases).toEqual(["v"]);
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		expect(() => defineFlag("", { type: "boolean" })).toThrow("non-empty");
+		expect(() => new Crust("cli").flags({ "": { type: "boolean" } })).toThrow("non-empty");
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => defineFlag({ type: "boolean", short: "xx" })).toThrow("one character");
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.

@@ -417,37 +417,8 @@ export type FlagDef =
 /** Record mapping flag names to their definitions */
 export type FlagsDef = Record<string, FlagDef>;
 
-// ────────────────────────────────────────────────────────────────────────────
-// Named definitions — the public authoring shape for flags
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * A flag definition that carries its own name — the shape produced by
- * `defineFlag(name, def)` or written inline as an object literal
- * (`{ name: "dry-run", type: "boolean" }`) for the variadic named form of
- * `.flags(...defs)`. The record form (`.flags({ "dry-run": { type: "boolean" } })`)
- * takes names from its keys instead.
- */
-export type NamedFlagDef = FlagDef & { readonly name: string };
-
 /** Distribute `Omit<_, "name">` over a definition union. */
 export type OmitName<D> = D extends unknown ? Omit<D, "name"> : never;
-
-/**
- * Derive the internal `FlagsDef` record from a tuple of named flag
- * definitions: each definition's `name` literal becomes a key, its value
- * the definition without `name`.
- *
- * The `extends infer R extends FlagsDef` step resolves the record eagerly, so it
- * satisfies `FlagsDef` in generic positions and inferred builder types show the
- * plain record: declaration emit in a consumer cannot name this alias, which
- * lives in an internal chunk of the published types.
- */
-export type NamedFlagsRecord<Defs extends readonly NamedFlagDef[]> = {
-	[K in Defs[number]["name"]]: OmitName<Extract<Defs[number], { name: K }>>;
-} extends infer R extends FlagsDef
-	? R
-	: never;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Merge utility types
@@ -456,8 +427,8 @@ export type NamedFlagsRecord<Defs extends readonly NamedFlagDef[]> = {
 /**
  * Merges two flag sets as a flat intersection.
  *
- * Statically known shared keys are branded at compile time (`DuplicateNameBrand`,
- * `ExistingFlagCollisionBrand`, `ProvideChecks`). A plain intersection stays
+ * Statically known shared keys are branded at compile time (`FlagRecordErrors`,
+ * `ProvideChecks`). A plain intersection stays
  * flat in the checker — chained `.flags()`/`.provide()` calls cost constant
  * instantiation depth, where per-call merge layers (mapped type or
  * `Simplify<Omit & …>`) nested and hit TS2589 at ~47 / ~31 chained calls.

@@ -137,14 +137,12 @@ function _sectionShapesStayTyped() {
 }
 
 function _overlappingFlagContributions(
-	flag:
-		| { name: "mode"; type: "string" }
-		| { name: "mode"; type: "string"; aliases: readonly ["m"] },
+	flag: { type: "string" } | { type: "string"; aliases: readonly ["m"] },
 ) {
-	new Crust("cli").flags(flag);
-	defineCommand("child", (command) => command.flags(flag));
-	const checked = new Crust("cli").flags(flag);
-	checked.flags({ name: "next", type: "boolean" });
+	new Crust("cli").flags({ mode: flag });
+	defineCommand("child", (command) => command.flags({ mode: flag }));
+	const checked = new Crust("cli").flags({ mode: flag });
+	checked.flags({ next: { type: "boolean" } });
 }
 
 type FlagBatch = {
@@ -476,15 +474,15 @@ function _infiniteNames(
 	mixed: "fixed" | `mode-${string}`,
 	branded: string & { readonly brand: unique symbol },
 ) {
-	defineFlag(name, { type: "string", required: true });
+	new Crust("app").flags({ [name]: { type: "string", required: true } });
 	defineArg(numeric, { type: "string", required: true });
 	new Crust(blank);
 	defineCommand(name, (c) => c);
 	defineContext(name).setup(() => 1);
-	defineFlag(mixed, { type: "string" });
-	defineFlag(branded, { type: "string" });
-	const flag = defineFlag(name, { type: "string", required: true });
-	const flags = new Crust("app").flags(flag);
+	new Crust("app").flags({ [mixed]: { type: "string" } });
+	new Crust("app").flags({ [branded]: { type: "string" } });
+	const flag = defineFlag({ type: "string", required: true });
+	const flags = new Crust("app").flags({ [name]: flag });
 	void flags.run([]);
 	void flags.run([], { flags: { [name]: "ok" } });
 	const args = new Crust("app").args(defineArg(numeric, { type: "string", required: true }));
@@ -501,11 +499,11 @@ function _infiniteNames(
 	const provided = new Crust("app").provide(provider());
 	provided.provide(defineContext("other").setup(() => 1)());
 	void provided.run([]);
-	const alias = defineFlag("safe", { type: "string", aliases: [name] as const });
-	const aliased = new Crust("app").flags(alias);
+	const alias = defineFlag({ type: "string", aliases: [name] as const });
+	const aliased = new Crust("app").flags({ safe: alias });
 	void aliased.run([], { flags: { safe: "ok" } });
-	aliased.flags({ name: "other", type: "boolean" });
-	const ext = defineExtension(defineExtensionId("infinite-recursive")).flags(flag);
+	aliased.flags({ other: { type: "boolean" } });
+	const ext = defineExtension(defineExtensionId("infinite-recursive")).flags({ [name]: flag });
 	const extended = new Crust("app").add(defineCommand("child", (c) => c)).extend(ext);
 	void extended.run(["child"]);
 	const replacement = new Crust("app")
@@ -515,30 +513,24 @@ function _infiniteNames(
 }
 
 function _finiteAndConditionalNames(name: `mode-${"a" | "b"}`) {
-	const flag = defineFlag(name, { type: "string", required: true });
+	const flag = defineFlag({ type: "string", required: true });
 	const arg = defineArg(name, { type: "string", required: true });
 	const command = defineCommand(name, (c) => c);
 	const provider = defineContext(name).setup(() => 1);
-	new Crust("app").flags(flag);
-	void new Crust("app").flags(flag).run([]);
+	new Crust("app").flags({ [name]: flag });
+	void new Crust("app").flags({ [name]: flag }).run([]);
 	void new Crust("app").args(arg).run([]);
 	void new Crust("app").add(command).run([name]);
 	void new Crust("app").add(command).run(["mode-a"]);
 	new Crust("app").provide(provider()).provide(defineContext("other").setup(() => 1)());
-	void new Crust("app").flags(defineFlag("mode-a", { type: "string" })).run([]);
+	void new Crust("app").flags({ "mode-a": defineFlag({ type: "string" }) }).run([]);
 	void new Crust("app")
-		.flags(defineFlag("mode", { type: "string", choices: ["mode-a", "mode-b"] }))
+		.flags({ mode: defineFlag({ type: "string", choices: ["mode-a", "mode-b"] }) })
 		.run([], { flags: { mode: name } });
 	// Fixed finite spellings retain ordinary proof.
 	const alias = "mode-a";
-	void new Crust("app").flags(defineFlag("safe", { type: "boolean", aliases: [alias] }));
+	void new Crust("app").flags({ safe: defineFlag({ type: "boolean", aliases: [alias] }) });
 }
-
-function _genericNameWrapper<N extends string>(name: N) {
-	// @ts-expect-error -- a generic constraint is not local name evidence
-	return defineFlag(name, { type: "string" });
-}
-void new Crust("app").flags(_genericNameWrapper("known")).run([]);
 
 function _conditionalArgumentTuples(condition: boolean) {
 	const a = defineArg("a", { type: "string", required: true });

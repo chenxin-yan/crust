@@ -292,7 +292,7 @@ describe("command definitions", () => {
 		const app = new Crust("cli").add(
 			defineCommand("good", { description: "Good", aliases: ["g"] }, (command) => {
 				configured.push("good");
-				return command.flags({ name: "force", type: "boolean" }).action(() => "ok");
+				return command.flags({ force: { type: "boolean" } }).action(() => "ok");
 			}),
 			defineCommand("bad", () => {
 				configured.push("bad");
@@ -354,7 +354,7 @@ describe("command definitions", () => {
 		const configured: string[] = [];
 		const context = defineContext("value").setup((_, value: string) => value);
 		const options = defineContext("options")
-			.flags({ name: "value", type: "string" })
+			.flags({ value: { type: "string" } })
 			.setup(({ flags }) => flags.value);
 		const id = defineExtensionId("provider");
 		const group = defineCommand("group", (command) => {
@@ -421,7 +421,7 @@ describe("command definitions", () => {
 					return command.use(value).action(async ({ ctx }) => await ctx.value);
 				}),
 			);
-		const derived = app.flags({ name: "verbose", type: "boolean" });
+		const derived = app.flags({ verbose: { type: "boolean" } });
 
 		expect(await unwrap(app.run(["child"]))).toMatchObject({ result: "extension" });
 		expect(await unwrap(derived.run(["child"]))).toMatchObject({ result: "extension" });
