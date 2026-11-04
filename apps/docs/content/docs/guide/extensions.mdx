@@ -40,7 +40,7 @@ $ deploy --preview
 nothing changed
 ```
 
-Return `ctx.handled()` from `preRun` to stop before validation and the action. Calling it without returning it does not stop the invocation.
+Return `ctx.handled()` from `preRun` to stop before validation and the action. Calling it without returning it does not stop the invocation. Validation includes invalid argv and environment values, so a handling hook wins over them; until then, an invalid flag or argument reads as `undefined` in `ctx.flags` and `ctx.args`, not as its default.
 
 Give each Extension a namespaced id such as `acme:preview`. Registering the same id again replaces the earlier registration.
 

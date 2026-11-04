@@ -311,7 +311,7 @@ A `FlagDef` (or `NamedFlagDef`) plus `recursive?: boolean`. `recursive` defaults
 
 ### `InferExtensionFlags<Defs>`
 
-The flag values an Extension's hooks see. They are pre-validation values, not schema outputs: a required flag can still be absent, and a non-recursive flag can be absent on descendants.
+The flag values an Extension's hooks see. They are pre-validation values, not schema outputs: a required flag can still be absent, a defaulted value flag is absent when its argv or environment value is invalid, and a non-recursive flag can be absent on descendants.
 
 ### `ExtensionContext`
 
@@ -329,7 +329,7 @@ The flag values an Extension's hooks see. They are pre-validation values, not sc
   name="ExtensionHooks"
 />
 
-- `preRun` runs in `.extend()` order after routing and input binding, before validation. Return `ctx.handled()` to end the invocation successfully. Pulling a flag-owning Context here rejects, because its flags are not validated yet.
+- `preRun` runs in `.extend()` order after routing and input binding, before validation. Return `ctx.handled()` to end the invocation successfully. Pulling a flag-owning Context here rejects, because its flags are not validated yet. An argv or environment value that fails conversion, `choices`, or `parse` reads as `undefined` here (not its default); its error surfaces at validation, after every `preRun` hook.
 - `onError` runs for `execute()` only. Return `true` after rendering to stop the chain, or a falsy value to fall through to Core's renderer.
 - `postRun` runs in reverse `.extend()` order after every completed, handled, or failed invocation that reached hooks, like `finally`. Contexts remain available until it completes. Preparation, routing, and parse failures skip it.
 

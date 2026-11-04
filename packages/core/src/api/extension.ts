@@ -152,7 +152,8 @@ export interface ExtensionContext<
 	/**
 	 * Bound positional values for the resolved command, before validation: parsed from
 	 * argv tokens for `execute()`, taken as-is from the structured input for typed `run()`
-	 * (URL/JSON values keep their identity).
+	 * (URL/JSON values keep their identity). An argument whose argv value is invalid is
+	 * `undefined`, as for {@link ExtensionContext.flags}.
 	 *
 	 * @example `{ target: "api" }`
 	 */
@@ -160,6 +161,8 @@ export interface ExtensionContext<
 	/**
 	 * Bound own flags plus unknown flags from the resolved command, before validation;
 	 * parsed from argv tokens for `execute()`, taken as-is from the structured input for typed `run()`.
+	 * A flag whose argv or environment value failed conversion, `choices`, or `parse` is
+	 * `undefined` (not its default); the error surfaces at validation.
 	 *
 	 * @example `{ trace: true }`
 	 */
@@ -200,7 +203,8 @@ export interface ExtensionHooks<
 	 * Runs after routing and input binding (argv parsing for `execute()`, structured
 	 * binding for typed `run()`), before validation, in `.extend()` order.
 	 * Return `ctx.handled()` to end the invocation successfully; later pre-run hooks,
-	 * validation, schemas, Contexts, and the Command Action do not run.
+	 * validation (including invalid argv and environment values), schemas, Contexts,
+	 * and the Command Action do not run.
 	 */
 	readonly preRun?: (ctx: ExtensionContext<Defs, Deps, MetaKeys>) => Awaitable<void | Handled>;
 	/**
@@ -250,12 +254,25 @@ type InferPreSchemaExtensionFlag<F extends ExtensionFlagDef> = F extends {
 						: never
 					: never)
 			| undefined
-	: F extends { required: true }
-		? F extends { default: unknown }
-			? InferFlags<{ value: F }>["value"]
-			: // Hooks run before validation enforces `required`, so the value may be absent.
-				InferFlags<{ value: F }>["value"] | undefined
+	: F extends { required: true } | { default: unknown }
+		? // Hooks run before validation enforces `required` and reports invalid values, which
+			// stay unset (not defaulted), so a required or defaulted value may still be absent.
+			| InferFlags<{ value: F }>["value"]
+			| (F extends { default: unknown }
+					? MayHoldInvalidValue<F> extends true
+						? undefined
+						: never
+					: undefined)
 		: InferFlags<{ value: F }>["value"];
+
+/** Value flags can fail coercion; a boolean only through an env `false` under `noNegate`. */
+type MayHoldInvalidValue<F extends ExtensionFlagDef> = F extends { type: "boolean" }
+	? "noNegate" extends keyof F
+		? "env" extends keyof F
+			? true
+			: false
+		: false
+	: true;
 
 type InferExtensionFlag<F> = F extends ExtensionFlagDef
 	?

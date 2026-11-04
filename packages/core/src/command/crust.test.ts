@@ -1,5 +1,5 @@
 import { getAmbientTerminalIO } from "@crustjs/utils/terminal";
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { unwrap } from "../../tests/helpers.ts";
@@ -857,6 +857,153 @@ describe("Extension named hooks", () => {
 
 		expect(seenPort).toBe(8080);
 		expect(outcomeBy).toBe("gate");
+	});
+
+	describe("deferred flag and argument value errors", () => {
+		let originalExitCode: typeof process.exitCode;
+
+		beforeEach(() => {
+			originalExitCode = process.exitCode;
+		});
+
+		afterEach(() => {
+			vi.unstubAllEnvs();
+			process.exitCode = originalExitCode ?? 0;
+		});
+
+		function deferringApp() {
+			const seen: unknown[] = [];
+			const errors: unknown[] = [];
+			const actions: string[] = [];
+			const port = { name: "port", type: "number", default: 3000, env: { name: "PORT" } } as const;
+			const gate = defineExtension(defineExtensionId("gate"))
+				.flags({ name: "stop", type: "boolean", recursive: true })
+				.preRun((ctx) => {
+					seen.push(ctx.flags.port);
+					if (ctx.flags.stop === true) return ctx.handled();
+				})
+				.onError((error) => void errors.push(error));
+			const app = new Crust("cli")
+				.flags(port, { name: "mode", type: "string", choices: ["fast", "safe"] })
+				.args({ name: "count", type: "number" })
+				.extend(gate)
+				.add(defineCommand("serve", (c) => c.flags(port).action(() => void actions.push("serve"))))
+				.action(() => void actions.push("root"));
+			async function execute(argv: string[]) {
+				const stderr: string[] = [];
+				const exitCode = await app.execute({
+					argv,
+					io: { stdout: () => {}, stderr: (line) => void stderr.push(line) },
+				});
+				return { exitCode, stderr: stderr.join("\n") };
+			}
+			return { execute, seen, errors, actions };
+		}
+
+		it("lets a handling preRun win over invalid argv values in any order", async () => {
+			const { execute, errors, actions } = deferringApp();
+			for (const argv of [
+				["--port", "abc", "--stop"],
+				["--stop", "--port", "abc"],
+				["--mode", "slow", "--stop"],
+				["nan", "--stop"],
+				["serve", "--port", "abc", "--stop"],
+			]) {
+				expect(await execute(argv), argv.join(" ")).toEqual({ exitCode: 0, stderr: "" });
+			}
+			expect(errors).toEqual([]);
+			expect(actions).toEqual([]);
+		});
+
+		it("lets a handling preRun win over an invalid env fallback", async () => {
+			vi.stubEnv("PORT", "abc");
+			const { execute, actions } = deferringApp();
+			expect(await execute(["--stop"])).toEqual({ exitCode: 0, stderr: "" });
+			expect(await execute(["serve", "--stop"])).toEqual({ exitCode: 0, stderr: "" });
+			expect(actions).toEqual([]);
+		});
+
+		it("surfaces the original error after preRun, which sees the invalid flag unset", async () => {
+			const cases: Array<[string[], Record<string, string>, string]> = [
+				[["--port", "abc"], {}, 'Expected number for --port, got "abc"'],
+				[[], { PORT: "abc" }, 'Expected number for --port, got "abc"'],
+				[["serve"], { PORT: "abc" }, 'Expected number for --port, got "abc"'],
+				[["--mode", "slow"], {}, 'Invalid value "slow" for --mode. Expected one of: fast, safe'],
+				[["nan"], {}, 'Expected number for <count>, got "nan"'],
+			];
+			const { execute, seen, errors, actions } = deferringApp();
+			for (const [argv, env, message] of cases) {
+				vi.unstubAllEnvs();
+				for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
+				const result = await execute(argv);
+				expect(result.exitCode, argv.join(" ")).toBe(1);
+				// Core's default renderer still prints the unchanged message.
+				expect(result.stderr).toContain(message);
+				expect(errors.at(-1)).toBeInstanceOf(CrustError);
+				expect(errors.at(-1)).toMatchObject({ code: "PARSE", message });
+			}
+			expect(seen).toEqual([undefined, undefined, undefined, 3000, 3000]);
+			expect(actions).toEqual([]);
+		});
+
+		it("reports a deferred value error to onError with the preRun context", async () => {
+			let preRunContext: unknown;
+			let onErrorContext: unknown;
+			const observer = defineExtension(defineExtensionId("observer"))
+				.preRun((ctx) => {
+					preRunContext = ctx;
+				})
+				.onError((_error, ctx) => {
+					onErrorContext = ctx;
+					return true;
+				});
+			const app = new Crust("cli")
+				.flags({ name: "port", type: "number" })
+				.extend(observer)
+				.action(() => {});
+
+			expect(await app.execute({ argv: ["--port", "abc"] })).toBe(1);
+			expect(preRunContext).toBeDefined();
+			expect(onErrorContext).toBe(preRunContext);
+		});
+
+		it("shows Extension-owned defaulted flags as unset to preRun and postRun", async () => {
+			const seen: unknown[] = [];
+			const owner = defineExtension(defineExtensionId("owner"))
+				.flags({ name: "port", type: "number", default: 3000 })
+				.preRun(({ flags }) => void seen.push(["pre", flags.port]))
+				.postRun(({ flags }, outcome) => void seen.push(["post", flags.port, outcome.status]));
+			const gate = defineExtension(defineExtensionId("gate")).preRun((ctx) =>
+				ctx.argv.includes("--stop") ? ctx.handled() : undefined,
+			);
+			const app = new Crust("cli")
+				.flags({ name: "stop", type: "boolean" })
+				.extend(owner, gate)
+				.action(() => void seen.push("action"));
+			const io = { stdout: () => {}, stderr: () => {} };
+
+			expect(await app.execute({ argv: ["--port", "abc", "--stop"], io })).toBe(0);
+			expect(await app.execute({ argv: ["--port", "abc"], io })).toBe(1);
+			expect(seen).toEqual([
+				["pre", undefined],
+				["post", undefined, "handled"],
+				["pre", undefined],
+				["post", undefined, "failed"],
+			]);
+		});
+
+		it("keeps structural argv errors ahead of preRun", async () => {
+			const { execute, seen } = deferringApp();
+			expect(await execute(["--port", "--stop"])).toMatchObject({
+				exitCode: 1,
+				stderr: expect.stringContaining("argument is ambiguous"),
+			});
+			expect(await execute(["--nope", "--stop"])).toMatchObject({
+				exitCode: 1,
+				stderr: expect.stringContaining('Unknown flag "--nope"'),
+			});
+			expect(seen).toEqual([]);
+		});
 	});
 
 	it("does not run hooks for routing failures and exposes frozen snapshots with injected io", async () => {

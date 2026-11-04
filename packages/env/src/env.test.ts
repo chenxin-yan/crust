@@ -135,6 +135,17 @@ describe("defineEnv", () => {
 		]);
 	});
 
+	it("rejects blank numbers instead of reading them as 0", async () => {
+		const error = await failure(
+			{ PORT: { type: "number", default: 3000 }, RETRIES: { type: "number" } },
+			{ source: { PORT: "", RETRIES: "  " } },
+		);
+		expect(error.details.issues).toEqual([
+			{ name: "PORT", expected: "number", received: "invalid" },
+			{ name: "RETRIES", expected: "number", received: "invalid" },
+		]);
+	});
+
 	it("reads only own source properties, including prototype-like names", async () => {
 		const source = Object.defineProperty({}, "__proto__", { value: "7", enumerable: true });
 		const value = await read(

@@ -19,17 +19,20 @@ export type ResolvePrimitive<T extends BaseValueType> = T extends "string"
 			: never;
 
 /**
- * Attempts to coerce a string to a number, returning `undefined` only when the
- * result is `NaN`. Callers decide whether `undefined` means throw or fallback.
+ * Attempts to coerce a string to a number, returning `undefined` when the
+ * result is `NaN` or the input is blank. Callers decide whether `undefined`
+ * means throw or fallback.
  *
  * @example
  * ```ts
  * tryCoerceNumber("42"); // 42
  * tryCoerceNumber("abc"); // undefined
- * tryCoerceNumber(""); // 0
+ * tryCoerceNumber(""); // undefined
  * ```
  */
 export function tryCoerceNumber(raw: string): number | undefined {
+	// `Number("")` and `Number("  ")` are 0, which would turn `PORT=` into port 0.
+	if (raw.trim() === "") return undefined;
 	const num = Number(raw);
 	return Number.isNaN(num) ? undefined : num;
 }

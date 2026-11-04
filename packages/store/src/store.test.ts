@@ -188,9 +188,9 @@ describe("store.read", () => {
 		expect(result.ports).toEqual([3000, 8080]);
 	});
 
-	it("should reject persisted values that do not match their declared type", async () => {
+	it.each(["abc", "", "  "])("should reject persisted %j for a number field", async (port) => {
 		const filePath = join(tempDir, "config.json");
-		await writeFile(filePath, JSON.stringify({ port: "abc" }));
+		await writeFile(filePath, JSON.stringify({ port }));
 
 		const store = createStore({
 			dirPath: tempDir,

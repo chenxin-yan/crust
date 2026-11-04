@@ -8,7 +8,8 @@ import { defineExtension, type InferExtensionFlags } from "./extension.ts";
 type Port = { name: "port"; type: "number"; default: number };
 type Host = { name: "host"; type: "string"; default: string };
 type Flags<D extends readonly (Port | Host)[]> = InferExtensionFlags<D>;
-type _fixed = Expect<Equal<Flags<readonly [Port]>["port"], number>>;
+// Hooks run before validation, so an invalid value leaves even a defaulted flag unset.
+type _fixed = Expect<Equal<Flags<readonly [Port]>["port"], number | undefined>>;
 type _array = Expect<Equal<Flags<Port[]>["port"], ParsedFlagValue>>;
 type _tupleUnion = Expect<Equal<Flags<readonly [Port] | readonly [Host]>["port"], ParsedFlagValue>>;
 type _memberUnion = Expect<Equal<Flags<readonly [Port | Host]>["port"], ParsedFlagValue>>;
@@ -29,10 +30,10 @@ type _open = Expect<
 	>
 >;
 type _true = Expect<
-	Equal<InferExtensionFlags<readonly [Port & { recursive: true }]>["port"], number>
+	Equal<InferExtensionFlags<readonly [Port & { recursive: true }]>["port"], number | undefined>
 >;
 type _optionalTrue = Expect<
-	Equal<InferExtensionFlags<readonly [Port & { recursive?: true }]>["port"], number>
+	Equal<InferExtensionFlags<readonly [Port & { recursive?: true }]>["port"], number | undefined>
 >;
 type _false = Expect<
 	Equal<InferExtensionFlags<readonly [Port & { recursive: false }]>["port"], number | undefined>
@@ -42,6 +43,24 @@ type _boolean = Expect<
 >;
 type _optionalScope = Expect<
 	Equal<InferExtensionFlags<readonly [Port & { recursive?: boolean }]>["port"], number | undefined>
+>;
+
+type Strict = {
+	name: "color";
+	type: "boolean";
+	default: true;
+	noNegate: true;
+	env: { name: "COLOR" };
+};
+// Argv booleans cannot be invalid; only an env `false` under `noNegate` leaves one unset.
+type _defaultedBoolean = Expect<
+	Equal<
+		InferExtensionFlags<readonly [{ name: "quiet"; type: "boolean"; default: false }]>["quiet"],
+		boolean
+	>
+>;
+type _strictBoolean = Expect<
+	Equal<InferExtensionFlags<readonly [Strict]>["color"], boolean | undefined>
 >;
 
 type Toggle = { name: "toggle"; type: "boolean"; schema: StandardSchema<unknown, number> };
@@ -60,6 +79,16 @@ type _optionalMultiple = Expect<
 >;
 
 function _contextual(recursive: boolean, flags: Port[], toggle: Toggle & { multiple?: true }) {
+	defineExtension(defineExtensionId("defaulted"))
+		.flags({ name: "port", type: "number", default: 123 })
+		.preRun(({ flags }) => {
+			// @ts-expect-error `--port abc` leaves a defaulted flag unset until validation reports it.
+			flags.port.toFixed();
+		})
+		.postRun(({ flags }) => {
+			// @ts-expect-error A failed invocation's post-run hooks see the same unvalidated value.
+			flags.port.toFixed();
+		});
 	defineExtension(defineExtensionId("scope"))
 		.flags({ name: "port", type: "number", default: 123, recursive })
 		.preRun(({ flags }) => {

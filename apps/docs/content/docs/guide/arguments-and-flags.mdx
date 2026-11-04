@@ -85,12 +85,14 @@ color=undefined port=undefined
 
 The definitions use `name: "color"` and `name: "port"` without dashes. A user types `--color --port 3000`, and the action reads `flags.color` and the converted number in `flags.port`.
 
-In this example, neither flag has `required`, `default`, or an environment binding, so omitting it gives an action value of `undefined`. When supplied, a value-taking flag needs one value, so `serve --port` fails. Built-in types convert CLI text and reject invalid input before the action runs:
+In this example, neither flag has `required`, `default`, or an environment binding, so omitting it gives an action value of `undefined`. When supplied, a value-taking flag needs one value, so `serve --port` fails. Built-in types convert CLI text and reject invalid input, including a blank number, before the action runs:
 
 ```sh
 $ serve --port nope
 Error: Expected number for --port, got "nope"
 ```
+
+Invalid values are reported after [`preRun` hooks](/docs/guide/extensions#hooks) and take precedence over missing required values, so `serve --port nope --help` still prints help. Malformed argv, such as an unknown flag or `serve --port --help`, fails before any hook runs.
 
 ### Required and defaulted values
 
@@ -201,7 +203,7 @@ $ PUBLISH_TOKEN=example publish --tag latest,beta --tag next
 publishing to npm tags=latest,beta,next
 ```
 
-An explicit argv occurrence always wins over the environment, even when it splits to zero occurrences. Invalid argv values fail rather than trying env; invalid environment values fail rather than trying the default. Zero occurrences after splitting follow the existing default/required or schema rules. Help, man pages, and generated skills list the variable as `[env: PUBLISH_TOKEN]` and never print its value. Programmatic [`run()`](/docs/api/crust#runpath-input-options) binds structured input directly: it does not read the environment and never splits arrays. Positional arguments have no `env`; use a flag.
+An explicit argv occurrence always wins over the environment, even when it splits to zero occurrences. Invalid argv values fail rather than trying env; invalid environment values, including a blank `PORT=` for a number flag, fail rather than trying the default. Like invalid argv values, they do not block `--help` or `--version`. Zero occurrences after splitting follow the existing default/required or schema rules. Help, man pages, and generated skills list the variable as `[env: PUBLISH_TOKEN]` and never print its value. Programmatic [`run()`](/docs/api/crust#runpath-input-options) binds structured input directly: it does not read the environment and never splits arrays. Positional arguments have no `env`; use a flag.
 
 ### Values that start with `-`
 
