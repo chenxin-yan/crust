@@ -1,6 +1,6 @@
 import type { DefiningOf } from "../api/context.ts";
 import type { CommandDefinitionData } from "../command/crust.ts";
-import type { FlagsDef } from "../types.ts";
+import type { FlagDef, FlagsDef } from "../types.ts";
 import type {
 	ClosedMembers,
 	CollisionBrand,
@@ -427,7 +427,16 @@ type LocalFlagBranchBrand<F> = LocalValueBrand<F> &
  * every other flag in the record. An index signature (a dynamic record) is left to runtime
  * checks, but literal keys beside it are still validated, including against each other.
  */
-export type FlagRecordErrors<F, Existing extends string> = RecordErrors<
+export type FlagRecordErrors<F, Existing extends string> =
+	// Each branch of a conditional record is checked on its own; a valid branch's `unknown`
+	// would absorb an invalid sibling's errors in a union, so the branches intersect.
+	BranchRecordErrors<F, Existing> extends (errors: infer E) => void ? E : never;
+
+type BranchRecordErrors<F, Existing extends string> = F extends unknown
+	? (errors: OneRecordErrors<F, Existing>) => void
+	: never;
+
+type OneRecordErrors<F, Existing extends string> = RecordErrors<
 	F,
 	[KnownFlagKey<keyof F>] extends [never]
 		? // An index signature absorbs literal keys in `keyof`; mapping per key recovers them.
@@ -445,7 +454,9 @@ type RecordErrors<
 	AllAliases extends string = ExtractAllAliases<F[Names & keyof F]>,
 > = DropEmpty<{
 	[K in keyof F as KnownFlagKey<K>]: K extends string
-		? IntegerLikeBrand<K> & RecordFlagBrand<F, K, Names, Existing, AllAliases>
+		? IntegerLikeBrand<K> &
+				UndefinedFlagBrand<F, K> &
+				RecordFlagBrand<F, K, Names, Existing, AllAliases>
 		: K extends number
 			? // Builders keep `keyof F` as is, so a number key would hide its runtime spelling from collision checks.
 				{ readonly FIX_NUMBER_KEY: "Flag names must be string keys; quote a numeric name" }
@@ -467,6 +478,44 @@ type IntegerLikeBrand<K extends string> = K extends `${bigint}`
 			: {}
 		: { readonly FIX_INTEGER_LIKE_NAME: IntegerLikeMessage }
 	: {};
+
+// The runtime rejects an `undefined` definition; only an optional key may be absent.
+// Without strictNullChecks every type admits `undefined`, so neither check can tell.
+type StrictNulls = undefined extends {} ? false : true;
+
+type UndefinedFlagBrand<F, K extends keyof F> = false extends StrictNulls
+	? {}
+	: undefined extends F[K]
+		? 0 extends 1 & F[K]
+			? {}
+			: {} extends Pick<F, K>
+				? {}
+				: {
+						readonly FIX_UNDEFINED_FLAG: "Flag definitions must not be undefined; make a flag conditional with { ...(cond ? { name: def } : {}) }";
+					}
+		: {};
+
+/**
+ * `.flags()` input. TypeScript adds `missing?: undefined` to each branch of a conditional
+ * record; accepting it keeps inference from falling back to an open record.
+ */
+export type FlagsInput<D = FlagDef> = { readonly [name: string]: D | undefined };
+
+/** Drops the `missing?: undefined` keys of a conditional record's branches. */
+export type DefinedFlags<F, D = FlagsDef> = Extract<DefinedRecord<F>, D>;
+
+type DefinedRecord<F> = false extends StrictNulls
+	? F
+	: undefined extends F[keyof F]
+		? F extends unknown
+			? {
+					[K in keyof F as [Exclude<F[K], undefined>] extends [never] ? never : K]: Exclude<
+						F[K],
+						undefined
+					>;
+				}
+			: never
+		: F;
 
 // Only these fields can make one flag invalid on its own; other flags need name checks only.
 type RiskyFlagField = "short" | "aliases" | "choices" | "parse" | "env" | "delimiter";

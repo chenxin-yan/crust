@@ -71,6 +71,8 @@ import type {
 	ValidateExtensionFlags,
 	ExtensionFlagDefsOf,
 	FlagRecordErrors,
+	FlagsInput,
+	DefinedFlags,
 	LocalSpellingsOf,
 } from "../validation/flags.brands.ts";
 import type { IsClosedName, IsUnion, UnionToIntersection } from "../validation/shared.ts";
@@ -1224,10 +1226,10 @@ export class Crust<
 	// (use/provide/add) default to never to reject that fallback without mapping the
 	// receiver. flags/args/add/command reject differing builder states through
 	// `StateReceiver`; extend keeps a this-bound phantom.
-	flags<const F extends FlagsDef, State extends BuilderState = ExplicitTypeArgumentsError>(
+	flags<const F extends FlagsInput, State extends BuilderState = ExplicitTypeArgumentsError>(
 		this: StateReceiver<State>,
 		flags: F & FlagRecordErrors<F, State["sp"] | LocalSpellingsOf<State["flags"]>>,
-	): AfterFlags<State, F>;
+	): AfterFlags<State, DefinedFlags<F>>;
 
 	flags(record: unknown): unknown {
 		const cloned = this._clone(cloneFlagRegistry(this._node));

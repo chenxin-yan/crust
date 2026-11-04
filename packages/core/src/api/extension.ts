@@ -22,6 +22,8 @@ import type {
 import type { DeclaredDepsOf, KnownContextInstances } from "../validation/contexts.brands.ts";
 import type {
 	FlagRecordErrors,
+	FlagsInput,
+	DefinedFlags,
 	LocalSpellingsOf,
 	ProvideChecks,
 	ProvidedContextSpellings,
@@ -504,9 +506,15 @@ export interface ExtensionBuilder<
 	 * Own flags, one record keyed by flag name; repeated calls accumulate. `recursive`
 	 * (default `true`) contributes a flag to every command.
 	 */
-	flags<const F extends ExtensionFlagsDef>(
+	flags<const F extends FlagsInput<ExtensionFlagDef>>(
 		flags: F & FlagRecordErrors<F, DeclaredSpellings<OF, Provide>>,
-	): ExtensionBuilder<Use, Provide, AppendedFlags<OF, F>, Commands, MetaKeys>;
+	): ExtensionBuilder<
+		Use,
+		Provide,
+		AppendedFlags<OF, DefinedFlags<F, ExtensionFlagsDef>>,
+		Commands,
+		MetaKeys
+	>;
 	/** Contribute root commands; names and aliases must not collide with any other root command. */
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
 		...definitions: Ds & ValidateCommandDefinitions<Ds, AttachedCommandSpellings<Commands>>

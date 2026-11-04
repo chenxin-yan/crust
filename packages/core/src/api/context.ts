@@ -15,6 +15,8 @@ import type { LocalSectionsBrand } from "../validation/commands.brands.ts";
 import type {
 	ContextOwnedFlags,
 	FlagRecordErrors,
+	FlagsInput,
+	DefinedFlags,
 	LocalSpellingsOf,
 } from "../validation/flags.brands.ts";
 import type {
@@ -289,9 +291,9 @@ export interface ContextBuilder<
 	 * Own flags parsed wherever this Context is provided; setup reads them from `flags`.
 	 * Takes one record keyed by flag name; repeated calls accumulate.
 	 */
-	flags<const F extends FlagsDef>(
+	flags<const F extends FlagsInput>(
 		flags: F & FlagRecordErrors<F, LocalSpellingsOf<OF>>,
-	): ContextBuilder<Name, Use, AppendedFlags<OF, F>>;
+	): ContextBuilder<Name, Use, AppendedFlags<OF, DefinedFlags<F>>>;
 	/** Document only the providing command (the root for Extension-provided Contexts). */
 	sections<const S extends readonly RuntimeCommandSectionInput[]>(
 		...sections: S & LocalSectionsBrand<{ sections: S }>["sections"]

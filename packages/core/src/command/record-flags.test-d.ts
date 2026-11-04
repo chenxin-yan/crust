@@ -400,6 +400,42 @@ function _conditionalRecords(definitions: {} | { port: { type: "number"; default
 	void app.run([], { flags: { quiet: true } });
 }
 
+// TypeScript adds `missing?: undefined` to each branch of a conditional; those keys must not
+// make inference fall back to an open record.
+function _inferredConditionalRecords(cond: boolean, maybe: { type: "boolean" } | undefined) {
+	const inline = new Crust("cli").flags(
+		cond ? { ok: { type: "boolean" } } : { other: { type: "string" } },
+	);
+	type _inline = Expect<
+		Equal<
+			typeof inline._types.flags,
+			| { readonly ok: { readonly type: "boolean" } }
+			| { readonly other: { readonly type: "string" } }
+		>
+	>;
+	const stored = cond ? { a: { type: "boolean" as const } } : { b: { type: "string" as const } };
+	const held = new Crust("cli").flags(stored);
+	type _held = Expect<
+		Equal<typeof held._types.flags, { a: { type: "boolean" } } | { b: { type: "string" } }>
+	>;
+	// each branch is checked on its own
+	new Crust("cli").flags(
+		// @ts-expect-error -- short flags must be one character
+		cond ? { ok: { type: "boolean" } } : { bad: { type: "boolean", short: "long" } },
+	);
+	defineContext("cfg").flags(
+		// @ts-expect-error -- Contexts check each branch too
+		cond ? { ok: { type: "boolean" } } : { bad: { type: "boolean", short: "long" } },
+	);
+	defineExtension(defineExtensionId("cfg")).flags(
+		// @ts-expect-error -- as do Extensions
+		cond ? { ok: { type: "boolean" } } : { bad: { type: "boolean", short: "long" } },
+	);
+	// the runtime rejects an undefined definition; only an optional key may be absent
+	// @ts-expect-error -- FIX_UNDEFINED_FLAG
+	new Crust("cli").flags({ x: maybe });
+}
+
 function _defineFlagChecksItsDefinition() {
 	// @ts-expect-error -- short flags must be one character
 	defineFlag({ type: "string", short: "oo" });
