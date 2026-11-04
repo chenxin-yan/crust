@@ -1216,6 +1216,27 @@ describe("Extension onError hooks", () => {
 		expect(process.exitCode).toBe(1);
 	});
 
+	it("sees the routed command when its argv fails to parse, and the root when routing fails", async () => {
+		const seen: { name: string; path: readonly string[]; error: string }[] = [];
+		const observer = defineExtension(defineExtensionId("observer")).onError((error, ctx) => {
+			seen.push({
+				name: ctx.command.meta.name,
+				path: ctx.commandPath,
+				error: (error as Error).message,
+			});
+		});
+		const app = new Crust("cli")
+			.extend(observer)
+			.add(defineCommand("sub", { aliases: ["s"] }, (cmd) => cmd.action(() => {})));
+
+		await app.execute({ argv: ["s", "--bogus"] });
+		await app.execute({ argv: ["nope"] });
+		expect(seen).toEqual([
+			{ name: "sub", path: ["cli", "sub"], error: 'Unknown flag "--bogus"' },
+			{ name: "cli", path: ["cli"], error: expect.stringContaining('"nope"') },
+		]);
+	});
+
 	it("falls through to Core's default renderer and never runs for run()", async () => {
 		let onErrorRan = false;
 		const observer = defineExtension(defineExtensionId("observer")).onError(() => {
@@ -2188,6 +2209,24 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 				details: { subject: "command", name: "deploy", reason: "missing-recipe" },
 			}),
 		);
+	});
+
+	it("rejects child command names that are not one argv token, including .as() renames", () => {
+		const invalidName = (name: string) =>
+			expect.objectContaining({
+				code: "DEFINITION",
+				details: { subject: "command", name, reason: "invalid-name" },
+			});
+		const dynamicName: string = "-x";
+		expect(() => defineCommand(dynamicName, (cmd) => cmd)).toThrow(invalidName("-x"));
+		expect(() => new Crust("cli").command(dynamicName, (cmd) => cmd)).toThrow(invalidName("-x"));
+		const deploy = defineCommand("deploy", (cmd) => cmd);
+		const dashedRename: string = "--deploy";
+		expect(() => deploy.as(dashedRename)).toThrow(invalidName("--deploy"));
+		const spacedName: string = "my cmd";
+		expect(() => defineCommand(spacedName, (cmd) => cmd)).toThrow(invalidName("my cmd"));
+		const tabbedRename: string = "de\tploy";
+		expect(() => deploy.as(tabbedRename)).toThrow(invalidName("de\tploy"));
 	});
 
 	it("rejects __proto__ as a command name", () => {

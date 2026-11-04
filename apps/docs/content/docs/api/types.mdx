@@ -139,7 +139,7 @@ Command Snapshots are frozen, serializable descriptions of the command tree. The
 
 <auto-type-table path="../../../../../packages/core/src/command/snapshot.ts" name="FlagSnapshot" />
 
-`URL` defaults become strings. `env` records the variable name and delimiter, never the value. Object-valued JSON defaults are shared references, not copies; treat them as immutable.
+`required` is the effective requiredness the parser enforces: it is absent when the definition has a `default`. `URL` defaults become strings. `env` records the variable name and delimiter, never the value. Object-valued JSON defaults are shared references, not copies; treat them as immutable.
 
 ## Typed invocation
 

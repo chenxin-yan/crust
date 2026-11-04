@@ -16,8 +16,33 @@ function _commandNames() {
 	command.as("\u2003");
 	// @ts-expect-error -- inline commands share canonical-name restrictions
 	new Crust("root").command("__proto__", (builder) => builder);
-	defineCommand("two words", (builder) => builder);
-	defineCommand("-leading", (builder) => builder);
+}
+
+// Child names are argv tokens; a literal that cannot be one fails before runtime.
+function _childNameShape(dynamic: string, mixed: "-x" | `mode-${string}`) {
+	const command = defineCommand("valid", (builder) => builder);
+	// @ts-expect-error -- leading dash reads as a flag
+	defineCommand("-x", (builder) => builder);
+	// @ts-expect-error -- leading dash reads as a flag
+	defineCommand("--x", {}, (builder) => builder);
+	// @ts-expect-error -- whitespace splits the argv token
+	defineCommand("my cmd", (builder) => builder);
+	// @ts-expect-error -- whitespace splits the argv token
+	defineCommand("my\tcmd", (builder) => builder);
+	// @ts-expect-error -- leading dash reads as a flag
+	new Crust("root").command("-x", (builder) => builder);
+	// @ts-expect-error -- whitespace splits the argv token
+	new Crust("root").command("my cmd", (builder) => builder);
+	// @ts-expect-error -- leading dash reads as a flag
+	command.as("--x");
+	// @ts-expect-error -- whitespace splits the argv token
+	command.as("de\tploy");
+	// @ts-expect-error -- an open member does not hide a literal flag-shaped member
+	defineCommand(mixed, (builder) => builder);
+	defineCommand(dynamic, (builder) => builder);
+	new Crust("root").command(dynamic, (builder) => builder);
+	command.as(dynamic);
+	defineCommand("x-y", (builder) => builder);
 }
 
 // An open template member does not hide an independently invalid literal member (#357).

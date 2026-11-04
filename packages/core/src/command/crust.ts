@@ -42,6 +42,7 @@ import type { AppendArgsChecks, AttachedArgs } from "../validation/args.brands.t
 import type {
 	AttachedCommandSpellings,
 	CommandCollisionBrand,
+	ChildCommandNameBrand,
 	AliasesOf,
 	CommandDefinitionSpellings,
 	CommandNameBrand,
@@ -215,7 +216,7 @@ export interface CommandDefinition<
 	readonly name: Name;
 	/** The same definition under a different name; configured aliases travel with it. */
 	as<const N extends string>(
-		name: N & CommandNameBrand<N> & ValidateCommandConfig<N, { aliases: Aliases }>,
+		name: N & ChildCommandNameBrand<N> & ValidateCommandConfig<N, { aliases: Aliases }>,
 	): CommandDefinition<N, Aliases, Shape, Deps>;
 	/** @internal */
 	readonly [commandDefinitionInternal]: CommandDefinitionInternal & {
@@ -573,6 +574,29 @@ function resolveCommandName<Name extends string>(
 	return name;
 }
 
+/**
+ * Child names and aliases are matched against a single argv token: one without
+ * whitespace that does not start with `-`, which would make it a flag.
+ */
+function isCommandToken(token: string): boolean {
+	return token !== "" && !/[ \t\n\r\v\f]/.test(token) && !token.startsWith("-");
+}
+
+function resolveChildCommandName<Name extends string>(
+	name: Name,
+	aliases: readonly string[] = [],
+): Name {
+	resolveCommandName(name, aliases);
+	if (!isCommandToken(name)) {
+		throw new CrustError(
+			"DEFINITION",
+			`Command name "${name}" must not contain whitespace or start with "-"`,
+			{ subject: "command", name, reason: "invalid-name" },
+		);
+	}
+	return name;
+}
+
 function isCommandRecipe(value: CommandConfig | CommandRecipe | undefined): value is CommandRecipe {
 	return typeof value === "function";
 }
@@ -589,7 +613,7 @@ export function defineCommand<
 	const Name extends string,
 	Builder extends AnyCommandDefinitionBuilder,
 >(
-	name: Name & CommandNameBrand<Name>,
+	name: Name & ChildCommandNameBrand<Name>,
 	recipe: CommandRecipe<Builder>,
 ): CommandDefinition<Name, readonly [], ShapeOfBuilder<Builder>, DepsOfBuilder<Builder>>;
 export function defineCommand<
@@ -597,7 +621,7 @@ export function defineCommand<
 	const C extends CommandConfig,
 	Builder extends AnyCommandDefinitionBuilder,
 >(
-	name: Name & CommandNameBrand<Name>,
+	name: Name & ChildCommandNameBrand<Name>,
 	config: C & LocalCommandConfigBrand<Name, C>,
 	recipe: CommandRecipe<Builder>,
 ): CommandDefinition<Name, AliasesOf<C>, ShapeOfBuilder<Builder>, DepsOfBuilder<Builder>>;
@@ -610,7 +634,7 @@ export function defineCommand(
 	const hasConfig = !isCommandRecipe(configOrRecipe);
 	const config: CommandConfig & { readonly version?: unknown } = hasConfig ? configOrRecipe : {};
 	const recipe = hasConfig ? maybeRecipe : configOrRecipe;
-	const name = resolveCommandName(nameInput, config.aliases);
+	const name = resolveChildCommandName(nameInput, config.aliases);
 	// Authoring overloads require a recipe in both call forms; untyped JavaScript can omit it.
 	if (!isCommandRecipe(recipe)) {
 		throw new CrustError("DEFINITION", `Command "${name}" requires a recipe`, {
@@ -621,7 +645,7 @@ export function defineCommand(
 	}
 
 	for (const alias of config.aliases ?? []) {
-		if (alias === "" || /[ \t\n\r\v\f]/.test(alias) || alias.startsWith("-")) {
+		if (!isCommandToken(alias)) {
 			throw new CrustError("DEFINITION", `Command "${name}" has an invalid alias "${alias}"`, {
 				subject: "command",
 				name,
@@ -646,7 +670,7 @@ export function defineCommand(
 		return Object.freeze({
 			name: defName,
 			as: <const NewName extends string>(newName: NewName) =>
-				named(resolveCommandName(newName, meta.aliases)),
+				named(resolveChildCommandName(newName, meta.aliases)),
 			[commandDefinitionInternal]: Object.freeze({ ...internal, name: defName }),
 		});
 	};
@@ -1433,7 +1457,7 @@ export class Crust<
 	 * or reuse.
 	 */
 	command<const N extends string, B extends AnyCommandDefinitionBuilder>(
-		name: N & CommandNameBrand<N> & CommandCollisionBrand<N, Sibs>,
+		name: N & ChildCommandNameBrand<N> & CommandCollisionBrand<N, Sibs>,
 		recipe: ((
 			command: CommandDefinitionBuilder<
 				{},
