@@ -1,15 +1,8 @@
 import { type AnyCrust, CrustError, type RunOutcome } from "@crustjs/core";
 import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-	type CallToolRequestParams,
-	type CallToolResult,
-	CallToolRequestSchema,
-	ErrorCode,
-	ListToolsRequestSchema,
-	McpError,
-} from "@modelcontextprotocol/sdk/types.js";
+// Type-only: the SDK loads inside the server functions, so CLIs pay for it only when `mcp` runs.
+import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import type { CallToolRequestParams, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 import { type McpTool, type McpToolsOptions, RAW_PROPERTY, toolsFromSnapshot } from "./tools.ts";
 
@@ -209,6 +202,11 @@ export async function createMcpServer(
 	const snapshot = await app.snapshot();
 	const tools = toolsFromSnapshot(snapshot, options);
 	const byName = new Map(tools.map((tool) => [tool.name, tool]));
+	const [{ Server }, { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError }] =
+		await Promise.all([
+			import("@modelcontextprotocol/sdk/server/index.js"),
+			import("@modelcontextprotocol/sdk/types.js"),
+		]);
 	const server = new Server(
 		{ name: snapshot.meta.name, version: snapshot.meta.version ?? DEFAULT_SERVER_VERSION },
 		{ capabilities: { tools: {} } },
@@ -239,6 +237,7 @@ export async function createMcpServer(
  * stdout for protocol frames; nothing else in the process may write to it.
  */
 export async function serveStdio(server: Server): Promise<void> {
+	const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
 	const closed = new Promise<void>((resolve) => {
 		// oxlint-disable-next-line unicorn/prefer-add-event-listener -- Protocol exposes only the `onclose` property.
 		server.onclose = resolve;

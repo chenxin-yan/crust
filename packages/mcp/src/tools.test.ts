@@ -40,6 +40,31 @@ describe("toolsFromSnapshot", () => {
 		expect(tools[0]?.description).toBe("Deploy");
 	});
 
+	it("rejects exclude paths that are not canonical command paths, listing each", async () => {
+		const app = new Crust("cli")
+			.add(defineCommand("deploy", { aliases: ["d"] }, (c) => c.action(noop)))
+			.add(
+				defineCommand("group", (c) =>
+					c.add(defineCommand("leaf", (sub) => sub.action(noop))).action(noop),
+				),
+			)
+			.add(defineCommand("secret", { hidden: true }, (c) => c.action(noop)));
+		const snapshot = await app.snapshot();
+		expect(() => toolsFromSnapshot(snapshot, { exclude: [["dpeloy"], ["d"], ["deploy"]] })).toThrow(
+			'Unknown MCP exclude paths "dpeloy", "d"; exclude takes canonical command paths',
+		);
+		// [""] is not the root path [], so it must not exclude the whole tree.
+		expect(() => toolsFromSnapshot(snapshot, { exclude: [[""]] })).toThrow(
+			"Unknown MCP exclude paths",
+		);
+		// Paths under an excluded parent or a hidden command are still real commands.
+		expect(
+			toolsFromSnapshot(snapshot, {
+				exclude: [["group"], ["group", "leaf"], ["secret"]],
+			}).map((tool) => tool.name),
+		).toEqual(["deploy"]);
+	});
+
 	it("exposes the root under its own name only when it has an action", async () => {
 		const actionless = new Crust("cli").add(defineCommand("run", (c) => c.action(noop)));
 		expect(toolsFromSnapshot(await actionless.snapshot()).map((t) => t.name)).toEqual(["run"]);

@@ -2,6 +2,7 @@ import { type AnyCrust, Crust, defineCommand } from "@crustjs/core";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+	currentLaunch,
 	MCP_CLIENTS,
 	mcpExtension,
 	renderClaudeAddCommand,
@@ -60,6 +61,19 @@ describe("mcpExtension", () => {
 		).toBe(0);
 		expect(stdout).toEqual([renderClientConfig("claude", "custom", launch)]);
 		expect(stderr).toEqual([`Or run: ${renderClaudeAddCommand("custom", launch)}`]);
+	});
+});
+
+describe("currentLaunch", () => {
+	it("launches a Node single executable application directly", () => {
+		const original = process.getBuiltinModule;
+		process.getBuiltinModule = (id: string) =>
+			id === "node:sea" ? { isSea: () => true } : original(id);
+		try {
+			expect(currentLaunch()).toEqual({ command: process.execPath, args: ["mcp"] });
+		} finally {
+			process.getBuiltinModule = original;
+		}
 	});
 });
 

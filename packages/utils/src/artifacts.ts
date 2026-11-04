@@ -24,7 +24,7 @@ type SeaProcess = {
  * True inside a `bun build --compile` executable or a Node single executable
  * application.
  */
-function isCompiledExecutable(): boolean {
+export function isCompiledExecutable(): boolean {
 	// SAFETY: the global is optional and every access below is optional-chained.
 	const { Bun } = globalThis as StandaloneGlobals;
 	// Bun serves the embedded entry from a virtual filesystem (`/$bunfs/` on POSIX,
