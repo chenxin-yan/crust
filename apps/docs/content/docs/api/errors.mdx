@@ -37,7 +37,7 @@ With `execute()`, an unmatched subcommand token becomes a positional argument if
 
 `reason` is typed as Core's known values (`DefinitionErrorReason`) but stays open to any string, since other packages add their own. Context failures set `reason`: `missing-context` for an unprovided Context, `context-cycle` for a dependency cycle, `flags-before-validation` when a flag-owning Context is pulled before validation, `context-during-disposal` when a never-built Context is pulled once cleanup has begun, and `context-after-disposal` for any pull after disposal.
 
-Flag definitions set `reason: "integer-like-name"` for an integer-like flag name (`"0"`, `"10"`, any digit-only name without a leading zero), which JavaScript records can list before other keys, and `reason: "invalid-flags"` when `.flags()` receives something other than exactly one plain-object record of object definitions.
+Flag definitions set `reason: "integer-like-name"` for an integer-like flag name (`"0"`, `"10"`, any digit-only name without a leading zero), which JavaScript records can list before other keys, `reason: "invalid-spelling"` for a name, alias, or `short` that contains whitespace or starts with `-`, or a name or alias that contains `=`, and `reason: "invalid-flags"` when `.flags()` receives something other than exactly one plain-object record of object definitions.
 
 ### `ParseErrorDetails`
 

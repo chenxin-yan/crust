@@ -248,7 +248,8 @@ import type {
 		},
 		never
 	>;
-	type _integer = Expect<Equal<keyof Integer, "2" | "10" | "0">>;
+	type _integer = Expect<Equal<keyof Integer, "2" | "10" | "0" | "-1">>;
+	type _negative = Expect<Equal<Extract<keyof Integer["-1"], "FIX_INTEGER_LIKE_NAME">, never>>;
 	type _integerMessage = Expect<
 		Equal<
 			Integer["10"]["FIX_INTEGER_LIKE_NAME"],
@@ -268,6 +269,183 @@ import type {
 	type Mixed = FlagRecordErrors<FlagsDef & { out: { type: "string"; short: "oo" } }, never>;
 	type _dynamic = Expect<Equal<keyof Dynamic, never>>;
 	type _mixed = Expect<Equal<keyof Mixed, "out">>;
+}
+
+{
+	// spellings that no argv token can match, keyed by the offending literal
+	type Mixed = `y-${string}`;
+	type Name = LocalFlagBrand<{ name: "a=b" | "-x" | "dry run" | Mixed; type: "boolean" }>;
+	type Alias = LocalFlagBrand<{ name: "out"; type: "string"; aliases: ["o=x", "--output"] }>;
+	type Short = LocalFlagBrand<{ name: "out"; type: "boolean"; short: "-" | " " }>;
+	type ShortEquals = LocalFlagBrand<{ name: "eq"; type: "boolean"; short: "=" }>;
+	type Open = LocalFlagBrand<{ name: string; type: "boolean"; aliases: string[]; short: string }>;
+	type _name = Expect<
+		Equal<
+			Name["FIX_SPELLING_SHAPE"],
+			| 'Flag spelling "a=b" must not contain "="'
+			| 'Flag spelling "-x" must not start with "-"; the parser adds the dashes'
+			| 'Flag spelling "dry run" must not contain whitespace'
+		>
+	>;
+	type _alias = Expect<
+		Equal<
+			Alias["FIX_SPELLING_SHAPE"],
+			| 'Flag spelling "o=x" must not contain "="'
+			| 'Flag spelling "--output" must not start with "-"; the parser adds the dashes'
+		>
+	>;
+	type _short = Expect<
+		Equal<
+			Short["FIX_SPELLING_SHAPE"],
+			| 'Flag spelling "-" must not start with "-"; the parser adds the dashes'
+			| 'Flag spelling " " must not contain whitespace'
+		>
+	>;
+	type _shortEquals = Expect<Equal<Extract<keyof ShortEquals, `FIX_${string}`>, never>>;
+	// optional and undefined-unioned spellings are still checked when supplied
+	type OptionalShort = LocalFlagBrand<{ name: "t"; type: "boolean"; short?: "-" }>;
+	type OptionalAliases = LocalFlagBrand<{ name: "t"; type: "string"; aliases?: readonly ["a=b"] }>;
+	type UndefinedShort = LocalFlagBrand<{ name: "t"; type: "boolean"; short: " " | undefined }>;
+	type _optionalShort = Expect<
+		Equal<
+			OptionalShort["FIX_SPELLING_SHAPE"],
+			'Flag spelling "-" must not start with "-"; the parser adds the dashes'
+		>
+	>;
+	type _optionalAliases = Expect<
+		Equal<OptionalAliases["FIX_SPELLING_SHAPE"], 'Flag spelling "a=b" must not contain "="'>
+	>;
+	type _undefinedShort = Expect<
+		Equal<UndefinedShort["FIX_SPELLING_SHAPE"], 'Flag spelling " " must not contain whitespace'>
+	>;
+	type OptionalOpen = LocalFlagBrand<{
+		name: "t";
+		type: "string";
+		aliases?: readonly string[];
+		short?: string;
+	}>;
+	type _optionalOpen = Expect<Equal<Extract<keyof OptionalOpen, `FIX_${string}`>, never>>;
+	type _open = Expect<Equal<Extract<keyof Open, `FIX_${string}`>, never>>;
+	// the per-flag and collision checks read optional fields too
+	type OptionalLongShort = LocalFlagBrand<{ name: "t"; type: "boolean"; short?: "ab" }>;
+	type OptionalSelfAlias = LocalFlagBrand<{ name: "t"; type: "boolean"; aliases?: readonly ["t"] }>;
+	type _optionalLongShort = Expect<
+		Equal<OptionalLongShort["FIX_SHORT_LENGTH"], "Short flags must be one character">
+	>;
+	type _optionalSelfAlias = Expect<
+		Equal<OptionalSelfAlias["FIX_ALIAS_COLLISION"], "Flag repeats one of its own spellings">
+	>;
+	type OptionalShortCollision = FlagRecordErrors<
+		{ verbose: { type: "boolean"; short: "v" }; t: { type: "boolean"; short?: "v" } },
+		never
+	>;
+	type OptionalAliasCollision = FlagRecordErrors<
+		{ verbose: { type: "boolean" }; t: { type: "boolean"; aliases?: readonly ["verbose"] } },
+		never
+	>;
+	type OptionalExistingCollision = FlagRecordErrors<{ t: { type: "boolean"; short?: "v" } }, "v">;
+	type _optionalShortCollision = Expect<
+		Equal<"FIX_ALIAS_COLLISION" extends keyof OptionalShortCollision["t"] ? true : false, true>
+	>;
+	type _optionalAliasCollision = Expect<
+		Equal<"FIX_ALIAS_COLLISION" extends keyof OptionalAliasCollision["t"] ? true : false, true>
+	>;
+	type _optionalExistingCollision = Expect<
+		Equal<"FIX_ALIAS_COLLISION" extends keyof OptionalExistingCollision["t"] ? true : false, true>
+	>;
+
+	// record keys get the same check, with or without risky fields
+	type Record = FlagRecordErrors<
+		{ "a=b": { type: "boolean" }; "-x": { type: "string"; short: "x" }; ok: { type: "boolean" } },
+		never
+	>;
+	type _recordKeys = Expect<Equal<keyof Record, "a=b" | "-x">>;
+	type _recordPlain = Expect<
+		Equal<Record["a=b"]["FIX_SPELLING_SHAPE"], 'Flag spelling "a=b" must not contain "="'>
+	>;
+}
+
+{
+	// empty env names and delimiters; widened values stay runtime-checked
+	type EnvName = LocalFlagBrand<{ name: "t"; type: "string"; env: { name: "" } }>;
+	type Delimiter = LocalFlagBrand<{ name: "t"; type: "string"; multiple: true; delimiter: "" }>;
+	type EnvDelimiter = LocalFlagBrand<{
+		name: "t";
+		type: "string";
+		multiple: true;
+		delimiter: string;
+		env: { name: "T"; delimiter: "" };
+	}>;
+	type Open = LocalFlagBrand<{
+		name: "t";
+		type: "string";
+		multiple: true;
+		delimiter: string;
+		env: { name: string; delimiter: string };
+	}>;
+	type _envName = Expect<Equal<EnvName["FIX_EMPTY_ENV"], "env.name must be a non-empty string">>;
+	type _delimiter = Expect<
+		Equal<Delimiter["FIX_EMPTY_DELIMITER"], "delimiter and env.delimiter must be non-empty strings">
+	>;
+	type _envDelimiter = Expect<
+		Equal<
+			EnvDelimiter["FIX_EMPTY_DELIMITER"],
+			"delimiter and env.delimiter must be non-empty strings"
+		>
+	>;
+	type _open = Expect<Equal<Extract<keyof Open, `FIX_${string}`>, never>>;
+	type Record = FlagRecordErrors<{ t: { type: "string"; env: { name: "" } } }, never>;
+	type _record = Expect<Equal<Record["t"]["FIX_EMPTY_ENV"], "env.name must be a non-empty string">>;
+
+	// optional and undefined-unioned literals are still known-empty when supplied
+	type OptionalEnvDelimiter = LocalFlagBrand<{
+		name: "t";
+		type: "string";
+		multiple: true;
+		env: { name: "T"; delimiter?: "" };
+	}>;
+	type OptionalDelimiter = LocalFlagBrand<{
+		name: "t";
+		type: "string";
+		multiple: true;
+		delimiter?: "";
+	}>;
+	type UndefinedDelimiter = LocalFlagBrand<{
+		name: "t";
+		type: "string";
+		multiple: true;
+		delimiter: "" | undefined;
+	}>;
+	type OptionalEnv = LocalFlagBrand<{ name: "t"; type: "string"; env?: { name: "" } }>;
+	type _optionalEnvDelimiter = Expect<
+		Equal<
+			OptionalEnvDelimiter["FIX_EMPTY_DELIMITER"],
+			"delimiter and env.delimiter must be non-empty strings"
+		>
+	>;
+	type _optionalDelimiter = Expect<
+		Equal<
+			OptionalDelimiter["FIX_EMPTY_DELIMITER"],
+			"delimiter and env.delimiter must be non-empty strings"
+		>
+	>;
+	type _undefinedDelimiter = Expect<
+		Equal<
+			UndefinedDelimiter["FIX_EMPTY_DELIMITER"],
+			"delimiter and env.delimiter must be non-empty strings"
+		>
+	>;
+	type _optionalEnv = Expect<
+		Equal<OptionalEnv["FIX_EMPTY_ENV"], "env.name must be a non-empty string">
+	>;
+	type OptionalOpen = LocalFlagBrand<{
+		name: "t";
+		type: "string";
+		multiple: true;
+		delimiter?: string;
+		env?: { name: string; delimiter?: string };
+	}>;
+	type _optionalOpen = Expect<Equal<Extract<keyof OptionalOpen, `FIX_${string}`>, never>>;
 }
 
 {

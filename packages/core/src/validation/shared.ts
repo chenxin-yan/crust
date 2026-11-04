@@ -135,6 +135,43 @@ type DefaultWithinChoicesBrand<T> = T extends {
 				: {}
 	: {};
 
+// Whitespace that runtime `isBareToken` rejects in child command names, aliases, and flag spellings.
+export type SpacedToken =
+	| `${string} ${string}`
+	| `${string}\t${string}`
+	| `${string}\n${string}`
+	| `${string}\r${string}`
+	| `${string}\v${string}`
+	| `${string}\f${string}`;
+
+// ECMAScript String.trim whitespace, matching runtime `trim()`-based validation.
+export type TrimWhitespace =
+	| " "
+	| "\t"
+	| "\n"
+	| "\r"
+	| "\v"
+	| "\f"
+	| "\u00a0"
+	| "\u1680"
+	| "\u2000"
+	| "\u2001"
+	| "\u2002"
+	| "\u2003"
+	| "\u2004"
+	| "\u2005"
+	| "\u2006"
+	| "\u2007"
+	| "\u2008"
+	| "\u2009"
+	| "\u200a"
+	| "\u2028"
+	| "\u2029"
+	| "\u202f"
+	| "\u205f"
+	| "\u3000"
+	| "\ufeff";
+
 /** `true` only for `any`, which brands treat as widened input owned by runtime checks. */
 export type IsAny<T> = 0 extends 1 & T ? true : false;
 

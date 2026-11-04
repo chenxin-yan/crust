@@ -2266,6 +2266,39 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 		}
 	});
 
+	it("rejects flag spellings no argv token can match from dynamic defs", () => {
+		const cases: [Record<string, ParsedFlagValue>, string][] = [
+			[{ name: "a=b", type: "string" }, "a=b"],
+			[{ name: "-x", type: "boolean" }, "-x"],
+			[{ name: "dry run", type: "boolean" }, "dry run"],
+			[{ name: "dry\trun", type: "boolean" }, "dry\trun"],
+			[{ name: "out", type: "string", aliases: ["o=x"] }, "o=x"],
+			[{ name: "out", type: "string", aliases: ["--output"] }, "--output"],
+			[{ name: "out", type: "string", aliases: ["out put"] }, "out put"],
+			[{ name: "out", type: "boolean", short: "-" }, "-"],
+			[{ name: "out", type: "boolean", short: " " }, " "],
+		];
+		for (const [def, spelling] of cases) {
+			expect(() => new Crust("cli").flags(asFlags([def])), spelling).toThrow(
+				expect.objectContaining({
+					code: "DEFINITION",
+					details: { subject: "flag", name: spelling, reason: "invalid-spelling" },
+				}),
+			);
+		}
+	});
+
+	it("accepts a short `=`, which `-=` still addresses", async () => {
+		let seen: boolean | undefined;
+		const app = new Crust("cli")
+			.flags(asFlags([{ name: "eq", type: "boolean", short: "=" }]))
+			.action(({ flags }) => {
+				seen = flags.eq === true;
+			});
+		await app.execute({ argv: ["-="] });
+		expect(seen).toBe(true);
+	});
+
 	it("rejects malformed .flags() records on commands, Contexts, and Extensions", () => {
 		const attach = [
 			(input: unknown) => new Crust("cli").flags(asDynamic(input)[0]!),
@@ -2286,6 +2319,8 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 			[[{ out: { type: "string" }, 10: { type: "string" } }], "integer-like-name", "10"],
 			// Past the array-index range, matching the type-level rule.
 			[[{ "4294967295": { type: "string" } }], "integer-like-name", "4294967295"],
+			[[{ "a=b": { type: "string" } }], "invalid-spelling", "a=b"],
+			[[{ "-x": { type: "string" } }], "invalid-spelling", "-x"],
 		];
 		for (const add of attach) {
 			for (const [input, reason, name] of cases) {
@@ -2298,7 +2333,7 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 			}
 		}
 		// Not array indexes: they keep insertion order.
-		for (const name of ["01", "-1", "2fa", "1.5"]) {
+		for (const name of ["01", "2fa", "1.5"]) {
 			expect(() =>
 				new Crust("cli").flags(asDynamic([{ [name]: { type: "string" } }])[0]!),
 			).not.toThrow();

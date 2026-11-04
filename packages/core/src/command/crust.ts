@@ -20,7 +20,7 @@ import type {
 } from "../api/extension.ts";
 import { CrustError, type DefinitionErrorReason } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
-import { flagRecordEntries, normalizeArg } from "../parsing/spellings.ts";
+import { flagRecordEntries, isBareToken, normalizeArg } from "../parsing/spellings.ts";
 import { validateCommandSections } from "../sections.ts";
 import type {
 	ArgsDef,
@@ -607,20 +607,12 @@ function resolveCommandName<Name extends string>(
 	return name;
 }
 
-/**
- * Child names and aliases are matched against a single argv token: one without
- * whitespace that does not start with `-`, which would make it a flag.
- */
-function isCommandToken(token: string): boolean {
-	return token !== "" && !/[ \t\n\r\v\f]/.test(token) && !token.startsWith("-");
-}
-
 function resolveChildCommandName<Name extends string>(
 	name: Name,
 	aliases: readonly string[] = [],
 ): Name {
 	resolveCommandName(name, aliases);
-	if (!isCommandToken(name)) {
+	if (!isBareToken(name)) {
 		throw new CrustError(
 			"DEFINITION",
 			`Command name "${name}" must not contain whitespace or start with "-"`,
@@ -669,7 +661,7 @@ export function defineCommand(
 	const recipe = hasConfig ? maybeRecipe : configOrRecipe;
 	const name = resolveChildCommandName(nameInput, config.aliases);
 	for (const alias of config.aliases ?? []) {
-		if (!isCommandToken(alias)) {
+		if (!isBareToken(alias)) {
 			throw new CrustError("DEFINITION", `Command "${name}" has an invalid alias "${alias}"`, {
 				subject: "command",
 				name,

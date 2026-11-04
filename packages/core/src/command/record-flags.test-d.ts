@@ -168,7 +168,6 @@ function _integerLikeNames() {
 	// Not integer-like: kept in insertion order, so allowed.
 	new Crust("cli").flags({
 		"01": { type: "boolean" },
-		"-1": { type: "boolean" },
 		"2fa": { type: "boolean" },
 		"1.5": { type: "boolean" },
 	});
@@ -234,6 +233,108 @@ function _literalKeysBesideIndexSignatures(
 	// @ts-expect-error -- `a` and `b` share an alias
 	new Crust("cli").flags(string);
 	new Crust("cli").flags(distinct);
+}
+
+// The parser adds a spelling's dashes and splits `--a=b` at `=`, so these never match argv.
+function _spellingShape(name: string, alias: string, short: string) {
+	new Crust("cli").flags({
+		// @ts-expect-error -- "=" in a name
+		"a=b": { type: "boolean" },
+		// @ts-expect-error -- a leading "-" in a name
+		"-x": { type: "boolean" },
+		// @ts-expect-error -- whitespace in a name
+		"dry run": { type: "boolean" },
+		ok: { type: "boolean" },
+	});
+	new Crust("cli").flags({
+		// @ts-expect-error -- "=" in an alias
+		out: { type: "string", aliases: ["o=x"] },
+	});
+	new Crust("cli").flags({
+		// @ts-expect-error -- an alias written with its dashes
+		out: { type: "string", aliases: ["--output"] },
+	});
+	new Crust("cli").flags({
+		// @ts-expect-error -- "-" can only be the `--` terminator or a positional
+		out: { type: "boolean", short: "-" },
+	});
+	// @ts-expect-error -- defineFlag checks its own spellings
+	defineFlag({ type: "string", aliases: ["out put"] });
+	defineContext("ctx").flags({
+		// @ts-expect-error -- Context flags follow the same rule
+		"a=b": { type: "string" },
+	});
+	defineExtension(defineExtensionId("test:shape")).flags({
+		// @ts-expect-error -- Extension flags follow the same rule
+		"-x": { type: "string" },
+	});
+	// `-=` addresses a short "="; dynamic spellings are runtime-checked.
+	new Crust("cli").flags({ eq: { type: "boolean", short: "=" } });
+	new Crust("cli").flags({ [name]: { type: "boolean", aliases: [alias], short } });
+}
+
+function _envAndDelimiter(
+	text: string,
+	envDelimiter: { name: "T"; delimiter: "" } | { name: "U" },
+	envName: { name: ""; delimiter: "," } | { name: string; delimiter: ":" },
+	widenedDelimiter: { name: "T"; delimiter: "" } | { name: "U"; delimiter: string },
+	validEnv: { name: string; delimiter: string } | { name: "U" },
+	emptyEnvBranch: { type: "string"; env: { name: "" } } | { type: "string" },
+	emptyDelimiterBranch: { type: "string"; multiple: true; delimiter: "" } | { type: "string" },
+) {
+	new Crust("cli").flags({
+		// @ts-expect-error -- an empty env variable name is never read
+		token: { type: "string", env: { name: "" } },
+	});
+	new Crust("cli").flags({
+		// @ts-expect-error -- an empty delimiter splits into characters
+		tags: { type: "string", multiple: true, delimiter: "" },
+	});
+	new Crust("cli").flags({
+		// @ts-expect-error -- so does an empty env delimiter
+		tags: { type: "string", multiple: true, env: { name: "TAGS", delimiter: "" } },
+	});
+	// @ts-expect-error -- defineFlag checks its env binding
+	defineFlag({ type: "string", env: { name: "" } });
+	// One empty literal in an env union is enough: that binding would throw at runtime.
+	new Crust("cli").flags({
+		// @ts-expect-error -- the first binding's delimiter is empty
+		tags: { type: "string", multiple: true, env: envDelimiter },
+	});
+	new Crust("cli").flags({
+		// @ts-expect-error -- the first binding's name is empty, beside an open name
+		tags: { type: "string", multiple: true, env: envName },
+	});
+	new Crust("cli").flags({
+		// @ts-expect-error -- a widened sibling delimiter does not hide the empty one
+		tags: { type: "string", multiple: true, env: widenedDelimiter },
+	});
+	// @ts-expect-error -- defineFlag checks each binding too
+	defineFlag({ type: "string", multiple: true, env: envDelimiter });
+	defineFlag({ type: "string", multiple: true, env: validEnv });
+	new Crust("cli").flags({ tags: { type: "string", multiple: true, env: validEnv } });
+	// So is one empty literal in a definition union.
+	new Crust("cli").flags({
+		// @ts-expect-error -- the first branch's env name is empty
+		token: emptyEnvBranch,
+	});
+	new Crust("cli").flags({
+		// @ts-expect-error -- the first branch's delimiter is empty
+		tags: emptyDelimiterBranch,
+	});
+	defineContext("ctx").flags({
+		// @ts-expect-error -- Contexts check every branch
+		token: emptyEnvBranch,
+	});
+	defineExtension(defineExtensionId("test:env-union")).flags({
+		// @ts-expect-error -- as do Extensions
+		token: emptyEnvBranch,
+	});
+	new Crust("cli").flags({
+		token: { type: "string", env: { name: text } },
+		tags: { type: "string", multiple: true, delimiter: text, env: { name: "T", delimiter: text } },
+		list: { type: "string", multiple: true, delimiter: ",", env: { name: "L", delimiter: ":" } },
+	});
 }
 
 function _symbolKeysAreRejected(dynamic: symbol) {
