@@ -13,7 +13,7 @@ import {
 	withTerminalIO as withSharedTerminalIO,
 } from "@crustjs/utils/terminal";
 
-import { defaultTheme } from "./theme.ts";
+import { defaultThemeFor } from "./theme.ts";
 import type { PartialPromptTheme, PromptTheme } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -116,7 +116,7 @@ export interface PromptConfig<S, T> {
 	) => HandleKeyResult<S, T> | Promise<HandleKeyResult<S, T>>;
 	/** Initial state for the prompt */
 	readonly initialState: S;
-	/** Optional partial theme; merged onto `defaultTheme`. */
+	/** Optional partial theme; merged onto `defaultTheme` styles detected from the output stream. */
 	readonly theme?: PartialPromptTheme;
 	/**
 	 * Optional: render the final submitted state.
@@ -241,8 +241,8 @@ function isSubmit<S, T>(result: HandleKeyResult<S, T>): result is SubmitResult<T
  */
 export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Promise<T> {
 	const { render, handleKey, initialState, renderSubmitted } = config;
-	const theme = config.theme ? { ...defaultTheme, ...config.theme } : defaultTheme;
 	const { input: stdin, output } = resolvePromptIO(io);
+	const theme = { ...defaultThemeFor(output), ...config.theme };
 	// SAFETY: readline's cursor helpers only call write(), which PromptOutput provides.
 	const readlineOutput = output as NodeJS.WritableStream;
 

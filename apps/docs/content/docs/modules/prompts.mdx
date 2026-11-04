@@ -142,7 +142,7 @@ Instance overrides from `createPrompts()` sit between `defaultTheme` and per-pro
 
 <auto-type-table path="../../../../../packages/prompts/src/core/types.ts" name="PromptTheme" />
 
-Style capability behavior comes from [`@crustjs/style`](/docs/modules/style#color-control).
+Default theme slots decide color from the prompt's output stream (stderr unless injected), applying the `NO_COLOR` and `FORCE_COLOR` rules from [`@crustjs/style` color control](/docs/modules/style#color-control). Theme functions you pass, including the exported `defaultTheme`, keep their own detection, which checks stdout.
 
 ## Non-interactive environments
 

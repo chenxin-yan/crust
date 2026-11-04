@@ -9,7 +9,7 @@ import {
 	withTerminalIO as withSharedTerminalIO,
 } from "@crustjs/utils/terminal";
 
-import { defaultTheme } from "./theme.ts";
+import { defaultThemeFor } from "./theme.ts";
 import type { PartialProgressTheme, ProgressTheme } from "./theme.ts";
 
 const ESC = "\x1B[";
@@ -166,7 +166,7 @@ export function withProgressSink<T>(sink: ProgressSink, fn: () => T): T {
 /** Internal handle constructor shared by both `spinner()` modes and `progress()`. */
 export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandle {
 	const sink = options.sink ?? getTerminalIO()?.output ?? process.stderr;
-	const theme = options.theme ? { ...defaultTheme, ...options.theme } : defaultTheme;
+	const theme = { ...defaultThemeFor(sink), ...options.theme };
 	const isInteractive = sink.isTTY ?? false;
 	const { frames, interval } = resolveSpinner(options.spinner);
 	const sigint = options.sigint ?? "exit";

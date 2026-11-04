@@ -1,7 +1,7 @@
 import { PassThrough, Writable } from "node:stream";
 
 import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { createPromptIO } from "../testing.ts";
 import {
@@ -14,7 +14,8 @@ import {
 	submit,
 	withPromptIO,
 } from "./renderer.ts";
-import { defaultTheme } from "./theme.ts";
+import { defaultTheme, defaultThemeFor } from "./theme.ts";
+import type { PromptTheme } from "./types.ts";
 
 describe("resolvePromptIO", () => {
 	it("prefers explicit and prompt-scoped output over ambient terminal output", () => {
@@ -72,12 +73,65 @@ describe("assertTTY", () => {
 // runPrompt
 // ────────────────────────────────────────────────────────────────────────────
 
+describe("runPrompt — default theme color", () => {
+	const originalIsTTY = process.stdout.isTTY;
+
+	afterEach(() => {
+		Object.defineProperty(process.stdout, "isTTY", { value: originalIsTTY, configurable: true });
+		vi.unstubAllEnvs();
+	});
+
+	async function renderDefaultTheme(outputIsTTY: boolean, stdoutIsTTY: boolean): Promise<string> {
+		vi.stubEnv("FORCE_COLOR", undefined);
+		vi.stubEnv("NO_COLOR", undefined);
+		vi.stubEnv("COLORTERM", undefined);
+		vi.stubEnv("TERM", undefined);
+		Object.defineProperty(process.stdout, "isTTY", { value: stdoutIsTTY, configurable: true });
+		const harness = createPromptIO();
+		let written = "";
+		const output = Object.assign(
+			new Writable({
+				write(chunk, _encoding, callback) {
+					written += chunk.toString();
+					callback();
+				},
+			}),
+			{ isTTY: outputIsTTY },
+		);
+		const answer = runPrompt<undefined, string>(
+			{
+				render: (_state, theme) => theme.prefix("?"),
+				handleKey: () => submit("done"),
+				initialState: undefined,
+			},
+			{ input: harness.io.input, output },
+		);
+		harness.type("x");
+		await answer;
+		return written;
+	}
+
+	it("colors the default theme on a TTY output when stdout is piped", async () => {
+		expect(await renderDefaultTheme(true, false)).toContain("\x1b[36m?\x1b[39m");
+	});
+
+	it("keeps the default theme plain on a redirected output when stdout is a TTY", async () => {
+		expect(await renderDefaultTheme(false, true)).not.toContain("\x1b[36m");
+	});
+
+	it("reuses the late-bound defaultTheme when output and stdout agree", () => {
+		Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
+		expect(defaultThemeFor({ isTTY: true })).toBe(defaultTheme);
+		expect(defaultThemeFor({ isTTY: false })).not.toBe(defaultTheme);
+	});
+});
+
 describe("runPrompt", () => {
 	it("merges a partial theme onto defaultTheme", async () => {
 		const harness = createPromptIO();
 
 		const prefix = (t: string) => `<P ${t}>`;
-		let seenTheme: { prefix: typeof prefix; message: unknown } | undefined;
+		let seenTheme: PromptTheme | undefined;
 		const answer = runPrompt<{ value: string }, string>(
 			{
 				render: (state, theme) => {
@@ -93,7 +147,7 @@ describe("runPrompt", () => {
 		harness.type("x");
 		expect(await answer).toBe("done");
 		expect(seenTheme?.prefix).toBe(prefix); // override applied
-		expect(seenTheme?.message).toBe(defaultTheme.message); // default preserved
+		expect(seenTheme?.message("m")).toBe(defaultThemeFor(harness.io.output).message("m")); // default preserved
 	});
 
 	it("disables raw mode on a fake input without isRaw", async () => {
