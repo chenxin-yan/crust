@@ -433,8 +433,24 @@ export type FlagRecordErrors<F, Existing extends string> =
 	BranchRecordErrors<F, Existing> extends (errors: infer E) => void ? E : never;
 
 type BranchRecordErrors<F, Existing extends string> = F extends unknown
-	? (errors: OneRecordErrors<F, Existing>) => void
+	? (errors: OneRecordErrors<PresentRecord<F>, Existing>) => void
 	: never;
+
+// Absent placeholders have no spelling; real optional and required undefined definitions
+// remain in the record so collision and undefined checks still apply to them.
+type PresentRecord<F> = false extends StrictNulls
+	? F
+	: undefined extends F[keyof F]
+		? {
+				[
+					K in keyof F as [Exclude<F[K], undefined>] extends [never]
+						? {} extends Pick<F, K>
+							? never
+							: K
+						: K
+				]: F[K];
+			}
+		: F;
 
 type OneRecordErrors<F, Existing extends string> = RecordErrors<
 	F,
@@ -506,16 +522,16 @@ export type DefinedFlags<F, D = FlagsDef> = Extract<DefinedRecord<F>, D>;
 
 type DefinedRecord<F> = false extends StrictNulls
 	? F
-	: undefined extends F[keyof F]
-		? F extends unknown
+	: F extends unknown
+		? undefined extends F[keyof F]
 			? {
 					[K in keyof F as [Exclude<F[K], undefined>] extends [never] ? never : K]: Exclude<
 						F[K],
 						undefined
 					>;
 				}
-			: never
-		: F;
+			: F
+		: never;
 
 // Only these fields can make one flag invalid on its own; other flags need name checks only.
 type RiskyFlagField = "short" | "aliases" | "choices" | "parse" | "env" | "delimiter";

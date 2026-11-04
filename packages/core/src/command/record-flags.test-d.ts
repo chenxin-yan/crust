@@ -436,6 +436,70 @@ function _inferredConditionalRecords(cond: boolean, maybe: { type: "boolean" } |
 	new Crust("cli").flags({ x: maybe });
 }
 
+function _exclusiveConditionalSpellings(cond: boolean) {
+	new Crust("cli").flags(
+		cond ? { a: { type: "boolean", short: "b" } } : { b: { type: "boolean" } },
+	);
+	defineContext("exclusive").flags(
+		cond ? { a: { type: "boolean", short: "b" } } : { b: { type: "boolean" } },
+	);
+	defineExtension(defineExtensionId("exclusive")).flags(
+		cond ? { a: { type: "boolean", short: "b" } } : { b: { type: "boolean" } },
+	);
+	const aliases = cond
+		? { a: { type: "boolean" as const, aliases: ["b"] as const } }
+		: { b: { type: "boolean" as const } };
+	new Crust("cli").flags(aliases);
+	defineContext("exclusive").flags(aliases);
+	defineExtension(defineExtensionId("exclusive")).flags(aliases);
+}
+
+function _conditionalNormalization(
+	partial:
+		| { a: { type: "boolean" }; missing?: undefined }
+		| { b: { type: "string"; default: "yes" } },
+	all:
+		| { a: { type: "boolean" }; missing?: undefined }
+		| { b: { type: "string" }; absent?: undefined },
+) {
+	const app = new Crust("cli").flags(partial).action(({ flags }) => {
+		// @ts-expect-error -- the a branch has no b flag
+		flags.b.toUpperCase();
+	});
+	type _partial = Expect<
+		Equal<
+			typeof app._types.flags,
+			{ a: { type: "boolean" } } | { b: { type: "string"; default: "yes" } }
+		>
+	>;
+	defineContext("partial")
+		.flags(partial)
+		.setup(({ flags }) => {
+			// @ts-expect-error -- setup must retain the a branch too
+			flags.b.toUpperCase();
+		});
+	defineExtension(defineExtensionId("partial"))
+		.flags(partial)
+		.preRun(({ flags }) => {
+			// @ts-expect-error -- extension hooks must retain the a branch too
+			flags.b.toUpperCase();
+		});
+	const both = new Crust("cli").flags(all);
+	type _all = Expect<
+		Equal<typeof both._types.flags, { a: { type: "boolean" } } | { b: { type: "string" } }>
+	>;
+}
+
+function _optionalDefinitionsStillChecked(
+	optional: { a: { type: "boolean"; short: "b" }; b?: { type: "boolean" } },
+	required: { a: { type: "boolean" }; b: undefined },
+) {
+	// @ts-expect-error -- a real optional flag can coexist with a and collide
+	new Crust("cli").flags(optional);
+	// @ts-expect-error -- required undefined-only keys are not absent placeholders
+	new Crust("cli").flags(required);
+}
+
 function _defineFlagChecksItsDefinition() {
 	// @ts-expect-error -- short flags must be one character
 	defineFlag({ type: "string", short: "oo" });
