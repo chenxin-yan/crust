@@ -312,4 +312,4 @@ export function createStyle(options?: StyleOptions): StyleInstance {
  * console.log(style.red("error"));
  * ```
  */
-export const style: StyleInstance = createStyleInstance(undefined, true);
+export const style: StyleInstance = /* @__PURE__ */ createStyleInstance(undefined, true);
