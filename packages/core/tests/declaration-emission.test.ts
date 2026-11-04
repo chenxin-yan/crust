@@ -151,6 +151,12 @@ const query = defineCommand("query", (cmd) =>
 new Crust("cli").provide(pool.of({ url: "fake" })).add(query);
 // @ts-expect-error -- inline .use(pool) demand is unmet at the call site
 new Crust("cli").command("query", (cmd) => cmd.use(pool).action(() => {}));
+
+// Controls: the same shapes compile once demands are met, so the directives above only
+// pass for the unmet demand, not for an unrelated error on their line.
+new Crust("cli").provide(config(), pool.of({ url: "fake" })).add(query);
+new Crust("cli").provide(config(), pool()).command("query", (cmd) => cmd.use(pool).action(() => {}));
+export const sameDemands: typeof extended = base.extend(extension);
 `;
 
 let fixtureDir: string;
