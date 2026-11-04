@@ -233,8 +233,8 @@ describe("Crust .flags() records", () => {
 			.flags({ zeta: { type: "boolean", short: "z" }, "dry-run": { type: "boolean" } })
 			.flags({ alpha: { type: "string", aliases: ["a-alias"] } });
 		const named = new Crust("test")
-			.flags({ zeta: { type: "boolean", short: "z" }, "dry-run": { type: "boolean" } })
-			.flags({ alpha: { type: "string", aliases: ["a-alias"] } });
+			.flags({ name: "zeta", type: "boolean", short: "z" }, { name: "dry-run", type: "boolean" })
+			.flags({ name: "alpha", type: "string", aliases: ["a-alias"] });
 		const snapshot = await record.snapshot();
 		expect(Object.keys(snapshot.flags)).toEqual(["zeta", "dry-run", "alpha"]);
 		expect(snapshot).toEqual(await named.snapshot());
