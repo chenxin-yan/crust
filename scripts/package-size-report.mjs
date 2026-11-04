@@ -75,6 +75,7 @@ const consumerFixtures = {
 		{ name: "error-only", file: "core-error-only.mjs" },
 		{ name: "tooling-docs", file: "core-tooling-docs.mjs" },
 	],
+	"@crustjs/extensions": [{ name: "help-only", file: "extensions-help-only.mjs" }],
 };
 
 /** @type {(dir: string) => PackageManifest} */
