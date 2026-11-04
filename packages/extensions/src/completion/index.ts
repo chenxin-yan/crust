@@ -20,7 +20,7 @@ import { renderFish } from "./templates/fish.ts";
 import { renderZsh } from "./templates/zsh.ts";
 import { walkCommand } from "./walker.ts";
 
-const COMPLETION: ExtensionId = defineExtensionId("crust:completion");
+const COMPLETION: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:completion");
 
 /** The set of shells supported by the v1 completion extension. */
 export type CompletionShell = "bash" | "zsh" | "fish";
@@ -167,7 +167,7 @@ export const completion: ExtensionFactory<
 	[],
 	[],
 	readonly CommandDefinition<any, any, any, any>[]
-> = defineExtension(COMPLETION).factory((extension, options = {}) => {
+> = /* @__PURE__ */ defineExtension(COMPLETION).factory((extension, options = {}) => {
 	const subcommandName = options.command ?? "completion";
 
 	const completionCommand = defineCommand(

@@ -117,9 +117,9 @@ export function assertSafeBinName(binName: string): string {
  * a shell comment line or shell-quoted string without smuggling a
  * newline that would terminate the comment / break the quote nesting.
  *
- * Replaces NUL, CR, LF, vertical-tab, form-feed, and other C0/C1 controls
- * with a single space. We keep horizontal tab as-is (descriptions
- * occasionally use it for alignment).
+ * Replaces NUL, CR, LF, vertical-tab, form-feed, other C0 controls, and DEL
+ * with a single space; C1 controls (0x80-0x9F) pass through. We keep
+ * horizontal tab as-is (descriptions occasionally use it for alignment).
  */
 export function sanitizeFreeText(value: string): string {
 	// Range covers C0 controls (NUL–BS, LF–US) plus DEL. We deliberately

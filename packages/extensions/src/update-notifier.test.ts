@@ -223,6 +223,7 @@ describe("lazy store import", () => {
 
 describe("updateNotifier post-run hook", () => {
 	const originalFetch = globalThis.fetch;
+	const stderrIsTTY = Object.getOwnPropertyDescriptor(process.stderr, "isTTY");
 	let stderrChunks: string[];
 	let cachedState: UpdateNotifierState | undefined;
 	let tempDirs: string[];
@@ -240,6 +241,10 @@ describe("updateNotifier post-run hook", () => {
 		const stateHome = await mkdtemp(join(tmpdir(), "crust-update-notifier-state-"));
 		tempDirs.push(stateHome);
 		vi.stubEnv("XDG_STATE_HOME", stateHome);
+		// The check runs only in an interactive, non-CI terminal; the runner may be neither.
+		vi.stubEnv("CI", undefined);
+		vi.stubEnv("NO_UPDATE_NOTIFIER", undefined);
+		setStderrIsTTY(true);
 
 		stderrChunks = [];
 	});
@@ -247,11 +252,17 @@ describe("updateNotifier post-run hook", () => {
 	afterEach(async () => {
 		globalThis.fetch = originalFetch;
 		vi.unstubAllEnvs();
+		if (stderrIsTTY) Object.defineProperty(process.stderr, "isTTY", stderrIsTTY);
+		else Reflect.deleteProperty(process.stderr, "isTTY");
 		await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })));
 	});
 
 	function getOutput() {
 		return stderrChunks.join("");
+	}
+
+	function setStderrIsTTY(isTTY: boolean): void {
+		Object.defineProperty(process.stderr, "isTTY", { configurable: true, value: isTTY });
 	}
 
 	/**
@@ -294,6 +305,7 @@ describe("updateNotifier post-run hook", () => {
 	/** Run an application with the extension so its post-run hook sees a completed outcome. */
 	async function runExtensionMiddleware(
 		options: Omit<UpdateNotifierOptions, "cache"> & {
+			currentVersion: string;
 			intervalMs?: number;
 			cache?: UpdateNotifierCacheAdapter | false;
 		},
@@ -352,6 +364,78 @@ describe("updateNotifier post-run hook", () => {
 			expect(getOutput()).toContain("Update available");
 			expect(getOutput()).toContain("1.0.0");
 			expect(getOutput()).toContain("2.0.0");
+		});
+	});
+
+	// ── Suppression ───────────────────────────────────────────────────────
+
+	describe("suppression", () => {
+		const neverRead: UpdateNotifierCacheAdapter = {
+			read: async () => {
+				throw new Error("cache must not be read");
+			},
+			write: async () => {
+				throw new Error("cache must not be written");
+			},
+		};
+
+		async function expectSkipped(): Promise<void> {
+			const fetchFn = vi.fn(() =>
+				Promise.resolve(
+					new Response(JSON.stringify({ "dist-tags": { latest: "2.0.0" } }), { status: 200 }),
+				),
+			);
+			mockFetch(fetchFn);
+			const read = vi.spyOn(neverRead, "read");
+
+			await runExtensionMiddleware({
+				currentVersion: "1.0.0",
+				packageName: uniquePackageName("suppressed"),
+				cache: neverRead,
+			});
+
+			expect(fetchFn).not.toHaveBeenCalled();
+			expect(read).not.toHaveBeenCalled();
+			expect(getOutput()).toBe("");
+		}
+
+		it.each(["true", "1", "github-actions"])("skips the check when CI=%s", async (ci) => {
+			vi.stubEnv("CI", ci);
+			await expectSkipped();
+		});
+
+		it.each(["", "0", "false", "FALSE"])("treats CI=%j as unset", async (ci) => {
+			vi.stubEnv("CI", ci);
+			mockRegistryResponse("2.0.0");
+
+			await runExtensionMiddleware({
+				currentVersion: "1.0.0",
+				packageName: uniquePackageName("ci-unset"),
+			});
+
+			expect(getOutput()).toContain("Update available");
+		});
+
+		it.each(["1", "0", "false"])("skips the check when NO_UPDATE_NOTIFIER=%s", async (value) => {
+			vi.stubEnv("NO_UPDATE_NOTIFIER", value);
+			await expectSkipped();
+		});
+
+		it("skips the check when stderr is not a TTY", async () => {
+			setStderrIsTTY(false);
+			await expectSkipped();
+		});
+
+		it("still reports a missing version when suppressed", async () => {
+			vi.stubEnv("CI", "true");
+			const pkgName = uniquePackageName("suppressed-missing-version");
+			const outcome = await new Crust(pkgName)
+				// @ts-expect-error Untyped callers can omit both version sources.
+				.extend(updateNotifier({ packageName: pkgName }))
+				.action(() => {})
+				.run([]);
+
+			expect(outcome).toMatchObject({ status: "failed", error: { code: "DEFINITION" } });
 		});
 	});
 
@@ -894,6 +978,7 @@ describe("updateNotifier post-run hook", () => {
 		it("reports a missing application version", async () => {
 			const pkgName = uniquePackageName("missing-version");
 			const app = new Crust(pkgName)
+				// @ts-expect-error Untyped callers can omit both version sources.
 				.extend(updateNotifier({ packageName: pkgName }))
 				.action(() => {});
 
