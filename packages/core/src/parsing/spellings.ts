@@ -110,6 +110,19 @@ export function ownDefinition<const D extends ArgDef | FlagDef>(
 	});
 }
 
+function isEnvBinding(value: unknown): value is NonNullable<FlagDef["env"]> {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		!Array.isArray(value) &&
+		"name" in value &&
+		typeof value.name === "string" &&
+		(!("delimiter" in value) ||
+			value.delimiter === undefined ||
+			typeof value.delimiter === "string")
+	);
+}
+
 export function normalizeFlag<const D extends FlagDef>(name: string, def: D): D {
 	assertUsableSpelling(name, "canonical");
 	if (def.short !== undefined) assertUsableSpelling(def.short, "short");
@@ -129,6 +142,17 @@ export function normalizeFlag<const D extends FlagDef>(name: string, def: D): D 
 			{ subject: "flag", name, reason: "invalid-short" },
 		);
 	}
+	if (def.env !== undefined && !isEnvBinding(def.env)) {
+		throw new CrustError(
+			"DEFINITION",
+			`Flag "${name}" env must be an object with a string name and optional string delimiter`,
+			{
+				subject: "flag",
+				name,
+				reason: "invalid-env",
+			},
+		);
+	}
 	if (def.env?.name === "") {
 		throw new CrustError("DEFINITION", `Flag "${name}" env variable name must be non-empty`, {
 			subject: "flag",
@@ -140,6 +164,14 @@ export function normalizeFlag<const D extends FlagDef>(name: string, def: D): D 
 		["delimiter", def.delimiter],
 		["env.delimiter", def.env?.delimiter],
 	] as const) {
+		if (delimiter === undefined) continue;
+		if (!def.multiple) {
+			throw new CrustError("DEFINITION", `Flag "${name}" ${field} requires multiple: true`, {
+				subject: "flag",
+				name,
+				reason: "delimiter-without-multiple",
+			});
+		}
 		if (delimiter === "") {
 			throw new CrustError("DEFINITION", `Flag "${name}" ${field} must be non-empty`, {
 				subject: "flag",

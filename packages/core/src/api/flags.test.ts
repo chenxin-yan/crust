@@ -5,6 +5,48 @@ import { Crust } from "../command/crust.ts";
 import { defineArg, defineFlag } from "./flags.ts";
 
 describe("defineFlag", () => {
+	it("rejects a malformed env hidden by a structural view", () => {
+		const options = { description: "Token", env: "TOKEN" };
+		function token(def: { description: string }) {
+			return defineFlag("token", { ...def, type: "string" });
+		}
+
+		expect(() => token(options)).toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				details: { subject: "flag", name: "token", reason: "invalid-env" },
+			}),
+		);
+	});
+
+	it("rejects an env delimiter hidden by a structural view on a scalar flag", () => {
+		const binding = { name: "TAGS", delimiter: "," };
+		function scalar(env: { name: string }) {
+			return defineFlag("tag", { type: "string", env });
+		}
+
+		expect(() => scalar(binding)).toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				details: { subject: "flag", name: "tag", reason: "delimiter-without-multiple" },
+			}),
+		);
+	});
+
+	it("rejects a delimiter hidden by a structural view on a scalar flag", () => {
+		const options = { description: "Tags", delimiter: "," };
+		function scalar(def: { description: string }) {
+			return defineFlag("tag", { ...def, type: "string" });
+		}
+
+		expect(() => scalar(options)).toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				details: { subject: "flag", name: "tag", reason: "delimiter-without-multiple" },
+			}),
+		);
+	});
+
 	it("returns the named definition with literal types preserved", () => {
 		const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
 
