@@ -9,6 +9,8 @@ export interface InteractiveRun {
 	type(text: string): void;
 	keys(...namedKeys: Key[]): void;
 	screen(): string;
+	/** Text passed to the action's `stdout()` so far, joined with newlines like `RunOutcome.stdout`. */
+	stdout(): string;
 	readonly done: Promise<void>;
 }
 
@@ -24,11 +26,14 @@ export function runInteractive<
 	const harness = createPromptIO();
 	const output = harness.io.output;
 	const [input] = args;
+	const stdoutLines: string[] = [];
 	const done = withTerminalIO(harness.io, () =>
 		// SAFETY: Path + RunInputArguments constrain input to App; AnyCrust.run erases the link.
 		app
 			.run(path as never, input as never, {
-				stdout: () => {},
+				stdout: (text) => {
+					stdoutLines.push(text);
+				},
 				stderr: (text) => {
 					// Line-oriented like core's console.error default.
 					output.write(`${text}\n`);
@@ -80,6 +85,7 @@ export function runInteractive<
 		type: (text) => harness.type(text),
 		keys: (...namedKeys) => harness.keys(...namedKeys),
 		screen: () => harness.screen(),
+		stdout: () => stdoutLines.join("\n"),
 		done,
 	};
 }

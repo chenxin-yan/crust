@@ -31,4 +31,4 @@ When many tests target one subcommand, bind it once with [`app.at(path)`](/docs/
 
 <include lang="ts">../../../examples/guide/testing.ts#interactive</include>
 
-`runInteractive()` answers what a user sees while a built-in prompt reads fake terminal input. `screen()` contains prompt, progress, and `stderr` output, while `stdout` remains available from `run()`; see the [`runInteractive()` reference](/docs/modules/testing#runinteractiveapp-path-input).
+`runInteractive()` answers what a user sees while a built-in prompt reads fake terminal input. `screen()` contains prompt, progress, and `stderr` output, while the action's `stdout` output is read with the handle's `stdout()` method; see the [`runInteractive()` reference](/docs/modules/testing#runinteractiveapp-path-input).

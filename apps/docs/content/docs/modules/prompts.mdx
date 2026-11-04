@@ -170,4 +170,4 @@ Ctrl+C rejects with a `DOMException` whose name is `AbortError`.
 
 ### Testing custom prompts
 
-`renderPrompt()` from `@crustjs/prompts/testing` runs a prompt against a fake TTY, as in the example above. `type()` and `keys()` send input, `screen()` returns the latest ANSI-stripped frame, and `answer` settles after submission. The subpath also exports `createPromptIO()` and `encodeKey()` for lower-level harnesses.
+`renderPrompt()` from `@crustjs/prompts/testing` runs a prompt against a fake TTY, as in the example above. `type()` and `keys()` send input, `screen()` returns the latest ANSI-stripped frame (wrapped at 80 columns like a real terminal), and `answer` settles after submission. The subpath also exports `createPromptIO()` and `encodeKey()` for lower-level harnesses.

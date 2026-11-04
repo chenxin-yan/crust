@@ -116,6 +116,89 @@ describe("spinner — terminal sink", () => {
 		expect(process.listeners("SIGINT")).toEqual(previousHandlers);
 		handle.stop();
 	});
+
+	it("restores the cursor on process exit and removes the exit listener on stop", () => {
+		const { sink, writes } = createFakeSink(true);
+		const previousHandlers = new Set(process.listeners("exit"));
+		const handle = spinner({ message: "Working", sigint: false, sink });
+		handle.start();
+		const added = process.listeners("exit").filter((listener) => !previousHandlers.has(listener));
+
+		expect(added).toHaveLength(1);
+		// Invoke directly — emitting a real "exit" would run the test runner's listeners.
+		added[0]?.(0);
+		expect(writes.at(-1)).toBe("\x1B[?25h");
+
+		handle.stop();
+		expect(new Set(process.listeners("exit"))).toEqual(previousHandlers);
+	});
+
+	it("cuts a message wider than the terminal to one row and prints it whole when done", () => {
+		const writes: string[] = [];
+		const sink = { isTTY: true, columns: 10, write: (text: string) => void writes.push(text) };
+		// "⠋ " leaves 7 of the 9 usable columns: 6 characters and "…".
+		const handle = spinner({ message: "abcdefghijklmnop", sigint: false, sink });
+		handle.start();
+		handle.updateMessage("short");
+		handle.stop("success", "abcdefghijklmnop");
+
+		expect(writes).toEqual([
+			"\x1B[?25l",
+			"\x1B[2K\r⠋ abcdef…",
+			"\x1B[2K\r⠋ short",
+			"\x1B[2K\r✓ abcdefghijklmnop\n",
+			"\x1B[?25h",
+		]);
+	});
+
+	it("cuts a wide character that would cross the edge whole", () => {
+		const writes: string[] = [];
+		const sink = { isTTY: true, columns: 10, write: (text: string) => void writes.push(text) };
+		const handle = spinner({ message: "aaaaa界", sigint: false, sink });
+		handle.start();
+		handle.updateMessage("aaaaaa界");
+		handle.stop();
+
+		// "aaaaa界" fills the 7 columns exactly; one more "a" pushes "界" past them.
+		expect(writes.slice(1, 3)).toEqual(["\x1B[2K\r⠋ aaaaa界", "\x1B[2K\r⠋ aaaaaa…"]);
+	});
+
+	it("does not count text a carriage return rewinds over toward the row width", () => {
+		const writes: string[] = [];
+		const sink = { isTTY: true, columns: 10, write: (text: string) => void writes.push(text) };
+		// "abcdef" and "ghijkl" overwrite each other within the 7 columns left.
+		const handle = spinner({ message: "abcdef\rghijkl", sigint: false, sink });
+		handle.start();
+		handle.stop();
+
+		expect(writes[1]).toBe("\x1B[2K\r⠋ abcdef\rghijkl");
+	});
+
+	it("cuts a multi-line message at its first line break", () => {
+		const writes: string[] = [];
+		const sink = { isTTY: true, columns: 10, write: (text: string) => void writes.push(text) };
+		const handle = spinner({ message: "ab\ncd", sigint: false, sink });
+		handle.start();
+		handle.stop();
+
+		expect(writes[1]).toBe("\x1B[2K\r⠋ ab…");
+	});
+
+	it("keeps the styles a cut frame opened closed", () => {
+		const writes: string[] = [];
+		const sink = { isTTY: true, columns: 10, write: (text: string) => void writes.push(text) };
+		const handle = spinner({
+			message: "Building",
+			spinner: { frames: ["ABCDEFGHIJ"], interval: 60_000 },
+			theme: { spinner: (frame) => `\x1B[35m${frame}\x1B[39m`, message: (text) => text },
+			sigint: false,
+			sink,
+		});
+		handle.start();
+		handle.stop();
+
+		expect(writes[1]).toBe("\x1B[2K\r\x1B[35mABCDEFGH…\x1B[39m");
+	});
 });
 
 describe("spinner — sink resolution", () => {
@@ -372,6 +455,27 @@ describe("spinner — cleanup", () => {
 		await tick(200);
 
 		expect(writes.join("")).toBe(outputAfterComplete);
+	});
+
+	it("restores the cursor and removes the exit listener when the first frame throws", () => {
+		const { sink, writes } = createFakeSink(true);
+		const previousExit = process.listeners("exit");
+		const previousSigint = process.listeners("SIGINT");
+		const themeError = new Error("theme boom");
+		const handle = spinner({
+			message: "Working",
+			sink,
+			theme: {
+				spinner: () => {
+					throw themeError;
+				},
+			},
+		});
+
+		expect(() => handle.start()).toThrow(themeError);
+		expect(writes.at(-1)).toBe("\x1B[?25h");
+		expect(process.listeners("exit")).toEqual(previousExit);
+		expect(process.listeners("SIGINT")).toEqual(previousSigint);
 	});
 
 	it("restores the cursor and cleans up when the final theme throws", async () => {

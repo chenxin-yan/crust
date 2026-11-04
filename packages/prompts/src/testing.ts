@@ -1,6 +1,8 @@
 import { PassThrough, Writable } from "node:stream";
 import { stripVTControlCharacters } from "node:util";
 
+import { stringWidth } from "@crustjs/style";
+
 import type { PromptIO } from "./core/renderer.ts";
 
 const namedKeys = {
@@ -52,39 +54,69 @@ export function encodeKey(key: Key): string {
 }
 
 class FakeTerminal {
-	private readonly lines = [""];
+	// One cell per column; a wide character's second column holds "".
+	private readonly lines: string[][] = [[]];
 	private row = 0;
+	// Equal to `columns` after the last column is written: the wrap waits for the next character.
 	private column = 0;
+	private readonly graphemes = new Intl.Segmenter();
+	// An escape sequence cut off at the end of a write, completed by the next one.
+	private pending = "";
 
-	write(text: string): void {
+	constructor(private readonly columns: number) {}
+
+	write(chunk: string): void {
+		const text = this.pending + chunk;
+		this.pending = "";
 		let index = 0;
 		while (index < text.length) {
+			const rest = text.slice(index);
 			// oxlint-disable-next-line no-control-regex -- parsing ANSI CSI sequences
-			const escape = /^\x1B\[([0-?]*)([ -/]*)([@-~])/.exec(text.slice(index));
+			const escape = /^\x1B\[([0-?]*)([ -/]*)([@-~])/.exec(rest);
 			if (escape) {
 				this.handleEscape(escape[1] ?? "", escape[3] ?? "");
 				index += escape[0].length;
 				continue;
 			}
+			// oxlint-disable-next-line no-control-regex -- OSC sequences (hyperlinks) occupy no columns
+			const osc = /^\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)/.exec(rest);
+			if (osc) {
+				index += osc[0].length;
+				continue;
+			}
+
+			// oxlint-disable-next-line no-control-regex -- an unterminated CSI or OSC prefix
+			if (/^\x1B(?:\[[0-?]*[ -/]*|\][^\x07\x1B]*\x1B?)?$/.test(rest)) {
+				this.pending = rest;
+				return;
+			}
 
 			const char = text[index] ?? "";
-			index++;
 			if (char === "\r") {
 				this.column = 0;
+				index++;
 			} else if (char === "\n") {
 				this.row++;
 				this.column = 0;
 				this.ensureLine();
+				index++;
 			} else {
-				this.writeChar(char);
+				// Segment the printable run so wide and combined characters land in whole cells.
+				// oxlint-disable-next-line no-control-regex -- stop at the next escape or line break
+				const run = /^[^\x1B\r\n]+/.exec(rest)?.[0] ?? char;
+				for (const { segment } of this.graphemes.segment(run)) this.writeChar(segment);
+				index += run.length;
 			}
 		}
 	}
 
 	screen(): string {
 		let last = this.lines.length - 1;
-		while (last > 0 && this.lines[last] === "") last--;
-		return this.lines.slice(0, last + 1).join("\n");
+		while (last > 0 && this.lines[last]?.length === 0) last--;
+		return this.lines
+			.slice(0, last + 1)
+			.map((cells) => cells.join(""))
+			.join("\n");
 	}
 
 	private handleEscape(parameters: string, command: string): void {
@@ -97,24 +129,40 @@ class FakeTerminal {
 		} else if (command === "G") {
 			this.column = count - 1;
 		} else if (command === "J") {
-			this.lines[this.row] = (this.lines[this.row] ?? "").slice(0, this.column);
+			this.lines[this.row] = (this.lines[this.row] ?? []).slice(0, this.column);
 			this.lines.length = this.row + 1;
 		} else if (command === "K") {
-			this.lines[this.row] = "";
+			this.lines[this.row] = [];
 		}
 	}
 
 	private writeChar(char: string): void {
+		const width = stringWidth(char);
 		this.ensureLine();
-		const line = this.lines[this.row] ?? "";
-		const padding = " ".repeat(Math.max(0, this.column - line.length));
-		this.lines[this.row] =
-			`${line.slice(0, this.column)}${padding}${char}${line.slice(this.column + 1)}`;
-		this.column++;
+		if (width === 0) {
+			const cells = this.lines[this.row] ?? [];
+			// After a wide character the previous cell is its "" marker; the mark belongs to its first cell.
+			const target = cells[this.column - 1] === "" ? this.column - 2 : this.column - 1;
+			if (target >= 0) cells[target] = `${cells[target] ?? ""}${char}`;
+			return;
+		}
+		if (this.column + width > this.columns) {
+			this.row++;
+			this.column = 0;
+			this.ensureLine();
+		}
+		const cells = this.lines[this.row] ?? [];
+		while (cells.length < this.column) cells.push(" ");
+		// Overwriting either half of a wide character ("" marks its second cell) blanks the other half.
+		if (cells[this.column] === "") cells[this.column - 1] = " ";
+		if (cells[this.column + width] === "") cells[this.column + width] = " ";
+		cells[this.column] = char;
+		if (width === 2) cells[this.column + 1] = "";
+		this.column += width;
 	}
 
 	private ensureLine(): void {
-		while (this.lines.length <= this.row) this.lines.push("");
+		while (this.lines.length <= this.row) this.lines.push([]);
 	}
 }
 
@@ -144,7 +192,8 @@ class TestInput extends PassThrough {
 export function createPromptIO({ isTTY = true }: { isTTY?: boolean } = {}): PromptTestIO {
 	const input = new TestInput(isTTY);
 
-	const terminal = new FakeTerminal();
+	const columns = 80;
+	const terminal = new FakeTerminal(columns);
 	const output = Object.assign(
 		new Writable({
 			write(chunk, _encoding, callback) {
@@ -152,7 +201,7 @@ export function createPromptIO({ isTTY = true }: { isTTY?: boolean } = {}): Prom
 				callback();
 			},
 		}),
-		{ columns: 80, isTTY },
+		{ columns, isTTY },
 	);
 
 	return {

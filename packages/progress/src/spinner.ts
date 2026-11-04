@@ -2,6 +2,7 @@
 // Spinner — Animated progress spinner for @crustjs/progress
 // ────────────────────────────────────────────────────────────────────────────
 
+import { stringWidth } from "@crustjs/style";
 import {
 	getTerminalIO,
 	type TerminalIO as SharedTerminalIO,
@@ -109,8 +110,8 @@ export interface SpinnerHandle {
 }
 
 export interface SpinnerOptions<T> extends SpinnerHandleOptions {
-	/** The async task to run while the spinner is displayed. */
-	readonly task: (controller: Pick<SpinnerHandle, "updateMessage">) => Promise<T>;
+	/** The task to run while the spinner is displayed; it may return a value or a promise. */
+	readonly task: (controller: Pick<SpinnerHandle, "updateMessage">) => T | Promise<T>;
 }
 
 function resolveSpinner(spinnerType: SpinnerType | undefined): SpinnerFrameSet {
@@ -131,20 +132,52 @@ function frameAt(frames: readonly string[], index: number): string {
 	return frame;
 }
 
-function renderFrame(frame: string, message: string, theme: ProgressTheme): string {
-	return `${ERASE_LINE}${CURSOR_TO_START}${theme.spinner(frame)} ${theme.message(message)}`;
+let graphemes: Intl.Segmenter | undefined;
+
+// CSI (SGR styles) and OSC (hyperlinks) sequences. Anything else is measured as text, which
+// can only overcount the row and cut early.
+// oxlint-disable-next-line no-control-regex -- matching escape sequences
+const ESCAPE = /\x1B\[[0-?]*[ -/]*[@-~]|\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)/g;
+// Controls that move the cursor down a row (terminals treat VT and FF as LF), alone or in a
+// cluster such as "\r\n".
+const LINE_BREAK = /[\n\v\f\x85]/;
+
+/**
+ * `text` if it fits one row of `width` columns; otherwise cut to fit, ending in "…". A cut keeps
+ * every escape sequence, so styles the kept part opened are still closed.
+ */
+function fitRow(text: string, width: number): string {
+	graphemes ??= new Intl.Segmenter();
+	let column = 0;
+	let cut = 0;
+	let start = 0;
+	for (const escape of [...text.matchAll(ESCAPE), undefined]) {
+		const end = escape?.index ?? text.length;
+		// Walk graphemes: a wide character that does not fit is cut whole.
+		for (const { segment, index } of graphemes.segment(text.slice(start, end))) {
+			// A carriage return rewinds to the start of the current row; the text after it overwrites.
+			if (segment === "\r") column = 0;
+			else if (LINE_BREAK.test(segment) || (column += stringWidth(segment)) > width) {
+				const escapes = text.slice(cut).match(ESCAPE)?.join("") ?? "";
+				return `${text.slice(0, cut)}${width > 0 ? "…" : ""}${escapes}`;
+			}
+			// Leave a column for the ellipsis.
+			if (column < width) cut = start + index + segment.length;
+		}
+		if (escape) start = end + escape[0].length;
+	}
+	return text;
 }
 
 function renderFinal(
 	message: string,
 	theme: ProgressTheme,
 	outcome: SpinnerOutcome,
-	erase: boolean,
+	erase: string,
 ): string {
 	const symbol = outcome === "success" ? SUCCESS_SYMBOL : ERROR_SYMBOL;
 	const styleSymbol = outcome === "success" ? theme.success : theme.error;
-	const line = `${styleSymbol(symbol)} ${theme.message(message)}\n`;
-	return erase ? ERASE_LINE + CURSOR_TO_START + line : line;
+	return `${erase}${styleSymbol(symbol)} ${theme.message(message)}\n`;
 }
 
 /** Terminal IO shared by prompts, spinners, and progress indicators. */
@@ -153,18 +186,21 @@ export type TerminalIO = SharedTerminalIO;
 /** Writable-compatible output driven by spinners and progress indicators. */
 export type ProgressSink = TerminalOutput;
 
-/** Run a function with terminal streams available to UI created in its async scope. */
-export function withTerminalIO<T>(io: TerminalIO, fn: () => T): T {
-	return withSharedTerminalIO(io, fn);
-}
+export { withTerminalIO } from "@crustjs/utils/terminal";
 
 /** Run a function with an ambient output sink for progress indicators. */
 export function withProgressSink<T>(sink: ProgressSink, fn: () => T): T {
 	return withSharedTerminalIO({ output: sink }, fn);
 }
 
-/** Internal handle constructor shared by both `spinner()` modes and `progress()`. */
-export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandle {
+/**
+ * Internal handle constructor shared by both `spinner()` modes and `progress()`.
+ * `suffix` follows the message and is never cut when a frame is fitted to one row.
+ */
+export function createSpinnerHandle(
+	options: SpinnerHandleOptions,
+	suffix: () => string = () => "",
+): SpinnerHandle {
 	const sink = options.sink ?? getTerminalIO()?.output ?? process.stderr;
 	const theme = { ...defaultThemeFor(sink), ...options.theme };
 	const isInteractive = sink.isTTY ?? false;
@@ -177,6 +213,21 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 	let finished = false;
 	let timerId: ReturnType<typeof setInterval> | undefined;
 	let sigintHandler: (() => void) | undefined;
+	let exitHandler: (() => void) | undefined;
+
+	function drawFrame(): void {
+		const width = (sink.columns || 80) - 1;
+		const symbol = `${theme.spinner(frameAt(frames, frameIndex))} `;
+		const tail = suffix();
+		// Cut the message first, so the count survives; text the theme adds counts against it.
+		const room = width - stringWidth(symbol + theme.message(tail));
+		const frame = symbol + theme.message(fitRow(currentMessage, room) + tail);
+		// The frame fits one row, short of the last column, and the cursor stays at its end, so a
+		// redraw only erases the cursor's row. The terminal does not report where the cursor is:
+		// rewinding over wrapped rows would erase lines the task printed between frames. When the
+		// symbol and count alone overflow the row, the whole frame is cut, count included.
+		sink.write(ERASE_LINE + CURSOR_TO_START + fitRow(frame, width));
+	}
 
 	function cleanup(): void {
 		if (timerId !== undefined) {
@@ -187,6 +238,10 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 			process.removeListener("SIGINT", sigintHandler);
 			sigintHandler = undefined;
 		}
+		if (exitHandler) {
+			process.removeListener("exit", exitHandler);
+			exitHandler = undefined;
+		}
 	}
 
 	return {
@@ -196,11 +251,25 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 			if (!isInteractive) return;
 
 			sink.write(HIDE_CURSOR);
-			sink.write(renderFrame(frameAt(frames, 0), currentMessage, theme));
+			// `process.exit()` skips stop(); "exit" listeners run synchronously, so restore here.
+			exitHandler = () => sink.write(SHOW_CURSOR);
+			process.once("exit", exitHandler);
+			try {
+				drawFrame();
+			} catch (error) {
+				// A throwing theme or sink must not leak the exit listener or leave the cursor hidden.
+				cleanup();
+				try {
+					sink.write(SHOW_CURSOR);
+				} catch {
+					// The draw failure wins.
+				}
+				throw error;
+			}
 
 			timerId = setInterval(() => {
 				frameIndex = (frameIndex + 1) % frames.length;
-				sink.write(renderFrame(frameAt(frames, frameIndex), currentMessage, theme));
+				drawFrame();
 			}, interval);
 
 			if (sigint === "exit") {
@@ -225,7 +294,7 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 			if (finished) return;
 			currentMessage = message;
 			if (started && isInteractive) {
-				sink.write(renderFrame(frameAt(frames, frameIndex), currentMessage, theme));
+				drawFrame();
 			}
 		},
 
@@ -238,7 +307,8 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 			// restore. The first failure wins; boxed because any value (even undefined) can be thrown.
 			let renderFailure: { error: unknown } | undefined;
 			try {
-				sink.write(renderFinal(currentMessage, theme, outcome, started && isInteractive));
+				const erase = started && isInteractive ? ERASE_LINE + CURSOR_TO_START : "";
+				sink.write(renderFinal(currentMessage + suffix(), theme, outcome, erase));
 			} catch (error) {
 				renderFailure = { error };
 			}
@@ -255,7 +325,7 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 }
 
 /**
- * Display a spinner while running an async task. The final line renders `✓`
+ * Display a spinner while running a task. The final line renders `✓`
  * when the task resolves and `✗` when it throws (the error is re-thrown).
  */
 export function spinner<T>(options: SpinnerOptions<T>): Promise<T>;
@@ -266,7 +336,9 @@ export function spinner<T>(options: SpinnerOptions<T>): Promise<T>;
  * Non-interactive stderr renders no animation frames — only the final
  * `✓`/`✗` line on `stop()`.
  */
-export function spinner(options: SpinnerHandleOptions): SpinnerHandle;
+export function spinner(
+	options: SpinnerHandleOptions & { readonly task?: undefined },
+): SpinnerHandle;
 export function spinner<T>(
 	options: SpinnerHandleOptions & { task?: SpinnerOptions<T>["task"] },
 ): Promise<T> | SpinnerHandle {

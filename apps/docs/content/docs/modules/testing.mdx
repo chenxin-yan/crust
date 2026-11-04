@@ -30,7 +30,7 @@ Import from `@crustjs/testing/interactive`; this entry point requires `@crustjs/
 
 `done` rejects with the error from a failed outcome. One ambient [`withTerminalIO`](/docs/modules/progress#output-sinks) scope sends prompts, progress, and `stderr()` output to the fake screen.
 
-`stdout()` output is not included, so use `run()` for stdout assertions.
+The action's `stdout()` output stays off the screen; read it with the handle's `stdout()` method.
 
 <auto-type-table path="../../../../../packages/testing/src/interactive.ts" name="InteractiveRun" />
 

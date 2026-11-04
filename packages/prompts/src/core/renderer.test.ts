@@ -300,6 +300,42 @@ describe("runPrompt", () => {
 		expect(raw.endsWith("\x1B[?25h")).toBe(true);
 	});
 
+	it("restores the cursor and raw mode on process exit and removes the exit listener", async () => {
+		const config: PromptConfig<{ value: string }, string> = {
+			render: () => "test",
+			handleKey: () => submit("done"),
+			initialState: { value: "" },
+			theme: defaultTheme,
+		};
+		const harness = createPromptIO();
+		let raw = "";
+		const output = Object.assign(
+			new Writable({
+				write(chunk, _encoding, callback) {
+					raw += chunk.toString();
+					callback();
+				},
+			}),
+			{ isTTY: true },
+		);
+		const previousHandlers = new Set(process.listeners("exit"));
+		void runPrompt(config, { input: harness.io.input, output });
+		const added = process.listeners("exit").filter((listener) => !previousHandlers.has(listener));
+
+		expect(added).toHaveLength(1);
+		// Invoke directly — emitting a real "exit" would run the test runner's listeners.
+		added[0]?.(0);
+		await new Promise((r) => setTimeout(r, 0));
+		expect(raw.endsWith("\x1B[?25h")).toBe(true);
+		expect(harness.io.input.isRaw).toBe(false);
+		expect(new Set(process.listeners("exit"))).toEqual(previousHandlers);
+
+		// The streams were released, so a later prompt can reuse them.
+		const next = runPrompt(config, { input: harness.io.input, output });
+		harness.keys("return");
+		await next;
+	});
+
 	it("calls renderSubmitted when provided", async () => {
 		const config: PromptConfig<{ value: string }, string> = {
 			render: (state) => `input: ${state.value}`,
@@ -471,5 +507,26 @@ describe("runPrompt", () => {
 		await promise;
 
 		expect(harness.screen()).toBe("frame 2");
+	});
+
+	it("erases every wrapped row of a frame wider than the terminal", async () => {
+		const config: PromptConfig<{ long: boolean }, string> = {
+			render: (state) => (state.long ? `? ${"x".repeat(100)}` : "? short"),
+			handleKey: (key, state) => (key.name === "return" ? submit("done") : { long: !state.long }),
+			initialState: { long: true },
+			theme: defaultTheme,
+		};
+
+		const harness = createPromptIO();
+		harness.io.output.write("above\n");
+		const promise = runPrompt(config, harness.io);
+		expect(harness.screen()).toBe(`above\n? ${"x".repeat(78)}\n${"x".repeat(22)}`);
+
+		harness.type("a");
+		await new Promise((r) => setTimeout(r, 10));
+		expect(harness.screen()).toBe("above\n? short");
+
+		harness.keys("return");
+		await promise;
 	});
 });

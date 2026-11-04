@@ -550,8 +550,9 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		);
 		harness.keys("space", "enter");
 		// The multiselect drains buffered input, so the confirm answer must
-		// wait until the confirm prompt is attached and rendering.
-		while (!harness.screen().includes("Overwrite?")) {
+		// wait until the confirm prompt is attached and rendering. The message
+		// holds a temp path, so join the rows the fake terminal wrapped it onto.
+		while (!harness.screen().replaceAll("\n", "").includes("Overwrite?")) {
 			await new Promise((resolve) => setTimeout(resolve, 10));
 		}
 		harness.keys("y", "enter");
