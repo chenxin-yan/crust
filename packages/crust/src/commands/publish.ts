@@ -3,7 +3,11 @@ import { resolve } from "node:path";
 import { defineCommand } from "@crustjs/core";
 
 import { CRUST_DIR } from "../distribute.ts";
-import { publishStagedPackages, readPublishManifest } from "../publish.ts";
+import {
+	assertStageMatchesProject,
+	publishStagedPackages,
+	readPublishManifest,
+} from "../publish.ts";
 
 export const publishCommand = defineCommand(
 	"publish",
@@ -32,6 +36,7 @@ export const publishCommand = defineCommand(
 				const cwd = process.cwd();
 				const stageDir = resolve(cwd, CRUST_DIR);
 				const manifest = readPublishManifest(stageDir);
+				assertStageMatchesProject(cwd, manifest);
 
 				await publishStagedPackages(
 					manifest,

@@ -146,6 +146,27 @@ export function readPublishManifest(stageDir: string): PublishManifest {
 	return manifest;
 }
 
+/** Rejects a stage built before the project's name or version changed, which would publish the old release. */
+export function assertStageMatchesProject(projectDir: string, manifest: PublishManifest): void {
+	const packageJsonPath = join(projectDir, "package.json");
+	let project: JsonValue;
+	try {
+		project = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
+	} catch (error) {
+		throw new Error(
+			`Could not read ${packageJsonPath} to check the staged packages against it: ${error instanceof Error ? error.message : String(error)}`,
+			{ cause: error },
+		);
+	}
+	const name = isRecord(project) ? project.name : undefined;
+	const version = isRecord(project) ? project.version : undefined;
+	if (name !== manifest.root.name || version !== manifest.version) {
+		throw new Error(
+			`Stage is stale: .crust/ holds ${manifest.root.name}@${manifest.version}, but package.json is ${String(name)}@${String(version)}.\n  Run \`crust build\` before \`crust publish\`.`,
+		);
+	}
+}
+
 function readStagedPackageJson(stageDir: string, dir: string): PublishPackageJson {
 	const packageJsonPath = join(stageDir, dir, "package.json");
 	if (!existsSync(packageJsonPath)) {

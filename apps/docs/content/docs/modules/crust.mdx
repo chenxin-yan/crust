@@ -64,7 +64,7 @@ crust publish --dry-run
 | `--dry-run`  | boolean | `false` | Print publish order and commands without publishing |
 | `--registry` | string  | none    | Override the registry passed to npm publish         |
 
-`crust publish` reads `.crust/manifest.json` and fails with `Run crust build before crust publish` if there is none. It uses `npm`, which must be on `PATH`, because npm supports [trusted publishing](https://docs.npmjs.com/trusted-publishers) from CI.
+`crust publish` reads `.crust/manifest.json` and fails with `Run crust build before crust publish` if there is none, or with `Stage is stale` if your `package.json` name or version no longer matches it. It uses `npm`, which must be on `PATH`, because npm supports [trusted publishing](https://docs.npmjs.com/trusted-publishers) from CI.
 
 - For each staged package, it checks `name@version` with `npm view` and runs `npm publish` only if that version is missing. Existing versions are skipped and never re-tagged, so rerunning after a failure resumes. `--dry-run` stays offline.
 - Before anything publishes, it verifies the manifest, that package names are unique, and that every package directory resolves inside the staging root.
@@ -143,7 +143,7 @@ Targets apply to binaries. `--target` overrides `crust.targets`; without either,
 
 Node.js targets use Node.js's own release names. Cross-platform builds download that target's official Node.js archive of the same version; see [Node.js binaries](/docs/guide/build-and-distribution#nodejs-binaries) for the unpacking tools and macOS signing.
 
-Each platform package contains `bin/<command>-<target>` (`.exe` on Windows) per command. The launcher supports only the targets included in the build.
+Each platform package contains `bin/<command>-<target>` (`.exe` on Windows) per command. The launcher supports only the targets included in the build. It forwards `SIGTERM` and `SIGHUP` to the binary and exits with the binary's exit code or signal. Ctrl-C reaches the binary through the terminal; on POSIX, a `SIGINT` sent to the launcher's PID is forwarded only when no controlling terminal is attached. On Windows it never forwards `SIGINT`: the console delivers Ctrl-C to the binary directly.
 
 ### Linux glibc and musl
 

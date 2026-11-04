@@ -32,6 +32,9 @@ async function release(): Promise<void> {
 // Every option is optional in the type (crust.artifact may supply the artifact); the callback may take the stream too.
 const options: BuildOptions = {};
 const runtimePackage: BuildOptions = { artifact: "package" };
+// Known targets are completion hints; computed strings stay accepted and are checked at build time.
+declare const computedTargets: string[];
+const dynamicTargets: BuildOptions = { targets: computedTargets };
 const withStream: BuildOptions = { onLog: (_line, stream) => stream satisfies "stdout" | "stderr" };
 const artifact: BuildArtifact = { kind: "launcher", path: "/x/.crust/root/bin/x.js", command: "x" };
 const result: Promise<BuildResult> = build(options);
@@ -48,6 +51,7 @@ const executable: BuildArtifact = { kind: "executable", path: "", command: "x" }
 void release;
 void withStream;
 void runtimePackage;
+void dynamicTargets;
 void artifact;
 void result;
 void executable;

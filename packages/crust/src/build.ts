@@ -50,6 +50,7 @@ import {
 	type BuildRuntime,
 	BUN_TARGETS,
 	type BunTarget,
+	type HOST_TARGET,
 	NODE_TARGETS,
 	type NodeTarget,
 	resolveTargets,
@@ -422,9 +423,10 @@ export type BuildOptions = {
 	/**
 	 * Canonical compiler targets, or `"host"` for this machine. Overrides
 	 * package.json `crust.targets`; omit both to stage every target of the
-	 * binary compiler. Rejected for runtime packages.
+	 * binary compiler. Rejected for runtime packages. Known names are completion
+	 * hints only; any string is checked at build time.
 	 */
-	targets?: readonly string[];
+	targets?: readonly (BunTarget | NodeTarget | typeof HOST_TARGET | (string & {}))[];
 	/** Env files inlining `PUBLIC_*` build-time constants, resolved against `cwd`. */
 	envFiles?: readonly string[];
 	/** Minify the output. Default: true. */
