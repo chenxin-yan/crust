@@ -432,20 +432,25 @@ type DefinitionsTreeSlow<
 				>;
 			};
 
-type KnownDefinitionTree<Ds extends readonly unknown[], CF extends FlagsDef> =
+// Accumulates in tail position so a long batch with a runtime-only name stays clear of TS2589.
+type KnownDefinitionTree<Ds extends readonly unknown[], CF extends FlagsDef, Acc = {}> =
 	IsUnion<Ds> extends true
-		? {}
+		? Acc
 		: Ds extends readonly [infer H, ...infer T]
-			? (IsUnion<H> extends true
-					? {}
-					: {
-							[K in CommandDefinitionSpellings<H>]: ShapeWithInheritedFlags<
-								DefinitionShapeForSpelling<H, K>,
-								CF
-							>;
-						}) &
-					KnownDefinitionTree<T, CF>
-			: {};
+			? KnownDefinitionTree<
+					T,
+					CF,
+					Acc &
+						(IsUnion<H> extends true
+							? {}
+							: {
+									[K in CommandDefinitionSpellings<H>]: ShapeWithInheritedFlags<
+										DefinitionShapeForSpelling<H, K>,
+										CF
+									>;
+								})
+				>
+			: Acc;
 
 type ExtensionCheckAt<Checks, I> = I extends keyof Checks ? Checks[I] : never;
 
@@ -519,62 +524,26 @@ type TreeWithInheritedFlags<Tree, F extends FlagsDef> = {
 	[K in keyof Tree]: ShapeWithInheritedFlags<Tree[K], F>;
 };
 
-// The tree does not retain canonical/alias insertion provenance. Colliding alias keys stay open.
-type ReplacementTree<Tree, D extends CommandDefinition<any, any, any, any>, CF extends FlagsDef> =
-	CommandDefinitionData<D> extends { readonly _aliases?: infer Aliases extends readonly string[] }
-		? IsClosedName<Aliases[number]> extends false
-			? Record<string, CommandShape> & {
-					[K in D["name"]]: ShapeWithInheritedFlags<DefinitionShapeForSpelling<D, K>, CF>;
-				}
-			: Omit<Tree, CommandDefinitionSpellings<D>> & {
-					[K in CommandDefinitionSpellings<D>]: K extends D["name"]
-						? ShapeWithInheritedFlags<DefinitionShapeForSpelling<D, K>, CF>
-						: K extends keyof Tree
-							? CommandShape
-							: ShapeWithInheritedFlags<DefinitionShapeForSpelling<D, K>, CF>;
-				}
-		: Record<string, CommandShape>;
-
-// Extension commands replace canonical children; an open contribution can replace any child.
-type ReplacedTree<
-	Tree,
-	Commands extends readonly unknown[],
-	CF extends FlagsDef,
-> = Commands extends readonly [
-	infer H extends CommandDefinition<any, any, any, any>,
-	...infer T extends readonly unknown[],
-]
-	? ReplacedTree<
-			IsClosedName<H["name"]> extends false
-				? Record<string, CommandShape>
-				: true extends IsUnion<H> | IsUnion<H["name"]>
-					? Record<string, CommandShape>
-					: ReplacementTree<Tree, H, CF>,
-			T,
-			CF
-		>
-	: number extends Commands["length"]
-		? Record<string, CommandShape>
-		: Tree;
-
-type ReplacedExtensionTree<
-	Tree,
-	Es extends readonly AnyExtension[],
-	CF extends FlagsDef,
-> = Es extends readonly [infer H extends AnyExtension, ...infer T extends readonly AnyExtension[]]
-	? ReplacedExtensionTree<ReplacedTree<Tree, ExtensionCommandDefs<H>, CF>, T, CF>
-	: ExtensionCommandDefs<Es[number]>[number] extends never
-		? Tree
-		: Record<string, CommandShape>;
-
 type ExtendedTree<
 	Tree,
 	Es extends readonly AnyExtension[],
 	RecursiveFlags extends FlagsDef,
 	InheritedFlags extends FlagsDef,
 > = keyof RecursiveFlags extends never
-	? ReplacedExtensionTree<Tree, Es, InheritedFlags>
-	: TreeWithInheritedFlags<ReplacedExtensionTree<Tree, Es, InheritedFlags>, RecursiveFlags>;
+	? ExtensionCommandTree<Tree, Es, InheritedFlags>
+	: TreeWithInheritedFlags<ExtensionCommandTree<Tree, Es, InheritedFlags>, RecursiveFlags>;
+
+// Extension commands join the tree like `.add()`: a colliding command is a definition error.
+type ExtensionCommandTree<Tree, Es extends readonly AnyExtension[], CF extends FlagsDef> =
+	// Resolving here keeps a chain of `.extend()` calls from deferring one nested tree per call
+	// (TS2589 at about 90 calls).
+	// A spelling TypeScript can't see may be a same-id re-registration replacing an earlier
+	// Extension's command (runtime dedupes by id); the types don't track ids yet.
+	string extends ExtensionsCommandSpellings<Es>
+		? Record<string, CommandShape>
+		: Tree & DefinitionsTree<ExtensionCommands<Es>, CF> extends infer R extends object
+			? R
+			: never;
 
 function resolveCommandName<Name extends string>(
 	name: Name,
@@ -1396,8 +1365,8 @@ export class Crust<
 	 * registration — its contributions and providers replace the earlier ones
 	 * and its hooks run once, at the later position. ID deduplication is
 	 * runtime-only, so removed paths can remain statically visible and reject
-	 * with `COMMAND_NOT_FOUND`. Canonical replacements use the new
-	 * shape; open replacements and ambiguous aliases have unknown results.
+	 * with `COMMAND_NOT_FOUND`. An Extension with runtime-only command names makes
+	 * every `run()` result `unknown`, since it may replace an earlier registration.
 	 * Required root metadata keys are checked against the constructor's inferred
 	 * metadata by TypeScript, not at runtime.
 	 * Recipe builders cannot call this root-only method.
