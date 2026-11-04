@@ -42,7 +42,7 @@ const fish = await renderFishCompletion(snapshot);
   name="CompletionOptions"
 />
 
-The renderers accept a root Command Snapshot plus a `version` override and resolve to the script text; the shell templates load on the first call. The runtime command, renderers, and build hook require a version from the option or root metadata.
+The renderers accept a root Command Snapshot plus a `version` override and resolve to the script text; the shell templates load on the first call. The runtime command, renderers, and build hook require a version from the option or root metadata. Without a string `version` option, `.extend(completion())` fails typecheck unless the root declares `version`, like [`version()`](/docs/modules/extensions/version); untyped callers that supply neither get a `DEFINITION` error when a script is rendered.
 
 The positional `<shell>` accepts `bash`, `zsh`, or `fish`. `command` changes the contributed command name and the regenerate hint in script headers; the standalone renderers always name `completion`. Pass a string literal so `app.run()` keeps type-checking command paths and flags; a `command` typed as `string` leaves the command tree unchecked. Every script targets the root command name as the executable, which [`crust build` requires to match the installed command](/docs/modules/crust#commands-and-entries-bin), so it must follow the [installed command name rule](/docs/modules/core#tooling-subpath).
 

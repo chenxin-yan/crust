@@ -47,7 +47,7 @@ function buildCli(options?: CompletionOptions) {
 
 describe("completion", () => {
 	it("exposes options: command name override", async () => {
-		const app = new Crust("mycli")
+		const app = new Crust("mycli", { version: "1.0.0" })
 			.extend(completion({ command: "shell-completion" }))
 			.action(() => {});
 		const root = await app.snapshot();

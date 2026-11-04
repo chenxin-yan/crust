@@ -76,24 +76,34 @@ export type CompletionCommandDefinition<Name extends string = "completion"> = Co
 	>
 >;
 
+type OpenCommands = readonly CommandDefinition<any, any, any, any>[];
+
 // A non-literal name cannot be keyed statically, so it keeps the open command namespace.
 type CompletionCommands<Name extends string> = string extends Name
-	? readonly CommandDefinition<any, any, any, any>[]
+	? OpenCommands
 	: readonly [CompletionCommandDefinition<Name>];
 
 /**
  * {@link completion}'s signature: a `command` that is always present flows into the host's
- * command tree, an absent one is `completion`, and a possibly absent one stays open.
+ * command tree, an absent one is `completion`, and a possibly absent one stays open. Each
+ * shape has a variant for an explicit `version`; without one the root needs a `version`.
  */
 export interface CompletionExtension {
 	<const Name extends string>(
-		options: CompletionOptions & { command: Name },
+		options: CompletionOptions & { command: Name; version: string },
 	): Extension<{}, [], {}, CompletionCommands<Name>>;
+	<const Name extends string>(
+		options: CompletionOptions & { command: Name },
+	): Extension<{}, [], {}, CompletionCommands<Name>, "version">;
+	(
+		options: CompletionOptions & { command?: undefined; version: string },
+	): Extension<{}, [], {}, readonly [CompletionCommandDefinition]>;
 	(
 		options?: CompletionOptions & { command?: undefined },
-	): Extension<{}, [], {}, readonly [CompletionCommandDefinition]>;
+	): Extension<{}, [], {}, readonly [CompletionCommandDefinition], "version">;
 	// Omitted `Commands` is the open command namespace.
-	(options?: CompletionOptions): Extension<{}, [], {}>;
+	(options: CompletionOptions & { version: string }): Extension<{}, [], {}>;
+	(options?: CompletionOptions): Extension<{}, [], {}, OpenCommands, "version">;
 	readonly id: ExtensionId;
 }
 
