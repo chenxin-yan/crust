@@ -35,11 +35,11 @@
 		]
 	},
 	"bin": {
-		"create-crust": "src/index.ts"
+		"create-crust": "src/cli.ts"
 	},
 	"scripts": {
 		"build": "vp run build:task",
-		"dev": "pnpm run build && bun src/index.ts",
+		"dev": "pnpm run build && bun src/cli.ts",
 		"release": "crust publish",
 		"check:types": "vp run check:types:task",
 		"test": "vp run test:task",

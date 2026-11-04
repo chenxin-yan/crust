@@ -3,7 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { homedir } from "node:os";
-import { join, win32 } from "node:path";
+import { join, posix, win32 } from "node:path";
 
 import { CrustStoreError } from "./errors.ts";
 
@@ -123,7 +123,11 @@ function resolvePlatformDir(
 
 	if (env.platform === "linux" || env.platform === "darwin") {
 		const configured = env.env[config.xdg];
-		const base = configured?.trim() ? configured : join(env.homedir, ...config.unixFallback);
+		// The XDG Base Directory spec says relative values are invalid and must be ignored.
+		const base =
+			configured && posix.isAbsolute(configured)
+				? configured
+				: join(env.homedir, ...config.unixFallback);
 		return join(base, appName);
 	}
 	if (env.platform === "win32") {

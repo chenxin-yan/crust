@@ -45,7 +45,7 @@ Field types and defaults determine the state type. `createStore()` resolves `<di
 | `stateDir`  | `~/.local/state/<app>` | `%LOCALAPPDATA%\<app>\State` | `XDG_STATE_HOME`; `LOCALAPPDATA` on Windows |
 | `cacheDir`  | `~/.cache/<app>`       | `%LOCALAPPDATA%\<app>\Cache` | `XDG_CACHE_HOME`; `LOCALAPPDATA` on Windows |
 
-Choose by intent: user configuration, durable app data, runtime state, or regenerable cache. macOS uses the XDG paths. Each helper accepts a `PlatformEnv` second argument for deterministic tests.
+Choose by intent: user configuration, durable app data, runtime state, or regenerable cache. macOS uses the XDG paths. Relative `XDG_*` values are ignored, as the XDG spec requires. Each helper accepts a `PlatformEnv` second argument for deterministic tests.
 
 ## Secret files
 

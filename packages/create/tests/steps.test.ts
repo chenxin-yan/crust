@@ -45,6 +45,55 @@ describe("runSteps", () => {
 			expect(result.stdout.toString().trim()).toBe("Initial commit");
 		});
 
+		describe("without a configured git identity", () => {
+			let globalConfig: string;
+
+			beforeEach(() => {
+				const home = join(tempDir, "home");
+				mkdirSync(home);
+				globalConfig = join(home, ".gitconfig");
+				writeFileSync(globalConfig, "");
+				vi.stubEnv("HOME", home);
+				vi.stubEnv("XDG_CONFIG_HOME", home);
+				vi.stubEnv("GIT_CONFIG_GLOBAL", globalConfig);
+				vi.stubEnv("GIT_CONFIG_NOSYSTEM", "1");
+				for (const key of [
+					"GIT_AUTHOR_NAME",
+					"GIT_AUTHOR_EMAIL",
+					"GIT_COMMITTER_NAME",
+					"GIT_COMMITTER_EMAIL",
+					"EMAIL",
+				]) {
+					vi.stubEnv(key, undefined);
+				}
+				writeFileSync(join(tempDir, "README.md"), "# Test Project\n");
+			});
+
+			function git(...args: string[]) {
+				return spawnSync("git", args, { cwd: tempDir, timeout: 10_000, encoding: "utf-8" });
+			}
+
+			it("commits with a fallback identity without persisting it", async () => {
+				await runSteps([{ type: "git-init", commit: "Initial commit" }], tempDir);
+
+				expect(git("log", "-1", "--format=%an <%ae>|%cn <%ce>").stdout.trim()).toBe(
+					"Crust <crust@scaffolded.project>|Crust <crust@scaffolded.project>",
+				);
+				expect(git("config", "--local", "user.name").status).not.toBe(0);
+				expect(git("config", "--local", "user.email").status).not.toBe(0);
+			});
+
+			it("only supplies the identity fields the user has not configured", async () => {
+				writeFileSync(globalConfig, "[user]\n\tname = Ada\n");
+
+				await runSteps([{ type: "git-init", commit: "Initial commit" }], tempDir);
+
+				expect(git("log", "-1", "--format=%an <%ae>").stdout.trim()).toBe(
+					"Ada <crust@scaffolded.project>",
+				);
+			});
+		});
+
 		it("runs git init without committing when no commit message is provided", async () => {
 			writeFileSync(join(tempDir, "file.txt"), "hello");
 
