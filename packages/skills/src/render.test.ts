@@ -463,6 +463,25 @@ describe("renderSkill", () => {
 			}
 		});
 
+		it.each(["\n", "\r\n", "\r"])("flattens %j line breaks within table cells", async (eol) => {
+			const cmd = makeCommand({
+				meta: { name: "test" },
+				flags: {
+					format: {
+						type: "string",
+						description: `Output format.${eol}One of json or text`,
+					},
+				},
+				run() {},
+			});
+
+			const documentation = buildCommandDocumentation(await snapshotFixture(cmd));
+			const files = renderSkill(documentation, { name: "test", description: "Test tool" });
+			const testContent = expectTextContent(findFile(files, "commands/test.md"));
+
+			expect(testContent).toContain("| Output format. One of json or text |");
+		});
+
 		it("preserves pipe in command description outside tables", async () => {
 			const cmd = makeCommand({
 				meta: {

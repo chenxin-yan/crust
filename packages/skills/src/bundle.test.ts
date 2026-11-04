@@ -174,6 +174,29 @@ describe("loadBundleFiles", () => {
 		expect(frontmatter.name).toBe("funnel-builder");
 	});
 
+	it.each([">-", "|", ">", "|+", "!!str |-", "&desc >", "!!str &desc |"])(
+		"rejects a `%s` YAML block scalar instead of reading the indicator as the value",
+		async (indicator) => {
+			const dir = join(tmpDir, "block-scalar");
+			await mkdir(dir, { recursive: true });
+			await writeFile(
+				join(dir, "SKILL.md"),
+				`---\nname: funnel-builder\ndescription: ${indicator}\n  Build a sales\n  funnel\n---\n`,
+			);
+			await expect(loadBundleFiles(dir)).rejects.toThrow(
+				/SKILL\.md.*YAML block scalar for `description:`.*one line/,
+			);
+		},
+	);
+
+	it("keeps a quoted value that starts with a block scalar indicator", async () => {
+		const dir = join(tmpDir, "quoted-indicator");
+		await mkdir(dir, { recursive: true });
+		await writeFile(join(dir, "SKILL.md"), '---\nname: funnel-builder\ndescription: ">-"\n---\n');
+		const { frontmatter } = await loadBundleFiles(dir);
+		expect(frontmatter.description).toBe(">-");
+	});
+
 	it("handles CRLF line endings", async () => {
 		const dir = join(tmpDir, "crlf");
 		await mkdir(dir, { recursive: true });

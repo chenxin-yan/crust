@@ -37,14 +37,15 @@ function escapeYaml(value: string): string {
 }
 
 /**
- * Escapes pipe characters in text intended for markdown table cells.
+ * Escapes text intended for markdown table cells.
  *
- * Unescaped `|` characters break markdown table structure. This replaces
- * them with `\|` while leaving already-escaped `\|` sequences untouched.
+ * Unescaped `|` characters and line breaks break markdown table structure.
+ * This replaces `|` with `\|` (leaving already-escaped `\|` sequences
+ * untouched) and folds line breaks into single spaces.
  */
 function escapeTableCell(value: string): string {
 	// Replace | that is NOT preceded by \
-	return value.replace(/(?<!\\)\|/g, "\\|");
+	return value.replace(/(?<!\\)\|/g, "\\|").replace(/\s*[\r\n]\s*/g, " ");
 }
 
 // ────────────────────────────────────────────────────────────────────────────

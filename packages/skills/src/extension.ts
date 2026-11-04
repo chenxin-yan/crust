@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 
 import {
@@ -9,8 +10,7 @@ import {
 	defineCommand,
 	defineExtension,
 } from "@crustjs/core";
-import { spinner } from "@crustjs/progress";
-import { confirm, multiselect, select } from "@crustjs/prompts";
+// @crustjs/prompts and @crustjs/progress load inside the `skills` command so other commands skip their import cost.
 import { bold, dim, yellow } from "@crustjs/style";
 import { isSourceRun, resolveArtifactDir } from "@crustjs/utils/artifacts";
 import { isWithin } from "@crustjs/utils/path";
@@ -47,6 +47,7 @@ async function resolveScope(
 	const scope = rawScope ?? options.defaultScope;
 	if (scope) return scope;
 	if (nonInteractive) return DEFAULT_SKILL_SCOPE;
+	const { select } = await import("@crustjs/prompts");
 	return select<Scope>({
 		message: "Select scope",
 		choices: [
@@ -76,11 +77,16 @@ function formatAgentLabels(agents: readonly AgentTarget[]): string[] {
 	return labels;
 }
 
+/**
+ * `explicit` is the `repair` command: it reports and re-points every stale owned link.
+ * Background repair fixes only links whose target is gone; a link to another live
+ * installed copy is left alone so two copies of the CLI do not take it from each other.
+ */
 async function repairInstalledSkill(
 	packagedSkill: PackagedSkill,
 	scope: Scope,
 	io: SkillIO,
-	report = false,
+	explicit = false,
 ): Promise<void> {
 	const status = await getSkillStatus({
 		name: packagedSkill.name,
@@ -93,9 +99,11 @@ async function repairInstalledSkill(
 	)) {
 		io.stderr(conflictWarning(packagedSkill.name, outputDir));
 	}
-	const stale = status.agents.filter((entry) => entry.status === "dangling");
+	const stale = status.agents.filter(
+		(entry) => entry.status === "dangling" && (explicit || !existsSync(entry.outputDir)),
+	);
 	if (stale.length === 0) {
-		if (report) io.stdout(dim(`No repairs needed [${packagedSkill.name}] (${effectiveScope}).`));
+		if (explicit) io.stdout(dim(`No repairs needed [${packagedSkill.name}] (${effectiveScope}).`));
 		return;
 	}
 
@@ -106,7 +114,7 @@ async function repairInstalledSkill(
 			scope,
 		});
 		const labels = formatAgentLabels(result.agents.map((entry) => entry.agent));
-		if (report && labels.length > 0) {
+		if (explicit && labels.length > 0) {
 			io.stdout(
 				`\n${bold(`Repaired "${packagedSkill.name}" for ${labels.join(", ")} (${effectiveScope})`)}`,
 			);
@@ -253,6 +261,7 @@ async function selectSkills(
 	skills: readonly PackagedSkill[],
 	defaults?: readonly PackagedSkill[],
 ): Promise<PackagedSkill[]> {
+	const { multiselect } = await import("@crustjs/prompts");
 	const names = await multiselect({
 		message,
 		choices: skills.map((packagedSkill) => ({
@@ -335,6 +344,7 @@ async function installSkills(opts: {
 		if (universal.length > 0 && universal.every((agent) => installed.has(agent))) {
 			defaults.unshift(UNIVERSAL_GROUP);
 		}
+		const { multiselect } = await import("@crustjs/prompts");
 		const values = await multiselect({
 			message: "Select agents to install for",
 			choices,
@@ -373,6 +383,10 @@ async function installSelectedAgents(opts: {
 		return;
 	}
 
+	const [{ spinner }, { confirm }] = await Promise.all([
+		import("@crustjs/progress"),
+		import("@crustjs/prompts"),
+	]);
 	const groups = groupAgentsByOutputDir(toInstall, scope, packagedSkill.name);
 	const linked: InstallSkillResult["agents"] = [];
 	for (const agents of groups.values()) {
@@ -439,6 +453,7 @@ async function uninstallSkills(opts: {
 		io.stdout(dim("No skills selected."));
 		return;
 	}
+	const { spinner } = await import("@crustjs/progress");
 	for (const packagedSkill of skills) {
 		const result = await spinner({
 			message: `Removing skill [${packagedSkill.name}]...`,
