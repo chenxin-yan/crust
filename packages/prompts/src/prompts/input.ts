@@ -103,14 +103,10 @@ function renderInput(
 	return output;
 }
 
-function renderSubmitted<Output>(
-	value: Output,
-	theme: PromptTheme,
-	message: string | undefined,
-): string {
+function renderSubmitted(value: string, theme: PromptTheme, message: string | undefined): string {
 	const prefix = theme.success(PREFIX_SUBMITTED);
 	const msg = theme.message(message ?? "Enter a value");
-	return formatSubmitted(prefix, msg, theme.success(String(value)));
+	return formatSubmitted(prefix, msg, theme.success(value));
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -134,7 +130,7 @@ function renderSubmitted<Output>(
  *
  * @param options - Input prompt configuration
  * @returns The entered text, or the schema's output when `schema` is supplied.
- * @throws {NonInteractiveError} when stdin is not a TTY and no `initial` or `default` is provided
+ * @throws {NonInteractiveError} when the input or output is not a TTY and no `initial` or `default` is provided
  *
  * @example
  * ```ts
@@ -192,7 +188,13 @@ export async function input<Output>(
 			render: (state, t) =>
 				renderInput(state, t, options.message, options.placeholder, options.default),
 			handleKey: createTextSubmitHandler<Output>(options.schema, options.validate, options.default),
-			renderSubmitted: (_state, value, t) => renderSubmitted(value, t, options.message),
+			// Show the submitted text: a schema's output may not stringify (e.g. objects).
+			renderSubmitted: (state, _value, t) =>
+				renderSubmitted(
+					state.value === "" && options.default !== undefined ? options.default : state.value,
+					t,
+					options.message,
+				),
 		},
 		promptIO,
 	);

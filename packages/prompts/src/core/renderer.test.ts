@@ -81,12 +81,16 @@ describe("runPrompt — default theme color", () => {
 		vi.unstubAllEnvs();
 	});
 
-	async function renderDefaultTheme(outputIsTTY: boolean, stdoutIsTTY: boolean): Promise<string> {
+	function stubColorEnvironment(stdoutIsTTY: boolean): void {
 		vi.stubEnv("FORCE_COLOR", undefined);
 		vi.stubEnv("NO_COLOR", undefined);
 		vi.stubEnv("COLORTERM", undefined);
 		vi.stubEnv("TERM", undefined);
 		Object.defineProperty(process.stdout, "isTTY", { value: stdoutIsTTY, configurable: true });
+	}
+
+	async function renderDefaultTheme(outputIsTTY: boolean, stdoutIsTTY: boolean): Promise<string> {
+		stubColorEnvironment(stdoutIsTTY);
 		const harness = createPromptIO();
 		let written = "";
 		const output = Object.assign(
@@ -115,8 +119,10 @@ describe("runPrompt — default theme color", () => {
 		expect(await renderDefaultTheme(true, false)).toContain("\x1b[36m?\x1b[39m");
 	});
 
-	it("keeps the default theme plain on a redirected output when stdout is a TTY", async () => {
-		expect(await renderDefaultTheme(false, true)).not.toContain("\x1b[36m");
+	// runPrompt refuses a non-TTY output, so check the theme it would resolve directly.
+	it("keeps the default theme plain for a redirected output when stdout is a TTY", () => {
+		stubColorEnvironment(true);
+		expect(defaultThemeFor({ isTTY: false }).prefix("?")).toBe("?");
 	});
 
 	it("reuses the late-bound defaultTheme when output and stdout agree", () => {
@@ -159,11 +165,14 @@ describe("runPrompt", () => {
 				return input;
 			},
 		});
-		const output = new Writable({
-			write(_chunk, _encoding, callback) {
-				callback();
-			},
-		});
+		const output = Object.assign(
+			new Writable({
+				write(_chunk, _encoding, callback) {
+					callback();
+				},
+			}),
+			{ isTTY: true },
+		);
 		const config: PromptConfig<undefined, string> = {
 			render: () => "prompt",
 			handleKey: () => submit("done"),
@@ -240,6 +249,21 @@ describe("runPrompt", () => {
 		);
 	});
 
+	it("rejects with NonInteractiveError when the output is not a TTY", async () => {
+		const config: PromptConfig<undefined, string> = {
+			render: () => "prompt",
+			handleKey: () => submit("done"),
+			initialState: undefined,
+			theme: defaultTheme,
+		};
+		const io = {
+			input: createPromptIO().io.input,
+			output: createPromptIO({ isTTY: false }).io.output,
+		};
+
+		await expect(runPrompt(config, io)).rejects.toThrow(NonInteractiveError);
+	});
+
 	it("defaults output to stderr, not stdout", () => {
 		expect(resolvePromptIO().output).toBe(process.stderr);
 	});
@@ -254,12 +278,15 @@ describe("runPrompt", () => {
 
 		const harness = createPromptIO();
 		let raw = "";
-		const output = new Writable({
-			write(chunk, _encoding, callback) {
-				raw += chunk.toString();
-				callback();
-			},
-		});
+		const output = Object.assign(
+			new Writable({
+				write(chunk, _encoding, callback) {
+					raw += chunk.toString();
+					callback();
+				},
+			}),
+			{ isTTY: true },
+		);
 		const promise = runPrompt(config, { input: harness.io.input, output });
 
 		await new Promise((r) => setTimeout(r, 10));
@@ -341,12 +368,15 @@ describe("runPrompt", () => {
 		let submitted = false;
 		const harness = createPromptIO();
 		let raw = "";
-		const output = new Writable({
-			write(chunk, _encoding, callback) {
-				raw += chunk.toString();
-				callback();
-			},
-		});
+		const output = Object.assign(
+			new Writable({
+				write(chunk, _encoding, callback) {
+					raw += chunk.toString();
+					callback();
+				},
+			}),
+			{ isTTY: true },
+		);
 		const io = { input: harness.io.input, output };
 		const promise = runPrompt<number, string>(
 			{

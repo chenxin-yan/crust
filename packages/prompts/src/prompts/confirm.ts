@@ -157,7 +157,7 @@ function renderSubmitted(
  *
  * @param options - Confirm prompt configuration
  * @returns The user's boolean selection
- * @throws {NonInteractiveError} when stdin is not a TTY and no `initial` or explicit `default` is provided
+ * @throws {NonInteractiveError} when the input or output is not a TTY and no `initial` or explicit `default` is provided
  *
  * @example
  * ```ts

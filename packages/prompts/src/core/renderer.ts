@@ -212,7 +212,7 @@ function isSubmit<S, T>(result: HandleKeyResult<S, T>): result is SubmitResult<T
  * Run an interactive prompt with the given configuration.
  *
  * Manages the full terminal lifecycle:
- * 1. Asserts the resolved input is a TTY
+ * 1. Asserts the resolved input and output are TTYs
  * 2. Enables raw mode and hides cursor
  * 3. Renders initial state
  * 4. Listens for keypress events, delegating to `handleKey`
@@ -225,7 +225,7 @@ function isSubmit<S, T>(result: HandleKeyResult<S, T>): result is SubmitResult<T
  * @param config - Prompt configuration (render, handleKey, initialState, theme)
  * @param io - Optional input/output streams, resolved per stream.
  * @returns Promise resolving to the user's submitted value
- * @throws {NonInteractiveError} when the resolved input is not a TTY
+ * @throws {NonInteractiveError} when the resolved input or output is not a TTY
  *
  * @example
  * ```ts
@@ -258,6 +258,7 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Prom
 		}
 
 		assertTTY(stdin);
+		assertTTY(output);
 		activeInputs.add(stdin);
 		activeOutputs.add(output);
 
@@ -356,7 +357,8 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Prom
 
 			const event: KeypressEvent = {
 				char: ch ?? "",
-				name: key?.name ?? "",
+				// Ctrl+J (LF) arrives as "enter"; treat it as Return so it submits instead of inserting a newline.
+				name: key?.name === "enter" ? "return" : (key?.name ?? ""),
 				ctrl: key?.ctrl ?? false,
 				meta: key?.meta ?? false,
 				shift: key?.shift ?? false,

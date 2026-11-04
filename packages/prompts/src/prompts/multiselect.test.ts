@@ -156,6 +156,24 @@ describe("multiselect — toggle all / invert", () => {
 		expect(result).toEqual([]);
 	});
 
+	it("'a' deselects all items when max is reached", async () => {
+		const prompt = renderPrompt(multiselect, {
+			message: "Select",
+			choices: ["a", "b", "c", "d"],
+			max: 2,
+		});
+
+		await tick();
+		prompt.type("a");
+		await tick();
+		prompt.type("a");
+		await tick();
+		prompt.keys("return");
+
+		const result = await prompt.answer;
+		expect(result).toEqual([]);
+	});
+
 	it("'i' inverts selection", async () => {
 		const prompt = renderPrompt(multiselect, {
 			message: "Select",

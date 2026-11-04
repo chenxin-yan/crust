@@ -28,6 +28,10 @@ async function _selectTypeInferenceTests() {
 		choices: [{ label: "HTTP", value: 80 }],
 	});
 	type _ExplicitWins = Expect<Equal<typeof explicit, number>>;
+	const explicitUnion = await select<"dev" | "prod">({
+		choices: [{ label: "Development", value: "dev" }, "prod"],
+	});
+	type _ExplicitUnionIsPreserved = Expect<Equal<typeof explicitUnion, "dev" | "prod">>;
 
 	// An explicit non-string type argument rejects plain-string choices, which
 	// would otherwise submit a string where the caller was promised a number.
@@ -52,4 +56,31 @@ async function _selectTypeInferenceTests() {
 	// A generic wrapper over SelectOptions<T> still resolves to Promise<T>.
 	const viaWrapper = (options: SelectOptions<number>): Promise<number> => select(options);
 	void viaWrapper;
+
+	const viaGenericChoices = <C extends readonly string[]>(choices: C) => select({ choices });
+	type _GenericChoicesReturnString = Expect<
+		Equal<ReturnType<typeof viaGenericChoices>, Promise<string>>
+	>;
+	const viaGenericObjects = <C extends readonly { label: string; value: number }[]>(choices: C) =>
+		select({ choices });
+	type _GenericObjectsReturnNumber = Expect<
+		Equal<ReturnType<typeof viaGenericObjects>, Promise<number>>
+	>;
+
+	// A default or initial outside literal choices is rejected instead of
+	// widening the result through a fallback overload.
+	// @ts-expect-error "staging" is not one of the literal choices
+	void select({ message: "?", choices: ["dev", "prod"], default: "staging" });
+	// @ts-expect-error 2 is not one of the literal choice values
+	void select({ message: "?", choices: [{ label: "one", value: 1 }], initial: 2 });
+	const flag: string = "dev";
+	// @ts-expect-error a widened string may be outside the literal choices
+	void select({ message: "?", choices: ["dev", "prod"], initial: flag });
+
+	// Dynamic collections still accept any default of their value type.
+	const looseDefault = await select({ message: "?", choices: widened, default: "c" });
+	type _LooseDefaultIsString = Expect<Equal<typeof looseDefault, string>>;
+	const ports: { label: string; value: number }[] = [];
+	const dynamic = await select({ message: "?", choices: ports, default: 443 });
+	type _DynamicIsNumber = Expect<Equal<typeof dynamic, number>>;
 }

@@ -120,7 +120,7 @@ function renderSubmitted(theme: PromptTheme, message: string | undefined, mask: 
  *
  * @param options - Password prompt configuration
  * @returns The entered text, or the schema's output when `schema` is supplied.
- * @throws {NonInteractiveError} when stdin is not a TTY and no `initial` is provided
+ * @throws {NonInteractiveError} when the input or output is not a TTY and no `initial` is provided
  *
  * @example
  * ```ts

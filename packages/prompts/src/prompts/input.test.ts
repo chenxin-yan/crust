@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
 
-import { renderPrompt } from "../testing.ts";
+import { createPromptIO, renderPrompt } from "../testing.ts";
 import { input } from "./input.ts";
 import { nonTTYIO, tick } from "./test-helpers.ts";
 
@@ -503,6 +503,94 @@ describe("input — schema short-circuit", () => {
 		);
 
 		expect(result).toBe(3000);
+	});
+});
+
+describe("input — validate short-circuit", () => {
+	const required = (value: string) => {
+		if (!value) throw new Error("Name is required");
+	};
+
+	it("returns `initial` that passes `validate`", async () => {
+		expect(await input({ message: "Name?", initial: "crust", validate: required })).toBe("crust");
+	});
+
+	it("throws when `initial` is rejected by `validate`", async () => {
+		await expect(input({ message: "Name?", initial: "", validate: required })).rejects.toThrow(
+			"initial value rejected: Name is required",
+		);
+	});
+
+	it("throws when non-TTY `default` is rejected by `validate`", async () => {
+		await expect(
+			input(
+				{
+					message: "Name?",
+					default: "bad",
+					validate: () => {
+						throw new Error("nope");
+					},
+				},
+				nonTTYIO(),
+			),
+		).rejects.toThrow("default value rejected: nope");
+	});
+});
+
+describe("input — output terminal", () => {
+	it("returns `default` without rendering when only the input is a TTY", async () => {
+		const tty = createPromptIO();
+		const redirected = createPromptIO({ isTTY: false });
+		const io = { input: tty.io.input, output: redirected.io.output };
+
+		expect(await input({ message: "Name?", default: "ci-user" }, io)).toBe("ci-user");
+		expect(redirected.screen()).toBe("");
+	});
+});
+
+describe("input — control keys", () => {
+	it("ignores Tab and submits on Ctrl+J", async () => {
+		const prompt = renderPrompt(input, { message: "Name?" });
+
+		await tick();
+		prompt.type("a");
+		prompt.keys("tab");
+		prompt.type("b");
+		prompt.keys("ctrl+j");
+
+		expect(await prompt.answer).toBe("ab");
+	});
+});
+
+describe("input — schema submitted line", () => {
+	it("renders the submitted text, not the schema output", async () => {
+		const prompt = renderPrompt(input<{ name: string }>, {
+			message: "Name?",
+			schema: z.string().transform((name) => ({ name })),
+		});
+
+		await tick();
+		prompt.type("crust");
+		await tick();
+		prompt.keys("return");
+
+		expect(await prompt.answer).toEqual({ name: "crust" });
+		expect(prompt.screen()).toContain("Name? crust");
+		expect(prompt.screen()).not.toContain("[object Object]");
+	});
+
+	it("renders the default when submitting empty input", async () => {
+		const prompt = renderPrompt(input<number>, {
+			message: "Port?",
+			default: "4000",
+			schema: z.coerce.number().int(),
+		});
+
+		await tick();
+		prompt.keys("return");
+
+		expect(await prompt.answer).toBe(4000);
+		expect(prompt.screen()).toContain("Port? 4000");
 	});
 });
 

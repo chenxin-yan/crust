@@ -12,7 +12,13 @@ import {
 	PREFIX_SUBMITTED,
 	PREFIX_SYMBOL,
 } from "../core/symbols.ts";
-import type { Choice, ChoiceValue, PartialPromptTheme, PromptTheme } from "../core/types.ts";
+import type {
+	Choice,
+	ChoiceValue,
+	NotChoiceTuple,
+	PartialPromptTheme,
+	PromptTheme,
+} from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
 import { formatSubmitted, moveCursor, renderChoiceList, validateSelection } from "../core/utils.ts";
 
@@ -134,7 +140,8 @@ function createHandleKey<T>(
 
 		// 'a' — toggle all (respects max constraint)
 		if (key.name === "a" && !key.ctrl && !key.meta) {
-			const allSelected = state.selected.size === totalItems;
+			// With `max`, a capped selection counts as "all" so the next press clears it.
+			const allSelected = state.selected.size >= Math.min(totalItems, max ?? totalItems);
 			let newSelected: Set<number>;
 			if (allSelected) {
 				newSelected = new Set<number>();
@@ -247,7 +254,7 @@ function renderSubmitted<T>(
  *
  * @param options - Multiselect prompt configuration
  * @returns Array of selected values
- * @throws {NonInteractiveError} when stdin is not a TTY and no `initial` or `default` is provided
+ * @throws {NonInteractiveError} when the input or output is not a TTY and no `initial` or `default` is provided
  *
  * @example
  * ```ts
@@ -286,11 +293,14 @@ export function multiselect<const C extends readonly [Choice<unknown>, ...Choice
 	options: MultiselectOptions<ChoiceValue<C>> & { readonly choices: C },
 	io?: PromptIO,
 ): Promise<ChoiceValue<C>[]>;
-export function multiselect(
-	options: MultiselectOptions<string> & { readonly choices: readonly string[] },
+export function multiselect<const C extends readonly string[]>(
+	options: MultiselectOptions<string> & { readonly choices: C & NotChoiceTuple<C> },
 	io?: PromptIO,
 ): Promise<string[]>;
-export function multiselect<T>(options: MultiselectOptions<T>, io?: PromptIO): Promise<T[]>;
+export function multiselect<T, const C extends readonly Choice<T>[] = readonly Choice<T>[]>(
+	options: MultiselectOptions<T> & { readonly choices: C & NotChoiceTuple<C> },
+	io?: PromptIO,
+): Promise<T[]>;
 export async function multiselect<T>(options: MultiselectOptions<T>, io?: PromptIO): Promise<T[]> {
 	const setup = await setupListPrompt<T, readonly T[]>(options, options.default ?? [], io);
 	if (setup.shortCircuited) return [...setup.value];
