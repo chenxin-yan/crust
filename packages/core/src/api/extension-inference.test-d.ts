@@ -13,6 +13,10 @@ type _dynamic = Expect<Equal<InferExtensionFlags<Record<string, Port>>["port"], 
 type _recordUnion = Expect<
 	Equal<InferExtensionFlags<{ port: Port } | { host: Host }>["port"], ParsedFlagValue>
 >;
+type _optional = Expect<Equal<InferExtensionFlags<{ port?: Port }>["port"], ParsedFlagValue>>;
+type _requiredBesideOptional = Expect<
+	Equal<InferExtensionFlags<{ port?: Port; host: Host }>["host"], string | undefined>
+>;
 type _keyUnion = Expect<
 	Equal<InferExtensionFlags<Record<"port" | "host", Port>>["port"], number | undefined>
 >;
@@ -71,6 +75,17 @@ function _contextual(
 	flags: Record<string, Port>,
 	toggle: Toggle & { multiple?: true },
 ) {
+	const optional: { port?: Port } = {};
+	defineExtension(defineExtensionId("optional"))
+		.flags(optional)
+		.preRun(({ flags }) => {
+			// @ts-expect-error An absent definition lets a peer own this name with another value type.
+			flags.port?.toFixed();
+		})
+		.postRun(({ flags }) => {
+			// @ts-expect-error Post-run hooks have the same uncertain ownership.
+			flags.port?.toFixed();
+		});
 	defineExtension(defineExtensionId("defaulted"))
 		.flags({ port: { type: "number", default: 123 } })
 		.preRun(({ flags }) => {

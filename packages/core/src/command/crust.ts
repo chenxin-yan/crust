@@ -1262,7 +1262,7 @@ export class Crust<
 		State extends BuilderState = ExplicitTypeArgumentsError,
 	>(
 		this: StateReceiver<State>,
-		...defs: ValidateLocalFlagDefs<Defs, State["sp"]>
+		...defs: ValidateLocalFlagDefs<Defs, State["sp"] | LocalSpellingsOf<State["flags"]>>
 	): AfterFlags<State, Defs>;
 
 	flags(...input: readonly unknown[]): unknown {

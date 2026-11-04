@@ -299,7 +299,11 @@ export type InferExtensionFlags<F extends ExtensionFlagsDef> =
 	IsClosedName<keyof F & string> extends true
 		? IsUnion<F> extends true
 			? Record<string, ParsedFlagValue>
-			: { -readonly [K in keyof F]: InferExtensionFlag<F[K]> }
+			: {
+					-readonly [K in keyof F]: {} extends Pick<F, K>
+						? ParsedFlagValue
+						: InferExtensionFlag<F[K]>;
+				}
 		: Record<string, ParsedFlagValue>;
 
 /** A documentation section an Extension contributes to one command path. */
@@ -334,11 +338,9 @@ type DeclaredSpellings<
 	Provide extends readonly AnyContextInstance[],
 > = LocalSpellingsOf<F> | ProvidedContextSpellings<Provide>;
 
-// The first call keeps its own record type instead of `{} & F`.
-type AppendedFlags<
-	OF extends ExtensionFlagsDef,
-	F extends ExtensionFlagsDef,
-> = keyof OF extends never ? F : MergeFlags<OF, F>;
+// Only a definitely empty state takes the first-call fast path; unions retain their uncertainty.
+type AppendedFlags<OF extends ExtensionFlagsDef, F extends ExtensionFlagsDef> =
+	IsUnion<OF> extends true ? MergeFlags<OF, F> : keyof OF extends never ? F : MergeFlags<OF, F>;
 
 declare const extensionHookProof: unique symbol;
 

@@ -4,6 +4,7 @@ import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { FlagDef } from "../types.ts";
+import type { IsUnion } from "../validation/shared.ts";
 import { Crust, defineCommand } from "./crust.ts";
 
 // Compile-time checks for the record form of `.flags()`; never invoked.
@@ -212,6 +213,12 @@ function _symbolKeysAreRejected(dynamic: symbol) {
 		[hidden]: { type: "string" },
 		out: { type: "string" },
 	});
+	const definitions = {
+		[hidden]: { type: "string", default: "hidden" },
+		out: { type: "string" },
+	} as const;
+	// @ts-expect-error -- a prebuilt record is checked the same way
+	new Crust("cli").flags(definitions);
 	// @ts-expect-error -- as would a key typed as any symbol
 	new Crust("cli").flags({ [dynamic]: { type: "string" } });
 	defineContext("ctx").flags({
@@ -239,6 +246,38 @@ function _unionDefinitionsCheckEveryBranch(
 	new Crust("cli").flags({
 		value: {} as { type: "boolean" } | { type: "string"; parse: (raw: string) => string },
 	});
+}
+
+function _conditionalRecords(definitions: {} | { port: { type: "number"; default: number } }) {
+	const extension = defineExtension(defineExtensionId("conditional"))
+		.flags(definitions)
+		.flags({ quiet: { type: "boolean" } });
+	void new Crust("cli").extend(extension).run([], { flags: { port: 3 } });
+	const context = defineContext("conditional")
+		.flags(definitions)
+		.flags({ quiet: { type: "boolean" } })
+		.setup(() => undefined);
+	const app = new Crust("cli").provide(context());
+	type _conditional = Expect<Equal<IsUnion<typeof app._types.flags>, true>>;
+	type _port = Expect<
+		Equal<
+			Extract<typeof app._types.flags, { port: unknown }>["port"],
+			{ type: "number"; default: number }
+		>
+	>;
+	// @ts-expect-error A conditional Context retains uncertainty rather than claiming quiet alone.
+	void app.run([], { flags: { quiet: true } });
+}
+
+function _mixedFormsCheckCollisions() {
+	const app = new Crust("cli").flags({ out: { type: "string", short: "o", aliases: ["output"] } });
+	// @ts-expect-error Named definitions must check record-owned short aliases.
+	app.flags({ name: "other", type: "string", short: "o" });
+	// @ts-expect-error Named definitions must check record-owned canonical names.
+	app.flags({ name: "out", type: "string" });
+	// @ts-expect-error Named definitions must check record-owned long aliases.
+	app.flags({ name: "other", type: "string", aliases: ["output"] });
+	app.flags({ name: "other", type: "boolean", short: "q" });
 }
 
 function _defineFlagChecksItsDefinition() {

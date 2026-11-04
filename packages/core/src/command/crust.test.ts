@@ -244,13 +244,81 @@ describe("Crust .flags() records", () => {
 	it("copies each definition and ignores symbol keys TypeScript did not see", async () => {
 		const out = { type: "string" as const, short: "o" };
 		const hidden = Symbol("hidden");
-		// @ts-expect-error -- TypeScript rejects symbol keys; untyped callers get them ignored
-		const app = new Crust("test").flags({ out, [hidden]: { type: "boolean" } });
+		const app = new Crust("test")
+			// @ts-expect-error -- TypeScript rejects symbol keys; untyped callers get them ignored
+			.flags({ out, [hidden]: { type: "string", default: "hidden" } })
+			.action(({ flags }) => {
+				expect(Reflect.ownKeys(flags)).toEqual(["out"]);
+			});
 		out.short = "x";
 		expect((await app.snapshot()).flags).toEqual({
 			out: { type: "string", short: "o", negatable: false },
 		});
+		await unwrap(app.run([], { flags: { out: "value" } }));
 	});
+
+	it("ignores symbol definitions in Context setup and Extension hooks", async () => {
+		const hidden = Symbol("hidden");
+		const seen: PropertyKey[][] = [];
+		const context = defineContext("symbols")
+			// @ts-expect-error -- TypeScript rejects symbol keys; untyped callers get them ignored
+			.flags({ [hidden]: { type: "string", default: "hidden" } })
+			.setup(({ flags }) => {
+				seen.push(Reflect.ownKeys(flags));
+			});
+		const extension = defineExtension(defineExtensionId("symbols"))
+			// @ts-expect-error -- as above
+			.flags({ [hidden]: { type: "string", default: "hidden" } })
+			.preRun(({ flags }) => {
+				seen.push(Reflect.ownKeys(flags));
+			})
+			.postRun(({ flags }) => {
+				seen.push(Reflect.ownKeys(flags));
+			});
+		await unwrap(
+			new Crust("test")
+				.provide(context())
+				.extend(extension)
+				.action(async ({ ctx }) => {
+					await ctx.symbols;
+				})
+				.run([]),
+		);
+		expect(seen).toEqual([[], [], []]);
+	});
+
+	it.each([false, true])(
+		"preserves conditional definitions across calls (present: %s)",
+		async (present) => {
+			const definitions: {} | { port: { type: "number"; default: number } } = present
+				? { port: { type: "number", default: 3 } }
+				: {};
+			const extension = defineExtension(defineExtensionId("conditional"))
+				.flags(definitions)
+				.flags({ quiet: { type: "boolean", default: false } });
+			const context = defineContext("conditional")
+				.flags(definitions)
+				.flags({ quiet: { type: "boolean", default: false } })
+				.setup(({ flags }) => flags);
+			const expected = present ? { port: 3, quiet: false } : { quiet: false };
+			await unwrap(
+				new Crust("test")
+					.extend(extension)
+					.action(({ flags }) => {
+						expect(flags).toEqual(expected);
+					})
+					.run([]),
+			);
+			expect(
+				await new Crust("test")
+					.provide(context())
+					.action(async ({ ctx }) => {
+						expect(await ctx.conditional).toEqual(expected);
+					})
+					.execute({ argv: [] }),
+			).toBe(0);
+		},
+	);
 
 	it("treats a one-key record keyed `name` as a flag named name", async () => {
 		const app = new Crust("test").flags({ name: { type: "string" } });
