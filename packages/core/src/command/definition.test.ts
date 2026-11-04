@@ -235,6 +235,29 @@ describe("command definitions", () => {
 		},
 	);
 
+	it.each([
+		["z", ["first"]],
+		["f", []],
+		["z", ["e"]],
+		["e", []],
+	])(
+		"rejects batch name %s with aliases %j colliding with an existing or earlier spelling",
+		(name: string, aliases: string[]) => {
+			const receiver = new Crust("cli").add(
+				defineCommand("existing", { aliases: ["e"] }, (command) => command),
+			);
+			const first = defineCommand("first", { aliases: ["f"] }, (command) => command);
+			const duplicate = defineCommand(name, { aliases }, (command) => command);
+
+			expect(() => receiver.add(first, duplicate)).toThrow(
+				expect.objectContaining({
+					message: `Command name "${name}" is already registered on this command`,
+					details: { subject: "command", name, reason: "command-collision" },
+				}),
+			);
+		},
+	);
+
 	it("adds multiple definitions in argument order without mutating retained builders", async () => {
 		const configured: string[] = [];
 		const ran: string[] = [];

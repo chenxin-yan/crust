@@ -10,6 +10,7 @@ import { defineExtension } from "../api/extension.ts";
 import { defineExtensionId } from "../identity.ts";
 import { Crust, defineCommand } from "./crust.ts";
 import { SNAPSHOT_PATH_ENV } from "./invocation.ts";
+import type { CommandSnapshot } from "./snapshot.ts";
 
 describe("Invocation pipeline internal seam — snapshot protocol", () => {
 	const originalExit = process.exit;
@@ -286,5 +287,76 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		expect(errorCalls[0]).toMatch(/^Extension "unsafe" build failed:/);
 		expect(errorCalls[0]).toContain(message);
 		expect(existsSync(outDir)).toBe(false);
+	});
+});
+
+describe("Invocation pipeline — root snapshot reuse", () => {
+	function rootObserver() {
+		const roots: CommandSnapshot[] = [];
+		const observer = defineExtension(defineExtensionId("observer"))
+			.preRun((ctx) => void roots.push(ctx.rootCommand))
+			.onError((_error, ctx) => {
+				roots.push(ctx.rootCommand);
+				return true;
+			});
+		return { observer, roots };
+	}
+
+	it("reuses one root snapshot across dispatches and fallback failure rendering", async () => {
+		const { observer, roots } = rootObserver();
+		const app = new Crust("app")
+			.extend(observer)
+			.flags({ name: "tag", type: "string", multiple: true, default: ["a"] })
+			.add(defineCommand("sub", (c) => c.action(() => {})))
+			.action(() => {});
+
+		await app.run([]);
+		await app.run(["sub"]);
+		// An unknown flag fails before dispatch builds a context.
+		const originalExitCode = process.exitCode;
+		try {
+			expect(await app.execute({ argv: ["--nope"], io: { stderr: () => {} } })).toBe(1);
+		} finally {
+			process.exitCode = originalExitCode ?? 0;
+		}
+
+		expect(roots).toHaveLength(3);
+		expect(roots[1]).toBe(roots[0]);
+		expect(roots[2]).toBe(roots[0]);
+	});
+
+	it("keeps re-projecting when a URL default would make a reused snapshot stale", async () => {
+		const endpoint = new URL("https://a.example/v1");
+		const { observer, roots } = rootObserver();
+		const app = new Crust("app")
+			.extend(observer)
+			.flags({ name: "endpoint", type: "url", default: endpoint })
+			.action(({ flags }) => flags.endpoint.href);
+
+		await app.run([]);
+		endpoint.pathname = "/v2";
+		const second = await app.run([]);
+
+		// The action and the snapshot must agree on the shared URL default.
+		expect(second).toMatchObject({ status: "completed", result: "https://a.example/v2" });
+		expect(roots.map(({ flags }) => flags.endpoint?.default)).toEqual([
+			"https://a.example/v1",
+			"https://a.example/v2",
+		]);
+	});
+
+	it("keeps re-projecting when a JSON default would make a reused snapshot stale", async () => {
+		const json = ["a"];
+		const { observer, roots } = rootObserver();
+		const app = new Crust("app")
+			.extend(observer)
+			.flags({ name: "data", type: "json", default: json })
+			.action(() => {});
+
+		await app.run([]);
+		json.push("b");
+		await app.run([]);
+
+		expect(roots.map(({ flags }) => flags.data?.default)).toEqual([["a"], ["a", "b"]]);
 	});
 });

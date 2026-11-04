@@ -119,11 +119,14 @@ export interface CommandSnapshot {
 
 /** Drop keys with `undefined` values so snapshots serialize cleanly, then freeze. */
 function freezeCompact<T extends object>(obj: T): T {
+	// Copy instead of `delete`: deleting keys drops V8 objects into slow dictionary mode.
+	const compact: Partial<T> = {};
 	// SAFETY: Object.keys returns exactly the enumerable string keys of T.
 	for (const key of Object.keys(obj) as (keyof T)[]) {
-		if (obj[key] === undefined) delete obj[key];
+		if (obj[key] !== undefined) compact[key] = obj[key];
 	}
-	return Object.freeze(obj);
+	// SAFETY: only keys whose value is `undefined` were left out, matching T's optional fields.
+	return Object.freeze(compact as T);
 }
 
 type SerializableDefault = (ArgSnapshot | FlagSnapshot)["default"];
@@ -138,6 +141,28 @@ function serializableDefault(value: DeclaredDefault): SerializableDefault {
 	if (value instanceof URL) return value.href;
 	if (Array.isArray(value)) return Object.freeze(value.map(serializableDefault));
 	return value;
+}
+
+/**
+ * Whether projecting `value` again could yield a different result: `URL` hrefs are
+ * read live and unfrozen arrays are copied, so later mutations change the projection.
+ */
+function isMutableDefault(value: DeclaredDefault): boolean {
+	if (value instanceof URL) return true;
+	if (Array.isArray(value)) return !Object.isFrozen(value) || value.some(isMutableDefault);
+	return false;
+}
+
+/**
+ * A snapshot of `node` may be reused only while re-projecting the (frozen) tree
+ * would produce the same result, i.e. no arg or flag default is mutable.
+ */
+export function isSnapshotReusable(node: CommandNode): boolean {
+	return (
+		!node.args.some((def) => isMutableDefault(def.default)) &&
+		!Object.values(node.effectiveFlags).some((def) => isMutableDefault(def.default)) &&
+		Object.values(node.subCommands).every(isSnapshotReusable)
+	);
 }
 
 /** The parser fills a missing value from its default, so a defaulted def is never required. */

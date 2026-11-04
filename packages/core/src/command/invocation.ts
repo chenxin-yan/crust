@@ -32,7 +32,7 @@ import {
 } from "./extensions-install.ts";
 import { cloneCommandNode, type CommandNode } from "./node.ts";
 import { commandNotFound, resolveCommand, type CommandRoute } from "./router.ts";
-import { snapshotCommand, type CommandSnapshot } from "./snapshot.ts";
+import { isSnapshotReusable, snapshotCommand, type CommandSnapshot } from "./snapshot.ts";
 import type { RunOutcome } from "./typed-run.ts";
 
 const ignoreStreamError = () => {};
@@ -75,6 +75,8 @@ const DEFAULT_IO: InvocationIO = {
 interface PreparedInvocation {
 	rootNode: CommandNode;
 	extensions: readonly ExtensionData[];
+	/** Root projection reused across invocations; see `preparedRootSnapshot`. */
+	rootSnapshot?: CommandSnapshot;
 }
 
 /**
@@ -272,6 +274,18 @@ export function prepareInvocation(
 	return prepared;
 }
 
+/**
+ * The prepared tree is frozen, so its projection is reusable unless a mutable
+ * default (shared by reference) would make a cached copy disagree with what the
+ * parser hands the action.
+ */
+function preparedRootSnapshot(prepared: PreparedInvocation): CommandSnapshot {
+	if (prepared.rootSnapshot) return prepared.rootSnapshot;
+	const rootSnapshot = snapshotCommand(prepared.rootNode);
+	if (isSnapshotReusable(prepared.rootNode)) prepared.rootSnapshot = rootSnapshot;
+	return rootSnapshot;
+}
+
 /** An invocation starts from terminal argv or a typed path plus structured values. */
 type InvocationInput =
 	| { readonly argv: readonly string[] }
@@ -348,7 +362,7 @@ async function dispatch(
 	const contexts = resolvedNode.contexts.map(({ instance }) => instance);
 	const resolver = createContextResolver(contexts, io, disposal, signal);
 
-	const rootSnapshot = snapshotCommand(rootNode);
+	const rootSnapshot = preparedRootSnapshot(prepared);
 	const extensionContext: ExtensionContext = Object.freeze({
 		argv: [...argv],
 		rootCommand: rootSnapshot,
@@ -468,7 +482,7 @@ async function renderFailure(
 					property === "then" || isSymbol(property) ? undefined : unavailable(property),
 			},
 		);
-		const rootSnapshot = snapshotCommand(prepared.rootNode);
+		const rootSnapshot = preparedRootSnapshot(prepared);
 		// Routing is pure, so redoing it recovers the command whose argv failed to parse.
 		let route: CommandRoute | undefined;
 		try {
