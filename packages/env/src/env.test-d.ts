@@ -119,3 +119,53 @@ function _typecheckRejectsFlagOnlyKeysAndPreservesVariants() {
 	// @ts-expect-error -- a single-value variable cannot declare a delimiter
 	const _delimiter: EnvVarDef = { type: "string", delimiter: "," };
 }
+
+function _typecheckDefineEnvRejectsInvalidValuesLikeDefineFlag() {
+	// @ts-expect-error -- FIX_DEFAULT_CHOICE: default must be one of choices
+	defineEnv("env", { LEVEL: { type: "string", choices: ["a", "b"], default: "c" } });
+	// @ts-expect-error -- FIX_ASYNC_PARSE: values are parsed synchronously
+	defineEnv("env", { ID: { type: "string", parse: async (raw: string) => raw.length } });
+
+	const declared = { LEVEL: { type: "string", choices: ["a", "b"], default: "c" } } as const;
+	// @ts-expect-error -- a pre-declared record is checked at the call too
+	defineEnv("env", declared);
+}
+
+function _typecheckInfersSchemaOutputWithoutPhantomTypes() {
+	const omitted = {
+		"~standard": {
+			version: 1 as const,
+			vendor: "d",
+			validate: (value: StandardInput) => ({ value: Number(value) }),
+		},
+	};
+	const asyncWithFailure = {
+		"~standard": {
+			version: 1 as const,
+			vendor: "d",
+			validate: async (value: StandardInput) =>
+				typeof value === "string" ? { value } : { issues: [{ message: "missing" }] },
+		},
+	};
+	const annotated: {
+		readonly "~standard": {
+			readonly version: 1;
+			readonly vendor: string;
+			readonly validate: (value: StandardInput) => { value: string };
+			readonly types?: { readonly input: string | undefined; readonly output: "a" | "b" };
+		};
+	} = { "~standard": { version: 1, vendor: "d", validate: (value) => ({ value: String(value) }) } };
+	const env = defineEnv("env", {
+		PORT: { type: "string", schema: omitted },
+		MIXED: { type: "string", schema: Math.random() < 0.5 ? annotated : omitted },
+		NAME: { type: "string", schema: asyncWithFailure },
+		LENGTH: { type: "string", schema: upper },
+	});
+	type Value = FactoryValueOf<typeof env>;
+	type _Port = Expect<Equal<Value["PORT"], number>>;
+	type _Name = Expect<Equal<Value["NAME"], string>>;
+	// explicit phantom types still win
+	type _Length = Expect<Equal<Value["LENGTH"], number>>;
+	// phantom precedence holds per member of a schema union
+	type _Mixed = Expect<Equal<Value["MIXED"], "a" | "b" | number>>;
+}

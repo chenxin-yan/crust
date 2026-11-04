@@ -68,7 +68,7 @@ Each invocation builds the Layer in a fresh `Scope`, closed with the other Conte
 
 <include lang="ts">../../../examples/modules/effect.ts#service</include>
 
-Pulls a plain Crust Context inside a `handler()` program, typed by the factory's value. It is lazy like `ctx.<name>`, and repeated pulls share one build. It works only inside `handler()`.
+Pulls a plain Crust Context inside a `handler()` program, typed by the factory's value. It is lazy like `ctx.<name>`, and repeated pulls share one build. It works only inside `handler()`: its Effect requires `HandlerInput`, which `@crustjs/effect` exports as a type for annotating reusable programs.
 
 The effective provider on the path must come from the **same factory**, including its `.of(...)` test doubles. A missing factory, or a different factory with the same name, fails with a `CrustDefinitionError`. This is checked at runtime, not compile time.
 

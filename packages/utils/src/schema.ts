@@ -81,8 +81,26 @@ export type StandardSchema<Input = unknown, Output = Input> = {
 	readonly "~standard": StandardSchemaProps<Input, Output>;
 };
 
-/** Infer the output type produced by a Standard Schema on success. */
-export type InferOutput<S extends StandardSchema> = NonNullable<S["~standard"]["types"]>["output"];
+/** The `value` of the successful members of a `validate()` result. */
+type SuccessValue<R> = R extends { readonly issues: ReadonlyArray<unknown> }
+	? never
+	: R extends { readonly value: infer Output }
+		? Output
+		: never;
+
+/**
+ * Infer the output type produced by a Standard Schema on success: the
+ * phantom `types.output` when available, otherwise the awaited successful
+ * `validate()` result, since `types` may be omitted or undefined. Distributes so
+ * each member of a schema union keeps its own precedence.
+ */
+export type InferOutput<S extends StandardSchema> = S extends unknown
+	? "types" extends keyof S["~standard"]
+		? [NonNullable<S["~standard"]["types"]>] extends [never]
+			? SuccessValue<Awaited<ReturnType<S["~standard"]["validate"]>>>
+			: NonNullable<S["~standard"]["types"]>["output"]
+		: SuccessValue<Awaited<ReturnType<S["~standard"]["validate"]>>>
+	: never;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Normalized validation issue

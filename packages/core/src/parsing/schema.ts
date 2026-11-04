@@ -1,6 +1,5 @@
 import {
 	normalizeStandardIssues,
-	type InferOutput,
 	type StandardSchema,
 	type ValidationIssue,
 } from "@crustjs/utils/schema";
@@ -8,12 +7,12 @@ import {
 import { CrustError } from "../errors.ts";
 import type { ArgsDef, FlagsDef, ParseResult, ValidatedInput } from "../types.ts";
 
-async function runSchema<S extends StandardSchema, Raw>(
-	schema: S,
-	raw: Raw,
+async function runSchema(
+	schema: StandardSchema,
+	raw: unknown,
 	path: readonly PropertyKey[],
 	issues: ValidationIssue[],
-): Promise<{ readonly ok: false } | { readonly ok: true; readonly value: InferOutput<S> }> {
+): Promise<{ readonly ok: false } | { readonly ok: true; readonly value: unknown }> {
 	// Standard Schema validation is async-capable, including promises from other realms.
 	const result = await schema["~standard"].validate(raw);
 

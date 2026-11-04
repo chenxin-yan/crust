@@ -143,10 +143,12 @@ export type FieldDef =
 export type FieldsDef = Record<string, FieldDef>;
 
 type JsonCompatibleFields<F extends FieldsDef> = {
-	[K in keyof F]: F[K] extends { schema: StandardSchema<unknown, infer Output> }
-		? Exclude<Output, undefined> extends JsonCompatible<Exclude<Output, undefined>>
+	[K in keyof F]: F[K] extends { schema: infer S extends StandardSchema }
+		? Exclude<InferOutput<S>, undefined> extends JsonCompatible<Exclude<InferOutput<S>, undefined>>
 			? F[K]
-			: never
+			: F[K] & {
+					readonly FIX_JSON_OUTPUT: "store schema output must be JSON-compatible data (no Date, Map, bigint, or functions)";
+				}
 		: F[K];
 };
 

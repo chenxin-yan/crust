@@ -22,7 +22,7 @@ const HandlerInputBase: Context.ServiceClass<
 > = Context.Service<HandlerInput, ActionInput>()("@crustjs/effect/HandlerInput");
 
 /** The invocation input, provided to every {@link handler} program so {@link service} can pull plain Contexts. */
-class HandlerInput extends HandlerInputBase {}
+export class HandlerInput extends HandlerInputBase {}
 
 /**
  * Union of the services provided by the {@link layer} Contexts in an action
@@ -42,6 +42,8 @@ export type ServicesOf<Input> = Input extends { readonly ctx: infer Bag }
  * is unchanged. A failure rethrows the original error so `execute()` renders
  * it unchanged, and interruption rethrows an `AbortError` so cancellation
  * exits with 130. Aborting the invocation's `ctx.signal` interrupts the fiber.
+ * A compile error saying a service is not assignable to `HandlerInput` means
+ * no {@link layer} on the path provides that service.
  */
 export function handler<Input extends ActionInput, Out, E>(
 	fn: (input: Input) => Effect.Effect<Out, E, ServicesOf<Input> | HandlerInput>,

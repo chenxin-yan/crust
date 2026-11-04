@@ -67,7 +67,7 @@ On Unix, `access: "private"` writes the file with mode `0600` and a parent direc
 <auto-type-table path="../../../../../packages/store/src/types.ts" name="FieldDef" />
 
 - Core `validate` callbacks run on read and mutation and throw to reject. They may return `{ value }` to transform, but transforms apply only on mutation.
-- A schema field gives validation, transformation, defaults, and optionality to its Standard Schema v1 `schema`, and cannot also set `default` or `validate`. `read()` returns the schema output without writing it.
+- A schema field gives validation, transformation, defaults, and optionality to its Standard Schema v1 `schema`, and cannot also set `default` or `validate`. `read()` returns the schema output without writing it. The field's type is the schema's `types.output`, or its successful `validate()` result when `types` is omitted. An output that is not JSON data, such as `Date`, is a `FIX_JSON_OUTPUT` compile error.
 - Mutations revalidate transformed values and reject transforms whose result would read back differently.
 - Mutations reject explicit `undefined` for defaulted core fields, and values JSON cannot round-trip, such as `NaN`, `Infinity`, `-0`, sparse arrays, `undefined` properties, and cycles.
 
