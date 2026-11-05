@@ -65,7 +65,7 @@ function _typecheckRejectsVariadicMethodsOnConditionalBuilderUnion(condition: bo
 	// @ts-expect-error -- union of distinct builders is not callable via .flags()
 	void (condition ? c.provide(text()) : c).flags({ name: "verbose", type: "boolean" });
 
-	// flags-only unions share Ctx; the phantom parameter must bind to `this` to reject them
+	// flags-only unions share Ctx; the union check must inspect the whole receiver to reject them
 	const flagsUnion = condition ? c.flags({ name: "first", type: "boolean" }) : c;
 	// @ts-expect-error -- union of builders differing only in Flags is not callable via .flags()
 	void flagsUnion.flags({ name: "second", type: "boolean" });
@@ -76,8 +76,10 @@ function _typecheckRejectsVariadicMethodsOnConditionalBuilderUnion(condition: bo
 
 	const child = defineCommand("child", (command) => command);
 	const treeUnion = condition ? c.add(child) : c;
-	// @ts-expect-error -- .add() rejects failed input inference on a tree-only union
+	// @ts-expect-error -- .add() rejects a union of builders that differ in state
 	void treeUnion.add(child.as("other"));
+	// @ts-expect-error -- .command() rejects a union of builders that differ in state
+	void treeUnion.command("inline", (command) => command);
 
 	const extension = defineExtension(defineExtensionId("conditional"));
 	// @ts-expect-error -- app-capability builders still reject union calls via .extend()
@@ -104,6 +106,71 @@ function _typecheckRejectsVariadicMethodsOnConditionalBuilderUnion(condition: bo
 	});
 }
 
+// Builder methods read their state off an inferred `this`; explicit type arguments would skip
+// that inference and type the call against no builder state, so they are rejected.
+// `.action()` keeps class parameters and accepts them.
+function _typecheckRejectsExplicitTypeArgumentsOnStateMethods() {
+	const app = new Crust("cli").flags({ name: "verbose", type: "boolean" });
+	const child = defineCommand("child", (command) => command);
+	// @ts-expect-error -- FIX_EXPLICIT_TYPE_ARGUMENTS
+	void app.flags<readonly [{ name: "force"; type: "boolean" }]>({ name: "force", type: "boolean" });
+	// @ts-expect-error -- FIX_EXPLICIT_TYPE_ARGUMENTS
+	void app.args<[{ name: "target"; type: "string" }]>({ name: "target", type: "string" });
+	void app.action<void>(() => {});
+	// @ts-expect-error -- FIX_EXPLICIT_TYPE_ARGUMENTS
+	void app.add<readonly [typeof child]>(child);
+	// @ts-expect-error -- FIX_EXPLICIT_TYPE_ARGUMENTS
+	void app.command<"inline", any>("inline", (command) => command);
+}
+
+// generic and polymorphic-`this` receivers resolve builder state through their constraint
+function _typecheckAcceptsGenericAndPolymorphicThisReceivers() {
+	const child = defineCommand("child", (command) => command);
+	function withEverything<C extends Crust>(c: C) {
+		void c.args({ name: "target", type: "string" });
+		void c.add(child);
+		void c.command("inline", (command) => command);
+		void c.action(() => {});
+		return c.flags({ name: "verbose", type: "boolean" });
+	}
+	type _flags = Expect<
+		Equal<keyof ReturnType<typeof withEverything<Crust>>["_types"]["flags"], "verbose">
+	>;
+	class CustomApp extends Crust {
+		verbose() {
+			return this.flags({ name: "verbose", type: "boolean" });
+		}
+		target() {
+			return this.args({ name: "target", type: "string" });
+		}
+		child() {
+			return this.add(child).command("inline", (command) => command);
+		}
+	}
+	void CustomApp;
+}
+
+// a union receiver cannot drop one branch's Extension Context demands
+function _typecheckUnionReceiverKeepsExtensionContextDemands(condition: boolean) {
+	const db = defineContext("db").setup(() => "ok");
+	const wrongDb = defineContext("db").setup(() => 42);
+	const extension = defineExtension(defineExtensionId("demands"))
+		.use(db)
+		.preRun(async ({ ctx }) => {
+			(await ctx.db).toUpperCase();
+		});
+	const base = new Crust("app").provide(db());
+	const child = defineCommand("child", (command) => command.provide(wrongDb()));
+	// @ts-expect-error -- FIX_DEPENDENCY_TYPE through the Extension's demands
+	void base.extend(extension).add(child);
+	// @ts-expect-error -- the union receiver is rejected rather than checked against `{}` demands
+	void (condition ? base.extend(extension) : base).add(child);
+	// @ts-expect-error -- the union receiver is rejected rather than checked against `{}` demands
+	void (condition ? base.extend(extension) : base).command("child", (command) =>
+		command.provide(wrongDb()),
+	);
+}
+
 // explicit registration inputs preserve inference without bypassing collision checks
 function _typecheckExplicitInputsOnConditionalBuilderUnion(condition: boolean) {
 	const text = defineContext("db").setup(() => "text");
@@ -125,10 +192,8 @@ function _typecheckExplicitInputsOnConditionalBuilderUnion(condition: boolean) {
 	const child = defineCommand("child", (command) => command);
 	const sibling = child.as("other");
 	const treeUnion = condition ? c.add(child) : c;
-	// No compile-time FIX_COMMAND_COLLISION for an explicit tuple on a union receiver: the
-	// TS2589-safe ValidateCommandDefinitions loses it; `.add()` still throws at runtime.
-	const registered = treeUnion.add<readonly [typeof sibling]>(sibling);
-	type _commonPaths = Expect<Equal<keyof (typeof registered)["_types"]["tree"], "other">>;
+	// @ts-expect-error -- explicit type arguments are rejected (FIX_EXPLICIT_TYPE_ARGUMENTS)
+	void treeUnion.add<readonly [typeof sibling]>(sibling);
 
 	defineCommand("explicit", (command) => {
 		const recipeUnion = condition ? command.use(text) : command;
@@ -163,7 +228,7 @@ function _typecheckRejectsSiblingCommandSpellingCollisionsAtTheCallSite() {
 	const defs = Math.random() > 0.5 ? ([build, build] as const) : ([build] as const);
 	// @ts-expect-error -- the [build, build] variant collides within the batch
 	new Crust("cli").add(...defs);
-	// @ts-expect-error -- an explicit tuple union is validated per variant too
+	// @ts-expect-error -- explicit type arguments are rejected (FIX_EXPLICIT_TYPE_ARGUMENTS)
 	new Crust("cli").add<typeof defs>(...defs);
 	// @ts-expect-error -- Extension commands share the same batch validation
 	defineExtension(defineExtensionId("ext")).add(...defs);

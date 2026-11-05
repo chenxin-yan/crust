@@ -6,6 +6,7 @@ const fixtures = [
 	{ name: "10", size: 10, wideAdd: false, wideContexts: false },
 	{ name: "100", size: 100, wideAdd: false, wideContexts: false },
 	{ name: "200", size: 200, wideAdd: false, wideContexts: false },
+	{ name: "400", size: 400, wideAdd: false, wideContexts: false },
 	// Core used to hit TS2589 at ~44 definitions in one `.add(...)` call.
 	{ name: "50 in one .add()", size: 50, wideAdd: true, wideContexts: false },
 	// Core used to hit TS2589 at ~46 Contexts in one `.provide()`, `.extend()` or `.use()` call.
@@ -19,13 +20,34 @@ export interface TypePerfReport {
 	fixtureApi: FixtureApi;
 	/** `error` is the first TypeScript error code of a fixture measured with `--allow-compile-errors`. */
 	instantiations: Record<FixtureName, number | { error: string }>;
+	/** Check time in seconds of each fixture that compiled. */
+	checkSeconds: Partial<Record<FixtureName, number>>;
 }
+
+// A cost that grows quadratically with commands can keep instantiations flat (e.g. relating
+// every inferred builder to a structural constraint), so the report also compares how check
+// time scales. Absolute times vary by runner; the 400/200 ratio of one run mostly cancels that.
+const scalingFixtures = ["200", "400"] as const satisfies readonly FixtureName[];
+// Single-run ratios moved about ±3% locally (tsc 7.0.2). A quadratic builder regression moved
+// the ratio from 2.3× to 3.1× (+34%) while instantiations stayed within 0.1%.
+const scalingTolerance = 1.2;
 
 export function parseExtendedDiagnostics(output: string): number {
 	const value = output.match(/^Instantiations:\s+(\d+)$/m)?.[1];
 	if (value === undefined)
 		throw new Error("Missing instantiations in TypeScript extended diagnostics");
 	return Number(value);
+}
+
+export function parseCheckSeconds(output: string): number {
+	const value = output.match(/^Check time:\s+([\d.]+)s$/m)?.[1];
+	if (value === undefined) throw new Error("Missing check time in TypeScript extended diagnostics");
+	return Number(value);
+}
+
+function checkTimeScaling(report: TypePerfReport): number | undefined {
+	const [small, large] = scalingFixtures.map((name) => report.checkSeconds[name]);
+	return small && large ? large / small : undefined;
 }
 
 const number = new Intl.NumberFormat("en-US");
@@ -42,6 +64,15 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
 			`TypeScript versions differ: ${base.typescriptVersion} → ${head.typescriptVersion}`,
 		);
 	}
+	const [baseScaling, headScaling] = [base, head].map(checkTimeScaling);
+	const scalingWarn =
+		baseScaling !== undefined &&
+		headScaling !== undefined &&
+		headScaling > baseScaling * scalingTolerance
+			? " ⚠️"
+			: "";
+	const ratio = (value: number | undefined) =>
+		value === undefined ? "n/a" : `${value.toFixed(2)}×`;
 	return [
 		"| Top-level commands | Base instantiations | PR merge instantiations | Δ |",
 		"|---:|---:|---:|---:|",
@@ -58,7 +89,9 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
 			return `| ${name}${warn} | ${number.format(before)} | ${number.format(after)} | ${signed(after - before)} (${percentage(before, after)}) |`;
 		}),
 		"",
-		`TypeScript ${head.typescriptVersion} · \`--checkers 1\` · ⚠️ marks increases above the repository's advisory 10% threshold.`,
+		`Check-time scaling (${scalingFixtures[1]} ÷ ${scalingFixtures[0]} commands)${scalingWarn}: base ${ratio(baseScaling)} · PR merge ${ratio(headScaling)}`,
+		"",
+		`TypeScript ${head.typescriptVersion} · \`--checkers 1\` · ⚠️ marks instantiation increases above the repository's advisory 10% threshold, or a check-time scaling ratio more than ${Math.round((scalingTolerance - 1) * 100)}% above base: type-check cost growing faster than the command count.`,
 		...(base.fixtureApi === head.fixtureApi
 			? []
 			: [
@@ -276,6 +309,7 @@ console.log(api);`,
 	const version = run([tsc, "--version"], root).replace(/^Version\s+/, "");
 	// SAFETY: the loop assigns every fixture or throws
 	const instantiations = {} as TypePerfReport["instantiations"];
+	const checkSeconds: TypePerfReport["checkSeconds"] = {};
 	const fixtureRoot = mkdtempSync(join(tmpdir(), "crust-type-perf-"));
 	try {
 		for (const [index, { name, size, wideAdd, wideContexts }] of fixtures.entries()) {
@@ -305,11 +339,17 @@ console.log(api);`,
 				continue;
 			}
 			instantiations[name] = parseExtendedDiagnostics(diagnostics);
+			checkSeconds[name] = parseCheckSeconds(diagnostics);
 		}
 	} finally {
 		rmSync(fixtureRoot, { recursive: true, force: true });
 	}
-	const report: TypePerfReport = { typescriptVersion: version, fixtureApi, instantiations };
+	const report: TypePerfReport = {
+		typescriptVersion: version,
+		fixtureApi,
+		instantiations,
+		checkSeconds,
+	};
 	mkdirSync(dirname(resolve(outputPath)), { recursive: true });
 	writeFileSync(resolve(outputPath), `${JSON.stringify(report, null, 2)}\n`);
 }
