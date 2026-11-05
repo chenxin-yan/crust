@@ -50,9 +50,10 @@ The positional `<shell>` accepts `bash`, `zsh`, or `fish`. `command` changes the
 
 ```ts
 command.flags({
-  name: "target",
-  type: "string",
-  choices: ["browser", "bun", "node"],
+  target: {
+    type: "string",
+    choices: ["browser", "bun", "node"],
+  },
 });
 // my-cli build --target <Tab> offers browser, bun, and node
 ```

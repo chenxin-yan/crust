@@ -64,8 +64,8 @@ describe("defineFlag", () => {
 	});
 
 	it("feeds .flags() with the same record typing as an inline literal", async () => {
-		const verbose = defineFlag("verbose", { type: "boolean" });
-		const app = new Crust("cli").flags(verbose, { name: "output", type: "string", short: "o" });
+		const verbose = defineFlag({ type: "boolean" });
+		const app = new Crust("cli").flags({ verbose, output: { type: "string", short: "o" } });
 
 		type Flags = (typeof app)["_types"]["flags"];
 		type _Verbose = Expect<Equal<Flags["verbose"], { readonly type: "boolean" }>>;
@@ -153,15 +153,15 @@ describe("checked local definitions", () => {
 		const aliases = ["v"];
 		const input = { type: "string" as const, aliases, choices: ["a"], default: "a" };
 		aliases.push("v");
-		expect(() => defineFlag("value", input)).toThrow("repeats");
+		expect(() => defineFlag(input)).toThrow("repeats");
 		aliases.pop();
-		const flag = defineFlag("value", input);
+		const flag = defineFlag(input);
 		aliases.push("later");
 		expect(flag.aliases).toEqual(["v"]);
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => defineFlag("", { type: "boolean" })).toThrow("non-empty");
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		expect(() => defineFlag("value", { type: "boolean", short: "xx" })).toThrow("one character");
+		expect(() => defineFlag({ type: "boolean", short: "xx" })).toThrow("one character");
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => defineArg("", { type: "string" })).toThrow("non-empty");
 		expect(() =>
@@ -173,10 +173,10 @@ describe("checked local definitions", () => {
 
 describe("checked attachments", () => {
 	it("checks destination relations and owns definition collections", async () => {
-		const local = defineFlag("value", { type: "string", aliases: ["v"] });
-		const app = new Crust("cli").flags(local);
+		const local = defineFlag({ type: "string", aliases: ["v"] });
+		const app = new Crust("cli").flags({ value: local });
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		expect(() => app.flags(local)).toThrow("collides");
+		expect(() => app.flags({ value: local })).toThrow("collides");
 		expect(() =>
 			new Crust("cli").args(
 				// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
@@ -193,7 +193,7 @@ describe("checked attachments", () => {
 		const choices = ["a"];
 		const defaults = ["a"];
 		const attached = new Crust("cli")
-			.flags({ name: "mode", type: "string", multiple: true, choices, default: defaults })
+			.flags({ mode: { type: "string", multiple: true, choices, default: defaults } })
 			.action(({ flags }) => flags.mode);
 		choices.length = 0;
 		defaults[0] = "b";
@@ -203,19 +203,16 @@ describe("checked attachments", () => {
 
 it("defers helper parsers until invocation and calls them once", async () => {
 	let calls = 0;
-	const flag = defineFlag(
-		"value",
-		// @ts-expect-error -- runtime regression deliberately exercises Promise rejection.
-		{
-			type: "string",
-			parse: (raw: string) => {
-				calls++;
-				return Promise.resolve(raw);
-			},
+	// @ts-expect-error -- runtime regression deliberately exercises Promise rejection.
+	const flag = defineFlag({
+		type: "string",
+		parse: (raw: string) => {
+			calls++;
+			return Promise.resolve(raw);
 		},
-	);
+	});
 	// @ts-expect-error -- runtime regression deliberately consumes the invalid helper.
-	const app = new Crust("cli").flags(flag);
+	const app = new Crust("cli").flags({ value: flag });
 	expect(calls).toBe(0);
 	await expect(unwrap(app.run([], { flags: { value: "input" } }))).rejects.toThrow("synchronous");
 	expect(calls).toBe(1);
@@ -225,10 +222,10 @@ it("preserves default payload identity", async () => {
 	const payload = { key: "value" };
 	const endpoint = new URL("https://example.com");
 	const defaults = new Crust("cli")
-		.flags(
-			{ name: "json", type: "json", default: payload },
-			{ name: "url", type: "url", multiple: true, default: [endpoint] },
-		)
+		.flags({
+			json: { type: "json", default: payload },
+			url: { type: "url", multiple: true, default: [endpoint] },
+		})
 		.action(({ flags }) => flags);
 	const outcome = await defaults.run([]);
 	if (outcome.status !== "completed") throw new Error("Expected completed invocation");
@@ -240,7 +237,7 @@ it("preserves default payload identity", async () => {
 
 it("keeps occurrence results mutable without exposing stored defaults", async () => {
 	const app = new Crust("cli")
-		.flags({ name: "mode", type: "string", multiple: true, default: ["a"] })
+		.flags({ mode: { type: "string", multiple: true, default: ["a"] } })
 		.action(({ flags }) => {
 			flags.mode.push("b");
 			return flags.mode;

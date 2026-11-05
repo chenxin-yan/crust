@@ -22,7 +22,7 @@ function buildCli(options?: CompletionOptions) {
 		.add(
 			defineCommand("build", { description: "Build artifact" }, (cmd) =>
 				cmd
-					.flags({ name: "target", type: "string", choices: ["browser", "bun", "node"] })
+					.flags({ target: { type: "string", choices: ["browser", "bun", "node"] } })
 					.action(() => {}),
 			),
 			defineCommand("deploy", { description: "Deploy", aliases: ["dep"] }, (cmd) =>
@@ -31,9 +31,10 @@ function buildCli(options?: CompletionOptions) {
 						defineCommand("prod", { description: "Production deploy" }, (sub) =>
 							sub
 								.flags({
-									name: "env",
-									type: "string",
-									choices: ["dev", "staging", "prod"],
+									env: {
+										type: "string",
+										choices: ["dev", "staging", "prod"],
+									},
 								})
 								.action(() => {}),
 						),

@@ -97,6 +97,6 @@ function _constructorNames(invalidName: "" | "valid") {
 	function identity<T extends AnyCrust>(app: T): T {
 		return app;
 	}
-	identity(new Crust("literal").flags({ name: "ok", type: "boolean" }));
+	identity(new Crust("literal").flags({ ok: { type: "boolean" } }));
 	void [broad, anyCrust];
 }

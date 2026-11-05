@@ -78,15 +78,16 @@ it("keeps compatible hook providers and unrelated descendant replacements lazy",
 
 it("checks pending Extension flag relations at preparation", async () => {
 	const ext = defineExtension(defineExtensionId("pending")).flags({
-		name: "token",
-		type: "string",
+		token: {
+			type: "string",
+		},
 	});
 	const root = new Crust("app").extend(ext);
 	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-	const withFlag = root.flags({ name: "token", type: "number" });
+	const withFlag = root.flags({ token: { type: "number" } });
 	await expect(withFlag.snapshot()).rejects.toThrow("collides");
 	const owner = defineContext("owner")
-		.flags({ name: "token", type: "number" })
+		.flags({ token: { type: "number" } })
 		.setup(() => 1);
 	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 	const withProvider = root.provide(owner());
@@ -109,7 +110,7 @@ it("opaque synchronous parser payloads retain identity without then or prototype
 		},
 	);
 	const app = new Crust("app")
-		.flags({ name: "value", type: "string", parse: () => value })
+		.flags({ value: { type: "string", parse: () => value } })
 		// Nest the payload to avoid ordinary async return-value thenable assimilation.
 		.action(({ flags }) => ({ value: flags.value }));
 	const outcome = await app.run([], { flags: { value: "input" } });
@@ -118,11 +119,11 @@ it("opaque synchronous parser payloads retain identity without then or prototype
 });
 
 it("locally proven helper results cannot be rewritten before checked consumption", async () => {
-	const flag = defineFlag("token", { type: "string", short: "t" });
+	const flag = defineFlag({ type: "string", short: "t" });
 	expect(() => Object.assign(flag, { short: "too-long" })).toThrow();
 	expect(
 		await new Crust("app")
-			.flags(flag)
+			.flags({ token: flag })
 			.action(({ flags }) => flags.token)
 			.run([], { flags: { token: "safe" } }),
 	).toMatchObject({ status: "completed", result: "safe" });
@@ -194,8 +195,8 @@ it("rejects dynamically named Extension commands that collide with another root 
 });
 
 it("owns the checked parser function instead of rereading the mutable author object", async () => {
-	const definition = { name: "value", type: "string" as const, parse: () => 1 };
-	const app = new Crust("app").flags(definition).action(({ flags }) => flags.value);
+	const definition = { type: "string" as const, parse: () => 1 };
+	const app = new Crust("app").flags({ value: definition }).action(({ flags }) => flags.value);
 	definition.parse = () => 2;
 	expect(await app.run([], { flags: { value: "input" } })).toMatchObject({
 		status: "completed",
@@ -205,21 +206,21 @@ it("owns the checked parser function instead of rereading the mutable author obj
 
 it("checks Extension flag relations before trusted reuse, including each factory result", () => {
 	const owner = defineContext("owner")
-		.flags({ name: "token", type: "string", short: "t" })
+		.flags({ token: { type: "string", short: "t" } })
 		.setup(() => 1);
 	const peer = defineContext("peer")
-		.flags({ name: "other", type: "boolean", short: "t" })
+		.flags({ other: { type: "boolean", short: "t" } })
 		.setup(() => 2);
 	// Widened names opt out of the static relation, leaving the consuming check.
-	const flags = [{ name: "token", type: "boolean" as const }];
+	const flags: Record<string, { type: "boolean" }> = { token: { type: "boolean" } };
 	const provided = [owner()];
 	expect(() =>
 		defineExtension(defineExtensionId("direct"))
-			.flags(...flags)
+			.flags(flags)
 			.provide(...provided),
 	).toThrow("collides");
 	const factory = defineExtension(defineExtensionId("factory")).factory((extension) =>
-		extension.flags(...flags).provide(...provided),
+		extension.flags(flags).provide(...provided),
 	);
 	expect(() => factory()).toThrow("collides");
 	expect(() =>
@@ -230,10 +231,10 @@ it("checks Extension flag relations before trusted reuse, including each factory
 
 it("keeps same-name Context replacement order inside checked Extensions", async () => {
 	const old = defineContext("owner")
-		.flags({ name: "old", type: "string" })
+		.flags({ old: { type: "string" } })
 		.setup(() => "old");
 	const current = defineContext("owner")
-		.flags({ name: "current", type: "string" })
+		.flags({ current: { type: "string" } })
 		.setup(() => "current");
 	const ext = defineExtension(defineExtensionId("replacement")).provide(old(), current());
 	const app = new Crust("app").extend(ext).action(({ ctx }) => ctx.owner);
@@ -257,7 +258,7 @@ it("keeps same-name Context replacement order inside checked Extensions", async 
 	expect(() =>
 		defineExtension(defineExtensionId("bad-default"))
 			// @ts-expect-error -- runtime regression deliberately exercises helper validation.
-			.flags({ name: "mode", type: "string", choices: ["allowed"], default: "forbidden" }),
+			.flags({ mode: { type: "string", choices: ["allowed"], default: "forbidden" } }),
 	).toThrow("default must be one of choices");
 });
 
@@ -265,14 +266,14 @@ it("checked providers validate pending contributed commands lazily against final
 	let recipes = 0;
 	let setups = 0;
 	const owner = defineContext("owner")
-		.flags({ name: "token", type: "string" })
+		.flags({ token: { type: "string" } })
 		.setup(() => {
 			setups++;
 			return 1;
 		});
 	const child = defineCommand("child", (c) => {
 		recipes++;
-		return c.flags({ name: "token", type: "boolean" });
+		return c.flags({ token: { type: "boolean" } });
 	});
 	const ext = defineExtension(defineExtensionId("pending-commands")).add(
 		defineCommand("parent", (c) => c.add(child)),
@@ -294,21 +295,21 @@ it("checked Extensions validate earlier pending commands against new flags and p
 		let recipes = 0;
 		let setups = 0;
 		const owner = defineContext("owner")
-			.flags({ name: "token", type: "string" })
+			.flags({ token: { type: "string" } })
 			.setup(() => {
 				setups++;
 				return 1;
 			});
 		const child = defineCommand("child", (c) => {
 			recipes++;
-			return c.flags({ name: "token", type: "boolean" });
+			return c.flags({ token: { type: "boolean" } });
 		});
 		const pending = defineExtension(defineExtensionId("pending")).add(
 			defineCommand("parent", (c) => c.add(child)),
 		);
 		const addition =
 			source === "flags"
-				? defineExtension(defineExtensionId("addition")).flags({ name: "token", type: "string" })
+				? defineExtension(defineExtensionId("addition")).flags({ token: { type: "string" } })
 				: defineExtension(defineExtensionId("addition")).provide(owner());
 		const root = new Crust("app").extend(pending);
 		const app = root.extend(addition);
@@ -326,7 +327,7 @@ it("checked Extensions validate earlier pending commands against new flags and p
 
 it("checked inputs validate open inherited flags without changing positional provider scope", async () => {
 	const owner = defineContext("owner")
-		.flags({ name: "token", type: "string", required: true })
+		.flags({ token: { type: "string", required: true } })
 		.setup(() => 1);
 	const providers = [owner()];
 	const child = defineCommand("child", (c) =>
@@ -348,10 +349,11 @@ it("checked inputs validate open inherited flags without changing positional pro
 	).toMatchObject({ status: "completed", result: "leaf" });
 	for (const recursive of [true, false]) {
 		const ext = defineExtension(defineExtensionId("recursive")).flags({
-			name: "token",
-			type: "string",
-			required: true,
-			recursive,
+			token: {
+				type: "string",
+				required: true,
+				recursive,
+			},
 		});
 		for (const app of [
 			new Crust("app").add(child).extend(ext),
@@ -371,18 +373,19 @@ it("checked inputs validate open inherited flags without changing positional pro
 });
 
 it("checked Extension additions preserve nonrecursive flags and same-id replacement", async () => {
-	const child = defineCommand("child", (c) => c.flags({ name: "token", type: "boolean" }));
+	const child = defineCommand("child", (c) => c.flags({ token: { type: "boolean" } }));
 	const id = defineExtensionId("pending-replacement");
 	const pending = defineExtension(id).add(child);
 	const root = new Crust("app").extend(pending);
 	const local = defineExtension(defineExtensionId("local")).flags({
-		name: "token",
-		type: "string",
-		recursive: false,
+		token: {
+			type: "string",
+			recursive: false,
+		},
 	});
 	const localExtension: Extension = local;
 	await expect(root.extend(localExtension).snapshot()).resolves.toBeDefined();
-	const replacement = defineExtension(id).flags({ name: "token", type: "string" });
+	const replacement = defineExtension(id).flags({ token: { type: "string" } });
 	const replacementExtension: Extension = replacement;
 	const snapshot = await root.extend(replacementExtension).snapshot();
 	expect(snapshot.subCommands).toEqual({});
@@ -391,9 +394,9 @@ it("checked Extension additions preserve nonrecursive flags and same-id replacem
 it("rejects supplied flag keys retired by same-ID Extension replacement", async () => {
 	const id = defineExtensionId("retired-flags");
 	const original = new Crust("app")
-		.extend(defineExtension(id).flags({ name: "oldFlag", type: "string", required: true }))
+		.extend(defineExtension(id).flags({ oldFlag: { type: "string", required: true } }))
 		.action(({ flags }): string => flags.oldFlag);
-	const replacement = defineExtension(id).flags({ name: "newFlag", type: "boolean" });
+	const replacement = defineExtension(id).flags({ newFlag: { type: "boolean" } });
 	await expect(
 		unwrap(original.extend(replacement).run([], { flags: { oldFlag: "supplied" } })),
 	).rejects.toMatchObject({ code: "PARSE", message: 'Unknown flag "--oldFlag"' });
@@ -405,7 +408,7 @@ it("rejects supplied flag keys retired by same-ID Extension replacement", async 
 
 it("rejects retired recursive keys on existing and later descendants and same-call replacements", async () => {
 	const id = defineExtensionId("retired-recursive");
-	const old = defineExtension(id).flags({ name: "oldFlag", type: "string", required: true });
+	const old = defineExtension(id).flags({ oldFlag: { type: "string", required: true } });
 	const replacement = defineExtension(id);
 	const grand = defineCommand("grand", (g) => g.action(() => "grand"));
 	const child = defineCommand("child", (c) => c.add(grand));
@@ -433,7 +436,7 @@ it("rejects retired recursive keys on existing and later descendants and same-ca
 it("rejects retired Extension provider flags in both registration forms without setup", async () => {
 	let setups = 0;
 	const provider = defineContext("provider")
-		.flags({ name: "provided", type: "string", required: true })
+		.flags({ provided: { type: "string", required: true } })
 		.setup(() => {
 			setups++;
 			return "provider";
@@ -462,10 +465,11 @@ it("rejects retired Extension provider flags in both registration forms without 
 it("keeps surviving and reintroduced keys and nonrecursive replacement scope", async () => {
 	const id = defineExtensionId("retired-local");
 	const old = defineExtension(id).flags({
-		name: "local",
-		type: "string",
-		required: true,
-		recursive: false,
+		local: {
+			type: "string",
+			required: true,
+			recursive: false,
+		},
 	});
 	const original = new Crust("app").extend(old).command("child", (c) => c.action(() => "child"));
 	const removed = original.extend(defineExtension(id));
@@ -483,7 +487,7 @@ it("keeps surviving and reintroduced keys and nonrecursive replacement scope", a
 		result: undefined,
 	});
 
-	const recursive = defineExtension(id).flags({ name: "local", type: "string", required: true });
+	const recursive = defineExtension(id).flags({ local: { type: "string", required: true } });
 	const narrowed = new Crust("app")
 		.extend(recursive)
 		.command("child", (c) => c.action(() => "child"))
@@ -499,8 +503,8 @@ it("keeps surviving and reintroduced keys and nonrecursive replacement scope", a
 
 it("does not mistake inherited object names for surviving replacement flags", async () => {
 	const id = defineExtensionId("retired-prototype-name");
-	const old = defineExtension(id).flags({ name: "toString", type: "string", required: true });
-	const replacement = defineExtension(id).flags({ name: "other", type: "boolean" });
+	const old = defineExtension(id).flags({ toString: { type: "string", required: true } });
+	const replacement = defineExtension(id).flags({ other: { type: "boolean" } });
 	const app = new Crust("app").extend(old, replacement);
 	await expect(unwrap(app.run([], { flags: { toString: "value" } }))).rejects.toThrow(
 		'Unknown flag "--toString"',
@@ -509,7 +513,7 @@ it("does not mistake inherited object names for surviving replacement flags", as
 
 it("retires actually inherited provider flags even below a later Context shadow", async () => {
 	const provider = defineContext("shadowed")
-		.flags({ name: "inherited", type: "string", required: true })
+		.flags({ inherited: { type: "string", required: true } })
 		.setup(() => "original");
 	const shadow = defineContext("shadowed").setup(() => 42);
 	const child = defineCommand("child", (c) => c.provide(shadow()).action(() => "child"));

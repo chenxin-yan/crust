@@ -10,11 +10,11 @@ async function walk(app: AnyCrust) {
 
 describe("walkCommand", () => {
 	it("captures flat flags with type, spellings, description, multiple, and takesValue", async () => {
-		const app = new Crust("mycli").flags(
-			{ name: "verbose", type: "boolean", short: "v", description: "Verbose output" },
-			{ name: "name", type: "string", description: "Name to greet", aliases: ["nm"] },
-			{ name: "tag", type: "string", multiple: true },
-		);
+		const app = new Crust("mycli").flags({
+			verbose: { type: "boolean", short: "v", description: "Verbose output" },
+			name: { type: "string", description: "Name to greet", aliases: ["nm"] },
+			tag: { type: "string", multiple: true },
+		});
 		const spec = await walk(app);
 		const byName = Object.fromEntries(spec.flags.map((f) => [f.name, f]));
 
@@ -62,7 +62,7 @@ describe("walkCommand", () => {
 
 	it("captures choices on string flags and string args", async () => {
 		const app = new Crust("mycli")
-			.flags({ name: "target", type: "string", choices: ["browser", "bun", "node"] })
+			.flags({ target: { type: "string", choices: ["browser", "bun", "node"] } })
 			.args({ name: "shell", type: "string", required: true, choices: ["bash", "zsh", "fish"] });
 		const spec = await walk(app);
 		expect(spec.flags.find((f) => f.name === "target")?.choices).toEqual([
@@ -90,10 +90,10 @@ describe("walkCommand", () => {
 	it("strips ANSI escapes and drops empty descriptions", async () => {
 		const ESC = "\x1b";
 		const app = new Crust("mycli", { description: `${ESC}[1mcolored desc${ESC}[0m` })
-			.flags(
-				{ name: "verbose", type: "boolean", description: `${ESC}[2mverbose${ESC}[0m` },
-				{ name: "empty", type: "string", description: "" },
-			)
+			.flags({
+				verbose: { type: "boolean", description: `${ESC}[2mverbose${ESC}[0m` },
+				empty: { type: "string", description: "" },
+			})
 			.args({ name: "input", type: "string", description: `${ESC}[33minput desc${ESC}[0m` })
 			.add(
 				defineCommand("kid", { description: `${ESC}[31mred kid${ESC}[0m` }, (command) => command),
@@ -109,11 +109,11 @@ describe("walkCommand", () => {
 
 describe("walkCommand — url/path/json valueCompletion", () => {
 	it("normalises special flag types", async () => {
-		const app = new Crust("mycli").flags(
-			{ name: "endpoint", type: "url" },
-			{ name: "out", type: "path" },
-			{ name: "config", type: "json" },
-		);
+		const app = new Crust("mycli").flags({
+			endpoint: { type: "url" },
+			out: { type: "path" },
+			config: { type: "json" },
+		});
 		const by = Object.fromEntries((await walk(app)).flags.map((f) => [f.name, f]));
 		expect(by.endpoint?.valueCompletion).toBe("none");
 		expect(by.out?.valueCompletion).toBe("files");

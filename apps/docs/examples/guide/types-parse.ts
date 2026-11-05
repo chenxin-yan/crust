@@ -2,7 +2,7 @@ import { Crust } from "@crustjs/core";
 
 const deploy = new Crust("deploy")
 	// [!code highlight]
-	.flags({ name: "regions", type: "string", parse: (raw) => raw.split(",") })
+	.flags({ regions: { type: "string", parse: (raw) => raw.split(",") } })
 	.action(({ flags, stdout }) => {
 		const regions = flags.regions;
 		//    ^?

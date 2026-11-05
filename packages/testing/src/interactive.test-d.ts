@@ -8,7 +8,7 @@ function _typecheckPreservesCommandArgumentAndFlagTypesFromTheApplication() {
 	const deploy = defineCommand("deploy", (command) =>
 		command
 			.args({ name: "target", type: "string", required: true })
-			.flags({ name: "force", type: "boolean" })
+			.flags({ force: { type: "boolean" } })
 			.action(() => {}),
 	);
 	const app = new Crust("cli").add(deploy);
@@ -24,10 +24,11 @@ function _typecheckPreservesCommandArgumentAndFlagTypesFromTheApplication() {
 
 function _typecheckStrictInteractiveChoices(mode: string) {
 	const app = new Crust("cli").flags({
-		name: "mode",
-		type: "string",
-		choices: ["safe", "fast"],
-		required: true,
+		mode: {
+			type: "string",
+			choices: ["safe", "fast"],
+			required: true,
+		},
 	});
 	void runInteractive(app, [], { flags: { mode: "safe" } });
 	if (mode === "safe" || mode === "fast") void runInteractive(app, [], { flags: { mode } });

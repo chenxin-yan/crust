@@ -8,10 +8,7 @@ function _typecheckBindsTheSelectedCommandShapeIntoAPathFreeTypedInvoker() {
 	const add = defineCommand("add", (command) =>
 		command
 			.args({ name: "name", type: "string", required: true })
-			.flags(
-				{ name: "fetch", type: "boolean" },
-				{ name: "mode", type: "string", choices: ["a", "b"] },
-			)
+			.flags({ fetch: { type: "boolean" }, mode: { type: "string", choices: ["a", "b"] } })
 			.action(({ args }) => ({ remote: args.name })),
 	);
 	const remote = defineCommand("remote", (command) => command.add(add));

@@ -81,9 +81,8 @@ function ownVar(name: string, def: EnvVarDef): EnvVarDef {
 		}
 	}
 	try {
-		// A fixed flag name keeps variable names such as `__proto__` out of flag spelling rules.
-		const { name: _flagName, ...owned } = defineFlag("value", def);
-		return owned;
+		// A name-less definition keeps variable names such as `__proto__` out of flag spelling rules.
+		return defineFlag(def);
 	} catch (error) {
 		if (!(error instanceof CrustError && error.is("DEFINITION"))) throw error;
 		throw new CrustError("DEFINITION", `Invalid environment variable "${name}"`, {

@@ -32,7 +32,7 @@ async function connect(app: AnyCrust, exclude?: readonly (readonly string[])[]) 
 }
 
 const finisher = defineExtension(defineExtensionId("test:finisher"))
-	.flags({ name: "bail", type: "boolean" })
+	.flags({ bail: { type: "boolean" } })
 	.preRun((ctx) => {
 		if (ctx.flags.bail === true) {
 			ctx.stdout("bailed");
@@ -51,11 +51,11 @@ const fixture = new Crust("fixture", { description: "Fixture", version: "1.2.3" 
 		defineCommand("echo", { description: "Echo input" }, (c) =>
 			c
 				.args({ name: "word", type: "string", required: true })
-				.flags(
-					{ name: "times", type: "number", default: 1 },
-					{ name: "origin", type: "url" },
-					{ name: "tag", type: "string", multiple: true },
-				)
+				.flags({
+					times: { type: "number", default: 1 },
+					origin: { type: "url" },
+					tag: { type: "string", multiple: true },
+				})
 				.action(({ args, flags, rawArgs }) => ({
 					word: args.word.repeat(flags.times),
 					origin: flags.origin?.href,
@@ -76,7 +76,7 @@ const fixture = new Crust("fixture", { description: "Fixture", version: "1.2.3" 
 	.add(defineCommand("scalar", (c) => c.action(() => 42)))
 	.add(
 		defineCommand("fail", (c) =>
-			c.flags({ name: "plain", type: "boolean" }).action(({ flags }) => {
+			c.flags({ plain: { type: "boolean" } }).action(({ flags }) => {
 				if (flags.plain) throw new Error("boom");
 				throw new CrustError("VALIDATION", "custom failure");
 			}),
@@ -204,7 +204,7 @@ describe("createMcpServer", () => {
 			disposed: Promise.withResolvers<void>(),
 		}));
 		const session = defineContext("session")
-			.flags({ name: "id", type: "number", required: true })
+			.flags({ id: { type: "number", required: true } })
 			.setup(({ flags, defer }) => {
 				const call = calls[flags.id]!;
 				defer(() => call.disposed.resolve());
@@ -253,7 +253,7 @@ describe("createMcpServer", () => {
 			defineCommand("probe", (c) =>
 				c
 					.args({ name: "hasOwnProperty", type: "string", required: true })
-					.flags({ name: "constructor", type: "string" }, { name: "toString", type: "number" })
+					.flags({ constructor: { type: "string" }, toString: { type: "number" } })
 					.action(({ args, flags }) => ({
 						own: args.hasOwnProperty,
 						constructor: flags.constructor ?? null,

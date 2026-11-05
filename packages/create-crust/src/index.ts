@@ -63,35 +63,30 @@ function validateProjectDirectory(path: string): void {
 // ────────────────────────────────────────────────────────────────────────────
 
 export const app = new Crust("create-crust", { description: pkg.description })
-	.flags(
-		{
-			name: "runtime",
+	.flags({
+		runtime: {
 			type: "string",
 			choices: ["bun", "node"],
 			description: 'Runtime to develop and build for ("bun" or "node")',
 		},
-		{
-			name: "artifact",
+		artifact: {
 			type: "string",
 			choices: ["package", "binary"],
 			description: "Build output: runtime package or standalone binary",
 		},
-		{
-			name: "install",
+		install: {
 			type: "boolean",
 			description: "Install dependencies after scaffolding",
 		},
-		{
-			name: "git",
+		git: {
 			type: "boolean",
 			description: "Initialize a git repository after scaffolding",
 		},
-		{
-			name: "overwrite",
+		overwrite: {
 			type: "boolean",
 			description: "Overwrite the destination directory if it already exists",
 		},
-	)
+	})
 	.args({
 		name: "directory",
 		type: "string",

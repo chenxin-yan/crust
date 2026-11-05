@@ -42,12 +42,7 @@ function fixtureDefinition(fixture: CommandFixture): CommandDefinition<any, any,
 	return defineCommand(name, meta, (command) => {
 		const configured = command
 			.args(...(fixture.args ?? []))
-			.flags(
-				...Object.entries(fixture.flags ?? {}).map(([flagName, def]) => ({
-					name: flagName,
-					...def,
-				})),
-			)
+			.flags(fixture.flags ?? {})
 			.add(...Object.values(fixture.subCommands ?? {}).map(fixtureDefinition));
 		return fixture.run ? configured.action(fixture.run) : configured;
 	});
@@ -57,9 +52,7 @@ export async function snapshotFixture(fixture: CommandFixture): Promise<CommandS
 	const { name, hidden: _hidden, ...meta } = fixture.meta;
 	const root = new Crust(name, meta)
 		.args(...(fixture.args ?? []))
-		.flags(
-			...Object.entries(fixture.flags ?? {}).map(([flagName, def]) => ({ name: flagName, ...def })),
-		)
+		.flags(fixture.flags ?? {})
 		.add(...Object.values(fixture.subCommands ?? {}).map(fixtureDefinition));
 	return await (fixture.run ? root.action(fixture.run) : root).snapshot();
 }

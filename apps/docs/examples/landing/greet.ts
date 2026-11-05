@@ -4,7 +4,7 @@ import { help } from "@crustjs/extensions";
 const app = new Crust("greet")
 	.extend(help())
 	.args({ name: "name", type: "string", default: "world" })
-	.flags({ name: "shout", type: "boolean", short: "s" })
+	.flags({ shout: { type: "boolean", short: "s" } })
 	.action(({ args, flags, stdout }) => {
 		//        ^?
 		//              ^?

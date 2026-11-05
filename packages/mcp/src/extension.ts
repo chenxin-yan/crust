@@ -128,11 +128,12 @@ export const mcpExtension: ExtensionFactory<
 							(sub) =>
 								sub
 									.flags({
-										name: "client",
-										type: "string",
-										choices: MCP_CLIENTS,
-										default: "claude",
-										description: CLIENT_FLAG_DESCRIPTION,
+										client: {
+											type: "string",
+											choices: MCP_CLIENTS,
+											default: "claude",
+											description: CLIENT_FLAG_DESCRIPTION,
+										},
 									})
 									.action((context) => {
 										const name = context.rootCommand.meta.name;

@@ -98,7 +98,7 @@ export interface FlagSnapshot {
  * defineCommand("add", (cmd) =>
  *   cmd
  *     .args({ name: "name", type: "string", required: true })
- *     .flags({ name: "force", type: "boolean", short: "f" })
+ *     .flags({ force: { type: "boolean", short: "f" } })
  *     .action(() => {}),
  * );
  * // snapshots to:

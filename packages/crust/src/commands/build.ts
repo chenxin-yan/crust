@@ -24,49 +24,43 @@ export const buildCommand = defineCommand(
 	{ description: "Build your CLI for Bun or Node" },
 	(command) =>
 		command
-			.flags(
-				{
-					name: "artifact",
+			.flags({
+				artifact: {
 					type: "string",
 					choices: ARTIFACT_KINDS,
 					description:
 						"package: a JavaScript bundle for the installed runtime; binary: standalone executables. Overrides package.json crust.artifact",
 				},
-				{
-					name: "target",
+				target: {
 					type: "string",
 					multiple: true,
 					description: `Canonical compiler target(s) for binaries, or "${HOST_TARGET}" for this machine; repeatable. Omit to stage package.json crust.targets, or every target`,
 					short: "t",
 				},
-				{
-					name: "env-file",
+				"env-file": {
 					type: "string",
 					multiple: true,
 					description: "Explicit env file(s) used for build-time constants; repeatable",
 				},
-				{
-					name: "validate",
+				validate: {
 					type: "boolean",
 					description:
 						"Materialize command definitions before compiling; --no-validate also skips Extension build hooks",
 					default: true,
 				},
-				{
-					name: "minify",
+				minify: {
 					type: "boolean",
 					description: "Minify the output",
 					default: true,
 				},
-				{
-					name: "bytecode",
+				bytecode: {
 					type: "boolean",
 					// No default: other builds must distinguish an explicit --bytecode (error)
 					// from the implicit bun-binary default (true, applied by `build`).
 					description:
 						"Precompile bun binaries to bytecode for faster startup (default for bun binaries; unsupported otherwise)",
 				},
-			)
+			})
 			.action(async ({ flags, stdout, stderr }) => {
 				await build({
 					cwd: process.cwd(),

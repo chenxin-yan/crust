@@ -38,8 +38,9 @@ type FifteenDeep = readonly [
 function _typecheckLayersRecursiveExtensionFlagsOntoEarlierCommandTrees() {
 	const local = defineCommand("local", (command) => command.action(() => {}));
 	const trace = defineExtension(defineExtensionId("trace")).flags({
-		name: "trace",
-		type: "boolean",
+		trace: {
+			type: "boolean",
+		},
 	});
 	const addedThenExtended = new Crust("cli").add(local).extend(trace);
 	type LocalInput = RunInput<
@@ -83,11 +84,7 @@ function _typecheckKeepsConditionallyAssembledExtensionContributionsRuntimeOnly(
 	const bar = defineCommand("bar", (command) => command.action(() => {}));
 	const condition = (globalThis as { __never?: boolean }).__never === true;
 	const conditional = defineExtension(defineExtensionId("conditional"))
-		.flags(
-			...(condition
-				? [{ name: "fa", type: "boolean" as const }]
-				: [{ name: "fb", type: "boolean" as const }]),
-		)
+		.flags(condition ? { fa: { type: "boolean" } } : { fb: { type: "boolean" } })
 		.add(...(condition ? [foo] : [bar]));
 	const app = new Crust("cli").action(() => {}).extend(conditional);
 	const elementConditional = defineExtension(defineExtensionId("element")).add(
@@ -156,13 +153,13 @@ function _typecheckRejectsCommandCollisionsInsideOneExtensionSTuple() {
 // rejects Extension flags colliding with contributed command flags
 function _typecheckRejectsExtensionFlagsCollidingWithContributedCommandFlags() {
 	const scan = defineCommand("scan", (command) =>
-		command.flags({ name: "trace", type: "boolean" }).action(() => {}),
+		command.flags({ trace: { type: "boolean" } }).action(() => {}),
 	);
 	const extension = defineExtension(defineExtensionId("tracing"))
-		.flags({ name: "trace", type: "string" as const })
+		.flags({ trace: { type: "string" as const } })
 		.add(scan);
 	const clean = defineExtension(defineExtensionId("clean"))
-		.flags({ name: "other", type: "string" as const })
+		.flags({ other: { type: "string" as const } })
 		.add(scan);
 
 	// @ts-expect-error -- prepare injects the flag into the contributed command and throws
@@ -175,9 +172,10 @@ function _typecheckRejectsExtensionFlagsCollidingWithContributedCommandFlags() {
 function _typecheckKeepsWidenedRecursiveFlagScopesOffDescendantTypedInputs() {
 	const dynamicScope = (globalThis as { __never?: boolean }).__never === true;
 	const scoped = defineExtension(defineExtensionId("scoped")).flags({
-		name: "trace",
-		type: "boolean",
-		recursive: dynamicScope,
+		trace: {
+			type: "boolean",
+			recursive: dynamicScope,
+		},
 	});
 	const child = defineCommand("child", (command) => command.action(() => {}));
 	const app = new Crust("cli")
@@ -192,7 +190,7 @@ function _typecheckKeepsWidenedRecursiveFlagScopesOffDescendantTypedInputs() {
 
 // accepts structurally JSON-compatible named interfaces
 function _typecheckAcceptsStructurallyJSONCompatibleNamedInterfaces() {
-	const app = new Crust("cli").flags({ name: "config", type: "json" }).action(() => {});
+	const app = new Crust("cli").flags({ config: { type: "json" } }).action(() => {});
 	const payload: NamedJsonPayload = { name: "demo", nested: { enabled: true } };
 	void app.run([], { flags: { config: payload } });
 	const invalid: NonJsonPayload = { createdAt: new Date() };
@@ -216,13 +214,13 @@ function _typecheckPreservesCommandAliasesAndPreParseInputTypes() {
 				{ name: "port", schema: rawNumber },
 				{ name: "region", type: "string", required: true, default: "us" },
 			)
-			.flags(
-				{ name: "mode", type: "string", choices: ["dev", "prod"], required: true },
-				{ name: "retries", type: "string", parse: Number },
-				{ name: "color", type: "boolean", default: true },
-				{ name: "env", type: "string", required: true, default: "prod" },
-				{ name: "version", type: "boolean", noNegate: true },
-			)
+			.flags({
+				mode: { type: "string", choices: ["dev", "prod"], required: true },
+				retries: { type: "string", parse: Number },
+				color: { type: "boolean", default: true },
+				env: { type: "string", required: true, default: "prod" },
+				version: { type: "boolean", noNegate: true },
+			})
 			.action(() => {}),
 	);
 	const release = defineCommand("release-now", (command) => command.add(deploy));
@@ -371,7 +369,7 @@ function _typecheckResolvesActionResultsForLiteralPathsPastTheDepthCap() {
 function _typecheckRejectsSubstitutedRunShapes() {
 	const app = new Crust("cli").add(
 		defineCommand("build", (command) =>
-			command.flags({ name: "count", type: "number", required: true }).action(() => 123),
+			command.flags({ count: { type: "number", required: true } }).action(() => 123),
 		),
 	);
 	type Path = readonly ["build"];
@@ -489,7 +487,7 @@ function _typecheckRejectsUnknownInputKeysHeldInVariables(cond: boolean) {
 	const app = new Crust("cli").command("build", (command) =>
 		command
 			.args({ name: "entry", type: "string" })
-			.flags({ name: "minify", type: "boolean" })
+			.flags({ minify: { type: "boolean" } })
 			.action(() => {}),
 	);
 	const handle = app.at(["build"]);
@@ -527,7 +525,7 @@ function _typecheckRejectsUnknownInputKeysHeldInVariables(cond: boolean) {
 // omits input sections a command does not define, so editors do not offer them
 function _typecheckOmitsUndefinedInputSections() {
 	const app = new Crust("cli")
-		.command("build", (command) => command.flags({ name: "minify", type: "boolean" }))
+		.command("build", (command) => command.flags({ minify: { type: "boolean" } }))
 		.command("bare", (command) => command);
 	type Shape = (typeof app)["_types"]["shape"];
 	type _build = Expect<
@@ -553,7 +551,7 @@ function _typecheckKeepsRequiredInputIndependentOfInference(
 	maybeOptional: { flags: { minify: boolean } } | undefined,
 ) {
 	const app = new Crust("app")
-		.flags({ name: "mode", type: "string", required: true })
+		.flags({ mode: { type: "string", required: true } })
 		.action(({ flags }) => flags.mode);
 	const handle = app.at([]);
 	const run = handle.run;
@@ -580,7 +578,7 @@ function _typecheckKeepsRequiredInputIndependentOfInference(
 	void app.run<readonly []>([], { flags: { mode: "safe" } });
 	void run({ flags: { mode: "safe" } });
 
-	const optional = new Crust("opt").flags({ name: "minify", type: "boolean" }).action(() => {});
+	const optional = new Crust("opt").flags({ minify: { type: "boolean" } }).action(() => {});
 	void optional.run([]);
 	void optional.run([], undefined);
 	void optional.run([], undefined, { stdout: () => {} });

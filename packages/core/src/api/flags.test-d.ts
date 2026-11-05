@@ -11,11 +11,11 @@ import { defineArg, defineFlag } from "./flags.ts";
 // rejects invalid choice defaults and reserved spellings at the builder call
 function _typecheckRejectsInvalidChoiceDefaultsAndReservedSpellingsAtTheBuilderCall() {
 	// @ts-expect-error -- default falls outside the literal choices
-	new Crust("cli").flags({ name: "mode", type: "string", choices: ["a", "b"], default: "z" });
+	new Crust("cli").flags({ mode: { type: "string", choices: ["a", "b"], default: "z" } });
 	// @ts-expect-error -- __proto__ would mutate the plain-object flag registry
-	new Crust("cli").flags({ name: "__proto__", type: "boolean" });
+	new Crust("cli").flags({ __proto__: { type: "boolean" } });
 	// @ts-expect-error -- aliases share the same reserved spelling rule
-	new Crust("cli").flags({ name: "safe", type: "boolean", aliases: ["__proto__"] });
+	new Crust("cli").flags({ safe: { type: "boolean", aliases: ["__proto__"] } });
 }
 
 // rejects defaults outside literal choices at the builder call
@@ -34,7 +34,7 @@ function _optionalParserDefinitions() {
 		parse: async (raw) => Number(raw),
 	};
 	// @ts-expect-error -- optional declared parsers must still be synchronous when present
-	defineFlag("port", asyncDefinition);
+	defineFlag(asyncDefinition);
 
 	type OptionalSyncDefinition = {
 		readonly type: "string";
@@ -44,21 +44,21 @@ function _optionalParserDefinitions() {
 		type: "string",
 		parse: (raw) => Number(raw),
 	};
-	defineFlag("port", syncDefinition);
+	defineFlag(syncDefinition);
 }
 
 function _localDefinitions(name: string, aliases: string[], choices: string[], value: string) {
 	// @ts-expect-error -- helpers own local spelling checks, not just attachments
-	defineFlag("bad", { type: "boolean", short: "xx" });
+	defineFlag({ type: "boolean", short: "xx" });
 	// @ts-expect-error -- scan alias tuples before extracting their union
-	defineFlag("bad", { type: "boolean", aliases: ["b", "b"] });
+	defineFlag({ type: "boolean", aliases: ["b", "b"] });
 	// @ts-expect-error -- short and long aliases share one namespace
-	defineFlag("bad", { type: "boolean", short: "b", aliases: ["b"] });
+	defineFlag({ type: "boolean", short: "b", aliases: ["b"] });
 	defineFlag(name, { type: "boolean" });
-	defineFlag("bad", { type: "boolean", aliases });
+	defineFlag({ type: "boolean", aliases });
 	defineArg("bad", { type: "string", parse: (_raw): unknown => 1 });
-	defineFlag("bad", { type: "string", parse: (_raw): object => ({}) });
-	defineFlag("mode", { type: "string", choices, default: value });
+	defineFlag({ type: "string", parse: (_raw): object => ({}) });
+	defineFlag({ type: "string", choices, default: value });
 	// @ts-expect-error -- literal membership is owned by the helper
 	defineArg("mode", { type: "string", choices: ["a"], default: "b" });
 	defineArg(name, { type: "string", choices, default: value });
@@ -66,54 +66,55 @@ function _localDefinitions(name: string, aliases: string[], choices: string[], v
 
 // Environment bindings work on every variant; either delimiter requires `multiple: true`.
 function _envAndDelimiter(schema: StandardSchema) {
-	defineFlag("token", { type: "string", env: { name: "APP_TOKEN" }, required: true });
-	defineFlag("port", { type: "number", env: { name: "APP_PORT" }, default: 3000 });
-	defineFlag("color", { type: "boolean", env: { name: "APP_COLOR" }, noNegate: true });
-	defineFlag("port", { type: "string", schema, env: { name: "APP_PORT" } });
-	defineFlag("tags", {
+	defineFlag({ type: "string", env: { name: "APP_TOKEN" }, required: true });
+	defineFlag({ type: "number", env: { name: "APP_PORT" }, default: 3000 });
+	defineFlag({ type: "boolean", env: { name: "APP_COLOR" }, noNegate: true });
+	defineFlag({ type: "string", schema, env: { name: "APP_PORT" } });
+	defineFlag({
 		type: "string",
 		multiple: true,
 		env: { name: "APP_TAGS", delimiter: ":" },
 		delimiter: ",",
 	});
-	defineFlag("ports", { type: "number", multiple: true, delimiter: ":" });
-	defineFlag("tags", {
+	defineFlag({ type: "number", multiple: true, delimiter: ":" });
+	defineFlag({
 		type: "string",
 		schema,
 		multiple: true,
 		env: { name: "APP_TAGS", delimiter: "," },
 	});
-	defineFlag("enabled", {
+	defineFlag({
 		type: "boolean",
 		schema,
 		multiple: true,
 		env: { name: "APP_ENABLED", delimiter: "," },
 	});
 	// @ts-expect-error -- an environment binding requires an explicit name
-	defineFlag("token", { type: "string", env: "APP_TOKEN" });
+	defineFlag({ type: "string", env: "APP_TOKEN" });
 	// @ts-expect-error -- the environment delimiter also requires multiple: true
-	defineFlag("tag", { type: "string", env: { name: "APP_TAGS", delimiter: "," } });
+	defineFlag({ type: "string", env: { name: "APP_TAGS", delimiter: "," } });
 	// @ts-expect-error -- schema-backed flags use the same occurrence restriction
-	defineFlag("tag", { type: "string", schema, env: { name: "APP_TAGS", delimiter: "," } });
+	defineFlag({ type: "string", schema, env: { name: "APP_TAGS", delimiter: "," } });
 	// @ts-expect-error -- bindings require a name
-	defineFlag("tag", { type: "string", multiple: true, env: { delimiter: "," } });
-	// @ts-expect-error -- the restriction also applies at attachment
+	defineFlag({ type: "string", multiple: true, env: { delimiter: "," } });
 	new Crust("cli").flags({
-		name: "tag",
-		type: "string",
-		env: { name: "APP_TAGS", delimiter: "," },
+		// @ts-expect-error -- the restriction also applies at attachment
+		tag: {
+			type: "string",
+			env: { name: "APP_TAGS", delimiter: "," },
+		},
 	});
 	// @ts-expect-error -- delimiter requires multiple: true
-	defineFlag("tag", { type: "string", delimiter: "," });
+	defineFlag({ type: "string", delimiter: "," });
 	// @ts-expect-error -- delimiter requires multiple: true on schema-backed flags too
-	defineFlag("tag", { type: "string", schema, delimiter: "," });
+	defineFlag({ type: "string", schema, delimiter: "," });
 	// @ts-expect-error -- delimiter requires multiple: true
-	new Crust("cli").flags({ name: "tag", type: "string", delimiter: "," });
+	new Crust("cli").flags({ tag: { type: "string", delimiter: "," } });
 }
 
 function _ownedEnvBinding() {
 	const env = { name: "APP_TAGS", delimiter: "," };
-	const flag = defineFlag("tags", { type: "string", multiple: true, env });
+	const flag = defineFlag({ type: "string", multiple: true, env });
 	// @ts-expect-error -- owned environment names are frozen even for predeclared bindings
 	flag.env.name = "OTHER";
 	// @ts-expect-error -- owned environment delimiters are frozen too
@@ -126,16 +127,16 @@ function _attachments(flags: NamedFlagDef[], args: ArgsDef, aliases: string[], c
 	new Crust("cli").flags(...flags);
 	new Crust("cli").flags(cond ? { name: "a", type: "boolean" } : { name: "b", type: "boolean" });
 	new Crust("cli").args(...args);
-	new Crust("cli").flags({ name: "a", type: "boolean", aliases });
+	new Crust("cli").flags({ a: { type: "boolean", aliases } });
 	new Crust("cli").args({ name: "a", type: "string", parse: (_raw): unknown => 1 });
 	const open = new Crust("cli").flags(...flags);
-	open.flags({ name: "known", type: "boolean" });
+	open.flags({ known: { type: "boolean" } });
 	const openArgs = new Crust("cli").args(...args);
 	openArgs.args({ name: "known", type: "string" });
 	// @ts-expect-error -- appending known args must not erase prior unknown args for run
 	void openArgs.args({ name: "known", type: "string" }).run([], {});
 	defineCommand("child", (b) => b.flags(...flags).args(...args));
-	const known = new Crust("cli").flags({ name: "mode", type: "string", required: true });
+	const known = new Crust("cli").flags({ mode: { type: "string", required: true } });
 	void known.run([], { flags: { mode: "a" } });
 	// @ts-expect-error -- a narrow checked tuple retains known required fields
 	void known.run([], {});
@@ -157,10 +158,10 @@ function _remainingLocalProofs(
 		: { type: "string" as const };
 	defineArg("value", maybeParser);
 	// @ts-expect-error -- any return is not synchronous proof
-	defineFlag("value", { type: "string", parse: JSON.parse });
+	defineFlag({ type: "string", parse: JSON.parse });
 	const choices: string[] = ["a"];
 	const defaults: string[] = ["a"];
-	const owned = defineFlag("value", { type: "string", multiple: true, choices, default: defaults });
+	const owned = defineFlag({ type: "string", multiple: true, choices, default: defaults });
 	// @ts-expect-error -- proof-bearing collections exposed from helpers are readonly
 	owned.choices.push("b");
 	// @ts-expect-error -- occurrence default arrays are readonly (contained JSON/URLs are not frozen)
@@ -172,25 +173,25 @@ function _mixedCheckedNamespaces(
 	cond: boolean,
 	maybe: { name: "maybe"; type: "string"; variadic?: true },
 ) {
-	const app = new Crust("cli").flags(
-		{ name: "static", type: "boolean" },
-		{ name: "dynamic", type: "boolean", aliases },
-	);
-	app.flags({ name: "later", type: "boolean" });
+	const app = new Crust("cli").flags({
+		static: { type: "boolean" },
+		dynamic: { type: "boolean", aliases },
+	});
+	app.flags({ later: { type: "boolean" } });
 	const args = new Crust("cli").args({ name: "first", type: "string" }, maybe);
 	args.args({ name: "last", type: "string" });
 	// @ts-expect-error -- every possible canonical spelling must be usable
 	new Crust("cli").flags({ name: cond ? "good" : "no-bad", type: "boolean" });
 	// @ts-expect-error -- every possible short spelling must be one character
-	defineFlag("flag", { type: "boolean", short: cond ? "f" : "ff" });
+	defineFlag({ type: "boolean", short: cond ? "f" : "ff" });
 }
 
 function _broadFlagHolders(
 	app: Crust<FlagsDef>,
 	aliases: Crust<{ known: { type: "boolean"; aliases: string[] } }>,
 ) {
-	app.flags({ name: "new", type: "boolean" });
-	aliases.flags({ name: "new", type: "boolean" });
+	app.flags({ new: { type: "boolean" } });
+	aliases.flags({ new: { type: "boolean" } });
 }
 
 function _emptyAttachmentsPreserveKnownState() {
@@ -224,7 +225,7 @@ function _mixedDefinitions(condition: boolean, name: string, invalidName: "" | "
 	// @ts-expect-error -- one valid branch cannot hide an invalid flag name
 	defineFlag(invalidName, { type: "string" });
 	// @ts-expect-error -- overlapping collision diagnostics must not cancel each other out
-	defineFlag("value", { type: "string", short: "v", aliases: ["value", "v"] });
+	defineFlag({ type: "string", short: "v", aliases: ["value", "v"] });
 }
 
 function _openInvalidDefinitions(condition: boolean) {
@@ -237,21 +238,21 @@ function _openInvalidDefinitions(condition: boolean) {
 	// @ts-expect-error -- an uncertain collection must not hide its independently invalid branch
 	new Crust("app").flags(...flags);
 	// @ts-expect-error -- multiple reserved-prefix diagnostics must not cancel each other out
-	new Crust("app").flags({ name: "no-value", type: "string", aliases: ["no-alias"] });
+	new Crust("app").flags({ "no-value": { type: "string", aliases: ["no-alias"] } });
 }
 
 function _otherFlagSpellingEntryPoints() {
 	defineContext("context")
 		// @ts-expect-error -- Context flags use the same local spelling contract
-		.flags({ name: "flag", type: "boolean", aliases: ["f", "f"] })
+		.flags({ flag: { type: "boolean", aliases: ["f", "f"] } })
 		.setup(() => true);
 	defineExtension(defineExtensionId("extension"))
 		// @ts-expect-error -- Extension flags use the same local spelling contract
-		.flags({ name: "flag", type: "boolean", short: "ff" });
+		.flags({ flag: { type: "boolean", short: "ff" } });
 	defineCommand("child", (command) =>
 		command
 			// @ts-expect-error -- recipe flags use the same local spelling contract
-			.flags({ name: "flag", type: "boolean", aliases: ["f", "f"] }),
+			.flags({ flag: { type: "boolean", aliases: ["f", "f"] } }),
 	);
-	new Crust("cli").flags({ name: "flag", type: "boolean", short: "f", aliases: ["again"] });
+	new Crust("cli").flags({ flag: { type: "boolean", short: "f", aliases: ["again"] } });
 }

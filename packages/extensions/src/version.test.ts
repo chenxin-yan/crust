@@ -13,7 +13,7 @@ describe("version", () => {
 		let ran = false;
 		const app = new Crust("app")
 			.extend(version("1.2.3"))
-			.flags({ name: "port", type: "number", default: 3000, env: { name: "PORT" } })
+			.flags({ port: { type: "number", default: 3000, env: { name: "PORT" } } })
 			.action(() => {
 				ran = true;
 			});

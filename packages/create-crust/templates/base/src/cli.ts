@@ -13,11 +13,12 @@ const app = new Crust(<%~ JSON.stringify(it.name) %>, { description: "A CLI buil
 		default: "world",
 	})
 	.flags({
-		name: "greet",
-		type: "string",
-		description: "Greeting to use",
-		default: "Hello",
-		short: "g",
+		greet: {
+			type: "string",
+			description: "Greeting to use",
+			default: "Hello",
+			short: "g",
+		},
 	})
 	.action(({ args, flags, stdout }) => {
 		stdout(`${flags.greet}, ${args.name}!`);

@@ -13,7 +13,7 @@ function _typecheckInfersPulledContextValuesWhilePreservingFluentActionTypes() {
 		command
 			.use(auth)
 			.args({ name: "target", type: "string", required: true })
-			.flags({ name: "force", type: "boolean", required: true })
+			.flags({ force: { type: "boolean", required: true } })
 			.provide(region())
 			.action(async ({ args, flags, ctx }) => {
 				const identity = await ctx.auth;
@@ -36,7 +36,7 @@ function _typecheckNestedFlaggedDefinitionAfterArgsSatisfiesErasedBuilder() {
 			.args({ name: "source", type: "string", required: true })
 			.add(
 				defineCommand("child", (child) =>
-					child.flags({ name: "mode", type: "string" }).action(() => {}),
+					child.flags({ mode: { type: "string" } }).action(() => {}),
 				),
 			)
 			.action(({ args }) => {
@@ -58,7 +58,7 @@ function _typecheckRestrictsBuilderCapabilities() {
 
 	defineCommand("configured", (command) => {
 		const configured = command
-			.flags({ name: "force", type: "boolean" })
+			.flags({ force: { type: "boolean" } })
 			.use(auth)
 			.action(async ({ ctx }) => (await ctx.auth).user);
 

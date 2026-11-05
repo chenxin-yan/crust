@@ -16,7 +16,7 @@ describe("defineContext()", () => {
 		const config = defineContext("config").setup(() => "config");
 		const logger = defineContext("logger").setup(() => "logger");
 		const base = defineContext("db").use(config);
-		const flagged = base.flags({ name: "url", type: "string" });
+		const flagged = base.flags({ url: { type: "string" } });
 		const logged = base.use(logger);
 		expect(Object.isFrozen(base)).toBe(true);
 		expect(flagged).not.toBe(base);
@@ -76,7 +76,7 @@ describe("defineContext()", () => {
 		const config = defineContext("config").setup(() => "config");
 		const db = defineContext("db")
 			.use(config)
-			.flags({ name: "url", type: "string" })
+			.flags({ url: { type: "string" } })
 			.setup(() => "real");
 		const real = db();
 		const fake = db.of("fake");
@@ -209,9 +209,9 @@ describe("Crust .provide()", () => {
 
 	it("throws DEFINITION when .provide() owns a colliding flag", () => {
 		const owner = defineContext("owner")
-			.flags({ name: "mode", type: "string" })
+			.flags({ mode: { type: "string" } })
 			.setup(() => ({}));
-		const app = new Crust("cli").flags({ name: "mode", type: "string" });
+		const app = new Crust("cli").flags({ mode: { type: "string" } });
 
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => app.provide(owner())).toThrow(
@@ -232,7 +232,7 @@ describe("Crust .provide()", () => {
 	});
 });
 
-const apiKey = defineFlag("api-key", { type: "string", short: "k", aliases: ["token"] });
+const apiKey = defineFlag({ type: "string", short: "k", aliases: ["token"] });
 
 describe("Context-owned sections", () => {
 	const envSection = { title: "Environment", body: "APP_TOKEN  API token" };
@@ -272,7 +272,7 @@ describe("Context-owned sections", () => {
 		const extended = base
 			.use(config)
 			.sections(notes)
-			.flags({ name: "port", type: "number", default: 3000 })
+			.flags({ port: { type: "number", default: 3000 } })
 			.sections()
 			.setup(async ({ ctx, flags }) => `${await ctx.config}:${flags.port}`);
 		const sibling = base.sections({ title: "Other", body: "Other notes" }).setup(() => 0);
@@ -441,7 +441,7 @@ describe("Context-owned flags", () => {
 	it("installs a propagating cloned flag and exposes its validated value to setup", async () => {
 		const seen: unknown[] = [];
 		const auth = defineContext("auth")
-			.flags(apiKey)
+			.flags({ "api-key": apiKey })
 			.setup(({ flags }) => {
 				type _ApiKey = Expect<Equal<(typeof flags)["api-key"], string | undefined>>;
 				seen.push(flags["api-key"]);
@@ -464,16 +464,16 @@ describe("Context-owned flags", () => {
 	});
 
 	it("passes only each Context's owned flags to its setup", async () => {
-		const region = defineFlag("region", { type: "string" });
+		const region = defineFlag({ type: "string" });
 		const seen: string[][] = [];
 		const auth = defineContext("auth")
-			.flags(apiKey)
+			.flags({ "api-key": apiKey })
 			.setup(({ flags }) => {
 				seen.push(Object.keys(flags));
 				return {};
 			});
 		const location = defineContext("location")
-			.flags(region)
+			.flags({ region })
 			.setup(({ flags }) => {
 				seen.push(Object.keys(flags));
 				return {};
@@ -493,11 +493,11 @@ describe("Context-owned flags", () => {
 	});
 
 	it("builds behavior capabilities with the action's injected io", async () => {
-		const verbose = defineFlag("verbose", { type: "boolean" });
+		const verbose = defineFlag({ type: "boolean" });
 		let setupStdout: ((text: string) => void) | undefined;
 		let setupStderr: ((text: string) => void) | undefined;
 		const logging = defineContext("logging")
-			.flags(verbose)
+			.flags({ verbose })
 			.setup(({ flags, stdout, stderr }) => {
 				type _Stdout = Expect<Equal<typeof stdout, (text: string) => void>>;
 				type _Stderr = Expect<Equal<typeof stderr, (text: string) => void>>;
@@ -526,7 +526,7 @@ describe("Context-owned flags", () => {
 	it("exposes a provided capability to later added commands", async () => {
 		const seen: string[] = [];
 		const auth = defineContext("auth")
-			.flags(apiKey)
+			.flags({ "api-key": apiKey })
 			.setup(({ flags }) => ({
 				apiKey: flags["api-key"],
 			}));
@@ -548,11 +548,11 @@ describe("Context-owned flags", () => {
 	it("keeps owned flags when later .flags() calls accumulate local flags", async () => {
 		expect.assertions(2);
 		const auth = defineContext("auth")
-			.flags(apiKey)
+			.flags({ "api-key": apiKey })
 			.setup(() => ({}));
 		const app = new Crust("cli")
 			.provide(auth())
-			.flags({ name: "verbose", type: "boolean" })
+			.flags({ verbose: { type: "boolean" } })
 			.action(({ flags }) => {
 				expect(flags["api-key"]).toBe("secret");
 				expect(flags.verbose).toBe(true);
@@ -564,7 +564,7 @@ describe("Context-owned flags", () => {
 	it("allows one owning factory on sibling command branches", async () => {
 		const seen: string[] = [];
 		const auth = defineContext("auth")
-			.flags(apiKey)
+			.flags({ "api-key": apiKey })
 			.setup(({ flags }) => ({
 				apiKey: flags["api-key"],
 			}));
@@ -585,7 +585,7 @@ describe("Context-owned flags", () => {
 	it("retains owned flags on .of() test doubles", async () => {
 		expect.assertions(3);
 		const auth = defineContext("auth")
-			.flags(apiKey)
+			.flags({ "api-key": apiKey })
 			.setup(() => ({ real: true }));
 		const fake = auth.of({ real: false });
 		expect(fake.ownedFlags["api-key"]).toBeDefined();
@@ -705,11 +705,11 @@ describe("Context setup dependencies", () => {
 
 	it("lets .of() cut the dependency graph while retaining owned flags", async () => {
 		expect.assertions(1);
-		const token = defineFlag("token", { type: "string" });
+		const token = defineFlag({ type: "string" });
 		const missing = defineContext("missing").setup(() => "real");
 		const db = defineContext("db")
 			.use(missing)
-			.flags(token)
+			.flags({ token })
 			.setup(async ({ ctx }) => await ctx.missing);
 		const app = new Crust("cli").provide(db.of("fake")).action(async ({ ctx }) => {
 			expect(await ctx.db).toBe("fake");
@@ -843,9 +843,9 @@ describe("Context dependency runtime boundaries", () => {
 
 describe("lazy Context bags", () => {
 	it("memoizes a degraded value a setup returned after catching the flag-phase rejection", async () => {
-		const token = defineFlag("token", { type: "string" });
+		const token = defineFlag({ type: "string" });
 		const gate = defineContext("gate")
-			.flags(token)
+			.flags({ token })
 			.setup(() => "real");
 		let setups = 0;
 		const wrapper = defineContext("wrapper")
@@ -944,9 +944,9 @@ describe("lazy Context bags", () => {
 	});
 
 	it("attributes nested preRun flag rejection to the flag-owning Context", async () => {
-		const token = defineFlag("token", { type: "string" });
+		const token = defineFlag({ type: "string" });
 		const auth = defineContext("auth")
-			.flags(token)
+			.flags({ token })
 			.setup(({ flags }) => flags.token);
 		const service = defineContext("service")
 			.use(auth)
@@ -966,9 +966,9 @@ describe("lazy Context bags", () => {
 
 	it("retries only flag-validation failures after preRun", async () => {
 		let serviceSetups = 0;
-		const token = defineFlag("token", { type: "string" });
+		const token = defineFlag({ type: "string" });
 		const auth = defineContext("auth")
-			.flags(token)
+			.flags({ token })
 			.setup(({ flags }) => flags.token);
 		const service = defineContext("service")
 			.use(auth)
@@ -990,9 +990,9 @@ describe("lazy Context bags", () => {
 
 	it("retries flag-validation failures the setup wrapped with a cause", async () => {
 		let serviceSetups = 0;
-		const token = defineFlag("token", { type: "string" });
+		const token = defineFlag({ type: "string" });
 		const auth = defineContext("auth")
-			.flags(token)
+			.flags({ token })
 			.setup(({ flags }) => flags.token);
 		const service = defineContext("service")
 			.use(auth)
@@ -1035,9 +1035,9 @@ describe("lazy Context bags", () => {
 
 	it("memoizes a replacement error after setup swallows flag rejection", async () => {
 		let setups = 0;
-		const token = defineFlag("token", { type: "string" });
+		const token = defineFlag({ type: "string" });
 		const auth = defineContext("auth")
-			.flags(token)
+			.flags({ token })
 			.setup(({ flags }) => flags.token);
 		const replacement = new Error("replacement");
 		const service = defineContext("service")
@@ -1084,9 +1084,9 @@ describe("lazy Context bags", () => {
 	});
 
 	it("rejects flag-owning Contexts after handled skips validation", async () => {
-		const token = defineFlag("token", { type: "string" });
+		const token = defineFlag({ type: "string" });
 		const auth = defineContext("auth")
-			.flags(token)
+			.flags({ token })
 			.setup(({ flags }) => flags.token);
 		const extension = defineExtension(defineExtensionId("consumer"))
 			.use(auth)
@@ -1642,9 +1642,9 @@ describe("Context setup defer()", () => {
 	it("keeps defers from a flags-before-validation attempt and adds the retry's defers", async () => {
 		const log: string[] = [];
 		let attempts = 0;
-		const token = defineFlag("token", { type: "string" });
+		const token = defineFlag({ type: "string" });
 		const auth = defineContext("auth")
-			.flags(token)
+			.flags({ token })
 			.setup(({ flags }) => flags.token);
 		const service = defineContext("service")
 			.use(auth)
@@ -1675,7 +1675,7 @@ describe("inline .command()", () => {
 		const auth = defineContext("auth").setup(() => ({ user: "chenxin" }));
 		const app = new Crust("cli").provide(auth()).command("whoami", (cmd) =>
 			cmd
-				.flags({ name: "loud", type: "boolean" })
+				.flags({ loud: { type: "boolean" } })
 				.args({ name: "suffix", type: "string" })
 				.action(async ({ args, flags, ctx }) => {
 					type _Suffix = Expect<Equal<typeof args.suffix, string | undefined>>;
@@ -1794,15 +1794,18 @@ describe("inline .command()", () => {
 describe("checked Context definitions", () => {
 	it("snapshots mutable flag definitions per .flags() call without starting setup", () => {
 		let setups = 0;
-		const flags = [{ name: "token", type: "string" as const, aliases: ["t"] }];
-		const base = defineContext("auth").flags(...flags);
-		flags[0]!.aliases.push("mutated");
-		flags.push({ name: "other", type: "string", aliases: ["t"] });
+		const flags: Record<string, { type: "string"; aliases: string[] }> = {
+			token: { type: "string", aliases: ["t"] },
+		};
+		const base = defineContext("auth").flags(flags);
+		flags.token!.aliases.push("mutated");
+		const other = { type: "string" as const, aliases: ["t"] };
+		flags.other = other;
 		// A later call collides with spellings an earlier call snapshotted.
-		expect(() => base.flags(flags[1]!)).toThrow("collides");
-		expect(() => defineContext("auth").flags(...flags)).toThrow("collides");
+		expect(() => base.flags({ other })).toThrow("collides");
+		expect(() => defineContext("auth").flags(flags)).toThrow("collides");
 		const auth = base.setup(() => ++setups);
-		flags.length = 0;
+		delete flags.token;
 		expect(auth().ownedFlags.token?.aliases).toEqual(["t"]);
 		expect(Object.isFrozen(auth().ownedFlags)).toBe(true);
 		expect(setups).toBe(0);
@@ -1838,12 +1841,12 @@ describe("checked Context definitions", () => {
 		const app = new Crust("replace").provide(source()).provide(...providers);
 		await unwrap(app.action(async ({ ctx }) => expect(await ctx.source).toBe(2)).run([]));
 		const auth = defineContext("auth")
-			.flags({ name: "token", type: "string", aliases: ["t"] })
+			.flags({ token: { type: "string", aliases: ["t"] } })
 			.setup(() => 1);
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => new Crust("same-owner").provide(auth()).provide(auth.of(2))).toThrow("collides");
 		const other = defineContext("auth")
-			.flags({ name: "other", type: "string", short: "t" })
+			.flags({ other: { type: "string", short: "t" } })
 			.setup(() => 2);
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => new Crust("same-owner-alias").provide(auth()).provide(other())).toThrow(
@@ -1855,7 +1858,7 @@ describe("checked Context definitions", () => {
 		const dep = defineContext("dep").setup(() => 1);
 		const real = defineContext("real")
 			.use(dep)
-			.flags({ name: "token", type: "string" })
+			.flags({ token: { type: "string" } })
 			.setup(() => 2);
 		const altered = {
 			...real(),

@@ -29,7 +29,7 @@ function _extensionBoundary(broad: Extension) {
 	const contributed = new Crust("app").extend(
 		defineExtension(id)
 			.provide(defineContext("logger").setup(() => "logger")())
-			.flags({ name: "trace", type: "boolean" })
+			.flags({ trace: { type: "boolean" } })
 			.add(defineCommand("child", (command) => command.action(() => 42)))
 			.preRun(({ flags }) => {
 				const trace: boolean | undefined = flags.trace;
@@ -45,9 +45,7 @@ function _extensionBoundary(broad: Extension) {
 	const list = [empty];
 	new Crust("app").extend(...list);
 	new Crust("app").extend(broad);
-	const choice = Math.random()
-		? empty
-		: defineExtension(id).flags({ name: "trace", type: "boolean" });
+	const choice = Math.random() ? empty : defineExtension(id).flags({ trace: { type: "boolean" } });
 	new Crust("app").extend(choice);
 	function generic<E extends Extension>(extension: E) {
 		// @ts-expect-error Unresolved generic contributions cannot use the trusted path.
@@ -59,7 +57,7 @@ function _extensionBoundary(broad: Extension) {
 
 function _privateCommandProof() {
 	const child = defineCommand("child", (c) =>
-		c.flags({ name: "token", type: "string" }).action(() => 42),
+		c.flags({ token: { type: "string" } }).action(() => 42),
 	);
 	const copy = { ...child };
 	const app = new Crust("app").add(copy);
@@ -68,7 +66,7 @@ function _privateCommandProof() {
 	new Crust("app")
 		.provide(
 			defineContext("owner")
-				.flags({ name: "token", type: "string" })
+				.flags({ token: { type: "string" } })
 				.setup(() => 1)(),
 		)
 		// @ts-expect-error Structural copies retain carried flag relations.
@@ -88,11 +86,11 @@ function _holderErasure() {
 	// @ts-expect-error An empty Extension holder cannot erase demands.
 	const erasedExtension: Extension<{}, [], {}, []> = extension;
 	const instance = defineContext("owned")
-		.flags({ name: "token", type: "string" })
+		.flags({ token: { type: "string" } })
 		.setup(() => 1)();
 	// @ts-expect-error An empty Context holder cannot erase owned flag state.
 	const erasedContext: ContextInstance<"owned", number, {}, {}> = instance;
-	const app = new Crust("app").flags({ name: "token", type: "string", required: true });
+	const app = new Crust("app").flags({ token: { type: "string", required: true } });
 	// @ts-expect-error Fresh-root defaults cannot be a holder for a nonempty root.
 	const erasedRoot: Crust = app;
 	void [erasedCommand, erasedExtension, erasedContext, erasedRoot];
@@ -126,7 +124,7 @@ function _checkedReplacementProof() {
 	const name: string = "child";
 	const commands = [defineCommand(name, (c) => c.action(() => "replacement"))];
 	const app = new Crust("app")
-		.flags({ name: "root", type: "number" })
+		.flags({ root: { type: "number" } })
 		.command("child", (c) => c.action(() => 42))
 		.extend(defineExtension(id).add(...commands));
 	void app.run(["child"]);
@@ -148,14 +146,14 @@ function _recipeHolderProof() {
 	const erase = (b: CommandDefinitionBuilder): CommandDefinitionBuilder => b;
 	defineCommand("child", (c) => {
 		// @ts-expect-error A public default holder cannot erase a recipe's local flags.
-		return erase(c.flags({ name: "token", type: "number" }));
+		return erase(c.flags({ token: { type: "number" } }));
 	});
 	function identity<B extends AnyCommandDefinitionBuilder>(b: B): B {
 		return b;
 	}
-	const child = defineCommand("child", (c) => identity(c.flags({ name: "token", type: "number" })));
+	const child = defineCommand("child", (c) => identity(c.flags({ token: { type: "number" } })));
 	const owner = defineContext("owner")
-		.flags({ name: "token", type: "string" })
+		.flags({ token: { type: "string" } })
 		.setup(() => 1);
 	// @ts-expect-error Generic identity retains the destination collision proof.
 	new Crust("app").provide(owner()).add(child);
@@ -164,13 +162,13 @@ function _recipeHolderProof() {
 function _openInlineOwnedFlags() {
 	const name: string = "token";
 	const owner = defineContext("owner")
-		.flags({ name, type: "string" })
+		.flags({ [name]: { type: "string" } })
 		.setup(() => 1);
 	const app = new Crust("app").provide(owner());
 	app.command("child", (c) => {
-		return c.flags({ name: "token", type: "number" });
+		return c.flags({ token: { type: "number" } });
 	});
-	app.command("child", (c) => c.flags({ name: "safe", type: "number" }));
+	app.command("child", (c) => c.flags({ safe: { type: "number" } }));
 }
 
 function _demandValues() {
@@ -338,9 +336,9 @@ function _checkedAliasReplacementProof() {
 
 function _providersAfterPendingCommands() {
 	const owner = defineContext("owner")
-		.flags({ name: "token", type: "string" })
+		.flags({ token: { type: "string" } })
 		.setup(() => 1);
-	const child = defineCommand("child", (c) => c.flags({ name: "token", type: "boolean" }));
+	const child = defineCommand("child", (c) => c.flags({ token: { type: "boolean" } }));
 	const ext = defineExtension(id).add(child);
 	// @ts-expect-error -- providers added later reach pending contributed commands
 	new Crust("app").extend(ext).provide(owner());

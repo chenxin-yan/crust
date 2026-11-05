@@ -20,9 +20,9 @@ const tscBin = join(repoRoot, "node_modules/.bin/tsc");
 
 const CONSUMER_SOURCE = `import { Crust, defineCommand, defineContext, defineExtension, defineExtensionId, defineFlag, type AnyCrust } from "@crustjs/core";
 
-export const localFlag = defineFlag("local", { type: "string", choices: ["a"], default: "a" });
+export const localFlag = defineFlag({ type: "string", choices: ["a"], default: "a" });
 export const localConfigured = new Crust("local", { sections: [{ title: "Notes", body: "text" }] })
-	.flags(localFlag).args({ name: "file", type: "string" });
+	.flags({ local: localFlag }).args({ name: "file", type: "string" });
 export const configuredChild = defineCommand("configured", { aliases: ["alias"] }, b => b);
 
 export const checkedApp = new Crust("checked")
@@ -35,23 +35,23 @@ export function dynamicCommand(name: string) {
 	return defineCommand(name, (command) => command.action(() => name));
 }
 
-// Inferred defineFlag element type remains structurally nameable
-export const configFlag = defineFlag("config", {
+// Inferred defineFlag type remains structurally nameable
+export const configFlag = defineFlag({
 	type: "string",
 	description: "Path to config file",
 });
 
-export const flags = [
-	configFlag,
-	defineFlag("quiet", { type: "boolean", short: "q", description: "Quiet mode" }),
-] as const;
+export const flags = {
+	config: configFlag,
+	quiet: defineFlag({ type: "boolean", short: "q", description: "Quiet mode" }),
+} as const;
 
-// Inferred builder type exposes the accumulated spelling-literal union
-export const flagged = new Crust("flagged").flags(...flags);
+// Inferred builder type exposes the accumulated flag record
+export const flagged = new Crust("flagged").flags(flags);
 
-export const apiKey = defineFlag("api-key", { type: "string", short: "k" });
+export const apiKey = defineFlag({ type: "string", short: "k" });
 // An unfinished fluent Context builder is itself a nameable exported type
-export const authBuilder = defineContext("auth").flags(apiKey);
+export const authBuilder = defineContext("auth").flags({ "api-key": apiKey });
 export const auth = authBuilder.setup(({ flags }) => ({
 	apiKey: flags["api-key"],
 }));
@@ -87,7 +87,7 @@ export const telemetry = defineExtension(defineExtensionId("telemetry"))
 
 // Inferred builder type references accumulated Context-owned flag shapes
 export const app = new Crust("consumer-cli")
-	.flags(...flags)
+	.flags(flags)
 	.provide(auth(), authenticatedApi())
 	.add(defineCommand("build", (cmd) => cmd.action(() => {})))
 	.add(deploy);
@@ -96,7 +96,7 @@ export const app = new Crust("consumer-cli")
 export const stamp = defineExtension<"version">(defineExtensionId("stamp")).factory(
 	(extension, prefix: string) =>
 		extension
-			.flags({ name: "prefix", type: "string", default: prefix })
+			.flags({ prefix: { type: "string", default: prefix } })
 			.preRun(({ rootCommand, stdout }) => stdout(rootCommand.meta.version)),
 );
 export const versionedApp = new Crust("versioned", { version: "1.2.3" })
@@ -114,7 +114,7 @@ ${Array.from(
 		cmd
 			.use(auth)
 			.use(authenticatedApi)
-			.flags({ name: "inline-${index}-verbose", type: "boolean" })
+			.flags({ "inline-${index}-verbose": { type: "boolean" } })
 			.args({ name: "inline-${index}-target", type: "string" })
 			.action(async ({ args, flags, ctx }) => {
 				void args["inline-${index}-target"];
@@ -230,7 +230,7 @@ beforeAll(() => {
 // required Contexts before it must still type the action's ctx and flags.
 const OPTIONAL_TAIL_SOURCE = `import { Crust, defineContext, defineExtension, defineExtensionId, defineFlag } from "@crustjs/core";
 
-const a = defineContext("a").flags(defineFlag("verbose", { type: "boolean" })).setup(() => 1);
+const a = defineContext("a").flags({ verbose: defineFlag({ type: "boolean" }) }).setup(() => 1);
 const b = defineContext("b").setup(() => "b");
 type Contexts = readonly [ReturnType<typeof a>, ReturnType<typeof b>?];
 

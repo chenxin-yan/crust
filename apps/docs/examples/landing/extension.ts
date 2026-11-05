@@ -7,7 +7,7 @@ import {
 const id = defineExtensionId("acme:preview");
 const preview = defineExtension(id)
 	// [!code highlight]
-	.flags({ name: "preview", type: "boolean" })
+	.flags({ preview: { type: "boolean" } })
 	.preRun((ctx) => {
 		if (ctx.flags.preview !== true) return;
 		//            ^?

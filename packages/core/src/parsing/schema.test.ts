@@ -94,7 +94,7 @@ describe("Standard Schema on flag definitions", () => {
 	it("string flags consume a token and pass the raw string to the schema", async () => {
 		let received: number | undefined;
 		const app = new Crust("cli")
-			.flags({ name: "port", type: "string", schema: port() })
+			.flags({ port: { type: "string", schema: port() } })
 			.action(({ flags }) => {
 				received = flags.port;
 			});
@@ -115,7 +115,7 @@ describe("Standard Schema on flag definitions", () => {
 			value: raw === true ? "on" : "off",
 		}));
 		const app = new Crust("cli")
-			.flags({ name: "loud", type: "boolean", schema: onOff })
+			.flags({ loud: { type: "boolean", schema: onOff } })
 			.args({ name: "sentinel", type: "string" })
 			.action(({ args, flags }) => {
 				received = flags.loud;
@@ -138,7 +138,7 @@ describe("Standard Schema on flag definitions", () => {
 	it("aggregates issues across args and flags into one VALIDATION error", async () => {
 		const app = new Crust("cli")
 			.args({ name: "input", schema: port() })
-			.flags({ name: "port", type: "string", schema: port() })
+			.flags({ port: { type: "string", schema: port() } })
 			.action(() => {});
 
 		const outcome = await app.run([], { args: { input: "oops" }, flags: { port: "nope" } });
@@ -159,7 +159,7 @@ describe("Standard Schema on flag definitions", () => {
 			value: (raw ?? []).join(","),
 		}));
 		const app = new Crust("cli")
-			.flags({ name: "tag", type: "string", multiple: true, schema: csv })
+			.flags({ tag: { type: "string", multiple: true, schema: csv } })
 			.action(({ flags }) => {
 				received = flags.tag;
 			});
@@ -179,7 +179,7 @@ describe("schema interaction with Extensions", () => {
 		});
 
 		const app = new Crust("cli")
-			.flags({ name: "port", type: "string", schema: port() })
+			.flags({ port: { type: "string", schema: port() } })
 			.extend(probe)
 			.action(({ flags }) => {
 				actionSaw = flags.port;
@@ -200,7 +200,7 @@ describe("schema interaction with Extensions", () => {
 		const gate = defineExtension(defineExtensionId("gate")).preRun((ctx) => ctx.handled());
 
 		const app = new Crust("cli")
-			.flags({ name: "x", type: "string", schema: spy })
+			.flags({ x: { type: "string", schema: spy } })
 			.extend(gate)
 			.action(() => {});
 

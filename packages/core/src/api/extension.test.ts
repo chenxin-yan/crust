@@ -35,7 +35,7 @@ describe("defineExtension", () => {
 	const HELP = defineExtensionId("acme:help");
 	const help = defineExtension(HELP).factory(
 		(extension, options: { readonly verbose?: boolean } = {}) =>
-			extension.flags({ name: "verbose", type: "boolean", default: options.verbose ?? false }),
+			extension.flags({ verbose: { type: "boolean", default: options.verbose ?? false } }),
 	);
 
 	it("exposes the identity and builds frozen, normalized Extensions with default options", () => {
@@ -68,7 +68,7 @@ describe("defineExtension", () => {
 		const logger = defineContext("logger").setup(() => "logger");
 		const empty = defineExtension(HELP);
 		const used = empty.use(logger);
-		const flagged = used.flags({ name: "trace", type: "boolean" });
+		const flagged = used.flags({ trace: { type: "boolean" } });
 		expect(used).not.toBe(empty);
 		expect(flagged).not.toBe(used);
 		for (const handle of [empty, used, flagged]) expect(Object.isFrozen(handle)).toBe(true);
@@ -89,8 +89,8 @@ describe("defineExtension", () => {
 			.use(b)
 			.provide(a())
 			.provide(b())
-			.flags({ name: "one", type: "boolean" })
-			.flags({ name: "two", type: "string" })
+			.flags({ one: { type: "boolean" } })
+			.flags({ two: { type: "string" } })
 			.add(first)
 			.add(second);
 		const data = definingOf(extension);
@@ -163,7 +163,7 @@ describe("defineExtension", () => {
 		commands.length = 0;
 		expect(definingOf(extension).commands).toHaveLength(1);
 		const factory = defineExtension(HELP).factory((extension, short: string) =>
-			extension.flags({ name: "verbose", type: "boolean", short }),
+			extension.flags({ verbose: { type: "boolean", short } }),
 		);
 		expect(factory("v").id).toBe(HELP);
 		expect(() => factory("long")).toThrow("one character");
@@ -171,8 +171,8 @@ describe("defineExtension", () => {
 
 	it("owns flag inputs before deriving handles or invoking factories", async () => {
 		const aliases = ["p"];
-		const flag = { name: "port", type: "number" as const, default: 1, aliases };
-		const original = defineExtension(HELP).flags(flag);
+		const flag = { type: "number" as const, default: 1, aliases };
+		const original = defineExtension(HELP).flags({ port: flag });
 		flag.default = 2;
 		aliases.push("invalid");
 		const derived = original.preRun(() => {});
@@ -186,25 +186,25 @@ describe("defineExtension", () => {
 
 	it("checks flag collisions against provided Context flags across calls", () => {
 		const owner = defineContext("owner")
-			.flags({ name: "token", type: "string" })
+			.flags({ token: { type: "string" } })
 			.setup(() => 1);
 		expect(() =>
 			defineExtension(HELP)
 				.provide(owner())
 				// @ts-expect-error The provided Context already owns this spelling.
-				.flags({ name: "token", type: "boolean" }),
+				.flags({ token: { type: "boolean" } }),
 		).toThrow(CrustError);
 		expect(() =>
 			defineExtension(HELP)
-				.flags({ name: "token", type: "boolean" })
+				.flags({ token: { type: "boolean" } })
 				// @ts-expect-error The declared flag already owns this spelling.
 				.provide(owner()),
 		).toThrow(CrustError);
 		expect(() =>
 			defineExtension(HELP)
-				.flags({ name: "token", type: "boolean" })
+				.flags({ token: { type: "boolean" } })
 				// @ts-expect-error Repeated flag calls check earlier declarations.
-				.flags({ name: "token", type: "string" }),
+				.flags({ token: { type: "string" } }),
 		).toThrow(CrustError);
 	});
 
@@ -228,7 +228,7 @@ describe("defineExtension", () => {
 			.use(logger)
 			.provide(provided)
 			.add(command)
-			.flags({ name: "verbose", type: "boolean" })
+			.flags({ verbose: { type: "boolean" } })
 			.postRun(async ({ ctx, flags }) => {
 				(await ctx.logger).info();
 				seen.push("post");
@@ -248,7 +248,7 @@ describe("defineExtension", () => {
 	it("specializes metadata without changing factory identity or runtime normalization", async () => {
 		const emit = defineExtension<"version" | "sections">(HELP).factory(
 			(extension, prefix: string) =>
-				extension.flags({ name: "prefix", type: "string", default: prefix }).preRun((ctx) => {
+				extension.flags({ prefix: { type: "string", default: prefix } }).preRun((ctx) => {
 					ctx.stdout(`${ctx.flags.prefix}:${ctx.rootCommand.meta.version}`);
 					expect(ctx.rootCommand.meta.sections[0]?.only).toEqual([HELP]);
 				}),

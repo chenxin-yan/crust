@@ -196,7 +196,7 @@ Sugar for `.add(defineCommand(name, recipe))`, for short inline commands. It wor
 
 ```ts
 const app = new Crust("my-cli").provide(logging()).command("up", (command) =>
-  command.flags({ name: "detach", type: "boolean" }).action(async ({ flags, ctx, stdout }) => {
+  command.flags({ detach: { type: "boolean" } }).action(async ({ flags, ctx, stdout }) => {
     (await ctx.logging).debug(`detach: ${String(flags.detach)}`);
     stdout("up");
   }),

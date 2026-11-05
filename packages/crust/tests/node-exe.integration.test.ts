@@ -155,7 +155,7 @@ const man = defineExtension(defineExtensionId("man")).build(() => [{ path: "man/
 if (import.meta.main) await new Crust("greet", { description: "Greets from a Node binary" })
 	.extend(man, help())
 	.args({ name: "name", type: "string", required: true })
-	.flags({ name: "shout", type: "boolean" })
+	.flags({ shout: { type: "boolean" } })
 	.action(async ({ args, flags, stdout, stderr }) => {
 		await new Promise((done) => setTimeout(done, 5));
 		const greeting = \`hello \${args.name}\${mark}\`;

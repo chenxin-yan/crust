@@ -43,7 +43,7 @@ describe("walker · validation", () => {
 	});
 
 	it("rejects flag names with shell metacharacters", async () => {
-		const cli = new Crust("bad").flags({ name: "a;rm", type: "boolean" }).action(() => {});
+		const cli = new Crust("bad").flags({ "a;rm": { type: "boolean" } }).action(() => {});
 		const model = buildCommandDocumentation(await cli.snapshot());
 		expect(() => walkCommand(model)).toThrow(/invalid flag name/);
 	});
@@ -51,9 +51,10 @@ describe("walker · validation", () => {
 	it("rejects choice values containing spaces", async () => {
 		const cli = new Crust("bad")
 			.flags({
-				name: "target",
-				type: "string",
-				choices: ["a", "two words", "c"],
+				target: {
+					type: "string",
+					choices: ["a", "two words", "c"],
+				},
 			})
 			.action(() => {});
 		const model = buildCommandDocumentation(await cli.snapshot());

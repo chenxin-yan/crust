@@ -20,7 +20,7 @@ await serve.execute();
 new Crust("fetch").args({ name: "remote", type: "string", parse: async (raw) => raw.trim() });
 
 // A schema flag keeps `type` so the parser knows whether a value token follows
-new Crust("serve").flags({ name: "port", type: "string", schema: Port });
+new Crust("serve").flags({ port: { type: "string", schema: Port } });
 
 // @ts-expect-error a schema argument owns conversion, so it cannot also set `type`
 new Crust("serve").args({ name: "port", type: "string", schema: Port });

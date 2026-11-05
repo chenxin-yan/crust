@@ -550,20 +550,20 @@ const INSTALL_ALL_DESCRIPTION =
 const UNINSTALL_ALL_DESCRIPTION = "Uninstall every installed skill non-interactively";
 
 const SCOPE_FLAG = {
-	name: "scope",
-	type: "string",
-	choices: ["project", "global"],
-	description: SCOPE_FLAG_DESCRIPTION,
+	scope: {
+		type: "string",
+		choices: ["project", "global"],
+		description: SCOPE_FLAG_DESCRIPTION,
+	},
 } as const;
 
-const INSTALL_FLAGS = [
-	SCOPE_FLAG,
-	{
-		name: "all",
+const INSTALL_FLAGS = {
+	...SCOPE_FLAG,
+	all: {
 		type: "boolean",
 		description: INSTALL_ALL_DESCRIPTION,
 	},
-] as const;
+} as const;
 
 type SkillActionContext = SkillIO & { flags: { scope?: Scope; all?: boolean } };
 
@@ -581,7 +581,7 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 		},
 		(command) =>
 			command
-				.flags(...INSTALL_FLAGS)
+				.flags(INSTALL_FLAGS)
 				.add(
 					defineCommand(
 						"install",
@@ -589,16 +589,15 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 							description:
 								"Link packaged skills into agent directories; never removes existing links",
 						},
-						(sub) => sub.flags(...INSTALL_FLAGS).action(install),
+						(sub) => sub.flags(INSTALL_FLAGS).action(install),
 					),
 				)
 				.add(
 					defineCommand("uninstall", { description: "Remove installed skill links" }, (sub) =>
 						sub
-							.flags(SCOPE_FLAG, {
-								name: "all",
-								type: "boolean",
-								description: UNINSTALL_ALL_DESCRIPTION,
+							.flags({
+								...SCOPE_FLAG,
+								all: { type: "boolean", description: UNINSTALL_ALL_DESCRIPTION },
 							})
 							.action(async (context) => {
 								const removeAll = context.flags.all === true;

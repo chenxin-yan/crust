@@ -1,12 +1,12 @@
 import { Crust } from "@crustjs/core";
 
 const serve = new Crust("serve")
-	.flags(
+	.flags({
 		// [!code highlight:2]
-		{ name: "target", type: "string", multiple: true, short: "t" },
-		{ name: "runtime", type: "string", choices: ["bun", "node"], default: "bun" },
-		{ name: "tag", type: "string" },
-	)
+		target: { type: "string", multiple: true, short: "t" },
+		runtime: { type: "string", choices: ["bun", "node"], default: "bun" },
+		tag: { type: "string" },
+	})
 	.action(({ flags, stdout }) => {
 		//         ^?
 		stdout(

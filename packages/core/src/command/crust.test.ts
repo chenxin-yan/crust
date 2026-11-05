@@ -8,7 +8,7 @@ import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
-import type { ArgsDef, NamedFlagDef, ParsedFlagValue } from "../types.ts";
+import type { ArgsDef, FlagsDef, NamedFlagDef, ParsedFlagValue } from "../types.ts";
 import { type AnyCrust, type CommandConfig, Crust, defineCommand } from "./crust.ts";
 import { cloneCommandNode, subCommandsOf } from "./node.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
@@ -68,14 +68,14 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 	type BuilderCase = readonly [name: string, apply: (app: Crust) => AnyCrust];
 
 	const builderCases: readonly BuilderCase[] = [
-		[".flags()", (app) => app.flags({ name: "verbose", type: "boolean" })],
+		[".flags()", (app) => app.flags({ verbose: { type: "boolean" } })],
 		[".args()", (app) => app.args({ name: "file", type: "string" })],
 		[
 			".provide()",
 			(app) =>
 				app.provide(
 					defineContext("auth")
-						.flags({ name: "api-key", type: "string" })
+						.flags({ "api-key": { type: "string" } })
 						.setup(() => ({}))(),
 				),
 		],
@@ -92,15 +92,15 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 
 	it("copies exactly the containers a builder method changes", async () => {
 		const auth = defineContext("auth")
-			.flags({ name: "api-key", type: "string" })
+			.flags({ "api-key": { type: "string" } })
 			.setup(() => ({}))();
 		const db = defineContext("db").setup(() => "db");
 		const base = new Crust("test")
-			.flags({ name: "verbose", type: "boolean", short: "v" })
+			.flags({ verbose: { type: "boolean", short: "v" } })
 			.add(defineCommand("existing", (command) => command));
 		const baseNode = cloneCommandNode(base._node);
 
-		const withFlags = base.flags({ name: "quiet", type: "boolean" });
+		const withFlags = base.flags({ quiet: { type: "boolean" } });
 		expect(withFlags._node.localFlags).not.toBe(base._node.localFlags);
 		expect(withFlags._node.effectiveFlags).not.toBe(base._node.effectiveFlags);
 		expect(withFlags._node.flagSpellings).not.toBe(base._node.flagSpellings);
@@ -154,12 +154,12 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 	it("shares flag spelling entries across fluent clones while keeping the tables independent", async () => {
 		const seen: Record<string, boolean | undefined>[] = [];
 		const base = new Crust("test")
-			.flags({ name: "verbose", type: "boolean", short: "v", aliases: ["loud"] })
+			.flags({ verbose: { type: "boolean", short: "v", aliases: ["loud"] } })
 			.action(({ flags }) => {
 				seen.push({ verbose: flags.verbose });
 			});
 		const derived = base
-			.flags({ name: "quiet", type: "boolean", short: "q", aliases: ["hush"] })
+			.flags({ quiet: { type: "boolean", short: "q", aliases: ["hush"] } })
 			.action(({ flags }) => {
 				seen.push({ verbose: flags.verbose, quiet: flags.quiet });
 			});
@@ -196,12 +196,11 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 describe("Crust .flags()", () => {
 	it("copies scalar flag definition fields (decoupled from caller)", async () => {
 		const flagDef = {
-			name: "verbose" as const,
 			type: "boolean" as const,
 			short: "v",
 		};
 
-		const app = new Crust("test").flags(flagDef);
+		const app = new Crust("test").flags({ verbose: flagDef });
 
 		// Mutating the original def should not affect the builder
 		flagDef.short = "V";
@@ -211,8 +210,8 @@ describe("Crust .flags()", () => {
 	it("repeated .flags() calls accumulate runtime and action types", async () => {
 		let received: { first: boolean | undefined; second: string | undefined } | undefined;
 		const app = new Crust("test")
-			.flags({ name: "first", type: "boolean" })
-			.flags({ name: "second", type: "string" })
+			.flags({ first: { type: "boolean" } })
+			.flags({ second: { type: "string" } })
 			.action(({ flags }) => {
 				type _First = Expect<Equal<typeof flags.first, boolean | undefined>>;
 				type _Second = Expect<Equal<typeof flags.second, string | undefined>>;
@@ -382,7 +381,7 @@ describe("command metadata", () => {
 			version: "1.2.3",
 			usage: "test [options]",
 		})
-			.flags({ name: "verbose", type: "boolean" })
+			.flags({ verbose: { type: "boolean" } })
 			.args({ name: "file", type: "string" });
 
 		expect(await app.snapshot()).toMatchObject({
@@ -420,14 +419,14 @@ describe("command metadata", () => {
 
 describe("Crust .add() with inline definitions", () => {
 	it("subcommand effective flags include Context-owned and local flags only", async () => {
-		const verbose = defineFlag("verbose", { type: "boolean" });
+		const verbose = defineFlag({ type: "boolean" });
 		const logging = defineContext("logging")
-			.flags(verbose)
+			.flags({ verbose })
 			.setup(() => ({}));
 		const app = new Crust("cli")
-			.flags({ name: "port", type: "number" })
+			.flags({ port: { type: "number" } })
 			.provide(logging())
-			.add(defineCommand("sub", (cmd) => cmd.flags({ name: "output", type: "string" })));
+			.add(defineCommand("sub", (cmd) => cmd.flags({ output: { type: "string" } })));
 
 		expect((await app.snapshot()).subCommands.sub?.flags).toEqual({
 			verbose: { type: "boolean", negatable: true },
@@ -495,7 +494,7 @@ describe("Crust .extend()", () => {
 		const id = defineExtensionId("shared");
 		const calls: string[] = [];
 		const firstResource = defineContext("firstResource")
-			.flags({ name: "legacyProvider", type: "boolean" })
+			.flags({ legacyProvider: { type: "boolean" } })
 			.setup(() => {
 				calls.push("first:setup");
 				return { [Symbol.dispose]: () => calls.push("first:dispose") };
@@ -506,13 +505,13 @@ describe("Crust .extend()", () => {
 		});
 		const first = defineExtension(id)
 			.provide(firstResource())
-			.flags({ name: "legacy", type: "boolean" })
+			.flags({ legacy: { type: "boolean" } })
 			.add(defineCommand("legacy", (command) => command))
 			.preRun(() => void calls.push("first:preRun"))
 			.sections(() => (calls.push("first:sections"), []));
 		const second = defineExtension(id)
 			.provide(secondResource())
-			.flags({ name: "current", type: "boolean" })
+			.flags({ current: { type: "boolean" } })
 			.add(defineCommand("current", (command) => command))
 			.preRun(() => void calls.push("second:preRun"))
 			.sections(() => (calls.push("second:sections"), []));
@@ -578,13 +577,14 @@ describe("Crust .extend()", () => {
 	it("rejects an Extension provider flag colliding with a local flag at preparation", async () => {
 		const id = defineExtensionId("flag-provider");
 		const provider = defineContext("flagProvider")
-			.flags({ name: "mode", type: "number", aliases: ["extension-mode"] })
+			.flags({ mode: { type: "number", aliases: ["extension-mode"] } })
 			.setup(() => ({}));
 		const first = defineExtension(id).provide(provider());
 		const app = new Crust("test").flags({
-			name: "mode",
-			type: "string",
-			aliases: ["local-mode"],
+			mode: {
+				type: "string",
+				aliases: ["local-mode"],
+			},
 		});
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		const extended = app.extend(first);
@@ -674,10 +674,10 @@ describe("Crust .extend()", () => {
 
 	it("preserves interleaved local and Context flag order across .extend()", async () => {
 		const owner = defineContext("owner")
-			.flags({ name: "bFlag", type: "boolean" })
+			.flags({ bFlag: { type: "boolean" } })
 			.setup(() => ({}));
 		const app = new Crust("test")
-			.flags({ name: "aFlag", type: "boolean" })
+			.flags({ aFlag: { type: "boolean" } })
 			.provide(owner())
 			.extend(defineExtension(defineExtensionId("order-noop")))
 			.action(() => {});
@@ -699,10 +699,10 @@ describe("Extension application at prepare time", () => {
 
 	it("rejects an Extension providing two Contexts that share a flag spelling at compile time", () => {
 		const first = defineContext("first")
-			.flags({ name: "mode", type: "number" })
+			.flags({ mode: { type: "number" } })
 			.setup(() => ({}));
 		const second = defineContext("second")
-			.flags({ name: "mode", type: "string" })
+			.flags({ mode: { type: "string" } })
 			.setup(() => ({}));
 		expect(() =>
 			defineExtension(defineExtensionId("double-provider"))
@@ -713,11 +713,12 @@ describe("Extension application at prepare time", () => {
 
 	it("rejects an Extension flag colliding with a subcommand's local flag at preparation", async () => {
 		const themer = defineExtension(defineExtensionId("themer")).flags({
-			name: "mode",
-			type: "boolean",
+			mode: {
+				type: "boolean",
+			},
 		});
 		const sub = defineCommand("sub", (cmd) =>
-			cmd.flags({ name: "mode", type: "string" }).action(() => {}),
+			cmd.flags({ mode: { type: "string" } }).action(() => {}),
 		);
 		const appWithSub = new Crust("cli").add(sub);
 		// @ts-expect-error -- Extension flag "mode" collides with subcommand "sub"'s local flag (FIX_ALIAS_COLLISION)
@@ -732,21 +733,22 @@ describe("Extension application at prepare time", () => {
 
 	it("rejects an Extension flag colliding with its own provided Context's flag at compile time", () => {
 		const modeContext = defineContext("mode-owner")
-			.flags({ name: "mode", type: "number" })
+			.flags({ mode: { type: "number" } })
 			.setup(() => ({}));
 		expect(() =>
 			defineExtension(defineExtensionId("self-collider"))
 				.provide(modeContext())
 				// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-				.flags({ name: "mode", type: "string" }),
+				.flags({ mode: { type: "string" } }),
 		).toThrow("collides");
 	});
 
 	it("recursive Extension flags reach every command, including Extension commands", async () => {
 		const seen: Record<string, ParsedFlagValue>[] = [];
 		const debug = defineExtension(defineExtensionId("debug")).flags({
-			name: "debug",
-			type: "boolean",
+			debug: {
+				type: "boolean",
+			},
 		});
 
 		const app = new Crust("cli").extend(debug).add(
@@ -764,10 +766,11 @@ describe("Extension application at prepare time", () => {
 
 	it("checks dynamic Extension flag collisions at preparation", async () => {
 		const thief = defineExtension(defineExtensionId("thief")).flags({
-			name: "auth",
-			type: "boolean",
+			auth: {
+				type: "boolean",
+			},
 		});
-		const app = new Crust("cli").flags({ name: "token", type: "string", aliases: ["auth"] });
+		const app = new Crust("cli").flags({ token: { type: "string", aliases: ["auth"] } });
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		const extended = app.extend(thief);
 		await expect(extended.snapshot()).rejects.toThrow(
@@ -777,9 +780,10 @@ describe("Extension application at prepare time", () => {
 
 	it("non-recursive Extension flags stay on the root", async () => {
 		const version = defineExtension(defineExtensionId("version")).flags({
-			name: "version",
-			type: "boolean",
-			recursive: false,
+			version: {
+				type: "boolean",
+				recursive: false,
+			},
 		});
 
 		let ran = false;
@@ -832,8 +836,9 @@ describe("Extension application at prepare time", () => {
 				return true;
 			});
 		const verbose = defineExtension(defineExtensionId("verbose")).flags({
-			name: "verbose",
-			type: "boolean",
+			verbose: {
+				type: "boolean",
+			},
 		});
 
 		const app = new Crust("cli").extend(completion, verbose).action(() => {});
@@ -1013,7 +1018,7 @@ describe("Extension named hooks", () => {
 			});
 		await unwrap(
 			new Crust("cli")
-				.flags({ name: "port", type: "number", required: true })
+				.flags({ port: { type: "number", required: true } })
 				.extend(gate)
 				.action(() => {})
 				.run([], { flags: { port: 8080 } }),
@@ -1041,17 +1046,19 @@ describe("Extension named hooks", () => {
 			const actions: string[] = [];
 			const port = { name: "port", type: "number", default: 3000, env: { name: "PORT" } } as const;
 			const gate = defineExtension(defineExtensionId("gate"))
-				.flags({ name: "stop", type: "boolean", recursive: true })
+				.flags({ stop: { type: "boolean", recursive: true } })
 				.preRun((ctx) => {
 					seen.push(ctx.flags.port);
 					if (ctx.flags.stop === true) return ctx.handled();
 				})
 				.onError((error) => void errors.push(error));
 			const app = new Crust("cli")
-				.flags(port, { name: "mode", type: "string", choices: ["fast", "safe"] })
+				.flags({ port, mode: { type: "string", choices: ["fast", "safe"] } })
 				.args({ name: "count", type: "number" })
 				.extend(gate)
-				.add(defineCommand("serve", (c) => c.flags(port).action(() => void actions.push("serve"))))
+				.add(
+					defineCommand("serve", (c) => c.flags({ port }).action(() => void actions.push("serve"))),
+				)
 				.action(() => void actions.push("root"));
 			async function execute(argv: string[]) {
 				const stderr: string[] = [];
@@ -1122,7 +1129,7 @@ describe("Extension named hooks", () => {
 					return true;
 				});
 			const app = new Crust("cli")
-				.flags({ name: "port", type: "number" })
+				.flags({ port: { type: "number" } })
 				.extend(observer)
 				.action(() => {});
 
@@ -1134,14 +1141,14 @@ describe("Extension named hooks", () => {
 		it("shows Extension-owned defaulted flags as unset to preRun and postRun", async () => {
 			const seen: unknown[] = [];
 			const owner = defineExtension(defineExtensionId("owner"))
-				.flags({ name: "port", type: "number", default: 3000 })
+				.flags({ port: { type: "number", default: 3000 } })
 				.preRun(({ flags }) => void seen.push(["pre", flags.port]))
 				.postRun(({ flags }, outcome) => void seen.push(["post", flags.port, outcome.status]));
 			const gate = defineExtension(defineExtensionId("gate")).preRun((ctx) =>
 				ctx.argv.includes("--stop") ? ctx.handled() : undefined,
 			);
 			const app = new Crust("cli")
-				.flags({ name: "stop", type: "boolean" })
+				.flags({ stop: { type: "boolean" } })
 				.extend(owner, gate)
 				.action(() => void seen.push("action"));
 			const io = { stdout: () => {}, stderr: () => {} };
@@ -1433,7 +1440,7 @@ describe("Crust .run()", () => {
 
 	it("captures the original CrustError without rendering or setting exitCode", async () => {
 		const stderrLines: string[] = [];
-		const app = new Crust("test").flags({ name: "port", type: "number" }).action(() => {});
+		const app = new Crust("test").flags({ port: { type: "number" } }).action(() => {});
 
 		await expect(
 			unwrap(
@@ -1537,7 +1544,7 @@ describe("Crust .execute()", () => {
 		let receivedCtx: ExecuteReceivedContext | undefined;
 
 		const app = new Crust("test")
-			.flags({ name: "port", type: "number", default: 3000 }, { name: "verbose", type: "boolean" })
+			.flags({ port: { type: "number", default: 3000 }, verbose: { type: "boolean" } })
 			.args({ name: "dir", type: "string", default: "." })
 			.action((ctx) => {
 				receivedCtx = ctx;
@@ -1573,13 +1580,13 @@ describe("Crust .execute()", () => {
 
 	it("passes Context-owned flags but not parent-local flags to subcommand actions", async () => {
 		let subFlags: Record<string, ParsedFlagValue> = {};
-		const verbose = defineFlag("verbose", { type: "boolean" });
+		const verbose = defineFlag({ type: "boolean" });
 		const logging = defineContext("logging")
-			.flags(verbose)
+			.flags({ verbose })
 			.setup(() => ({}));
 
 		const app = new Crust("cli")
-			.flags({ name: "port", type: "number", default: 3000 })
+			.flags({ port: { type: "number", default: 3000 } })
 			.provide(logging())
 			.add(
 				defineCommand("sub", (cmd) =>
@@ -1598,9 +1605,9 @@ describe("Crust .execute()", () => {
 
 	it("dispatches a Context-owned flag written before the subcommand", async () => {
 		let subFlags: Record<string, ParsedFlagValue> = {};
-		const verbose = defineFlag("verbose", { type: "boolean" });
+		const verbose = defineFlag({ type: "boolean" });
 		const logging = defineContext("logging")
-			.flags(verbose)
+			.flags({ verbose })
 			.setup(() => ({}));
 
 		const app = new Crust("cli").provide(logging()).add(
@@ -1619,7 +1626,7 @@ describe("Crust .execute()", () => {
 	it("rejects a parent-local flag written before the subcommand", async () => {
 		let subRan = false;
 
-		const app = new Crust("cli").flags({ name: "quiet", type: "boolean" }).add(
+		const app = new Crust("cli").flags({ quiet: { type: "boolean" } }).add(
 			defineCommand("sub", (cmd) =>
 				cmd.action(() => {
 					subRan = true;
@@ -1721,7 +1728,7 @@ describe("Crust .execute()", () => {
 	});
 
 	it("no action is a no-op (no error)", async () => {
-		const app = new Crust("test").flags({ name: "verbose", type: "boolean" });
+		const app = new Crust("test").flags({ verbose: { type: "boolean" } });
 
 		await app.execute({ argv: ["--verbose"] });
 
@@ -1732,7 +1739,7 @@ describe("Crust .execute()", () => {
 	it("rawArgs are passed through", async () => {
 		let receivedRawArgs: string[] = [];
 
-		const app = new Crust("test").flags({ name: "verbose", type: "boolean" }).action((ctx) => {
+		const app = new Crust("test").flags({ verbose: { type: "boolean" } }).action((ctx) => {
 			receivedRawArgs = ctx.rawArgs;
 		});
 
@@ -1743,10 +1750,10 @@ describe("Crust .execute()", () => {
 
 	it("default flag values work on subcommands", async () => {
 		let receivedPort: number | undefined;
-		const port = defineFlag("port", { type: "number", default: 3000 });
+		const port = defineFlag({ type: "number", default: 3000 });
 
 		const ports = defineContext("ports")
-			.flags(port)
+			.flags({ port })
 			.setup(({ flags }) => ({
 				port: flags.port,
 			}));
@@ -1765,10 +1772,10 @@ describe("Crust .execute()", () => {
 
 	it("Context-owned flag short alias works on subcommand", async () => {
 		let receivedVerbose: boolean | undefined;
-		const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
+		const verbose = defineFlag({ type: "boolean", short: "v" });
 
 		const logging = defineContext("logging")
-			.flags(verbose)
+			.flags({ verbose })
 			.setup(({ flags }) => ({
 				verbose: flags.verbose,
 			}));
@@ -2132,9 +2139,10 @@ describe("Crust .execute()", () => {
 describe("Crust.snapshot", () => {
 	it("returns a frozen snapshot with Extension flags applied", async () => {
 		const docs = defineExtension(defineExtensionId("doc-test")).flags({
-			name: "extra",
-			type: "boolean",
-			description: "Injected for docs",
+			extra: {
+				type: "boolean",
+				description: "Injected for docs",
+			},
 		});
 
 		const app = new Crust("cli", { description: "Test" }).extend(docs);
@@ -2209,6 +2217,9 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 	type DynamicDefs = NamedFlagDef[] & ArgsDef;
 	// SAFETY: adversarial fixtures deliberately model definitions received from untyped JavaScript.
 	const asDynamic = (value: unknown): DynamicDefs => value as DynamicDefs;
+	// SAFETY: as above; each fixture keeps its name beside the definition, as config-built input would.
+	const asFlags = (defs: readonly Record<string, unknown>[]): FlagsDef =>
+		Object.fromEntries(defs.map(({ name, ...def }) => [name, def])) as FlagsDef;
 
 	it("rejects duplicate argument names from dynamic defs", () => {
 		const defs = asDynamic([
@@ -2245,8 +2256,7 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 			[{ name: "safe", type: "string", aliases: ["__proto__"] }, "reserved-spelling"],
 		];
 		for (const [def, reason] of cases) {
-			const defs = asDynamic([def]);
-			expect(() => new Crust("cli").flags(...defs)).toThrow(
+			expect(() => new Crust("cli").flags(asFlags([def]))).toThrow(
 				expect.objectContaining({
 					code: "DEFINITION",
 					details: expect.objectContaining({ reason }),
@@ -2315,8 +2325,7 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 			[{ name: "tags", type: "string", multiple: true, delimiter: "" }, "empty-delimiter"],
 		];
 		for (const [def, reason] of cases) {
-			const defs = asDynamic([def]);
-			expect(() => new Crust("cli").flags(...defs)).toThrow(
+			expect(() => new Crust("cli").flags(asFlags([def]))).toThrow(
 				expect.objectContaining({
 					code: "DEFINITION",
 					details: { subject: "flag", name: def.name, reason },
@@ -2325,7 +2334,7 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 		}
 		expect(() =>
 			new Crust("cli").flags(
-				...asDynamic([
+				asFlags([
 					{
 						name: "tags",
 						type: "string",
@@ -2341,22 +2350,22 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 	it("rejects __proto__ flags at defineContext/defineExtension time", () => {
 		expect(() =>
 			defineContext("cfg")
-				.flags(...asDynamic([{ name: "__proto__", type: "string" }]))
+				.flags(asFlags([{ name: "__proto__", type: "string" }]))
 				.setup(() => ({})),
 		).toThrow(expect.objectContaining({ code: "DEFINITION" }));
 		expect(() =>
 			defineExtension(defineExtensionId("cfg-ext")).flags(
-				...asDynamic([{ name: "__proto__", type: "string" }]),
+				asFlags([{ name: "__proto__", type: "string" }]),
 			),
 		).toThrow(expect.objectContaining({ code: "DEFINITION" }));
 	});
 
 	it("rejects dynamic .flags() collisions with existing spellings", () => {
-		const app = new Crust("cli").flags({ name: "mode", type: "string", short: "m" });
-		const sameName = asDynamic([{ name: "mode", type: "boolean" }]);
-		const aliasSteal = asDynamic([{ name: "method", type: "string", short: "m" }]);
-		for (const defs of [sameName, aliasSteal]) {
-			expect(() => app.flags(...defs)).toThrow(
+		const app = new Crust("cli").flags({ mode: { type: "string", short: "m" } });
+		const sameName = asFlags([{ name: "mode", type: "boolean" }]);
+		const aliasSteal = asFlags([{ name: "method", type: "string", short: "m" }]);
+		for (const flags of [sameName, aliasSteal]) {
+			expect(() => app.flags(flags)).toThrow(
 				expect.objectContaining({
 					code: "DEFINITION",
 					details: expect.objectContaining({ reason: "flag-collision" }),
@@ -2371,7 +2380,7 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 			{ name: "mode", type: "string", aliases: ["mode"] },
 			{ name: "mode", type: "string", aliases: ["m", "m"] },
 		]) {
-			expect(() => new Crust("cli").flags(...asDynamic([definition]))).toThrow(
+			expect(() => new Crust("cli").flags(asFlags([definition]))).toThrow(
 				expect.objectContaining({
 					code: "DEFINITION",
 					details: { subject: "flag", name: "mode", reason: "flag-collision" },
