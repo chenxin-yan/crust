@@ -47,6 +47,7 @@ crust build --artifact binary --target bun-linux-x64
 | `--env-file`                  | string, repeatable  | none    | Explicit env file(s) used for build-time constants                                                                                                                   |
 | `--validate`, `--no-validate` | boolean             | `true`  | Materialize command definitions before compiling; `--no-validate` also skips Extension build hooks                                                                   |
 | `--minify`, `--no-minify`     | boolean             | `true`  | Minify the output; on unless `--no-minify`                                                                                                                           |
+| `--bytecode`, `--no-bytecode` | boolean             | `true`  | Precompile bun binaries to bytecode for faster startup; on for bun binaries unless `--no-bytecode`, rejected for runtime packages and node                           |
 
 Command names, entry files, runtime, default targets, Bun bundler plugins, extra directories, and external dependencies are not flags: they come from [`bin`](#commands-and-entries-bin) and the [`crust` block](#packagejson-configuration) in `package.json`.
 

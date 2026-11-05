@@ -127,6 +127,20 @@ describe("planBuild", () => {
 		});
 	});
 
+	it("precompiles bytecode only for bun binaries, by default", () => {
+		writePackageJson({ crust: { runtime: "bun", artifact: "binary" } });
+		expect(planBuild(baseFlags, tmpDir)).toMatchObject({ bytecode: true });
+		expect(planBuild({ bytecode: false }, tmpDir)).toMatchObject({ bytecode: false });
+		for (const crust of [
+			{ runtime: "bun", artifact: "package" },
+			{ runtime: "node", artifact: "binary" },
+			{ runtime: "node", artifact: "package" },
+		]) {
+			writePackageJson({ crust });
+			expect(planBuild(baseFlags, tmpDir)).toMatchObject({ bytecode: false });
+		}
+	});
+
 	it("plans node standalone binaries over Node's own target table", () => {
 		writePackageJson({ crust: { runtime: "node", artifact: "binary" } });
 		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
@@ -268,6 +282,18 @@ describe("planBuild", () => {
 			crust: { runtime: "node", artifact: "package" },
 			flags: { targets: ["bun-linux-x64"] },
 			error: "--target cannot be used with runtime packages (artifact package)",
+		},
+		{
+			name: "bytecode for runtime packages",
+			crust: { runtime: "bun", artifact: "package" },
+			flags: { bytecode: true },
+			error: "--bytecode is not supported for runtime packages (artifact package)",
+		},
+		{
+			name: "bytecode for Node binaries",
+			crust: { runtime: "node", artifact: "binary" },
+			flags: { bytecode: true },
+			error: "--bytecode is not supported with the node runtime",
 		},
 	];
 	for (const testCase of rejectedCases) {

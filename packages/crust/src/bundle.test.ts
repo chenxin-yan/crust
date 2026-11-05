@@ -17,7 +17,12 @@ import { pathToFileURL } from "node:url";
 import { which } from "@crustjs/utils/process";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
-import { execBuild, execScriptBuild, resolveBunPluginSource } from "./bundle.ts";
+import {
+	createBunCompileArgs,
+	execBuild,
+	execScriptBuild,
+	resolveBunPluginSource,
+} from "./bundle.ts";
 import { BUN_TARGETS, hostTarget } from "./targets.ts";
 
 const bunVersion = spawnSync(which("bun")!, ["--version"], {
@@ -331,4 +336,15 @@ describe("execScriptBuild with crust.external", () => {
 			});
 		}
 	}
+});
+
+describe("createBunCompileArgs", () => {
+	it("adds ESM bytecode only when asked", () => {
+		const args = (bytecode?: boolean) =>
+			createBunCompileArgs("/cli.ts", "/out", false, "bun-linux-x64", [], bytecode);
+		// ESM: bytecode otherwise defaults to CommonJS, which rejects top-level await.
+		expect(args(true)).toEqual(expect.arrayContaining(["--bytecode", "--format=esm"]));
+		expect(args()).not.toContain("--bytecode");
+		expect(args(false)).not.toContain("--bytecode");
+	});
 });

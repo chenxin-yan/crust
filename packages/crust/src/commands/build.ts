@@ -58,6 +58,14 @@ export const buildCommand = defineCommand(
 					description: "Minify the output",
 					default: true,
 				},
+				{
+					name: "bytecode",
+					type: "boolean",
+					// No default: other builds must distinguish an explicit --bytecode (error)
+					// from the implicit bun-binary default (true, applied by `build`).
+					description:
+						"Precompile bun binaries to bytecode for faster startup (default for bun binaries; unsupported otherwise)",
+				},
 			)
 			.action(async ({ flags, stdout, stderr }) => {
 				await build({
@@ -66,6 +74,7 @@ export const buildCommand = defineCommand(
 					targets: flags.target,
 					envFiles: flags["env-file"],
 					minify: flags.minify,
+					bytecode: flags.bytecode,
 					validate: flags.validate,
 					onLog: (line, stream) => (stream === "stderr" ? stderr : stdout)(line),
 				});

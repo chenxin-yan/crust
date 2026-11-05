@@ -431,6 +431,12 @@ export type BuildOptions = {
 	envFiles?: readonly string[];
 	/** Minify the output. Default: true. */
 	minify?: boolean;
+	/**
+	 * Precompile Bun standalone executables to bytecode for faster startup. Default:
+	 * true for bun binaries; an explicit `true` is rejected for other runtimes and for
+	 * runtime packages, whose consumer runtime may not read Bun bytecode.
+	 */
+	bytecode?: boolean;
 	/** Materialize Command Snapshots and run Extension build hooks before compiling. Default: true. */
 	validate?: boolean;
 	/** Receives each progress line `crust build` would print; silent when omitted. Warnings arrive as `"stderr"`. */
@@ -453,6 +459,7 @@ type CommonBuildPlan = DistributeBuildPlan & {
 	envFiles: string[];
 	bunPlugins: string[];
 	minify: boolean;
+	bytecode: boolean;
 };
 
 /**
@@ -518,6 +525,14 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 			'package.json crust.targets is not supported for runtime packages (artifact package).\n  A runtime package is one portable JavaScript bundle; remove crust.targets or set "artifact": "binary".',
 		);
 	}
+	const bunBinary = runtime === "bun" && artifact === "binary";
+	if (options.bytecode && !bunBinary) {
+		throw new Error(
+			artifact === "package"
+				? "--bytecode is not supported for runtime packages (artifact package).\n  Bun bytecode only runs on the exact Bun version that built it, so it is embedded in bun binaries only; drop the flag."
+				: `--bytecode is not supported with the ${runtime} runtime.\n  Bytecode is Bun's JavaScriptCore format; Node binaries cannot use it. Drop the flag.`,
+		);
+	}
 	if (runtime === "node" && artifact === "binary" && bunPlugins.length > 0) {
 		throw new Error(
 			"package.json crust.bunPlugins is not supported for node standalone binaries.\n  Remove crust.bunPlugins, or use artifact package or the bun runtime.",
@@ -539,6 +554,7 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 		stageDir,
 		validate: options.validate ?? true,
 		minify: options.minify ?? true,
+		bytecode: bunBinary && (options.bytecode ?? true),
 	};
 
 	if (artifact === "package") return { ...common, runtime, artifact };
