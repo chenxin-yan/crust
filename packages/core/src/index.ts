@@ -28,7 +28,6 @@ export type {
 	Handled,
 	InferExtensionFlags,
 	InvocationOutcome,
-	NamedExtensionFlagDef,
 } from "./api/extension.ts";
 export { defineExtension } from "./api/extension.ts";
 export type { ExtensionId } from "./identity.ts";
@@ -96,7 +95,6 @@ export type {
 	InvocationOptions,
 	MergeContext,
 	MergeFlags,
-	NamedFlagDef,
 	ParsedArgValue,
 	ParsedFlagValue,
 	ParseResult,

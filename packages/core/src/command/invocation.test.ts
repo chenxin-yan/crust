@@ -339,7 +339,7 @@ describe("Invocation pipeline — snapshot projection", () => {
 		const command = (name: string) =>
 			defineCommand(name, { description: `${name} command` }, (c) => {
 				built.push(name);
-				return c.flags({ name: `${name}-flag`, type: "boolean" }).action(() => {});
+				return c.flags({ [`${name}-flag`]: { type: "boolean" } }).action(() => {});
 			});
 		const app = new Crust("app").add(command("a"), command("b")).action(({ rootCommand }) => {
 			const b = rootCommand.subCommands.b!;

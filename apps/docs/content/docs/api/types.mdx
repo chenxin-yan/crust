@@ -74,10 +74,6 @@ const flags = {
 } satisfies FlagsDef;
 ```
 
-### `NamedFlagDef`
-
-A `FlagDef` carrying its `name`: the shape accepted by the variadic named form of `.flags(...defs)` and returned by `defineFlag(name, def)`.
-
 ### `defineFlag` and `defineArg`
 
 Declare a definition separately from `.flags()` or `.args()` while keeping its literal types, without `as const`. A flag takes its name from the key it is attached under, so one definition can serve several names:
@@ -90,8 +86,6 @@ const target = defineArg("target", { type: "string", required: true });
 
 new Crust("build").flags({ verbose }).args(target); // --verbose
 ```
-
-`defineFlag(name, def)` returns a named definition for the variadic `.flags(...defs)` form.
 
 Invalid literal names, defaults, and parsers fail typecheck. Dynamic definitions are checked where they are consumed. `UnnamedArgDef` is the `defineArg()` definition without its name.
 
@@ -313,7 +307,7 @@ A frozen handle created only by `defineExtension()`. Spreading or copying it doe
 
 ### `ExtensionFlagDef` and `ExtensionFlagsDef`
 
-A `FlagDef` plus `recursive?: boolean`. `recursive` defaults to `true`; `false` contributes the flag only to the root. `ExtensionFlagsDef` is `Record<string, ExtensionFlagDef>`, the record an Extension's `.flags()` takes, the third type argument of `Extension`, and the fourth type argument of `ExtensionFactory`. `NamedExtensionFlagDef` is `ExtensionFlagDef` carrying its `name`, for the variadic named form.
+A `FlagDef` plus `recursive?: boolean`. `recursive` defaults to `true`; `false` contributes the flag only to the root. `ExtensionFlagsDef` is `Record<string, ExtensionFlagDef>`, the record an Extension's `.flags()` takes, the third type argument of `Extension`, and the fourth type argument of `ExtensionFactory`.
 
 ### `InferExtensionFlags<F>`
 

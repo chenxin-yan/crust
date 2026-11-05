@@ -27,11 +27,9 @@ const fixtures = [
 	},
 ] as const;
 type FixtureName = (typeof fixtures)[number]["name"];
-type FixtureApi = "context-config" | "fluent" | "record-flags";
 
 export interface TypePerfReport {
 	typescriptVersion: string;
-	fixtureApi: FixtureApi;
 	/** `error` is the first TypeScript error code of a fixture measured with `--allow-compile-errors`. */
 	instantiations: Record<FixtureName, number | { error: string }>;
 	/** Check time in seconds of each fixture that compiled. */
@@ -106,12 +104,6 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
 		`Check-time scaling (${scalingFixtures[1]} ÷ ${scalingFixtures[0]} commands)${scalingWarn}: base ${ratio(baseScaling)} · PR merge ${ratio(headScaling)}`,
 		"",
 		`TypeScript ${head.typescriptVersion} · \`--checkers 1\` · ⚠️ marks instantiation increases above the repository's advisory 10% threshold, or a check-time scaling ratio more than ${Math.round((scalingTolerance - 1) * 100)}% above base: type-check cost growing faster than the command count.`,
-		...(base.fixtureApi === head.fixtureApi
-			? []
-			: [
-					"",
-					`API transition (${base.fixtureApi} → ${head.fixtureApi}): fixtures use equivalent workloads with each API's Context, Extension, and flag syntax, not identical source.`,
-				]),
 	].join("\n");
 }
 
@@ -125,35 +117,26 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
  * to the app's `.provide()`, a command's `.use()`, and an Extension's `.provide()`
  * that a second app `.extend()`s. `wideExtensions` adds 60 Extensions, each with a flag,
  * a provided Context and a command, that another app passes to one `.extend()` call.
- * The context-config dialect supports comparisons across the fluent-Context API transition, and
- * the fluent dialect across the record-flags transition. The fluent and record-flags dialects
- * emit the same number of `.flags()` calls, so that transition row measures the flag form, not
- * call merging; context-config passes Context flags through its config object instead.
  */
 export function generateConsumerSource(
 	size: number,
-	fixtureApi: FixtureApi = "record-flags",
 	wideAdd = false,
 	wideContexts = false,
 	wideExtensions = false,
 ): string {
 	if (!Number.isInteger(size) || size < 1) throw new Error("size must be a positive integer");
 	const contextCount = Math.max(3, Math.ceil(size / 10));
-	const records = fixtureApi === "record-flags";
-	const flag = (name: string, fields: string) =>
-		records ? `{ "${name}": { ${fields} } }` : `{ name: "${name}", ${fields} }`;
+	const flag = (name: string, fields: string) => `{ "${name}": { ${fields} } }`;
 	const lines = [
 		'import { Crust, defineCommand, defineContext, defineExtension, defineExtensionId, defineFlag } from "@crustjs/core";',
 		"",
 	];
 
 	const context = (index: number, setup: string, use?: string) =>
-		fixtureApi !== "context-config"
-			? `defineContext("context-${index}").flags(${records ? `{ "context-${index}-token": contextFlag${index} }` : `contextFlag${index}`})${use ? `.use(${use})` : ""}.setup(${setup})`
-			: `defineContext("context-${index}", { flags: [contextFlag${index}]${use ? `, use: [${use}]` : ""} }, ${setup})`;
+		`defineContext("context-${index}").flags({ "context-${index}-token": contextFlag${index} })${use ? `.use(${use})` : ""}.setup(${setup})`;
 	for (let index = 0; index < contextCount; index++) {
 		lines.push(
-			`const contextFlag${index} = defineFlag(${records ? "" : `"context-${index}-token", `}{ type: "string", aliases: ["ctx-${index}-token"] });`,
+			`const contextFlag${index} = defineFlag({ type: "string", aliases: ["ctx-${index}-token"] });`,
 			`const context${index} = ${
 				index === 0
 					? context(index, `({ flags }) => ({ value: flags["context-${index}-token"] ?? "" })`)
@@ -168,9 +151,7 @@ export function generateConsumerSource(
 	lines.push("");
 
 	const valueContext = (name: string, value: number) =>
-		fixtureApi !== "context-config"
-			? `defineContext("${name}").setup(() => ${value})`
-			: `defineContext("${name}", () => ${value})`;
+		`defineContext("${name}").setup(() => ${value})`;
 	const wide = Array.from({ length: wideContexts ? 60 : 0 }, (_, index) => `wide${index}`);
 	const wideInstances = wide.map((name) => `${name}()`).join(", ");
 	if (wideContexts) {
@@ -259,7 +240,6 @@ export function generateConsumerFixture(
 	outputDir: string,
 	rootDir: string,
 	size: number,
-	fixtureApi: FixtureApi = "record-flags",
 	wideAdd = false,
 	wideContexts = false,
 	wideExtensions = false,
@@ -277,7 +257,7 @@ export function generateConsumerFixture(
 	}
 	writeFileSync(
 		join(fixtureDir, "consumer.ts"),
-		generateConsumerSource(size, fixtureApi, wideAdd, wideContexts, wideExtensions),
+		generateConsumerSource(size, wideAdd, wideContexts, wideExtensions),
 	);
 	writeFileSync(
 		join(fixtureDir, "tsconfig.json"),
@@ -321,24 +301,6 @@ function parseTypePerfReport(content: string): TypePerfReport {
 
 function measure(outputPath: string, rootDir = ".", allowCompileErrors = false): void {
 	const root = resolve(rootDir);
-	// Probe the built target API before compilation, never retry a failed fixture.
-	const fixtureApi = run(
-		[
-			process.execPath,
-			"--eval",
-			`import { Crust, defineContext } from ${JSON.stringify(join(root, "packages/core/dist/index.js"))};
-let api = "context-config";
-// The config-era defineContext(name) throws reading its missing config.
-try { if (typeof defineContext("type-perf-probe").setup === "function") api = "fluent"; } catch {}
-// A named-only .flags() reads the record as a definition without a name and throws.
-if (api === "fluent") try { new Crust("type-perf-probe").flags({ p: { type: "boolean" } }); api = "record-flags"; } catch {}
-console.log(api);`,
-		],
-		root,
-	);
-	if (fixtureApi !== "fluent" && fixtureApi !== "context-config" && fixtureApi !== "record-flags") {
-		throw new Error(`Unexpected fixture API: ${fixtureApi}`);
-	}
 	// Both trees use the harness's compiler, even when their lockfiles differ.
 	const tsc = resolve(import.meta.dir, "../node_modules/.bin/tsc");
 	const version = run([tsc, "--version"], root).replace(/^Version\s+/, "");
@@ -352,15 +314,7 @@ console.log(api);`,
 			{ name, size, wideAdd, wideContexts, wideExtensions },
 		] of fixtures.entries()) {
 			const fixtureDir = join(fixtureRoot, String(index));
-			generateConsumerFixture(
-				fixtureDir,
-				root,
-				size,
-				fixtureApi,
-				wideAdd,
-				wideContexts,
-				wideExtensions,
-			);
+			generateConsumerFixture(fixtureDir, root, size, wideAdd, wideContexts, wideExtensions);
 			let diagnostics: string;
 			try {
 				diagnostics = run(
@@ -392,7 +346,6 @@ console.log(api);`,
 	}
 	const report: TypePerfReport = {
 		typescriptVersion: version,
-		fixtureApi,
 		instantiations,
 		checkSeconds,
 	};

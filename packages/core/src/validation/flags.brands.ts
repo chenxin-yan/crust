@@ -1,12 +1,11 @@
 import type { DefiningOf } from "../api/context.ts";
 import type { CommandDefinitionData } from "../command/crust.ts";
-import type { FlagsDef, NamedFlagDef, NamedFlagsRecord } from "../types.ts";
+import type { FlagsDef } from "../types.ts";
 import type {
 	ClosedMembers,
 	CollisionBrand,
 	DefName,
 	EmptyLiteralNameBrand,
-	HasClosedNames,
 	IsAny,
 	IsStaticTuple,
 	IsClosedName,
@@ -27,12 +26,6 @@ type ExistingSpellingCollisionBrand<S extends string, Existing extends string> =
 	"FIX_ALIAS_COLLISION",
 	"Flag spelling ",
 	" collides with an existing flag"
->;
-
-/** Brand an incoming definition when one of its spellings is already claimed. */
-type ExistingFlagCollisionBrand<F, Existing extends string> = ExistingSpellingCollisionBrand<
-	DefName<F> | ExtractAllAliases<F>,
-	Existing
 >;
 
 /**
@@ -360,42 +353,6 @@ type LocalFlagBranchBrand<F> = LocalValueBrand<F> &
 		? {}
 		: { readonly FIX_ALIAS_COLLISION: "Flag repeats one of its own spellings" });
 
-/** Validate provable local fields and destination relations without inventing names for open inputs. */
-export type ValidateLocalFlagDefs<
-	Defs extends readonly NamedFlagDef[],
-	Existing extends string,
-> = Defs & UnionToIntersection<LocalFlagTupleChecks<Defs, Existing>>;
-
-/**
- * Key a closed-name flag's errors by its spelling: the diagnostic then names the
- * flag, and two flags' distinct messages under one brand key cannot intersect to `never`.
- */
-type NamedFlagErrors<F, Errors> = [DefName<F>] extends [never]
-	? Errors
-	: [keyof Errors] extends [never]
-		? {}
-		: { readonly [K in `--${DefName<F>}`]: Errors };
-
-// Accumulate only errors: rebuilding a validated tuple forces structural comparison
-// of every FlagDef variant during inference. The tail also rejects optional/rest slots.
-type LocalFlagTupleChecks<
-	Defs extends readonly NamedFlagDef[],
-	Existing extends string,
-	Errors = {},
-> = Defs extends readonly [
-	infer Head extends NamedFlagDef,
-	...infer Tail extends readonly NamedFlagDef[],
-]
-	? LocalFlagTupleChecks<
-			Tail,
-			Existing | DefName<Head> | ExtractAllAliases<Head>,
-			Errors &
-				NamedFlagErrors<Head, LocalFlagBrand<Head> & ExistingFlagCollisionBrand<Head, Existing>>
-		>
-	: Defs extends readonly []
-		? Errors
-		: Errors & LocalFlagBrand<Defs[number]>;
-
 /**
  * Errors-only validation for a flag record (`.flags({ out: { type: "string" } })`):
  * `unknown` when valid; otherwise each offending key carries its brands, so the diagnostic
@@ -480,30 +437,6 @@ type RecordNameBrand<K extends string> = NoPrefixBrand<K> &
 // its record to the intersection, which measurably slows checking.
 type DropEmpty<M> = NonEmpty<{ [K in keyof M as {} extends M[K] ? never : K]: M[K] }>;
 type NonEmpty<M> = keyof M extends never ? unknown : M;
-
-/** An open collection is not an empty or guaranteed-present flag record. */
-type KnownNamedFlag<D> = D extends NamedFlagDef
-	? HasClosedNames<readonly [D]> extends true
-		? D
-		: never
-	: never;
-
-export type AttachedFlags<Defs extends readonly NamedFlagDef[]> =
-	HasClosedNames<Defs> extends true
-		? NamedFlagsRecord<Defs>
-		: IsStaticTuple<Defs> extends true
-			? FlagsDef & NamedFlagsRecord<readonly KnownNamedFlag<Defs[number]>[]>
-			: FlagsDef;
-export type AttachedSpellings<Defs extends readonly NamedFlagDef[]> =
-	IsStaticTuple<Defs> extends true
-		? false extends { [I in keyof Defs]: HasClosedFlagSpellings<Defs[I]> }[number]
-			? string
-			: Defs[number]["name"] | ExtractAllAliases<Defs[number]>
-		: string;
-
-export type LocalFlagNameBrand<N extends string> = EmptyFlagSpellingBrand<N> &
-	ReservedSpellingBrand<{ name: N }> &
-	NoPrefixBrand<N>;
 
 /** Broad structural builder holders must not default their spelling state to empty. */
 export type LocalSpellingsOf<F extends FlagsDef> = string extends keyof F

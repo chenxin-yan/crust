@@ -2,7 +2,7 @@ import type { CommandDefinition, RootCommandMeta } from "../command/crust.ts";
 import type { CommandSnapshot } from "../command/snapshot.ts";
 import { CrustError, type CaughtError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
-import { flagEntries, ownDefinition, toFlagsRecord } from "../parsing/spellings.ts";
+import { flagRecordEntries, ownDefinition, toFlagsRecord } from "../parsing/spellings.ts";
 import type {
 	Awaitable,
 	CommandMeta,
@@ -12,7 +12,6 @@ import type {
 	InvocationIO,
 	MergeFlags,
 	MergeProviders,
-	NamedFlagDef,
 	ParsedArgValue,
 	ParsedFlagValue,
 } from "../types.ts";
@@ -22,12 +21,10 @@ import type {
 } from "../validation/commands.brands.ts";
 import type { DeclaredDepsOf, KnownContextInstances } from "../validation/contexts.brands.ts";
 import type {
-	AttachedFlags,
 	FlagRecordErrors,
 	LocalSpellingsOf,
 	ProvideChecks,
 	ProvidedContextSpellings,
-	ValidateLocalFlagDefs,
 } from "../validation/flags.brands.ts";
 import type { IsClosedName, IsUnion } from "../validation/shared.ts";
 import {
@@ -249,11 +246,6 @@ export type ExtensionFlagDef = FlagDef & { readonly recursive?: boolean };
 
 /** Record mapping an Extension's flag names to their definitions. */
 export type ExtensionFlagsDef = Record<string, ExtensionFlagDef>;
-
-/** A named flag definition accepted by {@link defineExtension}. */
-export type NamedExtensionFlagDef = NamedFlagDef & {
-	readonly recursive?: boolean;
-};
 
 type SchemaToken<F> = F extends { type: "boolean" } ? boolean : string;
 
@@ -515,9 +507,6 @@ export interface ExtensionBuilder<
 	flags<const F extends ExtensionFlagsDef>(
 		flags: F & FlagRecordErrors<F, DeclaredSpellings<OF, Provide>>,
 	): ExtensionBuilder<Use, Provide, AppendedFlags<OF, F>, Commands, MetaKeys>;
-	flags<const Fs extends readonly NamedExtensionFlagDef[]>(
-		...defs: ValidateLocalFlagDefs<Fs, DeclaredSpellings<OF, Provide>>
-	): ExtensionBuilder<Use, Provide, AppendedFlags<OF, AttachedFlags<Fs>>, Commands, MetaKeys>;
 	/** Contribute root commands; names and aliases must not collide with any other root command. */
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
 		...definitions: Ds & ValidateCommandDefinitions<Ds, AttachedCommandSpellings<Commands>>
@@ -587,11 +576,11 @@ function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 			next({ use: [...state.use, ...factories.map(definingOf)] }),
 		provide: (...instances: readonly AnyContextInstance[]) =>
 			next({ provide: [...state.provide, ...instances.map(definingOf)] }),
-		flags: (...input: readonly unknown[]) =>
+		flags: (record: unknown) =>
 			next({
 				flags: [
 					...state.flags,
-					...flagEntries(input).map(
+					...flagRecordEntries(record).map(
 						([name, def]) => [name, ownDefinition(def, "flag", name)] as const,
 					),
 				],

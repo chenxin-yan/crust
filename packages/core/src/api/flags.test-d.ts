@@ -2,7 +2,7 @@ import type { StandardSchema } from "@crustjs/utils/schema";
 
 import { Crust, defineCommand } from "../command/crust.ts";
 import { defineExtensionId } from "../identity.ts";
-import type { ArgsDef, FlagsDef, NamedFlagDef } from "../types.ts";
+import type { ArgsDef, FlagsDef } from "../types.ts";
 import { defineContext } from "./context.ts";
 import { defineExtension } from "./extension.ts";
 import { defineArg, defineFlag } from "./flags.ts";
@@ -54,7 +54,7 @@ function _localDefinitions(name: string, aliases: string[], choices: string[], v
 	defineFlag({ type: "boolean", aliases: ["b", "b"] });
 	// @ts-expect-error -- short and long aliases share one namespace
 	defineFlag({ type: "boolean", short: "b", aliases: ["b"] });
-	defineFlag(name, { type: "boolean" });
+	new Crust("cli").flags({ [name]: { type: "boolean" } });
 	defineFlag({ type: "boolean", aliases });
 	defineArg("bad", { type: "string", parse: (_raw): unknown => 1 });
 	defineFlag({ type: "string", parse: (_raw): object => ({}) });
@@ -123,19 +123,19 @@ function _ownedEnvBinding() {
 	env.delimiter = ":";
 }
 
-function _attachments(flags: NamedFlagDef[], args: ArgsDef, aliases: string[], cond: boolean) {
-	new Crust("cli").flags(...flags);
-	new Crust("cli").flags(cond ? { name: "a", type: "boolean" } : { name: "b", type: "boolean" });
+function _attachments(flags: FlagsDef, args: ArgsDef, aliases: string[], cond: boolean) {
+	new Crust("cli").flags(flags);
+	new Crust("cli").flags(cond ? { a: { type: "boolean" } } : { b: { type: "boolean" } });
 	new Crust("cli").args(...args);
 	new Crust("cli").flags({ a: { type: "boolean", aliases } });
 	new Crust("cli").args({ name: "a", type: "string", parse: (_raw): unknown => 1 });
-	const open = new Crust("cli").flags(...flags);
+	const open = new Crust("cli").flags(flags);
 	open.flags({ known: { type: "boolean" } });
 	const openArgs = new Crust("cli").args(...args);
 	openArgs.args({ name: "known", type: "string" });
 	// @ts-expect-error -- appending known args must not erase prior unknown args for run
 	void openArgs.args({ name: "known", type: "string" }).run([], {});
-	defineCommand("child", (b) => b.flags(...flags).args(...args));
+	defineCommand("child", (b) => b.flags(flags).args(...args));
 	const known = new Crust("cli").flags({ mode: { type: "string", required: true } });
 	void known.run([], { flags: { mode: "a" } });
 	// @ts-expect-error -- a narrow checked tuple retains known required fields
@@ -151,8 +151,6 @@ function _remainingLocalProofs(
 	prior.args({ name: "last", type: "string" });
 	// @ts-expect-error -- a conditional name cannot hide an invalid member
 	defineArg(cond ? "valid" : "", { type: "string" });
-	// @ts-expect-error -- wrapping the definition does not excuse a known invalid ordinary name
-	defineFlag("__proto__", { type: "boolean" });
 	const maybeParser = cond
 		? { type: "string" as const, parse: (_s: string): unknown => 1 }
 		: { type: "string" as const };
@@ -180,8 +178,6 @@ function _mixedCheckedNamespaces(
 	app.flags({ later: { type: "boolean" } });
 	const args = new Crust("cli").args({ name: "first", type: "string" }, maybe);
 	args.args({ name: "last", type: "string" });
-	// @ts-expect-error -- every possible canonical spelling must be usable
-	new Crust("cli").flags({ name: cond ? "good" : "no-bad", type: "boolean" });
 	// @ts-expect-error -- every possible short spelling must be one character
 	defineFlag({ type: "boolean", short: cond ? "f" : "ff" });
 }
@@ -195,18 +191,11 @@ function _broadFlagHolders(
 }
 
 function _emptyAttachmentsPreserveKnownState() {
-	const app = new Crust("cli").flags().args();
+	const app = new Crust("cli").flags({}).args();
 	void app.run([]);
 }
 
 function _conditionalCanonicalIdentity(cond: boolean) {
-	const flag = {
-		name: cond ? ("a" as const) : ("b" as const),
-		type: "string" as const,
-		required: true as const,
-	};
-	const flags = new Crust("cli").flags(flag);
-	void flags.run([], { flags: { a: "a", b: "b" } });
 	const arg = {
 		name: cond ? ("a" as const) : ("b" as const),
 		type: "string" as const,
@@ -216,27 +205,20 @@ function _conditionalCanonicalIdentity(cond: boolean) {
 	void args.run([], { args: { a: "a", b: "b" } });
 }
 
-function _mixedDefinitions(condition: boolean, name: string, invalidName: "" | "valid") {
+function _mixedDefinitions(condition: boolean) {
 	const mixed = condition
 		? { type: "string" as const, short: "long" as const }
 		: { type: "string" as const };
 	// @ts-expect-error -- an uncertain definition cannot hide a known invalid short spelling
-	defineFlag(name, mixed);
-	// @ts-expect-error -- one valid branch cannot hide an invalid flag name
-	defineFlag(invalidName, { type: "string" });
+	defineFlag(mixed);
 	// @ts-expect-error -- overlapping collision diagnostics must not cancel each other out
 	defineFlag({ type: "string", short: "v", aliases: ["value", "v"] });
 }
 
-function _openInvalidDefinitions(condition: boolean) {
+function _openInvalidDefinitions() {
 	const args: { name: string; type: "string"; choices: readonly ["ok"]; default: "bad" }[] = [];
 	// @ts-expect-error -- an open collection must retain independently invalid default membership
 	new Crust("app").args(...args);
-	const flags = condition
-		? ([{ name: "ok", type: "string" } as const] as const)
-		: ([{ name: "bad", type: "string", short: "long" } as const] as const);
-	// @ts-expect-error -- an uncertain collection must not hide its independently invalid branch
-	new Crust("app").flags(...flags);
 	// @ts-expect-error -- multiple reserved-prefix diagnostics must not cancel each other out
 	new Crust("app").flags({ "no-value": { type: "string", aliases: ["no-alias"] } });
 }

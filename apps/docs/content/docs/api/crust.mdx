@@ -106,7 +106,7 @@ const serve = new Crust("serve").flags({
 });
 ```
 
-The variadic named form, `.flags({ name: "verbose", type: "boolean" })` or `.flags(defineFlag("verbose", def))`, is still accepted.
+`.flags()` takes exactly one record per call; call it again to add more flags.
 
 - Only own enumerable string keys are flags; TypeScript rejects symbol keys and unquoted number keys, so write `"1.5"` rather than `1.5`. Integer-like names (`"0"`, or digits without a leading zero such as `"2"`) are rejected at any length, because JavaScript lists array-index keys first and would reorder help. A record whose prototype is not `Object.prototype` or `null`, such as one written with a literal `__proto__` key, throws a `DEFINITION` error.
 - A key written after a spread (`{ ...shared, out }`) silently replaces the spread's flag of the same name. Attach shared sets in their own `.flags()` call: collisions across calls are checked.

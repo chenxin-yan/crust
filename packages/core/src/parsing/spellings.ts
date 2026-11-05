@@ -1,5 +1,5 @@
 import { CrustError } from "../errors.ts";
-import type { ArgDef, FlagDef, FlagsDef, NamedFlagDef } from "../types.ts";
+import type { ArgDef, FlagDef, FlagsDef } from "../types.ts";
 
 // Array-index keys (below 2 ** 32 - 1) are enumerated first, ahead of insertion order. Every
 // canonical decimal integer (`0`, or digits without a leading zero) is rejected at any length so
@@ -76,39 +76,23 @@ function invalidFlags(message: string): CrustError {
 }
 
 /**
- * Read the `[name, def]` entries of a `.flags()` call: one record keyed by canonical
- * name, or named definitions. Only own enumerable string keys count.
+ * Read the `[name, def]` entries of a `.flags()` call: exactly one plain-object
+ * record keyed by canonical name. Only own enumerable string keys count.
  */
-export function flagEntries(
-	input: readonly unknown[],
+export function flagRecordEntries(
+	record: unknown,
 ): readonly (readonly [name: string, def: FlagDef])[] {
-	const first: unknown = input[0];
-	// A named definition carries a string `name`; a record maps names to definitions.
-	if (
-		input.length !== 1 ||
-		(typeof first === "object" &&
-			first !== null &&
-			typeof (first as { name?: unknown }).name === "string")
-	) {
-		return input.map((definition) => {
-			if (typeof (definition as { name?: unknown } | null)?.name !== "string") {
-				throw invalidFlags(".flags() expects one record of flag definitions keyed by name");
-			}
-			const { name, ...def } = definition as NamedFlagDef;
-			return [name, def];
-		});
-	}
-	if (typeof first !== "object" || first === null || Array.isArray(first)) {
+	if (typeof record !== "object" || record === null || Array.isArray(record)) {
 		throw invalidFlags(".flags() expects one record of flag definitions keyed by name");
 	}
 	// A literal `{ __proto__: def }` sets the prototype instead of adding a key.
-	const proto: unknown = Object.getPrototypeOf(first);
+	const proto: unknown = Object.getPrototypeOf(record);
 	if (proto !== Object.prototype && proto !== null) {
 		throw invalidFlags(
 			".flags() expects a plain object record; a `__proto__` key sets its prototype instead of naming a flag",
 		);
 	}
-	const entries = Object.entries(first);
+	const entries = Object.entries(record);
 	for (const [name, def] of entries) {
 		if (typeof def !== "object" || def === null || Array.isArray(def)) {
 			throw new CrustError("DEFINITION", `Flag "${name}" definition must be an object`, {

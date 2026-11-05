@@ -20,7 +20,7 @@ import type {
 } from "../api/extension.ts";
 import { CrustError, type DefinitionErrorReason } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
-import { flagEntries, normalizeArg } from "../parsing/spellings.ts";
+import { flagRecordEntries, normalizeArg } from "../parsing/spellings.ts";
 import { validateCommandSections } from "../sections.ts";
 import type {
 	ArgsDef,
@@ -35,7 +35,6 @@ import type {
 	MergeContext,
 	MergeFlags,
 	MergeProviders,
-	NamedFlagDef,
 	RunInputPayload,
 } from "../types.ts";
 import type { AppendArgsErrors, AttachedArgs } from "../validation/args.brands.ts";
@@ -70,9 +69,6 @@ import type {
 	ShapeFlagCollisionBrand,
 	ValidateDefinitionFlags,
 	ValidateExtensionFlags,
-	ValidateLocalFlagDefs,
-	AttachedFlags,
-	AttachedSpellings,
 	ExtensionFlagDefsOf,
 	FlagRecordErrors,
 	LocalSpellingsOf,
@@ -767,23 +763,8 @@ type ProvidersOf<S extends AnyCollisionSpellings> = Exclude<S["providers"], unde
 /** Obligations of this node's stored action, never inherited by descendants. */
 type ActionDepsOf<S extends AnyCollisionSpellings> = Exclude<S["actionDeps"], undefined>;
 
-type AfterFlags<State extends BuilderState, Defs extends readonly NamedFlagDef[]> = Crust<
-	MergeFlags<State["flags"], AttachedFlags<Defs>>,
-	State["args"],
-	State["ctx"],
-	State["sibs"],
-	State["sp"] | AttachedSpellings<Defs>,
-	State["tree"],
-	State["ctxFlags"],
-	State["collision"],
-	State["result"],
-	State["meta"],
-	string,
-	State["caps"]
->;
-
 // Record spellings are derived from `Flags` on demand instead of accumulated in `Sp`.
-type AfterFlagRecord<State extends BuilderState, F extends FlagsDef> = Crust<
+type AfterFlags<State extends BuilderState, F extends FlagsDef> = Crust<
 	MergeFlags<State["flags"], F>,
 	State["args"],
 	State["ctx"],
@@ -1239,8 +1220,7 @@ export class Crust<
 	/**
 	 * Define local flags for this command from one record keyed by flag name
 	 * (`{ "dry-run": { type: "boolean" } }`); values are written inline or created
-	 * with `defineFlag(def)`. The variadic named form (`defineFlag(name, def)` or
-	 * `{ name: "dry-run", type: "boolean" }`) is also accepted.
+	 * with `defineFlag(def)`.
 	 *
 	 * Repeated `.flags()` calls accumulate local flags. Returns a new builder
 	 * with the combined local flag types. The original builder is not mutated.
@@ -1255,19 +1235,11 @@ export class Crust<
 	flags<const F extends FlagsDef, State extends BuilderState = ExplicitTypeArgumentsError>(
 		this: StateReceiver<State>,
 		flags: F & FlagRecordErrors<F, State["sp"] | LocalSpellingsOf<State["flags"]>>,
-	): AfterFlagRecord<State, F>;
+	): AfterFlags<State, F>;
 
-	flags<
-		const Defs extends readonly NamedFlagDef[],
-		State extends BuilderState = ExplicitTypeArgumentsError,
-	>(
-		this: StateReceiver<State>,
-		...defs: ValidateLocalFlagDefs<Defs, State["sp"] | LocalSpellingsOf<State["flags"]>>
-	): AfterFlags<State, Defs>;
-
-	flags(...input: readonly unknown[]): unknown {
+	flags(record: unknown): unknown {
 		const cloned = this._clone(cloneFlagRegistry(this._node));
-		for (const [name, def] of flagEntries(input)) {
+		for (const [name, def] of flagRecordEntries(record)) {
 			registerFlag(cloned._node, name, def, "local");
 		}
 		return cloned;

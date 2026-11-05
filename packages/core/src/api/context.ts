@@ -1,5 +1,5 @@
 import { CrustError } from "../errors.ts";
-import { flagEntries, toFlagsRecord } from "../parsing/spellings.ts";
+import { flagRecordEntries, toFlagsRecord } from "../parsing/spellings.ts";
 import { validateCommandSections } from "../sections.ts";
 import type {
 	Awaitable,
@@ -9,16 +9,13 @@ import type {
 	InvocationIO,
 	MergeFlags,
 	MergeProviders,
-	NamedFlagDef,
 	RuntimeCommandSectionInput,
 } from "../types.ts";
 import type { LocalSectionsBrand } from "../validation/commands.brands.ts";
 import type {
-	AttachedFlags,
 	ContextOwnedFlags,
 	FlagRecordErrors,
 	LocalSpellingsOf,
-	ValidateLocalFlagDefs,
 } from "../validation/flags.brands.ts";
 import type {
 	IsStaticTuple,
@@ -295,9 +292,6 @@ export interface ContextBuilder<
 	flags<const F extends FlagsDef>(
 		flags: F & FlagRecordErrors<F, LocalSpellingsOf<OF>>,
 	): ContextBuilder<Name, Use, AppendedFlags<OF, F>>;
-	flags<const Fs extends readonly NamedFlagDef[]>(
-		...defs: ValidateLocalFlagDefs<Fs, LocalSpellingsOf<OF>>
-	): ContextBuilder<Name, Use, AppendedFlags<OF, AttachedFlags<Fs>>>;
 	/** Document only the providing command (the root for Extension-provided Contexts). */
 	sections<const S extends readonly RuntimeCommandSectionInput[]>(
 		...sections: S & LocalSectionsBrand<{ sections: S }>["sections"]
@@ -338,11 +332,11 @@ function createContextBuilder(
 				sections,
 			),
 		// Snapshot and collision-check each call's definitions eagerly, like one combined list.
-		flags: (...input: readonly unknown[]) =>
+		flags: (record: unknown) =>
 			createContextBuilder(
 				name,
 				use,
-				Object.freeze(toFlagsRecord(flagEntries(input), ownedFlags)),
+				Object.freeze(toFlagsRecord(flagRecordEntries(record), ownedFlags)),
 				sections,
 			),
 		sections: (...inputs: readonly RuntimeCommandSectionInput[]) =>

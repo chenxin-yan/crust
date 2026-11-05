@@ -1,8 +1,9 @@
 import type { Equal, Expect } from "../../tests/helpers.ts";
-import type { FlagsDef, NamedFlagDef } from "../types.ts";
+import type { FlagsDef } from "../types.ts";
 import type {
-	AttachedSpellings,
 	ContextOwnedFlags,
+	FlagRecordErrors,
+	LocalSpellingsOf,
 	DefinitionTreeSpellings,
 	ProvideChecks,
 	SpellingsOf,
@@ -10,8 +11,6 @@ import type {
 	ValidateDefinitionFlags,
 	ValidateExtensionFlags,
 	LocalFlagBrand,
-	LocalFlagNameBrand,
-	ValidateLocalFlagDefs,
 } from "./flags.brands.ts";
 
 {
@@ -26,15 +25,16 @@ import type {
 }
 
 {
-	// derives attached spellings from closed flag definitions
-	type Attached = AttachedSpellings<
-		readonly [
-			{ name: "verbose"; type: "boolean"; short: "v" },
-			{ name: "output"; type: "string"; short: "o"; aliases: ["out"] },
-		]
+	// derives local spellings from a closed flag record; a dynamic record stays open
+	type Local = LocalSpellingsOf<{
+		verbose: { type: "boolean"; short: "v" };
+		output: { type: "string"; short: "o"; aliases: ["out"] };
+	}>;
+	type _check = Expect<Equal<Local, "verbose" | "v" | "output" | "o" | "out">>;
+	type _open = Expect<Equal<LocalSpellingsOf<FlagsDef>, string>>;
+	type _openAlias = Expect<
+		Equal<LocalSpellingsOf<{ a: { type: "string"; aliases: string[] } }>, string>
 	>;
-	type _check = Expect<Equal<Attached, "verbose" | "v" | "output" | "o" | "out">>;
-	type _open = Expect<Equal<AttachedSpellings<readonly NamedFlagDef[]>, string>>;
 }
 
 {
@@ -165,19 +165,26 @@ import type {
 	>;
 	type _valid = Expect<Equal<Extract<keyof Valid, `FIX_${string}`>, never>>;
 
-	type DirectReserved = LocalFlagNameBrand<"__proto__" | Mixed>;
-	type DirectValid = LocalFlagNameBrand<"fixed" | Mixed>;
-	type _directReserved = Expect<
-		Equal<DirectReserved["FIX_RESERVED_SPELLING"], 'Flag spelling "__proto__" is reserved'>
+	// the same brands reach record keys, with or without risky fields
+	type Record = FlagRecordErrors<
+		{
+			__proto__: { type: "boolean" };
+			"": { type: "boolean" };
+			"no-x": { type: "string"; short: "x" };
+			fixed: { type: "boolean"; aliases: ["f" | Mixed] };
+		},
+		never
 	>;
-	type _directValid = Expect<Equal<keyof DirectValid, never>>;
-
-	// the same brands reach .flags() tuples; open members still opt out of collision evidence
-	type Tuple = ValidateLocalFlagDefs<readonly [{ name: "" | Mixed; type: "boolean" }], "y-a">;
-	type _tuple = Expect<
-		Equal<Tuple["FIX_EMPTY_SPELLING"], "Flag names and aliases must be non-empty strings">
+	type _recordReserved = Expect<
+		Equal<Record["__proto__"]["FIX_RESERVED_SPELLING"], 'Flag spelling "__proto__" is reserved'>
 	>;
-	type _tupleCollision = Expect<Equal<Extract<keyof Tuple, "FIX_ALIAS_COLLISION">, never>>;
+	type _recordEmpty = Expect<
+		Equal<Record[""]["FIX_EMPTY_SPELLING"], "Flag names and aliases must be non-empty strings">
+	>;
+	type _recordNoPrefix = Expect<
+		Equal<Record["no-x"]["FIX_NO_PREFIX"], "Names must not start with no-">
+	>;
+	type _recordValid = Expect<Equal<keyof Record, "__proto__" | "" | "no-x">>;
 
 	// a `string`-typed field must not absorb a sibling field's invalid literal
 	type BroadName = LocalFlagBrand<{ name: string; type: "boolean"; aliases: [""] }>;
@@ -199,26 +206,68 @@ import type {
 }
 
 {
-	// .flags() tuple errors are keyed by the offending flag's spelling
-	type Bad = { name: "c"; type: "string"; choices: ["x", "y"]; default: "z" };
-	type Named = ValidateLocalFlagDefs<readonly [{ name: "a"; type: "boolean" }, Bad], never>;
-	type _named = Expect<Equal<Named["--c"]["FIX_DEFAULT_CHOICE"], "default must be one of choices">>;
-	type _clean = Expect<Equal<Extract<keyof Named, "--a" | `FIX_${string}`>, never>>;
+	// record errors are keyed by the offending flag's name; valid flags stay out
+	type Bad = { type: "string"; choices: ["x", "y"]; default: "z" };
+	type Named = FlagRecordErrors<{ a: { type: "boolean" }; c: Bad }, never>;
+	type _named = Expect<Equal<Named["c"]["FIX_DEFAULT_CHOICE"], "default must be one of choices">>;
+	type _clean = Expect<Equal<keyof Named, "c">>;
 
-	// distinct messages on different flags must not reduce the errors to never and pass
-	type Collisions = readonly [
-		{ name: "a"; type: "boolean"; short: "z" },
-		{ name: "b"; type: "boolean"; short: "z" },
-		{ name: "c"; type: "boolean"; short: "a" },
-	];
-	type Checked = ValidateLocalFlagDefs<Collisions, never>;
+	// every flag in a collision carries it, against peers and existing spellings
+	type Collisions = {
+		a: { type: "boolean"; short: "z" };
+		b: { type: "boolean"; short: "z" };
+		c: { type: "boolean"; short: "a" };
+		d: { type: "boolean"; aliases: ["taken"] };
+		e: { type: "boolean" };
+	};
+	type Checked = FlagRecordErrors<Collisions, "taken">;
 	type _b = Expect<
-		Equal<Checked["--b"]["FIX_ALIAS_COLLISION"], 'Flag spelling "z" collides with an existing flag'>
+		Equal<Checked["b"]["FIX_ALIAS_COLLISION"], 'Flag spelling "z" collides with an existing flag'>
 	>;
 	type _c = Expect<
-		Equal<Checked["--c"]["FIX_ALIAS_COLLISION"], 'Flag spelling "a" collides with an existing flag'>
+		Equal<Checked["c"]["FIX_ALIAS_COLLISION"], 'Flag spelling "a" collides with an existing flag'>
 	>;
-	type _rejected = Expect<Equal<Collisions extends Checked ? true : false, false>>;
+	type _d = Expect<
+		Equal<
+			Checked["d"]["FIX_ALIAS_COLLISION"],
+			'Flag spelling "taken" collides with an existing flag'
+		>
+	>;
+	type _flagged = Expect<Equal<keyof Checked, "a" | "b" | "c" | "d">>;
+	type _rejected = Expect<Equal<Collisions extends Collisions & Checked ? true : false, false>>;
+
+	// integer-like keys are rejected; non-index numeric-looking keys are not
+	type Integer = FlagRecordErrors<
+		{
+			"2": { type: "string" };
+			"10": { type: "string" };
+			"0": { type: "string" };
+			"01": { type: "string" };
+			"-1": { type: "string" };
+			"1.5": { type: "string" };
+		},
+		never
+	>;
+	type _integer = Expect<Equal<keyof Integer, "2" | "10" | "0">>;
+	type _integerMessage = Expect<
+		Equal<
+			Integer["10"]["FIX_INTEGER_LIKE_NAME"],
+			"Flag names must not be integer-like; JavaScript lists such keys first"
+		>
+	>;
+
+	// number keys must be quoted, integer-like or not
+	type NumberKeys = FlagRecordErrors<{ 2: { type: "string" }; 1.5: { type: "string" } }, never>;
+	type _numberKeys = Expect<Equal<keyof NumberKeys, 2 | 1.5>>;
+	type _numberMessage = Expect<
+		Equal<NumberKeys[1.5]["FIX_NUMBER_KEY"], "Flag names must be string keys; quote a numeric name">
+	>;
+
+	// an index signature is runtime-checked; literal keys beside it are still checked
+	type Dynamic = FlagRecordErrors<FlagsDef, never>;
+	type Mixed = FlagRecordErrors<FlagsDef & { out: { type: "string"; short: "oo" } }, never>;
+	type _dynamic = Expect<Equal<keyof Dynamic, never>>;
+	type _mixed = Expect<Equal<keyof Mixed, "out">>;
 }
 
 {

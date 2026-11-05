@@ -8,7 +8,7 @@ import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
-import type { ArgsDef, FlagsDef, NamedFlagDef, ParsedFlagValue } from "../types.ts";
+import type { ArgsDef, FlagsDef, ParsedFlagValue } from "../types.ts";
 import { type AnyCrust, type CommandConfig, Crust, defineCommand } from "./crust.ts";
 import { cloneCommandNode, subCommandsOf } from "./node.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
@@ -228,16 +228,17 @@ describe("Crust .flags()", () => {
 });
 
 describe("Crust .flags() records", () => {
-	it("registers keys in insertion order across calls, matching the named form", async () => {
-		const record = new Crust("test")
+	it("registers keys in insertion order across calls", async () => {
+		const app = new Crust("test")
 			.flags({ zeta: { type: "boolean", short: "z" }, "dry-run": { type: "boolean" } })
 			.flags({ alpha: { type: "string", aliases: ["a-alias"] } });
-		const named = new Crust("test")
-			.flags({ name: "zeta", type: "boolean", short: "z" }, { name: "dry-run", type: "boolean" })
-			.flags({ name: "alpha", type: "string", aliases: ["a-alias"] });
-		const snapshot = await record.snapshot();
-		expect(Object.keys(snapshot.flags)).toEqual(["zeta", "dry-run", "alpha"]);
-		expect(snapshot).toEqual(await named.snapshot());
+		const { flags } = await app.snapshot();
+		expect(Object.keys(flags)).toEqual(["zeta", "dry-run", "alpha"]);
+		expect(flags).toEqual({
+			zeta: { type: "boolean", short: "z", negatable: true },
+			"dry-run": { type: "boolean", negatable: true },
+			alpha: { type: "string", aliases: ["a-alias"], negatable: false },
+		});
 	});
 
 	it("copies each definition and ignores symbol keys TypeScript did not see", async () => {
@@ -597,7 +598,7 @@ describe("Crust .extend()", () => {
 		// Only the final registration for an id is applied, so a replacement rescues it,
 		// on the root and on children added before or after the conflicting registration.
 		const child = defineCommand("child", (command) =>
-			command.flags({ name: "mode", type: "string" }).action(() => "ran"),
+			command.flags({ mode: { type: "string" } }).action(() => "ran"),
 		);
 		const addedBefore = new Crust("test")
 			.add(child)
@@ -2214,7 +2215,7 @@ describe("Crust .add() aliases", () => {
 });
 
 describe("dynamic definition guards (brands own literals; runtime owns config-built defs)", () => {
-	type DynamicDefs = NamedFlagDef[] & ArgsDef;
+	type DynamicDefs = FlagsDef[] & ArgsDef;
 	// SAFETY: adversarial fixtures deliberately model definitions received from untyped JavaScript.
 	const asDynamic = (value: unknown): DynamicDefs => value as DynamicDefs;
 	// SAFETY: as above; each fixture keeps its name beside the definition, as config-built input would.
@@ -2296,12 +2297,6 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 				);
 			}
 		}
-		// Two records: the named form requires a string `name` on every definition.
-		expect(() =>
-			new Crust("cli").flags(...asDynamic([{ a: { type: "string" } }, { b: { type: "string" } }])),
-		).toThrow(
-			expect.objectContaining({ details: expect.objectContaining({ reason: "invalid-flags" }) }),
-		);
 		// Not array indexes: they keep insertion order.
 		for (const name of ["01", "-1", "2fa", "1.5"]) {
 			expect(() =>

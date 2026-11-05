@@ -38,7 +38,7 @@ function _inference() {
 		// @ts-expect-error -- typed run() input is checked against the record's choices
 		.run(["deploy"], { args: { source: "x" }, flags: { format: "xml" } });
 
-	// Action flags are mutable like the named form's, though the inferred record is readonly.
+	// Action flags are mutable, though the inferred record is readonly.
 	new Crust("cli")
 		.flags({ out: { type: "string" }, force: { type: "boolean" } })
 		.action(({ flags }) => {
@@ -56,8 +56,9 @@ function _inference() {
 // §5: each diagnostic lands on the offending flag's own literal.
 function _errorLocality() {
 	new Crust("cli").flags({
-		// @ts-expect-error -- `out` and `open` share the short "o"
+		// @ts-expect-error -- `out` and `open` share the short "o"; both literals carry it
 		out: { type: "string", short: "o" },
+		// @ts-expect-error -- `out` and `open` share the short "o"; both literals carry it
 		open: { type: "boolean", short: "o" },
 	});
 	new Crust("cli")
@@ -92,6 +93,20 @@ function _errorLocality() {
 	);
 }
 
+// §5: the removed named form is rejected per property and per extra argument.
+function _namedFormIsRejected() {
+	new Crust("cli").flags({
+		// @ts-expect-error -- a string is not a flag definition
+		name: "out",
+		// @ts-expect-error -- a string is not a flag definition
+		type: "string",
+	});
+	// @ts-expect-error -- one record per call
+	new Crust("cli").flags({ out: { type: "string" } }, { force: { type: "boolean" } });
+	// @ts-expect-error -- definitions take their name from the key
+	defineFlag("out", { type: "string" });
+}
+
 // §5/§6: object-literal limits TypeScript itself reports, and the ones it cannot.
 function _spreads(dynamic: Record<string, FlagDef>) {
 	const shared = { out: { type: "boolean" } } as const;
@@ -116,15 +131,17 @@ function _spreads(dynamic: Record<string, FlagDef>) {
 	});
 	// After a dynamic record, a later record's literal flags are still checked against each other.
 	new Crust("cli").flags(dynamic).flags({
-		// @ts-expect-error -- `a` and `b` share the short "x"
+		// @ts-expect-error -- `a` and `b` share the short "x"; both literals carry it
 		a: { type: "boolean", short: "x" },
+		// @ts-expect-error -- `a` and `b` share the short "x"; both literals carry it
 		b: { type: "boolean", short: "x" },
 	});
 	defineContext("open")
 		.flags(dynamic)
 		.flags({
-			// @ts-expect-error -- `a`'s alias "all" is the name of flag `all`
+			// @ts-expect-error -- `a`'s alias "all" is the name of flag `all`; both literals carry it
 			a: { type: "boolean", aliases: ["all"] },
+			// @ts-expect-error -- `a`'s alias "all" is the name of flag `all`; both literals carry it
 			all: { type: "boolean" },
 		});
 }
@@ -280,17 +297,6 @@ function _conditionalRecords(definitions: {} | { port: { type: "number"; default
 	>;
 	// @ts-expect-error A conditional Context retains uncertainty rather than claiming quiet alone.
 	void app.run([], { flags: { quiet: true } });
-}
-
-function _mixedFormsCheckCollisions() {
-	const app = new Crust("cli").flags({ out: { type: "string", short: "o", aliases: ["output"] } });
-	// @ts-expect-error Named definitions must check record-owned short aliases.
-	app.flags({ name: "other", type: "string", short: "o" });
-	// @ts-expect-error Named definitions must check record-owned canonical names.
-	app.flags({ name: "out", type: "string" });
-	// @ts-expect-error Named definitions must check record-owned long aliases.
-	app.flags({ name: "other", type: "string", aliases: ["output"] });
-	app.flags({ name: "other", type: "boolean", short: "q" });
 }
 
 function _defineFlagChecksItsDefinition() {
