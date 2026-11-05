@@ -120,7 +120,7 @@ function _completedHolder() {
 	void [empty, regained];
 }
 
-function _checkedReplacementProof() {
+function _spreadExtensionsOpenResults() {
 	const name: string = "child";
 	const commands = [defineCommand(name, (c) => c.action(() => "replacement"))];
 	const app = new Crust("app")
@@ -136,6 +136,7 @@ function _checkedReplacementProof() {
 		.command("child", (c) => c.action(() => 42))
 		.command("sibling", (c) => c.action(() => true))
 		.extend(...replacements);
+	// A spread Extension list is only known at runtime and may re-register an earlier id.
 	const result = dynamic.run(["child"]);
 	type _result = Expect<Equal<typeof result, Promise<RunOutcome<unknown>>>>;
 	const sibling = dynamic.run(["sibling"]);
@@ -299,23 +300,16 @@ function _commandLocalDemandValues() {
 	});
 }
 
-function _replacementOrderAndFixedDynamicNames() {
+function _dynamicExtensionCommandsOpenResults() {
 	const name: string = "child";
 	const open = defineExtension(id).add(defineCommand(name, (c) => c.action(() => "dynamic")));
 	const root = new Crust("app").command("child", (c) => c.action(() => 42));
-	const replaced = root.extend(open);
-	void replaced.run(["child"]);
-	const last = defineExtension(defineExtensionId("last")).add(
-		defineCommand("child", (c) => c.action(() => true)),
-	);
-	const commands = [defineCommand(name, (c) => c.action(() => "dynamic"))];
-	const broad = defineExtension(id).add(...commands);
-	const restored = root.extend(broad, last);
-	const result = restored.run(["child"]);
-	type _result = Expect<Equal<typeof result, Promise<RunOutcome<boolean>>>>;
+	const extended = root.extend(open);
+	const result = extended.run(["child"]);
+	type _result = Expect<Equal<typeof result, Promise<RunOutcome<unknown>>>>;
 }
 
-function _checkedAliasReplacementProof() {
+function _spreadExtensionsOpenAliasResults() {
 	const old = defineCommand("old", { aliases: ["shared"] }, (c) => c.action(() => 42));
 	const incoming = defineCommand("incoming", { aliases: ["shared", "old"] }, (c) =>
 		c.action(() => "new"),
@@ -324,14 +318,8 @@ function _checkedAliasReplacementProof() {
 	const app = new Crust("app").add(old).extend(...aliases);
 	void app.run(["shared"]);
 	void app.run(["old"]);
-	const unknown = app.run(["shared"], {});
-	type _unknown = Expect<Equal<typeof unknown, Promise<RunOutcome<unknown>>>>;
-	const replacements = [
-		defineExtension(id).add(defineCommand("shared", (c) => c.action(() => true))),
-	];
-	const canonical = new Crust("app").add(old).extend(...replacements);
-	const result = canonical.run(["shared"]);
-	type _canonical = Expect<Equal<typeof result, Promise<RunOutcome<unknown>>>>;
+	const shared = app.run(["shared"], {});
+	type _shared = Expect<Equal<typeof shared, Promise<RunOutcome<unknown>>>>;
 }
 
 function _providersAfterPendingCommands() {
@@ -436,4 +424,15 @@ function _conditionalProviderAndChildHolders(
 	root.extend(demand).add(compatible);
 	root.add(compatible).extend(demand);
 	root.add(child);
+}
+
+// Runtime dedupe keeps the last registration of an id, so an Extension whose command name the
+// types cannot see may replace an earlier Extension's command with a different result.
+function _runtimeOnlyNamesMayReplaceSameIdCommands() {
+	const shared = defineExtensionId("shared");
+	const name: string = "child";
+	const first = defineExtension(shared).add(defineCommand("child", (c) => c.action(() => 1)));
+	const second = defineExtension(shared).add(defineCommand(name, (c) => c.action(() => "s")));
+	const result = new Crust("app").extend(first).extend(second).run(["child"]);
+	type _result = Expect<Equal<typeof result, Promise<RunOutcome<unknown>>>>;
 }

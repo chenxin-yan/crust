@@ -92,7 +92,7 @@ function _typecheckKeepsConditionallyAssembledExtensionContributionsRuntimeOnly(
 	);
 	const elementApp = new Crust("cli").extend(elementConditional);
 
-	// @ts-expect-error -- only one branch of a conditional commands array is installed
+	// A conditional commands array leaves paths to runtime checks, like other runtime-only names.
 	void app.run(["foo"]);
 	void app.run([], { flags: { fa: true } });
 	void elementApp.run(["foo"]);
@@ -120,9 +120,8 @@ function _typecheckKeepsDynamicallyAssembledExtensionsAndContributionArraysRunti
 	const spreadApp = new Crust("cli").extend(...extensionList);
 
 	void homoApp.run(["foo"]);
-	// @ts-expect-error -- a conditionally selected Extension is runtime-only
+	// A conditionally selected Extension leaves paths to runtime checks, like other runtime-only names.
 	void unionApp.run(["foo"]);
-	// @ts-expect-error -- a conditionally selected Extension is runtime-only
 	void unionApp.run(["bar"]);
 	// Separate static Extensions in one call still publish both paths.
 	void bothApp.run(["foo"]);

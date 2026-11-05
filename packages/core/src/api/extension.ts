@@ -305,18 +305,20 @@ export type ExtensionSectionContribution = RuntimeCommandSectionInput & {
 	readonly command: readonly string[];
 };
 
+// Accumulates in tail position so one Extension can `.add()` 45+ commands without TS2589.
 type CommandDefinitionsDependencies<
 	Commands extends readonly CommandDefinition<any, any, any, any>[],
+	Acc = {},
 > = Commands extends readonly [
 	infer H extends CommandDefinition<any, any, any, any>,
 	...infer T extends readonly CommandDefinition<any, any, any, any>[],
 ]
 	? // A `never` element (e.g. a `{} as never` cast) would distribute DeclaredDepsOf
 		// to `never` and poison the whole dependency intersection.
-		([H] extends [never] ? {} : DeclaredDepsOf<H>) & CommandDefinitionsDependencies<T>
+		CommandDefinitionsDependencies<T, Acc & ([H] extends [never] ? {} : DeclaredDepsOf<H>)>
 	: Commands extends readonly []
-		? {}
-		: Record<string, ContextValue>;
+		? Acc
+		: Acc & Record<string, ContextValue>;
 
 type ExtensionDeps<
 	Use extends readonly AnyContextFactory[],
