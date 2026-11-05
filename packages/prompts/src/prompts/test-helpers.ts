@@ -8,7 +8,8 @@ import { createPromptIO } from "../testing.ts";
  * `setTimeout(0)`. `setImmediate` resolves only after that chain drains, so the `setTimeout(0)`
  * queued from it lands behind the frame timer in the same timer list. A fixed sleep instead
  * races the frame: Node stamps each timer when it is created, so a stall on a loaded machine
- * lets the sleep expire first.
+ * lets the sleep expire first. This holds only while key handling settles on microtasks: a
+ * handler that awaits a timer or I/O (such as a validator with a delay) needs an explicit wait.
  */
 export async function tick(): Promise<void> {
 	await new Promise<void>((resolve) => setImmediate(resolve));

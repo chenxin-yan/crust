@@ -443,7 +443,7 @@ describe("runPrompt", () => {
 		);
 		const before = raw;
 		pending.resolve(submit("old"));
-		await new Promise((resolve) => setTimeout(resolve, 10));
+		await tick();
 		const after = raw;
 		harness.keys("return");
 		expect(await replacement).toBe("done");
