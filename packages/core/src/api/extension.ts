@@ -576,11 +576,11 @@ function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 			next({ use: [...state.use, ...factories.map(definingOf)] }),
 		provide: (...instances: readonly AnyContextInstance[]) =>
 			next({ provide: [...state.provide, ...instances.map(definingOf)] }),
-		flags: (...input: readonly unknown[]) =>
+		flags: (record: unknown) =>
 			next({
 				flags: [
 					...state.flags,
-					...flagRecordEntries(input).map(
+					...flagRecordEntries(record).map(
 						([name, def]) => [name, ownDefinition(def, "flag", name)] as const,
 					),
 				],

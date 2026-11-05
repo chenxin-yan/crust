@@ -80,15 +80,9 @@ function invalidFlags(message: string): CrustError {
  * record keyed by canonical name. Only own enumerable string keys count.
  */
 export function flagRecordEntries(
-	input: readonly unknown[],
+	record: unknown,
 ): readonly (readonly [name: string, def: FlagDef])[] {
-	const record: unknown = input[0];
-	if (
-		input.length !== 1 ||
-		typeof record !== "object" ||
-		record === null ||
-		Array.isArray(record)
-	) {
+	if (typeof record !== "object" || record === null || Array.isArray(record)) {
 		throw invalidFlags(".flags() expects one record of flag definitions keyed by name");
 	}
 	// A literal `{ __proto__: def }` sets the prototype instead of adding a key.

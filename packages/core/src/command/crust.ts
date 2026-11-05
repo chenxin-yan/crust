@@ -1237,9 +1237,9 @@ export class Crust<
 		flags: F & FlagRecordErrors<F, State["sp"] | LocalSpellingsOf<State["flags"]>>,
 	): AfterFlags<State, F>;
 
-	flags(...input: readonly unknown[]): unknown {
+	flags(record: unknown): unknown {
 		const cloned = this._clone(cloneFlagRegistry(this._node));
-		for (const [name, def] of flagRecordEntries(input)) {
+		for (const [name, def] of flagRecordEntries(record)) {
 			registerFlag(cloned._node, name, def, "local");
 		}
 		return cloned;

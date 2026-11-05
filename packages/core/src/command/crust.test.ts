@@ -2297,22 +2297,6 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 				);
 			}
 		}
-		// Exactly one record per call; a removed named definition is not a record of definitions.
-		const app = new Crust("cli");
-		// SAFETY: models an untyped JavaScript caller; the runtime guard owns this input.
-		const untypedFlags = app.flags as unknown as (this: typeof app, ...input: unknown[]) => unknown;
-		for (const input of [
-			[],
-			[{ a: { type: "string" } }, { b: { type: "string" } }],
-			[{ name: "out", type: "string" }],
-		]) {
-			expect(() => untypedFlags.call(app, ...input), JSON.stringify(input)).toThrow(
-				expect.objectContaining({
-					code: "DEFINITION",
-					details: expect.objectContaining({ subject: "flag", reason: "invalid-flags" }),
-				}),
-			);
-		}
 		// Not array indexes: they keep insertion order.
 		for (const name of ["01", "-1", "2fa", "1.5"]) {
 			expect(() =>

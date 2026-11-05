@@ -332,11 +332,11 @@ function createContextBuilder(
 				sections,
 			),
 		// Snapshot and collision-check each call's definitions eagerly, like one combined list.
-		flags: (...input: readonly unknown[]) =>
+		flags: (record: unknown) =>
 			createContextBuilder(
 				name,
 				use,
-				Object.freeze(toFlagsRecord(flagRecordEntries(input), ownedFlags)),
+				Object.freeze(toFlagsRecord(flagRecordEntries(record), ownedFlags)),
 				sections,
 			),
 		sections: (...inputs: readonly RuntimeCommandSectionInput[]) =>
