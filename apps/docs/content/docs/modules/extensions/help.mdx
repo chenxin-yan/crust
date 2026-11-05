@@ -38,8 +38,8 @@ Use `help` as a section consumer to include or exclude sections from its output.
 ## `renderHelp`
 
 ```ts
-const text = renderHelp(await app.snapshot());
+const text = await renderHelp(await app.snapshot());
 // => "my-cli - My CLI\n\nUsage:\n  my-cli [options] ..."
 ```
 
-`renderHelp(command, path?)` renders a Command Snapshot without running the app. `path` is the command path shown in the output and defaults to `[meta.name]`.
+`renderHelp(command, path?)` renders a Command Snapshot without running the app and resolves to the help text. The renderer and `@crustjs/style` load on the first call, so a CLI pays for them only when it prints help. `path` is the command path shown in the output and defaults to `[meta.name]`.

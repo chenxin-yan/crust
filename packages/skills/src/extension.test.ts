@@ -101,7 +101,7 @@ describe("skill extension packaged directory", () => {
 		expect(snapshot.subCommands.skills?.meta.name).toBe("skills");
 		expect(snapshot.subCommands.skills?.meta.aliases).toEqual(["skill"]);
 		expect(snapshot.subCommands.skill).toBeUndefined();
-		expect(renderHelp(snapshot)).toContain("Then run `demo skills`");
+		expect(await renderHelp(snapshot)).toContain("Then run `demo skills`");
 	});
 
 	it.each(["agents", "skill"])(
@@ -119,7 +119,7 @@ describe("skill extension packaged directory", () => {
 		await writeSource("guide", "guide", "Explain deployment choices");
 		const snapshot = await createApp().snapshot();
 
-		const output = renderHelp(snapshot);
+		const output = await renderHelp(snapshot);
 		expect(output).toContain("Agent skills:");
 		// Sources outside the cwd advertise their absolute path; ../ chains would
 		// still spell out the absolute location while being harder to use.
@@ -133,7 +133,7 @@ describe("skill extension packaged directory", () => {
 		const app = new Crust("demo", { description: "Demo" })
 			.extend(skill({ command: "agents" }))
 			.action(() => {});
-		const output = renderHelp(await app.snapshot());
+		const output = await renderHelp(await app.snapshot());
 
 		expect(output).toContain("Agent skills:");
 		expect(output).toContain(
@@ -534,7 +534,7 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		const source = await writeSource("demo");
 		await writeFile(join(source, "demo", "SKILL.md"), "---\nname: demo\n---\n");
 
-		const output = renderHelp(await createApp().snapshot());
+		const output = await renderHelp(await createApp().snapshot());
 		expect(output).toContain("Agent skills:");
 		expect(output).toContain("Packaged skills could not be read.");
 		expect(output).not.toContain("Packaged skills not found");
