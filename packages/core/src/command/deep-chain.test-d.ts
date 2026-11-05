@@ -1618,3 +1618,25 @@ function _typecheckRecursiveFlagsReachAnOpenTree(name: string) {
 	void app.run(["anything"], { flags: { r: "notbool" } });
 	void app.run(["anything"], { flags: { r: true } });
 }
+
+// Recursive flags registered before an opening `.extend()` still reach the opened tree.
+function _typecheckEarlierRecursiveFlagsReachALaterOpenTree(name: string) {
+	const trace = defineExtension(defineExtensionId("earlier-trace")).flags({
+		trace: { type: "boolean" },
+	});
+	const tools = defineExtension(defineExtensionId("earlier-tools")).add(
+		defineCommand("tool", (command) => command.action(() => 7 as const)),
+	);
+	const runtimeName = defineExtension(defineExtensionId("later-open")).add(
+		defineCommand(name, (command) => command),
+	);
+	const app = new Crust("earlier-recursive")
+		.add(defineCommand("known", (command) => command.action(() => 42 as const)))
+		.extend(tools, trace)
+		.extend(runtimeName);
+	// @ts-expect-error -- the earlier recursive flag is a boolean on the widened Extension command
+	void app.run(["tool"], { flags: { trace: "x" } });
+	// @ts-expect-error -- and on any runtime-only path
+	void app.run(["whatever"], { flags: { trace: "x" } });
+	void app.run(["known"], { flags: { trace: true } });
+}
