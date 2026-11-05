@@ -28,7 +28,7 @@ Built-in prompts return the submitted value. `input()` and `password()` also acc
 
 Each prompt accepts an optional second `PromptIO` argument with optional `input` and `output`. Resolution is explicit IO, ambient `withTerminalIO()` IO, then `process.stdin` and `process.stderr`.
 
-`withPromptIO()` is an output-compatible alias. The ambient scope is shared with `@crustjs/progress`.
+The ambient `withTerminalIO()` scope is shared with `@crustjs/progress`.
 
 ## Prompts
 

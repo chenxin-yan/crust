@@ -14,7 +14,7 @@ import { dirname, join, resolve } from "node:path";
 
 import { type AnyCrust, Crust } from "@crustjs/core";
 import { renderHelp } from "@crustjs/extensions";
-import { withPromptIO } from "@crustjs/prompts";
+import { withTerminalIO } from "@crustjs/prompts";
 import { createPromptIO } from "@crustjs/prompts/testing";
 import { captureExecute } from "@crustjs/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -239,7 +239,7 @@ describe("skill extension packaged directory", () => {
 		vi.stubEnv("PATH", "");
 		const harness = createPromptIO();
 		const run = withCwd(tempRoot, () =>
-			withPromptIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
+			withTerminalIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
 		);
 		await waitForPrompt(harness, "Select skills to install");
 		// Nothing is installed, so both skills start selected; drop "guide".
@@ -264,7 +264,7 @@ describe("skill extension packaged directory", () => {
 		vi.stubEnv("PATH", "");
 		const harness = createPromptIO();
 		const run = withCwd(tempRoot, () =>
-			withPromptIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
+			withTerminalIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
 		);
 		await waitForPrompt(harness, "Select skills to install");
 		// Only the installed "guide" starts selected; swap it for "demo".
@@ -296,7 +296,7 @@ describe("skill extension packaged directory", () => {
 			vi.stubEnv("PATH", "");
 			const harness = createPromptIO();
 			const run = withCwd(tempRoot, () =>
-				withPromptIO(harness.io, () => createApp().execute({ argv: command.split(" ") })),
+				withTerminalIO(harness.io, () => createApp().execute({ argv: command.split(" ") })),
 			);
 			await waitForPrompt(harness, "Select agents to install for");
 			// Only the installed Augment starts selected; swap it for Universal.
@@ -319,7 +319,7 @@ describe("skill extension packaged directory", () => {
 
 		const harness = createPromptIO();
 		const run = withCwd(tempRoot, () =>
-			withPromptIO(harness.io, () => captureExecute(createApp(), ["skill", "uninstall"])),
+			withTerminalIO(harness.io, () => captureExecute(createApp(), ["skill", "uninstall"])),
 		);
 		await waitForPrompt(harness, "Select skills to uninstall");
 		// Nothing is preselected; pick "demo" (first choice) so only it is removed.
@@ -553,7 +553,7 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		vi.stubEnv("PATH", "");
 		const harness = createPromptIO();
 		const run = withCwd(tempRoot, () =>
-			withPromptIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
+			withTerminalIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
 		);
 		harness.keys("down", "space", "enter");
 		await run;
@@ -571,7 +571,7 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		vi.stubEnv("PATH", "");
 		const harness = createPromptIO();
 		const run = withCwd(tempRoot, () =>
-			withPromptIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
+			withTerminalIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
 		);
 		harness.keys("space", "enter");
 		// The multiselect drains buffered input, so the confirm answer must

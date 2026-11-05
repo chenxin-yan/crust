@@ -40,7 +40,6 @@ export {
 	resolvePromptIO,
 	runPrompt,
 	submit,
-	withPromptIO,
 	withTerminalIO,
 } from "./core/renderer.ts";
 

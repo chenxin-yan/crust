@@ -79,8 +79,6 @@ export interface ParseErrorDetails {
 	readonly flag?: string;
 	/** The offending argument name, for `"positional-gap"` and `"unknown-argument"`. */
 	readonly argument?: string;
-	/** Retained for compatibility; Core no longer populates this field. */
-	readonly value?: string;
 	/** Open so other packages can add reasons; `string & {}` keeps Core's literals in autocomplete. */
 	readonly reason?: ParseErrorReason | (string & {});
 }

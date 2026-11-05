@@ -28,7 +28,7 @@ export type PromptOutput = TerminalOutput;
 /** Streams used to render and receive input for a prompt. */
 export type PromptIO = TerminalIO;
 
-export { withTerminalIO, withTerminalIO as withPromptIO } from "@crustjs/utils/terminal";
+export { withTerminalIO } from "@crustjs/utils/terminal";
 
 /** Resolve explicit, ambient, then process-global streams. */
 export function resolvePromptIO(io?: PromptIO): Required<PromptIO> {
