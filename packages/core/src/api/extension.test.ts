@@ -98,6 +98,47 @@ describe("defineExtension", () => {
 		expect(seen).toEqual(["second pre", "second post"]);
 	});
 
+	it("runs noAction hooks after every preRun hook, only for commands without an action", async () => {
+		const seen: string[] = [];
+		const first = defineExtension(defineExtensionId("first"))
+			.preRun(() => void seen.push("first pre"))
+			.noAction(() => void seen.push("first noAction"));
+		const second = defineExtension(defineExtensionId("second"))
+			.preRun(() => void seen.push("second pre"))
+			.noAction((ctx) => {
+				seen.push("second noAction");
+				return ctx.handled();
+			});
+		const app = new Crust("app")
+			.extend(first, second)
+			// Missing, but noAction runs before validation, like preRun.
+			.args({ name: "name", type: "string", required: true })
+			.command("leaf", (command) => command.action(() => void seen.push("action")));
+
+		expect(await app.run([] as never, {} as never)).toMatchObject({
+			status: "handled",
+			by: "second",
+		});
+		expect(seen).toEqual(["first pre", "second pre", "first noAction", "second noAction"]);
+
+		seen.length = 0;
+		await unwrap(app.run(["leaf"]));
+		expect(seen).toEqual(["first pre", "second pre", "action"]);
+
+		seen.length = 0;
+		const claimed = new Crust("app")
+			.extend(
+				defineExtension(defineExtensionId("claim")).preRun((ctx) => ctx.handled()),
+				second,
+			)
+			.command("leaf", (command) => command.action(() => {}));
+		expect(await claimed.run([] as never)).toMatchObject({ status: "handled", by: "claim" });
+		expect(seen).toEqual([]);
+
+		const unclaimed = new Crust("app").extend(first).command("leaf", (c) => c.action(() => {}));
+		expect(await unclaimed.run([] as never)).toMatchObject({ status: "completed" });
+	});
+
 	it("snapshots contribution arrays and validates flags at the offending call", () => {
 		const commands = [defineCommand("child", (command) => command)];
 		const extension = defineExtension(HELP).add(...commands);

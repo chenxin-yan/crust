@@ -424,10 +424,13 @@ async function dispatch(
 	let outcome: InvocationOutcome = { status: "completed" };
 	try {
 		try {
-			for (const extension of extensions) {
-				if ((await extension.hooks?.preRun?.(extensionContext)) === handledInvocation()) {
-					outcome = { status: "handled", by: extension.id };
-					break;
+			const phases = resolvedNode.run ? (["preRun"] as const) : (["preRun", "noAction"] as const);
+			phases: for (const phase of phases) {
+				for (const extension of extensions) {
+					if ((await extension.hooks?.[phase]?.(extensionContext)) === handledInvocation()) {
+						outcome = { status: "handled", by: extension.id };
+						break phases;
+					}
 				}
 			}
 			if (outcome.status !== "handled") {

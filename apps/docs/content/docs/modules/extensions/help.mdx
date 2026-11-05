@@ -23,7 +23,7 @@ Options:
   -h, --help                   Show help
 ```
 
-`help()` owns the recursive `--help` and `-h` flag. It also shows help when the selected command has no Command Action. Subcommands are listed from their `defineCommand()` metadata without running their recipes, so a command whose recipe throws still appears.
+`help()` owns the recursive `--help` and `-h` flag. It also shows help when the selected command has no Command Action. That fallback runs as a `noAction` hook, after every `preRun` hook, so `my-cli --version` still prints the version on an action-less root whatever the `.extend()` order. Subcommands are listed from their `defineCommand()` metadata without running their recipes, so a command whose recipe throws still appears.
 
 ## Section consumer
 

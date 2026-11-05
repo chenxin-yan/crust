@@ -247,20 +247,21 @@ Runs the terminal boundary: parses `process.argv.slice(2)` (or `options.argv`), 
 
 ### Invocation order
 
-`.execute()` and `.run()` follow the same sequence. Routing or parse failures skip steps 4 through 10.
+`.execute()` and `.run()` follow the same sequence. Routing or parse failures skip steps 4 through 11.
 
 1. Prepare the application: apply Extensions, flags, and sections, deferring pending commands until needed.
 2. Route the command path, materializing pending commands as needed.
 3. Parse argv (`execute()`) or bind structured input (`run()`).
 4. Run Extension `preRun` hooks in registration order; `ctx.handled()` ends the invocation with a `handled` outcome.
-5. Check required values and positional structure.
-6. Apply Standard Schemas and aggregate their issues.
-7. Construct Contexts as they are first pulled.
-8. Run the Command Action.
-9. Run Extension `postRun` hooks in reverse registration order with the outcome.
-10. Run deferred cleanup and dispose Contexts in reverse registration order.
+5. If the routed command has no Command Action, run Extension `noAction` hooks in registration order; `ctx.handled()` ends the invocation the same way.
+6. Check required values and positional structure.
+7. Apply Standard Schemas and aggregate their issues.
+8. Construct Contexts as they are first pulled.
+9. Run the Command Action.
+10. Run Extension `postRun` hooks in reverse registration order with the outcome.
+11. Run deferred cleanup and dispose Contexts in reverse registration order.
 
-A failure in steps 4 through 8 still runs steps 9 and 10.
+A failure in steps 4 through 9 still runs steps 10 and 11.
 
 <Callout type="warn">
   `.action()` defines behavior. `.run()` is the programmatic entry point and `.execute()` is the
