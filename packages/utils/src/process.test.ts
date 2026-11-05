@@ -16,23 +16,7 @@ import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { isErrnoException } from "./error.ts";
-import {
-	getWindowsShimCommand,
-	packageManagerFromUserAgent,
-	runProcess,
-	which,
-} from "./process.ts";
-
-describe("packageManagerFromUserAgent", () => {
-	it("recognizes supported package manager user agents", () => {
-		expect(packageManagerFromUserAgent("bun/1.3.0")).toBe("bun");
-		expect(packageManagerFromUserAgent("pnpm/10.0.0 node/v22")).toBe("pnpm");
-		expect(packageManagerFromUserAgent("yarn/4.0.0 npm/?")).toBe("yarn");
-		expect(packageManagerFromUserAgent("npm/10.0.0 node/v22")).toBe("npm");
-		expect(packageManagerFromUserAgent("unknown/1.0.0")).toBeNull();
-		expect(packageManagerFromUserAgent(undefined)).toBeNull();
-	});
-});
+import { getWindowsShimCommand, runProcess, which } from "./process.ts";
 
 describe("getWindowsShimCommand", () => {
 	it("only selects command shims on Windows when shell mode was not requested", () => {

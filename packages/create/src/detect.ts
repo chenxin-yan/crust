@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-import { type PackageManager, packageManagerFromUserAgent } from "@crustjs/utils/process";
+import { type PackageManager, packageManagerFromUserAgent } from "@crustjs/utils/package-manager";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Package Manager Detection

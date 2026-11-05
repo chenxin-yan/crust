@@ -9,6 +9,7 @@ export default defineConfig({
 			"src/artifacts.ts",
 			"src/error.ts",
 			"src/json.ts",
+			"src/package-manager.ts",
 			"src/path.ts",
 			"src/primitive.ts",
 			"src/process.ts",
