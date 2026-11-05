@@ -454,14 +454,19 @@ type KnownDefinitionTree<Ds extends readonly unknown[], CF extends FlagsDef> =
 
 type ExtensionCheckAt<Checks, I> = I extends keyof Checks ? Checks[I] : never;
 
-type ExtensionCommands<Es extends readonly AnyExtension[]> = Es extends readonly [
-	infer H,
-	...infer T extends readonly AnyExtension[],
-]
-	? readonly [...ExtensionCommandDefs<H>, ...ExtensionCommands<T>]
-	: ExtensionCommandDefs<Es[number]>[number] extends never
-		? readonly []
-		: readonly CommandDefinition<any, any, any, any>[];
+// Extension-tuple walks below accumulate in tail position so one `.extend()` takes 45+
+// Extensions without TS2589; intersections keep their member order.
+type ExtensionCommands<
+	Es extends readonly AnyExtension[],
+	Acc extends readonly unknown[] = readonly [],
+> = Es extends readonly [infer H, ...infer T extends readonly AnyExtension[]]
+	? ExtensionCommands<T, readonly [...Acc, ...ExtensionCommandDefs<H>]>
+	: readonly [
+			...Acc,
+			...(ExtensionCommandDefs<Es[number]>[number] extends never
+				? readonly []
+				: readonly CommandDefinition<any, any, any, any>[]),
+		];
 
 type ExtensionProviders<E> = [E] extends [never]
 	? []
@@ -474,18 +479,20 @@ type ExtensionOwnDefs<E> = [E] extends [never]
 		? F
 		: [];
 
-type ExtensionFlags<Es extends readonly AnyExtension[]> = Es extends readonly [
+type ExtensionFlags<Es extends readonly AnyExtension[], Acc = {}> = Es extends readonly [
 	infer H,
 	...infer T extends readonly AnyExtension[],
 ]
-	? AttachedFlags<ExtensionOwnDefs<H>> &
-			ContextsOwnedFlags<ExtensionProviders<H>> &
-			ExtensionFlags<T>
-	: ExtensionOwnDefs<Es[number]>[number] extends never
-		? keyof ContextsOwnedFlags<ExtensionProviders<Es[number]>> extends never
-			? {}
-			: FlagsDef
-		: FlagsDef;
+	? ExtensionFlags<
+			T,
+			Acc & AttachedFlags<ExtensionOwnDefs<H>> & ContextsOwnedFlags<ExtensionProviders<H>>
+		>
+	: Acc &
+			(ExtensionOwnDefs<Es[number]>[number] extends never
+				? keyof ContextsOwnedFlags<ExtensionProviders<Es[number]>> extends never
+					? {}
+					: FlagsDef
+				: FlagsDef);
 
 type RecursiveFlagsOf<E> = ExtensionOwnDefs<E>[number] extends never
 	? {}
@@ -518,12 +525,15 @@ type RecursiveFlagsOf<E> = ExtensionOwnDefs<E>[number] extends never
 				}
 			: FlagsDef;
 
-type RecursiveExtensionFlags<Es extends readonly AnyExtension[]> = Es extends readonly [
+type RecursiveExtensionFlags<Es extends readonly AnyExtension[], Acc = {}> = Es extends readonly [
 	infer H,
 	...infer T extends readonly AnyExtension[],
 ]
-	? RecursiveFlagsOf<H> & ContextsOwnedFlags<ExtensionProviders<H>> & RecursiveExtensionFlags<T>
-	: ExtensionFlags<Es>;
+	? RecursiveExtensionFlags<
+			T,
+			Acc & RecursiveFlagsOf<H> & ContextsOwnedFlags<ExtensionProviders<H>>
+		>
+	: Acc & ExtensionFlags<Es>;
 
 type TreeWithInheritedFlags<Tree, F extends FlagsDef> = {
 	[K in keyof Tree]: ShapeWithInheritedFlags<Tree[K], F>;

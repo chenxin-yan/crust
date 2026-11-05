@@ -274,12 +274,17 @@ type ExtensionCommandCollisionBrand<E, Existing extends string> = CollisionBrand
 export type ValidateExtensionCommands<
 	Es extends readonly unknown[],
 	Existing extends string,
+	// Accumulating in tail position lets one `.extend()` take 45+ Extensions without TS2589.
+	Acc extends readonly unknown[] = readonly [],
 > = Es extends readonly [infer H, ...infer T extends readonly unknown[]]
-	? readonly [
-			H & ExtensionCommandCollisionBrand<H, Existing>,
-			...ValidateExtensionCommands<T, Existing | ExtensionCommandSpellings<H>>,
-		]
-	: Es;
+	? ValidateExtensionCommands<
+			T,
+			Existing | ExtensionCommandSpellings<H>,
+			readonly [...Acc, H & ExtensionCommandCollisionBrand<H, Existing>]
+		>
+	: Acc extends readonly []
+		? Es
+		: readonly [...Acc, ...Es];
 
 // ────────────────────────────────────────────────────────────────────────────
 

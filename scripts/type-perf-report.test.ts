@@ -23,6 +23,7 @@ const report = (
 	stress: Measured,
 	wide: Measured = 1_000,
 	contexts: Measured = 1_000,
+	extensions: Measured = 1_000,
 	[check200, check400] = [1, 2],
 ): TypePerfReport => ({
 	typescriptVersion: "7.0.2",
@@ -34,6 +35,7 @@ const report = (
 		400: typeof stress === "number" ? stress * 2 : stress,
 		"50 in one .add()": wide,
 		"60 Contexts in one call": contexts,
+		"60 Extensions in one call": extensions,
 	},
 	checkSeconds: { 200: check200, 400: check400 },
 });
@@ -78,6 +80,19 @@ describe("type performance report", () => {
 		expect(wideConfig).toContain('const wide59 = defineContext("wide-59", () => 59);');
 		expect(wideFluent).toContain('const wide59 = defineContext("wide-59").setup(() => 59);');
 		expect(withoutContexts(wideConfig)).toBe(withoutContexts(wideFluent));
+
+		const extensionsFluent = generateConsumerSource(size, "fluent", false, false, true);
+		const extensionsConfig = generateConsumerSource(size, "context-config", false, false, true);
+		expect(extensionsConfig).toContain('.provide(defineContext("wide-extension-59", () => 59)())');
+		expect(extensionsFluent).toContain(
+			'.provide(defineContext("wide-extension-59").setup(() => 59)())',
+		);
+		const withoutInlineContexts = (source: string) =>
+			withoutContexts(source).replace(
+				/defineContext\("([^"]+)"(?:\)\.setup\(|, )\(\) => (\d+)\)/g,
+				"context($1, $2)",
+			);
+		expect(withoutInlineContexts(extensionsConfig)).toBe(withoutInlineContexts(extensionsFluent));
 	});
 
 	it("exercises typed run()/at() and adds commands one call at a time unless wide", () => {
@@ -106,6 +121,19 @@ describe("type performance report", () => {
 		expect(source).toContain('new Crust("type-perf-wide").extend(wideExtension)');
 	});
 
+	it("passes 60 Extensions with flags, Contexts and commands to one .extend() call", () => {
+		expect(generateConsumerSource(10)).not.toContain("wideExtension");
+		const source = generateConsumerSource(10, "fluent", false, false, true);
+		const extensions = Array.from({ length: 60 }, (_, index) => `wideExtension${index}`);
+		expect(source).toContain(
+			`new Crust("type-perf-wide-extensions").extend(${extensions.join(", ")})`,
+		);
+		expect(source).toContain(
+			'const wideExtension59 = defineExtension(defineExtensionId("type-perf-wide-extension-59")).flags({ name: "wide-extension-59", type: "boolean" }).provide(defineContext("wide-extension-59").setup(() => 59)()).add(defineCommand("wide-extension-command-59", (command) => command));',
+		);
+		expect(source).not.toContain("wide59");
+	});
+
 	it("measures all consumer sizes using the harness compiler, not the target tree's compiler", async () => {
 		const root = mkdtempSync(join(tmpdir(), "crust-type-perf-test-"));
 		try {
@@ -125,10 +153,14 @@ describe("type performance report", () => {
 				"400",
 				"50 in one .add()",
 				"60 Contexts in one call",
+				"60 Extensions in one call",
 			]);
 			expect(measured.instantiations[10]).toBeGreaterThan(0);
 			expect(measured.instantiations["50 in one .add()"]).toBeGreaterThan(0);
 			expect(measured.instantiations["60 Contexts in one call"]).toBeGreaterThan(
+				measured.instantiations[10],
+			);
+			expect(measured.instantiations["60 Extensions in one call"]).toBeGreaterThan(
 				measured.instantiations[10],
 			);
 			expect(measured.instantiations[100]).toBeGreaterThan(measured.instantiations[10]);
@@ -171,6 +203,7 @@ describe("type performance report", () => {
 				400: { error: "TS2305" },
 				"50 in one .add()": { error: "TS2305" },
 				"60 Contexts in one call": { error: "TS2305" },
+				"60 Extensions in one call": { error: "TS2305" },
 			});
 		} finally {
 			rmSync(root, { recursive: true, force: true });
@@ -179,11 +212,21 @@ describe("type performance report", () => {
 
 	it("reports base compile errors as n/a and rejects a failing PR merge", () => {
 		const output = formatComparison(
-			report(10_000, 50_000, { error: "TS2590" }, { error: "TS2589" }, { error: "TS2589" }),
-			report(11_000, 60_000, 120_000, 2_000, 3_000),
+			report(
+				10_000,
+				50_000,
+				{ error: "TS2590" },
+				{ error: "TS2589" },
+				{ error: "TS2589" },
+				{ error: "TS2589" },
+			),
+			report(11_000, 60_000, 120_000, 2_000, 3_000, 4_000),
 		);
 		expect(output).toContain(
 			"| 60 Contexts in one call | n/a (base failed: TS2589) | 3,000 | n/a |",
+		);
+		expect(output).toContain(
+			"| 60 Extensions in one call | n/a (base failed: TS2589) | 4,000 | n/a |",
 		);
 		expect(output).toContain("| 200 | n/a (base failed: TS2590) | 120,000 | n/a |");
 		expect(output).toContain("| 50 in one .add() | n/a (base failed: TS2589) | 2,000 | n/a |");
@@ -218,12 +261,12 @@ describe("type performance report", () => {
 	});
 
 	it("flags check-time scaling only when it grows more than 20% above base", () => {
-		const base = report(10_000, 50_000, 100_000, 1_000, 1_000, [1, 2.3]);
+		const base = report(10_000, 50_000, 100_000, 1_000, 1_000, 1_000, [1, 2.3]);
 		expect(
-			formatComparison(base, report(10_000, 50_000, 100_000, 1_000, 1_000, [2, 5.5])),
+			formatComparison(base, report(10_000, 50_000, 100_000, 1_000, 1_000, 1_000, [2, 5.5])),
 		).toContain("Check-time scaling (400 ÷ 200 commands): base 2.30× · PR merge 2.75×");
 		expect(
-			formatComparison(base, report(10_000, 50_000, 100_000, 1_000, 1_000, [1, 3.1])),
+			formatComparison(base, report(10_000, 50_000, 100_000, 1_000, 1_000, 1_000, [1, 3.1])),
 		).toContain("Check-time scaling (400 ÷ 200 commands) ⚠️: base 2.30× · PR merge 3.10×");
 		const failedBase = report(10_000, 50_000, { error: "TS2590" });
 		failedBase.checkSeconds = {};

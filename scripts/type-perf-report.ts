@@ -3,14 +3,28 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 const fixtures = [
-	{ name: "10", size: 10, wideAdd: false, wideContexts: false },
-	{ name: "100", size: 100, wideAdd: false, wideContexts: false },
-	{ name: "200", size: 200, wideAdd: false, wideContexts: false },
-	{ name: "400", size: 400, wideAdd: false, wideContexts: false },
+	{ name: "10", size: 10, wideAdd: false, wideContexts: false, wideExtensions: false },
+	{ name: "100", size: 100, wideAdd: false, wideContexts: false, wideExtensions: false },
+	{ name: "200", size: 200, wideAdd: false, wideContexts: false, wideExtensions: false },
+	{ name: "400", size: 400, wideAdd: false, wideContexts: false, wideExtensions: false },
 	// Core used to hit TS2589 at ~44 definitions in one `.add(...)` call.
-	{ name: "50 in one .add()", size: 50, wideAdd: true, wideContexts: false },
+	{ name: "50 in one .add()", size: 50, wideAdd: true, wideContexts: false, wideExtensions: false },
 	// Core used to hit TS2589 at ~46 Contexts in one `.provide()`, `.extend()` or `.use()` call.
-	{ name: "60 Contexts in one call", size: 10, wideAdd: false, wideContexts: true },
+	{
+		name: "60 Contexts in one call",
+		size: 10,
+		wideAdd: false,
+		wideContexts: true,
+		wideExtensions: false,
+	},
+	// Core used to hit TS2589 at ~45 Extensions in one `.extend()` call.
+	{
+		name: "60 Extensions in one call",
+		size: 10,
+		wideAdd: false,
+		wideContexts: false,
+		wideExtensions: true,
+	},
 ] as const;
 type FixtureName = (typeof fixtures)[number]["name"];
 type FixtureApi = "context-config" | "fluent";
@@ -109,7 +123,8 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
  * is set, then makes five literal typed `app.run(path, { args, flags })` calls
  * and one `app.at(path)` call. `wideContexts` adds 60 Contexts passed in one call each
  * to the app's `.provide()`, a command's `.use()`, and an Extension's `.provide()`
- * that a second app `.extend()`s.
+ * that a second app `.extend()`s. `wideExtensions` adds 60 Extensions, each with a flag,
+ * a provided Context and a command, that another app passes to one `.extend()` call.
  * The context-config dialect supports comparisons across the fluent-Context API transition.
  */
 export function generateConsumerSource(
@@ -117,6 +132,7 @@ export function generateConsumerSource(
 	fixtureApi: FixtureApi = "fluent",
 	wideAdd = false,
 	wideContexts = false,
+	wideExtensions = false,
 ): string {
 	if (!Number.isInteger(size) || size < 1) throw new Error("size must be a positive integer");
 	const contextCount = Math.max(3, Math.ceil(size / 10));
@@ -145,22 +161,33 @@ export function generateConsumerSource(
 	}
 	lines.push("");
 
+	const valueContext = (name: string, value: number) =>
+		fixtureApi === "fluent"
+			? `defineContext("${name}").setup(() => ${value})`
+			: `defineContext("${name}", () => ${value})`;
 	const wide = Array.from({ length: wideContexts ? 60 : 0 }, (_, index) => `wide${index}`);
 	const wideInstances = wide.map((name) => `${name}()`).join(", ");
 	if (wideContexts) {
 		for (const [index, name] of wide.entries()) {
-			lines.push(
-				`const ${name} = ${
-					fixtureApi === "fluent"
-						? `defineContext("wide-${index}").setup(() => ${index})`
-						: `defineContext("wide-${index}", () => ${index})`
-				};`,
-			);
+			lines.push(`const ${name} = ${valueContext(`wide-${index}`, index)};`);
 		}
 		lines.push(
 			`const wideCommand = defineCommand("wide-command", (command) => command.use(${wide.join(", ")}).action(async ({ ctx }) => { void await ctx["wide-59"]; }));`,
 			`const wideExtension = defineExtension(defineExtensionId("type-perf-wide-extension")).provide(${wideInstances});`,
 			'export const wideApp = new Crust("type-perf-wide").extend(wideExtension).action(async ({ ctx }) => { void await ctx["wide-59"]; });',
+			"",
+		);
+	}
+
+	if (wideExtensions) {
+		const extensions = Array.from({ length: 60 }, (_, index) => `wideExtension${index}`);
+		for (const [index, name] of extensions.entries()) {
+			lines.push(
+				`const ${name} = defineExtension(defineExtensionId("type-perf-wide-extension-${index}")).flags({ name: "wide-extension-${index}", type: "boolean" }).provide(${valueContext(`wide-extension-${index}`, index)}()).add(defineCommand("wide-extension-command-${index}", (command) => command));`,
+			);
+		}
+		lines.push(
+			`export const wideExtensionsApp = new Crust("type-perf-wide-extensions").extend(${extensions.join(", ")}).action(async ({ ctx, flags }) => { void flags["wide-extension-59"]; void await ctx["wide-extension-59"]; });`,
 			"",
 		);
 	}
@@ -230,6 +257,7 @@ export function generateConsumerFixture(
 	fixtureApi: FixtureApi = "fluent",
 	wideAdd = false,
 	wideContexts = false,
+	wideExtensions = false,
 ): void {
 	const fixtureDir = resolve(outputDir);
 	const root = resolve(rootDir);
@@ -244,7 +272,7 @@ export function generateConsumerFixture(
 	}
 	writeFileSync(
 		join(fixtureDir, "consumer.ts"),
-		generateConsumerSource(size, fixtureApi, wideAdd, wideContexts),
+		generateConsumerSource(size, fixtureApi, wideAdd, wideContexts, wideExtensions),
 	);
 	writeFileSync(
 		join(fixtureDir, "tsconfig.json"),
@@ -312,9 +340,20 @@ console.log(api);`,
 	const checkSeconds: TypePerfReport["checkSeconds"] = {};
 	const fixtureRoot = mkdtempSync(join(tmpdir(), "crust-type-perf-"));
 	try {
-		for (const [index, { name, size, wideAdd, wideContexts }] of fixtures.entries()) {
+		for (const [
+			index,
+			{ name, size, wideAdd, wideContexts, wideExtensions },
+		] of fixtures.entries()) {
 			const fixtureDir = join(fixtureRoot, String(index));
-			generateConsumerFixture(fixtureDir, root, size, fixtureApi, wideAdd, wideContexts);
+			generateConsumerFixture(
+				fixtureDir,
+				root,
+				size,
+				fixtureApi,
+				wideAdd,
+				wideContexts,
+				wideExtensions,
+			);
 			let diagnostics: string;
 			try {
 				diagnostics = run(
