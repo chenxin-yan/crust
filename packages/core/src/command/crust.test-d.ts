@@ -472,3 +472,16 @@ function _typecheckExtensionFlagsBesideDynamicCommandFlags(dynamic: Record<strin
 	// @ts-expect-error -- the Extension's "trace" collides with the child's own flag
 	new Crust("app").add(child).extend(open, trace);
 }
+
+// an open Extension in one .extend() call does not erase the others' flags for later checks
+function _typecheckExtensionFlagsSurviveAnOpenExtensionInTheSameCall(
+	dynamic: Record<string, FlagDef>,
+) {
+	const open = defineExtension(defineExtensionId("open-flags")).flags(dynamic);
+	const trace = defineExtension(defineExtensionId("trace-only")).flags({
+		trace: { type: "boolean" },
+	});
+	const app = new Crust("app").extend(open, trace);
+	// @ts-expect-error -- the child's own "trace" collides with the Extension flag
+	void app.add(defineCommand("child", (command) => command.flags({ trace: { type: "string" } })));
+}

@@ -884,7 +884,7 @@ type AfterExtend<
 	ExtendedTree<Tree, Es, RecursiveExtensionFlags<Es>, CtxFlags>,
 	MergeFlags<CtxFlags, RecursiveExtensionFlags<Es>>,
 	CollisionSpellings<
-		CollisionSp["extension"] | KnownSpellings<ExtensionsSpellings<Es>>,
+		CollisionSp["extension"] | ExtensionsSpellings<Es>,
 		CollisionSp["tree"] | KnownSpellings<DefinitionTreeSpellings<ExtensionCommands<Es>>>,
 		CollisionSp["demands"] & ExtensionDemandValues<Es>,
 		CollisionSp["pending"] | KnownSpellings<DefinitionTreeSpellings<ExtensionCommands<Es>>>,
@@ -1466,7 +1466,7 @@ export class Crust<
 			DefinitionDescendantValuesBrand<Ds, State["collision"]["demands"]> &
 			ValidateDefinitionFlags<
 				Ds,
-				State["collision"]["extension"] | LocalSpellingsOf<State["ctxFlags"]>
+				State["collision"]["extension"] | KnownSpellings<LocalSpellingsOf<State["ctxFlags"]>>
 			>
 	): AfterAdd<State, Ds>;
 
