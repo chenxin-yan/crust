@@ -26,7 +26,7 @@ console.log({ features, proceed });
 //#endregion
 
 //#region io
-declare const io: PromptIO;
+declare const io: TerminalIO;
 await withTerminalIO(io, () => input({ message: "Name?" }));
 //#endregion
 
@@ -36,10 +36,10 @@ await prompts.input({ message: "Name?", initial: "Ada" });
 //#endregion
 
 //#region custom
-import { type PromptIO, runPrompt, submit } from "@crustjs/prompts";
+import { type TerminalIO, runPrompt, submit } from "@crustjs/prompts";
 import { renderPrompt } from "@crustjs/prompts/testing";
 
-function counter(options: { message: string }, promptIO?: PromptIO) {
+function counter(options: { message: string }, promptIO?: TerminalIO) {
 	return runPrompt(
 		{
 			initialState: 0,

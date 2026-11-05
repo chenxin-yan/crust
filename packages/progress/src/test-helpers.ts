@@ -1,7 +1,7 @@
-import type { ProgressSink } from "./spinner.ts";
+import type { TerminalOutput } from "./spinner.ts";
 
 export interface FakeSink {
-	sink: ProgressSink;
+	sink: TerminalOutput;
 	writes: string[];
 }
 

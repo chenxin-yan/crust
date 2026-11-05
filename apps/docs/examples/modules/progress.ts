@@ -1,4 +1,4 @@
-import { progress, spinner, type ProgressSink, withTerminalIO } from "@crustjs/progress";
+import { progress, spinner, type TerminalOutput, withTerminalIO } from "@crustjs/progress";
 
 //#region spinner
 await spinner({
@@ -19,7 +19,7 @@ bar.stop("success", "Files complete");
 
 //#region sink
 const transcript: string[] = [];
-const sink: ProgressSink = { isTTY: false, write: (text) => transcript.push(text) };
+const sink: TerminalOutput = { isTTY: false, write: (text) => transcript.push(text) };
 await withTerminalIO({ output: sink }, () =>
 	spinner({ message: "Deploying", task: async () => {} }),
 );

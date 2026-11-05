@@ -98,7 +98,7 @@ A `ProgressTheme` has `spinner`, `message`, `success`, and `error` style slots. 
 
 <include lang="ts">../../../examples/modules/progress.ts#sink</include>
 
-A per-call `sink` wins over ambient terminal output, which wins over `process.stderr`. `withTerminalIO(io, fn)` takes the same optional `{ input, output }` streams as [`@crustjs/prompts`](/docs/modules/prompts#injecting-io) and shares its ambient scope; `withProgressSink()` is the output-only alias.
+A per-call `sink` wins over ambient terminal output, which wins over `process.stderr`. `withTerminalIO(io, fn)` takes the same optional `{ input, output }` streams as [`@crustjs/prompts`](/docs/modules/prompts#injecting-io) and shares its ambient scope.
 
 ## Non-interactive behavior
 

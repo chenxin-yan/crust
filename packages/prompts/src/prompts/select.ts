@@ -3,7 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { setupListPrompt } from "../core/list.ts";
-import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
+import type { KeypressEvent, TerminalIO, SubmitResult } from "../core/renderer.ts";
 import { runPrompt, submit } from "../core/renderer.ts";
 import { CURSOR_INDICATOR, PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import type {
@@ -207,17 +207,17 @@ function renderSubmitted<T>(
 // literal choices is an error instead of silently widening the result.
 export function select<const C extends readonly [Choice<unknown>, ...Choice<unknown>[]]>(
 	options: SelectOptions<ChoiceValue<C>> & { readonly choices: C },
-	io?: PromptIO,
+	io?: TerminalIO,
 ): Promise<ChoiceValue<C>>;
 export function select<const C extends readonly string[]>(
 	options: SelectOptions<string> & { readonly choices: C & NotChoiceTuple<C> },
-	io?: PromptIO,
+	io?: TerminalIO,
 ): Promise<string>;
 export function select<T, const C extends readonly Choice<T>[] = readonly Choice<T>[]>(
 	options: SelectOptions<T> & { readonly choices: C & NotChoiceTuple<C> },
-	io?: PromptIO,
+	io?: TerminalIO,
 ): Promise<T>;
-export async function select<T>(options: SelectOptions<T>, io?: PromptIO): Promise<T> {
+export async function select<T>(options: SelectOptions<T>, io?: TerminalIO): Promise<T> {
 	const setup = await setupListPrompt<T, T>(
 		options,
 		options.default === undefined ? [] : [options.default],

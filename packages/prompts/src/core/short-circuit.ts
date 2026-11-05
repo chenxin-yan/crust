@@ -1,4 +1,4 @@
-import type { PromptIO } from "./renderer.ts";
+import type { TerminalIO } from "./renderer.ts";
 import { isTTY, resolvePromptIO } from "./renderer.ts";
 import type { SchemaOrValidate } from "./types.ts";
 import { validateSubmitValue } from "./validate.ts";
@@ -10,21 +10,21 @@ type ShortCircuitOptions<Input> = {
 
 type ShortCircuitResult<Answer> =
 	| { readonly shortCircuited: true; readonly value: Answer }
-	| { readonly shortCircuited: false; readonly promptIO: Required<PromptIO> };
+	| { readonly shortCircuited: false; readonly promptIO: Required<TerminalIO> };
 
 /** @internal Resolve values that let a prompt answer without rendering. */
 export function resolveShortCircuit<Input>(
 	options: ShortCircuitOptions<Input>,
-	io?: PromptIO,
+	io?: TerminalIO,
 ): Promise<ShortCircuitResult<Input>>;
 export function resolveShortCircuit<Input, Answer>(
 	options: ShortCircuitOptions<Input>,
-	io: PromptIO | undefined,
+	io: TerminalIO | undefined,
 	parse: (value: Input, source: "initial" | "default") => Answer | Promise<Answer>,
 ): Promise<ShortCircuitResult<Answer>>;
 export async function resolveShortCircuit<Input, Answer>(
 	options: ShortCircuitOptions<Input>,
-	io?: PromptIO,
+	io?: TerminalIO,
 	parse?: (value: Input, source: "initial" | "default") => Answer | Promise<Answer>,
 ): Promise<ShortCircuitResult<Input | Answer>> {
 	if (options.initial !== undefined) {
@@ -53,7 +53,7 @@ export async function resolveShortCircuit<Input, Answer>(
 export async function resolveTextShortCircuit<Output>(
 	promptName: string,
 	options: ShortCircuitOptions<string> & SchemaOrValidate<Output>,
-	io?: PromptIO,
+	io?: TerminalIO,
 ): Promise<ShortCircuitResult<Output | string>> {
 	if (options.schema !== undefined && options.validate !== undefined) {
 		throw new Error(`${promptName}() cannot combine "schema" with "validate"`);

@@ -3,12 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { stringWidth } from "@crustjs/style";
-import {
-	getTerminalIO,
-	type TerminalIO as SharedTerminalIO,
-	type TerminalOutput,
-	withTerminalIO as withSharedTerminalIO,
-} from "@crustjs/utils/terminal";
+import { getTerminalIO, type TerminalOutput } from "@crustjs/utils/terminal";
 
 import { defaultThemeFor } from "./theme.ts";
 import type { PartialProgressTheme, ProgressTheme } from "./theme.ts";
@@ -91,7 +86,7 @@ export interface SpinnerHandleOptions {
 	 * Terminal sink receiving the rendered output. Resolution order:
 	 * this option → ambient {@link withTerminalIO} output → `process.stderr`.
 	 */
-	readonly sink?: ProgressSink;
+	readonly sink?: TerminalOutput;
 }
 
 export interface SpinnerHandle {
@@ -180,18 +175,8 @@ function renderFinal(
 	return `${erase}${styleSymbol(symbol)} ${theme.message(message)}\n`;
 }
 
-/** Terminal IO shared by prompts, spinners, and progress indicators. */
-export type TerminalIO = SharedTerminalIO;
-
-/** Writable-compatible output driven by spinners and progress indicators. */
-export type ProgressSink = TerminalOutput;
-
+export type { TerminalIO, TerminalOutput } from "@crustjs/utils/terminal";
 export { withTerminalIO } from "@crustjs/utils/terminal";
-
-/** Run a function with an ambient output sink for progress indicators. */
-export function withProgressSink<T>(sink: ProgressSink, fn: () => T): T {
-	return withSharedTerminalIO({ output: sink }, fn);
-}
 
 /**
  * Internal handle constructor shared by both `spinner()` modes and `progress()`.

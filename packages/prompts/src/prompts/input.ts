@@ -4,7 +4,7 @@
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 
-import type { PromptIO } from "../core/renderer.ts";
+import type { TerminalIO } from "../core/renderer.ts";
 import { runPrompt } from "../core/renderer.ts";
 import { resolveTextShortCircuit } from "../core/short-circuit.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
@@ -158,18 +158,18 @@ export function input<Output>(
 		readonly schema: StandardSchema<unknown, Output>;
 		readonly validate?: never;
 	},
-	io?: PromptIO,
+	io?: TerminalIO,
 ): Promise<Output>;
 export function input(
 	options?: InputBaseOptions & {
 		readonly schema?: never;
 		readonly validate?: ValidateFn<string>;
 	},
-	io?: PromptIO,
+	io?: TerminalIO,
 ): Promise<string>;
 export async function input<Output>(
 	options: InputOptions<Output> = {},
-	io?: PromptIO,
+	io?: TerminalIO,
 ): Promise<Output | string> {
 	const shortCircuit = await resolveTextShortCircuit("input", options, io);
 	if (shortCircuit.shortCircuited) return shortCircuit.value;
