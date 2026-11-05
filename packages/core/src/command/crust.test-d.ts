@@ -495,3 +495,58 @@ function _typecheckVariableLengthExtensionListsDoNotClaimFlags(condition: boolea
 	const app = new Crust("app").extend(...extensions);
 	void app.add(defineCommand("child", (command) => command.flags({ trace: { type: "string" } })));
 }
+
+// recursive Extension flags reach a nested recipe child without counting as its own flags
+function _typecheckNestedRecipeChildrenDoNotOwnRecursiveExtensionFlags() {
+	const trace = defineExtension(defineExtensionId("nested-trace")).flags({
+		trace: { type: "boolean" },
+	});
+	const deep = defineCommand("deep", (command) => command);
+	const app = new Crust("app").extend(trace).command("x", (c) => c.add(deep).action(() => {}));
+	void app.run(["x", "deep"], { flags: { trace: true } });
+}
+
+// `recursive: false` Extension flags stay on the root, so commands below it may reuse them
+function _typecheckRootOnlyExtensionFlagsLeaveChildrenFree() {
+	const rootOnly = defineExtension(defineExtensionId("root-only-depth")).flags({
+		depth: { type: "string", recursive: false },
+	});
+	const child = defineCommand("child", (c) => c.flags({ depth: { type: "number" } }));
+	const withCommand = defineExtension(defineExtensionId("depth-command")).add(child);
+	new Crust("app").extend(rootOnly).add(child);
+	new Crust("app").extend(rootOnly).command("child", (c) => c.flags({ depth: { type: "number" } }));
+	new Crust("app").add(child).extend(rootOnly);
+	new Crust("app").extend(rootOnly, withCommand);
+	new Crust("app").extend(rootOnly).extend(withCommand);
+	// @ts-expect-error -- the root's own "depth" collides with the root-only Extension flag
+	new Crust("app").flags({ depth: { type: "number" } }).extend(rootOnly);
+}
+
+// an open recursive Extension flag record does not hide known inherited-flag collisions
+function _typecheckOpenRecursiveFlagsKeepKnownChildChecks(dynamic: Record<string, FlagDef>) {
+	const open = defineExtension(defineExtensionId("open-recursive")).flags(dynamic);
+	const trace = defineExtension(defineExtensionId("known-trace")).flags({
+		trace: { type: "boolean" },
+	});
+	const owner = defineContext("owner")
+		.flags({ pflag: { type: "string" } })
+		.setup(() => 1);
+	const pflagCommand = defineExtension(defineExtensionId("pflag-command")).add(
+		defineCommand("e", (c) => c.flags({ pflag: { type: "string" } })),
+	);
+	const traceCommand = defineExtension(defineExtensionId("trace-command")).add(
+		defineCommand("e", (c) => c.flags({ trace: { type: "string" } })),
+	);
+	const invalid = () => {
+		new Crust("app")
+			.provide(owner())
+			.extend(open)
+			// @ts-expect-error -- the child's "pflag" collides with the inherited Context flag
+			.command("child", (c) => c.flags({ pflag: { type: "string" } }));
+		// @ts-expect-error -- the Extension command's "pflag" collides with the inherited Context flag
+		new Crust("app").provide(owner()).extend(open).extend(pflagCommand);
+		// @ts-expect-error -- the Extension command's "trace" collides with the recursive Extension flag
+		new Crust("app").extend(trace).extend(open).extend(traceCommand);
+	};
+	void invalid;
+}

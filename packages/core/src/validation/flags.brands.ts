@@ -255,14 +255,44 @@ export type ProvidedContextSpellings<
 		? Acc
 		: Acc | LocalSpellingsOf<ContextOwnedFlags<P[number]>>;
 
+type ExtensionProvidedSpellings<E> = [E] extends [never]
+	? never
+	: DefiningOf<E> extends { readonly provide?: infer P extends readonly unknown[] }
+		? ProvidedContextSpellings<P>
+		: never;
+
 /** All statically known flag spellings an Extension contributes: declared flags plus provided Context-owned flags. */
 type ExtensionSpellings<E> =
 	| LocalSpellingsOf<ExtensionFlagDefsOf<E>>
-	| ([E] extends [never]
-			? never
-			: DefiningOf<E> extends { readonly provide?: infer P extends readonly unknown[] }
-				? ProvidedContextSpellings<P>
-				: never);
+	| ExtensionProvidedSpellings<E>;
+
+// `recursive: false` flags stay on the root; a possibly-recursive or dynamic record stays open.
+export type RecursiveOwnFlags<F> = keyof F extends never
+	? {}
+	: string extends keyof F
+		? FlagsDef
+		: true extends {
+					[K in keyof F]: F[K] extends { recursive: infer R }
+						? boolean extends R
+							? true
+							: false
+						: false;
+			  }[keyof F]
+			? FlagsDef
+			: {
+					[K in keyof F as F[K] extends { readonly recursive: false } ? never : K]: F[K];
+				};
+
+/**
+ * Known spellings an Extension puts on every command, not just the root: recursive flags and
+ * provided Context-owned flags. Only these can collide with a flag below the root at runtime.
+ */
+type RecursiveExtensionSpellings<E> = KnownSpellings<
+	| (RecursiveOwnFlags<ExtensionFlagDefsOf<E>> extends infer F extends FlagsDef
+			? LocalSpellingsOf<F>
+			: never)
+	| ExtensionProvidedSpellings<E>
+>;
 
 type ExtensionFlagCollisionBrand<E, Existing extends string> = CollisionBrand<
 	ExtensionSpellings<E>,
@@ -274,20 +304,30 @@ type ExtensionFlagCollisionBrand<E, Existing extends string> = CollisionBrand<
 
 /**
  * Validate each Extension's contributed flag spellings against accumulated
- * existing spellings and against Extensions earlier in the same `.extend()`
- * call. Extensions must not override application flags: a silent overwrite
- * would retype an already-bound action's flag at parse time.
+ * existing root spellings (`Existing`), flag spellings on commands below the root
+ * (`Below`, checked only against flags that reach them), and Extensions earlier in
+ * the same `.extend()` call. Extensions must not override application flags: a
+ * silent overwrite would retype an already-bound action's flag at parse time.
  */
 export type ValidateExtensionFlags<
 	Es extends readonly unknown[],
 	Existing extends string,
+	Below extends string = never,
 	// Accumulating in tail position lets one `.extend()` take 45+ Extensions without TS2589.
 	Acc extends readonly unknown[] = readonly [],
 > = Es extends readonly [infer H, ...infer T extends readonly unknown[]]
 	? ValidateExtensionFlags<
 			T,
 			Existing | KnownSpellings<ExtensionSpellings<H>>,
-			readonly [...Acc, H & ExtensionFlagCollisionBrand<H, Existing>]
+			Below,
+			readonly [
+				...Acc,
+				H &
+					ExtensionFlagCollisionBrand<
+						H,
+						Existing | (KnownSpellings<Below> & RecursiveExtensionSpellings<H>)
+					>,
+			]
 		>
 	: Acc extends readonly []
 		? Es
@@ -360,6 +400,14 @@ export type ExtensionsSpellings<
 	? ExtensionsSpellings<T, Acc | KnownSpellings<ExtensionSpellings<H>>>
 	: // A variable-length rest may be empty, so its flags are not known to be installed.
 		Acc;
+
+/** {@link ExtensionsSpellings} limited to flags that reach every command (see `RecursiveExtensionSpellings`). */
+export type RecursiveExtensionsSpellings<
+	Es extends readonly unknown[],
+	Acc extends string = never,
+> = Es extends readonly [infer H, ...infer T extends readonly unknown[]]
+	? RecursiveExtensionsSpellings<T, Acc | RecursiveExtensionSpellings<H>>
+	: Acc;
 
 /**
  * Validate Context-owned flags against accumulated existing spellings and

@@ -66,6 +66,8 @@ import type {
 } from "../validation/contexts.brands.ts";
 import type {
 	ExtensionsSpellings,
+	RecursiveExtensionsSpellings,
+	RecursiveOwnFlags,
 	ProvideChecks,
 	DefinitionTreeSpellings,
 	ShapeFlagCollisionBrand,
@@ -500,23 +502,6 @@ type ExtensionFlags<Es extends readonly AnyExtension[], Acc = {}> = Es extends r
 
 type RecursiveFlagsOf<E> = RecursiveOwnFlags<ExtensionOwnFlags<E>>;
 
-// `recursive: false` flags stay on the root; a possibly-recursive or dynamic record stays open.
-type RecursiveOwnFlags<F> = keyof F extends never
-	? {}
-	: string extends keyof F
-		? FlagsDef
-		: true extends {
-					[K in keyof F]: F[K] extends { recursive: infer R }
-						? boolean extends R
-							? true
-							: false
-						: false;
-			  }[keyof F]
-			? FlagsDef
-			: {
-					[K in keyof F as F[K] extends { readonly recursive: false } ? never : K]: F[K];
-				};
-
 type RecursiveExtensionFlags<Es extends readonly AnyExtension[], Acc = {}> = Es extends readonly [
 	infer H,
 	...infer T extends readonly AnyExtension[],
@@ -714,6 +699,9 @@ async function runAt(
 // ────────────────────────────────────────────────────────────────────────────
 
 type CollisionSpellings<
+	// Known spellings of Extension flags that reach every command (recursive own flags and
+	// provided Context flags): the Extension flags a command below the root can collide with at
+	// runtime. Root-only (`recursive: false`) flags join only `Sp`.
 	Extensions extends string = never,
 	Tree extends string = never,
 	Demands extends ContextMap = {},
@@ -929,7 +917,7 @@ type AfterExtend<
 	ExtensionCommandTree<Tree, Es, CtxFlags, ExtensionCommandsOf<CollisionSp>>,
 	CtxFlags,
 	CollisionSpellings<
-		CollisionSp["extension"] | ExtensionsSpellings<Es>,
+		CollisionSp["extension"] | RecursiveExtensionsSpellings<Es>,
 		CollisionSp["tree"] | KnownSpellings<DefinitionTreeSpellings<ExtensionCommands<Es>>>,
 		CollisionSp["demands"] & ExtensionDemandValues<Es>,
 		CollisionSp["pending"] | KnownSpellings<DefinitionTreeSpellings<ExtensionCommands<Es>>>,
@@ -1441,13 +1429,15 @@ export class Crust<
 	extend<const Es extends readonly AnyExtension[], _Union extends this = never>(
 		this: { readonly _types: { readonly caps: "app" } },
 		...extensions: Es & {
+			// Flags inherited so far; same-call and later Extension flags check these commands through
+			// `ValidateExtensionFlags`'s `Below` set.
 			[I in keyof Es]: (ExtensionCommandDefs<Es[I]> extends ValidateDefinitionFlags<
 				ExtensionCommandDefs<Es[I]>,
-				LocalSpellingsOf<CtxFlags & AppRecursiveFlagsOf<CollisionSp>>
+				CollisionSp["extension"] | KnownSpellings<LocalSpellingsOf<CtxFlags>>
 			>
 				? {}
 				: {
-						readonly FIX_ALIAS_COLLISION: "Extension command flags collide with inherited Context flags";
+						readonly FIX_ALIAS_COLLISION: "Extension command flags collide with inherited Context or Extension flags";
 					}) &
 				ValidateDeclaredDeps<MergeProviders<Ctx, ExtensionsProvidesOutput<Es>>, Es>[I] &
 				DeclaredDependencyValuesBrand<
@@ -1462,10 +1452,8 @@ export class Crust<
 				ExtensionCheckAt<
 					ValidateExtensionFlags<
 						Es,
-						| Sp
-						| LocalSpellingsOf<Flags>
-						| CollisionSp["tree"]
-						| KnownSpellings<DefinitionTreeSpellings<ExtensionCommands<Es>>>
+						Sp | LocalSpellingsOf<Flags>,
+						CollisionSp["tree"] | KnownSpellings<DefinitionTreeSpellings<ExtensionCommands<Es>>>
 					>,
 					I
 				> &
@@ -1546,16 +1534,17 @@ export class Crust<
 		this: StateReceiver<State>,
 		name: N & ChildCommandNameBrand<N> & CommandCollisionBrand<N, State["sibs"]>,
 		recipe: ((
-			// A recipe has no separate slot for recursive Extension flags, so it inherits them
-			// with the Context flags.
+			// Recursive Extension flags seed only the spellings: as inherited flags they would join
+			// nested children's shapes, where the brand below counts them as the child's own. Readers
+			// apply them to every command (see `AppShape`).
 			command: CommandDefinitionBuilder<
 				{},
 				[],
 				State["ctx"],
 				never,
-				LocalSpellingsOf<State["ctxFlags"] & AppRecursiveFlagsOf<State["collision"]>>,
+				KnownSpellings<LocalSpellingsOf<State["ctxFlags"]>> | State["collision"]["extension"],
 				{},
-				State["ctxFlags"] & AppRecursiveFlagsOf<State["collision"]>
+				State["ctxFlags"]
 			>,
 		) => B &
 			// Include nested children, whose flags are not in the seeded spelling set.

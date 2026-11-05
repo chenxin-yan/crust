@@ -132,12 +132,6 @@ function _typecheckBrandsInlineFlagsThatCollideWithRegisteredExtensionFlagsMatch
 			type: "boolean",
 		},
 	});
-	const rootOnly = defineExtension(defineExtensionId("root-only")).flags({
-		depth: {
-			type: "string",
-			recursive: false,
-		},
-	});
 	const nestedColliding = defineCommand("child", (cmd) =>
 		cmd.flags({ trace: { type: "boolean" } }).action(() => {}),
 	);
@@ -151,9 +145,9 @@ function _typecheckBrandsInlineFlagsThatCollideWithRegisteredExtensionFlagsMatch
 			// @ts-expect-error -- nested child's "trace" collides with tracer's recursive flag (parity with .add())
 			.command("query", (cmd) => cmd.add(nestedColliding).action(() => {}));
 		new Crust("cli")
-			.extend(rootOnly)
-			// @ts-expect-error -- inline "depth" collides with a registered Extension flag (parity with .add())
-			.command("query", (cmd) => cmd.flags({ depth: { type: "string" } }).action(() => {}));
+			.extend(tracer)
+			// @ts-expect-error -- inline "trace" collides with tracer's recursive flag (parity with .add())
+			.command("query", (cmd) => cmd.flags({ trace: { type: "string" } }).action(() => {}));
 	};
 	void invalidCompositions;
 }
