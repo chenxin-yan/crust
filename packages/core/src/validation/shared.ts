@@ -57,15 +57,19 @@ export type HasClosedNames<Ds extends readonly unknown[]> = number extends Ds["l
 	? false
 	: IsUnion<Ds> extends true
 		? false
-		: false extends {
-					[I in keyof Ds]: Ds[I] extends { name: infer N extends string }
-						? IsUnion<N> extends true
-							? false
-							: IsClosedName<N>
-						: false;
-			  }[number]
+		: false extends { [I in keyof Ds]: HasClosedName<Ds[I]> }[number]
 			? false
 			: true;
+
+// A separate alias, not an inline `Ds[I] extends { name: infer N }`: an enclosing `extends`
+// mentions `Ds`, so TypeScript keeps `Ds` as an outer parameter of the `{ name }` pattern and
+// re-instantiates the whole tuple once per element (O(n^2) for a batched `.add(...)`).
+// `[D]` keeps the check non-distributive: a union member has a union name, which is not closed.
+type HasClosedName<D> = [D] extends [{ name: infer N extends string }]
+	? IsUnion<N> extends true
+		? false
+		: IsClosedName<N>
+	: false;
 
 /** Brand statically known spelling collisions while allowing open names. */
 export type CollisionBrand<
