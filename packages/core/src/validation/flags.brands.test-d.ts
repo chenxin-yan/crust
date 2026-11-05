@@ -46,6 +46,14 @@ import type {
 	type _second = Expect<
 		Equal<Batch[1]["FIX_ALIAS_COLLISION"], 'Flag spelling "token" collides with an existing flag'>
 	>;
+	// a Context with open flags in between does not hide known collisions
+	type AfterOpen = ProvideChecks<never, readonly [First, { _ownedFlags?: FlagsDef }, Second]>;
+	type _afterOpen = Expect<
+		Equal<
+			AfterOpen[2]["FIX_ALIAS_COLLISION"],
+			'Flag spelling "token" collides with an existing flag'
+		>
+	>;
 }
 
 {
@@ -85,6 +93,32 @@ import type {
 	>;
 	type _clean = Expect<Equal<Extract<keyof Clean[0], "FIX_ALIAS_COLLISION">, never>>;
 	type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_ALIAS_COLLISION">, never>>;
+
+	// an open Extension in between does not hide known collisions
+	type AfterOpen = ValidateExtensionFlags<
+		readonly [Ext<FlagsDef>, Ext<{ mode: { type: "boolean" } }>],
+		"mode"
+	>;
+	type CrossOpen = ValidateExtensionFlags<
+		readonly [
+			Ext<{ verbose: { type: "boolean" } }>,
+			Ext<FlagsDef>,
+			Ext<{ verbose: { type: "string" } }>,
+		],
+		never
+	>;
+	type _afterOpen = Expect<
+		Equal<
+			AfterOpen[1]["FIX_ALIAS_COLLISION"],
+			'Extension flag spelling "mode" collides with an existing flag'
+		>
+	>;
+	type _crossOpen = Expect<
+		Equal<
+			CrossOpen[2]["FIX_ALIAS_COLLISION"],
+			'Extension flag spelling "verbose" collides with an existing flag'
+		>
+	>;
 }
 
 {

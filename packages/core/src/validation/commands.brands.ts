@@ -222,8 +222,15 @@ export type ExtensionsCommandSpellings<Es extends readonly unknown[]> =
 			? never
 			: string;
 
+/** Collision evidence from Extensions: a runtime-only command spelling contributes none. */
+type KnownExtensionCommandSpellings<E> = KnownCommandSpellings<ExtensionCommandDefs<E>>;
+export type KnownExtensionsCommandSpellings<Es extends readonly unknown[]> =
+	IsStaticTuple<Es> extends true
+		? { [I in keyof Es]: KnownExtensionCommandSpellings<Es[I]> }[number]
+		: never;
+
 type ExtensionCommandCollisionBrand<E, Existing extends string> = CollisionBrand<
-	ExtensionCommandSpellings<E>,
+	KnownExtensionCommandSpellings<E>,
 	Existing,
 	"FIX_COMMAND_COLLISION",
 	"Extension command ",
@@ -244,7 +251,7 @@ export type ValidateExtensionCommands<
 > = Es extends readonly [infer H, ...infer T extends readonly unknown[]]
 	? ValidateExtensionCommands<
 			T,
-			Existing | ExtensionCommandSpellings<H>,
+			Existing | KnownExtensionCommandSpellings<H>,
 			readonly [...Acc, H & ExtensionCommandCollisionBrand<H, Existing>]
 		>
 	: Acc extends readonly []
@@ -315,3 +322,21 @@ type AttachedCommandSpellingsSlow<Ds extends readonly unknown[]> = [Ds] extends 
 				: CommandDefinitionSpellings<Ds[number]>
 			: string
 		: string;
+
+/**
+ * Collision evidence from a definition tuple: the spellings it certainly registers. A
+ * runtime-only name or uncertain slot contributes none instead of opening the whole set.
+ */
+export type KnownCommandSpellings<Ds extends readonly unknown[]> =
+	string extends AttachedCommandSpellings<Ds>
+		? KnownSlotSpellings<Ds>
+		: AttachedCommandSpellings<Ds>;
+
+// Only fixed, non-union slots are certainly registered (see `IsStaticTuple`).
+type KnownSlotSpellings<Ds extends readonly unknown[]> = number extends Ds["length"]
+	? never
+	: IsUnion<Ds> extends true
+		? never
+		: {
+				[I in keyof Ds]: IsUnion<Ds[I]> extends true ? never : CommandDefinitionSpellings<Ds[I]>;
+			}[number];

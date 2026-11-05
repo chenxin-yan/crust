@@ -10,6 +10,7 @@ import type {
 	IsStaticTuple,
 	IsClosedName,
 	IsUnion,
+	KnownSpellings,
 	LocalValueBrand,
 	DefNameMembers,
 	SpacedToken,
@@ -285,7 +286,7 @@ export type ValidateExtensionFlags<
 > = Es extends readonly [infer H, ...infer T extends readonly unknown[]]
 	? ValidateExtensionFlags<
 			T,
-			Existing | ExtensionSpellings<H>,
+			Existing | KnownSpellings<ExtensionSpellings<H>>,
 			readonly [...Acc, H & ExtensionFlagCollisionBrand<H, Existing>]
 		>
 	: Acc extends readonly []
@@ -356,10 +357,9 @@ export type ExtensionsSpellings<
 	Es extends readonly unknown[],
 	Acc extends string = never,
 > = Es extends readonly [infer H, ...infer T extends readonly unknown[]]
-	? ExtensionsSpellings<T, Acc | ExtensionSpellings<H>>
-	: ExtensionSpellings<Es[number]> extends never
-		? Acc
-		: string;
+	? ExtensionsSpellings<T, Acc | KnownSpellings<ExtensionSpellings<H>>>
+	: // A variable-length rest may be empty, so its flags are not known to be installed.
+		Acc;
 
 /**
  * Validate Context-owned flags against accumulated existing spellings and
@@ -374,7 +374,7 @@ export type ProvideChecks<
 	Acc extends readonly unknown[] = readonly [],
 > = Cs extends readonly [infer H, ...infer T extends readonly unknown[]]
 	? ProvideChecks<
-			Sp | LocalSpellingsOf<ContextOwnedFlags<H>>,
+			Sp | KnownSpellings<LocalSpellingsOf<ContextOwnedFlags<H>>>,
 			T,
 			readonly [...Acc, H & ContextFlagCollisionBrand<H, Sp>]
 		>
@@ -547,9 +547,8 @@ type RecordFlagBrand<
 	: LocalFlagBrand<F[K] & { name: K }>) &
 	ExistingSpellingCollisionBrand<
 		K | ExtractAllAliases<F[K]>,
-		// An open `Existing` (after a dynamic record) is checked at runtime; dropping it keeps
-		// this record's own flags checked against each other instead of skipping every check.
-		| (string extends Existing ? never : Existing)
+		// An open `Existing` (after a dynamic record) would skip every check; see KnownSpellings.
+		| KnownSpellings<Existing>
 		// A flag without a known short or alias can only collide with another flag's alias.
 		| ([ExtractAllAliases<F[K]>] extends [never]
 				? AllAliases

@@ -165,6 +165,15 @@ function _typecheckRejectsExtensionFlagsCollidingWithContributedCommandFlags() {
 	void new Crust("cli").extend(extension);
 	// Disjoint spellings pass.
 	void new Crust("cli").extend(clean);
+
+	const dynamicFlags: Record<string, { type: "boolean" }> = {};
+	const open = defineCommand("open", (command) => command.flags(dynamicFlags));
+	const tracing = defineExtension(defineExtensionId("trace-only")).flags({
+		trace: { type: "string" as const },
+	});
+	// @ts-expect-error -- an added command with runtime-only flags does not hide a sibling's
+	void new Crust("cli").add(scan).add(open).extend(tracing);
+	void new Crust("cli").add(open).extend(tracing);
 }
 
 // keeps widened recursive flag scopes off descendant typed inputs

@@ -16,7 +16,7 @@ import type {
 	ParsedFlagValue,
 } from "../types.ts";
 import type {
-	AttachedCommandSpellings,
+	KnownCommandSpellings,
 	ValidateCommandDefinitions,
 } from "../validation/commands.brands.ts";
 import type { DeclaredDepsOf, KnownContextInstances } from "../validation/contexts.brands.ts";
@@ -519,7 +519,7 @@ export interface ExtensionBuilder<
 	>;
 	/** Contribute root commands; names and aliases must not collide with any other root command. */
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
-		...definitions: Ds & ValidateCommandDefinitions<Ds, AttachedCommandSpellings<Commands>>
+		...definitions: Ds & ValidateCommandDefinitions<Ds, KnownCommandSpellings<Commands>>
 	): ExtensionBuilder<Use, Provide, OF, readonly [...Commands, ...Ds], MetaKeys>;
 	/** See {@link ExtensionHooks.preRun}. */
 	preRun(
