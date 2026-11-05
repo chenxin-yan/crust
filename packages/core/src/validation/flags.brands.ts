@@ -458,7 +458,9 @@ type RecordFlagBrand<
 	: LocalFlagBrand<F[K] & { name: K }>) &
 	ExistingSpellingCollisionBrand<
 		K | ExtractAllAliases<F[K]>,
-		| Existing
+		// An open `Existing` (after a dynamic record) is checked at runtime; dropping it keeps
+		// this record's own flags checked against each other instead of skipping every check.
+		| (string extends Existing ? never : Existing)
 		// A flag without a known short or alias can only collide with another flag's alias.
 		| ([ExtractAllAliases<F[K]>] extends [never]
 				? AllAliases

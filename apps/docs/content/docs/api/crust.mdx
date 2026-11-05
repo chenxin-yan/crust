@@ -110,7 +110,7 @@ The variadic named form, `.flags({ name: "verbose", type: "boolean" })` or `.fla
 
 - Only own enumerable string keys are flags; TypeScript rejects symbol keys and unquoted number keys, so write `"1.5"` rather than `1.5`. Integer-like names (`"0"`, or digits without a leading zero such as `"2"`) are rejected at any length, because JavaScript lists array-index keys first and would reorder help. A record whose prototype is not `Object.prototype` or `null`, such as one written with a literal `__proto__` key, throws a `DEFINITION` error.
 - A key written after a spread (`{ ...shared, out }`) silently replaces the spread's flag of the same name. Attach shared sets in their own `.flags()` call: collisions across calls are checked.
-- A record with an index signature, such as one built with `Object.fromEntries()`, is checked when the call runs; literal keys beside it are still checked by TypeScript.
+- A record with an index signature, such as one built with `Object.fromEntries()`, is checked when the call runs; literal keys beside it or in later `.flags()` calls are still checked by TypeScript, against each other but not against the dynamic flags.
 - Long names, aliases, and `short` spellings must not collide with other flags visible on the command.
 - One-character names and aliases accept one or two dashes: `aliases: ["P"]` accepts `-P` and `--P`. Help, completion, man, and skills output list both.
 - Boolean flags accept `--no-<spelling>` for the name and every long alias. `noNegate: true` rejects negation with a `PARSE` error and hides it from help, completion, and man output. Names and aliases beginning with `no-` are reserved.

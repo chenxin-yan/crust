@@ -114,6 +114,19 @@ function _spreads(dynamic: Record<string, FlagDef>) {
 	new Crust("cli").flags(dynamic).action(({ flags }) => {
 		type _any = Expect<Equal<(typeof flags)["anything"], typeof flags.other>>;
 	});
+	// After a dynamic record, a later record's literal flags are still checked against each other.
+	new Crust("cli").flags(dynamic).flags({
+		// @ts-expect-error -- `a` and `b` share the short "x"
+		a: { type: "boolean", short: "x" },
+		b: { type: "boolean", short: "x" },
+	});
+	defineContext("open")
+		.flags(dynamic)
+		.flags({
+			// @ts-expect-error -- `a`'s alias "all" is the name of flag `all`
+			a: { type: "boolean", aliases: ["all"] },
+			all: { type: "boolean" },
+		});
 }
 
 // §6: integer-like names are rejected because JavaScript lists them first.
