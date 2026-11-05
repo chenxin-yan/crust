@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import {
 	existsSync,
 	mkdirSync,
@@ -17,10 +18,12 @@ import { Crust } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import type { JsonValue } from "@crustjs/utils/json";
 import { which } from "@crustjs/utils/process";
+import { getCachedBinaryPath } from "@tsdown/exe";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 
 import { buildCommand } from "../src/commands/build.ts";
 import type { DistributionManifest } from "../src/distribute.ts";
+import { nodeExeTarget } from "../src/node-exe.ts";
 import { hostTarget, NODE_TARGETS, type TargetInfo } from "../src/targets.ts";
 import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
 import { seaNodeBinDir, withPathPrefix } from "./helpers.ts";
@@ -146,6 +149,7 @@ import { help } from ${JSON.stringify(extensionsDist)};
 import { mark } from "esm-dep";
 import cjs from "cjs-dep";
 import { helper } from "./helper.ts";
+const { sep } = await import("node:path");
 const man = defineExtension(defineExtensionId("man")).build(() => [{ path: "man/greet.1", content: ".Dd" }]);
 // Only this module is main: helper.ts and cjs-dep guard main-only output.
 if (import.meta.main) await new Crust("greet", { description: "Greets from a Node binary" })
@@ -166,6 +170,7 @@ if (import.meta.main) await new Crust("greet", { description: "Greets from a Nod
 			secret: process.env.SECRET_TOKEN ?? null,
 			helper,
 			cjs: [cjs.dirnameType(), cjs.sep],
+			dynamicImport: sep,
 			asset: readFileSync(join(resolveArtifactDir("assets"), "greeting.txt"), "utf8").trim(),
 			man: readFileSync(join(resolveArtifactDir("man"), "greet.1"), "utf8"),
 		}));
@@ -377,6 +382,7 @@ describe.skipIf(seaNodeDir === null || host === null || npm === null)(
 					secret: null,
 					helper: "imported",
 					cjs: ["string", process.platform === "win32" ? "\\" : "/"],
+					dynamicImport: process.platform === "win32" ? "\\" : "/",
 					asset: "hello from assets",
 					man: ".Dd",
 				};
@@ -384,6 +390,24 @@ describe.skipIf(seaNodeDir === null || host === null || npm === null)(
 				expect(direct.exitCode, direct.stderr).toBe(0);
 				expect(direct.stderr.trim()).toBe("to stderr");
 				expect(JSON.parse(direct.stdout)).toEqual(expected);
+				// Only a builder Node that is the exact embedded binary, without
+				// NODE_OPTIONS, writes a code cache V8 accepts; any other gets none
+				// rather than a rejected one. Ask the Node for its execPath, as the
+				// build does: on PATH it may be a version-manager shim.
+				const builderNode = spawnSync(join(seaNodeDir!, `node${exe}`), ["-p", "process.execPath"], {
+					encoding: "utf8",
+					timeout: 10_000,
+				}).stdout.trim();
+				const embedsBuilder =
+					!process.env.NODE_OPTIONS &&
+					readFileSync(getCachedBinaryPath(nodeExeTarget(host!, nodeVersion))).equals(
+						readFileSync(builderNode),
+					);
+				const traced = await runWithoutNode(greetBinary, ["ada"], { NODE_DEBUG_NATIVE: "SEA" });
+				expect(traced.exitCode, traced.stderr).toBe(0);
+				expect(traced.stderr).not.toContain("rejected");
+				expect(traced.stderr.includes("SEA module code cache accepted")).toBe(embedsBuilder);
+				expect(hostBuild.stdout).toContain(embedsBuilder ? "Code cache: on" : "Code cache: off (");
 
 				const help = await runWithoutNode(greetBinary, ["--help"]);
 				expect(help.exitCode, help.stderr).toBe(0);
