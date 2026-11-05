@@ -358,7 +358,8 @@ export type ExtensionsSpellings<
 	Acc extends string = never,
 > = Es extends readonly [infer H, ...infer T extends readonly unknown[]]
 	? ExtensionsSpellings<T, Acc | KnownSpellings<ExtensionSpellings<H>>>
-	: Acc | KnownSpellings<ExtensionSpellings<Es[number]>>;
+	: // A variable-length rest may be empty, so its flags are not known to be installed.
+		Acc;
 
 /**
  * Validate Context-owned flags against accumulated existing spellings and

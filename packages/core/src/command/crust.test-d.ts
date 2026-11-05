@@ -485,3 +485,13 @@ function _typecheckExtensionFlagsSurviveAnOpenExtensionInTheSameCall(
 	// @ts-expect-error -- the child's own "trace" collides with the Extension flag
 	void app.add(defineCommand("child", (command) => command.flags({ trace: { type: "string" } })));
 }
+
+// a variable-length Extension list may be empty, so its flags are not known to be installed
+function _typecheckVariableLengthExtensionListsDoNotClaimFlags(condition: boolean) {
+	const trace = defineExtension(defineExtensionId("maybe-trace")).flags({
+		trace: { type: "boolean" },
+	});
+	const extensions: (typeof trace)[] = condition ? [trace] : [];
+	const app = new Crust("app").extend(...extensions);
+	void app.add(defineCommand("child", (command) => command.flags({ trace: { type: "string" } })));
+}
