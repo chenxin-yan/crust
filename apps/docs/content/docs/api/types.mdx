@@ -299,7 +299,7 @@ When annotating a published factory, preserve literal tuples for precise typed i
 
 <auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Extension" />
 
-A frozen handle created only by `defineExtension()`. Spreading or copying it does not redefine the Extension. Mint the branded `ExtensionId` with `defineExtensionId()`, which requires a non-empty, trimmed string.
+A frozen handle created only by `defineExtension()`. Spreading or copying it does not redefine the Extension. Mint the branded `ExtensionId` with `defineExtensionId()`, which requires a non-empty, trimmed string. TypeScript rejects a literal id that breaks this; a computed one throws a `DEFINITION` error (`empty-id`).
 
 ### `RootMetaKey`
 

@@ -61,6 +61,7 @@ export type DefinitionErrorReason =
 	| "invalid-section-path"
 	| "invalid-sections"
 	| "invalid-short"
+	| "invalid-spelling"
 	| "missing-context"
 	| "nested-command-extension"
 	| "reserved-name"

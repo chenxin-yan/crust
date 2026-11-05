@@ -59,3 +59,23 @@ function _typecheckOmittedNameKeepsDefault(options: { command?: "completions" })
 	// An optional literal may be absent at runtime, so the tree stays open.
 	void host().extend(completion(options)).run(["completion"]);
 }
+
+// scripts embed a version, so like version() the root needs one unless completion() gets it
+function _typecheckVersionRequirement(maybe: string | undefined, options: { version?: string }) {
+	// @ts-expect-error -- no root version and no explicit version
+	new Crust("cli").extend(completion());
+	// @ts-expect-error -- a renamed command still needs a version
+	new Crust("cli").extend(completion({ command: "completions" }));
+	// @ts-expect-error -- a possibly absent version is not enough
+	new Crust("cli").extend(completion({ version: maybe }));
+	// @ts-expect-error -- neither is an optional one
+	new Crust("cli").extend(completion(options));
+
+	new Crust("cli", { version: "1.0.0" }).extend(completion());
+	new Crust("cli", { version: "1.0.0" }).extend(completion({ version: maybe }));
+	new Crust("cli").extend(completion({ version: "1.0.0" }));
+	const renamed = new Crust("cli").extend(completion({ command: "completions", version: "1.0.0" }));
+	void renamed.run(["completions"], { args: { shell: "bash" } });
+	// @ts-expect-error -- the explicit-version overload keeps the renamed tree closed
+	void renamed.run(["completion"], { args: { shell: "bash" } });
+}

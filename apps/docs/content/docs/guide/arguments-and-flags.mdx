@@ -83,7 +83,7 @@ $ serve
 color=undefined port=undefined
 ```
 
-`.flags()` takes one record: each key is a flag's name without the `--` prefix. A user types `--color --port 3000`, and the action reads `flags.color` and the converted number in `flags.port`. Quote a name that is not an identifier, such as `"dry-run"`, and read it as `flags["dry-run"]`.
+`.flags()` takes one record: each key is a flag's name without the `--` prefix. A user types `--color --port 3000`, and the action reads `flags.color` and the converted number in `flags.port`. Quote a name that is not an identifier, such as `"dry-run"`, and read it as `flags["dry-run"]`. A name must not contain whitespace or `=`, or start with `-`: TypeScript rejects such a literal name, and a computed one throws a `DEFINITION` error.
 
 In this example, neither flag has `required`, `default`, or an environment binding, so omitting it gives an action value of `undefined`. When supplied, a value-taking flag needs one value, so `serve --port` fails. Built-in types convert CLI text and reject invalid input, including a blank number, before the action runs:
 
@@ -192,7 +192,7 @@ publishing to jsr tags=undefined
 
 After its own optional splitting, the environment value enters the same conversion and validation path as argv, so `type` conversion, `choices`, `parse`, and schemas apply unchanged. Boolean flags accept `true` or `1` as true; any other value is false, and a `noNegate` flag rejects a false value the way it rejects `--no-<name>`.
 
-The two delimiters are independent: flag-level `delimiter` splits string argv occurrences, while `env.delimiter` splits environment text. Both require `multiple: true`, use nonempty literal separators, and drop empty segments. Neither inherits the other's setting; without `env.delimiter`, the entire environment value is one occurrence. Boolean argv switches remain `--flag` / `--no-flag` (not `--flag=true,false`); repeated booleans can use `env: { name: "FEATURES", delimiter: "," }` for environment text such as `true,false`.
+The two delimiters are independent: flag-level `delimiter` splits string argv occurrences, while `env.delimiter` splits environment text. Both require `multiple: true`, use nonempty literal separators, and drop empty segments. TypeScript rejects an empty literal `env.name`, `delimiter`, or `env.delimiter`; a computed empty value throws a `DEFINITION` error. Neither inherits the other's setting; without `env.delimiter`, the entire environment value is one occurrence. Boolean argv switches remain `--flag` / `--no-flag` (not `--flag=true,false`); repeated booleans can use `env: { name: "FEATURES", delimiter: "," }` for environment text such as `true,false`.
 
 The example above uses commas on argv and colons in `PUBLISH_TAGS`:
 

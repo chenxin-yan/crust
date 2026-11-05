@@ -6,7 +6,16 @@ import type { ArgDef, FlagDef, FlagsDef } from "../types.ts";
 // the rule matches the type-level check; `01` is not one and keeps its insertion order.
 const INTEGER_LIKE = /^(0|[1-9]\d*)$/;
 
-// Compile-time brands (FIX_EMPTY_SPELLING, FIX_NO_PREFIX) own literal
+/**
+ * Child command names and aliases are matched against a single argv token: one
+ * without whitespace that does not start with `-`, which would make it a flag.
+ * Flag spellings follow the same rule, since the parser adds their dashes.
+ */
+export function isBareToken(token: string): boolean {
+	return token !== "" && !/[ \t\n\r\v\f]/.test(token) && !token.startsWith("-");
+}
+
+// Compile-time brands (FIX_EMPTY_SPELLING, FIX_NO_PREFIX, FIX_SPELLING_SHAPE) own literal
 // definitions; this guard owns the dynamic path (config-built flag defs).
 // Empty spellings register flags no argv token can address; "no-" spellings
 // collide with boolean negation (the parser inverts every `--no-` rawName).
@@ -41,6 +50,14 @@ function assertUsableSpelling(spelling: string, kind: "canonical" | "short" | "a
 			name: spelling,
 			reason: "reserved-spelling",
 		});
+	}
+	// `--a=b` splits at `=`, so a long spelling containing it can never be matched.
+	if (!isBareToken(spelling) || (kind !== "short" && spelling.includes("="))) {
+		throw new CrustError(
+			"DEFINITION",
+			`Flag ${kind} "${spelling}" must not contain whitespace${kind === "short" ? "" : ' or "="'} or start with "-"`,
+			{ subject: "flag", name: spelling, reason: "invalid-spelling" },
+		);
 	}
 }
 

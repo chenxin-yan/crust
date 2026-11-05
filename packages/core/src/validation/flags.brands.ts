@@ -1,6 +1,6 @@
 import type { DefiningOf } from "../api/context.ts";
 import type { CommandDefinitionData } from "../command/crust.ts";
-import type { FlagsDef } from "../types.ts";
+import type { FlagDef, FlagsDef } from "../types.ts";
 import type {
 	ClosedMembers,
 	CollisionBrand,
@@ -12,6 +12,7 @@ import type {
 	IsUnion,
 	LocalValueBrand,
 	DefNameMembers,
+	SpacedToken,
 	UnionToIntersection,
 } from "./shared.ts";
 
@@ -35,10 +36,44 @@ type ExistingSpellingCollisionBrand<S extends string, Existing extends string> =
  * Each field is filtered on its own so a `string`-typed field cannot absorb a
  * sibling field's invalid literal before the filter runs.
  */
-type SpellingMembers<F> =
+type SpellingMembers<F> = LongSpellingMembers<F> | ShortMembers<F>;
+
+// Optional and `undefined`-unioned fields count: a supplied value is still one of the literals.
+type LongSpellingMembers<F> =
 	| DefNameMembers<F>
-	| ClosedMembers<F extends { short: infer S extends string } ? S : never>
-	| ClosedMembers<F extends { aliases: infer A extends readonly string[] } ? A[number] : never>;
+	| ClosedMembers<
+			F extends { aliases?: infer A extends readonly string[] | undefined }
+				? Exclude<A, undefined>[number]
+				: never
+	  >;
+
+type ShortMembers<F> = ClosedMembers<
+	F extends { short?: infer S extends string | undefined } ? Exclude<S, undefined> : never
+>;
+
+// Mirrors runtime `isBareToken`, since the parser adds a spelling's dashes. Names and aliases
+// (`Long`) also reject `=`: `--a=b` splits there, while `-=` still reaches a short.
+// Valid spellings take only the first `extends`.
+type SpellingShapeError<S extends string, Long extends boolean> = S extends
+	| SpacedToken
+	| `-${string}`
+	| (Long extends true ? `${string}=${string}` : never)
+	? S extends SpacedToken
+		? `Flag spelling "${S}" must not contain whitespace`
+		: S extends `-${string}`
+			? `Flag spelling "${S}" must not start with "-"; the parser adds the dashes`
+			: `Flag spelling "${S}" must not contain "="`
+	: never;
+
+type SpellingShapeBrand<Long extends string, Short extends string = never> = [
+	SpellingShapeError<Long, true> | SpellingShapeError<Short, false>,
+] extends [never]
+	? {}
+	: {
+			readonly FIX_SPELLING_SHAPE:
+				| SpellingShapeError<Long, true>
+				| SpellingShapeError<Short, false>;
+		};
 
 /** Reject `__proto__`, which mutates the prototype of plain-object flag registries. */
 type ReservedSpellingBrand<F> =
@@ -58,6 +93,34 @@ type EmptyFlagSpellingBrand<Name extends string> = EmptyLiteralNameBrand<Name, E
 /** Reject empty spellings: their CLI tokens (`--`, `-`) are unparseable, so the flag can never be supplied. */
 type EmptySpellingBrand<F> = "" extends SpellingMembers<F> ? EmptySpellingError : {};
 
+// Each binding of an env union is read on its own, so one binding's missing or open field
+// cannot hide another's empty literal. Optional and `undefined`-unioned fields still count:
+// a value that can only be `""` when supplied is a known mistake.
+type EnvBinding<F> = F extends { env?: infer E } ? Exclude<E, undefined> : never;
+type EnvNames<E> = E extends { name: infer N extends string } ? ClosedMembers<N> : never;
+type Delimiters<T> = T extends { delimiter?: infer D } ? ClosedMembers<Extract<D, string>> : never;
+
+/** Reject an empty env variable name: the variable can never be read. */
+type EmptyEnvBrand<F> =
+	"" extends EnvNames<EnvBinding<F>>
+		? { readonly FIX_EMPTY_ENV: "env.name must be a non-empty string" }
+		: {};
+
+/**
+ * Reject an empty delimiter, which would split values into single characters. Each field is
+ * filtered on its own so a `string`-typed field cannot absorb the other's empty literal.
+ */
+type EmptyDelimiterBrand<F> = "" extends Delimiters<F> | Delimiters<EnvBinding<F>>
+	? { readonly FIX_EMPTY_DELIMITER: "delimiter and env.delimiter must be non-empty strings" }
+	: {};
+
+// Most flags have neither field; testing for them first keeps the common case cheap.
+type EmptyTextBrand<F> = F extends unknown
+	? [Extract<keyof F, "env" | "delimiter">] extends [never]
+		? {}
+		: EmptyEnvBrand<F> & EmptyDelimiterBrand<F>
+	: never;
+
 type RepeatedAliases<
 	Aliases extends readonly string[],
 	Seen extends string,
@@ -65,8 +128,8 @@ type RepeatedAliases<
 	? (Head & Seen) | RepeatedAliases<Tail, Seen | Head>
 	: never;
 
-type OwnAliasesBrand<F> = F extends { aliases: infer Aliases extends readonly string[] }
-	? RepeatedAliases<Aliases, ExtractShort<F>> extends infer Duplicate extends string
+type OwnAliasesBrand<F> = F extends { aliases?: infer A extends readonly string[] | undefined }
+	? RepeatedAliases<Exclude<A, undefined>, ExtractShort<F>> extends infer Duplicate extends string
 		? [Duplicate] extends [never]
 			? {}
 			: { readonly FIX_ALIAS_COLLISION: "Flag repeats one of its own spellings" }
@@ -79,12 +142,14 @@ type InvalidShort<S extends string> = S extends `${infer _First}${infer Rest}`
 		: S
 	: S;
 
-type ShortLengthBrand<F> = F extends { short: infer Short extends string }
-	? string extends Short
-		? {}
-		: [InvalidShort<Short>] extends [never]
+type ShortLengthBrand<F> = F extends { short?: infer S extends string | undefined }
+	? Exclude<S, undefined> extends infer Short extends string
+		? string extends Short
 			? {}
-			: { readonly FIX_SHORT_LENGTH: "Short flags must be one character" }
+			: [InvalidShort<Short>] extends [never]
+				? {}
+				: { readonly FIX_SHORT_LENGTH: "Short flags must be one character" }
+		: never
 	: {};
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -95,8 +160,8 @@ type ShortLengthBrand<F> = F extends { short: infer Short extends string }
  * Extract the `short` alias literal from a flag definition.
  * Resolves to `never` when the field is absent or its spelling domain is open.
  */
-type ExtractShort<F> = F extends { short: infer S }
-	? S extends string
+type ExtractShort<F> = F extends { short?: infer Field }
+	? Exclude<Field, undefined> extends infer S extends string
 		? IsClosedName<S> extends true
 			? S
 			: never
@@ -107,8 +172,8 @@ type ExtractShort<F> = F extends { short: infer S }
  * Extract alias string literals from the `aliases` array of a flag definition.
  * Resolves to `never` when the field is absent or its element domain is open.
  */
-type ExtractLongAliases<F> = F extends { aliases: infer A }
-	? A extends readonly string[]
+type ExtractLongAliases<F> = F extends { aliases?: infer Field }
+	? Exclude<Field, undefined> extends infer A extends readonly string[]
 		? IsClosedName<A[number]> extends true
 			? A[number]
 			: never
@@ -348,6 +413,8 @@ type LocalFlagBranchBrand<F> = LocalValueBrand<F> &
 	ShortLengthBrand<F> &
 	ReservedSpellingBrand<F> &
 	EmptySpellingBrand<F> &
+	SpellingShapeBrand<LongSpellingMembers<F>, ShortMembers<F>> &
+	EmptyTextBrand<F> &
 	NoPrefixBrand<SpellingMembers<F>> &
 	([DefName<F> & ExtractAllAliases<F>] extends [never]
 		? {}
@@ -360,7 +427,32 @@ type LocalFlagBranchBrand<F> = LocalValueBrand<F> &
  * every other flag in the record. An index signature (a dynamic record) is left to runtime
  * checks, but literal keys beside it are still validated, including against each other.
  */
-export type FlagRecordErrors<F, Existing extends string> = RecordErrors<
+export type FlagRecordErrors<F, Existing extends string> =
+	// Each branch of a conditional record is checked on its own; a valid branch's `unknown`
+	// would absorb an invalid sibling's errors in a union, so the branches intersect.
+	BranchRecordErrors<F, Existing> extends (errors: infer E) => void ? E : never;
+
+type BranchRecordErrors<F, Existing extends string> = F extends unknown
+	? (errors: OneRecordErrors<PresentRecord<F>, Existing>) => void
+	: never;
+
+// Absent placeholders have no spelling; real optional and required undefined definitions
+// remain in the record so collision and undefined checks still apply to them.
+type PresentRecord<F> = false extends StrictNulls
+	? F
+	: undefined extends F[keyof F]
+		? {
+				[
+					K in keyof F as [Exclude<F[K], undefined>] extends [never]
+						? {} extends Pick<F, K>
+							? never
+							: K
+						: K
+				]: F[K];
+			}
+		: F;
+
+type OneRecordErrors<F, Existing extends string> = RecordErrors<
 	F,
 	[KnownFlagKey<keyof F>] extends [never]
 		? // An index signature absorbs literal keys in `keyof`; mapping per key recovers them.
@@ -378,7 +470,9 @@ type RecordErrors<
 	AllAliases extends string = ExtractAllAliases<F[Names & keyof F]>,
 > = DropEmpty<{
 	[K in keyof F as KnownFlagKey<K>]: K extends string
-		? IntegerLikeBrand<K> & RecordFlagBrand<F, K, Names, Existing, AllAliases>
+		? IntegerLikeBrand<K> &
+				UndefinedFlagBrand<F, K> &
+				RecordFlagBrand<F, K, Names, Existing, AllAliases>
 		: K extends number
 			? // Builders keep `keyof F` as is, so a number key would hide its runtime spelling from collision checks.
 				{ readonly FIX_NUMBER_KEY: "Flag names must be string keys; quote a numeric name" }
@@ -401,8 +495,46 @@ type IntegerLikeBrand<K extends string> = K extends `${bigint}`
 		: { readonly FIX_INTEGER_LIKE_NAME: IntegerLikeMessage }
 	: {};
 
+// The runtime rejects an `undefined` definition; only an optional key may be absent.
+// Without strictNullChecks every type admits `undefined`, so neither check can tell.
+type StrictNulls = undefined extends {} ? false : true;
+
+type UndefinedFlagBrand<F, K extends keyof F> = false extends StrictNulls
+	? {}
+	: undefined extends F[K]
+		? 0 extends 1 & F[K]
+			? {}
+			: {} extends Pick<F, K>
+				? {}
+				: {
+						readonly FIX_UNDEFINED_FLAG: "Flag definitions must not be undefined; make a flag conditional with { ...(cond ? { name: def } : {}) }";
+					}
+		: {};
+
+/**
+ * `.flags()` input. TypeScript adds `missing?: undefined` to each branch of a conditional
+ * record; accepting it keeps inference from falling back to an open record.
+ */
+export type FlagsInput<D = FlagDef> = { readonly [name: string]: D | undefined };
+
+/** Drops the `missing?: undefined` keys of a conditional record's branches. */
+export type DefinedFlags<F, D = FlagsDef> = Extract<DefinedRecord<F>, D>;
+
+type DefinedRecord<F> = false extends StrictNulls
+	? F
+	: F extends unknown
+		? undefined extends F[keyof F]
+			? {
+					[K in keyof F as [Exclude<F[K], undefined>] extends [never] ? never : K]: Exclude<
+						F[K],
+						undefined
+					>;
+				}
+			: F
+		: never;
+
 // Only these fields can make one flag invalid on its own; other flags need name checks only.
-type RiskyFlagField = "short" | "aliases" | "choices" | "parse";
+type RiskyFlagField = "short" | "aliases" | "choices" | "parse" | "env" | "delimiter";
 
 type RecordFlagBrand<
 	F,
@@ -431,6 +563,7 @@ type KeysOfAnyBranch<D> = D extends unknown ? keyof D : never;
 
 type RecordNameBrand<K extends string> = NoPrefixBrand<K> &
 	EmptyFlagSpellingBrand<K> &
+	SpellingShapeBrand<ClosedMembers<K>> &
 	ReservedSpellingBrand<{ name: K }>;
 
 // `unknown` when nothing is wrong: an empty `{}` left in `F & Errors` makes every call relate
