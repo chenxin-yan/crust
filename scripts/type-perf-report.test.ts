@@ -27,7 +27,6 @@ const report = (
 	[check200, check400] = [1, 2],
 ): TypePerfReport => ({
 	typescriptVersion: "7.0.2",
-	fixtureApi: "fluent",
 	instantiations: {
 		10: small,
 		100: large,
@@ -61,58 +60,17 @@ describe("type performance report", () => {
 		expect(() => parseCheckSeconds("Bind time: 0.1s")).toThrow("Missing check time");
 	});
 
-	it.each([10])("preserves the workload across API dialects at size %i", (size) => {
-		const fluent = generateConsumerSource(size, "fluent");
-		const config = generateConsumerSource(size, "context-config");
-		expect(config).toContain(
-			'defineContext("context-1", { flags: [contextFlag1], use: [context0] }, async',
-		);
-		expect(fluent).toContain(
-			'defineContext("context-1").flags(contextFlag1).use(context0).setup(async',
-		);
-		expect(fluent).not.toMatch(/defineContext\("[^"]+", /);
-		const withoutContexts = (source: string) =>
-			source.replace(/^const (context|wide)\d+ = .+$/gm, "");
-		expect(withoutContexts(config)).toBe(withoutContexts(fluent));
-
-		const wideFluent = generateConsumerSource(size, "fluent", false, true);
-		const wideConfig = generateConsumerSource(size, "context-config", false, true);
-		expect(wideConfig).toContain('const wide59 = defineContext("wide-59", () => 59);');
-		expect(wideFluent).toContain('const wide59 = defineContext("wide-59").setup(() => 59);');
-		expect(withoutContexts(wideConfig)).toBe(withoutContexts(wideFluent));
-
-		const extensionsFluent = generateConsumerSource(size, "fluent", false, false, true);
-		const extensionsConfig = generateConsumerSource(size, "context-config", false, false, true);
-		expect(extensionsConfig).toContain('.provide(defineContext("wide-extension-59", () => 59)())');
-		expect(extensionsFluent).toContain(
-			'.provide(defineContext("wide-extension-59").setup(() => 59)())',
-		);
-		const withoutInlineContexts = (source: string) =>
-			withoutContexts(source).replace(
-				/defineContext\("([^"]+)"(?:\)\.setup\(|, )\(\) => (\d+)\)/g,
-				"context($1, $2)",
-			);
-		expect(withoutInlineContexts(extensionsConfig)).toBe(withoutInlineContexts(extensionsFluent));
-
-		// Named and record flags differ only in syntax, with one flag per `.flags()` call.
-		const records = generateConsumerSource(size, "record-flags", false, true, true);
-		const named = generateConsumerSource(size, "fluent", false, true, true);
-		expect(records).toContain(
+	it("declares one record-form flag per .flags() call", () => {
+		const source = generateConsumerSource(10, false, true, true);
+		expect(source).toContain(
 			'.flags({ "command-0-verbose": { type: "boolean", short: "v", aliases: ["verbose-0"] } })',
 		);
-		expect(records).toContain(
+		expect(source).toContain(
 			'const contextFlag0 = defineFlag({ type: "string", aliases: ["ctx-0-token"] });',
 		);
-		expect(records).toContain(
+		expect(source).toContain(
 			'defineContext("context-0").flags({ "context-0-token": contextFlag0 })',
 		);
-		const asRecords = (source: string) =>
-			source
-				.replace(/\.flags\(\{ name: "([^"]+)", ([^}]*) \}\)/g, '.flags({ "$1": { $2 } })')
-				.replace(/defineFlag\("(context-\d+-token)", /g, "defineFlag(")
-				.replace(/\.flags\(contextFlag(\d+)\)/g, '.flags({ "context-$1-token": contextFlag$1 })');
-		expect(asRecords(named)).toBe(records);
-		expect(records.match(/\.flags\(/g)).toHaveLength(named.match(/\.flags\(/g)!.length);
 	});
 
 	it("exercises typed run()/at() and adds commands one call at a time unless wide", () => {
@@ -124,7 +82,7 @@ describe("type performance report", () => {
 		expect(chained).toContain('void app.at(["cmd-0", "n-0"]);');
 		expect(chained).toContain("\t.add(command0)\n\t.add(command1)\n");
 
-		const wide = generateConsumerSource(50, "fluent", true);
+		const wide = generateConsumerSource(50, true);
 		const commands = Array.from({ length: 50 }, (_, index) => `command${index}`).join(", ");
 		expect(wide).toContain(`\t.add(${commands})\n`);
 		expect(wide).not.toContain("\t.add(command0)\n");
@@ -132,7 +90,7 @@ describe("type performance report", () => {
 
 	it("passes 60 Contexts in one call to .provide(), a command's .use(), and an extended Extension", () => {
 		expect(generateConsumerSource(10)).not.toContain("wide");
-		const source = generateConsumerSource(10, "fluent", false, true);
+		const source = generateConsumerSource(10, false, true);
 		const factories = Array.from({ length: 60 }, (_, index) => `wide${index}`);
 		const instances = factories.map((factory) => `${factory}()`).join(", ");
 		expect(source).toContain(`command.use(${factories.join(", ")})`);
@@ -143,7 +101,7 @@ describe("type performance report", () => {
 
 	it("passes 60 Extensions with flags, Contexts and commands to one .extend() call", () => {
 		expect(generateConsumerSource(10)).not.toContain("wideExtension");
-		const source = generateConsumerSource(10, "record-flags", false, false, true);
+		const source = generateConsumerSource(10, false, false, true);
 		const extensions = Array.from({ length: 60 }, (_, index) => `wideExtension${index}`);
 		expect(source).toContain(
 			`new Crust("type-perf-wide-extensions").extend(${extensions.join(", ")})`,
@@ -189,7 +147,6 @@ describe("type performance report", () => {
 			expect(Object.keys(measured.checkSeconds)).toEqual(Object.keys(measured.instantiations));
 			expect(measured.checkSeconds[400]).toBeGreaterThan(0);
 			expect(measured.typescriptVersion).toBeTruthy();
-			expect(measured.fixtureApi).toBe("record-flags");
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}
@@ -259,17 +216,6 @@ describe("type performance report", () => {
 		).toThrow("PR merge fixture 50 in one .add() failed to compile: TS2589");
 	});
 
-	it("labels comparisons across the Context and flag API transitions", () => {
-		const base = { ...report(10_000, 50_000, 100_000), fixtureApi: "context-config" as const };
-		expect(formatComparison(base, report(11_000, 60_000, 120_000))).toContain(
-			"API transition (context-config → fluent): fixtures use equivalent workloads with each API's Context, Extension, and flag syntax, not identical source.",
-		);
-		const records = { ...report(11_000, 60_000, 120_000), fixtureApi: "record-flags" as const };
-		expect(formatComparison(report(10_000, 50_000, 100_000), records)).toContain(
-			"API transition (fluent → record-flags)",
-		);
-	});
-
 	it("reports only per-fixture deltas and flags increases strictly above 10%", () => {
 		const output = formatComparison(
 			report(10_000, 50_000, 100_000),
@@ -281,7 +227,6 @@ describe("type performance report", () => {
 		expect(output).toContain("PR merge");
 		expect(output).toContain("TypeScript 7.0.2");
 		expect(output).not.toContain("Editor latency");
-		expect(output).not.toContain("API transition");
 	});
 
 	it("flags check-time scaling only when it grows more than 20% above base", () => {
