@@ -5,6 +5,7 @@ import { type ContextBag, defineContext } from "../api/context.ts";
 import { defineExtension, type Extension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { defineExtensionId } from "../identity.ts";
+import type { FlagDef } from "../types.ts";
 import { Crust, defineCommand } from "./crust.ts";
 
 // Compile-time regression checks; intentionally never invoked.
@@ -457,4 +458,17 @@ function _typecheckDefinedExtensionFlags() {
 		.preRun((ctx) => {
 			type _trace = Expect<Equal<typeof ctx.flags.trace, boolean>>;
 		});
+}
+
+// an Extension command with dynamic flags does not hide another Extension's flag collisions
+function _typecheckExtensionFlagsBesideDynamicCommandFlags(dynamic: Record<string, FlagDef>) {
+	const open = defineExtension(defineExtensionId("open-command-flags")).add(
+		defineCommand("open-command", (command) => command.flags(dynamic)),
+	);
+	const trace = defineExtension(defineExtensionId("trace-flag")).flags({
+		trace: { type: "boolean" },
+	});
+	const child = defineCommand("child", (command) => command.flags({ trace: { type: "string" } }));
+	// @ts-expect-error -- the Extension's "trace" collides with the child's own flag
+	new Crust("app").add(child).extend(open, trace);
 }

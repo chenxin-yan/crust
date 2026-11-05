@@ -42,7 +42,7 @@ nothing changed
 
 Return `ctx.handled()` from `preRun` to stop before validation and the action. Calling it without returning it does not stop the invocation. Validation includes invalid argv and environment values, so a handling hook wins over them; until then, an invalid flag or argument reads as `undefined` in `ctx.flags` and `ctx.args`, not as its default.
 
-Give each Extension a namespaced id such as `acme:preview`. Registering the same id again replaces the earlier registration.
+Give each Extension a namespaced id such as `acme:preview`. Registering the same id again replaces the earlier registration. The types don't track ids yet: they still see the earlier registration's commands, so a re-registration that contributes the same literal command names, or a later command reusing one of them, is a compile-time collision even though the app runs.
 
 Builder methods other than `.factory()` return new frozen Extensions; there is no finalization step. Declare flags and Contexts before the hooks that read them. Collection methods append; setting a hook again replaces its callback.
 

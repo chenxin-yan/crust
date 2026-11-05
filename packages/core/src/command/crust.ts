@@ -817,7 +817,7 @@ type AfterProvide<
 	A,
 	MergeProviders<Ctx, ContextsOutput<Cs>>,
 	Sibs,
-	Sp | KnownSpellings<LocalSpellingsOf<ContextsOwnedFlags<Cs>>>,
+	Sp | LocalSpellingsOf<ContextsOwnedFlags<Cs>>,
 	Tree,
 	MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
 	CollisionSpellings<
@@ -880,7 +880,7 @@ type AfterExtend<
 	A,
 	MergeProviders<Ctx, ExtensionsProvidesOutput<Es>>,
 	Sibs | KnownExtensionsCommandSpellings<Es>,
-	Sp | KnownSpellings<ExtensionsSpellings<Es>>,
+	Sp | ExtensionsSpellings<Es>,
 	ExtendedTree<Tree, Es, RecursiveExtensionFlags<Es>, CtxFlags>,
 	MergeFlags<CtxFlags, RecursiveExtensionFlags<Es>>,
 	CollisionSpellings<
@@ -1414,7 +1414,7 @@ export class Crust<
 						| Sp
 						| LocalSpellingsOf<Flags>
 						| CollisionSp["tree"]
-						| DefinitionTreeSpellings<ExtensionCommands<Es>>
+						| KnownSpellings<DefinitionTreeSpellings<ExtensionCommands<Es>>>
 					>,
 					I
 				> &
