@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { createPromptIO, renderPrompt } from "../testing.ts";
 import { password } from "./password.ts";
-import { tick, waitForScreen } from "./test-helpers.ts";
+import { tick } from "./test-helpers.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Masked rendering
@@ -145,8 +145,7 @@ describe("password — secrecy", () => {
 			prompt.assertSecretAbsent();
 		}
 		prompt.keys("return");
-		// Schema validation is async; a fixed tick races the error render on slow runners.
-		await waitForScreen(prompt, "too short");
+		await tick();
 
 		expect(prompt.screen()).toContain("too short");
 		prompt.assertSecretAbsent();
