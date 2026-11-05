@@ -579,3 +579,28 @@ function _typecheckRecursiveFlagsBesideUncertainOnes(
 		// @ts-expect-error -- the provided Context's flag reaches the child despite the open record
 		.add(defineCommand("child", (command) => command.flags({ pflag: { type: "string" } })));
 }
+
+// An optional `recursive` may be absent (recursive) or false (root-only), so it isn't certain either way.
+function _typecheckOptionalRecursiveIsUncertain(maybe: boolean) {
+	const depth: { type: "string"; recursive?: false } = { type: "string", recursive: false };
+	const ext = defineExtension(defineExtensionId("optional-recursive")).flags({
+		depth,
+		maybe: { type: "boolean", recursive: maybe },
+	});
+	const child = defineCommand("child", (command) => command.flags({ depth: { type: "number" } }));
+	void new Crust("app").extend(ext).add(child);
+	void new Crust("app").add(child).extend(ext);
+}
+
+// An open flag record on a recipe command doesn't hide a nested command's known collision.
+function _typecheckNestedRecipeFlagsBesideAnOpenParent(dynamic: Record<string, FlagDef>) {
+	const trace = defineExtension(defineExtensionId("nested-trace")).flags({
+		trace: { type: "boolean" },
+	});
+	void new Crust("app").extend(trace).command("parent", (command) =>
+		// @ts-expect-error -- the nested command's "trace" collides with the recursive Extension flag
+		command
+			.flags(dynamic)
+			.command("nested", (nested) => nested.flags({ trace: { type: "boolean" } })),
+	);
+}

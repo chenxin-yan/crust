@@ -294,10 +294,18 @@ type RecursiveExtensionSpellings<E> =
 	| KnownSpellings<ExtensionProvidedSpellings<E>>;
 
 // Per key and per part, so a `recursive: boolean` flag or an open record doesn't hide the rest:
-// only flags that are certainly recursive (the default, or `recursive: true`) count.
+// only flags that are certainly recursive (the default, or `recursive: true`) count. An optional
+// `recursive` may be absent or false, and every branch of a conditional definition must agree.
 type RecursiveFlagKeys<F> = {
-	[K in keyof F]: F[K] extends { recursive: infer R } ? ([R] extends [true] ? K : never) : K;
+	[K in keyof F]: false extends (F[K] extends unknown ? IsCertainlyRecursive<F[K]> : never)
+		? never
+		: K;
 }[keyof F];
+type IsCertainlyRecursive<D> = "recursive" extends keyof D
+	? [D[Extract<"recursive", keyof D>]] extends [true | undefined]
+		? true
+		: false
+	: true;
 
 type ExtensionFlagCollisionBrand<E, Existing extends string> = CollisionBrand<
 	ExtensionSpellings<E>,
@@ -347,18 +355,22 @@ type ShapeSpellings<S> =
 	IsAny<S> extends true
 		? string
 		: S extends { readonly flags: infer F extends FlagsDef; readonly children: infer C }
-			? LocalSpellingsOf<F> | TreeSpellings<C>
+			? // Per node, so one open flag record doesn't hide known spellings elsewhere in the tree.
+				KnownSpellings<LocalSpellingsOf<F>> | TreeSpellings<C>
 			: never;
 
 /** Every flag spelling reachable in a compile-time command tree (`Record<spelling, CommandShape>`), recursively. */
 export type TreeSpellings<Tree> =
 	IsAny<Tree> extends true
 		? string
-		: string extends keyof Tree
-			? string
-			: Tree extends object
-				? { [K in keyof Tree]: ShapeSpellings<Tree[K]> }[keyof Tree]
-				: never;
+		: Tree extends object
+			? // Known children only: an index signature's runtime-only commands are checked at runtime.
+				{
+					[K in keyof Tree as string extends K ? never : K]: ShapeSpellings<Tree[K]>;
+				} extends infer M
+				? M[keyof M]
+				: never
+			: never;
 
 type DefinitionSpellings<D> =
 	CommandDefinitionData<D> extends { readonly _shape?: infer S } ? ShapeSpellings<S> : never;
