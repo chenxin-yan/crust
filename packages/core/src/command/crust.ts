@@ -536,18 +536,33 @@ type ExtendedTree<
 	Es extends readonly AnyExtension[],
 	RecursiveFlags extends FlagsDef,
 	InheritedFlags extends FlagsDef,
+	ExtensionCommandSpellings extends string,
 > = keyof RecursiveFlags extends never
-	? ExtensionCommandTree<Tree, Es, InheritedFlags>
-	: TreeWithInheritedFlags<ExtensionCommandTree<Tree, Es, InheritedFlags>, RecursiveFlags>;
+	? ExtensionCommandTree<Tree, Es, InheritedFlags, ExtensionCommandSpellings>
+	: TreeWithInheritedFlags<
+			ExtensionCommandTree<Tree, Es, InheritedFlags, ExtensionCommandSpellings>,
+			RecursiveFlags
+		>;
 
 // Extension commands join the tree like `.add()`: a colliding command is a definition error.
-type ExtensionCommandTree<Tree, Es extends readonly AnyExtension[], CF extends FlagsDef> =
-	// Resolving here keeps a chain of `.extend()` calls from deferring one nested tree per call
-	// (TS2589 at about 90 calls).
+// Resolving with `infer R` keeps a chain of `.extend()` calls from deferring one nested tree per
+// call (TS2589 at about 90 calls).
+type ExtensionCommandTree<
+	Tree,
+	Es extends readonly AnyExtension[],
+	CF extends FlagsDef,
+	ExtensionCommandSpellings extends string,
+> =
 	// A spelling TypeScript can't see may be a same-id re-registration replacing an earlier
-	// Extension's command (runtime dedupes by id); the types don't track ids yet.
+	// Extension's command (runtime dedupes by id; the types don't track ids), so earlier
+	// Extension commands and this call's open up. App commands stay: no Extension replaces them.
 	string extends ExtensionsCommandSpellings<Es>
-		? Record<string, CommandShape>
+		? ([ExtensionCommandSpellings] extends [never]
+				? Tree
+				: { [K in keyof Tree]: K extends ExtensionCommandSpellings ? CommandShape : Tree[K] }) &
+				Record<string, CommandShape> extends infer R extends object
+			? R
+			: never
 		: Tree & DefinitionsTree<ExtensionCommands<Es>, CF> extends infer R extends object
 			? R
 			: never;
@@ -701,8 +716,12 @@ type CollisionSpellings<
 	RecipeDeps extends ContextMap = {},
 	Providers extends Record<string, ContextValue> = {},
 	ActionDeps extends ContextMap = {},
+	// Root command spellings with precise tree entries contributed by Extensions. Only `.extend()`
+	// reads it (ExtensionCommandsOf); other steps pass it through unread, `undefined` included.
+	ExtensionCommandSpellings extends string | undefined = never,
 > = {
 	readonly actionDeps: ActionDeps;
+	readonly extensionCommands: ExtensionCommandSpellings;
 	readonly pending: Pending;
 	readonly demands: Demands;
 	readonly extension: Extensions;
@@ -714,6 +733,7 @@ type CollisionSpellings<
 // Explicit `| undefined`: mapped types over these members (e.g. `Omit`) keep it under exactOptionalPropertyTypes.
 type AnyCollisionSpellings = {
 	readonly actionDeps?: ContextMap | undefined;
+	readonly extensionCommands?: string | undefined;
 	readonly pending: string;
 	readonly demands: ContextMap;
 	readonly extension: string;
@@ -732,6 +752,14 @@ type ProvidersOf<S extends AnyCollisionSpellings> = Exclude<S["providers"], unde
 
 /** Obligations of this node's stored action, never inherited by descendants. */
 type ActionDepsOf<S extends AnyCollisionSpellings> = Exclude<S["actionDeps"], undefined>;
+
+// Not `Exclude`: distributing over this union, which grows with each `.extend()`, cost +6% on a
+// 200-call chain. A state without the member (explicit type arguments) opens every entry.
+type ExtensionCommandsOf<S extends AnyCollisionSpellings> = [S["extensionCommands"]] extends [
+	infer E extends string,
+]
+	? E
+	: string;
 
 // Record spellings are derived from `Flags` on demand instead of accumulated in `Sp`.
 type AfterFlags<State extends BuilderState, F extends FlagsDef> = Crust<
@@ -791,7 +819,8 @@ type AfterUse<
 		CollisionSp["pending"],
 		MergeContext<RecipeDepsOf<CollisionSp>, ContextDependencies<Fs>>,
 		ProvidersOf<CollisionSp>,
-		ActionDepsOf<CollisionSp>
+		ActionDepsOf<CollisionSp>,
+		CollisionSp["extensionCommands"]
 	>,
 	Result,
 	Meta,
@@ -827,7 +856,8 @@ type AfterProvide<
 		CollisionSp["pending"],
 		RecipeDepsOf<CollisionSp>,
 		MergeProviders<ProvidersOf<CollisionSp>, ContextsOutput<Cs>>,
-		ActionDepsOf<CollisionSp>
+		ActionDepsOf<CollisionSp>,
+		CollisionSp["extensionCommands"]
 	>,
 	Result,
 	Meta,
@@ -881,7 +911,7 @@ type AfterExtend<
 	MergeProviders<Ctx, ExtensionsProvidesOutput<Es>>,
 	Sibs | KnownExtensionsCommandSpellings<Es>,
 	Sp | ExtensionsSpellings<Es>,
-	ExtendedTree<Tree, Es, RecursiveExtensionFlags<Es>, CtxFlags>,
+	ExtendedTree<Tree, Es, RecursiveExtensionFlags<Es>, CtxFlags, ExtensionCommandsOf<CollisionSp>>,
 	MergeFlags<CtxFlags, RecursiveExtensionFlags<Es>>,
 	CollisionSpellings<
 		CollisionSp["extension"] | ExtensionsSpellings<Es>,
@@ -890,7 +920,9 @@ type AfterExtend<
 		CollisionSp["pending"] | KnownSpellings<DefinitionTreeSpellings<ExtensionCommands<Es>>>,
 		RecipeDepsOf<CollisionSp>,
 		MergeProviders<ProvidersOf<CollisionSp>, ExtensionsProvidesOutput<Es>>,
-		ActionDepsOf<CollisionSp>
+		ActionDepsOf<CollisionSp>,
+		// An open call adds no precise entries (see ExtensionCommandTree).
+		ExtensionCommandsOf<CollisionSp> | KnownSpellings<ExtensionsCommandSpellings<Es>>
 	>,
 	Result,
 	Meta,
@@ -916,7 +948,8 @@ type AfterAdd<
 		State["collision"]["pending"],
 		RecipeDepsOf<State["collision"]>,
 		ProvidersOf<State["collision"]>,
-		ActionDepsOf<State["collision"]>
+		ActionDepsOf<State["collision"]>,
+		State["collision"]["extensionCommands"]
 	>,
 	State["result"],
 	State["meta"],
@@ -1373,7 +1406,8 @@ export class Crust<
 	 * and its hooks run once, at the later position. ID deduplication is
 	 * runtime-only, so removed paths can remain statically visible and reject
 	 * with `COMMAND_NOT_FOUND`. An Extension with runtime-only command names makes
-	 * every `run()` result `unknown`, since it may replace an earlier registration.
+	 * `run()` results `unknown` for Extension commands registered up to and in that
+	 * call, since it may replace their registration; app commands keep their types.
 	 * Required root metadata keys are checked against the constructor's inferred
 	 * metadata by TypeScript, not at runtime.
 	 * Recipe builders cannot call this root-only method.
