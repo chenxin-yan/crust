@@ -3,13 +3,14 @@ import { describe, expect, it } from "vite-plus/test";
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { unwrap } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
-import { defineExtension } from "../api/extension.ts";
+import { defineExtension, type Extension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { defineExtensionId } from "../identity.ts";
 import { type CommandDefinitionBuilder, Crust, defineCommand } from "./crust.ts";
+import { subCommandsOf } from "./node.ts";
 
 describe("command definitions", () => {
-	it("stays inert and materializes each time it is added", async () => {
+	it("stays inert until first use and materializes once per addition", async () => {
 		let configured = 0;
 		const definition = defineCommand("build", (command) => {
 			configured++;
@@ -19,8 +20,11 @@ describe("command definitions", () => {
 		expect(configured).toBe(0);
 		const app = new Crust("cli").add(definition, definition.as("compile"));
 
-		expect(configured).toBe(2);
+		expect(configured).toBe(0);
 		const snapshot = await app.snapshot();
+		expect(configured).toBe(2);
+		await app.snapshot();
+		expect(configured).toBe(2);
 		expect(snapshot.subCommands.build?.meta.name).toBe("build");
 		expect(snapshot.subCommands.compile?.meta.name).toBe("compile");
 	});
@@ -45,20 +49,20 @@ describe("command definitions", () => {
 			return command;
 		});
 
-		expect(() => receiver.add(first, second, later)).toThrow(
-			expect.objectContaining({
-				code: "DEFINITION",
-				message: 'Command "second" definition must return the same command builder it received',
-				details: { subject: "command", name: "second", reason: "foreign-command-builder" },
-			}),
-		);
+		const app = receiver.add(first, second, later);
+		expect(events).toEqual([]);
+		await expect(app.snapshot()).rejects.toMatchObject({
+			code: "DEFINITION",
+			message: 'Command "second" definition must return the same command builder it received',
+			details: { subject: "command", name: "second", reason: "foreign-command-builder" },
+		});
 		expect(events).toEqual(["first", "second"]);
-		expect(Object.keys(base._node.subCommands)).toEqual([]);
-		expect(Object.keys(receiver._node.subCommands)).toEqual(["existing"]);
+		expect(Object.keys(subCommandsOf(base._node))).toEqual([]);
+		expect(Object.keys(subCommandsOf(receiver._node))).toEqual(["existing"]);
 		expect(Object.keys((await receiver.snapshot()).subCommands)).toEqual(["existing"]);
 	});
 
-	it("rejects Extensions registered inside command definitions", () => {
+	it("rejects Extensions registered inside command definitions", async () => {
 		const nestedExtension = defineCommand("bad", (command) => {
 			// SAFETY: deliberately escape the sealed recipe surface to verify its runtime guard.
 			return (command as unknown as Crust).extend(
@@ -66,7 +70,7 @@ describe("command definitions", () => {
 			) as never;
 		});
 
-		expect(() => new Crust("cli").add(nestedExtension)).toThrow(
+		await expect(new Crust("cli").add(nestedExtension).snapshot()).rejects.toThrow(
 			/Command "bad" cannot register Extensions inside command definitions/,
 		);
 	});
@@ -161,7 +165,7 @@ describe("command definitions", () => {
 		void rejectedForms;
 	});
 
-	it("rejects a recipe-provided Context flag colliding with an ancestor Context's flag", () => {
+	it("rejects a recipe-provided Context flag colliding with an ancestor Context's flag", async () => {
 		const db = defineContext("db")
 			.flags({ name: "conn", type: "string" })
 			.setup(() => ({}));
@@ -172,7 +176,8 @@ describe("command definitions", () => {
 		const sub = defineCommand("sub", (cmd) => cmd.provide(cache()).action(() => {}));
 		const app = new Crust("cli").provide(db());
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		expect(() => app.add(sub)).toThrow(
+		const invalid = app.add(sub);
+		await expect(invalid.snapshot()).rejects.toThrow(
 			'Flag "conn" collides with existing flag "conn" on command "sub"',
 		);
 	});
@@ -195,15 +200,16 @@ describe("command definitions", () => {
 			return command;
 		});
 
-		expect(() => receiver.add(first, throwing, later)).toThrow(failure);
+		const app = receiver.add(first, throwing, later);
+		await expect(app.snapshot()).rejects.toBe(failure);
 		expect(events).toEqual(["first", "throwing"]);
-		expect(Object.keys(base._node.subCommands)).toEqual([]);
-		expect(Object.keys(receiver._node.subCommands)).toEqual(["existing"]);
+		expect(Object.keys(subCommandsOf(base._node))).toEqual([]);
+		expect(Object.keys(subCommandsOf(receiver._node))).toEqual(["existing"]);
 		expect(Object.keys((await receiver.snapshot()).subCommands)).toEqual(["existing"]);
 	});
 
 	it.each(["first", "existing"])(
-		"checks a batch duplicate of %s before its recipe and stops registration",
+		"checks a batch duplicate of %s before any recipe runs and stops registration",
 		async (name: string) => {
 			const events: string[] = [];
 			const base = new Crust("cli");
@@ -228,9 +234,9 @@ describe("command definitions", () => {
 					details: { subject: "command", name, reason: "command-collision" },
 				}),
 			);
-			expect(events).toEqual(["first"]);
-			expect(Object.keys(base._node.subCommands)).toEqual([]);
-			expect(Object.keys(receiver._node.subCommands)).toEqual(["existing"]);
+			expect(events).toEqual([]);
+			expect(Object.keys(subCommandsOf(base._node))).toEqual([]);
+			expect(Object.keys(subCommandsOf(receiver._node))).toEqual(["existing"]);
 			expect(Object.keys((await receiver.snapshot()).subCommands)).toEqual(["existing"]);
 		},
 	);
@@ -258,6 +264,170 @@ describe("command definitions", () => {
 		},
 	);
 
+	it("runs only the routed command's recipe, so a broken sibling fails only when used", async () => {
+		const configured: string[] = [];
+		const good = defineCommand("good", (command) => {
+			configured.push("good");
+			return command.action(() => "ok");
+		});
+		const failure = new Error("broken recipe");
+		const bad = defineCommand("bad", () => {
+			configured.push("bad");
+			throw failure;
+		});
+		const app = new Crust("cli").add(good, bad);
+
+		expect(await unwrap(app.run(["good"]))).toMatchObject({ status: "completed", result: "ok" });
+		expect(configured).toEqual(["good"]);
+		expect(await app.run(["bad"])).toMatchObject({ status: "failed", error: failure });
+		await expect(app.snapshot()).rejects.toBe(failure);
+		expect(await unwrap(app.run(["good"]))).toMatchObject({ status: "completed", result: "ok" });
+		expect(configured).toEqual(["good", "bad", "bad"]);
+	});
+
+	it("keeps nested siblings deferred through recipe cloning and alias routing", async () => {
+		const configured: string[] = [];
+		const failure = new Error("broken nested recipe");
+		const app = new Crust("cli").command("group", (command) =>
+			command.add(
+				defineCommand("good", { aliases: ["g"] }, (child) => {
+					configured.push("good");
+					return child.action(() => "ok");
+				}),
+				defineCommand("bad", () => {
+					configured.push("bad");
+					throw failure;
+				}),
+			),
+		);
+
+		expect(await unwrap(app.run(["group", "g"]))).toMatchObject({ result: "ok" });
+		expect(configured).toEqual(["good"]);
+		expect(await app.run(["group", "bad"])).toMatchObject({ status: "failed", error: failure });
+		await expect(app.snapshot()).rejects.toBe(failure);
+	});
+
+	it("keeps recipes deferred through extension provider replacement and descendant shadowing", async () => {
+		const configured: string[] = [];
+		const context = defineContext("value").setup((_, value: string) => value);
+		const options = defineContext("options")
+			.flags({ name: "value", type: "string" })
+			.setup(({ flags }) => flags.value);
+		const id = defineExtensionId("provider");
+		const group = defineCommand("group", (command) => {
+			configured.push("group");
+			return command
+				.use(context, options)
+				.command("inherited", (child) => {
+					configured.push("inherited");
+					return child
+						.use(context, options)
+						.action(async ({ ctx }) => `${await ctx.value}:${await ctx.options}`);
+				})
+				.command("shadowed", (child) => {
+					configured.push("shadowed");
+					return child
+						.provide(context("local"))
+						.use(options)
+						.action(async ({ ctx }) => `${await ctx.value}:${await ctx.options}`);
+				})
+				.command("bad", () => {
+					configured.push("bad");
+					throw new Error("broken recipe");
+				});
+		});
+		const base = new Crust("cli")
+			.extend(defineExtension(id).provide(context("old"), options()))
+			.add(group);
+		const app = base
+			.extend(defineExtension(defineExtensionId("noop")))
+			// @ts-expect-error -- branded ids cannot prove same-id replacement at compile time.
+			.extend(defineExtension(id).provide(context("new"), options()));
+
+		expect(configured).toEqual([]);
+		expect(
+			await unwrap(app.run(["group", "inherited"], { flags: { value: "flag" } })),
+		).toMatchObject({
+			result: "new:flag",
+		});
+		expect(configured).toEqual(["group", "inherited"]);
+		expect(
+			await unwrap(app.run(["group", "shadowed"], { flags: { value: "flag" } })),
+		).toMatchObject({
+			result: "local:flag",
+		});
+		expect(
+			await unwrap(base.run(["group", "inherited"], { flags: { value: "flag" } })),
+		).toMatchObject({
+			result: "old:flag",
+		});
+		expect(configured).toEqual(["group", "inherited", "shadowed"]);
+		await expect(app.snapshot()).rejects.toThrow("broken recipe");
+	});
+
+	it("defers unused and overridden Extension command recipes", async () => {
+		const configured: string[] = [];
+		const replacement: Extension = defineExtension(defineExtensionId("last")).add(
+			defineCommand("good", { aliases: ["g"] }, (command) => {
+				configured.push("good");
+				return command.action(() => "ok");
+			}),
+		);
+		const app = new Crust("cli").extend(
+			defineExtension(defineExtensionId("first")).add(
+				defineCommand("good", () => {
+					throw new Error("overridden recipe");
+				}),
+				defineCommand("bad", () => {
+					configured.push("bad");
+					throw new Error("broken Extension recipe");
+				}),
+			),
+			replacement,
+		);
+
+		expect(configured).toEqual([]);
+		expect(await app.execute({ argv: ["g"] })).toBe(0);
+		expect(await app.execute({ argv: ["good"] })).toBe(0);
+		expect(configured).toEqual(["good"]);
+		await expect(app.snapshot()).rejects.toThrow("broken Extension recipe");
+	});
+
+	it("projects rootCommand on demand, sharing the routed command's snapshot", async () => {
+		const configured: string[] = [];
+		const command = (name: string) =>
+			defineCommand(name, (c) => {
+				configured.push(name);
+				// Read the context lazily: destructuring would project rootCommand up front.
+				return c.action((context) => {
+					const before = [...configured];
+					const same = context.rootCommand.subCommands[name] === context.command;
+					return { before, same, after: [...configured] };
+				});
+			});
+		const app = new Crust("cli").add(command("a"), command("b"), command("c"));
+
+		expect(await unwrap(app.run(["b"]))).toMatchObject({
+			status: "completed",
+			result: { before: ["b"], same: true, after: ["b", "a", "c"] },
+		});
+	});
+
+	it("keeps chained .add() branches from a shared builder independent", async () => {
+		const command = (name: string) => defineCommand(name, (c) => c.action(() => name));
+		const base = new Crust("cli").add(command("a"));
+		const left = base.add(command("b"));
+		// `left` took over base's sibling index; `right` must not inherit "b" from it.
+		const right = base.add(command("c")).add(command("b"));
+
+		expect(Object.keys(subCommandsOf(left._node))).toEqual(["a", "b"]);
+		expect(Object.keys(subCommandsOf(right._node))).toEqual(["a", "c", "b"]);
+		expect(Object.keys(subCommandsOf(base._node))).toEqual(["a"]);
+		expect(() => left.add(command("b"))).toThrow('Command name "b" is already registered');
+		expect(() => right.add(command("c"))).toThrow('Command name "c" is already registered');
+		expect(await unwrap(right.run(["c"]))).toMatchObject({ status: "completed", result: "c" });
+	});
+
 	it("adds multiple definitions in argument order without mutating retained builders", async () => {
 		const configured: string[] = [];
 		const ran: string[] = [];
@@ -277,11 +447,12 @@ describe("command definitions", () => {
 		const receiver = base.add(defineCommand("existing", (command) => command));
 		const app = receiver.add(build, publish);
 
+		expect(configured).toEqual([]);
+		expect(Object.keys(subCommandsOf(base._node))).toEqual([]);
+		expect(Object.keys(subCommandsOf(receiver._node))).toEqual(["existing"]);
+		expect(Object.keys(subCommandsOf(app._node))).toEqual(["existing", "build", "publish"]);
 		expect(configured).toEqual(["build", "publish"]);
-		expect(Object.keys(base._node.subCommands)).toEqual([]);
-		expect(Object.keys(receiver._node.subCommands)).toEqual(["existing"]);
-		expect(Object.keys(app._node.subCommands)).toEqual(["existing", "build", "publish"]);
-		expect(app._node.subCommands).not.toBe(receiver._node.subCommands);
+		expect(subCommandsOf(app._node)).not.toBe(subCommandsOf(receiver._node));
 
 		await unwrap(app.run(["build"]));
 		await unwrap(app.run(["publish"]));

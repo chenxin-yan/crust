@@ -72,15 +72,16 @@ One `ENV` error aggregates every missing or invalid variable of a `defineEnv()` 
 
 ## Propagation boundaries
 
-| Failure                                                          | `run()`                                | `execute()`                                   |
-| ---------------------------------------------------------------- | -------------------------------------- | --------------------------------------------- |
-| Authoring and attachment (`.flags()`, `.provide()`, `.add()`, …) | Throws at the builder call             | Throws at the builder call                    |
-| Preparation                                                      | `failed` outcome; no hooks run         | Rendered directly; exit `1`                   |
-| Routing, argv syntax, structured input binding                   | `failed` outcome; no hooks run         | Rendered via `onError`; exit `1`              |
-| `preRun`, validation, Context setup, Command Action              | `failed` outcome after `postRun` hooks | Rendered via `onError`; exit `1`              |
-| Cancellation (`AbortError`)                                      | `failed` outcome                       | Offered to `onError`, else silent; exit `130` |
+| Failure                                                     | `run()`                                | `execute()`                                   |
+| ----------------------------------------------------------- | -------------------------------------- | --------------------------------------------- |
+| Eager builder checks (direct inputs, sibling names/aliases) | Throws at the builder call             | Throws at the builder call                    |
+| Deferred recipe, inherited-flag, or Context-demand checks   | `failed` outcome when encountered      | Rendered when encountered; exit `1`           |
+| Preparation                                                 | `failed` outcome; no hooks run         | Rendered directly; exit `1`                   |
+| Routing, argv syntax, structured input binding              | `failed` outcome; no hooks run         | Rendered via `onError`; exit `1`              |
+| `preRun`, validation, Context setup, Command Action         | `failed` outcome after `postRun` hooks | Rendered via `onError`; exit `1`              |
+| Cancellation (`AbortError`)                                 | `failed` outcome                       | Offered to `onError`, else silent; exit `130` |
 
-`snapshot()` rejects with preparation errors. Context setup and Command Action failures are not wrapped in `CrustError`.
+`.add()` checks sibling names and aliases immediately, but does not run recipes or validate their inherited flags and Context demands. Those checks happen when commands materialize on first use. `await app.snapshot()` materializes and validates the full tree without running Command Actions, rejecting with any deferred definition or preparation error. `at()` can also throw deferred definition errors while resolving a path. Context setup and Command Action failures are not wrapped in `CrustError`.
 
 - After a lifecycle failure, every `postRun` hook still runs in reverse registration order, and constructed Contexts are disposed afterwards.
 - An invocation failure takes precedence over `postRun` failures. After a successful invocation, the first `postRun` failure escapes once the remaining hooks run.

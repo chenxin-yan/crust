@@ -110,7 +110,7 @@ describe("typed programmatic invocation", () => {
 		expect(await pending).toMatchObject({ status: "completed", result: { kind: "lit" } });
 	});
 
-	it("surfaces delayed checked recipe failures before typed dispatch", async () => {
+	it("surfaces delayed Extension recipe failures only when the command is used", async () => {
 		const app = new Crust("cli").extend(
 			defineExtension(defineExtensionId("failure")).add(
 				defineCommand("child", () => {
@@ -118,7 +118,9 @@ describe("typed programmatic invocation", () => {
 				}),
 			),
 		);
-		await expect(unwrap(app.run([]))).rejects.toThrow("recipe failed");
+		expect(await app.run([])).toMatchObject({ status: "completed" });
+		await expect(unwrap(app.run(["child"]))).rejects.toThrow("recipe failed");
+		await expect(app.snapshot()).rejects.toThrow("recipe failed");
 	});
 
 	it("binds structured input directly against the selected command", async () => {

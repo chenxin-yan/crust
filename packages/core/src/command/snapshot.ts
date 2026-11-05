@@ -200,10 +200,36 @@ function snapshotFlag(def: FlagDef): FlagSnapshot {
 }
 
 /**
- * Project an internal command node (and its whole subtree) into a
- * {@link CommandSnapshot}.
+ * Memoized projections of frozen nodes. `stable` holds subtrees with no mutable
+ * defaults and may live as long as the prepared tree; `volatile` holds the rest
+ * and must be per invocation, so a mutated `URL` default is re-projected.
  */
-export function snapshotCommand(node: CommandNode): CommandSnapshot {
+export interface SnapshotCache {
+	readonly stable: WeakMap<CommandNode, CommandSnapshot>;
+	readonly volatile: WeakMap<CommandNode, CommandSnapshot>;
+}
+
+export function createSnapshotCache(
+	stable: WeakMap<CommandNode, CommandSnapshot> = new WeakMap(),
+): SnapshotCache {
+	return { stable, volatile: new WeakMap() };
+}
+
+/**
+ * Project an internal command node (and its whole subtree) into a
+ * {@link CommandSnapshot}. Sharing `cache` across calls keeps one object per
+ * node, so `rootCommand.subCommands.x` is the same object as a routed `command`.
+ */
+export function snapshotCommand(
+	node: CommandNode,
+	cache: SnapshotCache = createSnapshotCache(),
+): CommandSnapshot {
+	const cached = cache.stable.get(node) ?? cache.volatile.get(node);
+	if (cached) return cached;
+
+	let stable =
+		!node.args.some((def) => isMutableDefault(def.default)) &&
+		!Object.values(node.effectiveFlags).some((def) => isMutableDefault(def.default));
 	const flags: Record<string, FlagSnapshot> = {};
 	for (const [name, def] of Object.entries(node.effectiveFlags)) {
 		flags[name] = snapshotFlag(def);
@@ -211,10 +237,11 @@ export function snapshotCommand(node: CommandNode): CommandSnapshot {
 
 	const subCommands: Record<string, CommandSnapshot> = {};
 	for (const [name, sub] of Object.entries(node.subCommands)) {
-		subCommands[name] = snapshotCommand(sub);
+		subCommands[name] = snapshotCommand(sub, cache);
+		stable &&= cache.stable.has(sub);
 	}
 
-	return Object.freeze({
+	const snapshot: CommandSnapshot = Object.freeze({
 		meta: freezeCompact({
 			name: node.meta.name,
 			description: node.meta.description,
@@ -231,4 +258,6 @@ export function snapshotCommand(node: CommandNode): CommandSnapshot {
 		flags: Object.freeze(flags),
 		subCommands: Object.freeze(subCommands),
 	});
+	(stable ? cache.stable : cache.volatile).set(node, snapshot);
+	return snapshot;
 }

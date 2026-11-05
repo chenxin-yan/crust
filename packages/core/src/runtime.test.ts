@@ -142,11 +142,14 @@ it("checks command relations at each actual destination and keeps Context setup 
 	);
 	const definitions = [definition];
 	expect(() => new Crust("first").add(...definitions)).not.toThrow();
+	// Recipes run on first use, so each destination's relations are checked by its snapshot.
 	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-	expect(() => new Crust("second").provide(owner()).add(...definitions)).toThrow("collides");
+	const collides = new Crust("second").provide(owner()).add(...definitions);
+	await expect(collides.snapshot()).rejects.toThrow("collides");
 	const demand = defineCommand("demand", (command) => command.use(owner));
 	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-	expect(() => new Crust("missing").add(demand)).toThrow("owner");
+	const missing = new Crust("missing").add(demand);
+	await expect(missing.snapshot()).rejects.toThrow("owner");
 	const app = new Crust("present").provide(owner()).add(demand);
 	await app.snapshot();
 	expect(setups).toBe(0);

@@ -1761,13 +1761,12 @@ describe("inline .command()", () => {
 		};
 		void invalidCompositions;
 
-		// Automatic consumption rejects the selected missing demand without running its action.
-		expect(() =>
-			new Crust("cli")
-				.provide(a())
-				// @ts-expect-error -- deliberately supply only the unchosen branch's demand
-				.add(either),
-		).toThrow('No provider for Context "b"');
+		// Consumption rejects the selected missing demand on first use without running its action.
+		const app = new Crust("cli")
+			.provide(a())
+			// @ts-expect-error -- deliberately supply only the unchosen branch's demand
+			.add(either);
+		await expect(app.snapshot()).rejects.toThrow('No provider for Context "b"');
 	});
 
 	it("retains only selected declared demands and does not inspect trusted factory shapes", () => {

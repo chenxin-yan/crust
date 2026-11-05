@@ -26,14 +26,28 @@ import { createContextResolver } from "./context-resolver.ts";
 import type { CrustCommandContext } from "./crust.ts";
 import {
 	applyContextSections,
-	applyExtensionCommands,
-	applyExtensionFlags,
 	applyExtensionSections,
+	applyNodeContextSections,
+	sectionContextsFor,
 	type MaterializeCommandDefinition,
 } from "./extensions-install.ts";
-import { cloneCommandNode, type CommandNode } from "./node.ts";
+import {
+	childEntriesOf,
+	cloneCommandNode,
+	cloneFlagRegistry,
+	commandDefinitionInternal,
+	lazyChildRecord,
+	registerFlag,
+	type ChildEntry,
+	type CommandNode,
+} from "./node.ts";
 import { commandNotFound, resolveCommand, type CommandRoute } from "./router.ts";
-import { isSnapshotReusable, snapshotCommand, type CommandSnapshot } from "./snapshot.ts";
+import {
+	createSnapshotCache,
+	snapshotCommand,
+	type CommandSnapshot,
+	type SnapshotCache,
+} from "./snapshot.ts";
 import type { RunOutcome } from "./typed-run.ts";
 
 const ignoreStreamError = () => {};
@@ -72,12 +86,12 @@ const DEFAULT_IO: InvocationIO = {
 	stderr: (text) => writeLine(process.stderr, text),
 };
 
-/** One cloned, extension-applied, frozen command tree. */
+/** One cloned, extension-applied, frozen command tree; children are prepared on first access. */
 interface PreparedInvocation {
 	rootNode: CommandNode;
 	extensions: readonly ExtensionData[];
-	/** Root projection reused across invocations; see `preparedRootSnapshot`. */
-	rootSnapshot?: CommandSnapshot;
+	/** Projections of subtrees without mutable defaults, reused across invocations. */
+	snapshots: WeakMap<CommandNode, CommandSnapshot>;
 }
 
 /**
@@ -188,6 +202,12 @@ function describeFailure(error: CaughtError, label = "Error"): string {
 }
 
 function freezeTree(node: CommandNode): void {
+	freezeNode(node);
+	for (const sub of Object.values(node.subCommands)) freezeTree(sub);
+	Object.freeze(node.subCommands);
+}
+
+function freezeNode(node: CommandNode): void {
 	Object.freeze(node);
 	Object.freeze(node.localFlags);
 	Object.freeze(node.ownedFlags);
@@ -198,8 +218,6 @@ function freezeTree(node: CommandNode): void {
 	Object.freeze(node.contexts);
 	Object.freeze(node.extensions);
 	Object.freeze(node.args);
-	for (const sub of Object.values(node.subCommands)) freezeTree(sub);
-	Object.freeze(node.subCommands);
 }
 
 function isSymbol<T>(value: T): value is T & symbol {
@@ -229,20 +247,73 @@ function normalizeArtifactPath(path: string): string {
 
 const preparedInvocations = new WeakMap<CommandNode, PreparedInvocation>();
 
-/** Clone and apply Extension commands and flags; recipes run exactly once here. */
+/**
+ * Clone the builder tree and apply Extension commands and flags. Nodes are built
+ * on first access (see `lazyChildRecord`): an invocation prepares only the path it
+ * routes through, while whole-tree readers (snapshots, docs) still build every
+ * node. With `finish`, each node also gets its Context sections and is frozen.
+ */
 function buildExtensionTree(
 	node: CommandNode,
 	materializeCommandDefinition: MaterializeCommandDefinition,
+	finish = false,
 ): PreparedInvocation {
-	const rootNode = cloneCommandNode(node);
 	const extensions = Object.freeze([...node.extensions]);
+	const extensionFlags = extensions.flatMap((extension) =>
+		Object.entries(extension.flags).map(([name, { recursive = true, ...def }]) => ({
+			name,
+			def,
+			recursive,
+		})),
+	);
 
-	for (const extension of extensions) {
-		applyExtensionCommands(rootNode, extension, materializeCommandDefinition);
-	}
-	for (const extension of extensions) applyExtensionFlags(rootNode, extension);
+	const prepare = (source: CommandNode, path: string, isRoot: boolean): CommandNode => {
+		const entries = new Map<string, ChildEntry>(
+			childEntriesOf(source).map((entry) => [entry.name, entry]),
+		);
+		if (isRoot) {
+			// Preserve last-write-wins without evaluating unused or replaced recipes.
+			for (const extension of extensions) {
+				for (const definition of extension.commands) {
+					let child: CommandNode | undefined;
+					entries.set(definition.name, {
+						name: definition.name,
+						meta: { name: definition.name, ...definition[commandDefinitionInternal].meta },
+						resolve: () =>
+							(child ??= materializeCommandDefinition(definition, source, extension.id)),
+					});
+				}
+			}
+		}
+		const prepared: CommandNode = {
+			...source,
+			meta: { ...source.meta },
+			...cloneFlagRegistry(source),
+			args: [...source.args],
+			subCommands: lazyChildRecord(entries.values(), (entry) =>
+				prepare(entry.resolve(), `${path} ${entry.name}`, false),
+			),
+			addedChildren: undefined,
+			contexts: source.contexts.map((context) => ({ ...context })),
+			providedContexts: [...source.providedContexts],
+			demands: [...source.demands],
+			extensions: [...source.extensions],
+		};
+		for (const { name, def, recursive } of extensionFlags) {
+			if (isRoot || recursive) registerFlag(prepared, name, def, "owned");
+		}
+		if (finish) {
+			applyNodeContextSections(
+				prepared,
+				path,
+				sectionContextsFor(prepared, isRoot ? extensions : undefined),
+			);
+			freezeNode(prepared);
+		}
+		return prepared;
+	};
 
-	return { rootNode, extensions };
+	return { rootNode: prepare(node, node.meta.name, true), extensions, snapshots: new WeakMap() };
 }
 
 /** Install Context sections, evaluate Extension section callbacks, and freeze the tree. */
@@ -272,22 +343,17 @@ export function prepareInvocation(
 	const cached = preparedInvocations.get(node);
 	if (cached) return cached;
 
-	const prepared = buildExtensionTree(node, materializeCommandDefinition);
-	applySectionsAndFreeze(prepared.rootNode, prepared.extensions);
+	// Extension section callbacks read the whole authored tree, so they keep eager preparation.
+	const eager = node.extensions.some((extension) => extension.sections !== undefined);
+	const prepared = buildExtensionTree(node, materializeCommandDefinition, !eager);
+	if (eager) applySectionsAndFreeze(prepared.rootNode, prepared.extensions);
 	preparedInvocations.set(node, prepared);
 	return prepared;
 }
 
-/**
- * The prepared tree is frozen, so its projection is reusable unless a mutable
- * default (shared by reference) would make a cached copy disagree with what the
- * parser hands the action.
- */
-function preparedRootSnapshot(prepared: PreparedInvocation): CommandSnapshot {
-	if (prepared.rootSnapshot) return prepared.rootSnapshot;
-	const rootSnapshot = snapshotCommand(prepared.rootNode);
-	if (isSnapshotReusable(prepared.rootNode)) prepared.rootSnapshot = rootSnapshot;
-	return rootSnapshot;
+/** Projections for one invocation: stable subtrees come from the prepared tree's cache. */
+function invocationSnapshots(prepared: PreparedInvocation): SnapshotCache {
+	return createSnapshotCache(prepared.snapshots);
 }
 
 /** An invocation starts from terminal argv or a typed path plus structured values. */
@@ -330,16 +396,26 @@ function resolveStructuredInput(
 }
 
 /**
- * The root projection already contains the resolved subtree; walk to it along
- * the canonical route instead of projecting the same nodes a second time.
+ * Lazy `rootCommand` / `command` projections. Most invocations read only the routed
+ * command (help checks `hasAction`), so the whole tree is projected (and its pending
+ * recipes run) only when something reads `rootCommand`. Both share one cache, so the
+ * routed snapshot is the same object inside the root projection.
  */
-function routedSnapshot(rootSnapshot: CommandSnapshot, route: CommandRoute): CommandSnapshot {
-	let commandSnapshot = rootSnapshot;
-	for (const name of route.commandPath.slice(1)) {
-		// SAFETY: the router only records canonical names of children it descended into.
-		commandSnapshot = commandSnapshot.subCommands[name]!;
-	}
-	return commandSnapshot;
+function lazySnapshots(
+	prepared: PreparedInvocation,
+	command: CommandNode,
+): { readonly rootCommand: CommandSnapshot; readonly command: CommandSnapshot } {
+	const cache = invocationSnapshots(prepared);
+	let root: CommandSnapshot | undefined;
+	let routed: CommandSnapshot | undefined;
+	return {
+		get rootCommand() {
+			return (root ??= snapshotCommand(prepared.rootNode, cache));
+		},
+		get command() {
+			return (routed ??= snapshotCommand(command, cache));
+		},
+	};
 }
 
 /** Resolve, parse, and run one invocation without rendering failures. */
@@ -366,11 +442,15 @@ async function dispatch(
 	const contexts = resolvedNode.contexts.map(({ instance }) => instance);
 	const resolver = createContextResolver(contexts, io, disposal, signal);
 
-	const rootSnapshot = preparedRootSnapshot(prepared);
+	const snapshots = lazySnapshots(prepared, resolvedNode);
 	const extensionContext: ExtensionContext = Object.freeze({
 		argv: [...argv],
-		rootCommand: rootSnapshot,
-		command: routedSnapshot(rootSnapshot, route),
+		get rootCommand() {
+			return snapshots.rootCommand;
+		},
+		get command() {
+			return snapshots.command;
+		},
 		commandPath: Object.freeze([...route.commandPath]),
 		args: parsed.args,
 		flags: parsed.flags,
@@ -398,8 +478,12 @@ async function dispatch(
 			ctx: resolver.bag(contexts),
 			rawArgs: parsed.rawArgs,
 			signal,
-			command: extensionContext.command,
-			rootCommand: rootSnapshot,
+			get command() {
+				return snapshots.command;
+			},
+			get rootCommand() {
+				return snapshots.rootCommand;
+			},
 			stdout: io.stdout,
 			stderr: io.stderr,
 		} satisfies CrustCommandContext;
@@ -486,7 +570,6 @@ async function renderFailure(
 					property === "then" || isSymbol(property) ? undefined : unavailable(property),
 			},
 		);
-		const rootSnapshot = preparedRootSnapshot(prepared);
 		// Routing is pure, so redoing it recovers the command whose argv failed to parse.
 		let route: CommandRoute | undefined;
 		try {
@@ -494,10 +577,15 @@ async function renderFailure(
 		} catch {
 			// Routing itself failed: the root stands in, as documented on `ExtensionContext.command`.
 		}
+		const snapshots = lazySnapshots(prepared, route?.command ?? prepared.rootNode);
 		context = Object.freeze({
 			argv: [...argv],
-			rootCommand: rootSnapshot,
-			command: route ? routedSnapshot(rootSnapshot, route) : rootSnapshot,
+			get rootCommand() {
+				return snapshots.rootCommand;
+			},
+			get command() {
+				return snapshots.command;
+			},
 			commandPath: Object.freeze(route ? [...route.commandPath] : [prepared.rootNode.meta.name]),
 			args: Object.freeze({}),
 			flags: Object.freeze({}),
