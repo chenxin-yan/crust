@@ -28,6 +28,9 @@ export type RunProcessOptions = {
 	/**
 	 * Milliseconds before process-tree cleanup and rejection. POSIX descendants
 	 * must remain in the child's group; Windows requires a live parent.
+	 * On POSIX, SIGINT, SIGTERM, SIGHUP, SIGQUIT or a synchronous exit of this process
+	 * also kills the group; a signal rejects the call and is re-raised when no other
+	 * listener handles it.
 	 */
 	timeout?: number;
 };
@@ -37,6 +40,48 @@ export type RunProcessResult = {
 	stdout: string;
 	stderr: string;
 };
+
+const LIFETIME_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const;
+
+type LifetimeBinding = { onSignal: (signal: NodeJS.Signals) => void; onExit: () => void };
+// One shared listener per event for all bindings, so concurrency never trips MaxListeners.
+const bindings = new Set<LifetimeBinding>();
+
+// Re-raise only when no other listener owns the signal, like Core's SIGINT handling.
+function onLifetimeSignal(signal: NodeJS.Signals): void {
+	const pending = [...bindings];
+	bindings.clear();
+	removeLifetimeListeners();
+	for (const binding of pending) binding.onSignal(signal);
+	if (process.listenerCount(signal) === 0) process.kill(process.pid, signal);
+}
+
+function onLifetimeExit(): void {
+	for (const binding of bindings) binding.onExit();
+}
+
+function removeLifetimeListeners(): void {
+	for (const signal of LIFETIME_SIGNALS) process.removeListener(signal, onLifetimeSignal);
+	process.removeListener("exit", onLifetimeExit);
+}
+
+/**
+ * Ties a detached POSIX child group to this process, which the group no longer shares
+ * terminal signals with. Until the returned release runs, SIGINT, SIGTERM, SIGHUP or SIGQUIT
+ * calls `onSignal` once and is then re-raised when no other listener handles it, and a
+ * synchronous exit (`process.exit`, an uncaught error) calls `onExit`. SIGKILL and native
+ * crashes cannot be observed and still orphan the group.
+ */
+export function bindToProcessLifetime(binding: LifetimeBinding): () => void {
+	if (bindings.size === 0) {
+		for (const signal of LIFETIME_SIGNALS) process.prependListener(signal, onLifetimeSignal);
+		process.on("exit", onLifetimeExit);
+	}
+	bindings.add(binding);
+	return () => {
+		if (bindings.delete(binding) && bindings.size === 0) removeLifetimeListeners();
+	};
+}
 
 const WINDOWS_SHELL_UNSAFE = /[\0\r\n"%!^`<>&|]/;
 const WINDOWS_SHELL_META = /([()\][%!^"`<>&|;, *?])/g;
@@ -131,35 +176,53 @@ export async function runProcess(
 	const windowsShimCommand = getWindowsShimCommand(command, args, options.shell);
 	const collect = (options.stdio ?? "collect") === "collect";
 	const collectStdout = collect && options.stdout !== "ignore";
+	// Only timed calls need a group; untimed interactive children keep terminal semantics.
+	const detached = options.timeout !== undefined && process.platform !== "win32";
 	const proc = spawn(windowsShimCommand?.command ?? command, windowsShimCommand?.args ?? args, {
 		cwd: options.cwd,
 		env: options.env,
 		shell: options.shell,
 		stdio: collect ? ["ignore", collectStdout ? "pipe" : "ignore", "pipe"] : "inherit",
-		// Only timed calls need a group; untimed interactive children keep terminal semantics.
-		detached: options.timeout !== undefined && process.platform !== "win32",
+		detached,
 		windowsVerbatimArguments: windowsShimCommand?.windowsVerbatimArguments,
 	});
 
-	let timer: NodeJS.Timeout | undefined;
-	const deadline = new Promise<never>((_, reject) => {
-		if (options.timeout === undefined) return;
-		const timeout = options.timeout;
-		timer = setTimeout(() => {
-			let failure = new Error(
-				`${[command, ...args].join(" ")} did not exit within ${timeout} ms and was killed.`,
-			);
+	const commandLine = [command, ...args].join(" ");
+	let stop!: (message: string, reason: string) => void;
+	const stopped = new Promise<never>((_, reject) => {
+		stop = (message, reason) => {
+			let failure = new Error(message);
 			try {
 				killProcessTree(proc);
 			} catch (cause) {
-				failure = new Error("Process-tree cleanup failed after timeout.", { cause });
+				failure = new Error(`Process-tree cleanup failed after ${reason}.`, { cause });
 			}
 			// Escaped descendants must not hold the timeout open through inherited pipes.
 			proc.stdout?.destroy();
 			proc.stderr?.destroy();
 			reject(failure);
-		}, timeout);
+		};
 	});
+	const timeout = options.timeout;
+	const timer =
+		timeout === undefined
+			? undefined
+			: setTimeout(
+					() => stop(`${commandLine} did not exit within ${timeout} ms and was killed.`, "timeout"),
+					timeout,
+				);
+	const release = detached
+		? bindToProcessLifetime({
+				onSignal: (signal) => stop(`${commandLine} was interrupted by ${signal}.`, signal),
+				onExit: () => {
+					try {
+						killProcessTree(proc);
+					} catch {
+						// Best effort: the exiting process takes precedence.
+					}
+				},
+			})
+		: () => {};
 
 	try {
 		const [stdout, stderr, [exitCode]] = await Promise.race([
@@ -168,11 +231,12 @@ export async function runProcess(
 				collect ? text(proc.stderr!) : "",
 				once(proc, "close"),
 			]),
-			deadline,
+			stopped,
 		]);
 		return { exitCode, stdout, stderr };
 	} finally {
 		clearTimeout(timer);
+		release();
 	}
 }
 
