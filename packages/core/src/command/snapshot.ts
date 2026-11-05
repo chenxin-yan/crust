@@ -1,6 +1,6 @@
 import { isFlagNegatable } from "../parsing/spellings.ts";
 import type { ArgDef, CommandMeta, DeclaredDefault, FlagDef, ValueType } from "../types.ts";
-import type { CommandNode } from "./node.ts";
+import { builtChildrenOf, type CommandNode } from "./node.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // CommandSnapshot — Readonly, serializable command description
@@ -143,28 +143,6 @@ function serializableDefault(value: DeclaredDefault): SerializableDefault {
 	return value;
 }
 
-/**
- * Whether projecting `value` again could yield a different result: `URL` hrefs are
- * read live and unfrozen arrays are copied, so later mutations change the projection.
- */
-function isMutableDefault(value: DeclaredDefault): boolean {
-	if (value instanceof URL) return true;
-	if (Array.isArray(value)) return !Object.isFrozen(value) || value.some(isMutableDefault);
-	return false;
-}
-
-/**
- * A snapshot of `node` may be reused only while re-projecting the (frozen) tree
- * would produce the same result, i.e. no arg or flag default is mutable.
- */
-export function isSnapshotReusable(node: CommandNode): boolean {
-	return (
-		!node.args.some((def) => isMutableDefault(def.default)) &&
-		!Object.values(node.effectiveFlags).some((def) => isMutableDefault(def.default)) &&
-		Object.values(node.subCommands).every(isSnapshotReusable)
-	);
-}
-
 /** The parser fills a missing value from its default, so a defaulted def is never required. */
 function effectiveRequired(def: ArgDef | FlagDef): boolean | undefined {
 	return def.default === undefined ? def.required : undefined;
@@ -200,48 +178,114 @@ function snapshotFlag(def: FlagDef): FlagSnapshot {
 }
 
 /**
- * Memoized projections of frozen nodes. `stable` holds subtrees with no mutable
- * defaults and may live as long as the prepared tree; `volatile` holds the rest
- * and must be per invocation, so a mutated `URL` default is re-projected.
+ * Project an internal command node (and its whole subtree) into a
+ * {@link CommandSnapshot}.
  */
-export interface SnapshotCache {
-	readonly stable: WeakMap<CommandNode, CommandSnapshot>;
-	readonly volatile: WeakMap<CommandNode, CommandSnapshot>;
-}
-
-export function createSnapshotCache(
-	stable: WeakMap<CommandNode, CommandSnapshot> = new WeakMap(),
-): SnapshotCache {
-	return { stable, volatile: new WeakMap() };
+export function snapshotCommand(node: CommandNode): CommandSnapshot {
+	const subCommands: Record<string, CommandSnapshot> = {};
+	for (const [name, sub] of Object.entries(node.subCommands)) {
+		subCommands[name] = snapshotCommand(sub);
+	}
+	return projectNode(node, snapshotFlags(node), Object.freeze(subCommands));
 }
 
 /**
- * Project an internal command node (and its whole subtree) into a
- * {@link CommandSnapshot}. Sharing `cache` across calls keeps one object per
- * node, so `rootCommand.subCommands.x` is the same object as a routed `command`.
+ * Whether projecting `value` again could yield a different result: `URL` hrefs are
+ * read live and unfrozen arrays are copied, so later mutations change the projection.
  */
-export function snapshotCommand(
-	node: CommandNode,
-	cache: SnapshotCache = createSnapshotCache(),
-): CommandSnapshot {
-	const cached = cache.stable.get(node) ?? cache.volatile.get(node);
-	if (cached) return cached;
+function isMutableDefault(value: DeclaredDefault): boolean {
+	if (value instanceof URL) return true;
+	if (Array.isArray(value)) return !Object.isFrozen(value) || value.some(isMutableDefault);
+	return false;
+}
 
-	let stable =
+/** Verdicts for prepared subtrees, which never change once every command is built. */
+const reusable = new WeakMap<CommandNode, boolean>();
+/** Projections of reusable prepared subtrees, shared across invocations. */
+const shared = new WeakMap<CommandNode, CommandSnapshot>();
+
+/**
+ * Whether one snapshot of `node` can serve every invocation: no default in the
+ * subtree is mutable. `undefined` while a command in it is still pending, because
+ * deciding would build it.
+ */
+function isReusable(node: CommandNode): boolean | undefined {
+	const known = reusable.get(node);
+	if (known !== undefined) return known;
+	let verdict =
 		!node.args.some((def) => isMutableDefault(def.default)) &&
 		!Object.values(node.effectiveFlags).some((def) => isMutableDefault(def.default));
+	if (verdict) {
+		const children = builtChildrenOf(node);
+		if (!children) return undefined;
+		for (const child of children) {
+			const childVerdict = isReusable(child);
+			if (childVerdict === undefined) return undefined;
+			verdict &&= childVerdict;
+		}
+	}
+	reusable.set(node, verdict);
+	return verdict;
+}
+
+/**
+ * A per-invocation projector over a prepared tree: each node is projected once,
+ * when first read, and its children only when they are read. An invocation that
+ * reads root metadata (`rootCommand.meta.version`) or the routed command projects,
+ * and builds, just those nodes, while walking `subCommands` still sees every child.
+ * Trees that are fully built and have no mutable defaults at the first read reuse
+ * projections across invocations. Otherwise the entire invocation stays local,
+ * even if its reads or another invocation make the tree reusable later. This keeps
+ * `rootCommand.subCommands.x` the same object as a routed `command`.
+ */
+export function createSnapshotProjector(root: CommandNode): (node: CommandNode) => CommandSnapshot {
+	const projected = new Map<CommandNode, CommandSnapshot>();
+	let reuse: boolean | undefined;
+	const share = (node: CommandNode): CommandSnapshot => {
+		const existing = shared.get(node);
+		if (existing) return existing;
+		const subCommands: Record<string, CommandSnapshot> = {};
+		for (const [name, sub] of Object.entries(node.subCommands)) subCommands[name] = share(sub);
+		const snapshot = projectNode(node, snapshotFlags(node), Object.freeze(subCommands));
+		shared.set(node, snapshot);
+		return snapshot;
+	};
+	const project = (node: CommandNode): CommandSnapshot => {
+		// Never mix invocation-local snapshots with a shared ancestor or descendant.
+		reuse ??= isReusable(root) === true;
+		if (reuse) return share(node);
+		const existing = projected.get(node);
+		if (existing) return existing;
+		const subCommands: Record<string, CommandSnapshot> = {};
+		// Object.keys does not build lazily prepared children.
+		for (const name of Object.keys(node.subCommands)) {
+			let child: CommandSnapshot | undefined;
+			Object.defineProperty(subCommands, name, {
+				enumerable: true,
+				get: () => (child ??= project(node.subCommands[name]!)),
+			});
+		}
+		const snapshot = projectNode(node, snapshotFlags(node), Object.freeze(subCommands));
+		projected.set(node, snapshot);
+		return snapshot;
+	};
+	return project;
+}
+
+function snapshotFlags(node: CommandNode): Record<string, FlagSnapshot> {
 	const flags: Record<string, FlagSnapshot> = {};
 	for (const [name, def] of Object.entries(node.effectiveFlags)) {
 		flags[name] = snapshotFlag(def);
 	}
+	return flags;
+}
 
-	const subCommands: Record<string, CommandSnapshot> = {};
-	for (const [name, sub] of Object.entries(node.subCommands)) {
-		subCommands[name] = snapshotCommand(sub, cache);
-		stable &&= cache.stable.has(sub);
-	}
-
-	const snapshot: CommandSnapshot = Object.freeze({
+function projectNode(
+	node: CommandNode,
+	flags: Record<string, FlagSnapshot>,
+	subCommands: Readonly<Record<string, CommandSnapshot>>,
+): CommandSnapshot {
+	return Object.freeze({
 		meta: freezeCompact({
 			name: node.meta.name,
 			description: node.meta.description,
@@ -256,8 +300,6 @@ export function snapshotCommand(
 		hasAction: node.run !== undefined,
 		args: Object.freeze(node.args.map(snapshotArg)),
 		flags: Object.freeze(flags),
-		subCommands: Object.freeze(subCommands),
+		subCommands,
 	});
-	(stable ? cache.stable : cache.volatile).set(node, snapshot);
-	return snapshot;
 }
