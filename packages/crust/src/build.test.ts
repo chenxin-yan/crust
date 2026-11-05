@@ -226,9 +226,12 @@ describe("planBuild", () => {
 		}
 	});
 
-	it("rejects an invalid configured runtime", () => {
-		writePackageJson({ crust: { runtime: "python" } });
-		expect(() => planBuild(baseFlags, tmpDir)).toThrow(/Invalid package.json crust.runtime/);
+	// deno was a supported runtime until it was dropped; keep it rejected.
+	it.each(["python", "deno"])("rejects the invalid configured runtime %j", (runtime) => {
+		writePackageJson({ crust: { runtime } });
+		expect(() => planBuild(baseFlags, tmpDir)).toThrow(
+			`Invalid package.json crust.runtime "${runtime}". Valid runtimes: bun, node`,
+		);
 	});
 
 	it("builds every bin entry under its command name, in declaration order", () => {
