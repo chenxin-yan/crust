@@ -9,7 +9,7 @@ import {
 	type FlagSpelling,
 } from "../parsing/spellings.ts";
 import type { ArgsDef, CommandMeta, FlagDef, FlagsDef } from "../types.ts";
-import type { CrustCommandContext } from "./crust.ts";
+import type { CommandDefinition, CrustCommandContext } from "./crust.ts";
 
 export const commandDefinitionInternal: unique symbol = Symbol.for("crust.commandDefinition");
 
@@ -18,7 +18,6 @@ export type CommandAction = (ctx: CrustCommandContext) => unknown;
 
 export interface CommandContext {
 	instance: AnyContextInstance;
-	extensionId?: ExtensionId;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -61,6 +60,11 @@ export interface CommandNode {
 	demands: readonly AnyContextFactory[];
 	/** Extensions registered via `.extend()` (root builder only) */
 	extensions: ExtensionData[];
+	/**
+	 * Root builder only, set with `extensions`: how many root `contexts` existed at
+	 * each Extension's last registration. Its providers replace those and yield to later ones.
+	 */
+	extensionPositions?: ReadonlyMap<ExtensionId, number>;
 	/** The Command Action */
 	run?: CommandAction;
 }
@@ -145,6 +149,10 @@ export function cloneFlagRegistry(
  */
 export interface AddedChild extends ChildEntry {
 	readonly next: AddedChild | undefined;
+	/** Lets preparation materialize a root child against a parent carrying Extension providers. */
+	readonly definition: CommandDefinition;
+	/** The builder node at `.add()` time: `.provide()` stays positional. */
+	readonly parent: CommandNode;
 }
 
 /**
@@ -167,10 +175,17 @@ export function childEntriesOf(node: CommandNode): ChildEntry[] {
 		meta,
 		resolve: () => subCommands[name]!,
 	}));
-	const added: AddedChild[] = [];
-	for (let cell = node.addedChildren; cell; cell = cell.next) added.push(cell);
-	for (let i = added.length - 1; i >= 0; i--) entries.push(added[i]!);
+	entries.push(...addedChildrenOf(node));
 	return entries;
+}
+
+/** The node's `.add()` cells in insertion order. */
+export function addedChildrenOf(node: CommandNode): AddedChild[] {
+	const newestFirst: AddedChild[] = [];
+	for (let cell = node.addedChildren; cell; cell = cell.next) newestFirst.push(cell);
+	const added: AddedChild[] = [];
+	for (let i = newestFirst.length - 1; i >= 0; i--) added.push(newestFirst[i]!);
+	return added;
 }
 
 const childRecords = new WeakMap<AddedChild, Record<string, CommandNode>>();

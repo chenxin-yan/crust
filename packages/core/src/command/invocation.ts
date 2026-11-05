@@ -1,6 +1,7 @@
 import { isSignalIgnored } from "@crustjs/utils/signals";
 import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
 
+import { validateContextAvailability } from "../api/context.ts";
 import {
 	handledInvocation,
 	type ExtensionData,
@@ -22,15 +23,19 @@ import type { CrustCommandContext } from "./crust.ts";
 import {
 	applyExtensionSections,
 	applyNodeContextSections,
+	installExtensionProviders,
 	sectionContextsFor,
+	type ExtensionProvider,
 	type MaterializeCommandDefinition,
 } from "./extensions-install.ts";
 import {
+	addedChildrenOf,
 	childEntriesOf,
 	cloneFlagRegistry,
 	commandDefinitionInternal,
 	lazyChildRecord,
 	registerFlag,
+	type AddedChild,
 	type ChildEntry,
 	type CommandNode,
 } from "./node.ts";
@@ -207,8 +212,17 @@ function isSymbol<T>(value: T): value is T & symbol {
 const preparedInvocations = new WeakMap<CommandNode, PreparedInvocation>();
 
 /**
- * Clone the builder tree and apply Extension commands and flags. Nodes are built
- * on first access (see `lazyChildRecord`): an invocation prepares only the path it
+ * Root children materialized against Extension providers, by the builder's final
+ * Extension list (`extensionPositions` changes with it), then `.add()` cell. Apps
+ * derived from one builder that keep the list, such as `app.flags(...)` after
+ * `.extend()`, run each recipe once.
+ */
+const providedChildren = new WeakMap<readonly ExtensionData[], WeakMap<AddedChild, CommandNode>>();
+
+/**
+ * Clone the builder tree and apply the final Extension list: providers, commands,
+ * and flags reach every command alike, whenever it was added. Nodes are built on
+ * first access (see `lazyChildRecord`): an invocation prepares only the path it
  * routes through, while whole-tree readers (snapshots, docs) still build every
  * node. Each node gets its Context sections and is frozen as it is built.
  */
@@ -224,10 +238,41 @@ export function buildExtensionTree(
 			recursive,
 		})),
 	);
+	const providers: ExtensionProvider[] = extensions.flatMap((extension) => {
+		// SAFETY: .extend() records a position for every id it adds to the list.
+		const position = node.extensionPositions!.get(extension.id)!;
+		return extension.provide.map((instance) => ({ instance, position }));
+	});
+	// The definitions of one `.add()` call share its parent.
+	const installed = new Map<CommandNode, CommandNode>();
+	const withProviders = (parent: CommandNode): CommandNode => {
+		let seeded = installed.get(parent);
+		if (!seeded) installed.set(parent, (seeded = installExtensionProviders(parent, providers)));
+		return seeded;
+	};
+	// A root child's recipe runs against its `.add()`-time parent plus the providers;
+	// descendants inherit them from it.
+	const rootChild = (cell: AddedChild): CommandNode => {
+		// Without providers, the builder's own once-per-`.add()` materialization applies.
+		if (providers.length === 0) return cell.resolve();
+		let built = providedChildren.get(node.extensions);
+		if (!built) providedChildren.set(node.extensions, (built = new WeakMap()));
+		let child = built.get(cell);
+		if (!child) {
+			child = materializeCommandDefinition(cell.definition, withProviders(cell.parent));
+			built.set(cell, child);
+		}
+		return child;
+	};
 
 	const prepare = (source: CommandNode, path: string, isRoot: boolean): CommandNode => {
 		const entries = new Map<string, ChildEntry>(
-			childEntriesOf(source).map((entry) => [entry.name, entry]),
+			isRoot
+				? addedChildrenOf(source).map((cell) => [
+						cell.name,
+						{ name: cell.name, meta: cell.meta, resolve: () => rootChild(cell) },
+					])
+				: childEntriesOf(source).map((entry) => [entry.name, entry]),
 		);
 		if (isRoot) {
 			// Preserve last-write-wins without evaluating unused or replaced recipes.
@@ -260,16 +305,17 @@ export function buildExtensionTree(
 		for (const { name, def, recursive } of extensionFlags) {
 			if (isRoot || recursive) registerFlag(prepared, name, def, "owned");
 		}
-		applyNodeContextSections(
-			prepared,
-			path,
-			sectionContextsFor(prepared, isRoot ? extensions : undefined),
-		);
+		applyNodeContextSections(prepared, path, sectionContextsFor(prepared, isRoot));
 		freezeNode(prepared);
 		return prepared;
 	};
 
-	return { rootNode: prepare(node, node.meta.name, true), extensions };
+	const root = withProviders(node);
+	validateContextAvailability(
+		root.contexts.map(({ instance }) => instance),
+		extensions.flatMap((extension) => [...extension.use, ...extension.provide]),
+	);
+	return { rootNode: prepare(root, node.meta.name, true), extensions };
 }
 
 /** Clone, apply Extensions and sections, freeze, and cache ordinary invocation preparation. */

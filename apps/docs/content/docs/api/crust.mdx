@@ -41,7 +41,7 @@ Metadata is optional unless an installed Extension [requires it](/docs/guide/ext
 
 ## Chaining semantics
 
-`.flags()`, `.args()`, `.provide()`, `.add()`, and `.extend()` are variadic, accept dynamic collections, and accumulate across calls. TypeScript rejects statically known invalid definitions and collisions. Runtime checks throw a `DEFINITION` [error](/docs/api/errors): direct builder inputs and sibling name/alias collisions are checked at the builder call, while recipe validation, inherited-flag collisions, and Context demands for added definitions are checked on first use. Use `await app.snapshot()` to validate the full tree without running Command Actions.
+`.flags()`, `.args()`, `.provide()`, `.add()`, and `.extend()` are variadic, accept dynamic collections, and accumulate across calls. TypeScript rejects statically known invalid definitions and collisions. Runtime checks throw a `DEFINITION` [error](/docs/api/errors): direct builder inputs and sibling name/alias collisions are checked at the builder call, while recipe validation, inherited-flag collisions, and Context demands for added definitions are checked on first use. `.extend()` only records Extensions: collisions between Extension-provided flags and the app's flags, and missing Contexts for an Extension's `.use()` or `.provide()`, are checked when the app prepares (first run, `snapshot()`, or `at()`). Use `await app.snapshot()` to validate the full tree without running Command Actions.
 
 ### Conditional chains
 
@@ -134,7 +134,7 @@ See [Contexts](/docs/guide/contexts) for worked examples.
 
 ## `.extend(...extensions)`
 
-Root-only. Registers application-wide [Extensions](/docs/guide/extensions) in registration order. A repeated `ExtensionId` replaces the earlier registration.
+Root-only. Registers application-wide [Extensions](/docs/guide/extensions) in registration order. A repeated `ExtensionId` replaces the earlier registration. `.extend()` only records the list; the app applies and validates the final list when it prepares, so a replacement also rescues an earlier registration that conflicted, and flag collisions or missing Contexts surface there as `DEFINITION` errors rather than at `.extend()`.
 
 ```ts
 import { help, version } from "@crustjs/extensions";
@@ -142,7 +142,7 @@ import { help, version } from "@crustjs/extensions";
 const app = new Crust("my-cli", { version: "1.2.3" }).extend(version(), help());
 ```
 
-Extensions apply to every command, including definitions added before `.extend()`. Contexts an Extension provides reach the root and existing descendants while more-specific local providers win. Extension commands are built on first use, like added definitions, and recursive Extension flags (the default) are registered on each command as it is built; flags with `recursive: false` are registered only on the root. Extensions must come from `defineExtension()`.
+Extensions apply to every command the same way, whether it was added before or after `.extend()`. Contexts an Extension provides reach every command. Between a root `.provide()` and an Extension-provided Context of the same name, the later call wins, as the types infer; a command's own `.provide()` always wins. Flags those Contexts own come first on every command, before the command's own flags. Extension commands are built on first use, like added definitions, and recursive Extension flags (the default) are registered on each command as it is built; flags with `recursive: false` are registered only on the root. Extensions must come from `defineExtension()`.
 
 ## `.action(action)`
 

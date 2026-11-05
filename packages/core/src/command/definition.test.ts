@@ -399,13 +399,34 @@ describe("command definitions", () => {
 		).toMatchObject({
 			result: "local:flag",
 		});
+		expect(configured).toEqual(["group", "inherited", "shadowed"]);
+		// `base` has a different provider, so its recipes run again, against that one.
 		expect(
 			await unwrap(base.run(["group", "inherited"], { flags: { value: "flag" } })),
 		).toMatchObject({
 			result: "old:flag",
 		});
-		expect(configured).toEqual(["group", "inherited", "shadowed"]);
+		expect(configured).toEqual(["group", "inherited", "shadowed", "group", "inherited"]);
 		await expect(app.snapshot()).rejects.toThrow("broken recipe");
+	});
+
+	it("runs root recipes once across apps that share the final Extension list", async () => {
+		let configured = 0;
+		const value = defineContext("value").setup(() => "extension");
+		const app = new Crust("cli")
+			.extend(defineExtension(defineExtensionId("provider")).provide(value()))
+			.add(
+				defineCommand("child", (command) => {
+					configured++;
+					return command.use(value).action(async ({ ctx }) => await ctx.value);
+				}),
+			);
+		const derived = app.flags({ name: "verbose", type: "boolean" });
+
+		expect(await unwrap(app.run(["child"]))).toMatchObject({ result: "extension" });
+		expect(await unwrap(derived.run(["child"]))).toMatchObject({ result: "extension" });
+		await derived.snapshot();
+		expect(configured).toBe(1);
 	});
 
 	it("defers unused and overridden Extension command recipes", async () => {

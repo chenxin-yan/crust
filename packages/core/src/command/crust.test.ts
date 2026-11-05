@@ -125,21 +125,12 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 		const withAction = base.action(() => {});
 		expect(withAction._node.run).toBeDefined();
 
+		// `.extend()` only records Extensions; preparation applies their providers.
 		const withExtension = base.extend(defineExtension(defineExtensionId("ext")).provide(db()));
-		for (const key of [
-			"localFlags",
-			"ownedFlags",
-			"effectiveFlags",
-			"flagSpellings",
-			"args",
-			"subCommands",
-			"contexts",
-			"extensions",
-		] as const) {
-			expect(withExtension._node[key]).not.toBe(base._node[key]);
+		expect(withExtension._node.extensions).not.toBe(base._node.extensions);
+		for (const key of ["effectiveFlags", "addedChildren", "contexts"] as const) {
+			expect(withExtension._node[key]).toBe(base._node[key]);
 		}
-		expect(withExtension._node.subCommands.existing).not.toBe(subCommandsOf(base._node).existing);
-		expect(withExtension._node.contexts.map(({ instance }) => instance.name)).toEqual(["db"]);
 
 		let demandsChecked = false;
 		await new Crust("test")
@@ -475,7 +466,7 @@ describe("Crust .extend()", () => {
 		expect(value).toBe("replacement");
 	});
 
-	it("rejects an Extension provider flag colliding with a local flag", () => {
+	it("rejects an Extension provider flag colliding with a local flag at preparation", async () => {
 		const id = defineExtensionId("flag-provider");
 		const provider = defineContext("flagProvider")
 			.flags({ name: "mode", type: "number", aliases: ["extension-mode"] })
@@ -487,12 +478,32 @@ describe("Crust .extend()", () => {
 			aliases: ["local-mode"],
 		});
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		expect(() => app.extend(first)).toThrow(
+		const extended = app.extend(first);
+		await expect(extended.snapshot()).rejects.toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",
 				details: expect.objectContaining({ reason: "flag-collision" }),
 			}),
 		);
+		// Only the final registration for an id is applied, so a replacement rescues it,
+		// on the root and on children added before or after the conflicting registration.
+		const child = defineCommand("child", (command) =>
+			command.flags({ name: "mode", type: "string" }).action(() => "ran"),
+		);
+		const addedBefore = new Crust("test")
+			.add(child)
+			.extend(first as never)
+			.extend(defineExtension(id) as never);
+		const replaced = [
+			extended.extend(defineExtension(id) as never),
+			addedBefore,
+			new Crust("test")
+				.extend(first)
+				.add(child as never)
+				.extend(defineExtension(id) as never),
+		];
+		for (const candidate of replaced) await expect(candidate.snapshot()).resolves.toBeDefined();
+		expect(await addedBefore.run(["child"])).toMatchObject({ status: "completed", result: "ran" });
 	});
 
 	it("keeps a local provider override across unrelated .extend() calls", async () => {
@@ -512,6 +523,44 @@ describe("Crust .extend()", () => {
 
 		await unwrap(app.run([], {}));
 		expect(value).toBe("local");
+		// Re-registering moves the provider after the local one.
+		await unwrap(app.extend(providing).run([], {}));
+		expect(value).toBe("extension");
+	});
+
+	it("lets an Extension replace a root provider registered before it, as the types infer", async () => {
+		const local = defineContext("value")
+			.sections({ title: "Local", body: "local" })
+			.setup(() => 123);
+		const remote = defineContext("value")
+			.sections({ title: "Remote", body: "remote" })
+			.setup(() => "extension");
+		// A non-tuple list opts out of the duplicate-name check, so this compiles
+		// and infers the Extension's value.
+		const providers = [local()];
+		const upper = defineCommand("upper", (command) =>
+			command.use(remote).action(async ({ ctx }) => (await ctx.value).toUpperCase()),
+		);
+		// TypeScript rejects a command added before `.extend()` that demands either value,
+		// so this one reads it untyped.
+		const before = defineCommand("before", (command) =>
+			command.action(async ({ ctx }) => await (ctx as { value: Promise<unknown> }).value),
+		);
+		const app = new Crust("test")
+			.provide(...providers)
+			.add(before)
+			.extend(defineExtension(defineExtensionId("provider")).provide(remote()))
+			.add(upper)
+			.action(async ({ ctx }) => {
+				const value: string = await ctx.value;
+				return value.toUpperCase();
+			});
+
+		expect(await app.run([])).toMatchObject({ status: "completed", result: "EXTENSION" });
+		expect(await app.run(["upper"])).toMatchObject({ status: "completed", result: "EXTENSION" });
+		expect(await app.run(["before"])).toMatchObject({ status: "completed", result: "extension" });
+		const titles = (await app.snapshot()).meta.sections?.map(({ title }) => title);
+		expect(titles).toEqual(["Remote"]);
 	});
 
 	it("preserves interleaved local and Context flag order across .extend()", async () => {
