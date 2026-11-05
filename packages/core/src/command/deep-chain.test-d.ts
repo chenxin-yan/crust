@@ -855,6 +855,80 @@ function _typecheckExtendsOpenRestExtensionTuple(
 	new Crust("optional").extend(...optional);
 }
 
+// A chain of 50+ `.extend()` calls adding flags, Contexts and commands must not hit TS2589.
+function _typecheckChainedFlagExtensions() {
+	const app = new Crust("chained-flags")
+		.extend(e0)
+		.extend(e1)
+		.extend(e2)
+		.extend(e3)
+		.extend(e4)
+		.extend(e5)
+		.extend(e6)
+		.extend(e7)
+		.extend(e8)
+		.extend(e9)
+		.extend(e10)
+		.extend(e11)
+		.extend(e12)
+		.extend(e13)
+		.extend(e14)
+		.extend(e15)
+		.extend(e16)
+		.extend(e17)
+		.extend(e18)
+		.extend(e19)
+		.extend(e20)
+		.extend(e21)
+		.extend(e22)
+		.extend(e23)
+		.extend(e24)
+		.extend(e25)
+		.extend(e26)
+		.extend(e27)
+		.extend(e28)
+		.extend(e29)
+		.extend(e30)
+		.extend(e31)
+		.extend(e32)
+		.extend(e33)
+		.extend(e34)
+		.extend(e35)
+		.extend(e36)
+		.extend(e37)
+		.extend(e38)
+		.extend(e39)
+		.extend(e40)
+		.extend(e41)
+		.extend(e42)
+		.extend(e43)
+		.extend(e44)
+		.extend(e45)
+		.extend(e46)
+		.extend(e47)
+		.extend(e48)
+		.extend(e49)
+		.extend(e50)
+		.extend(e51)
+		.extend(e52)
+		.extend(e53)
+		.extend(e54)
+		.extend(e55)
+		.extend(e56)
+		.extend(e57)
+		.extend(e58)
+		.extend(e59);
+	const last = app.run(["ec59"]);
+	type _last = Expect<Equal<typeof last, Promise<RunOutcome<void>>>>;
+	type Tree = (typeof app)["_types"]["tree"];
+	// The first command still inherits the last Extension's recursive flag.
+	type _inherited = Expect<Equal<"f59" extends keyof Tree["ec0"]["flags"] ? true : false, true>>;
+	app.action(({ ctx, flags }) => {
+		type _lastContext = Expect<Equal<Awaited<typeof ctx.p59>, number>>;
+		type _lastFlag = Expect<Equal<typeof flags.f59, boolean | undefined>>;
+	});
+}
+
 // A chain of 90+ `.extend()` calls must not hit TS2589: each call resolves its command tree.
 const chained0 = defineExtension(defineExtensionId("chained-0")).add(
 	defineCommand("chained-0", (command) =>
@@ -1530,4 +1604,39 @@ function _typecheckMixedLiteralAndDynamicAdd() {
 	);
 	const first = app.run(["mixed-0"]);
 	type _first = Expect<Equal<typeof first, Promise<RunOutcome<0>>>>;
+}
+
+// A runtime-only Extension command name opens the tree; recursive Extension flags still apply to it.
+function _typecheckRecursiveFlagsReachAnOpenTree(name: string) {
+	const open = defineExtension(defineExtensionId("open-recursive"))
+		.flags({ r: { type: "boolean" } })
+		.add(defineCommand(name, (command) => command));
+	const app = new Crust("open-recursive")
+		.add(defineCommand("known", (command) => command))
+		.extend(open);
+	// @ts-expect-error -- the recursive Extension flag is a boolean on every command
+	void app.run(["anything"], { flags: { r: "notbool" } });
+	void app.run(["anything"], { flags: { r: true } });
+}
+
+// Recursive flags registered before an opening `.extend()` still reach the opened tree.
+function _typecheckEarlierRecursiveFlagsReachALaterOpenTree(name: string) {
+	const trace = defineExtension(defineExtensionId("earlier-trace")).flags({
+		trace: { type: "boolean" },
+	});
+	const tools = defineExtension(defineExtensionId("earlier-tools")).add(
+		defineCommand("tool", (command) => command.action(() => 7 as const)),
+	);
+	const runtimeName = defineExtension(defineExtensionId("later-open")).add(
+		defineCommand(name, (command) => command),
+	);
+	const app = new Crust("earlier-recursive")
+		.add(defineCommand("known", (command) => command.action(() => 42 as const)))
+		.extend(tools, trace)
+		.extend(runtimeName);
+	// @ts-expect-error -- the earlier recursive flag is a boolean on the widened Extension command
+	void app.run(["tool"], { flags: { trace: "x" } });
+	// @ts-expect-error -- and on any runtime-only path
+	void app.run(["whatever"], { flags: { trace: "x" } });
+	void app.run(["known"], { flags: { trace: true } });
 }

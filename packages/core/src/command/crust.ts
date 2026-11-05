@@ -531,18 +531,23 @@ type TreeWithInheritedFlags<Tree, F extends FlagsDef> = {
 	[K in keyof Tree]: ShapeWithInheritedFlags<Tree[K], F>;
 };
 
-type ExtendedTree<
-	Tree,
-	Es extends readonly AnyExtension[],
-	RecursiveFlags extends FlagsDef,
-	InheritedFlags extends FlagsDef,
-	ExtensionCommandSpellings extends string,
-> = keyof RecursiveFlags extends never
-	? ExtensionCommandTree<Tree, Es, InheritedFlags, ExtensionCommandSpellings>
-	: TreeWithInheritedFlags<
-			ExtensionCommandTree<Tree, Es, InheritedFlags, ExtensionCommandSpellings>,
-			RecursiveFlags
-		>;
+// Recursive Extension flags reach every command at runtime, whenever it was added, so stored
+// shapes leave them out and readers apply the accumulated set once. Flagging the tree on each
+// `.extend()` nested one mapped type per call (TS2589 at about 50 calls), and resolving it
+// eagerly instead re-walked every existing command per call. Leaving them out also keeps the
+// stored tree independent of where `.add()` sits relative to `.extend()`.
+type TreeWithRecursiveFlags<Tree extends object, R extends FlagsDef> = keyof R extends never
+	? Tree
+	: TreeWithInheritedFlags<Tree, R>;
+
+/** The root shape that typed `run()`, `at()` and `_types` read. */
+type AppShape<
+	A extends ArgsDef,
+	F extends FlagsDef,
+	Tree extends object,
+	Result,
+	S extends AnyCollisionSpellings,
+> = CommandShape<A, F, TreeWithRecursiveFlags<Tree, AppRecursiveFlagsOf<S>>, Result>;
 
 // Extension commands join the tree like `.add()`: a colliding command is a definition error.
 // Resolving with `infer R` keeps a chain of `.extend()` calls from deferring one nested tree per
@@ -719,9 +724,11 @@ type CollisionSpellings<
 	// Root command spellings with precise tree entries contributed by Extensions. Only `.extend()`
 	// reads it (ExtensionCommandsOf); other steps pass it through unread, `undefined` included.
 	ExtensionCommandSpellings extends string | undefined = never,
+	RecursiveFlags extends FlagsDef = {},
 > = {
 	readonly actionDeps: ActionDeps;
 	readonly extensionCommands: ExtensionCommandSpellings;
+	readonly recursiveFlags: RecursiveFlags;
 	readonly pending: Pending;
 	readonly demands: Demands;
 	readonly extension: Extensions;
@@ -734,6 +741,7 @@ type CollisionSpellings<
 type AnyCollisionSpellings = {
 	readonly actionDeps?: ContextMap | undefined;
 	readonly extensionCommands?: string | undefined;
+	readonly recursiveFlags?: FlagsDef | undefined;
 	readonly pending: string;
 	readonly demands: ContextMap;
 	readonly extension: string;
@@ -760,6 +768,9 @@ type ExtensionCommandsOf<S extends AnyCollisionSpellings> = [S["extensionCommand
 ]
 	? E
 	: string;
+
+/** Recursive Extension flags registered so far; see `TreeWithRecursiveFlags`. */
+type AppRecursiveFlagsOf<S extends AnyCollisionSpellings> = Exclude<S["recursiveFlags"], undefined>;
 
 // Record spellings are derived from `Flags` on demand instead of accumulated in `Sp`.
 type AfterFlags<State extends BuilderState, F extends FlagsDef> = Crust<
@@ -820,7 +831,8 @@ type AfterUse<
 		MergeContext<RecipeDepsOf<CollisionSp>, ContextDependencies<Fs>>,
 		ProvidersOf<CollisionSp>,
 		ActionDepsOf<CollisionSp>,
-		CollisionSp["extensionCommands"]
+		CollisionSp["extensionCommands"],
+		AppRecursiveFlagsOf<CollisionSp>
 	>,
 	Result,
 	Meta,
@@ -857,7 +869,8 @@ type AfterProvide<
 		RecipeDepsOf<CollisionSp>,
 		MergeProviders<ProvidersOf<CollisionSp>, ContextsOutput<Cs>>,
 		ActionDepsOf<CollisionSp>,
-		CollisionSp["extensionCommands"]
+		CollisionSp["extensionCommands"],
+		AppRecursiveFlagsOf<CollisionSp>
 	>,
 	Result,
 	Meta,
@@ -906,13 +919,15 @@ type AfterExtend<
 	Meta extends RootCommandMeta | undefined,
 	Caps extends "app" | "recipe",
 > = Crust<
-	MergeFlags<Flags, ExtensionFlags<Es>>,
+	// `&`, not `MergeFlags`: re-instantiating an alias revisits its type arguments, so a chain of
+	// `.extend()` calls would nest one `MergeFlags<…>` level per call (TS2589 at about 100 calls).
+	Flags & ExtensionFlags<Es>,
 	A,
 	MergeProviders<Ctx, ExtensionsProvidesOutput<Es>>,
 	Sibs | KnownExtensionsCommandSpellings<Es>,
 	Sp | ExtensionsSpellings<Es>,
-	ExtendedTree<Tree, Es, RecursiveExtensionFlags<Es>, CtxFlags, ExtensionCommandsOf<CollisionSp>>,
-	MergeFlags<CtxFlags, RecursiveExtensionFlags<Es>>,
+	ExtensionCommandTree<Tree, Es, CtxFlags, ExtensionCommandsOf<CollisionSp>>,
+	CtxFlags,
 	CollisionSpellings<
 		CollisionSp["extension"] | ExtensionsSpellings<Es>,
 		CollisionSp["tree"] | KnownSpellings<DefinitionTreeSpellings<ExtensionCommands<Es>>>,
@@ -922,7 +937,8 @@ type AfterExtend<
 		MergeProviders<ProvidersOf<CollisionSp>, ExtensionsProvidesOutput<Es>>,
 		ActionDepsOf<CollisionSp>,
 		// An open call adds no precise entries (see ExtensionCommandTree).
-		ExtensionCommandsOf<CollisionSp> | KnownSpellings<ExtensionsCommandSpellings<Es>>
+		ExtensionCommandsOf<CollisionSp> | KnownSpellings<ExtensionsCommandSpellings<Es>>,
+		AppRecursiveFlagsOf<CollisionSp> & RecursiveExtensionFlags<Es>
 	>,
 	Result,
 	Meta,
@@ -949,7 +965,8 @@ type AfterAdd<
 		RecipeDepsOf<State["collision"]>,
 		ProvidersOf<State["collision"]>,
 		ActionDepsOf<State["collision"]>,
-		State["collision"]["extensionCommands"]
+		State["collision"]["extensionCommands"],
+		AppRecursiveFlagsOf<State["collision"]>
 	>,
 	State["result"],
 	State["meta"],
@@ -1066,9 +1083,9 @@ type MissingRootMetaBrand<E, Defined extends RootMetaKey> =
  * - `Sibs` — statically known sibling command names and aliases already registered
  * - `Sp` — accumulated flag spellings used for collision checks
  * - `Tree` — command shapes accumulated by `.add()` for typed `run()`
- * - `CtxFlags` — Context-owned flags accumulated by `.provide()` and recursive
- *   Extension flags accumulated by `.extend()`, inherited by the shapes of
- *   definitions added afterwards
+ * - `CtxFlags` — Context-owned flags accumulated by `.provide()`, inherited by
+ *   the shapes of definitions added afterwards (recursive Extension flags reach
+ *   every command and are applied where shapes are read; see `TreeWithRecursiveFlags`)
  * - `Result` — awaited return type of this command's action
  * - `Meta` — authored root metadata available to Extension requirements
  * - `Caps` — root application or configure-only recipe capabilities
@@ -1156,8 +1173,8 @@ export class Crust<
 		flags: Flags;
 		args: A;
 		ctx: Ctx;
-		tree: Tree;
-		shape: CommandShape<A, Flags, Tree, Result>;
+		tree: AppShape<A, Flags, Tree, Result, CollisionSp>["children"];
+		shape: AppShape<A, Flags, Tree, Result, CollisionSp>;
 		readonly rootMeta: Meta;
 		readonly caps: Caps;
 	};
@@ -1426,7 +1443,7 @@ export class Crust<
 		...extensions: Es & {
 			[I in keyof Es]: (ExtensionCommandDefs<Es[I]> extends ValidateDefinitionFlags<
 				ExtensionCommandDefs<Es[I]>,
-				LocalSpellingsOf<CtxFlags>
+				LocalSpellingsOf<CtxFlags & AppRecursiveFlagsOf<CollisionSp>>
 			>
 				? {}
 				: {
@@ -1529,14 +1546,16 @@ export class Crust<
 		this: StateReceiver<State>,
 		name: N & ChildCommandNameBrand<N> & CommandCollisionBrand<N, State["sibs"]>,
 		recipe: ((
+			// A recipe has no separate slot for recursive Extension flags, so it inherits them
+			// with the Context flags.
 			command: CommandDefinitionBuilder<
 				{},
 				[],
 				State["ctx"],
 				never,
-				LocalSpellingsOf<State["ctxFlags"]>,
+				LocalSpellingsOf<State["ctxFlags"] & AppRecursiveFlagsOf<State["collision"]>>,
 				{},
-				State["ctxFlags"]
+				State["ctxFlags"] & AppRecursiveFlagsOf<State["collision"]>
 			>,
 		) => B &
 			// Include nested children, whose flags are not in the seeded spelling set.
@@ -1648,23 +1667,25 @@ export class Crust<
 	// either would erase the partial literal editors use for completions (see `KnownCommandPath`).
 	run<const Path extends readonly string[]>(
 		this: RunWithoutInputThis<
-			CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>,
+			CommandShapeAt<AppShape<A, Flags, Tree, Result, CollisionSp>, Path>,
 			{ readonly _types: { readonly caps: "app" } }
 		>,
 		path: KnownCommandPath<Path, Tree>,
-	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
+	): Promise<
+		RunOutcome<CommandShapeAt<AppShape<A, Flags, Tree, Result, CollisionSp>, Path>["result"]>
+	>;
 	run<
 		const Path extends readonly string[],
 		// Resolving the shape once here keeps contextual typing of a literal `input` from
 		// re-walking the whole tree on every pass.
-		S extends CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path> = CommandShapeAt<
-			CommandShape<A, Flags, Tree, Result>,
+		S extends CommandShapeAt<AppShape<A, Flags, Tree, Result, CollisionSp>, Path> = CommandShapeAt<
+			AppShape<A, Flags, Tree, Result, CollisionSp>,
 			Path
 		>,
 		const Input extends RunInput<S> | OmittableRunInput<S> = RunInput<S>,
 	>(
 		// The reverse check also rejects explicit subtypes that narrow results or add flags.
-		this: [CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>] extends [S]
+		this: [CommandShapeAt<AppShape<A, Flags, Tree, Result, CollisionSp>, Path>] extends [S]
 			? { readonly _types: { readonly caps: "app" } }
 			: never,
 		path: KnownCommandPath<Path, Tree>,
@@ -1680,13 +1701,15 @@ export class Crust<
 		// input union so a valid branch cannot hide an invalid one.
 		...validation: [Input] extends [
 			CompatibleRunInput<
-				CommandShapeAt<CommandShape<A, Flags, Tree, Result>, NoInfer<Path>>,
+				CommandShapeAt<AppShape<A, Flags, Tree, Result, CollisionSp>, NoInfer<Path>>,
 				Input
 			>,
 		]
 			? readonly [options?: InvocationOptions]
 			: readonly [invalidInput: never]
-	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
+	): Promise<
+		RunOutcome<CommandShapeAt<AppShape<A, Flags, Tree, Result, CollisionSp>, Path>["result"]>
+	>;
 	async run(path: readonly string[], ...args: readonly unknown[]): Promise<RunOutcome<unknown>> {
 		return await runAt(this._node, path, args);
 	}
@@ -1705,7 +1728,7 @@ export class Crust<
 	at<const Path extends readonly string[]>(
 		this: { readonly _types: { readonly caps: "app" } },
 		path: KnownCommandPath<Path, Tree>,
-	): CommandHandle<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>>;
+	): CommandHandle<CommandShapeAt<AppShape<A, Flags, Tree, Result, CollisionSp>, Path>>;
 
 	at(path: readonly string[]): CommandHandle<CommandShape> {
 		resolveTypedPath(prepareInvocation(this._node, materializeCommandDefinition).rootNode, path);
