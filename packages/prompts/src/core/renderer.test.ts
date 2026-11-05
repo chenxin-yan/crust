@@ -12,7 +12,7 @@ import {
 	resolvePromptIO,
 	runPrompt,
 	submit,
-	withPromptIO,
+	withTerminalIO,
 } from "./renderer.ts";
 import { defaultTheme, defaultThemeFor } from "./theme.ts";
 import type { PromptTheme } from "./types.ts";
@@ -25,7 +25,7 @@ describe("resolvePromptIO", () => {
 
 		withAmbientTerminalIO({ stdout: () => {}, stderr: (text) => errors.push(text) }, () => {
 			expect(resolvePromptIO({ output: explicit }).output).toBe(explicit);
-			withPromptIO({ output: scoped }, () => {
+			withTerminalIO({ output: scoped }, () => {
 				expect(resolvePromptIO().output).toBe(scoped);
 			});
 		});
@@ -62,7 +62,7 @@ describe("assertTTY", () => {
 			configurable: true,
 		});
 		const harness = createPromptIO({ isTTY: false });
-		withPromptIO(harness.io, () => {
+		withTerminalIO(harness.io, () => {
 			expect(isTTY()).toBe(false);
 			expect(() => assertTTY()).toThrow(NonInteractiveError);
 		});
@@ -187,7 +187,7 @@ describe("runPrompt", () => {
 		expect(rawModes).toEqual([true, false]);
 	});
 
-	it("uses streams from withPromptIO", async () => {
+	it("uses streams from withTerminalIO", async () => {
 		const harness = createPromptIO();
 		const config: PromptConfig<{ value: string }, string> = {
 			render: (state) => state.value,
@@ -196,7 +196,7 @@ describe("runPrompt", () => {
 			theme: defaultTheme,
 		};
 
-		const answer = withPromptIO(harness.io, () => runPrompt(config));
+		const answer = withTerminalIO(harness.io, () => runPrompt(config));
 		harness.type("x");
 
 		expect(await answer).toBe("done");

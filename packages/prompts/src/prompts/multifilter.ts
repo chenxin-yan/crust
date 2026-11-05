@@ -5,7 +5,7 @@
 import type { FuzzyFilterResult } from "../core/fuzzy.ts";
 import { fuzzyFilter, highlightMatches } from "../core/fuzzy.ts";
 import { handleQueryListKey, setupListPrompt } from "../core/list.ts";
-import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
+import type { KeypressEvent, TerminalIO, SubmitResult } from "../core/renderer.ts";
 import { runPrompt, submit } from "../core/renderer.ts";
 import {
 	CHECKBOX_CHECKED,
@@ -232,17 +232,20 @@ function renderSubmitted<T>(
 // Narrowing overloads — see `select` for the pattern rationale.
 export function multifilter<const C extends readonly [Choice<unknown>, ...Choice<unknown>[]]>(
 	options: MultifilterOptions<ChoiceValue<C>> & { readonly choices: C },
-	io?: PromptIO,
+	io?: TerminalIO,
 ): Promise<ChoiceValue<C>[]>;
 export function multifilter<const C extends readonly string[]>(
 	options: MultifilterOptions<string> & { readonly choices: C & NotChoiceTuple<C> },
-	io?: PromptIO,
+	io?: TerminalIO,
 ): Promise<string[]>;
 export function multifilter<T, const C extends readonly Choice<T>[] = readonly Choice<T>[]>(
 	options: MultifilterOptions<T> & { readonly choices: C & NotChoiceTuple<C> },
-	io?: PromptIO,
+	io?: TerminalIO,
 ): Promise<T[]>;
-export async function multifilter<T>(options: MultifilterOptions<T>, io?: PromptIO): Promise<T[]> {
+export async function multifilter<T>(
+	options: MultifilterOptions<T>,
+	io?: TerminalIO,
+): Promise<T[]> {
 	const setup = await setupListPrompt<T, readonly T[]>(options, options.default ?? [], io);
 	if (setup.shortCircuited) return [...setup.value];
 

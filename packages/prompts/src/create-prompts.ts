@@ -2,7 +2,7 @@
 // createPrompts — themed prompt instance factory for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { PromptIO } from "./core/renderer.ts";
+import type { TerminalIO } from "./core/renderer.ts";
 import { defaultTheme } from "./core/theme.ts";
 import type { PartialPromptTheme, PromptTheme } from "./core/types.ts";
 import { type ConfirmOptions, confirm } from "./prompts/confirm.ts";
@@ -73,15 +73,15 @@ export function createPrompts(options: CreatePromptsOptions = {}): PromptsInstan
 	return {
 		theme: { ...defaultTheme, ...overrides },
 		// SAFETY: adding an optional theme preserves every input overload's options and return type.
-		input: ((opts?: InputOptions<unknown>, io?: PromptIO) =>
+		input: ((opts?: InputOptions<unknown>, io?: TerminalIO) =>
 			input(themed(opts ?? {}) as never, io)) as typeof input,
 		// SAFETY: adding an optional theme preserves every password overload's options and return type.
-		password: ((opts?: PasswordOptions<unknown>, io?: PromptIO) =>
+		password: ((opts?: PasswordOptions<unknown>, io?: TerminalIO) =>
 			password(themed(opts ?? {}) as never, io)) as typeof password,
-		confirm: (opts: ConfirmOptions, io?: PromptIO) => confirm(themed(opts), io),
-		select: <T>(opts: SelectOptions<T>, io?: PromptIO) => select(themed(opts), io),
-		multiselect: <T>(opts: MultiselectOptions<T>, io?: PromptIO) => multiselect(themed(opts), io),
-		filter: <T>(opts: FilterOptions<T>, io?: PromptIO) => filter(themed(opts), io),
-		multifilter: <T>(opts: MultifilterOptions<T>, io?: PromptIO) => multifilter(themed(opts), io),
+		confirm: (opts: ConfirmOptions, io?: TerminalIO) => confirm(themed(opts), io),
+		select: <T>(opts: SelectOptions<T>, io?: TerminalIO) => select(themed(opts), io),
+		multiselect: <T>(opts: MultiselectOptions<T>, io?: TerminalIO) => multiselect(themed(opts), io),
+		filter: <T>(opts: FilterOptions<T>, io?: TerminalIO) => filter(themed(opts), io),
+		multifilter: <T>(opts: MultifilterOptions<T>, io?: TerminalIO) => multifilter(themed(opts), io),
 	};
 }

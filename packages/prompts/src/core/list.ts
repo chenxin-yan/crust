@@ -1,6 +1,6 @@
 import type { FuzzyFilterResult } from "./fuzzy.ts";
 import { fuzzyFilter } from "./fuzzy.ts";
-import type { KeypressEvent, PromptIO } from "./renderer.ts";
+import type { KeypressEvent, TerminalIO } from "./renderer.ts";
 import { resolveShortCircuit } from "./short-circuit.ts";
 import { handleTextEdit } from "./text-edit.ts";
 import type { Choice } from "./types.ts";
@@ -28,14 +28,14 @@ type ListPromptSetup<T, Answer extends T | readonly T[]> =
 			readonly cursor: number;
 			readonly scrollOffset: number;
 			readonly selected: ReadonlySet<number>;
-			readonly promptIO: Required<PromptIO>;
+			readonly promptIO: Required<TerminalIO>;
 	  };
 
 /** @internal Resolve the shared lifecycle and initial viewport for list prompts. */
 export async function setupListPrompt<T, Answer extends T | readonly T[]>(
 	options: ListPromptOptions<T, Answer>,
 	defaults: readonly T[],
-	io?: PromptIO,
+	io?: TerminalIO,
 ): Promise<ListPromptSetup<T, Answer>> {
 	const shortCircuit = await resolveShortCircuit(options, io);
 	if (shortCircuit.shortCircuited) return shortCircuit;

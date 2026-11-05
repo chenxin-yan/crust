@@ -19,19 +19,11 @@ import type { PartialPromptTheme, PromptTheme } from "./types.ts";
 // Types
 // ────────────────────────────────────────────────────────────────────────────
 
-/** A readable stream that can drive an interactive terminal prompt. */
-export type PromptInput = TerminalInput;
-
-/** A writable stream that receives prompt output. */
-export type PromptOutput = TerminalOutput;
-
-/** Streams used to render and receive input for a prompt. */
-export type PromptIO = TerminalIO;
-
-export { withTerminalIO, withTerminalIO as withPromptIO } from "@crustjs/utils/terminal";
+export type { TerminalInput, TerminalIO, TerminalOutput } from "@crustjs/utils/terminal";
+export { withTerminalIO } from "@crustjs/utils/terminal";
 
 /** Resolve explicit, ambient, then process-global streams. */
-export function resolvePromptIO(io?: PromptIO): Required<PromptIO> {
+export function resolvePromptIO(io?: TerminalIO): Required<TerminalIO> {
 	const ambient = getTerminalIO();
 	return {
 		input: io?.input ?? ambient?.input ?? process.stdin,
@@ -122,9 +114,9 @@ export interface PromptConfig<S, T> {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Tracks active prompts so a stream can only drive one prompt at a time. */
-const activeInputs = new WeakSet<PromptInput>();
+const activeInputs = new WeakSet<TerminalInput>();
 /** Tracks active outputs — concurrent frames on one stream would erase each other. */
-const activeOutputs = new WeakSet<PromptOutput>();
+const activeOutputs = new WeakSet<TerminalOutput>();
 
 // ────────────────────────────────────────────────────────────────────────────
 // ANSI escape sequences
@@ -174,7 +166,7 @@ export class NonInteractiveError extends Error {
  * Check whether the resolved prompt input is an interactive TTY.
  * @returns `true` if the input is a TTY, `false` otherwise
  */
-export function isTTY(input: Pick<PromptInput, "isTTY"> = resolvePromptIO().input): boolean {
+export function isTTY(input: Pick<TerminalInput, "isTTY"> = resolvePromptIO().input): boolean {
 	return !!input.isTTY;
 }
 
@@ -182,7 +174,7 @@ export function isTTY(input: Pick<PromptInput, "isTTY"> = resolvePromptIO().inpu
  * Check that the resolved prompt input is an interactive TTY.
  * @throws {NonInteractiveError} when the input is not a TTY
  */
-export function assertTTY(input: Pick<PromptInput, "isTTY"> = resolvePromptIO().input): void {
+export function assertTTY(input: Pick<TerminalInput, "isTTY"> = resolvePromptIO().input): void {
 	if (!isTTY(input)) {
 		throw new NonInteractiveError();
 	}
@@ -230,11 +222,11 @@ function isSubmit<S, T>(result: HandleKeyResult<S, T>): result is SubmitResult<T
  * });
  * ```
  */
-export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Promise<T> {
+export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Promise<T> {
 	const { render, handleKey, initialState, renderSubmitted } = config;
 	const { input: stdin, output } = resolvePromptIO(io);
 	const theme = { ...defaultThemeFor(output), ...config.theme };
-	// SAFETY: readline's cursor helpers only call write(), which PromptOutput provides.
+	// SAFETY: readline's cursor helpers only call write(), which TerminalOutput provides.
 	const readlineOutput = output as NodeJS.WritableStream;
 
 	return new Promise<T>((resolve, reject) => {

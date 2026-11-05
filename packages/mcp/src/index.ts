@@ -8,7 +8,6 @@ export {
 	renderClientConfig,
 	resolveLaunch,
 } from "./extension.ts";
-export type { McpServerOptions } from "./server.ts";
 export {
 	DEFAULT_SERVER_VERSION,
 	createMcpServer,

@@ -3,7 +3,7 @@ import { stripVTControlCharacters } from "node:util";
 
 import { stringWidth } from "@crustjs/style";
 
-import type { PromptIO } from "./core/renderer.ts";
+import type { TerminalIO } from "./core/renderer.ts";
 
 const namedKeys = {
 	return: "\r",
@@ -167,7 +167,7 @@ class FakeTerminal {
 }
 
 export interface PromptTestIO {
-	readonly io: Required<PromptIO>;
+	readonly io: Required<TerminalIO>;
 	type(text: string): void;
 	keys(...namedKeys: Key[]): void;
 	screen(): string;
@@ -223,7 +223,7 @@ export interface RenderedPrompt<Answer> {
 
 /** Run a prompt function against fake TTY streams and expose terminal-style controls. */
 export function renderPrompt<Options, Answer>(
-	prompt: (options: Options, io?: PromptIO) => Promise<Answer>,
+	prompt: (options: Options, io?: TerminalIO) => Promise<Answer>,
 	options: Options,
 ): RenderedPrompt<Answer> {
 	const harness = createPromptIO();

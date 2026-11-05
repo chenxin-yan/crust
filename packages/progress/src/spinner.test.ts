@@ -2,7 +2,7 @@ import { setTimeout as tick } from "node:timers/promises";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { type ProgressSink, spinner, withProgressSink } from "./spinner.ts";
+import { type TerminalOutput, spinner, withTerminalIO } from "./spinner.ts";
 import { createFakeSink } from "./test-helpers.ts";
 import { defaultTheme, defaultThemeFor } from "./theme.ts";
 
@@ -10,7 +10,7 @@ import { defaultTheme, defaultThemeFor } from "./theme.ts";
 beforeAll(() => vi.stubEnv("FORCE_COLOR", "0"));
 afterAll(() => vi.unstubAllEnvs());
 
-let sink: ProgressSink;
+let sink: TerminalOutput;
 let writes: string[];
 
 beforeEach(() => {
@@ -230,10 +230,10 @@ describe("spinner — sink resolution", () => {
 		}
 	});
 
-	it("routes output to the ambient withProgressSink sink", () => {
+	it("routes output to the ambient withTerminalIO output", () => {
 		const { sink, writes } = createFakeSink(false);
 
-		withProgressSink(sink, () => {
+		withTerminalIO({ output: sink }, () => {
 			const handle = spinner({ message: "Ambient" });
 			handle.start();
 			handle.stop();
@@ -246,7 +246,7 @@ describe("spinner — sink resolution", () => {
 		const ambient = createFakeSink(false);
 		const explicit = createFakeSink(false);
 
-		withProgressSink(ambient.sink, () => {
+		withTerminalIO({ output: ambient.sink }, () => {
 			const handle = spinner({ message: "Explicit", sink: explicit.sink });
 			handle.start();
 			handle.stop();
@@ -259,7 +259,7 @@ describe("spinner — sink resolution", () => {
 	it("a handle created inside the scope keeps its sink when stopped outside", () => {
 		const { sink, writes } = createFakeSink(false);
 
-		const handle = withProgressSink(sink, () => spinner({ message: "Escaped" }));
+		const handle = withTerminalIO({ output: sink }, () => spinner({ message: "Escaped" }));
 		handle.start();
 		handle.stop();
 
@@ -505,7 +505,7 @@ describe("spinner — cleanup", () => {
 	function stopWithFailingRestore(theme?: { success: () => never }) {
 		const previousHandlers = process.listeners("SIGINT");
 		const { sink: recording, writes } = createFakeSink(true);
-		const failingRestore: ProgressSink = {
+		const failingRestore: TerminalOutput = {
 			isTTY: true,
 			write: (text) => {
 				recording.write(text);

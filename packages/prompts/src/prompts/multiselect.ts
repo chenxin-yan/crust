@@ -3,7 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { setupListPrompt } from "../core/list.ts";
-import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
+import type { KeypressEvent, TerminalIO, SubmitResult } from "../core/renderer.ts";
 import { runPrompt, submit } from "../core/renderer.ts";
 import {
 	CHECKBOX_CHECKED,
@@ -291,17 +291,20 @@ function renderSubmitted<T>(
 // Narrowing overloads — see `select` for the pattern rationale.
 export function multiselect<const C extends readonly [Choice<unknown>, ...Choice<unknown>[]]>(
 	options: MultiselectOptions<ChoiceValue<C>> & { readonly choices: C },
-	io?: PromptIO,
+	io?: TerminalIO,
 ): Promise<ChoiceValue<C>[]>;
 export function multiselect<const C extends readonly string[]>(
 	options: MultiselectOptions<string> & { readonly choices: C & NotChoiceTuple<C> },
-	io?: PromptIO,
+	io?: TerminalIO,
 ): Promise<string[]>;
 export function multiselect<T, const C extends readonly Choice<T>[] = readonly Choice<T>[]>(
 	options: MultiselectOptions<T> & { readonly choices: C & NotChoiceTuple<C> },
-	io?: PromptIO,
+	io?: TerminalIO,
 ): Promise<T[]>;
-export async function multiselect<T>(options: MultiselectOptions<T>, io?: PromptIO): Promise<T[]> {
+export async function multiselect<T>(
+	options: MultiselectOptions<T>,
+	io?: TerminalIO,
+): Promise<T[]> {
 	const setup = await setupListPrompt<T, readonly T[]>(options, options.default ?? [], io);
 	if (setup.shortCircuited) return [...setup.value];
 

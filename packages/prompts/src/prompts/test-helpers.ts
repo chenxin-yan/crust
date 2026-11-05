@@ -1,4 +1,4 @@
-import type { PromptIO } from "../core/renderer.ts";
+import type { TerminalIO } from "../core/renderer.ts";
 import { createPromptIO, type RenderedPrompt } from "../testing.ts";
 
 export function tick(ms = 10): Promise<void> {
@@ -22,7 +22,7 @@ export async function waitForScreen(
 	}
 }
 
-export function nonTTYIO(): Required<PromptIO> {
+export function nonTTYIO(): Required<TerminalIO> {
 	return createPromptIO({ isTTY: false }).io;
 }
 

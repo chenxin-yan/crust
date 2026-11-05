@@ -28,19 +28,17 @@ export type {
 	HandleKeyResult,
 	KeypressEvent,
 	PromptConfig,
-	PromptIO,
-	PromptInput,
-	PromptOutput,
 	SubmitResult,
+	TerminalInput,
+	TerminalIO,
+	TerminalOutput,
 } from "./core/renderer.ts";
 export {
 	assertTTY,
 	isTTY,
 	NonInteractiveError,
-	resolvePromptIO,
 	runPrompt,
 	submit,
-	withPromptIO,
 	withTerminalIO,
 } from "./core/renderer.ts";
 

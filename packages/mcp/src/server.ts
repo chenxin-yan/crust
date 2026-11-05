@@ -6,8 +6,6 @@ import type { CallToolRequestParams, CallToolResult } from "@modelcontextprotoco
 
 import { type McpTool, type McpToolsOptions, RAW_PROPERTY, toolsFromSnapshot } from "./tools.ts";
 
-export type McpServerOptions = McpToolsOptions;
-
 /** Server `version` when the root command declares none; the SDK requires one. */
 export const DEFAULT_SERVER_VERSION = "0.0.0";
 
@@ -197,7 +195,7 @@ function parseToolArguments(tool: McpTool, values: ToolArguments): RunInputPaylo
  */
 export async function createMcpServer(
 	app: AnyCrust,
-	options: McpServerOptions = {},
+	options: McpToolsOptions = {},
 ): Promise<Server> {
 	const snapshot = await app.snapshot();
 	const tools = toolsFromSnapshot(snapshot, options);

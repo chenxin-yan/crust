@@ -2,7 +2,7 @@
 // Confirm — Yes/no boolean confirmation prompt for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
+import type { KeypressEvent, TerminalIO, SubmitResult } from "../core/renderer.ts";
 import { runPrompt, submit } from "../core/renderer.ts";
 import { resolveShortCircuit } from "../core/short-circuit.ts";
 import {
@@ -186,7 +186,7 @@ function renderSubmitted(
  * });
  * ```
  */
-export async function confirm(options: ConfirmOptions, io?: PromptIO): Promise<boolean> {
+export async function confirm(options: ConfirmOptions, io?: TerminalIO): Promise<boolean> {
 	const shortCircuit = await resolveShortCircuit(options, io);
 	if (shortCircuit.shortCircuited) return shortCircuit.value;
 	const { promptIO } = shortCircuit;

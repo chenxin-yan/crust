@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 
 import { progress as createProgressBar } from "./progress.ts";
-import { withProgressSink } from "./spinner.ts";
+import { withTerminalIO } from "./spinner.ts";
 import { createFakeSink } from "./test-helpers.ts";
 
 beforeAll(() => vi.stubEnv("FORCE_COLOR", "0"));
@@ -56,7 +56,7 @@ describe("progress — determinate", () => {
 });
 
 describe("progress — sink resolution", () => {
-	it("honors sink from options and the ambient withProgressSink sink", () => {
+	it("honors sink from options and the ambient withTerminalIO output", () => {
 		const option = createFakeSink(false);
 		const ambient = createFakeSink(false);
 
@@ -69,7 +69,7 @@ describe("progress — sink resolution", () => {
 		viaOption.advance();
 		viaOption.stop();
 
-		withProgressSink(ambient.sink, () => {
+		withTerminalIO({ output: ambient.sink }, () => {
 			const viaAmbient = createProgressBar({ message: "Sync", total: 2 });
 			viaAmbient.start();
 			viaAmbient.stop();

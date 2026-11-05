@@ -5,7 +5,7 @@
 import type { FuzzyFilterResult } from "../core/fuzzy.ts";
 import { fuzzyFilter, highlightMatches } from "../core/fuzzy.ts";
 import { handleQueryListKey, setupListPrompt } from "../core/list.ts";
-import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
+import type { KeypressEvent, TerminalIO, SubmitResult } from "../core/renderer.ts";
 import { runPrompt, submit } from "../core/renderer.ts";
 import { CURSOR_INDICATOR, PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { renderTextWithCursor } from "../core/text-edit.ts";
@@ -199,17 +199,17 @@ function renderSubmitted<T>(
 // Narrowing overloads — see `select` for the pattern rationale.
 export function filter<const C extends readonly [Choice<unknown>, ...Choice<unknown>[]]>(
 	options: FilterOptions<ChoiceValue<C>> & { readonly choices: C },
-	io?: PromptIO,
+	io?: TerminalIO,
 ): Promise<ChoiceValue<C>>;
 export function filter<const C extends readonly string[]>(
 	options: FilterOptions<string> & { readonly choices: C & NotChoiceTuple<C> },
-	io?: PromptIO,
+	io?: TerminalIO,
 ): Promise<string>;
 export function filter<T, const C extends readonly Choice<T>[] = readonly Choice<T>[]>(
 	options: FilterOptions<T> & { readonly choices: C & NotChoiceTuple<C> },
-	io?: PromptIO,
+	io?: TerminalIO,
 ): Promise<T>;
-export async function filter<T>(options: FilterOptions<T>, io?: PromptIO): Promise<T> {
+export async function filter<T>(options: FilterOptions<T>, io?: TerminalIO): Promise<T> {
 	const setup = await setupListPrompt<T, T>(
 		options,
 		options.default === undefined ? [] : [options.default],

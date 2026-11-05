@@ -86,18 +86,11 @@ describe("planBuild", () => {
 		});
 	});
 
-	it("requires an explicit artifact kind, with migration guidance naming the old implicit output", () => {
+	it("requires an explicit artifact kind", () => {
 		expect(() => planBuild(baseFlags, tmpDir)).toThrow(
 			'crust build needs an artifact kind: pass --artifact package|binary or set package.json "crust": { "artifact": "package" | "binary" }.',
 		);
-		expect(() => planBuild(baseFlags, tmpDir)).toThrow(
-			'Earlier versions built a binary for the bun runtime implicitly; set "artifact": "binary" to keep that output.',
-		);
-		writePackageJson({ devDependencies: { "@types/node": "^22" } });
-		expect(() => planBuild(baseFlags, tmpDir)).toThrow(
-			'Earlier versions built a package for the node runtime implicitly; set "artifact": "package"',
-		);
-		// Checked before bin entries, so the migration error is what an old project sees first.
+		// Checked before bin entries.
 		writePackageJson({ bin: { cli: "src/missing.ts" } });
 		expect(() => planBuild(baseFlags, tmpDir)).toThrow("crust build needs an artifact kind");
 		// Programmatic callers are validated like the CLI's choices.

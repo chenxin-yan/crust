@@ -2,7 +2,7 @@ import { Terminal } from "@xterm/headless";
 import { describe, expect, it } from "vite-plus/test";
 
 import { progress } from "./progress.ts";
-import { spinner, type ProgressSink } from "./spinner.ts";
+import { spinner, type TerminalOutput } from "./spinner.ts";
 
 /** A spinner drawing into an xterm screen, plus that screen's logical lines. */
 function setup(columns: number, reflowCursorLine: boolean, message: string) {
@@ -84,7 +84,7 @@ describe("spinner frame wider than the row", () => {
 		[
 			string,
 			number,
-			(sink: ProgressSink) => { start(): void; redraw(): void; stop(): void },
+			(sink: TerminalOutput) => { start(): void; redraw(): void; stop(): void },
 			string,
 		]
 	>([

@@ -474,18 +474,8 @@ export type BuildPlan = CommonBuildPlan &
 		| { runtime: BuildRuntime; artifact: "package" }
 	);
 
-/** What earlier releases built for each runtime without being asked; quoted in the migration error. */
-const IMPLICIT_ARTIFACTS = {
-	bun: "binary",
-	node: "package",
-} as const satisfies Record<BuildRuntime, ArtifactKind>;
-
 /** `option` (the `artifact` build option or `--artifact`) > package.json `crust.artifact`; no default. */
-function resolveArtifact(
-	option: ArtifactKind | undefined,
-	config: CrustConfig,
-	runtime: BuildRuntime,
-): ArtifactKind {
+function resolveArtifact(option: ArtifactKind | undefined, config: CrustConfig): ArtifactKind {
 	if (option !== undefined && !isArtifactKind(option)) {
 		throw new Error(
 			`Invalid artifact ${JSON.stringify(option)}. Valid artifacts: ${ARTIFACT_KINDS.join(", ")}`,
@@ -493,12 +483,10 @@ function resolveArtifact(
 	}
 	const artifact = option ?? config.artifact;
 	if (artifact === undefined) {
-		const previous = IMPLICIT_ARTIFACTS[runtime];
 		throw new Error(
 			`crust build needs an artifact kind: pass --artifact package|binary or set package.json "crust": { "artifact": "package" | "binary" }.\n` +
 				"  package: one JavaScript bundle per command that runs on the consumer's installed runtime.\n" +
-				"  binary: standalone executables in per-platform npm packages behind a Node launcher.\n" +
-				`  Earlier versions built a ${previous} for the ${runtime} runtime implicitly; set "artifact": "${previous}" to keep that output.`,
+				"  binary: standalone executables in per-platform npm packages behind a Node launcher.",
 		);
 	}
 
@@ -509,7 +497,7 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 	const userPackageJson = readUserPackageJson(cwd);
 	const config = readCrustConfig(userPackageJson);
 	const { runtime, source: runtimeSource } = resolveBuildRuntime(userPackageJson, config);
-	const artifact = resolveArtifact(options.artifact, config, runtime);
+	const artifact = resolveArtifact(options.artifact, config);
 	const entries = resolveBinEntries(cwd, userPackageJson);
 	validatePackageIdentity(userPackageJson, "package.json");
 	const envFiles = resolveEnvFilePaths(cwd, options.envFiles);
