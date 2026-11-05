@@ -82,5 +82,13 @@ export type AppendArgsChecks<A extends ArgsDef, NewA extends ArgsDef> = A extend
 		: ValidateArgs<NewA, ArgNames<A>>
 	: ValidateArgs<NewA>;
 
+/** Errors-only view of {@link AppendArgsChecks}: `unknown` when no element carries a `FIX_*` brand. */
+export type AppendArgsErrors<A extends ArgsDef, NewA extends ArgsDef> =
+	AppendArgsChecks<A, NewA> extends infer C extends readonly unknown[]
+		? [{ [I in keyof C]: keyof C[I] & `FIX_${string}` }[number]] extends [never]
+			? unknown
+			: C
+		: never;
+
 /** Conditional collections and uncertain canonical identities cannot promise every alternative output key. */
 export type AttachedArgs<A extends ArgsDef> = HasClosedNames<A> extends true ? A : ArgsDef;

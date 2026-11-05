@@ -1,5 +1,6 @@
 import type { DefiningOf } from "../api/context.ts";
 import type { CommandDefinitionData } from "../command/crust.ts";
+import type { commandDefinitionInternal } from "../command/node.ts";
 import type {
 	ClosedMembers,
 	CollisionBrand,
@@ -195,7 +196,34 @@ export type CommandCollisionBrand<
 export type ValidateCommandDefinitions<
 	Ds extends readonly unknown[],
 	Existing extends string = never,
-> = UnionToIntersection<CommandDefinitionsErrors<Ds, Existing>>;
+> = UnionToIntersection<
+	Ds extends unknown
+		? number extends Ds["length"]
+			? CommandDefinitionsErrors<Ds, Existing>
+			: CommandInfoErrors<
+					{
+						[I in keyof Ds]: readonly [
+							CommandDefinitionSpellings<Ds[I]>,
+							ChildCommandNameBrand<DefNameMembers<Ds[I]>> & SelfAliasBrand<Ds[I]>,
+						];
+					},
+					Existing
+				>
+		: never
+>;
+
+// Walks precomputed per-definition spellings and local errors: recursing over the
+// definitions themselves re-instantiates the remaining tuple on every step (O(n^2)).
+type CommandInfoErrors<Is, Existing extends string> = Is extends readonly [
+	readonly [infer S extends string, infer Own],
+	...infer T,
+]
+	? CommandCollisionBrand<S, Existing> & Own extends infer E
+		? {} extends E
+			? CommandInfoErrors<T, Existing | S>
+			: E
+		: never
+	: {};
 
 type CommandDefinitionsErrors<
 	Ds extends readonly unknown[],
@@ -283,7 +311,30 @@ export type LocalSectionsBrand<C> = "sections" extends keyof C
 export type LocalCommandConfigBrand<N extends string, C> = ValidateCommandConfig<N, C> &
 	LocalSectionsBrand<C>;
 
-export type AttachedCommandSpellings<Ds extends readonly unknown[]> = [Ds] extends [readonly []]
+// Fast path for the common `.add(def)`: one definition with a closed, non-union name. A
+// conditional definition keeps the slow path even when its variants share a name.
+export type AttachedCommandSpellings<Ds extends readonly unknown[]> = [Ds] extends [
+	readonly [
+		{
+			readonly name: infer N extends string;
+			readonly [commandDefinitionInternal]: {
+				readonly _aliases?: infer Al extends readonly string[];
+			};
+		},
+	],
+]
+	? IsUnion<N> extends true
+		? AttachedCommandSpellingsSlow<Ds>
+		: IsUnion<Ds[number]> extends true
+			? AttachedCommandSpellingsSlow<Ds>
+			: IsClosedName<N> extends true
+				? IsClosedName<Al[number]> extends true
+					? N | Al[number]
+					: string
+				: AttachedCommandSpellingsSlow<Ds>
+	: AttachedCommandSpellingsSlow<Ds>;
+
+type AttachedCommandSpellingsSlow<Ds extends readonly unknown[]> = [Ds] extends [readonly []]
 	? never
 	: IsStaticTuple<Ds> extends true
 		? HasClosedNames<Ds> extends true

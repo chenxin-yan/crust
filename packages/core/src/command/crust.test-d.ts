@@ -194,6 +194,24 @@ function _typecheckAcceptsCrossAliasedDefinitionUnion(condition: boolean) {
 	void new Crust("app").add(condition ? x : y);
 }
 
+// same-name conditional definitions stay runtime-only, like any conditional definition
+function _typecheckSameNameConditionalDefinitionsStayRuntimeOnly(condition: boolean) {
+	const a = defineCommand("task", (c) => c.command("a", (x) => x));
+	const b = defineCommand("task", (c) => c.command("b", (x) => x));
+	const tree = new Crust("cli").add(condition ? a : b);
+	void tree.run(["task", "a"]);
+	void tree.run(["task", "b"]);
+
+	const left = defineCommand("same", { aliases: ["left"] }, (c) => c);
+	const right = defineCommand("same", { aliases: ["right"] }, (c) => c);
+	const element = new Crust("cli").add(condition ? left : right);
+	void element.add(defineCommand("left", (c) => c));
+	void element.run(["runtime-only"]);
+	const spread = new Crust("cli").add(...(condition ? ([left] as const) : ([right] as const)));
+	void spread.add(defineCommand("left", (c) => c));
+	void spread.run(["runtime-only"]);
+}
+
 // types pulled capabilities and local values in actions
 function _typecheckTypesPulledCapabilitiesAndLocalValuesInActions() {
 	const verbose = defineFlag("verbose", { type: "boolean" });
