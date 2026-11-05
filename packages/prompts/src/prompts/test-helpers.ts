@@ -1,25 +1,19 @@
 import type { TerminalIO } from "../core/renderer.ts";
-import { createPromptIO, type RenderedPrompt } from "../testing.ts";
+import { createPromptIO } from "../testing.ts";
 
-export function tick(ms = 10): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-export async function waitForScreen(
-	prompt: Pick<RenderedPrompt<unknown>, "screen">,
-	needle: string,
-	timeout = 500,
-): Promise<void> {
-	const start = Date.now();
-	while (!prompt.screen().includes(needle)) {
-		if (Date.now() - start > timeout) {
-			throw new Error(
-				`screen never contained ${JSON.stringify(needle)} within ${timeout}ms. ` +
-					`Got: ${JSON.stringify(prompt.screen())}`,
-			);
-		}
-		await tick(5);
-	}
+/**
+ * Wait until the prompt has handled all input written so far and drawn the resulting frame.
+ *
+ * Keypresses are processed on nextTicks/microtasks, and the renderer then defers the frame with
+ * `setTimeout(0)`. `setImmediate` resolves only after that chain drains, so the `setTimeout(0)`
+ * queued from it lands behind the frame timer in the same timer list. A fixed sleep instead
+ * races the frame: Node stamps each timer when it is created, so a stall on a loaded machine
+ * lets the sleep expire first. This holds only while key handling settles on microtasks: a
+ * handler that awaits a timer or I/O (such as a validator with a delay) needs an explicit wait.
+ */
+export async function tick(): Promise<void> {
+	await new Promise<void>((resolve) => setImmediate(resolve));
+	await new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
 export function nonTTYIO(): Required<TerminalIO> {

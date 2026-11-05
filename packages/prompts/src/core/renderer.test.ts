@@ -3,6 +3,7 @@ import { PassThrough, Writable } from "node:stream";
 import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
+import { tick } from "../prompts/test-helpers.ts";
 import { createPromptIO } from "../testing.ts";
 import {
 	assertTTY,
@@ -442,7 +443,7 @@ describe("runPrompt", () => {
 		);
 		const before = raw;
 		pending.resolve(submit("old"));
-		await new Promise((resolve) => setTimeout(resolve, 10));
+		await tick();
 		const after = raw;
 		harness.keys("return");
 		expect(await replacement).toBe("done");
@@ -499,9 +500,9 @@ describe("runPrompt", () => {
 		const harness = createPromptIO();
 		const promise = runPrompt(config, harness.io);
 		harness.type("a");
-		await new Promise((r) => setTimeout(r, 10));
+		await tick();
 		harness.type("b");
-		await new Promise((r) => setTimeout(r, 10));
+		await tick();
 		harness.type("c");
 
 		await promise;
@@ -523,7 +524,7 @@ describe("runPrompt", () => {
 		expect(harness.screen()).toBe(`above\n? ${"x".repeat(78)}\n${"x".repeat(22)}`);
 
 		harness.type("a");
-		await new Promise((r) => setTimeout(r, 10));
+		await tick();
 		expect(harness.screen()).toBe("above\n? short");
 
 		harness.keys("return");
