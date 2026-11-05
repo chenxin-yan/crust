@@ -1429,10 +1429,10 @@ export class Crust<
 	extend<const Es extends readonly AnyExtension[], _Union extends this = never>(
 		this: { readonly _types: { readonly caps: "app" } },
 		...extensions: Es & {
-			// Flags inherited so far; same-call and later Extension flags check these commands through
-			// `ValidateExtensionFlags`'s `Below` set.
 			[I in keyof Es]: (ExtensionCommandDefs<Es[I]> extends ValidateDefinitionFlags<
 				ExtensionCommandDefs<Es[I]>,
+				// Flags inherited so far; same-call and later Extension flags check these commands
+				// through `ValidateExtensionFlags`'s `Below` set.
 				CollisionSp["extension"] | KnownSpellings<LocalSpellingsOf<CtxFlags>>
 			>
 				? {}

@@ -550,3 +550,32 @@ function _typecheckOpenRecursiveFlagsKeepKnownChildChecks(dynamic: Record<string
 	};
 	void invalid;
 }
+
+// A possibly-recursive flag or an open record in an Extension doesn't hide its other recursive flags.
+function _typecheckRecursiveFlagsBesideUncertainOnes(
+	maybe: boolean,
+	dynamic: Record<string, FlagDef>,
+) {
+	const mixed = defineExtension(defineExtensionId("mixed-recursive")).flags({
+		trace: { type: "boolean" },
+		maybe: { type: "string", recursive: maybe },
+	});
+	const traced = defineCommand("traced", (command) => command.flags({ trace: { type: "string" } }));
+	// @ts-expect-error -- "trace" is recursive, so it collides with the child's own flag
+	void new Crust("app").extend(mixed).add(traced);
+	void new Crust("app")
+		.extend(mixed)
+		// @ts-expect-error -- and with an inline command's flag
+		.command("inline", (command) => command.flags({ trace: { type: "string" } }));
+	// @ts-expect-error -- and with a child added before the Extension
+	void new Crust("app").add(traced).extend(mixed);
+
+	const owner = defineContext("owner-ctx")
+		.flags({ pflag: { type: "string" } })
+		.setup(() => 1);
+	const open = defineExtension(defineExtensionId("open-provider")).flags(dynamic).provide(owner());
+	void new Crust("app")
+		.extend(open)
+		// @ts-expect-error -- the provided Context's flag reaches the child despite the open record
+		.add(defineCommand("child", (command) => command.flags({ pflag: { type: "string" } })));
+}

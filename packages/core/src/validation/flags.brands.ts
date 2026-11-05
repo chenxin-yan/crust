@@ -287,12 +287,17 @@ export type RecursiveOwnFlags<F> = keyof F extends never
  * Known spellings an Extension puts on every command, not just the root: recursive flags and
  * provided Context-owned flags. Only these can collide with a flag below the root at runtime.
  */
-type RecursiveExtensionSpellings<E> = KnownSpellings<
-	| (RecursiveOwnFlags<ExtensionFlagDefsOf<E>> extends infer F extends FlagsDef
-			? LocalSpellingsOf<F>
+type RecursiveExtensionSpellings<E> =
+	| (ExtensionFlagDefsOf<E> extends infer F extends FlagsDef
+			? KnownSpellings<LocalSpellingsOf<Pick<F, RecursiveFlagKeys<F>>>>
 			: never)
-	| ExtensionProvidedSpellings<E>
->;
+	| KnownSpellings<ExtensionProvidedSpellings<E>>;
+
+// Per key and per part, so a `recursive: boolean` flag or an open record doesn't hide the rest:
+// only flags that are certainly recursive (the default, or `recursive: true`) count.
+type RecursiveFlagKeys<F> = {
+	[K in keyof F]: F[K] extends { recursive: infer R } ? ([R] extends [true] ? K : never) : K;
+}[keyof F];
 
 type ExtensionFlagCollisionBrand<E, Existing extends string> = CollisionBrand<
 	ExtensionSpellings<E>,
