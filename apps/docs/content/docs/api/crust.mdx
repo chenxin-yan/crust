@@ -156,7 +156,7 @@ See [Contexts](/docs/guide/contexts) for worked examples.
 
 ## `.extend(...extensions)`
 
-Root-only. Registers application-wide [Extensions](/docs/guide/extensions) in registration order. A repeated `ExtensionId` replaces the earlier registration at runtime; the types don't track ids, so they still see the earlier registration's commands and flags, and reusing one of its literal names is a compile-time collision. `.extend()` only records the list; the app applies and validates the final list when it prepares, so a replacement also rescues an earlier registration that conflicted, and flag or command collisions and missing Contexts surface there as `DEFINITION` errors rather than at `.extend()`.
+Root-only. Registers application-wide [Extensions](/docs/guide/extensions) in registration order. A repeated `ExtensionId` replaces the earlier registration at runtime; the types don't track ids, so they still see the earlier registration's commands and flags, and reusing one of its literal names is a compile-time collision. For the same reason, once a call includes an Extension with runtime-only command names, typed `run()` results are `unknown` for the commands of Extensions registered up to and in that call; commands added with `.add()` or `.command()` keep their result types, since no Extension can replace them. `.extend()` only records the list; the app applies and validates the final list when it prepares, so a replacement also rescues an earlier registration that conflicted, and flag or command collisions and missing Contexts surface there as `DEFINITION` errors rather than at `.extend()`.
 
 ```ts
 import { help, version } from "@crustjs/extensions";

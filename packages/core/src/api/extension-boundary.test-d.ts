@@ -136,11 +136,13 @@ function _spreadExtensionsOpenResults() {
 		.command("child", (c) => c.action(() => 42))
 		.command("sibling", (c) => c.action(() => true))
 		.extend(...replacements);
-	// A spread Extension list is only known at runtime and may re-register an earlier id.
+	// A spread Extension list is only known at runtime, but it cannot replace app commands.
 	const result = dynamic.run(["child"]);
-	type _result = Expect<Equal<typeof result, Promise<RunOutcome<unknown>>>>;
+	type _result = Expect<Equal<typeof result, Promise<RunOutcome<number>>>>;
 	const sibling = dynamic.run(["sibling"]);
-	type _sibling = Expect<Equal<typeof sibling, Promise<RunOutcome<unknown>>>>;
+	type _sibling = Expect<Equal<typeof sibling, Promise<RunOutcome<boolean>>>>;
+	const other = dynamic.run(["other"]);
+	type _other = Expect<Equal<typeof other, Promise<RunOutcome<unknown>>>>;
 }
 
 function _recipeHolderProof() {
@@ -300,13 +302,26 @@ function _commandLocalDemandValues() {
 	});
 }
 
-function _dynamicExtensionCommandsOpenResults() {
+// An Extension command never replaces an app command (preparation throws `DEFINITION`).
+function _dynamicExtensionCommandsKeepAppResults(condition: boolean) {
 	const name: string = "child";
 	const open = defineExtension(id).add(defineCommand(name, (c) => c.action(() => "dynamic")));
 	const root = new Crust("app").command("child", (c) => c.action(() => 42));
 	const extended = root.extend(open);
 	const result = extended.run(["child"]);
-	type _result = Expect<Equal<typeof result, Promise<RunOutcome<unknown>>>>;
+	type _result = Expect<Equal<typeof result, Promise<RunOutcome<number>>>>;
+	const other = extended.run(["other"]);
+	type _other = Expect<Equal<typeof other, Promise<RunOutcome<unknown>>>>;
+	const literal = defineExtension(id).add(defineCommand("lit", (c) => c.action(() => 1n)));
+	const chosen = root.extend(condition ? open : literal).run(["child"]);
+	type _chosen = Expect<Equal<typeof chosen, Promise<RunOutcome<number>>>>;
+	const later = extended.command("later", (c) => c.action(() => true)).run(["later"]);
+	type _later = Expect<Equal<typeof later, Promise<RunOutcome<boolean>>>>;
+	const recursive = defineExtension(id)
+		.flags({ trace: { type: "boolean" } })
+		.add(defineCommand(name, (c) => c));
+	const inherited = root.extend(recursive).run(["child"], { flags: { trace: true } });
+	type _inherited = Expect<Equal<typeof inherited, Promise<RunOutcome<number>>>>;
 }
 
 function _spreadExtensionsOpenAliasResults() {
@@ -314,12 +329,13 @@ function _spreadExtensionsOpenAliasResults() {
 	const incoming = defineCommand("incoming", { aliases: ["shared", "old"] }, (c) =>
 		c.action(() => "new"),
 	);
+	// Unchecked spread collisions with app commands throw `DEFINITION` at preparation.
 	const aliases = [defineExtension(id).add(incoming)];
 	const app = new Crust("app").add(old).extend(...aliases);
 	void app.run(["shared"]);
 	void app.run(["old"]);
 	const shared = app.run(["shared"], {});
-	type _shared = Expect<Equal<typeof shared, Promise<RunOutcome<unknown>>>>;
+	type _shared = Expect<Equal<typeof shared, Promise<RunOutcome<number>>>>;
 }
 
 function _providersAfterPendingCommands() {
@@ -427,12 +443,39 @@ function _conditionalProviderAndChildHolders(
 }
 
 // Runtime dedupe keeps the last registration of an id, so an Extension whose command name the
-// types cannot see may replace an earlier Extension's command with a different result.
+// types cannot see may replace an earlier Extension's command with a different result. The
+// types don't track ids, so every earlier Extension's command opens; app commands stay precise.
 function _runtimeOnlyNamesMayReplaceSameIdCommands() {
 	const shared = defineExtensionId("shared");
 	const name: string = "child";
 	const first = defineExtension(shared).add(defineCommand("child", (c) => c.action(() => 1)));
 	const second = defineExtension(shared).add(defineCommand(name, (c) => c.action(() => "s")));
-	const result = new Crust("app").extend(first).extend(second).run(["child"]);
+	const app = new Crust("app")
+		.command("own", (c) => c.action(() => true))
+		.extend(first)
+		.extend(second);
+	const result = app.run(["child"]);
 	type _result = Expect<Equal<typeof result, Promise<RunOutcome<unknown>>>>;
+	const own = app.run(["own"]);
+	type _own = Expect<Equal<typeof own, Promise<RunOutcome<boolean>>>>;
+	// An earlier Extension's alias widens like its name.
+	const aliased = defineExtension(shared).add(
+		defineCommand("aliased", { aliases: ["al"] }, (c) => c.action(() => 1)),
+	);
+	const viaAlias = new Crust("app").extend(aliased).extend(second).run(["al"]);
+	type _viaAlias = Expect<Equal<typeof viaAlias, Promise<RunOutcome<unknown>>>>;
+	// Literal Extensions after the open one stay precise until another open call.
+	const third = defineExtension(defineExtensionId("third")).add(
+		defineCommand("third", (c) => c.action(() => 1n)),
+	);
+	const withThird = app.extend(third).command("added", (c) => c.action(() => "a"));
+	const precise = withThird.run(["third"]);
+	type _precise = Expect<Equal<typeof precise, Promise<RunOutcome<bigint>>>>;
+	const reopened = withThird.extend(second);
+	const replaced = reopened.run(["third"]);
+	type _replaced = Expect<Equal<typeof replaced, Promise<RunOutcome<unknown>>>>;
+	const added = reopened.run(["added"]);
+	type _added = Expect<Equal<typeof added, Promise<RunOutcome<string>>>>;
+	const stillOwn = reopened.run(["own"]);
+	type _stillOwn = Expect<Equal<typeof stillOwn, Promise<RunOutcome<boolean>>>>;
 }
