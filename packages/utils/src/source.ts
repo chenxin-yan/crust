@@ -1,7 +1,3 @@
-import { existsSync, realpathSync, statSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-
 // ────────────────────────────────────────────────────────────────────────────
 // Package root lookup
 // ────────────────────────────────────────────────────────────────────────────
@@ -22,6 +18,8 @@ import { fileURLToPath } from "node:url";
  * @internal Shared by {@link resolveSourceDir} and `resolveArtifactDir`.
  */
 export function findNearestPackageRoot(startPath: string): string | null {
+	const { existsSync, statSync } = process.getBuiltinModule("node:fs");
+	const { dirname, join, resolve } = process.getBuiltinModule("node:path");
 	let current = resolve(startPath);
 
 	if (existsSync(current) && !statSync(current).isDirectory()) {
@@ -92,11 +90,13 @@ export function findNearestPackageRoot(startPath: string): string | null {
  * ```
  */
 export function resolveSourceDir(input: string | URL): string {
+	const { existsSync, realpathSync } = process.getBuiltinModule("node:fs");
+	const { isAbsolute, resolve } = process.getBuiltinModule("node:path");
 	if (input instanceof URL) {
 		if (input.protocol !== "file:") {
 			throw new Error(`sourceDir URL must use file: protocol, got "${input.protocol}".`);
 		}
-		return fileURLToPath(input);
+		return process.getBuiltinModule("node:url").fileURLToPath(input);
 	}
 
 	if (isAbsolute(input)) {

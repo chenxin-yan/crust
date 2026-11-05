@@ -1,6 +1,3 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join, posix, win32 } from "node:path";
-
 import { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
 
 import type { BuildReport } from "../api/extension.ts";
@@ -11,6 +8,7 @@ import { cloneCommandNode, type CommandNode } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
 
 function normalizeArtifactPath(path: string): string {
+	const { posix, win32 } = process.getBuiltinModule("node:path");
 	const normalized = posix.normalize(path.replaceAll("\\", "/"));
 	const drivePrefix = /^[A-Za-z]:/;
 	if (
@@ -37,6 +35,8 @@ export async function writeSnapshotProtocol(
 	snapshotPath: string,
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): Promise<void> {
+	const { mkdir, writeFile } = process.getBuiltinModule("node:fs/promises");
+	const { dirname, join } = process.getBuiltinModule("node:path");
 	// Commands and flags materialize once so recipes keep their
 	// once-per-`.add()` lifecycle; only section callbacks re-evaluate.
 	const base = buildExtensionTree(node, materializeCommandDefinition);

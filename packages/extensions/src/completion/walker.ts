@@ -1,5 +1,3 @@
-import { stripVTControlCharacters } from "node:util";
-
 import type { ValueType } from "@crustjs/core";
 import type {
 	CommandDocumentation,
@@ -17,7 +15,9 @@ import type { CompletionArg, CompletionCommand, CompletionFlag, StringCompletion
  */
 function normaliseDescription(value: string | undefined): string | undefined {
 	if (value === undefined) return undefined;
-	const stripped = sanitizeFreeText(stripVTControlCharacters(value)).trim();
+	const stripped = sanitizeFreeText(
+		process.getBuiltinModule("node:util").stripVTControlCharacters(value),
+	).trim();
 	return stripped.length === 0 ? undefined : stripped;
 }
 

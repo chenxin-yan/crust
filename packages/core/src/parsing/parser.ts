@@ -1,5 +1,4 @@
-import { parseArgs as nodeParseArgs, type ParseArgsOptionDescriptor } from "node:util";
-import { isPromise } from "node:util/types";
+import type { ParseArgsOptionDescriptor } from "node:util";
 
 import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
 
@@ -52,7 +51,9 @@ export interface ArgvParseResult<
 }
 
 /** Element type of `parseArgs(...).tokens` — not exported by `@types/node`. */
-type ParseArgsToken = NonNullable<ReturnType<typeof nodeParseArgs>["tokens"]>[number];
+type ParseArgsToken = NonNullable<
+	ReturnType<typeof import("node:util").parseArgs>["tokens"]
+>[number];
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal helpers
@@ -132,7 +133,7 @@ function invokeParse<ParseOutput>(
 		const reason = err instanceof Error ? err.message : String(err);
 		throw new CrustError("PARSE", `Failed to parse ${location}: ${reason}`).withCause(err);
 	}
-	if (isPromise(result)) {
+	if (process.getBuiltinModule("node:util/types").isPromise(result)) {
 		result.catch(() => {});
 		throw new CrustError("PARSE", `Failed to parse ${location}: parse must be synchronous`);
 	}
@@ -470,10 +471,10 @@ function tokenizeArgv(command: CommandNode, argv: string[]) {
 
 	validateNoNegateUsage(argv, spellings);
 
-	let parsed: ReturnType<typeof nodeParseArgs> & { tokens: ParseArgsToken[] };
+	let parsed: ReturnType<typeof import("node:util").parseArgs> & { tokens: ParseArgsToken[] };
 
 	try {
-		parsed = nodeParseArgs({
+		parsed = process.getBuiltinModule("node:util").parseArgs({
 			args: argv,
 			options: parseOptions,
 			strict: true,

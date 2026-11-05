@@ -1,7 +1,3 @@
-import { realpathSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { findNearestPackageRoot } from "./source.ts";
 
 /**
@@ -85,6 +81,7 @@ export function resolveArtifactDir(name: string): string {
 		throw new Error(`Artifact name must be a single directory name, got ${JSON.stringify(name)}.`);
 	}
 
+	const { dirname, join, resolve } = process.getBuiltinModule("node:path");
 	if (isCompiledExecutable()) {
 		return join(dirname(process.execPath), name);
 	}
@@ -92,7 +89,12 @@ export function resolveArtifactDir(name: string): string {
 	if (isCrustBundle()) {
 		// import.meta.url is the bundle itself (everything is inlined) and Node
 		// realpaths it, unlike process.argv[1] through a node_modules/.bin symlink.
-		return resolve(fileURLToPath(import.meta.url), "..", "..", name);
+		return resolve(
+			process.getBuiltinModule("node:url").fileURLToPath(import.meta.url),
+			"..",
+			"..",
+			name,
+		);
 	}
 
 	// `crust build` wipes `.crust` before running the entry for its snapshot, so
@@ -105,7 +107,7 @@ export function resolveArtifactDir(name: string): string {
 	if (entrypoint) {
 		try {
 			// Node keeps a source npm-link's consumer-side .bin path in argv[1].
-			sourceEntrypoint = realpathSync(entrypoint);
+			sourceEntrypoint = process.getBuiltinModule("node:fs").realpathSync(entrypoint);
 		} catch (cause) {
 			throw new Error(
 				`Could not resolve artifact "${name}": could not resolve source entrypoint "${entrypoint}".`,
