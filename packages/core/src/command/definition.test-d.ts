@@ -74,3 +74,17 @@ function _typecheckRestrictsBuilderCapabilities() {
 		return configured;
 	});
 }
+
+// both call forms require a recipe; there is no runtime check for an omitted one
+function _typecheckRequiresARecipe(
+	recipe: Parameters<typeof defineCommand>[2],
+	maybe: Parameters<typeof defineCommand>[2] | undefined,
+) {
+	// @ts-expect-error -- the name-only form needs a recipe
+	defineCommand("deploy");
+	// @ts-expect-error -- the config form needs a recipe too
+	defineCommand("deploy", { description: "Deploy" });
+	defineCommand("deploy", { description: "Deploy" }, recipe);
+	// @ts-expect-error -- a possibly missing recipe is rejected
+	defineCommand("deploy", { description: "Deploy" }, maybe);
+}

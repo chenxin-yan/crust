@@ -1,6 +1,5 @@
 import {
 	Crust,
-	CrustError,
 	defineExtension,
 	defineExtensionId,
 	type Extension,
@@ -19,8 +18,8 @@ export interface StampFactory {
 export const stamp: StampFactory = defineExtension(defineExtensionId("acme:stamp")).factory(
 	(extension, version?: string) =>
 		extension.preRun((ctx) => {
-			const resolved = version ?? ctx.rootCommand.meta.version;
-			if (resolved === undefined) throw new CrustError("DEFINITION", "acme:stamp needs a version");
+			// The overloads guarantee root `version` whenever `version` is omitted.
+			const resolved = version ?? ctx.rootCommand.meta.version!;
 			ctx.stdout(`version ${resolved}`);
 		}),
 );

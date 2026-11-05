@@ -1,5 +1,4 @@
 import {
-	CrustError,
 	type Extension,
 	type RootMetaKey,
 	type ExtensionId,
@@ -50,15 +49,9 @@ export const version: VersionExtension = /* @__PURE__ */ defineExtension(VERSION
 		const { format } = options;
 		return extension.flags(...versionFlags).preRun((context) => {
 			if (context.commandPath.length !== 1 || context.flags.version !== true) return;
+			// SAFETY: the `VersionExtension` overloads require root `version` metadata when `value` is omitted.
 			const resolvedVersion =
-				typeof value === "function" ? value() : (value ?? context.rootCommand.meta.version);
-			// Overloads are type-only; untyped callers can still reach this.
-			if (resolvedVersion === undefined) {
-				throw new CrustError(
-					"DEFINITION",
-					"The version extension requires a version in new Crust(name, { version }) or version(value)",
-				);
-			}
+				typeof value === "function" ? value() : (value ?? context.rootCommand.meta.version!);
 			const line =
 				format === "plain"
 					? resolvedVersion

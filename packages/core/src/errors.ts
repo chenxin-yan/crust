@@ -60,7 +60,6 @@ export type DefinitionErrorReason =
 	| "invalid-sections"
 	| "invalid-short"
 	| "missing-context"
-	| "missing-recipe"
 	| "nested-command-extension"
 	| "reserved-name"
 	| "reserved-no-prefix"

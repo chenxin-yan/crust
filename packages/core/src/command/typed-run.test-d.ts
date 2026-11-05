@@ -145,7 +145,7 @@ function _typecheckRejectsCommandCollisionsInsideOneExtensionSTuple() {
 		command.action(() => {}),
 	);
 
-	// @ts-expect-error -- duplicate canonical names resolve last-write-wins at prepare
+	// @ts-expect-error -- duplicate canonical names are rejected
 	void defineExtension(defineExtensionId("dup")).add(foo, fooDup);
 	// @ts-expect-error -- a shared alias would union both shapes under one path
 	void defineExtension(defineExtensionId("alias")).add(aliasA, aliasB);

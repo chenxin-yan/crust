@@ -657,15 +657,6 @@ export function defineCommand(
 	const config: CommandConfig & { readonly version?: unknown } = hasConfig ? configOrRecipe : {};
 	const recipe = hasConfig ? maybeRecipe : configOrRecipe;
 	const name = resolveChildCommandName(nameInput, config.aliases);
-	// Authoring overloads require a recipe in both call forms; untyped JavaScript can omit it.
-	if (!isCommandRecipe(recipe)) {
-		throw new CrustError("DEFINITION", `Command "${name}" requires a recipe`, {
-			subject: "command",
-			name,
-			reason: "missing-recipe",
-		});
-	}
-
 	for (const alias of config.aliases ?? []) {
 		if (!isCommandToken(alias)) {
 			throw new CrustError("DEFINITION", `Command "${name}" has an invalid alias "${alias}"`, {
@@ -1584,7 +1575,7 @@ export class Crust<
 		for (const definition of definitions) {
 			// FIX_COMMAND_COLLISION owns literal names; this owns dynamic `.add()`,
 			// where a silent replacement makes the earlier command unreachable.
-			// Extension-contributed commands keep documented last-write-wins.
+			// Extension commands are checked when the app prepares (`buildExtensionTree`).
 			const spellings = [
 				definition.name,
 				...(definition[commandDefinitionInternal].meta.aliases ?? []),

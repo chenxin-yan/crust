@@ -240,9 +240,8 @@ type ExtensionCommandCollisionBrand<E, Existing extends string> = CollisionBrand
 /**
  * Validate each Extension's contributed command spellings against existing
  * root commands and against Extensions earlier in the same `.extend()` call.
- * Runtime preparation resolves collisions last-write-wins, so a statically
- * known collision would silently retype `run()` against a command that
- * dispatch replaces.
+ * Runtime preparation rejects the same collisions as a `DEFINITION` error;
+ * this brand reports statically known ones at compile time.
  */
 export type ValidateExtensionCommands<
 	Es extends readonly unknown[],

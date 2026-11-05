@@ -275,13 +275,29 @@ export function buildExtensionTree(
 				: childEntriesOf(source).map((entry) => [entry.name, entry]),
 		);
 		if (isRoot) {
-			// Preserve last-write-wins without evaluating unused or replaced recipes.
+			// FIX_COMMAND_COLLISION owns literal names; this owns dynamic ones, where a
+			// collision would silently replace or shadow a command. Recipes stay unevaluated.
+			const spellings = new Set<string>();
+			for (const { meta } of entries.values()) {
+				spellings.add(meta.name);
+				for (const alias of meta.aliases ?? []) spellings.add(alias);
+			}
 			for (const extension of extensions) {
 				for (const definition of extension.commands) {
+					const meta = { name: definition.name, ...definition[commandDefinitionInternal].meta };
+					const own = [meta.name, ...(meta.aliases ?? [])];
+					if (own.some((spelling) => spellings.has(spelling))) {
+						throw new CrustError(
+							"DEFINITION",
+							`Extension "${extension.id}" command "${definition.name}" collides with an existing command`,
+							{ subject: "command", name: definition.name, reason: "command-collision" },
+						);
+					}
+					for (const spelling of own) spellings.add(spelling);
 					let child: CommandNode | undefined;
 					entries.set(definition.name, {
 						name: definition.name,
-						meta: { name: definition.name, ...definition[commandDefinitionInternal].meta },
+						meta,
 						resolve: () =>
 							(child ??= materializeCommandDefinition(definition, source, extension.id)),
 					});

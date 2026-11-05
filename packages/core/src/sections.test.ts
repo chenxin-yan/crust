@@ -3,9 +3,31 @@ import { describe, expect, it } from "vite-plus/test";
 import { defineCommand, Crust } from "./command/crust.ts";
 import { defineExtensionId } from "./identity.ts";
 import { sectionsFor, visibleSectionsFor } from "./sections.ts";
+import type { CommandSectionInput } from "./types.ts";
 
 const agentDocs = defineExtensionId("agent-docs");
 const terminal = defineExtensionId("terminal");
+
+it("rejects conflicting audiences hidden by a structural view", () => {
+	const original: CommandSectionInput = {
+		title: "Notes",
+		body: "For humans",
+		except: [agentDocs],
+	};
+	function withOnly(section: {
+		readonly title: string;
+		readonly body: string;
+	}): CommandSectionInput {
+		return { ...section, only: [agentDocs] };
+	}
+
+	expect(() => new Crust("demo", { sections: [withOnly(original)] })).toThrow(
+		expect.objectContaining({
+			code: "DEFINITION",
+			details: { subject: "command", name: "demo", reason: "invalid-sections" },
+		}),
+	);
+});
 
 describe("sectionsFor", () => {
 	it("includes only sections addressed to the requested consumer", () => {

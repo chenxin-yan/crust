@@ -485,7 +485,7 @@ export interface ExtensionBuilder<
 	flags<const Fs extends readonly NamedExtensionFlagDef[]>(
 		...defs: ValidateLocalFlagDefs<Fs, DeclaredSpellings<Defs, Provide>>
 	): ExtensionBuilder<Use, Provide, readonly [...Defs, ...Fs], Commands, MetaKeys>;
-	/** Contribute root commands; they replace same-named application commands. */
+	/** Contribute root commands; names and aliases must not collide with any other root command. */
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
 		...definitions: Ds & ValidateCommandDefinitions<Ds, AttachedCommandSpellings<Commands>>
 	): ExtensionBuilder<Use, Provide, Defs, readonly [...Commands, ...Ds], MetaKeys>;

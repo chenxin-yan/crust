@@ -1,4 +1,4 @@
-import { Crust } from "@crustjs/core";
+import { Crust, type RootCommandMeta } from "@crustjs/core";
 
 import { help } from "./help.ts";
 import { version } from "./version.ts";
@@ -12,4 +12,11 @@ function _versionRequirements() {
 	// @ts-expect-error Optional overrides conservatively need root metadata.
 	new Crust("app").extend(version(maybe));
 	new Crust("app", { version: "1" }).extend(version(maybe));
+	// @ts-expect-error A root version that may be undefined is not guaranteed.
+	new Crust("app", { version: maybe }).extend(version());
+}
+
+function _versionRequiresGuaranteedRootMeta(meta: RootCommandMeta) {
+	// @ts-expect-error Optional root metadata does not guarantee a version.
+	new Crust("app", meta).extend(version());
 }
