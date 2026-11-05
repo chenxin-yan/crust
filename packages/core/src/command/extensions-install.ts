@@ -3,7 +3,7 @@ import type { ExtensionData } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import { normalizeSection, type SectionOwner } from "../sections.ts";
-import type { FlagDef, FlagsDef } from "../types.ts";
+import type { FlagsDef } from "../types.ts";
 import type { CommandDefinition } from "./crust.ts";
 import {
 	childEntriesOf,
@@ -20,43 +20,6 @@ export type MaterializeCommandDefinition = (
 	parent: CommandNode,
 	extensionId?: ExtensionId,
 ) => CommandNode;
-
-/** Inject an Extension-owned flag into a node and, when recursive, its descendants. */
-function injectExtensionFlag(
-	node: CommandNode,
-	name: string,
-	def: FlagDef,
-	recursive: boolean,
-): void {
-	registerFlag(node, name, def, "owned");
-	if (!recursive) return;
-	for (const sub of Object.values(node.subCommands)) {
-		injectExtensionFlag(sub, name, def, true);
-	}
-}
-
-/** Attach one Extension's owned root commands to a cloned tree. */
-export function applyExtensionCommands(
-	root: CommandNode,
-	extension: ExtensionData,
-	materializeCommandDefinition: MaterializeCommandDefinition,
-): void {
-	for (const definition of extension.commands) {
-		root.subCommands[definition.name] = materializeCommandDefinition(
-			definition,
-			root,
-			extension.id,
-		);
-	}
-}
-
-/** Inject one Extension's owned flags across a cloned tree. */
-export function applyExtensionFlags(root: CommandNode, extension: ExtensionData): void {
-	for (const [name, defWithScope] of Object.entries(extension.flags)) {
-		const { recursive = true, ...def } = defWithScope;
-		injectExtensionFlag(root, name, def, recursive);
-	}
-}
 
 function contributionTarget(
 	root: CommandNode,
