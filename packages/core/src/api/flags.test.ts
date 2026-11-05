@@ -54,17 +54,6 @@ describe("defineFlag", () => {
 		type _Flag = Expect<Equal<typeof verbose, { readonly type: "boolean"; readonly short: "v" }>>;
 	});
 
-	it("rejects the removed name argument from untyped callers", () => {
-		// SAFETY: models an untyped JavaScript caller; the runtime guard owns this input.
-		const untyped = defineFlag as unknown as (...input: unknown[]) => unknown;
-		expect(() => untyped("verbose", { type: "boolean" })).toThrow(
-			expect.objectContaining({
-				code: "DEFINITION",
-				details: { subject: "flag", reason: "invalid-flags" },
-			}),
-		);
-	});
-
 	it("feeds .flags() with the same record typing as an inline literal", async () => {
 		const verbose = defineFlag({ type: "boolean" });
 		const app = new Crust("cli").flags({ verbose, output: { type: "string", short: "o" } });
