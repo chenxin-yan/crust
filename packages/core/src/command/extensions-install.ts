@@ -13,7 +13,7 @@ import {
 	type CommandContext,
 	type CommandNode,
 } from "./node.ts";
-import type { CommandSnapshot } from "./snapshot.ts";
+import { contributeSection, createSnapshotProjector } from "./snapshot.ts";
 
 export type MaterializeCommandDefinition = (
 	definition: CommandDefinition,
@@ -48,18 +48,24 @@ function contributionTarget(
 	return target;
 }
 
+/**
+ * Evaluate Extension section callbacks and record their contributions beside the
+ * target nodes. Callbacks share one lazily projected authored snapshot, so each
+ * builds only the commands it reads and none sees Extension sections.
+ */
 export function applyExtensionSections(
 	root: CommandNode,
-	extension: ExtensionData,
-	snapshot: CommandSnapshot,
+	extensions: readonly ExtensionData[],
 ): void {
-	if (!extension.sections) return;
-	const owner: SectionOwner = { subject: "extension", name: extension.id };
-	const contributions = extension.sections(snapshot);
-	for (const contribution of contributions) {
-		const section = normalizeSection(contribution, owner);
-		const target = contributionTarget(root, contribution.command, extension);
-		target.meta.sections = [...(target.meta.sections ?? []), section];
+	if (!extensions.some((extension) => extension.sections !== undefined)) return;
+	const authored = createSnapshotProjector(root, true)(root);
+	for (const extension of extensions) {
+		if (!extension.sections) continue;
+		const owner: SectionOwner = { subject: "extension", name: extension.id };
+		for (const contribution of extension.sections(authored)) {
+			const section = normalizeSection(contribution, owner);
+			contributeSection(contributionTarget(root, contribution.command, extension), section);
+		}
 	}
 }
 
@@ -100,24 +106,6 @@ export function sectionContextsFor(
 	return extensions === undefined
 		? node.providedContexts
 		: [...node.providedContexts, ...extensions.flatMap((extension) => extension.provide)];
-}
-
-/**
- * Install Context sections where each Context is provided: `.provide()` on its own
- * command only, Extension providers once on the root. Unlike Extension section
- * contributions, a title already on the command is a `DEFINITION` error.
- */
-export function applyContextSections(
-	root: CommandNode,
-	extensions: readonly ExtensionData[],
-): void {
-	const visit = (node: CommandNode, path: string, isRoot: boolean): void => {
-		applyNodeContextSections(node, path, sectionContextsFor(node, isRoot ? extensions : undefined));
-		for (const [name, child] of Object.entries(node.subCommands)) {
-			visit(child, `${path} ${name}`, false);
-		}
-	};
-	visit(root, root.meta.name, true);
 }
 
 export function installExtensionContexts(

@@ -5,8 +5,8 @@ import { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
 
 import type { BuildReport } from "../api/extension.ts";
 import type { ExtensionId } from "../identity.ts";
-import type { MaterializeCommandDefinition } from "./extensions-install.ts";
-import { applySectionsAndFreeze, buildExtensionTree } from "./invocation.ts";
+import { applyExtensionSections, type MaterializeCommandDefinition } from "./extensions-install.ts";
+import { buildExtensionTree } from "./invocation.ts";
 import { cloneCommandNode, type CommandNode } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
 
@@ -40,8 +40,13 @@ export async function writeSnapshotProtocol(
 	// Commands and flags materialize once so recipes keep their
 	// once-per-`.add()` lifecycle; only section callbacks re-evaluate.
 	const base = buildExtensionTree(node, materializeCommandDefinition);
-	const takeSnapshot = () =>
-		snapshotCommand(applySectionsAndFreeze(cloneCommandNode(base.rootNode), base.extensions));
+	const takeSnapshot = () => {
+		// Contributions are keyed by node, so each evaluation needs fresh nodes to
+		// replace, rather than extend, the previous evaluation's sections.
+		const root = cloneCommandNode(base.rootNode);
+		applyExtensionSections(root, base.extensions);
+		return snapshotCommand(root);
+	};
 	let snapshot = takeSnapshot();
 	const buildOutDir = process.env[BUILD_OUT_DIR_ENV];
 	if (buildOutDir) {
