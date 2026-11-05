@@ -4,8 +4,11 @@ import { dirname, join, relative } from "node:path";
 import {
 	type BuildArtifacts,
 	type CommandDefinition,
+	type CommandShape,
+	type Extension,
 	type ExtensionBuildContext,
 	type ExtensionFactory,
+	type ExtensionId,
 	type InvocationIO,
 	defineCommand,
 	defineExtension,
@@ -200,13 +203,84 @@ async function buildSkills(
 	return files.map((file) => ({ path: join(SKILLS_ARTIFACT, file.path), content: file.content }));
 }
 
-// Configurable command names require an open command namespace.
-export const skill: ExtensionFactory<
+type SkillScopeFlag = {
+	readonly type: "string";
+	readonly choices: readonly ["project", "global"];
+	readonly description: typeof SCOPE_FLAG_DESCRIPTION;
+};
+type SkillAllFlag<Description extends string> = {
+	readonly type: "boolean";
+	readonly description: Description;
+};
+type SkillInstallFlags = {
+	readonly scope: SkillScopeFlag;
+	readonly all: SkillAllFlag<typeof INSTALL_ALL_DESCRIPTION>;
+};
+
+/**
+ * The contributed skill management command, spelled out because the exported
+ * factory needs a declared type: a closed name keeps the host's command tree
+ * precise after `.extend()`.
+ */
+export type SkillCommandDefinition<
+	Command extends string = typeof DEFAULT_SKILL_COMMAND_NAME,
+	Aliases extends readonly string[] = SkillCommandAliases<Command>,
+> = CommandDefinition<
+	Command,
+	Aliases,
+	CommandShape<
+		[],
+		SkillInstallFlags,
+		{
+			install: CommandShape<[], SkillInstallFlags, {}, void, {}>;
+			uninstall: CommandShape<
+				[],
+				{
+					readonly scope: SkillScopeFlag;
+					readonly all: SkillAllFlag<typeof UNINSTALL_ALL_DESCRIPTION>;
+				},
+				{},
+				void,
+				{}
+			>;
+			repair: CommandShape<[], { readonly scope: SkillScopeFlag }, {}, void, {}>;
+		},
+		void,
+		{}
+	>
+>;
+
+type SkillCommandAliases<Command extends string> = Command extends typeof DEFAULT_SKILL_COMMAND_NAME
+	? readonly ["skill"]
+	: readonly [];
+
+// A non-literal name cannot be keyed statically, so it keeps the open command namespace.
+type SkillCommands<Command extends string> = string extends Command
+	? readonly CommandDefinition<any, any, any, any>[]
+	: readonly [SkillCommandDefinition<Command>];
+
+/**
+ * {@link skill}'s signature: a `command` that is always present flows into the host's
+ * command tree, an absent one is `skills`, and a possibly absent one stays open.
+ */
+export interface SkillExtension {
+	<const Command extends string>(
+		options: SkillOptions & { command: Command },
+	): Extension<{}, [], [], SkillCommands<Command>>;
+	(
+		options: SkillOptions & { command?: undefined },
+	): Extension<{}, [], [], readonly [SkillCommandDefinition]>;
+	// Omitted `Commands` is the open command namespace.
+	(options: SkillOptions): Extension<{}, [], []>;
+	readonly id: ExtensionId;
+}
+
+const skillFactory: ExtensionFactory<
 	[options: SkillOptions],
 	{},
 	[],
 	[],
-	readonly CommandDefinition<any, any, any, any>[]
+	readonly [SkillCommandDefinition<string, readonly string[]>]
 > = defineExtension(SKILLS).factory((extension, options) => {
 	const commandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
 	return (
@@ -233,6 +307,10 @@ export const skill: ExtensionFactory<
 			.build((context) => buildSkills(options, context))
 	);
 });
+
+// SAFETY: the runtime command name is `options.command ?? "skills"`, which each overload's name restates,
+// and only the default name carries the `skill` alias.
+export const skill = skillFactory as SkillExtension;
 
 type SkillStatusEntry = SkillStatusResult["agents"][number];
 type SkillStatusMap = ReadonlyMap<AgentTarget, SkillStatusEntry>;
@@ -466,11 +544,16 @@ async function uninstallSkills(opts: {
 	}
 }
 
+const SCOPE_FLAG_DESCRIPTION = "Skill scope (project or global)";
+const INSTALL_ALL_DESCRIPTION =
+	"Install for every detected agent and every agent already holding a packaged skill, non-interactively";
+const UNINSTALL_ALL_DESCRIPTION = "Uninstall every installed skill non-interactively";
+
 const SCOPE_FLAG = {
 	name: "scope",
 	type: "string",
 	choices: ["project", "global"],
-	description: "Skill scope (project or global)",
+	description: SCOPE_FLAG_DESCRIPTION,
 } as const;
 
 const INSTALL_FLAGS = [
@@ -478,8 +561,7 @@ const INSTALL_FLAGS = [
 	{
 		name: "all",
 		type: "boolean",
-		description:
-			"Install for every detected agent and every agent already holding a packaged skill, non-interactively",
+		description: INSTALL_ALL_DESCRIPTION,
 	},
 ] as const;
 
@@ -516,7 +598,7 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 							.flags(SCOPE_FLAG, {
 								name: "all",
 								type: "boolean",
-								description: "Uninstall every installed skill non-interactively",
+								description: UNINSTALL_ALL_DESCRIPTION,
 							})
 							.action(async (context) => {
 								const removeAll = context.flags.all === true;

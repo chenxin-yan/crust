@@ -5,6 +5,7 @@ export {
 	renderZshCompletion,
 } from "./completion/index.ts";
 export type {
+	CompletionExtension,
 	CompletionOptions,
 	CompletionRenderOptions,
 	CompletionShell,

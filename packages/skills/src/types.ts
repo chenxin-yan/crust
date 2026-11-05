@@ -99,6 +99,10 @@ export interface SkillOptions {
 	 * checkout does not take over an installed CLI's links. @default true
 	 */
 	autoUpdate?: boolean;
-	/** Name of the interactive management command. The default includes a `skill` alias. @default "skills" */
+	/**
+	 * Name of the interactive management command. The default includes a `skill` alias.
+	 * A literal name keeps the host's command tree type-checked; a dynamic `string` opens it.
+	 * @default "skills"
+	 */
 	command?: string;
 }
