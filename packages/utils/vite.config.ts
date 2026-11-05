@@ -14,6 +14,7 @@ export default defineConfig({
 			"src/process.ts",
 			"src/source.ts",
 			"src/schema.ts",
+			"src/signals.ts",
 			"src/terminal.ts",
 		],
 	},

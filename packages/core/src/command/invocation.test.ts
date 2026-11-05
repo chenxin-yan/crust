@@ -1,7 +1,9 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -359,4 +361,42 @@ describe("Invocation pipeline — root snapshot reuse", () => {
 
 		expect(roots.map(({ flags }) => flags.data?.default)).toEqual([["a"], ["a", "b"]]);
 	});
+});
+
+describe("Invocation pipeline — inherited SIGINT ignore", () => {
+	// Bun keeps an inherited SIG_IGN (Node resets it at startup). The real executable, not a
+	// version-manager shim that may reset signals before exec.
+	const bunPath =
+		process.platform === "linux"
+			? spawnSync("bun", ["-e", "console.log(process.execPath)"], {
+					encoding: "utf8",
+					timeout: 10_000,
+				}).stdout?.trim()
+			: undefined;
+
+	it.skipIf(!bunPath)(
+		"keeps a background job immune to SIGINT on Bun",
+		async () => {
+			const dir = await mkdtemp(join(tmpdir(), "crust-ignored-sigint-"));
+			const probe = join(dir, "probe.ts");
+			await writeFile(
+				probe,
+				`import { Crust } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "..", "index.ts")).href)};
+await new Crust("app").action(() => {}).execute({ argv: [] });
+process.kill(process.pid, "SIGINT");
+await new Promise((resolve) => setTimeout(resolve, 200));
+console.log("alive");`,
+			);
+			try {
+				const result = spawnSync("sh", ["-c", 'trap "" INT; exec "$0" "$1"', bunPath!, probe], {
+					encoding: "utf8",
+					timeout: 10_000,
+				});
+				expect(result).toMatchObject({ status: 0, stdout: "alive\n" });
+			} finally {
+				await rm(dir, { recursive: true, force: true });
+			}
+		},
+		15_000,
+	);
 });
