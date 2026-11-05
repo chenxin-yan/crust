@@ -458,6 +458,12 @@ function _runtimeOnlyNamesMayReplaceSameIdCommands() {
 	type _result = Expect<Equal<typeof result, Promise<RunOutcome<unknown>>>>;
 	const own = app.run(["own"]);
 	type _own = Expect<Equal<typeof own, Promise<RunOutcome<boolean>>>>;
+	// An earlier Extension's alias widens like its name.
+	const aliased = defineExtension(shared).add(
+		defineCommand("aliased", { aliases: ["al"] }, (c) => c.action(() => 1)),
+	);
+	const viaAlias = new Crust("app").extend(aliased).extend(second).run(["al"]);
+	type _viaAlias = Expect<Equal<typeof viaAlias, Promise<RunOutcome<unknown>>>>;
 	// Literal Extensions after the open one stay precise until another open call.
 	const third = defineExtension(defineExtensionId("third")).add(
 		defineCommand("third", (c) => c.action(() => 1n)),
