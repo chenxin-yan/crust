@@ -85,6 +85,12 @@ export type CollisionBrand<
 		: { readonly [K in Key]: `${Before}"${S & Existing}"${After}` };
 
 /**
+ * A contribution to accumulated collision evidence. An open contribution is checked at
+ * runtime; adding it as `string` would absorb every known spelling and skip later checks.
+ */
+export type KnownSpellings<S extends string> = string extends S ? never : S;
+
+/**
  * The statically known members of a name union; open members stay runtime-owned.
  * Only for local spelling grammar: a literal beside an open template is still
  * independently invalid, but must never become key or collision evidence.

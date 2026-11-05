@@ -69,7 +69,7 @@ $ my-cli doctor
 checking my-cli
 ```
 
-Contributed commands work like commands added with `.add()`, including typed `run()` paths. Like sibling commands, they cannot replace each other: a name or alias that collides with an app command or another Extension's command is a compile error, and a collision TypeScript can't see, such as a name chosen by a factory option, is a `DEFINITION` error when the app prepares. [`@crustjs/mcp`](/docs/modules/mcp) uses this pattern to install an `mcp` command that serves your commands as MCP tools.
+Contributed commands work like commands added with `.add()`, including typed `run()` paths. Like sibling commands, they cannot replace each other: a name or alias that collides with an app command or another Extension's command is a compile error, and a collision TypeScript can't see, such as a name chosen by a factory option, is a `DEFINITION` error when the app prepares. Such a name doesn't hide collisions among the other, statically known command names. [`@crustjs/mcp`](/docs/modules/mcp) uses this pattern to install an `mcp` command that serves your commands as MCP tools.
 
 ## Hooks
 

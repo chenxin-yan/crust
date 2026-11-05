@@ -47,6 +47,8 @@ import type {
 	CommandNameBrand,
 	ExtensionCommandDefs,
 	ExtensionsCommandSpellings,
+	KnownCommandSpellings,
+	KnownExtensionsCommandSpellings,
 	ValidateCommandConfig,
 	LocalCommandConfigBrand,
 	LocalSectionsBrand,
@@ -75,7 +77,12 @@ import type {
 	DefinedFlags,
 	LocalSpellingsOf,
 } from "../validation/flags.brands.ts";
-import type { IsClosedName, IsUnion, UnionToIntersection } from "../validation/shared.ts";
+import type {
+	IsClosedName,
+	IsUnion,
+	KnownSpellings,
+	UnionToIntersection,
+} from "../validation/shared.ts";
 import {
 	executeInvocation,
 	prepareInvocation,
@@ -810,7 +817,7 @@ type AfterProvide<
 	A,
 	MergeProviders<Ctx, ContextsOutput<Cs>>,
 	Sibs,
-	Sp | LocalSpellingsOf<ContextsOwnedFlags<Cs>>,
+	Sp | KnownSpellings<LocalSpellingsOf<ContextsOwnedFlags<Cs>>>,
 	Tree,
 	MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
 	CollisionSpellings<
@@ -872,15 +879,15 @@ type AfterExtend<
 	MergeFlags<Flags, ExtensionFlags<Es>>,
 	A,
 	MergeProviders<Ctx, ExtensionsProvidesOutput<Es>>,
-	Sibs | ExtensionsCommandSpellings<Es>,
-	Sp | ExtensionsSpellings<Es>,
+	Sibs | KnownExtensionsCommandSpellings<Es>,
+	Sp | KnownSpellings<ExtensionsSpellings<Es>>,
 	ExtendedTree<Tree, Es, RecursiveExtensionFlags<Es>, CtxFlags>,
 	MergeFlags<CtxFlags, RecursiveExtensionFlags<Es>>,
 	CollisionSpellings<
-		CollisionSp["extension"] | ExtensionsSpellings<Es>,
-		CollisionSp["tree"] | DefinitionTreeSpellings<ExtensionCommands<Es>>,
+		CollisionSp["extension"] | KnownSpellings<ExtensionsSpellings<Es>>,
+		CollisionSp["tree"] | KnownSpellings<DefinitionTreeSpellings<ExtensionCommands<Es>>>,
 		CollisionSp["demands"] & ExtensionDemandValues<Es>,
-		CollisionSp["pending"] | DefinitionTreeSpellings<ExtensionCommands<Es>>,
+		CollisionSp["pending"] | KnownSpellings<DefinitionTreeSpellings<ExtensionCommands<Es>>>,
 		RecipeDepsOf<CollisionSp>,
 		MergeProviders<ProvidersOf<CollisionSp>, ExtensionsProvidesOutput<Es>>,
 		ActionDepsOf<CollisionSp>
@@ -898,13 +905,13 @@ type AfterAdd<
 	State["flags"],
 	State["args"],
 	State["ctx"],
-	State["sibs"] | AttachedCommandSpellings<Ds>,
+	State["sibs"] | KnownCommandSpellings<Ds>,
 	State["sp"],
 	State["tree"] & DefinitionsTree<Ds, State["ctxFlags"]>,
 	State["ctxFlags"],
 	CollisionSpellings<
 		State["collision"]["extension"],
-		State["collision"]["tree"] | DefinitionTreeSpellings<Ds>,
+		State["collision"]["tree"] | KnownSpellings<DefinitionTreeSpellings<Ds>>,
 		State["collision"]["demands"],
 		State["collision"]["pending"],
 		RecipeDepsOf<State["collision"]>,
@@ -1023,7 +1030,7 @@ type MissingRootMetaBrand<E, Defined extends RootMetaKey> =
  * - `Flags` — flags defined locally or installed by provided Contexts
  * - `A` — positional argument definitions
  * - `Ctx` — provided Context values
- * - `Sibs` — sibling command names and aliases already registered
+ * - `Sibs` — statically known sibling command names and aliases already registered
  * - `Sp` — accumulated flag spellings used for collision checks
  * - `Tree` — command shapes accumulated by `.add()` for typed `run()`
  * - `CtxFlags` — Context-owned flags accumulated by `.provide()` and recursive
