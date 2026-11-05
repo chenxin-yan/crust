@@ -1,8 +1,6 @@
-// The generated npm launcher stands between the user's shell and the platform
-// binary, so it must keep the child's signal lifecycle: PID-directed SIGTERM is
-// forwarded, terminal Ctrl-C (SIGINT to the whole process group) is left to the
-// child, PID-directed SIGINT is forwarded only without a controlling terminal,
-// and the launcher exits only after the child, with its exit status.
+// On POSIX the generated npm launcher replaces itself with the platform binary
+// (execve), so every signal and the exit status belong to the binary alone: no
+// signal is dropped or delivered twice, with or without a controlling terminal.
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import {
@@ -78,7 +76,10 @@ afterEach(() => {
 });
 
 /** Stages `root/bin/app.js` beside the host platform package, as `crust build` lays out `.crust/`. */
-function stageLauncher(dir: string): string {
+function stageLauncher(
+	dir: string,
+	binarySource = `#!${process.execPath}\n${CHILD_SOURCE}`,
+): string {
 	const bunTarget = hostTarget();
 	if (!bunTarget) throw new Error("No Bun target matches this machine.");
 	const info: TargetInfo = BUN_TARGETS.info[bunTarget];
@@ -98,7 +99,7 @@ function stageLauncher(dir: string): string {
 	const launcherPath = join(dir, "root", "bin", "app.js");
 	writeFileSync(launcherPath, generateLauncher("app", [target]));
 	const binaryPath = join(dir, info.alias, "bin", binaryFilename("app", target));
-	writeFileSync(binaryPath, `#!${process.execPath}\n${CHILD_SOURCE}`);
+	writeFileSync(binaryPath, binarySource);
 	chmodSync(binaryPath, 0o755);
 	return launcherPath;
 }
@@ -176,6 +177,109 @@ describe.skipIf(process.platform === "win32")("generated npm launcher signals", 
 			expect(result).toEqual({ exitCode: 3, signal: null, log: ["got SIGINT", "cleanup done"] });
 		},
 		TIMEOUT * 2,
+	);
+
+	it(
+		"replaces itself with the platform binary",
+		async () => {
+			let samePid = false;
+			const result = await runSignaled("plain", (launcher) => {
+				samePid = readLog(join(tmpDir!, "child.log"))[0] === `ready ${launcher.pid}`;
+				process.kill(launcher.pid!, "SIGTERM");
+			});
+			expect(samePid).toBe(true);
+			expect(result.signal).toBe("SIGTERM");
+		},
+		TIMEOUT * 2,
+	);
+
+	it(
+		"delivers a SIGINT sent to the whole process group once when no terminal is attached",
+		async () => {
+			const result = await runSignaled("trap", ({ pid }) => process.kill(-pid!, "SIGINT"));
+			expect(result).toEqual({ exitCode: 3, signal: null, log: ["got SIGINT", "cleanup done"] });
+		},
+		TIMEOUT * 2,
+	);
+
+	it.skipIf(!hasPty || spawnSync("pgrep", ["-V"]).error !== undefined)(
+		"delivers a SIGINT sent to the launcher PID inside a terminal",
+		async () => {
+			const result = await runSignaled(
+				"trap",
+				({ pid: host, stdin }) => {
+					// The process PTY_HOST started: the launcher, which execve made the binary.
+					const launcher = spawnSync("pgrep", ["-P", String(host)], { encoding: "utf8" });
+					process.kill(Number(launcher.stdout.trim()), "SIGINT");
+					// PTY_HOST waits for one stdin byte before it reaps the launcher.
+					stdin!.end();
+				},
+				true,
+			);
+			expect(result).toEqual({ exitCode: 3, signal: null, log: ["got SIGINT", "cleanup done"] });
+		},
+		TIMEOUT * 2,
+	);
+
+	it.skipIf(!hasPty)("hands the binary blocking stdio", () => {
+		tmpDir = mkdtempSync(join(tmpdir(), "crust-launcher-test-"));
+		const logPath = join(tmpDir, "child.log");
+		// Importing node:process in the launcher would leave these O_NONBLOCK after execve.
+		const launcher = stageLauncher(
+			tmpDir,
+			`#!/usr/bin/env python3
+import fcntl, os
+flags = [fcntl.fcntl(fd, fcntl.F_GETFL) & os.O_NONBLOCK for fd in (0, 1, 2)]
+open(os.environ["LAUNCHER_TEST_LOG"], "a").write("nonblocking " + ",".join("1" if f else "0" for f in flags) + "\\n")
+`,
+		);
+		const result = spawnSync(process.execPath, [launcher], {
+			env: { ...process.env, LAUNCHER_TEST_LOG: logPath },
+			stdio: "pipe",
+			timeout: TIMEOUT,
+		});
+		expect(result.status).toBe(0);
+		expect(readLog(logPath)).toEqual(["nonblocking 0,0,0"]);
+	});
+
+	it("preserves the environment when execve defaults to an empty environment", () => {
+		tmpDir = mkdtempSync(join(tmpdir(), "crust-launcher-test-"));
+		const launcher = stageLauncher(
+			tmpDir,
+			`#!${process.execPath}\nconsole.log(JSON.stringify(process.env));`,
+		);
+		const env = {
+			PATH: process.env.PATH!,
+			LAUNCHER_TEST_VALUE: "value with spaces=kept",
+			LAUNCHER_TEST_EMPTY: "",
+		};
+		// Reproduce early execve defaults (e.g. Node 24.0.0) on newer test hosts too.
+		const result = spawnSync(
+			process.execPath,
+			[
+				"--import",
+				"data:text/javascript,const execve = process.execve; process.execve = (file, args, env = {}) => execve(file, args, env);",
+				launcher,
+			],
+			{ env, encoding: "utf8", timeout: TIMEOUT },
+		);
+		expect(result.status).toBe(0);
+		// A subset: some Node builds (e.g. Nix wrappers) add variables of their own.
+		expect(JSON.parse(result.stdout)).toMatchObject(env);
+	});
+
+	it.each(["getBuiltinModule", "execve"])(
+		"tells users of a Node.js without %s which version it needs",
+		(api) => {
+			tmpDir = mkdtempSync(join(tmpdir(), "crust-launcher-test-"));
+			const result = spawnSync(
+				process.execPath,
+				["--import", `data:text/javascript,delete process.${api}`, stageLauncher(tmpDir)],
+				{ encoding: "utf8", timeout: TIMEOUT },
+			);
+			expect(result.status).toBe(1);
+			expect(result.stderr).toContain("[app] Requires Node.js >=24");
+		},
 	);
 
 	it(

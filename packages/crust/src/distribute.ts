@@ -7,7 +7,7 @@ import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/js
 import { isWithin } from "@crustjs/utils/path";
 
 import { collectArtifacts, collectIncludeDirs } from "./artifacts.ts";
-import { binaryFilename, generateLauncher } from "./launcher.ts";
+import { binaryFilename, generateLauncher, LAUNCHER_NODE_RANGE } from "./launcher.ts";
 import type { BuildRuntime, TargetInfo, TargetTable } from "./targets.ts";
 
 /** Project-relative directory that `crust build` owns: wiped per build, read by `crust publish`. */
@@ -187,8 +187,18 @@ function buildDistributionRootPackageJson(
 	targets: readonly DistributionTarget[],
 	{ artifactDirs, manPages }: StagingOptions,
 ): RootPublishPackageJson {
+	// Library exports keep the project's range: their consumers import them on their own Node.
+	const { engines } = metadata.rootPackageJson;
+	const launcherEngines =
+		targets.length > 0 && metadata.exports === undefined
+			? {
+					...(engines !== undefined && isJsonObject(engines) ? engines : {}),
+					node: LAUNCHER_NODE_RANGE,
+				}
+			: undefined;
 	const rootPackageJson: RootPublishPackageJson = {
 		...metadata.rootPackageJson,
+		...(launcherEngines ? { engines: launcherEngines } : {}),
 		name: metadata.rootPackageName,
 		version: metadata.version,
 		type: "module",
@@ -433,7 +443,10 @@ function resolveDistributionMetadata(
 		version: pkgJson.version,
 		rootPackageJson: pickRootMetadata(pkgJson),
 		sourceType: pkgJson.type,
-		...(pkgJson.exports !== undefined ? { exports: pkgJson.exports } : {}),
+		// Node resolves `exports: null` like an absent field, so it publishes no library.
+		...(pkgJson.exports !== undefined && pkgJson.exports !== null
+			? { exports: pkgJson.exports }
+			: {}),
 		...(pkgJson.peerDependencies !== undefined
 			? validatePeerDependencies(pkgJson.peerDependencies, pkgJson.peerDependenciesMeta)
 			: {}),

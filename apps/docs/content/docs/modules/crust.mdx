@@ -121,7 +121,7 @@ Staged manifests are generated rather than copied:
 | `exports`, `peerDependencies`, `peerDependenciesMeta` | Preserved in the root only, subject to the rules below                                                                                  |
 | `private`, source scripts, `$schema`                  | Omitted                                                                                                                                 |
 
-¹ Node.js binaries omit `engines.node`, which constrained the Node.js that built and is embedded in the executables, from platform packages, and from the root unless it carries `exports`, whose importers need it. Other `engines` keys are copied.
+¹ For binary builds without library `exports`, the root's `engines.node` is replaced by the npm launcher's requirement, `>=24`; a root with `exports` keeps your range, because its importers run that code on their own Node.js. Platform packages of Node.js binaries omit `engines.node`, which constrained the Node.js that built and is embedded in the executables. Other `engines` keys are copied.
 
 `README.md` is copied into the root package and the license file into every package. Platform manifests carry `os`, `cpu`, and, on Linux, `libc`.
 
@@ -144,7 +144,7 @@ Targets apply to binaries. `--target` overrides `crust.targets`; without either,
 
 Node.js targets use Node.js's own release names. Cross-platform builds download that target's official Node.js archive of the same version; see [Node.js binaries](/docs/guide/build-and-distribution#nodejs-binaries) for the unpacking tools and macOS signing.
 
-Each platform package contains `bin/<command>-<target>` (`.exe` on Windows) per command. The launcher supports only the targets included in the build. It forwards `SIGTERM` and `SIGHUP` to the binary and exits with the binary's exit code or signal. Ctrl-C reaches the binary through the terminal; on POSIX, a `SIGINT` sent to the launcher's PID is forwarded only when no controlling terminal is attached. On Windows it never forwards `SIGINT`: the console delivers Ctrl-C to the binary directly.
+Each platform package contains `bin/<command>-<target>` (`.exe` on Windows) per command. The launcher supports only the targets included in the build. On POSIX it replaces itself with the binary (`process.execve`), so every signal and the exit status belong to the binary, as if it ran directly; this needs Node.js `>=24`, which binary-only root packages declare in `engines.node`. Roots that also publish library `exports` keep the project's range, but their launcher still requires a supported Node.js. Windows has no `execve`: there the launcher starts the binary, forwards `SIGTERM` and `SIGHUP`, never forwards `SIGINT` (the console delivers Ctrl-C to the binary directly), and exits with the binary's exit code or signal.
 
 ### Linux glibc and musl
 

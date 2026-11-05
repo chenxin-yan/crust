@@ -885,7 +885,7 @@ describe("runDistributeBuild", () => {
 		).rejects.toThrow("peerDependenciesMeta must be an object");
 	});
 
-	it("keeps engines.node off node binary packages unless the root carries library exports", async () => {
+	it("gives binary roots the launcher's engines.node and keeps it off platform packages", async () => {
 		mkdirSync(join(tmpDir, "dist"), { recursive: true });
 		writeFileSync(join(tmpDir, "dist", "index.js"), "export const build = 1;\n");
 		const stageDir = join(tmpDir, ".crust");
@@ -914,11 +914,17 @@ describe("runDistributeBuild", () => {
 		const staged = (dir: string) =>
 			readJson<Record<string, JsonValue>>(join(stageDir, dir, "package.json"));
 
-		// engines.node constrained the builder Node that every binary embeds; users need only the launcher's Node.
+		// engines.node constrained the builder Node that every binary embeds; users need only the
+		// launcher's Node, which needs execve.
 		const engines = { node: ">=20", bun: ">=1.4.0" };
 		const source = { engines, description: "CLI", license: "MIT" };
 		await stage(source);
-		for (const dir of ["root", "linux-x64", "windows-x64"]) {
+		expect(staged("root")).toMatchObject({
+			engines: { bun: ">=1.4.0", node: ">=24" },
+			description: "CLI",
+			license: "MIT",
+		});
+		for (const dir of ["linux-x64", "windows-x64"]) {
 			expect(staged(dir)).toMatchObject({
 				engines: { bun: ">=1.4.0" },
 				description: "CLI",
@@ -928,12 +934,17 @@ describe("runDistributeBuild", () => {
 		}
 		expect(engines).toEqual({ node: ">=20", bun: ">=1.4.0" });
 		await stage({ engines: { node: ">=20" } });
-		for (const dir of ["root", "linux-x64"]) expect(staged(dir)).not.toHaveProperty("engines");
+		expect(staged("root").engines).toEqual({ node: ">=24" });
+		expect(staged("linux-x64")).not.toHaveProperty("engines");
 
 		// A library's consumers import the staged exports on their own Node, so the root keeps its range.
 		await stage({ ...source, exports: { ".": "./dist/index.js" } });
 		expect(staged("root").engines).toEqual(engines);
 		expect(staged("linux-x64").engines).toEqual({ bun: ">=1.4.0" });
+		// Node resolves `exports: null` like no exports, so the root is still binary-only.
+		await stage({ ...source, exports: null });
+		expect(staged("root").engines).toEqual({ bun: ">=1.4.0", node: ">=24" });
+		expect(staged("root")).not.toHaveProperty("exports");
 
 		// Node runtime packages and other runtimes' binaries keep engines as written.
 		await stage(source, "node", { execute: fakeExecutor });
@@ -944,6 +955,7 @@ describe("runDistributeBuild", () => {
 			bunDistribution(["bun-linux-x64"]),
 			io,
 		);
-		for (const dir of ["root", "linux-x64"]) expect(staged(dir).engines).toEqual(engines);
+		expect(staged("root").engines).toEqual({ ...engines, node: ">=24" });
+		expect(staged("linux-x64").engines).toEqual(engines);
 	});
 });
