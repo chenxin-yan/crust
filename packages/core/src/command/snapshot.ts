@@ -7,7 +7,7 @@ import type {
 	FlagDef,
 	ValueType,
 } from "../types.ts";
-import { builtChildrenOf, type CommandNode } from "./node.ts";
+import { builtChildOf, builtChildrenOf, childMetaOf, type CommandNode } from "./node.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // CommandSnapshot — Readonly, serializable command description
@@ -120,7 +120,11 @@ export interface CommandSnapshot {
 	readonly args: readonly ArgSnapshot[];
 	/** Effective flags keyed by canonical flag name. */
 	readonly flags: Readonly<Record<string, FlagSnapshot>>;
-	/** Direct subcommand snapshots keyed by canonical name (includes hidden ones). */
+	/**
+	 * Direct subcommand snapshots keyed by canonical name (includes hidden ones). In
+	 * invocation snapshots a pending child exposes `meta` (except `meta.sections`)
+	 * without being built; reading anything else builds it.
+	 */
 	readonly subCommands: Readonly<Record<string, CommandSnapshot>>;
 }
 
@@ -251,7 +255,8 @@ function isReusable(node: CommandNode): boolean | undefined {
  * A per-invocation projector over a prepared tree: each node is projected once,
  * when first read, and its children only when they are read. An invocation that
  * reads root metadata (`rootCommand.meta.version`) or the routed command projects,
- * and builds, just those nodes, while walking `subCommands` still sees every child.
+ * and builds, just those nodes, while walking `subCommands` still sees every child;
+ * a pending child stays unbuilt until something past its static metadata is read.
  * Trees that are fully built and have no mutable defaults at the first read reuse
  * projections across invocations. Otherwise the entire invocation stays local,
  * even if its reads or another invocation make the tree reusable later. This keeps
@@ -281,17 +286,56 @@ export function createSnapshotProjector(
 		if (reuse) return share(node);
 		const existing = projected.get(node);
 		if (existing) return existing;
+		const snapshot = projectLocal(node);
+		projected.set(node, snapshot);
+		return snapshot;
+	};
+	const projectLocal = (node: CommandNode): CommandSnapshot => {
 		const subCommands: Record<string, CommandSnapshot> = {};
-		// Object.keys does not build lazily prepared children.
-		for (const name of Object.keys(node.subCommands)) {
+		// childMetaOf does not build lazily prepared children.
+		for (const [name, meta] of childMetaOf(node.subCommands)) {
 			let child: CommandSnapshot | undefined;
 			Object.defineProperty(subCommands, name, {
 				enumerable: true,
-				get: () => (child ??= project(node.subCommands[name]!)),
+				get: () => (child ??= projectChild(node, name, meta)),
 			});
 		}
-		const snapshot = projectNode(node, snapshotFlags(node), Object.freeze(subCommands), authored);
-		projected.set(node, snapshot);
+		return projectNode(node, snapshotFlags(node), Object.freeze(subCommands), authored);
+	};
+	/**
+	 * A child that is not built yet is projected from its static metadata. Only
+	 * `meta.sections` (a recipe's own Contexts add sections) and the body build it.
+	 */
+	const projectChild = (parent: CommandNode, name: string, meta: CommandMeta): CommandSnapshot => {
+		const built = builtChildOf(parent.subCommands, name);
+		if (built) return project(built);
+		let full: CommandSnapshot | undefined;
+		const body = (): CommandSnapshot => {
+			if (full) return full;
+			const node = parent.subCommands[name]!;
+			full = projected.get(node) ?? projectLocal(node);
+			// Later projections of this node, e.g. through its own children, return the stand-in.
+			if (!projected.has(node)) projected.set(node, snapshot);
+			return full;
+		};
+		const snapshot: CommandSnapshot = Object.freeze(
+			// SAFETY: every CommandSnapshot field is defined below.
+			Object.defineProperties({} as CommandSnapshot, {
+				meta: {
+					enumerable: true,
+					value: Object.freeze(
+						Object.defineProperty({ ...projectMeta(meta, undefined) }, "sections", {
+							enumerable: true,
+							get: () => body().meta.sections,
+						}),
+					),
+				},
+				hasAction: { enumerable: true, get: () => body().hasAction },
+				args: { enumerable: true, get: () => body().args },
+				flags: { enumerable: true, get: () => body().flags },
+				subCommands: { enumerable: true, get: () => body().subCommands },
+			}),
+		);
 		return snapshot;
 	};
 	return project;
@@ -305,6 +349,23 @@ function snapshotFlags(node: CommandNode): Record<string, FlagSnapshot> {
 	return flags;
 }
 
+function projectMeta(
+	meta: CommandMeta,
+	sections: readonly CommandSection[] | undefined,
+): Readonly<CommandMeta> {
+	return freezeCompact({
+		name: meta.name,
+		description: meta.description,
+		version: meta.version,
+		usage: meta.usage,
+		sections: sections
+			? Object.freeze(sections.map((section) => Object.freeze({ ...section })))
+			: undefined,
+		aliases: meta.aliases ? Object.freeze([...meta.aliases]) : undefined,
+		hidden: meta.hidden,
+	});
+}
+
 function projectNode(
 	node: CommandNode,
 	flags: Record<string, FlagSnapshot>,
@@ -316,17 +377,7 @@ function projectNode(
 		? [...(node.meta.sections ?? []), ...contributed]
 		: node.meta.sections;
 	return Object.freeze({
-		meta: freezeCompact({
-			name: node.meta.name,
-			description: node.meta.description,
-			version: node.meta.version,
-			usage: node.meta.usage,
-			sections: sections
-				? Object.freeze(sections.map((section) => Object.freeze({ ...section })))
-				: undefined,
-			aliases: node.meta.aliases ? Object.freeze([...node.meta.aliases]) : undefined,
-			hidden: node.meta.hidden,
-		}),
+		meta: projectMeta(node.meta, sections),
 		hasAction: node.run !== undefined,
 		args: Object.freeze(node.args.map(snapshotArg)),
 		flags: Object.freeze(flags),

@@ -5,6 +5,7 @@ import { unwrap } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
 import { defineExtension, type Extension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
+import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
 import { type CommandDefinitionBuilder, Crust, defineCommand } from "./crust.ts";
 import { subCommandsOf } from "./node.ts";
@@ -285,6 +286,48 @@ describe("command definitions", () => {
 		expect(configured).toEqual(["good", "bad", "bad"]);
 	});
 
+	it("reports an unknown command without building its siblings, even a broken one", async () => {
+		const configured: string[] = [];
+		const failure = new Error("broken recipe");
+		const app = new Crust("cli").add(
+			defineCommand("good", { description: "Good", aliases: ["g"] }, (command) => {
+				configured.push("good");
+				return command.flags({ name: "force", type: "boolean" }).action(() => "ok");
+			}),
+			defineCommand("bad", () => {
+				configured.push("bad");
+				throw failure;
+			}),
+			defineCommand("hidden", { hidden: true }, (command) => command),
+		);
+		// Explicit reads: a deep matcher would walk, and build, every sibling's body.
+		const notFound = (error: unknown) => {
+			if (!(error instanceof CrustError) || !error.is("COMMAND_NOT_FOUND")) throw error;
+			expect(error.details.input).toBe("typo");
+			expect(error.details.available).toEqual(["good", "bad"]);
+			return error.details.parentCommand;
+		};
+
+		const outcome = await app.run(["typo"] as never);
+		if (outcome.status !== "failed") throw new Error("expected a failure");
+		const parentCommand = notFound(outcome.error);
+		let thrown: unknown;
+		try {
+			app.at(["typo"] as never);
+		} catch (error) {
+			thrown = error;
+		}
+		notFound(thrown);
+		expect(configured).toEqual([]);
+
+		// Child metadata is static, so reading it does not run the recipe; the body does.
+		const good = parentCommand.subCommands.good!;
+		expect(good.meta).toMatchObject({ name: "good", description: "Good", aliases: ["g"] });
+		expect(configured).toEqual([]);
+		expect(Object.keys(good.flags)).toEqual(["force"]);
+		expect(configured).toEqual(["good"]);
+	});
+
 	it("keeps nested siblings deferred through recipe cloning and alias routing", async () => {
 		const configured: string[] = [];
 		const failure = new Error("broken nested recipe");
@@ -405,8 +448,19 @@ describe("command definitions", () => {
 					const afterRead = [...configured];
 					const listed = Object.keys(context.rootCommand.subCommands);
 					const afterKeys = [...configured];
-					void Object.values(context.rootCommand.subCommands);
-					return { before, same, afterRead, listed, afterKeys, afterWalk: [...configured] };
+					// Listing reads static metadata only; a child's body builds it.
+					for (const child of Object.values(context.rootCommand.subCommands)) void child.meta.name;
+					const afterWalk = [...configured];
+					for (const child of Object.values(context.rootCommand.subCommands)) void child.flags;
+					return {
+						before,
+						same,
+						afterRead,
+						listed,
+						afterKeys,
+						afterWalk,
+						afterBodies: [...configured],
+					};
 				});
 			});
 		const app = new Crust("cli").add(command("a"), command("b"), command("c"));
@@ -419,7 +473,8 @@ describe("command definitions", () => {
 				afterRead: ["b"],
 				listed: ["a", "b", "c"],
 				afterKeys: ["b"],
-				afterWalk: ["b", "a", "c"],
+				afterWalk: ["b"],
+				afterBodies: ["b", "a", "c"],
 			},
 		});
 	});

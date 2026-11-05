@@ -23,7 +23,7 @@ Options:
   -h, --help                   Show help
 ```
 
-`help()` owns the recursive `--help` and `-h` flag. It also shows help when the selected command has no Command Action.
+`help()` owns the recursive `--help` and `-h` flag. It also shows help when the selected command has no Command Action. Subcommands are listed from their `defineCommand()` metadata without running their recipes, so a command whose recipe throws still appears.
 
 ## Section consumer
 

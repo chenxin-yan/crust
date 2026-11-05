@@ -232,6 +232,15 @@ export function childMetaOf(
 	);
 }
 
+/** The named child if it is already built, else `undefined`; never builds it. */
+export function builtChildOf(
+	subCommands: Record<string, CommandNode>,
+	name: string,
+): CommandNode | undefined {
+	const built = lazyChildBuilt.get(subCommands);
+	return built ? built.get(name) : subCommands[name];
+}
+
 /** The node's children if every one is already built, else `undefined`; never builds one. */
 export function builtChildrenOf(node: CommandNode): CommandNode[] | undefined {
 	if (node.addedChildren) return undefined;

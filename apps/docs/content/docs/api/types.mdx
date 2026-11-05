@@ -129,6 +129,8 @@ Command Snapshots are frozen, serializable descriptions of the command tree. The
   name="CommandSnapshot"
 />
 
+Snapshots from Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details build pending commands only when read. A child's `meta`, except `meta.sections`, comes from its `defineCommand()` config, so reading it never runs the recipe. Reading the child's `meta.sections`, `hasAction`, `args`, `flags`, or `subCommands` builds it and throws any recipe error. `app.snapshot()` builds the full tree up front.
+
 `flags` contains effective local and Context-owned flags. `meta.sections` holds each command-authored, Context-owned, and Extension-contributed section separately; same-title merging happens only when a renderer consumes them.
 
 ### `ArgSnapshot`

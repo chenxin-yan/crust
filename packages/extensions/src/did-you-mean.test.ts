@@ -18,6 +18,28 @@ describe("didYouMean", () => {
 		expect(exitCode).toBe(1);
 	});
 
+	it("reports the unknown command even when a sibling recipe throws", async () => {
+		const built: string[] = [];
+		const app = new Crust("app").extend(didYouMean()).add(
+			defineCommand("build", (cmd) => {
+				built.push("build");
+				return cmd.action(() => {});
+			}),
+			defineCommand("broken", () => {
+				built.push("broken");
+				throw new Error("broken recipe");
+			}),
+		);
+
+		const { stderr, exitCode } = await captureExecute(app, ["buld"]);
+
+		expect(stderr).toContain('Unknown command "buld"');
+		expect(stderr).toContain('Did you mean "build"?');
+		expect(stderr).not.toContain("broken recipe");
+		expect(exitCode).toBe(1);
+		expect(built).toEqual([]);
+	});
+
 	it.each(["car"])("breaks tied scores by canonical name for %s", async (input) => {
 		const app = new Crust("app")
 			.extend(didYouMean())

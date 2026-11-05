@@ -334,6 +334,42 @@ describe("Invocation pipeline — snapshot projection", () => {
 		expect(roots[1]!.subCommands.sub?.meta.name).toBe("sub");
 	});
 
+	it("reads child metadata without building the child; reading its body builds it", async () => {
+		const built: string[] = [];
+		const command = (name: string) =>
+			defineCommand(name, { description: `${name} command` }, (c) => {
+				built.push(name);
+				return c.flags({ name: `${name}-flag`, type: "boolean" }).action(() => {});
+			});
+		const app = new Crust("app").add(command("a"), command("b")).action(({ rootCommand }) => {
+			const b = rootCommand.subCommands.b!;
+			const before = [...built];
+			const meta = { name: b.meta.name, description: b.meta.description };
+			const afterMeta = [...built];
+			const flags = Object.keys(b.flags);
+			return {
+				before,
+				meta,
+				afterMeta,
+				flags,
+				after: [...built],
+				same: rootCommand.subCommands.b === b,
+			};
+		});
+
+		expect(await app.run([])).toMatchObject({
+			status: "completed",
+			result: {
+				before: [],
+				meta: { name: "b", description: "b command" },
+				afterMeta: [],
+				flags: ["b-flag"],
+				after: ["b"],
+				same: true,
+			},
+		});
+	});
+
 	it("reuses rootCommand across invocations once every command is built", async () => {
 		const { observer, roots } = rootObserver();
 		const built: string[] = [];
