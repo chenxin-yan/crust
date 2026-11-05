@@ -77,6 +77,46 @@ describe("defineFlag", () => {
 	});
 });
 
+describe("defineFlag(def)", () => {
+	it("returns a frozen definition that takes its name from the key it is attached under", async () => {
+		const format = defineFlag({ type: "string", choices: ["json", "yaml"], default: "json" });
+		type _Format = Expect<
+			Equal<
+				typeof format,
+				{
+					readonly type: "string";
+					readonly choices: readonly ["json", "yaml"];
+					readonly default: "json";
+				}
+			>
+		>;
+		expect(Object.isFrozen(format)).toBe(true);
+		expect(Object.isFrozen(format.choices)).toBe(true);
+
+		const app = new Crust("cli").flags({ format, output: format });
+		expect(Object.keys((await app.snapshot()).flags)).toEqual(["format", "output"]);
+		const outcome = await unwrap(app.run([], { flags: { output: "yaml" } }));
+		expect(outcome.status).toBe("completed");
+	});
+
+	it("checks the definition eagerly without a name", () => {
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises helper validation.
+		expect(() => defineFlag({ type: "boolean", short: "xx" })).toThrow(
+			expect.objectContaining({
+				message: 'Flag short "xx" must be one character',
+				details: { subject: "flag", reason: "invalid-short" },
+			}),
+		);
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises helper validation.
+		expect(() => defineFlag({ type: "string", choices: ["a"], default: "b" })).toThrow(
+			expect.objectContaining({
+				message: "Flag default must be one of choices",
+				details: { subject: "flag", reason: "default-outside-choices" },
+			}),
+		);
+	});
+});
+
 describe("defineArg", () => {
 	it("returns the named definition with literal types preserved", () => {
 		const target = defineArg("target", { type: "string", required: true });

@@ -1,5 +1,5 @@
 import { CrustError } from "../errors.ts";
-import { toFlagsRecord } from "../parsing/spellings.ts";
+import { flagEntries, toFlagsRecord } from "../parsing/spellings.ts";
 import { validateCommandSections } from "../sections.ts";
 import type {
 	Awaitable,
@@ -15,8 +15,9 @@ import type {
 import type { LocalSectionsBrand } from "../validation/commands.brands.ts";
 import type {
 	AttachedFlags,
-	AttachedSpellings,
 	ContextOwnedFlags,
+	FlagRecordErrors,
+	LocalSpellingsOf,
 	ValidateLocalFlagDefs,
 } from "../validation/flags.brands.ts";
 import type {
@@ -281,38 +282,39 @@ type ContextOptionsOf<Args extends readonly unknown[]> = Args extends readonly [
 export interface ContextBuilder<
 	Name extends string,
 	Use extends readonly AnyContextFactory[] = [],
-	Defs extends readonly NamedFlagDef[] = [],
+	OF extends FlagsDef = {},
 > {
 	/** Declare Contexts setup reads from `ctx`; consumers must provide their transitive closure. */
 	use<const Fs extends readonly AnyContextFactory[]>(
 		...factories: Fs
-	): ContextBuilder<Name, readonly [...Use, ...Fs], Defs>;
-	/** Own flags parsed wherever this Context is provided; setup reads them from `flags`. */
+	): ContextBuilder<Name, readonly [...Use, ...Fs], OF>;
+	/**
+	 * Own flags parsed wherever this Context is provided; setup reads them from `flags`.
+	 * Takes one record keyed by flag name; repeated calls accumulate.
+	 */
+	flags<const F extends FlagsDef>(
+		flags: F & FlagRecordErrors<F, LocalSpellingsOf<OF>>,
+	): ContextBuilder<Name, Use, AppendedFlags<OF, F>>;
 	flags<const Fs extends readonly NamedFlagDef[]>(
-		...defs: ValidateLocalFlagDefs<Fs, AttachedSpellings<Defs>>
-	): ContextBuilder<Name, Use, readonly [...Defs, ...Fs]>;
+		...defs: ValidateLocalFlagDefs<Fs, LocalSpellingsOf<OF>>
+	): ContextBuilder<Name, Use, AppendedFlags<OF, AttachedFlags<Fs>>>;
 	/** Document only the providing command (the root for Extension-provided Contexts). */
 	sections<const S extends readonly RuntimeCommandSectionInput[]>(
 		...sections: S & LocalSectionsBrand<{ sections: S }>["sections"]
-	): ContextBuilder<Name, Use, Defs>;
+	): ContextBuilder<Name, Use, OF>;
 	/**
 	 * Finish the definition. `setup` runs lazily, once per invocation, when a
 	 * consumer first reads the Context. Annotate its optional second parameter to
 	 * accept factory options: `.setup((input, options: { url: string }) => …)`.
 	 */
 	setup<Value, Args extends readonly [options?: unknown] = []>(
-		setup: (
-			input: ContextSetup<AttachedFlags<Defs>, ContextDependencies<Use>>,
-			...args: Args
-		) => Awaitable<Value>,
-	): ContextFactory<
-		Name,
-		ContextOptionsOf<Args>,
-		Value,
-		AttachedFlags<Defs>,
-		ContextDependencies<Use>
-	>;
+		setup: (input: ContextSetup<OF, ContextDependencies<Use>>, ...args: Args) => Awaitable<Value>,
+	): ContextFactory<Name, ContextOptionsOf<Args>, Value, OF, ContextDependencies<Use>>;
 }
+
+// Only a definitely empty state takes the first-call fast path; unions retain their uncertainty.
+type AppendedFlags<OF extends FlagsDef, F extends FlagsDef> =
+	IsUnion<OF> extends true ? MergeFlags<OF, F> : keyof OF extends never ? F : MergeFlags<OF, F>;
 
 type ErasedContextBuilder = ContextBuilder<string, any, any>;
 type ErasedContextOptions = Parameters<AnyContextFactory>[0];
@@ -336,8 +338,13 @@ function createContextBuilder(
 				sections,
 			),
 		// Snapshot and collision-check each call's definitions eagerly, like one combined list.
-		flags: (...defs: readonly NamedFlagDef[]) =>
-			createContextBuilder(name, use, Object.freeze(toFlagsRecord(defs, ownedFlags)), sections),
+		flags: (...input: readonly unknown[]) =>
+			createContextBuilder(
+				name,
+				use,
+				Object.freeze(toFlagsRecord(flagEntries(input), ownedFlags)),
+				sections,
+			),
 		sections: (...inputs: readonly RuntimeCommandSectionInput[]) =>
 			createContextBuilder(
 				name,

@@ -1,5 +1,5 @@
 import type { Equal, Expect } from "../../tests/helpers.ts";
-import type { NamedFlagDef } from "../types.ts";
+import type { FlagsDef, NamedFlagDef } from "../types.ts";
 import type {
 	AttachedSpellings,
 	ContextOwnedFlags,
@@ -50,30 +50,21 @@ import type {
 
 {
 	// brands Extension flag spellings colliding with existing or earlier-Extension flags
-	type Ext<Defs extends readonly NamedFlagDef[], Provide extends readonly unknown[] = []> = {
-		readonly _flagDefs?: Defs;
+	type Ext<Flags extends FlagsDef, Provide extends readonly unknown[] = []> = {
+		readonly _flagDefs?: Flags;
 		readonly provide?: Provide;
 	};
-	type AppCollision = ValidateExtensionFlags<
-		readonly [Ext<readonly [{ name: "mode"; type: "boolean" }]>],
-		"mode"
-	>;
+	type AppCollision = ValidateExtensionFlags<readonly [Ext<{ mode: { type: "boolean" } }>], "mode">;
 	type CrossExtension = ValidateExtensionFlags<
-		readonly [
-			Ext<readonly [{ name: "verbose"; type: "boolean" }]>,
-			Ext<readonly [{ name: "verbose"; type: "string" }]>,
-		],
+		readonly [Ext<{ verbose: { type: "boolean" } }>, Ext<{ verbose: { type: "string" } }>],
 		never
 	>;
 	type Provided = ValidateExtensionFlags<
-		readonly [Ext<readonly [], readonly [{ _ownedFlags?: { mode: { type: "string" } } }]>],
+		readonly [Ext<{}, readonly [{ _ownedFlags?: { mode: { type: "string" } } }]>],
 		"mode"
 	>;
-	type Clean = ValidateExtensionFlags<
-		readonly [Ext<readonly [{ name: "verbose"; type: "boolean" }]>],
-		"mode"
-	>;
-	type Widened = ValidateExtensionFlags<readonly [{ readonly _flagDefs?: NamedFlagDef[] }], "mode">;
+	type Clean = ValidateExtensionFlags<readonly [Ext<{ verbose: { type: "boolean" } }>], "mode">;
+	type Widened = ValidateExtensionFlags<readonly [{ readonly _flagDefs?: FlagsDef }], "mode">;
 	type _app = Expect<
 		Equal<
 			AppCollision[0]["FIX_ALIAS_COLLISION"],

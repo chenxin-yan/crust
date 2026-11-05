@@ -22,6 +22,7 @@ export type {
 	ExtensionBuildContext,
 	ExtensionContext,
 	ExtensionFlagDef,
+	ExtensionFlagsDef,
 	ExtensionSectionContribution,
 	ExtensionHooks,
 	Handled,

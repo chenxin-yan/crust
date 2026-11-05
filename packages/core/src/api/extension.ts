@@ -2,7 +2,7 @@ import type { CommandDefinition, RootCommandMeta } from "../command/crust.ts";
 import type { CommandSnapshot } from "../command/snapshot.ts";
 import { CrustError, type CaughtError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
-import { ownDefinition, toFlagsRecord } from "../parsing/spellings.ts";
+import { flagEntries, ownDefinition, toFlagsRecord } from "../parsing/spellings.ts";
 import type {
 	Awaitable,
 	CommandMeta,
@@ -10,9 +10,9 @@ import type {
 	FlagDef,
 	InferFlags,
 	InvocationIO,
+	MergeFlags,
 	MergeProviders,
 	NamedFlagDef,
-	NamedFlagsRecord,
 	ParsedArgValue,
 	ParsedFlagValue,
 } from "../types.ts";
@@ -22,12 +22,14 @@ import type {
 } from "../validation/commands.brands.ts";
 import type { DeclaredDepsOf, KnownContextInstances } from "../validation/contexts.brands.ts";
 import type {
-	AttachedSpellings,
+	AttachedFlags,
+	FlagRecordErrors,
+	LocalSpellingsOf,
 	ProvideChecks,
 	ProvidedContextSpellings,
 	ValidateLocalFlagDefs,
 } from "../validation/flags.brands.ts";
-import type { HasClosedNames, IsStaticTuple } from "../validation/shared.ts";
+import type { IsClosedName, IsUnion } from "../validation/shared.ts";
 import {
 	definingOf,
 	sealHandle,
@@ -112,7 +114,7 @@ export interface ExtensionBuildContext<MetaKeys extends RootMetaKey = never> {
  * Examples below assume the `tool deploy api --trace -- --dry-run` invocation.
  */
 export interface ExtensionContext<
-	Defs extends readonly NamedExtensionFlagDef[] = [],
+	F extends ExtensionFlagsDef = {},
 	Deps extends ContextMap = {},
 	MetaKeys extends RootMetaKey = never,
 > extends Readonly<InvocationIO> {
@@ -166,7 +168,7 @@ export interface ExtensionContext<
 	 *
 	 * @example `{ trace: true }`
 	 */
-	readonly flags: Readonly<InferExtensionFlags<Defs> & Record<string, ParsedFlagValue>>;
+	readonly flags: Readonly<InferExtensionFlags<F> & Record<string, ParsedFlagValue>>;
 	/**
 	 * Positional values that appeared after the `--` separator, or the `raw` array passed to typed `run()`.
 	 *
@@ -195,7 +197,7 @@ export interface ExtensionContext<
 }
 
 export interface ExtensionHooks<
-	Defs extends readonly NamedExtensionFlagDef[] = [],
+	F extends ExtensionFlagsDef = {},
 	Deps extends ContextMap = {},
 	MetaKeys extends RootMetaKey = never,
 > {
@@ -206,7 +208,7 @@ export interface ExtensionHooks<
 	 * validation (including invalid argv and environment values), schemas, Contexts,
 	 * and the Command Action do not run.
 	 */
-	readonly preRun?: (ctx: ExtensionContext<Defs, Deps, MetaKeys>) => Awaitable<void | Handled>;
+	readonly preRun?: (ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<void | Handled>;
 	/**
 	 * Runs in place of a missing Command Action: only when the routed command has
 	 * none, after every `preRun` hook declined, in `.extend()` order. A fallback
@@ -215,13 +217,13 @@ export interface ExtensionHooks<
 	 * invocation like `preRun`; if no hook does, validation runs and, if it succeeds,
 	 * the invocation completes without a result.
 	 */
-	readonly noAction?: (ctx: ExtensionContext<Defs, Deps, MetaKeys>) => Awaitable<void | Handled>;
+	readonly noAction?: (ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<void | Handled>;
 	/**
 	 * Runs after the invocation settles, in reverse `.extend()` order. This is the
 	 * `finally` slot for cleanup and post-run side effects.
 	 */
 	readonly postRun?: (
-		ctx: ExtensionContext<Defs, Deps, MetaKeys>,
+		ctx: ExtensionContext<F, Deps, MetaKeys>,
 		outcome: InvocationOutcome,
 	) => Awaitable<void>;
 	/**
@@ -235,7 +237,7 @@ export interface ExtensionHooks<
 	 */
 	readonly onError?: (
 		error: CaughtError,
-		ctx: ExtensionContext<[], Deps, MetaKeys>,
+		ctx: ExtensionContext<{}, Deps, MetaKeys>,
 	) => Awaitable<boolean | void>;
 }
 
@@ -244,6 +246,9 @@ export interface ExtensionHooks<
  * flag to every command in the application; set `false` for a root-only flag.
  */
 export type ExtensionFlagDef = FlagDef & { readonly recursive?: boolean };
+
+/** Record mapping an Extension's flag names to their definitions. */
+export type ExtensionFlagsDef = Record<string, ExtensionFlagDef>;
 
 /** A named flag definition accepted by {@link defineExtension}. */
 export type NamedExtensionFlagDef = NamedFlagDef & {
@@ -289,12 +294,16 @@ type InferExtensionFlag<F> = F extends ExtensionFlagDef
 			| ("recursive" extends keyof F ? (false extends F["recursive"] ? undefined : never) : never)
 	: never;
 
-/** Infer pre-validation hook values; uncertain collections claim no typed ownership. */
-export type InferExtensionFlags<Defs extends readonly NamedExtensionFlagDef[]> =
-	IsStaticTuple<Defs> extends true
-		? HasClosedNames<Defs> extends true
-			? { [K in keyof NamedFlagsRecord<Defs>]: InferExtensionFlag<NamedFlagsRecord<Defs>[K]> }
-			: Record<string, ParsedFlagValue>
+/** Infer pre-validation hook values; dynamic or conditional records claim no typed ownership. */
+export type InferExtensionFlags<F extends ExtensionFlagsDef> =
+	IsClosedName<keyof F & string> extends true
+		? IsUnion<F> extends true
+			? Record<string, ParsedFlagValue>
+			: {
+					-readonly [K in keyof F]: {} extends Pick<F, K>
+						? ParsedFlagValue
+						: InferExtensionFlag<F[K]>;
+				}
 		: Record<string, ParsedFlagValue>;
 
 /** A documentation section an Extension contributes to one command path. */
@@ -325,9 +334,13 @@ type ExtensionDeps<
 
 /** Flag spellings an Extension already owns: declared flags plus provided Context-owned flags. */
 type DeclaredSpellings<
-	Defs extends readonly NamedExtensionFlagDef[],
+	F extends ExtensionFlagsDef,
 	Provide extends readonly AnyContextInstance[],
-> = AttachedSpellings<Defs> | ProvidedContextSpellings<Provide>;
+> = LocalSpellingsOf<F> | ProvidedContextSpellings<Provide>;
+
+// Only a definitely empty state takes the first-call fast path; unions retain their uncertainty.
+type AppendedFlags<OF extends ExtensionFlagsDef, F extends ExtensionFlagsDef> =
+	IsUnion<OF> extends true ? MergeFlags<OF, F> : keyof OF extends never ? F : MergeFlags<OF, F>;
 
 declare const extensionHookProof: unique symbol;
 
@@ -339,7 +352,7 @@ declare const extensionHookProof: unique symbol;
 export interface ExtensionData<
 	Deps extends ContextMap = ContextMap,
 	Provide extends readonly AnyContextInstance[] = readonly AnyContextInstance[],
-	FlagDefs extends readonly NamedExtensionFlagDef[] = readonly NamedExtensionFlagDef[],
+	FlagDefs extends ExtensionFlagsDef = ExtensionFlagsDef,
 	Commands extends readonly CommandDefinition<any, any, any, any>[] = readonly CommandDefinition<
 		any,
 		any,
@@ -354,7 +367,7 @@ export interface ExtensionData<
 	readonly [extensionHookProof]?: (deps: HookDeps) => void;
 	readonly id: ExtensionId;
 	readonly flags: Readonly<Record<string, ExtensionFlagDef>>;
-	/** @internal — phantom carrying declared flag literals for extend-time collision checks */
+	/** @internal — phantom carrying the declared flag record for extend-time collision checks */
 	readonly _flagDefs?: FlagDefs;
 	readonly commands: Commands;
 	readonly use: readonly AnyContextFactory[];
@@ -374,7 +387,7 @@ export interface ExtensionData<
 export interface Extension<
 	Deps extends ContextMap = ContextMap,
 	Provide extends readonly AnyContextInstance[] = readonly AnyContextInstance[],
-	FlagDefs extends readonly NamedExtensionFlagDef[] = readonly NamedExtensionFlagDef[],
+	FlagDefs extends ExtensionFlagsDef = ExtensionFlagsDef,
 	Commands extends readonly CommandDefinition<any, any, any, any>[] = readonly CommandDefinition<
 		any,
 		any,
@@ -424,18 +437,18 @@ export type ExtensionsProvidesOutput<Es extends readonly AnyExtension[]> =
 /**
  * A callable Extension constructor whose identity is also a section consumer.
  * Contribution parameters default to closed sets. Use `ContextMap`,
- * `readonly AnyContextInstance[]`, `readonly NamedExtensionFlagDef[]`, or
+ * `readonly AnyContextInstance[]`, `ExtensionFlagsDef`, or
  * `readonly CommandDefinition<any, any, any, any>[]` to keep a namespace open.
  */
 export type ExtensionFactory<
 	Args extends readonly unknown[] = [],
 	Deps extends ContextMap = {},
 	Provide extends readonly AnyContextInstance[] = [],
-	Defs extends readonly NamedExtensionFlagDef[] = [],
+	Flags extends ExtensionFlagsDef = {},
 	Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
 	MetaKeys extends RootMetaKey = never,
 	HookDeps extends ContextMap = Deps,
-> = ((...args: Args) => Extension<Deps, Provide, Defs, Commands, MetaKeys, HookDeps>) & {
+> = ((...args: Args) => Extension<Deps, Provide, Flags, Commands, MetaKeys, HookDeps>) & {
 	readonly id: ExtensionId;
 };
 
@@ -444,21 +457,21 @@ type ExtensionFactoryOf<Args extends readonly unknown[], E> =
 		ExtensionData<
 			infer Deps,
 			infer Provide,
-			infer Defs,
+			infer Flags,
 			infer Commands,
 			infer MetaKeys,
 			infer HookDeps
 		>
 	>
-		? ExtensionFactory<Args, Deps, Provide, Defs, Commands, MetaKeys, HookDeps>
+		? ExtensionFactory<Args, Deps, Provide, Flags, Commands, MetaKeys, HookDeps>
 		: never;
 
 type ExtensionHook<
 	Name extends keyof ExtensionHooks,
 	Use extends readonly AnyContextFactory[],
-	Defs extends readonly NamedExtensionFlagDef[],
+	F extends ExtensionFlagsDef,
 	MetaKeys extends RootMetaKey,
-> = NonNullable<ExtensionHooks<Defs, ContextDependencies<Use>, MetaKeys>[Name]>;
+> = NonNullable<ExtensionHooks<F, ContextDependencies<Use>, MetaKeys>[Name]>;
 
 /**
  * Immutable fluent Extension authoring handle returned by {@link defineExtension}.
@@ -470,13 +483,13 @@ type ExtensionHook<
 export interface ExtensionBuilder<
 	Use extends readonly AnyContextFactory[] = [],
 	Provide extends readonly AnyContextInstance[] = [],
-	Defs extends readonly NamedExtensionFlagDef[] = [],
+	OF extends ExtensionFlagsDef = {},
 	Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
 	MetaKeys extends RootMetaKey = never,
 > extends Extension<
 	ExtensionDeps<Use, Provide, Commands>,
 	Provide,
-	Defs,
+	OF,
 	Commands,
 	MetaKeys,
 	ContextDependencies<Use>
@@ -487,62 +500,65 @@ export interface ExtensionBuilder<
 	 */
 	use<const Fs extends readonly [AnyContextFactory, ...AnyContextFactory[]]>(
 		...factories: Fs
-	): ExtensionBuilder<readonly [...Use, ...Fs], Provide, Defs, Commands, MetaKeys>;
+	): ExtensionBuilder<readonly [...Use, ...Fs], Provide, OF, Commands, MetaKeys>;
 	/**
 	 * Provide Contexts application-wide, regardless of chain position. Provided
 	 * Contexts are not exposed to this Extension's hooks unless also declared with `.use()`.
 	 */
 	provide<const Cs extends readonly AnyContextInstance[]>(
-		...instances: KnownContextInstances<Cs> & ProvideChecks<DeclaredSpellings<Defs, Provide>, Cs>
-	): ExtensionBuilder<Use, readonly [...Provide, ...Cs], Defs, Commands, MetaKeys>;
-	/** Own flags; `recursive` (default `true`) contributes a flag to every command. */
+		...instances: KnownContextInstances<Cs> & ProvideChecks<DeclaredSpellings<OF, Provide>, Cs>
+	): ExtensionBuilder<Use, readonly [...Provide, ...Cs], OF, Commands, MetaKeys>;
+	/**
+	 * Own flags, one record keyed by flag name; repeated calls accumulate. `recursive`
+	 * (default `true`) contributes a flag to every command.
+	 */
+	flags<const F extends ExtensionFlagsDef>(
+		flags: F & FlagRecordErrors<F, DeclaredSpellings<OF, Provide>>,
+	): ExtensionBuilder<Use, Provide, AppendedFlags<OF, F>, Commands, MetaKeys>;
 	flags<const Fs extends readonly NamedExtensionFlagDef[]>(
-		...defs: ValidateLocalFlagDefs<Fs, DeclaredSpellings<Defs, Provide>>
-	): ExtensionBuilder<Use, Provide, readonly [...Defs, ...Fs], Commands, MetaKeys>;
+		...defs: ValidateLocalFlagDefs<Fs, DeclaredSpellings<OF, Provide>>
+	): ExtensionBuilder<Use, Provide, AppendedFlags<OF, AttachedFlags<Fs>>, Commands, MetaKeys>;
 	/** Contribute root commands; names and aliases must not collide with any other root command. */
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
 		...definitions: Ds & ValidateCommandDefinitions<Ds, AttachedCommandSpellings<Commands>>
-	): ExtensionBuilder<Use, Provide, Defs, readonly [...Commands, ...Ds], MetaKeys>;
+	): ExtensionBuilder<Use, Provide, OF, readonly [...Commands, ...Ds], MetaKeys>;
 	/** See {@link ExtensionHooks.preRun}. */
 	preRun(
-		hook: ExtensionHook<"preRun", Use, Defs, MetaKeys>,
-	): ExtensionBuilder<Use, Provide, Defs, Commands, MetaKeys>;
+		hook: ExtensionHook<"preRun", Use, OF, MetaKeys>,
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
 	/** See {@link ExtensionHooks.noAction}. */
 	noAction(
-		hook: ExtensionHook<"noAction", Use, Defs, MetaKeys>,
-	): ExtensionBuilder<Use, Provide, Defs, Commands, MetaKeys>;
+		hook: ExtensionHook<"noAction", Use, OF, MetaKeys>,
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
 	/** See {@link ExtensionHooks.postRun}. */
 	postRun(
-		hook: ExtensionHook<"postRun", Use, Defs, MetaKeys>,
-	): ExtensionBuilder<Use, Provide, Defs, Commands, MetaKeys>;
+		hook: ExtensionHook<"postRun", Use, OF, MetaKeys>,
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
 	/** See {@link ExtensionHooks.onError}. */
 	onError(
-		hook: ExtensionHook<"onError", Use, Defs, MetaKeys>,
-	): ExtensionBuilder<Use, Provide, Defs, Commands, MetaKeys>;
+		hook: ExtensionHook<"onError", Use, OF, MetaKeys>,
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
 	/** Contribute documentation sections computed from the prepared root snapshot. */
 	sections(
 		contribute: (
 			snapshot: RootCommandSnapshot<MetaKeys>,
 		) => readonly ExtensionSectionContribution[],
-	): ExtensionBuilder<Use, Provide, Defs, Commands, MetaKeys>;
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
 	/** Generate build artifacts; build tooling writes the returned files. */
 	build(
 		generate: (ctx: ExtensionBuildContext<MetaKeys>) => Awaitable<BuildArtifacts>,
-	): ExtensionBuilder<Use, Provide, Defs, Commands, MetaKeys>;
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
 	/**
 	 * Make a configurable Extension: each call passes this handle and the call
 	 * arguments to `define`, which must return an Extension with this handle's id.
 	 */
 	factory<Args extends readonly unknown[], E extends AnyExtension>(
-		define: (
-			extension: ExtensionBuilder<Use, Provide, Defs, Commands, MetaKeys>,
-			...args: Args
-		) => E,
+		define: (extension: ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>, ...args: Args) => E,
 	): ExtensionFactoryOf<Args, E>;
 }
 
 interface ExtensionState extends Omit<ExtensionData, "flags"> {
-	readonly flags: readonly NamedExtensionFlagDef[];
+	readonly flags: readonly (readonly [name: string, def: ExtensionFlagDef])[];
 }
 
 type ErasedExtensionBuilder = ExtensionBuilder<any, any, any, any, any>;
@@ -551,9 +567,7 @@ function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 	const flags = Object.freeze(toFlagsRecord(state.flags));
 	// Provided Context-owned spellings collide with owned flags but stay Context-owned.
 	toFlagsRecord(
-		state.provide.flatMap((instance) =>
-			Object.entries(instance.ownedFlags).map(([name, def]) => ({ ...def, name })),
-		),
+		state.provide.flatMap((instance) => Object.entries(instance.ownedFlags)),
 		flags,
 	);
 	const data: ExtensionData = Object.freeze({
@@ -573,8 +587,15 @@ function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 			next({ use: [...state.use, ...factories.map(definingOf)] }),
 		provide: (...instances: readonly AnyContextInstance[]) =>
 			next({ provide: [...state.provide, ...instances.map(definingOf)] }),
-		flags: (...defs: readonly NamedExtensionFlagDef[]) =>
-			next({ flags: [...state.flags, ...defs.map((def) => ownDefinition(def, "flag", def.name))] }),
+		flags: (...input: readonly unknown[]) =>
+			next({
+				flags: [
+					...state.flags,
+					...flagEntries(input).map(
+						([name, def]) => [name, ownDefinition(def, "flag", name)] as const,
+					),
+				],
+			}),
 		add: (...definitions: readonly CommandDefinition<any, any, any, any>[]) =>
 			next({ commands: [...state.commands, ...definitions] }),
 		preRun: (preRun: ExtensionHooks["preRun"]) => next({ hooks: { ...state.hooks, preRun } }),
@@ -617,7 +638,7 @@ function createExtension(state: ExtensionState): ErasedExtensionBuilder {
  */
 export function defineExtension<MetaKeys extends RootMetaKey = never>(
 	id: ExtensionId,
-): ExtensionBuilder<[], [], [], [], MetaKeys> {
+): ExtensionBuilder<[], [], {}, [], MetaKeys> {
 	// SAFETY: metadata requirements are type-only; the runtime handle is identical for every MetaKeys.
 	return createExtension({
 		id,
@@ -626,5 +647,5 @@ export function defineExtension<MetaKeys extends RootMetaKey = never>(
 		flags: [],
 		commands: [],
 		hooks: {},
-	}) as ExtensionBuilder<[], [], [], [], MetaKeys>;
+	}) as ExtensionBuilder<[], [], {}, [], MetaKeys>;
 }

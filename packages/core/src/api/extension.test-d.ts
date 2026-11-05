@@ -184,7 +184,7 @@ function _metadataRequirements() {
 }
 
 function _genericMetadataRequirements<K extends "version">(
-	extension: Extension<{}, [], [], [], K>,
+	extension: Extension<{}, [], {}, [], K>,
 ) {
 	const app = new Crust("app", { version: "1" });
 	const unversioned = new Crust("app");
@@ -210,7 +210,7 @@ function _genericMetadataRequirements<K extends "version">(
 }
 
 function _genericMultipleMetadataRequirements<K extends "version" | "description">(
-	extension: Extension<{}, [], [], [], K>,
+	extension: Extension<{}, [], {}, [], K>,
 ) {
 	new Crust("app", { version: "1", description: "app" }).extend(extension);
 	// @ts-expect-error The root must guarantee every key the generic may require.
@@ -239,7 +239,7 @@ function _fluentInference() {
 	logging(123);
 	const extension = logging("docs");
 	type Data = DefiningOf<typeof extension>;
-	type _flags = Expect<Equal<NonNullable<Data["_flagDefs"]>[0]["name"], "verbose">>;
+	type _flags = Expect<Equal<keyof NonNullable<Data["_flagDefs"]>, "verbose">>;
 	type _commands = Expect<Equal<Data["commands"], readonly [typeof command]>>;
 	const app = new Crust("app", { version: "1" }).extend(extension);
 	void app.run(["docs"], { flags: { verbose: true } });
@@ -262,10 +262,10 @@ function _fluentInference() {
 	});
 	type _optionalArgs = Expect<Equal<Parameters<typeof optional>, [options?: { a?: 1 }]>>;
 	optional();
-	const flags = [{ name: "label", type: "string" }] as const;
+	const flags = { label: { type: "string" } } as const;
 	const annotated: ExtensionFactory<[label: string], {}, [], typeof flags> = defineExtension(
 		ID,
-	).factory((extension, _label: string) => extension.flags(...flags));
+	).factory((extension, _label: string) => extension.flags(flags));
 	annotated("value");
 }
 

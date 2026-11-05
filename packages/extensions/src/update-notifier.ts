@@ -163,7 +163,7 @@ function isUpdateCheckSuppressed(): boolean {
 // Extension factory
 // ────────────────────────────────────────────────────────────────────────────
 
-type UpdateNotifierRegistration<K extends RootMetaKey> = Extension<{}, [], [], [], K>;
+type UpdateNotifierRegistration<K extends RootMetaKey> = Extension<{}, [], {}, [], K>;
 
 /** An explicit `currentVersion` supplies the version; omitting it requires root metadata. */
 export interface UpdateNotifierExtension {

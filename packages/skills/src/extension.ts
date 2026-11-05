@@ -266,12 +266,12 @@ type SkillCommands<Command extends string> = string extends Command
 export interface SkillExtension {
 	<const Command extends string>(
 		options: SkillOptions & { command: Command },
-	): Extension<{}, [], [], SkillCommands<Command>>;
+	): Extension<{}, [], {}, SkillCommands<Command>>;
 	(
 		options: SkillOptions & { command?: undefined },
-	): Extension<{}, [], [], readonly [SkillCommandDefinition]>;
+	): Extension<{}, [], {}, readonly [SkillCommandDefinition]>;
 	// Omitted `Commands` is the open command namespace.
-	(options: SkillOptions): Extension<{}, [], []>;
+	(options: SkillOptions): Extension<{}, [], {}>;
 	readonly id: ExtensionId;
 }
 
@@ -279,7 +279,7 @@ const skillFactory: ExtensionFactory<
 	[options: SkillOptions],
 	{},
 	[],
-	[],
+	{},
 	readonly [SkillCommandDefinition<string, readonly string[]>]
 > = defineExtension(SKILLS).factory((extension, options) => {
 	const commandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;

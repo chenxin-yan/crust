@@ -6,7 +6,7 @@ import {
 	type ExtensionId,
 } from "@crustjs/core";
 
-type Stamp<MetaKeys extends "version"> = Extension<{}, [], [], [], MetaKeys>;
+type Stamp<MetaKeys extends "version"> = Extension<{}, [], {}, [], MetaKeys>;
 
 export interface StampFactory {
 	(version: string): Stamp<never>; // an explicit value needs no root metadata

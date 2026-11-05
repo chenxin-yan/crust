@@ -76,18 +76,22 @@ const flags = {
 
 ### `NamedFlagDef`
 
-A `FlagDef` carrying its `name`: the shape accepted by command and Context `.flags(...defs)`, and `defineFlag()`.
+A `FlagDef` carrying its `name`: the shape accepted by the variadic named form of `.flags(...defs)` and returned by `defineFlag(name, def)`.
 
 ### `defineFlag` and `defineArg`
 
-Declare a definition separately from `.flags()` or `.args()` while keeping its literal types, without `as const`:
+Declare a definition separately from `.flags()` or `.args()` while keeping its literal types, without `as const`. A flag takes its name from the key it is attached under, so one definition can serve several names:
 
 ```ts
-import { defineArg, defineFlag } from "@crustjs/core";
+import { Crust, defineArg, defineFlag } from "@crustjs/core";
 
-const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
+const verbose = defineFlag({ type: "boolean", short: "v" });
 const target = defineArg("target", { type: "string", required: true });
+
+new Crust("build").flags({ verbose }).args(target); // --verbose
 ```
+
+`defineFlag(name, def)` returns a named definition for the variadic `.flags(...defs)` form.
 
 Invalid literal names, defaults, and parsers fail typecheck. Dynamic definitions are checked where they are consumed. `UnnamedArgDef` is the `defineArg()` definition without its name.
 
@@ -225,7 +229,7 @@ Declared in [`api/context.ts`](https://github.com/chenxin-yan/crust/blob/main/pa
 `defineContext(name)` starts an immutable definition. `.use()`, `.flags()`, and `.sections()` append and return new frozen builders; the original is unchanged. The terminal `.setup(callback)` returns a [`ContextFactory`](#contextfactory). An unfinished builder cannot be provided or used as a factory.
 
 - `.use(...factories)` declares the dependencies setup reads from `ctx`. Literal lists retain exact types; widened arrays declare open dependencies checked at runtime during composition. Empty calls are allowed.
-- `.flags(...defs)` declares owned flags. Definitions are copied, and spellings are checked against earlier calls both by TypeScript and when the method runs.
+- `.flags(flags)` declares owned flags from one record keyed by flag name. Definitions are copied, and spellings are checked against earlier calls both by TypeScript and when the method runs.
 - `.sections(...sections)` declares [`CommandSectionInput`](#commandsectioninput) documentation, validated and frozen at declaration. It documents only the providing command (the root for Extension-provided Contexts); duplicate titles from other Contexts or command sections fail preparation. See [Context-owned documentation](/docs/guide/contexts#documentation-owned-by-a-context).
 - Setup receives types from the preceding declarations. Annotate its second parameter for factory options without restating `ctx`, flag, or return types:
 
@@ -307,13 +311,15 @@ A frozen handle created only by `defineExtension()`. Spreading or copying it doe
 
 `keyof RootCommandMeta`: the keys `defineExtension<MetaKeys>(id)` accepts as its only type argument. Required keys become non-optional in the root snapshots passed to hooks, `build`, and `sections`, and `.extend()` checks at compile time that the root supplies them. See [required root metadata](/docs/guide/extensions#required-root-metadata).
 
-### `ExtensionFlagDef` and `NamedExtensionFlagDef`
+### `ExtensionFlagDef` and `ExtensionFlagsDef`
 
-A `FlagDef` (or `NamedFlagDef`) plus `recursive?: boolean`. `recursive` defaults to `true`; `false` contributes the flag only to the root.
+A `FlagDef` plus `recursive?: boolean`. `recursive` defaults to `true`; `false` contributes the flag only to the root. `ExtensionFlagsDef` is `Record<string, ExtensionFlagDef>`, the record an Extension's `.flags()` takes, the third type argument of `Extension`, and the fourth type argument of `ExtensionFactory`. `NamedExtensionFlagDef` is `ExtensionFlagDef` carrying its `name`, for the variadic named form.
 
-### `InferExtensionFlags<Defs>`
+### `InferExtensionFlags<F>`
 
 The flag values an Extension's hooks see. They are pre-validation values, not schema outputs: a required flag can still be absent, a defaulted value flag is absent when its argv or environment value is invalid, and a non-recursive flag can be absent on descendants.
+
+Dynamic or conditional records do not claim typed ownership of hook values. An optional definition likewise exposes `ParsedFlagValue`: when it is absent, another Extension may own the same name with a different value type.
 
 ### `ExtensionContext`
 

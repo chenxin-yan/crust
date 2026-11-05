@@ -62,7 +62,7 @@ describe("type performance report", () => {
 	});
 
 	it.each([10])("preserves the workload across API dialects at size %i", (size) => {
-		const fluent = generateConsumerSource(size);
+		const fluent = generateConsumerSource(size, "fluent");
 		const config = generateConsumerSource(size, "context-config");
 		expect(config).toContain(
 			'defineContext("context-1", { flags: [contextFlag1], use: [context0] }, async',
@@ -93,6 +93,26 @@ describe("type performance report", () => {
 				"context($1, $2)",
 			);
 		expect(withoutInlineContexts(extensionsConfig)).toBe(withoutInlineContexts(extensionsFluent));
+
+		// Named and record flags differ only in syntax, with one flag per `.flags()` call.
+		const records = generateConsumerSource(size, "record-flags", false, true, true);
+		const named = generateConsumerSource(size, "fluent", false, true, true);
+		expect(records).toContain(
+			'.flags({ "command-0-verbose": { type: "boolean", short: "v", aliases: ["verbose-0"] } })',
+		);
+		expect(records).toContain(
+			'const contextFlag0 = defineFlag({ type: "string", aliases: ["ctx-0-token"] });',
+		);
+		expect(records).toContain(
+			'defineContext("context-0").flags({ "context-0-token": contextFlag0 })',
+		);
+		const asRecords = (source: string) =>
+			source
+				.replace(/\.flags\(\{ name: "([^"]+)", ([^}]*) \}\)/g, '.flags({ "$1": { $2 } })')
+				.replace(/defineFlag\("(context-\d+-token)", /g, "defineFlag(")
+				.replace(/\.flags\(contextFlag(\d+)\)/g, '.flags({ "context-$1-token": contextFlag$1 })');
+		expect(asRecords(named)).toBe(records);
+		expect(records.match(/\.flags\(/g)).toHaveLength(named.match(/\.flags\(/g)!.length);
 	});
 
 	it("exercises typed run()/at() and adds commands one call at a time unless wide", () => {
@@ -123,13 +143,13 @@ describe("type performance report", () => {
 
 	it("passes 60 Extensions with flags, Contexts and commands to one .extend() call", () => {
 		expect(generateConsumerSource(10)).not.toContain("wideExtension");
-		const source = generateConsumerSource(10, "fluent", false, false, true);
+		const source = generateConsumerSource(10, "record-flags", false, false, true);
 		const extensions = Array.from({ length: 60 }, (_, index) => `wideExtension${index}`);
 		expect(source).toContain(
 			`new Crust("type-perf-wide-extensions").extend(${extensions.join(", ")})`,
 		);
 		expect(source).toContain(
-			'const wideExtension59 = defineExtension(defineExtensionId("type-perf-wide-extension-59")).flags({ name: "wide-extension-59", type: "boolean" }).provide(defineContext("wide-extension-59").setup(() => 59)()).add(defineCommand("wide-extension-command-59", (command) => command));',
+			'const wideExtension59 = defineExtension(defineExtensionId("type-perf-wide-extension-59")).flags({ "wide-extension-59": { type: "boolean" } }).provide(defineContext("wide-extension-59").setup(() => 59)()).add(defineCommand("wide-extension-command-59", (command) => command));',
 		);
 		expect(source).not.toContain("wide59");
 	});
@@ -169,7 +189,7 @@ describe("type performance report", () => {
 			expect(Object.keys(measured.checkSeconds)).toEqual(Object.keys(measured.instantiations));
 			expect(measured.checkSeconds[400]).toBeGreaterThan(0);
 			expect(measured.typescriptVersion).toBeTruthy();
-			expect(measured.fixtureApi).toBe("fluent");
+			expect(measured.fixtureApi).toBe("record-flags");
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}
@@ -239,10 +259,14 @@ describe("type performance report", () => {
 		).toThrow("PR merge fixture 50 in one .add() failed to compile: TS2589");
 	});
 
-	it("labels comparisons across the Context API transition", () => {
+	it("labels comparisons across the Context and flag API transitions", () => {
 		const base = { ...report(10_000, 50_000, 100_000), fixtureApi: "context-config" as const };
 		expect(formatComparison(base, report(11_000, 60_000, 120_000))).toContain(
-			"API transition (context-config → fluent): fixtures use equivalent workloads with each API's context and extension syntax, not identical source.",
+			"API transition (context-config → fluent): fixtures use equivalent workloads with each API's Context, Extension, and flag syntax, not identical source.",
+		);
+		const records = { ...report(11_000, 60_000, 120_000), fixtureApi: "record-flags" as const };
+		expect(formatComparison(report(10_000, 50_000, 100_000), records)).toContain(
+			"API transition (fluent → record-flags)",
 		);
 	});
 

@@ -22,16 +22,15 @@ export interface VersionOptions {
 	readonly format?: "plain" | ((version: string, context: ExtensionContext) => string);
 }
 
-const versionFlags = [
-	{
-		name: "version",
+const versionFlags = {
+	version: {
 		type: "boolean",
 		short: "v",
 		noNegate: true,
 		description: "Show version number",
 		recursive: false,
 	},
-] as const;
+} as const;
 
 type VersionRegistration<K extends RootMetaKey> = Extension<{}, [], typeof versionFlags, [], K>;
 
@@ -47,7 +46,7 @@ export interface VersionExtension {
 export const version: VersionExtension = /* @__PURE__ */ defineExtension(VERSION).factory(
 	(extension, value?: VersionValue, options: VersionOptions = {}) => {
 		const { format } = options;
-		return extension.flags(...versionFlags).preRun((context) => {
+		return extension.flags(versionFlags).preRun((context) => {
 			if (context.commandPath.length !== 1 || context.flags.version !== true) return;
 			// SAFETY: the `VersionExtension` overloads require root `version` metadata when `value` is omitted.
 			const resolvedVersion =

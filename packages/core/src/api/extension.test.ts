@@ -10,10 +10,28 @@ import {
 	defineExtension,
 	defineExtensionId,
 	type Extension,
+	type ExtensionFlagsDef,
 } from "../index.ts";
 import { definingOf } from "./context.ts";
 
 describe("defineExtension", () => {
+	it("does not claim hook values for absent optional definitions", async () => {
+		const optional: { port?: { type: "number"; default: number } } = {};
+		const peerFlags: ExtensionFlagsDef = { port: { type: "string", default: "text" } };
+		const seen: unknown[] = [];
+		const observer = defineExtension(defineExtensionId("observer"))
+			.flags(optional)
+			.preRun(({ flags }) => {
+				seen.push(flags.port);
+			})
+			.postRun(({ flags }) => {
+				seen.push(flags.port);
+			});
+		const peer = defineExtension(defineExtensionId("peer")).flags(peerFlags);
+		await unwrap(new Crust("cli").extend(observer, peer).run([]));
+		expect(seen).toEqual(["text", "text"]);
+	});
+
 	const HELP = defineExtensionId("acme:help");
 	const help = defineExtension(HELP).factory(
 		(extension, options: { readonly verbose?: boolean } = {}) =>
@@ -219,7 +237,7 @@ describe("defineExtension", () => {
 		const _broad: Extension<
 			{ logger: { info: () => void } },
 			readonly [typeof provided],
-			readonly [{ readonly name: "verbose"; readonly type: "boolean" }],
+			{ readonly verbose: { readonly type: "boolean" } },
 			readonly [typeof command]
 		> = logging;
 		expect(definingOf(logging).commands).toEqual([command]);

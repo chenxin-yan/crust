@@ -27,7 +27,7 @@ const fixtures = [
 	},
 ] as const;
 type FixtureName = (typeof fixtures)[number]["name"];
-type FixtureApi = "context-config" | "fluent";
+type FixtureApi = "context-config" | "fluent" | "record-flags";
 
 export interface TypePerfReport {
 	typescriptVersion: string;
@@ -110,7 +110,7 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
 			? []
 			: [
 					"",
-					`API transition (${base.fixtureApi} → ${head.fixtureApi}): fixtures use equivalent workloads with each API's context and extension syntax, not identical source.`,
+					`API transition (${base.fixtureApi} → ${head.fixtureApi}): fixtures use equivalent workloads with each API's Context, Extension, and flag syntax, not identical source.`,
 				]),
 	].join("\n");
 }
@@ -125,29 +125,35 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
  * to the app's `.provide()`, a command's `.use()`, and an Extension's `.provide()`
  * that a second app `.extend()`s. `wideExtensions` adds 60 Extensions, each with a flag,
  * a provided Context and a command, that another app passes to one `.extend()` call.
- * The context-config dialect supports comparisons across the fluent-Context API transition.
+ * The context-config dialect supports comparisons across the fluent-Context API transition, and
+ * the fluent dialect across the record-flags transition. The fluent and record-flags dialects
+ * emit the same number of `.flags()` calls, so that transition row measures the flag form, not
+ * call merging; context-config passes Context flags through its config object instead.
  */
 export function generateConsumerSource(
 	size: number,
-	fixtureApi: FixtureApi = "fluent",
+	fixtureApi: FixtureApi = "record-flags",
 	wideAdd = false,
 	wideContexts = false,
 	wideExtensions = false,
 ): string {
 	if (!Number.isInteger(size) || size < 1) throw new Error("size must be a positive integer");
 	const contextCount = Math.max(3, Math.ceil(size / 10));
+	const records = fixtureApi === "record-flags";
+	const flag = (name: string, fields: string) =>
+		records ? `{ "${name}": { ${fields} } }` : `{ name: "${name}", ${fields} }`;
 	const lines = [
 		'import { Crust, defineCommand, defineContext, defineExtension, defineExtensionId, defineFlag } from "@crustjs/core";',
 		"",
 	];
 
 	const context = (index: number, setup: string, use?: string) =>
-		fixtureApi === "fluent"
-			? `defineContext("context-${index}").flags(contextFlag${index})${use ? `.use(${use})` : ""}.setup(${setup})`
+		fixtureApi !== "context-config"
+			? `defineContext("context-${index}").flags(${records ? `{ "context-${index}-token": contextFlag${index} }` : `contextFlag${index}`})${use ? `.use(${use})` : ""}.setup(${setup})`
 			: `defineContext("context-${index}", { flags: [contextFlag${index}]${use ? `, use: [${use}]` : ""} }, ${setup})`;
 	for (let index = 0; index < contextCount; index++) {
 		lines.push(
-			`const contextFlag${index} = defineFlag("context-${index}-token", { type: "string", aliases: ["ctx-${index}-token"] });`,
+			`const contextFlag${index} = defineFlag(${records ? "" : `"context-${index}-token", `}{ type: "string", aliases: ["ctx-${index}-token"] });`,
 			`const context${index} = ${
 				index === 0
 					? context(index, `({ flags }) => ({ value: flags["context-${index}-token"] ?? "" })`)
@@ -162,7 +168,7 @@ export function generateConsumerSource(
 	lines.push("");
 
 	const valueContext = (name: string, value: number) =>
-		fixtureApi === "fluent"
+		fixtureApi !== "context-config"
 			? `defineContext("${name}").setup(() => ${value})`
 			: `defineContext("${name}", () => ${value})`;
 	const wide = Array.from({ length: wideContexts ? 60 : 0 }, (_, index) => `wide${index}`);
@@ -183,7 +189,7 @@ export function generateConsumerSource(
 		const extensions = Array.from({ length: 60 }, (_, index) => `wideExtension${index}`);
 		for (const [index, name] of extensions.entries()) {
 			lines.push(
-				`const ${name} = defineExtension(defineExtensionId("type-perf-wide-extension-${index}")).flags({ name: "wide-extension-${index}", type: "boolean" }).provide(${valueContext(`wide-extension-${index}`, index)}()).add(defineCommand("wide-extension-command-${index}", (command) => command));`,
+				`const ${name} = defineExtension(defineExtensionId("type-perf-wide-extension-${index}")).flags(${flag(`wide-extension-${index}`, 'type: "boolean"')}).provide(${valueContext(`wide-extension-${index}`, index)}()).add(defineCommand("wide-extension-command-${index}", (command) => command));`,
 			);
 		}
 		lines.push(
@@ -198,16 +204,16 @@ export function generateConsumerSource(
 			`const command${index} = defineCommand("command-${index}", { aliases: ["cmd-${index}", "c-${index}"] }, (command) =>`,
 			"\tcommand",
 			`\t\t.use(context${contextIndex})`,
-			`\t\t.flags({ name: "command-${index}-verbose", type: "boolean", short: "v", aliases: ["verbose-${index}"] })`,
-			`\t\t.flags({ name: "command-${index}-output", type: "string", short: "o", aliases: ["output-${index}"] })`,
-			`\t\t.flags({ name: "command-${index}-force", type: "boolean", short: "f", aliases: ["force-${index}"] })`,
+			`\t\t.flags(${flag(`command-${index}-verbose`, `type: "boolean", short: "v", aliases: ["verbose-${index}"]`)})`,
+			`\t\t.flags(${flag(`command-${index}-output`, `type: "string", short: "o", aliases: ["output-${index}"]`)})`,
+			`\t\t.flags(${flag(`command-${index}-force`, `type: "boolean", short: "f", aliases: ["force-${index}"]`)})`,
 			`\t\t.args({ name: "source-${index}", type: "string", required: true })`,
 			`\t\t.args({ name: "destination-${index}", type: "string" })`,
 		);
 		if (index % 10 === 0) {
 			lines.push(
 				`\t\t.add(defineCommand("nested-${index}", { aliases: ["n-${index}"] }, (nested) =>`,
-				`\t\t\tnested.use(context${contextIndex}).flags({ name: "nested-${index}-mode", type: "string", short: "m", aliases: ["mode-${index}"] }).action(async ({ flags, ctx }) => { void flags["nested-${index}-mode"]; void await ctx["context-${contextIndex}"]; }),`,
+				`\t\t\tnested.use(context${contextIndex}).flags(${flag(`nested-${index}-mode`, `type: "string", short: "m", aliases: ["mode-${index}"]`)}).action(async ({ flags, ctx }) => { void flags["nested-${index}-mode"]; void await ctx["context-${contextIndex}"]; }),`,
 				"\t\t))",
 			);
 		}
@@ -218,18 +224,17 @@ export function generateConsumerSource(
 		);
 	}
 
-	const extensionCommand =
-		'defineCommand("extension-command", { aliases: ["ext"] }, (command) => command.flags({ name: "extension-mode", type: "string" }).action(() => ({ source: "extension" as const })))';
+	const extensionCommand = `defineCommand("extension-command", { aliases: ["ext"] }, (command) => command.flags(${flag("extension-mode", 'type: "string"')}).action(() => ({ source: "extension" as const })))`;
 	lines.push(
 		'const extension = defineExtension(defineExtensionId("type-perf-extension"))',
-		'\t.flags({ name: "extension-trace", type: "boolean" })',
+		`\t.flags(${flag("extension-trace", 'type: "boolean"')})`,
 		`\t.add(${extensionCommand});`,
 	);
 	lines.push(
 		"",
 		'export const app = new Crust("type-perf-consumer", { description: "Synthetic type-performance fixture" })',
-		'\t.flags({ name: "root-verbose", type: "boolean", short: "v", aliases: ["verbose"] })',
-		'\t.flags({ name: "root-config", type: "string", short: "c", aliases: ["config"] })',
+		`\t.flags(${flag("root-verbose", 'type: "boolean", short: "v", aliases: ["verbose"]')})`,
+		`\t.flags(${flag("root-config", 'type: "string", short: "c", aliases: ["config"]')})`,
 		`\t.provide(${Array.from({ length: contextCount }, (_, index) => `context${index}()`).join(", ")})`,
 		"\t.extend(extension)",
 	);
@@ -254,7 +259,7 @@ export function generateConsumerFixture(
 	outputDir: string,
 	rootDir: string,
 	size: number,
-	fixtureApi: FixtureApi = "fluent",
+	fixtureApi: FixtureApi = "record-flags",
 	wideAdd = false,
 	wideContexts = false,
 	wideExtensions = false,
@@ -321,15 +326,17 @@ function measure(outputPath: string, rootDir = ".", allowCompileErrors = false):
 		[
 			process.execPath,
 			"--eval",
-			`import { defineContext } from ${JSON.stringify(join(root, "packages/core/dist/index.js"))};
+			`import { Crust, defineContext } from ${JSON.stringify(join(root, "packages/core/dist/index.js"))};
 let api = "context-config";
 // The config-era defineContext(name) throws reading its missing config.
 try { if (typeof defineContext("type-perf-probe").setup === "function") api = "fluent"; } catch {}
+// A named-only .flags() reads the record as a definition without a name and throws.
+if (api === "fluent") try { new Crust("type-perf-probe").flags({ p: { type: "boolean" } }); api = "record-flags"; } catch {}
 console.log(api);`,
 		],
 		root,
 	);
-	if (fixtureApi !== "fluent" && fixtureApi !== "context-config") {
+	if (fixtureApi !== "fluent" && fixtureApi !== "context-config" && fixtureApi !== "record-flags") {
 		throw new Error(`Unexpected fixture API: ${fixtureApi}`);
 	}
 	// Both trees use the harness's compiler, even when their lockfiles differ.

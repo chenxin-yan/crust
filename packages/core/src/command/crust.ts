@@ -20,7 +20,7 @@ import type {
 } from "../api/extension.ts";
 import { CrustError, type DefinitionErrorReason } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
-import { normalizeArg } from "../parsing/spellings.ts";
+import { flagEntries, normalizeArg } from "../parsing/spellings.ts";
 import { validateCommandSections } from "../sections.ts";
 import type {
 	ArgsDef,
@@ -73,14 +73,11 @@ import type {
 	ValidateLocalFlagDefs,
 	AttachedFlags,
 	AttachedSpellings,
+	ExtensionFlagDefsOf,
+	FlagRecordErrors,
 	LocalSpellingsOf,
 } from "../validation/flags.brands.ts";
-import type {
-	IsClosedName,
-	IsStaticTuple,
-	IsUnion,
-	UnionToIntersection,
-} from "../validation/shared.ts";
+import type { IsClosedName, IsUnion, UnionToIntersection } from "../validation/shared.ts";
 import {
 	executeInvocation,
 	prepareInvocation,
@@ -473,57 +470,42 @@ type ExtensionProviders<E> = [E] extends [never]
 	: DefiningOf<E> extends { provide?: infer P extends readonly AnyContextInstance[] }
 		? P
 		: [];
-type ExtensionOwnDefs<E> = [E] extends [never]
-	? []
-	: DefiningOf<E> extends { _flagDefs?: infer F extends readonly NamedFlagDef[] }
-		? F
-		: [];
+type ExtensionOwnFlags<E> = [E] extends [never]
+	? {}
+	: DefiningOf<E> extends { _flagDefs?: FlagsDef }
+		? ExtensionFlagDefsOf<E>
+		: {};
 
 type ExtensionFlags<Es extends readonly AnyExtension[], Acc = {}> = Es extends readonly [
 	infer H,
 	...infer T extends readonly AnyExtension[],
 ]
-	? ExtensionFlags<
-			T,
-			Acc & AttachedFlags<ExtensionOwnDefs<H>> & ContextsOwnedFlags<ExtensionProviders<H>>
-		>
+	? ExtensionFlags<T, Acc & ExtensionOwnFlags<H> & ContextsOwnedFlags<ExtensionProviders<H>>>
 	: Acc &
-			(ExtensionOwnDefs<Es[number]>[number] extends never
+			(keyof ExtensionOwnFlags<Es[number]> extends never
 				? keyof ContextsOwnedFlags<ExtensionProviders<Es[number]>> extends never
 					? {}
 					: FlagsDef
 				: FlagsDef);
 
-type RecursiveFlagsOf<E> = ExtensionOwnDefs<E>[number] extends never
+type RecursiveFlagsOf<E> = RecursiveOwnFlags<ExtensionOwnFlags<E>>;
+
+// `recursive: false` flags stay on the root; a possibly-recursive or dynamic record stays open.
+type RecursiveOwnFlags<F> = keyof F extends never
 	? {}
-	: true extends {
-				[K in keyof ExtensionOwnDefs<E>]: ExtensionOwnDefs<E>[K] extends infer D extends
-					NamedFlagDef
-					? D extends { readonly recursive: false }
-						? false
-						: IsClosedName<D["name"]> extends false
-							? true
-							: IsUnion<D["name"]> extends true
-								? true
-								: D extends { recursive: infer R }
-									? boolean extends R
-										? true
-										: false
-									: false
-					: false;
-		  }[number]
+	: string extends keyof F
 		? FlagsDef
-		: IsStaticTuple<ExtensionOwnDefs<E>> extends true
-			? {
-					[
-						D in ExtensionOwnDefs<E>[number] as D extends { readonly recursive: infer R }
-							? [R] extends [false]
-								? never
-								: D["name"]
-							: D["name"]
-					]: Omit<D, "name">;
-				}
-			: FlagsDef;
+		: true extends {
+					[K in keyof F]: F[K] extends { recursive: infer R }
+						? boolean extends R
+							? true
+							: false
+						: false;
+			  }[keyof F]
+			? FlagsDef
+			: {
+					[K in keyof F as F[K] extends { readonly recursive: false } ? never : K]: F[K];
+				};
 
 type RecursiveExtensionFlags<Es extends readonly AnyExtension[], Acc = {}> = Es extends readonly [
 	infer H,
@@ -791,6 +773,22 @@ type AfterFlags<State extends BuilderState, Defs extends readonly NamedFlagDef[]
 	State["ctx"],
 	State["sibs"],
 	State["sp"] | AttachedSpellings<Defs>,
+	State["tree"],
+	State["ctxFlags"],
+	State["collision"],
+	State["result"],
+	State["meta"],
+	string,
+	State["caps"]
+>;
+
+// Record spellings are derived from `Flags` on demand instead of accumulated in `Sp`.
+type AfterFlagRecord<State extends BuilderState, F extends FlagsDef> = Crust<
+	MergeFlags<State["flags"], F>,
+	State["args"],
+	State["ctx"],
+	State["sibs"],
+	State["sp"],
 	State["tree"],
 	State["ctxFlags"],
 	State["collision"],
@@ -1094,7 +1092,7 @@ type MissingRootMetaBrand<E, Defined extends RootMetaKey> =
  * @example
  * ```ts
  * const app = new Crust("my-cli")
- *   .flags({ name: "verbose", type: "boolean", short: "v" })
+ *   .flags({ verbose: { type: "boolean", short: "v" } })
  *   .args({ name: "file", type: "string", required: true })
  *   .action(({ args, flags }) => {
  *     console.log(args.file, flags.verbose);
@@ -1239,35 +1237,38 @@ export class Crust<
 	}
 
 	/**
-	 * Define local flags for this command from named flag definitions
-	 * (created with `defineFlag(name, def)` or written inline as
-	 * `{ name: "dry-run", type: "boolean" }`).
+	 * Define local flags for this command from one record keyed by flag name
+	 * (`{ "dry-run": { type: "boolean" } }`); values are written inline or created
+	 * with `defineFlag(def)`. The variadic named form (`defineFlag(name, def)` or
+	 * `{ name: "dry-run", type: "boolean" }`) is also accepted.
 	 *
 	 * Repeated `.flags()` calls accumulate local flags. Returns a new builder
 	 * with the combined local flag types. The original builder is not mutated.
 	 *
-	 * @param defs - Named flag definitions
+	 * @param flags - Flag definitions keyed by canonical name
 	 * @returns A new `Crust` instance with the given flags
 	 */
 	// Combined union signatures can lose rest-tuple inference. Registration inputs
 	// (use/provide/add) default to never to reject that fallback without mapping the
 	// receiver. flags/args/add/command reject differing builder states through
 	// `StateReceiver`; extend keeps a this-bound phantom.
+	flags<const F extends FlagsDef, State extends BuilderState = ExplicitTypeArgumentsError>(
+		this: StateReceiver<State>,
+		flags: F & FlagRecordErrors<F, State["sp"] | LocalSpellingsOf<State["flags"]>>,
+	): AfterFlagRecord<State, F>;
+
 	flags<
 		const Defs extends readonly NamedFlagDef[],
 		State extends BuilderState = ExplicitTypeArgumentsError,
 	>(
 		this: StateReceiver<State>,
-		...defs: ValidateLocalFlagDefs<Defs, State["sp"]>
+		...defs: ValidateLocalFlagDefs<Defs, State["sp"] | LocalSpellingsOf<State["flags"]>>
 	): AfterFlags<State, Defs>;
 
-	flags<const Defs extends readonly NamedFlagDef[]>(
-		...defs: Defs
-	): AfterFlags<this["_state"], Defs> {
-		const cloned = this._clone<AfterFlags<this["_state"], Defs>>(cloneFlagRegistry(this._node));
-		for (const def of defs) {
-			const { name, ...rest } = def;
-			registerFlag(cloned._node, name, rest, "local");
+	flags(...input: readonly unknown[]): unknown {
+		const cloned = this._clone(cloneFlagRegistry(this._node));
+		for (const [name, def] of flagEntries(input)) {
+			registerFlag(cloned._node, name, def, "local");
 		}
 		return cloned;
 	}
@@ -1351,7 +1352,7 @@ export class Crust<
 	 */
 	provide<const Cs extends readonly AnyContextInstance[] = never>(
 		...instances: KnownContextInstances<Cs> &
-			ProvideChecks<Sp | CollisionSp["pending"], Cs> &
+			ProvideChecks<Sp | LocalSpellingsOf<Flags> | CollisionSp["pending"], Cs> &
 			ValidateContextNames<Caps extends "recipe" ? ProvidersOf<CollisionSp> : Ctx, Cs> &
 			ValidateContextDeps<Ctx, Cs> &
 			DeclaredDependencyValuesBrand<
@@ -1468,7 +1469,10 @@ export class Crust<
 				ExtensionCheckAt<
 					ValidateExtensionFlags<
 						Es,
-						Sp | CollisionSp["tree"] | DefinitionTreeSpellings<ExtensionCommands<Es>>
+						| Sp
+						| LocalSpellingsOf<Flags>
+						| CollisionSp["tree"]
+						| DefinitionTreeSpellings<ExtensionCommands<Es>>
 					>,
 					I
 				> &
