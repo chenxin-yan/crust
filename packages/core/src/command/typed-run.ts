@@ -99,10 +99,15 @@ export type CommandShapeAt<
 			? CommandShapeAt<Child, Tail>
 			: never
 		: // A non-literal segment (e.g. a hand-annotated `[string, ...string[]]`
-			// tuple) selects a statically unknowable command, not no command.
+			// tuple) selects a statically unknowable command, not no command. So does any
+			// segment below an open entry (plain `CommandShape`, e.g. widened by a runtime-only
+			// Extension command name): its `children` is `{}` only because the types can't see them.
+			// Matched on args and result because inherited recursive flags rewrite its `flags`.
 			string extends Head
 			? CommandShape
-			: never
+			: [ArgsDef, unknown] extends [Shape["args"], Shape["result"]]
+				? CommandShape
+				: never
 	: Path extends readonly []
 		? Shape
 		: // A tail widened past the CommandPath depth cap selects a statically

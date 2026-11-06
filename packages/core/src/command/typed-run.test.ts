@@ -107,6 +107,38 @@ describe("typed programmatic invocation", () => {
 		expect(await pending).toMatchObject({ status: "completed", result: { kind: "lit" } });
 	});
 
+	it("runtime-checks paths below commands a widened tree can no longer see into", async () => {
+		const nested = defineExtension(defineExtensionId("nested")).add(
+			defineCommand("bar", (command) =>
+				command.command("sub", (sub) => sub.action(() => "sub-s" as const)),
+			),
+		);
+		const widened: Extension = defineExtension(defineExtensionId("dyn")).add(
+			defineCommand("generated", (command) => command.action(() => {})),
+		);
+		const trace = defineExtension(defineExtensionId("trace")).flags({
+			trace: { type: "boolean" },
+		});
+		const app = new Crust("cli").extend(nested).extend(widened);
+
+		const sub = app.run(["bar", "sub"]);
+		type _sub = Expect<Equal<typeof sub, Promise<RunOutcome<unknown>>>>;
+		expect(await sub).toMatchObject({ status: "completed", result: "sub-s" });
+		const handle = app.at(["bar", "sub"]).run();
+		type _handle = Expect<Equal<typeof handle, Promise<RunOutcome<unknown>>>>;
+		expect(await handle).toMatchObject({ status: "completed", result: "sub-s" });
+		// Inherited recursive flags rewrite the open entries' flags but leave them open.
+		const traced = app.extend(trace).run(["bar", "sub"], { flags: { trace: true } });
+		type _traced = Expect<Equal<typeof traced, Promise<RunOutcome<unknown>>>>;
+		expect(await traced).toMatchObject({ status: "completed", result: "sub-s" });
+		const missing = app.run(["anything", "nested"]);
+		type _missing = Expect<Equal<typeof missing, Promise<RunOutcome<unknown>>>>;
+		expect(await missing).toMatchObject({
+			status: "failed",
+			error: { code: "COMMAND_NOT_FOUND" },
+		});
+	});
+
 	it("surfaces delayed Extension recipe failures only when the command is used", async () => {
 		const app = new Crust("cli").extend(
 			defineExtension(defineExtensionId("failure")).add(
