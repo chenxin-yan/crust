@@ -180,12 +180,8 @@ type Def<Name extends string, Aliases extends readonly string[] = readonly []> =
 			'Subcommand "issue" alias "-i" must not start with "-" (reserved for flags)'
 		>
 	>;
-	type _ownAlias = Expect<
-		Equal<
-			OwnAlias["FIX_ALIAS_SHAPE"],
-			'Subcommand "issue" alias "issue" must not equal its own canonical name'
-		>
-	>;
+	// A self-alias is checked where the definition is added (`SelfAlias` above), so a generic name can carry literal aliases.
+	type _ownAlias = Expect<Equal<keyof OwnAlias, never>>;
 	type _validAlias = Expect<Equal<keyof ValidAlias, never>>;
 	// .as() rename landing on a mixed alias union's literal member
 	type SelfAlias = ValidateCommandDefinitions<
@@ -254,12 +250,7 @@ type Def<Name extends string, Aliases extends readonly string[] = readonly []> =
 			'Subcommand "issue" alias "my issue" must not contain whitespace'
 		>
 	>;
-	type _ownName = Expect<
-		Equal<
-			OwnName["FIX_ALIAS_SHAPE"],
-			'Subcommand "issue" alias "issue" must not equal its own canonical name'
-		>
-	>;
+	type _ownName = Expect<Equal<keyof OwnName, never>>;
 }
 
 {

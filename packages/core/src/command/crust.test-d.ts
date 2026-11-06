@@ -264,8 +264,10 @@ function _typecheckRejectsInvalidCommandAliasShapesAtDefineCommand() {
 	defineCommand("issue", { aliases: ["my issue"] }, (command) => command);
 	// @ts-expect-error -- aliases must not contain tabs
 	defineCommand("issue", { aliases: ["my\tissue"] }, (command) => command);
-	// @ts-expect-error -- aliases must differ from their own canonical name
-	defineCommand("issue", { aliases: ["issue"] }, (command) => command);
+	void new Crust("app").add(
+		// @ts-expect-error -- aliases must differ from their own canonical name, checked where it is added
+		defineCommand("issue", { aliases: ["issue"] }, (command) => command),
+	);
 }
 
 // accepts a definition union whose variants alias each other's canonical name
