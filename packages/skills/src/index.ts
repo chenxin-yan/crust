@@ -4,12 +4,7 @@
 
 export { writeSkills, writeSkillsFromSnapshot } from "./build.ts";
 export type { WriteSkillsOptions } from "./build.ts";
-export {
-	detectInstalledAgents,
-	getAdditionalAgents,
-	getUniversalAgents,
-	isUniversalAgent,
-} from "./agents.ts";
+export { detectInstalledAgents, getUniversalAgents } from "./agents.ts";
 export type { AgentClass, AgentTarget, Scope } from "./agents.ts";
 export { SkillConflictError, SkillSourceConflictError } from "./errors.ts";
 export { skill } from "./extension.ts";
