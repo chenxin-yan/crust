@@ -17,7 +17,7 @@ $ my-cli deploy --input @deploy.json
 $ echo '{"target":"prod"}' | my-cli deploy --input -
 ```
 
-`input()` adds a recursive string `--input` flag. Without it, nothing changes.
+`input()` adds a recursive string `--input` flag. Without it, nothing changes. `--input` is read in `preRun`, so only when the command's action runs: a flag handler such as `--help` takes over first and nothing is read.
 
 ## Behavior
 
