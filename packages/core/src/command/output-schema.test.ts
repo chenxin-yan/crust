@@ -89,6 +89,17 @@ describe(".output()", () => {
 		expect(outcomes[1]).toMatchObject({ status: "failed", error: { code: "OUTPUT" } });
 	});
 
+	it("validates an actionless command's undefined result", async () => {
+		expect(await new Crust("cli").output(z.number().default(3)).run([])).toMatchObject({
+			status: "completed",
+			result: 3,
+		});
+		expect(await new Crust("cli").output(z.number()).run([])).toMatchObject({
+			status: "failed",
+			error: { code: "OUTPUT" },
+		});
+	});
+
 	it("validates the result of an async action", async () => {
 		const app = new Crust("cli").output(user).action(async () => ({ id: 2 }));
 
