@@ -81,7 +81,15 @@ export const input: ExtensionFactory<[], {}, [], typeof inputFlags> =
 					"--input: expected a JSON object keyed by argument and flag names",
 				);
 			}
-			const { parseCommandInput, RAW_INPUT_PROPERTY } = await import("@crustjs/core/tooling");
+			const { commandInputSchema, parseCommandInput, RAW_INPUT_PROPERTY } =
+				await import("@crustjs/core/tooling");
+			try {
+				// Throws when an arg and a flag share a name or one is named `raw`: keys would be ambiguous.
+				commandInputSchema(context.command, context.commandPath);
+			} catch (cause) {
+				const reason = cause instanceof Error ? cause.message : String(cause);
+				throw new CrustError("PARSE", `--input: ${reason}`).withCause(cause);
+			}
 			// Drop keys argv gave before conversion, so an invalid overridden value never fails.
 			const { args, flags, raw } = context.argvProvided;
 			const given = new Set([...args, ...flags, ...(raw ? [RAW_INPUT_PROPERTY] : [])]);
