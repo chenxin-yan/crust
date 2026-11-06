@@ -534,7 +534,7 @@ async function dispatch(
 		return await resolvedNode.run(context);
 	};
 
-	let outcome: InvocationOutcome = { status: "completed", result: undefined };
+	let outcome: InvocationOutcome;
 	try {
 		try {
 			// Setups only configure, so their order cannot change what runs. Their cleanups share
