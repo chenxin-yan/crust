@@ -16,13 +16,40 @@ const inputFlags = {
 	},
 } as const;
 
-/** Inline JSON, `@path` (relative to the working directory), or `-` (all of stdin). */
-function readInput(value: string): string {
-	if (value !== "-" && !value.startsWith("@")) return value;
-	const source = value === "-" ? 0 : value.slice(1);
+/**
+ * All of stdin. Read asynchronously: a synchronous read would block the event loop, so
+ * Ctrl-C could not cancel an `--input -` waiting on an open pipe or terminal.
+ */
+async function readStdin(signal: AbortSignal): Promise<string> {
+	signal.throwIfAborted();
+	const { stdin } = process;
+	const chunks: Buffer[] = [];
+	const done = Promise.withResolvers<string>();
+	const onData = (chunk: Buffer) => void chunks.push(chunk);
+	const onEnd = () => done.resolve(Buffer.concat(chunks).toString("utf8"));
+	const onAbort = () => done.reject(signal.reason);
+	stdin.on("data", onData).once("end", onEnd).once("error", done.reject);
+	signal.addEventListener("abort", onAbort, { once: true });
 	try {
-		return process.getBuiltinModule("node:fs").readFileSync(source, "utf8");
+		return await done.promise;
+	} finally {
+		signal.removeEventListener("abort", onAbort);
+		stdin.off("data", onData).off("end", onEnd).off("error", done.reject);
+		// Paused stdin no longer keeps the process alive after a cancelled read.
+		stdin.pause();
+	}
+}
+
+/** Inline JSON, `@path` (relative to the working directory), or `-` (all of stdin). */
+async function readInput(value: string, signal: AbortSignal): Promise<string> {
+	if (value !== "-" && !value.startsWith("@")) return value;
+	try {
+		return value === "-"
+			? await readStdin(signal)
+			: process.getBuiltinModule("node:fs").readFileSync(value.slice(1), "utf8");
 	} catch (cause) {
+		// Cancellation stays an abort, not a PARSE failure.
+		if (signal.aborted && cause === signal.reason) throw cause;
 		const name = value === "-" ? "stdin" : `"${value.slice(1)}"`;
 		const reason = cause instanceof Error ? ` (${cause.message})` : "";
 		throw new CrustError("PARSE", `--input: cannot read ${name}${reason}`).withCause(cause);
@@ -40,7 +67,7 @@ export const input: ExtensionFactory<[], {}, [], typeof inputFlags> =
 	/* @__PURE__ */ defineExtension(JSON_INPUT).factory((extension) =>
 		extension.flags(inputFlags).preRun(async (context) => {
 			if (typeof context.flags.input !== "string") return;
-			const text = readInput(context.flags.input);
+			const text = await readInput(context.flags.input, context.signal);
 			let values: unknown;
 			try {
 				values = JSON.parse(text);
