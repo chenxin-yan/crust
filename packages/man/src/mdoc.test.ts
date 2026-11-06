@@ -137,6 +137,21 @@ describe("renderManPageMdoc", () => {
 		expect(mdoc).toContain(".It Fl v , Fl Fl verbose , Fl Fl no-verbose");
 	});
 
+	it("marks the value argument of value flags with Ar", async () => {
+		const root = await new Crust("demo")
+			.flags({
+				count: { type: "number", short: "c" },
+				yes: { type: "boolean" },
+			})
+			.action(() => {})
+			.snapshot();
+		const mdoc = renderManPageMdoc({ root, section: 1 });
+
+		expect(mdoc).toContain(".It Fl c , Fl Fl count Ar number\n");
+		expect(mdoc).toContain(".It Fl Fl yes , Fl Fl no-yes\n");
+		expect(mdoc).toContain(".Bl -tag -width 18n");
+	});
+
 	it("escapes leading dots in descriptions and .Nd", async () => {
 		const app = new Crust("x", {
 			description: ".config is read automatically.",

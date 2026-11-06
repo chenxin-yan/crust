@@ -126,6 +126,43 @@ describe("help", () => {
 		expect(lines).toContain('  [dir]              Output directory [default: "."]');
 	});
 
+	it("renderHelp shows a value placeholder after value flags only", async () => {
+		const command = new Crust("app").flags({
+			count: { type: "number", short: "c", description: "Number of times", default: 1 },
+			mode: { type: "string", choices: ["fast", "slow"], description: "Execution mode" },
+			tag: { type: "string", short: "t", multiple: true, description: "Tag" },
+			out: { type: "path", description: "Output file" },
+			force: { type: "boolean", short: "f", description: "Force it" },
+		});
+
+		const lines = stripAnsi(await renderHelp(await command.snapshot())).split("\n");
+
+		expect(lines).toContain("  -c, --count <number>         Number of times [default: 1]");
+		expect(lines).toContain("  --mode <string>              Execution mode [choices: fast, slow]");
+		expect(lines).toContain("  -t, --tag <string>           Tag");
+		expect(lines).toContain("  --out <path>                 Output file");
+		expect(lines).toContain("  -f, --force, --no-force      Force it");
+	});
+
+	it("renderHelp widens a column to fit its longest label", async () => {
+		const command = new Crust("app").flags({
+			"output-directory": {
+				type: "string",
+				short: "o",
+				aliases: ["outdir"],
+				description: "Where to write",
+			},
+			force: { type: "boolean", short: "f", description: "Force it" },
+		});
+
+		const lines = stripAnsi(await renderHelp(await command.snapshot())).split("\n");
+		const long = lines.find((line) => line.includes("--output-directory"));
+		const short = lines.find((line) => line.includes("--force"));
+
+		expect(long).toBe("  -o, --output-directory, --outdir <string>  Where to write");
+		expect(short?.indexOf("Force it")).toBe(long?.indexOf("Where to write"));
+	});
+
 	it("help extension renders generated help for no-run command", async () => {
 		const app = new Crust("app")
 			.extend(help())
