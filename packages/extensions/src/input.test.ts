@@ -80,6 +80,22 @@ describe("input", () => {
 		expect(JSON.parse(stdout)).toMatchObject({ target: "staging", region: "us", force: true });
 	});
 
+	it("never converts JSON values that argv overrides", async () => {
+		const origin = await captureExecute(deployApp(), [
+			"prod",
+			"--origin",
+			"https://example.com/",
+			"--input",
+			'{"origin":"not a url"}',
+		]);
+		const raw = await captureExecute(deployApp(), ["prod", "--input", '{"raw":"x"}', "--", "a"]);
+
+		expect(origin.exitCode).toBe(0);
+		expect(JSON.parse(origin.stdout)).toMatchObject({ origin: "https://example.com/" });
+		expect(raw.exitCode).toBe(0);
+		expect(JSON.parse(raw.stdout)).toMatchObject({ target: "prod", rawArgs: ["a"] });
+	});
+
 	it("reads JSON from a file named with @", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "crust-input-"));
 		tempDirs.push(dir);

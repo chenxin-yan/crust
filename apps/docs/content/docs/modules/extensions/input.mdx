@@ -31,7 +31,7 @@ It must be a JSON object keyed by the routed command's argument and flag names, 
 
 The object is bound with [`ctx.bindInput()`](/docs/api/types#extensioncontext), so values are converted and validated exactly as typed `run()` input:
 
-- Arguments and flags given on argv win over the same keys, even when equal to the default: `my-cli deploy staging --input @deploy.json` deploys `staging` whatever the file says.
+- Arguments and flags given on argv win over the same keys, even when equal to the default: `my-cli deploy staging --input @deploy.json` deploys `staging` whatever the file says. Overridden JSON values are dropped before conversion, so an invalid one does not fail; `raw` is overridden when argv has passthrough tokens after `--`.
 - Every other key replaces the environment value or default. Keys are replaced whole; objects are not merged.
 
 Under [`run()`](/docs/api/crust#runpath-input-options), pass the JSON text as the `input` flag, for example `{ args: { target: "dev" }, flags: { input: '{"target":"prod"}' } }`. Nothing came from argv, so its keys replace the typed input.
