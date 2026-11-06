@@ -177,7 +177,8 @@ export interface ExtensionContext<
 	 * Under typed `run()` nothing came from argv, so supplied keys replace the typed input.
 	 * Each call re-binds against the original input, so the last call wins. Afterwards
 	 * `args`, `flags`, and `rawArgs` report the bound values, and validation and the Command
-	 * Action use them. A no-op in `onError` after a routing or argv-syntax failure.
+	 * Action use them. Flag handlers were chosen from the original input before `preRun`, so a
+	 * bound flag never selects one. A no-op in `onError` after a routing or argv-syntax failure.
 	 *
 	 * @throws {CrustError} `PARSE` on an unknown key, a positional argument supplied after an
 	 *   omitted earlier one, or a value that fails conversion (including a non-array value for
