@@ -6,11 +6,12 @@ import { beforeAll, describe, expect, it } from "vite-plus/test";
 import { ensureDist } from "./helpers.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Startup imports — every module file Node loads at startup costs a resolve and
-// compile, and a static `node:*` import evaluates every lazy getter on that
-// built-in (`fs.promises`, `util.parseArgs`, …). The published entry must load
-// only core's own chunks: utils is bundled in, and built-ins are resolved with
-// `process.getBuiltinModule()` where they are used.
+// Startup imports — built-ins stay external even in a bundled app, and a static
+// `node:*` import evaluates every lazy getter on that built-in (`fs.promises`,
+// `util.parseArgs`, …). The published entry resolves built-ins with
+// `process.getBuiltinModule()` where they are used; its only external imports
+// are `@crustjs/utils` subpaths, which an app's bundle shares with the other
+// Crust packages.
 // ────────────────────────────────────────────────────────────────────────────
 
 const dist = resolve(import.meta.dirname, "../dist");
@@ -38,9 +39,11 @@ function staticGraph(entry: string): { files: string[]; external: string[] } {
 beforeAll(ensureDist);
 
 describe("@crustjs/core startup imports", () => {
-	it("loads no other package or Node built-in when imported", () => {
+	it("imports no Node built-in and no package other than @crustjs/utils", () => {
 		const graph = staticGraph(resolve(dist, "index.js"));
 		expect(graph.files.length).toBeGreaterThan(1);
-		expect(graph.external).toEqual([]);
+		expect(graph.external.filter((specifier) => !specifier.startsWith("@crustjs/utils/"))).toEqual(
+			[],
+		);
 	});
 });
