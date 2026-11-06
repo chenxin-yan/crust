@@ -168,11 +168,17 @@ describe("input", () => {
 			.flags({ raw: { type: "boolean" } })
 			.action(({ rawArgs }) => rawArgs);
 
-		for (const app of [shared, raw]) {
-			const outcome = await app.run([], { flags: { input: "{}" } });
+		const outcomes = [
+			await shared.run([], { flags: { input: "{}" } }),
+			await raw.run([], { flags: { input: "{}" } }),
+		];
+		for (const outcome of outcomes) {
 			expect(outcome).toMatchObject({
 				status: "failed",
-				error: { code: "PARSE", message: expect.stringMatching(/^--input: Command "app" declares/) },
+				error: {
+					code: "PARSE",
+					message: expect.stringMatching(/^--input: Command "app" declares/),
+				},
 			});
 		}
 		expect(await shared.run([], {})).toMatchObject({
@@ -229,22 +235,28 @@ describe("input", () => {
 	it.each([
 		["node", process.execPath, ["--input-type=module"]],
 		["bun", "bun", []],
-	])("cancels a pending stdin read on SIGINT on %s", async (_runtime, command, options) => {
-		const script = `
+	])(
+		"cancels a pending stdin read on SIGINT on %s",
+		async (_runtime, command, options) => {
+			const script = `
 			import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
 			import { input } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "input.ts")).href)};
 			const ready = defineExtension(defineExtensionId("ready")).preRun(({ stderr }) => stderr("ready"));
 			const app = new Crust("app").extend(ready, input()).action(() => {});
 			process.exitCode = await app.execute({ argv: ["--input", "-"] });
 		`;
-		// stdin stays open, so only cancellation can end the read.
-		const child = spawn(command, [...options, "-e", script], { cwd: join(import.meta.dirname, "..") });
-		const watchdog = setTimeout(() => child.kill("SIGKILL"), 3_000);
-		child.stderr.once("data", () => child.kill("SIGINT"));
-		const [code, signal] = await once(child, "exit");
-		clearTimeout(watchdog);
-		child.stdin.end();
+			// stdin stays open, so only cancellation can end the read.
+			const child = spawn(command, [...options, "-e", script], {
+				cwd: join(import.meta.dirname, ".."),
+			});
+			const watchdog = setTimeout(() => child.kill("SIGKILL"), 3_000);
+			child.stderr.once("data", () => child.kill("SIGINT"));
+			const [code, signal] = await once(child, "exit");
+			clearTimeout(watchdog);
+			child.stdin.end();
 
-		expect({ code, signal }).toEqual({ code: 130, signal: null });
-	}, 10_000);
+			expect({ code, signal }).toEqual({ code: 130, signal: null });
+		},
+		10_000,
+	);
 });
