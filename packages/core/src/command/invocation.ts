@@ -74,10 +74,12 @@ const closedFds = new Set<number>();
 
 /**
  * Synchronous line write to a file descriptor. Returning only once every byte is written
- * keeps output ordered with the user's own `console.log` and intact through an immediate
- * `process.exit()`. `EAGAIN` means a non-blocking pipe is full (Bun makes fd 1 non-blocking
- * once anything touches `process.stdout`): sleep 1 ms and retry rather than drop or reorder.
- * `EPIPE` (`cli | head`) closes the fd for later writes silently, like `console.log`.
+ * keeps output intact through an immediate `process.exit()`. It does not flush what user
+ * code queued on `process.stdout` first (`process.stdout.write`, Node's `console.log`), so
+ * Crust's line can land inside such output once a pipe is full. `EAGAIN` means a non-blocking
+ * pipe is full (Bun makes fd 1 non-blocking once anything touches `process.stdout`): sleep
+ * 1 ms and retry rather than drop or reorder. Any other error (`EPIPE` from `cli | head`)
+ * closes the fd for later writes silently, like `console.log`.
  */
 function writeFdLine(fd: 1 | 2, text: string): void {
 	if (closedFds.has(fd)) return;
@@ -88,12 +90,8 @@ function writeFdLine(fd: 1 | 2, text: string): void {
 		try {
 			offset += writeSync(fd, buffer, offset);
 		} catch (error) {
-			const code = isErrnoException(error) ? error.code : undefined;
-			if (code === "EAGAIN") Atomics.wait(retryPause, 0, 0, 1);
-			else {
-				if (code === "EPIPE") closedFds.add(fd);
-				return;
-			}
+			if (isErrnoException(error) && error.code === "EAGAIN") Atomics.wait(retryPause, 0, 0, 1);
+			else return void closedFds.add(fd);
 		}
 	}
 }

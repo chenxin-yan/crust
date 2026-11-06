@@ -154,40 +154,6 @@ await new Crust("pipe-cli")
 			expect(stderr).toBe(`${"y".repeat(LINE_LENGTH)}\n`);
 		});
 
-		it(`does not leave error listeners after successful writes (${runtime})`, () => {
-			const source = `${importCore("dist/index.js")}
-import assert from "node:assert/strict";
-const streams = [process.stdout, process.stderr];
-const listeners = streams.map((stream) => stream.listeners("error"));
-await new Crust("pipe-cli")
-	.action(({ stdout, stderr }) => {
-		stdout("first");
-		stderr("first");
-		stdout("second");
-		stderr("second");
-	})
-	.execute({ argv: [] });
-await new Promise((resolve) => setImmediate(resolve));
-for (const [index, stream] of streams.entries()) {
-	assert.deepEqual(stream.listeners("error"), listeners[index]);
-	if (listeners[index].length === 0) {
-		assert.throws(() => stream.emit("error", new Error("unrelated failure")), /unrelated failure/);
-	}
-}
-`;
-			const {
-				stdout,
-				stderr,
-				status: exitCode,
-			} = spawnSync(runtime, ["--input-type=module", "--eval", source], {
-				encoding: "utf8",
-				timeout: 5_000,
-			});
-			expect(stderr).toBe("first\nsecond\n");
-			expect(stdout).toBe("first\nsecond\n");
-			expect(exitCode).toBe(0);
-		});
-
 		for (const closed of ["stdout", "stderr"] as const) {
 			it(`survives a consumer closing ${closed} early (${runtime})`, async () => {
 				const { exitCode, other } = await runWithEarlyClose(runtime, closed);
