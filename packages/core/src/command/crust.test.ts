@@ -1033,6 +1033,27 @@ describe("Extension named hooks", () => {
 		expect(outcomes).toEqual(["second:handled", "first:handled"]);
 	});
 
+	it("passes the action's awaited result to postRun for run() and execute()", async () => {
+		const outcomes: unknown[] = [];
+		const observer = defineExtension(defineExtensionId("observer")).postRun(
+			(_ctx, outcome) => void outcomes.push(outcome),
+		);
+		const app = new Crust("cli").extend(observer).action(async () => ({ id: 7 }));
+
+		await unwrap(app.run([]));
+		expect(await app.execute({ argv: [] })).toBe(0);
+		await unwrap(new Crust("cli").extend(observer).run([]));
+
+		expect(outcomes).toEqual([
+			{ status: "completed", result: { id: 7 } },
+			{ status: "completed", result: { id: 7 } },
+			{ status: "completed", result: undefined },
+		]);
+		expect(outcomes[0]).toHaveProperty("result");
+		expect(outcomes[2]).toHaveProperty("result");
+		expect(Object.isFrozen(outcomes[0])).toBe(true);
+	});
+
 	it("reports the handling Extension and exposes parsed snapshots before validation", async () => {
 		let outcomeBy = "";
 		let seenPort: unknown;

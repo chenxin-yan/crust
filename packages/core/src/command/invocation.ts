@@ -534,8 +534,7 @@ async function dispatch(
 		return await resolvedNode.run(context);
 	};
 
-	let result: unknown;
-	let outcome: InvocationOutcome = { status: "completed" };
+	let outcome: InvocationOutcome = { status: "completed", result: undefined };
 	try {
 		try {
 			// Setups only configure, so their order cannot change what runs. Their cleanups share
@@ -557,7 +556,7 @@ async function dispatch(
 				if (resolvedNode.run) {
 					for (const extension of extensions) await extension.hooks.preRun?.(extensionContext);
 				}
-				result = await terminal();
+				outcome = { status: "completed", result: await terminal() };
 			}
 		} catch (error) {
 			const by = await onFailure?.(error, extensionContext);
@@ -586,7 +585,7 @@ async function dispatch(
 	}
 	return outcome.status === "handled"
 		? { status: "handled", by: outcome.by }
-		: { status: "completed", result };
+		: { status: "completed", result: outcome.result };
 }
 
 /** Render one failure through Extension onError hooks, ending in Core's default renderer. */
