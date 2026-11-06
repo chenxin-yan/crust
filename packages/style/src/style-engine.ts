@@ -55,3 +55,29 @@ export function applyStyle(text: StyleInput, style: AnsiPair): string {
 
 	return open + result + close;
 }
+
+function isTemplateStringsArray(
+	value: StyleInput | TemplateStringsArray,
+): value is TemplateStringsArray {
+	return Array.isArray(value) && "raw" in value && Array.isArray(value.raw);
+}
+
+/**
+ * Resolve the text of a style function call: a direct `fn(text)` call passes
+ * `text` through; a tagged template `` fn`a ${b}` `` joins its cooked strings
+ * with each value coerced via `String(...)`.
+ */
+export function callText(
+	first: StyleInput | TemplateStringsArray,
+	values: readonly unknown[],
+): StyleInput {
+	if (!isTemplateStringsArray(first)) {
+		return first;
+	}
+	let text = "";
+	for (let i = 0; i < first.length; i++) {
+		text += first[i] ?? "";
+		if (i < values.length) text += String(values[i]);
+	}
+	return text;
+}

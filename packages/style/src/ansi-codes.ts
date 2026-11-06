@@ -71,18 +71,20 @@ const colorCodes = {
 
 export type StyleMethodName = keyof typeof modifierCodes | keyof typeof colorCodes;
 
-const styleMethodCodes = { ...modifierCodes, ...colorCodes };
+// Each derived table is a nested pure call so bundles that never chain drop it;
+// bundlers keep a spread or an unannotated argument call.
+const styleMethodCodes = /* @__PURE__ */ Object.assign({}, modifierCodes, colorCodes);
 
 export const styleMethodNames: readonly StyleMethodName[] = /* @__PURE__ */ Object.freeze(
 	// SAFETY: Object.keys returns exactly the own keys of the literal code tables.
-	Object.keys(styleMethodCodes) as StyleMethodName[],
+	/* @__PURE__ */ Object.keys(styleMethodCodes) as StyleMethodName[],
 );
 
 export const styleMethodPairs: Readonly<Record<StyleMethodName, AnsiPair>> =
 	/* @__PURE__ */ Object.freeze(
 		// SAFETY: the entries map every registered style method name to its pair.
-		Object.fromEntries(
-			styleMethodNames.map((name) => {
+		/* @__PURE__ */ Object.fromEntries(
+			/* @__PURE__ */ styleMethodNames.map((name) => {
 				const [open, close] = styleMethodCodes[name];
 				return [name, { open: `\x1b[${open}m`, close: `\x1b[${close}m` }];
 			}),

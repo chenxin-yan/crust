@@ -14,19 +14,46 @@ npm install @crustjs/style
 
 <include lang="ts">../../../examples/modules/style.ts#styling</include>
 
-Named styles are callable and chainable. Chains also support tagged templates.
+Bare named styles such as `bold` and `red` are plain functions. Chain on `style` (`style.bold.red`) or on a `createStyle()` instance. Both forms support tagged templates.
 
 ## Styling
 
 ```ts
 bold("direct");
 bold`tagged ${value}`;
-bold.red.bgYellow("chained");
+bold(red("nested"));
+style.bold.red.bgYellow("chained");
 ```
 
 Modifiers are `bold`, `dim`, `italic`, `underline`, `inverse`, `hidden`, and `strikethrough`. The package also exports the standard 16 foreground and 16 background names.
 
-A chain is a `ChainableStyleFn`, which can be passed where a `(text: string) => string` `StyleFn` is expected. Null and undefined inputs to chainables produce an empty string.
+A bare export is a `PlainStyleFn`, and a chain is a `ChainableStyleFn`. Both can be passed where a `(text: string) => string` `StyleFn` is expected, and both return an empty string for null and undefined. Bare exports carry no chain methods and no `open`/`close` pair, so importing one does not bundle the chain engine.
+
+## Combining styles
+
+Combine styles by nesting bare functions, by naming a combination as a function, or by chaining on `style`:
+
+```ts
+import { bold, style, yellow } from "@crustjs/style";
+
+bold(yellow("warning")); // nest
+
+const warn = (text: string) => bold(yellow(text)); // name it: a `StyleFn`
+warn("careful");
+
+const warnChain = style.bold.yellow; // chain
+warnChain("careful");
+```
+
+All three apply the same styles and produce the same output for the same text. An inner style closes and the outer one reopens after it, so `red(blue("a") + "b")` keeps `b` red.
+
+|                       | Nested or named functions                         | `style` chain                                        |
+| --------------------- | ------------------------------------------------- | ---------------------------------------------------- |
+| Bundles               | the styles you import, plus a small shared engine | the chain engine, color parsing, and CSS color names |
+| Chaining (`.red`)     | no                                                | yes                                                  |
+| `open` / `close` pair | no                                                | yes                                                  |
+
+Prefer bare functions in code that ships, such as themes and output helpers: a named combination is a plain `StyleFn`, so it fits anywhere one is accepted, such as a prompt theme slot. Use `style` when you want chaining, dynamic `fg`/`bg` chains, or the raw `open`/`close` codes.
 
 ## Dynamic colors
 
@@ -82,4 +109,4 @@ const close = chain.close;
 
 `open` and `close` are raw static ANSI strings and do not recheck capabilities. Use `chain(text)` for capability-aware, nesting-safe output.
 
-Direct `fg(text, input)` requires string text. Chainables accept other stringifiable values, return `""` for nullish or empty input, and still validate dynamic color input.
+Direct `fg(text, input)` requires string text. Bare exports and chainables accept other stringifiable values and return `""` for nullish or empty input. Chainables still validate dynamic color input.
