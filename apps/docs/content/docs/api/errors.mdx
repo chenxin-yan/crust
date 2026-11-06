@@ -11,7 +11,7 @@ Framework definition, routing, parsing, and validation failures use `CrustError`
   ../../../examples/api/errors.ts#handle
 </include>
 
-After `instanceof CrustError`, `code` is the union of codes, and checking `code` or calling `.is(code)` narrows `details` to that code's shape. `.withCause(cause)` sets `cause` and returns the error. `toJSON()` returns `code`, `message`, and `details`, and omits `cause`. The constructor's details argument is required for `COMMAND_NOT_FOUND` and `ENV`. See the [declaration](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/errors.ts) for the exact generic contract.
+After `instanceof CrustError`, `code` is the union of codes, and checking `code` or calling `.is(code)` narrows `details` to that code's shape. `.withCause(cause)` sets `cause` and returns the error. `toJSON()` returns `code`, `message`, and `details`, and omits `cause`. The constructor's details argument is required for `COMMAND_NOT_FOUND`, `ENV`, and `OUTPUT`. See the [declaration](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/errors.ts) for the exact generic contract.
 
 ## Codes
 
@@ -22,6 +22,7 @@ After `instanceof CrustError`, `code` is the union of codes, and checking `code`
 | `VALIDATION`        | Required-value or Standard Schema validation failed                                                     |
 | `COMMAND_NOT_FOUND` | An unknown command under the [routing rules](/docs/guide/commands#unknown-commands)                     |
 | `ENV`               | [`@crustjs/env`](/docs/modules/env) variables were missing or invalid                                   |
+| `OUTPUT`            | A Command Action result failed its [`.output()`](/docs/api/crust#outputschema) schema                   |
 
 With `execute()`, an unmatched subcommand token becomes a positional argument if the parent has a Command Action; without an action, the parent reports `COMMAND_NOT_FOUND`. Typed `run()` returns `COMMAND_NOT_FOUND` for any unknown path segment.
 
@@ -70,16 +71,22 @@ Every schema failure in one invocation is aggregated into one `VALIDATION` error
 
 One `ENV` error aggregates every missing or invalid variable of a `defineEnv()` Context. Its message, details, and `toJSON()` name variables and their declared expectations but never their values, and it carries no `cause`.
 
+### `OutputErrorDetails`
+
+<auto-type-table path="../../../../../packages/core/src/errors.ts" name="OutputErrorDetails" />
+
+Every issue the `.output()` schema reports for one result is aggregated into one `OUTPUT` error. Issue paths are relative to the result, such as `items[0].id`, and are `""` for the result itself. An `OUTPUT` error is a bug in the command, not in its input.
+
 ## Propagation boundaries
 
-| Failure                                                                                              | `run()`                                | `execute()`                                   |
-| ---------------------------------------------------------------------------------------------------- | -------------------------------------- | --------------------------------------------- |
-| Eager builder checks (direct inputs, sibling names/aliases)                                          | Throws at the builder call             | Throws at the builder call                    |
-| Deferred recipe, inherited-flag, or Context-demand checks                                            | `failed` outcome when encountered      | Rendered when encountered; exit `1`           |
-| Preparation                                                                                          | `failed` outcome; no hooks run         | Rendered directly; exit `1`                   |
-| Routing, argv syntax, typed `run()` input binding                                                    | `failed` outcome; no hooks run         | Rendered via `onError`; exit `1`              |
-| Extension hooks before the action (including `bindInput`), validation, Context setup, Command Action | `failed` outcome after `postRun` hooks | Rendered via `onError`; exit `1`              |
-| Cancellation (`AbortError`)                                                                          | `failed` outcome                       | Offered to `onError`, else silent; exit `130` |
+| Failure                                                                                                                      | `run()`                                | `execute()`                                   |
+| ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | --------------------------------------------- |
+| Eager builder checks (direct inputs, sibling names/aliases)                                                                  | Throws at the builder call             | Throws at the builder call                    |
+| Deferred recipe, inherited-flag, or Context-demand checks                                                                    | `failed` outcome when encountered      | Rendered when encountered; exit `1`           |
+| Preparation                                                                                                                  | `failed` outcome; no hooks run         | Rendered directly; exit `1`                   |
+| Routing, argv syntax, typed `run()` input binding                                                                            | `failed` outcome; no hooks run         | Rendered via `onError`; exit `1`              |
+| Extension hooks before the action (including `bindInput`), validation, Context setup, Command Action, `.output()` validation | `failed` outcome after `postRun` hooks | Rendered via `onError`; exit `1`              |
+| Cancellation (`AbortError`)                                                                                                  | `failed` outcome                       | Offered to `onError`, else silent; exit `130` |
 
 `.add()` checks sibling names and aliases immediately, but does not run recipes or validate their inherited flags and Context demands. Those checks happen when commands materialize on first use. `.extend()` checks nothing at the call: collisions between Extension-provided flags and the app's flags, Extension commands that collide with another root command, and missing Contexts for an Extension's `.use()` or `.provide()`, are preparation errors. `await app.snapshot()` materializes and validates the full tree without running Command Actions, rejecting with any deferred definition or preparation error. `at()` can also throw deferred definition errors while resolving a path. Context setup and Command Action failures are not wrapped in `CrustError`.
 
@@ -90,7 +97,7 @@ One `ENV` error aggregates every missing or invalid variable of a `defineEnv()` 
 
 `execute()` renders a failure once. Extension `onError` hooks are presentation only and cannot turn a failure into success: they run in registration order until one returns a truthy value. If none claims the failure, the [renderer's `error`](/docs/api/types#renderer) renders it when an Extension chose a renderer that has one; otherwise Core writes one `Error: message` line per underlying failure (each member of a `SuppressedError` chain or `AggregateError`). If cleanup fails after a failure was already rendered, Core writes `Cleanup failed: message` lines without calling `onError` or the renderer's `error` again.
 
-For Extension `setup`, flag handler, `noAction`, and `preRun` failures, and validation, Context setup, and action failures, `onError` runs before `postRun` while Contexts are live. A `postRun` or disposal failure reaches `onError` after cleanup, when Context pulls reject. Routing and parse failures receive empty `args` and `flags` and no Contexts; `command` is the routed command when routing succeeded and the root otherwise. Argv syntax failures are unknown flags, missing option values, and negating a `noNegate` flag; an invalid argv or environment value (conversion, `choices`, `parse`) keeps code `PARSE` but surfaces during validation, after flag handlers and `preRun` and with live Contexts, so a `--help` handler still runs first. See [error handling](/docs/guide/error-handling) for worked examples.
+For Extension `setup`, flag handler, `noAction`, and `preRun` failures, and validation, Context setup, action, and `.output()` failures, `onError` runs before `postRun` while Contexts are live. A `postRun` or disposal failure reaches `onError` after cleanup, when Context pulls reject. Routing and parse failures receive empty `args` and `flags` and no Contexts; `command` is the routed command when routing succeeded and the root otherwise. Argv syntax failures are unknown flags, missing option values, and negating a `noNegate` flag; an invalid argv or environment value (conversion, `choices`, `parse`) keeps code `PARSE` but surfaces during validation, after flag handlers and `preRun` and with live Contexts, so a `--help` handler still runs first. See [error handling](/docs/guide/error-handling) for worked examples.
 
 ## Cancellation
 

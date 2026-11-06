@@ -1,5 +1,6 @@
 import {
 	normalizeStandardIssues,
+	type StandardJSONSchema,
 	type StandardSchema,
 	type ValidationIssue,
 } from "@crustjs/utils/schema";
@@ -64,4 +65,49 @@ export async function applySchemas<A extends ArgsDef = ArgsDef, F extends FlagsD
 		A,
 		F
 	>;
+}
+
+/**
+ * Validate a Command Action result against its `.output()` schema.
+ *
+ * @returns The schema output, which replaces the result
+ * @throws {CrustError} `OUTPUT` listing every schema issue
+ */
+export async function applyOutputSchema(schema: StandardSchema, result: unknown): Promise<unknown> {
+	const issues: ValidationIssue[] = [];
+	const validated = await runSchema(schema, result, [], issues);
+	if (validated.ok) return validated.value;
+	const lines = issues.map((issue) =>
+		issue.path === "" ? `  - ${issue.message}` : `  - ${issue.path}: ${issue.message}`,
+	);
+	throw new CrustError("OUTPUT", `Invalid command result:\n${lines.join("\n")}`, { issues });
+}
+
+/**
+ * The draft 2020-12 JSON Schema of a Standard Schema's input or output type,
+ * through its Standard JSON Schema `~standard.jsonSchema` converter.
+ *
+ * Returns `undefined` when the schema has no converter (e.g. a Valibot schema
+ * not wrapped with `toStandardJsonSchema`) or the converter throws because the
+ * type cannot be represented (e.g. a Zod transform's output).
+ *
+ * @example
+ * ```ts
+ * standardJsonSchema(z.object({ id: z.number() }), "output");
+ * // => { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object", … }
+ * ```
+ */
+export function standardJsonSchema(
+	schema: StandardSchema,
+	direction: "input" | "output",
+): Record<string, unknown> | undefined {
+	// Standard JSON Schema is optional on a Standard Schema; check before calling.
+	const props: Partial<StandardJSONSchema["~standard"]> = schema["~standard"];
+	const jsonSchema = props.jsonSchema;
+	if (typeof jsonSchema?.[direction] !== "function") return undefined;
+	try {
+		return jsonSchema[direction]({ target: "draft-2020-12" });
+	} catch {
+		return undefined;
+	}
 }

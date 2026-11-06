@@ -236,8 +236,9 @@ export interface Renderer {
 	/** A line the Command Action or a Context wrote with `stderr()`. Default: the invocation's stderr. */
 	diag(line: string): void;
 	/**
-	 * The Command Action's awaited return value, only when the invocation ran an action that
-	 * completed; called before `postRun`. A throw becomes the invocation's failure. Default: ignored.
+	 * The Command Action's awaited return value, after any `.output()` schema validated it, only
+	 * when the invocation ran an action that completed; called before `postRun`. A throw becomes
+	 * the invocation's failure. Default: ignored.
 	 */
 	result?(value: unknown): void;
 	/**
