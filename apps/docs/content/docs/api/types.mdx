@@ -283,7 +283,7 @@ Declared in [`api/extension.ts`](https://github.com/chenxin-yan/crust/blob/main/
 `defineExtension(id)` starts an immutable fluent definition; `defineExtension<MetaKeys>(id)` also [requires root metadata](#rootmetakey). Every method except `.factory()` returns a new frozen handle, and every handle is an `Extension` accepted by `.extend()`. There is no final build step.
 
 - Collection methods append on repeated calls. `.use()` declares Contexts the hooks consume. `.provide()` installs Context instances application-wide regardless of chain position; hooks see them only if also declared with `.use()`. `.flags()` owns flags. `.add()` contributes `defineCommand()` definitions at the root.
-- Lifecycle setters replace the previous callback: `.preRun()`, `.noAction()`, `.postRun()`, and `.onError()` set the [hooks](#extensionhooks); `.sections(snapshot)` returns [section contributions](#extensionsectioncontribution); `.build(ctx)` returns [`BuildArtifacts`](#buildartifacts) for build tooling to write.
+- Lifecycle setters replace the previous callback: `.setup()`, `.noAction()`, `.preRun()`, `.postRun()`, and `.onError()` set the [hooks](#extensionhooks); `.handle(flag, run, options)` sets the [handler](#extensionhandleoptions) for one owned flag; `.sections(snapshot)` returns [section contributions](#extensionsectioncontribution); `.build(ctx)` returns [`BuildArtifacts`](#buildartifacts) for build tooling to write.
 - Each callback is typed by the declarations made before it in the chain.
 - Flag spellings and contributed command names are checked for collisions by TypeScript and when the method runs.
 
@@ -331,18 +331,34 @@ Dynamic or conditional records do not claim typed ownership of hook values. An o
   name="ExtensionHooks"
 />
 
-- `preRun` runs in `.extend()` order after routing and input binding, before validation. Return `ctx.handled()` to end the invocation successfully. Pulling a flag-owning Context here rejects, because its flags are not validated yet. An argv or environment value that fails conversion, `choices`, or `parse` reads as `undefined` here (not its default); its error surfaces at validation, after every `preRun` hook.
-- `noAction` runs only when the routed command has no Command Action, after every `preRun` hook declined, in `.extend()` order and with the same context. Use it for fallbacks such as help for a command group, so they never shadow another Extension's `preRun`. Return `ctx.handled()` to end the invocation; otherwise validation runs and, if it succeeds, the invocation completes without a result.
+- `setup` runs for every Extension in `.extend()` order after routing and input binding, before any flag handler. Its context adds `defer(cleanup)`; cleanups run after `postRun` hooks, in reverse registration order together with Context disposal, including when a later setup throws. Calling `defer` once setups have finished throws a `DEFINITION` error (`extension-defer-after-setup`). A setup can fail the invocation by throwing but cannot end it successfully.
+- Flag handlers registered with [`.handle()`](#extensionbuilder) run after every setup. The selected handler ends the invocation as `handled`; `preRun`, validation, and the Command Action don't run.
+- `noAction` runs when the routed command has no Command Action and no flag handler took over, with the same context, and ends the invocation as `handled`. At most one Extension in an application may set it; a second fails preparation with a `DEFINITION` error (`duplicate-no-action`). Without one, validation runs and, if it succeeds, the invocation completes without a result.
+- `preRun` runs in `.extend()` order only when the Command Action will run: after setups, when no flag handler took over, before validation. Throw to fail the invocation; it cannot end it successfully. Pulling a flag-owning Context here rejects, because its flags are not validated yet. An argv or environment value that fails conversion, `choices`, or `parse` reads as `undefined` in setups, handlers, and `preRun` (not its default); its error surfaces at validation.
 - `onError` runs for `execute()` only. Return `true` after rendering to stop the chain, or a falsy value to fall through to Core's renderer.
 - `postRun` runs in reverse `.extend()` order after every completed, handled, or failed invocation that reached hooks, like `finally`. Contexts remain available until it completes. Preparation, routing, and parse failures skip it.
 
 See [propagation boundaries](/docs/api/errors#propagation-boundaries) for hook timing on failure.
 
-### `Handled`
+### `ExtensionHandleOptions`
 
-<auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Handled" />
+<auto-type-table
+  path="../../../../../packages/core/src/api/extension.ts"
+  name="ExtensionHandleOptions"
+/>
 
-The opaque token returned by `ctx.handled()`. Return that exact value from `preRun` or `noAction`.
+`.handle(flag, run, options)` binds `run` to a flag the Extension declared with `.flags()`; another name is a compile error, and a name hidden by a dynamic flag record that the Extension doesn't own is a `DEFINITION` error (`unknown-handle-flag`). Calling `.handle()` again for the same flag replaces its handler. A handler fires when the flag is supplied on argv, through its `env` variable, or in typed `run()` input, unless it is a negated boolean (`false`, or only `false` occurrences of a repeatable boolean); a defaulted, omitted, or invalid value fires nothing. A handler for a `recursive: false` flag fires only on the root, so a subcommand may own an unrelated flag with the same name.
+
+Selection doesn't depend on `.extend()` order: eager handlers first, then the others; within each group the flag given first on the command line wins. Flags set only through `env` rank after argv flags, by name. Typed `run()` input ranks by the key order of its `flags` object.
+
+### `ExtensionSetupContext`
+
+<auto-type-table
+  path="../../../../../packages/core/src/api/extension.ts"
+  name="ExtensionSetupContext"
+/>
+
+The context `setup` receives: the same [`ExtensionContext`](#extensioncontext) object later hooks get, plus `defer`, as in a Context's setup.
 
 ### `InvocationOutcome`
 
@@ -351,7 +367,7 @@ The opaque token returned by `ctx.handled()`. Return that exact value from `preR
   name="InvocationOutcome"
 />
 
-`postRun` receives `completed`, `handled` with the short-circuiting Extension's `by`, or `failed` with the thrown value. On `failed`, `by` names the Extension whose `onError` claimed the failure.
+`postRun` receives `completed`, `handled` with `by` naming the Extension whose flag handler or `noAction` ended the invocation, or `failed` with the thrown value. On `failed`, `by` names the Extension whose `onError` claimed the failure.
 
 ### `ExtensionSectionContribution`
 

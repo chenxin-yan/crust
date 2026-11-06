@@ -47,20 +47,6 @@ import {
 // Extension — the public integration contract
 // ────────────────────────────────────────────────────────────────────────────
 
-const handledBrand: unique symbol = Symbol("crust.handled");
-
-/** Opaque token returned by {@link ExtensionContext.handled} to end an invocation successfully. */
-export interface Handled {
-	readonly [handledBrand]: true;
-}
-
-const HANDLED: Handled = Object.freeze({ [handledBrand]: true as const });
-
-/** @internal */
-export function handledInvocation(): Handled {
-	return HANDLED;
-}
-
 export type InvocationOutcome =
 	| { readonly status: "completed" }
 	| { readonly status: "handled"; readonly by: ExtensionId }
@@ -181,17 +167,42 @@ export interface ExtensionContext<
 	readonly signal: AbortSignal;
 	/** Declared Contexts, constructed lazily on first property access. */
 	readonly ctx: ContextBag<Deps>;
+}
+
+/** The context {@link ExtensionHooks.setup} receives. */
+export interface ExtensionSetupContext<
+	F extends ExtensionFlagsDef = {},
+	Deps extends ContextMap = {},
+	MetaKeys extends RootMetaKey = never,
+> extends ExtensionContext<F, Deps, MetaKeys> {
 	/**
-	 * End the invocation successfully before validation, Context construction, and the action.
-	 *
-	 * @example
-	 * ```ts
-	 * preRun(ctx) {
-	 *   if (ctx.flags.help === true) return ctx.handled();
-	 * }
-	 * ```
+	 * Registers cleanup on the invocation's disposal stack, as a Context's setup does:
+	 * callbacks run after `postRun` hooks, in reverse registration order together with
+	 * Context disposal, including after a failure. Throws once setups have finished.
 	 */
-	readonly handled: () => Handled;
+	readonly defer: (cleanup: () => void | PromiseLike<void>) => void;
+}
+
+/** Options for {@link ExtensionBuilder.handle}. */
+export interface ExtensionHandleOptions {
+	/**
+	 * Rank before every non-eager handler, like Click's `is_eager` and argparse's help and
+	 * version actions: `deploy --preview --help` shows help. Among eager handlers, the flag
+	 * given first wins, so `--help --version` shows help and `--version --help` the version.
+	 *
+	 * @default false
+	 */
+	readonly eager?: boolean;
+}
+
+/** @internal A flag handler as stored on the Extension record. */
+export interface ExtensionHandler<
+	F extends ExtensionFlagsDef = {},
+	Deps extends ContextMap = {},
+	MetaKeys extends RootMetaKey = never,
+> {
+	readonly eager: boolean;
+	readonly run: (ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<void>;
 }
 
 export interface ExtensionHooks<
@@ -200,22 +211,24 @@ export interface ExtensionHooks<
 	MetaKeys extends RootMetaKey = never,
 > {
 	/**
-	 * Runs after routing and input binding (argv parsing for `execute()`, structured
-	 * binding for typed `run()`), before validation, in `.extend()` order.
-	 * Return `ctx.handled()` to end the invocation successfully; later pre-run hooks,
-	 * validation (including invalid argv and environment values), schemas, Contexts,
-	 * and the Command Action do not run.
+	 * Configures the invocation's environment after routing and input binding, before any
+	 * flag handler, so it applies to all output, including `--help`. Every setup runs, in
+	 * `.extend()` order, so setups must not depend on each other; one cannot end the
+	 * invocation except by throwing. Undo it with `ctx.defer(cleanup)`.
 	 */
-	readonly preRun?: (ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<void | Handled>;
+	readonly setup?: (ctx: ExtensionSetupContext<F, Deps, MetaKeys>) => Awaitable<void>;
 	/**
-	 * Runs in place of a missing Command Action: only when the routed command has
-	 * none, after every `preRun` hook declined, in `.extend()` order. A fallback
-	 * here, such as help for a command group, cannot shadow another Extension's
-	 * `preRun`, whatever the registration order. Return `ctx.handled()` to end the
-	 * invocation like `preRun`; if no hook does, validation runs and, if it succeeds,
-	 * the invocation completes without a result.
+	 * Runs in place of a missing Command Action, when no flag handler took the invocation,
+	 * and ends it as `handled`. At most one Extension in an application may set it.
 	 */
-	readonly noAction?: (ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<void | Handled>;
+	readonly noAction?: (ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<void>;
+	/**
+	 * Runs only when the Command Action will: after setups, when no flag handler took the
+	 * invocation, before validation, in `.extend()` order. For checks and preparation that
+	 * must precede every action but never `--help` or `--version`, such as a login check or
+	 * a deprecation warning. Throw to fail the invocation; it cannot end it successfully.
+	 */
+	readonly preRun?: (ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<void>;
 	/**
 	 * Runs after the invocation settles, in reverse `.extend()` order. This is the
 	 * `finally` slot for cleanup and post-run side effects.
@@ -372,6 +385,8 @@ export interface ExtensionData<
 	) => readonly ExtensionSectionContribution[];
 	readonly build?: (ctx: ExtensionBuildContext<MetaKeys>) => Awaitable<BuildArtifacts>;
 	readonly hooks: ExtensionHooks<any, Deps, MetaKeys>;
+	/** Flag handlers keyed by the owned flag they bind to. */
+	readonly handlers: Readonly<Record<string, ExtensionHandler<any, Deps, MetaKeys>>>;
 	readonly _deps?: Deps;
 }
 
@@ -471,9 +486,9 @@ type ExtensionHook<
 /**
  * Immutable fluent Extension authoring handle returned by {@link defineExtension}.
  * Every method returns a new handle. Collection methods (`use`, `provide`,
- * `flags`, `add`) append; lifecycle setters (`preRun`, `noAction`, `postRun`, `onError`,
- * `sections`, `build`) replace the previous callback. Callbacks are typed by the
- * declarations made before them.
+ * `flags`, `add`) append; lifecycle setters (`setup`, `preRun`, `noAction`, `postRun`,
+ * `onError`, `sections`, `build`, and `handle` per flag) replace the previous callback.
+ * Callbacks are typed by the declarations made before them.
  */
 export interface ExtensionBuilder<
 	Use extends readonly AnyContextFactory[] = [],
@@ -520,6 +535,22 @@ export interface ExtensionBuilder<
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
 		...definitions: Ds & ValidateCommandDefinitions<Ds, KnownCommandSpellings<Commands>>
 	): ExtensionBuilder<Use, Provide, OF, readonly [...Commands, ...Ds], MetaKeys>;
+	/** See {@link ExtensionHooks.setup}. */
+	setup(
+		hook: ExtensionHook<"setup", Use, OF, MetaKeys>,
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
+	/**
+	 * Take over the invocation when the user supplies `flag` (argv, environment, or typed
+	 * `run()` input), unless it is a negated boolean: `run` replaces `preRun`, validation,
+	 * and the Command Action, and the invocation ends as `handled`. Handlers run after every
+	 * setup; eager handlers rank first, then the flag given first on the command line wins,
+	 * whatever the `.extend()` order.
+	 */
+	handle(
+		flag: keyof OF & string,
+		run: ExtensionHook<"noAction", Use, OF, MetaKeys>,
+		options?: ExtensionHandleOptions,
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
 	/** See {@link ExtensionHooks.preRun}. */
 	preRun(
 		hook: ExtensionHook<"preRun", Use, OF, MetaKeys>,
@@ -536,6 +567,7 @@ export interface ExtensionBuilder<
 	onError(
 		hook: ExtensionHook<"onError", Use, OF, MetaKeys>,
 	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
+
 	/** Contribute documentation sections computed from the prepared root snapshot. */
 	sections(
 		contribute: (
@@ -575,6 +607,7 @@ function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 		use: Object.freeze([...state.use]),
 		provide: Object.freeze([...state.provide]),
 		hooks: Object.freeze({ ...state.hooks }),
+		handlers: Object.freeze({ ...state.handlers }),
 		...(state.sections ? { sections: state.sections } : {}),
 		...(state.build ? { build: state.build } : {}),
 	});
@@ -596,7 +629,21 @@ function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 			}),
 		add: (...definitions: readonly CommandDefinition<any, any, any, any>[]) =>
 			next({ commands: [...state.commands, ...definitions] }),
+		setup: (setup: ExtensionHooks["setup"]) => next({ hooks: { ...state.hooks, setup } }),
 		preRun: (preRun: ExtensionHooks["preRun"]) => next({ hooks: { ...state.hooks, preRun } }),
+		handle: (flag: string, run: ExtensionHandler["run"], options: ExtensionHandleOptions = {}) => {
+			// A dynamic flag record hides its names from the types.
+			if (!Object.hasOwn(flags, flag)) {
+				throw new CrustError(
+					"DEFINITION",
+					`Extension "${state.id}" handles flag "--${flag}", which it does not own`,
+					{ subject: "extension", name: state.id, reason: "unknown-handle-flag" },
+				);
+			}
+			return next({
+				handlers: { ...state.handlers, [flag]: { eager: options.eager ?? false, run } },
+			});
+		},
 		noAction: (noAction: ExtensionHooks["noAction"]) =>
 			next({ hooks: { ...state.hooks, noAction } }),
 		postRun: (postRun: ExtensionHooks["postRun"]) => next({ hooks: { ...state.hooks, postRun } }),
@@ -645,5 +692,6 @@ export function defineExtension<MetaKeys extends RootMetaKey = never>(
 		flags: [],
 		commands: [],
 		hooks: {},
+		handlers: {},
 	}) as ExtensionBuilder<[], [], {}, [], MetaKeys>;
 }

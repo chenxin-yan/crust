@@ -1,7 +1,6 @@
 import {
 	type ExtensionFactory,
 	type ExtensionId,
-	type ExtensionContext,
 	CrustError,
 	defineExtension,
 	defineExtensionId,
@@ -17,7 +16,6 @@ let activeRuns = 0;
 let activeFlag: boolean | undefined;
 let baseForceColor: string | undefined;
 let baseNoColor: string | undefined;
-const colorRuns = new WeakSet<ExtensionContext>();
 
 const colorFlags = {
 	color: {
@@ -44,13 +42,14 @@ const colorFlags = {
  * programmatic runs in one process may share a direction (both `--color` or
  * both `--no-color`); the ambient values are restored once all runs finish.
  * An overlapping run with the opposing flag throws a `CrustError` in
- * `preRun`, because the env is process-global and cannot hold both values.
+ * `setup`, because the env is process-global and cannot hold both values.
  */
 export const noColor: ExtensionFactory<[], {}, [], typeof colorFlags> =
 	/* @__PURE__ */ defineExtension(NO_COLOR).factory((extension) =>
 		extension
 			.flags(colorFlags)
-			.preRun((context) => {
+			// A setup, so the variables apply before any handler renders (`--help --no-color`).
+			.setup((context) => {
 				const flagValue = context.flags.color;
 				if (flagValue !== true && flagValue !== false) return;
 
@@ -68,7 +67,6 @@ export const noColor: ExtensionFactory<[], {}, [], typeof colorFlags> =
 					baseNoColor = process.env.NO_COLOR;
 				}
 				activeRuns++;
-				colorRuns.add(context);
 
 				if (flagValue) {
 					delete process.env.NO_COLOR;
@@ -77,17 +75,14 @@ export const noColor: ExtensionFactory<[], {}, [], typeof colorFlags> =
 					delete process.env.FORCE_COLOR;
 					process.env.NO_COLOR = "1";
 				}
-			})
-			.postRun((context) => {
-				if (!colorRuns.has(context)) return;
-				colorRuns.delete(context);
-				activeRuns--;
-				if (activeRuns === 0) {
+				context.defer(() => {
+					activeRuns--;
+					if (activeRuns > 0) return;
 					activeFlag = undefined;
 					if (baseForceColor === undefined) delete process.env.FORCE_COLOR;
 					else process.env.FORCE_COLOR = baseForceColor;
 					if (baseNoColor === undefined) delete process.env.NO_COLOR;
 					else process.env.NO_COLOR = baseNoColor;
-				}
+				});
 			}),
 	);

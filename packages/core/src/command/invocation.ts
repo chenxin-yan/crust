@@ -2,11 +2,12 @@ import { isSignalIgnored } from "@crustjs/utils/signals";
 import { withAmbientTerminalIO, writeProcessOutput } from "@crustjs/utils/terminal";
 
 import { validateContextAvailability } from "../api/context.ts";
-import {
-	handledInvocation,
-	type ExtensionData,
-	type ExtensionContext,
-	type InvocationOutcome,
+import type {
+	ExtensionData,
+	ExtensionHandler,
+	ExtensionSetupContext,
+	ExtensionContext,
+	InvocationOutcome,
 } from "../api/extension.ts";
 import { CrustError, type CaughtError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
@@ -48,10 +49,22 @@ const DEFAULT_IO: InvocationIO = {
 	stderr: (text) => writeProcessOutput(2, `${text}\n`),
 };
 
+/** A flag handler with the Extension that registered it. */
+interface BoundHandler extends ExtensionHandler<any, any, any> {
+	readonly by: ExtensionId;
+	/** A `recursive: false` flag; a child may own an unrelated flag with the same name. */
+	readonly rootOnly: boolean;
+	/** Only a boolean can be negated; `false` or `[]` is a supplied value of any other type. */
+	readonly boolean: boolean;
+}
+
 /** One cloned, extension-applied, frozen command tree; children are prepared on first access. */
 interface PreparedInvocation {
 	rootNode: CommandNode;
 	extensions: readonly ExtensionData[];
+	/** Handlers by flag name; Extension flags never collide, so each flag has at most one. */
+	handlers: ReadonlyMap<string, BoundHandler>;
+	noAction?: { readonly by: ExtensionId; readonly run: ExtensionHandler<any, any, any>["run"] };
 }
 
 /**
@@ -200,13 +213,39 @@ export function buildExtensionTree(
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): PreparedInvocation {
 	const extensions = Object.freeze([...node.extensions]);
-	const extensionFlags = extensions.flatMap((extension) =>
-		Object.entries(extension.flags).map(([name, { recursive = true, ...def }]) => ({
-			name,
-			def,
-			recursive,
-		})),
-	);
+	// By name, not `.extend()` order, so help lists Extension flags the same for every order.
+	const extensionFlags = extensions
+		.flatMap((extension) =>
+			Object.entries(extension.flags).map(([name, { recursive = true, ...def }]) => ({
+				name,
+				def,
+				recursive,
+			})),
+		)
+		.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+	const handlers = new Map<string, BoundHandler>();
+	let noAction: PreparedInvocation["noAction"];
+	for (const extension of extensions) {
+		for (const [flag, handler] of Object.entries(extension.handlers)) {
+			const def = extension.flags[flag];
+			handlers.set(flag, {
+				...handler,
+				by: extension.id,
+				rootOnly: def?.recursive === false,
+				boolean: def?.type === "boolean",
+			});
+		}
+		if (!extension.hooks.noAction) continue;
+		// Two fallbacks could only be ranked by `.extend()` order.
+		if (noAction) {
+			throw new CrustError(
+				"DEFINITION",
+				`Extensions "${noAction.by}" and "${extension.id}" both set noAction; an application can have one`,
+				{ subject: "extension", name: extension.id, reason: "duplicate-no-action" },
+			);
+		}
+		noAction = { by: extension.id, run: extension.hooks.noAction };
+	}
 	const providers: ExtensionProvider[] = extensions.flatMap((extension) => {
 		// SAFETY: .extend() records a position for every id it adds to the list.
 		const position = node.extensionPositions!.get(extension.id)!;
@@ -300,7 +339,12 @@ export function buildExtensionTree(
 		root.contexts.map(({ instance }) => instance),
 		extensions.flatMap((extension) => [...extension.use, ...extension.provide]),
 	);
-	return { rootNode: prepare(root, node.meta.name, true), extensions };
+	return {
+		rootNode: prepare(root, node.meta.name, true),
+		extensions,
+		handlers,
+		...(noAction && { noAction }),
+	};
 }
 
 /** Clone, apply Extensions and sections, freeze, and cache ordinary invocation preparation. */
@@ -378,6 +422,33 @@ function lazySnapshots(
 	};
 }
 
+/**
+ * The flag handler that takes the invocation: eager handlers first, then the flag given
+ * first. A negated boolean (`--no-preview`, or only negations of a repeatable one) or a
+ * value that failed conversion selects nothing.
+ */
+function selectHandler(
+	handlers: ReadonlyMap<string, BoundHandler>,
+	parsed: ArgvParseResult,
+	isRoot: boolean,
+): BoundHandler | undefined {
+	let first: BoundHandler | undefined;
+	for (const flag of parsed.flagOrder) {
+		const handler = handlers.get(flag);
+		const value = parsed.flags[flag];
+		if (!handler || (handler.rootOnly && !isRoot) || value === undefined) continue;
+		if (
+			handler.boolean &&
+			(value === false || (Array.isArray(value) && value.every((item) => item === false)))
+		) {
+			continue;
+		}
+		if (handler.eager) return handler;
+		first ??= handler;
+	}
+	return first;
+}
+
 /** Resolve, parse, and run one invocation without rendering failures. */
 async function dispatch(
 	input: InvocationInput,
@@ -390,7 +461,7 @@ async function dispatch(
 	const { rootNode, extensions } = prepared;
 
 	// Routing and syntax parsing — failures flow directly to the caller. Value errors
-	// wait in `parsed.valueError` for `terminal()`, so a preRun `--help` still wins.
+	// wait in `parsed.valueError` for `terminal()`, so a `--help` handler still wins.
 	const { argv, route, parsed } =
 		"argv" in input
 			? resolveArgvInput(rootNode, input.argv)
@@ -403,7 +474,10 @@ async function dispatch(
 	const resolver = createContextResolver(contexts, io, disposal, signal);
 
 	const snapshots = lazySnapshots(prepared, resolvedNode);
-	const extensionContext: ExtensionContext = Object.freeze({
+	// Setups register cleanup only while they run; one shared object keeps per-invocation
+	// identity (e.g. WeakMap keys) from setup through onError.
+	let settingUp = false;
+	const extensionContext: ExtensionSetupContext = Object.freeze({
 		argv: [...argv],
 		get rootCommand() {
 			return snapshots.rootCommand;
@@ -417,9 +491,18 @@ async function dispatch(
 		rawArgs: parsed.rawArgs,
 		signal,
 		ctx: resolver.bag(extensions.flatMap((extension) => extension.use)),
-		handled: handledInvocation,
 		stdout: io.stdout,
 		stderr: io.stderr,
+		defer(cleanup: () => void | PromiseLike<void>) {
+			if (!settingUp) {
+				throw new CrustError(
+					"DEFINITION",
+					"Extension cleanup can only be registered while Extension setups run.",
+					{ subject: "extension", reason: "extension-defer-after-setup" },
+				);
+			}
+			disposal.defer(cleanup);
+		},
 	});
 	onExtensionContext?.(extensionContext);
 
@@ -455,16 +538,25 @@ async function dispatch(
 	let outcome: InvocationOutcome = { status: "completed" };
 	try {
 		try {
-			const phases = resolvedNode.run ? (["preRun"] as const) : (["preRun", "noAction"] as const);
-			phases: for (const phase of phases) {
-				for (const extension of extensions) {
-					if ((await extension.hooks?.[phase]?.(extensionContext)) === handledInvocation()) {
-						outcome = { status: "handled", by: extension.id };
-						break phases;
-					}
-				}
+			// Setups only configure, so their order cannot change what runs. Their cleanups share
+			// the disposal stack with Contexts: a Context a setup pulled is disposed after it.
+			settingUp = true;
+			try {
+				for (const extension of extensions) await extension.hooks.setup?.(extensionContext);
+			} finally {
+				settingUp = false;
 			}
-			if (outcome.status !== "handled") {
+			const handler =
+				selectHandler(prepared.handlers, parsed, resolvedNode === rootNode) ??
+				(resolvedNode.run ? undefined : prepared.noAction);
+			if (handler) {
+				await handler.run(extensionContext);
+				outcome = { status: "handled", by: handler.by };
+			} else {
+				// Gates such as login checks precede only an action, never `--help` or a fallback.
+				if (resolvedNode.run) {
+					for (const extension of extensions) await extension.hooks.preRun?.(extensionContext);
+				}
 				result = await terminal();
 			}
 		} catch (error) {
@@ -554,7 +646,6 @@ async function renderFailure(
 			flags: Object.freeze({}),
 			rawArgs: [],
 			signal,
-			handled: handledInvocation,
 			stdout: io.stdout,
 			stderr: io.stderr,
 			ctx: unavailableContext,

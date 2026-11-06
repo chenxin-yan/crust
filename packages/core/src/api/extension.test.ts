@@ -21,7 +21,7 @@ describe("defineExtension", () => {
 		const seen: unknown[] = [];
 		const observer = defineExtension(defineExtensionId("observer"))
 			.flags(optional)
-			.preRun(({ flags }) => {
+			.setup(({ flags }) => {
 				seen.push(flags.port);
 			})
 			.postRun(({ flags }) => {
@@ -116,20 +116,17 @@ describe("defineExtension", () => {
 		expect(seen).toEqual(["second pre", "second post"]);
 	});
 
-	it("runs noAction hooks after every preRun hook, only for commands without an action", async () => {
+	it("runs noAction in place of a missing action, skipping preRun, unless a handler fires", async () => {
 		const seen: string[] = [];
 		const first = defineExtension(defineExtensionId("first"))
-			.preRun(() => void seen.push("first pre"))
-			.noAction(() => void seen.push("first noAction"));
+			.setup(() => void seen.push("first setup"))
+			.preRun(() => void seen.push("first pre"));
 		const second = defineExtension(defineExtensionId("second"))
 			.preRun(() => void seen.push("second pre"))
-			.noAction((ctx) => {
-				seen.push("second noAction");
-				return ctx.handled();
-			});
+			.noAction(() => void seen.push("second noAction"));
 		const app = new Crust("app")
 			.extend(first, second)
-			// Missing, but noAction runs before validation, like preRun.
+			// Missing, but noAction runs before validation.
 			.args({ name: "name", type: "string", required: true })
 			.command("leaf", (command) => command.action(() => void seen.push("action")));
 
@@ -137,20 +134,25 @@ describe("defineExtension", () => {
 			status: "handled",
 			by: "second",
 		});
-		expect(seen).toEqual(["first pre", "second pre", "first noAction", "second noAction"]);
+		expect(seen).toEqual(["first setup", "second noAction"]);
 
 		seen.length = 0;
 		await unwrap(app.run(["leaf"]));
-		expect(seen).toEqual(["first pre", "second pre", "action"]);
+		expect(seen).toEqual(["first setup", "first pre", "second pre", "action"]);
 
 		seen.length = 0;
 		const claimed = new Crust("app")
 			.extend(
-				defineExtension(defineExtensionId("claim")).preRun((ctx) => ctx.handled()),
 				second,
+				defineExtension(defineExtensionId("claim"))
+					.flags({ stop: { type: "boolean" } })
+					.handle("stop", () => {}),
 			)
 			.command("leaf", (command) => command.action(() => {}));
-		expect(await claimed.run([] as never)).toMatchObject({ status: "handled", by: "claim" });
+		expect(await claimed.run([] as never, { flags: { stop: true } } as never)).toMatchObject({
+			status: "handled",
+			by: "claim",
+		});
 		expect(seen).toEqual([]);
 
 		const unclaimed = new Crust("app").extend(first).command("leaf", (c) => c.action(() => {}));

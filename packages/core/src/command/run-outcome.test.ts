@@ -69,9 +69,8 @@ describe("captured run outcomes", () => {
 	it("handles the invocation before required validation and captures hook output", async () => {
 		const id = defineExtensionId("handled");
 		const app = new Crust("app").flags({ mode: { type: "string", required: true } }).extend(
-			defineExtension(id).preRun((ctx) => {
+			defineExtension(id).noAction((ctx) => {
 				ctx.stdout("help");
-				return ctx.handled();
 			}),
 		);
 		const erased: AnyCrust = app;

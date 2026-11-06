@@ -55,7 +55,7 @@ project: .agents/skills/my-cli -> ../../node_modules/my-cli/skills/my-cli
 global:  ~/.agents/skills/my-cli -> /usr/lib/node_modules/my-cli/skills/my-cli
 ```
 
-Project links are relative and global links are absolute. The pre-run hook of an installed CLI repairs Crust-owned links whose target no longer exists unless `autoUpdate: false`; it does not create links that were never installed, and it leaves a link to another live installed copy of the CLI (global versus project-local, `npx`) alone so the copies do not take it from each other. `skills repair` re-points such a link to the running copy. Running from source (`bun run`, `node`) skips it, so trying a checkout never moves an installed CLI's links to that checkout's build. Run `skills repair` there to relink deliberately.
+Project links are relative and global links are absolute. Before each Command Action, the `preRun` hook of an installed CLI repairs Crust-owned links whose target no longer exists unless `autoUpdate: false`; it does not create links that were never installed, and it leaves a link to another live installed copy of the CLI (global versus project-local, `npx`) alone so the copies do not take it from each other. `skills repair` re-points such a link to the running copy. Running from source (`bun run`, `node`) skips it, so trying a checkout never moves an installed CLI's links to that checkout's build. Run `skills repair` there to relink deliberately.
 
 A link is Crust-owned when its textual target ends in `skills/<name>`. Real directories and foreign links conflict unless `force: true` is passed to low-level installation.
 

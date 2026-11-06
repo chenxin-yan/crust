@@ -46,6 +46,12 @@ export interface ArgvParseResult<
 	F extends FlagsDef = FlagsDef,
 > extends ParseResult<A, F> {
 	valueError?: CrustError;
+	/**
+	 * Canonical names of flags given a value, in the order the user gave them: argv by first
+	 * occurrence, then environment values by name; structured input in key order.
+	 * Extension flag handlers rank by it, so the first one on the command line wins.
+	 */
+	flagOrder: readonly string[];
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -273,6 +279,7 @@ function resolveFlags<F extends FlagsDef, V>(
 	values: Readonly<Record<string, V | undefined>>,
 	coerce: (name: string, def: FlagDef, value: V) => ParsedFlagValue,
 	defer?: DeferValueError,
+	present?: Set<string>,
 ): RawParsedFlags<F> {
 	const resolved: Record<string, ParsedFlagValue> = {};
 	for (const [name, def] of Object.entries(flagsDef)) {
@@ -283,6 +290,7 @@ function resolveFlags<F extends FlagsDef, V>(
 			parsedValue === undefined ||
 			(def.multiple && Array.isArray(parsedValue) && parsedValue.length === 0);
 		if (!absent) {
+			present?.add(name);
 			resolved[name] = coerceOrDefer(() => coerce(name, def, parsedValue), defer);
 			continue;
 		}
@@ -595,8 +603,10 @@ function bind<A extends ArgsDef, F extends FlagsDef, V, W>(
 	coerceFlag: (name: string, def: FlagDef, value: W) => ParsedFlagValue,
 	defer?: DeferValueError,
 ) {
-	const flags = resolveFlags(command.effectiveFlags, flagValues, coerceFlag, defer);
-	return { ...resolveArgs(command.args, positionals, coerceArg, defer), flags };
+	// Flags given a value, so an omission that resolves to a default never orders as supplied.
+	const present = new Set<string>();
+	const flags = resolveFlags(command.effectiveFlags, flagValues, coerceFlag, defer, present);
+	return { ...resolveArgs(command.args, positionals, coerceArg, defer), flags, present };
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -629,7 +639,7 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 ): ArgvParseResult<A, F> {
 	const { positionals, separatorIndex, flagValues } = tokenizeArgv(command, argv);
 	let valueError: CrustError | undefined;
-	const { args, flags, consumed } = bind(
+	const { args, flags, consumed, present } = bind(
 		command,
 		positionals,
 		applyEnvAndDelimiter(command.effectiveFlags, flagValues, env),
@@ -645,6 +655,12 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 		// Tokens after `--` are operands: declared positionals take them first, the rest pass through.
 		excessArgs: positionals.slice(consumed, separatorIndex),
 		rawArgs: positionals.slice(Math.max(consumed, separatorIndex)),
+		// `flagValues` keys follow first occurrence in argv. Environment values have no
+		// position; sorting them keeps the order independent of declaration order.
+		flagOrder: [
+			...Object.keys(flagValues).filter((name) => present.has(name)),
+			...[...present].filter((name) => !Object.hasOwn(flagValues, name)).sort(),
+		],
 		...(valueError && { valueError }),
 	};
 }
@@ -681,7 +697,7 @@ export async function parseFlagValues<const F extends FlagsDef>(
 export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
 	command: CommandNode & { args: A; effectiveFlags: F },
 	input: RunInputPayload,
-): ParseResult<A, F> {
+): ArgvParseResult<A, F> {
 	const { args: inputArgs, flags: inputFlags, raw } = input;
 	const positionals: RunInputValue[] = [];
 	let omittedArgument: string | undefined;
@@ -738,14 +754,16 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 			});
 		}
 	}
-	const { args, flags } = bind(
+	const { args, flags, present } = bind(
 		command,
 		positionals,
 		inputFlags ?? {},
 		coerceStructuredValue,
 		coerceStructuredFlag,
 	);
-	return { args, flags, excessArgs: [], rawArgs: [...(raw ?? [])] };
+	// Key order stands in for command-line order; values are not re-read, so getters run once.
+	const flagOrder = Object.keys(inputFlags ?? {}).filter((name) => present.has(name));
+	return { args, flags, excessArgs: [], rawArgs: [...(raw ?? [])], flagOrder };
 }
 
 /**

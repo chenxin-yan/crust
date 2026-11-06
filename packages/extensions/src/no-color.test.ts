@@ -41,7 +41,7 @@ describe("noColor", () => {
 		});
 
 		// A (--color) starts and stays pending; B (--no-color) must be rejected
-		// in preRun rather than flipping the shared env under A.
+		// in setup rather than flipping the shared env under A.
 		const runA = captureExecute(appA, ["--color"]);
 		const runB = await captureExecute(appB, ["--no-color"]);
 

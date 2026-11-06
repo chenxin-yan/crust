@@ -960,15 +960,19 @@ describe("Extension application at prepare time", () => {
 });
 
 describe("Extension named hooks", () => {
-	it("runs pre-run hooks in extension order and handled skips later hooks and the action", async () => {
+	it("runs pre-run hooks in extension order before the action, and a handler skips them all", async () => {
 		const order: string[] = [];
 		const first = defineExtension(defineExtensionId("first")).preRun(() => {
 			order.push("first");
 		});
-		const gate = defineExtension(defineExtensionId("gate")).preRun((ctx) => {
-			order.push("gate");
-			return ctx.handled();
-		});
+		const gate = defineExtension(defineExtensionId("gate"))
+			.flags({ stop: { type: "boolean" } })
+			.preRun(() => {
+				order.push("gate");
+			})
+			.handle("stop", () => {
+				order.push("stop");
+			});
 		const last = defineExtension(defineExtensionId("last")).preRun(() => {
 			order.push("last");
 		});
@@ -980,7 +984,10 @@ describe("Extension named hooks", () => {
 			});
 
 		await unwrap(app.run([], { args: { file: "unused" } }));
-		expect(order).toEqual(["first", "gate"]);
+		expect(order).toEqual(["first", "gate", "last", "action"]);
+		order.length = 0;
+		await unwrap(app.run([], { args: { file: "unused" }, flags: { stop: true } }));
+		expect(order).toEqual(["stop"]);
 	});
 
 	it("runs post-run hooks LIFO for completed, failed, and handled invocations", async () => {
@@ -1014,12 +1021,14 @@ describe("Extension named hooks", () => {
 		expect(outcomes).toEqual(["second:failed", "first:failed"]);
 
 		outcomes.length = 0;
-		const gate = defineExtension(defineExtensionId("gate")).preRun((ctx) => ctx.handled());
+		const gate = defineExtension(defineExtensionId("gate"))
+			.flags({ stop: { type: "boolean" } })
+			.handle("stop", () => {});
 		await unwrap(
 			new Crust("cli")
 				.extend(first, gate, second)
 				.action(() => {})
-				.run([]),
+				.run([], { flags: { stop: true } }),
 		);
 		expect(outcomes).toEqual(["second:handled", "first:handled"]);
 	});
@@ -1028,9 +1037,9 @@ describe("Extension named hooks", () => {
 		let outcomeBy = "";
 		let seenPort: unknown;
 		const gate = defineExtension(defineExtensionId("gate"))
-			.preRun((ctx) => {
+			.flags({ stop: { type: "boolean" } })
+			.handle("stop", (ctx) => {
 				seenPort = ctx.flags.port;
-				return ctx.handled();
 			})
 			.postRun((_ctx, outcome) => {
 				outcomeBy = outcome.status === "handled" ? outcome.by : "";
@@ -1040,7 +1049,7 @@ describe("Extension named hooks", () => {
 				.flags({ port: { type: "number", required: true } })
 				.extend(gate)
 				.action(() => {})
-				.run([], { flags: { port: 8080 } }),
+				.run([], { flags: { port: 8080, stop: true } }),
 		);
 
 		expect(seenPort).toBe(8080);
@@ -1066,10 +1075,8 @@ describe("Extension named hooks", () => {
 			const port = { name: "port", type: "number", default: 3000, env: { name: "PORT" } } as const;
 			const gate = defineExtension(defineExtensionId("gate"))
 				.flags({ stop: { type: "boolean", recursive: true } })
-				.preRun((ctx) => {
-					seen.push(ctx.flags.port);
-					if (ctx.flags.stop === true) return ctx.handled();
-				})
+				.preRun((ctx) => void seen.push(ctx.flags.port))
+				.handle("stop", () => {})
 				.onError((error) => void errors.push(error));
 			const app = new Crust("cli")
 				.flags({ port, mode: { type: "string", choices: ["fast", "safe"] } })
@@ -1090,7 +1097,7 @@ describe("Extension named hooks", () => {
 			return { execute, seen, errors, actions };
 		}
 
-		it("lets a handling preRun win over invalid argv values in any order", async () => {
+		it("lets a flag handler win over invalid argv values in any order", async () => {
 			const { execute, errors, actions } = deferringApp();
 			for (const argv of [
 				["--port", "abc", "--stop"],
@@ -1105,7 +1112,7 @@ describe("Extension named hooks", () => {
 			expect(actions).toEqual([]);
 		});
 
-		it("lets a handling preRun win over an invalid env fallback", async () => {
+		it("lets a flag handler win over an invalid env fallback", async () => {
 			vi.stubEnv("PORT", "abc");
 			const { execute, actions } = deferringApp();
 			expect(await execute(["--stop"])).toEqual({ exitCode: 0, stderr: "" });
@@ -1157,27 +1164,24 @@ describe("Extension named hooks", () => {
 			expect(onErrorContext).toBe(preRunContext);
 		});
 
-		it("shows Extension-owned defaulted flags as unset to preRun and postRun", async () => {
+		it("shows Extension-owned defaulted flags as unset to setup and postRun", async () => {
 			const seen: unknown[] = [];
 			const owner = defineExtension(defineExtensionId("owner"))
 				.flags({ port: { type: "number", default: 3000 } })
-				.preRun(({ flags }) => void seen.push(["pre", flags.port]))
+				.setup(({ flags }) => void seen.push(["setup", flags.port]))
 				.postRun(({ flags }, outcome) => void seen.push(["post", flags.port, outcome.status]));
-			const gate = defineExtension(defineExtensionId("gate")).preRun((ctx) =>
-				ctx.argv.includes("--stop") ? ctx.handled() : undefined,
-			);
-			const app = new Crust("cli")
+			const gate = defineExtension(defineExtensionId("gate"))
 				.flags({ stop: { type: "boolean" } })
-				.extend(owner, gate)
-				.action(() => void seen.push("action"));
+				.handle("stop", () => {});
+			const app = new Crust("cli").extend(owner, gate).action(() => void seen.push("action"));
 			const io = { stdout: () => {}, stderr: () => {} };
 
 			expect(await app.execute({ argv: ["--port", "abc", "--stop"], io })).toBe(0);
 			expect(await app.execute({ argv: ["--port", "abc"], io })).toBe(1);
 			expect(seen).toEqual([
-				["pre", undefined],
+				["setup", undefined],
 				["post", undefined, "handled"],
-				["pre", undefined],
+				["setup", undefined],
 				["post", undefined, "failed"],
 			]);
 		});
@@ -1272,6 +1276,270 @@ describe("Extension named hooks", () => {
 		await unwrap(app.run([]));
 		await app.execute({ argv: ["owned"] });
 		expect(roots).toEqual(["cli", "cli"]);
+	});
+});
+
+describe("Extension setup, flag handlers, and noAction", () => {
+	afterEach(() => void vi.unstubAllEnvs());
+
+	/** One app per `.extend()` order; each handler prints its flag name. */
+	function handlerApps() {
+		const handler = (name: string, eager = false) =>
+			defineExtension(defineExtensionId(name))
+				.flags({ [name]: { type: "boolean", env: { name: name.toUpperCase() } } } as const)
+				.handle(name, (ctx) => ctx.stdout(name), { eager });
+		const [help, version, preview, dry] = [
+			handler("help", true),
+			handler("version", true),
+			handler("preview"),
+			handler("dry"),
+		];
+		return [
+			new Crust("cli").extend(help, version, preview, dry).action(({ stdout }) => stdout("action")),
+			new Crust("cli").extend(dry, preview, version, help).action(({ stdout }) => stdout("action")),
+		];
+	}
+
+	async function outputs(argv: string[]) {
+		return Promise.all(
+			handlerApps().map(async (app) => {
+				const lines: string[] = [];
+				await app.execute({
+					argv,
+					io: { stdout: (line) => void lines.push(line), stderr: () => {} },
+				});
+				return lines.join("\n");
+			}),
+		);
+	}
+
+	it("ranks eager handlers first, then the flag given first, whatever the .extend() order", async () => {
+		for (const [argv, expected] of [
+			[["--preview", "--help"], "help"],
+			[["--dry", "--preview", "--version"], "version"],
+			[["--help", "--version"], "help"],
+			[["--version", "--help"], "version"],
+			[["--dry", "--preview"], "dry"],
+			[["--preview", "--dry"], "preview"],
+			[["--preview", "--no-dry"], "preview"],
+		] as const) {
+			expect(await outputs([...argv]), argv.join(" ")).toEqual([expected, expected]);
+		}
+	});
+
+	it("ranks environment-sourced handlers after argv", async () => {
+		vi.stubEnv("DRY", "true");
+		expect(await outputs(["--preview"])).toEqual(["preview", "preview"]);
+		expect(await outputs([])).toEqual(["dry", "dry"]);
+	});
+
+	it("does not handle a negated flag", async () => {
+		expect(await outputs(["--no-preview"])).toEqual(["action", "action"]);
+	});
+
+	it("handles only flags that were given, not omissions that resolve to a default", async () => {
+		const handled = (flags: FlagsDef) =>
+			new Crust("cli")
+				.extend(
+					defineExtension(defineExtensionId("mode"))
+						.flags(flags)
+						.handle("mode", (ctx) => ctx.stdout("handled")),
+				)
+				.action(({ stdout }) => stdout("action"));
+		const repeatable = handled({ mode: { type: "boolean", multiple: true } });
+		expect((await repeatable.run([], { flags: { mode: [false] } })).stdout).toBe("action");
+		const defaulted = handled({ mode: { type: "boolean", default: true } });
+		expect((await defaulted.run([], { flags: { mode: undefined } })).stdout).toBe("action");
+		const listed = handled({
+			mode: { type: "string", multiple: true, delimiter: ",", default: ["a"] },
+		});
+		expect((await listed.run([], { flags: { mode: [] } })).stdout).toBe("action");
+		const lines: string[] = [];
+		await listed.execute({
+			argv: ["--mode", ""],
+			io: { stdout: (line) => void lines.push(line), stderr: () => {} },
+		});
+		expect(lines).toEqual(["action"]);
+	});
+
+	it("handles any supplied value of a non-boolean flag, including JSON arrays and false", async () => {
+		const app = new Crust("cli")
+			.extend(
+				defineExtension(defineExtensionId("json-mode"))
+					.flags({ mode: { type: "json" } })
+					.handle("mode", (ctx) => ctx.stdout("handled")),
+			)
+			.action(({ stdout }) => stdout("action"));
+		for (const mode of [[], [false], false]) {
+			expect((await app.run([], { flags: { mode } })).stdout, JSON.stringify(mode)).toBe("handled");
+		}
+		const lines: string[] = [];
+		await app.execute({
+			argv: ["--mode", "[]"],
+			io: { stdout: (line) => void lines.push(line), stderr: () => {} },
+		});
+		expect(lines).toEqual(["handled"]);
+	});
+
+	it("handles a root-only flag only on the root, not a child's own flag of that name", async () => {
+		const version = defineExtension(defineExtensionId("version"))
+			.flags({ version: { type: "boolean", recursive: false } })
+			.handle("version", (ctx) => ctx.stdout("cli v1"), { eager: true });
+		const app = new Crust("cli")
+			.extend(version)
+			.command("publish", (command) =>
+				command
+					.flags({ version: { type: "string" } })
+					.action(({ flags, stdout }) => stdout(`publishing ${flags.version}`)),
+			)
+			.action(() => {});
+		expect((await app.run([], { flags: { version: true } })).stdout).toBe("cli v1");
+		expect((await app.run(["publish"], { flags: { version: "2.0.0" } })).stdout).toBe(
+			"publishing 2.0.0",
+		);
+		const lines: string[] = [];
+		await app.execute({
+			argv: ["publish", "--version", "2.0.0"],
+			io: { stdout: (line) => void lines.push(line), stderr: () => {} },
+		});
+		expect(lines).toEqual(["publishing 2.0.0"]);
+	});
+
+	it("ranks structured run() flags by key order", async () => {
+		for (const app of handlerApps()) {
+			expect(await app.run([], { flags: { dry: true, preview: true } })).toMatchObject({
+				status: "handled",
+				by: "dry",
+			});
+			expect(await app.run([], { flags: { preview: true, dry: true } })).toMatchObject({
+				status: "handled",
+				by: "preview",
+			});
+		}
+	});
+
+	it("runs preRun after every setup and before validation, only when the action runs", async () => {
+		const seen: string[] = [];
+		const gate = defineExtension(defineExtensionId("gate"))
+			.flags({ stop: { type: "boolean" } })
+			.preRun(() => void seen.push("preRun"))
+			.setup(() => void seen.push("gate setup"))
+			.handle("stop", () => void seen.push("stop"));
+		const fallback = defineExtension(defineExtensionId("fallback"))
+			.setup(() => void seen.push("fallback setup"))
+			.noAction(() => void seen.push("noAction"));
+		const app = new Crust("cli")
+			.args({ name: "file", type: "string", required: true })
+			.extend(gate, fallback)
+			.command("group", (command) => command)
+			.action(() => void seen.push("action"));
+
+		expect(await app.run([], {} as never)).toMatchObject({ status: "failed" });
+		expect(seen).toEqual(["gate setup", "fallback setup", "preRun"]);
+		seen.length = 0;
+		await unwrap(app.run([], { args: { file: "x" } }));
+		expect(seen).toEqual(["gate setup", "fallback setup", "preRun", "action"]);
+		seen.length = 0;
+		expect(await app.run([], { flags: { stop: true } } as never)).toMatchObject({
+			status: "handled",
+			by: "gate",
+		});
+		expect(seen).toEqual(["gate setup", "fallback setup", "stop"]);
+		seen.length = 0;
+		expect(await app.run(["group"])).toMatchObject({ status: "handled", by: "fallback" });
+		expect(seen).toEqual(["gate setup", "fallback setup", "noAction"]);
+	});
+
+	it("passes setup the same context object as later hooks", async () => {
+		const seen = new WeakSet<object>();
+		let sameInPostRun = false;
+		const tracker = defineExtension(defineExtensionId("tracker"))
+			.setup((ctx) => void seen.add(ctx))
+			.postRun((ctx) => void (sameInPostRun = seen.has(ctx)));
+		await unwrap(
+			new Crust("cli")
+				.extend(tracker)
+				.action(() => {})
+				.run([]),
+		);
+		expect(sameInPostRun).toBe(true);
+	});
+
+	it("runs deferred setup cleanup in reverse after postRun and Context disposal, even when a later setup throws", async () => {
+		const seen: string[] = [];
+		const resource = defineContext("resource").setup(() => ({
+			async [Symbol.asyncDispose]() {
+				seen.push("dispose");
+			},
+		}));
+		const extension = (name: string) =>
+			defineExtension(defineExtensionId(name))
+				.setup(({ defer }) => {
+					seen.push(`setup ${name}`);
+					defer(() => void seen.push(`cleanup ${name}`));
+				})
+				.postRun(() => void seen.push(`postRun ${name}`));
+		const app = new Crust("cli")
+			.provide(resource())
+			.extend(extension("a"), extension("b"))
+			.action(async ({ ctx }) => void (await ctx.resource));
+
+		await unwrap(app.run([]));
+		expect(seen).toEqual([
+			"setup a",
+			"setup b",
+			"postRun b",
+			"postRun a",
+			"dispose",
+			"cleanup b",
+			"cleanup a",
+		]);
+
+		seen.length = 0;
+		const boom = defineExtension(defineExtensionId("boom")).setup(() => {
+			throw new Error("boom");
+		});
+		const failing = new Crust("cli")
+			.extend(extension("a"), boom, extension("b"))
+			.action(() => void seen.push("action"));
+		await expect(unwrap(failing.run([]))).rejects.toThrow("boom");
+		expect(seen).toEqual(["setup a", "postRun b", "postRun a", "cleanup a"]);
+
+		let late: ((cleanup: () => void) => void) | undefined;
+		const leaky = defineExtension(defineExtensionId("leaky")).setup(({ defer }) => {
+			late = defer;
+		});
+		await unwrap(
+			new Crust("cli")
+				.extend(leaky)
+				.action(() => {})
+				.run([]),
+		);
+		expect(() => late?.(() => {})).toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				details: expect.objectContaining({ reason: "extension-defer-after-setup" }),
+			}),
+		);
+	});
+
+	it("rejects two noAction Extensions and handlers for unowned flags", async () => {
+		const fallback = (name: string) => defineExtension(defineExtensionId(name)).noAction(() => {});
+		await expect(new Crust("cli").extend(fallback("a"), fallback("b")).snapshot()).rejects.toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				details: expect.objectContaining({ reason: "duplicate-no-action" }),
+			}),
+		);
+		const dynamic: Record<string, { type: "boolean" }> = { owned: { type: "boolean" } };
+		const extension = defineExtension(defineExtensionId("dynamic")).flags(dynamic);
+		expect(() => extension.handle("missing", () => {})).toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				details: expect.objectContaining({ reason: "unknown-handle-flag" }),
+			}),
+		);
+		expect(() => extension.handle("owned", () => {})).not.toThrow();
 	});
 });
 

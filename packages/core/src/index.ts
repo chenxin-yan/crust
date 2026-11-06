@@ -23,9 +23,10 @@ export type {
 	ExtensionContext,
 	ExtensionFlagDef,
 	ExtensionFlagsDef,
+	ExtensionHandleOptions,
 	ExtensionSectionContribution,
+	ExtensionSetupContext,
 	ExtensionHooks,
-	Handled,
 	InferExtensionFlags,
 	InvocationOutcome,
 } from "./api/extension.ts";

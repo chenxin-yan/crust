@@ -32,7 +32,7 @@ it("uncertain flag collections may be empty or leave the name to another extensi
 	const seen: unknown[] = [];
 	const observer = defineExtension(defineExtensionId("observer"))
 		.flags(flags)
-		.preRun(({ flags }) => {
+		.setup(({ flags }) => {
 			seen.push(flags.port);
 		});
 	expect((await new Crust("cli").extend(observer).run([])).status).toBe("completed");

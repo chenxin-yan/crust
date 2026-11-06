@@ -322,3 +322,34 @@ function _positionalCallbacks() {
 		// @ts-expect-error Repeated add() calls check earlier command spellings.
 		.add(defineCommand("f", (cmd) => cmd));
 }
+
+function _handleCallbacks() {
+	const ID = defineExtensionId("test:handle");
+	const logger = defineContext("logger").setup(() => "logger");
+	const owned = defineExtension(ID)
+		.use(logger)
+		.flags({ preview: { type: "boolean" }, mode: { type: "string" } });
+	owned.handle(
+		"preview",
+		async ({ ctx, flags }) => {
+			const _logger: string = await ctx.logger;
+			type _preview = Expect<Equal<typeof flags.preview, boolean | undefined>>;
+		},
+		{ eager: true },
+	);
+	owned.handle("mode", () => {});
+	// @ts-expect-error A handler binds only to a flag the Extension owns.
+	owned.handle("help", () => {});
+	// @ts-expect-error Flags declared later are not owned yet.
+	defineExtension(ID).handle("preview", () => {});
+	// @ts-expect-error A handler cannot return a value; it always ends the invocation.
+	owned.handle("preview", () => "done");
+	// @ts-expect-error preRun cannot end the invocation with a token.
+	owned.preRun(() => ({ status: "handled" }));
+	owned.setup(({ defer, flags }) => {
+		type _preview = Expect<Equal<typeof flags.preview, boolean | undefined>>;
+		defer(() => {});
+	});
+	// @ts-expect-error Cleanup is registered with `defer`, not returned.
+	owned.setup(() => () => {});
+}

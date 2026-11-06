@@ -75,7 +75,7 @@ describe("runtime structured invocation", () => {
 					},
 				},
 			})
-			.extend(defineExtension(defineExtensionId("handled")).preRun(({ handled }) => handled()));
+			.extend(defineExtension(defineExtensionId("handled")).noAction(() => {}));
 		const erased: AnyCrust = app;
 		expect(await erased.run([], {})).toMatchObject({
 			status: "handled",

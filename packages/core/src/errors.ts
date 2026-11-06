@@ -45,12 +45,14 @@ export type DefinitionErrorReason =
 	| "default-outside-choices"
 	| "delimiter-without-multiple"
 	| "duplicate-arg"
+	| "duplicate-no-action"
 	| "duplicate-section"
 	| "empty-delimiter"
 	| "empty-env"
 	| "empty-id"
 	| "empty-name"
 	| "empty-spelling"
+	| "extension-defer-after-setup"
 	| "factory-id-mismatch"
 	| "flag-collision"
 	| "flags-before-validation"
@@ -69,6 +71,7 @@ export type DefinitionErrorReason =
 	| "reserved-name"
 	| "reserved-no-prefix"
 	| "reserved-spelling"
+	| "unknown-handle-flag"
 	| "variadic-position";
 
 /** Details for argv syntax or built-in value parsing failures. */

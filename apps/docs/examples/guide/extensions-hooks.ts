@@ -2,9 +2,7 @@ import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
 
 export const outcomes = defineExtension(defineExtensionId("acme:outcomes"))
 	.flags({ skip: { type: "boolean" } })
-	.preRun((ctx) => {
-		if (ctx.flags.skip === true) return ctx.handled(); // [!code highlight]
-	})
+	.handle("skip", () => {}) // [!code highlight]
 	// [!code highlight:2]
 	.postRun((ctx, outcome) => {
 		ctx.stdout(`outcome: ${outcome.status}`);
