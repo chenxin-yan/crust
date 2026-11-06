@@ -72,14 +72,14 @@ export type ColorMode = "auto" | "always" | "never";
 export type ColorDepth = "truecolor" | "256" | "16" | "none";
 
 /**
- * Capability inputs for deterministic testing.
+ * Capability inputs that replace runtime checks field by field.
  *
- * When provided, these override the runtime environment checks.
- * This allows tests to simulate different terminal environments
- * without modifying `process.env` or `process.stdout`.
+ * Each key present replaces its `process.stdout.isTTY` or `process.env` read;
+ * omitted keys still read the real value. Use it to decide color for another
+ * output stream, or to simulate terminal environments in tests.
  */
 export interface CapabilityOverrides {
-	/** Override `process.stdout.isTTY`. */
+	/** Override `process.stdout.isTTY`, e.g. with the TTY state of the stream you write to. */
 	readonly isTTY?: boolean;
 	/** Override `process.env.NO_COLOR`. Non-empty values disable color. */
 	readonly noColor?: string | undefined;
@@ -110,7 +110,7 @@ export interface StyleOptions {
 	 * @default "auto"
 	 */
 	readonly mode?: ColorMode;
-	/** Capability overrides for deterministic testing. */
+	/** Per-field capability inputs: each key present replaces its `process.stdout.isTTY` or `process.env` read, and omitted keys still read the real value. */
 	readonly overrides?: CapabilityOverrides;
 }
 
@@ -129,6 +129,11 @@ export type StyleFn = (text: string) => string;
  */
 export type StyleMethodMap = {
 	readonly [K in StyleMethodName]: ChainableStyleFn;
+};
+
+/** Plain style functions with fixed settings, returned by {@link createPlainStyle}. */
+export type PlainStyle = {
+	readonly [K in StyleMethodName]: PlainStyleFn;
 };
 
 /**

@@ -90,7 +90,7 @@ function detectDepth(
  * / `TERM` conventions; no bespoke environment variables are introduced.
  *
  * @param mode - The color emission mode.
- * @param overrides - Optional overrides for deterministic testing.
+ * @param overrides - Optional capability inputs, such as another stream's TTY state or fixed test values.
  * @returns The resolved {@link ColorDepth} tier.
  *
  * @example
