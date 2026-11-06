@@ -604,29 +604,32 @@ async function dispatch(
 		// transformation; actions and flag-owning Contexts receive schema outputs.
 		const validated = await applySchemas(resolvedNode, bound);
 		resolver.setValidatedFlags(validated.flags);
-		if (!resolvedNode.run) return;
 
-		const context = {
-			args: validated.args,
-			flags: validated.flags,
-			ctx: resolver.bag(contexts),
-			rawArgs: bound.rawArgs,
-			signal,
-			get command() {
-				return snapshots.command;
-			},
-			get rootCommand() {
-				return snapshots.rootCommand;
-			},
-			stdout: output.routed.stdout,
-			stderr: output.routed.stderr,
-		} satisfies CrustCommandContext;
-
-		const result = await resolvedNode.run(context);
+		let result: unknown;
+		if (resolvedNode.run) {
+			const context = {
+				args: validated.args,
+				flags: validated.flags,
+				ctx: resolver.bag(contexts),
+				rawArgs: bound.rawArgs,
+				signal,
+				get command() {
+					return snapshots.command;
+				},
+				get rootCommand() {
+					return snapshots.rootCommand;
+				},
+				stdout: output.routed.stdout,
+				stderr: output.routed.stderr,
+			} satisfies CrustCommandContext;
+			result = await resolvedNode.run(context);
+		}
+		// An actionless command's `undefined` result still meets its `.output()` contract.
 		const checked = resolvedNode.outputSchema
 			? await applyOutputSchema(resolvedNode.outputSchema, result)
 			: result;
-		output.renderer?.result?.(checked);
+		// A renderer only sees results of an action that ran.
+		if (resolvedNode.run) output.renderer?.result?.(checked);
 		return checked;
 	};
 
