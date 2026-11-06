@@ -2,6 +2,7 @@ export {
 	CrustCommandNotFoundError,
 	CrustDefinitionError,
 	CrustEnvError,
+	CrustOutputError,
 	CrustParseError,
 	CrustValidationError,
 	type CrustTaggedError,
