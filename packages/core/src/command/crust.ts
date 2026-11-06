@@ -49,7 +49,6 @@ import type {
 	ExtensionsCommandSpellings,
 	KnownCommandSpellings,
 	KnownExtensionsCommandSpellings,
-	ValidateCommandConfig,
 	LocalCommandConfigBrand,
 	LocalSectionsBrand,
 	ValidateCommandDefinitions,
@@ -219,9 +218,7 @@ export interface CommandDefinition<
 	/** The subcommand name this definition is added under */
 	readonly name: Name;
 	/** The same definition under a different name; configured aliases travel with it. */
-	as<const N extends string>(
-		name: N & ChildCommandNameBrand<N> & ValidateCommandConfig<N, { aliases: Aliases }>,
-	): CommandDefinition<N, Aliases, Shape, Deps>;
+	as<const N extends string>(name: N): CommandDefinition<N, Aliases, Shape, Deps>;
 	/** @internal */
 	readonly [commandDefinitionInternal]: CommandDefinitionInternal & {
 		readonly _aliases?: Aliases;
@@ -616,12 +613,15 @@ function isCommandRecipe(value: CommandConfig | CommandRecipe | undefined): valu
  *
  * Static metadata belongs in `config`. Use `.as(name)`
  * to add one definition under a different name; configured aliases travel with it.
+ *
+ * The types check `name` where the definition is passed to `.add()`, so a generic
+ * name such as `N extends "staging" | "production"` compiles here.
  */
 export function defineCommand<
 	const Name extends string,
 	Builder extends AnyCommandDefinitionBuilder,
 >(
-	name: Name & ChildCommandNameBrand<Name>,
+	name: Name,
 	recipe: CommandRecipe<Builder>,
 ): CommandDefinition<Name, readonly [], ShapeOfBuilder<Builder>, DepsOfBuilder<Builder>>;
 export function defineCommand<
@@ -629,7 +629,7 @@ export function defineCommand<
 	const C extends CommandConfig,
 	Builder extends AnyCommandDefinitionBuilder,
 >(
-	name: Name & ChildCommandNameBrand<Name>,
+	name: Name,
 	config: C & LocalCommandConfigBrand<Name, C>,
 	recipe: CommandRecipe<Builder>,
 ): CommandDefinition<Name, AliasesOf<C>, ShapeOfBuilder<Builder>, DepsOfBuilder<Builder>>;

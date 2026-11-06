@@ -75,12 +75,62 @@ function _checkedCommandNames(name: string) {
 }
 
 function _genericCommandName<Name extends string>(name: Name) {
-	// @ts-expect-error -- a generic string constraint does not prove canonical validity
 	const command = defineCommand(name, (builder) => builder);
-	// @ts-expect-error -- a generic name does not prove valid renaming
 	const renamed = command.as(name);
 	type _name = Expect<Equal<typeof renamed.name, Name>>;
+	// @ts-expect-error -- a generic string constraint does not prove canonical validity
+	new Crust("cli").add(command);
+	// @ts-expect-error -- a generic name does not prove valid renaming
+	new Crust("cli").add(renamed);
 	return command;
+}
+
+// A generic factory is checked where its result is added, against each literal name.
+function _genericCommandFactory() {
+	function deployTo<const N extends "staging" | "production">(name: N) {
+		return defineCommand(name, { description: `Deploy to ${name}` }, (command) =>
+			command
+				.flags({ force: { type: "boolean" } })
+				.action(({ flags }) => ({ env: name, force: flags.force })),
+		);
+	}
+	const app = new Crust("cli").add(deployTo("staging"), deployTo("production").as("prod"));
+	const staging = app.run(["staging"]);
+	type _staging = Expect<
+		Equal<typeof staging, Promise<RunOutcome<{ env: "staging"; force: boolean | undefined }>>>
+	>;
+	const prod = app.run(["prod"]);
+	type _prod = Expect<
+		Equal<typeof prod, Promise<RunOutcome<{ env: "production"; force: boolean | undefined }>>>
+	>;
+	// @ts-expect-error -- each added literal name is still checked
+	new Crust("cli").add(_genericCommandName("-x"));
+}
+
+// Names in a spread array that is not a tuple are still checked where they are added.
+function _spreadArrayCommandNames() {
+	const commands = [
+		defineCommand("-x", (command) => command),
+		defineCommand("ok", (command) => command),
+	];
+	// @ts-expect-error -- "-x" is not a valid command name
+	new Crust("cli").add(...commands);
+	// @ts-expect-error -- and an Extension checks it too
+	defineExtension(defineExtensionId("spread")).add(...commands);
+}
+
+// A generic name may carry literal aliases: the self-alias check runs where the definition is added.
+function _genericCommandNameWithLiteralAliases() {
+	function deployTo<const N extends "staging" | "production">(name: N) {
+		return defineCommand(name, { aliases: ["d"] }, (command) => command);
+	}
+	function renameTo<const N extends "staging" | "production">(name: N) {
+		return defineCommand("deploy", { aliases: ["d"] }, (command) => command).as(name);
+	}
+	void new Crust("cli").add(deployTo("staging"));
+	void new Crust("cli").add(renameTo("production"));
+	// @ts-expect-error -- an alias equal to its own command name is rejected where it is added
+	void new Crust("cli").add(defineCommand("issue", { aliases: ["issue"] }, (command) => command));
 }
 
 function _localMetadata(

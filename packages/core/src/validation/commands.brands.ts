@@ -39,11 +39,7 @@ type AliasShapeError<Name extends string, Alias extends string> = Alias extends 
 		? `Subcommand "${Name}" alias "${Alias}" must not contain whitespace`
 		: Alias extends `-${string}`
 			? `Subcommand "${Name}" alias "${Alias}" must not start with "-" (reserved for flags)`
-			: string extends Name
-				? never
-				: Alias extends Name
-					? `Subcommand "${Name}" alias "${Alias}" must not equal its own canonical name`
-					: never;
+			: never;
 
 type AliasShapeErrors<Name extends string, C> =
 	AliasMembers<AliasesOf<C>> extends infer Alias
@@ -164,7 +160,9 @@ export type ValidateCommandDefinitions<
 > = UnionToIntersection<
 	Ds extends unknown
 		? number extends Ds["length"]
-			? CommandDefinitionsErrors<Ds, Existing>
+			? CommandDefinitionsErrors<Ds, Existing> &
+					ChildCommandNameBrand<DefNameMembers<Ds[number]>> &
+					SelfAliasBrand<Ds[number]>
 			: CommandInfoErrors<
 					{
 						[I in keyof Ds]: readonly [

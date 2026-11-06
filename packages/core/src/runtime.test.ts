@@ -92,7 +92,6 @@ describe("runtime command names", () => {
 		const name = " \t";
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => new Crust(name)).toThrow("Command name must be a non-empty string");
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => defineCommand("__proto__", (command) => command)).toThrow(
 			'Command name "__proto__" is reserved',
 		);
@@ -101,9 +100,7 @@ describe("runtime command names", () => {
 	it("checks renamed names against carried aliases", () => {
 		const command = defineCommand("source", { aliases: ["alias", "alias"] }, (builder) => builder);
 		expect(command.as("target").name).toBe("target");
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => command.as("alias")).toThrow("canonical name");
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => command.as("__proto__")).toThrow("reserved");
 	});
 });
@@ -119,7 +116,6 @@ describe("local metadata boundaries", () => {
 		expect(() => new Crust("cli", config)).toThrow("invalid documentation sections");
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => defineCommand("child", { aliases: ["bad alias"] }, (b) => b)).toThrow("alias");
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => defineCommand("child", { aliases: ["child"] }, (b) => b)).toThrow("alias");
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => new Crust("cli", { sections: [{ title: "\n", body: "text" }] })).toThrow(
