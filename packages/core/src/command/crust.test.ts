@@ -1273,6 +1273,21 @@ describe("Extension named hooks", () => {
 			expect(actions).toEqual([]);
 		});
 
+		it("never lets a bound flag select a flag handler", async () => {
+			const order: string[] = [];
+			const gate = defineExtension(defineExtensionId("gate"))
+				.flags({ stop: { type: "boolean" } })
+				.handle("stop", () => void order.push("stop"));
+			const binder = defineExtension(defineExtensionId("binder")).preRun((ctx) =>
+				ctx.bindInput({ flags: { stop: true } }),
+			);
+			const app = new Crust("cli")
+				.extend(gate, binder)
+				.action(({ flags }) => void order.push(`action stop=${flags.stop}`));
+			await unwrap(app.run([]));
+			expect(order).toEqual(["action stop=true"]);
+		});
+
 		it("gives the routing-failure onError context a no-op bindInput", async () => {
 			let flags: unknown;
 			const renderer = defineExtension(defineExtensionId("renderer")).onError((_error, ctx) => {
