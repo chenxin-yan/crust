@@ -68,6 +68,7 @@ export type {
 	ColorInput,
 	ColorMode,
 	ColorString,
+	PlainStyleFn,
 	StyleFn,
 	StyleInput,
 	StyleInstance,

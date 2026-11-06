@@ -7,7 +7,7 @@ import { isModifierName, styleMethodNames, styleMethodPairs } from "./ansi-codes
 import { resolveColorDepth, resolveModifierCapability } from "./capability.ts";
 import { colorPair, paint } from "./color.ts";
 import { linkCode, link as linkDirect } from "./hyperlinks.ts";
-import { applyStyle } from "./style-engine.ts";
+import { applyStyle, callText } from "./style-engine.ts";
 import type {
 	ChainableStyleFn,
 	ColorDepth,
@@ -83,13 +83,7 @@ function applyChain(
 	return result;
 }
 
-function isTemplateStringsArray(
-	value: StyleInput | TemplateStringsArray,
-): value is TemplateStringsArray {
-	return Array.isArray(value) && "raw" in value && Array.isArray(value.raw);
-}
-
-const chainSteps = Symbol("crust.style.steps");
+const chainSteps = /* @__PURE__ */ Symbol("crust.style.steps");
 type ChainFunction = ChainableStyleFn & { readonly [chainSteps]: readonly ChainStep[] };
 
 function buildChainableStyleFactory(
@@ -140,17 +134,8 @@ function buildChainableStyleFactory(
 		//   chain`tagged ${value} template`      — tagged template
 		//   chain(undefined | null)               — defensive (returns "")
 		// SAFETY: chainPrototype supplies the methods; steps, open, and close are attached below.
-		const styleFn = ((first?: StyleInput | TemplateStringsArray, ...rest: unknown[]) => {
-			if (isTemplateStringsArray(first)) {
-				let text = "";
-				for (let i = 0; i < first.length; i++) {
-					text += first[i] ?? "";
-					if (i < rest.length) text += String(rest[i]);
-				}
-				return applyChain(text, steps, resolveCapabilities);
-			}
-			return applyChain(first, steps, resolveCapabilities);
-		}) as ChainableStyleFn;
+		const styleFn = ((first?: StyleInput | TemplateStringsArray, ...rest: unknown[]) =>
+			applyChain(callText(first, rest), steps, resolveCapabilities)) as ChainableStyleFn;
 
 		if (cache.size >= 1024) cache.delete(cache.keys().next().value!);
 		cache.set(key, styleFn);

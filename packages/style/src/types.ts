@@ -132,6 +132,43 @@ export type StyleMethodMap = {
 };
 
 /**
+ * A style function for one style, as exported bare (`bold`, `red`, …).
+ *
+ * Call it directly or as a tagged template. It does not chain and carries no
+ * {@link AnsiPair}; chain on {@link StyleInstance} instead (`style.bold.red`).
+ * Assignable to {@link StyleFn}.
+ *
+ * @example
+ * ```ts
+ * import { bold, cyan, style } from "@crustjs/style";
+ *
+ * bold("done");
+ * bold(cyan("nested"));
+ * style.bold.cyan("chained");
+ * ```
+ */
+export interface PlainStyleFn {
+	/**
+	 * Apply the style to a string. `null` / `undefined` return `""`;
+	 * other non-string inputs are stringified via `String(value)`.
+	 */
+	(text: StyleInput): string;
+	/**
+	 * Apply the style to a tagged template literal. Interpolated values
+	 * are coerced via `String(...)`; nested style calls inside `${...}`
+	 * work because each inner style emits its own ANSI sequences,
+	 * and the outer style is re-opened after any inner close code that
+	 * matches the outer close.
+	 *
+	 * @example
+	 * ```ts
+	 * red`Build ${cyan`./dist`} failed after ${ms}ms`;
+	 * ```
+	 */
+	(strings: TemplateStringsArray, ...values: unknown[]): string;
+}
+
+/**
  * A callable style function that also exposes all style methods for
  * chaining and the underlying {@link AnsiPair} (`open` / `close`) for
  * manual hot-path composition (chalk/ansis parity).
@@ -152,6 +189,9 @@ export type StyleMethodMap = {
  * // Direct call
  * style.bold.red("error");
  *
+ * // Tagged template
+ * style.bold.red`Build ${style.cyan`./dist`} in ${ms}ms`;
+ *
  * // Style as a value — chainables are plain functions
  * const paint: StyleFn = style.bold.red;
  * paint("error");
@@ -161,25 +201,7 @@ export type StyleMethodMap = {
  * out.write(open + chunk + close);
  * ```
  */
-export interface ChainableStyleFn extends StyleMethodMap, AnsiPair {
-	/**
-	 * Apply the chain to a string. `null` / `undefined` return `""`;
-	 * other non-string inputs are stringified via `String(value)`.
-	 */
-	(text: StyleInput): string;
-	/**
-	 * Apply the chain to a tagged template literal. Interpolated values
-	 * are coerced via `String(...)`; nested chain calls inside `${...}`
-	 * work because each inner chainable emits its own ANSI sequences,
-	 * and the outer style is re-opened after any inner close code that
-	 * matches the outer close.
-	 *
-	 * @example
-	 * ```ts
-	 * style.bold.red`Build ${style.cyan`./dist`} in ${ms}ms`;
-	 * ```
-	 */
-	(strings: TemplateStringsArray, ...values: unknown[]): string;
+export interface ChainableStyleFn extends PlainStyleFn, StyleMethodMap, AnsiPair {
 	/**
 	 * Append a depth-aware foreground color to the chain. The resulting
 	 * chainable can be called or chained further like any other.
