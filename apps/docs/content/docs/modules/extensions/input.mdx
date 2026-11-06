@@ -1,0 +1,44 @@
+---
+title: Input
+description: Accept a command's arguments and flags as one JSON object.
+---
+
+## Usage
+
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../../examples/modules/extensions/input.ts
+</include>
+
+```sh
+$ my-cli deploy --input '{"target":"prod","region":"eu"}'
+Deploying prod to eu
+
+$ my-cli deploy --input @deploy.json
+$ echo '{"target":"prod"}' | my-cli deploy --input -
+```
+
+`input()` adds a recursive string `--input` flag. Without it, nothing changes.
+
+## Behavior
+
+The value of `--input` is one of:
+
+- inline JSON;
+- `@path`, which reads the file at `path`, relative to the working directory;
+- `-`, which reads all of stdin.
+
+It must be a JSON object keyed by the routed command's argument and flag names, plus `raw` for passthrough values received as `rawArgs`, like tokens after `--`. This is the flat shape [`commandInputSchema()`](/docs/modules/core#tooling-subpath) describes and the [MCP](/docs/modules/mcp) server accepts. Variadic arguments and `multiple` flags take arrays, and `url` values take strings.
+
+The object is bound with [`ctx.bindInput()`](/docs/api/types#extensioncontext), so values are converted and validated exactly as typed `run()` input:
+
+- Arguments and flags given on argv win over the same keys, even when equal to the default: `my-cli deploy staging --input @deploy.json` deploys `staging` whatever the file says.
+- Every other key replaces the environment value or default. Keys are replaced whole; objects are not merged.
+
+Under [`run()`](/docs/api/crust#runpath-input-options), pass the JSON text as the `input` flag, for example `{ args: { target: "dev" }, flags: { input: '{"target":"prod"}' } }`. Nothing came from argv, so its keys replace the typed input.
+
+## Errors
+
+Each fails the command with a `PARSE` [`CrustError`](/docs/api/errors) before validation and the action run:
+
+- invalid JSON, a value that is not a JSON object, a file that cannot be read, or an invalid `url` value: a message starting with `--input:`;
+- an unknown key or a value of the wrong type: the same error typed `run()` input reports, such as `Unknown flag "--nope"` or `Expected boolean for --force`.
