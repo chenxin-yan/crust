@@ -117,3 +117,17 @@ $ echo $?
 ```
 
 Conversion and `parse` failures use the `PARSE` code; schema failures use `VALIDATION`. See [`CrustError` codes](/docs/api/errors#codes).
+
+## Command results
+
+A command can declare what its action returns with `.output(schema)`, using the same Standard Schema libraries. Declare it before `.action()`:
+
+<include lang="ts" meta='title="whoami.ts" twoslash'>
+  ../../../examples/guide/types-output.ts
+</include>
+
+- **Compile time:** the action must return the schema's input type. Returning `{ id: "1" }` here is a TypeScript error.
+- **Runtime:** after the action resolves, Crust validates the result. The schema's output becomes the `result` of `run()`, typed as such, so defaults and transforms apply. A rejected result fails with the `OUTPUT` code, exit `1`; it is a bug in the command, not in the user's input.
+- **Tooling:** the command's snapshot carries the output as JSON Schema in `outputSchema` when the schema can produce it. Zod 4.2+ and ArkType 2.1.28+ can; Valibot needs `toStandardJsonSchema()` from `@valibot/to-json-schema`.
+
+Without `.output()`, results are neither validated nor described. See [`.output()`](/docs/api/crust#outputschema).

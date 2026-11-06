@@ -72,6 +72,7 @@ export type {
 	DefinitionErrorReason,
 	EnvErrorDetails,
 	EnvIssue,
+	OutputErrorDetails,
 	ParseErrorDetails,
 	ParseErrorReason,
 	ValidationErrorDetails,

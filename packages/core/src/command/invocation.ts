@@ -20,7 +20,7 @@ import {
 	validateParsed,
 	type ArgvParseResult,
 } from "../parsing/parser.ts";
-import { applySchemas } from "../parsing/schema.ts";
+import { applyOutputSchema, applySchemas } from "../parsing/schema.ts";
 import type { ExecuteOptions, InvocationIO, InvocationOptions, RunInputPayload } from "../types.ts";
 import { createContextResolver } from "./context-resolver.ts";
 import type { CrustCommandContext } from "./crust.ts";
@@ -607,8 +607,11 @@ async function dispatch(
 		} satisfies CrustCommandContext;
 
 		const result = await resolvedNode.run(context);
-		output.renderer?.result?.(result);
-		return result;
+		const checked = resolvedNode.outputSchema
+			? await applyOutputSchema(resolvedNode.outputSchema, result)
+			: result;
+		output.renderer?.result?.(checked);
+		return checked;
 	};
 
 	let outcome: InvocationOutcome;

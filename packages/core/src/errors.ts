@@ -25,6 +25,12 @@ export interface ValidationErrorDetails {
 	issues: readonly { readonly message: string; readonly path: string }[];
 }
 
+/** Standard Schema issues from a command result rejected by its `.output()` schema. */
+export interface OutputErrorDetails {
+	/** Issues with paths relative to the result (`""` for the result itself). */
+	issues: readonly { readonly message: string; readonly path: string }[];
+}
+
 /** `details.reason` values Core sets on `PARSE` errors. */
 export type ParseErrorReason =
 	| "unknown-flag"
@@ -119,6 +125,7 @@ export interface CrustErrorDetailsMap {
 	PARSE: ParseErrorDetails | undefined;
 	COMMAND_NOT_FOUND: CommandNotFoundErrorDetails;
 	ENV: EnvErrorDetails;
+	OUTPUT: OutputErrorDetails;
 }
 
 /**
@@ -129,6 +136,7 @@ export interface CrustErrorDetailsMap {
  * - `PARSE` — Argv syntax, structured `run()` input binding, or built-in value parsing failure
  * - `COMMAND_NOT_FOUND` — Unrecognised subcommand at the current level
  * - `ENV` — Missing or invalid `@crustjs/env` variables (values redacted)
+ * - `OUTPUT` — A Command Action result rejected by the command's `.output()` schema
  *
  * @example
  * ```ts

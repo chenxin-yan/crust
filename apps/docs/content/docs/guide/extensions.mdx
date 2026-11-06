@@ -109,7 +109,7 @@ Core decides when output happens; one Extension can decide how. `.renderer(selec
 </include>
 
 - `text` and `diag` receive each line the action or a Context writes with `stdout()` and `stderr()`. An Extension's own `ctx.stdout` and `ctx.stderr` bypass the renderer, so help and notices print as usual.
-- `result`, if set, receives the action's return value after the action completes and before `postRun`. Throwing from it fails the invocation.
+- `result`, if set, receives the action's return value after the action completes and its [`.output()`](/docs/api/crust#outputschema) schema, if any, validates it, and before `postRun`. Throwing from it fails the invocation.
 - `error`, if set, replaces Core's `Error: message` rendering in `.execute()` when no `onError` hook claimed the failure. Core calls it at most once, never under `.run()`, where callers read `outcome.error`, and never for a cancellation.
 
 Core calls `select` once per invocation, after every setup and before any flag handler, so it sees what setups bound. It may be `async`, for example to `import()` a formatter only when it is needed; Core awaits it. Output the action side writes earlier, such as from a Context a setup pulled, waits and then goes through the chosen renderer; without a `.renderer()` in the application, it is written immediately. A setup failure still goes through the chosen renderer: Core calls `select` after it, since flags are already bound, and falls back to the default if `select` fails too. A selector or renderer that throws there never replaces the setup failure. Routing and argv syntax errors happen before flags are bound and render by default. Only one Extension in an application may set `.renderer()`; a second is a `DEFINITION` error when the app prepares.
