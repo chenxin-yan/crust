@@ -24,6 +24,7 @@ describe("argv errors across runtimes", () => {
 		const result = spawnSync(
 			bun,
 			[
+				"--input-type=module",
 				"--eval",
 				`import { argvErrors } from ${JSON.stringify(fixture)};
 console.log(JSON.stringify(await argvErrors()));`,
@@ -31,6 +32,7 @@ console.log(JSON.stringify(await argvErrors()));`,
 			{ encoding: "utf8", timeout: 10_000 },
 		);
 		expect(result.stderr).toBe("");
+		expect(result.status).toBe(0);
 		expect(JSON.parse(result.stdout)).toEqual(node);
 	});
 });

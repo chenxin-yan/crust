@@ -180,6 +180,10 @@ function _mixedCheckedNamespaces(
 	args.args({ name: "last", type: "string" });
 	// @ts-expect-error -- every possible short spelling must be one character
 	defineFlag({ type: "boolean", short: cond ? "f" : "ff" });
+	// One character is one code point, as the runtime counts it.
+	defineFlag({ type: "boolean", short: "😀" });
+	// @ts-expect-error -- two code points
+	defineFlag({ type: "boolean", short: "😀f" });
 }
 
 function _broadFlagHolders(
