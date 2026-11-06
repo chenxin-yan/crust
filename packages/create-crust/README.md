@@ -20,6 +20,7 @@ The initializer collects the destination, any required overwrite decision, runti
 
 ```text
 create-crust [directory] [--runtime bun|node] [--artifact package|binary] [--install|--no-install] [--git|--no-git] [--overwrite|--no-overwrite]
+create-crust --help | --version
 ```
 
 - `directory` sets the destination; otherwise the directory prompt defaults to `my-cli`. Its basename (the current directory's for `.`) becomes the package and command name, so it must follow the [installed command name rule](https://crustjs.com/docs/modules/core#tooling-subpath): letters, digits, `.`, `_`, and `-`, starting with a letter or digit; anything else is rejected before any file is written.
@@ -28,6 +29,7 @@ create-crust [directory] [--runtime bun|node] [--artifact package|binary] [--ins
 - `--install` / `--no-install` installs or skips dependencies. The default is to install, using the detected package manager. If installation is skipped, the next steps include the install command.
 - `--git` / `--no-git` initializes or skips a Git repository when the destination is not already inside one. The default is to initialize.
 - When the destination requires an overwrite decision, `--overwrite` overwrites conflicting files without confirmation; `--no-overwrite` aborts without prompting. The default is not to overwrite.
+- `-h, --help` prints usage and `-v, --version` prints the version; neither scaffolds anything.
 
 Generated projects use the single-file starter (`src/cli.ts`). The generated README and next steps use the detected package manager for script commands (`bun run`, `npm run`, `pnpm run`, or `yarn run`), independently of the selected runtime. Detection checks the destination's lockfiles first, then the invoking package manager's user-agent, and defaults to npm.
 

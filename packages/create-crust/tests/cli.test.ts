@@ -2,6 +2,7 @@ import {
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
+	readdirSync,
 	readFileSync,
 	rmSync,
 	symlinkSync,
@@ -18,6 +19,7 @@ import crustPackage from "../../crust/package.json";
 import { reapBoundedProcesses, runBoundedProcess } from "../../crust/tests/bounded-process.ts";
 import extensionsPackage from "../../extensions/package.json";
 import type { RunProcessResult } from "../../utils/src/process.ts";
+import packageJson from "../package.json";
 
 const packageRoot = resolve(import.meta.dirname, "..");
 const builtCliPath = join(packageRoot, ".crust", "root", "bin", "create-crust.js");
@@ -254,6 +256,28 @@ describe("create-crust CLI", () => {
 			'Invalid value "deno" for --runtime. Expected one of: bun, node',
 		);
 		expect(existsSync(projectDir)).toBe(false);
+	}, 30_000);
+
+	it.each(["--help", "-h"])(
+		"prints usage for %s without scaffolding",
+		async (flag) => {
+			const tempRoot = makeTempRoot("create-crust-help");
+
+			const result = await runCreateCrust([flag], { cwd: tempRoot });
+
+			expect(result.exitCode, result.stderr).toBe(0);
+			expect(result.stdout).toContain("Usage:");
+			expect(result.stdout).toContain("--runtime");
+			expect(readdirSync(tempRoot)).toEqual([]);
+		},
+		30_000,
+	);
+
+	it("prints its version for --version", async () => {
+		const result = await runCreateCrust(["--version"]);
+
+		expect(result.exitCode, result.stderr).toBe(0);
+		expect(result.stdout).toContain(packageJson.version);
 	}, 30_000);
 
 	// The basename becomes the package name, bin key, and a quoted TS string, so
