@@ -804,7 +804,9 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
  * converted and cannot fail; values not replaced are kept without re-resolving defaults.
  *
  * @param parsed - The invocation's original parse result; each call re-binds against it
- * @throws {CrustError} `PARSE` on an unknown key or a value that fails conversion
+ * @throws {CrustError} `PARSE` on an unknown key, a positional argument supplied after an
+ *   omitted earlier one, or a value that fails conversion (including a non-array value for
+ *   a variadic argument or `multiple` flag)
  */
 export function bindStructuredInput(
 	command: CommandNode,
