@@ -762,7 +762,7 @@ type AppRecursiveFlagsOf<S extends AnyCollisionSpellings> = Exclude<S["recursive
 
 // Record spellings are derived from `Flags` on demand instead of accumulated in `Sp`.
 type AfterFlags<State extends BuilderState, F extends FlagsDef> = Crust<
-	MergeFlags<State["flags"], F>,
+	State["flags"] & F,
 	State["args"],
 	State["ctx"],
 	State["sibs"],
@@ -842,13 +842,13 @@ type AfterProvide<
 	Meta extends RootCommandMeta | undefined,
 	Caps extends "app" | "recipe",
 > = Crust<
-	MergeFlags<Flags, ContextsOwnedFlags<Cs>>,
+	Flags & ContextsOwnedFlags<Cs>,
 	A,
 	MergeProviders<Ctx, ContextsOutput<Cs>>,
 	Sibs,
 	Sp | LocalSpellingsOf<ContextsOwnedFlags<Cs>>,
 	Tree,
-	MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
+	CtxFlags & ContextsOwnedFlags<Cs>,
 	CollisionSpellings<
 		CollisionSp["extension"],
 		CollisionSp["tree"],

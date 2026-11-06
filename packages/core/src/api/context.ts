@@ -310,7 +310,7 @@ export interface ContextBuilder<
 
 // Only a definitely empty state takes the first-call fast path; unions retain their uncertainty.
 type AppendedFlags<OF extends FlagsDef, F extends FlagsDef> =
-	IsUnion<OF> extends true ? MergeFlags<OF, F> : keyof OF extends never ? F : MergeFlags<OF, F>;
+	IsUnion<OF> extends true ? OF & F : keyof OF extends never ? F : OF & F;
 
 type ErasedContextBuilder = ContextBuilder<string, any, any>;
 type ErasedContextOptions = Parameters<AnyContextFactory>[0];
