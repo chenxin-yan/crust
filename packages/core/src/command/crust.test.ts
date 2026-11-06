@@ -1184,6 +1184,48 @@ describe("Extension named hooks", () => {
 			]);
 		});
 
+		it("never re-resolves defaults it does not replace", async () => {
+			const calls: string[] = [];
+			const strict = (raw: string) => {
+				calls.push(raw);
+				if (raw === "bad") throw new Error("rejected");
+				return raw;
+			};
+			const app = new Crust("cli")
+				.flags({
+					mode: { type: "string", default: "bad", parse: strict },
+					level: { type: "string", default: "low", parse: strict },
+					other: { type: "string" },
+				})
+				.args({ name: "source", type: "string", default: "here", parse: strict })
+				.extend(
+					defineExtension(defineExtensionId("binder")).preRun((ctx) =>
+						ctx.bindInput({ flags: { other: "x" } }),
+					),
+				)
+				.action(() => {});
+			expect(await app.execute({ argv: ["--mode", "good"], io: { stderr: () => {} } })).toBe(0);
+			// One parse each from argv binding: the argv value and the two untouched defaults.
+			expect(calls.toSorted()).toEqual(["good", "here", "low"]);
+		});
+
+		it("keeps typed run() positionals that precede a replaced one", async () => {
+			const { app, received } = bindingApp({ args: { target: "new" } });
+			await unwrap(app.run([], { args: { source: "src", target: "old" } }));
+			expect(received).toMatchObject([{ args: { source: "src", target: "new" } }]);
+		});
+
+		it("rejects a structured positional after one nothing supplied", async () => {
+			const gap = {
+				code: "PARSE",
+				message: "Argument <target> cannot be provided after omitted argument <source>",
+			};
+			const { app, execute, received } = bindingApp({ args: { target: "new" } });
+			expect(await execute([])).toEqual({ exitCode: 1, stderr: `Error: ${gap.message}` });
+			await expect(app.run([])).resolves.toMatchObject({ status: "failed", error: gap });
+			expect(received).toEqual([]);
+		});
+
 		it("replaces typed run() input, which has no argv-explicit values", async () => {
 			const { app, received } = bindingApp({ flags: { name: "json" }, args: { source: "json" } });
 			await unwrap(app.run([], { args: { source: "typed" }, flags: { name: "typed", port: 2 } }));

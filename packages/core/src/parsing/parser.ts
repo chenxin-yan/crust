@@ -40,7 +40,7 @@ type ArgvFlagValue =
 /** Records a value error, keyed by its definition's label, instead of throwing it; see {@link parseArgs}. */
 type DeferValueError = (error: CrustError, label: string) => void;
 
-/** {@link ParseResult} plus the flag order and, for argv only, what argv supplied and its value errors. */
+/** {@link ParseResult} plus the flag order, what the invocation supplied, and argv's value errors. */
 export interface ArgvParseResult<
 	A extends ArgsDef = ArgsDef,
 	F extends FlagsDef = FlagsDef,
@@ -51,6 +51,8 @@ export interface ArgvParseResult<
 	 * Extension flag handlers rank by it, so the first one on the command line wins.
 	 */
 	flagOrder: readonly string[];
+	/** Positional arguments supplied by argv or typed `run()` input; later bound input cannot skip one. */
+	suppliedArgs?: ReadonlySet<string>;
 	/** Inputs given on argv by label (`--flag`, `<arg>`, `--` for passthrough tokens); see {@link bindStructuredInput}. */
 	argvLabels?: ReadonlySet<string>;
 	/** Argv/env value errors by definition label, in binding order; {@link validateParsed} throws the first. */
@@ -660,11 +662,12 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 	);
 	// Tokens after `--` are operands: declared positionals take them first, the rest pass through.
 	const rawArgs = positionals.slice(Math.max(consumed, separatorIndex));
-	// Presence is read before delimiter splitting, so `--tags ""` counts as given.
 	// Declared arguments take one positional each (a variadic, last, takes the rest).
+	const suppliedArgs = new Set(command.args.slice(0, positionals.length).map(({ name }) => name));
+	// Presence is read before delimiter splitting, so `--tags ""` counts as given.
 	const argvLabels = new Set([
 		...Object.keys(flagValues).map((name) => `--${name}`),
-		...command.args.slice(0, positionals.length).map(({ name }) => `<${name}>`),
+		...[...suppliedArgs].map((name) => `<${name}>`),
 		...(rawArgs.length > 0 ? ["--"] : []),
 	]);
 	return {
@@ -678,6 +681,7 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 			...Object.keys(flagValues).filter((name) => present.has(name)),
 			...[...present].filter((name) => !Object.hasOwn(flagValues, name)).sort(),
 		],
+		...(suppliedArgs.size > 0 && { suppliedArgs }),
 		...(argvLabels.size > 0 && { argvLabels }),
 		...(valueErrors.size > 0 && { valueErrors }),
 	};
@@ -711,6 +715,15 @@ export async function parseFlagValues<const F extends FlagsDef>(
 	return validated.flags;
 }
 
+/** Only named records can supply a later positional while omitting an earlier one. */
+function positionalGap(argument: string, omitted: string): CrustError {
+	return new CrustError(
+		"PARSE",
+		`Argument <${argument}> cannot be provided after omitted argument <${omitted}>`,
+		{ argument, reason: "positional-gap" },
+	);
+}
+
 /** Bind typed input without producing argv; the path alone selects the command. */
 export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
 	command: CommandNode & { args: A; effectiveFlags: F },
@@ -718,6 +731,7 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 ): ArgvParseResult<A, F> {
 	const { args: inputArgs, flags: inputFlags, raw } = input;
 	const positionals: RunInputValue[] = [];
+	const suppliedArgs = new Set<string>();
 	let omittedArgument: string | undefined;
 	for (const definition of command.args) {
 		const value =
@@ -728,17 +742,8 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 			omittedArgument = definition.name;
 			continue;
 		}
-		// Only named records can supply a later positional while omitting an earlier one.
-		if (omittedArgument !== undefined) {
-			throw new CrustError(
-				"PARSE",
-				`Argument <${definition.name}> cannot be provided after omitted argument <${omittedArgument}>`,
-				{
-					argument: definition.name,
-					reason: "positional-gap",
-				},
-			);
-		}
+		if (omittedArgument !== undefined) throw positionalGap(definition.name, omittedArgument);
+		suppliedArgs.add(definition.name);
 		if (definition.variadic) {
 			if (!isOccurrenceArray(value)) {
 				throw new CrustError("PARSE", `Expected an occurrence array for <${definition.name}>`);
@@ -781,7 +786,14 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 	);
 	// Key order stands in for command-line order; values are not re-read, so getters run once.
 	const flagOrder = Object.keys(inputFlags ?? {}).filter((name) => present.has(name));
-	return { args, flags, excessArgs: [], rawArgs: [...(raw ?? [])], flagOrder };
+	return {
+		args,
+		flags,
+		excessArgs: [],
+		rawArgs: [...(raw ?? [])],
+		flagOrder,
+		...(suppliedArgs.size > 0 && { suppliedArgs }),
+	};
 }
 
 /**
@@ -789,7 +801,7 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
  * Values given on argv win; every other supplied key replaces the environment value,
  * default, or typed `run()` value, converted as {@link parseStructured} converts it.
  * Supplied keys that argv already gave are dropped first, so their values are never
- * converted and cannot fail.
+ * converted and cannot fail; values not replaced are kept without re-resolving defaults.
  *
  * @param parsed - The invocation's original parse result; each call re-binds against it
  * @throws {CrustError} `PARSE` on an unknown key or a value that fails conversion
@@ -809,9 +821,21 @@ export function bindStructuredInput(
 	const inputArgs = supplied(input.args, (name) => `<${name}>`);
 	const inputFlags = supplied(input.flags, (name) => `--${name}`);
 	const raw = given.has("--") ? undefined : input.raw;
-	// Argv supplies a leading run of positionals; structured input binds the rest.
+	// Typed `run()` order over the merged positionals, kept ones included.
+	let omitted: string | undefined;
+	for (const { name } of command.args) {
+		if (!parsed.suppliedArgs?.has(name) && !Object.hasOwn(inputArgs, name)) omitted = name;
+		else if (omitted !== undefined) throw positionalGap(name, omitted);
+	}
+	// Bind only the supplied definitions; unknown keys still fail against the narrowed command.
 	const structured = parseStructured(
-		{ ...command, args: command.args.filter(({ name }) => !given.has(`<${name}>`)) },
+		{
+			...command,
+			args: command.args.filter(({ name }) => Object.hasOwn(inputArgs, name)),
+			effectiveFlags: Object.fromEntries(
+				Object.entries(command.effectiveFlags).filter(([name]) => Object.hasOwn(inputFlags, name)),
+			),
+		},
 		{ args: inputArgs, flags: inputFlags, raw },
 	);
 	const pick = (bound: Record<string, ParsedArgValue>, names: Record<string, unknown>) =>
