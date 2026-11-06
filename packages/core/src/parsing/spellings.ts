@@ -99,19 +99,21 @@ function invalidFlags(message: string): CrustError {
 export function flagRecordEntries(
 	record: unknown,
 ): readonly (readonly [name: string, def: FlagDef])[] {
-	if (typeof record !== "object" || record === null || Array.isArray(record)) {
-		throw invalidFlags(".flags() expects one record of flag definitions keyed by name");
-	}
-	// A literal `{ __proto__: def }` sets the prototype instead of adding a key.
-	const proto: unknown = Object.getPrototypeOf(record);
+	// Without strictNullChecks a nullish record typechecks. A `Record`-typed literal can hold
+	// `{ __proto__: def }`, which sets the prototype instead of adding a key.
+	const nullish = record === null || record === undefined;
+	const proto: unknown = nullish ? undefined : Object.getPrototypeOf(record);
 	if (proto !== Object.prototype && proto !== null) {
 		throw invalidFlags(
-			".flags() expects a plain object record; a `__proto__` key sets its prototype instead of naming a flag",
+			nullish
+				? ".flags() expects a plain object record"
+				: ".flags() expects a plain object record; a `__proto__` key sets its prototype instead of naming a flag",
 		);
 	}
-	const entries = Object.entries(record);
+	const entries = Object.entries(record as object);
 	for (const [name, def] of entries) {
-		if (typeof def !== "object" || def === null || Array.isArray(def)) {
+		// `FlagsInput` admits `undefined` definitions (and `null` without strictNullChecks).
+		if (def === undefined || def === null) {
 			throw new CrustError("DEFINITION", `Flag "${name}" definition must be an object`, {
 				subject: "flag",
 				name,
