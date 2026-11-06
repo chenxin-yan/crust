@@ -6,6 +6,10 @@
 - Compile-only type tests: co-located `src/foo.test-d.ts`; enforced by `pnpm run check:types` (tsc), not collected by `vp test`.
 - Integration/smoke tests: package-local `packages/<pkg>/tests/`
 
+## Performance
+
+Performance targets the shipped artifact (after `crust build` bundling or compilation); unbundled dev-mode startup is not an optimization goal.
+
 ## Documentation
 
 Update relevant docs/code comments in the same change as the code. Stale docs = bug.
