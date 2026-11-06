@@ -65,6 +65,28 @@ function _outputAfterActionChecksTheActionResult() {
 	type _result = Expect<Equal<Completed<ReturnType<typeof app.run<[]>>>, User>>;
 	// @ts-expect-error the earlier action's result does not match the schema input
 	new Crust("cli").action(() => ({ id: "1" })).output(user);
+	// @ts-expect-error an earlier action that returns nothing does not satisfy the schema
+	new Crust("cli").action(() => {}).output(z.number());
+	new Crust("cli").action(() => {}).output(z.void());
+}
+
+function _replacingTheSchemaChecksTheActionReturn() {
+	const length = z.string().transform((value) => value.length);
+	const returnsString = new Crust("cli").output(length).action(() => "x");
+	// @ts-expect-error the action still returns a string, not the transformed number
+	returnsString.output(z.number());
+	returnsString.output(z.string());
+	// Without an action, a replacement only declares the new schema.
+	const app = new Crust("cli")
+		.output(length)
+		.output(z.number())
+		.action(() => 1);
+	type _result = Expect<Equal<Completed<ReturnType<typeof app.run<[]>>>, number>>;
+}
+
+function _actionlessCommandsResolveToTheSchemaOutput() {
+	const app = new Crust("cli").output(z.number().default(3));
+	type _result = Expect<Equal<Completed<ReturnType<typeof app.run<[]>>>, number>>;
 }
 
 function _schemasWithoutTypesAcceptAnyReturn(schema: StandardSchema) {
