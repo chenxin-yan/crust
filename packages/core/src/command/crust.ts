@@ -715,8 +715,8 @@ type CollisionSpellings<
 	// reads it (ExtensionCommandsOf); other steps pass it through unread, `undefined` included.
 	ExtensionCommandSpellings extends string | undefined = never,
 	RecursiveFlags extends FlagsDef = {},
-	// Schema from `.output()`; the action's return must satisfy its input type.
-	Output extends StandardSchema | undefined = undefined,
+	// The `.output()` schema and the action's awaited return, each checked against the other.
+	Output extends OutputState | undefined = InitialOutputState,
 > = {
 	readonly output: Output;
 	readonly actionDeps: ActionDeps;
@@ -732,7 +732,7 @@ type CollisionSpellings<
 
 // Explicit `| undefined`: mapped types over these members (e.g. `Omit`) keep it under exactOptionalPropertyTypes.
 type AnyCollisionSpellings = {
-	readonly output?: StandardSchema | undefined;
+	readonly output?: OutputState | undefined;
 	readonly actionDeps?: ContextMap | undefined;
 	readonly extensionCommands?: string | undefined;
 	readonly recursiveFlags?: FlagsDef | undefined;
@@ -766,7 +766,30 @@ type ExtensionCommandsOf<S extends AnyCollisionSpellings> = [S["extensionCommand
 /** Recursive Extension flags registered so far; see `TreeWithRecursiveFlags`. */
 type AppRecursiveFlagsOf<S extends AnyCollisionSpellings> = Exclude<S["recursiveFlags"], undefined>;
 
-type OutputSchemaOf<S extends AnyCollisionSpellings> = Exclude<S["output"], undefined>;
+/**
+ * `schema` is the `.output()` schema; `actionReturn` wraps the action's awaited return
+ * (`undefined` before any `.action()`), kept apart from the result the schema produces.
+ */
+type OutputState = {
+	readonly schema: StandardSchema | undefined;
+	readonly actionReturn: readonly [unknown] | undefined;
+};
+
+// `actionReturn` stays open (no action, or any) so a builder annotated with the default state,
+// such as `CommandDefinitionBuilder<F, A>`, still accepts one after `.action()`.
+type InitialOutputState = {
+	readonly schema: undefined;
+	readonly actionReturn: readonly [unknown] | undefined;
+};
+
+type OutputStateOf<S extends AnyCollisionSpellings> = Exclude<S["output"], undefined>;
+
+type OutputSchemaOf<S extends AnyCollisionSpellings> = Exclude<
+	OutputStateOf<S>["schema"],
+	undefined
+>;
+
+type ActionReturnOf<S extends AnyCollisionSpellings> = OutputStateOf<S>["actionReturn"];
 
 /** What the action may return: anything, or the `.output()` schema's input (possibly awaited). */
 type ActionReturn<S extends AnyCollisionSpellings> = [OutputSchemaOf<S>] extends [never]
@@ -778,10 +801,14 @@ type ActionResult<S extends AnyCollisionSpellings, R> = [OutputSchemaOf<S>] exte
 	? Awaited<R>
 	: InferOutput<OutputSchemaOf<S>>;
 
-// `.output()` after `.action()` checks the action's awaited return; `void` means no action yet.
-type OutputResultBrand<Result, S extends StandardSchema> = [Result] extends [void]
+// `.output()` after `.action()` checks the action's awaited return against the new schema;
+// a state that may have no action (see `InitialOutputState`) has nothing to check.
+type OutputResultBrand<
+	Return extends readonly [unknown] | undefined,
+	S extends StandardSchema,
+> = undefined extends Return
 	? {}
-	: [Result] extends [InferInput<S>]
+	: [NonNullable<Return>[0]] extends [InferInput<S>]
 		? {}
 		: {
 				readonly FIX_OUTPUT: "The action's result does not match this output schema's input type";
@@ -915,7 +942,13 @@ type AfterAction<
 	Sp,
 	Tree,
 	CtxFlags,
-	Omit<CollisionSp, "actionDeps"> & { readonly actionDeps: Ctx },
+	Omit<CollisionSp, "actionDeps" | "output"> & {
+		readonly actionDeps: Ctx;
+		readonly output: {
+			readonly schema: OutputStateOf<CollisionSp>["schema"];
+			readonly actionReturn: readonly [Awaited<R>];
+		};
+	},
 	ActionResult<CollisionSp, R>,
 	Meta,
 	string,
@@ -942,7 +975,9 @@ type AfterOutput<
 	Sp,
 	Tree,
 	CtxFlags,
-	Omit<CollisionSp, "output"> & { readonly output: S },
+	Omit<CollisionSp, "output"> & {
+		readonly output: { readonly schema: S; readonly actionReturn: ActionReturnOf<CollisionSp> };
+	},
 	InferOutput<S>,
 	Meta,
 	string,
@@ -1439,17 +1474,19 @@ export class Crust<
 	 * Declare it before `.action()`: TypeScript then checks the action's return
 	 * against the schema's input type. After the action resolves, Core validates
 	 * its result with the schema and returns the schema's output as the result,
-	 * typed in `run()`. A result the schema rejects fails the invocation with an
-	 * `OUTPUT` {@link CrustError}. Tooling reads the result's JSON Schema from
+	 * typed in `run()`; a command without an action validates `undefined`. A result
+	 * the schema rejects fails the invocation with an `OUTPUT` {@link CrustError}. Tooling reads the result's JSON Schema from
 	 * `CommandSnapshot.outputSchema`.
 	 *
-	 * Calling `.output()` again replaces the schema. The original builder is not mutated.
+	 * After `.action()`, TypeScript checks the action's awaited return against the new
+	 * schema's input instead. Calling `.output()` again replaces the schema. The
+	 * original builder is not mutated.
 	 *
 	 * @param schema - Standard Schema for the action result
 	 * @returns A new `Crust` instance with the output schema registered
 	 */
 	output<S extends StandardSchema>(
-		schema: S & OutputResultBrand<Result, S>,
+		schema: S & OutputResultBrand<ActionReturnOf<CollisionSp>, S>,
 	): AfterOutput<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, S, Meta, Caps> {
 		return this._clone<
 			AfterOutput<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, S, Meta, Caps>
