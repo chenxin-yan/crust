@@ -108,7 +108,7 @@ const AGENTS: AgentRegistry = {
 		class: "additional",
 		projectSkillsDir: join(".codebuddy", "skills"),
 		globalSkillsDir: (home) => join(home, ".codebuddy", "skills"),
-		detectCommands: ["codebuddy", "cbc"],
+		detectCommands: ["codebuddy"],
 	},
 	codex: universal("Codex"),
 	"command-code": universal("Command Code"),

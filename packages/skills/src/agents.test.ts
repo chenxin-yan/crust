@@ -39,7 +39,7 @@ describe("detectInstalledAgents", () => {
 	});
 
 	it("detects additional but not universal commands on PATH", async () => {
-		for (const name of ["claude", "opencode"]) {
+		for (const name of ["claude", "opencode", "trae"]) {
 			const fakeBin = join(tmpDir, name);
 			writeFileSync(fakeBin, "#!/bin/sh\necho fake");
 			chmodSync(fakeBin, 0o755);
@@ -49,5 +49,8 @@ describe("detectInstalledAgents", () => {
 		const result = await detectInstalledAgents();
 		expect(result).toContain("claude-code");
 		expect(result).not.toContain("opencode");
+		// `trae` is Trae's launcher only; Trae CN must not be reported from it.
+		expect(result).toContain("trae");
+		expect(result).not.toContain("trae-cn");
 	});
 });

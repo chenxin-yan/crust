@@ -66,7 +66,7 @@ project: .agents/skills/<name>
 global:  ~/.agents/skills/<name>
 ```
 
-Universal targets, such as codex, cursor, and opencode, share those directories. Additional targets, such as claude-code, use agent-specific locations and are found through a non-executing `PATH` lookup. The [agent registry](https://github.com/chenxin-yan/crust/blob/main/packages/skills/src/agents.ts) lists every target and its directories.
+Universal targets, such as codex, cursor, and opencode, share those directories. Additional targets, such as claude-code, use an agent-specific location in at least one scope (antigravity, for example, shares `.agents/skills` only at project scope) and are found through a non-executing `PATH` lookup. The [agent registry](https://github.com/chenxin-yan/crust/blob/main/packages/skills/src/agents.ts) lists every target and its directories.
 
 When the working directory is the home directory, project scope becomes global scope. Result objects include the effective scope.
 
