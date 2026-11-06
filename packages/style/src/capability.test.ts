@@ -17,6 +17,17 @@ afterEach(() => vi.unstubAllEnvs());
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("resolveColorDepth", () => {
+	it("does not read process.stdout when isTTY is overridden", () => {
+		const stdout = vi.spyOn(process, "stdout", "get");
+		try {
+			expect(resolveColorDepth("auto", { isTTY: true })).toBe("16");
+			expect(resolveColorDepth("auto", { isTTY: undefined })).toBe("none");
+			expect(stdout).not.toHaveBeenCalled();
+		} finally {
+			stdout.mockRestore();
+		}
+	});
+
 	it('`never` mode → "none"', () => {
 		expect(resolveColorDepth("never")).toBe("none");
 		expect(

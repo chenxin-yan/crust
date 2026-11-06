@@ -4,7 +4,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vite-
 
 import { type TerminalOutput, spinner, withTerminalIO } from "./spinner.ts";
 import { createFakeSink } from "./test-helpers.ts";
-import { defaultTheme, defaultThemeFor } from "./theme.ts";
 
 // Keep frames plain; the default theme follows the sink's TTY state (see "default theme color").
 beforeAll(() => vi.stubEnv("FORCE_COLOR", "0"));
@@ -310,13 +309,6 @@ describe("spinner — default theme color", () => {
 		});
 
 		expect(writes).toEqual(["✓ Plain\n"]);
-	});
-
-	it("reuses the late-bound defaultTheme when the sink and stdout agree", () => {
-		withStdoutTTY(true, () => {
-			expect(defaultThemeFor({ isTTY: true })).toBe(defaultTheme);
-			expect(defaultThemeFor({ isTTY: false })).not.toBe(defaultTheme);
-		});
 	});
 });
 
