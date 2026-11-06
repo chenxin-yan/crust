@@ -10,7 +10,6 @@ import type {
 	FlagDef,
 	InferFlags,
 	InvocationIO,
-	MergeFlags,
 	MergeProviders,
 	ParsedArgValue,
 	ParsedFlagValue,
@@ -336,7 +335,7 @@ type DeclaredSpellings<
 
 // Only a definitely empty state takes the first-call fast path; unions retain their uncertainty.
 type AppendedFlags<OF extends ExtensionFlagsDef, F extends ExtensionFlagsDef> =
-	IsUnion<OF> extends true ? MergeFlags<OF, F> : keyof OF extends never ? F : MergeFlags<OF, F>;
+	IsUnion<OF> extends true ? OF & F : keyof OF extends never ? F : OF & F;
 
 declare const extensionHookProof: unique symbol;
 
