@@ -73,13 +73,13 @@ describe("parseArgs — number flags", () => {
 		});
 		const parsed = parseArgs(deferred, ["--port", "abc"], {});
 		expect(parsed.flags.port).toBeUndefined();
-		expect(parsed.valueError).toMatchObject({
+		expect(parsed.valueErrors?.get("--port")).toMatchObject({
 			code: "PARSE",
 			message: 'Expected number for --port, got "abc"',
 		});
 		// A value error outranks missing-required, as when it was thrown during parsing.
-		expect(() => validateParsed(deferred, parsed)).toThrow(parsed.valueError);
-		expect(parseArgs(deferred, ["--port", "80"], {})).not.toHaveProperty("valueError");
+		expect(() => validateParsed(deferred, parsed)).toThrow(parsed.valueErrors?.get("--port"));
+		expect(parseArgs(deferred, ["--port", "80"], {})).not.toHaveProperty("valueErrors");
 	});
 });
 

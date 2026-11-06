@@ -8,7 +8,7 @@ import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
-import type { ArgsDef, FlagsDef, ParsedFlagValue } from "../types.ts";
+import type { ArgsDef, FlagsDef, ParsedFlagValue, RunInputPayload } from "../types.ts";
 import { type AnyCrust, type CommandConfig, Crust, defineCommand } from "./crust.ts";
 import { cloneCommandNode, subCommandsOf } from "./node.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
@@ -1052,6 +1052,198 @@ describe("Extension named hooks", () => {
 		expect(outcomes[0]).toHaveProperty("result");
 		expect(outcomes[2]).toHaveProperty("result");
 		expect(Object.isFrozen(outcomes[0])).toBe(true);
+	});
+
+	describe("bindInput", () => {
+		let originalExitCode: typeof process.exitCode;
+
+		beforeEach(() => {
+			originalExitCode = process.exitCode;
+		});
+
+		afterEach(() => {
+			vi.unstubAllEnvs();
+			process.exitCode = originalExitCode ?? 0;
+		});
+
+		function bindingApp(...payloads: RunInputPayload[]) {
+			const preRunSeen: unknown[] = [];
+			const received: unknown[] = [];
+			const binder = defineExtension(defineExtensionId("binder")).preRun((ctx) => {
+				for (const payload of payloads) ctx.bindInput(payload);
+				preRunSeen.push({ args: { ...ctx.args }, flags: { ...ctx.flags }, rawArgs: ctx.rawArgs });
+			});
+			const app = new Crust("cli")
+				.flags({
+					name: { type: "string", default: "dflt" },
+					port: { type: "number", env: { name: "BIND_PORT" } },
+					verbose: { type: "boolean", default: false },
+					tags: { type: "string", multiple: true, delimiter: "," },
+				})
+				.args({ name: "source", type: "string" })
+				.args({ name: "target", type: "string", default: "out" })
+				.extend(binder)
+				.action(({ args, flags, rawArgs }) => void received.push({ args, flags, rawArgs }));
+			async function execute(argv: string[]) {
+				const stderr: string[] = [];
+				const exitCode = await app.execute({
+					argv,
+					io: { stdout: () => {}, stderr: (line) => void stderr.push(line) },
+				});
+				return { exitCode, stderr: stderr.join("\n") };
+			}
+			return { app, execute, preRunSeen, received };
+		}
+
+		it("lets argv-explicit flags win, even when equal to the default or negated", async () => {
+			const { execute, received } = bindingApp({
+				flags: { name: "json", verbose: true, port: 1 },
+			});
+			expect(await execute(["--name", "dflt", "--no-verbose"])).toEqual({
+				exitCode: 0,
+				stderr: "",
+			});
+			expect(received).toEqual([
+				{
+					args: { source: undefined, target: "out" },
+					flags: { name: "dflt", port: 1, verbose: false, tags: undefined },
+					rawArgs: [],
+				},
+			]);
+		});
+
+		it("replaces environment values and defaults with structured values", async () => {
+			vi.stubEnv("BIND_PORT", "9000");
+			const { execute, preRunSeen, received } = bindingApp({
+				args: { source: "a", target: "b" },
+				flags: { name: "json", port: 1, tags: ["x"] },
+				raw: ["--dry"],
+			});
+			expect(await execute([])).toEqual({ exitCode: 0, stderr: "" });
+			const bound = {
+				args: { source: "a", target: "b" },
+				flags: { name: "json", port: 1, verbose: false, tags: ["x"] },
+				rawArgs: ["--dry"],
+			};
+			// ctx.args/ctx.flags reflect the bound values for later hooks.
+			expect(preRunSeen).toEqual([bound]);
+			expect(received).toEqual([bound]);
+		});
+
+		it("lets a structured value replace an invalid environment value", async () => {
+			vi.stubEnv("BIND_PORT", "abc");
+			const { execute, received } = bindingApp({ flags: { port: 1 } });
+			expect(await execute([])).toEqual({ exitCode: 0, stderr: "" });
+			expect(received).toMatchObject([{ flags: { port: 1 } }]);
+		});
+
+		it('keeps an explicit `--tags ""` that splits to zero occurrences', async () => {
+			const { execute, received } = bindingApp({ flags: { tags: ["x"] } });
+			expect(await execute(["--tags", ""])).toEqual({ exitCode: 0, stderr: "" });
+			expect(received).toMatchObject([{ flags: { tags: undefined } }]);
+		});
+
+		it("never converts a structured value that argv overrides", async () => {
+			const { execute, received } = bindingApp({
+				args: { source: 1 },
+				flags: { port: "not a number", verbose: "yes" },
+			});
+			expect(await execute(["src", "--port", "80", "--verbose"])).toEqual({
+				exitCode: 0,
+				stderr: "",
+			});
+			expect(received).toMatchObject([
+				{ args: { source: "src" }, flags: { port: 80, verbose: true } },
+			]);
+		});
+
+		it("binds later positionals from structured input after argv-explicit ones", async () => {
+			const { execute, received } = bindingApp({ args: { source: "json", target: "dest" } });
+			expect(await execute(["src"])).toEqual({ exitCode: 0, stderr: "" });
+			expect(await execute(["--", "src", "dst"])).toEqual({ exitCode: 0, stderr: "" });
+			expect(received).toMatchObject([
+				{ args: { source: "src", target: "dest" } },
+				{ args: { source: "src", target: "dst" }, rawArgs: [] },
+			]);
+		});
+
+		it("keeps argv passthrough tokens over structured raw values", async () => {
+			const { execute, received } = bindingApp({ raw: ["json"] });
+			expect(await execute(["a", "b", "--", "argv"])).toEqual({ exitCode: 0, stderr: "" });
+			expect(received).toMatchObject([{ rawArgs: ["argv"] }]);
+		});
+
+		it("re-binds against the original input on each call, so the last call wins", async () => {
+			const { execute, received } = bindingApp(
+				{ args: { source: "first" }, flags: { name: "first", port: 1 } },
+				{ flags: { name: "second" } },
+			);
+			expect(await execute([])).toEqual({ exitCode: 0, stderr: "" });
+			expect(received).toMatchObject([
+				{ args: { source: undefined }, flags: { name: "second", port: undefined } },
+			]);
+		});
+
+		it("replaces typed run() input, which has no argv-explicit values", async () => {
+			const { app, received } = bindingApp({ flags: { name: "json" }, args: { source: "json" } });
+			await unwrap(app.run([], { args: { source: "typed" }, flags: { name: "typed", port: 2 } }));
+			expect(received).toMatchObject([
+				{ args: { source: "json" }, flags: { name: "json", port: 2 } },
+			]);
+		});
+
+		it("validates the bound values", async () => {
+			const regions: unknown[] = [];
+			const app = (input: RunInputPayload) =>
+				new Crust("cli")
+					.flags({ region: { type: "string", required: true } })
+					.extend(
+						defineExtension(defineExtensionId("binder")).preRun((ctx) => ctx.bindInput(input)),
+					)
+					.action(({ flags }) => void regions.push(flags.region));
+			const stderr: string[] = [];
+			const io = { stdout: () => {}, stderr: (line: string) => void stderr.push(line) };
+			expect(await app({ flags: { region: "eu" } }).execute({ argv: [], io })).toBe(0);
+			expect(await app({}).execute({ argv: [], io })).toBe(1);
+			expect(regions).toEqual(["eu"]);
+			expect(stderr).toEqual(['Error: Missing required flag "--region"']);
+		});
+
+		it("routes a PARSE error from bindInput through onError and postRun", async () => {
+			const errors: unknown[] = [];
+			const outcomes: unknown[] = [];
+			const binder = defineExtension(defineExtensionId("binder"))
+				.preRun((ctx) => ctx.bindInput({ flags: { port: "abc" } }))
+				.postRun((_ctx, outcome) => void outcomes.push(outcome.status))
+				.onError((error) => void errors.push(error));
+			const actions: string[] = [];
+			const app = new Crust("cli")
+				.flags({ port: { type: "number" } })
+				.extend(binder)
+				.action(() => void actions.push("ran"));
+			const stderr: string[] = [];
+			expect(
+				await app.execute({ argv: [], io: { stderr: (line) => void stderr.push(line) } }),
+			).toBe(1);
+			expect(errors).toEqual([expect.objectContaining({ code: "PARSE" })]);
+			expect(stderr.join("\n")).toContain("Expected number for --port");
+			expect(outcomes).toEqual(["failed"]);
+			expect(actions).toEqual([]);
+		});
+
+		it("gives the routing-failure onError context a no-op bindInput", async () => {
+			let flags: unknown;
+			const renderer = defineExtension(defineExtensionId("renderer")).onError((_error, ctx) => {
+				ctx.bindInput({ flags: { anything: true } });
+				flags = ctx.flags;
+				return true;
+			});
+			const app = new Crust("cli")
+				.extend(renderer)
+				.add(defineCommand("known", (cmd) => cmd.action(() => {})));
+			expect(await app.execute({ argv: ["nope"] })).toBe(1);
+			expect(flags).toEqual({});
+		});
 	});
 
 	it("reports the handling Extension and exposes parsed snapshots before validation", async () => {
