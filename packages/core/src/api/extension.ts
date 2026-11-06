@@ -179,7 +179,9 @@ export interface ExtensionContext<
 	 * `args`, `flags`, and `rawArgs` report the bound values, and validation and the Command
 	 * Action use them. A no-op in `onError` after a routing or argv-syntax failure.
 	 *
-	 * @throws {CrustError} `PARSE` on an unknown key or a value that fails conversion
+	 * @throws {CrustError} `PARSE` on an unknown key, a positional argument supplied after an
+	 *   omitted earlier one, or a value that fails conversion (including a non-array value for
+	 *   a variadic argument or `multiple` flag)
 	 *
 	 * @example
 	 * ```ts
