@@ -88,7 +88,7 @@ describe("parseArgs — number flags", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — aliases", () => {
-	it("registers util.parseArgs options only for canonical and alias spellings", () => {
+	it("accepts --<spelling> only for canonical and alias spellings", () => {
 		const cmd = makeNode({
 			meta: "test",
 			flags: {
@@ -101,8 +101,7 @@ describe("parseArgs — aliases", () => {
 			},
 		});
 
-		// util.parseArgs accepts `--<key>` for every registered option key, so a short
-		// spelling must be reachable only through its canonical descriptor's `short`.
+		// A short spelling is reachable only as `-<short>`.
 		expect(() => parseArgs(cmd, ["--v"])).toThrow('Unknown flag "--v"');
 		expect(() => parseArgs(cmd, ["--s"])).toThrow('Unknown flag "--s"');
 		expect(parseArgs(cmd, ["--P", "1"]).flags.port).toBe(1);
@@ -120,6 +119,26 @@ describe("parseArgs — aliases", () => {
 			port: 7070,
 			output: "x",
 		});
+	});
+
+	// One code point is one character to the types; clusters must not split its surrogate pair.
+	it("accepts an astral short and reads clusters by code point", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				smile: { type: "boolean", short: "😀" },
+				name: { type: "string", short: "n" },
+			},
+		});
+		expect(parseArgs(cmd, ["-😀"]).flags.smile).toBe(true);
+		expect(parseArgs(cmd, ["-😀n", "x"]).flags).toMatchObject({ smile: true, name: "x" });
+		expect(parseArgs(cmd, ["-n😀"]).flags.name).toBe("😀");
+		expect(() => parseArgs(cmd, ["-😁"])).toThrow(
+			expect.objectContaining({
+				message: 'Unknown flag "-😁"',
+				details: { flag: "😁", reason: "unknown-flag" },
+			}),
+		);
 	});
 });
 
@@ -449,11 +468,13 @@ describe("parseArgs — strict mode (unknown flags)", () => {
 		["--unknown", "unknown"],
 		["--unknown=value", "unknown"],
 		["-x", "x"],
+		["-x=1", "x"],
+		["-xv", "x"],
 	])("reports unknown flag %s with structured details", (token, flag) => {
 		expect(() => parseArgs(cmd, [token])).toThrow(
 			expect.objectContaining({
 				code: "PARSE",
-				message: expect.stringContaining("Unknown flag"),
+				message: `Unknown flag "${token.startsWith("--") ? `--${flag}` : `-${flag}`}"`,
 				details: { flag, reason: "unknown-flag" },
 			}),
 		);

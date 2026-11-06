@@ -1,5 +1,3 @@
-import type { ParseArgsOptionDescriptor } from "node:util";
-
 import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
 
 import type { CommandNode } from "../command/node.ts";
@@ -31,7 +29,7 @@ export type FlagEnvironment = Readonly<Record<string, string | undefined>>;
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Values bound from strict Node tokens, tagged before definition/value correlation erases.
+ * Values bound from argv tokens, tagged before definition/value correlation erases.
  * `invalid` is an environment value already rejected; coercion rethrows it so it defers like the rest.
  */
 type ArgvFlagValue =
@@ -50,36 +48,9 @@ export interface ArgvParseResult<
 	valueError?: CrustError;
 }
 
-/** Element type of `parseArgs(...).tokens` — not exported by `@types/node`. */
-type ParseArgsToken = NonNullable<
-	ReturnType<typeof import("node:util").parseArgs>["tokens"]
->[number];
-
 // ────────────────────────────────────────────────────────────────────────────
 // Internal helpers
 // ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Build the options config for `util.parseArgs` from the shared spelling table.
- */
-function buildParseArgsOptionDescriptor(spellings: ReadonlyMap<string, FlagSpelling>) {
-	const options: Record<string, ParseArgsOptionDescriptor> = {};
-
-	for (const [spelling, entry] of spellings) {
-		// The canonical descriptor already carries `short`; a short entry has no descriptor of its own.
-		if (entry.kind === "short") continue;
-
-		const descriptor: ParseArgsOptionDescriptor = {
-			type: entry.def.type === "boolean" ? "boolean" : "string",
-		};
-		if (entry.def.multiple) descriptor.multiple = true;
-
-		if (entry.kind === "canonical" && entry.def.short) descriptor.short = entry.def.short;
-		options[spelling] = descriptor;
-	}
-
-	return options;
-}
 
 /**
  * Coerce a string value to the expected type based on the type literal.
@@ -219,41 +190,6 @@ function coerceFlagValue(name: string, def: FlagDef, parsed: ArgvFlagValue): Par
 	return Array.isArray(parsed.value)
 		? parsed.value.map((value, i) => coerceToken(def, value, label, i))
 		: coerceToken(def, parsed.value, label);
-}
-
-/**
- * Resolve parsed option tokens to canonical flag names, in argv order.
- *
- * Works from `parsed.tokens` rather than `parsed.values` because
- * `util.parseArgs` groups values by option key: with aliases, the last *key*
- * would win instead of the last *token* (`--verbose --no-loud --verbose`
- * must be `true`), and `multiple` flags spread across aliases would lose
- * their interleaved argv order.
- */
-function resolveAliases(tokens: ParseArgsToken[], spellings: ReadonlyMap<string, FlagSpelling>) {
-	const canonical: Record<string, ArgvFlagValue | undefined> = {};
-
-	for (const token of tokens) {
-		if (token.kind !== "option") continue;
-
-		// Strict token names come from this command's descriptor, built from its retained spelling map.
-		const { canonicalName, def } = spellings.get(token.name)!;
-		const existing = canonical[canonicalName];
-		if (def.type === "boolean") {
-			const value = !token.rawName.startsWith("--no-");
-			if (def.multiple && existing?.kind === "boolean" && Array.isArray(existing.value))
-				existing.value.push(value);
-			else canonical[canonicalName] = { kind: "boolean", value: def.multiple ? [value] : value };
-		} else {
-			// SAFETY: strict Node descriptors configure every non-boolean option as string-valued.
-			const value = token.value as string;
-			if (def.multiple && existing?.kind === "string" && Array.isArray(existing.value))
-				existing.value.push(value);
-			else canonical[canonicalName] = { kind: "string", value: def.multiple ? [value] : value };
-		}
-	}
-
-	return canonical;
 }
 
 /** Split repeatable occurrences on the declared delimiter, dropping empty segments. */
@@ -437,39 +373,23 @@ function resolveArgs<A extends ArgsDef, V>(
 	return { args: resolved as RawParsedArgs<A>, consumed: index };
 }
 
+/** One flag occurrence read from an argv token. */
+interface FlagOccurrence {
+	readonly spelling: FlagSpelling;
+	readonly value: string | boolean;
+}
+
 /**
- * Enforce `noNegate` at parse time.
- *
- * `--no-<spelling>` works for the canonical name and every long alias
- * (an alias is a perfect synonym), but a boolean that
- * opted out via `noNegate` rejects every negated spelling. Without this
- * pre-scan, `util.parseArgs` (`allowNegative`) would silently accept it.
- * Also rejects `--no-<spelling>=value` on negatable booleans.
+ * A flag token resolved against a command's spelling table. `pending` is a
+ * value-taking flag that ends the token, so it reads the next argv token.
  */
-function validateNoNegateUsage(argv: string[], spellings: ReadonlyMap<string, FlagSpelling>): void {
-	for (const arg of argv) {
-		if (arg === "--") return;
-		if (!arg.startsWith("--no-")) continue;
+interface FlagToken {
+	readonly occurrences: readonly FlagOccurrence[];
+	readonly pending?: FlagSpelling;
+}
 
-		const assignmentIndex = arg.indexOf("=");
-		const rawName =
-			assignmentIndex === -1
-				? arg.slice("--no-".length)
-				: arg.slice("--no-".length, assignmentIndex);
-		const spelling = spellings.get(rawName);
-		// `--no-` applies to long spellings only; a short name after it stays an unknown flag.
-		if (!spelling || spelling.kind === "short" || spelling.def.type !== "boolean") continue;
-		// Checked here because runtimes disagree: Node reports an invalid value, Bun an unknown option.
-		if (spelling.negatable) {
-			if (assignmentIndex !== -1) throw unexpectedValue(spelling.canonicalName);
-			continue;
-		}
-
-		throw new CrustError(
-			"PARSE",
-			`Flag "--${spelling.canonicalName}" does not support negation ("--no-${rawName}")`,
-		);
-	}
+function unknownFlag(token: string, flag: string): CrustError {
+	return new CrustError("PARSE", `Unknown flag "${token}"`, { flag, reason: "unknown-flag" });
 }
 
 function unexpectedValue(flag: string): CrustError {
@@ -479,78 +399,131 @@ function unexpectedValue(flag: string): CrustError {
 	});
 }
 
-function tokenizeArgv(command: CommandNode, argv: string[]) {
-	const spellings = command.flagSpellings;
-	const parseOptions = buildParseArgsOptionDescriptor(spellings);
+/**
+ * Match one argv token against a command's spelling table: `--name`,
+ * `--name=value`, `--no-<long spelling>` for negatable booleans, and short
+ * clusters (`-fc 3`, `-ovalue`). Shared by the parser, which throws the
+ * returned error, and the router, which stops at it.
+ *
+ * @returns `undefined` for a token that is not a flag (`-`, `--`, or no leading dash)
+ */
+export function matchFlagToken(
+	spellings: ReadonlyMap<string, FlagSpelling>,
+	token: string,
+): FlagToken | CrustError | undefined {
+	if (token.length < 2 || !token.startsWith("-") || token === "--") return undefined;
 
-	validateNoNegateUsage(argv, spellings);
-
-	let parsed: ReturnType<typeof import("node:util").parseArgs> & { tokens: ParseArgsToken[] };
-
-	try {
-		parsed = process.getBuiltinModule("node:util").parseArgs({
-			args: argv,
-			options: parseOptions,
-			strict: true,
-			allowPositionals: true,
-			allowNegative: true,
-			tokens: true,
-		});
-	} catch (error) {
-		if (error instanceof Error) {
-			const token = error.message.match(/Unknown option '(.+?)'/)?.[1];
-			if (token !== undefined) {
-				throw new CrustError("PARSE", `Unknown flag "${token}"`, {
-					flag: token.replace(/^-+|=.*$/g, ""),
-					reason: "unknown-flag",
-				}).withCause(error);
+	if (token[1] !== "-") {
+		const occurrences: FlagOccurrence[] = [];
+		for (let index = 1; index < token.length;) {
+			// A short is one code point; an astral one spans two UTF-16 units.
+			// SAFETY: index < token.length.
+			const short = String.fromCodePoint(token.codePointAt(index)!);
+			index += short.length;
+			const spelling = spellings.get(short);
+			// A stray `-` would print as `--`, which reads as the separator; name the whole token instead.
+			if (!spelling) return unknownFlag(short === "-" ? token : `-${short}`, short);
+			if (spelling.def.type === "boolean") {
+				occurrences.push({ spelling, value: true });
+				continue;
 			}
-			if (
-				"code" in error &&
-				error.code === "ERR_PARSE_ARGS_INVALID_OPTION_VALUE" &&
-				error.message.length > 0
-			) {
-				// Node and Bun name the option as `-c, --count <value>`, `--count`, or `-c`.
-				const invalid =
-					/^Option '(?:-., )?-{1,2}(.+?)(?: <value>)?' (argument missing|argument is ambiguous|does not take an argument)/.exec(
-						error.message,
-					);
-				if (invalid) {
-					const [, spelling = "", problem] = invalid;
-					const flag = spellings.get(spelling)?.canonicalName ?? spelling;
-					if (problem === "does not take an argument") {
-						throw unexpectedValue(flag).withCause(error);
-					}
-					const hint =
-						problem === "argument is ambiguous"
-							? `; to pass a value starting with "-", write --${flag}=<value>`
-							: "";
-					throw new CrustError("PARSE", `Missing value for flag "--${flag}"${hint}`, {
-						flag,
-						reason: "missing-value",
-					}).withCause(error);
-				}
-				throw new CrustError("PARSE", error.message).withCause(error);
-			}
+			// A value-taking short takes the rest of the cluster (`-ovalue`), else the next token.
+			if (index === token.length) return { occurrences, pending: spelling };
+			occurrences.push({ spelling, value: token.slice(index) });
+			break;
 		}
-		throw new CrustError("PARSE", "Failed to parse command arguments").withCause(error);
+		return { occurrences };
 	}
 
+	// Spellings are non-empty and never contain "=", so `=` right after the dashes is part of the name.
+	const eq = token.indexOf("=", 3);
+	const name = eq === -1 ? token.slice(2) : token.slice(2, eq);
+	const value = eq === -1 ? undefined : token.slice(eq + 1);
+	const spelling = spellings.get(name);
+	if (spelling && spelling.kind !== "short") {
+		if (spelling.def.type !== "boolean") {
+			return value === undefined
+				? { occurrences: [], pending: spelling }
+				: { occurrences: [{ spelling, value }] };
+		}
+		if (value !== undefined) return unexpectedValue(spelling.canonicalName);
+		return { occurrences: [{ spelling, value: true }] };
+	}
+
+	const base = name.startsWith("no-") ? spellings.get(name.slice(3)) : undefined;
+	if (base && base.kind !== "short" && base.def.type === "boolean") {
+		if (!base.negatable) {
+			return new CrustError(
+				"PARSE",
+				`Flag "--${base.canonicalName}" does not support negation ("--${name}")`,
+			);
+		}
+		if (value !== undefined) return unexpectedValue(base.canonicalName);
+		return { occurrences: [{ spelling: base, value: false }] };
+	}
+
+	return unknownFlag(`--${name}`, name);
+}
+
+/** Record one occurrence under its canonical name; `multiple` keeps argv order across spellings. */
+function addFlagValue(
+	values: Record<string, ArgvFlagValue | undefined>,
+	{ canonicalName, def }: FlagSpelling,
+	value: string | boolean,
+): void {
+	const existing = values[canonicalName];
+	if (typeof value === "boolean") {
+		if (def.multiple && existing?.kind === "boolean" && Array.isArray(existing.value))
+			existing.value.push(value);
+		else values[canonicalName] = { kind: "boolean", value: def.multiple ? [value] : value };
+	} else if (def.multiple && existing?.kind === "string" && Array.isArray(existing.value)) {
+		existing.value.push(value);
+	} else {
+		values[canonicalName] = { kind: "string", value: def.multiple ? [value] : value };
+	}
+}
+
+/**
+ * Split argv into positionals and canonical flag values, in argv order.
+ * Strict: the first malformed flag token throws.
+ */
+function tokenizeArgv(command: CommandNode, argv: readonly string[]) {
 	const positionals: string[] = [];
-	let separatorIndex: number | undefined;
-	for (const token of parsed.tokens) {
-		if (token.kind === "option-terminator") {
-			separatorIndex = positionals.length;
-		} else if (token.kind === "positional") {
-			positionals.push(token.value);
+	const flagValues: Record<string, ArgvFlagValue | undefined> = {};
+	for (let index = 0; index < argv.length; index++) {
+		// SAFETY: index < argv.length.
+		const arg = argv[index]!;
+		// POSIX guideline 10: every token after the first `--` is an operand.
+		if (arg === "--") {
+			const separatorIndex = positionals.length;
+			positionals.push(...argv.slice(index + 1));
+			return { positionals, separatorIndex, flagValues };
 		}
-	}
 
-	return {
-		positionals,
-		separatorIndex: separatorIndex ?? positionals.length,
-		flagValues: resolveAliases(parsed.tokens, spellings),
-	};
+		const token = matchFlagToken(command.flagSpellings, arg);
+		if (token === undefined) {
+			positionals.push(arg);
+			continue;
+		}
+		if (token instanceof CrustError) throw token;
+		for (const { spelling, value } of token.occurrences) addFlagValue(flagValues, spelling, value);
+		if (!token.pending) continue;
+
+		const flag = token.pending.canonicalName;
+		const value = argv[index + 1];
+		// A next token starting with "-" more likely means a forgotten value; a lone `-` (stdin) is a value.
+		if (value === undefined || (value.length > 1 && value.startsWith("-"))) {
+			const hint =
+				value === undefined ? "" : `; to pass a value starting with "-", write --${flag}=<value>`;
+			throw new CrustError("PARSE", `Missing value for flag "--${flag}"${hint}`, {
+				flag,
+				reason: "missing-value",
+			});
+		}
+		addFlagValue(flagValues, token.pending, value);
+		index++;
+	}
+	return { positionals, separatorIndex: positionals.length, flagValues };
 }
 
 // `Array.isArray` alone narrows a structured value to `any[]`.
@@ -633,9 +606,9 @@ function bind<A extends ArgsDef, F extends FlagsDef, V, W>(
 /**
  * Parse argv against a command's arg/flag definitions.
  *
- * Wraps Node's `util.parseArgs` with Crust's enhanced semantics:
- * positional arg mapping, type coercion, alias expansion, default values,
- * variadic args, and strict mode.
+ * Tokenizes argv against the command's flag spellings (strict: unknown or
+ * malformed flags throw), then applies positional arg mapping, type
+ * coercion, alias expansion, default values, and variadic args.
  *
  * Never throws for missing required values or for invalid values (type
  * coercion, `choices`, `parse`, env fallbacks). The first value error is
