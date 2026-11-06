@@ -407,9 +407,7 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 				...process.env,
 				HOME: tempRoot,
 				PATH: binDir,
-				XDG_CONFIG_HOME: join(tempRoot, ".config"),
 				CLAUDE_CONFIG_DIR: join(tempRoot, ".claude"),
-				VIBE_HOME: join(tempRoot, ".vibe"),
 			},
 			timeout: 4_000,
 		});

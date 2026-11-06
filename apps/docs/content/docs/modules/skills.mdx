@@ -66,7 +66,7 @@ project: .agents/skills/<name>
 global:  ~/.agents/skills/<name>
 ```
 
-Universal targets share those directories: amp, augment, cline, codex, command-code, crush, cursor, devin, droid, gemini-cli, github-copilot, goose, junie, kilo, kimi-code-cli, mistral-vibe, opencode, openclaw, openhands, pi, pochi, qwen-code, replit, warp, xum, zed, and zencoder. Additional targets (adal, antigravity, claude-code, codebuddy, cortex, kiro-cli, kode, qoder, trae, and trae-cn) use agent-specific locations and are found through a non-executing `PATH` lookup.
+Universal targets, such as codex, cursor, and opencode, share those directories. Additional targets, such as claude-code, use agent-specific locations and are found through a non-executing `PATH` lookup. The [agent registry](https://github.com/chenxin-yan/crust/blob/main/packages/skills/src/agents.ts) lists every target and its directories.
 
 When the working directory is the home directory, project scope becomes global scope. Result objects include the effective scope.
 
