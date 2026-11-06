@@ -3,7 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { AnsiPair } from "./ansi-codes.ts";
-import type { StyleInput } from "./types.ts";
+import type { PlainStyleFn, StyleInput } from "./types.ts";
 
 /**
  * Apply an ANSI style pair to a string with nesting-safe composition.
@@ -80,4 +80,12 @@ export function callText(
 		if (i < values.length) text += String(values[i]);
 	}
 	return text;
+}
+
+/** A plain (non-chaining) style function that applies `pair` while `enabled()` is true. */
+export function plainStyleFn(pair: AnsiPair, enabled: () => boolean): PlainStyleFn {
+	return (first: StyleInput | TemplateStringsArray, ...values: unknown[]) => {
+		const text = callText(first, values);
+		return enabled() ? applyStyle(text, pair) : text == null ? "" : String(text);
+	};
 }

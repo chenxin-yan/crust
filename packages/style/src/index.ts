@@ -8,6 +8,7 @@ export type { AnsiPair } from "./ansi-codes.ts";
 export type { ColumnAlignment, TableOptions } from "./table.ts";
 export { table } from "./table.ts";
 export { createStyle, style } from "./create-style.ts";
+export { createPlainStyle } from "./plain-style.ts";
 export type { HyperlinkOptions } from "./hyperlinks.ts";
 export type { NamedColor } from "./named-color-values.ts";
 export {
@@ -68,6 +69,7 @@ export type {
 	ColorInput,
 	ColorMode,
 	ColorString,
+	PlainStyle,
 	PlainStyleFn,
 	StyleFn,
 	StyleInput,

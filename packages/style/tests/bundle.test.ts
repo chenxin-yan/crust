@@ -16,15 +16,18 @@ beforeAll(() => {
 
 afterAll(() => rmSync(fixtureDir, { recursive: true, force: true }));
 
-function bundle(imports: string): string {
+function bundle(imports: string, body?: string): string {
 	const entry = join(fixtureDir, "entry.ts");
 	const outfile = join(fixtureDir, "out.js");
 	writeFileSync(
 		entry,
-		`import { ${imports} } from ${JSON.stringify(styleEntry)};\nconsole.log(${imports
-			.split(",")
-			.map((name) => `${name.trim()}("x")`)
-			.join(", ")});\n`,
+		`import { ${imports} } from ${JSON.stringify(styleEntry)};\n${
+			body ??
+			`console.log(${imports
+				.split(",")
+				.map((name) => `${name.trim()}("x")`)
+				.join(", ")});`
+		}\n`,
 	);
 	const result = spawnSync(
 		"bun",
@@ -44,5 +47,16 @@ describe("bare colour exports", () => {
 		expect(code).not.toContain("crust.style.steps");
 		expect(code).not.toContain("rebeccapurple");
 		expect(code).not.toContain("brightMagenta");
+	});
+});
+
+describe("createPlainStyle", () => {
+	it("bundles without the chain engine or CSS colour names", () => {
+		const code = bundle(
+			"createPlainStyle",
+			'const s = createPlainStyle({ overrides: { isTTY: true } });\nconsole.log(s.bold(s.cyan("x")));',
+		);
+		expect(code).not.toContain("crust.style.steps");
+		expect(code).not.toContain("rebeccapurple");
 	});
 });

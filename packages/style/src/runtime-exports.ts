@@ -4,31 +4,24 @@
 
 import { resolveColorDepth, resolveModifierCapability } from "./capability.ts";
 import { style } from "./create-style.ts";
-import { applyStyle, callText } from "./style-engine.ts";
-import type { PlainStyleFn, StyleInput, StyleInstance } from "./types.ts";
+import { plainStyleFn } from "./style-engine.ts";
+import type { PlainStyleFn, StyleInstance } from "./types.ts";
 
 // Bare helpers are plain functions so importing one does not pull in the chain
 // engine (shared prototype getters, colour parsing, CSS colour names). SGR codes
 // are inlined rather than read from the ansi-codes tables, which bundlers cannot
 // split per property; runtime-exports.test.ts checks each against `style`.
-function plain(open: number, close: number, isModifier: boolean): PlainStyleFn {
-	const pair = { open: `\x1b[${open}m`, close: `\x1b[${close}m` };
-	return (first: StyleInput | TemplateStringsArray, ...values: unknown[]) => {
-		const text = callText(first, values);
-		// Resolved per call, like the default `style` instance.
-		const enabled = isModifier
-			? resolveModifierCapability("auto")
-			: resolveColorDepth("auto") !== "none";
-		return enabled ? applyStyle(text, pair) : text == null ? "" : String(text);
-	};
-}
+// Resolved per call, like the default `style` instance. Separate resolvers keep
+// a modifier-only import from bundling color-depth detection.
+const modifiersEnabled = () => resolveModifierCapability("auto");
+const colorsEnabled = () => resolveColorDepth("auto") !== "none";
 
 function modifier(open: number, close: number): PlainStyleFn {
-	return plain(open, close, true);
+	return plainStyleFn({ open: `\x1b[${open}m`, close: `\x1b[${close}m` }, modifiersEnabled);
 }
 
 function color(open: number, close: number): PlainStyleFn {
-	return plain(open, close, false);
+	return plainStyleFn({ open: `\x1b[${open}m`, close: `\x1b[${close}m` }, colorsEnabled);
 }
 
 // A pure call (unlike a property read) lets bundlers drop every helper a consumer

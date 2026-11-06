@@ -1,4 +1,4 @@
-import { magenta, style } from "@crustjs/style";
+import { bold, magenta } from "@crustjs/style";
 import { describe, expect, it } from "vite-plus/test";
 
 import { createPrompts } from "./create-prompts.ts";
@@ -9,7 +9,7 @@ describe("createPrompts", () => {
 	it("resolves instance theme over defaults", () => {
 		const p = createPrompts({ theme: { prefix: magenta } });
 		expect(p.theme.prefix).toBe(magenta);
-		expect(p.theme.message).toBe(style.bold); // default preserved
+		expect(p.theme.message).toBe(bold); // default preserved
 	});
 
 	it("keeps instance-only slots when a different slot is overridden per call", async () => {
