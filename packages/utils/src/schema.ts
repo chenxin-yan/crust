@@ -81,6 +81,45 @@ export type StandardSchema<Input = unknown, Output = Input> = {
 	readonly "~standard": StandardSchemaProps<Input, Output>;
 };
 
+/** Options for converting a schema to JSON Schema (Standard JSON Schema v1). */
+interface StandardJSONSchemaOptions {
+	/** The JSON Schema dialect, e.g. `"draft-2020-12"` or `"draft-07"`. */
+	readonly target: "draft-2020-12" | "draft-07" | "openapi-3.0" | ({} & string);
+	/** Vendor-specific conversion options. */
+	readonly libraryOptions?: Record<string, unknown> | undefined;
+}
+
+/**
+ * A schema that also implements Standard JSON Schema v1
+ * (`@standard-schema/spec` v1.1.0): `~standard.jsonSchema` converts its input
+ * or output type to JSON Schema. Both converters may throw when a type cannot
+ * be represented. Separate from {@link StandardSchema} so schemas without it
+ * stay valid everywhere.
+ */
+export type StandardJSONSchema<Input = unknown, Output = Input> = {
+	readonly "~standard": {
+		readonly version: 1;
+		readonly vendor: string;
+		readonly types?: StandardSchemaTypes<Input, Output> | undefined;
+		readonly jsonSchema: {
+			readonly input: (options: StandardJSONSchemaOptions) => Record<string, unknown>;
+			readonly output: (options: StandardJSONSchemaOptions) => Record<string, unknown>;
+		};
+	};
+};
+
+/**
+ * Infer the input type a Standard Schema accepts: the phantom `types.input`
+ * when available, otherwise `unknown`, since `validate()` accepts any value.
+ */
+export type InferInput<S extends StandardSchema> = S extends unknown
+	? "types" extends keyof S["~standard"]
+		? [NonNullable<S["~standard"]["types"]>] extends [never]
+			? unknown
+			: NonNullable<S["~standard"]["types"]>["input"]
+		: unknown
+	: never;
+
 /** The `value` of the successful members of a `validate()` result. */
 type SuccessValue<R> = R extends { readonly issues: ReadonlyArray<unknown> }
 	? never

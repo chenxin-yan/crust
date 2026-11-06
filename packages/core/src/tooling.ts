@@ -35,6 +35,7 @@ export type {
 export type { CommandSnapshot } from "./command/snapshot.ts";
 export { INSTALLED_COMMAND_NAME_RULE, isInstalledCommandName } from "./installed-command-name.ts";
 export { parseFlagValues } from "./parsing/parser.ts";
+export { standardJsonSchema } from "./parsing/schema.ts";
 export type { FlagEnvironment } from "./parsing/parser.ts";
 export { isListed, sectionsFor, visibleSectionsFor } from "./sections.ts";
 export type { RunInputPayload, RunInputValue } from "./types.ts";

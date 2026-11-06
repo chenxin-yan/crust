@@ -1,3 +1,4 @@
+import { standardJsonSchema } from "../parsing/schema.ts";
 import { isFlagNegatable } from "../parsing/spellings.ts";
 import type {
 	ArgDef,
@@ -120,6 +121,13 @@ export interface CommandSnapshot {
 	readonly args: readonly ArgSnapshot[];
 	/** Effective flags keyed by canonical flag name. */
 	readonly flags: Readonly<Record<string, FlagSnapshot>>;
+	/**
+	 * Draft 2020-12 JSON Schema of the action result, from the command's
+	 * `.output()` schema (`~standard.jsonSchema.output`). Absent without
+	 * `.output()` or when the schema cannot produce JSON Schema. Not frozen:
+	 * treat it as immutable.
+	 */
+	readonly outputSchema?: Readonly<Record<string, unknown>>;
 	/**
 	 * Direct subcommand snapshots keyed by canonical name (includes hidden ones). In
 	 * invocation snapshots a pending child exposes `meta` (except `meta.sections`)
@@ -333,6 +341,7 @@ export function createSnapshotProjector(
 				hasAction: { enumerable: true, get: () => body().hasAction },
 				args: { enumerable: true, get: () => body().args },
 				flags: { enumerable: true, get: () => body().flags },
+				outputSchema: { enumerable: true, get: () => body().outputSchema },
 				subCommands: { enumerable: true, get: () => body().subCommands },
 			}),
 		);
@@ -376,11 +385,13 @@ function projectNode(
 	const sections = contributed
 		? [...(node.meta.sections ?? []), ...contributed]
 		: node.meta.sections;
+	const outputSchema = node.outputSchema && standardJsonSchema(node.outputSchema, "output");
 	return Object.freeze({
 		meta: projectMeta(node.meta, sections),
 		hasAction: node.run !== undefined,
 		args: Object.freeze(node.args.map(snapshotArg)),
 		flags: Object.freeze(flags),
+		...(outputSchema ? { outputSchema } : {}),
 		subCommands,
 	});
 }
