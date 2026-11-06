@@ -202,15 +202,18 @@ describe("spinner — terminal sink", () => {
 });
 
 describe("spinner — sink resolution", () => {
-	// Windows keeps the stream writer for the default sink.
-	it.skipIf(process.platform === "win32")(
-		"writes the default sink to fd 2 and reads its TTY state there",
-		() => {
-			const output: string[] = [];
-			const tty = process.getBuiltinModule("node:tty");
+	it("writes the default sink through Core's stderr writer and reads its TTY state from fd 2", () => {
+		const output: string[] = [];
+		vi.spyOn(process.getBuiltinModule("node:tty"), "isatty").mockImplementation((fd) => fd === 2);
+		// The shared writer targets fd 2, or `process.stderr` on Windows.
+		if (process.platform === "win32") {
+			vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => {
+				output.push(Buffer.from(chunk).toString("utf8"));
+				return true;
+			});
+		} else {
 			const fs = process.getBuiltinModule("node:fs");
 			const writeSync = fs.writeSync;
-			vi.spyOn(tty, "isatty").mockImplementation((fd) => fd === 2);
 			vi.spyOn(fs, "writeSync").mockImplementation(((
 				fd: number,
 				buffer: Uint8Array,
@@ -220,18 +223,18 @@ describe("spinner — sink resolution", () => {
 				output.push(Buffer.from(buffer.subarray(offset)).toString("utf8"));
 				return buffer.length - (offset ?? 0);
 			}) as typeof writeSync);
-			try {
-				const handle = spinner({ message: "Default", sigint: false });
-				handle.start();
-				handle.stop();
+		}
+		try {
+			const handle = spinner({ message: "Default", sigint: false });
+			handle.start();
+			handle.stop();
 
-				expect(output).toContain("\x1B[?25l");
-				expect(output.at(-1)).toBe("\x1B[?25h");
-			} finally {
-				vi.restoreAllMocks();
-			}
-		},
-	);
+			expect(output).toContain("\x1B[?25l");
+			expect(output.at(-1)).toBe("\x1B[?25h");
+		} finally {
+			vi.restoreAllMocks();
+		}
+	});
 
 	it("routes output to the ambient withTerminalIO output", () => {
 		const { sink, writes } = createFakeSink(false);

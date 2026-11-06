@@ -108,6 +108,8 @@ async function runGitInit(cwd: string, commit?: string): Promise<void> {
  */
 async function runOpenEditor(cwd: string, stderr: (text: string) => void): Promise<void> {
 	const editor = process.env.EDITOR || "code";
+	// Reported after the try, so a throwing `stderr` is not mistaken for a spawn failure.
+	let warning: string | undefined;
 
 	try {
 		const proc = spawn(editor, [cwd], {
@@ -128,11 +130,12 @@ async function runOpenEditor(cwd: string, stderr: (text: string) => void): Promi
 
 		// If it exited immediately with a non-zero code, the editor likely wasn't found
 		if (raceResult.kind === "exited" && raceResult.code !== 0) {
-			stderr(`Warning: could not open editor "${editor}" (exit code ${raceResult.code})`);
+			warning = `Warning: could not open editor "${editor}" (exit code ${raceResult.code})`;
 		}
 	} catch {
-		stderr(`Warning: could not open editor "${editor}"`);
+		warning = `Warning: could not open editor "${editor}"`;
 	}
+	if (warning !== undefined) stderr(warning);
 }
 
 /** Run an arbitrary command string through the platform shell. */

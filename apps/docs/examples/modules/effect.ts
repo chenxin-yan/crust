@@ -7,7 +7,10 @@ class Db extends Context.Service<Db, { readonly query: (sql: string) => Promise<
 	"app/Db",
 ) {}
 
-declare const pool: { query(sql: string): Promise<string>; end(): Promise<void> };
+const pool = {
+	query: async (sql: string) => `rows for ${sql}`,
+	end: async () => {},
+};
 
 const DbLive = Layer.effect(
 	Db,
