@@ -383,7 +383,7 @@ interface FlagOccurrence {
  * A flag token resolved against a command's spelling table. `pending` is a
  * value-taking flag that ends the token, so it reads the next argv token.
  */
-export interface FlagToken {
+interface FlagToken {
 	readonly occurrences: readonly FlagOccurrence[];
 	readonly pending?: FlagSpelling;
 }
@@ -421,7 +421,8 @@ export function matchFlagToken(
 			const short = String.fromCodePoint(token.codePointAt(index)!);
 			index += short.length;
 			const spelling = spellings.get(short);
-			if (!spelling) return unknownFlag(`-${short}`, short);
+			// A stray `-` would print as `--`, which reads as the separator; name the whole token instead.
+			if (!spelling) return unknownFlag(short === "-" ? token : `-${short}`, short);
 			if (spelling.def.type === "boolean") {
 				occurrences.push({ spelling, value: true });
 				continue;

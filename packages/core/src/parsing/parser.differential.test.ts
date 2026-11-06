@@ -262,7 +262,7 @@ describe("argv tokenizer vs node:util.parseArgs", () => {
 
 	it("rejects `-` inside a cluster instead of reading it as `--`", () => {
 		expect(crustOutcome(flags, ["-v-", "x"])).toEqual({
-			error: 'Unknown flag "--"',
+			error: 'Unknown flag "-v-"',
 			details: { flag: "-", reason: "unknown-flag" },
 		});
 		expect(oracleOutcome(flags, ["-v-", "x"])).toMatchObject({ operands: ["x"] });
