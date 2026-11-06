@@ -290,10 +290,14 @@ describe("command definitions", () => {
 		const configured: string[] = [];
 		const failure = new Error("broken recipe");
 		const app = new Crust("cli").add(
-			defineCommand("good", { description: "Good", aliases: ["g"] }, (command) => {
-				configured.push("good");
-				return command.flags({ force: { type: "boolean" } }).action(() => "ok");
-			}),
+			defineCommand(
+				"good",
+				{ description: "Good", aliases: ["g"], destructive: true },
+				(command) => {
+					configured.push("good");
+					return command.flags({ force: { type: "boolean" } }).action(() => "ok");
+				},
+			),
 			defineCommand("bad", () => {
 				configured.push("bad");
 				throw failure;
@@ -322,7 +326,12 @@ describe("command definitions", () => {
 
 		// Child metadata is static, so reading it does not run the recipe; the body does.
 		const good = parentCommand.subCommands.good!;
-		expect(good.meta).toMatchObject({ name: "good", description: "Good", aliases: ["g"] });
+		expect(good.meta).toMatchObject({
+			name: "good",
+			description: "Good",
+			aliases: ["g"],
+			destructive: true,
+		});
 		expect(configured).toEqual([]);
 		expect(Object.keys(good.flags)).toEqual(["force"]);
 		expect(configured).toEqual(["good"]);

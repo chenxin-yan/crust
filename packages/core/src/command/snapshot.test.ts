@@ -48,6 +48,7 @@ function buildTree() {
 	const sub = createCommandNode("build");
 	sub.meta.aliases = ["b"];
 	sub.meta.hidden = true;
+	sub.meta.destructive = true;
 	root.subCommands = { build: sub };
 	return root;
 }
@@ -69,7 +70,21 @@ describe("snapshotCommand", () => {
 		expect(snapshot.flags.endpoint?.negatable).toBe(false);
 		expect(snapshot.subCommands.build?.meta.aliases).toEqual(["b"]);
 		expect(snapshot.subCommands.build?.meta.hidden).toBe(true);
+		expect(snapshot.subCommands.build?.meta.destructive).toBe(true);
+		expect(snapshot.meta).not.toHaveProperty("destructive");
 		expect(snapshot.subCommands.build?.hasAction).toBe(false);
+	});
+
+	it("projects destructive from root and defineCommand metadata", async () => {
+		const app = new Crust("cli", { destructive: true }).add(
+			defineCommand("rm", { destructive: true }, (command) => command.action(() => {})),
+			defineCommand("ls", (command) => command.action(() => {})),
+		);
+		const snapshot = await app.snapshot();
+
+		expect(snapshot.meta.destructive).toBe(true);
+		expect(snapshot.subCommands.rm?.meta.destructive).toBe(true);
+		expect(snapshot.subCommands.ls?.meta).not.toHaveProperty("destructive");
 	});
 
 	it("is serializable: no functions, URL defaults become strings", () => {

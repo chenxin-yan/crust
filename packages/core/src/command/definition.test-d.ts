@@ -3,6 +3,7 @@ import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineExtensionId } from "../identity.ts";
 import { Crust, defineCommand } from "./crust.ts";
+import type { CommandSnapshot } from "./snapshot.ts";
 
 // Compile-time regression checks; intentionally never invoked.
 // infers pulled Context values while preserving fluent action types
@@ -87,4 +88,15 @@ function _typecheckRequiresARecipe(
 	defineCommand("deploy", { description: "Deploy" }, recipe);
 	// @ts-expect-error -- a possibly missing recipe is rejected
 	defineCommand("deploy", { description: "Deploy" }, maybe);
+}
+
+// root and reusable commands accept a boolean `destructive` flag that the snapshot exposes
+function _typecheckDestructiveMetadata() {
+	new Crust("cli", { destructive: true });
+	defineCommand("rm", { destructive: true }, (command) => command);
+	// @ts-expect-error -- destructive is a boolean
+	new Crust("cli", { destructive: "yes" });
+	// @ts-expect-error -- destructive is a boolean
+	defineCommand("rm", { destructive: "yes" }, (command) => command);
+	type _Snapshot = Expect<Equal<CommandSnapshot["meta"]["destructive"], boolean | undefined>>;
 }

@@ -372,6 +372,7 @@ function projectMeta(
 			: undefined,
 		aliases: meta.aliases ? Object.freeze([...meta.aliases]) : undefined,
 		hidden: meta.hidden,
+		destructive: meta.destructive,
 	});
 }
 

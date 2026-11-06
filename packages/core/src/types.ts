@@ -822,6 +822,18 @@ export interface CommandMeta {
 	 * meta: { name: "__complete", hidden: true, description: "Internal" }
 	 */
 	hidden?: boolean;
+	/**
+	 * When `true`, running this command changes or deletes state in a way that
+	 * is hard to undo (deleting files, dropping data, publishing).
+	 *
+	 * Metadata only: core never reads it. It is exposed in the Command Snapshot
+	 * (`meta.destructive`) so Extensions and tooling can act on it, for example
+	 * by asking for confirmation or marking an MCP tool as destructive.
+	 *
+	 * @example
+	 * defineCommand("drop", { destructive: true }, recipe)
+	 */
+	destructive?: boolean;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

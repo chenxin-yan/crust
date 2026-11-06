@@ -33,7 +33,7 @@ new Crust(name, meta?)
 
 <auto-type-table path="../../../../../packages/core/src/command/crust.ts" name="RootCommandMeta" />
 
-Metadata is optional unless an installed Extension [requires it](/docs/guide/extensions#required-root-metadata); `.extend()` checks that requirement at compile time. TypeScript rejects extra root keys. `version` is exposed on the root snapshot. Aliases and `hidden` apply only to subcommands, so they are not root metadata.
+Metadata is optional unless an installed Extension [requires it](/docs/guide/extensions#required-root-metadata); `.extend()` checks that requirement at compile time. TypeScript rejects extra root keys. `version` is exposed on the root snapshot, and so is `destructive`, for a root action that is hard to undo. Aliases and `hidden` apply only to subcommands, so they are not root metadata.
 
 <include lang="ts" meta='title="src/cli.ts"'>
   ../../../examples/api/crust.ts#root

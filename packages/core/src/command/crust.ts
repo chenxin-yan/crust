@@ -168,7 +168,10 @@ export interface CommandConfig extends Omit<CommandMeta, "name" | "sections" | "
 }
 
 /** Static metadata accepted by the root command constructor. */
-export type RootCommandMeta = Pick<CommandMeta, "description" | "version" | "usage"> & {
+export type RootCommandMeta = Pick<
+	CommandMeta,
+	"description" | "version" | "usage" | "destructive"
+> & {
 	/** Plain-text sections rendered after built-in command documentation. */
 	readonly sections?: readonly RuntimeCommandSectionInput[];
 };
@@ -1274,7 +1277,7 @@ export class Crust<
 	 * Create a new root command builder.
 	 *
 	 * @param name - The command name.
-	 * @param metadata - Optional root description, version, usage, and documentation sections.
+	 * @param metadata - Optional root description, version, usage, destructive marker, and documentation sections.
 	 */
 	constructor(
 		nameInput: (Name & CommandNameBrand<Name>) &
@@ -1302,6 +1305,7 @@ export class Crust<
 		if (meta.description !== undefined) this._node.meta.description = meta.description;
 		if (meta.version !== undefined) this._node.meta.version = meta.version;
 		if (meta.usage !== undefined) this._node.meta.usage = meta.usage;
+		if (meta.destructive !== undefined) this._node.meta.destructive = meta.destructive;
 		if (meta.sections !== undefined) {
 			this._node.meta.sections = validateCommandSections(name, meta.sections);
 		}

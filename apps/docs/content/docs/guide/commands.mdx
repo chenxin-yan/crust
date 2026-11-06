@@ -57,7 +57,7 @@ Move a subcommand into its own file with `defineCommand()`, then attach it with 
   ../../../examples/guide/commands-split-files/commands/greet.ts
 </include>
 
-Importing a command definition does not run its action. The optional second argument supplies metadata, such as the description shown in help. Help and typo suggestions list a command from this metadata without running its recipe. See the [`defineCommand()` options](/docs/api/crust#definecommandname-config-recipe) for aliases, custom usage, additional sections, and hiding commands from listings.
+Importing a command definition does not run its action. The optional second argument supplies metadata, such as the description shown in help. Help and typo suggestions list a command from this metadata without running its recipe. See the [`defineCommand()` options](/docs/api/crust#definecommandname-config-recipe) for aliases, custom usage, additional sections, hiding commands from listings, and marking commands `destructive` for tooling.
 
 </Step>
 <Step>
