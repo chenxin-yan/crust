@@ -66,7 +66,7 @@ $ wrap -- --watch src
 --watch src
 ```
 
-Tokens after `--` bypass argument and flag parsing and reach the Command Action as `rawArgs`. Use this for wrapper commands that pass options to another tool.
+Tokens after `--` are never parsed as flags. They fill any declared positional arguments still unfilled, and the rest reach the Command Action as `rawArgs`. Use this for wrapper commands that pass options to another tool. A command with no positional arguments, like `wrap`, receives every token after `--`; an optional argument takes the first one (`wrap [target] -- --watch src` binds `target` to `--watch`), and a variadic argument takes them all, leaving `rawArgs` empty.
 
 ## Flags
 
@@ -207,7 +207,7 @@ An explicit argv occurrence always wins over the environment, even when it split
 
 ### Values that start with `-`
 
-For a value-taking flag, attach a dash-leading value with `=` so it is not mistaken for another flag:
+For a value-taking flag, attach a dash-leading value with `=` so it is not mistaken for another flag. For a positional argument, pass the value after `--`, as in `seek -- -5`; tokens after `--` fill positional arguments before [`rawArgs`](#pass-through-raw-tokens).
 
 ```sh
 $ serve --tag=-nightly

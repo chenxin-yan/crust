@@ -1751,6 +1751,20 @@ describe("Crust .execute()", () => {
 		expect(receivedRawArgs).toEqual(["extra1", "extra2"]);
 	});
 
+	it("fills declared positionals from tokens after -- before rawArgs", async () => {
+		let seen: [number, string[]] | undefined;
+		const app = new Crust("test")
+			.args({ name: "offset", type: "number", required: true })
+			.action(({ args, rawArgs }) => {
+				seen = [args.offset, rawArgs];
+			});
+
+		expect(await app.execute({ argv: ["--", "-5", "-x"], io: { stdout() {}, stderr() {} } })).toBe(
+			0,
+		);
+		expect(seen).toEqual([-5, ["-x"]]);
+	});
+
 	it("default flag values work on subcommands", async () => {
 		let receivedPort: number | undefined;
 		const port = defineFlag({ type: "number", default: 3000 });

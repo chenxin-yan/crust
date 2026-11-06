@@ -110,7 +110,7 @@ describe("toolsFromSnapshot", () => {
 				raw: {
 					type: "array",
 					items: { type: "string" },
-					description: "Passthrough values, as if written after `--`",
+					description: "Passthrough values, received as `rawArgs`; they never fill arguments",
 				},
 			},
 			required: ["target"],

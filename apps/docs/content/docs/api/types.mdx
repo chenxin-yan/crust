@@ -179,7 +179,7 @@ See the [source declaration](https://github.com/chenxin-yan/crust/blob/main/pack
 
 ### Parser boundary types
 
-For parser integrations and tooling. `ParseResult<A, F>` is the syntax-parsed input before required-value and schema validation: `excessArgs` holds unconsumed positionals and `rawArgs` holds tokens after `--`. `ParsedArgValue` and `ParsedFlagValue` are its erased value types. `ValidatedInput<A, F>` is the validated input passed to Command Actions.
+For parser integrations and tooling. `ParseResult<A, F>` is the syntax-parsed input before required-value and schema validation: `excessArgs` holds positionals before `--` that no declared argument consumed, and `rawArgs` holds tokens after `--` that no declared argument consumed. `ParsedArgValue` and `ParsedFlagValue` are its erased value types. `ValidatedInput<A, F>` is the validated input passed to Command Actions.
 
 ## Invocation I/O
 

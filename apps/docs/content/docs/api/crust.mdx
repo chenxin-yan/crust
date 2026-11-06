@@ -176,7 +176,7 @@ const greet = new Crust("greet")
   .action(({ args, stdout }) => stdout(`Hello, ${args.name}!`));
 ```
 
-The action receives typed `args` and `flags`, the lazy `ctx` bag, `rawArgs` after `--`, a cancellation `signal`, the resolved `command` and `rootCommand` snapshots, and `stdout(text)` / `stderr(text)`. See [`CrustCommandContext`](/docs/api/types#crustcommandcontexta-f-ctx).
+The action receives typed `args` and `flags`, the lazy `ctx` bag, `rawArgs` (tokens after `--` that no declared argument consumed), a cancellation `signal`, the resolved `command` and `rootCommand` snapshots, and `stdout(text)` / `stderr(text)`. See [`CrustCommandContext`](/docs/api/types#crustcommandcontexta-f-ctx).
 
 `signal` aborts on `execute({ signal })`, `run(path, input, { signal })`, or the first Ctrl-C during `execute()`. Pass it to `fetch`, timers, or child processes. When work throws the signal's reason, that error decides the exit path; see [cancellation](/docs/api/errors#cancellation).
 
@@ -230,7 +230,7 @@ Editors complete command names, argument and flag names, and the action's result
 - Supplied positionals must form a prefix. `undefined` means omitted. An empty `multiple` array means zero occurrences.
 - Structured input binding never reads `process.env`, so a flag's `env` fallback does not apply. Only [`.execute()`](#executeoptions) uses flag environment fallbacks. Contexts such as [`@crustjs/env`](/docs/modules/env) can still read the environment when pulled.
 - TypeScript rejects unknown argument, flag, and top-level keys, including in inputs held in variables. Keys set to `undefined` count as omitted. At runtime, unknown argument or flag keys return a failed outcome before the action runs.
-- `raw` reaches the action as `rawArgs`, like tokens after `--`.
+- `raw` reaches the action as `rawArgs`, like tokens after `--` that no declared argument consumed. It never fills `args`.
 - The path alone selects the command. Unknown path segments return a `COMMAND_NOT_FOUND` failure, even when the nearest parent has an action.
 - For genuinely dynamic paths and input, use an `AnyCrust` view; it resolves to `RunOutcome<unknown>`.
 

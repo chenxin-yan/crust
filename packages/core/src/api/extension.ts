@@ -169,7 +169,7 @@ export interface ExtensionContext<
 	 */
 	readonly flags: Readonly<InferExtensionFlags<F> & Record<string, ParsedFlagValue>>;
 	/**
-	 * Positional values that appeared after the `--` separator, or the `raw` array passed to typed `run()`.
+	 * Tokens after the `--` separator that no declared argument consumed, or the `raw` array passed to typed `run()`.
 	 *
 	 * @example `["--dry-run"]`
 	 */
