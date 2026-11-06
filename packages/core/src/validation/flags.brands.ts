@@ -255,14 +255,57 @@ export type ProvidedContextSpellings<
 		? Acc
 		: Acc | LocalSpellingsOf<ContextOwnedFlags<P[number]>>;
 
+type ExtensionProvidedSpellings<E> = [E] extends [never]
+	? never
+	: DefiningOf<E> extends { readonly provide?: infer P extends readonly unknown[] }
+		? ProvidedContextSpellings<P>
+		: never;
+
 /** All statically known flag spellings an Extension contributes: declared flags plus provided Context-owned flags. */
 type ExtensionSpellings<E> =
 	| LocalSpellingsOf<ExtensionFlagDefsOf<E>>
-	| ([E] extends [never]
-			? never
-			: DefiningOf<E> extends { readonly provide?: infer P extends readonly unknown[] }
-				? ProvidedContextSpellings<P>
-				: never);
+	| ExtensionProvidedSpellings<E>;
+
+// `recursive: false` flags stay on the root; a possibly-recursive or dynamic record stays open.
+export type RecursiveOwnFlags<F> = keyof F extends never
+	? {}
+	: string extends keyof F
+		? FlagsDef
+		: true extends {
+					[K in keyof F]: F[K] extends { recursive: infer R }
+						? boolean extends R
+							? true
+							: false
+						: false;
+			  }[keyof F]
+			? FlagsDef
+			: {
+					[K in keyof F as F[K] extends { readonly recursive: false } ? never : K]: F[K];
+				};
+
+/**
+ * Known spellings an Extension puts on every command, not just the root: recursive flags and
+ * provided Context-owned flags. Only these can collide with a flag below the root at runtime.
+ */
+type RecursiveExtensionSpellings<E> =
+	| (ExtensionFlagDefsOf<E> extends infer F extends FlagsDef
+			? KnownSpellings<LocalSpellingsOf<Pick<F, RecursiveFlagKeys<F>>>>
+			: never)
+	| KnownSpellings<ExtensionProvidedSpellings<E>>;
+
+// Per key and per part, so a `recursive: boolean` flag or an open record doesn't hide the rest:
+// only flags that are certainly recursive (the default, or `recursive: true`) count. An optional
+// `recursive` may be absent or false, and every branch of a conditional definition must agree.
+type RecursiveFlagKeys<F> = {
+	[K in keyof F]: false extends (F[K] extends unknown ? IsCertainlyRecursive<F[K]> : never)
+		? never
+		: K;
+}[keyof F];
+type IsCertainlyRecursive<D> = "recursive" extends keyof D
+	? [D[Extract<"recursive", keyof D>]] extends [true | undefined]
+		? true
+		: false
+	: true;
 
 type ExtensionFlagCollisionBrand<E, Existing extends string> = CollisionBrand<
 	ExtensionSpellings<E>,
@@ -274,20 +317,30 @@ type ExtensionFlagCollisionBrand<E, Existing extends string> = CollisionBrand<
 
 /**
  * Validate each Extension's contributed flag spellings against accumulated
- * existing spellings and against Extensions earlier in the same `.extend()`
- * call. Extensions must not override application flags: a silent overwrite
- * would retype an already-bound action's flag at parse time.
+ * existing root spellings (`Existing`), flag spellings on commands below the root
+ * (`Below`, checked only against flags that reach them), and Extensions earlier in
+ * the same `.extend()` call. Extensions must not override application flags: a
+ * silent overwrite would retype an already-bound action's flag at parse time.
  */
 export type ValidateExtensionFlags<
 	Es extends readonly unknown[],
 	Existing extends string,
+	Below extends string = never,
 	// Accumulating in tail position lets one `.extend()` take 45+ Extensions without TS2589.
 	Acc extends readonly unknown[] = readonly [],
 > = Es extends readonly [infer H, ...infer T extends readonly unknown[]]
 	? ValidateExtensionFlags<
 			T,
 			Existing | KnownSpellings<ExtensionSpellings<H>>,
-			readonly [...Acc, H & ExtensionFlagCollisionBrand<H, Existing>]
+			Below,
+			readonly [
+				...Acc,
+				H &
+					ExtensionFlagCollisionBrand<
+						H,
+						Existing | (KnownSpellings<Below> & RecursiveExtensionSpellings<H>)
+					>,
+			]
 		>
 	: Acc extends readonly []
 		? Es
@@ -302,18 +355,22 @@ type ShapeSpellings<S> =
 	IsAny<S> extends true
 		? string
 		: S extends { readonly flags: infer F extends FlagsDef; readonly children: infer C }
-			? LocalSpellingsOf<F> | TreeSpellings<C>
+			? // Per node, so one open flag record doesn't hide known spellings elsewhere in the tree.
+				KnownSpellings<LocalSpellingsOf<F>> | TreeSpellings<C>
 			: never;
 
 /** Every flag spelling reachable in a compile-time command tree (`Record<spelling, CommandShape>`), recursively. */
 export type TreeSpellings<Tree> =
 	IsAny<Tree> extends true
 		? string
-		: string extends keyof Tree
-			? string
-			: Tree extends object
-				? { [K in keyof Tree]: ShapeSpellings<Tree[K]> }[keyof Tree]
-				: never;
+		: Tree extends object
+			? // Known children only: an index signature's runtime-only commands are checked at runtime.
+				{
+					[K in keyof Tree as string extends K ? never : K]: ShapeSpellings<Tree[K]>;
+				} extends infer M
+				? M[keyof M]
+				: never
+			: never;
 
 type DefinitionSpellings<D> =
 	CommandDefinitionData<D> extends { readonly _shape?: infer S } ? ShapeSpellings<S> : never;
@@ -360,6 +417,14 @@ export type ExtensionsSpellings<
 	? ExtensionsSpellings<T, Acc | KnownSpellings<ExtensionSpellings<H>>>
 	: // A variable-length rest may be empty, so its flags are not known to be installed.
 		Acc;
+
+/** {@link ExtensionsSpellings} limited to flags that reach every command (see `RecursiveExtensionSpellings`). */
+export type RecursiveExtensionsSpellings<
+	Es extends readonly unknown[],
+	Acc extends string = never,
+> = Es extends readonly [infer H, ...infer T extends readonly unknown[]]
+	? RecursiveExtensionsSpellings<T, Acc | RecursiveExtensionSpellings<H>>
+	: Acc;
 
 /**
  * Validate Context-owned flags against accumulated existing spellings and

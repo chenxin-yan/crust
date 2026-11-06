@@ -319,6 +319,7 @@ it("checked Extensions validate earlier pending commands against new flags and p
 		expect(recipes).toBe(1);
 		expect(setups).toBe(0);
 		await expect(root.snapshot()).resolves.toBeDefined();
+		// @ts-expect-error -- the types also see this collision; the runtime check is what's under test
 		await expect(new Crust("app").extend(addition).extend(pending).snapshot()).rejects.toThrow(
 			"collides",
 		);

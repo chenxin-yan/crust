@@ -56,7 +56,7 @@ Return a chain on the supplied Extension to keep its id. See [`ExtensionBuilder`
 
 ## Owned flags and commands
 
-The preview flag above is available on every command. Set `recursive: false` on a flag definition to make it root-only.
+The preview flag above is available on every command, so no command may declare its own `--preview`. Set `recursive: false` on a flag definition to make it root-only; then only the root's flags must avoid its spellings.
 
 An Extension can also install top-level commands:
 
