@@ -1,92 +1,14 @@
-import { type AnyCrust, CrustError, type RunOutcome } from "@crustjs/core";
-import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
+import { type AnyCrust, type CommandSnapshot, CrustError, type RunOutcome } from "@crustjs/core";
+import { parseCommandInput, type RunInputPayload } from "@crustjs/core/tooling";
+import { isJsonObject, parseJsonValue } from "@crustjs/utils/json";
 // Type-only: the SDK loads inside the server functions, so CLIs pay for it only when `mcp` runs.
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import type { CallToolRequestParams, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
-import { type McpTool, type McpToolsOptions, RAW_PROPERTY, toolsFromSnapshot } from "./tools.ts";
+import { type McpTool, type McpToolsOptions, toolsFromSnapshot } from "./tools.ts";
 
 /** Server `version` when the root command declares none; the SDK requires one. */
 export const DEFAULT_SERVER_VERSION = "0.0.0";
-
-function isJsonPrimitive(value: unknown): value is string | number | boolean | null {
-	return (
-		value === null ||
-		typeof value === "string" ||
-		typeof value === "boolean" ||
-		(typeof value === "number" && Number.isFinite(value))
-	);
-}
-
-function isObject(value: unknown): value is object {
-	return typeof value === "object" && value !== null;
-}
-
-/**
- * Detached copy of a value `JSON.stringify` round-trips without loss, reading each
- * property once so getters cannot change between validation and serialization.
- * Accepts finite numbers, strings, booleans, `null`, dense plain arrays of such,
- * and plain or null-prototype objects whose own keys are all enumerable strings
- * (copied as plain objects; `__proto__` stays an own key). Throws on `undefined`,
- * functions (including `toJSON` hooks, which never run), symbols, BigInt, `NaN`,
- * class instances (`Date`, `Map`, `URL`, Array subclasses, …), array holes,
- * non-index array keys, symbol or non-enumerable keys, and cycles. `-0` is kept
- * because `JSON.parse` yields it for client input; results reject it when
- * serialized. `copies` maps each object to its finished copy, or `undefined`
- * while it is being copied: an object referenced twice reuses one capture, and
- * reaching an in-progress object is a cycle.
- */
-function parseJsonValue(
-	value: unknown,
-	copies = new Map<object, JsonValue | undefined>(),
-): JsonValue {
-	if (isJsonPrimitive(value)) return value;
-	if (!isObject(value)) throw new TypeError("Not JSON data");
-	if (copies.has(value)) {
-		const copy = copies.get(value);
-		if (copy === undefined) throw new TypeError("Cycle");
-		return copy;
-	}
-	if (Object.getOwnPropertySymbols(value).length > 0) throw new TypeError("Symbol key");
-	const proto = Object.getPrototypeOf(value);
-	const names = Object.getOwnPropertyNames(value);
-	if (Array.isArray(value)) {
-		// Holes serialize as `null` and named keys are dropped: require exactly the indices plus `length`.
-		if (proto !== Array.prototype || names.length !== value.length + 1) {
-			throw new TypeError("Not a dense plain array");
-		}
-		if (!names.every((name, index) => name === "length" || name === String(index))) {
-			throw new TypeError("Array hole");
-		}
-	} else {
-		if (proto !== Object.prototype && proto !== null) throw new TypeError("Not a plain object");
-		// Non-enumerable keys are dropped.
-		if (!names.every((name) => Object.prototype.propertyIsEnumerable.call(value, name))) {
-			throw new TypeError("Non-enumerable key");
-		}
-	}
-	copies.set(value, undefined);
-	const copy = Array.isArray(value)
-		? Array.from({ length: value.length }, (_, index) => parseJsonValue(value[index], copies))
-		: // Capture the validated names even if a getter hides a later property.
-			// `fromEntries` defines own properties, so a `__proto__` key cannot set the prototype.
-			Object.fromEntries(
-				// oxlint-disable-next-line eslint/no-restricted-properties -- this JSON boundary recursively validates each dynamic property before accepting it.
-				names.map((key) => [key, parseJsonValue(Reflect.get(value, key), copies)] as const),
-			);
-	if (
-		(Array.isArray(value) && value.length !== copy.length) ||
-		Reflect.ownKeys(value).some((key) => !Object.hasOwn(copy, key))
-	) {
-		throw new TypeError("Properties added during capture");
-	}
-	copies.set(value, copy);
-	return copy;
-}
-
-function isString(value: JsonValue): value is string {
-	return typeof value === "string";
-}
 
 function text(value: string): CallToolResult {
 	return { content: [{ type: "text", text: value }] };
@@ -140,48 +62,6 @@ export function toolResultFromOutcome(outcome: RunOutcome<unknown>): CallToolRes
 	}
 }
 
-/** A client-supplied JSON value, or the `URL` built from one for a `url` field. */
-type RunValue = JsonValue | URL | readonly (JsonValue | URL)[];
-
-interface RunInputPayload {
-	readonly args: Record<string, RunValue>;
-	readonly flags: Record<string, RunValue>;
-	readonly raw?: readonly string[];
-}
-
-type ToolArguments = NonNullable<CallToolRequestParams["arguments"]>;
-
-/** Split the flat tool arguments back into `run()` input; `url` fields become `URL`s. */
-function parseToolArguments(tool: McpTool, values: ToolArguments): RunInputPayload {
-	// Null prototypes so a `__proto__` definition binds as an own property.
-	const args: Record<string, RunValue> = Object.create(null);
-	const flags: Record<string, RunValue> = Object.create(null);
-	const toUrl = (value: JsonValue) => (isString(value) ? new URL(value) : value);
-	let raw: readonly string[] | undefined;
-	for (const [name, value] of Object.entries(values)) {
-		if (value === undefined) continue;
-		let given: JsonValue;
-		try {
-			given = parseJsonValue(value);
-		} catch {
-			throw new CrustError("PARSE", `Expected a JSON value for "${name}"`);
-		}
-		if (name === RAW_PROPERTY) {
-			if (!Array.isArray(given) || !given.every(isString)) {
-				throw new CrustError("PARSE", `Expected an array of strings for "${RAW_PROPERTY}"`);
-			}
-			raw = given;
-			continue;
-		}
-		(tool.argNames.includes(name) ? args : flags)[name] = tool.urlFields.includes(name)
-			? Array.isArray(given)
-				? given.map(toUrl)
-				: toUrl(given)
-			: given;
-	}
-	return raw === undefined ? { args, flags } : { args, flags, raw };
-}
-
 /**
  * Build an MCP server whose tools are the application's commands.
  *
@@ -199,7 +79,11 @@ export async function createMcpServer(
 ): Promise<Server> {
 	const snapshot = await app.snapshot();
 	const tools = toolsFromSnapshot(snapshot, options);
-	const byName = new Map(tools.map((tool) => [tool.name, tool]));
+	const commandAt = (path: readonly string[]) =>
+		path.reduce<CommandSnapshot>((command, name) => command.subCommands[name]!, snapshot);
+	const byName = new Map<string, readonly [McpTool, CommandSnapshot]>(
+		tools.map((tool) => [tool.name, [tool, commandAt(tool.path)]]),
+	);
 	const [{ Server }, { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError }] =
 		await Promise.all([
 			import("@modelcontextprotocol/sdk/server/index.js"),
@@ -213,13 +97,14 @@ export async function createMcpServer(
 		tools: tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
 	}));
 	server.setRequestHandler(CallToolRequestSchema, async (request, { signal }) => {
-		const tool = byName.get(request.params.name);
-		if (!tool) {
+		const entry = byName.get(request.params.name);
+		if (!entry) {
 			throw new McpError(ErrorCode.InvalidParams, `Tool ${request.params.name} not found`);
 		}
+		const [tool, command] = entry;
 		let input: RunInputPayload;
 		try {
-			input = parseToolArguments(tool, request.params.arguments ?? {});
+			input = parseCommandInput(command, request.params.arguments ?? {});
 		} catch (error) {
 			// Input shaping failures (bad URL, bad raw) surface like action failures.
 			return toolResultFromOutcome({ status: "failed", error, stdout: "", stderr: "" });
