@@ -42,7 +42,7 @@ The `bin` key must match your root command: `new Crust("my-cli")`. `"private": t
 | `bun`   | Bun-targeted JavaScript; users need Bun         | Standalone executable per platform, with Bun embedded     |
 | `node`  | Node.js-targeted JavaScript; users need Node.js | Standalone executable per platform, with Node.js embedded |
 
-Crust stages npm metadata for either artifact kind, even if you never publish to npm. Binary builds include a Node.js launcher for npm distribution; direct binary distribution does not use it. Runtime packages contain no embedded runtime: for example, Bun packages use `#!/usr/bin/env bun`, whether installed by npm or Bun. `--artifact package` or `--artifact binary` overrides `crust.artifact` for one build.
+Crust stages npm metadata for either artifact kind, even if you never publish to npm. Binary builds include a Node.js launcher for npm distribution; direct binary distribution does not use it. See [choose an artifact to ship](#choose-an-artifact-to-ship) for what each choice costs your users. Runtime packages contain no embedded runtime: for example, Bun packages use `#!/usr/bin/env bun`, whether installed by npm or Bun. `--artifact package` or `--artifact binary` overrides `crust.artifact` for one build.
 
 The commands below assume Node.js and Bun are installed; Node.js binaries need a `node` on `PATH` that [tsdown can build executables with](#nodejs-binaries). See [tooling requirements](/docs/modules/crust#install) and [runtime versions](/docs/guide/runtime-support#run-the-same-cli).
 
@@ -95,11 +95,13 @@ Bun binaries are precompiled to [bytecode](https://bun.com/docs/compiler/bytecod
 
 Bytecode applies only to Bun binaries. Runtime packages run on whatever Bun the user has installed, which would ignore bytecode from another version, and Node.js uses a different engine, so `--bytecode` is rejected for both.
 
-### Choose an artifact for npm
+### Choose an artifact to ship
 
-A binary installed through npm starts through the launcher, so every run pays one Node.js startup before the binary takes over. If your users install from npm and your CLI uses no Bun APIs, a Node.js runtime package (`"runtime": "node", "artifact": "package"`) starts faster and is far smaller: the scaffolded CLI's package is about 60 KB, its Linux x64 Bun binary about 110 MB. Binaries suit direct downloads, Homebrew or Scoop, and CLIs that need Bun's runtime without asking users to install Bun.
+A binary published to npm runs through the launcher. The root package's `bin/my-cli.js` is a small Node.js script: it finds the platform package that the package manager installed from `optionalDependencies` for the user's OS, CPU, and C library, then replaces itself with that package's binary (`process.execve`; Windows starts the binary as a child process instead). Anyone with Node.js can install a compiled CLI this way, but every run pays about one Node.js start before the binary's own, roughly 20 ms on Linux x64. In one benchmark of a 30-command CLI on Linux x64, that made the npm-installed binary slower to start than the same CLI as a Node.js runtime package: 35 ms against 28 ms.
 
-Users who want no launcher can install the platform package directly, such as `npm install -g my-cli-linux-x64`: each platform package's `bin` points straight at its executable.
+- **Users install from npm and your CLI needs no Bun-only APIs:** ship a Node.js runtime package (`"runtime": "node", "artifact": "package"`). It has no launcher and is far smaller: the scaffolded CLI's package is about 50 KB, its Linux x64 Bun binary about 110 MB.
+- **Users want a binary:** ship it as [release downloads](#release-downloads) or through [Homebrew, Scoop, and other installers](#homebrew-scoop-and-other-installers), which run it with no launcher or Node.js. From npm, users can install the platform package directly, such as `npm install -g my-cli-linux-x64` ([named](/docs/modules/crust#staged-packagejson-files) after your package and the [platform alias](/docs/modules/crust#supported-targets)). Its `bin` points straight at the executable, so the installed command runs the binary itself, and its `os`, `cpu`, and `libc` fields make npm reject a package built for another platform. Users choose the package themselves, such as `my-cli-linux-x64-musl` on Alpine, and install either it or the root package: both provide the same command.
+- **Your CLI needs Bun's runtime and your users may not have Bun:** publish binaries through the root npm package. Users need only Node.js `>=24` to install and start them, and accept the launcher's startup cost.
 
 ### Node.js binaries
 
