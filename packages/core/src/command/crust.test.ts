@@ -22,17 +22,20 @@ interface ExecuteReceivedContext {
 	flags: { port: number };
 }
 
-function isString<T>(value: T): value is T & string {
-	return typeof value === "string";
-}
-
-/** Default IO writes one `text\n` per call; capture each as a line, like the old console stubs. */
-function captureLines(lines: () => string[]): typeof process.stdout.write {
-	return (chunk: string | Uint8Array) => {
-		const text = isString(chunk) ? chunk : Buffer.from(chunk).toString("utf8");
-		lines().push(text.replace(/\n$/, ""));
-		return true;
+/**
+ * Default IO writes one `text\n` per call straight to fd 1/2; capture each as a line for the
+ * mapped fds and pass every other write through. Restore with `vi.restoreAllMocks()`.
+ */
+function captureDefaultIO(fds: { 1?: () => string[]; 2?: () => string[] }): void {
+	const fs = process.getBuiltinModule("node:fs");
+	const writeSync = fs.writeSync;
+	const capture = (fd: number, buffer: Uint8Array, offset?: number) => {
+		const lines = (fd === 1 || fd === 2) && fds[fd]?.();
+		if (!lines) return writeSync(fd, buffer, offset);
+		lines.push(Buffer.from(buffer.subarray(offset)).toString("utf8").replace(/\n$/, ""));
+		return buffer.length - (offset ?? 0);
 	};
+	vi.spyOn(fs, "writeSync").mockImplementation(capture as typeof writeSync);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -1262,20 +1265,18 @@ describe("Extension named hooks", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("Extension onError hooks", () => {
-	let originalStderrWrite: typeof process.stderr.write;
 	let originalExitCode: number | string | null | undefined;
 	let stderrChunks: string[];
 
 	beforeEach(() => {
-		originalStderrWrite = process.stderr.write;
 		originalExitCode = process.exitCode;
 		stderrChunks = [];
-		process.stderr.write = captureLines(() => stderrChunks);
+		captureDefaultIO({ 2: () => stderrChunks });
 		process.exitCode = 0;
 	});
 
 	afterEach(() => {
-		process.stderr.write = originalStderrWrite;
+		vi.restoreAllMocks();
 		process.exitCode = originalExitCode ?? 0;
 	});
 
@@ -1517,28 +1518,22 @@ describe("Crust .run()", () => {
 });
 
 describe("Crust .execute()", () => {
-	// Save/restore the process streams and process.exitCode around each test
-	let originalStdoutWrite: typeof process.stdout.write;
-	let originalStderrWrite: typeof process.stderr.write;
+	// Capture default IO and save/restore process.exitCode around each test
 	let originalExitCode: number | string | null | undefined;
 	let stdoutChunks: string[];
 	let stderrChunks: string[];
 
 	beforeEach(() => {
-		originalStdoutWrite = process.stdout.write;
-		originalStderrWrite = process.stderr.write;
 		originalExitCode = process.exitCode;
 		stdoutChunks = [];
 		stderrChunks = [];
-		process.stdout.write = captureLines(() => stdoutChunks);
-		process.stderr.write = captureLines(() => stderrChunks);
+		captureDefaultIO({ 1: () => stdoutChunks, 2: () => stderrChunks });
 		// Reset exitCode — setting to 0 then deleting clears the value
 		process.exitCode = 0;
 	});
 
 	afterEach(() => {
-		process.stdout.write = originalStdoutWrite;
-		process.stderr.write = originalStderrWrite;
+		vi.restoreAllMocks();
 		// Restore original exit code (0 acts as "no error")
 		process.exitCode = originalExitCode ?? 0;
 	});

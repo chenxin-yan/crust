@@ -32,7 +32,11 @@ export interface InvocationOptions extends Partial<InvocationIO> {
 export interface ExecuteOptions {
 	/** Arguments to parse; defaults to `process.argv.slice(2)`. */
 	argv?: readonly string[];
-	/** Captured `stdout(text)` / `stderr(text)` callbacks (e.g. in-process tests). */
+	/**
+	 * Captured `stdout(text)` / `stderr(text)` callbacks (e.g. in-process tests). Omitted
+	 * callbacks write each line synchronously to file descriptor 1 or 2 (`process.stdout` /
+	 * `process.stderr` on Windows), so patching `process.stdout.write` does not capture them.
+	 */
 	io?: Partial<InvocationIO>;
 	/**
 	 * Caller-owned cancellation; aborting it aborts the invocation's `ctx.signal`

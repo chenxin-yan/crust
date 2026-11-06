@@ -1,5 +1,5 @@
 import { getAmbientTerminalIO, getTerminalIO, withTerminalIO } from "@crustjs/utils/terminal";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import {
 	Crust,
@@ -11,13 +11,7 @@ import {
 
 describe("captured run outcomes", () => {
 	it("captures quietly, preserving callback payloads and result", async () => {
-		const stdoutWrite = process.stdout.write;
-		const stderrWrite = process.stderr.write;
-		let liveWrites = 0;
-		process.stdout.write = process.stderr.write = (() => {
-			liveWrites++;
-			return true;
-		}) as typeof process.stdout.write;
+		const writeSync = vi.spyOn(process.getBuiltinModule("node:fs"), "writeSync");
 		try {
 			const result = await new Crust("app")
 				.action(({ stdout, stderr }) => {
@@ -33,10 +27,9 @@ describe("captured run outcomes", () => {
 				stdout: "one\ntwo\n",
 				stderr: "diagnostic",
 			});
-			expect(liveWrites).toBe(0);
+			expect(writeSync.mock.calls.filter(([fd]) => fd === 1 || fd === 2)).toEqual([]);
 		} finally {
-			process.stdout.write = stdoutWrite;
-			process.stderr.write = stderrWrite;
+			writeSync.mockRestore();
 		}
 	});
 	it.each([undefined, null, 0, "failure", { identity: true }])(

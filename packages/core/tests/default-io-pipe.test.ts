@@ -9,16 +9,17 @@ import { beforeAll, describe, expect, it } from "vite-plus/test";
 import { ensureDist } from "./helpers.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Default IO through a pipe — once `process.stdout` is materialized (any platform
-// layer or color library probing `isTTY` does it), Bun's native `console.log`
-// silently drops output past the 64 KiB pipe buffer at exit (oven-sh/bun#36419).
-// The default IO must deliver a large payload intact to a piped parent, and must
-// keep `console.log`'s tolerance for a consumer that closes the pipe early.
+// Default IO through a pipe — a payload larger than the 64 KiB pipe buffer must
+// arrive intact even when the action exits the process right after writing, must
+// stay ordered with the user's own `console.log`, and the default IO must keep
+// `console.log`'s tolerance for a consumer that closes the pipe early. Bun flips
+// fd 1 to non-blocking once anything touches `process.stdout` (a platform layer,
+// a color library probing `isTTY`), so several cases probe it first.
 // ────────────────────────────────────────────────────────────────────────────
 
 const corePkg = resolve(import.meta.dirname, "..");
 const LINE_LENGTH = 300_000;
-// The regression is Bun's; tests run on Node, so spawn Bun as the subject.
+// Tests run on Node; spawn Bun as a subject too.
 const bun = which("bun")!;
 
 beforeAll(ensureDist);
@@ -63,7 +64,61 @@ async function runWithEarlyClose(runtime: string, closed: "stdout" | "stderr") {
 
 const runtimes = [bun, ...(which("node") ? ["node"] : [])];
 
+const run = (runtime: string, source: string) =>
+	spawnSync(runtime, ["--input-type=module", "--eval", source], {
+		encoding: "utf8",
+		timeout: 5_000,
+	});
+
 describe("default IO", () => {
+	it("keeps a large write ordered before a later console.log after stdout is probed (bun)", () => {
+		const { stdout, status } = run(
+			bun,
+			`${importCore("src/index.ts")}void process.stdout.isTTY;
+await new Crust("pipe-cli")
+	.action(({ stdout }) => {
+		stdout("x".repeat(${LINE_LENGTH}));
+		console.log("B");
+	})
+	.execute({ argv: [] });
+`,
+		);
+		expect(status).toBe(0);
+		expect(stdout.indexOf("B")).toBe(LINE_LENGTH + 1);
+		expect(stdout).toBe(`${"x".repeat(LINE_LENGTH)}\nB\n`);
+	});
+
+	it("never materializes process.stdout or process.stderr on a plain run (node)", () => {
+		const { stdout, stderr, status } = run(
+			"node",
+			`import { writeSync } from "node:fs";
+const touched = [];
+for (const name of ["stdout", "stderr"]) {
+	const { get, enumerable } = Object.getOwnPropertyDescriptor(process, name);
+	Object.defineProperty(process, name, {
+		configurable: true,
+		enumerable,
+		get() {
+			touched.push(name);
+			return get.call(process);
+		},
+	});
+}
+const { Crust } = await import(${JSON.stringify(join(corePkg, "dist/index.js"))});
+await new Crust("pipe-cli")
+	.action(({ stdout, stderr }) => {
+		stdout("out");
+		stderr("err");
+	})
+	.execute({ argv: [] });
+writeSync(1, JSON.stringify(touched));
+`,
+		);
+		expect(stderr).toBe("err\n");
+		expect(stdout).toBe("out\n[]");
+		expect(status).toBe(0);
+	});
+
 	it("delivers output larger than the pipe buffer to a piped parent", () => {
 		const {
 			stdout,
@@ -79,6 +134,26 @@ describe("default IO", () => {
 	});
 
 	for (const runtime of runtimes) {
+		it(`delivers a large write before an immediate process.exit() (${runtime})`, () => {
+			const { stdout, stderr, status } = run(
+				runtime,
+				`${importCore("dist/index.js")}void process.stdout.isTTY;
+await new Crust("pipe-cli")
+	.action(({ stdout, stderr }) => {
+		stdout("x".repeat(${LINE_LENGTH}));
+		stderr("y".repeat(${LINE_LENGTH}));
+		process.exit(0);
+	})
+	.execute({ argv: [] });
+`,
+			);
+			expect(status).toBe(0);
+			expect(stdout.length).toBe(LINE_LENGTH + 1);
+			expect(stderr.length).toBe(LINE_LENGTH + 1);
+			expect(stdout).toBe(`${"x".repeat(LINE_LENGTH)}\n`);
+			expect(stderr).toBe(`${"y".repeat(LINE_LENGTH)}\n`);
+		});
+
 		it(`does not leave error listeners after successful writes (${runtime})`, () => {
 			const source = `${importCore("dist/index.js")}
 import assert from "node:assert/strict";
