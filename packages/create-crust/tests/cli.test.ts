@@ -237,6 +237,25 @@ describe("create-crust CLI", () => {
 		);
 	}
 
+	// Deno support was removed; a dropped runtime must stay rejected, not silently scaffolded.
+	it("rejects --runtime deno before writing anything", async () => {
+		const projectDir = join(makeTempRoot("create-crust-deno"), "my-cli");
+
+		const result = await runCreateCrust([
+			projectDir,
+			"--runtime",
+			"deno",
+			"--no-install",
+			"--no-git",
+		]);
+
+		expect(result.exitCode).not.toBe(0);
+		expect(result.stderr).toContain(
+			'Invalid value "deno" for --runtime. Expected one of: bun, node',
+		);
+		expect(existsSync(projectDir)).toBe(false);
+	}, 30_000);
+
 	// The basename becomes the package name, bin key, and a quoted TS string, so
 	// positional input must meet the same command-name contract as the prompt.
 	it.each(['bad"name'])(
