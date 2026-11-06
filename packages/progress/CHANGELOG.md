@@ -1,5 +1,36 @@
 # @crustjs/progress
 
+## 0.2.0
+
+### Minor Changes
+
+- [#592](https://github.com/chenxin-yan/crust/pull/592) [`4208178`](https://github.com/chenxin-yan/crust/commit/420817832f065c875e836b86deac832f84d86828) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Spinners and progress indicators without a `sink` or ambient terminal output now write standard error through the same writer as `@crustjs/core`'s default `stderr`, so inside a Command Action they stay in order with the action's `stderr()` lines and restore the cursor even when the process exits right away. Their default colors now follow only their own output, so creating a spinner no longer touches `process.stdout`, and `@crustjs/style` no longer reads `process.stdout` when `overrides.isTTY` is given.
+  
+  **Behavior change:** on macOS and Linux the default output is written synchronously to file descriptor 2, so replacing `process.stderr.write` no longer captures it. Pass a `sink` or use `withTerminalIO()` to capture spinner output.
+
+- [#567](https://github.com/chenxin-yan/crust/pull/567) [`2821b47`](https://github.com/chenxin-yan/crust/commit/2821b479175e77e513330ac5100b50ac159573a7) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Breaking: `ProgressSink` is renamed to `TerminalOutput`, the same type `@crustjs/prompts` exports, and the `withProgressSink(sink, fn)` alias is removed; use `withTerminalIO({ output: sink }, fn)`.
+
+### Patch Changes
+
+- [#539](https://github.com/chenxin-yan/crust/pull/539) [`ce12aed`](https://github.com/chenxin-yan/crust/commit/ce12aed7a34275c49b54340d1995378afedfa2a6) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Remove the `engines.deno` declaration; Deno is no longer supported.
+
+- [#515](https://github.com/chenxin-yan/crust/pull/515) [`0e52e28`](https://github.com/chenxin-yan/crust/commit/0e52e28cef2b18dd7f9774e14be9083ad9167ba5) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `spinner({ task })` accepts a synchronous `task` (it returns `T | Promise<T>`) and is typed `Promise<T>`. Previously a stored options object with a synchronous task resolved to the `SpinnerHandle` overload while the call actually returned a promise; the handle overload now requires `task` to be absent.
+  
+  Also fixes:
+  
+  - A spinner or progress frame wider than the terminal no longer adds a line on every frame: the animated frame (symbol, message, count, and theme text) is cut to one row with `…` and at its first line break (`progress()` keeps its count when it fits), and the final line prints the full message. Redraws still erase only the spinner's row, so lines the task logs to the same terminal stay on screen.
+  - `process.exit()` while an interactive spinner is running restores the cursor when the sink writes synchronously.
+  - A theme or sink that throws while drawing the first frame no longer leaves the cursor hidden or an `exit` listener behind.
+
+- [#513](https://github.com/chenxin-yan/crust/pull/513) [`6ef96cd`](https://github.com/chenxin-yan/crust/commit/6ef96cdc8349991ca77360e906f6ae56863cc38b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Decide default theme colors from the stream a prompt or spinner writes to instead of stdout. Prompts and spinners on a terminal stderr are now colored when stdout is piped, and redirected stderr no longer receives ANSI escapes when stdout is a terminal. `NO_COLOR` and `FORCE_COLOR` apply as before; theme functions you pass are unchanged.
+
+- [#589](https://github.com/chenxin-yan/crust/pull/589) [`db2f5b3`](https://github.com/chenxin-yan/crust/commit/db2f5b391ccbcc6750e98e9219511ecf0820baf6) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Add `createPlainStyle()`: plain style functions (`bold`, `red`, …) with fixed settings. It takes the same options as `createStyle()` and gives the same output, without chaining, `open`/`close`, or `fg`/`bg`, so importing it does not bundle the chain engine. Pass `overrides: { isTTY }` to decide color for a stream other than stdout. Its return type, `PlainStyle`, is exported.
+  
+  The default themes of `@crustjs/prompts` and `@crustjs/progress` use it to decide color from their own output stream, so apps that use prompts or spinners no longer bundle the chain engine. Output is unchanged.
+- Updated dependencies [[`6fdb8a6`](https://github.com/chenxin-yan/crust/commit/6fdb8a642b79a176d60d9a3d4be3431493201052), [`ce12aed`](https://github.com/chenxin-yan/crust/commit/ce12aed7a34275c49b54340d1995378afedfa2a6), [`ce12aed`](https://github.com/chenxin-yan/crust/commit/ce12aed7a34275c49b54340d1995378afedfa2a6), [`643beb2`](https://github.com/chenxin-yan/crust/commit/643beb264f5b206177110dd947b258f47cc68073), [`708e181`](https://github.com/chenxin-yan/crust/commit/708e181f0de97b81b77d64261f754e2649af1761), [`4a4386d`](https://github.com/chenxin-yan/crust/commit/4a4386d64fdef5440e77cebd8b9ac85e7a1d7350), [`4208178`](https://github.com/chenxin-yan/crust/commit/420817832f065c875e836b86deac832f84d86828), [`d64f307`](https://github.com/chenxin-yan/crust/commit/d64f30727fd3d28dcb26b7edeb6aed929a3efe19), [`e802ec7`](https://github.com/chenxin-yan/crust/commit/e802ec7c09c6635d77716e3c1c545faa99fe7759), [`db2f5b3`](https://github.com/chenxin-yan/crust/commit/db2f5b391ccbcc6750e98e9219511ecf0820baf6), [`6ef96cd`](https://github.com/chenxin-yan/crust/commit/6ef96cdc8349991ca77360e906f6ae56863cc38b), [`bc85878`](https://github.com/chenxin-yan/crust/commit/bc858780958074fad17424509e5a4190e5e7d468), [`f49de57`](https://github.com/chenxin-yan/crust/commit/f49de57eb0d77220617792669fb185f1e20e656d), [`6ce95ed`](https://github.com/chenxin-yan/crust/commit/6ce95edb85095d8e8c3ab27fed8226d320fc3d82), [`7811b12`](https://github.com/chenxin-yan/crust/commit/7811b12f73827e1d47a1574c4b88736eb82632b0), [`3a6dbb1`](https://github.com/chenxin-yan/crust/commit/3a6dbb1702cff684c17054cd476ddef0b5d56f99)]:
+  - @crustjs/utils@0.3.0
+  - @crustjs/style@0.4.0
+
 ## 0.1.5
 
 ### Patch Changes
