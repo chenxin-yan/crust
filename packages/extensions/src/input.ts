@@ -54,10 +54,16 @@ export const input: ExtensionFactory<[], {}, [], typeof inputFlags> =
 					"--input: expected a JSON object keyed by argument and flag names",
 				);
 			}
-			const { parseCommandInput } = await import("@crustjs/core/tooling");
+			const { parseCommandInput, RAW_INPUT_PROPERTY } = await import("@crustjs/core/tooling");
+			// Drop keys argv gave before conversion, so an invalid overridden value never fails.
+			const { args, flags, raw } = context.argvProvided;
+			const given = new Set([...args, ...flags, ...(raw ? [RAW_INPUT_PROPERTY] : [])]);
+			const supplied = Object.fromEntries(
+				Object.entries(values).filter(([name]) => !given.has(name)),
+			);
 			let payload: RunInputPayload;
 			try {
-				payload = parseCommandInput(context.command, values as Record<string, unknown>);
+				payload = parseCommandInput(context.command, supplied);
 			} catch (cause) {
 				if (cause instanceof CrustError) throw cause;
 				// parseCommandInput throws a TypeError for an invalid `url` value.
