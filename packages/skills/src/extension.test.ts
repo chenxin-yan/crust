@@ -286,27 +286,27 @@ describe("skill extension packaged directory", () => {
 		"%s installs newly selected agents without removing a deselected agent's link",
 		async (command) => {
 			const source = await writeSource("demo");
-			const augmentTarget = join(tempRoot, ".augment", "skills", "demo");
+			const cortexTarget = join(tempRoot, ".cortex", "skills", "demo");
 			await withCwd(tempRoot, () =>
-				installSkill({ sourceDir: join(source, "demo"), agents: ["augment"], scope: "project" }),
+				installSkill({ sourceDir: join(source, "demo"), agents: ["cortex"], scope: "project" }),
 			);
 
 			// Empty PATH keeps agent detection deterministic: Universal plus the
-			// already-installed Augment are the only agent choices.
+			// already-installed Cortex Code are the only agent choices.
 			vi.stubEnv("PATH", "");
 			const harness = createPromptIO();
 			const run = withCwd(tempRoot, () =>
 				withTerminalIO(harness.io, () => createApp().execute({ argv: command.split(" ") })),
 			);
 			await waitForPrompt(harness, "Select agents to install for");
-			// Only the installed Augment starts selected; swap it for Universal.
+			// Only the installed Cortex Code starts selected; swap it for Universal.
 			harness.keys("space", "down", "space", "enter");
 			await run;
 
 			expect(resolve(dirname(target("demo")), await readlink(target("demo")))).toBe(
 				join(source, "demo"),
 			);
-			expect(resolve(dirname(augmentTarget), await readlink(augmentTarget))).toBe(
+			expect(resolve(dirname(cortexTarget), await readlink(cortexTarget))).toBe(
 				join(source, "demo"),
 			);
 		},
@@ -357,10 +357,11 @@ describe("skill extension packaged directory", () => {
 			await writeFile(join(conflict, "manual.md"), "keep\n");
 		}
 		const binDir = join(tempRoot, "bin");
-		const traeBin = join(binDir, "trae");
 		await mkdir(binDir);
-		await writeFile(traeBin, "#!/bin/sh\nexit 0\n");
-		await chmod(traeBin, 0o755);
+		for (const name of ["trae", "trae-cn"]) {
+			await writeFile(join(binDir, name), "#!/bin/sh\nexit 0\n");
+			await chmod(join(binDir, name), 0o755);
+		}
 
 		// Inside the fake package so the subprocess resolves the same staged skills.
 		const script = join(packageRoot, "home-scope.ts");

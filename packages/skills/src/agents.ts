@@ -11,8 +11,8 @@ export type AgentClass = "universal" | "additional";
 export type Scope = "global" | "project";
 
 export type AgentTarget =
-	| "amp"
 	| "adal"
+	| "amp"
 	| "antigravity"
 	| "augment"
 	| "claude-code"
@@ -20,24 +20,20 @@ export type AgentTarget =
 	| "codebuddy"
 	| "codex"
 	| "command-code"
-	| "continue"
 	| "cortex"
 	| "crush"
 	| "cursor"
+	| "devin"
 	| "droid"
 	| "gemini-cli"
 	| "github-copilot"
 	| "goose"
-	| "iflow-cli"
 	| "junie"
 	| "kilo"
-	| "kimi-cli"
+	| "kimi-code-cli"
 	| "kiro-cli"
 	| "kode"
-	| "mcpjam"
 	| "mistral-vibe"
-	| "mux"
-	| "neovate"
 	| "opencode"
 	| "openclaw"
 	| "openhands"
@@ -46,11 +42,10 @@ export type AgentTarget =
 	| "qoder"
 	| "qwen-code"
 	| "replit"
-	| "roo"
 	| "trae"
 	| "trae-cn"
 	| "warp"
-	| "windsurf"
+	| "xum"
 	| "zed"
 	| "zencoder";
 
@@ -65,11 +60,6 @@ interface AgentConfig {
 }
 
 const PROJECT_UNIVERSAL_SKILLS_DIR = join(".agents", "skills");
-
-function configHome(home: string): string {
-	const xdg = process.env.XDG_CONFIG_HOME?.trim();
-	return xdg || join(home, ".config");
-}
 
 function universalGlobalSkillsDir(home: string): string {
 	return join(home, ".agents", "skills");
@@ -88,7 +78,6 @@ export function resolveEffectiveScope(scope: Scope): Scope {
 }
 
 const AGENTS: AgentRegistry = {
-	amp: universal("Amp"),
 	adal: {
 		label: "AdaL",
 		class: "additional",
@@ -96,27 +85,22 @@ const AGENTS: AgentRegistry = {
 		globalSkillsDir: (home) => join(home, ".adal", "skills"),
 		detectCommands: ["adal"],
 	},
+	amp: universal("Amp"),
 	antigravity: {
 		label: "Antigravity",
 		class: "additional",
 		projectSkillsDir: PROJECT_UNIVERSAL_SKILLS_DIR,
 		globalSkillsDir: (home) => join(home, ".gemini", "config", "skills"),
-		detectCommands: ["antigravity"],
+		detectCommands: ["agy", "antigravity"],
 	},
-	augment: {
-		label: "Augment",
-		class: "additional",
-		projectSkillsDir: join(".augment", "skills"),
-		globalSkillsDir: (home) => join(home, ".augment", "skills"),
-		detectCommands: ["augment"],
-	},
+	augment: universal("Augment"),
 	"claude-code": {
 		label: "Claude Code",
 		class: "additional",
 		projectSkillsDir: join(".claude", "skills"),
 		globalSkillsDir: (home) =>
 			join(process.env.CLAUDE_CONFIG_DIR?.trim() || join(home, ".claude"), "skills"),
-		detectCommands: ["claude", "claude-code"],
+		detectCommands: ["claude"],
 	},
 	cline: universal("Cline"),
 	codebuddy: {
@@ -124,23 +108,10 @@ const AGENTS: AgentRegistry = {
 		class: "additional",
 		projectSkillsDir: join(".codebuddy", "skills"),
 		globalSkillsDir: (home) => join(home, ".codebuddy", "skills"),
-		detectCommands: ["codebuddy"],
+		detectCommands: ["codebuddy", "cbc"],
 	},
 	codex: universal("Codex"),
-	"command-code": {
-		label: "Command Code",
-		class: "additional",
-		projectSkillsDir: join(".commandcode", "skills"),
-		globalSkillsDir: (home) => join(home, ".commandcode", "skills"),
-		detectCommands: ["command-code", "commandcode"],
-	},
-	continue: {
-		label: "Continue",
-		class: "additional",
-		projectSkillsDir: join(".continue", "skills"),
-		globalSkillsDir: (home) => join(home, ".continue", "skills"),
-		detectCommands: ["continue"],
-	},
+	"command-code": universal("Command Code"),
 	cortex: {
 		label: "Cortex Code",
 		class: "additional",
@@ -148,58 +119,22 @@ const AGENTS: AgentRegistry = {
 		globalSkillsDir: (home) => join(home, ".snowflake", "cortex", "skills"),
 		detectCommands: ["cortex"],
 	},
-	crush: {
-		label: "Crush",
-		class: "additional",
-		projectSkillsDir: join(".crush", "skills"),
-		globalSkillsDir: (home) => join(configHome(home), "crush", "skills"),
-		detectCommands: ["crush"],
-	},
+	crush: universal("Crush"),
 	cursor: universal("Cursor"),
-	droid: {
-		label: "Droid",
-		class: "additional",
-		projectSkillsDir: join(".factory", "skills"),
-		globalSkillsDir: (home) => join(home, ".factory", "skills"),
-		detectCommands: ["droid"],
-	},
+	devin: universal("Devin"),
+	droid: universal("Droid"),
 	"gemini-cli": universal("Gemini CLI"),
 	"github-copilot": universal("GitHub Copilot"),
-	goose: {
-		label: "Goose",
-		class: "additional",
-		projectSkillsDir: join(".goose", "skills"),
-		globalSkillsDir: (home) => join(configHome(home), "goose", "skills"),
-		detectCommands: ["goose"],
-	},
-	"iflow-cli": {
-		label: "iFlow CLI",
-		class: "additional",
-		projectSkillsDir: join(".iflow", "skills"),
-		globalSkillsDir: (home) => join(home, ".iflow", "skills"),
-		detectCommands: ["iflow", "iflow-cli"],
-	},
-	junie: {
-		label: "Junie",
-		class: "additional",
-		projectSkillsDir: join(".junie", "skills"),
-		globalSkillsDir: (home) => join(home, ".junie", "skills"),
-		detectCommands: ["junie"],
-	},
-	kilo: {
-		label: "Kilo Code",
-		class: "additional",
-		projectSkillsDir: join(".kilocode", "skills"),
-		globalSkillsDir: (home) => join(home, ".kilocode", "skills"),
-		detectCommands: ["kilo", "kilocode"],
-	},
-	"kimi-cli": universal("Kimi Code CLI"),
+	goose: universal("Goose"),
+	junie: universal("Junie"),
+	kilo: universal("Kilo Code"),
+	"kimi-code-cli": universal("Kimi Code CLI"),
 	"kiro-cli": {
 		label: "Kiro CLI",
 		class: "additional",
 		projectSkillsDir: join(".kiro", "skills"),
 		globalSkillsDir: (home) => join(home, ".kiro", "skills"),
-		detectCommands: ["kiro", "kiro-cli"],
+		detectCommands: ["kiro-cli", "kiro"],
 	},
 	kode: {
 		label: "Kode",
@@ -208,79 +143,21 @@ const AGENTS: AgentRegistry = {
 		globalSkillsDir: (home) => join(home, ".kode", "skills"),
 		detectCommands: ["kode"],
 	},
-	mcpjam: {
-		label: "MCPJam",
-		class: "additional",
-		projectSkillsDir: join(".mcpjam", "skills"),
-		globalSkillsDir: (home) => join(home, ".mcpjam", "skills"),
-		detectCommands: ["mcpjam"],
-	},
-	"mistral-vibe": {
-		label: "Mistral Vibe",
-		class: "additional",
-		projectSkillsDir: join(".vibe", "skills"),
-		globalSkillsDir: (home) => join(process.env.VIBE_HOME || join(home, ".vibe"), "skills"),
-		detectCommands: ["mistral-vibe", "vibe"],
-	},
-	mux: {
-		label: "Mux",
-		class: "additional",
-		projectSkillsDir: join(".mux", "skills"),
-		globalSkillsDir: (home) => join(home, ".mux", "skills"),
-		detectCommands: ["mux"],
-	},
-	neovate: {
-		label: "Neovate",
-		class: "additional",
-		projectSkillsDir: join(".neovate", "skills"),
-		globalSkillsDir: (home) => join(home, ".neovate", "skills"),
-		detectCommands: ["neovate"],
-	},
+	"mistral-vibe": universal("Mistral Vibe"),
 	opencode: universal("OpenCode"),
-	openclaw: {
-		label: "OpenClaw",
-		class: "additional",
-		projectSkillsDir: "skills",
-		globalSkillsDir: (home) => join(home, ".openclaw", "skills"),
-		detectCommands: ["openclaw"],
-	},
-	openhands: {
-		label: "OpenHands",
-		class: "additional",
-		projectSkillsDir: join(".openhands", "skills"),
-		globalSkillsDir: (home) => join(home, ".openhands", "skills"),
-		detectCommands: ["openhands"],
-	},
+	openclaw: universal("OpenClaw"),
+	openhands: universal("OpenHands"),
 	pi: universal("Pi"),
-	pochi: {
-		label: "Pochi",
-		class: "additional",
-		projectSkillsDir: join(".pochi", "skills"),
-		globalSkillsDir: (home) => join(home, ".pochi", "skills"),
-		detectCommands: ["pochi"],
-	},
+	pochi: universal("Pochi"),
 	qoder: {
 		label: "Qoder",
 		class: "additional",
 		projectSkillsDir: join(".qoder", "skills"),
 		globalSkillsDir: (home) => join(home, ".qoder", "skills"),
-		detectCommands: ["qoder"],
+		detectCommands: ["qoder", "qodercli"],
 	},
-	"qwen-code": {
-		label: "Qwen Code",
-		class: "additional",
-		projectSkillsDir: join(".qwen", "skills"),
-		globalSkillsDir: (home) => join(home, ".qwen", "skills"),
-		detectCommands: ["qwen", "qwen-code"],
-	},
+	"qwen-code": universal("Qwen Code"),
 	replit: universal("Replit"),
-	roo: {
-		label: "Roo Code",
-		class: "additional",
-		projectSkillsDir: join(".roo", "skills"),
-		globalSkillsDir: (home) => join(home, ".roo", "skills"),
-		detectCommands: ["roo", "roo-code"],
-	},
 	trae: {
 		label: "Trae",
 		class: "additional",
@@ -293,24 +170,12 @@ const AGENTS: AgentRegistry = {
 		class: "additional",
 		projectSkillsDir: join(".trae", "skills"),
 		globalSkillsDir: (home) => join(home, ".trae-cn", "skills"),
-		detectCommands: ["trae-cn", "trae"],
+		detectCommands: ["trae-cn"],
 	},
 	warp: universal("Warp"),
-	windsurf: {
-		label: "Windsurf",
-		class: "additional",
-		projectSkillsDir: join(".windsurf", "skills"),
-		globalSkillsDir: (home) => join(home, ".codeium", "windsurf", "skills"),
-		detectCommands: ["windsurf"],
-	},
+	xum: universal("Xum"),
 	zed: universal("Zed"),
-	zencoder: {
-		label: "Zencoder",
-		class: "additional",
-		projectSkillsDir: join(".zencoder", "skills"),
-		globalSkillsDir: (home) => join(home, ".zencoder", "skills"),
-		detectCommands: ["zencoder"],
-	},
+	zencoder: universal("Zencoder"),
 };
 
 const agentKeys = Object.keys(AGENTS);
@@ -341,14 +206,13 @@ export function getUniversalAgents(): AgentTarget[] {
 	return ALL_AGENTS.filter((agent) => AGENTS[agent].class === "universal");
 }
 
-/** Returns agents that do not use the canonical layout at both scopes. */
+/**
+ * Returns agents that do not use the canonical layout at both scopes.
+ *
+ * @internal
+ */
 export function getAdditionalAgents(): AgentTarget[] {
 	return ALL_AGENTS.filter((agent) => AGENTS[agent].class === "additional");
-}
-
-/** Returns true if the agent uses the canonical layout at both scopes. */
-export function isUniversalAgent(agent: AgentTarget): boolean {
-	return AGENTS[agent].class === "universal";
 }
 
 /**

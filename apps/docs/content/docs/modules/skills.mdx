@@ -66,7 +66,7 @@ project: .agents/skills/<name>
 global:  ~/.agents/skills/<name>
 ```
 
-Universal targets share those directories: amp, cline, codex, cursor, gemini-cli, github-copilot, kimi-cli, opencode, pi, replit, warp, and zed. Additional targets use agent-specific locations and are found through a non-executing `PATH` lookup.
+Universal targets share those directories: amp, augment, cline, codex, command-code, crush, cursor, devin, droid, gemini-cli, github-copilot, goose, junie, kilo, kimi-code-cli, mistral-vibe, opencode, openclaw, openhands, pi, pochi, qwen-code, replit, warp, xum, zed, and zencoder. Additional targets (adal, antigravity, claude-code, codebuddy, cortex, kiro-cli, kode, qoder, trae, and trae-cn) use agent-specific locations and are found through a non-executing `PATH` lookup.
 
 When the working directory is the home directory, project scope becomes global scope. Result objects include the effective scope.
 
@@ -86,7 +86,7 @@ await uninstallSkill({ name: "my-cli" });
 
 <auto-type-table path="../../../../../packages/skills/src/types.ts" name="UninstallSkillOptions" />
 
-`detectInstalledAgents()`, `getUniversalAgents()`, `getAdditionalAgents()`, and `isUniversalAgent()` expose the agent catalog. The [package entry point](https://github.com/chenxin-yan/crust/blob/main/packages/skills/src/index.ts) lists every exported type.
+`detectInstalledAgents()` and `getUniversalAgents()` expose the agent catalog. The [package entry point](https://github.com/chenxin-yan/crust/blob/main/packages/skills/src/index.ts) lists every exported type.
 
 ## Command sections
 
