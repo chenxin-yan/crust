@@ -54,7 +54,7 @@ A command becomes a tool when it is visible (not `hidden`, nor under a hidden co
 
 The tool name is the canonical command path joined with `_` (`deploy api` becomes `deploy_api`); the root uses its own name, and aliases never become tools. That join is not injective, so `toolsFromSnapshot` throws when two commands map to one name (`a_b` and `a b`, or the root and a subcommand named after it), naming both paths. It also throws when a name falls outside the MCP tool-name rule (1–128 characters of `A-Z a-z 0-9 _ - .`).
 
-Each tool's `inputSchema` is one flat object built from the snapshot:
+Each tool's `inputSchema` is one flat object built from the snapshot by [`commandInputSchema()`](/docs/modules/core#tooling-subpath), and call arguments go back through `parseCommandInput()`:
 
 | Definition                        | Schema                                                                                                |
 | --------------------------------- | ----------------------------------------------------------------------------------------------------- |

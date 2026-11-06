@@ -1,22 +1,16 @@
-import type { ArgSnapshot, CommandSnapshot, FlagSnapshot, ValueType } from "@crustjs/core";
-import { isListed } from "@crustjs/core/tooling";
+import type { CommandSnapshot } from "@crustjs/core";
+import {
+	type CommandInputPropertySchema,
+	type CommandInputSchema,
+	commandInputSchema,
+	isListed,
+} from "@crustjs/core/tooling";
 
 /** JSON Schema fragment for one tool input property. */
-export interface McpPropertySchema {
-	readonly type?: "string" | "number" | "boolean" | "array";
-	readonly description?: string;
-	readonly format?: "uri";
-	readonly enum?: readonly string[];
-	readonly items?: McpPropertySchema;
-	readonly default?: unknown;
-}
+export type McpPropertySchema = CommandInputPropertySchema;
 
 /** JSON Schema object accepted by `tools/list` as a tool's `inputSchema`. */
-export interface McpToolInputSchema {
-	readonly type: "object";
-	readonly properties: Readonly<Record<string, McpPropertySchema>>;
-	readonly required?: readonly string[];
-}
+export type McpToolInputSchema = CommandInputSchema;
 
 /** One command exposed as an MCP tool. */
 export interface McpTool {
@@ -26,9 +20,9 @@ export interface McpTool {
 	readonly inputSchema: McpToolInputSchema;
 	/** Canonical command path for `app.run()`; `[]` is the root. */
 	readonly path: readonly string[];
-	/** Arg and flag names declared as `type: "url"`; the server turns their strings into `URL`s. */
+	/** Arg and flag names declared as `type: "url"`; their strings become `URL`s before `run()`. */
 	readonly urlFields: readonly string[];
-	/** Arg names, so the server can split the flat tool input back into `args` and `flags`. */
+	/** Arg names; every other input property except `raw` is a flag. */
 	readonly argNames: readonly string[];
 }
 
@@ -39,60 +33,9 @@ export interface McpToolsOptions {
 
 /** Name of the command `mcpExtension` contributes; never exposed as a tool. */
 export const MCP_COMMAND_NAME = "mcp";
-/** Passthrough values land here and reach the action as `rawArgs`. */
-export const RAW_PROPERTY = "raw";
 
 /** MCP specification 2025-11-25, "Tool Names". */
 const TOOL_NAME_PATTERN = /^[A-Za-z0-9_.-]{1,128}$/;
-
-function valueSchema(
-	type: ValueType | undefined,
-	choices: readonly string[] | undefined,
-): McpPropertySchema {
-	if (choices) return { type: "string", enum: [...choices] };
-	switch (type) {
-		case "json":
-			return {};
-		case "url":
-			return { type: "string", format: "uri" };
-		case "number":
-			return { type: "number" };
-		case "boolean":
-			return { type: "boolean" };
-		case "string":
-		case "path":
-		// Only schema-backed args omit `type`; schema flags and custom `parse` are
-		// indistinguishable from core definitions and map by their token type.
-		case undefined:
-			return { type: "string" };
-	}
-}
-
-function propertySchema(def: ArgSnapshot | FlagSnapshot, list: boolean): McpPropertySchema {
-	const value = valueSchema(def.type, def.choices);
-	const schema: McpPropertySchema = list ? { type: "array", items: value } : value;
-	let defaultValue: unknown;
-	if (def.default !== undefined) {
-		try {
-			defaultValue = JSON.parse(
-				JSON.stringify(def.default, (_key, entry) => {
-					// JSON would publish a non-finite number as `null`, misstating the default.
-					if (entry === Infinity || entry === -Infinity || Number.isNaN(entry)) {
-						throw new TypeError("Non-finite number");
-					}
-					return entry;
-				}),
-			);
-		} catch {
-			// Advisory metadata must not break discovery; run() still owns the actual default.
-		}
-	}
-	return {
-		...schema,
-		...(def.description === undefined ? {} : { description: def.description }),
-		...(defaultValue === undefined ? {} : { default: defaultValue }),
-	};
-}
 
 function formatPath(path: readonly string[]): string {
 	return path.length === 0 ? "<root>" : path.join(" ");
@@ -101,36 +44,14 @@ function formatPath(path: readonly string[]): string {
 type ToolInput = Pick<McpTool, "inputSchema" | "urlFields" | "argNames">;
 
 function toolInput(command: CommandSnapshot, path: readonly string[]): ToolInput {
-	// Null prototype: core allows definitions named `constructor` or `__proto__`,
-	// which `in` and plain assignment would confuse with Object.prototype.
-	const properties: Record<string, McpPropertySchema> = Object.create(null);
-	const required: string[] = [];
-	const urlFields: string[] = [];
-	const claim = (name: string, def: ArgSnapshot | FlagSnapshot, list: boolean) => {
-		if (Object.hasOwn(properties, name) || name === RAW_PROPERTY) {
-			throw new Error(
-				`Command "${formatPath(path)}" declares "${name}" more than once across args, flags, and "${RAW_PROPERTY}"; MCP tool input is one flat object`,
-			);
-		}
-		properties[name] = propertySchema(def, list);
-		if (def.required === true) required.push(name);
-		if (def.type === "url") urlFields.push(name);
-	};
-	for (const arg of command.args) claim(arg.name, arg, arg.variadic === true);
-	for (const [name, flag] of Object.entries(command.flags)) {
-		claim(name, flag, flag.multiple === true);
-	}
-	properties[RAW_PROPERTY] = {
-		type: "array",
-		items: { type: "string" },
-		description: "Passthrough values, received as `rawArgs`; they never fill arguments",
-	};
 	return {
-		inputSchema:
-			required.length === 0
-				? { type: "object", properties }
-				: { type: "object", properties, required },
-		urlFields,
+		inputSchema: commandInputSchema(command, path),
+		urlFields: [
+			...command.args.filter((arg) => arg.type === "url").map((arg) => arg.name),
+			...Object.entries(command.flags)
+				.filter(([, flag]) => flag.type === "url")
+				.map(([name]) => name),
+		],
 		argNames: command.args.map((arg) => arg.name),
 	};
 }
