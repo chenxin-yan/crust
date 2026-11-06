@@ -85,8 +85,9 @@ function formatPath(path: readonly string[]): string {
  * name (variadic and `multiple` as arrays), plus {@link RAW_INPUT_PROPERTY}.
  * Mapped from the snapshot's declared types, so Standard Schema and custom
  * `parse` definitions appear as their token type, and only declared `required`
- * definitions are required. Defaults are JSON copies; unserializable ones are
- * omitted. `path` names the command in the error thrown when an arg and a flag
+ * definitions are required. Defaults are `JSON.stringify` copies (`URL`s become
+ * strings; nested `undefined`, functions, and symbols are dropped); defaults
+ * that fail to serialize or hold non-finite numbers are omitted. `path` names the command in the error thrown when an arg and a flag
  * share a name, or a definition is named `raw`.
  */
 export function commandInputSchema(

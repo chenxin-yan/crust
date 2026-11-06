@@ -126,6 +126,16 @@ describe("commandInputSchema", () => {
 		}
 	});
 
+	it("advertises JSON.stringify copies of defaults, dropping nested entries JSON cannot hold", async () => {
+		const app = new Crust("cli")
+			.flags({
+				config: { type: "json", default: { keep: 1, gone: undefined, fn: noop } },
+			})
+			.action(noop);
+		const { properties } = commandInputSchema(await app.snapshot(), []);
+		expect(properties.config?.default).toEqual({ keep: 1 });
+	});
+
 	it("maps schema and custom-parse definitions by token type; only declared required is required", async () => {
 		const app = new Crust("cli").add(
 			defineCommand("check", (c) =>

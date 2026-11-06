@@ -68,7 +68,7 @@ Each tool's `inputSchema` is one flat object built from the snapshot by [`comman
 | Standard Schema or custom `parse` | The declared token type (`string` for schema args); the command validates and transforms when it runs |
 | every tool                        | `raw: { type: "array", items: { type: "string" } }`, delivered to the action as `rawArgs`             |
 
-Snapshots carry no schemas or `parse` functions, so schema-owned requiredness is invisible: schema-backed definitions are advertised as optional, while a custom `parse` definition keeps its declared `required`. An arg and a flag with the same name, or a definition named `raw`, are rejected. Defaults are advertised as JSON copies; unserializable defaults are omitted from the manifest but still apply when the command runs.
+Snapshots carry no schemas or `parse` functions, so schema-owned requiredness is invisible: schema-backed definitions are advertised as optional, while a custom `parse` definition keeps its declared `required`. An arg and a flag with the same name, or a definition named `raw`, are rejected. Defaults are advertised as `JSON.stringify` copies, so `URL`s become strings and nested `undefined`, functions, and symbols are dropped; defaults that fail to serialize or hold non-finite numbers are omitted from the manifest. Either way, `run()` still applies the declared default.
 
 ## Results
 
