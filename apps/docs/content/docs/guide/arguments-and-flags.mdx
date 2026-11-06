@@ -212,6 +212,8 @@ For a value-taking flag, attach a dash-leading value with `=` so it is not mista
 ```sh
 $ serve --tag=-nightly
 targets=undefined runtime=bun tag=-nightly
+$ serve --tag -nightly
+Error: Missing value for flag "--tag"; to pass a value starting with "-", write --tag=<value>
 ```
 
 ### Reuse across commands

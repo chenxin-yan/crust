@@ -28,6 +28,8 @@ export interface ValidationErrorDetails {
 /** `details.reason` values Core sets on `PARSE` errors. */
 export type ParseErrorReason =
 	| "unknown-flag"
+	| "missing-value"
+	| "unexpected-value"
 	| "unknown-argument"
 	| "positional-gap"
 	| "flag-not-forwardable";
@@ -74,7 +76,8 @@ export interface ParseErrorDetails {
 	/**
 	 * The offending flag. For `"unknown-flag"` it is the supplied name without
 	 * leading dashes (`--nope` and `-x` report `"nope"` and `"x"`); for
-	 * `"flag-not-forwardable"` it is the argv token as written.
+	 * `"missing-value"` and `"unexpected-value"` it is the canonical flag name;
+	 * for `"flag-not-forwardable"` it is the argv token as written.
 	 */
 	readonly flag?: string;
 	/** The offending argument name, for `"positional-gap"` and `"unknown-argument"`. */

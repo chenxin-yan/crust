@@ -43,7 +43,7 @@ Flag definitions set `reason: "integer-like-name"` for an integer-like flag name
 
 <auto-type-table path="../../../../../packages/core/src/errors.ts" name="ParseErrorDetails" />
 
-`reason` is typed as Core's known values (`ParseErrorReason`) but stays open to any string, since other packages add their own.
+`reason` is typed as Core's known values (`ParseErrorReason`) but stays open to any string, since other packages add their own. These argv flag errors set `flag` and `reason`: `unknown-flag` for an unrecognized flag, `missing-value` when a value-taking flag has no value (`Missing value for flag "--count"`), and `unexpected-value` when a boolean flag is given one with `=` (`Flag "--force" does not take a value`). Negating a `noNegate` boolean (`--no-quiet`) is a `PARSE` error without details.
 
 ### `ValidationErrorDetails`
 

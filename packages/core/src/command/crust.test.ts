@@ -1168,7 +1168,9 @@ describe("Extension named hooks", () => {
 			const { execute, seen } = deferringApp();
 			expect(await execute(["--port", "--stop"])).toMatchObject({
 				exitCode: 1,
-				stderr: expect.stringContaining("argument is ambiguous"),
+				stderr: expect.stringContaining(
+					'Missing value for flag "--port"; to pass a value starting with "-", write --port=<value>',
+				),
 			});
 			expect(await execute(["--nope", "--stop"])).toMatchObject({
 				exitCode: 1,

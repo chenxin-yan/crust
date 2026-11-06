@@ -444,6 +444,7 @@ function resolveArgs<A extends ArgsDef, V>(
  * (an alias is a perfect synonym), but a boolean that
  * opted out via `noNegate` rejects every negated spelling. Without this
  * pre-scan, `util.parseArgs` (`allowNegative`) would silently accept it.
+ * Also rejects `--no-<spelling>=value` on negatable booleans.
  */
 function validateNoNegateUsage(argv: string[], spellings: ReadonlyMap<string, FlagSpelling>): void {
 	for (const arg of argv) {
@@ -456,13 +457,26 @@ function validateNoNegateUsage(argv: string[], spellings: ReadonlyMap<string, Fl
 				? arg.slice("--no-".length)
 				: arg.slice("--no-".length, assignmentIndex);
 		const spelling = spellings.get(rawName);
-		if (!spelling || spelling.def.type !== "boolean" || spelling.negatable) continue;
+		// `--no-` applies to long spellings only; a short name after it stays an unknown flag.
+		if (!spelling || spelling.kind === "short" || spelling.def.type !== "boolean") continue;
+		// Checked here because runtimes disagree: Node reports an invalid value, Bun an unknown option.
+		if (spelling.negatable) {
+			if (assignmentIndex !== -1) throw unexpectedValue(spelling.canonicalName);
+			continue;
+		}
 
 		throw new CrustError(
 			"PARSE",
 			`Flag "--${spelling.canonicalName}" does not support negation ("--no-${rawName}")`,
 		);
 	}
+}
+
+function unexpectedValue(flag: string): CrustError {
+	return new CrustError("PARSE", `Flag "--${flag}" does not take a value`, {
+		flag,
+		reason: "unexpected-value",
+	});
 }
 
 function tokenizeArgv(command: CommandNode, argv: string[]) {
@@ -496,6 +510,26 @@ function tokenizeArgv(command: CommandNode, argv: string[]) {
 				error.code === "ERR_PARSE_ARGS_INVALID_OPTION_VALUE" &&
 				error.message.length > 0
 			) {
+				// Node and Bun name the option as `-c, --count <value>`, `--count`, or `-c`.
+				const invalid =
+					/^Option '(?:-., )?-{1,2}(.+?)(?: <value>)?' (argument missing|argument is ambiguous|does not take an argument)/.exec(
+						error.message,
+					);
+				if (invalid) {
+					const [, spelling = "", problem] = invalid;
+					const flag = spellings.get(spelling)?.canonicalName ?? spelling;
+					if (problem === "does not take an argument") {
+						throw unexpectedValue(flag).withCause(error);
+					}
+					const hint =
+						problem === "argument is ambiguous"
+							? `; to pass a value starting with "-", write --${flag}=<value>`
+							: "";
+					throw new CrustError("PARSE", `Missing value for flag "--${flag}"${hint}`, {
+						flag,
+						reason: "missing-value",
+					}).withCause(error);
+				}
 				throw new CrustError("PARSE", error.message).withCause(error);
 			}
 		}
