@@ -46,4 +46,10 @@ describe("@crustjs/core startup imports", () => {
 			[],
 		);
 	});
+
+	// Loading `node:util` costs milliseconds on Bun; argv tokenizing is Crust's own.
+	it("never loads node:util", () => {
+		const { files } = staticGraph(resolve(dist, "index.js"));
+		expect(files.filter((file) => readFileSync(file, "utf8").includes('"node:util"'))).toEqual([]);
+	});
 });

@@ -265,7 +265,7 @@ export type ArgsDef = readonly ArgDef[];
 interface FlagDefBase {
 	/** Human-readable description for help text */
 	description?: string;
-	/** Single-character short alias (e.g. `"v"` → `-v`) */
+	/** Single-character (one code point) short alias (e.g. `"v"` → `-v`) */
 	short?: string;
 	/** Additional aliases (e.g. `["out"]` → `--out`); one-character aliases also accept one dash. */
 	aliases?: readonly string[];

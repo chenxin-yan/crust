@@ -207,7 +207,8 @@ export function normalizeFlag<const D extends FlagDef>(name: string | undefined,
 			reason: "flag-collision",
 		});
 	}
-	if (def.short !== undefined && def.short.length !== 1) {
+	// One code point, as the types count it: an astral short is two UTF-16 units.
+	if (def.short !== undefined && !/^.$/su.test(def.short)) {
 		throw new CrustError("DEFINITION", `${label} short "${def.short}" must be one character`, {
 			subject: "flag",
 			...named,
