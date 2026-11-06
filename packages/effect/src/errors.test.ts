@@ -6,6 +6,7 @@ import {
 	CrustCommandNotFoundError,
 	CrustDefinitionError,
 	CrustEnvError,
+	CrustOutputError,
 	CrustParseError,
 	type CrustTaggedError,
 	CrustValidationError,
@@ -59,6 +60,13 @@ describe("tagged errors", () => {
 			}),
 			class: CrustEnvError,
 			tag: "CrustEnvError",
+		},
+		{
+			error: new CrustError("OUTPUT", "o", {
+				issues: [{ message: "expected number", path: "id" }],
+			}),
+			class: CrustOutputError,
+			tag: "CrustOutputError",
 		},
 	];
 
