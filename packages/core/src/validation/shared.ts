@@ -109,7 +109,7 @@ export type EmptyLiteralNameBrand<Name extends string, Err> =
  * Brand a definition whose custom parser can return a Promise — parse results
  * are consumed synchronously during argv parsing. `Extract` keeps the check
  * union-aware (a sometimes-async `cond ? Promise.resolve(x) : x` parser is
- * caught) while `any`-returning parsers stay unbranded.
+ * caught). An `any` return is branded too: it is no proof the parser is synchronous.
  */
 type AsyncParseBrand<T> = T extends { parse?: (...args: never[]) => infer R }
 	? Extract<R, Promise<unknown>> extends never
@@ -150,7 +150,8 @@ export type SpacedToken =
 	| `${string}\v${string}`
 	| `${string}\f${string}`;
 
-// ECMAScript String.trim whitespace, matching runtime `trim()`-based validation.
+// ECMAScript String.trim whitespace, matching runtime `trim()`-based validation. Runtime calls the
+// native `trim()`, so this list cannot derive from it; `definition-parity.test.ts` pins the two.
 export type TrimWhitespace =
 	| " "
 	| "\t"
