@@ -64,6 +64,9 @@ async function runWithEarlyClose(runtime: string, closed: "stdout" | "stderr") {
 
 const runtimes = [bun, ...(which("node") ? ["node"] : [])];
 
+// The fd writer and its guarantees apply outside Windows; Windows keeps the stream writer.
+const fdWriter = process.platform !== "win32";
+
 const run = (runtime: string, source: string) =>
 	spawnSync(runtime, ["--input-type=module", "--eval", source], {
 		encoding: "utf8",
@@ -71,10 +74,12 @@ const run = (runtime: string, source: string) =>
 	});
 
 describe("default IO", () => {
-	it("keeps a large write ordered before a later console.log after stdout is probed (bun)", () => {
-		const { stdout, status } = run(
-			bun,
-			`${importCore("src/index.ts")}void process.stdout.isTTY;
+	it.runIf(fdWriter)(
+		"keeps a large write ordered before a later console.log after stdout is probed (bun)",
+		() => {
+			const { stdout, status } = run(
+				bun,
+				`${importCore("src/index.ts")}void process.stdout.isTTY;
 await new Crust("pipe-cli")
 	.action(({ stdout }) => {
 		stdout("x".repeat(${LINE_LENGTH}));
@@ -82,16 +87,19 @@ await new Crust("pipe-cli")
 	})
 	.execute({ argv: [] });
 `,
-		);
-		expect(status).toBe(0);
-		expect(stdout.indexOf("B")).toBe(LINE_LENGTH + 1);
-		expect(stdout).toBe(`${"x".repeat(LINE_LENGTH)}\nB\n`);
-	});
+			);
+			expect(status).toBe(0);
+			expect(stdout.indexOf("B")).toBe(LINE_LENGTH + 1);
+			expect(stdout).toBe(`${"x".repeat(LINE_LENGTH)}\nB\n`);
+		},
+	);
 
-	it("never materializes process.stdout or process.stderr on a plain run (node)", () => {
-		const { stdout, stderr, status } = run(
-			"node",
-			`import { writeSync } from "node:fs";
+	it.runIf(fdWriter)(
+		"never materializes process.stdout or process.stderr on a plain run (node)",
+		() => {
+			const { stdout, stderr, status } = run(
+				"node",
+				`import { writeSync } from "node:fs";
 const touched = [];
 for (const name of ["stdout", "stderr"]) {
 	const { get, enumerable } = Object.getOwnPropertyDescriptor(process, name);
@@ -113,11 +121,12 @@ await new Crust("pipe-cli")
 	.execute({ argv: [] });
 writeSync(1, JSON.stringify(touched));
 `,
-		);
-		expect(stderr).toBe("err\n");
-		expect(stdout).toBe("out\n[]");
-		expect(status).toBe(0);
-	});
+			);
+			expect(stderr).toBe("err\n");
+			expect(stdout).toBe("out\n[]");
+			expect(status).toBe(0);
+		},
+	);
 
 	it("delivers output larger than the pipe buffer to a piped parent", () => {
 		const {
@@ -134,10 +143,12 @@ writeSync(1, JSON.stringify(touched));
 	});
 
 	for (const runtime of runtimes) {
-		it(`delivers a large write before an immediate process.exit() (${runtime})`, () => {
-			const { stdout, stderr, status } = run(
-				runtime,
-				`${importCore("dist/index.js")}void process.stdout.isTTY;
+		it.runIf(fdWriter)(
+			`delivers a large write before an immediate process.exit() (${runtime})`,
+			() => {
+				const { stdout, stderr, status } = run(
+					runtime,
+					`${importCore("dist/index.js")}void process.stdout.isTTY;
 await new Crust("pipe-cli")
 	.action(({ stdout, stderr }) => {
 		stdout("x".repeat(${LINE_LENGTH}));
@@ -146,13 +157,14 @@ await new Crust("pipe-cli")
 	})
 	.execute({ argv: [] });
 `,
-			);
-			expect(status).toBe(0);
-			expect(stdout.length).toBe(LINE_LENGTH + 1);
-			expect(stderr.length).toBe(LINE_LENGTH + 1);
-			expect(stdout).toBe(`${"x".repeat(LINE_LENGTH)}\n`);
-			expect(stderr).toBe(`${"y".repeat(LINE_LENGTH)}\n`);
-		});
+				);
+				expect(status).toBe(0);
+				expect(stdout.length).toBe(LINE_LENGTH + 1);
+				expect(stderr.length).toBe(LINE_LENGTH + 1);
+				expect(stdout).toBe(`${"x".repeat(LINE_LENGTH)}\n`);
+				expect(stderr).toBe(`${"y".repeat(LINE_LENGTH)}\n`);
+			},
+		);
 
 		for (const closed of ["stdout", "stderr"] as const) {
 			it(`survives a consumer closing ${closed} early (${runtime})`, async () => {

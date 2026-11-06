@@ -1,6 +1,5 @@
-import { isErrnoException } from "@crustjs/utils/error";
 import { isSignalIgnored } from "@crustjs/utils/signals";
-import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
+import { withAmbientTerminalIO, writeProcessOutput } from "@crustjs/utils/terminal";
 
 import { validateContextAvailability } from "../api/context.ts";
 import {
@@ -44,75 +43,10 @@ import { commandNotFound, resolveCommand, type CommandRoute } from "./router.ts"
 import { createSnapshotProjector, type CommandSnapshot } from "./snapshot.ts";
 import type { RunOutcome } from "./typed-run.ts";
 
-const ignoreStreamError = () => {};
-
-/**
- * Line-oriented write to a process stream, with `console.log`'s error tolerance: a
- * downstream that closed early (`cli | head`) surfaces as EPIPE, synchronously or as a
- * later `error` event, and must not crash the CLI. Mirrors Node's Console
- * (`ignoreErrors: true`): a noop listener absorbs the event when nobody else listens.
- */
-function writeStreamLine(stream: NodeJS.WriteStream, text: string): void {
-	const absorb = () => {
-		if (stream.listenerCount("error") === 0) stream.once("error", ignoreStreamError);
-	};
-	try {
-		absorb();
-		stream.write(`${text}\n`, (error) => {
-			if (error) absorb();
-		});
-	} catch {
-		// Synchronous write failure on an already-destroyed stream.
-	} finally {
-		// Async failures install their own one-shot listener in the write callback.
-		stream.removeListener("error", ignoreStreamError);
-	}
-}
-
-const retryPause = new Int32Array(new SharedArrayBuffer(4));
-const closedFds = new Set<number>();
-
-/**
- * Synchronous line write to a file descriptor. Returning only once every byte is written
- * keeps output intact through an immediate `process.exit()`. It does not flush what user
- * code queued on `process.stdout` first (`process.stdout.write`, Node's `console.log`), so
- * Crust's line can land inside such output once a pipe is full. `EAGAIN` means a non-blocking
- * pipe is full (Bun makes fd 1 non-blocking once anything touches `process.stdout`): sleep
- * 1 ms and retry rather than drop or reorder. Any other error (`EPIPE` from `cli | head`)
- * closes the fd for later writes silently, like `console.log`.
- */
-function writeFdLine(fd: 1 | 2, text: string): void {
-	if (closedFds.has(fd)) return;
-	const { writeSync } = process.getBuiltinModule("node:fs");
-	const buffer = Buffer.from(`${text}\n`);
-	let offset = 0;
-	while (offset < buffer.length) {
-		try {
-			offset += writeSync(fd, buffer, offset);
-		} catch (error) {
-			if (isErrnoException(error) && error.code === "EAGAIN") Atomics.wait(retryPause, 0, 0, 1);
-			else return void closedFds.add(fd);
-		}
-	}
-}
-
-/**
- * Terminal defaults. Outside Windows, fd writes skip creating `process.stdout`/`process.stderr`
- * (which loads `node:stream`) and avoid the stream writer's async tail, which a
- * `process.exit()` truncates at the pipe buffer. Windows keeps the stream writer: its
- * console handling transcodes text, while raw bytes to a legacy console can garble
- * non-ASCII output.
- */
-const DEFAULT_IO: InvocationIO =
-	process.platform === "win32"
-		? {
-				stdout: (text) => writeStreamLine(process.stdout, text),
-				stderr: (text) => writeStreamLine(process.stderr, text),
-			}
-		: {
-				stdout: (text) => writeFdLine(1, text),
-				stderr: (text) => writeFdLine(2, text),
-			};
+const DEFAULT_IO: InvocationIO = {
+	stdout: (text) => writeProcessOutput(1, `${text}\n`),
+	stderr: (text) => writeProcessOutput(2, `${text}\n`),
+};
 
 /** One cloned, extension-applied, frozen command tree; children are prepared on first access. */
 interface PreparedInvocation {
@@ -703,7 +637,7 @@ export async function executeInvocation(
 			await writeSnapshotProtocol(node, snapshotPath, materializeCommandDefinition);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			console.error(message);
+			io.stderr(message);
 			return process.exit(1);
 		}
 		return process.exit(0);

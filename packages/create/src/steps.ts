@@ -2,9 +2,10 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 
 import { runProcess, which } from "@crustjs/utils/process";
+import { writeProcessOutput } from "@crustjs/utils/terminal";
 
 import { detectPackageManager } from "./detect.ts";
-import type { PostScaffoldStep } from "./types.ts";
+import type { PostScaffoldStep, RunStepsOptions } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Post-Scaffold Step Runner
@@ -19,6 +20,7 @@ import type { PostScaffoldStep } from "./types.ts";
  *
  * @param steps - Array of {@link PostScaffoldStep} objects to execute.
  * @param cwd - The working directory for steps (typically the scaffold dest).
+ * @param options - Where non-fatal warnings go; see {@link RunStepsOptions}.
  *
  * @example
  * ```ts
@@ -32,7 +34,12 @@ import type { PostScaffoldStep } from "./types.ts";
  * );
  * ```
  */
-export async function runSteps(steps: readonly PostScaffoldStep[], cwd: string): Promise<void> {
+export async function runSteps(
+	steps: readonly PostScaffoldStep[],
+	cwd: string,
+	options: RunStepsOptions = {},
+): Promise<void> {
+	const stderr = options.stderr ?? ((text) => writeProcessOutput(2, `${text}\n`));
 	for (const step of steps) {
 		switch (step.type) {
 			case "install":
@@ -42,7 +49,7 @@ export async function runSteps(steps: readonly PostScaffoldStep[], cwd: string):
 				await runGitInit(cwd, step.commit);
 				break;
 			case "open-editor":
-				await runOpenEditor(cwd);
+				await runOpenEditor(cwd, stderr);
 				break;
 			case "command":
 				await runCommand(step.cmd, step.cwd ?? cwd);
@@ -97,9 +104,9 @@ async function runGitInit(cwd: string, commit?: string): Promise<void> {
  * Open the project directory in the user's preferred editor.
  *
  * Checks `$EDITOR` first, then falls back to `code` (VS Code).
- * Does not throw if the editor is not found — logs a warning instead.
+ * Does not throw if the editor is not found — reports a warning instead.
  */
-async function runOpenEditor(cwd: string): Promise<void> {
+async function runOpenEditor(cwd: string, stderr: (text: string) => void): Promise<void> {
 	const editor = process.env.EDITOR || "code";
 
 	try {
@@ -121,10 +128,10 @@ async function runOpenEditor(cwd: string): Promise<void> {
 
 		// If it exited immediately with a non-zero code, the editor likely wasn't found
 		if (raceResult.kind === "exited" && raceResult.code !== 0) {
-			console.warn(`Warning: could not open editor "${editor}" (exit code ${raceResult.code})`);
+			stderr(`Warning: could not open editor "${editor}" (exit code ${raceResult.code})`);
 		}
 	} catch {
-		console.warn(`Warning: could not open editor "${editor}"`);
+		stderr(`Warning: could not open editor "${editor}"`);
 	}
 }
 

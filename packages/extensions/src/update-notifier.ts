@@ -203,8 +203,8 @@ export interface UpdateNotifierExtension {
  *
  * const app = new Crust("my-cli", { description: "My awesome CLI", version: "1.2.3" })
  *   .extend(updateNotifier({ packageName: "my-cli" }))
- *   .action(() => {
- *     console.log("Hello!");
+ *   .action(({ stdout }) => {
+ *     stdout("Hello!");
  *   });
  *
  * await app.execute();

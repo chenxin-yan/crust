@@ -97,7 +97,7 @@ export const app = new Crust("create-crust", {
 		type: "string",
 		description: "Project directory to scaffold into",
 	})
-	.action(async ({ args, flags }) => {
+	.action(async ({ args, flags, stdout, stderr }) => {
 		// ── Collect all prompts before any file operations ──────────────
 		// This ensures a mid-prompt Ctrl+C won't leave partially scaffolded files.
 
@@ -130,7 +130,7 @@ export const app = new Crust("create-crust", {
 				initial: flags.overwrite,
 			});
 			if (!overwrite) {
-				console.log("Aborted.");
+				stdout("Aborted.");
 				return;
 			}
 		}
@@ -222,24 +222,27 @@ export const app = new Crust("create-crust", {
 		});
 
 		if (installDeps) {
-			await runSteps([{ type: "install" }], resolvedDir);
+			await runSteps([{ type: "install" }], resolvedDir, { stderr });
 		}
 
 		if (initGit) {
 			await spinner({
 				message: "Initializing git repository...",
-				task: () => runSteps([{ type: "git-init", commit: "chore: initial commit" }], resolvedDir),
+				task: () =>
+					runSteps([{ type: "git-init", commit: "chore: initial commit" }], resolvedDir, {
+						stderr,
+					}),
 			});
 		}
 
-		console.log(`\nCreated ${name}!\n`);
-		console.log("Next steps:");
+		stdout(`\nCreated ${name}!\n`);
+		stdout("Next steps:");
 		if (!isCwd) {
 			const cdTarget =
 				isAbsolute(targetDir) || targetDir.startsWith(".") ? targetDir : `./${targetDir}`;
-			console.log(`  cd ${cdTarget}`);
+			stdout(`  cd ${cdTarget}`);
 		}
-		if (!installDeps) console.log(`  ${context.install}`);
-		console.log(`  ${context.run} dev`);
-		console.log(`  ${context.run} build`);
+		if (!installDeps) stdout(`  ${context.install}`);
+		stdout(`  ${context.run} dev`);
+		stdout(`  ${context.run} build`);
 	});

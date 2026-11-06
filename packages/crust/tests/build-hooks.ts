@@ -17,7 +17,6 @@ export async function runBuildHooks(
 	const outDir = join(dir, "out");
 	// oxlint-disable-next-line typescript/unbound-method -- restored unchanged after the stub.
 	const originalExit = process.exit;
-	const originalConsoleError = console.error;
 	const originalEnv = [SNAPSHOT_PATH_ENV, BUILD_OUT_DIR_ENV].map(
 		(key) => [key, process.env[key]] as const,
 	);
@@ -29,12 +28,16 @@ export async function runBuildHooks(
 	process.exit = () => {
 		throw exited;
 	};
-	console.error = (message: string) => {
-		error = message;
-	};
 	try {
 		try {
-			await app.execute({ argv: [] });
+			await app.execute({
+				argv: [],
+				io: {
+					stderr: (message) => {
+						error = message;
+					},
+				},
+			});
 		} catch (thrown) {
 			if (thrown !== exited) throw thrown;
 		}
@@ -47,7 +50,6 @@ export async function runBuildHooks(
 		return { files };
 	} finally {
 		process.exit = originalExit;
-		console.error = originalConsoleError;
 		for (const [key, value] of originalEnv) {
 			if (value === undefined) delete process.env[key];
 			else process.env[key] = value;

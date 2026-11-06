@@ -16,6 +16,8 @@ $ bun src/cli.ts
 Hello!
 ```
 
+Print through the action's `stdout(text)` and `stderr(text)` rather than `console.log` or `process.stdout.write`. Crust owns only what goes through them: [`run()`](/docs/api/crust#runpath-input-options), [tests](/docs/guide/testing), and [MCP tools](/docs/modules/mcp) capture it, and it stays in order with Crust's own output, such as rendered errors. Direct writes bypass all of that.
+
 Choose how to add subcommands based on your app's size and how you want to organize and reuse its commands:
 
 - **Define inline with `.command()`** for small CLIs or short subcommands used only by this app.

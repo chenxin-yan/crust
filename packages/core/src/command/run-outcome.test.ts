@@ -11,7 +11,12 @@ import {
 
 describe("captured run outcomes", () => {
 	it("captures quietly, preserving callback payloads and result", async () => {
+		// Default output writes to fd 1/2, or through the process streams on Windows.
 		const writeSync = vi.spyOn(process.getBuiltinModule("node:fs"), "writeSync");
+		const streamWrites =
+			process.platform === "win32"
+				? [vi.spyOn(process.stdout, "write"), vi.spyOn(process.stderr, "write")]
+				: [];
 		try {
 			const result = await new Crust("app")
 				.action(({ stdout, stderr }) => {
@@ -28,8 +33,9 @@ describe("captured run outcomes", () => {
 				stderr: "diagnostic",
 			});
 			expect(writeSync.mock.calls.filter(([fd]) => fd === 1 || fd === 2)).toEqual([]);
+			for (const write of streamWrites) expect(write).not.toHaveBeenCalled();
 		} finally {
-			writeSync.mockRestore();
+			vi.restoreAllMocks();
 		}
 	});
 	it.each([undefined, null, 0, "failure", { identity: true }])(

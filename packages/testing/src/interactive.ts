@@ -35,7 +35,7 @@ export function runInteractive<
 					stdoutLines.push(text);
 				},
 				stderr: (text) => {
-					// Line-oriented like core's console.error default.
+					// Line-oriented like core's default stderr.
 					output.write(`${text}\n`);
 				},
 			})

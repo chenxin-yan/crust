@@ -295,10 +295,10 @@ describe("createMcpServer", () => {
 			]);
 			expect(a.structuredContent).toEqual({ id: "a" });
 			expect(b.structuredContent).toEqual({ id: "b" });
+			expect(writeSync.mock.calls.filter(([fd]) => fd === 1)).toEqual([]);
 		} finally {
 			writeSync.mockRestore();
 		}
-		expect(writeSync.mock.calls.filter(([fd]) => fd === 1)).toEqual([]);
 	});
 });
 

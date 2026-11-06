@@ -96,3 +96,13 @@ export type PostScaffoldStep =
 	 * host shell's semantics, which differ across platforms.
 	 */
 	| { readonly type: "command"; readonly cmd: string; readonly cwd?: string };
+
+/** Options for {@link runSteps}. */
+export interface RunStepsOptions {
+	/**
+	 * Receives non-fatal warnings, one line per call, such as an editor that failed to open.
+	 * Inside a Crust command, pass the action's `stderr`. Defaults to standard error, written
+	 * through the same writer as Core's default `stderr`.
+	 */
+	readonly stderr?: (text: string) => void;
+}

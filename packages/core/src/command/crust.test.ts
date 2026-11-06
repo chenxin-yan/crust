@@ -23,10 +23,25 @@ interface ExecuteReceivedContext {
 }
 
 /**
- * Default IO writes one `text\n` per call straight to fd 1/2; capture each as a line for the
- * mapped fds and pass every other write through. Restore with `vi.restoreAllMocks()`.
+ * Default IO writes one `text\n` per call, straight to fd 1/2 outside Windows and through the
+ * process streams on Windows; capture each as a line for the mapped fds and pass every other
+ * write through. Restore with `vi.restoreAllMocks()`.
  */
 function captureDefaultIO(fds: { 1?: () => string[]; 2?: () => string[] }): void {
+	if (process.platform === "win32") {
+		for (const [fd, stream] of [
+			[1, process.stdout],
+			[2, process.stderr],
+		] as const) {
+			const lines = fds[fd];
+			if (!lines) continue;
+			vi.spyOn(stream, "write").mockImplementation((chunk: string | Uint8Array) => {
+				lines().push(Buffer.from(chunk).toString("utf8").replace(/\n$/, ""));
+				return true;
+			});
+		}
+		return;
+	}
 	const fs = process.getBuiltinModule("node:fs");
 	const writeSync = fs.writeSync;
 	const capture = (fd: number, buffer: Uint8Array, offset?: number) => {

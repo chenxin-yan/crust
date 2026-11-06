@@ -34,7 +34,7 @@ await spinner({ message: "Building", task: async () => build() });
 
 `task` may return a value or a promise; `spinner({ task })` always returns a promise. A failed task prints the error line, then rejects with the task error. Non-TTY output omits animation and cursor-control sequences.
 
-Interactive spinners and progress indicators keep the animated frame on one row: the whole frame (spinner symbol, message, count, and any text a custom theme adds) is cut with `…` at its first line break or where it would reach the terminal's last column. The message is cut first, so `progress()` keeps its count while the symbol and count fit; the final `✓`/`✗` line prints the message in full. Each redraw erases only the spinner's row, so complete lines the task writes to the same terminal, such as `console.log()` output while the spinner draws on stderr, stay on screen after the frame they interrupted. A write without a trailing newline begins on the spinner's row and is erased by the next frame; if it wraps, only its last row is erased. Narrowing a terminal that also reflows the cursor's row can leave the start of the previous frame above the spinner.
+Interactive spinners and progress indicators keep the animated frame on one row: the whole frame (spinner symbol, message, count, and any text a custom theme adds) is cut with `…` at its first line break or where it would reach the terminal's last column. The message is cut first, so `progress()` keeps its count while the symbol and count fit; the final `✓`/`✗` line prints the message in full. Each redraw erases only the spinner's row, so complete lines the task writes to the same terminal, such as the action's `stdout()` lines while the spinner draws on stderr, stay on screen after the frame they interrupted. A write without a trailing newline begins on the spinner's row and is erased by the next frame; if it wraps, only its last row is erased. Narrowing a terminal that also reflows the cursor's row can leave the start of the previous frame above the spinner.
 
 <auto-type-table path="../../../../../packages/progress/src/spinner.ts" name="SpinnerOptions" />
 
@@ -98,7 +98,7 @@ A `ProgressTheme` has `spinner`, `message`, `success`, and `error` style slots. 
 
 <include lang="ts">../../../examples/modules/progress.ts#sink</include>
 
-A per-call `sink` wins over ambient terminal output, which wins over `process.stderr`. `withTerminalIO(io, fn)` takes the same optional `{ input, output }` streams as [`@crustjs/prompts`](/docs/modules/prompts#injecting-io) and shares its ambient scope.
+A per-call `sink` wins over ambient terminal output, which wins over standard error. Standard error is written through the same writer as Core's default `stderr`, so a spinner inside a Command Action stays in order with the action's `stderr()` lines; outside Windows it writes synchronously to file descriptor 2, and patching `process.stderr.write` does not capture it. `withTerminalIO(io, fn)` takes the same optional `{ input, output }` streams as [`@crustjs/prompts`](/docs/modules/prompts#injecting-io) and shares its ambient scope.
 
 ## Non-interactive behavior
 

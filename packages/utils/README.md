@@ -11,4 +11,4 @@ Internal shared utilities for Crust packages
 - `@crustjs/utils/process` — executable lookup and subprocess execution.
 - `@crustjs/utils/source` — source directory resolution.
 - `@crustjs/utils/schema` — Standard Schema types and issue normalization.
-- `@crustjs/utils/terminal` — cross-package ambient terminal IO.
+- `@crustjs/utils/terminal` — cross-package ambient terminal IO and the shared process output writer.
