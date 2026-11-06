@@ -25,6 +25,8 @@ Options:
 
 `help()` owns the recursive `--help` and `-h` flag. It also shows help when the selected command has no Command Action. That fallback runs as a `noAction` hook, after every `preRun` hook, so `my-cli --version` still prints the version on an action-less root whatever the `.extend()` order. Subcommands are listed from their `defineCommand()` metadata without running their recipes, so a command whose recipe throws still appears.
 
+A flag that takes a value shows its type after its spellings, such as `-p, --port <number>`. Boolean flags show none. Choices, defaults, and env variables follow the description. A label too wide for its column widens the column, so descriptions stay aligned.
+
 ## Section consumer
 
 ```ts

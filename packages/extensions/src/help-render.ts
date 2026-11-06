@@ -6,7 +6,7 @@ import {
 	type CommandDocumentation,
 	type UsageSegment,
 } from "@crustjs/core/tooling";
-import { bold, cyan, dim, green, padEnd, yellow } from "@crustjs/style";
+import { bold, cyan, dim, green, padEnd, stringWidth, yellow } from "@crustjs/style";
 
 const FLAG_COLUMN_WIDTH = 28;
 const ARG_COLUMN_WIDTH = 18;
@@ -35,9 +35,11 @@ function formatSection(
 	rows: readonly (readonly [label: string, description: string])[],
 ): string[] {
 	if (rows.length === 0) return [];
+	// A label wider than the column widens it, keeping two spaces before every description.
+	const column = Math.max(width, ...rows.map(([label]) => stringWidth(label) + 1));
 	return [
 		bold(cyan(`${title}:`)),
-		...rows.map(([label, description]) => `  ${padEnd(label, width)} ${description}`.trimEnd()),
+		...rows.map(([label, description]) => `  ${padEnd(label, column)} ${description}`.trimEnd()),
 	];
 }
 
@@ -106,7 +108,7 @@ export function renderHelpText(
 			model.flags.map(
 				(flag) =>
 					[
-						cyan(flag.spellings.join(", ")),
+						cyan(flag.spellings.join(", ") + (flag.type === "boolean" ? "" : ` <${flag.type}>`)),
 						formatDescription(flag.description, flag.default, flag.choices, dim, flag.env?.name),
 					] as const,
 			),

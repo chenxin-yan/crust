@@ -39,7 +39,11 @@ function flagMacro(spelling: string): string {
 	return spelling.startsWith("--") ? `Fl Fl ${spelling.slice(2)}` : `Fl ${spelling.slice(1)}`;
 }
 function flagMacros(flag: DocumentationFlag): string {
-	return flag.spellings.map(flagMacro).join(" , ");
+	const value = flag.type === "boolean" ? "" : ` Ar ${flag.type}`;
+	return flag.spellings.map(flagMacro).join(" , ") + value;
+}
+function flagLabel(flag: DocumentationFlag): string {
+	return flag.spellings.join(", ") + (flag.type === "boolean" ? "" : ` ${flag.type}`);
 }
 function commandLabel(command: CommandDocumentation): string {
 	return command.aliases.length === 0
@@ -108,7 +112,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 	if (model.flags.length > 0) {
 		lines.push(
 			".Sh OPTIONS",
-			`.Bl -tag -width ${Math.max(8, ...model.flags.map((flag) => flag.spellings.join(", ").length))}n`,
+			`.Bl -tag -width ${Math.max(8, ...model.flags.map((flag) => flagLabel(flag).length))}n`,
 		);
 		for (const flag of [...model.flags].sort(byName)) {
 			lines.push(`.It ${flagMacros(flag)}`);
