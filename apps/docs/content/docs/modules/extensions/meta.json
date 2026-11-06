@@ -1,4 +1,13 @@
 {
   "title": "Extensions",
-  "pages": ["help", "version", "completion", "did-you-mean", "no-color", "update-notifier", "json"]
+  "pages": [
+    "help",
+    "version",
+    "completion",
+    "did-you-mean",
+    "no-color",
+    "update-notifier",
+    "json",
+    "input"
+  ]
 }
