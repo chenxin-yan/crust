@@ -383,15 +383,45 @@ describe("parseArgs — strict mode (unknown flags)", () => {
 			}),
 		);
 	});
+});
 
-	it("preserves the flag name when its value is missing", () => {
-		const valued = makeNode({
-			meta: { name: "test" },
-			flags: { output: { type: "string" } },
-		});
+describe("parseArgs — flag value errors", () => {
+	const cmd = makeNode({
+		meta: { name: "test" },
+		flags: {
+			count: { type: "number", short: "c", aliases: ["n"] },
+			name: { type: "string" },
+			force: { type: "boolean", short: "f" },
+			quiet: { type: "boolean", short: "q", noNegate: true },
+		},
+	});
+	const dashHint = (flag: string) =>
+		`Missing value for flag "--${flag}"; to pass a value starting with "-", write --${flag}=<value>`;
 
-		expect(() => parseArgs(valued, ["--output"])).toThrow(
-			expect.objectContaining({ code: "PARSE", message: expect.stringContaining("--output") }),
+	it.each([
+		[["--count"], 'Missing value for flag "--count"', "count", "missing-value"],
+		[["-c"], 'Missing value for flag "--count"', "count", "missing-value"],
+		[["--n"], 'Missing value for flag "--count"', "count", "missing-value"],
+		[["-fc"], 'Missing value for flag "--count"', "count", "missing-value"],
+		[["--name", "-v"], dashHint("name"), "name", "missing-value"],
+		[["--name", "--"], dashHint("name"), "name", "missing-value"],
+		[["-c", "--help"], dashHint("count"), "count", "missing-value"],
+		[["--force=yes"], 'Flag "--force" does not take a value', "force", "unexpected-value"],
+		[["--no-force=yes"], 'Flag "--force" does not take a value', "force", "unexpected-value"],
+	])("reports %j in Crust's wording", (argv, message, flag, reason) => {
+		expect(() => parseArgs(cmd, argv)).toThrow(
+			expect.objectContaining({ code: "PARSE", message, details: { flag, reason } }),
+		);
+	});
+
+	// `--no-` applies to long spellings only, so a short name after it is just an unknown flag.
+	it.each([["--no-f"], ["--no-f=yes"], ["--no-q"]])("reports %j as an unknown flag", (arg) => {
+		expect(() => parseArgs(cmd, [arg])).toThrow(
+			expect.objectContaining({
+				code: "PARSE",
+				message: expect.stringContaining("Unknown flag"),
+				details: expect.objectContaining({ reason: "unknown-flag" }),
+			}),
 		);
 	});
 });
