@@ -5,6 +5,7 @@ import { Crust, resolveArtifactDir } from "@crustjs/core";
 import { INSTALLED_COMMAND_NAME_RULE, isInstalledCommandName } from "@crustjs/core/tooling";
 import { detectPackageManager, isInGitRepo, runSteps, scaffold } from "@crustjs/create";
 import type { BuildOptions } from "@crustjs/crust";
+import { help, version } from "@crustjs/extensions";
 import { spinner } from "@crustjs/progress";
 import { confirm, input, select } from "@crustjs/prompts";
 import { Eta } from "eta/core";
@@ -62,7 +63,11 @@ function validateProjectDirectory(path: string): void {
 // Command definition
 // ────────────────────────────────────────────────────────────────────────────
 
-export const app = new Crust("create-crust", { description: pkg.description })
+export const app = new Crust("create-crust", {
+	description: pkg.description,
+	version: pkg.version,
+})
+	.extend(version(), help())
 	.flags({
 		runtime: {
 			type: "string",
