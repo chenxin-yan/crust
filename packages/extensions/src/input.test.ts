@@ -156,6 +156,30 @@ describe("input", () => {
 		});
 	});
 
+	it("rejects commands whose input is not one flat object only when --input is given", async () => {
+		const shared = new Crust("app")
+			.extend(input())
+			.args({ name: "target", type: "string", default: "arg-default" })
+			.flags({ target: { type: "string", default: "flag-default" } })
+			.action(({ args, flags }) => `${args.target} ${flags.target}`);
+		const raw = new Crust("app")
+			.extend(input())
+			.flags({ raw: { type: "boolean" } })
+			.action(({ rawArgs }) => rawArgs);
+
+		for (const app of [shared, raw]) {
+			const outcome = await app.run([], { flags: { input: "{}" } });
+			expect(outcome).toMatchObject({
+				status: "failed",
+				error: { code: "PARSE", message: expect.stringMatching(/^--input: Command "app" declares/) },
+			});
+		}
+		expect(await shared.run([], {})).toMatchObject({
+			status: "completed",
+			result: "arg-default flag-default",
+		});
+	});
+
 	it("renders an --input error through execute() with exit code 1", async () => {
 		expect(await captureExecute(deployApp(), ["--input", "{target"])).toMatchObject({
 			stdout: "",
