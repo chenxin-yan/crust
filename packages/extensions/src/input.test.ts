@@ -9,6 +9,7 @@ import { Crust, CrustError } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
+import { help } from "./help.ts";
 import { input } from "./input.ts";
 
 function deployApp() {
@@ -178,6 +179,18 @@ describe("input", () => {
 			status: "completed",
 			result: "arg-default flag-default",
 		});
+	});
+
+	it("never reads --input when a flag handler such as --help takes over", async () => {
+		const app = new Crust("app").extend(input(), help()).action(() => "ran");
+		const { stdout, exitCode } = await captureExecute(app, [
+			"--input",
+			"@/nonexistent/crust-input.json",
+			"--help",
+		]);
+
+		expect(exitCode).toBe(0);
+		expect(stdout).toContain("--input");
 	});
 
 	it("renders an --input error through execute() with exit code 1", async () => {
