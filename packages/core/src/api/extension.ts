@@ -47,8 +47,9 @@ import {
 // Extension — the public integration contract
 // ────────────────────────────────────────────────────────────────────────────
 
+/** How an invocation settled; `completed` carries the Command Action's awaited return value (`undefined` without an action). */
 export type InvocationOutcome =
-	| { readonly status: "completed" }
+	| { readonly status: "completed"; readonly result: unknown }
 	| { readonly status: "handled"; readonly by: ExtensionId }
 	| { readonly status: "failed"; readonly error: unknown; readonly by?: ExtensionId };
 
@@ -231,7 +232,8 @@ export interface ExtensionHooks<
 	readonly preRun?: (ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<void>;
 	/**
 	 * Runs after the invocation settles, in reverse `.extend()` order. This is the
-	 * `finally` slot for cleanup and post-run side effects.
+	 * `finally` slot for cleanup and post-run side effects. A `completed` outcome
+	 * carries the Command Action's awaited return value as `result`.
 	 */
 	readonly postRun?: (
 		ctx: ExtensionContext<F, Deps, MetaKeys>,
