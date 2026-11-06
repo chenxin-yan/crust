@@ -3,7 +3,6 @@ import {
 	type ExtensionContext,
 	type ExtensionFactory,
 	type ExtensionId,
-	type Handled,
 	defineExtension,
 	defineExtensionId,
 } from "@crustjs/core";
@@ -27,17 +26,12 @@ const helpFlags = {
 	help: { type: "boolean", short: "h", noNegate: true, description: "Show help" },
 } as const;
 
-async function showHelp(context: ExtensionContext): Promise<Handled> {
+async function showHelp(context: ExtensionContext): Promise<void> {
 	context.stdout(await renderHelp(context.command, context.commandPath));
-	return context.handled();
 }
 
 export const help: ExtensionFactory<[], {}, [], typeof helpFlags> = /* @__PURE__ */ defineExtension(
 	HELP,
 ).factory((extension) =>
-	extension
-		.flags(helpFlags)
-		.preRun((context) => (context.flags.help === true ? showHelp(context) : undefined))
-		// A fallback, so other Extensions' flags (`--version`) still work on command groups.
-		.noAction(showHelp),
+	extension.flags(helpFlags).handle("help", showHelp, { eager: true }).noAction(showHelp),
 );

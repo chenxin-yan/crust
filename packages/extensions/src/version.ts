@@ -46,19 +46,21 @@ export interface VersionExtension {
 export const version: VersionExtension = /* @__PURE__ */ defineExtension(VERSION).factory(
 	(extension, value?: VersionValue, options: VersionOptions = {}) => {
 		const { format } = options;
-		return extension.flags(versionFlags).preRun((context) => {
-			if (context.commandPath.length !== 1 || context.flags.version !== true) return;
-			// SAFETY: the `VersionExtension` overloads require root `version` metadata when `value` is omitted.
-			const resolvedVersion =
-				typeof value === "function" ? value() : (value ?? context.rootCommand.meta.version!);
-			const line =
-				format === "plain"
-					? resolvedVersion
-					: format
-						? format(resolvedVersion, context)
-						: `${context.rootCommand.meta.name} v${resolvedVersion}`;
-			context.stdout(line);
-			return context.handled();
-		});
+		return extension.flags(versionFlags).handle(
+			"version",
+			(context) => {
+				// SAFETY: the `VersionExtension` overloads require root `version` metadata when `value` is omitted.
+				const resolvedVersion =
+					typeof value === "function" ? value() : (value ?? context.rootCommand.meta.version!);
+				const line =
+					format === "plain"
+						? resolvedVersion
+						: format
+							? format(resolvedVersion, context)
+							: `${context.rootCommand.meta.name} v${resolvedVersion}`;
+				context.stdout(line);
+			},
+			{ eager: true },
+		);
 	},
 );

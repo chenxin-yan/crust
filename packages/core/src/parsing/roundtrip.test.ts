@@ -7,15 +7,8 @@ import { resolveTypedPath } from "../command/invocation.ts";
 import type { CommandNode } from "../command/node.ts";
 import { resolveCommand, type CommandRoute } from "../command/router.ts";
 import { CrustError } from "../errors.ts";
-import type {
-	ArgDef,
-	FlagDef,
-	ParseResult,
-	RunInputPayload,
-	RunInputValue,
-	ValidatedInput,
-} from "../types.ts";
-import { parseArgs, parseStructured, validateParsed } from "./parser.ts";
+import type { ArgDef, FlagDef, RunInputPayload, RunInputValue, ValidatedInput } from "../types.ts";
+import { type ArgvParseResult, parseArgs, parseStructured, validateParsed } from "./parser.ts";
 import { applySchemas } from "./schema.ts";
 import { isFlagNegatable } from "./spellings.ts";
 
@@ -38,7 +31,9 @@ type Attempt =
 	| { readonly ok: false; readonly error: CrustError };
 
 /** Production parse/validation failures are outcomes to compare; anything else is a bug. */
-async function bind(resolve: () => { route: CommandRoute; parsed: ParseResult }): Promise<Attempt> {
+async function bind(
+	resolve: () => { route: CommandRoute; parsed: ArgvParseResult },
+): Promise<Attempt> {
 	try {
 		const { route, parsed } = resolve();
 		validateParsed(route.command, parsed);

@@ -19,7 +19,7 @@ Available commands: deploy
 # exit 1
 ```
 
-`help()` adds `-h` and `--help` and shows help when this actionless root is invoked. Registration order matters for `noColor()`, which configures color before output hooks. `version()` and `help()` work in either order: help for an actionless command runs from `noAction`, after every `preRun`.
+`help()` adds `-h` and `--help` and shows help when this actionless root is invoked. The `.extend()` order doesn't change behavior: `--help --version` prints help and `--version --help` the version, the flag given first winning as in GNU tools, and `--no-color` applies to help output too.
 
 Call `.extend()` on the root builder, not inside a command recipe. See [built-in Extensions](/docs/modules/extensions) for the full list.
 
@@ -40,7 +40,9 @@ $ deploy --preview
 nothing changed
 ```
 
-Return `ctx.handled()` from `preRun` to stop before validation and the action. Calling it without returning it does not stop the invocation. Validation includes invalid argv and environment values, so a handling hook wins over them; until then, an invalid flag or argument reads as `undefined` in `ctx.flags` and `ctx.args`, not as its default.
+`.handle(flag, run)` takes over the invocation when the user passes a flag the Extension owns, unless it is a negated boolean such as `--no-preview`: `run` replaces `preRun`, validation, and the action, and `run()` reports a `handled` outcome. The flag name must come from the Extension's own `.flags()`, so a typo is a compile error. Validation includes invalid argv and environment values, so a handler wins over them; an invalid flag or argument reads as `undefined` in `ctx.flags` and `ctx.args`, not as its default, and doesn't trigger a handler.
+
+When several handled flags are passed, the one given first on the command line wins, whatever the `.extend()` order. Pass `{ eager: true }` for flags that must win over every other handler, as `help()` and `version()` do: `deploy --preview --help` shows help. Typed `run()` input ranks handled flags by the key order of its `flags` object, and a flag set only through its `env` variable ranks after flags passed on the command line.
 
 Give each Extension a namespaced id such as `acme:preview`. Registering the same id again replaces the earlier registration. The types don't track ids yet: they still see the earlier registration's commands, so a re-registration that contributes the same literal command names, or a later command reusing one of them, is a compile-time collision even though the app runs.
 
@@ -73,16 +75,25 @@ Contributed commands work like commands added with `.add()`, including typed `ru
 
 ## Hooks
 
-Use `preRun` for work before validation and the action, and `postRun` for work after the invocation settles:
+After routing and parsing, an invocation runs these hooks:
+
+```text
+setup → handle → preRun → validation → action → postRun
+            └─ no handler and no action → noAction
+```
 
 <include lang="ts" meta='title="hooks.ts" twoslash'>
   ../../../examples/guide/extensions-hooks.ts
 </include>
 
-- `preRun` follows `.extend()` order. Returning `ctx.handled()` skips later `preRun` hooks and the action.
-- `noAction` runs only for a command without an action, after every `preRun` hook declined. Put fallbacks there, such as showing help for a command group, so they cannot shadow another Extension's flag, whatever the `.extend()` order.
-- `postRun` runs in reverse order, including after an Extension handles the invocation early or a failure once hooks start. Preparation, routing, and input-binding failures happen before hooks and skip it. Context cleanup runs afterwards.
-- `onError` handles terminal errors from `.execute()`; see [Error handling](/docs/guide/error-handling).
+- `setup` configures the process before anything prints, such as color or log level. Every setup runs, in `.extend()` order, before any handler; setups must not depend on each other. Register cleanup with `ctx.defer()`, as in a Context's setup: it runs after `postRun` hooks, in reverse order together with Context cleanup, including after a failure.
+- `.handle()` is the only way a flag takes over the invocation; see [Write your own](#write-your-own).
+- `noAction` runs when the command has no action and no handler took over, and ends the invocation as `handled`. Use it for fallbacks such as help for a command group. Only one Extension in an application may set it; a second is a `DEFINITION` error when the app prepares.
+- `preRun` runs only when the action will run, in `.extend()` order, before validation. Use it for checks and notices that must precede every action but never `--help` or `--version`, such as a login check or a deprecation warning. Throw to fail the invocation; `preRun` can't end it successfully.
+- `postRun` runs in reverse order after every invocation that reached hooks, including handled and failed ones. Preparation, routing, and input-binding failures happen before hooks and skip it. Context cleanup runs afterwards.
+- `onError` renders terminal errors from `.execute()` in `.extend()` order; see [Error handling](/docs/guide/error-handling).
+
+Only handlers and `noAction` can end an invocation early. Handlers are selected by the order of their flags on the command line, or by key order for typed `run()`; `noAction` runs only when the command has no action and no handler took over. Reordering `.extend()` changes neither choice, only what is meant to be ordered: setups, `preRun` checks, and `onError` hooks run in registration order, and `postRun` hooks and cleanups in reverse.
 
 Hook flags are **pre-validation values**, not schema outputs. Check values before using them. See [`ExtensionHooks`](/docs/api/types#extensionhooks) for the full lifecycle.
 

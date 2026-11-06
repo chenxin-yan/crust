@@ -13,7 +13,7 @@ describe("built-in extensions", () => {
 	it("lets official help coexist with a user Extension named help", async () => {
 		let userHelpRan = false;
 		const app = new Crust("app")
-			.extend(defineExtension(defineExtensionId("help")).preRun(() => void (userHelpRan = true)))
+			.extend(defineExtension(defineExtensionId("help")).setup(() => void (userHelpRan = true)))
 			.extend(help());
 
 		const { stdout } = await captureExecute(app, []);

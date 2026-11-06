@@ -549,7 +549,7 @@ it("keeps compatible conditional descendant providers lazy in either hook attach
 		});
 		const demand = defineExtension(defineExtensionId("conditional-demand"))
 			.use(text)
-			.preRun(async ({ ctx }) => {
+			.setup(async ({ ctx }) => {
 				expect((await ctx.db).toUpperCase()).toBe(condition ? "CHILD" : "DB");
 			});
 		const leaf = defineCommand("leaf", (c) => (condition ? c.provide(compatible()) : c));

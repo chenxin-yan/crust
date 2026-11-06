@@ -191,20 +191,22 @@ describe("schema interaction with Extensions", () => {
 		expect(actionSaw).toBe(8080); // schema output
 	});
 
-	it("a pre-run handled skips schema validation entirely", async () => {
+	it("a flag handler skips schema validation entirely", async () => {
 		let validated = false;
 		const spy = schema<string | undefined, string>((raw) => {
 			validated = true;
 			return { value: String(raw) };
 		});
-		const gate = defineExtension(defineExtensionId("gate")).preRun((ctx) => ctx.handled());
+		const gate = defineExtension(defineExtensionId("gate"))
+			.flags({ stop: { type: "boolean" } })
+			.handle("stop", () => {});
 
 		const app = new Crust("cli")
 			.flags({ x: { type: "string", schema: spy } })
 			.extend(gate)
 			.action(() => {});
 
-		await unwrap(app.run([], { flags: { x: "whatever" } }));
+		await unwrap(app.run([], { flags: { x: "whatever", stop: true } }));
 		expect(validated).toBe(false);
 	});
 });

@@ -356,7 +356,7 @@ describe("command metadata sections", () => {
 		const solo = new Crust("solo").extend(
 			defineExtension(defineExtensionId("docs"))
 				.sections(() => [{ command: [], title: "Root extra", body: "x" }])
-				.preRun((ctx) => {
+				.setup((ctx) => {
 					seen.push(ctx.rootCommand);
 				}),
 		);

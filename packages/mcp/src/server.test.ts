@@ -33,12 +33,7 @@ async function connect(app: AnyCrust, exclude?: readonly (readonly string[])[]) 
 
 const finisher = defineExtension(defineExtensionId("test:finisher"))
 	.flags({ bail: { type: "boolean" } })
-	.preRun((ctx) => {
-		if (ctx.flags.bail === true) {
-			ctx.stdout("bailed");
-			return ctx.handled();
-		}
-	});
+	.handle("bail", (ctx) => ctx.stdout("bailed"));
 
 const contributed = defineExtension(defineExtensionId("test:contrib")).add(
 	defineCommand("extra", { description: "From an Extension" }, (c) =>

@@ -762,7 +762,7 @@ describe("Context setup dependencies", () => {
 		let seen: string | undefined;
 		const observer = defineExtension(defineExtensionId("of-cut-observer"))
 			.use(db)
-			.preRun(async ({ ctx }) => {
+			.setup(async ({ ctx }) => {
 				seen = await ctx.config;
 			});
 		await unwrap(new Crust("cli").provide(db.of("fake"), config()).extend(observer).run([]));
@@ -817,7 +817,7 @@ describe("Context dependency runtime boundaries", () => {
 		let seen: string | undefined;
 		const consumerExtension = defineExtension(defineExtensionId("consumer"))
 			.use(logger)
-			.preRun(async ({ ctx }) => {
+			.setup(async ({ ctx }) => {
 				seen = await ctx.logger;
 			});
 		await unwrap(new Crust("cli").extend(providerExtension).extend(consumerExtension).run([]));
@@ -1083,21 +1083,22 @@ describe("lazy Context bags", () => {
 		expect(setups).toBe(1);
 	});
 
-	it("rejects flag-owning Contexts after handled skips validation", async () => {
+	it("rejects flag-owning Contexts after a handler skips validation", async () => {
 		const token = defineFlag({ type: "string" });
 		const auth = defineContext("auth")
 			.flags({ token })
 			.setup(({ flags }) => flags.token);
 		const extension = defineExtension(defineExtensionId("consumer"))
 			.use(auth)
-			.preRun((ctx) => ctx.handled())
+			.flags({ stop: { type: "boolean" } })
+			.handle("stop", () => {})
 			.postRun(async (ctx) => void (await ctx.ctx.auth));
 		const app = new Crust("cli")
 			.provide(auth())
 			.extend(extension)
 			.action(() => {});
 
-		await expect(unwrap(app.run([]))).rejects.toMatchObject({
+		await expect(unwrap(app.run([], { flags: { stop: true } }))).rejects.toMatchObject({
 			details: { reason: "flags-before-validation" },
 		});
 	});
