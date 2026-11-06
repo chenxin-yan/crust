@@ -1,5 +1,53 @@
 # @crustjs/utils
 
+## 0.3.0
+
+### Minor Changes
+
+- [#510](https://github.com/chenxin-yan/crust/pull/510) [`6fdb8a6`](https://github.com/chenxin-yan/crust/commit/6fdb8a642b79a176d60d9a3d4be3431493201052) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `tryCoerceNumber` returns `undefined` for empty or whitespace-only input instead of `0`. Store `type: "number"` fields reject a persisted blank string with a `VALIDATION` error instead of reading it as `0`, and `@crustjs/env` reports `PORT=""` as invalid for `type: "number"`, as documented.
+
+- [#539](https://github.com/chenxin-yan/crust/pull/539) [`ce12aed`](https://github.com/chenxin-yan/crust/commit/ce12aed7a34275c49b54340d1995378afedfa2a6) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Drop Deno support. Crust now targets Bun and Node.js only.
+  
+  - `@crustjs/crust`: `crust.runtime: "deno"` and Deno targets are removed; `deno.json`/`deno.jsonc` no longer selects a runtime. `--minify` now defaults to `true` in `--help`.
+  - `create-crust`: `--runtime deno` is no longer accepted.
+  - `@crustjs/utils`: `PACKAGED_BUILD_KEY` and `isPackagedBuild` are removed from `@crustjs/utils/artifacts`, and Deno compiled executables are no longer detected.
+  - `@crustjs/core`: the snapshot protocol no longer checks the packaged-build marker.
+  - `@crustjs/mcp`: Deno standalone builds are no longer detected as compiled executables.
+
+- [#540](https://github.com/chenxin-yan/crust/pull/540) [`643beb2`](https://github.com/chenxin-yan/crust/commit/643beb264f5b206177110dd947b258f47cc68073) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - On Bun on Linux, a CLI started with a signal ignored (SIGHUP under `nohup`, SIGINT for a background job in a script) now keeps ignoring it. Core's Ctrl-C handling, timed `runProcess()` calls, and `crust build`'s snapshot step no longer listen for an ignored signal; listening replaced the ignore, and Bun restores the default action when the listener is removed, so the process could die from a signal it was started to ignore. Node already resets inherited ignores at startup, so nothing changes there. macOS on Bun still loses the ignore until Bun keeps the previous disposition (oven-sh/bun#47574). Adds `isSignalIgnored()` from `@crustjs/utils/signals`.
+
+- [#532](https://github.com/chenxin-yan/crust/pull/532) [`3a6dbb1`](https://github.com/chenxin-yan/crust/commit/3a6dbb1702cff684c17054cd476ddef0b5d56f99) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `packageManagerFromUserAgent` and `PackageManager` moved from `@crustjs/utils/process` to the new `@crustjs/utils/package-manager`, which does not load `child_process`, so `updateNotifier()` no longer pays for it at startup.
+
+### Patch Changes
+
+- [#558](https://github.com/chenxin-yan/crust/pull/558) [`708e181`](https://github.com/chenxin-yan/crust/commit/708e181f0de97b81b77d64261f754e2649af1761) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Start faster on Node. Core, Extensions, and utils load Node built-ins with `process.getBuiltinModule()` where they are used instead of static `node:*` imports, which made Node evaluate every lazy export of `node:fs` and `node:util` at startup. `node:stream`, which is expensive to load on Bun, now loads only for `run()` and for `execute()` with injected `io`.
+
+- [#517](https://github.com/chenxin-yan/crust/pull/517) [`4a4386d`](https://github.com/chenxin-yan/crust/commit/4a4386d64fdef5440e77cebd8b9ac85e7a1d7350) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `createMcpServer()` and `toolsFromSnapshot()` now throw when an `exclude` path is not a canonical command path, listing each unknown path, so a bad `mcpExtension({ exclude })` path fails when the `mcp` server starts. Previously a misspelled path or an alias was silently ignored and the command stayed exposed as an MCP tool.
+  
+  `mcp config` now detects a Node single executable application as a compiled executable and prints `<executable> mcp` instead of passing the executable path back to itself as an entry.
+  
+  `@crustjs/mcp` loads the MCP SDK only when the server starts, so importing the package (and every command of a CLI using `mcpExtension`) no longer pays the SDK's load time.
+
+- [#592](https://github.com/chenxin-yan/crust/pull/592) [`4208178`](https://github.com/chenxin-yan/crust/commit/420817832f065c875e836b86deac832f84d86828) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Spinners and progress indicators without a `sink` or ambient terminal output now write standard error through the same writer as `@crustjs/core`'s default `stderr`, so inside a Command Action they stay in order with the action's `stderr()` lines and restore the cursor even when the process exits right away. Their default colors now follow only their own output, so creating a spinner no longer touches `process.stdout`, and `@crustjs/style` no longer reads `process.stdout` when `overrides.isTTY` is given.
+  
+  **Behavior change:** on macOS and Linux the default output is written synchronously to file descriptor 2, so replacing `process.stderr.write` no longer captures it. Pass a `sink` or use `withTerminalIO()` to capture spinner output.
+
+- [#522](https://github.com/chenxin-yan/crust/pull/522) [`d64f307`](https://github.com/chenxin-yan/crust/commit/d64f30727fd3d28dcb26b7edeb6aed929a3efe19) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - A Standard Schema without the optional `types` member now infers its output from the successful `validate()` result (awaited) instead of `unknown` in store fields, env variables, and schema-backed flags and arguments; declared `types.output` still wins. `defineEnv()` now rejects a literal default outside literal `choices` and an async `parse` at compile time, as `defineFlag()` does. A store schema whose output is not JSON data now fails with a `FIX_JSON_OUTPUT` message instead of "not assignable to type 'never'". `@crustjs/effect` exports the `HandlerInput` type that `service()` requires, and `@crustjs/core/tooling` exports `LocalValueBrand`.
+
+- [#518](https://github.com/chenxin-yan/crust/pull/518) [`e802ec7`](https://github.com/chenxin-yan/crust/commit/e802ec7c09c6635d77716e3c1c545faa99fe7759) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Generated skill tables fold line breaks in descriptions into spaces, so a multi-line flag, argument, or command description no longer breaks the markdown table.
+  
+  An authored `SKILL.md` whose `name` or `description` uses a YAML block scalar (`|`, `>-`) is now rejected with an error asking for a one-line value. Previously the indicator itself (`">-"`) became the skill's description.
+  
+  The background auto-repair before ordinary commands now repairs only owned links whose target no longer exists. A link to another live installed copy of the CLI (global versus project-local, `npx`) is left alone, so two copies no longer move the link back and forth on every run. `skills repair` and `installSkill()` still re-point such links.
+  
+  `@crustjs/skills` loads `@crustjs/prompts` and `@crustjs/progress` only when the `skills` command runs. `installSkill()`, `uninstallSkill()`, and `getSkillStatus()` accept readonly `agents` arrays.
+  
+  Relative skill source paths now resolve from the package that owns a symlinked entrypoint (an npm-linked `node_modules/.bin` script) instead of the consumer's package.
+
+- [#520](https://github.com/chenxin-yan/crust/pull/520) [`7811b12`](https://github.com/chenxin-yan/crust/commit/7811b12f73827e1d47a1574c4b88736eb82632b0) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - On POSIX, `runProcess()` with a `timeout` now also kills the child's process group when the calling process receives `SIGINT`, `SIGTERM`, `SIGHUP`, or `SIGQUIT`, or exits synchronously. The call rejects, and the signal is re-raised when no other listener handles it. Previously the detached child and its descendants outlived an interrupted parent. `crust build` uses this for its compiler `--version` probe, so interrupting a build no longer leaves a stuck probe running.
+  
+  `@crustjs/utils/process` exports `bindToProcessLifetime()`, the signal and exit policy `runProcess()` and `crust build`'s entry preparation now share.
+
 ## 0.2.2
 
 ### Patch Changes

@@ -1,5 +1,23 @@
 # @crustjs/create
 
+## 0.3.0
+
+### Minor Changes
+
+- [#592](https://github.com/chenxin-yan/crust/pull/592) [`4208178`](https://github.com/chenxin-yan/crust/commit/420817832f065c875e836b86deac832f84d86828) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `runSteps(steps, cwd, options?)` accepts `options.stderr` for non-fatal warnings, such as an editor that failed to open. Inside a Crust command, pass the action's `stderr` so warnings go through the invocation's output.
+  
+  **Behavior change:** without `options.stderr`, warnings are written to standard error through Crust's shared writer instead of `console.warn`, so replacing `console.warn` no longer captures them.
+
+### Patch Changes
+
+- [#523](https://github.com/chenxin-yan/crust/pull/523) [`d8f8062`](https://github.com/chenxin-yan/crust/commit/d8f8062ff67fb9ad31f8134b3ee59209325de75f) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - The `git-init` step no longer writes a fallback `Crust <crust@scaffolded.project>` identity into the new repository's config. When `user.name` or `user.email` is not configured, the missing field is passed to the initial commit only, so later commits use the user's own identity. `configDir()`, `dataDir()`, `stateDir()`, and `cacheDir()` now ignore relative `XDG_*_HOME` values, as the XDG Base Directory spec requires, and fall back to the home-relative default.
+
+- [#539](https://github.com/chenxin-yan/crust/pull/539) [`ce12aed`](https://github.com/chenxin-yan/crust/commit/ce12aed7a34275c49b54340d1995378afedfa2a6) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Remove the `engines.deno` declaration; Deno is no longer supported.
+
+- [#532](https://github.com/chenxin-yan/crust/pull/532) [`3a6dbb1`](https://github.com/chenxin-yan/crust/commit/3a6dbb1702cff684c17054cd476ddef0b5d56f99) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `packageManagerFromUserAgent` and `PackageManager` moved from `@crustjs/utils/process` to the new `@crustjs/utils/package-manager`, which does not load `child_process`, so `updateNotifier()` no longer pays for it at startup.
+- Updated dependencies [[`6fdb8a6`](https://github.com/chenxin-yan/crust/commit/6fdb8a642b79a176d60d9a3d4be3431493201052), [`ce12aed`](https://github.com/chenxin-yan/crust/commit/ce12aed7a34275c49b54340d1995378afedfa2a6), [`643beb2`](https://github.com/chenxin-yan/crust/commit/643beb264f5b206177110dd947b258f47cc68073), [`708e181`](https://github.com/chenxin-yan/crust/commit/708e181f0de97b81b77d64261f754e2649af1761), [`4a4386d`](https://github.com/chenxin-yan/crust/commit/4a4386d64fdef5440e77cebd8b9ac85e7a1d7350), [`4208178`](https://github.com/chenxin-yan/crust/commit/420817832f065c875e836b86deac832f84d86828), [`d64f307`](https://github.com/chenxin-yan/crust/commit/d64f30727fd3d28dcb26b7edeb6aed929a3efe19), [`e802ec7`](https://github.com/chenxin-yan/crust/commit/e802ec7c09c6635d77716e3c1c545faa99fe7759), [`7811b12`](https://github.com/chenxin-yan/crust/commit/7811b12f73827e1d47a1574c4b88736eb82632b0), [`3a6dbb1`](https://github.com/chenxin-yan/crust/commit/3a6dbb1702cff684c17054cd476ddef0b5d56f99)]:
+  - @crustjs/utils@0.3.0
+
 ## 0.2.2
 
 ### Patch Changes
