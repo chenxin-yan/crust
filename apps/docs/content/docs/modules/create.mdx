@@ -76,7 +76,7 @@ The default `conflict: "abort"` throws for a non-empty destination. `"overwrite"
 
 Containment is checked again after rendering and before each write, including binary copies. A detected redirect of the canonical destination root or an escaping link introduced during rendering aborts the call; earlier writes remain. These path checks are not atomic with filesystem writes: use a destination whose directories cannot be concurrently modified by untrusted processes.
 
-## `runSteps(steps, cwd)`
+## `runSteps(steps, cwd, options?)`
 
 ```ts
 await runSteps(
@@ -85,7 +85,9 @@ await runSteps(
 );
 ```
 
-Steps run in order and stop at the first error.
+Steps run in order and stop at the first error. Inside a Crust command, pass the action's `stderr` as `options.stderr` so non-fatal warnings go through the invocation's output.
+
+<auto-type-table path="../../../../../packages/create/src/types.ts" name="RunStepsOptions" />
 
 <auto-type-table path="../../../../../packages/create/src/types.ts" name="PostScaffoldStep" />
 

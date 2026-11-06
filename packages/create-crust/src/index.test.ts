@@ -22,12 +22,15 @@ describe("create-crust app (in-process)", () => {
 	it("aborts without writing when the destination exists and --no-overwrite is passed", async () => {
 		const projectDir = join(tempRoot, "existing-cli");
 		mkdirSync(projectDir);
-		const log = vi.spyOn(console, "log").mockImplementation(() => {});
+		const stdout: string[] = [];
 
-		const exitCode = await app.execute({ argv: [projectDir, "--no-overwrite"] });
+		const exitCode = await app.execute({
+			argv: [projectDir, "--no-overwrite"],
+			io: { stdout: (text) => stdout.push(text) },
+		});
 
 		expect(exitCode).toBe(0);
-		expect(log).toHaveBeenCalledWith("Aborted.");
+		expect(stdout).toEqual(["Aborted."]);
 		expect(readdirSync(projectDir)).toEqual([]);
 	});
 

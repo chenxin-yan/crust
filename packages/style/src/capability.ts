@@ -16,8 +16,11 @@ function read<Key extends keyof CapabilityOverrides>(
 	return overrides !== undefined && key in overrides ? overrides[key] : environment;
 }
 
+// An override answers without touching `process.stdout`, which creating costs startup time.
 function readTTY(overrides: CapabilityOverrides | undefined): boolean {
-	return read(overrides, "isTTY", process.stdout?.isTTY) ?? false;
+	const isTTY =
+		overrides !== undefined && "isTTY" in overrides ? overrides.isTTY : process.stdout?.isTTY;
+	return isTTY ?? false;
 }
 
 function readForceColor(overrides: CapabilityOverrides | undefined): string | undefined {

@@ -20,4 +20,9 @@ export { detectPackageManager, isInGitRepo, type PackageManager } from "./detect
 // Types
 // ────────────────────────────────────────────────────────────────────────────
 
-export type { PostScaffoldStep, ScaffoldOptions, ScaffoldResult } from "./types.ts";
+export type {
+	PostScaffoldStep,
+	RunStepsOptions,
+	ScaffoldOptions,
+	ScaffoldResult,
+} from "./types.ts";

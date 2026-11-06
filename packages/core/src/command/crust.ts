@@ -1083,8 +1083,8 @@ type MissingRootMetaBrand<E, Defined extends RootMetaKey> =
  * const app = new Crust("my-cli")
  *   .flags({ verbose: { type: "boolean", short: "v" } })
  *   .args({ name: "file", type: "string", required: true })
- *   .action(({ args, flags }) => {
- *     console.log(args.file, flags.verbose);
+ *   .action(({ args, flags, stdout }) => {
+ *     stdout(`${args.file} ${flags.verbose}`);
  *   });
  * ```
  */

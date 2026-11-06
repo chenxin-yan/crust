@@ -1,5 +1,5 @@
 import { isSignalIgnored } from "@crustjs/utils/signals";
-import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
+import { withAmbientTerminalIO, writeProcessOutput } from "@crustjs/utils/terminal";
 
 import { validateContextAvailability } from "../api/context.ts";
 import {
@@ -43,40 +43,9 @@ import { commandNotFound, resolveCommand, type CommandRoute } from "./router.ts"
 import { createSnapshotProjector, type CommandSnapshot } from "./snapshot.ts";
 import type { RunOutcome } from "./typed-run.ts";
 
-const ignoreStreamError = () => {};
-
-/**
- * Line-oriented write to a process stream, with `console.log`'s error tolerance: a
- * downstream that closed early (`cli | head`) surfaces as EPIPE, synchronously or as a
- * later `error` event, and must not crash the CLI. Mirrors Node's Console
- * (`ignoreErrors: true`): a noop listener absorbs the event when nobody else listens.
- */
-function writeLine(stream: NodeJS.WriteStream, text: string): void {
-	const absorb = () => {
-		if (stream.listenerCount("error") === 0) stream.once("error", ignoreStreamError);
-	};
-	try {
-		absorb();
-		stream.write(`${text}\n`, (error) => {
-			if (error) absorb();
-		});
-	} catch {
-		// Synchronous write failure on an already-destroyed stream.
-	} finally {
-		// Async failures install their own one-shot listener in the write callback.
-		stream.removeListener("error", ignoreStreamError);
-	}
-}
-
-/**
- * Terminal defaults: stream writes rather than `console.log`. Once anything materializes
- * `process.stdout` (a platform layer, a color library probing `isTTY`), Bun's native
- * console writer silently drops output past the 64 KiB pipe buffer at exit
- * (oven-sh/bun#36419); the stream writer flushes it.
- */
 const DEFAULT_IO: InvocationIO = {
-	stdout: (text) => writeLine(process.stdout, text),
-	stderr: (text) => writeLine(process.stderr, text),
+	stdout: (text) => writeProcessOutput(1, `${text}\n`),
+	stderr: (text) => writeProcessOutput(2, `${text}\n`),
 };
 
 /** One cloned, extension-applied, frozen command tree; children are prepared on first access. */
@@ -668,7 +637,7 @@ export async function executeInvocation(
 			await writeSnapshotProtocol(node, snapshotPath, materializeCommandDefinition);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			console.error(message);
+			io.stderr(message);
 			return process.exit(1);
 		}
 		return process.exit(0);

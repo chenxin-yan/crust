@@ -4,7 +4,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vite-
 
 import { type TerminalOutput, spinner, withTerminalIO } from "./spinner.ts";
 import { createFakeSink } from "./test-helpers.ts";
-import { defaultTheme, defaultThemeFor } from "./theme.ts";
 
 // Keep frames plain; the default theme follows the sink's TTY state (see "default theme color").
 beforeAll(() => vi.stubEnv("FORCE_COLOR", "0"));
@@ -202,31 +201,37 @@ describe("spinner — terminal sink", () => {
 });
 
 describe("spinner — sink resolution", () => {
-	it("reads TTY state from process.stderr for the default sink", () => {
-		const originalWrite = process.stderr.write;
-		const originalIsTTY = process.stderr.isTTY;
+	it("writes the default sink through Core's stderr writer and reads its TTY state from fd 2", () => {
 		const output: string[] = [];
-		try {
-			process.stderr.write = (chunk: string | Uint8Array) => {
-				output.push(chunk.toString());
+		vi.spyOn(process.getBuiltinModule("node:tty"), "isatty").mockImplementation((fd) => fd === 2);
+		// The shared writer targets fd 2, or `process.stderr` on Windows.
+		if (process.platform === "win32") {
+			vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => {
+				output.push(Buffer.from(chunk).toString("utf8"));
 				return true;
-			};
-			Object.defineProperty(process.stderr, "isTTY", {
-				value: true,
-				configurable: true,
 			});
-
+		} else {
+			const fs = process.getBuiltinModule("node:fs");
+			const writeSync = fs.writeSync;
+			vi.spyOn(fs, "writeSync").mockImplementation(((
+				fd: number,
+				buffer: Uint8Array,
+				offset?: number,
+			) => {
+				if (fd !== 2) return writeSync(fd, buffer, offset);
+				output.push(Buffer.from(buffer.subarray(offset)).toString("utf8"));
+				return buffer.length - (offset ?? 0);
+			}) as typeof writeSync);
+		}
+		try {
 			const handle = spinner({ message: "Default", sigint: false });
 			handle.start();
 			handle.stop();
 
 			expect(output).toContain("\x1B[?25l");
+			expect(output.at(-1)).toBe("\x1B[?25h");
 		} finally {
-			process.stderr.write = originalWrite;
-			Object.defineProperty(process.stderr, "isTTY", {
-				value: originalIsTTY,
-				configurable: true,
-			});
+			vi.restoreAllMocks();
 		}
 	});
 
@@ -304,13 +309,6 @@ describe("spinner — default theme color", () => {
 		});
 
 		expect(writes).toEqual(["✓ Plain\n"]);
-	});
-
-	it("reuses the late-bound defaultTheme when the sink and stdout agree", () => {
-		withStdoutTTY(true, () => {
-			expect(defaultThemeFor({ isTTY: true })).toBe(defaultTheme);
-			expect(defaultThemeFor({ isTTY: false })).not.toBe(defaultTheme);
-		});
 	});
 });
 

@@ -1,6 +1,8 @@
 import type { AsyncLocalStorage } from "node:async_hooks";
 import type { Readable } from "node:stream";
 
+import { isErrnoException } from "./error.ts";
+
 /** A readable stream available to terminal libraries. */
 export type TerminalInput = Readable & {
 	readonly isTTY?: boolean;
@@ -20,6 +22,86 @@ export interface TerminalIO {
 	readonly input?: TerminalInput;
 	readonly output?: TerminalOutput;
 }
+
+const ignoreStreamError = () => {};
+
+/**
+ * Write to a process stream with `console.log`'s error tolerance: a downstream that closed
+ * early (`cli | head`) surfaces as EPIPE, synchronously or as a later `error` event, and must
+ * not crash the CLI. Mirrors Node's Console (`ignoreErrors: true`): a noop listener absorbs
+ * the event when nobody else listens.
+ */
+function writeStream(stream: NodeJS.WriteStream, text: string): void {
+	const absorb = () => {
+		if (stream.listenerCount("error") === 0) stream.once("error", ignoreStreamError);
+	};
+	try {
+		absorb();
+		stream.write(text, (error) => {
+			if (error) absorb();
+		});
+	} catch {
+		// Synchronous write failure on an already-destroyed stream.
+	} finally {
+		// Async failures install their own one-shot listener in the write callback.
+		stream.removeListener("error", ignoreStreamError);
+	}
+}
+
+let retryPause: Int32Array | undefined;
+const closedFds = new Set<number>();
+
+/**
+ * Returning only once every byte is written keeps output intact through an immediate
+ * `process.exit()`. `EAGAIN` means a non-blocking pipe is full (Bun makes fd 1 non-blocking
+ * once anything touches `process.stdout`): sleep 1 ms and retry rather than drop or reorder.
+ * A closed reader or descriptor (`EPIPE` from `cli | head`, `EBADF`) closes the fd for later
+ * writes silently, like `console.log`; other errors (`ENOSPC`) drop only the current write.
+ */
+function writeFd(fd: 1 | 2, text: string): void {
+	if (closedFds.has(fd)) return;
+	const { writeSync } = process.getBuiltinModule("node:fs");
+	const buffer = Buffer.from(text);
+	let offset = 0;
+	while (offset < buffer.length) {
+		try {
+			offset += writeSync(fd, buffer, offset);
+		} catch (error) {
+			const code = isErrnoException(error) ? error.code : undefined;
+			if (code !== "EAGAIN") {
+				if (code === "EPIPE" || code === "EBADF") closedFds.add(fd);
+				return;
+			}
+			Atomics.wait((retryPause ??= new Int32Array(new SharedArrayBuffer(4))), 0, 0, 1);
+		}
+	}
+}
+
+/**
+ * Crust's process output, shared by Core's default `stdout`/`stderr` and first-party terminal
+ * components so their writes reach each descriptor in call order. Outside Windows it writes
+ * synchronously to fd 1 or 2: no `process.stdout`/`process.stderr` (and their `node:stream`
+ * load), and no async tail for a `process.exit()` to truncate. Writes queued on those streams
+ * by other code are a separate queue and are not ordered with these. Windows keeps the stream
+ * writer: its console handling transcodes text, while raw bytes to a legacy console can garble
+ * non-ASCII output.
+ */
+export function writeProcessOutput(fd: 1 | 2, text: string): void {
+	if (process.platform === "win32") writeStream(fd === 1 ? process.stdout : process.stderr, text);
+	else writeFd(fd, text);
+}
+
+/** Standard error as {@link TerminalOutput}, written through {@link writeProcessOutput}. */
+export const processStderr: TerminalOutput = {
+	get isTTY() {
+		return process.getBuiltinModule("node:tty").isatty(2);
+	},
+	// Only drawing on a terminal reads the width, which needs the stream.
+	get columns() {
+		return process.stderr.columns;
+	},
+	write: (text) => writeProcessOutput(2, text),
+};
 
 /** Line-oriented output callbacks ambiently supplied by Core invocations. */
 export interface AmbientTerminalIO {

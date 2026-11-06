@@ -287,12 +287,7 @@ describe("createMcpServer", () => {
 
 	it("keeps concurrent calls isolated and off process stdout", async () => {
 		const client = await connect(fixture);
-		const stdoutWrite = process.stdout.write;
-		let liveWrites = 0;
-		process.stdout.write = () => {
-			liveWrites++;
-			return true;
-		};
+		const writeSync = vi.spyOn(process.getBuiltinModule("node:fs"), "writeSync");
 		try {
 			const [a, b] = await Promise.all([
 				client.callTool({ name: "slow", arguments: { id: "a" } }),
@@ -300,10 +295,10 @@ describe("createMcpServer", () => {
 			]);
 			expect(a.structuredContent).toEqual({ id: "a" });
 			expect(b.structuredContent).toEqual({ id: "b" });
+			expect(writeSync.mock.calls.filter(([fd]) => fd === 1)).toEqual([]);
 		} finally {
-			process.stdout.write = stdoutWrite;
+			writeSync.mockRestore();
 		}
-		expect(liveWrites).toBe(0);
 	});
 });
 

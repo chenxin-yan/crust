@@ -7,11 +7,16 @@ class Db extends Context.Service<Db, { readonly query: (sql: string) => Promise<
 	"app/Db",
 ) {}
 
+const pool = {
+	query: async (sql: string) => `rows for ${sql}`,
+	end: async () => {},
+};
+
 const DbLive = Layer.effect(
 	Db,
 	Effect.acquireRelease(
-		Effect.sync(() => ({ query: async (sql) => `rows for ${sql}` })),
-		() => Effect.sync(() => console.log("db closed")),
+		Effect.sync(() => ({ query: (sql: string) => pool.query(sql) })),
+		() => Effect.promise(() => pool.end()),
 	),
 );
 

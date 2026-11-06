@@ -21,7 +21,7 @@ npm install @crustjs/effect effect@4
 
 <include lang="ts">../../../examples/modules/effect.ts#quick-example</include>
 
-`DbLive` is built when the action starts; `db closed` prints after the action finishes, whether it succeeded, failed, or was interrupted. `config` is a plain Crust Context and stays lazy.
+`DbLive` is built when the action starts; its release (`pool.end()`) runs after the action finishes, whether it succeeded, failed, or was interrupted. `config` is a plain Crust Context and stays lazy.
 
 ## How it fits
 

@@ -16,9 +16,9 @@ import type { CommandSnapshot } from "./snapshot.ts";
 
 describe("Invocation pipeline internal seam — snapshot protocol", () => {
 	const originalExit = process.exit;
-	const originalConsoleError = console.error;
 	let exitCalls: Array<number | undefined>;
 	let errorCalls: string[];
+	const io = { stderr: (text: string) => void errorCalls.push(text) };
 	let tempDirs: string[];
 
 	beforeEach(() => {
@@ -29,12 +29,10 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 			exitCalls.push(code);
 			throw new Error(`process.exit(${code ?? "undefined"}) was called during snapshot`);
 		};
-		console.error = (...values: unknown[]) => errorCalls.push(values.map(String).join(" "));
 	});
 
 	afterEach(async () => {
 		process.exit = originalExit;
-		console.error = originalConsoleError;
 		vi.unstubAllEnvs();
 		await Promise.all(tempDirs.map((path) => rm(path, { recursive: true, force: true })));
 	});
@@ -59,7 +57,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 				actionRan = true;
 			});
 
-		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
+		await expect(app.execute({ argv: [], io })).rejects.toThrow("process.exit(0) was called");
 
 		expect(exitCalls).toEqual([0]);
 		expect(actionRan).toBe(false);
@@ -99,7 +97,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 				calls.push("action");
 			});
 
-		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
+		await expect(app.execute({ argv: [], io })).rejects.toThrow("process.exit(0) was called");
 
 		expect(calls).toEqual(["first", "second"]);
 		// The report lists exactly the written paths; core wrote them, not the hook.
@@ -127,7 +125,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 			]),
 		);
 
-		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
+		await expect(app.execute({ argv: [], io })).rejects.toThrow("process.exit(1) was called");
 
 		expect(errorCalls).toHaveLength(1);
 		expect(errorCalls[0]).toMatch(/^Extension "second" build failed:/);
@@ -151,7 +149,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 			]),
 		);
 
-		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
+		await expect(app.execute({ argv: [], io })).rejects.toThrow("process.exit(1) was called");
 
 		expect(errorCalls).toHaveLength(1);
 		expect(errorCalls[0]).toMatch(/^Extension "second" build failed:/);
@@ -174,7 +172,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 			]),
 		);
 
-		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
+		await expect(app.execute({ argv: [], io })).rejects.toThrow("process.exit(1) was called");
 
 		expect(errorCalls).toHaveLength(1);
 		expect(errorCalls[0]).toMatch(/^Extension "only" build failed:/);
@@ -217,7 +215,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 				}),
 		);
 
-		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
+		await expect(app.execute({ argv: [], io })).rejects.toThrow("process.exit(0) was called");
 
 		expect(calls).toEqual(["producer", "consumer"]);
 		expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({
@@ -242,7 +240,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 			defineExtension(defineExtensionId("second-hook")).build(() => []),
 		);
 
-		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
+		await expect(app.execute({ argv: [], io })).rejects.toThrow("process.exit(0) was called");
 
 		expect(recipeRuns).toBe(1);
 	});
@@ -257,7 +255,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 			}),
 		);
 
-		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
+		await expect(app.execute({ argv: [], io })).rejects.toThrow("process.exit(1) was called");
 
 		expect(errorCalls).toEqual(['Extension "broken" build failed: disk full']);
 	});
@@ -283,7 +281,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 				]),
 		);
 
-		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
+		await expect(app.execute({ argv: [], io })).rejects.toThrow("process.exit(1) was called");
 
 		expect(errorCalls).toHaveLength(1);
 		expect(errorCalls[0]).toMatch(/^Extension "unsafe" build failed:/);

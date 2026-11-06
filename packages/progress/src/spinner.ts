@@ -3,7 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { stringWidth } from "@crustjs/style";
-import { getTerminalIO, type TerminalOutput } from "@crustjs/utils/terminal";
+import { getTerminalIO, processStderr, type TerminalOutput } from "@crustjs/utils/terminal";
 
 import { defaultThemeFor } from "./theme.ts";
 import type { PartialProgressTheme, ProgressTheme } from "./theme.ts";
@@ -84,7 +84,8 @@ export interface SpinnerHandleOptions {
 	readonly sigint?: SpinnerSigintPolicy;
 	/**
 	 * Terminal sink receiving the rendered output. Resolution order:
-	 * this option → ambient {@link withTerminalIO} output → `process.stderr`.
+	 * this option → ambient {@link withTerminalIO} output → standard error, written through
+	 * the same writer as Core's default `stderr`.
 	 */
 	readonly sink?: TerminalOutput;
 }
@@ -186,7 +187,7 @@ export function createSpinnerHandle(
 	options: SpinnerHandleOptions,
 	suffix: () => string = () => "",
 ): SpinnerHandle {
-	const sink = options.sink ?? getTerminalIO()?.output ?? process.stderr;
+	const sink = options.sink ?? getTerminalIO()?.output ?? processStderr;
 	const theme = { ...defaultThemeFor(sink), ...options.theme };
 	const isInteractive = sink.isTTY ?? false;
 	const { frames, interval } = resolveSpinner(options.spinner);

@@ -10,10 +10,10 @@ const env = defineEnv("env", {
 });
 
 const app = new Crust("app").provide(env()).command("serve", (cmd) =>
-	cmd.action(async ({ ctx }) => {
+	cmd.action(async ({ ctx, stdout }) => {
 		const { DATABASE_URL, PORT } = await ctx.env;
 		//      ^?
-		console.log(`listening on ${PORT} for ${DATABASE_URL.host}`);
+		stdout(`listening on ${PORT} for ${DATABASE_URL.host}`);
 	}),
 );
 //#endregion
