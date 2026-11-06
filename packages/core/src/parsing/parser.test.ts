@@ -347,7 +347,7 @@ describe("parseArgs — variadic args", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — '--' separator", () => {
-	it("positional args before -- are parsed, after -- go to rawArgs", () => {
+	it("positional args before -- are parsed, unconsumed tokens after -- go to rawArgs", () => {
 		const cmd = makeNode({
 			meta: { name: "test" },
 			args: [{ name: "file", type: "string", required: true }],
@@ -355,6 +355,81 @@ describe("parseArgs — '--' separator", () => {
 		const result = parseArgs(cmd, ["input.ts", "--", "--extra"]);
 		expect(result.args.file).toBe("input.ts");
 		expect(result.rawArgs).toEqual(["--extra"]);
+	});
+
+	it("fills a required positional from a dash-led token after --", () => {
+		const cmd = makeNode({
+			meta: { name: "test" },
+			args: [{ name: "file", type: "string", required: true }],
+		});
+		const result = parseArgs(cmd, ["--", "-x"]);
+		expect(result.args.file).toBe("-x");
+		expect(result.rawArgs).toEqual([]);
+		expect(() => validateParsed(cmd, result)).not.toThrow();
+	});
+
+	it("fills the remaining positionals after the ones before --", () => {
+		const cmd = makeNode({
+			meta: { name: "test" },
+			args: [
+				{ name: "name", type: "string", required: true },
+				{ name: "offset", type: "number" },
+			],
+		});
+		const result = parseArgs(cmd, ["a", "--", "-5", "rest"]);
+		expect(result.args).toEqual({ name: "a", offset: -5 });
+		expect(result.excessArgs).toEqual([]);
+		expect(result.rawArgs).toEqual(["rest"]);
+	});
+
+	it("leaves every token after -- in rawArgs without declared positionals", () => {
+		const cmd = makeNode({ meta: { name: "test" } });
+		const result = parseArgs(cmd, ["--", "-x", "--watch", "src"]);
+		expect(result.rawArgs).toEqual(["-x", "--watch", "src"]);
+		expect(result.excessArgs).toEqual([]);
+	});
+
+	it("binds an optional positional before rawArgs", () => {
+		const cmd = makeNode({
+			meta: { name: "test" },
+			args: [{ name: "target", type: "string" }],
+		});
+		const result = parseArgs(cmd, ["--", "--watch", "src"]);
+		expect(result.args.target).toBe("--watch");
+		expect(result.rawArgs).toEqual(["src"]);
+	});
+
+	it("lets a variadic positional consume every token after --", () => {
+		const cmd = makeNode({
+			meta: { name: "test" },
+			args: [{ name: "files", type: "string", variadic: true, required: true }],
+		});
+		const result = parseArgs(cmd, ["a", "--", "-b", "--", "c"]);
+		expect(result.args.files).toEqual(["a", "-b", "--", "c"]);
+		expect(result.rawArgs).toEqual([]);
+	});
+
+	it("treats flag spellings after -- as values", () => {
+		const cmd = makeNode({
+			meta: { name: "test" },
+			args: [{ name: "pattern", type: "string", required: true }],
+			flags: { verbose: { type: "boolean" } },
+		});
+		const result = parseArgs(cmd, ["--", "--verbose", "--help"]);
+		expect(result.args.pattern).toBe("--verbose");
+		expect(result.flags.verbose).toBeUndefined();
+		expect(result.rawArgs).toEqual(["--help"]);
+	});
+
+	it("still reports excess positionals before -- once every declared one is filled", () => {
+		const cmd = makeNode({
+			meta: { name: "test" },
+			args: [{ name: "file", type: "string" }],
+		});
+		const result = parseArgs(cmd, ["a", "b", "--", "c"]);
+		expect(result.args.file).toBe("a");
+		expect(result.excessArgs).toEqual(["b"]);
+		expect(result.rawArgs).toEqual(["c"]);
 	});
 });
 
@@ -467,12 +542,12 @@ describe("parseArgs — complex scenarios", () => {
 			"--some-extra-flag",
 		]);
 		expect(result.args.entry).toBe("main.ts");
-		expect(result.args.extras).toEqual(["extra1.ts", "extra2.ts"]);
+		expect(result.args.extras).toEqual(["extra1.ts", "extra2.ts", "--some-extra-flag"]);
 		expect(result.flags.output).toBe("./build");
 		expect(result.flags.port).toBe(8080);
 		expect(result.flags.minify).toBe(false);
 		expect(result.flags.verbose).toBeUndefined();
-		expect(result.rawArgs).toEqual(["--some-extra-flag"]);
+		expect(result.rawArgs).toEqual([]);
 	});
 });
 

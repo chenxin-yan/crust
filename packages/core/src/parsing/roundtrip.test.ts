@@ -148,20 +148,30 @@ function pick<T>(random: Random, pool: readonly T[]): T {
 	return pool[int(random, pool.length)]!;
 }
 
-const STRINGS = ["", "origin", "main", "with space", "a=b", "ünïcödé", "42", "true", "null"];
+const STRINGS = [
+	"",
+	"origin",
+	"main",
+	"with space",
+	"a=b",
+	"ünïcödé",
+	"42",
+	"true",
+	"null",
+	"-x",
+	"--",
+];
 const PATHS = ["src/index.ts", "./dist", "../shared", "~/projects", "/tmp/out", "a b/c.txt"];
 const URLS = ["https://example.com/", "http://localhost:3000/api?x=1", "file:///tmp/a.txt"];
 const RAW = ["--literal", "-x", "--", "plain", ""];
-/** Argv cannot express a leading dash before `--`, so positional numbers stay non-negative. */
-const POSITIONAL_NUMBERS = [0, 1, 42, 3.5, 0.1, 1e21];
-const FLAG_NUMBERS = [...POSITIONAL_NUMBERS, -3, -0.5];
+const NUMBERS = [0, 1, 42, 3.5, 0.1, 1e21, -3, -0.5];
 
 function jsonScalar(random: Random): string | number | boolean | null {
 	switch (int(random, 4)) {
 		case 0:
 			return pick(random, STRINGS);
 		case 1:
-			return pick(random, FLAG_NUMBERS);
+			return pick(random, NUMBERS);
 		case 2:
 			return random() < 0.5;
 		default:
@@ -183,7 +193,7 @@ interface Encoded {
 	readonly token: string;
 }
 
-function scalar(random: Random, def: ArgDef | FlagDef, positional: boolean): Encoded {
+function scalar(random: Random, def: ArgDef | FlagDef): Encoded {
 	if (def.choices) {
 		const value = pick(random, def.choices);
 		return { value, token: value };
@@ -191,7 +201,7 @@ function scalar(random: Random, def: ArgDef | FlagDef, positional: boolean): Enc
 	// Schema-backed args carry no `type`; their schema receives the raw string on both paths.
 	switch (def.type ?? "string") {
 		case "number": {
-			const value = pick(random, positional ? POSITIONAL_NUMBERS : FLAG_NUMBERS);
+			const value = pick(random, NUMBERS);
 			return { value, token: String(value) };
 		}
 		case "boolean": {
@@ -239,7 +249,7 @@ function generateArgs(random: Random, defs: readonly ArgDef[]) {
 	const supplied = lastRequired + 1 + int(random, available - lastRequired);
 	for (const def of defs.slice(0, supplied)) {
 		const count = def.variadic ? (mustSupply(def) ? 1 : 0) + int(random, 3) : 1;
-		const items = Array.from({ length: count }, () => scalar(random, def, true));
+		const items = Array.from({ length: count }, () => scalar(random, def));
 		args[def.name] = def.variadic ? items.map((item) => item.value) : items[0]!.value;
 		tokens.push(...items.map((item) => item.token));
 	}
@@ -258,7 +268,7 @@ function generateFlags(random: Random, defs: Readonly<Record<string, FlagDef>>) 
 		// A `delimiter` splits argv occurrences and drops empty segments, but never touches
 		// structured values, so a token containing it (or an empty token) is not equivalent.
 		for (let draw = 0; draw < MAX_ENCODE_ATTEMPTS; draw++) {
-			const item = scalar(random, def, false);
+			const item = scalar(random, def);
 			if (
 				def.delimiter !== undefined &&
 				(item.token === "" || item.token.includes(def.delimiter))
@@ -294,26 +304,29 @@ function generateCase(
 	path: readonly string[],
 	reserved: ReadonlySet<string>,
 ): RoundTripCase {
-	for (let draw = 0; draw < MAX_ENCODE_ATTEMPTS; draw++) {
-		const positional = generateArgs(random, command.args);
-		const named = generateFlags(random, command.effectiveFlags);
-		// A dash-led positional would parse as a flag; a reserved first positional would route
-		// into a subcommand. Both are unreachable from argv, so draw again.
-		const [first] = positional.tokens;
-		if (positional.tokens.some((token) => token.startsWith("-"))) continue;
-		if (first !== undefined && reserved.has(first)) continue;
+	const positional = generateArgs(random, command.args);
+	const named = generateFlags(random, command.effectiveFlags);
+	// A dash-led positional would parse as a flag, and a reserved first positional would route
+	// into a subcommand; after `--` both are operands.
+	const [first] = positional.tokens;
+	const separated =
+		positional.tokens.some((token) => token.startsWith("-")) ||
+		(first !== undefined && reserved.has(first));
 
-		const input: RunInputPayload = { args: positional.args, flags: named.flags };
-		const argv = [...path, ...positional.tokens, ...named.tokens];
-		if (random() < 0.3) {
-			const raw = Array.from({ length: int(random, 4) }, () => pick(random, RAW));
-			return { input: { ...input, raw }, argv: [...argv, "--", ...raw] };
-		}
-		return { input, argv };
+	const input: RunInputPayload = { args: positional.args, flags: named.flags };
+	const argv = separated
+		? [...path, ...named.tokens, "--", ...positional.tokens]
+		: [...path, ...positional.tokens, ...named.tokens];
+	// Declared positionals take tokens after `--` first, so `raw` only follows a full, non-variadic set.
+	const last = command.args.at(-1);
+	const rawReachable =
+		last === undefined ||
+		(!last.variadic && Object.keys(positional.args).length === command.args.length);
+	if (rawReachable && random() < 0.3) {
+		const raw = Array.from({ length: int(random, 4) }, () => pick(random, RAW));
+		return { input: { ...input, raw }, argv: [...argv, ...(separated ? [] : ["--"]), ...raw] };
 	}
-	throw new Error(
-		`could not encode a case for [${path.join(", ")}] on argv after ${MAX_ENCODE_ATTEMPTS} attempts; a positional definition only accepts dash-led values or subcommand names.`,
-	);
+	return { input, argv };
 }
 
 interface RoundTripReport {

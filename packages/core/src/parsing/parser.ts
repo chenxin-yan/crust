@@ -536,23 +536,20 @@ function tokenizeArgv(command: CommandNode, argv: string[]) {
 		throw new CrustError("PARSE", "Failed to parse command arguments").withCause(error);
 	}
 
-	const rawArgs: string[] = [];
-	const preSeparatorPositionals: string[] = [];
-	let afterSeparator = false;
+	const positionals: string[] = [];
+	let separatorIndex: number | undefined;
 	for (const token of parsed.tokens) {
 		if (token.kind === "option-terminator") {
-			afterSeparator = true;
-			continue;
-		}
-		if (token.kind === "positional") {
-			(afterSeparator ? rawArgs : preSeparatorPositionals).push(token.value);
+			separatorIndex = positionals.length;
+		} else if (token.kind === "positional") {
+			positionals.push(token.value);
 		}
 	}
 
 	return {
-		positionals: preSeparatorPositionals,
+		positionals,
+		separatorIndex: separatorIndex ?? positionals.length,
 		flagValues: resolveAliases(parsed.tokens, spellings),
-		rawArgs,
 	};
 }
 
@@ -649,7 +646,7 @@ function bind<A extends ArgsDef, F extends FlagsDef, V, W>(
  * @param command - The command whose arg/flag definitions drive the parsing
  * @param argv - The argv array to parse (typically `process.argv.slice(2)`)
  * @param env - Environment consulted for `FlagDef.env` fallbacks; pass `{}` to parse without one
- * @returns Parsed args, flags, excessArgs (positionals before `--` not consumed by a declared argument), rawArgs (everything after `--`), and any deferred valueError
+ * @returns Parsed args, flags, excessArgs (positionals before `--` not consumed by a declared argument), rawArgs (tokens after `--` not consumed by a declared argument), and any deferred valueError
  * @throws {CrustError} On malformed argv: unknown flags, a missing option value, or a negated `noNegate` flag
  */
 export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
@@ -657,7 +654,7 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 	argv: string[],
 	env: FlagEnvironment = process.env,
 ): ArgvParseResult<A, F> {
-	const { positionals, flagValues, rawArgs } = tokenizeArgv(command, argv);
+	const { positionals, separatorIndex, flagValues } = tokenizeArgv(command, argv);
 	let valueError: CrustError | undefined;
 	const { args, flags, consumed } = bind(
 		command,
@@ -672,8 +669,9 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 	return {
 		args,
 		flags,
-		excessArgs: positionals.slice(consumed),
-		rawArgs,
+		// Tokens after `--` are operands: declared positionals take them first, the rest pass through.
+		excessArgs: positionals.slice(consumed, separatorIndex),
+		rawArgs: positionals.slice(Math.max(consumed, separatorIndex)),
 		...(valueError && { valueError }),
 	};
 }

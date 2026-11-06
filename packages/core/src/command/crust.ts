@@ -142,7 +142,7 @@ export interface CrustCommandContext<
 	flags: InferFlags<F>;
 	/** Lazy Context values available on this command path. */
 	ctx: ContextBag<Ctx>;
-	/** Raw arguments that appeared after the `--` separator */
+	/** Tokens after the `--` separator that no declared argument consumed, or the `raw` array passed to typed `run()` */
 	rawArgs: string[];
 	/**
 	 * Aborted when the caller cancels the invocation (`execute({ signal })`,

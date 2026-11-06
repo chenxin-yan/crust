@@ -857,7 +857,7 @@ export interface ParseResult<A extends ArgsDef = ArgsDef, F extends FlagsDef = F
 	flags: RawParsedFlags<F>;
 	/** Positionals before `--` that were not consumed by a declared argument. */
 	excessArgs: string[];
-	/** Arguments after the `--` separator. */
+	/** From argv, the tokens after `--` that no declared argument consumed; from structured `run()` input, its `raw` values. */
 	rawArgs: string[];
 }
 
