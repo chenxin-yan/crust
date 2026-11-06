@@ -23,6 +23,15 @@ import { BUN_TARGETS, type TargetInfo } from "../src/targets.ts";
 import { isRunning } from "./bounded-process.ts";
 import { hostTarget } from "./helpers.ts";
 
+function hostInterpreterNamesLibc(): boolean {
+	try {
+		const head = readFileSync("/proc/self/exe").subarray(0, 2048).toString("latin1");
+		return head.includes("/ld-musl-") || head.includes("/ld-linux-");
+	} catch {
+		return false;
+	}
+}
+
 const TIMEOUT = 10_000;
 
 // Fake platform binary: logs synchronously so the log is complete once it exits.
@@ -267,6 +276,28 @@ open(os.environ["LAUNCHER_TEST_LOG"], "a").write("nonblocking " + ",".join("1" i
 		// A subset: some Node builds (e.g. Nix wrappers) add variables of their own.
 		expect(JSON.parse(result.stdout)).toMatchObject(env);
 	});
+
+	// A diagnostic report costs milliseconds on every start; Node's ELF interpreter names its libc.
+	// Hosts where that read finds no interpreter (static Node, no readable /proc) take the fallback.
+	it.skipIf(process.platform !== "linux" || !hostInterpreterNamesLibc())(
+		"picks the Linux binary without building a diagnostic report",
+		() => {
+			tmpDir = mkdtempSync(join(tmpdir(), "crust-launcher-test-"));
+			const launcher = stageLauncher(tmpDir, `#!${process.execPath}\nconsole.log("ran");`);
+			const result = spawnSync(
+				process.execPath,
+				[
+					"--import",
+					'data:text/javascript,process.report.getReport = () => { console.error("getReport called"); process.exit(9); };',
+					launcher,
+				],
+				{ encoding: "utf8", timeout: TIMEOUT },
+			);
+			expect(result.stderr).not.toContain("getReport called");
+			expect(result.stdout).toBe("ran\n");
+			expect(result.status).toBe(0);
+		},
+	);
 
 	it.each(["getBuiltinModule", "execve"])(
 		"tells users of a Node.js without %s which version it needs",
