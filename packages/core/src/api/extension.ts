@@ -162,6 +162,20 @@ export interface ExtensionContext<
 	 */
 	readonly rawArgs: readonly string[];
 	/**
+	 * What argv gave explicitly: declared argument names, canonical flag names (aliases and
+	 * `--no-<name>` included, environment values not), and whether passthrough tokens were
+	 * left after `--`. It reflects argv only, never values bound later by
+	 * {@link ExtensionContext.bindInput}; empty under typed `run()` and in `onError` after a
+	 * routing or argv-syntax failure.
+	 *
+	 * @example `{ args: ["target"], flags: ["trace"], raw: true }`
+	 */
+	readonly argvProvided: {
+		readonly args: readonly string[];
+		readonly flags: readonly string[];
+		readonly raw: boolean;
+	};
+	/**
 	 * Aborted when the caller cancels the invocation (`execute({ signal })`,
 	 * `run(path, input, { signal })`, or the first `SIGINT` under `execute()`);
 	 * see `ExecuteOptions.signal` for how the abort reason maps to the exit code.

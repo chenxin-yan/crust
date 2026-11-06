@@ -1307,6 +1307,55 @@ describe("Extension named hooks", () => {
 		});
 	});
 
+	describe("argvProvided", () => {
+		function recordingApp() {
+			const seen: unknown[] = [];
+			const recorder = defineExtension(defineExtensionId("recorder"))
+				.preRun((ctx) => {
+					ctx.bindInput({ flags: { name: "json" } });
+					seen.push(ctx.argvProvided);
+				})
+				.onError((_error, ctx) => void seen.push(ctx.argvProvided));
+			const app = new Crust("cli")
+				.flags({
+					name: { type: "string", default: "dflt" },
+					verbose: { type: "boolean", short: "V" },
+					port: { type: "number", env: { name: "PROVIDED_PORT" } },
+				})
+				.args({ name: "source", type: "string" })
+				.args({ name: "target", type: "string" })
+				.extend(recorder)
+				.action(() => {});
+			return { app, seen };
+		}
+
+		afterEach(() => vi.unstubAllEnvs());
+
+		it("lists argv's arguments, canonical flag names, and passthrough tokens, ignoring env and bindInput", async () => {
+			vi.stubEnv("PROVIDED_PORT", "9000");
+			const { app, seen } = recordingApp();
+			expect(
+				await app.execute({ argv: ["a", "-V", "--", "b", "--x"], io: { stdout: () => {} } }),
+			).toBe(0);
+			expect(seen).toEqual([{ args: ["source", "target"], flags: ["verbose"], raw: true }]);
+			expect(Object.isFrozen(seen[0])).toBe(true);
+		});
+
+		it("reports no passthrough when `--` has no tokens left over", async () => {
+			const { app, seen } = recordingApp();
+			await app.execute({ argv: ["--name", "x", "--"] });
+			expect(seen).toEqual([{ args: [], flags: ["name"], raw: false }]);
+		});
+
+		it("is empty under typed run() and in the routing-failure onError context", async () => {
+			const { app, seen } = recordingApp();
+			await app.run([], { args: { source: "a" }, flags: { verbose: true }, raw: ["r"] });
+			await app.execute({ argv: ["--nope"], io: { stderr: () => {} } });
+			const empty = { args: [], flags: [], raw: false };
+			expect(seen).toEqual([empty, empty]);
+		});
+	});
+
 	it("reports the handling Extension and exposes parsed snapshots before validation", async () => {
 		let outcomeBy = "";
 		let seenPort: unknown;
