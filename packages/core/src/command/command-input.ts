@@ -120,6 +120,27 @@ export function commandInputSchema(
 		: { type: "object", properties, required };
 }
 
+/** How a command's flat JSON input splits back into `run()` input. */
+export interface CommandInputFields {
+	/** Arg and flag names declared as `type: "url"`; their strings become `URL`s before `run()`. */
+	readonly urlFields: readonly string[];
+	/** Arg names; every other input property except `raw` is a flag. */
+	readonly argNames: readonly string[];
+}
+
+/** Arg names and `url` field names of a command's flat JSON input, in declaration order. */
+export function commandInputFields(command: CommandSnapshot): CommandInputFields {
+	return {
+		urlFields: [
+			...command.args.filter((arg) => arg.type === "url").map((arg) => arg.name),
+			...Object.entries(command.flags)
+				.filter(([, flag]) => flag.type === "url")
+				.map(([name]) => name),
+		],
+		argNames: command.args.map((arg) => arg.name),
+	};
+}
+
 function isString(value: JsonValue): value is string {
 	return typeof value === "string";
 }
@@ -140,13 +161,7 @@ export function parseCommandInput(
 	// Null prototypes so a `__proto__` definition binds as an own property.
 	const args: Record<string, RunInputValue> = Object.create(null);
 	const flags: Record<string, RunInputValue> = Object.create(null);
-	const argNames = command.args.map((arg) => arg.name);
-	const urlFields = [
-		...command.args.filter((arg) => arg.type === "url").map((arg) => arg.name),
-		...Object.entries(command.flags)
-			.filter(([, flag]) => flag.type === "url")
-			.map(([name]) => name),
-	];
+	const { argNames, urlFields } = commandInputFields(command);
 	const toUrl = (value: JsonValue) => (isString(value) ? new URL(value) : value);
 	let raw: readonly string[] | undefined;
 	for (const [name, value] of Object.entries(values)) {

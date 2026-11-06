@@ -2,6 +2,7 @@ import type { CommandSnapshot } from "@crustjs/core";
 import {
 	type CommandInputPropertySchema,
 	type CommandInputSchema,
+	commandInputFields,
 	commandInputSchema,
 	isListed,
 } from "@crustjs/core/tooling";
@@ -33,27 +34,14 @@ export interface McpToolsOptions {
 
 /** Name of the command `mcpExtension` contributes; never exposed as a tool. */
 export const MCP_COMMAND_NAME = "mcp";
+/** Passthrough values land here and reach the action as `rawArgs`. */
+export { RAW_INPUT_PROPERTY as RAW_PROPERTY } from "@crustjs/core/tooling";
 
 /** MCP specification 2025-11-25, "Tool Names". */
 const TOOL_NAME_PATTERN = /^[A-Za-z0-9_.-]{1,128}$/;
 
 function formatPath(path: readonly string[]): string {
 	return path.length === 0 ? "<root>" : path.join(" ");
-}
-
-type ToolInput = Pick<McpTool, "inputSchema" | "urlFields" | "argNames">;
-
-function toolInput(command: CommandSnapshot, path: readonly string[]): ToolInput {
-	return {
-		inputSchema: commandInputSchema(command, path),
-		urlFields: [
-			...command.args.filter((arg) => arg.type === "url").map((arg) => arg.name),
-			...Object.entries(command.flags)
-				.filter(([, flag]) => flag.type === "url")
-				.map(([name]) => name),
-		],
-		argNames: command.args.map((arg) => arg.name),
-	};
 }
 
 /**
@@ -113,7 +101,8 @@ export function toolsFromSnapshot(
 				...(command.meta.description === undefined
 					? {}
 					: { description: command.meta.description }),
-				...toolInput(command, path),
+				inputSchema: commandInputSchema(command, path),
+				...commandInputFields(command),
 				path,
 			});
 		}

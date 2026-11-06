@@ -11,11 +11,16 @@
 export { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
 export { SNAPSHOT_PATH_ENV } from "./command/invocation.ts";
 export {
+	commandInputFields,
 	commandInputSchema,
 	parseCommandInput,
 	RAW_INPUT_PROPERTY,
 } from "./command/command-input.ts";
-export type { CommandInputPropertySchema, CommandInputSchema } from "./command/command-input.ts";
+export type {
+	CommandInputFields,
+	CommandInputPropertySchema,
+	CommandInputSchema,
+} from "./command/command-input.ts";
 export {
 	buildCommandDocumentation,
 	formatDefault,
