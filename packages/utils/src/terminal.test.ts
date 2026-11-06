@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
 	getAmbientTerminalIO,
 	getTerminalIO,
 	withAmbientTerminalIO,
 	withTerminalIO,
+	writeProcessOutput,
 } from "./terminal.ts";
 
 describe("ambient terminal IO", () => {
@@ -55,4 +56,37 @@ describe("ambient terminal IO", () => {
 			});
 		});
 	});
+});
+
+describe("writeProcessOutput", () => {
+	afterEach(() => vi.restoreAllMocks());
+
+	// Windows writes through the process streams instead.
+	it.skipIf(process.platform === "win32")(
+		"drops only the failed write after a transient error such as ENOSPC",
+		() => {
+			const fs = process.getBuiltinModule("node:fs");
+			const writeSync = fs.writeSync;
+			const written: string[] = [];
+			let failNext = true;
+			vi.spyOn(fs, "writeSync").mockImplementation(((
+				fd: number,
+				buffer: Uint8Array,
+				offset?: number,
+			) => {
+				if (fd !== 2) return writeSync(fd, buffer, offset);
+				if (failNext) {
+					failNext = false;
+					throw Object.assign(new Error("no space left on device"), { code: "ENOSPC" });
+				}
+				written.push(Buffer.from(buffer.subarray(offset)).toString("utf8"));
+				return buffer.length - (offset ?? 0);
+			}) as typeof writeSync);
+
+			writeProcessOutput(2, "lost\n");
+			writeProcessOutput(2, "kept\n");
+
+			expect(written).toEqual(["kept\n"]);
+		},
+	);
 });

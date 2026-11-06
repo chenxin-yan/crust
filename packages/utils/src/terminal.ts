@@ -55,8 +55,8 @@ const closedFds = new Set<number>();
  * Returning only once every byte is written keeps output intact through an immediate
  * `process.exit()`. `EAGAIN` means a non-blocking pipe is full (Bun makes fd 1 non-blocking
  * once anything touches `process.stdout`): sleep 1 ms and retry rather than drop or reorder.
- * Any other error (`EPIPE` from `cli | head`) closes the fd for later writes silently, like
- * `console.log`.
+ * A closed reader or descriptor (`EPIPE` from `cli | head`, `EBADF`) closes the fd for later
+ * writes silently, like `console.log`; other errors (`ENOSPC`) drop only the current write.
  */
 function writeFd(fd: 1 | 2, text: string): void {
 	if (closedFds.has(fd)) return;
@@ -67,7 +67,11 @@ function writeFd(fd: 1 | 2, text: string): void {
 		try {
 			offset += writeSync(fd, buffer, offset);
 		} catch (error) {
-			if (!isErrnoException(error) || error.code !== "EAGAIN") return void closedFds.add(fd);
+			const code = isErrnoException(error) ? error.code : undefined;
+			if (code !== "EAGAIN") {
+				if (code === "EPIPE" || code === "EBADF") closedFds.add(fd);
+				return;
+			}
 			Atomics.wait((retryPause ??= new Int32Array(new SharedArrayBuffer(4))), 0, 0, 1);
 		}
 	}
