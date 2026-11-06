@@ -36,14 +36,24 @@ if (typeof process.getBuiltinModule !== "function" ||
 // Builtins come from process.getBuiltinModule (cheaper than imports) and never from
 // node:process: importing it touches stdio, which leaves the shared terminal and pipes
 // non-blocking for the binary after execve.
-const { chmodSync, existsSync } = process.getBuiltinModule("node:fs");
+const { chmodSync, closeSync, existsSync, openSync, readSync } = process.getBuiltinModule("node:fs");
 const { resolve } = process.getBuiltinModule("node:path");
 
 const PLATFORMS = ${JSON.stringify(targetMap, null, "\t")};
 const dir = import.meta.dirname;
 
-// Same check as Bun's own npm installer: glibc reports its version, musl does not.
 function isMusl() {
+	// The first 2 KB of Node's ELF image hold its interpreter path (detect-libc reads the same
+	// span), which names its libc without the milliseconds a diagnostic report costs on every start.
+	try {
+		const fd = openSync("/proc/self/exe", "r");
+		const head = Buffer.alloc(2048);
+		const interpreter = head.toString("latin1", 0, readSync(fd, head, 0, head.length, 0));
+		closeSync(fd);
+		if (interpreter.includes("/ld-musl-")) return true;
+		if (interpreter.includes("/ld-linux-")) return false;
+	} catch {}
+	// Same check as Bun's own npm installer: glibc reports its version, musl does not.
 	try {
 		const report = process.report?.getReport();
 		if (report?.header) return report.header.glibcVersionRuntime === undefined;
