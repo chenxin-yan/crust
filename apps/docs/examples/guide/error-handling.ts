@@ -58,6 +58,8 @@ async function loadConfig(path: string) {
 	try {
 		return await readFile(path, "utf8");
 	} catch (cause) {
+		// Only a missing file means "run init"; rethrow permission and other failures as is.
+		if ((cause as NodeJS.ErrnoException).code !== "ENOENT") throw cause;
 		// [!code highlight]
 		throw new ConfigNotFoundError(`No ${path} found. Run \`app init\` to create one.`, { cause });
 	}
