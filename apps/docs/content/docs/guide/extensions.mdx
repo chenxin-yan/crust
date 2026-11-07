@@ -134,6 +134,25 @@ outcome: completed
 
 A provided Context's [documentation sections](/docs/guide/contexts#documentation-owned-by-a-context) appear once on the root, not on every command.
 
+A provided Context's [flags](/docs/guide/contexts#flags-owned-by-a-context) are parsed by the root, its inline `.command()` children, and the commands that `.use()` the Context:
+
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../examples/guide/extensions-provider-flags.ts#use-site
+</include>
+
+```sh
+$ my-cli remove --yes
+removed
+$ my-cli list --yes
+Error: Unknown flag "--yes"
+```
+
+When the Extension's own hooks `.use()` the Context, every command parses its flags, because hooks run on every command. With `.extend(audited)`, `my-cli list --yes` is accepted:
+
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../examples/guide/extensions-provider-flags.ts#hooks
+</include>
+
 A flag-owning Context requires successful validation. Use it in the action, or in `postRun` after validation has succeeded—not after an Extension handled the invocation early and skipped validation.
 
 ### Use an Extension's Contexts from a command

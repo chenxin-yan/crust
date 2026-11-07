@@ -116,7 +116,7 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 			.setup(() => ({}));
 		const app = new Crust("cli")
 			.provide(auth())
-			.add(defineCommand("deploy", (command) => command.action(() => {})));
+			.add(defineCommand("deploy", (command) => command.use(auth).action(() => {})));
 
 		const result = await executeCrust(app, ["deploy"]);
 		expect(result.exitCode).toBe(1);
@@ -134,8 +134,8 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 			});
 		const app = new Crust("cli").provide(auth()).add(
 			defineCommand("deploy", (command) =>
-				command.action(({ flags, stdout }) => {
-					stdout(`token=${String((flags as { token?: string }).token)}`);
+				command.use(auth).action(({ flags, stdout }) => {
+					stdout(`token=${String(flags.token)}`);
 				}),
 			),
 		);

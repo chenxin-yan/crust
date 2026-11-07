@@ -38,6 +38,7 @@ import {
 	cloneFlagRegistry,
 	commandDefinitionInternal,
 	commandPathOf,
+	installContextFlags,
 	lazyChildRecord,
 	registerFlag,
 	type AddedChild,
@@ -333,6 +334,7 @@ export function buildExtensionTree(
 		const position = node.extensionPositions!.get(extension.id)!;
 		return extension.provide.map((instance) => ({ instance, position }));
 	});
+	const hookContexts = extensions.flatMap((extension) => extension.use);
 	// The definitions of one `.add()` call share its parent.
 	const installed = new Map<CommandNode, CommandNode>();
 	const withProviders = (parent: CommandNode): CommandNode => {
@@ -427,6 +429,8 @@ export function buildExtensionTree(
 		for (const { name, def, recursive } of extensionFlags) {
 			if (isRoot || recursive) registerFlag(prepared, name, def, "owned");
 		}
+		// Extension hooks run on every command, so the Contexts they use parse their flags everywhere.
+		installContextFlags(prepared, hookContexts);
 		applyNodeContextSections(prepared, path, sectionContextsFor(prepared, isRoot));
 		freezeNode(prepared);
 		return prepared;
@@ -606,7 +610,13 @@ async function dispatch(
 	// One resource scope and resolver span pre-run, the action, and post-run.
 	await using disposal = new AsyncDisposableStack();
 	const contexts = resolvedNode.contexts.map(({ instance }) => instance);
-	const resolver = createContextResolver(contexts, output.routed, disposal, signal);
+	const resolver = createContextResolver(
+		contexts,
+		resolvedNode.flagContexts,
+		output.routed,
+		disposal,
+		signal,
+	);
 
 	const snapshots = lazySnapshots(prepared, resolvedNode);
 	// Setups register cleanup only while they run; one shared object keeps per-invocation

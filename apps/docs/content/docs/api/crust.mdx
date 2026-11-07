@@ -122,6 +122,8 @@ const serve = new Crust("serve").flags({
 
 Recipe-only. Declares the Context factories a reusable definition consumes, without providing instances. The call requires at least one factory; repeated calls accumulate. At runtime, the demands and their transitive dependencies are checked when the definition materializes, not at `.add()`.
 
+The command parses the flags these Contexts own, and those of the Contexts their setup uses, transitively; so do its inline `.command()` children added after the call. The builder's flag type includes them. Flags come from the Context the command resolves by that name, so an `.of()` double parses the same flags. See [Flags owned by a Context](/docs/guide/contexts#flags-owned-by-a-context).
+
 An Extension, or an Extension factory, also counts as a factory list: `.use(time)` declares every Context `time()` provides, with the same compile-time checks. At runtime, the app must extend that Extension (matched by id); otherwise preparation throws a `DEFINITION` error with `reason: "missing-extension"`. An Extension value's provided Contexts are also checked as provided (a `.of()` value demands no dependencies) when the definition materializes; a factory's are known only per call, so only its id is checked. See [Use an Extension's Contexts from a command](/docs/guide/extensions#use-an-extensions-contexts-from-a-command).
 
 ## `.provide(...instances)`
@@ -139,7 +141,7 @@ const app = new Crust("my-cli")
   .action(async ({ ctx }) => (await ctx.database).url);
 ```
 
-- Flags declared with a Context's `.flags()` are installed on this command and later-added descendants. The builder's flag type includes them.
+- Flags declared with a Context's `.flags()` are installed on this command and on inline `.command()` children added afterwards. The builder's flag type includes them. A reusable definition parses them only if it declares the Context with [`.use()`](#usefactories); other commands reject them as unknown. See [Flags owned by a Context](/docs/guide/contexts#flags-owned-by-a-context).
 - Its `.sections()` document only the providing command, after the command's own sections. Duplicate titles throw `DEFINITION` (`duplicate-section`) during preparation, not at `.provide()`. See [Context-owned documentation](/docs/guide/contexts#documentation-owned-by-a-context).
 - Within one call, dependencies may appear in any order; across calls, providers must precede their consumers.
 - Names, dependencies, and owned-flag collisions are checked by TypeScript. Runtime composition checks reject missing declared providers and dynamic flag collisions with a `DEFINITION` error, without running setup. Pulling a Context also checks missing providers, dependency cycles, and lifecycle misuse.
@@ -166,7 +168,7 @@ import { help, version } from "@crustjs/extensions";
 const app = new Crust("my-cli", { version: "1.2.3" }).extend(version(), help());
 ```
 
-Extensions apply to every command the same way, whether it was added before or after `.extend()`. Contexts an Extension provides reach every command. Between a root `.provide()` and an Extension-provided Context of the same name, the later call wins, as the types infer; a command's own `.provide()` always wins. Flags those Contexts own come first on every command, before the command's own flags. Extension commands are built on first use, like added definitions, and recursive Extension flags (the default) are registered on each command as it is built; flags with `recursive: false` are registered only on the root, so only the root's flags can collide with them. Extensions must come from `defineExtension()`.
+Extensions apply to every command the same way, whether it was added before or after `.extend()`. Contexts an Extension provides reach every command. Between a root `.provide()` and an Extension-provided Context of the same name, the later call wins, as the types infer; a command's own `.provide()` always wins. Flags those Contexts own are parsed by the root, its inline `.command()` children, and the commands that `.use()` the Context, before the command's own flags; the flags of a Context the Extension's hooks `.use()` are parsed by every command. Extension commands are built on first use, like added definitions, and recursive Extension flags (the default) are registered on each command as it is built; flags with `recursive: false` are registered only on the root, so only the root's flags can collide with them. Extensions must come from `defineExtension()`.
 
 ## `.output(schema)`
 
@@ -200,7 +202,7 @@ The action receives typed `args` and `flags`, the lazy `ctx` bag, `rawArgs` (tok
 
 Registers definitions under their carried names, deferring their recipes until first use. Each addition materializes as a fresh child command. See the [root example](#constructor), which adds `deploy` twice with `.as()`.
 
-Sibling names and aliases must not collide; `.add()` checks them immediately without running recipes. Recipe validation, inherited-flag collisions, and Context-demand checks are deferred until materialization. Chained `.add()` and `.command()` calls share persistent child lists rather than copying existing children, so batching is not required to avoid those copies. A definition can itself add definitions; nested ones access inherited Contexts by declaring them with `.use()`. An added command accepts the Context-owned flags already provided on its parent path, but not the parent's local flags.
+Sibling names and aliases must not collide; `.add()` checks them immediately without running recipes. Recipe validation, inherited-flag collisions, and Context-demand checks are deferred until materialization. Chained `.add()` and `.command()` calls share persistent child lists rather than copying existing children, so batching is not required to avoid those copies. A definition can itself add definitions; nested ones access inherited Contexts by declaring them with `.use()`. An added command accepts the flags of the Contexts it declares with `.use()`, but neither other Context-owned flags on its parent path nor the parent's local flags.
 
 <Callout type="info">
   A later `.provide()` does not reach an already-added definition. Register a definition's providers
@@ -209,7 +211,7 @@ Sibling names and aliases must not collide; `.add()` checks them immediately wit
 
 ## `.command(name, recipe)`
 
-Sugar for `.add(defineCommand(name, recipe))`, for short inline commands. It works on the root and inside another command's recipe, so subcommands can nest inline. Use `defineCommand()` for commands in separate files and reused commands.
+Defines a child like `.add(defineCommand(name, recipe))`, for short inline commands. It works on the root and inside another command's recipe, so subcommands can nest inline. Use `defineCommand()` for commands in separate files and reused commands.
 
 ```ts
 const app = new Crust("my-cli").provide(logging()).command("up", (command) =>
@@ -220,7 +222,7 @@ const app = new Crust("my-cli").provide(logging()).command("up", (command) =>
 );
 ```
 
-The recipe sees the Contexts and Context-owned flags available before the call, so its `ctx` is typed without `.use()`. Inside a recipe, those are the Contexts the parent declared with `.use()` or `.provide()`. Contexts provided after `.command()` are not visible to it.
+The recipe sees the Contexts and Context-owned flags available before the call, so its `ctx` is typed without `.use()` and the command parses those Contexts' flags. Inside a recipe, those are the Contexts the parent declared with `.use()` or `.provide()`. Contexts provided after `.command()` are not visible to it.
 
 ## `.snapshot()`
 
