@@ -1,6 +1,12 @@
 import { stripVTControlCharacters } from "node:util";
 
-import { Crust, defineCommand, defineExtension, defineExtensionId } from "@crustjs/core";
+import {
+	Crust,
+	defineCommand,
+	defineContext,
+	defineExtension,
+	defineExtensionId,
+} from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -161,6 +167,36 @@ describe("help", () => {
 
 		expect(long).toBe("  -o, --output-directory, --outdir <string>  Where to write");
 		expect(short?.indexOf("Force it")).toBe(long?.indexOf("Where to write"));
+	});
+
+	it("lists a Context's owned flags only on commands that parse them", async () => {
+		const config = defineContext("config")
+			.flags({ region: { type: "string", description: "API region" } })
+			.setup(({ flags }) => flags.region);
+		const api = defineContext("api")
+			.use(config)
+			.flags({ "api-url": { type: "string", description: "API base URL" } })
+			.setup(({ flags }) => flags["api-url"]);
+		const app = new Crust("app")
+			.extend(help())
+			.provide(config(), api())
+			.add(
+				defineCommand("status", (cmd) => cmd.use(api).action(() => {})),
+				defineCommand("version", (cmd) => cmd.action(() => {})),
+			)
+			.command("deploy", (cmd) => cmd.action(() => {}));
+		const helpFor = async (command: string) =>
+			stripAnsi((await captureExecute(app, [command, "--help"])).stdout);
+
+		for (const command of ["status", "deploy"]) {
+			const output = await helpFor(command);
+			expect(output).toContain("--api-url <string>");
+			expect(output).toContain("--region <string>");
+		}
+		const version = await helpFor("version");
+		expect(version).toContain("--help");
+		expect(version).not.toContain("--api-url");
+		expect(version).not.toContain("--region");
 	});
 
 	it("help extension renders generated help for no-run command", async () => {
