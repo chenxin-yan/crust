@@ -5,7 +5,6 @@ import {
 	definingOf,
 	type AnyContextFactory,
 	type ContextBag,
-	type ContextDependencies,
 	type AnyContextInstance,
 	type ContextValue,
 	type ContextMap,
@@ -19,6 +18,8 @@ import type {
 	ExtensionData,
 	ExtensionsProvidesOutput,
 	RootMetaKey,
+	UsedContexts,
+	UseSource,
 } from "../api/extension.ts";
 import { CrustError, type DefinitionErrorReason } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
@@ -858,12 +859,12 @@ type AfterUse<
 	CtxFlags extends FlagsDef,
 	CollisionSp extends AnyCollisionSpellings,
 	Result,
-	Fs extends readonly AnyContextFactory[],
+	Us extends readonly UseSource[],
 	Meta extends RootCommandMeta | undefined,
 > = Crust<
 	Flags,
 	A,
-	MergeContext<Ctx, ContextDependencies<Fs>>,
+	MergeContext<Ctx, UsedContexts<Us>>,
 	Sibs,
 	Sp,
 	Tree,
@@ -873,7 +874,7 @@ type AfterUse<
 		CollisionSp["tree"],
 		CollisionSp["demands"],
 		CollisionSp["pending"],
-		MergeContext<RecipeDepsOf<CollisionSp>, ContextDependencies<Fs>>,
+		MergeContext<RecipeDepsOf<CollisionSp>, UsedContexts<Us>>,
 		ProvidersOf<CollisionSp>,
 		ActionDepsOf<CollisionSp>,
 		CollisionSp["extensionCommands"],
@@ -1397,21 +1398,44 @@ export class Crust<
 
 	/**
 	 * Declare Contexts this command consumes without supplying their values.
-	 * Factory references are retained while setup stays lazy.
+	 * Factory references are retained while setup stays lazy. An Extension, or
+	 * Extension factory, stands for the Contexts that Extension provides.
 	 */
-	use<const Fs extends readonly [AnyContextFactory, ...AnyContextFactory[]] = never>(
+	use<const Us extends readonly [UseSource, ...UseSource[]] = never>(
 		this: { readonly _types: { readonly caps: "recipe" } },
-		...factories: Fs &
-			DeclaredDependencyValuesBrand<ContextDependencies<Fs>, ProvidersOf<CollisionSp>>
-	): AfterUse<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Fs, Meta>;
+		...sources: Us & DeclaredDependencyValuesBrand<UsedContexts<Us>, ProvidersOf<CollisionSp>>
+	): AfterUse<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Us, Meta>;
 
-	use<const Fs extends readonly [AnyContextFactory, ...AnyContextFactory[]]>(
-		...factories: Fs
-	): AfterUse<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Fs, Meta> {
+	use<const Us extends readonly [UseSource, ...UseSource[]]>(
+		...sources: Us
+	): AfterUse<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Us, Meta> {
+		const demands: (AnyContextInstance | AnyContextFactory)[] = [];
+		const extensions: ExtensionId[] = [];
+		for (const source of sources) {
+			if ("contextName" in source) {
+				demands.push(definingOf(source));
+				continue;
+			}
+			// A factory's provided Contexts are known only per call, so only its id is checked.
+			if (typeof source === "function") {
+				extensions.push(source.id);
+				continue;
+			}
+			// An instance is matched by its defining id, as `.extend()` registers it, and its
+			// provided instances are demanded as given, so `.of()` values need no dependencies.
+			const {
+				id,
+				provide,
+			}: { readonly id: ExtensionId; readonly provide: readonly AnyContextInstance[] } =
+				definingOf(source);
+			extensions.push(id);
+			demands.push(...provide);
+		}
 		return this._clone<
-			AfterUse<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Fs, Meta>
+			AfterUse<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Us, Meta>
 		>({
-			demands: [...this._node.demands, ...factories.map(definingOf)],
+			demands: [...this._node.demands, ...demands],
+			usedExtensions: [...this._node.usedExtensions, ...extensions],
 		});
 	}
 

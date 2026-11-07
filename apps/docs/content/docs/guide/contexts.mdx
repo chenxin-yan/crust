@@ -41,6 +41,8 @@ https://api.example.com/health
 
 `.use(api)` says “I need this Context”; `.provide(api())` supplies it. Add the command after providing its dependencies—reversing the order is a type error.
 
+To use the Contexts an [Extension](/docs/guide/extensions#use-an-extensions-contexts-from-a-command) provides, pass the Extension to `.use()` instead of each factory.
+
 ## Setup and cleanup
 
 Setup starts on first access to `ctx.database`. Once it succeeds, its value is shared for that invocation. Register cleanup with `defer()` as soon as you acquire a resource:

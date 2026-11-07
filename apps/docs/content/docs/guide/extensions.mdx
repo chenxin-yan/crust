@@ -134,6 +134,21 @@ A provided Context's [documentation sections](/docs/guide/contexts#documentation
 
 A flag-owning Context requires successful validation. Use it in the action, or in `postRun` after validation has succeeded—not after an Extension handled the invocation early and skipped validation.
 
+### Use an Extension's Contexts from a command
+
+A [reusable command](/docs/guide/contexts#use-from-a-reusable-command) can pass an Extension, or its factory, to `.use()` to use every Context that Extension provides:
+
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../examples/guide/extensions-use.ts
+</include>
+
+```sh
+$ my-cli now
+12:00
+```
+
+`.use(time)` and `.use(time())` both declare the Contexts `time()` provides, here `ctx.clock`, so the command does not import the Context factory. TypeScript requires those Contexts where the command is added, as for `.use(clock)`; when the app prepares, Core throws a `DEFINITION` error (`missing-extension`) if it does not extend that Extension.
+
 ## Required root metadata
 
 An Extension that needs `version` can require it with `defineExtension<"version">(id)`:
