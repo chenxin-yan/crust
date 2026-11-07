@@ -10,8 +10,13 @@ function shellQuote(token: string): string {
 }
 
 /** Argv parses a `json` value with `JSON.parse`, so even a string value needs its JSON encoding. */
-function argvValue(value: RunInputValue, type: ValueType | undefined): string {
+function argvValue(value: RunInputValue, type: ValueType | undefined, label: string): string {
 	if (typeof value === "string" && type !== "json") return value;
+	// Argv reads numbers with `Number()`: it accepts `Infinity` (JSON would print `null`) but rejects `NaN`.
+	if (typeof value === "number" && type !== "json") {
+		if (Number.isNaN(value)) throw new Error(`${label} value NaN has no argv spelling`);
+		return String(value);
+	}
 	return value instanceof URL ? value.href : JSON.stringify(value);
 }
 
@@ -36,7 +41,7 @@ function stepArgv(root: CommandSnapshot, step: NextStep): string[] {
 				else if (flag.negatable) options.push(`--no-${name}`);
 				continue;
 			}
-			const text = argvValue(item, flag.type);
+			const text = argvValue(item, flag.type, `"--${name}"`);
 			// The parser splits each occurrence on the delimiter and drops empty pieces.
 			if (flag.delimiter !== undefined && (text === "" || text.includes(flag.delimiter))) {
 				const problem = text === "" ? "is dropped by" : "contains";
@@ -66,7 +71,7 @@ function stepArgv(root: CommandSnapshot, step: NextStep): string[] {
 			throw new Error(`argument "${arg.name}" follows omitted "${omitted}"`);
 		positionals.push(
 			...(arg.variadic && Array.isArray(value) ? value : [value]).map((item) =>
-				argvValue(item, arg.type),
+				argvValue(item, arg.type, `argument "${arg.name}"`),
 			),
 		);
 	}

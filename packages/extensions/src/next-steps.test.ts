@@ -311,6 +311,35 @@ describe("nextSteps", () => {
 		]);
 	});
 
+	it("replays infinite numbers and skips NaN, which argv cannot spell", async () => {
+		const seen: unknown[] = [];
+		const app = new Crust("app")
+			.extend(nextSteps())
+			.command("wait", (cmd) =>
+				cmd
+					.args({ name: "at", type: "number" })
+					.flags({ timeout: { type: "number" } })
+					.action(({ args, flags }) => void seen.push([args, flags])),
+			)
+			.command("suggest", (cmd) =>
+				cmd.use(nextStepsContext).action(async ({ ctx }) => {
+					const next = await ctx.next;
+					next.add(["wait"], { args: { at: -Infinity }, flags: { timeout: Infinity } });
+					next.add(["wait"], { flags: { timeout: Number.NaN } });
+				}),
+			);
+
+		const { stderr } = await captureExecute(app, ["suggest"]);
+		expect(stderr.split("\n")).toEqual([
+			'nextSteps(): skipped "app wait": "--timeout" value NaN has no argv spelling',
+			"Next steps:",
+			"  app wait --timeout Infinity -- -Infinity",
+		]);
+		const line = stderr.split("\n").at(-1)!.trim();
+		expect(await captureExecute(app, shellWords(line).slice(1))).toMatchObject({ exitCode: 0 });
+		expect(seen).toEqual([[{ at: -Infinity }, { timeout: Infinity }]]);
+	});
+
 	it("skips a repeatable flag value its delimiter would split or drop", async () => {
 		const app = new Crust("app")
 			.extend(nextSteps())
