@@ -16,7 +16,7 @@ export type { DidYouMeanOptions } from "./did-you-mean.ts";
 export { help, renderHelp } from "./help.ts";
 export { input } from "./input.ts";
 export { json } from "./json.ts";
-export { nextSteps, nextStepsContext } from "./next-steps.ts";
+export { nextSteps } from "./next-steps.ts";
 export type { NextStep, NextSteps, NextStepsOptions } from "./next-steps.ts";
 export { noColor } from "./no-color.ts";
 export { schema } from "./schema.ts";

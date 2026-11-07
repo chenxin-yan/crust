@@ -1,8 +1,10 @@
 import {
-	type ContextFactory,
+	type CommandDefinition,
+	type CommandShape,
 	type ContextInstance,
 	type ExtensionFactory,
 	type ExtensionId,
+	type RunInput,
 	defineContext,
 	defineExtension,
 	defineExtensionId,
@@ -11,19 +13,32 @@ import type { RunInputPayload } from "@crustjs/core/tooling";
 
 const NEXT_STEPS: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:next-steps");
 
+type AnyCommandDefinition = CommandDefinition<any, any, any, any>;
+
+/** The typed `run()` input of the command added from definition `D`. */
+type DefinitionInput<D> =
+	D extends CommandDefinition<any, any, infer Shape extends CommandShape, any>
+		? RunInput<Shape>
+		: RunInputPayload;
+
 /** A follow-up command to suggest. */
 export interface NextStep {
-	/** Command path below the application root, by canonical names, e.g. `["db", "migrate"]`. */
-	readonly command: readonly string[];
+	/** The command's definition; the step names the command the application added from it. */
+	readonly command: AnyCommandDefinition;
 	/** Arguments, flags, and `raw` tokens in the shape `run()` takes, rendered as argv. */
 	readonly input?: RunInputPayload;
 	/** What the step is for; printed above its command line. */
 	readonly description?: string;
 }
 
-/** The `next` Context value: collects the steps to suggest after this invocation. */
+/** The `nextSteps` Context value: collects the steps to suggest after this invocation. */
 export interface NextSteps {
-	add(command: readonly string[], input?: RunInputPayload, description?: string): void;
+	/** Suggest the command added from `definition`, with `input` typed from its arguments and flags. */
+	add<D extends AnyCommandDefinition>(
+		definition: D,
+		input?: DefinitionInput<D>,
+		description?: string,
+	): void;
 }
 
 export interface NextStepsOptions {
@@ -37,38 +52,36 @@ export interface NextStepsOptions {
 // The postRun hook reads the steps through the Context value without exposing them on it.
 const addedSteps = new WeakMap<NextSteps, NextStep[]>();
 
-/**
- * The `next` Context provided by {@link nextSteps}. A command declares it with
- * `.use(nextStepsContext)` and calls `(await ctx.next).add(...)` from its action.
- */
-export const nextStepsContext: ContextFactory<"next", void, NextSteps> =
-	/* @__PURE__ */ defineContext("next").setup(() => {
-		const steps: NextStep[] = [];
-		const next: NextSteps = {
-			add: (command, input, description) => void steps.push({ command, input, description }),
-		};
-		addedSteps.set(next, steps);
-		return next;
-	});
+const nextStepsContext = /* @__PURE__ */ defineContext("nextSteps").setup(() => {
+	const steps: NextStep[] = [];
+	const next: NextSteps = {
+		add: (command, input?: RunInputPayload, description?: string) =>
+			void steps.push({ command, input, description }),
+	};
+	addedSteps.set(next, steps);
+	return next;
+});
 
 function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
 /**
- * Provides {@link nextStepsContext} and, after an invocation completes or fails,
+ * Provides the `nextSteps` Context and, after an invocation completes or fails,
  * prints a `Next steps:` block to stderr: on failure the `onError` steps first,
- * then the steps the action added. A step that does not match the command tree
- * is skipped with a note on stderr; printing never changes the invocation's result.
+ * then the steps the action added. A command declares the Context with
+ * `.use(nextSteps)` and calls `(await ctx.nextSteps).add(definition, input?, description?)`.
+ * A step whose command the application does not add, or whose input does not match
+ * it, is skipped with a note on stderr; printing never changes the invocation's result.
  */
 export const nextSteps: ExtensionFactory<
 	[options?: NextStepsOptions],
-	{ next: NextSteps },
-	readonly [ContextInstance<"next", NextSteps, {}, {}>],
+	{ nextSteps: NextSteps },
+	readonly [ContextInstance<"nextSteps", NextSteps, {}, {}>],
 	{},
 	[],
 	never,
-	{ next: NextSteps }
+	{ nextSteps: NextSteps }
 > = /* @__PURE__ */ defineExtension(NEXT_STEPS).factory(
 	(extension, options: NextStepsOptions = {}) =>
 		extension
@@ -86,10 +99,14 @@ export const nextSteps: ExtensionFactory<
 							context.stderr(`nextSteps(): onError: ${errorMessage(error)}`);
 						}
 					}
-					steps.push(...(addedSteps.get(await context.ctx.next) ?? []));
+					steps.push(...(addedSteps.get(await context.ctx.nextSteps) ?? []));
 					if (steps.length === 0) return;
 					const { renderNextSteps } = await import("./next-steps-render.ts");
-					const { notes, text } = renderNextSteps(context.rootCommand, steps);
+					const { notes, text } = renderNextSteps(
+						context.rootCommand,
+						steps,
+						context.commandPathOf,
+					);
 					for (const note of notes) context.stderr(`nextSteps(): ${note}`);
 					if (text) context.stderr(text);
 				} catch (error) {
