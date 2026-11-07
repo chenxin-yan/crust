@@ -4,7 +4,7 @@ import { confirmation } from "@crustjs/extensions";
 const app = new Crust("my-cli")
 	.extend(confirmation())
 	.add(
-		defineCommand("drop", { description: "Drop the database", destructive: true }, (cmd) =>
+		defineCommand("drop", { description: "Drop the database" }, (cmd) =>
 			cmd.action(({ stdout }) => stdout("Dropped")),
 		),
 	);
