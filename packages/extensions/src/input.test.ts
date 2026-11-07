@@ -208,10 +208,23 @@ describe("input", () => {
 
 	// Tests run on Node; spawn each runtime so stdin is a real pipe.
 	it.each([
-		["node", process.execPath, ["--input-type=module"]],
-		["bun", "bun", []],
-	])("reads JSON from stdin for - on %s", (_runtime, command, options) => {
+		["node", process.execPath, ["--input-type=module"], ""],
+		["bun", "bun", [], ""],
+		[
+			"node after setEncoding",
+			process.execPath,
+			["--input-type=module"],
+			'process.stdin.setEncoding("utf8");',
+		],
+		[
+			"node after pause",
+			process.execPath,
+			["--input-type=module"],
+			"process.stdin.on('data', () => {}).pause();",
+		],
+	])("reads JSON from stdin for - on %s", (_runtime, command, options, prelude) => {
 		const script = `
+			${prelude}
 			import { Crust } from "@crustjs/core";
 			import { input } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "input.ts")).href)};
 			const app = new Crust("app")
