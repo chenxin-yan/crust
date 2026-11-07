@@ -39,9 +39,9 @@ it.each([
 		"",
 		"Error: Deployment service is unavailable. Try again later.\nClosed database\n",
 	],
-	["custom", 1, "", "Error: Config file not found.\nHint: Run init to create the config file.\n"],
+	["config", 1, "", "Error: No app.config.json found. Run `app init` to create one.\n"],
 	["cancel", 130, "", ""],
-	["inspect", 0, "Config file not found.\n", ""],
+	["inspect", 0, "No app.config.json found. Run `app init` to create one.\n", ""],
 ])(
 	"error-handling example %s prints only its own diagnostics",
 	(scenario, exitCode, stdout, stderr) => {
