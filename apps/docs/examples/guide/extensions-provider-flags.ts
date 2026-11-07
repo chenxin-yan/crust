@@ -20,17 +20,19 @@ const remove = defineCommand("remove", (command) =>
 			stdout((await ctx.confirm).skip ? "removed" : "pass --yes to remove");
 		}),
 );
-const list = defineCommand("list", (command) => command.action(({ stdout }) => stdout("a b")));
+export const list = defineCommand("list", (command) =>
+	command.action(({ stdout }) => stdout("a b")),
+);
 
-const app = new Crust("my-cli").extend(confirmation).add(remove, list);
+export const app = new Crust("my-cli").extend(confirmation).add(remove, list);
 //#endregion
 
 //#region hooks
 export const audited = confirmation
 	.use(confirm) // [!code highlight]
-	.postRun(async ({ ctx, stderr }) => {
+	.postRun(async ({ ctx, stderr }, outcome) => {
+		// A handled invocation, such as --help, skipped flag validation.
+		if (outcome.status !== "completed") return;
 		if ((await ctx.confirm).skip) stderr("confirmation skipped with --yes");
 	});
 //#endregion
-
-await app.execute();
