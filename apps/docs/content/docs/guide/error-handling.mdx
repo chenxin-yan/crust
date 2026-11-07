@@ -61,8 +61,8 @@ Error: Config file not found.
 Hint: Run init to create the config file.
 ```
 
-- Return `true` after rendering to stop later hooks and the default renderer.
-- Return nothing to pass the error to the next hook in `.extend()` order, then the default renderer. Like `catch` blocks, the first hook that claims an error wins, so register specific handlers before broad ones.
+- Return `true` after rendering to stop later hooks and the default rendering.
+- Return nothing to pass the error to the next hook in `.extend()` order, then to the [renderer's `error`](/docs/api/types#renderer) if an Extension chose one, or Core's default rendering. A hook that throws passes the original error on the same way. Like `catch` blocks, the first hook that claims an error wins, so register specific handlers before broad ones.
 - Hooks only run for `execute()`. Rendering this `ConfigError` still exits with status 1; it doesn't turn failure into success.
 
 [`didYouMean()`](/docs/modules/extensions/did-you-mean) uses this hook for command suggestions. See [`onError`](/docs/api/types#extensionhooks) for the full contract.

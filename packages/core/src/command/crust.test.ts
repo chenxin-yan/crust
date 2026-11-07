@@ -1732,10 +1732,11 @@ describe("Extension renderer", () => {
 		expect(lines).toEqual(["stderr:Error: no renderer"]);
 	});
 
-	it("calls error once after onError hooks decline, never when one claims the failure", async () => {
+	it("calls error once after onError hooks decline or throw, never when one claims the failure", async () => {
 		const lines: string[] = [];
-		let claim = false;
+		let claim: boolean | "throw" = false;
 		const presenter = defineExtension(defineExtensionId("presenter")).onError((error, ctx) => {
+			if (claim === "throw") throw new Error("hook broke");
 			if (!claim) return false;
 			ctx.stderr(`claimed:${(error as Error).message}`);
 			return true;
@@ -1745,6 +1746,10 @@ describe("Extension renderer", () => {
 			throw new Error("boom");
 		});
 
+		expect(await execute(app, [], lines)).toBe(1);
+		expect(lines).toEqual(["error:boom"]);
+		lines.length = 0;
+		claim = "throw";
 		expect(await execute(app, [], lines)).toBe(1);
 		expect(lines).toEqual(["error:boom"]);
 		lines.length = 0;

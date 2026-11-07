@@ -271,9 +271,10 @@ export interface ExtensionHooks<
 	) => Awaitable<void>;
 	/**
 	 * Renders a failure in `execute()` only. Return true when rendered to stop the
-	 * chain; falsy values delegate to the next Extension and then Core's renderer.
-	 * A hook that throws ends the chain: remaining hooks are skipped and Core's
-	 * default renderer reports the original failure.
+	 * chain; falsy values delegate to the next Extension and then the selected
+	 * {@link Renderer}'s `error`, or Core's default rendering without one. A hook that
+	 * throws ends the chain: remaining hooks are skipped and the original failure
+	 * reaches that same `error` or default rendering.
 	 *
 	 * Receives the base context: routing or syntax-parse failures render with a
 	 * fallback context whose `flags` are empty, so owned-flag inference would lie here.
