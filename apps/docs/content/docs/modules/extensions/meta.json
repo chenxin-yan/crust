@@ -1,4 +1,4 @@
 {
   "title": "Extensions",
-  "pages": ["help", "version", "completion", "did-you-mean", "no-color", "update-notifier"]
+  "pages": ["help", "version", "completion", "did-you-mean", "no-color", "update-notifier", "json"]
 }
