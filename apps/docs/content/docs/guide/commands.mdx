@@ -107,6 +107,8 @@ A long-running command can report progress to programs while it works. Write its
 
 Events are for programs, not people: Crust never prints them, so a terminal user sees only what the action writes through `stdout(text)` and `stderr(text)`. `run()` and `execute()` deliver each event live to `options.onEvent`, after the [renderer](/docs/guide/extensions#renderers) an Extension selected, if any, receives it as `event`. The `run()` outcome carries every event as `events`, typed from the yields, both when the command completes and when it fails mid-stream; `events` is absent for ordinary actions. The action pauses at each `yield` until the renderer and callback have run. When the invocation's `signal` aborts, Crust closes the generator with `return()` at its next `yield`, so its `finally` blocks run, and the invocation fails with the abort reason; pass `signal` to the work between yields to stop sooner. A throwing renderer `event` or `onEvent` callback closes the generator the same way and fails the invocation. An action that returns an async generator object, such as `async () => watch()`, streams the same way; other async iterables are ordinary results.
 
+To print events on the command line, add the [`json()`](/docs/modules/extensions/json#generator-actions) Extension: with `--json`, a generator action streams its events and final result as NDJSON on stdout.
+
 ## Unknown commands
 
 ```sh
