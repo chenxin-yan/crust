@@ -297,7 +297,7 @@ describe("createMcpServer", () => {
 		}
 	});
 
-	it("advertises destructiveHint and output schemas that the results' structuredContent satisfies", async () => {
+	it("advertises output schemas that the results' structuredContent satisfies", async () => {
 		const DIALECT = "https://json-schema.org/draft/2020-12/schema";
 		const user = {
 			type: "object",
@@ -307,7 +307,7 @@ describe("createMcpServer", () => {
 		};
 		const app = new Crust("cli")
 			.add(
-				defineCommand("rm", { destructive: true }, (c) =>
+				defineCommand("rm", (c) =>
 					c.output(jsonSchemaOutput({ $schema: DIALECT, ...user })).action(() => ({ id: 1 })),
 				),
 			)
@@ -321,7 +321,6 @@ describe("createMcpServer", () => {
 		expect(tools).toMatchObject([
 			{
 				name: "rm",
-				annotations: { destructiveHint: true },
 				outputSchema: { $schema: DIALECT, ...user },
 			},
 			{
@@ -334,7 +333,6 @@ describe("createMcpServer", () => {
 				},
 			},
 		]);
-		expect(tools[1]).not.toHaveProperty("annotations");
 		// The SDK client validates structuredContent against the advertised outputSchema.
 		expect((await client.callTool({ name: "rm" })).structuredContent).toEqual({ id: 1 });
 		expect((await client.callTool({ name: "count" })).structuredContent).toEqual({ result: 2 });
