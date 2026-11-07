@@ -370,31 +370,37 @@ describe("json", () => {
 			});
 		});
 
-		it("fails with an error line and closes the generator when an event is not JSON data", async () => {
-			let closed = false;
-			const app = new Crust("app").extend(json()).action(async function* () {
-				try {
-					yield 1;
-					yield 1n;
-					return 2;
-				} finally {
-					closed = true;
-				}
-			});
+		it.each([
+			["a BigInt", 1n],
+			["undefined", undefined],
+		])(
+			"fails with an error line and closes the generator when an event is %s",
+			async (_label, event) => {
+				let closed = false;
+				const app = new Crust("app").extend(json()).action(async function* () {
+					try {
+						yield 1;
+						yield event;
+						return 2;
+					} finally {
+						closed = true;
+					}
+				});
 
-			const { stdout, stderr, exitCode } = await captureExecute(app, ["--json"]);
+				const { stdout, stderr, exitCode } = await captureExecute(app, ["--json"]);
 
-			expect(exitCode).toBe(1);
-			expect(stderr).toBe("");
-			const lines = stdout.split("\n");
-			expect(lines).toHaveLength(2);
-			expect(lines[0]).toBe('{"type":"event","data":1}');
-			expect(JSON.parse(lines[1]!)).toMatchObject({
-				type: "error",
-				error: { message: expect.stringMatching(/^--json: an event is not JSON data/) },
-			});
-			expect(closed).toBe(true);
-		});
+				expect(exitCode).toBe(1);
+				expect(stderr).toBe("");
+				const lines = stdout.split("\n");
+				expect(lines).toHaveLength(2);
+				expect(lines[0]).toBe('{"type":"event","data":1}');
+				expect(JSON.parse(lines[1]!)).toMatchObject({
+					type: "error",
+					error: { message: expect.stringMatching(/^--json: an event is not JSON data/) },
+				});
+				expect(closed).toBe(true);
+			},
+		);
 
 		it("fails with an error line when the returned result is not JSON data", async () => {
 			const app = new Crust("app").extend(json()).action(async function* () {

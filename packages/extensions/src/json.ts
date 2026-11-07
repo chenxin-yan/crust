@@ -51,11 +51,9 @@ export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__
 				throw new Error(`--json: ${what} is not JSON data${reason}.`, { cause });
 			}
 		};
-		/** One NDJSON line of a generator action's stream; `undefined` data is omitted. */
-		const line = (type: "event" | "result", value: unknown, what: string): string =>
-			value === undefined
-				? `{"type":"${type}"}`
-				: `{"type":"${type}","data":${serialize(value, what)}}`;
+		/** One NDJSON line of a generator action's stream. */
+		const line = (type: "event" | "result", data: string): string =>
+			`{"type":"${type}","data":${data}}`;
 		// Set by Core's `stream()` before a generator action's first event. Once the final
 		// result line is out, a later failure goes to stderr so stdout keeps exactly one final line.
 		let streaming = false;
@@ -66,10 +64,15 @@ export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__
 			stream() {
 				streaming = true;
 			},
-			event: (value) => ctx.stdout(line("event", value, "an event")),
+			event: (value) => ctx.stdout(line("event", serialize(value, "an event"))),
 			result(value) {
 				if (streaming) {
-					ctx.stdout(line("result", value, "the command result"));
+					// The stream still ends with one result line; an `undefined` result has no `data`.
+					ctx.stdout(
+						value === undefined
+							? '{"type":"result"}'
+							: line("result", serialize(value, "the command result")),
+					);
 					ended = true;
 				} else if (value !== undefined) {
 					ctx.stdout(serialize(value, "the command result"));

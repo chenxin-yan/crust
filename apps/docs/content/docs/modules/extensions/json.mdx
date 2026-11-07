@@ -41,7 +41,7 @@ $ tool sync --json
 
 - Each yielded value prints as `{"type":"event","data":…}` as soon as it is yielded.
 - The stream ends with exactly one `{"type":"result","data":…}` line for the `return` value, even when it is `undefined` (the line then has no `data`), or, if the command fails after the action started, one `{"type":"error","error":…}` line with the same error JSON as above. That failure is not also written to stderr.
-- Events and the result must be JSON data, as above; one that is not fails the command with an error line.
+- Events and the result must be JSON data, as above; one that is not, including a yielded `undefined`, fails the command with an error line. Only an `undefined` result is allowed.
 - A failure before the action started, such as a validation error, prints stderr JSON as for any other action. A failure after the result line, such as a Context cleanup failure, also goes to stderr, so stdout never has two final lines.
 
 An ordinary action keeps the bare result line.
