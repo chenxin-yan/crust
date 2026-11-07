@@ -221,6 +221,12 @@ describe("commandInputSchema", () => {
 				when: { type: "string", schema: z.coerce.date() },
 				ref: { type: "string", schema: referencing },
 				tags: { type: "string", multiple: true, schema: z.array(node) },
+				// `items` covers only the rest; the numeric prefix would fail string binding.
+				pair: {
+					type: "string",
+					multiple: true,
+					schema: z.tuple([z.coerce.number()], z.string()),
+				},
 			})
 			.action(noop);
 		const { properties } = commandInputSchema(await app.snapshot(), []);
@@ -234,6 +240,7 @@ describe("commandInputSchema", () => {
 		});
 		expect(properties.port).toEqual({ type: "string", description: "Port" });
 		expect(properties.ref).toEqual({ type: "string" });
+		expect(properties.pair).toEqual({ type: "array", items: { type: "string" } });
 	});
 
 	it("accepts prototype-named definitions as own properties", async () => {
