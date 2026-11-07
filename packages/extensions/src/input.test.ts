@@ -244,6 +244,19 @@ describe("input", () => {
 		});
 	});
 
+	// A setup failure comes after flags are bound, so json() still renders it.
+	it.each([
+		["input first", () => [input(), json()] as const],
+		["json first", () => [json(), input()] as const],
+	])("renders an --input error as one JSON line under --json (%s)", async (_order, extensions) => {
+		const app = new Crust("app").extend(...extensions()).action(() => ({ ok: true }));
+
+		const { stdout, stderr, exitCode } = await captureExecute(app, ["--json", "--input", "{bad"]);
+		expect({ stdout, exitCode }).toEqual({ stdout: "", exitCode: 1 });
+		expect(stderr.split("\n")).toHaveLength(1);
+		expect(JSON.parse(stderr)).toMatchObject({ code: "PARSE", message: expect.any(String) });
+	});
+
 	// Tests run on Node; spawn each runtime so stdin is a real pipe.
 	it.each([
 		["node", process.execPath, ["--input-type=module"], ""],
