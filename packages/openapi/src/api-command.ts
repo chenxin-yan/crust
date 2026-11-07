@@ -1,0 +1,345 @@
+import {
+	type CommandDefinition,
+	type CommandShape,
+	type ContextInstance,
+	type ExtensionFactory,
+	type ExtensionId,
+	CrustError,
+	defineCommand,
+	defineExtension,
+	defineExtensionId,
+} from "@crustjs/core";
+
+import { type ApiClient, type ApiClientOptions, apiClient } from "./client.ts";
+
+const API: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:openapi");
+
+/** An OpenAPI document; only `paths` and local `$ref` targets are read. */
+export interface OpenApiSpec {
+	readonly paths?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+	readonly [key: string]: unknown;
+}
+
+/** A request for {@link ApiClient.fetch}; without `init`, the previous request's is reused. */
+export interface ApiRequest {
+	readonly path: string;
+	readonly init?: RequestInit;
+}
+
+export interface ApiCommandOptions extends ApiClientOptions {
+	/** The OpenAPI document bundled with the CLI, e.g. an imported JSON file; read offline. */
+	readonly spec: OpenApiSpec;
+	/**
+	 * The next page's request for `--paginate`, or `undefined` after the last page.
+	 * Receives a copy of each successful response, so it may read the body.
+	 */
+	readonly paginate?: (
+		response: Response,
+	) => ApiRequest | undefined | Promise<ApiRequest | undefined>;
+}
+
+/** A non-2xx response to `api <path>`; its body was already printed to stdout. */
+export class ApiResponseError extends Error {
+	override name = "ApiResponseError";
+
+	/** The HTTP status code. */
+	readonly status: number;
+
+	constructor(status: number, message: string) {
+		super(message);
+		this.status = status;
+	}
+}
+
+const METHODS = ["get", "put", "post", "delete", "options", "head", "patch", "trace"] as const;
+
+function operations(spec: OpenApiSpec): { method: string; path: string; operation: object }[] {
+	return Object.entries(spec.paths ?? {}).flatMap(([path, item]) =>
+		METHODS.flatMap((method) => {
+			const operation = item[method];
+			return typeof operation === "object" && operation !== null
+				? [{ method, path, operation }]
+				: [];
+		}),
+	);
+}
+
+/** One line per operation: `METHOD path operationId summary`, omitting what the spec lacks. */
+function listOperations(spec: OpenApiSpec): string[] {
+	return operations(spec).map(({ method, path, operation }) => {
+		const { operationId, summary } = operation as { operationId?: unknown; summary?: unknown };
+		return [method.toUpperCase(), path, operationId, summary]
+			.filter((part) => typeof part === "string" && part !== "")
+			.join(" ");
+	});
+}
+
+/** Follows local `$ref`s (`#/...`), keeping sibling keys; a `$ref` back into its own chain stays as is. */
+function resolveRefs(value: unknown, spec: OpenApiSpec, chain: readonly string[]): unknown {
+	if (Array.isArray(value)) return value.map((item) => resolveRefs(item, spec, chain));
+	if (typeof value !== "object" || value === null) return value;
+	const { $ref, ...siblings } = value as { $ref?: unknown };
+	if (typeof $ref === "string" && $ref.startsWith("#") && !chain.includes($ref)) {
+		let target: unknown = spec;
+		for (const token of $ref.slice(1).split("/").slice(1)) {
+			const key = decodeURIComponent(token).replaceAll("~1", "/").replaceAll("~0", "~");
+			target =
+				typeof target === "object" && target !== null && Object.hasOwn(target, key)
+					? (target as Record<string, unknown>)[key]
+					: undefined;
+		}
+		if (target !== undefined) {
+			const resolved = resolveRefs(target, spec, [...chain, $ref]);
+			return typeof resolved === "object" && resolved !== null && !Array.isArray(resolved)
+				? { ...resolved, ...(resolveRefs(siblings, spec, chain) as object) }
+				: resolved;
+		}
+	}
+	return Object.fromEntries(
+		Object.entries(value).map(([key, item]) => [key, resolveRefs(item, spec, chain)]),
+	);
+}
+
+/**
+ * The path item for a spec path, or the operation with that `operationId`, with
+ * local `$ref`s resolved.
+ */
+function specFor(spec: OpenApiSpec, target: string): unknown {
+	const paths = spec.paths ?? {};
+	const found = Object.hasOwn(paths, target)
+		? paths[target]
+		: operations(spec).find(
+				({ operation }) => (operation as { operationId?: unknown }).operationId === target,
+			)?.operation;
+	if (found === undefined) {
+		throw new Error(`No operation or path "${target}" in the OpenAPI spec`);
+	}
+	return resolveRefs(found, spec, []);
+}
+
+const JSON_NUMBER = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
+
+/** `key=value`; `true`, `false`, `null`, and JSON numbers become JSON values, like `gh api -F`. */
+function parseField(field: string): [string, unknown] {
+	const at = field.indexOf("=");
+	if (at <= 0) {
+		throw new CrustError("PARSE", `--field: expected key=value, got "${field}"`, {
+			flag: "field",
+		});
+	}
+	const value = field.slice(at + 1);
+	const literals: Record<string, unknown> = { true: true, false: false, null: null };
+	return [
+		field.slice(0, at),
+		Object.hasOwn(literals, value)
+			? literals[value]
+			: JSON_NUMBER.test(value)
+				? Number(value)
+				: value,
+	];
+}
+
+function parseHeader(header: string): [string, string] {
+	const at = header.indexOf(":");
+	if (at <= 0) {
+		throw new CrustError("PARSE", `--header: expected "Key: Value", got "${header}"`, {
+			flag: "header",
+		});
+	}
+	return [header.slice(0, at).trim(), header.slice(at + 1).trim()];
+}
+
+/**
+ * All of stdin, read asynchronously so Ctrl-C can cancel a read waiting on an open pipe.
+ * shortcut: copied from `@crustjs/extensions` input(); share it if a third package needs it.
+ */
+async function readStdin(signal: AbortSignal): Promise<string> {
+	signal.throwIfAborted();
+	const { stdin } = process;
+	const chunks: Buffer[] = [];
+	const done = Promise.withResolvers<string>();
+	// Strings arrive when something already called `stdin.setEncoding()`.
+	const onData = (chunk: Buffer | string) =>
+		void chunks.push(typeof chunk === "string" ? Buffer.from(chunk, "utf8") : chunk);
+	const onEnd = () => done.resolve(Buffer.concat(chunks).toString("utf8"));
+	const onAbort = () => done.reject(signal.reason);
+	stdin.on("data", onData).once("end", onEnd).once("error", done.reject);
+	signal.addEventListener("abort", onAbort, { once: true });
+	// A `data` listener does not restart a stream an earlier consumer paused.
+	stdin.resume();
+	try {
+		return await done.promise;
+	} finally {
+		signal.removeEventListener("abort", onAbort);
+		stdin.off("data", onData).off("end", onEnd).off("error", done.reject);
+		// Paused stdin no longer keeps the process alive after a cancelled read.
+		stdin.pause();
+	}
+}
+
+/** Inline text, `@path` (relative to the working directory), or `-` (all of stdin). */
+async function readBody(value: string, signal: AbortSignal): Promise<string> {
+	if (value !== "-" && !value.startsWith("@")) return value;
+	try {
+		return value === "-"
+			? await readStdin(signal)
+			: process.getBuiltinModule("node:fs").readFileSync(value.slice(1), "utf8");
+	} catch (cause) {
+		// Cancellation stays an abort, not a PARSE failure.
+		if (signal.aborted && cause === signal.reason) throw cause;
+		const name = value === "-" ? "stdin" : `"${value.slice(1)}"`;
+		const reason = cause instanceof Error ? ` (${cause.message})` : "";
+		throw new CrustError("PARSE", `--body: cannot read ${name}${reason}`, {
+			flag: "body",
+		}).withCause(cause);
+	}
+}
+
+const pathArg = {
+	name: "path",
+	type: "string",
+	description: "Request path below the API base URL, e.g. /users",
+} as const;
+
+const apiFlags = {
+	list: { type: "boolean", noNegate: true, description: "List the API's operations" },
+	spec: { type: "string", description: "Print the OpenAPI definition of an operationId or path" },
+	method: {
+		type: "string",
+		short: "X",
+		description: "HTTP method; default GET, or POST with fields or a body",
+	},
+	header: {
+		type: "string",
+		short: "H",
+		multiple: true,
+		description: "Request header, 'Key: Value'",
+	},
+	field: {
+		type: "string",
+		short: "F",
+		multiple: true,
+		description: "key=value; true, false, null, and numbers are sent as JSON",
+	},
+	body: { type: "string", description: "Request body: inline, @file, or - for stdin" },
+	paginate: {
+		type: "boolean",
+		noNegate: true,
+		description: "Fetch every page, printing each response body as one JSON line",
+	},
+} as const;
+
+/** The contributed `api` command, spelled out because the exported factory needs a declared type. */
+type ApiCommandDefinition = CommandDefinition<
+	"api",
+	readonly [],
+	CommandShape<readonly [typeof pathArg], typeof apiFlags, {}, void, {}, undefined>,
+	{ api: ApiClient }
+>;
+
+/**
+ * Provides the {@link apiClient} Context and contributes `api`: `api --list` and
+ * `api --spec <operationId|path>` read the bundled spec offline; `api <path>` sends
+ * a request through the client, prints the response body to stdout, and fails with
+ * {@link ApiResponseError} on a non-2xx status.
+ */
+export const apiCommand: ExtensionFactory<
+	[options: ApiCommandOptions],
+	{ api: ApiClient },
+	readonly [ContextInstance<"api", ApiClient, {}, {}>],
+	{},
+	readonly [ApiCommandDefinition],
+	never,
+	{}
+> = /* @__PURE__ */ defineExtension(API).factory(
+	(extension, { spec, paginate, ...client }: ApiCommandOptions) =>
+		extension.provide(apiClient(client)).add(
+			defineCommand(
+				"api",
+				{ description: "Call the HTTP API, or browse its OpenAPI spec" },
+				(command) =>
+					command
+						.use(apiClient)
+						.args(pathArg)
+						.flags(apiFlags)
+						.action(async ({ args, flags, ctx, signal, stdout }) => {
+							if (flags.list) {
+								for (const line of listOperations(spec)) stdout(line);
+								return;
+							}
+							if (flags.spec !== undefined) {
+								stdout(JSON.stringify(specFor(spec, flags.spec)));
+								return;
+							}
+							if (args.path === undefined) {
+								throw new CrustError(
+									"VALIDATION",
+									'Missing required argument "<path>" (or pass --list or --spec)',
+								);
+							}
+							if (flags.paginate && paginate === undefined) {
+								throw new Error("--paginate: this CLI does not configure pagination");
+							}
+
+							const fields = (flags.field ?? []).map(parseField);
+							const body =
+								flags.body === undefined ? undefined : await readBody(flags.body, signal);
+							const method = (
+								flags.method ?? (fields.length > 0 || body !== undefined ? "POST" : "GET")
+							).toUpperCase();
+							const headers = new Headers((flags.header ?? []).map(parseHeader));
+							let path = args.path;
+							let requestBody = body;
+							if (fields.length > 0) {
+								// Fields go in the query when the method takes no body or --body is the body.
+								if (body !== undefined || method === "GET" || method === "HEAD") {
+									const query = new URLSearchParams(
+										fields.map(([key, value]): [string, string] => [key, String(value)]),
+									);
+									path += `${path.includes("?") ? "&" : "?"}${query.toString()}`;
+								} else {
+									requestBody = JSON.stringify(Object.fromEntries(fields));
+								}
+							}
+							if (requestBody !== undefined && !headers.has("content-type")) {
+								headers.set("content-type", "application/json");
+							}
+
+							const api = await ctx.api;
+							let request: ApiRequest | undefined = {
+								path,
+								init: { method, headers, body: requestBody },
+							};
+							while (request !== undefined) {
+								const response = await api.fetch(request.path, request.init);
+								// Bun types `clone()` as undici's Response, which lacks Bun's Headers extras.
+								const page = flags.paginate ? (response.clone() as Response) : undefined;
+								const text = await response.text();
+								if (flags.paginate) {
+									stdout(compactJson(text));
+								} else if (text !== "") {
+									stdout(text.replace(/\r?\n$/, ""));
+								}
+								if (!response.ok) {
+									throw new ApiResponseError(
+										response.status,
+										`${request.init?.method ?? "GET"} ${request.path}: HTTP ${response.status} ${response.statusText}`.trimEnd(),
+									);
+								}
+								const next: ApiRequest | undefined =
+									page && paginate ? await paginate(page) : undefined;
+								request = next && { path: next.path, init: next.init ?? request.init };
+							}
+						}),
+			),
+		),
+);
+
+/** A JSON page on one line for NDJSON; anything else is printed as is. */
+function compactJson(text: string): string {
+	try {
+		return JSON.stringify(JSON.parse(text));
+	} catch {
+		return text;
+	}
+}

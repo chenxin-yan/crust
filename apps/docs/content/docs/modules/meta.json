@@ -10,6 +10,7 @@
     "effect",
     "env",
     "mcp",
+    "openapi",
     "testing",
     "create",
     "progress",

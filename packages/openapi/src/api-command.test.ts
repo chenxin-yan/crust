@@ -1,0 +1,345 @@
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+
+import { Crust, defineCommand } from "@crustjs/core";
+import { captureExecute } from "@crustjs/testing";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+
+import { type ApiCommandOptions, apiCommand } from "./api-command.ts";
+import { apiClient } from "./client.ts";
+
+const spec = {
+	openapi: "3.1.0",
+	paths: {
+		"/users": {
+			get: { operationId: "listUsers", summary: "List users" },
+			post: {
+				operationId: "createUser",
+				requestBody: {
+					content: { "application/json": { schema: { $ref: "#/components/schemas/User" } } },
+				},
+			},
+		},
+		"/users/{id}": {
+			parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+			get: { operationId: "getUser" },
+			delete: {},
+		},
+	},
+	components: {
+		schemas: {
+			User: {
+				type: "object",
+				properties: {
+					name: { $ref: "#/components/schemas/Name", description: "Display name" },
+					friends: { type: "array", items: { $ref: "#/components/schemas/User" } },
+				},
+			},
+			Name: { type: "string", minLength: 1 },
+		},
+	},
+};
+
+interface FetchCall {
+	url: string;
+	method: string;
+	headers: Record<string, string>;
+	body: string | undefined;
+	signal: AbortSignal | undefined;
+}
+
+/** Stubs `fetch` with `respond`, recording each call. */
+function stubFetch(respond: (call: FetchCall) => Response = () => new Response("{}")): FetchCall[] {
+	const calls: FetchCall[] = [];
+	vi.stubGlobal("fetch", async (url: URL, init: RequestInit) => {
+		const call: FetchCall = {
+			url: url.href,
+			method: init.method ?? "GET",
+			headers: Object.fromEntries(new Headers(init.headers)),
+			body: init.body === undefined ? undefined : String(init.body),
+			signal: init.signal ?? undefined,
+		};
+		calls.push(call);
+		return respond(call);
+	});
+	return calls;
+}
+
+function buildApp(options: Partial<ApiCommandOptions> = {}) {
+	return new Crust("tool").extend(
+		apiCommand({
+			spec,
+			baseUrl: "https://api.example.com/v1/",
+			auth: () => ({ authorization: "Bearer secret" }),
+			...options,
+		}),
+	);
+}
+
+afterEach(() => {
+	vi.unstubAllGlobals();
+});
+
+describe("api --list and --spec", () => {
+	it("lists one line per operation without network access", async () => {
+		const calls = stubFetch();
+		const { stdout, exitCode } = await captureExecute(buildApp(), ["api", "--list"]);
+
+		expect(exitCode).toBe(0);
+		expect(stdout.split("\n")).toEqual([
+			"GET /users listUsers List users",
+			"POST /users createUser",
+			"GET /users/{id} getUser",
+			"DELETE /users/{id}",
+		]);
+		expect(calls).toEqual([]);
+	});
+
+	it("prints an operation by operationId with $refs resolved and cycles kept as $ref", async () => {
+		const { stdout, exitCode } = await captureExecute(buildApp(), ["api", "--spec", "createUser"]);
+
+		expect(exitCode).toBe(0);
+		expect(JSON.parse(stdout)).toEqual({
+			operationId: "createUser",
+			requestBody: {
+				content: {
+					"application/json": {
+						schema: {
+							type: "object",
+							properties: {
+								name: { type: "string", minLength: 1, description: "Display name" },
+								friends: { type: "array", items: { $ref: "#/components/schemas/User" } },
+							},
+						},
+					},
+				},
+			},
+		});
+	});
+
+	it("prints a path item by path, including its shared parameters", async () => {
+		const { stdout } = await captureExecute(buildApp(), ["api", "--spec", "/users/{id}"]);
+
+		expect(JSON.parse(stdout)).toEqual(spec.paths["/users/{id}"]);
+	});
+
+	it("fails for an unknown operationId or path", async () => {
+		const { stderr, exitCode } = await captureExecute(buildApp(), ["api", "--spec", "constructor"]);
+
+		expect(exitCode).toBe(1);
+		expect(stderr).toBe('Error: No operation or path "constructor" in the OpenAPI spec');
+	});
+});
+
+describe("api <path>", () => {
+	it("GETs the path below the base URL with auth and prints the body", async () => {
+		const calls = stubFetch(() => new Response('[{"name":"ada"}]\n'));
+		const { stdout, stderr, exitCode } = await captureExecute(buildApp(), ["api", "/users"]);
+
+		expect({ stdout, stderr, exitCode }).toEqual({
+			stdout: '[{"name":"ada"}]',
+			stderr: "",
+			exitCode: 0,
+		});
+		expect(calls).toEqual([
+			{
+				url: "https://api.example.com/v1/users",
+				method: "GET",
+				headers: { authorization: "Bearer secret" },
+				body: undefined,
+				signal: expect.any(AbortSignal),
+			},
+		]);
+	});
+
+	it("POSTs -F fields as a JSON object, typing true, false, null, and numbers", async () => {
+		const calls = stubFetch();
+		const fields = ["a=true", "b=false", "c=null", "n=42", "f=-1.5e2", "zip=007", "s=x=y"];
+		await captureExecute(buildApp(), ["api", "users", ...fields.flatMap((f) => ["-F", f])]);
+
+		expect(calls[0]?.method).toBe("POST");
+		expect(calls[0]?.headers["content-type"]).toBe("application/json");
+		expect(JSON.parse(calls[0]?.body ?? "")).toEqual({
+			a: true,
+			b: false,
+			c: null,
+			n: 42,
+			f: -150,
+			zip: "007",
+			s: "x=y",
+		});
+	});
+
+	it("sends fields as query parameters for -X GET", async () => {
+		const calls = stubFetch();
+		await captureExecute(buildApp(), ["api", "/users?sort=name", "-X", "get", "-F", "page=2"]);
+
+		expect(calls[0]).toMatchObject({
+			url: "https://api.example.com/v1/users?sort=name&page=2",
+			method: "GET",
+			body: undefined,
+		});
+	});
+
+	it("sends --body as the request body and lets -H override auth", async () => {
+		const calls = stubFetch();
+		await captureExecute(buildApp(), [
+			"api",
+			"/users",
+			"--body",
+			'{"name":"ada"}',
+			"-H",
+			"Authorization: Bearer other",
+			"-H",
+			"X-Trace: 1",
+		]);
+
+		expect(calls[0]).toMatchObject({
+			method: "POST",
+			body: '{"name":"ada"}',
+			headers: {
+				authorization: "Bearer other",
+				"content-type": "application/json",
+				"x-trace": "1",
+			},
+		});
+	});
+
+	it("reads --body @file", async () => {
+		const file = join(mkdtempSync(join(tmpdir(), "crust-openapi-")), "body.json");
+		writeFileSync(file, '{"name":"grace"}');
+		const calls = stubFetch();
+		await captureExecute(buildApp(), ["api", "/users", "-X", "PUT", "--body", `@${file}`]);
+
+		expect(calls[0]).toMatchObject({ method: "PUT", body: '{"name":"grace"}' });
+	});
+
+	it("prints a non-2xx body to stdout and a summary to stderr with exit code 1", async () => {
+		stubFetch(
+			() => new Response('{"message":"not found"}', { status: 404, statusText: "Not Found" }),
+		);
+		const { stdout, stderr, exitCode } = await captureExecute(buildApp(), ["api", "/users/9"]);
+
+		expect({ stdout, stderr, exitCode }).toEqual({
+			stdout: '{"message":"not found"}',
+			stderr: "Error: GET /users/9: HTTP 404 Not Found",
+			exitCode: 1,
+		});
+	});
+
+	it("follows --paginate pages as NDJSON, reusing the request without a new init", async () => {
+		const calls = stubFetch(({ url }) =>
+			url.endsWith("page=2")
+				? new Response('{\n  "items": [2]\n}')
+				: new Response('{"items":[1],"next":"/users?page=2"}'),
+		);
+		const app = buildApp({
+			paginate: async (response) => {
+				const { next } = (await response.json()) as { next?: string };
+				return next === undefined ? undefined : { path: next };
+			},
+		});
+		const { stdout, exitCode } = await captureExecute(app, ["api", "/users", "--paginate"]);
+
+		expect(exitCode).toBe(0);
+		expect(stdout.split("\n")).toEqual(['{"items":[1],"next":"/users?page=2"}', '{"items":[2]}']);
+		expect(calls.map(({ url, headers }) => [url, headers.authorization])).toEqual([
+			["https://api.example.com/v1/users", "Bearer secret"],
+			["https://api.example.com/v1/users?page=2", "Bearer secret"],
+		]);
+	});
+
+	it("rejects --paginate when the CLI configures no paginate()", async () => {
+		const calls = stubFetch();
+		const { stderr, exitCode } = await captureExecute(buildApp(), ["api", "/users", "--paginate"]);
+
+		expect(exitCode).toBe(1);
+		expect(stderr).toBe("Error: --paginate: this CLI does not configure pagination");
+		expect(calls).toEqual([]);
+	});
+
+	it.each([
+		[["api"], 'Error: Missing required argument "<path>" (or pass --list or --spec)'],
+		[["api", "/users", "-F", "novalue"], 'Error: --field: expected key=value, got "novalue"'],
+		[["api", "/users", "-H", "NoColon"], 'Error: --header: expected "Key: Value", got "NoColon"'],
+	])("fails before any request for %j", async (argv, message) => {
+		const calls = stubFetch();
+		const { stderr, exitCode } = await captureExecute(buildApp(), argv);
+
+		expect({ stderr, exitCode }).toEqual({ stderr: message, exitCode: 1 });
+		expect(calls).toEqual([]);
+	});
+
+	// Tests run on Node; spawn each runtime so stdin is a real pipe.
+	it.each([
+		["node", process.execPath, ["--input-type=module"]],
+		["bun", "bun", []],
+	])("reads --body - from stdin on %s", (_runtime, command, options) => {
+		const script = `
+			import { Crust } from "@crustjs/core";
+			import { apiCommand } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "api-command.ts")).href)};
+			globalThis.fetch = async (url, init) => new Response(init.method + " " + init.body);
+			const app = new Crust("tool").extend(apiCommand({ spec: {}, baseUrl: "https://api.example.com" }));
+			process.exitCode = await app.execute({ argv: ["api", "/echo", "--body", "-"] });
+		`;
+		const run = spawnSync(command, [...options, "-e", script], {
+			cwd: join(import.meta.dirname, ".."),
+			input: '{"name":"ada"}',
+			encoding: "utf8",
+			timeout: 10_000,
+		});
+
+		expect(run.stderr).toBe("");
+		expect(run.stdout.trim()).toBe('POST {"name":"ada"}');
+		expect(run.status).toBe(0);
+	});
+});
+
+describe("apiClient", () => {
+	it("is shared with app commands that declare it", async () => {
+		const calls = stubFetch(() => new Response('{"id":"u1"}'));
+		const app = buildApp().add(
+			defineCommand("whoami", {}, (command) =>
+				command.use(apiClient).action(async ({ ctx, stdout }) => {
+					const api = await ctx.api;
+					const response = await api.fetch("/me", { headers: { accept: "application/json" } });
+					stdout(`${api.baseUrl} ${await response.text()}`);
+				}),
+			),
+		);
+		const { stdout, exitCode } = await captureExecute(app, ["whoami"]);
+
+		expect({ stdout, exitCode }).toEqual({
+			stdout: 'https://api.example.com/v1/ {"id":"u1"}',
+			exitCode: 0,
+		});
+		expect(calls[0]).toMatchObject({
+			url: "https://api.example.com/v1/me",
+			headers: { accept: "application/json", authorization: "Bearer secret" },
+		});
+	});
+
+	it("sends auth headers only to the base URL's origin and calls auth once per invocation", async () => {
+		const auth = vi.fn(() => ({ authorization: "Bearer secret" }));
+		const calls = stubFetch();
+		const app = buildApp({ auth }).add(
+			defineCommand("sync", {}, (command) =>
+				command.use(apiClient).action(async ({ ctx }) => {
+					const api = await ctx.api;
+					await api.fetch("https://api.example.com/v1/a");
+					await api.fetch("https://elsewhere.example.com/b");
+				}),
+			),
+		);
+		await captureExecute(app, ["sync"]);
+
+		expect(calls.map(({ url, headers }) => [url, headers.authorization])).toEqual([
+			["https://api.example.com/v1/a", "Bearer secret"],
+			["https://elsewhere.example.com/b", undefined],
+		]);
+		expect(auth).toHaveBeenCalledTimes(1);
+	});
+});
