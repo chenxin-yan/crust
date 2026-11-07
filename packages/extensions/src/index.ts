@@ -16,6 +16,8 @@ export { help, renderHelp } from "./help.ts";
 export { input } from "./input.ts";
 export { json } from "./json.ts";
 export { noColor } from "./no-color.ts";
+export { schema } from "./schema.ts";
+export type { CommandSchema } from "./schema.ts";
 export { updateNotifier } from "./update-notifier.ts";
 export type {
 	UpdateCommandResolver,
