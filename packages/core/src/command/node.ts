@@ -59,7 +59,7 @@ export interface CommandNode {
 	/** Contexts `.provide()`d on this command itself; preparation installs their sections here. */
 	providedContexts: readonly AnyContextInstance[];
 	/** Declared command demands; validated when recipes are materialized. */
-	demands: readonly AnyContextFactory[];
+	demands: readonly (AnyContextInstance | AnyContextFactory)[];
 	/** Ids of Extensions this command uses for their Contexts; preparation checks the app extends each. */
 	usedExtensions: readonly ExtensionId[];
 	/** Extensions registered via `.extend()` (root builder only) */

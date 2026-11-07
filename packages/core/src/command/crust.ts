@@ -1409,25 +1409,32 @@ export class Crust<
 	use<const Us extends readonly [UseSource, ...UseSource[]]>(
 		...sources: Us
 	): AfterUse<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Us, Meta> {
-		const factories: AnyContextFactory[] = [];
+		const demands: (AnyContextInstance | AnyContextFactory)[] = [];
 		const extensions: ExtensionId[] = [];
 		for (const source of sources) {
 			if ("contextName" in source) {
-				factories.push(definingOf(source));
+				demands.push(definingOf(source));
 				continue;
 			}
-			extensions.push(source.id);
-			// An instance's provided Contexts are known, so they are demanded like factories;
-			// a factory's are known only per call, so only its id is checked.
-			if (typeof source !== "function") {
-				const { provide }: { readonly provide: readonly AnyContextInstance[] } = definingOf(source);
-				factories.push(...provide.map((instance) => instance.factory));
+			// A factory's provided Contexts are known only per call, so only its id is checked.
+			if (typeof source === "function") {
+				extensions.push(source.id);
+				continue;
 			}
+			// An instance is matched by its defining id, as `.extend()` registers it, and its
+			// provided instances are demanded as given, so `.of()` values need no dependencies.
+			const {
+				id,
+				provide,
+			}: { readonly id: ExtensionId; readonly provide: readonly AnyContextInstance[] } =
+				definingOf(source);
+			extensions.push(id);
+			demands.push(...provide);
 		}
 		return this._clone<
 			AfterUse<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Us, Meta>
 		>({
-			demands: [...this._node.demands, ...factories],
+			demands: [...this._node.demands, ...demands],
 			usedExtensions: [...this._node.usedExtensions, ...extensions],
 		});
 	}
