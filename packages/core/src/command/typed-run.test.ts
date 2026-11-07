@@ -6,6 +6,9 @@ import { defineExtension, type Extension } from "../api/extension.ts";
 import { defineExtensionId } from "../identity.ts";
 import { Crust, defineCommand } from "./crust.ts";
 import type { CommandShapeAt, RunInput, RunOutcome } from "./typed-run.ts";
+
+// A command whose type is not statically known may be an async generator action.
+type OpenEvents = readonly unknown[] | undefined;
 interface StructuredRunCapture {
 	args: { name: string; count: number; files: string[] };
 	flags: {
@@ -103,7 +106,7 @@ describe("typed programmatic invocation", () => {
 		const app = new Crust("cli").extend(lit, widened);
 
 		const pending = app.run(["inspect"], {});
-		type _result = Expect<Equal<typeof pending, Promise<RunOutcome<unknown>>>>;
+		type _result = Expect<Equal<typeof pending, Promise<RunOutcome<unknown, OpenEvents>>>>;
 		expect(await pending).toMatchObject({ status: "completed", result: { kind: "lit" } });
 	});
 
@@ -122,17 +125,17 @@ describe("typed programmatic invocation", () => {
 		const app = new Crust("cli").extend(nested).extend(widened);
 
 		const sub = app.run(["bar", "sub"]);
-		type _sub = Expect<Equal<typeof sub, Promise<RunOutcome<unknown>>>>;
+		type _sub = Expect<Equal<typeof sub, Promise<RunOutcome<unknown, OpenEvents>>>>;
 		expect(await sub).toMatchObject({ status: "completed", result: "sub-s" });
 		const handle = app.at(["bar", "sub"]).run();
-		type _handle = Expect<Equal<typeof handle, Promise<RunOutcome<unknown>>>>;
+		type _handle = Expect<Equal<typeof handle, Promise<RunOutcome<unknown, OpenEvents>>>>;
 		expect(await handle).toMatchObject({ status: "completed", result: "sub-s" });
 		// Inherited recursive flags rewrite the open entries' flags but leave them open.
 		const traced = app.extend(trace).run(["bar", "sub"], { flags: { trace: true } });
-		type _traced = Expect<Equal<typeof traced, Promise<RunOutcome<unknown>>>>;
+		type _traced = Expect<Equal<typeof traced, Promise<RunOutcome<unknown, OpenEvents>>>>;
 		expect(await traced).toMatchObject({ status: "completed", result: "sub-s" });
 		const missing = app.run(["anything", "nested"]);
-		type _missing = Expect<Equal<typeof missing, Promise<RunOutcome<unknown>>>>;
+		type _missing = Expect<Equal<typeof missing, Promise<RunOutcome<unknown, OpenEvents>>>>;
 		expect(await missing).toMatchObject({
 			status: "failed",
 			error: { code: "COMMAND_NOT_FOUND" },
