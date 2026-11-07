@@ -18,7 +18,8 @@ import { builtChildOf, builtChildrenOf, childMetaOf, type CommandNode } from "./
  * Serializable projection of a positional argument definition.
  *
  * Carries everything help/man/tooling surfaces need; `parse` functions and
- * schemas never cross the boundary.
+ * Standard Schemas never cross the boundary (a schema's JSON Schema does, as
+ * `inputSchema`).
  *
  * Fields with `undefined` values are dropped entirely (see `freezeCompact`),
  * so absent means "not declared" — except `required`, which is omitted when a
@@ -46,6 +47,12 @@ export interface ArgSnapshot {
 	readonly choices?: readonly string[];
 	/** Declared default value; `URL` defaults are serialized to their `href` string. */
 	readonly default?: unknown;
+	/**
+	 * Draft 2020-12 JSON Schema of the values a schema-backed arg accepts
+	 * (`~standard.jsonSchema.input`). Absent without a schema or when the schema
+	 * cannot produce JSON Schema. Not frozen: treat it as immutable.
+	 */
+	readonly inputSchema?: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -84,6 +91,12 @@ export interface FlagSnapshot {
 	readonly env?: Readonly<NonNullable<FlagDef["env"]>>;
 	/** Delimiter that splits string argv values of a repeatable flag into occurrences. */
 	readonly delimiter?: string;
+	/**
+	 * Draft 2020-12 JSON Schema of the values a schema-backed flag accepts
+	 * (`~standard.jsonSchema.input`). Absent without a schema or when the schema
+	 * cannot produce JSON Schema. Not frozen: treat it as immutable.
+	 */
+	readonly inputSchema?: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -176,6 +189,7 @@ function snapshotArg(def: ArgDef): ArgSnapshot {
 		variadic: def.variadic,
 		choices: def.choices ? Object.freeze([...def.choices]) : undefined,
 		default: serializableDefault(def.default),
+		inputSchema: def.schema && standardJsonSchema(def.schema, "input"),
 	});
 }
 
@@ -193,6 +207,7 @@ function snapshotFlag(def: FlagDef): FlagSnapshot {
 		default: serializableDefault(def.default),
 		env: def.env ? freezeCompact({ name: def.env.name, delimiter: def.env.delimiter }) : undefined,
 		delimiter: def.delimiter,
+		inputSchema: def.schema && standardJsonSchema(def.schema, "input"),
 	});
 }
 
