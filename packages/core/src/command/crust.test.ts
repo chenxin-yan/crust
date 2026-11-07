@@ -1251,41 +1251,45 @@ describe("Extension named hooks", () => {
 			expect(stderr).toEqual(['Error: Missing required flag "--region"']);
 		});
 
-		it("routes a PARSE error from bindInput through onError and postRun", async () => {
-			const errors: unknown[] = [];
-			const outcomes: unknown[] = [];
-			const binder = defineExtension(defineExtensionId("binder"))
-				.preRun((ctx) => ctx.bindInput({ flags: { port: "abc" } }))
-				.postRun((_ctx, outcome) => void outcomes.push(outcome.status))
-				.onError((error) => void errors.push(error));
-			const actions: string[] = [];
-			const app = new Crust("cli")
-				.flags({ port: { type: "number" } })
-				.extend(binder)
-				.action(() => void actions.push("ran"));
-			const stderr: string[] = [];
-			expect(
-				await app.execute({ argv: [], io: { stderr: (line) => void stderr.push(line) } }),
-			).toBe(1);
-			expect(errors).toEqual([expect.objectContaining({ code: "PARSE" })]);
-			expect(stderr.join("\n")).toContain("Expected number for --port");
-			expect(outcomes).toEqual(["failed"]);
-			expect(actions).toEqual([]);
-		});
+		it.each(["setup", "preRun"] as const)(
+			"routes a PARSE error from bindInput in %s through onError and postRun",
+			async (hook) => {
+				const errors: unknown[] = [];
+				const outcomes: unknown[] = [];
+				const binder = defineExtension(defineExtensionId("binder"))
+					[hook]((ctx) => ctx.bindInput({ flags: { port: "abc" } }))
+					.postRun((_ctx, outcome) => void outcomes.push(outcome.status))
+					.onError((error) => void errors.push(error));
+				const actions: string[] = [];
+				const app = new Crust("cli")
+					.flags({ port: { type: "number" } })
+					.extend(binder)
+					.action(() => void actions.push("ran"));
+				const stderr: string[] = [];
+				expect(
+					await app.execute({ argv: [], io: { stderr: (line) => void stderr.push(line) } }),
+				).toBe(1);
+				expect(errors).toEqual([expect.objectContaining({ code: "PARSE" })]);
+				expect(stderr.join("\n")).toContain("Expected number for --port");
+				expect(outcomes).toEqual(["failed"]);
+				expect(actions).toEqual([]);
+			},
+		);
 
-		it("never lets a bound flag select a flag handler", async () => {
+		it("shows values bound in setup to every preRun and never lets them select a flag handler", async () => {
 			const order: string[] = [];
 			const gate = defineExtension(defineExtensionId("gate"))
 				.flags({ stop: { type: "boolean" } })
-				.handle("stop", () => void order.push("stop"));
-			const binder = defineExtension(defineExtensionId("binder")).preRun((ctx) =>
+				.handle("stop", () => void order.push("stop"))
+				.preRun(({ flags }) => void order.push(`preRun stop=${flags.stop}`));
+			const binder = defineExtension(defineExtensionId("binder")).setup((ctx) =>
 				ctx.bindInput({ flags: { stop: true } }),
 			);
 			const app = new Crust("cli")
 				.extend(gate, binder)
 				.action(({ flags }) => void order.push(`action stop=${flags.stop}`));
 			await unwrap(app.run([]));
-			expect(order).toEqual(["action stop=true"]);
+			expect(order).toEqual(["preRun stop=true", "action stop=true"]);
 		});
 
 		it("gives the routing-failure onError context a no-op bindInput", async () => {
