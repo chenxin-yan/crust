@@ -11,6 +11,7 @@ export type {
 	CompletionShell,
 } from "./completion/index.ts";
 export { ConfirmationRequiredError, confirmation } from "./confirmation.ts";
+export { DryRunUnsupportedError, dryRun, dryRunContext } from "./dry-run.ts";
 export { didYouMean } from "./did-you-mean.ts";
 export type { DidYouMeanOptions } from "./did-you-mean.ts";
 export { help, renderHelp } from "./help.ts";

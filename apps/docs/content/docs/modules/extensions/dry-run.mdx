@@ -1,0 +1,37 @@
+---
+title: Dry Run
+description: Preview a command with --dry-run, and reject it where a command cannot preview.
+---
+
+## Usage
+
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../../examples/modules/extensions/dry-run.ts
+</include>
+
+```sh
+$ my-cli deploy --dry-run
+Would deploy v2
+
+$ my-cli deploy
+Deployed v2
+
+$ my-cli logs --dry-run
+Error: "my-cli logs" does not support --dry-run.
+```
+
+`dryRun()` provides `dryRunContext`, a [Context](/docs/guide/contexts) named `dryRun` that owns a recursive boolean `--dry-run` flag. Its value is `true` when `--dry-run` is passed and `false` otherwise. A command opts in by declaring it with its own `.use(dryRunContext)` and branching on `await ctx.dryRun`; Crust does not skip any work for it.
+
+## Behavior
+
+The check runs in `preRun`, so only when the command's action runs: a flag handler such as `--help` takes over first. When `--dry-run` is passed to a command whose [Command Snapshot](/docs/api/types#commandsnapshot) `uses` does not include `dryRun`, the command fails with exit code 1 and a `DryRunUnsupportedError` naming it, before its action runs. A command that cannot preview never runs for real when a preview was asked for.
+
+Only the routed command's own `.use()` counts: a parent that uses `dryRunContext` does not opt in its subcommands, and providing the Context elsewhere does not either. Commands without `--dry-run` are unchanged.
+
+Under [`run()`](/docs/api/crust#runpath-input-options), pass `{ flags: { "dry-run": true } }`; for a command that does not use the Context, the outcome is `failed` with the `DryRunUnsupportedError` in `outcome.error`. `DryRunUnsupportedError` is exported, so code can tell it apart with `instanceof`.
+
+Using `dryRunContext` without registering `dryRun()` fails with a `DEFINITION` [error](/docs/api/errors), `No provider for Context "dryRun"`, like any Context without a provider.
+
+## Limitations
+
+Extension flags are either recursive or root-only, so `--dry-run` appears in every command's flags and help, including commands that reject it. A command cannot declare its own `dry-run` flag while `dryRun()` is registered.
