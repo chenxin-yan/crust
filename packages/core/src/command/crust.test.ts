@@ -1730,6 +1730,41 @@ describe("Extension renderer", () => {
 			),
 		).toBe(1);
 		expect(lines).toEqual(["stderr:Error: no renderer"]);
+
+		lines.length = 0;
+		const rejecting = defineExtension(defineExtensionId("render")).renderer(async () => {
+			throw new Error("no async renderer");
+		});
+		expect(
+			await execute(
+				new Crust("cli").extend(rejecting).action(() => {}),
+				[],
+				lines,
+			),
+		).toBe(1);
+		expect(lines).toEqual(["stderr:Error: no async renderer"]);
+	});
+
+	it("awaits an async selector before any handler, preRun, or action runs", async () => {
+		const lines: string[] = [];
+		const logger = defineContext("logger").setup(({ stdout }) => {
+			stdout("logger:setup");
+			return stdout;
+		});
+		const render = defineExtension(defineExtensionId("render"))
+			.provide(logger())
+			.use(logger)
+			.setup(async ({ ctx }) => void (await ctx.logger))
+			.renderer(async () => {
+				await new Promise((resolve) => setTimeout(resolve, 0));
+				lines.push("selected");
+				return tagging(lines);
+			})
+			.preRun(() => void lines.push("preRun"));
+		const app = new Crust("cli").extend(render).action(() => ({ ok: true }));
+
+		expect(await execute(app, [], lines)).toBe(0);
+		expect(lines).toEqual(["selected", "text:logger:setup", "preRun", 'result:{"ok":true}']);
 	});
 
 	it("calls error once after onError hooks decline or throw, never when one claims the failure", async () => {

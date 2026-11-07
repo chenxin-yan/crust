@@ -243,11 +243,13 @@ export interface ExtensionHooks<
 	readonly setup?: (ctx: ExtensionSetupContext<F, Deps, MetaKeys>) => Awaitable<void>;
 	/**
 	 * Selects the invocation's {@link Renderer}, once, after every setup and before any flag
-	 * handler, so it sees what setups bound. Return `undefined` to keep Core's default. Action
-	 * and Context output written before then waits and goes through the selected renderer; a
-	 * failure before then renders by default. At most one Extension in an application may set it.
+	 * handler, so it sees what setups bound. Return (or resolve to) `undefined` to keep Core's
+	 * default; Core awaits the selector, so it can lazy-load a formatter. A throw or rejection
+	 * fails the invocation like a throwing setup. Action and Context output written before then
+	 * waits and goes through the selected renderer; a failure before then renders by default.
+	 * At most one Extension in an application may set it.
 	 */
-	readonly renderer?: (ctx: ExtensionContext<F, Deps, MetaKeys>) => Renderer | undefined;
+	readonly renderer?: (ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<Renderer | undefined>;
 	/**
 	 * Runs in place of a missing Command Action, when no flag handler took the invocation,
 	 * and ends it as `handled`. At most one Extension in an application may set it.

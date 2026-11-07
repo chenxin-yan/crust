@@ -606,7 +606,7 @@ async function dispatch(
 				settingUp = false;
 			}
 			// After every setup, so the selector sees what setups bound; before any handler output.
-			output.choose(prepared.renderer?.select(extensionContext));
+			output.choose(await prepared.renderer?.select(extensionContext));
 			const handler =
 				selectHandler(prepared.handlers, parsed, resolvedNode === rootNode) ??
 				(resolvedNode.run ? undefined : prepared.noAction);

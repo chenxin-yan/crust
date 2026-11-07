@@ -387,7 +387,9 @@ function _rendererSelector() {
 	});
 	// @ts-expect-error A renderer handles both text and diagnostics.
 	owned.renderer(() => ({ text() {} }));
-	// @ts-expect-error The selector is synchronous: Core chooses before any handler runs.
-	owned.renderer(async () => undefined);
+	// Core awaits the selector, so it can lazy-load a formatter.
+	owned.renderer(async () => ({ text() {}, diag() {} }));
+	// @ts-expect-error A resolved renderer still handles both text and diagnostics.
+	owned.renderer(async () => ({ text() {} }));
 	const _renderer: Renderer = { text() {}, diag() {}, error(_error: unknown) {} };
 }
