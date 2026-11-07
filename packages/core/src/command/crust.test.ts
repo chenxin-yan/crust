@@ -489,6 +489,17 @@ describe("Crust .add() with inline definitions", () => {
 		});
 	});
 
+	it("checks the Contexts of a used Extension instance, not only its id", async () => {
+		const db = defineContext("db").setup(() => "db");
+		const base = defineExtension(defineExtensionId("test:storage"));
+		const full = base.provide(db());
+		const query = defineCommand("query", (command) => command.use(full));
+
+		// @ts-expect-error -- runtime regression: the extended same-id variant provides no db.
+		const app = new Crust("cli").extend(base).add(query);
+		await expect(app.snapshot()).rejects.toThrow('No provider for Context "db"');
+	});
+
 	it("rejects a command that uses an Extension the application does not extend", async () => {
 		const greeter = defineContext("greeter").setup(() => "hi");
 		const greeting = defineExtension(defineExtensionId("test:greeting"))
