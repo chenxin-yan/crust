@@ -291,6 +291,29 @@ describe("nextSteps", () => {
 		expect(stderr).toBe('nextSteps(): skipped "nope": recipe failed\nNext steps:\n  app logs');
 	});
 
+	it("skips an onError step whose boolean flag value is not a boolean", async () => {
+		const app = appWith({
+			onError: () => [
+				{ command: login, input: { flags: { sso: "true" } } },
+				{ command: login, input: { flags: { sso: true } } },
+			],
+		});
+
+		expect(await captureExecute(app, ["deploy", "prod", "--fail"])).toEqual({
+			stdout: "",
+			stderr: [
+				"Error: not logged in",
+				'nextSteps(): skipped "app login": "--sso" value is not a boolean',
+				"Next steps:",
+				"  app login --sso",
+				"  Check the deployment:",
+				"    app status prod",
+				"  app logs",
+			].join("\n"),
+			exitCode: 1,
+		});
+	});
+
 	it("reports a throwing onError on stderr and still prints the action's steps", async () => {
 		const app = appWith({
 			onError: () => {
