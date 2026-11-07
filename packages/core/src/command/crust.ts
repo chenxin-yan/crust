@@ -8,6 +8,7 @@ import {
 	type ContextValue,
 	type ContextMap,
 	type ContextsOutput,
+	type ContextsFlagsByName,
 	type ContextsOwnedFlags,
 	type ContextUseFlags,
 	type DefiningOf,
@@ -388,10 +389,18 @@ type DepsOfBuilder<B> =
 // Match only established spellings; open siblings must not replace a known shape.
 // Distribute over `D`: a variadic `.add(a, b)` passes the definition union, and a
 // non-distributive check would infer the union of every sibling's shape.
-type DefinitionShapeForSpelling<D, Spelling extends string> = D extends unknown
-	? CommandDefinitionData<D> extends { readonly _shape?: infer Shape extends CommandShape }
+type DefinitionEntryForSpelling<
+	D,
+	Spelling extends string,
+	CF extends FlagsDef | false,
+	M,
+> = D extends unknown
+	? CommandDefinitionData<D> extends {
+			readonly _shape?: infer Shape extends CommandShape;
+			readonly _deps?: infer Deps;
+		}
 		? Spelling extends CommandDefinitionSpellings<D>
-			? Shape
+			? EntryShape<Shape, CF, Deps, M>
 			: never
 		: never
 	: never;
@@ -420,12 +429,38 @@ type InlineShape<S, CF extends FlagsDef> =
 		? CommandShape<SA, keyof CF extends never ? SF : MergeFlags<CF, SF>, SC, SR, P, true>
 		: never;
 
-// `false`: reusable definitions, which inherit no Context-owned flags.
-type EntryShape<S, CF extends FlagsDef | false> = [CF] extends [FlagsDef] ? InlineShape<S, CF> : S;
+// The flags of the providers (`M`, by Context name) of the Contexts a reusable definition uses:
+// at runtime it parses them besides the flags its `.use()` declares, and so do its inline
+// children. Nested reusable definitions resolve their own providers where they are added.
+type ProvidedShape<S, F> = keyof F extends never
+	? S
+	: F extends FlagsDef
+		? S extends CommandShape<
+				infer SA,
+				infer SF,
+				infer SC,
+				infer SR,
+				infer P,
+				infer I extends boolean
+			>
+			? CommandShape<SA, MergeFlags<F, SF>, InlineScopeTree<SC, F>, SR, P, I>
+			: S
+		: S;
 
+type ProviderFlagsFor<Deps, M> = [keyof Deps & keyof M] extends [never]
+	? {}
+	: UnionToIntersection<M[keyof Deps & keyof M]>;
+
+// `false`: reusable definitions, which inherit no Context-owned flags.
+type EntryShape<S, CF extends FlagsDef | false, Deps, M> = [CF] extends [FlagsDef]
+	? InlineShape<S, CF>
+	: ProvidedShape<S, ProviderFlagsFor<Deps, M>>;
+
+// `M`: provider flags by Context name at the attachment point (see `EntryShape`).
 type DefinitionsTree<
 	Ds extends readonly CommandDefinition<any, any, any, any>[],
 	CtxFlags extends FlagsDef | false = false,
+	M = {},
 > = [Ds] extends [
 	readonly [
 		{
@@ -433,48 +468,50 @@ type DefinitionsTree<
 			readonly [commandDefinitionInternal]: {
 				readonly _aliases?: infer Al extends readonly string[];
 				readonly _shape?: infer S;
+				readonly _deps?: infer Deps;
 			};
 		},
 	],
 ]
 	? IsUnion<N> extends true
-		? DefinitionsTreeSlow<Ds, CtxFlags>
+		? DefinitionsTreeSlow<Ds, CtxFlags, M>
 		: IsUnion<Ds[number]> extends true
-			? DefinitionsTreeSlow<Ds, CtxFlags>
+			? DefinitionsTreeSlow<Ds, CtxFlags, M>
 			: [IsClosedName<N>, IsClosedName<Al[number]>] extends [true, true]
-				? { [K in N | Al[number]]: EntryShape<S, CtxFlags> }
-				: DefinitionsTreeSlow<Ds, CtxFlags>
-	: DefinitionsTreeSlow<Ds, CtxFlags>;
+				? { [K in N | Al[number]]: EntryShape<S, CtxFlags, Deps, M> }
+				: DefinitionsTreeSlow<Ds, CtxFlags, M>
+	: DefinitionsTreeSlow<Ds, CtxFlags, M>;
 
 type DefinitionsTreeSlow<
 	Ds extends readonly CommandDefinition<any, any, any, any>[],
-	CtxFlags extends FlagsDef | false = false,
+	CtxFlags extends FlagsDef | false,
+	M,
 > =
 	string extends AttachedCommandSpellings<Ds>
-		? Record<string, CommandShape> & KnownDefinitionTree<Ds, CtxFlags>
+		? Record<string, CommandShape> & KnownDefinitionTree<Ds, CtxFlags, M>
 		: {
-				[K in CommandDefinitionSpellings<Ds[number]>]: EntryShape<
-					DefinitionShapeForSpelling<Ds[number], K>,
-					CtxFlags
+				[K in CommandDefinitionSpellings<Ds[number]>]: DefinitionEntryForSpelling<
+					Ds[number],
+					K,
+					CtxFlags,
+					M
 				>;
 			};
 
 // Accumulates in tail position so a long batch with a runtime-only name stays clear of TS2589.
-type KnownDefinitionTree<Ds extends readonly unknown[], CF extends FlagsDef | false, Acc = {}> =
+type KnownDefinitionTree<Ds extends readonly unknown[], CF extends FlagsDef | false, M, Acc = {}> =
 	IsUnion<Ds> extends true
 		? Acc
 		: Ds extends readonly [infer H, ...infer T]
 			? KnownDefinitionTree<
 					T,
 					CF,
+					M,
 					Acc &
 						(IsUnion<H> extends true
 							? {}
 							: {
-									[K in CommandDefinitionSpellings<H>]: EntryShape<
-										DefinitionShapeForSpelling<H, K>,
-										CF
-									>;
+									[K in CommandDefinitionSpellings<H>]: DefinitionEntryForSpelling<H, K, CF, M>;
 								})
 				>
 			: Acc;
@@ -540,6 +577,14 @@ type RecursiveExtensionFlags<Es extends readonly AnyExtension[], Acc = {}> = Es 
 	? RecursiveExtensionFlags<T, Acc & RecursiveFlagsOf<H> & ExtensionHookFlags<H>>
 	: Acc & ExtensionFlags<Es>;
 
+// Extension providers replace same-name root providers made before `.extend()`.
+type ExtensionsProviderFlags<Es extends readonly AnyExtension[], Acc> = Es extends readonly [
+	infer H,
+	...infer T extends readonly AnyExtension[],
+]
+	? ExtensionsProviderFlags<T, MergeProviders<Acc, ContextsFlagsByName<ExtensionProviders<H>>>>
+	: Acc;
+
 // Fold of `ExtensionProvidedFlags`: inline `.command()` children added after `.extend()` inherit them.
 type ExtensionsProvidedFlags<Es extends readonly AnyExtension[], Acc = {}> = Es extends readonly [
 	infer H,
@@ -603,6 +648,7 @@ type ExtensionCommandTree<
 	Tree,
 	Es extends readonly AnyExtension[],
 	ExtensionCommandSpellings extends string,
+	M,
 > =
 	// A spelling TypeScript can't see may be a same-id re-registration replacing an earlier
 	// Extension's command (runtime dedupes by id; the types don't track ids), so earlier
@@ -614,7 +660,7 @@ type ExtensionCommandTree<
 				Record<string, CommandShape> extends infer R extends object
 			? R
 			: never
-		: Tree & DefinitionsTree<ExtensionCommands<Es>> extends infer R extends object
+		: Tree & DefinitionsTree<ExtensionCommands<Es>, false, M> extends infer R extends object
 			? R
 			: never;
 
@@ -778,7 +824,10 @@ type CollisionSpellings<
 	RecursiveFlags extends FlagsDef = {},
 	// Extension-provided Context flags registered so far; see `TreeWithInlineFlags`.
 	InlineFlags extends FlagsDef = {},
+	// Provided Contexts' owned flags by name, for the definitions `.add()` attaches (`EntryShape`).
+	ProviderFlags extends object = {},
 > = {
+	readonly providerFlags: ProviderFlags;
 	readonly actionDeps: ActionDeps;
 	readonly extensionCommands: ExtensionCommandSpellings;
 	readonly recursiveFlags: RecursiveFlags;
@@ -796,6 +845,7 @@ type AnyCollisionSpellings = {
 	readonly extensionCommands?: string | undefined;
 	readonly recursiveFlags?: FlagsDef | undefined;
 	readonly inlineFlags?: FlagsDef | undefined;
+	readonly providerFlags?: object | undefined;
 	readonly demands: ContextMap;
 	readonly extension: string;
 	readonly tree: string;
@@ -827,6 +877,8 @@ type AppRecursiveFlagsOf<S extends AnyCollisionSpellings> = Exclude<S["recursive
 
 /** Extension-provided Context flags registered so far; see `TreeWithInlineFlags`. */
 type AppInlineFlagsOf<S extends AnyCollisionSpellings> = Exclude<S["inlineFlags"], undefined>;
+
+type ProviderFlagsOf<S extends AnyCollisionSpellings> = Exclude<S["providerFlags"], undefined>;
 
 // Record spellings are derived from `Flags` on demand instead of accumulated in `Sp`.
 type AfterFlags<State extends BuilderState, F extends FlagsDef> = Crust<
@@ -888,7 +940,8 @@ type AfterUse<
 		ActionDepsOf<CollisionSp>,
 		CollisionSp["extensionCommands"],
 		AppRecursiveFlagsOf<CollisionSp>,
-		AppInlineFlagsOf<CollisionSp>
+		AppInlineFlagsOf<CollisionSp>,
+		ProviderFlagsOf<CollisionSp>
 	>,
 	Result,
 	Meta,
@@ -926,7 +979,8 @@ type AfterProvide<
 		ActionDepsOf<CollisionSp>,
 		CollisionSp["extensionCommands"],
 		AppRecursiveFlagsOf<CollisionSp>,
-		AppInlineFlagsOf<CollisionSp>
+		AppInlineFlagsOf<CollisionSp>,
+		MergeProviders<ProviderFlagsOf<CollisionSp>, ContextsFlagsByName<Cs>>
 	>,
 	Result,
 	Meta,
@@ -982,7 +1036,12 @@ type AfterExtend<
 	MergeProviders<Ctx, ExtensionsProvidesOutput<Es>>,
 	Sibs | KnownExtensionsCommandSpellings<Es>,
 	Sp | ExtensionsSpellings<Es>,
-	ExtensionCommandTree<Tree, Es, ExtensionCommandsOf<CollisionSp>>,
+	ExtensionCommandTree<
+		Tree,
+		Es,
+		ExtensionCommandsOf<CollisionSp>,
+		ExtensionsProviderFlags<Es, ProviderFlagsOf<CollisionSp>>
+	>,
 	CtxFlags & ExtensionsProvidedFlags<Es>,
 	CollisionSpellings<
 		CollisionSp["extension"] | RecursiveExtensionsSpellings<Es>,
@@ -994,7 +1053,8 @@ type AfterExtend<
 		// An open call adds no precise entries (see ExtensionCommandTree).
 		ExtensionCommandsOf<CollisionSp> | KnownSpellings<ExtensionsCommandSpellings<Es>>,
 		AppRecursiveFlagsOf<CollisionSp> & RecursiveExtensionFlags<Es>,
-		AppInlineFlagsOf<CollisionSp> & ExtensionsProvidedFlags<Es>
+		AppInlineFlagsOf<CollisionSp> & ExtensionsProvidedFlags<Es>,
+		ExtensionsProviderFlags<Es, ProviderFlagsOf<CollisionSp>>
 	>,
 	Result,
 	Meta,
@@ -1013,7 +1073,7 @@ type AfterAdd<
 	State["ctx"],
 	State["sibs"] | KnownCommandSpellings<Ds>,
 	State["sp"],
-	State["tree"] & DefinitionsTree<Ds, Inherited>,
+	State["tree"] & DefinitionsTree<Ds, Inherited, ProviderFlagsOf<State["collision"]>>,
 	State["ctxFlags"],
 	CollisionSpellings<
 		State["collision"]["extension"],
@@ -1024,7 +1084,8 @@ type AfterAdd<
 		ActionDepsOf<State["collision"]>,
 		State["collision"]["extensionCommands"],
 		AppRecursiveFlagsOf<State["collision"]>,
-		AppInlineFlagsOf<State["collision"]>
+		AppInlineFlagsOf<State["collision"]>,
+		ProviderFlagsOf<State["collision"]>
 	>,
 	State["result"],
 	State["meta"],
@@ -1449,7 +1510,7 @@ export class Crust<
 		for (const instance of instances) {
 			// Fulfilling this command's own `.use()` demand shares the flags `.use()` installed.
 			if (declared.has(instance.name)) {
-				registerContextFlags(cloned._node, instance.name, instance.ownedFlags);
+				registerContextFlags(cloned._node, instance.name, instance.ownedFlags, "provided");
 				continue;
 			}
 			for (const [name, definition] of Object.entries(instance.ownedFlags)) {
