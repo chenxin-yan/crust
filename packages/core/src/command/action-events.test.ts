@@ -246,6 +246,34 @@ describe("async generator actions", () => {
 		expect(finalized).toBe(true);
 	});
 
+	it("keeps the consumer's failure when closing the generator also throws", async () => {
+		const consumer = new Error("consumer");
+		const close = new Error("close");
+		const app = new Crust("cli").action(async function* () {
+			try {
+				yield 1;
+			} finally {
+				// oxlint-disable-next-line no-unsafe-finally -- simulates a cleanup failure.
+				throw close;
+			}
+		});
+
+		const outcome = await app.run(
+			[],
+			{},
+			{
+				onEvent: () => {
+					throw consumer;
+				},
+			},
+		);
+
+		expect(outcome.status).toBe("failed");
+		const error = outcome.status === "failed" ? outcome.error : undefined;
+		expect(error).toBeInstanceOf(SuppressedError);
+		expect(error).toMatchObject({ error: close, suppressed: consumer });
+	});
+
 	it("validates the returned value with .output()", async () => {
 		const app = new Crust("cli").output(z.object({ count: z.number() })).action(async function* () {
 			yield "progress";

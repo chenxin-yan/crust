@@ -707,15 +707,20 @@ async function dispatch(
 				output.renderer?.event?.(step.value);
 				stream.onEvent?.(step.value);
 			}
-		} finally {
+		} catch (error) {
+			if (done) throw error;
 			// Runs the generator's own `finally` on abort or a throwing consumer; a no-op once it threw.
 			// A `finally` that yields suspends `return()`, so resume it to the end; values it
 			// yields while closing are not events.
-			if (!done) {
+			try {
 				for (let step = await generator.return(undefined); !step.done;) {
 					step = await generator.next();
 				}
+			} catch (closeError) {
+				// Same shape as a failed disposal: the cleanup failure wraps the original as `suppressed`.
+				throw new SuppressedError(closeError, error, "Closing the action's generator failed.");
 			}
+			throw error;
 		}
 	};
 
