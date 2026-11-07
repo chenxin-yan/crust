@@ -1685,32 +1685,62 @@ describe("Extension renderer", () => {
 		expect(lines).toEqual(["text:action", "stderr:Error: boom"]);
 	});
 
-	it("renders failures before the renderer is chosen, and their waiting output, by default", async () => {
-		const lines: string[] = [];
+	/** An Extension whose setup writes through a Context, then throws. */
+	function brokenSetup() {
 		const logger = defineContext("logger").setup(({ stdout }) => {
 			stdout("logger:setup");
 			return stdout;
 		});
-		let selected = false;
-		const render = defineExtension(defineExtensionId("render")).renderer(
-			() => ((selected = true), tagging(lines)),
-		);
-		const broken = defineExtension(defineExtensionId("broken"))
+		return defineExtension(defineExtensionId("broken"))
 			.provide(logger())
 			.use(logger)
 			.setup(async ({ ctx }) => {
 				await ctx.logger;
 				throw new Error("setup failed");
 			});
-		const app = new Crust("cli")
-			.extend(render, broken)
-			.add(defineCommand("known", (cmd) => cmd.action(() => {})));
+	}
 
-		expect(await execute(app, ["known"], lines)).toBe(1);
-		expect(selected).toBe(false);
-		expect(lines).toEqual(["stdout:logger:setup", "stderr:Error: setup failed"]);
+	it("routes a setup failure, and the output waiting for it, through the renderer an argv flag selected", async () => {
+		const lines: string[] = [];
+		const render = defineExtension(defineExtensionId("render"))
+			.flags({ tagged: { type: "boolean" } })
+			.renderer((ctx) => (ctx.flags.tagged === true ? tagging(lines) : undefined))
+			.onError(() => void lines.push("onError"));
+		const app = new Crust("cli").extend(render, brokenSetup()).action(() => {});
 
+		expect(await execute(app, ["--tagged"], lines)).toBe(1);
+		expect(lines).toEqual(["text:logger:setup", "onError", "error:setup failed"]);
 		lines.length = 0;
+		expect(await execute(app, [], lines)).toBe(1);
+		expect(lines).toEqual(["stdout:logger:setup", "onError", "stderr:Error: setup failed"]);
+	});
+
+	it("renders a setup failure by default when the selector then throws or rejects", async () => {
+		const lines: string[] = [];
+		for (const select of [
+			() => {
+				lines.push("selector");
+				throw new Error("no renderer");
+			},
+			async () => {
+				lines.push("selector");
+				throw new Error("no async renderer");
+			},
+		]) {
+			lines.length = 0;
+			const render = defineExtension(defineExtensionId("render")).renderer(select);
+			const app = new Crust("cli").extend(render, brokenSetup()).action(() => {});
+			expect(await execute(app, [], lines)).toBe(1);
+			expect(lines).toEqual(["selector", "stdout:logger:setup", "stderr:Error: setup failed"]);
+		}
+	});
+
+	it("renders routing and selector failures by default", async () => {
+		const lines: string[] = [];
+		let selected = false;
+		const render = defineExtension(defineExtensionId("render")).renderer(
+			() => ((selected = true), tagging(lines)),
+		);
 		const routed = new Crust("cli")
 			.extend(render)
 			.add(defineCommand("known", (cmd) => cmd.action(() => {})));

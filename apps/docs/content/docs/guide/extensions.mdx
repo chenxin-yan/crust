@@ -110,7 +110,7 @@ Core decides when output happens; one Extension can decide how. `.renderer(selec
 - `result`, if set, receives the action's return value after the action completes and before `postRun`. Throwing from it fails the invocation.
 - `error`, if set, replaces Core's `Error: message` rendering in `.execute()` when no `onError` hook claimed the failure. Core calls it at most once, never under `.run()`, where callers read `outcome.error`, and never for a cancellation.
 
-Core calls `select` once per invocation, after every setup and before any flag handler, so it sees what setups bound. It may be `async`, for example to `import()` a formatter only when it is needed; Core awaits it. Output the action side writes earlier, such as from a Context a setup pulled, waits and then goes through the chosen renderer. A failure before then, including routing and argv syntax errors, renders by default. Only one Extension in an application may set `.renderer()`; a second is a `DEFINITION` error when the app prepares.
+Core calls `select` once per invocation, after every setup and before any flag handler, so it sees what setups bound. It may be `async`, for example to `import()` a formatter only when it is needed; Core awaits it. Output the action side writes earlier, such as from a Context a setup pulled, waits and then goes through the chosen renderer. A setup failure still goes through the chosen renderer: Core calls `select` after it, since flags are already bound, and falls back to the default if `select` fails too. Routing and argv syntax errors happen before flags are bound and render by default. Only one Extension in an application may set `.renderer()`; a second is a `DEFINITION` error when the app prepares.
 
 ## Dependency injection
 

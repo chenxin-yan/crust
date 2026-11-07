@@ -594,6 +594,9 @@ async function dispatch(
 		return result;
 	};
 
+	// `async` turns a synchronous selector throw into a rejection.
+	const selectRenderer = async () => prepared.renderer?.select(extensionContext);
+
 	let outcome: InvocationOutcome;
 	try {
 		try {
@@ -602,11 +605,17 @@ async function dispatch(
 			settingUp = true;
 			try {
 				for (const extension of extensions) await extension.hooks.setup?.(extensionContext);
+			} catch (error) {
+				settingUp = false;
+				// Flags are bound, so the selector still chooses how a setup failure renders. If it
+				// fails too, the default renders the setup failure, the root cause, not the selector's.
+				output.choose(await selectRenderer().catch(() => undefined));
+				throw error;
 			} finally {
 				settingUp = false;
 			}
 			// After every setup, so the selector sees what setups bound; before any handler output.
-			output.choose(await prepared.renderer?.select(extensionContext));
+			output.choose(await selectRenderer());
 			const handler =
 				selectHandler(prepared.handlers, parsed, resolvedNode === rootNode) ??
 				(resolvedNode.run ? undefined : prepared.noAction);
@@ -621,7 +630,7 @@ async function dispatch(
 				outcome = { status: "completed", result: await terminal() };
 			}
 		} catch (error) {
-			// A failure before the renderer was chosen renders by default, after the output waiting for it.
+			// A failing selector leaves no renderer: the failure and the output waiting for it render by default.
 			if (!output.renderer) output.choose(undefined);
 			const by = await onFailure?.(error, extensionContext);
 			outcome = { status: "failed", error, ...(by === undefined ? {} : { by }) };

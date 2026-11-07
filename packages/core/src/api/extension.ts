@@ -245,8 +245,11 @@ export interface ExtensionHooks<
 	 * Selects the invocation's {@link Renderer}, once, after every setup and before any flag
 	 * handler, so it sees what setups bound. Return (or resolve to) `undefined` to keep Core's
 	 * default; Core awaits the selector, so it can lazy-load a formatter. A throw or rejection
-	 * fails the invocation like a throwing setup. Action and Context output written before then
-	 * waits and goes through the selected renderer; a failure before then renders by default.
+	 * fails the invocation, rendered by default. Action and Context output written before then
+	 * waits and goes through the selected renderer. When a setup throws, Core still calls the
+	 * selector (flags are bound) and renders the failure through the selected renderer; if the
+	 * selector then fails too, the setup failure renders by default. Routing and argv syntax
+	 * failures, before any setup, always render by default.
 	 * At most one Extension in an application may set it.
 	 */
 	readonly renderer?: (ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<Renderer | undefined>;
