@@ -72,10 +72,11 @@ export type RunOutcome<Result, Events extends readonly unknown[] | undefined = u
 );
 
 /** The {@link RunOutcome} of a command shape. */
-export type ShapeRunOutcome<Shape extends CommandShape> = RunOutcome<
-	Shape["result"],
-	ShapeEvents<Shape>
->;
+// A resolved conditional shows in hovers as the `RunOutcome<…>` it resolves to; a plain alias
+// would show as `ShapeRunOutcome<…>` with the whole command shape spelled out.
+export type ShapeRunOutcome<Shape extends CommandShape> = [Shape] extends [CommandShape]
+	? RunOutcome<Shape["result"], ShapeEvents<Shape>>
+	: never;
 
 /** Compile-time command tree accumulated by `.add()`. */
 export type CommandTree = Record<string, CommandShape>;
