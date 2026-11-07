@@ -19,9 +19,10 @@ export interface ApiClientOptions {
 export interface ApiClient {
 	readonly baseUrl: string;
 	/**
-	 * `fetch()` for `path` below {@link ApiClient.baseUrl} (an absolute URL is used as is),
-	 * with the `auth` headers the request does not set itself, only on the base URL's origin,
-	 * and the invocation's signal unless `init.signal` is given. Redirects are followed here
+	 * `fetch()` for `path` below {@link ApiClient.baseUrl} (an absolute URL is used as is, but
+	 * must be on the base URL's origin: otherwise it rejects with a `TypeError` before any request),
+	 * with the `auth` headers the request does not set itself, and the invocation's signal
+	 * unless `init.signal` is given. Redirects are followed here
 	 * (up to 20 per request, http: and https: only); one to another origin than the base URL's
 	 * continues without `Authorization` or any header named like an `auth` header.
 	 */
@@ -33,6 +34,20 @@ function resolveUrl(baseUrl: string, path: string): URL {
 	return URL.canParse(path)
 		? new URL(path)
 		: new URL(`${baseUrl.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`);
+}
+
+/**
+ * `path` resolved like {@link ApiClient.fetch} does for a first request, which must stay on
+ * `baseUrl`'s origin, so credentials set for the API never go to a host the caller named;
+ * only redirects and next pages may leave it. Throws a `TypeError` for any other origin.
+ */
+export function baseOriginUrl(baseUrl: string, path: string): URL {
+	const url = resolveUrl(baseUrl, path);
+	const { origin } = new URL(baseUrl);
+	if (url.origin !== origin) {
+		throw new TypeError(`Cannot request ${url.href}: only URLs on ${origin} are allowed`);
+	}
+	return url;
 }
 
 /** One request of a chain: the first, a redirect's, or a next page's. */
@@ -149,7 +164,7 @@ export const apiClient: ContextFactory<"api", ApiClientOptions, ApiClient> =
 
 		const client: ApiClient = {
 			baseUrl: options.baseUrl,
-			fetch: (path, init) => send(firstHop(resolveUrl(options.baseUrl, path), init)),
+			fetch: async (path, init) => send(firstHop(baseOriginUrl(options.baseUrl, path), init)),
 		};
 		nextPageFetchers.set(client, (path, init) => {
 			const target = resolveUrl(options.baseUrl, path);
