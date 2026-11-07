@@ -1,11 +1,11 @@
 //#region deploy
 import { defineCommand } from "@crustjs/core";
-import { nextStepsContext } from "@crustjs/extensions";
+import { nextSteps } from "@crustjs/extensions";
 import { z } from "zod";
 
 const deploy = defineCommand("deploy", { description: "Deploy a release" }, (cmd) =>
 	cmd
-		.use(nextStepsContext)
+		.use(nextSteps)
 		.args({ name: "target", type: "string", required: true, choices: ["staging", "prod"] })
 		.flags({
 			release: { type: "string", default: "latest", description: "Release to deploy" },
@@ -17,7 +17,7 @@ const deploy = defineCommand("deploy", { description: "Deploy a release" }, (cmd
 			const dryRun = flags["dry-run"] === true;
 			stdout(`${dryRun ? "Would deploy" : "Deploying"} ${flags.release} to ${args.target}`);
 			if (!dryRun) {
-				(await ctx.next).add(["status"], { args: { target: args.target } }, "Watch the rollout");
+				(await ctx.nextSteps).add(status, { args: { target: args.target } }, "Watch the rollout");
 			}
 			// [!code highlight]
 			return { target: args.target, release: flags.release, dryRun };
@@ -58,7 +58,8 @@ const init = defineCommand("init", { description: "Create a project" }, (cmd) =>
 
 //#region app
 import { Crust } from "@crustjs/core";
-import { help, input, json, nextSteps, schema } from "@crustjs/extensions";
+// `nextSteps` is imported with `deploy` above.
+import { help, input, json, schema } from "@crustjs/extensions";
 
 export const app = new Crust("my-cli", { description: "Deploy releases" })
 	.extend(help(), input(), json(), schema(), nextSteps())
