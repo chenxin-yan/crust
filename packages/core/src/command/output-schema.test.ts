@@ -100,6 +100,23 @@ describe(".output()", () => {
 		});
 	});
 
+	it("skips validation when a flag handler or noAction takes over", async () => {
+		const stop = defineExtension(defineExtensionId("stop"))
+			.flags({ stop: { type: "boolean" } })
+			.handle("stop", () => {});
+		const fallback = defineExtension(defineExtensionId("fallback")).noAction(() => {});
+
+		const handled = await new Crust("cli")
+			.extend(stop)
+			.output(z.number())
+			.action(() => "1" as unknown as number)
+			.run([], { flags: { stop: true } });
+		const actionless = await new Crust("cli").extend(fallback).output(z.number()).run([]);
+
+		expect(handled).toMatchObject({ status: "handled", by: "stop" });
+		expect(actionless).toMatchObject({ status: "handled", by: "fallback" });
+	});
+
 	it("validates the result of an async action", async () => {
 		const app = new Crust("cli").output(user).action(async () => ({ id: 2 }));
 
