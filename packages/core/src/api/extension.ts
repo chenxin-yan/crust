@@ -13,6 +13,7 @@ import type {
 	MergeProviders,
 	ParsedArgValue,
 	ParsedFlagValue,
+	RunInputPayload,
 } from "../types.ts";
 import type {
 	KnownCommandSpellings,
@@ -168,6 +169,32 @@ export interface ExtensionContext<
 	readonly signal: AbortSignal;
 	/** Declared Contexts, constructed lazily on first property access. */
 	readonly ctx: ContextBag<Deps>;
+	/**
+	 * Bind structured input (arguments, flags, and `raw` passthrough tokens) into this
+	 * invocation, for example a JSON object read from a flag. Call it from `setup`, so every
+	 * later hook, including each `preRun` whatever the `.extend()` order, sees the bound
+	 * values, or from `preRun`, so it happens only when the Command Action will run. Values
+	 * given explicitly on argv win, even when equal to the default; every other supplied key
+	 * replaces the environment value or default, converted exactly as typed `run()` input is.
+	 * Under typed `run()` nothing came from argv, so supplied keys replace the typed input.
+	 * Each call re-binds against the original input, so the last call wins. Afterwards
+	 * `args`, `flags`, and `rawArgs` report the bound values, and validation and the Command
+	 * Action use them. Flag handlers are chosen from the original input, so a bound flag never
+	 * selects one, even when bound in `setup`. A no-op in `onError` after a routing or argv-syntax failure.
+	 *
+	 * @throws {CrustError} `PARSE` on an unknown key, a positional argument supplied after an
+	 *   omitted earlier one, or a value that fails conversion (including a non-array value for
+	 *   a variadic argument or `multiple` flag); it fails the invocation like any error thrown
+	 *   from the hook that called it
+	 *
+	 * @example
+	 * ```ts
+	 * setup(ctx) {
+	 *   if (typeof ctx.flags.input === "string") ctx.bindInput({ flags: JSON.parse(ctx.flags.input) });
+	 * }
+	 * ```
+	 */
+	readonly bindInput: (input: RunInputPayload) => void;
 }
 
 /** The context {@link ExtensionHooks.setup} receives. */

@@ -324,6 +324,8 @@ Dynamic or conditional records do not claim typed ownership of hook values. An o
 
 `args` and `flags` are syntax-parsed values. Hooks do not change Command Action types.
 
+`bindInput({ args, flags, raw })` binds structured input from `setup` or `preRun`, with the conversion typed `run()` uses. Keys given explicitly on argv are kept and their supplied values are never converted: a flag counts as given whenever it appears on argv (including `--no-<name>`, a value equal to its default, or `--tags ""`), a positional argument when argv supplied it, and `raw` when argv has passthrough tokens after `--`. Supplied values replace environment values (including an invalid one) and defaults. Positional arguments still follow typed `run()` order: kept argv or typed `run()` positionals count as supplied, and bound input cannot skip one. Values that are not replaced are kept as bound, without re-running defaults or `parse`. Each call re-binds against the original input, so the last call wins. Bound values are visible to every later hook; binding in `setup` lets each `preRun` see them whatever the `.extend()` order. Flag handlers are chosen from the original input, so a bound flag never selects one, even when bound in `setup`. A failure fails the invocation as an error thrown from the calling hook would.
+
 ### `ExtensionHooks`
 
 <auto-type-table
@@ -337,7 +339,7 @@ Dynamic or conditional records do not claim typed ownership of hook values. An o
 - `noAction` runs when the routed command has no Command Action and no flag handler took over, with the same context, and ends the invocation as `handled`. At most one Extension in an application may set it; a second fails preparation with a `DEFINITION` error (`duplicate-no-action`). Without one, validation runs and, if it succeeds, the invocation completes without a result.
 - `preRun` runs in `.extend()` order only when the Command Action will run: after setups, when no flag handler took over, before validation. Throw to fail the invocation; it cannot end it successfully. Pulling a flag-owning Context here rejects, because its flags are not validated yet. An argv or environment value that fails conversion, `choices`, or `parse` reads as `undefined` in setups, handlers, and `preRun` (not its default); its error surfaces at validation.
 - `onError` runs for `execute()` only. Return `true` after rendering to stop the chain, or a falsy value to fall through to the selected [renderer's `error`](#renderer), or Core's default rendering without one. A hook that throws ends the chain and the original failure falls through the same way.
-- `postRun` runs in reverse `.extend()` order after every completed, handled, or failed invocation that reached hooks, like `finally`. Contexts remain available until it completes. Preparation, routing, and parse failures skip it.
+- `postRun` runs in reverse `.extend()` order after every completed, handled, or failed invocation that reached hooks, like `finally`. Contexts remain available until it completes. Preparation, routing, argv-parse, and typed `run()` input-binding failures skip it; a `bindInput` failure is a failure of the `setup` or `preRun` hook that called it and does not.
 
 See [propagation boundaries](/docs/api/errors#propagation-boundaries) for hook timing on failure.
 

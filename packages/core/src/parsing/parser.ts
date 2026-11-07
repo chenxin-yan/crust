@@ -37,21 +37,26 @@ type ArgvFlagValue =
 	| { readonly kind: "string"; value: string | string[] }
 	| { readonly kind: "invalid"; readonly error: CrustError };
 
-/** Records a value error instead of throwing it; see {@link parseArgs}. */
-type DeferValueError = (error: CrustError) => void;
+/** Records a value error, keyed by its definition's label, instead of throwing it; see {@link parseArgs}. */
+type DeferValueError = (error: CrustError, label: string) => void;
 
-/** {@link ParseResult} plus the first argv/env value error, which {@link validateParsed} throws. */
+/** {@link ParseResult} plus the flag order, what the invocation supplied, and argv's value errors. */
 export interface ArgvParseResult<
 	A extends ArgsDef = ArgsDef,
 	F extends FlagsDef = FlagsDef,
 > extends ParseResult<A, F> {
-	valueError?: CrustError;
 	/**
 	 * Canonical names of flags given a value, in the order the user gave them: argv by first
 	 * occurrence, then environment values by name; structured input in key order.
 	 * Extension flag handlers rank by it, so the first one on the command line wins.
 	 */
 	flagOrder: readonly string[];
+	/** Positional arguments supplied by argv or typed `run()` input; later bound input cannot skip one. */
+	suppliedArgs?: ReadonlySet<string>;
+	/** Inputs given on argv by label (`--flag`, `<arg>`, `--` for passthrough tokens); see {@link bindStructuredInput}. */
+	argvLabels?: ReadonlySet<string>;
+	/** Argv/env value errors by definition label, in binding order; {@link validateParsed} throws the first. */
+	valueErrors?: ReadonlyMap<string, CrustError>;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -177,13 +182,17 @@ function coerceToken(
  * Run one definition's coercion. With `defer`, a `CrustError` is recorded and the
  * definition stays unset (not defaulted) so the invocation can still reach `preRun`.
  */
-function coerceOrDefer<T>(coerce: () => T, defer: DeferValueError | undefined): T | undefined {
+function coerceOrDefer<T>(
+	coerce: () => T,
+	defer: DeferValueError | undefined,
+	label: string,
+): T | undefined {
 	if (!defer) return coerce();
 	try {
 		return coerce();
 	} catch (error) {
 		if (!(error instanceof CrustError)) throw error;
-		defer(error);
+		defer(error, label);
 		return undefined;
 	}
 }
@@ -291,7 +300,7 @@ function resolveFlags<F extends FlagsDef, V>(
 			(def.multiple && Array.isArray(parsedValue) && parsedValue.length === 0);
 		if (!absent) {
 			present?.add(name);
-			resolved[name] = coerceOrDefer(() => coerce(name, def, parsedValue), defer);
+			resolved[name] = coerceOrDefer(() => coerce(name, def, parsedValue), defer, `--${name}`);
 			continue;
 		}
 
@@ -366,11 +375,15 @@ function resolveArgs<A extends ArgsDef, V>(
 			resolved[name] =
 				remaining.length === 0 && def.default !== undefined
 					? [resolveDefault(def, label)]
-					: coerceOrDefer(() => remaining.map((v, i) => coerce(def, v, label, i)), defer);
+					: coerceOrDefer(() => remaining.map((v, i) => coerce(def, v, label, i)), defer, label);
 			index = positionals.length;
 		} else if (index < positionals.length) {
 			// SAFETY: the bounds check above proves this positional exists.
-			resolved[name] = coerceOrDefer(() => coerce(def, positionals[index] as V, label), defer);
+			resolved[name] = coerceOrDefer(
+				() => coerce(def, positionals[index] as V, label),
+				defer,
+				label,
+			);
 			index++;
 		} else {
 			resolved[name] = resolveDefault(def, label);
@@ -622,14 +635,14 @@ function bind<A extends ArgsDef, F extends FlagsDef, V, W>(
  *
  * Never throws for missing required values or for invalid values (type
  * coercion, `choices`, `parse`, env fallbacks). The first value error is
- * returned as `valueError`, its definition is left unset (not defaulted), and
+ * recorded in `valueErrors`, its definition is left unset (not defaulted), and
  * {@link validateParsed} throws it after extensions have had a chance to
  * handle an invocation (e.g. `--help`, `--version`).
  *
  * @param command - The command whose arg/flag definitions drive the parsing
  * @param argv - The argv array to parse (typically `process.argv.slice(2)`)
  * @param env - Environment consulted for `FlagDef.env` fallbacks; pass `{}` to parse without one
- * @returns Parsed args, flags, excessArgs (positionals before `--` not consumed by a declared argument), rawArgs (tokens after `--` not consumed by a declared argument), and any deferred valueError
+ * @returns Parsed args, flags, excessArgs (positionals before `--` not consumed by a declared argument), rawArgs (tokens after `--` not consumed by a declared argument), the labels argv supplied, and any deferred valueErrors
  * @throws {CrustError} On malformed argv: unknown flags, a missing option value, or a negated `noNegate` flag
  */
 export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
@@ -638,30 +651,39 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 	env: FlagEnvironment = process.env,
 ): ArgvParseResult<A, F> {
 	const { positionals, separatorIndex, flagValues } = tokenizeArgv(command, argv);
-	let valueError: CrustError | undefined;
+	const valueErrors = new Map<string, CrustError>();
 	const { args, flags, consumed, present } = bind(
 		command,
 		positionals,
 		applyEnvAndDelimiter(command.effectiveFlags, flagValues, env),
 		coerceToken,
 		coerceFlagValue,
-		(error) => {
-			valueError ??= error;
-		},
+		(error, label) => valueErrors.set(label, error),
 	);
+	// Tokens after `--` are operands: declared positionals take them first, the rest pass through.
+	const rawArgs = positionals.slice(Math.max(consumed, separatorIndex));
+	// Declared arguments take one positional each (a variadic, last, takes the rest).
+	const suppliedArgs = new Set(command.args.slice(0, positionals.length).map(({ name }) => name));
+	// Presence is read before delimiter splitting, so `--tags ""` counts as given.
+	const argvLabels = new Set([
+		...Object.keys(flagValues).map((name) => `--${name}`),
+		...[...suppliedArgs].map((name) => `<${name}>`),
+		...(rawArgs.length > 0 ? ["--"] : []),
+	]);
 	return {
 		args,
 		flags,
-		// Tokens after `--` are operands: declared positionals take them first, the rest pass through.
 		excessArgs: positionals.slice(consumed, separatorIndex),
-		rawArgs: positionals.slice(Math.max(consumed, separatorIndex)),
+		rawArgs,
 		// `flagValues` keys follow first occurrence in argv. Environment values have no
 		// position; sorting them keeps the order independent of declaration order.
 		flagOrder: [
 			...Object.keys(flagValues).filter((name) => present.has(name)),
 			...[...present].filter((name) => !Object.hasOwn(flagValues, name)).sort(),
 		],
-		...(valueError && { valueError }),
+		...(suppliedArgs.size > 0 && { suppliedArgs }),
+		...(argvLabels.size > 0 && { argvLabels }),
+		...(valueErrors.size > 0 && { valueErrors }),
 	};
 }
 
@@ -693,6 +715,15 @@ export async function parseFlagValues<const F extends FlagsDef>(
 	return validated.flags;
 }
 
+/** Only named records can supply a later positional while omitting an earlier one. */
+function positionalGap(argument: string, omitted: string): CrustError {
+	return new CrustError(
+		"PARSE",
+		`Argument <${argument}> cannot be provided after omitted argument <${omitted}>`,
+		{ argument, reason: "positional-gap" },
+	);
+}
+
 /** Bind typed input without producing argv; the path alone selects the command. */
 export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
 	command: CommandNode & { args: A; effectiveFlags: F },
@@ -700,6 +731,7 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 ): ArgvParseResult<A, F> {
 	const { args: inputArgs, flags: inputFlags, raw } = input;
 	const positionals: RunInputValue[] = [];
+	const suppliedArgs = new Set<string>();
 	let omittedArgument: string | undefined;
 	for (const definition of command.args) {
 		const value =
@@ -710,17 +742,8 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 			omittedArgument = definition.name;
 			continue;
 		}
-		// Only named records can supply a later positional while omitting an earlier one.
-		if (omittedArgument !== undefined) {
-			throw new CrustError(
-				"PARSE",
-				`Argument <${definition.name}> cannot be provided after omitted argument <${omittedArgument}>`,
-				{
-					argument: definition.name,
-					reason: "positional-gap",
-				},
-			);
-		}
+		if (omittedArgument !== undefined) throw positionalGap(definition.name, omittedArgument);
+		suppliedArgs.add(definition.name);
 		if (definition.variadic) {
 			if (!isOccurrenceArray(value)) {
 				throw new CrustError("PARSE", `Expected an occurrence array for <${definition.name}>`);
@@ -763,7 +786,75 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 	);
 	// Key order stands in for command-line order; values are not re-read, so getters run once.
 	const flagOrder = Object.keys(inputFlags ?? {}).filter((name) => present.has(name));
-	return { args, flags, excessArgs: [], rawArgs: [...(raw ?? [])], flagOrder };
+	return {
+		args,
+		flags,
+		excessArgs: [],
+		rawArgs: [...(raw ?? [])],
+		flagOrder,
+		...(suppliedArgs.size > 0 && { suppliedArgs }),
+	};
+}
+
+/**
+ * Bind structured input over a parse result, as `ExtensionContext.bindInput` does.
+ * Values given on argv win; every other supplied key replaces the environment value,
+ * default, or typed `run()` value, converted as {@link parseStructured} converts it.
+ * Supplied keys that argv already gave are dropped first, so their values are never
+ * converted and cannot fail; values not replaced are kept without re-resolving defaults.
+ *
+ * @param parsed - The invocation's original parse result; each call re-binds against it
+ * @throws {CrustError} `PARSE` on an unknown key, a positional argument supplied after an
+ *   omitted earlier one, or a value that fails conversion (including a non-array value for
+ *   a variadic argument or `multiple` flag)
+ */
+export function bindStructuredInput(
+	command: CommandNode,
+	parsed: ArgvParseResult,
+	input: RunInputPayload,
+): ArgvParseResult {
+	const given = parsed.argvLabels ?? new Set<string>();
+	const supplied = (record: RunInputPayload["args"], label: (name: string) => string) =>
+		Object.fromEntries(
+			Object.entries(record ?? {}).filter(
+				([name, value]) => value !== undefined && !given.has(label(name)),
+			),
+		);
+	const inputArgs = supplied(input.args, (name) => `<${name}>`);
+	const inputFlags = supplied(input.flags, (name) => `--${name}`);
+	const raw = given.has("--") ? undefined : input.raw;
+	// Typed `run()` order over the merged positionals, kept ones included.
+	let omitted: string | undefined;
+	for (const { name } of command.args) {
+		if (!parsed.suppliedArgs?.has(name) && !Object.hasOwn(inputArgs, name)) omitted = name;
+		else if (omitted !== undefined) throw positionalGap(name, omitted);
+	}
+	// Bind only the supplied definitions; unknown keys still fail against the narrowed command.
+	const structured = parseStructured(
+		{
+			...command,
+			args: command.args.filter(({ name }) => Object.hasOwn(inputArgs, name)),
+			effectiveFlags: Object.fromEntries(
+				Object.entries(command.effectiveFlags).filter(([name]) => Object.hasOwn(inputFlags, name)),
+			),
+		},
+		{ args: inputArgs, flags: inputFlags, raw },
+	);
+	const pick = (bound: Record<string, ParsedArgValue>, names: Record<string, unknown>) =>
+		Object.fromEntries(Object.keys(names).map((name) => [name, bound[name]]));
+	// A replaced flag's environment value error no longer applies.
+	const replaced = new Set(Object.keys(inputFlags).map((name) => `--${name}`));
+	const valueErrors = new Map(
+		[...(parsed.valueErrors ?? [])].filter(([label]) => !replaced.has(label)),
+	);
+	return {
+		...parsed,
+		// Spread, not assignment: an argument may be named `__proto__`.
+		args: { ...parsed.args, ...pick(structured.args, inputArgs) },
+		flags: { ...parsed.flags, ...pick(structured.flags, inputFlags) },
+		rawArgs: raw === undefined ? parsed.rawArgs : structured.rawArgs,
+		valueErrors,
+	};
 }
 
 /**
@@ -775,14 +866,15 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
  *
  * @param command - The command whose definitions drive the validation
  * @param parsed - The parse result from {@link parseArgs}
- * @throws {CrustError} The deferred `valueError` (`PARSE`), or `VALIDATION` on
+ * @throws {CrustError} The first deferred value error (`PARSE`), or `VALIDATION` on
  *   unexpected positionals or missing required args or flags
  */
 export function validateParsed<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
 	command: CommandNode & { args: A; effectiveFlags: F },
 	parsed: ArgvParseResult<A, F>,
 ): void {
-	if (parsed.valueError) throw parsed.valueError;
+	const [valueError] = parsed.valueErrors?.values() ?? [];
+	if (valueError) throw valueError;
 	if (parsed.excessArgs.length > 0) {
 		throw new CrustError(
 			"VALIDATION",
