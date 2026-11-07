@@ -283,7 +283,7 @@ Declared in [`api/extension.ts`](https://github.com/chenxin-yan/crust/blob/main/
 `defineExtension(id)` starts an immutable fluent definition; `defineExtension<MetaKeys>(id)` also [requires root metadata](#rootmetakey). Every method except `.factory()` returns a new frozen handle, and every handle is an `Extension` accepted by `.extend()`. There is no final build step.
 
 - Collection methods append on repeated calls. `.use()` declares Contexts the hooks consume. `.provide()` installs Context instances application-wide regardless of chain position; hooks see them only if also declared with `.use()`. `.flags()` owns flags. `.add()` contributes `defineCommand()` definitions at the root.
-- Lifecycle setters replace the previous callback: `.setup()`, `.noAction()`, `.preRun()`, `.postRun()`, and `.onError()` set the [hooks](#extensionhooks); `.handle(flag, run, options)` sets the [handler](#extensionhandleoptions) for one owned flag; `.sections(snapshot)` returns [section contributions](#extensionsectioncontribution); `.build(ctx)` returns [`BuildArtifacts`](#buildartifacts) for build tooling to write.
+- Lifecycle setters replace the previous callback: `.setup()`, `.renderer()`, `.noAction()`, `.preRun()`, `.postRun()`, and `.onError()` set the [hooks](#extensionhooks); `.handle(flag, run, options)` sets the [handler](#extensionhandleoptions) for one owned flag; `.sections(snapshot)` returns [section contributions](#extensionsectioncontribution); `.build(ctx)` returns [`BuildArtifacts`](#buildartifacts) for build tooling to write.
 - Each callback is typed by the declarations made before it in the chain.
 - Flag spellings and contributed command names are checked for collisions by TypeScript and when the method runs.
 
@@ -332,6 +332,7 @@ Dynamic or conditional records do not claim typed ownership of hook values. An o
 />
 
 - `setup` runs for every Extension in `.extend()` order after routing and input binding, before any flag handler. Its context adds `defer(cleanup)`; cleanups run after `postRun` hooks, in reverse registration order together with Context disposal, including when a later setup throws. Calling `defer` once setups have finished throws a `DEFINITION` error (`extension-defer-after-setup`). A setup can fail the invocation by throwing but cannot end it successfully.
+- `renderer` runs once after every setup, before any flag handler, with the same context, and returns the invocation's [`Renderer`](#renderer) or `undefined` for the default. At most one Extension in an application may set it; a second fails preparation with a `DEFINITION` error (`duplicate-renderer`).
 - Flag handlers registered with [`.handle()`](#extensionbuilder) run after every setup. The selected handler ends the invocation as `handled`; `preRun`, validation, and the Command Action don't run.
 - `noAction` runs when the routed command has no Command Action and no flag handler took over, with the same context, and ends the invocation as `handled`. At most one Extension in an application may set it; a second fails preparation with a `DEFINITION` error (`duplicate-no-action`). Without one, validation runs and, if it succeeds, the invocation completes without a result.
 - `preRun` runs in `.extend()` order only when the Command Action will run: after setups, when no flag handler took over, before validation. Throw to fail the invocation; it cannot end it successfully. Pulling a flag-owning Context here rejects, because its flags are not validated yet. An argv or environment value that fails conversion, `choices`, or `parse` reads as `undefined` in setups, handlers, and `preRun` (not its default); its error surfaces at validation.
@@ -339,6 +340,12 @@ Dynamic or conditional records do not claim typed ownership of hook values. An o
 - `postRun` runs in reverse `.extend()` order after every completed, handled, or failed invocation that reached hooks, like `finally`. Contexts remain available until it completes. Preparation, routing, and parse failures skip it.
 
 See [propagation boundaries](/docs/api/errors#propagation-boundaries) for hook timing on failure.
+
+### `Renderer`
+
+<auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Renderer" />
+
+Returned by an Extension's [`.renderer()`](/docs/guide/extensions#renderers) selector. It receives the Command Action's and Contexts' `stdout()` lines as `text` and `stderr()` lines as `diag`, the completed action's result, and, in `execute()` only, a failure no `onError` hook claimed. Extension `ctx.stdout` and `ctx.stderr` bypass it. Output written before Core calls the selector waits and goes through the chosen renderer; a failure before then renders by default. Without `result` the result is not printed; without `error` Core writes its `Error: message` lines. Exit codes don't change.
 
 ### `ExtensionHandleOptions`
 

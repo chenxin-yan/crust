@@ -275,13 +275,13 @@ Runs the terminal boundary: parses `process.argv.slice(2)` (or `options.argv`), 
 1. Prepare the application: apply Extensions, flags, and sections, deferring pending commands until needed.
 2. Route the command path, materializing pending commands as needed.
 3. Parse argv (`execute()`) or bind structured input (`run()`).
-4. Run Extension `setup` hooks in registration order.
+4. Run Extension `setup` hooks in registration order, then choose the [renderer](/docs/guide/extensions#renderers) for action and Context output.
 5. If the user passed a flag with an Extension handler, run the selected handler (eager handlers first, then the flag given first) and end the invocation with a `handled` outcome. Otherwise, if the routed command has no Command Action, run the application's `noAction` hook, if any, and end it the same way.
 6. Run Extension `preRun` hooks in registration order. They run only before a Command Action.
 7. Check required values and positional structure.
 8. Apply Standard Schemas and aggregate their issues.
 9. Construct Contexts as they are first pulled.
-10. Run the Command Action.
+10. Run the Command Action and pass its result to the renderer's `result`, if any.
 11. Run Extension `postRun` hooks in reverse registration order with the outcome.
 12. Run deferred cleanup, including cleanup deferred by Extension setups, and dispose Contexts in reverse registration order.
 
