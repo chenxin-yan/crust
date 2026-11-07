@@ -323,6 +323,162 @@ describe("json", () => {
 		expect(exitCode).toBe(1);
 	});
 
+	describe("generator actions", () => {
+		it("streams each event as an NDJSON line, then one result line", async () => {
+			const app = new Crust("app").extend(json()).action(async function* ({ stdout }) {
+				stdout("working");
+				yield { file: "a" };
+				yield "b";
+				return { synced: 2 };
+			});
+
+			expect(await captureExecute(app, ["--json"])).toEqual({
+				stdout: [
+					'{"type":"event","data":{"file":"a"}}',
+					'{"type":"event","data":"b"}',
+					'{"type":"result","data":{"synced":2}}',
+				].join("\n"),
+				stderr: "working",
+				exitCode: 0,
+			});
+			expect(await captureExecute(app, [])).toEqual({ stdout: "working", stderr: "", exitCode: 0 });
+		});
+
+		it("writes each event line as it is yielded", async () => {
+			const log: string[] = [];
+			const app = new Crust("app").extend(json()).action(async function* () {
+				yield 1;
+				log.push("resumed");
+				return 2;
+			});
+
+			await app.execute({
+				argv: ["--json"],
+				io: { stdout: (line) => log.push(line), stderr: (line) => log.push(`stderr:${line}`) },
+			});
+
+			expect(log).toEqual(['{"type":"event","data":1}', "resumed", '{"type":"result","data":2}']);
+		});
+
+		it("still ends with one result line for zero events and an undefined result", async () => {
+			const app = new Crust("app").extend(json()).action(async function* () {});
+
+			expect(await captureExecute(app, ["--json"])).toEqual({
+				stdout: '{"type":"result"}',
+				stderr: "",
+				exitCode: 0,
+			});
+		});
+
+		it("ends a failed stream with one error line on stdout instead of stderr JSON", async () => {
+			const app = new Crust("app").extend(json()).action(async function* () {
+				yield 1;
+				throw new CrustError("PARSE", "bad value");
+			});
+
+			expect(await captureExecute(app, ["--json"])).toEqual({
+				stdout: [
+					'{"type":"event","data":1}',
+					'{"type":"error","error":{"code":"PARSE","message":"bad value"}}',
+				].join("\n"),
+				stderr: "",
+				exitCode: 1,
+			});
+		});
+
+		it("fails with an error line and closes the generator when an event is not JSON data", async () => {
+			let closed = false;
+			const app = new Crust("app").extend(json()).action(async function* () {
+				try {
+					yield 1;
+					yield 1n;
+					return 2;
+				} finally {
+					closed = true;
+				}
+			});
+
+			const { stdout, stderr, exitCode } = await captureExecute(app, ["--json"]);
+
+			expect(exitCode).toBe(1);
+			expect(stderr).toBe("");
+			const lines = stdout.split("\n");
+			expect(lines).toHaveLength(2);
+			expect(lines[0]).toBe('{"type":"event","data":1}');
+			expect(JSON.parse(lines[1]!)).toMatchObject({
+				type: "error",
+				error: { message: expect.stringMatching(/^--json: an event is not JSON data/) },
+			});
+			expect(closed).toBe(true);
+		});
+
+		it("fails with an error line when the returned result is not JSON data", async () => {
+			const app = new Crust("app").extend(json()).action(async function* () {
+				yield 1;
+				return 1n;
+			});
+
+			const { stdout, exitCode } = await captureExecute(app, ["--json"]);
+
+			expect(exitCode).toBe(1);
+			const lines = stdout.split("\n");
+			expect(lines).toHaveLength(2);
+			expect(JSON.parse(lines[1]!)).toMatchObject({
+				type: "error",
+				error: { message: expect.stringMatching(/^--json: the command result is not JSON data/) },
+			});
+		});
+
+		// Stdout already ended with the result line, so a later failure must not add a second final line.
+		it("renders a failure after the result line as error JSON on stderr", async () => {
+			const app = new Crust("app")
+				.extend(json())
+				.provide(disposeFails())
+				.action(async function* ({ ctx }) {
+					await ctx.resource;
+					yield "opened";
+					return { ok: true };
+				});
+
+			expect(await captureExecute(app, ["--json"])).toEqual({
+				stdout: '{"type":"event","data":"opened"}\n{"type":"result","data":{"ok":true}}',
+				stderr: '{"message":"dispose"}',
+				exitCode: 1,
+			});
+		});
+
+		it("renders a failure before the generator starts as stderr JSON", async () => {
+			const app = new Crust("app")
+				.extend(json())
+				.args({ name: "target", type: "string", required: true })
+				.action(async function* () {
+					yield 1;
+				});
+
+			const { stdout, stderr, exitCode } = await captureExecute(app, ["--json"]);
+
+			expect(stdout).toBe("");
+			expect(exitCode).toBe(1);
+			expect(JSON.parse(stderr)).toMatchObject({ code: "VALIDATION" });
+		});
+
+		it("captures the stream under run() and leaves failures to outcome.error", async () => {
+			const failure = new Error("boom");
+			const app = new Crust("app").extend(json()).action(async function* () {
+				yield 1;
+				throw failure;
+			});
+
+			expect(await app.run([], { flags: { json: true } })).toEqual({
+				status: "failed",
+				error: failure,
+				events: [1],
+				stdout: '{"type":"event","data":1}',
+				stderr: "",
+			});
+		});
+	});
+
 	it("captures the result on stdout under run() and leaves failures to outcome.error", async () => {
 		const ok = appReturning(() => [1, 2]);
 		expect(await ok.run([], { flags: { json: true } })).toEqual({
