@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 
 import { defineExtension } from "../api/extension.ts";
 import { defineExtensionId } from "../identity.ts";
-import { Crust, defineCommand } from "./crust.ts";
+import { Crust, type CommandDefinition, defineCommand } from "./crust.ts";
 import { SNAPSHOT_PATH_ENV } from "./invocation.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
 
@@ -474,6 +474,66 @@ describe("Invocation pipeline — snapshot projection", () => {
 		await app.run([]);
 
 		expect(roots.map(({ flags }) => flags.data?.default)).toEqual([["a"], ["a", "b"]]);
+	});
+});
+
+describe("Invocation pipeline — commandPathOf", () => {
+	const migrate = defineCommand("migrate", (c) => c.action(() => {}));
+	const db = defineCommand("db", { aliases: ["d"] }, (c) => c.add(migrate).action(() => {}));
+	const status = defineCommand("status", (c) => c.action(() => {}));
+	const doctor = defineCommand("doctor", (c) => c.action(() => {}));
+	const unmounted = defineCommand("unmounted", (c) => c.action(() => {}));
+	const tools = defineExtension(defineExtensionId("tools")).add(doctor);
+
+	function lookup(definitions: readonly CommandDefinition<any, any, any, any>[]) {
+		const found: unknown[] = [];
+		const observer = defineExtension(defineExtensionId("observer"))
+			.postRun((ctx) => {
+				for (const definition of definitions) found.push(ctx.commandPathOf(definition));
+			})
+			.onError((_error, ctx) => {
+				for (const definition of definitions) found.push(ctx.commandPathOf(definition));
+				return true;
+			});
+		return { found, observer };
+	}
+
+	it("finds the canonical path of an added, nested, or Extension-contributed definition", async () => {
+		const renamed = status.as("state");
+		const { found, observer } = lookup([migrate, db, doctor, renamed, status, unmounted]);
+		const app = new Crust("app").extend(observer, tools).add(db, renamed);
+
+		expect(await app.run(["doctor"])).toMatchObject({ status: "completed" });
+		expect(found).toEqual([
+			["app", "db", "migrate"],
+			["app", "db"],
+			["app", "doctor"],
+			["app", "state"],
+			// `.as()` returns a different definition.
+			undefined,
+			undefined,
+		]);
+	});
+
+	it("returns the shallowest path of a definition added more than once", async () => {
+		const { found, observer } = lookup([migrate]);
+		const app = new Crust("app").extend(observer).add(db, migrate);
+
+		await app.run(["db"]);
+		expect(found).toEqual([["app", "migrate"]]);
+	});
+
+	it("finds paths from onError after a failure before dispatch", async () => {
+		const { found, observer } = lookup([migrate]);
+		const app = new Crust("app").extend(observer).add(db);
+
+		const originalExitCode = process.exitCode;
+		try {
+			await app.execute({ argv: ["nope"], io: { stderr: () => {} } });
+		} finally {
+			process.exitCode = originalExitCode ?? 0;
+		}
+		expect(found).toEqual([["app", "db", "migrate"]]);
 	});
 });
 

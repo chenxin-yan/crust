@@ -172,15 +172,19 @@ export interface ChildEntry {
 	readonly meta: CommandMeta;
 	/** Materializes the child once; a throwing recipe throws again on the next call. */
 	readonly resolve: () => CommandNode;
+	/** The definition `.add()` or an Extension contributed the child from. */
+	readonly definition?: CommandDefinition;
 }
 
 /** The node's children in insertion order, without materializing pending ones. */
 export function childEntriesOf(node: CommandNode): ChildEntry[] {
 	const subCommands = node.subCommands;
+	const definitions = lazyChildDefinitions.get(subCommands);
 	const entries: ChildEntry[] = [...childMetaOf(subCommands)].map(([name, meta]) => ({
 		name,
 		meta,
 		resolve: () => subCommands[name]!,
+		definition: definitions?.get(name),
 	}));
 	entries.push(...addedChildrenOf(node));
 	return entries;
@@ -215,6 +219,7 @@ export function subCommandsOf(node: CommandNode): Record<string, CommandNode> {
 
 const lazyChildMeta = new WeakMap<object, ReadonlyMap<string, CommandMeta>>();
 const lazyChildBuilt = new WeakMap<object, ReadonlyMap<string, CommandNode>>();
+const lazyChildDefinitions = new WeakMap<object, ReadonlyMap<string, CommandDefinition>>();
 
 /**
  * A frozen children record whose nodes are built on first property access, so an
@@ -228,7 +233,9 @@ export function lazyChildRecord(
 	const record: Record<string, CommandNode> = {};
 	const meta = new Map<string, CommandMeta>();
 	const built = new Map<string, CommandNode>();
+	const definitions = new Map<string, CommandDefinition>();
 	for (const entry of entries) {
+		if (entry.definition) definitions.set(entry.name, entry.definition);
 		Object.defineProperty(record, entry.name, {
 			enumerable: true,
 			get: () => {
@@ -241,7 +248,36 @@ export function lazyChildRecord(
 	}
 	lazyChildMeta.set(record, meta);
 	lazyChildBuilt.set(record, built);
+	lazyChildDefinitions.set(record, definitions);
 	return Object.freeze(record);
+}
+
+/**
+ * Canonical names from `root` through the command added from `definition` (by identity),
+ * shallowest first, then in insertion order; `undefined` when no command was added from it.
+ * Builds the children of every level it searches.
+ */
+export function commandPathOf(
+	root: CommandNode,
+	definition: CommandDefinition,
+): readonly string[] | undefined {
+	let level: { node: CommandNode; path: readonly string[] }[] = [
+		{ node: root, path: [root.meta.name] },
+	];
+	while (level.length > 0) {
+		for (const { node, path } of level) {
+			for (const [name, candidate] of lazyChildDefinitions.get(node.subCommands) ?? []) {
+				if (candidate === definition) return Object.freeze([...path, name]);
+			}
+		}
+		level = level.flatMap(({ node, path }) =>
+			Object.entries(node.subCommands).map(([name, child]) => ({
+				node: child,
+				path: [...path, name],
+			})),
+		);
+	}
+	return undefined;
 }
 
 /** Child metadata by name, read without building children when the record is lazy. */

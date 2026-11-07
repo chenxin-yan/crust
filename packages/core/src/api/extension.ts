@@ -142,6 +142,18 @@ export interface ExtensionContext<
 	 */
 	readonly commandPath: readonly string[];
 	/**
+	 * Canonical names from the application root through the command added from `definition`,
+	 * in the form of {@link ExtensionContext.commandPath}; `undefined` when the application
+	 * has no command added from it. Definitions match by identity, so a `.as()` copy is a
+	 * different definition. A definition added more than once resolves to its shallowest
+	 * path, then the first added. Searching builds the commands it passes, running their recipes.
+	 *
+	 * @example `ctx.commandPathOf(migrate)` → `["tool", "db", "migrate"]`
+	 */
+	readonly commandPathOf: (
+		definition: CommandDefinition<any, any, any, any>,
+	) => readonly string[] | undefined;
+	/**
 	 * Bound positional values for the resolved command, before validation: parsed from
 	 * argv tokens for `execute()`, taken as-is from the structured input for typed `run()`
 	 * (URL/JSON values keep their identity). An argument whose argv value is invalid is
