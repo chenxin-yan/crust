@@ -168,7 +168,7 @@ Extensions apply to every command the same way, whether it was added before or a
 
 ## `.output(schema)`
 
-Declares the command's result with a [Standard Schema](https://standardschema.dev). Call it before `.action()`: TypeScript then requires the action to return the schema's input type, or a promise of it. After the action resolves, Crust validates its result with the schema and the schema's output becomes the `result`, typed in `run()`. A result the schema rejects fails the invocation with an [`OUTPUT`](/docs/api/errors#outputerrordetails) error, exit `1` under `execute()`. A command without an action passes `undefined` to the schema, whose output becomes the result. An invocation an Extension's flag handler or `noAction` takes over ends `handled`, with no result to validate. A later `.output()` replaces the schema. Without `.output()`, results are not validated.
+Declares the command's result with a [Standard Schema](https://standardschema.dev). Call it before `.action()`: TypeScript then requires the action to return the schema's input type, or a promise of it. After the action resolves, Crust validates its result with the schema and the schema's output, awaited, becomes the `result`, typed in `run()`. A result the schema rejects fails the invocation with an [`OUTPUT`](/docs/api/errors#outputerrordetails) error, exit `1` under `execute()`. A command without an action passes `undefined` to the schema, whose output becomes the result. An invocation an Extension's flag handler or `noAction` takes over ends `handled`, with no result to validate. A later `.output()` replaces the schema. Without `.output()`, results are not validated.
 
 ```ts
 const whoami = new Crust("whoami")

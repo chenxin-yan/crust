@@ -84,6 +84,13 @@ function _replacingTheSchemaChecksTheActionReturn() {
 	type _result = Expect<Equal<Completed<ReturnType<typeof app.run<[]>>>, number>>;
 }
 
+function _promiseOutputsAreAwaitedLikeActionResults() {
+	const app = new Crust("cli").output(z.promise(z.number())).action(async () => 3);
+	type _result = Expect<Equal<Completed<ReturnType<typeof app.run<[]>>>, number>>;
+	const actionless = new Crust("cli").output(z.promise(z.number()));
+	type _actionless = Expect<Equal<Completed<ReturnType<typeof actionless.run<[]>>>, number>>;
+}
+
 function _actionlessCommandsResolveToTheSchemaOutput() {
 	const app = new Crust("cli").output(z.number().default(3));
 	type _result = Expect<Equal<Completed<ReturnType<typeof app.run<[]>>>, number>>;
