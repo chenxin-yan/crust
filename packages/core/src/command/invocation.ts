@@ -550,17 +550,19 @@ function selectHandler(
 
 /**
  * Strict on purpose: an action may return any other async iterable, such as a stream,
- * as its result.
+ * as its result. `Symbol.asyncIterator` is probed first so an ordinary result's getters
+ * (e.g. `next`) are never read here; serialization reads them exactly once.
  */
 function isAsyncGenerator(value: unknown): value is AsyncGenerator {
 	if (typeof value !== "object" || value === null) return false;
 	const candidate = value as Partial<AsyncGenerator>;
 	try {
 		return (
+			Symbol.asyncIterator in candidate &&
+			typeof candidate[Symbol.asyncIterator] === "function" &&
 			typeof candidate.next === "function" &&
 			typeof candidate.return === "function" &&
-			typeof candidate.throw === "function" &&
-			typeof candidate[Symbol.asyncIterator] === "function"
+			typeof candidate.throw === "function"
 		);
 	} catch {
 		// A result whose properties throw when read (e.g. a strict Proxy) is an ordinary result.
