@@ -340,6 +340,32 @@ describe("createMcpServer", () => {
 		expect((await client.callTool({ name: "count" })).structuredContent).toEqual({ result: 2 });
 	});
 
+	it("reports text-only results of tools with an outputSchema as errors", async () => {
+		const app = new Crust("cli")
+			.add(
+				defineCommand("count", (c) =>
+					c.output(jsonSchemaOutput({ type: "number" })).action(() => -0),
+				),
+			)
+			.extend(finisher);
+		const client = await connect(app);
+		await client.listTools();
+		// An Extension handling the call leaves only stdout, which cannot satisfy the outputSchema.
+		const unmet = {
+			type: "text",
+			text: "The command finished without a JSON result for this tool's outputSchema; its stdout follows",
+		};
+		expect(await client.callTool({ name: "count", arguments: { bail: true } })).toEqual({
+			content: [unmet, { type: "text", text: "bailed" }],
+			isError: true,
+		});
+		// -0 does not survive JSON, so the result falls back to stdout.
+		expect(await client.callTool({ name: "count" })).toEqual({
+			content: [unmet, { type: "text", text: "" }],
+			isError: true,
+		});
+	});
+
 	it("sends progress notifications for yielded events when the request has a progress token", async () => {
 		const app = new Crust("cli").add(
 			defineCommand("sync", (c) =>

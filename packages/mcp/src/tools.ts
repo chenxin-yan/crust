@@ -54,6 +54,20 @@ function formatPath(path: readonly string[]): string {
 	return path.length === 0 ? "<root>" : path.join(" ");
 }
 
+/**
+ * Whether every reference still resolves once the schema is nested under
+ * `properties.result`: only `#/$defs/…` `$ref`s, which follow the hoisted
+ * `$defs`, and no other `$` keyword (`$id`, `$anchor`, `$dynamicRef`, …).
+ */
+function survivesWrapping(value: unknown): boolean {
+	if (typeof value !== "object" || value === null) return true;
+	return Object.entries(value).every(([key, entry]) =>
+		key === "$ref"
+			? typeof entry === "string" && entry.startsWith("#/$defs/")
+			: (!key.startsWith("$") || key === "$comment") && survivesWrapping(entry),
+	);
+}
+
 /** A command's output JSON Schema as MCP `outputSchema`; see {@link toolsFromSnapshot}. */
 function toolOutputSchema(
 	schema: Readonly<Record<string, unknown>> | undefined,
@@ -61,11 +75,10 @@ function toolOutputSchema(
 	if (schema === undefined) return undefined;
 	if (schema.type === "object") return { ...schema, type: "object" };
 	const types: unknown[] = [schema.type].flat();
-	// The exact `"$ref":"#"` token would point at the wrapper; `#/$defs/…` continues past the `#`.
-	const selfReferencing = JSON.stringify(schema).includes('"$ref":"#"');
-	if (schema.type === undefined || types.includes("object") || selfReferencing) return undefined;
+	if (schema.type === undefined || types.includes("object")) return undefined;
 	// `$schema` and `$defs` belong at the root, where `#/$defs/…` references resolve.
 	const { $schema, $defs, ...result } = schema;
+	if (!survivesWrapping(result) || !survivesWrapping($defs)) return undefined;
 	return {
 		...($schema === undefined ? {} : { $schema }),
 		type: "object",
@@ -93,8 +106,8 @@ function toolOutputSchema(
  * themselves, schemas that exclude objects (e.g. `number`, `array`) wrapped as
  * `{ result }` (with `$schema` and `$defs` kept at the root). Schemas that may
  * or may not describe an object (no top-level `type`, e.g. `anyOf`, or a `type`
- * list including `"object"`), or that wrapping would break (a `$ref` to `#`),
- * are not advertised.
+ * list including `"object"`), or that wrapping would break (a `$ref` outside
+ * `#/$defs/`, or another `$` keyword such as `$id`), are not advertised.
  */
 export function toolsFromSnapshot(
 	snapshot: CommandSnapshot,
