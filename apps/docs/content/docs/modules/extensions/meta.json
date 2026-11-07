@@ -8,6 +8,7 @@
     "no-color",
     "update-notifier",
     "json",
-    "input"
+    "input",
+    "schema"
   ]
 }
