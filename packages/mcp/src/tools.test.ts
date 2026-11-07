@@ -10,6 +10,16 @@ const passthrough = {
 	"~standard": { version: 1 as const, vendor: "test", validate: (value: unknown) => ({ value }) },
 };
 
+/** Standard Schema whose output converts to `jsonSchema`. */
+function jsonSchemaOutput(jsonSchema: Record<string, unknown>) {
+	return {
+		"~standard": {
+			...passthrough["~standard"],
+			jsonSchema: { input: () => jsonSchema, output: () => jsonSchema },
+		},
+	};
+}
+
 describe("toolsFromSnapshot", () => {
 	it("names tools by canonical path, skipping hidden, actionless, excluded, and mcp commands", async () => {
 		const app = new Crust("fixture", { description: "Fixture app" })
@@ -127,6 +137,68 @@ describe("toolsFromSnapshot", () => {
 		]);
 		expect(commandInputFields(command)).toEqual({ urlFields: ["origin"], argNames: ["target"] });
 		expect(RAW_PROPERTY).toBe("raw");
+	});
+
+	it("marks destructive commands with destructiveHint and omits annotations otherwise", async () => {
+		const app = new Crust("cli")
+			.add(defineCommand("rm", { destructive: true }, (c) => c.action(noop)))
+			.add(defineCommand("ls", (c) => c.action(noop)));
+		const [rm, ls] = toolsFromSnapshot(await app.snapshot());
+		expect(rm?.annotations).toEqual({ destructiveHint: true });
+		expect(ls).not.toHaveProperty("annotations");
+	});
+
+	it("advertises output schemas in the shape structuredContent takes", async () => {
+		const DIALECT = "https://json-schema.org/draft/2020-12/schema";
+		const node = { type: "object", properties: { name: { type: "string" } } };
+		const app = new Crust("cli")
+			.command("user", (c) =>
+				c.output(jsonSchemaOutput({ $schema: DIALECT, ...node })).action(() => ({})),
+			)
+			.command("count", (c) =>
+				c.output(jsonSchemaOutput({ $schema: DIALECT, type: "number" })).action(() => 1),
+			)
+			.command("tree", (c) =>
+				c
+					.output(
+						jsonSchemaOutput({
+							type: "array",
+							items: { $ref: "#/$defs/Node" },
+							$defs: { Node: node },
+						}),
+					)
+					.action(() => []),
+			)
+			.command("maybe", (c) =>
+				c.output(jsonSchemaOutput({ anyOf: [node, { type: "null" }] })).action(() => null),
+			)
+			.command("loop", (c) =>
+				c.output(jsonSchemaOutput({ type: "array", items: { $ref: "#" } })).action(() => []),
+			)
+			.command("plain", (c) => c.output(passthrough).action(() => 1));
+		const outputs = Object.fromEntries(
+			toolsFromSnapshot(await app.snapshot()).map((tool) => [tool.name, tool.outputSchema]),
+		);
+		expect(outputs).toEqual({
+			user: { $schema: DIALECT, ...node },
+			count: {
+				$schema: DIALECT,
+				type: "object",
+				properties: { result: { type: "number" } },
+				required: ["result"],
+			},
+			tree: {
+				type: "object",
+				properties: { result: { type: "array", items: { $ref: "#/$defs/Node" } } },
+				required: ["result"],
+				$defs: { Node: node },
+			},
+			// Results may be objects or not, so structuredContent may or may not be wrapped.
+			maybe: undefined,
+			// `#` would point at the wrapper.
+			loop: undefined,
+			plain: undefined,
+		});
 	});
 
 	it("rejects a command whose flat input would declare a name twice", async () => {

@@ -56,19 +56,20 @@ The tool name is the canonical command path joined with `_` (`deploy api` become
 
 Each tool's `inputSchema` is one flat object built from the snapshot by [`commandInputSchema()`](/docs/modules/core#tooling-subpath), and call arguments go back through `parseCommandInput()`:
 
-| Definition                        | Schema                                                                                                |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `type: "string"` / `"path"`       | `{ type: "string" }`                                                                                  |
-| `type: "number"` / `"boolean"`    | `{ type: "number" }` / `{ type: "boolean" }`                                                          |
-| `type: "url"`                     | `{ type: "string", format: "uri" }`; the string becomes a `URL` before `run()`                        |
-| `type: "json"`                    | `{}` (any JSON)                                                                                       |
-| `choices`                         | `{ type: "string", enum }`                                                                            |
-| `variadic` / `multiple`           | `{ type: "array", items }`                                                                            |
-| `required` without `default`      | listed in `required`                                                                                  |
-| Standard Schema or custom `parse` | The declared token type (`string` for schema args); the command validates and transforms when it runs |
-| every tool                        | `raw: { type: "array", items: { type: "string" } }`, delivered to the action as `rawArgs`             |
+| Definition                     | Schema                                                                                                              |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `type: "string"` / `"path"`    | `{ type: "string" }`                                                                                                |
+| `type: "number"` / `"boolean"` | `{ type: "number" }` / `{ type: "boolean" }`                                                                        |
+| `type: "url"`                  | `{ type: "string", format: "uri" }`; the string becomes a `URL` before `run()`                                      |
+| `type: "json"`                 | `{}` (any JSON)                                                                                                     |
+| `choices`                      | `{ type: "string", enum }`                                                                                          |
+| `variadic` / `multiple`        | `{ type: "array", items }`                                                                                          |
+| `required` without `default`   | listed in `required`                                                                                                |
+| Standard Schema                | Its input JSON Schema when `run()` accepts that shape; otherwise the declared token type (`string` for schema args) |
+| custom `parse`                 | The declared token type; the command validates and transforms when it runs                                          |
+| every tool                     | `raw: { type: "array", items: { type: "string" } }`, delivered to the action as `rawArgs`                           |
 
-Snapshots carry no schemas or `parse` functions, so schema-owned requiredness is invisible: schema-backed definitions are advertised as optional, while a custom `parse` definition keeps its declared `required`. An arg and a flag with the same name, or a definition named `raw`, are rejected. Defaults are advertised as `JSON.stringify` copies, so `URL`s become strings and nested `undefined`, functions, and symbols are dropped; defaults that fail to serialize or hold non-finite numbers are omitted from the manifest. Either way, `run()` still applies the declared default.
+A Standard Schema definition's snapshot carries the schema's input JSON Schema (`inputSchema`) when it can produce one (Zod 4.2+, ArkType 2.1.28+, Valibot through `toStandardJsonSchema()`). Schema-backed values reach `run()` as their token, a string (a boolean for `type: "boolean"` flags), so that JSON Schema is advertised, without `$schema`, only when its top-level `type` is that token type, or `array` with such `items` for `variadic` and `multiple`, and it has no `$ref`, `$defs`, or other `$` keyword. `z.enum([...])`, `z.string().min(3)`, and `z.url()` keep their `enum`, `minLength`, and `format`; `z.coerce.number()` (JSON Schema `number`) falls back to `{ type: "string" }`, since a JSON number would fail the string binding. The definition's `description` fills in when the JSON Schema has none. Schema-owned requiredness is invisible: schema-backed definitions are advertised as optional, while a custom `parse` definition keeps its declared `required`. An arg and a flag with the same name, or a definition named `raw`, are rejected. Defaults are advertised as `JSON.stringify` copies, so `URL`s become strings and nested `undefined`, functions, and symbols are dropped; defaults that fail to serialize or hold non-finite numbers are omitted from the manifest. Either way, `run()` still applies the declared default.
 
 ## Results
 
@@ -78,13 +79,21 @@ The outcome of `app.run()` decides the tool result:
 - Any other `completed` result (`undefined`, `Date`, `Map`, class instances, `BigInt`, `NaN`, cycles) and every `handled` outcome return the captured stdout as text. The result is copied once before serialization, so getters run once and `toJSON` is not called.
 - A `failed` outcome sets `isError` with `<code>: <message>` for a `CrustError`, `<name>: <message>` for other errors.
 
+A command with an [`.output()`](/docs/api/crust#outputschema) schema whose snapshot carries `outputSchema` advertises it as the tool's `outputSchema`, in the shape of its `structuredContent`. An object schema is advertised as is. A schema whose `type` excludes objects (`number`, `array`, `["string", "null"]`, …) is wrapped as `{ type: "object", properties: { result }, required: ["result"] }`, with `$schema` and `$defs` kept at the root. A schema that may describe an object or not (no top-level `type`, such as `anyOf`, or a `type` list including `"object"`), or that refers to its own root (`"$ref": "#"`), is not advertised, since its results may be sent either way.
+
+A command marked [`destructive`](/docs/api/types#commandmeta) advertises `annotations: { destructiveHint: true }`; other tools carry no `annotations`.
+
 Unknown tool names are protocol errors (`InvalidParams`), which is also how hidden and excluded commands present.
+
+## Progress
+
+When a `tools/call` request carries `_meta.progressToken`, each value an [async generator action](/docs/guide/commands#stream-events) yields sends a `notifications/progress` for that token: `progress` counts the events so far (1, 2, …), and a string event becomes its `message`; other events send no `message`. Without a token, no notifications are sent. A notification that fails to send is dropped without failing the call. The tool result is still the action's return value.
 
 ## Headless primitives
 
 <include lang="ts">../../../examples/modules/mcp.ts#headless</include>
 
-`createMcpServer(app, options?)` returns the SDK's low-level `Server` with `tools/list` and `tools/call` handlers, named after the root command with its `version` (or `0.0.0`). Each call runs `app.run(path, input, { signal })` with its own captured output. Client cancellation aborts only that call and disconnecting aborts all of them; actions must honor `signal` to stop. `serveStdio(server)` connects the stdio transport and resolves when the client disconnects.
+`createMcpServer(app, options?)` returns the SDK's low-level `Server` with `tools/list` and `tools/call` handlers, named after the root command with its `version` (or `0.0.0`). Each call runs `app.run(path, input, { signal })` with its own captured output, plus an `onEvent` that sends [progress](#progress) when the request carries a progress token. Client cancellation aborts only that call and disconnecting aborts all of them; actions must honor `signal` to stop. `serveStdio(server)` connects the stdio transport and resolves when the client disconnects.
 
 <Callout type="warn">
   Over stdio, protocol frames own the process's stdout. Output written through the invocation's
@@ -98,6 +107,6 @@ Unknown tool names are protocol errors (`InvalidParams`), which is also how hidd
 
 <include lang="ts">../../../examples/modules/mcp.ts#manifest</include>
 
-The pure manifest, for tests or tooling that ships tool definitions without a server. Pass `await app.snapshot()` so Extension-contributed commands are included. Each entry carries the tool `name`, `description`, `inputSchema`, and the canonical `path` for `app.run()`.
+The pure manifest, for tests or tooling that ships tool definitions without a server. Pass `await app.snapshot()` so Extension-contributed commands are included. Each entry carries the tool `name`, `description`, `inputSchema`, `outputSchema` and `annotations` when they apply, and the canonical `path` for `app.run()`.
 
 <auto-type-table path="../../../../../packages/mcp/src/tools.ts" name="McpTool" />
