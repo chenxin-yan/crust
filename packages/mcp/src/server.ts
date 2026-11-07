@@ -69,7 +69,10 @@ export function toolResultFromOutcome(outcome: RunOutcome<unknown>): CallToolRes
  * via {@link toolsFromSnapshot}; each call runs `app.run(path, input)` with its
  * own captured stdout/stderr, so concurrent calls never share state and never
  * write to the process's stdout. The server is named after the root command,
- * with its `version` or {@link DEFAULT_SERVER_VERSION}.
+ * with its `version` or {@link DEFAULT_SERVER_VERSION}. When a call carries a
+ * `progressToken`, each event an async generator action yields sends a
+ * `notifications/progress` with a running `progress` count and, for string
+ * events, the string as `message`; failed sends are ignored.
  *
  * @throws when the snapshot cannot be prepared or the tool manifest is invalid
  */
@@ -94,9 +97,12 @@ export async function createMcpServer(
 		{ capabilities: { tools: {} } },
 	);
 	server.setRequestHandler(ListToolsRequestSchema, () => ({
-		tools: tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
+		// Everything but the fields run() routing uses.
+		tools: tools.map(
+			({ path: _path, urlFields: _urlFields, argNames: _argNames, ...tool }) => tool,
+		),
 	}));
-	server.setRequestHandler(CallToolRequestSchema, async (request, { signal }) => {
+	server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
 		const entry = byName.get(request.params.name);
 		if (!entry) {
 			throw new McpError(ErrorCode.InvalidParams, `Tool ${request.params.name} not found`);
@@ -109,8 +115,30 @@ export async function createMcpServer(
 			// Input shaping failures (bad URL, bad raw) surface like action failures.
 			return toolResultFromOutcome({ status: "failed", error, stdout: "", stderr: "" });
 		}
+		const { signal, sendNotification } = extra;
+		const progressToken = extra._meta?.progressToken;
+		let progress = 0;
+		const onEvent =
+			progressToken === undefined
+				? undefined
+				: (event: unknown) => {
+						progress++;
+						const message = typeof event === "string" ? { message: event } : {};
+						sendNotification({
+							method: "notifications/progress",
+							params: { progressToken, progress, ...message },
+						}).catch(() => {
+							// A lost progress notification must not fail the tool call.
+						});
+					};
 		// SAFETY: `path` comes from this app's own snapshot and run() validates `input`; AnyCrust erases the typed link.
-		return toolResultFromOutcome(await app.run(tool.path as never, input as never, { signal }));
+		return toolResultFromOutcome(
+			await app.run(
+				tool.path as never,
+				input as never,
+				onEvent === undefined ? { signal } : { signal, onEvent },
+			),
+		);
 	});
 	return server;
 }

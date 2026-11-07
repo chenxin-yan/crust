@@ -13,12 +13,22 @@ export type McpPropertySchema = CommandInputPropertySchema;
 /** JSON Schema object accepted by `tools/list` as a tool's `inputSchema`. */
 export type McpToolInputSchema = CommandInputSchema;
 
+/** JSON Schema object accepted by `tools/list` as a tool's `outputSchema`. */
+export interface McpToolOutputSchema {
+	readonly type: "object";
+	readonly [keyword: string]: unknown;
+}
+
 /** One command exposed as an MCP tool. */
 export interface McpTool {
 	/** Canonical path joined with `_`; the root command uses its own name. */
 	readonly name: string;
 	readonly description?: string;
 	readonly inputSchema: McpToolInputSchema;
+	/** The command's `.output()` result in the shape of its `structuredContent`; see {@link toolsFromSnapshot}. */
+	readonly outputSchema?: McpToolOutputSchema;
+	/** Present only for commands with `meta.destructive`. */
+	readonly annotations?: { readonly destructiveHint: true };
 	/** Canonical command path for `app.run()`; `[]` is the root. */
 	readonly path: readonly string[];
 	/** Arg and flag names declared as `type: "url"`; their strings become `URL`s before `run()`. */
@@ -44,6 +54,27 @@ function formatPath(path: readonly string[]): string {
 	return path.length === 0 ? "<root>" : path.join(" ");
 }
 
+/** A command's output JSON Schema as MCP `outputSchema`; see {@link toolsFromSnapshot}. */
+function toolOutputSchema(
+	schema: Readonly<Record<string, unknown>> | undefined,
+): McpToolOutputSchema | undefined {
+	if (schema === undefined) return undefined;
+	if (schema.type === "object") return { ...schema, type: "object" };
+	const types: unknown[] = [schema.type].flat();
+	// The exact `"$ref":"#"` token would point at the wrapper; `#/$defs/…` continues past the `#`.
+	const selfReferencing = JSON.stringify(schema).includes('"$ref":"#"');
+	if (schema.type === undefined || types.includes("object") || selfReferencing) return undefined;
+	// `$schema` and `$defs` belong at the root, where `#/$defs/…` references resolve.
+	const { $schema, $defs, ...result } = schema;
+	return {
+		...($schema === undefined ? {} : { $schema }),
+		type: "object",
+		properties: { result },
+		required: ["result"],
+		...($defs === undefined ? {} : { $defs }),
+	};
+}
+
 /**
  * Enumerate the MCP tools a Command Snapshot exposes.
  *
@@ -55,6 +86,15 @@ function formatPath(path: readonly string[]): string {
  * Also throws when a name violates the MCP tool-name character set, or when an
  * `exclude` path is not a canonical command path (a typo or alias would
  * otherwise leave the command exposed).
+ *
+ * A command with `meta.destructive` gets `annotations: { destructiveHint: true }`.
+ * A command whose snapshot has an `outputSchema` (from `.output()`) gets an MCP
+ * `outputSchema` describing its `structuredContent`: object schemas as
+ * themselves, schemas that exclude objects (e.g. `number`, `array`) wrapped as
+ * `{ result }` (with `$schema` and `$defs` kept at the root). Schemas that may
+ * or may not describe an object (no top-level `type`, e.g. `anyOf`, or a `type`
+ * list including `"object"`), or that wrapping would break (a `$ref` to `#`),
+ * are not advertised.
  */
 export function toolsFromSnapshot(
 	snapshot: CommandSnapshot,
@@ -96,12 +136,17 @@ export function toolsFromSnapshot(
 				);
 			}
 			owners.set(name, path);
+			const outputSchema = toolOutputSchema(command.outputSchema);
 			tools.push({
 				name,
 				...(command.meta.description === undefined
 					? {}
 					: { description: command.meta.description }),
 				inputSchema: commandInputSchema(command, path),
+				...(outputSchema === undefined ? {} : { outputSchema }),
+				...(command.meta.destructive === true
+					? { annotations: { destructiveHint: true } as const }
+					: {}),
 				...commandInputFields(command),
 				path,
 			});
