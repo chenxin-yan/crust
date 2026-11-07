@@ -32,12 +32,12 @@ The object is converted and validated exactly like argv, and arguments and flags
 Write for people with `stdout(text)` and return data for programs. [`json()`](/docs/modules/extensions/json) adds `--json`, which prints the Command Action's return value as one line of JSON on stdout and moves the action's and Contexts' `stdout()` writes to stderr:
 
 ```sh
-$ my-cli deploy prod --json
-Deploying latest to prod                              # stderr
-{"target":"prod","release":"latest","dryRun":false}   # stdout
-Next steps:                                           # stderr, see below
+$ my-cli deploy staging --json
+Deploying latest to staging                              # stderr
+{"target":"staging","release":"latest","dryRun":false}   # stdout
+Next steps:                                              # stderr, see below
   Watch the rollout:
-    my-cli status prod
+    my-cli status staging
 ```
 
 Failures become one line of JSON on stderr: [`CrustError`](/docs/api/errors)'s `toJSON()`, or `{ "message" }` for any other error. Exit codes don't change, so an agent still checks them first. Make the message itself actionable; see [error handling](/docs/guide/error-handling).
@@ -85,23 +85,39 @@ $ my-cli schema deploy
 
 ## Dry run
 
-A command that can preview declares its own `dry-run` flag and branches on it, as `deploy` does above. Commands without the flag reject `--dry-run` as an unknown flag instead of running for real:
+A command that can preview declares its own `dry-run` flag and branches on it, as `deploy` does above. It returns the preview before it asks for [confirmation](#confirmation), so a dry run never prompts. Commands without the flag reject `--dry-run` as an unknown flag instead of running for real:
 
 ```sh
 $ my-cli deploy prod --dry-run
 Would deploy latest to prod
 ```
 
+## Confirmation
+
+Ask before a change that is hard to undo, without stalling an agent on a prompt. With [`confirm()`](/docs/modules/extensions/confirm), a command that `.use(confirm)` calls `(await ctx.confirm)(message)` before the change, as `deploy` does for `prod`. `--yes`, or `"yes": true` in `--input`, confirms up front; on a terminal, the user answers a yes/no prompt; without a TTY, the command fails with `ConfirmationRequiredError` instead of waiting:
+
+```sh
+$ my-cli deploy prod < /dev/null
+Error: Confirmation required: Deploy latest to prod? Pass --yes to confirm.
+$ my-cli deploy prod --yes
+Deploying latest to prod
+Next steps:
+  Watch the rollout:
+    my-cli status prod
+```
+
+`.use(confirm)` and `.use(nextSteps)` take the Extension itself: [using an Extension](/docs/guide/extensions#use-an-extensions-contexts-from-a-command) uses the Contexts it provides, and the app must `.extend()` it.
+
 ## Next steps
 
 Tell the agent what to run next instead of leaving it to guess. With [`nextSteps()`](/docs/modules/extensions/next-steps), a command that `.use(nextSteps)` adds follow-up commands by definition with `(await ctx.nextSteps).add(status, input, description)`, as `deploy` does above, and `nextSteps({ onError })` returns recovery commands for errors you recognize with `instanceof`. The steps print to stderr as runnable command lines, after success or failure:
 
 ```sh
-$ my-cli deploy prod
-Deploying latest to prod
+$ my-cli deploy staging
+Deploying latest to staging
 Next steps:
   Watch the rollout:
-    my-cli status prod
+    my-cli status staging
 ```
 
 ## Prompts without a TTY
@@ -142,6 +158,7 @@ For a CLI backed by an HTTP API, [`@crustjs/openapi`](/docs/modules/openapi) add
 - [`json()`](/docs/modules/extensions/json), [`input()`](/docs/modules/extensions/input), and [`schema()`](/docs/modules/extensions/schema) are registered.
 - Long-running commands yield events.
 - Commands that can preview declare a `dry-run` flag.
+- Commands that change things call [`confirm()`](/docs/modules/extensions/confirm)'s `ctx.confirm` first, after any dry-run preview.
 - Error messages say what to do next; known failures have recovery steps from [`nextSteps()`](/docs/modules/extensions/next-steps).
 - Every prompt has a flag for `initial` or a `default`.
 - Optionally: an MCP server, a packaged skill, and an `api` command.

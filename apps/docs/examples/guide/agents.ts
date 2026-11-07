@@ -1,11 +1,11 @@
 //#region deploy
 import { defineCommand } from "@crustjs/core";
-import { nextSteps } from "@crustjs/extensions";
+import { confirm, nextSteps } from "@crustjs/extensions";
 import { z } from "zod";
 
 const deploy = defineCommand("deploy", { description: "Deploy a release" }, (cmd) =>
 	cmd
-		.use(nextSteps)
+		.use(confirm, nextSteps)
 		.args({ name: "target", type: "string", required: true, choices: ["staging", "prod"] })
 		.flags({
 			release: { type: "string", default: "latest", description: "Release to deploy" },
@@ -14,13 +14,18 @@ const deploy = defineCommand("deploy", { description: "Deploy a release" }, (cmd
 		// [!code highlight]
 		.output(z.object({ target: z.string(), release: z.string(), dryRun: z.boolean() }))
 		.action(async ({ args, flags, ctx, stdout }) => {
-			const dryRun = flags["dry-run"] === true;
-			stdout(`${dryRun ? "Would deploy" : "Deploying"} ${flags.release} to ${args.target}`);
-			if (!dryRun) {
-				(await ctx.nextSteps).add(status, { args: { target: args.target } }, "Watch the rollout");
+			const { target } = args;
+			const { release } = flags;
+			// Preview before confirming, so a dry run never prompts.
+			if (flags["dry-run"]) {
+				stdout(`Would deploy ${release} to ${target}`);
+				return { target, release, dryRun: true };
 			}
+			if (target === "prod") await (await ctx.confirm)(`Deploy ${release} to prod?`);
+			stdout(`Deploying ${release} to ${target}`);
+			(await ctx.nextSteps).add(status, { args: { target } }, "Watch the rollout");
 			// [!code highlight]
-			return { target: args.target, release: flags.release, dryRun };
+			return { target, release, dryRun: false };
 		}),
 );
 //#endregion
@@ -58,11 +63,11 @@ const init = defineCommand("init", { description: "Create a project" }, (cmd) =>
 
 //#region app
 import { Crust } from "@crustjs/core";
-// `nextSteps` is imported with `deploy` above.
+// `confirm` and `nextSteps` are imported with `deploy` above.
 import { help, input, json, schema } from "@crustjs/extensions";
 
 export const app = new Crust("my-cli", { description: "Deploy releases" })
-	.extend(help(), input(), json(), schema(), nextSteps())
+	.extend(help(), input(), json(), schema(), confirm(), nextSteps())
 	.add(deploy, status, init);
 //#endregion
 
