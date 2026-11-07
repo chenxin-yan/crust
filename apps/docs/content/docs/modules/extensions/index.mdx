@@ -2,7 +2,7 @@
 title: Extensions
 ---
 
-`@crustjs/extensions` exports ten official Extensions and three completion renderers.
+`@crustjs/extensions` exports eleven official Extensions and three completion renderers.
 
 ## Install
 
@@ -22,19 +22,20 @@ Register Extensions on the root builder, in any order: the built-ins behave the 
 
 A curated list of the runtime exports; the [package entry point](https://github.com/chenxin-yan/crust/blob/main/packages/extensions/src/index.ts) also exports each option type. Importing an Extension loads only its registration: renderers, completion scripts, update checks, and typo suggestions load the first time they run.
 
-| Export                                                                        | Contribution                                      |
-| ----------------------------------------------------------------------------- | ------------------------------------------------- |
-| [`help()`](/docs/modules/extensions/help)                                     | Recursive `--help` / `-h` flag and help rendering |
-| [`renderHelp(command, path?)`](/docs/modules/extensions/help)                 | Resolve help text for a Command Snapshot          |
-| [`version(value?, options?)`](/docs/modules/extensions/version)               | Root-only `--version` / `-v` flag                 |
-| [`completion(options?)`](/docs/modules/extensions/completion)                 | Shell completion command and build artifacts      |
-| [`renderBashCompletion(root, options?)`](/docs/modules/extensions/completion) | Resolve bash completion for a Command Snapshot    |
-| [`renderZshCompletion(root, options?)`](/docs/modules/extensions/completion)  | Resolve zsh completion for a Command Snapshot     |
-| [`renderFishCompletion(root, options?)`](/docs/modules/extensions/completion) | Resolve fish completion for a Command Snapshot    |
-| [`didYouMean(options?)`](/docs/modules/extensions/did-you-mean)               | `COMMAND_NOT_FOUND` presentation                  |
-| [`noColor()`](/docs/modules/extensions/no-color)                              | Recursive `--color` / `--no-color` flag           |
-| [`updateNotifier(options)`](/docs/modules/extensions/update-notifier)         | Post-action npm update notice                     |
-| [`json()`](/docs/modules/extensions/json)                                     | Recursive `--json` flag for JSON results          |
-| [`input()`](/docs/modules/extensions/input)                                   | Recursive `--input` flag for JSON arguments       |
-| [`schema()`](/docs/modules/extensions/schema)                                 | `schema` command and root-only `--llms` flag      |
-| [`confirm()`](/docs/modules/extensions/confirm)                               | `confirm` Context: prompt or `--yes`              |
+| Export                                                                        | Contribution                                       |
+| ----------------------------------------------------------------------------- | -------------------------------------------------- |
+| [`help()`](/docs/modules/extensions/help)                                     | Recursive `--help` / `-h` flag and help rendering  |
+| [`renderHelp(command, path?)`](/docs/modules/extensions/help)                 | Resolve help text for a Command Snapshot           |
+| [`version(value?, options?)`](/docs/modules/extensions/version)               | Root-only `--version` / `-v` flag                  |
+| [`completion(options?)`](/docs/modules/extensions/completion)                 | Shell completion command and build artifacts       |
+| [`renderBashCompletion(root, options?)`](/docs/modules/extensions/completion) | Resolve bash completion for a Command Snapshot     |
+| [`renderZshCompletion(root, options?)`](/docs/modules/extensions/completion)  | Resolve zsh completion for a Command Snapshot      |
+| [`renderFishCompletion(root, options?)`](/docs/modules/extensions/completion) | Resolve fish completion for a Command Snapshot     |
+| [`didYouMean(options?)`](/docs/modules/extensions/did-you-mean)               | `COMMAND_NOT_FOUND` presentation                   |
+| [`noColor()`](/docs/modules/extensions/no-color)                              | Recursive `--color` / `--no-color` flag            |
+| [`updateNotifier(options)`](/docs/modules/extensions/update-notifier)         | Post-action npm update notice                      |
+| [`json()`](/docs/modules/extensions/json)                                     | Recursive `--json` flag for JSON results           |
+| [`input()`](/docs/modules/extensions/input)                                   | Recursive `--input` flag for JSON arguments        |
+| [`schema()`](/docs/modules/extensions/schema)                                 | `schema` command and root-only `--llms` flag       |
+| [`confirm()`](/docs/modules/extensions/confirm)                               | `confirm` Context: prompt or `--yes`               |
+| [`nextSteps(options?)`](/docs/modules/extensions/next-steps)                  | `nextSteps` Context: follow-up command suggestions |
