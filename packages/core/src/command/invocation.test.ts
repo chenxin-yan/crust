@@ -523,6 +523,18 @@ describe("Invocation pipeline — commandPathOf", () => {
 		expect(found).toEqual([["app", "migrate"]]);
 	});
 
+	it("breaks a same-depth tie by the first added, even for integer-like names", async () => {
+		const { found, observer } = lookup([migrate]);
+		const app = new Crust("app")
+			.extend(observer)
+			.command("2", (c) => c.add(migrate))
+			.command("1", (c) => c.add(migrate))
+			.action(() => {});
+
+		await app.run([]);
+		expect(found).toEqual([["app", "2", "migrate"]]);
+	});
+
 	it("finds paths from onError after a failure before dispatch", async () => {
 		const { found, observer } = lookup([migrate]);
 		const app = new Crust("app").extend(observer).add(db);
