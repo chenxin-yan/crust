@@ -1,14 +1,9 @@
 import type { CommandSnapshot, ExtensionContext, ValueType } from "@crustjs/core";
 import type { RunInputValue } from "@crustjs/core/tooling";
 import { parseJsonValue } from "@crustjs/utils/json";
+import { shellQuote } from "@crustjs/utils/process";
 
 import type { NextStep } from "./next-steps.ts";
-
-function shellQuote(token: string): string {
-	return /^[A-Za-z0-9_./:=@%+-]+$/.test(token)
-		? token
-		: `'${token.replaceAll("'", String.raw`'\''`)}'`;
-}
 
 /** Argv parses a `json` value with `JSON.parse`, so even a string value needs its JSON encoding. */
 function argvValue(value: RunInputValue, type: ValueType | undefined, label: string): string {
