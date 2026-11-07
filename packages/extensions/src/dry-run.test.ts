@@ -84,9 +84,12 @@ describe("dryRun", () => {
 		expect(stdout).toContain("--dry-run");
 	});
 
-	it("checks --dry-run given in an --input payload when input() is registered first", async () => {
+	it.each([
+		["input first", () => [input(), dryRun()] as const],
+		["dryRun first", () => [dryRun(), input()] as const],
+	])("rejects --dry-run given in an --input payload (%s)", async (_order, extensions) => {
 		const app = new Crust("app")
-			.extend(input(), dryRun())
+			.extend(...extensions())
 			.command("rm", (cmd) => cmd.action(({ stdout }) => stdout("removed")));
 
 		expect(await captureExecute(app, ["rm", "--input", '{"dry-run":true}'])).toEqual({
@@ -94,5 +97,8 @@ describe("dryRun", () => {
 			stderr: 'Error: "app rm" does not support --dry-run.',
 			exitCode: 1,
 		});
+		const outcome = await app.run(["rm"], { flags: { input: '{"dry-run":true}' } });
+		expect(outcome).toMatchObject({ status: "failed", stdout: "" });
+		expect(outcome.status === "failed" && outcome.error).toBeInstanceOf(DryRunUnsupportedError);
 	});
 });
