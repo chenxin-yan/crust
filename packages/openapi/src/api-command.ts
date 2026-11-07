@@ -10,7 +10,7 @@ import {
 	defineExtensionId,
 } from "@crustjs/core";
 
-import { type ApiClient, type ApiClientOptions, apiClient } from "./client.ts";
+import { type ApiClient, type ApiClientOptions, apiClient, fetchNextPage } from "./client.ts";
 
 const API: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:openapi");
 
@@ -31,7 +31,8 @@ export interface ApiCommandOptions extends ApiClientOptions {
 	readonly spec: OpenApiSpec;
 	/**
 	 * The next page's request for `--paginate`, or `undefined` after the last page.
-	 * Receives a copy of each successful response, so it may read the body.
+	 * Receives a copy of each successful response, so it may read the body. The next page
+	 * must be http(s); off the base URL's origin it is requested without credential headers.
 	 */
 	readonly paginate?: (
 		response: Response,
@@ -355,12 +356,9 @@ export const apiCommand: ExtensionFactory<
 							}
 
 							const api = await ctx.api;
-							let request: ApiRequest | undefined = {
-								path,
-								init: { method, headers, body: requestBody },
-							};
-							while (request !== undefined) {
-								const response = await api.fetch(request.path, request.init);
+							let request: ApiRequest = { path, init: { method, headers, body: requestBody } };
+							let response = await api.fetch(request.path, request.init);
+							for (;;) {
 								// Bun types `clone()` as undici's Response, which lacks Bun's Headers extras.
 								const page = flags.paginate ? (response.clone() as Response) : undefined;
 								const text = await response.text();
@@ -377,7 +375,9 @@ export const apiCommand: ExtensionFactory<
 								}
 								const next: ApiRequest | undefined =
 									page && paginate ? await paginate(page) : undefined;
-								request = next && { path: next.path, init: next.init ?? request.init };
+								if (next === undefined) return;
+								request = { path: next.path, init: next.init ?? request.init };
+								response = await fetchNextPage(api, request.path, request.init);
 							}
 						}),
 			),
