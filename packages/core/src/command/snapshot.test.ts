@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { z } from "zod";
 
 import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
@@ -70,6 +71,38 @@ describe("snapshotCommand", () => {
 		expect(snapshot.subCommands.build?.meta.aliases).toEqual(["b"]);
 		expect(snapshot.subCommands.build?.meta.hidden).toBe(true);
 		expect(snapshot.subCommands.build?.hasAction).toBe(false);
+	});
+
+	it("projects the input JSON Schema of schema-backed args and flags, not the schema", async () => {
+		const opaque = {
+			"~standard": {
+				version: 1 as const,
+				vendor: "test",
+				validate: (value: unknown) => ({ value }),
+			},
+		};
+		const snapshot = await new Crust("cli")
+			.args({ name: "level", schema: z.enum(["low", "high"]) })
+			.flags({
+				port: { type: "string", schema: z.coerce.number() },
+				mode: { type: "string", schema: opaque },
+				plain: { type: "string" },
+			})
+			.action(() => {})
+			.snapshot();
+
+		expect(snapshot.args[0]).toEqual({
+			name: "level",
+			inputSchema: {
+				$schema: "https://json-schema.org/draft/2020-12/schema",
+				type: "string",
+				enum: ["low", "high"],
+			},
+		});
+		expect(snapshot.flags.port?.inputSchema).toMatchObject({ type: "number" });
+		expect(snapshot.flags.mode).not.toHaveProperty("inputSchema");
+		expect(snapshot.flags.plain).not.toHaveProperty("inputSchema");
+		expect(JSON.parse(JSON.stringify(snapshot)).args).toEqual(snapshot.args);
 	});
 
 	it("is serializable: no functions, URL defaults become strings", () => {
