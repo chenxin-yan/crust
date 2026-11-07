@@ -184,6 +184,29 @@ export interface ExtensionSetupContext<
 	readonly defer: (cleanup: () => void | PromiseLike<void>) => void;
 }
 
+/**
+ * How one invocation's output is presented. Core decides when each kind of output happens;
+ * the renderer an Extension selects with {@link ExtensionBuilder.renderer} decides how.
+ * An omitted optional member keeps Core's default for it.
+ */
+export interface Renderer {
+	/** A line the Command Action or a Context wrote with `stdout()`. Default: the invocation's stdout. */
+	text(line: string): void;
+	/** A line the Command Action or a Context wrote with `stderr()`. Default: the invocation's stderr. */
+	diag(line: string): void;
+	/**
+	 * The Command Action's awaited return value, only when the invocation ran an action that
+	 * completed; called before `postRun`. A throw becomes the invocation's failure. Default: ignored.
+	 */
+	result?(value: unknown): void;
+	/**
+	 * A failure, in `execute()` only, at most once per invocation, after every `onError` hook
+	 * declined it; never for a cancellation, which Core does not render. If it throws, Core
+	 * renders the original failure. Default: Core's `Error: <message>` lines on stderr.
+	 */
+	error?(error: unknown): void;
+}
+
 /** Options for {@link ExtensionBuilder.handle}. */
 export interface ExtensionHandleOptions {
 	/**
@@ -219,6 +242,20 @@ export interface ExtensionHooks<
 	 */
 	readonly setup?: (ctx: ExtensionSetupContext<F, Deps, MetaKeys>) => Awaitable<void>;
 	/**
+	 * Selects the invocation's {@link Renderer}, once, after every setup and before any flag
+	 * handler, so it sees what setups bound. Return (or resolve to) `undefined` to keep Core's
+	 * default; Core awaits the selector, so it can lazy-load a formatter. A throw or rejection
+	 * fails the invocation, rendered by default. Action and Context output written before then
+	 * waits and goes through the selected renderer; without a selector in the application, it is
+	 * written immediately. When a setup throws, Core still calls the selector (flags are bound)
+	 * and renders the failure through the selected renderer; if the selector then fails too, the
+	 * setup failure renders by default. A selector or renderer that throws there never replaces
+	 * the setup failure. Routing and argv syntax
+	 * failures, before any setup, always render by default.
+	 * At most one Extension in an application may set it.
+	 */
+	readonly renderer?: (ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<Renderer | undefined>;
+	/**
 	 * Runs in place of a missing Command Action, when no flag handler took the invocation,
 	 * and ends it as `handled`. At most one Extension in an application may set it.
 	 */
@@ -241,9 +278,10 @@ export interface ExtensionHooks<
 	) => Awaitable<void>;
 	/**
 	 * Renders a failure in `execute()` only. Return true when rendered to stop the
-	 * chain; falsy values delegate to the next Extension and then Core's renderer.
-	 * A hook that throws ends the chain: remaining hooks are skipped and Core's
-	 * default renderer reports the original failure.
+	 * chain; falsy values delegate to the next Extension and then the selected
+	 * {@link Renderer}'s `error`, or Core's default rendering without one. A hook that
+	 * throws ends the chain: remaining hooks are skipped and the original failure
+	 * reaches that same `error` or default rendering.
 	 *
 	 * Receives the base context: routing or syntax-parse failures render with a
 	 * fallback context whose `flags` are empty, so owned-flag inference would lie here.
@@ -488,8 +526,8 @@ type ExtensionHook<
 /**
  * Immutable fluent Extension authoring handle returned by {@link defineExtension}.
  * Every method returns a new handle. Collection methods (`use`, `provide`,
- * `flags`, `add`) append; lifecycle setters (`setup`, `preRun`, `noAction`, `postRun`,
- * `onError`, `sections`, `build`, and `handle` per flag) replace the previous callback.
+ * `flags`, `add`) append; lifecycle setters (`setup`, `renderer`, `preRun`, `noAction`,
+ * `postRun`, `onError`, `sections`, `build`, and `handle` per flag) replace the previous callback.
  * Callbacks are typed by the declarations made before them.
  */
 export interface ExtensionBuilder<
@@ -552,6 +590,10 @@ export interface ExtensionBuilder<
 		flag: keyof OF & string,
 		run: ExtensionHook<"noAction", Use, OF, MetaKeys>,
 		options?: ExtensionHandleOptions,
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
+	/** See {@link ExtensionHooks.renderer}. */
+	renderer(
+		select: ExtensionHook<"renderer", Use, OF, MetaKeys>,
 	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
 	/** See {@link ExtensionHooks.preRun}. */
 	preRun(
@@ -632,6 +674,8 @@ function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 		add: (...definitions: readonly CommandDefinition<any, any, any, any>[]) =>
 			next({ commands: [...state.commands, ...definitions] }),
 		setup: (setup: ExtensionHooks["setup"]) => next({ hooks: { ...state.hooks, setup } }),
+		renderer: (renderer: ExtensionHooks["renderer"]) =>
+			next({ hooks: { ...state.hooks, renderer } }),
 		preRun: (preRun: ExtensionHooks["preRun"]) => next({ hooks: { ...state.hooks, preRun } }),
 		handle: (flag: string, run: ExtensionHandler["run"], options: ExtensionHandleOptions = {}) => {
 			// A dynamic flag record hides its names from the types.

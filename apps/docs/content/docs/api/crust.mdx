@@ -263,7 +263,7 @@ Runs the terminal boundary: parses `process.argv.slice(2)` (or `options.argv`), 
 </include>
 
 - Exit codes are `0` on success, `1` on failure, and `130` for cancellation. `process.exitCode` is set on failure.
-- A failure renders once, through Extension `onError` hooks and then Core's renderer. Cancellation is offered to `onError` hooks and renders nothing if none claims it. See [propagation boundaries](/docs/api/errors#propagation-boundaries).
+- A failure renders once, through Extension `onError` hooks and then the selected [renderer's `error`](/docs/api/types#renderer) or Core's default rendering. Cancellation is offered to `onError` hooks and renders nothing if none claims it. See [propagation boundaries](/docs/api/errors#propagation-boundaries).
 - On macOS and Linux, each default `stdout(text)` / `stderr(text)` line is written synchronously to file descriptor 1 or 2, so it arrives complete even when the action calls `process.exit()` right after, and patching `process.stdout.write` does not capture it. On Windows, default output goes through `process.stdout` / `process.stderr`.
 - `options.io` captures rendered output in tests, including default prompt and progress output. It does not provide prompt input.
 - The first Ctrl-C aborts the invocation's `signal` with an `AbortError`. Work that honors the signal stops, then `postRun` hooks and Context cleanup run. A second Ctrl-C removes Core's listener and reaches the runtime's default handling unless another listener still owns the signal. A SIGINT handled within 50 ms of the first counts as the same Ctrl-C: `npm run`, `npx`, `bun run`, and pnpm relay the terminal's SIGINT, so one press can arrive twice. Presses that arrive while the event loop is blocked are handled together and count as one Ctrl-C; press again once it is responsive to force the exit.
@@ -275,13 +275,13 @@ Runs the terminal boundary: parses `process.argv.slice(2)` (or `options.argv`), 
 1. Prepare the application: apply Extensions, flags, and sections, deferring pending commands until needed.
 2. Route the command path, materializing pending commands as needed.
 3. Parse argv (`execute()`) or bind structured input (`run()`).
-4. Run Extension `setup` hooks in registration order.
+4. Run Extension `setup` hooks in registration order, then choose the [renderer](/docs/guide/extensions#renderers) for action and Context output.
 5. If the user passed a flag with an Extension handler, run the selected handler (eager handlers first, then the flag given first) and end the invocation with a `handled` outcome. Otherwise, if the routed command has no Command Action, run the application's `noAction` hook, if any, and end it the same way.
 6. Run Extension `preRun` hooks in registration order. They run only before a Command Action.
 7. Check required values and positional structure.
 8. Apply Standard Schemas and aggregate their issues.
 9. Construct Contexts as they are first pulled.
-10. Run the Command Action.
+10. Run the Command Action and pass its result to the renderer's `result`, if any.
 11. Run Extension `postRun` hooks in reverse registration order with the outcome.
 12. Run deferred cleanup, including cleanup deferred by Extension setups, and dispose Contexts in reverse registration order.
 

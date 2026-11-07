@@ -29,6 +29,7 @@ export type {
 	ExtensionHooks,
 	InferExtensionFlags,
 	InvocationOutcome,
+	Renderer,
 } from "./api/extension.ts";
 export { defineExtension } from "./api/extension.ts";
 export type { ExtensionId } from "./identity.ts";

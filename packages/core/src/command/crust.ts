@@ -1736,8 +1736,8 @@ export class Crust<
 	 * execute the matched Command Action.
 	 *
 	 * This is the terminal CLI boundary — call it on the root builder. It
-	 * renders a failure once (through Extension `onError` hooks, ending in
-	 * Core's default renderer), sets `process.exitCode` (`1`, or
+	 * renders a failure once (through Extension `onError` hooks, ending in the
+	 * chosen Renderer's `error` or Core's default rendering), sets `process.exitCode` (`1`, or
 	 * `130` for an `AbortError` cancellation), and resolves to the exit code.
 	 *
 	 * @param options - Optional overrides: custom `argv` and captured `io` for
