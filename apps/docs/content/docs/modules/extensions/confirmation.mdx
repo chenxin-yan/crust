@@ -1,0 +1,38 @@
+---
+title: Confirmation
+description: Ask before running destructive commands, or require --yes.
+---
+
+## Usage
+
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../../examples/modules/extensions/confirmation.ts
+</include>
+
+```sh
+$ my-cli drop
+? Run destructive command "my-cli drop"? ○ Yes · ● No
+
+$ my-cli drop < /dev/null
+Error: "my-cli drop" is destructive and needs confirmation; pass --yes to run it.
+
+$ my-cli drop --yes
+Dropped
+```
+
+`confirmation()` adds a recursive boolean `--yes` flag and checks it before every command marked [`destructive`](/docs/api/types#commandmeta). Commands not marked `destructive` are unchanged, with or without `--yes`.
+
+## Behavior
+
+The check runs in `preRun`, so only when the command's action runs: a flag handler such as `--help` takes over first and nothing is asked. For a `destructive` command without `--yes`:
+
+- When stdin and stderr are TTYs, a [`confirm()`](/docs/modules/prompts#confirmoptions-io) prompt asks on stderr, defaulting to no. Confirming runs the command; declining fails it with exit code 1 and `"my-cli drop" was not confirmed; nothing was changed.`, and Ctrl+C cancels it with exit code 130.
+- Otherwise, such as in CI, a pipe, or an agent's shell, the command fails with exit code 1 and a `ConfirmationRequiredError` whose message names the command and `--yes`. It never runs silently and never exits 0.
+
+`--yes` runs the command without asking. Under [`run()`](/docs/api/crust#runpath-input-options), pass `{ flags: { yes: true } }`; without it the same TTY rule applies, and the outcome is `failed` with the `ConfirmationRequiredError` in `outcome.error`. Prompts follow the streams set with [`withTerminalIO()`](/docs/modules/prompts#injecting-io), which is how [`runInteractive()`](/docs/modules/testing#runinteractiveapp-path-input) drives the prompt in tests.
+
+`ConfirmationRequiredError` is exported, so code that calls `run()` can tell it apart with `instanceof`.
+
+## Limitations
+
+Extension flags are either recursive or root-only, so `--yes` is accepted by every command, including ones that are not `destructive`, where it does nothing. A command cannot declare its own `yes` flag while `confirmation()` is registered.

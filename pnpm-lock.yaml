@@ -491,6 +491,9 @@ importers:
 
   packages/extensions:
     dependencies:
+      '@crustjs/prompts':
+        specifier: workspace:^
+        version: link:../prompts
       '@crustjs/store':
         specifier: workspace:^
         version: link:../store
