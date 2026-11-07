@@ -25,11 +25,15 @@ async function readStdin(signal: AbortSignal): Promise<string> {
 	const { stdin } = process;
 	const chunks: Buffer[] = [];
 	const done = Promise.withResolvers<string>();
-	const onData = (chunk: Buffer) => void chunks.push(chunk);
+	// Strings arrive when something already called `stdin.setEncoding()`.
+	const onData = (chunk: Buffer | string) =>
+		void chunks.push(typeof chunk === "string" ? Buffer.from(chunk, "utf8") : chunk);
 	const onEnd = () => done.resolve(Buffer.concat(chunks).toString("utf8"));
 	const onAbort = () => done.reject(signal.reason);
 	stdin.on("data", onData).once("end", onEnd).once("error", done.reject);
 	signal.addEventListener("abort", onAbort, { once: true });
+	// A `data` listener does not restart a stream an earlier consumer paused.
+	stdin.resume();
 	try {
 		return await done.promise;
 	} finally {
