@@ -285,6 +285,53 @@ describe("api <path>", () => {
 		]);
 	});
 
+	it("sends a --paginate page on another origin without auth or credential headers the request set", async () => {
+		const calls = stubFetch(
+			({ url }) =>
+				new Response(url.startsWith("https://api.example.com/") ? '{"page":1}' : '{"page":2}'),
+		);
+		const app = buildApp({
+			auth: () => ({ "X-Api-Key": "auth-key" }),
+			paginate: async (response) =>
+				((await response.json()) as { page: number }).page === 1
+					? { path: "https://evil.example.com/page2" }
+					: undefined,
+		});
+		const { stdout, exitCode } = await captureExecute(app, [
+			"api",
+			"/users",
+			"--paginate",
+			"-H",
+			"X-Api-Key: secret",
+			"-H",
+			"Authorization: Bearer mine",
+			"-H",
+			"X-Trace: 1",
+		]);
+
+		expect({ stdout, exitCode }).toEqual({ stdout: '{"page":1}\n{"page":2}', exitCode: 0 });
+		expect(calls.map(({ url, headers }) => [url, headers])).toEqual([
+			[
+				"https://api.example.com/v1/users",
+				{ authorization: "Bearer mine", "x-api-key": "secret", "x-trace": "1" },
+			],
+			["https://evil.example.com/page2", { "x-trace": "1" }],
+		]);
+	});
+
+	it("rejects a --paginate page that is not http(s) before any request for it", async () => {
+		const calls = stubFetch();
+		let pagesSeen = 0;
+		const app = buildApp({
+			paginate: () => (pagesSeen++ === 0 ? { path: "data:text/plain,x" } : undefined),
+		});
+		const { stderr, exitCode } = await captureExecute(app, ["api", "/users", "--paginate"]);
+
+		expect(exitCode).toBe(1);
+		expect(stderr).toBe("Error: Cannot request data:text/plain,x: only http: and https: URLs");
+		expect(calls).toHaveLength(1);
+	});
+
 	it("prints non-JSON --paginate pages, even empty ones, as JSON strings", async () => {
 		const pages = ["first\nsecond", ""];
 		stubFetch(({ url }) => new Response(pages[Number(new URL(url).searchParams.get("page"))]));
@@ -405,6 +452,68 @@ describe("apiClient", () => {
 			["https://elsewhere.example.com/b", undefined],
 		]);
 		expect(auth).toHaveBeenCalledTimes(1);
+	});
+
+	it.each([
+		[20, { stdout: "done", stderr: "", exitCode: 0 }],
+		[
+			21,
+			{
+				stdout: "",
+				stderr: "Error: fetch https://other.example.com/r/20: too many redirects",
+				exitCode: 1,
+			},
+		],
+	])("counts %i redirects as one chain across origins, allowing 20", async (total, expected) => {
+		// /r/0 through /r/9 on the base origin, the rest on another one.
+		const calls = stubFetch(({ url }) => {
+			const hop = Number(url.split("/").pop());
+			if (hop === total) return new Response("done");
+			const origin = hop + 1 < 10 ? "https://api.example.com/v1" : "https://other.example.com";
+			return new Response(null, { status: 302, headers: { location: `${origin}/r/${hop + 1}` } });
+		});
+		const result = await captureExecute(buildApp(), ["api", "/r/0"]);
+
+		expect(result).toEqual(expected);
+		expect(calls).toHaveLength(Math.min(total, 20) + 1);
+	});
+
+	it("rejects a redirect to a URL that is not http(s)", async () => {
+		const calls = stubFetch(
+			() => new Response(null, { status: 302, headers: { location: "data:text/plain,x" } }),
+		);
+		const { stderr, exitCode } = await captureExecute(buildApp(), ["api", "/users"]);
+
+		expect({ stderr, exitCode }).toEqual({
+			stderr: "Error: Cannot request data:text/plain,x: only http: and https: URLs",
+			exitCode: 1,
+		});
+		expect(calls).toHaveLength(1);
+	});
+
+	it("reports a followed redirect as Response.redirected, on clones and to paginate() too", async () => {
+		stubFetch(({ url }) =>
+			url.endsWith("/old")
+				? new Response(null, { status: 301, headers: { location: "/v1/new" } })
+				: new Response("{}"),
+		);
+		const seen: boolean[] = [];
+		const app = buildApp({
+			paginate: (response) => void seen.push(response.redirected),
+		}).add(
+			defineCommand("probe", {}, (command) =>
+				command.use(apiClient).action(async ({ ctx }) => {
+					const api = await ctx.api;
+					const moved = await api.fetch("/old");
+					const direct = await api.fetch("/new");
+					seen.push(moved.redirected, moved.clone().redirected, direct.redirected);
+				}),
+			),
+		);
+		await captureExecute(app, ["probe"]);
+		await captureExecute(app, ["api", "/old", "--paginate"]);
+
+		expect(seen).toEqual([true, true, false, true]);
 	});
 
 	it("follows redirects itself so auth headers never reach another origin", async () => {
