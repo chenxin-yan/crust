@@ -270,10 +270,11 @@ export function commandPathOf(
 				if (candidate === definition) return Object.freeze([...path, name]);
 			}
 		}
+		// childEntriesOf keeps insertion order; Object.entries would put integer-like names first.
 		level = level.flatMap(({ node, path }) =>
-			Object.entries(node.subCommands).map(([name, child]) => ({
-				node: child,
-				path: [...path, name],
+			childEntriesOf(node).map((entry) => ({
+				node: entry.resolve(),
+				path: [...path, entry.name],
 			})),
 		);
 	}
