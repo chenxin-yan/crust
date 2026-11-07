@@ -60,6 +60,8 @@ export interface CommandNode {
 	providedContexts: readonly AnyContextInstance[];
 	/** Declared command demands; validated when recipes are materialized. */
 	demands: readonly AnyContextFactory[];
+	/** Ids of Extensions this command uses for their Contexts; preparation checks the app extends each. */
+	usedExtensions: readonly ExtensionId[];
 	/** Extensions registered via `.extend()` (root builder only) */
 	extensions: ExtensionData[];
 	/**
@@ -96,6 +98,7 @@ export function createCommandNode(name: string): CommandNode {
 		contexts: [],
 		providedContexts: [],
 		demands: [],
+		usedExtensions: [],
 		extensions: [],
 		run: undefined,
 	};

@@ -74,6 +74,7 @@ export type DefinitionErrorReason =
 	| "invalid-short"
 	| "invalid-spelling"
 	| "missing-context"
+	| "missing-extension"
 	| "nested-command-extension"
 	| "reserved-name"
 	| "reserved-no-prefix"
