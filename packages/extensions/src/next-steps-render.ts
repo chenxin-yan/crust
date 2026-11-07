@@ -39,7 +39,7 @@ function stepArgv(
 			if (flag.type === "boolean") {
 				if (typeof item !== "boolean") throw new Error(`"--${name}" value is not a boolean`);
 				// `false` on a `noNegate` flag has no spelling: it is the flag left unset.
-				if (item === true) options.push(`--${name}`);
+				if (item) options.push(`--${name}`);
 				else if (flag.negatable) options.push(`--no-${name}`);
 				continue;
 			}
