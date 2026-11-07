@@ -1256,8 +1256,8 @@ describe("Extension named hooks", () => {
 			async (hook) => {
 				const errors: unknown[] = [];
 				const outcomes: unknown[] = [];
-				const binder = defineExtension(defineExtensionId("binder"))
-					[hook]((ctx) => ctx.bindInput({ flags: { port: "abc" } }))
+				const extension = defineExtension(defineExtensionId("binder"));
+				const binder = extension[hook]((ctx) => ctx.bindInput({ flags: { port: "abc" } }))
 					.postRun((_ctx, outcome) => void outcomes.push(outcome.status))
 					.onError((error) => void errors.push(error));
 				const actions: string[] = [];
