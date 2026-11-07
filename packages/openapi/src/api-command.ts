@@ -53,11 +53,21 @@ export class ApiResponseError extends Error {
 
 const METHODS = ["get", "put", "post", "delete", "options", "head", "patch", "trace"] as const;
 
-/** The value a local `$ref` (`#/...`) points to in `spec`, or `undefined`. */
+/**
+ * The value a local `$ref`'s JSON Pointer fragment (`#/...`, URI-encoded or not) points to
+ * in `spec`, or `undefined`, also for other fragments such as `#anchor`.
+ */
 function refTarget(spec: OpenApiSpec, ref: string): unknown {
+	let pointer: string;
+	try {
+		pointer = decodeURIComponent(ref.slice(1));
+	} catch {
+		return undefined;
+	}
+	if (pointer !== "" && !pointer.startsWith("/")) return undefined;
 	let target: unknown = spec;
-	for (const token of ref.slice(1).split("/").slice(1)) {
-		const key = decodeURIComponent(token).replaceAll("~1", "/").replaceAll("~0", "~");
+	for (const token of pointer.split("/").slice(1)) {
+		const key = token.replaceAll("~1", "/").replaceAll("~0", "~");
 		target =
 			typeof target === "object" && target !== null && Object.hasOwn(target, key)
 				? (target as Record<string, unknown>)[key]
@@ -157,14 +167,16 @@ function parseField(field: string): [string, unknown] {
 	}
 	const value = field.slice(at + 1);
 	const literals: Record<string, unknown> = { true: true, false: false, null: null };
-	return [
-		field.slice(0, at),
-		Object.hasOwn(literals, value)
-			? literals[value]
-			: JSON_NUMBER.test(value)
-				? Number(value)
-				: value,
-	];
+	if (Object.hasOwn(literals, value)) return [field.slice(0, at), literals[value]];
+	if (!JSON_NUMBER.test(value)) return [field.slice(0, at), value];
+	const number = Number(value);
+	// JSON.stringify would send Infinity as null.
+	if (!Number.isFinite(number)) {
+		throw new CrustError("PARSE", `--field: "${field}" is out of range for a number`, {
+			flag: "field",
+		});
+	}
+	return [field.slice(0, at), number];
 }
 
 function parseHeader(header: string): [string, string] {
@@ -174,7 +186,16 @@ function parseHeader(header: string): [string, string] {
 			flag: "header",
 		});
 	}
-	return [header.slice(0, at).trim(), header.slice(at + 1).trim()];
+	const entry: [string, string] = [header.slice(0, at).trim(), header.slice(at + 1).trim()];
+	try {
+		new Headers().append(...entry);
+	} catch (cause) {
+		const reason = cause instanceof Error ? ` (${cause.message})` : "";
+		throw new CrustError("PARSE", `--header: invalid header "${header}"${reason}`, {
+			flag: "header",
+		}).withCause(cause);
+	}
+	return entry;
 }
 
 /**

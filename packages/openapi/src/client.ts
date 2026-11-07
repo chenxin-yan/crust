@@ -70,7 +70,11 @@ export const apiClient: ContextFactory<"api", ApiClientOptions, ApiClient> =
 					if (redirects === 20) throw new TypeError(`fetch ${url.href}: too many redirects`);
 					await response.body?.cancel();
 					const next = new URL(location, url);
-					if (next.origin !== url.origin) headers.delete("authorization");
+					if (next.origin !== url.origin) {
+						// The request may override an auth header's value; it is a credential either way.
+						for (const [name] of authHeaders) headers.delete(name);
+						headers.delete("authorization");
+					}
 					const upper = method.toUpperCase();
 					if (
 						response.status === 303

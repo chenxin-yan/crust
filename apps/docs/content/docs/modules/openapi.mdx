@@ -35,7 +35,7 @@ $ my-cli api --spec listUsers
 ```
 
 - `--list` prints one line per operation: `METHOD path operationId summary`, leaving out an `operationId` or `summary` the spec lacks. A path item that is itself a local `$ref` (such as to `components.pathItems`) is followed, for `--list` and `operationId` lookup alike.
-- `--spec <operationId|path>` prints one line of JSON: the path item for a path such as `/users/{id}` (including its shared `parameters`), or the operation with that `operationId`. Local `$ref`s (`#/...`) are replaced by their targets, keeping sibling keys such as `description`; a `$ref` that points back into its own chain is kept as is, so recursive schemas stay finite. An unknown target fails with exit code 1.
+- `--spec <operationId|path>` prints one line of JSON: the path item for a path such as `/users/{id}` (including its shared `parameters`), or the operation with that `operationId`. Local JSON Pointer `$ref`s (`#/...`, URI-encoded or not) are replaced by their targets, keeping sibling keys such as `description`; other `$ref`s, such as external files or `#anchor`, are kept as is, and so is a `$ref` that points back into its own chain, so recursive schemas stay finite. An unknown target fails with exit code 1.
 
 ### Send requests
 
@@ -51,18 +51,18 @@ my-cli api /users --paginate                       # every page, one JSON line e
 `api <path>` resolves `path` below `baseUrl` (keeping the base URL's own path; an absolute URL is used as is) and sends it through the `apiClient` Context.
 
 - `-X, --method`: the HTTP method. Without it, the request is a `GET`, or a `POST` when fields or a body are given.
-- `-F, --field key=value` (repeatable): `true`, `false`, `null`, and JSON numbers become JSON values; anything else, such as `007`, stays a string. Fields form a JSON object body, or query parameters for `GET` and `HEAD` and when `--body` is given.
+- `-F, --field key=value` (repeatable): `true`, `false`, `null`, and JSON numbers become JSON values (a number too large for a double, such as `1e309`, is rejected); anything else, such as `007`, stays a string. Fields form a JSON object body, or query parameters for `GET` and `HEAD` and when `--body` is given.
 - `--body <value>`: the request body, inline, `@path` (relative to the working directory), or `-` for all of stdin.
 - `-H, --header 'Key: Value'` (repeatable): request headers. They override the `auth` headers of the same name. A body is sent with `Content-Type: application/json` unless a header sets it.
 - `--paginate`: after each successful page, calls `paginate(response)` with a copy of the response, so it may read headers or the body, and requests the page it returns until it returns `undefined`. A returned request without `init` reuses the previous request's method, headers, and body. Each page body is printed as one JSON line (NDJSON): JSON is compacted, and any other body, including an empty one, is printed as a JSON string. Without a `paginate` option, `--paginate` fails before any request.
 
-The response body is printed to stdout as is. A non-2xx response still prints its body to stdout, then fails with an `ApiResponseError` (exit code 1) whose message, such as `GET /users/9: HTTP 404 Not Found`, goes to stderr; its `status` holds the code. Malformed `-F` and `-H` values and an unreadable `--body` fail with a `PARSE` [`CrustError`](/docs/api/errors) before any request.
+The response body is printed to stdout as is. A non-2xx response still prints its body to stdout, then fails with an `ApiResponseError` (exit code 1) whose message, such as `GET /users/9: HTTP 404 Not Found`, goes to stderr; its `status` holds the code. A `-F` value without `=` or out of number range, a `-H` value without `:` or with a header name or value the runtime rejects, and an unreadable `--body` fail with a `PARSE` [`CrustError`](/docs/api/errors) before any request.
 
 ## `apiClient`
 
 The `api` Context: a `fetch()` bound to the base URL and auth. `apiCommand()` provides it to every command, so a command declares it with `.use(apiClient)` and calls `(await ctx.api).fetch(path, init?)`, as `whoami` does above.
 
-- `fetch(path, init?)` resolves `path` like `api <path>` and returns the `Response`. It adds the `auth` headers the request does not set itself, only for URLs on the base URL's origin, so an absolute URL to another host never receives credentials. While auth headers apply, `fetch()` follows redirects itself (unless `init.redirect` is `"manual"` or `"error"`) with `fetch()`'s method and body rules, but a redirect to another origin continues without the auth headers and without an `Authorization` header. It passes the invocation's cancellation signal unless `init.signal` is given.
+- `fetch(path, init?)` resolves `path` like `api <path>` and returns the `Response`. It adds the `auth` headers the request does not set itself, only for URLs on the base URL's origin, so an absolute URL to another host never receives credentials. While auth headers apply, `fetch()` follows redirects itself (unless `init.redirect` is `"manual"` or `"error"`) with `fetch()`'s method and body rules, but a redirect to another origin continues without any header named like an auth header (even when the request overrode its value) and without an `Authorization` header. It passes the invocation's cancellation signal unless `init.signal` is given.
 - `auth(input)` runs once per invocation, when a command first reads the Context, and receives the Context setup input (`signal`, `stdout`, `stderr`). It is not called for `api --list` or `api --spec`.
 
 <auto-type-table path="../../../../../packages/openapi/src/client.ts" name="ApiClient" />
