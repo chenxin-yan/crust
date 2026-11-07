@@ -159,6 +159,29 @@ describe("api --list and --spec", () => {
 		expect(JSON.parse(stdout)).toEqual(spec.paths["/users/{id}"]);
 	});
 
+	it("skips x-* extensions of the Paths Object, whatever their value", async () => {
+		const app = buildApp({
+			spec: {
+				paths: {
+					"/users": { get: { operationId: "users" } },
+					"x-note": null,
+					"x-meta": { get: { operationId: "fake" } },
+				},
+			},
+		});
+
+		expect((await captureExecute(app, ["api", "--list"])).stdout).toBe("GET /users users");
+		expect((await captureExecute(app, ["api", "--spec", "users"])).stdout).toBe(
+			'{"operationId":"users"}',
+		);
+		for (const target of ["fake", "x-meta"]) {
+			expect(await captureExecute(app, ["api", "--spec", target])).toMatchObject({
+				stderr: `Error: No operation or path "${target}" in the OpenAPI spec`,
+				exitCode: 1,
+			});
+		}
+	});
+
 	it("fails for an unknown operationId or path", async () => {
 		const { stderr, exitCode } = await captureExecute(buildApp(), ["api", "--spec", "constructor"]);
 
@@ -283,6 +306,18 @@ describe("api <path>", () => {
 			["https://api.example.com/v1/users", "Bearer secret"],
 			["https://api.example.com/v1/users?page=2", "Bearer secret"],
 		]);
+	});
+
+	it("compacts --paginate pages without changing numbers or strings", async () => {
+		stubFetch(
+			() =>
+				new Response('{ "id": 9007199254740993, "large": 1e309,\n "text": "a \\" b", "n": -0.10 }'),
+		);
+		const app = buildApp({ paginate: () => undefined });
+		const { stdout, exitCode } = await captureExecute(app, ["api", "/ids", "--paginate"]);
+
+		expect(exitCode).toBe(0);
+		expect(stdout).toBe('{"id":9007199254740993,"large":1e309,"text":"a \\" b","n":-0.10}');
 	});
 
 	it("sends a --paginate page on another origin without auth or credential headers the request set", async () => {
