@@ -46,7 +46,7 @@ import {
 } from "./node.ts";
 import { commandNotFound, resolveCommand, type CommandRoute } from "./router.ts";
 import { createSnapshotProjector, type CommandSnapshot } from "./snapshot.ts";
-import type { RunOutcome } from "./typed-run.ts";
+import type { CommandShape, ShapeRunOutcome } from "./typed-run.ts";
 
 const DEFAULT_IO: InvocationIO = {
 	stdout: (text) => writeProcessOutput(1, `${text}\n`),
@@ -543,15 +543,45 @@ function argvProvidedFrom(
 	});
 }
 
+/**
+ * Strict on purpose: an action may return any other async iterable, such as a stream,
+ * as its result.
+ */
+function isAsyncGenerator(value: unknown): value is AsyncGenerator {
+	if (typeof value !== "object" || value === null) return false;
+	const candidate = value as Partial<AsyncGenerator>;
+	try {
+		return (
+			typeof candidate.next === "function" &&
+			typeof candidate.return === "function" &&
+			typeof candidate.throw === "function" &&
+			typeof candidate[Symbol.asyncIterator] === "function"
+		);
+	} catch {
+		// A result whose properties throw when read (e.g. a strict Proxy) is an ordinary result.
+		return false;
+	}
+}
+
+/** One invocation's action events: the caller's live callback, and every event once a generator action starts. */
+interface ActionEventStream {
+	readonly onEvent?: ((event: unknown) => void) | undefined;
+	events?: unknown[];
+}
+
 /** Resolve, parse, and run one invocation without rendering failures. */
 async function dispatch(
 	input: InvocationInput,
 	prepared: PreparedInvocation,
 	output: InvocationOutput,
 	signal: AbortSignal,
+	stream: ActionEventStream,
 	onExtensionContext?: (context: ExtensionContext) => void,
 	onFailure?: (error: CaughtError, context: ExtensionContext) => Promise<ExtensionId | undefined>,
-): Promise<{ status: "completed"; result: unknown } | { status: "handled"; by: ExtensionId }> {
+): Promise<
+	| { status: "completed"; result: unknown; events?: readonly unknown[] }
+	| { status: "handled"; by: ExtensionId }
+> {
 	const { rootNode, extensions } = prepared;
 	// Nothing to wait for without a selector: action-side output stays immediate and in order.
 	if (!prepared.renderer) output.choose(undefined);
@@ -641,6 +671,7 @@ async function dispatch(
 				stderr: output.routed.stderr,
 			} satisfies CrustCommandContext;
 			result = await resolvedNode.run(context);
+			if (isAsyncGenerator(result)) result = await drain(result, (stream.events = []));
 		}
 		// An actionless command's `undefined` result still meets its `.output()` contract.
 		const checked = resolvedNode.outputSchema
@@ -649,6 +680,34 @@ async function dispatch(
 		// A renderer only sees results of an action that ran.
 		if (resolvedNode.run) output.renderer?.result?.(checked);
 		return checked;
+	};
+
+	/** Deliver each yielded event live and return the generator's `return` value. */
+	const drain = async (generator: AsyncGenerator, events: unknown[]): Promise<unknown> => {
+		let done = false;
+		try {
+			output.renderer?.stream?.();
+			for (;;) {
+				signal.throwIfAborted();
+				const step = await generator.next();
+				done = step.done === true;
+				// Also after the step: an abort during the final step must not complete the invocation.
+				signal.throwIfAborted();
+				if (step.done) return step.value;
+				events.push(step.value);
+				output.renderer?.event?.(step.value);
+				stream.onEvent?.(step.value);
+			}
+		} finally {
+			// Runs the generator's own `finally` on abort or a throwing consumer; a no-op once it threw.
+			// A `finally` that yields suspends `return()`, so resume it to the end; values it
+			// yields while closing are not events.
+			if (!done) {
+				for (let step = await generator.return(undefined); !step.done;) {
+					step = await generator.next();
+				}
+			}
+		}
 	};
 
 	let outcome: InvocationOutcome;
@@ -685,13 +744,19 @@ async function dispatch(
 				if (resolvedNode.run) {
 					for (const extension of extensions) await extension.hooks.preRun?.(extensionContext);
 				}
-				outcome = { status: "completed", result: await terminal() };
+				const result = await terminal();
+				outcome = { status: "completed", result, ...eventsOf(stream) };
 			}
 		} catch (error) {
 			// A failing selector leaves no renderer: the failure and the output waiting for it render by default.
 			if (!output.renderer) output.choose(undefined);
 			const by = await onFailure?.(error, extensionContext);
-			outcome = { status: "failed", error, ...(by === undefined ? {} : { by }) };
+			outcome = {
+				status: "failed",
+				error,
+				...(by === undefined ? {} : { by }),
+				...eventsOf(stream),
+			};
 		}
 
 		// Frozen so a mutating post-run hook cannot rewrite the outcome Core
@@ -716,7 +781,12 @@ async function dispatch(
 	}
 	return outcome.status === "handled"
 		? { status: "handled", by: outcome.by }
-		: { status: "completed", result: outcome.result };
+		: { status: "completed", result: outcome.result, ...eventsOf(stream) };
+}
+
+/** `events` only after a generator action started: its presence is what marks one. */
+function eventsOf(stream: ActionEventStream): { readonly events?: readonly unknown[] } {
+	return stream.events ? { events: Object.freeze(stream.events) } : {};
 }
 
 /** Render one failure through Extension onError hooks, ending in the Renderer's `error` or Core's default. */
@@ -820,9 +890,10 @@ export async function runInvocation(
 	input: InvocationInput,
 	options: InvocationOptions | undefined,
 	materializeCommandDefinition: MaterializeCommandDefinition,
-): Promise<RunOutcome<unknown>> {
+): Promise<ShapeRunOutcome<CommandShape>> {
 	const stdout: string[] = [];
 	const stderr: string[] = [];
+	const stream: ActionEventStream = { onEvent: options?.onEvent };
 	try {
 		// Keep the same per-invocation callback snapshot semantics as execute.
 		const { signal = new AbortController().signal, ...sinks } = options ?? {};
@@ -838,11 +909,17 @@ export async function runInvocation(
 		};
 		const outcome = await withAmbientTerminalIO(resolvedIO, async () => {
 			const prepared = prepareInvocation(node, materializeCommandDefinition);
-			return await dispatch(input, prepared, createInvocationOutput(resolvedIO), signal);
+			return await dispatch(input, prepared, createInvocationOutput(resolvedIO), signal, stream);
 		});
 		return { ...outcome, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
 	} catch (error) {
-		return { status: "failed", error, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
+		return {
+			status: "failed",
+			error,
+			...eventsOf(stream),
+			stdout: stdout.join("\n"),
+			stderr: stderr.join("\n"),
+		};
 	}
 }
 
@@ -921,6 +998,7 @@ export async function executeInvocation(
 				prepared,
 				output,
 				signal,
+				{ onEvent: options?.onEvent },
 				(context) => {
 					extensionContext = context;
 				},

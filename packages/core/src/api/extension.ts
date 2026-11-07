@@ -51,12 +51,23 @@ import {
 /**
  * How an invocation settled; `completed` carries the command's result: the awaited
  * `.output()` schema output when declared, otherwise the Command Action's awaited
- * return value (`undefined` without an action).
+ * return value (`undefined` without an action). For an async generator action, the
+ * result is its `return` value, and `completed` and `failed` carry the values it
+ * yielded as `events` (`[]` when it yielded none); `events` is absent otherwise.
  */
 export type InvocationOutcome =
-	| { readonly status: "completed"; readonly result: unknown }
+	| {
+			readonly status: "completed";
+			readonly result: unknown;
+			readonly events?: readonly unknown[];
+	  }
 	| { readonly status: "handled"; readonly by: ExtensionId }
-	| { readonly status: "failed"; readonly error: unknown; readonly by?: ExtensionId };
+	| {
+			readonly status: "failed";
+			readonly error: unknown;
+			readonly by?: ExtensionId;
+			readonly events?: readonly unknown[];
+	  };
 
 /** Authored root metadata fields an Extension may require. */
 export type RootMetaKey = keyof RootCommandMeta;
@@ -258,6 +269,18 @@ export interface Renderer {
 	 */
 	result?(value: unknown): void;
 	/**
+	 * Called once when the Command Action turns out to be an async generator, before its first
+	 * event, so `event`, `result`, and `error` know the invocation streams. A throw fails the
+	 * invocation and closes the generator. Default: ignored.
+	 */
+	stream?(): void;
+	/**
+	 * Each value an async generator Command Action yields, as it is yielded and before the
+	 * caller's `onEvent`. A throw fails the invocation and closes the generator. Default: ignored,
+	 * so events are never printed.
+	 */
+	event?(value: unknown): void;
+	/**
 	 * A failure, in `execute()` only, at most once per invocation, after every `onError` hook
 	 * declined it; never for a cancellation, which Core does not render. If it throws, Core
 	 * renders the original failure. Default: Core's `Error: <message>` lines on stderr.
@@ -329,7 +352,8 @@ export interface ExtensionHooks<
 	 * Runs after the invocation settles, in reverse `.extend()` order. This is the
 	 * `finally` slot for cleanup and post-run side effects. A `completed` outcome
 	 * carries the command's result as `result`: the awaited `.output()` schema output
-	 * when declared, otherwise the Command Action's awaited return value.
+	 * when declared, otherwise the Command Action's awaited return value. After an async
+	 * generator action, `completed` and `failed` also carry its yielded values as `events`.
 	 */
 	readonly postRun?: (
 		ctx: ExtensionContext<F, Deps, MetaKeys>,
