@@ -5,9 +5,11 @@
 import { posix } from "node:path";
 
 import {
+	buildCommandDocumentation,
 	formatDescription,
 	sectionsFor,
 	type CommandDocumentation,
+	type CommandSnapshot,
 	type DocumentationArg,
 	type DocumentationFlag,
 } from "@crustjs/core/tooling";
@@ -53,7 +55,7 @@ function escapeTableCell(value: string): string {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Renders a complete set of skill files from a command documentation tree and metadata.
+ * Renders a complete set of skill files from a Command Snapshot and metadata.
  *
  * Produces:
  * - `SKILL.md` — entrypoint with frontmatter and lazy-load instructions
@@ -61,12 +63,15 @@ function escapeTableCell(value: string): string {
  *
  * Command names are trimmed and lowercased for file names and invocations; children and
  * flags render alphabetically, and only sections whose audience includes skills render.
+ * Runnable commands marked `destructive` tell agents to confirm with the user first, and
+ * those with an output JSON Schema (from `.output()`) document it.
  *
- * @param root - Core documentation tree from `buildCommandDocumentation()`
+ * @param snapshot - Command Snapshot of the root command
  * @param meta - Skill metadata for frontmatter and naming
  * @returns Array of rendered files ready for writing
  */
-export function renderSkill(root: CommandDocumentation, meta: SkillMeta): RenderedFile[] {
+export function renderSkill(snapshot: CommandSnapshot, meta: SkillMeta): RenderedFile[] {
+	const root = buildCommandDocumentation(snapshot);
 	assertCommandFiles(root, new Map());
 	const files: RenderedFile[] = [];
 
@@ -81,11 +86,20 @@ export function renderSkill(root: CommandDocumentation, meta: SkillMeta): Render
 
 	// 2. commands/ — per-command markdown files
 	const parents = new Map<CommandDocumentation, CommandDocumentation>();
+	// Documentation omits destructive and output metadata, so pair each node with its snapshot.
+	const commands = new Map([[root, snapshot]]);
 	for (const node of allNodes) {
-		for (const child of node.children) parents.set(child, node);
+		for (const child of node.children) {
+			parents.set(child, node);
+			// Children are the visible subcommands, keyed by their last path segment.
+			commands.set(child, commands.get(node)!.subCommands[child.path.at(-1)!]!);
+		}
 	}
 	for (const node of allNodes) {
-		files.push({ path: commandFilePath(node), content: renderCommand(node, parents.get(node)) });
+		files.push({
+			path: commandFilePath(node),
+			content: renderCommand(node, commands.get(node)!, parents.get(node)),
+		});
 	}
 
 	return files;
@@ -333,10 +347,11 @@ function commandType(node: CommandDocumentation): string {
 /** Renders a command markdown file with its runnable details and child links. */
 function renderCommand(
 	node: CommandDocumentation,
+	command: CommandSnapshot,
 	parent: CommandDocumentation | undefined,
 ): string {
 	const lines = [...renderCommandHeading(node), ...renderCommandSections(node)];
-	if (node.hasAction) lines.push(...renderRunnableCommandSections(node));
+	if (node.hasAction) lines.push(...renderRunnableCommandSections(node, command));
 	if (node.children.length > 0) lines.push(...renderSubcommandLinks(node, commandFilePath(node)));
 	lines.push(...renderNavigation(node, parent));
 	return lines.join("\n");
@@ -364,8 +379,20 @@ function renderCommandSections(node: CommandDocumentation): string[] {
 	]);
 }
 
-function renderRunnableCommandSections(node: CommandDocumentation): string[] {
-	const lines = ["## Usage", "", "```", node.usage, "```", ""];
+function renderRunnableCommandSections(
+	node: CommandDocumentation,
+	command: CommandSnapshot,
+): string[] {
+	const lines: string[] = [];
+
+	if (command.meta.destructive === true) {
+		lines.push(
+			"**Destructive:** this command changes or deletes state in a way that is hard to undo. You must confirm with the user before running it.",
+			"",
+		);
+	}
+
+	lines.push("## Usage", "", "```", node.usage, "```", "");
 
 	if (node.args.length > 0) {
 		lines.push("## Arguments", "", ...renderArgsTable(node.args), "");
@@ -374,6 +401,21 @@ function renderRunnableCommandSections(node: CommandDocumentation): string[] {
 	if (node.flags.length > 0) {
 		const flags = [...node.flags].sort((a, b) => a.name.localeCompare(b.name));
 		lines.push("## Flags", "", ...renderFlagsTable(flags), "");
+	}
+
+	if (command.outputSchema) {
+		// The dialect URI is noise for agents; `$defs` references still resolve from the root.
+		const { $schema: _dialect, ...shape } = command.outputSchema;
+		lines.push(
+			"## Output",
+			"",
+			"The command's result matches this JSON Schema:",
+			"",
+			"```json",
+			JSON.stringify(shape),
+			"```",
+			"",
+		);
 	}
 
 	lines.push(
