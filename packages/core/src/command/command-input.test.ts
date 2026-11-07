@@ -16,6 +16,16 @@ const passthrough = {
 	"~standard": { version: 1 as const, vendor: "test", validate: (value: unknown) => ({ value }) },
 };
 
+/** Standard Schema whose input converts to `jsonSchema`. */
+function withInputJsonSchema(jsonSchema: Record<string, unknown>) {
+	return {
+		"~standard": {
+			...passthrough["~standard"],
+			jsonSchema: { input: () => jsonSchema, output: () => ({}) },
+		},
+	};
+}
+
 const send = defineCommand("send", (c) =>
 	c
 		.args(
@@ -173,6 +183,11 @@ describe("commandInputSchema", () => {
 				endpoint: { type: "string", schema: z.url().describe("Where to send") },
 				label: { type: "string", schema: z.string().min(3).default("abc") },
 				on: { type: "boolean", schema: z.boolean() },
+				contact: { type: "string", schema: z.email() },
+				confirm: {
+					type: "boolean",
+					schema: withInputJsonSchema({ type: "boolean", enum: [true] }),
+				},
 			})
 			.action(noop);
 		const { properties } = commandInputSchema(await app.snapshot(), []);
@@ -182,8 +197,10 @@ describe("commandInputSchema", () => {
 			endpoint: { type: "string", format: "uri", description: "Where to send" },
 			label: { type: "string", minLength: 3, default: "abc" },
 			on: { type: "boolean" },
+			contact: { type: "string", format: "email" },
+			confirm: { type: "boolean", enum: [true] },
 		});
-		for (const name of ["level", "names", "endpoint", "label", "on"]) {
+		for (const name of ["level", "names", "endpoint", "label", "on", "contact"]) {
 			expect(properties[name]).not.toHaveProperty("$schema");
 		}
 	});
@@ -191,19 +208,11 @@ describe("commandInputSchema", () => {
 	it("maps a schema whose JSON Schema run() would reject by its token type", async () => {
 		const node = z.object({ name: z.string() });
 		// Type-compatible, but its `$ref` would resolve against the command input schema's root.
-		const referencing = {
-			"~standard": {
-				...passthrough["~standard"],
-				jsonSchema: {
-					input: () => ({
-						type: "string",
-						allOf: [{ $ref: "#/$defs/Name" }],
-						$defs: { Name: { minLength: 1 } },
-					}),
-					output: () => ({}),
-				},
-			},
-		};
+		const referencing = withInputJsonSchema({
+			type: "string",
+			allOf: [{ $ref: "#/$defs/Name" }],
+			$defs: { Name: { minLength: 1 } },
+		});
 		const app = new Crust("cli")
 			.args({ name: "ids", schema: z.string(), variadic: true })
 			.flags({

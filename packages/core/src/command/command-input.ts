@@ -11,8 +11,8 @@ import type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "./snapshot.ts";
 export interface CommandInputPropertySchema {
 	readonly type?: "string" | "number" | "boolean" | "array";
 	readonly description?: string;
-	readonly format?: "uri";
-	readonly enum?: readonly string[];
+	readonly format?: string;
+	readonly enum?: readonly (string | boolean)[];
 	readonly items?: CommandInputPropertySchema;
 	readonly default?: unknown;
 	readonly [keyword: string]: unknown;
