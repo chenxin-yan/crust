@@ -1,9 +1,9 @@
-import { Crust, defineCommand, defineContext } from "@crustjs/core";
+import { Crust, CrustError, defineCommand, defineContext } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import { describe, expect, it } from "vite-plus/test";
 
 import { help } from "./help.ts";
-import { type NextStepsOptions, nextSteps, nextStepsContext } from "./next-steps.ts";
+import { type NextStepsOptions, nextSteps } from "./next-steps.ts";
 
 class NotLoggedInError extends Error {}
 
@@ -30,35 +30,35 @@ function shellWords(line: string): string[] {
 	return words;
 }
 
+const status = defineCommand("status", (cmd) =>
+	cmd.args({ name: "env", type: "string" }).action(() => {}),
+);
+const logs = defineCommand("logs", (cmd) => cmd.action(() => {}));
+const login = defineCommand("login", (cmd) =>
+	cmd.flags({ sso: { type: "boolean" } }).action(({ stdout }) => stdout("logged in")),
+);
+const deploy = defineCommand("deploy", (cmd) =>
+	cmd
+		.use(nextSteps)
+		.args({ name: "env", type: "string", required: true })
+		.flags({ fail: { type: "boolean" } })
+		.action(async ({ args, flags, ctx }) => {
+			const next = await ctx.nextSteps;
+			next.add(status, { args: { env: args.env } }, "Check the deployment");
+			next.add(logs);
+			if (flags.fail) throw new NotLoggedInError("not logged in");
+			return { env: args.env };
+		}),
+);
+
 function appWith(options?: NextStepsOptions) {
-	return new Crust("app")
-		.extend(nextSteps(options))
-		.add(
-			defineCommand("deploy", (cmd) =>
-				cmd
-					.use(nextStepsContext)
-					.args({ name: "env", type: "string", required: true })
-					.flags({ fail: { type: "boolean" } })
-					.action(async ({ args, flags, ctx }) => {
-						const next = await ctx.next;
-						next.add(["status"], { args: { env: args.env } }, "Check the deployment");
-						next.add(["logs"]);
-						if (flags.fail) throw new NotLoggedInError("not logged in");
-						return { env: args.env };
-					}),
-			),
-		)
-		.command("status", (cmd) => cmd.args({ name: "env", type: "string" }).action(() => {}))
-		.command("logs", (cmd) => cmd.action(() => {}))
-		.command("login", (cmd) =>
-			cmd.flags({ sso: { type: "boolean" } }).action(({ stdout }) => stdout("logged in")),
-		);
+	return new Crust("app").extend(nextSteps(options)).add(deploy, status, logs, login);
 }
 
 const recovery: NextStepsOptions = {
 	onError: (error) =>
 		error instanceof NotLoggedInError
-			? [{ command: ["login"], input: { flags: { sso: true } }, description: "Log in" }]
+			? [{ command: login, input: { flags: { sso: true } }, description: "Log in" }]
 			: undefined,
 };
 
@@ -105,7 +105,7 @@ describe("nextSteps", () => {
 		const app = appWith({
 			onError: (error) => {
 				seen.push(error);
-				return [{ command: ["deploy"], input: { args: { env: "staging" } } }];
+				return [{ command: deploy, input: { args: { env: "staging" } } }];
 			},
 		});
 
@@ -120,10 +120,11 @@ describe("nextSteps", () => {
 		const broken = defineContext("broken").setup((): string => {
 			throw new Error("setup failed");
 		});
+		const doctor = defineCommand("doctor", (cmd) => cmd.action(() => {}));
 		const app = new Crust("app")
 			.provide(broken())
-			.extend(nextSteps({ onError: () => [{ command: ["doctor"] }] }))
-			.command("doctor", (cmd) => cmd.action(() => {}))
+			.extend(nextSteps({ onError: () => [{ command: doctor }] }))
+			.add(doctor)
 			.command("run", (cmd) => cmd.use(broken).action(async ({ ctx }) => void (await ctx.broken)));
 
 		expect(await captureExecute(app, ["run"])).toEqual({
@@ -153,33 +154,36 @@ describe("nextSteps", () => {
 	});
 
 	it("renders flags, booleans, repeated values, positionals, and raw tokens as a quoted command line", async () => {
+		const copy = defineCommand("copy", (cmd) =>
+			cmd
+				.args(
+					{ name: "from", type: "string", required: true },
+					{ name: "to", type: "string", variadic: true },
+				)
+				.flags({
+					message: { type: "string" },
+					count: { type: "number" },
+					tag: { type: "string", multiple: true },
+					force: { type: "boolean" },
+					cache: { type: "boolean" },
+					quiet: { type: "boolean", noNegate: true },
+					meta: { type: "json" },
+					offset: { type: "number" },
+					url: { type: "url" },
+				})
+				.action(() => {}),
+		);
+		const exec = defineCommand("exec", (cmd) => cmd.action(() => {}));
+		const seek = defineCommand("seek", (cmd) =>
+			cmd.args({ name: "at", type: "number" }).action(() => {}),
+		);
 		const app = new Crust("app")
 			.extend(nextSteps())
-			.command("copy", (cmd) =>
-				cmd
-					.args(
-						{ name: "from", type: "string", required: true },
-						{ name: "to", type: "string", variadic: true },
-					)
-					.flags({
-						message: { type: "string" },
-						count: { type: "number" },
-						tag: { type: "string", multiple: true },
-						force: { type: "boolean" },
-						cache: { type: "boolean" },
-						quiet: { type: "boolean", noNegate: true },
-						meta: { type: "json" },
-						offset: { type: "number" },
-						url: { type: "url" },
-					})
-					.action(() => {}),
-			)
-			.command("exec", (cmd) => cmd.action(() => {}))
-			.command("seek", (cmd) => cmd.args({ name: "at", type: "number" }).action(() => {}))
+			.add(copy, exec, seek)
 			.command("suggest", (cmd) =>
-				cmd.use(nextStepsContext).action(async ({ ctx }) => {
-					const next = await ctx.next;
-					next.add(["copy"], {
+				cmd.use(nextSteps).action(async ({ ctx }) => {
+					const next = await ctx.nextSteps;
+					next.add(copy, {
 						args: { from: "a b.txt", to: ["it's", "c"] },
 						flags: {
 							message: "hello world",
@@ -187,14 +191,15 @@ describe("nextSteps", () => {
 							tag: ["x", "y"],
 							force: true,
 							cache: false,
+							// @ts-expect-error -- `false` on a noNegate flag has no spelling and is left out.
 							quiet: false,
 							meta: { a: 1 },
 							offset: -5,
 							url: new URL("https://example.com/a?b=1"),
 						},
 					});
-					next.add(["exec"], { raw: ["--watch", "src"] });
-					next.add(["seek"], { args: { at: -5 } });
+					next.add(exec, { raw: ["--watch", "src"] });
+					next.add(seek, { args: { at: -5 } });
 				}),
 			);
 
@@ -210,29 +215,47 @@ describe("nextSteps", () => {
 		);
 	});
 
-	it("skips an invalid step with a note on stderr and never fails the invocation", async () => {
+	it("prints the path the application added a nested definition at", async () => {
+		const migrate = defineCommand("migrate", (cmd) => cmd.action(() => {}));
+		const db = defineCommand("db", { aliases: ["d"] }, (cmd) => cmd.add(migrate));
 		const app = new Crust("app")
 			.extend(nextSteps())
-			.command("status", (cmd) =>
-				cmd
-					.args({ name: "env", type: "string" }, { name: "region", type: "string" })
-					.action(() => {}),
-			)
+			.add(db)
 			.command("suggest", (cmd) =>
-				cmd.use(nextStepsContext).action(async ({ ctx }) => {
-					const next = await ctx.next;
-					next.add(["nope"]);
-					next.add(["status"], { flags: { verbose: true } });
-					next.add(["status"], { args: { region: "eu" } });
-					next.add(["status"], { args: { stage: "eu" } });
-					next.add(["status"], { args: { env: "prod" } }, "Check prod");
+				cmd.use(nextSteps).action(async ({ ctx }) => void (await ctx.nextSteps).add(migrate)),
+			);
+
+		expect((await captureExecute(app, ["suggest"])).stderr).toBe("Next steps:\n  app db migrate");
+	});
+
+	it("skips an invalid step with a note on stderr and never fails the invocation", async () => {
+		const unadded = defineCommand("nope", (cmd) => cmd.action(() => {}));
+		const status = defineCommand("status", (cmd) =>
+			cmd
+				.args({ name: "env", type: "string" }, { name: "region", type: "string" })
+				.action(() => {}),
+		);
+		const app = new Crust("app")
+			.extend(nextSteps())
+			.add(status)
+			.command("suggest", (cmd) =>
+				cmd.use(nextSteps).action(async ({ ctx }) => {
+					const next = await ctx.nextSteps;
+					next.add(unadded);
+					// @ts-expect-error -- runtime regression for input the types reject.
+					next.add(status, { flags: { verbose: true } });
+					// @ts-expect-error -- runtime regression for input the types reject.
+					next.add(status, { args: { region: "eu" } });
+					// @ts-expect-error -- runtime regression for input the types reject.
+					next.add(status, { args: { stage: "eu" } });
+					next.add(status, { args: { env: "prod" } }, "Check prod");
 				}),
 			);
 
 		expect(await captureExecute(app, ["suggest"])).toEqual({
 			stdout: "",
 			stderr: [
-				'nextSteps(): skipped "app nope": unknown command',
+				'nextSteps(): skipped "nope": the application does not add this command',
 				'nextSteps(): skipped "app status": unknown flag "--verbose"',
 				'nextSteps(): skipped "app status": argument "region" follows omitted "env"',
 				'nextSteps(): skipped "app status": unknown argument "stage"',
@@ -242,6 +265,28 @@ describe("nextSteps", () => {
 			].join("\n"),
 			exitCode: 0,
 		});
+	});
+
+	it("skips a step whose command fails to build while searching, with a note", async () => {
+		const broken = defineCommand("broken", (): never => {
+			throw new Error("recipe failed");
+		});
+		const unadded = defineCommand("nope", (cmd) => cmd.action(() => {}));
+		const app = new Crust("app")
+			.extend(nextSteps())
+			.add(broken)
+			.command("suggest", (cmd) =>
+				cmd.use(nextSteps).action(async ({ ctx }) => {
+					const next = await ctx.nextSteps;
+					next.add(unadded);
+					next.add(logs);
+				}),
+			)
+			.add(logs);
+
+		const { stderr, exitCode } = await captureExecute(app, ["suggest"]);
+		expect(exitCode).toBe(0);
+		expect(stderr).toBe('nextSteps(): skipped "nope": recipe failed\nNext steps:\n  app logs');
 	});
 
 	it("reports a throwing onError on stderr and still prints the action's steps", async () => {
@@ -261,31 +306,34 @@ describe("nextSteps", () => {
 
 	it("replays each suggested command line to the input it was built from", async () => {
 		const seen: unknown[] = [];
+		const remove = defineCommand("delete", { aliases: ["rm"] }, (cmd) =>
+			cmd.action(() => void seen.push(["delete"])),
+		);
+		const group = defineCommand("group", (cmd) =>
+			cmd
+				.args({ name: "target", type: "string" })
+				.action(({ args }) => void seen.push(["group", args]))
+				.add(remove),
+		);
+		const show = defineCommand("show", (cmd) =>
+			cmd
+				.args({ name: "doc", type: "json" })
+				.flags({
+					meta: { type: "json" },
+					metas: { type: "json", multiple: true },
+					tags: { type: "string", multiple: true, delimiter: "," },
+				})
+				.action(({ args, flags }) => void seen.push(["show", args, flags])),
+		);
 		const app = new Crust("app")
 			.extend(nextSteps())
-			.args({ name: "target", type: "string" })
-			.action(({ args }) => void seen.push(["app", args]))
-			.add(
-				defineCommand("delete", { aliases: ["rm"] }, (cmd) =>
-					cmd.action(() => void seen.push(["delete"])),
-				),
-			)
-			.command("show", (cmd) =>
-				cmd
-					.args({ name: "doc", type: "json" })
-					.flags({
-						meta: { type: "json" },
-						metas: { type: "json", multiple: true },
-						tags: { type: "string", multiple: true, delimiter: "," },
-					})
-					.action(({ args, flags }) => void seen.push(["show", args, flags])),
-			)
+			.add(group, show)
 			.command("suggest", (cmd) =>
-				cmd.use(nextStepsContext).action(async ({ ctx }) => {
-					const next = await ctx.next;
-					next.add([], { args: { target: "delete" } });
-					next.add([], { args: { target: "rm" } });
-					next.add(["show"], {
+				cmd.use(nextSteps).action(async ({ ctx }) => {
+					const next = await ctx.nextSteps;
+					next.add(group, { args: { target: "delete" } });
+					next.add(group, { args: { target: "rm" } });
+					next.add(show, {
 						args: { doc: "123" },
 						flags: { meta: "hello", metas: ["1", "x"], tags: ["a", "b"] },
 					});
@@ -295,8 +343,8 @@ describe("nextSteps", () => {
 		const { stderr } = await captureExecute(app, ["suggest"]);
 		const lines = stderr.split("\n").slice(1);
 		expect(lines).toEqual([
-			"  app -- delete",
-			"  app -- rm",
+			"  app group -- delete",
+			"  app group -- rm",
 			`  app show --meta '"hello"' --metas '"1"' --metas '"x"' --tags a --tags b '"123"'`,
 		]);
 		for (const line of lines) {
@@ -305,27 +353,28 @@ describe("nextSteps", () => {
 			});
 		}
 		expect(seen).toEqual([
-			["app", { target: "delete" }],
-			["app", { target: "rm" }],
+			["group", { target: "delete" }],
+			["group", { target: "rm" }],
 			["show", { doc: "123" }, { meta: "hello", metas: ["1", "x"], tags: ["a", "b"] }],
 		]);
 	});
 
 	it("replays infinite numbers and skips NaN, which argv cannot spell", async () => {
 		const seen: unknown[] = [];
+		const wait = defineCommand("wait", (cmd) =>
+			cmd
+				.args({ name: "at", type: "number" })
+				.flags({ timeout: { type: "number" } })
+				.action(({ args, flags }) => void seen.push([args, flags])),
+		);
 		const app = new Crust("app")
 			.extend(nextSteps())
-			.command("wait", (cmd) =>
-				cmd
-					.args({ name: "at", type: "number" })
-					.flags({ timeout: { type: "number" } })
-					.action(({ args, flags }) => void seen.push([args, flags])),
-			)
+			.add(wait)
 			.command("suggest", (cmd) =>
-				cmd.use(nextStepsContext).action(async ({ ctx }) => {
-					const next = await ctx.next;
-					next.add(["wait"], { args: { at: -Infinity }, flags: { timeout: Infinity } });
-					next.add(["wait"], { flags: { timeout: Number.NaN } });
+				cmd.use(nextSteps).action(async ({ ctx }) => {
+					const next = await ctx.nextSteps;
+					next.add(wait, { args: { at: -Infinity }, flags: { timeout: Infinity } });
+					next.add(wait, { flags: { timeout: Number.NaN } });
 				}),
 			);
 
@@ -341,16 +390,17 @@ describe("nextSteps", () => {
 	});
 
 	it("skips a repeatable flag value its delimiter would split or drop", async () => {
+		const tag = defineCommand("tag", (cmd) =>
+			cmd.flags({ tags: { type: "string", multiple: true, delimiter: "," } }).action(() => {}),
+		);
 		const app = new Crust("app")
 			.extend(nextSteps())
-			.command("tag", (cmd) =>
-				cmd.flags({ tags: { type: "string", multiple: true, delimiter: "," } }).action(() => {}),
-			)
+			.add(tag)
 			.command("suggest", (cmd) =>
-				cmd.use(nextStepsContext).action(async ({ ctx }) => {
-					const next = await ctx.next;
-					next.add(["tag"], { flags: { tags: ["a,b"] } });
-					next.add(["tag"], { flags: { tags: [""] } });
+				cmd.use(nextSteps).action(async ({ ctx }) => {
+					const next = await ctx.nextSteps;
+					next.add(tag, { flags: { tags: ["a,b"] } });
+					next.add(tag, { flags: { tags: [""] } });
 				}),
 			);
 
@@ -364,18 +414,19 @@ describe("nextSteps", () => {
 
 	it("renders omitted prototype-named arguments as omitted", async () => {
 		const seen: unknown[] = [];
+		const target = defineCommand("target", (cmd) =>
+			cmd
+				.args({ name: "constructor", type: "string" }, { name: "__proto__", type: "string" })
+				.action(({ args }) => void seen.push({ ...args })),
+		);
 		const app = new Crust("app")
 			.extend(nextSteps())
-			.command("target", (cmd) =>
-				cmd
-					.args({ name: "constructor", type: "string" }, { name: "__proto__", type: "string" })
-					.action(({ args }) => void seen.push({ ...args })),
-			)
+			.add(target)
 			.command("suggest", (cmd) =>
-				cmd.use(nextStepsContext).action(async ({ ctx }) => {
-					const next = await ctx.next;
-					next.add(["target"]);
-					next.add(["target"], { args: { constructor: "x" } });
+				cmd.use(nextSteps).action(async ({ ctx }) => {
+					const next = await ctx.nextSteps;
+					next.add(target);
+					next.add(target, { args: { constructor: "x" } });
 				}),
 			);
 
@@ -403,5 +454,16 @@ describe("nextSteps", () => {
 		);
 
 		expect(outcome).toMatchObject({ status: "completed", result: { env: "prod" } });
+	});
+
+	it("rejects a command that uses nextSteps without extending nextSteps()", async () => {
+		// @ts-expect-error -- runtime regression deliberately exercises the preparation check.
+		const unextended = new Crust("app").add(deploy);
+		const error = await unextended.snapshot().catch((caught: unknown) => caught);
+		expect(error).toBeInstanceOf(CrustError);
+		expect(error).toMatchObject({
+			code: "DEFINITION",
+			details: { subject: "extension", name: "crust:next-steps", reason: "missing-extension" },
+		});
 	});
 });

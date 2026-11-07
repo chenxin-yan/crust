@@ -1,4 +1,4 @@
-import type { CommandSnapshot, ValueType } from "@crustjs/core";
+import type { CommandSnapshot, ExtensionContext, ValueType } from "@crustjs/core";
 import type { RunInputValue } from "@crustjs/core/tooling";
 
 import type { NextStep } from "./next-steps.ts";
@@ -20,14 +20,15 @@ function argvValue(value: RunInputValue, type: ValueType | undefined, label: str
 	return value instanceof URL ? value.href : JSON.stringify(value);
 }
 
-/** The step's argv after the application name; throws a reason when it does not fit the command tree. */
-function stepArgv(root: CommandSnapshot, step: NextStep): string[] {
+/** The argv after the application name for `names`' command; throws a reason when `input` does not fit it. */
+function stepArgv(
+	root: CommandSnapshot,
+	names: readonly string[],
+	input: NextStep["input"],
+): string[] {
 	let command = root;
-	for (const name of step.command) {
-		if (!Object.hasOwn(command.subCommands, name)) throw new Error("unknown command");
-		command = command.subCommands[name]!;
-	}
-	const { args = {}, flags = {}, raw = [] } = step.input ?? {};
+	for (const name of names) command = command.subCommands[name]!;
+	const { args = {}, flags = {}, raw = [] } = input ?? {};
 
 	const options: string[] = [];
 	for (const [name, value] of Object.entries(flags)) {
@@ -85,25 +86,29 @@ function stepArgv(root: CommandSnapshot, step: NextStep): string[] {
 		(positionals.length > 0 &&
 			(Object.keys(command.subCommands).length > 0 ||
 				positionals.some((token) => token.startsWith("-"))));
-	return [...step.command, ...options, ...(separator ? ["--"] : []), ...positionals, ...raw];
+	return [...names, ...options, ...(separator ? ["--"] : []), ...positionals, ...raw];
 }
 
 /**
- * The `Next steps:` block for the steps that fit `root`'s command tree (`text` is
- * empty when none do), and one note per skipped step.
+ * The `Next steps:` block for the steps whose command `root`'s application adds and
+ * whose input fits it (`text` is empty when none do), and one note per skipped step.
  */
 export function renderNextSteps(
 	root: CommandSnapshot,
 	steps: readonly NextStep[],
+	commandPathOf: ExtensionContext["commandPathOf"],
 ): { readonly notes: readonly string[]; readonly text: string } {
 	const notes: string[] = [];
 	const lines: string[] = [];
 	for (const step of steps) {
+		let path: readonly string[] | undefined;
 		let argv: string[];
 		try {
-			argv = stepArgv(root, step);
+			path = commandPathOf(step.command);
+			if (!path) throw new Error("the application does not add this command");
+			argv = stepArgv(root, path.slice(1), step.input);
 		} catch (error) {
-			const name = [root.meta.name, ...step.command].join(" ");
+			const name = path ? path.join(" ") : step.command.name;
 			notes.push(`skipped "${name}": ${error instanceof Error ? error.message : String(error)}`);
 			continue;
 		}
