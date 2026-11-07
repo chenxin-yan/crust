@@ -303,6 +303,19 @@ function _typecheckAcceptsWidenedAndEmptyUseSpreads(deps: readonly AnyContextFac
 		.setup(() => 1);
 	type _Empty = Expect<Equal<NonNullable<(typeof empty)["_deps"]>, {}>>;
 	new Crust("cli").provide(empty());
+	type _EmptyFlags = Expect<Equal<NonNullable<(typeof empty)["_useFlags"]>, {}>>;
+
+	// Widened dependencies may own any flags, so commands that use the Context accept open flags.
+	const owned = defineContext("owned")
+		.flags({ "api-key": apiKey })
+		.use(...deps)
+		.setup(() => 1);
+	const user = defineCommand("user", (command) => command.use(owned));
+	const app = new Crust("cli").provide(owned()).add(user);
+	void app.run(["user"], { flags: { "api-key": "k", anything: "x" } });
+	type _KnownKept = Expect<
+		Equal<NonNullable<(typeof owned)["_useFlags"]>["api-key"]["type"], "string">
+	>;
 }
 
 // checks literal Context sections like command sections
@@ -375,4 +388,28 @@ function _typecheckTypesContextFlagsAtUseSites() {
 		.extend(hooked)
 		.add(status)
 		.run(["status"], { flags: { yes: true } });
+
+	// Inline commands added before `.extend()` parse Extension-provided Context flags too;
+	// a reusable command below an inline one parses only what it uses.
+	const early = new Crust("cli")
+		.command("group", (command) => command.add(status).command("leaf", (leaf) => leaf))
+		.extend(provided);
+	void early.run(["group"], { flags: { yes: true } });
+	void early.run(["group", "leaf"], { flags: { yes: true } });
+	// @ts-expect-error -- the reusable status below the inline group does not use confirm
+	void early.run(["group", "status"], { flags: { yes: true } });
+	const inherited = new Crust("cli")
+		.provide(config(), api())
+		.command("group", (command) => command.add(status));
+	void inherited.run(["group"], { flags: { "api-key": "k" } });
+	// @ts-expect-error -- inline inheritance stops at the reusable status
+	void inherited.run(["group", "status"], { flags: { "api-key": "k" } });
+
+	// A command may provide a flag-owning Context it uses; another Context with its flags collides.
+	defineCommand("local", (command) => command.use(config).provide(config()));
+	const other = defineContext("other")
+		.flags({ region })
+		.setup(() => 1);
+	// @ts-expect-error -- "region" collides with the used config Context's flag
+	defineCommand("other", (command) => command.use(config).provide(other()));
 }

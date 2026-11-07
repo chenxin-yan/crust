@@ -233,9 +233,10 @@ describe("integration: split-file definitions end-to-end", () => {
 
 	it("reuses a definition across satisfying parents, renamed via .as()", async () => {
 		const first = new Crust("first").provide(logging()).add(listCommand);
+		// Another same-name Context: it must define the flags the definition declares the same way.
 		const defaultLogging = defineContext("logging")
-			.flags({ verbose: { ...verbose, default: true } })
-			.setup(({ flags }) => flags);
+			.flags({ verbose })
+			.setup(({ flags }) => ({ verbose: flags.verbose ?? true }));
 		const second = new Crust("second").provide(defaultLogging()).add(listCommand.as("show"));
 
 		expect((await executeCrust(first, ["list", "pods"])).stdout).toContain("verbose=undefined");

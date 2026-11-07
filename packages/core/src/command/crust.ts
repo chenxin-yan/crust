@@ -104,7 +104,9 @@ import {
 	commandDefinitionInternal,
 	createCommandNode,
 	childEntriesOf,
+	declaredContextNames,
 	installContextFlags,
+	registerContextFlags,
 	registerFlag,
 } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
@@ -398,10 +400,8 @@ type DefinitionShapeForSpelling<D, Spelling extends string> = D extends unknown
 		: never
 	: never;
 
-// Inline `.command()` children inherit the parent's Context-owned flags at runtime
-// (materialization seeds them with `parent.ownedFlags`), so the typed shape merges
-// them too — deeply, because their own inline children inherit the same flags.
-// Local parent flags never inherit and stay out.
+// Applies flags that reach a whole subtree (recursive Extension flags) to a shape and every
+// descendant. Local parent flags never inherit and stay out.
 type ShapeWithInheritedFlags<S, CF extends FlagsDef> = keyof CF extends never
 	? S
 	: S extends CommandShape<infer SA, infer SF, infer SC, infer SR, infer P, infer SE>
@@ -415,9 +415,22 @@ type ShapeWithInheritedFlags<S, CF extends FlagsDef> = keyof CF extends never
 			>
 		: never;
 
+// Inline `.command()` children inherit the parent's Context-owned flags at runtime
+// (materialization seeds them with `parent.ownedFlags`), so the typed shape merges them too.
+// Only one level: an inline child's own inline children merge them at their `.command()`,
+// and a reusable child below parses only the Context flags it uses. The mark lets readers
+// add Extension-provided Context flags to inline commands added before `.extend()`.
+type InlineShape<S, CF extends FlagsDef> =
+	S extends CommandShape<infer SA, infer SF, infer SC, infer SR, infer P, infer SE>
+		? CommandShape<SA, keyof CF extends never ? SF : MergeFlags<CF, SF>, SC, SR, P, SE, true>
+		: never;
+
+// `false`: reusable definitions, which inherit no Context-owned flags.
+type EntryShape<S, CF extends FlagsDef | false> = [CF] extends [FlagsDef] ? InlineShape<S, CF> : S;
+
 type DefinitionsTree<
 	Ds extends readonly CommandDefinition<any, any, any, any>[],
-	CtxFlags extends FlagsDef = {},
+	CtxFlags extends FlagsDef | false = false,
 > = [Ds] extends [
 	readonly [
 		{
@@ -434,25 +447,25 @@ type DefinitionsTree<
 		: IsUnion<Ds[number]> extends true
 			? DefinitionsTreeSlow<Ds, CtxFlags>
 			: [IsClosedName<N>, IsClosedName<Al[number]>] extends [true, true]
-				? { [K in N | Al[number]]: ShapeWithInheritedFlags<S, CtxFlags> }
+				? { [K in N | Al[number]]: EntryShape<S, CtxFlags> }
 				: DefinitionsTreeSlow<Ds, CtxFlags>
 	: DefinitionsTreeSlow<Ds, CtxFlags>;
 
 type DefinitionsTreeSlow<
 	Ds extends readonly CommandDefinition<any, any, any, any>[],
-	CtxFlags extends FlagsDef = {},
+	CtxFlags extends FlagsDef | false = false,
 > =
 	string extends AttachedCommandSpellings<Ds>
 		? Record<string, CommandShape> & KnownDefinitionTree<Ds, CtxFlags>
 		: {
-				[K in CommandDefinitionSpellings<Ds[number]>]: ShapeWithInheritedFlags<
+				[K in CommandDefinitionSpellings<Ds[number]>]: EntryShape<
 					DefinitionShapeForSpelling<Ds[number], K>,
 					CtxFlags
 				>;
 			};
 
 // Accumulates in tail position so a long batch with a runtime-only name stays clear of TS2589.
-type KnownDefinitionTree<Ds extends readonly unknown[], CF extends FlagsDef, Acc = {}> =
+type KnownDefinitionTree<Ds extends readonly unknown[], CF extends FlagsDef | false, Acc = {}> =
 	IsUnion<Ds> extends true
 		? Acc
 		: Ds extends readonly [infer H, ...infer T]
@@ -463,7 +476,7 @@ type KnownDefinitionTree<Ds extends readonly unknown[], CF extends FlagsDef, Acc
 						(IsUnion<H> extends true
 							? {}
 							: {
-									[K in CommandDefinitionSpellings<H>]: ShapeWithInheritedFlags<
+									[K in CommandDefinitionSpellings<H>]: EntryShape<
 										DefinitionShapeForSpelling<H, K>,
 										CF
 									>;
@@ -554,6 +567,27 @@ type TreeWithRecursiveFlags<Tree extends object, R extends FlagsDef> = keyof R e
 	? Tree
 	: TreeWithInheritedFlags<Tree, R>;
 
+// Extension-provided Context flags reach the root's inline `.command()` children (and theirs),
+// whenever they were added, like the root's own providers reach later ones. Reusable commands
+// stop the walk: they parse only the Context flags they use.
+type TreeWithInlineFlags<Tree extends object, F extends FlagsDef> = keyof F extends never
+	? Tree
+	: InlineScopeTree<Tree, F>;
+
+type InlineScopeTree<Tree, F extends FlagsDef> = {
+	[K in keyof Tree]: Tree[K] extends CommandShape<
+		infer SA,
+		infer SF,
+		infer SC,
+		infer SR,
+		infer P,
+		infer SE,
+		true
+	>
+		? CommandShape<SA, MergeFlags<F, SF>, InlineScopeTree<SC, F>, SR, P, SE, true>
+		: Tree[K];
+};
+
 /** The root shape that typed `run()`, `at()` and `_types` read. */
 type AppShape<
 	A extends ArgsDef,
@@ -564,7 +598,7 @@ type AppShape<
 > = CommandShape<
 	A,
 	F,
-	TreeWithRecursiveFlags<Tree, AppRecursiveFlagsOf<S>>,
+	TreeWithRecursiveFlags<TreeWithInlineFlags<Tree, AppInlineFlagsOf<S>>, AppRecursiveFlagsOf<S>>,
 	Result,
 	Record<string, ContextValue>,
 	ActionEvents<S>
@@ -752,11 +786,14 @@ type CollisionSpellings<
 	RecursiveFlags extends FlagsDef = {},
 	// The `.output()` schema and the action's awaited return, each checked against the other.
 	Output extends OutputState | undefined = InitialOutputState,
+	// Extension-provided Context flags registered so far; see `TreeWithInlineFlags`.
+	InlineFlags extends FlagsDef = {},
 > = {
 	readonly output: Output;
 	readonly actionDeps: ActionDeps;
 	readonly extensionCommands: ExtensionCommandSpellings;
 	readonly recursiveFlags: RecursiveFlags;
+	readonly inlineFlags: InlineFlags;
 	readonly demands: Demands;
 	readonly extension: Extensions;
 	readonly tree: Tree;
@@ -770,6 +807,7 @@ type AnyCollisionSpellings = {
 	readonly actionDeps?: ContextMap | undefined;
 	readonly extensionCommands?: string | undefined;
 	readonly recursiveFlags?: FlagsDef | undefined;
+	readonly inlineFlags?: FlagsDef | undefined;
 	readonly demands: ContextMap;
 	readonly extension: string;
 	readonly tree: string;
@@ -876,6 +914,9 @@ type OutputResultBrand<
 				readonly FIX_OUTPUT: "The action's result does not match this output schema's input type";
 			};
 
+/** Extension-provided Context flags registered so far; see `TreeWithInlineFlags`. */
+type AppInlineFlagsOf<S extends AnyCollisionSpellings> = Exclude<S["inlineFlags"], undefined>;
+
 // Record spellings are derived from `Flags` on demand instead of accumulated in `Sp`.
 type AfterFlags<State extends BuilderState, F extends FlagsDef> = Crust<
 	State["flags"] & F,
@@ -936,7 +977,8 @@ type AfterUse<
 		ActionDepsOf<CollisionSp>,
 		CollisionSp["extensionCommands"],
 		AppRecursiveFlagsOf<CollisionSp>,
-		CollisionSp["output"]
+		CollisionSp["output"],
+		AppInlineFlagsOf<CollisionSp>
 	>,
 	Result,
 	Meta,
@@ -974,7 +1016,8 @@ type AfterProvide<
 		ActionDepsOf<CollisionSp>,
 		CollisionSp["extensionCommands"],
 		AppRecursiveFlagsOf<CollisionSp>,
-		CollisionSp["output"]
+		CollisionSp["output"],
+		AppInlineFlagsOf<CollisionSp>
 	>,
 	Result,
 	Meta,
@@ -1077,7 +1120,8 @@ type AfterExtend<
 		// An open call adds no precise entries (see ExtensionCommandTree).
 		ExtensionCommandsOf<CollisionSp> | KnownSpellings<ExtensionsCommandSpellings<Es>>,
 		AppRecursiveFlagsOf<CollisionSp> & RecursiveExtensionFlags<Es>,
-		CollisionSp["output"]
+		CollisionSp["output"],
+		AppInlineFlagsOf<CollisionSp> & ExtensionsProvidedFlags<Es>
 	>,
 	Result,
 	Meta,
@@ -1089,7 +1133,7 @@ type AfterAdd<
 	State extends BuilderState,
 	Ds extends readonly CommandDefinition<any, any, any, any>[],
 	// Context-owned flags the added commands inherit: inline `.command()` children only.
-	Inherited extends FlagsDef = {},
+	Inherited extends FlagsDef | false = false,
 > = Crust<
 	State["flags"],
 	State["args"],
@@ -1107,7 +1151,8 @@ type AfterAdd<
 		ActionDepsOf<State["collision"]>,
 		State["collision"]["extensionCommands"],
 		AppRecursiveFlagsOf<State["collision"]>,
-		State["collision"]["output"]
+		State["collision"]["output"],
+		AppInlineFlagsOf<State["collision"]>
 	>,
 	State["result"],
 	State["meta"],
@@ -1530,7 +1575,7 @@ export class Crust<
 	 */
 	provide<const Cs extends readonly AnyContextInstance[] = never>(
 		...instances: KnownContextInstances<Cs> &
-			ProvideChecks<Sp | LocalSpellingsOf<Flags>, Cs> &
+			ProvideChecks<Sp | LocalSpellingsOf<Flags>, Cs, keyof RecipeDepsOf<CollisionSp>> &
 			ValidateContextNames<Caps extends "recipe" ? ProvidersOf<CollisionSp> : Ctx, Cs> &
 			ValidateContextDeps<Ctx, Cs> &
 			DeclaredDependencyValuesBrand<
@@ -1563,14 +1608,24 @@ export class Crust<
 			contexts: [...this._node.contexts, ...instances.map((instance) => ({ instance }))],
 			providedContexts: [...this._node.providedContexts, ...instances],
 		});
+		const declared = declaredContextNames(
+			this._node.demands.filter((demand) => "contextName" in demand),
+		);
 		for (const instance of instances) {
+			// Fulfilling this command's own `.use()` demand shares the flags `.use()` installed.
+			if (declared.has(instance.name)) {
+				registerContextFlags(cloned._node, instance.name, instance.ownedFlags);
+				continue;
+			}
 			for (const [name, definition] of Object.entries(instance.ownedFlags)) {
 				registerFlag(cloned._node, name, definition, "owned");
 			}
+			const installed = cloned._node.flagContexts.get(instance.name) ?? [];
+			cloned._node.flagContexts = new Map(cloned._node.flagContexts).set(instance.name, [
+				...installed,
+				...Object.keys(instance.ownedFlags),
+			]);
 		}
-		cloned._node.flagContexts = [
-			...new Set([...this._node.flagContexts, ...instances.map(({ name }) => name)]),
-		];
 
 		return cloned;
 	}

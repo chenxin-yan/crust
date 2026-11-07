@@ -47,7 +47,7 @@ export interface ContextResolver {
 export function createContextResolver(
 	contexts: readonly AnyContextInstance[],
 	// Names of the Contexts whose owned flags the invoked command parses.
-	flagContexts: readonly string[],
+	flagContexts: ReadonlyMap<string, readonly string[]>,
 	io: InvocationIO,
 	disposal: AsyncDisposableStack,
 	signal: AbortSignal,
@@ -157,7 +157,7 @@ export function createContextResolver(
 			);
 		}
 		const ownsFlags = Object.keys(context.ownedFlags).length > 0;
-		if (ownsFlags && !flagContexts.includes(name)) {
+		if (ownsFlags && !flagContexts.has(name)) {
 			return handledRejection(
 				new CrustError(
 					"DEFINITION",

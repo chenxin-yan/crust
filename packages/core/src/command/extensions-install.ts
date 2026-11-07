@@ -135,9 +135,12 @@ export function installExtensionProviders(
 		...parent,
 		localFlags: {},
 		ownedFlags: {},
-		flagContexts: [
-			...new Set([...providers.map(({ instance }) => instance.name), ...parent.flagContexts]),
-		],
+		flagContexts: new Map([
+			...providers.map(
+				({ instance }) => [instance.name, Object.keys(instance.ownedFlags)] as const,
+			),
+			...parent.flagContexts,
+		]),
 		effectiveFlags: {},
 		flagSpellings: new Map(),
 		contexts,

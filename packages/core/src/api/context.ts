@@ -272,7 +272,12 @@ export type ContextUseFlags<
 	Acc extends FlagsDef = {},
 > = Fs extends readonly [infer H, ...infer T]
 	? ContextUseFlags<T, AppendedFlags<Acc, FactoryUseFlags<H>>>
-	: Acc;
+	: // A widened rest may hold any flag-owning factories, so its flags stay open.
+		[Fs[number]] extends [never]
+		? Acc
+		: keyof FactoryUseFlags<Fs[number]> extends never
+			? Acc
+			: AppendedFlags<Acc, FlagsDef>;
 
 export type ContextDependencies<Use extends readonly AnyContextFactory[]> =
 	IsStaticTuple<Use> extends true
@@ -311,7 +316,9 @@ export interface ContextBuilder<
 		...factories: Fs
 	): ContextBuilder<Name, readonly [...Use, ...Fs], OF>;
 	/**
-	 * Own flags parsed wherever this Context is provided; setup reads them from `flags`.
+	 * Own flags, which setup reads from `flags`. A command parses them where its `ctx` exposes
+	 * this Context: the providing command and inline `.command()` children after it, and
+	 * reusable commands that `.use()` it (or a Context that depends on it).
 	 * Takes one record keyed by flag name; repeated calls accumulate.
 	 */
 	flags<const F extends FlagsInput>(
