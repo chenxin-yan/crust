@@ -296,6 +296,29 @@ describe("input", () => {
 		expect(run.status).toBe(0);
 	});
 
+	// An earlier consumer read stdin to EOF; its `end` event cannot fire again.
+	it.each([
+		["node", process.execPath, ["--input-type=module"]],
+		["bun", "bun", []],
+	])("reads stdin that already ended as empty input on %s", (_runtime, command, options) => {
+		const script = `
+			import { Crust } from "@crustjs/core";
+			import { input } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "input.ts")).href)};
+			for await (const _ of process.stdin);
+			const app = new Crust("app").extend(input()).action(() => {});
+			process.exitCode = await app.execute({ argv: ["--input", "-"] });
+		`;
+		const run = spawnSync(command, [...options, "-e", script], {
+			cwd: join(import.meta.dirname, ".."),
+			input: '{"region":"eu"}',
+			encoding: "utf8",
+			timeout: 10_000,
+		});
+
+		expect(run.stderr).toContain("--input: invalid JSON");
+		expect(run.status).toBe(1);
+	});
+
 	it.each([
 		["node", process.execPath, ["--input-type=module"]],
 		["bun", "bun", []],

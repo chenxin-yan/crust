@@ -25,7 +25,7 @@ The value of `--input` is one of:
 
 - inline JSON;
 - `@path`, which reads the file at `path`, relative to the working directory;
-- `-`, which reads all of stdin.
+- `-`, which reads all of stdin. Stdin that something else already read to the end reads as empty, which fails as invalid JSON.
 
 It must be a JSON object keyed by the routed command's argument and flag names, plus `raw` for passthrough values received as `rawArgs`, like tokens after `--`. This is the flat shape [`commandInputSchema()`](/docs/modules/core#tooling-subpath) describes and the [MCP](/docs/modules/mcp) server accepts. Variadic arguments and `multiple` flags take arrays, and `url` values take strings.
 
