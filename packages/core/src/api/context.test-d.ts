@@ -405,6 +405,22 @@ function _typecheckTypesContextFlagsAtUseSites() {
 	// @ts-expect-error -- inline inheritance stops at the reusable status
 	void inherited.run(["group", "status"], { flags: { "api-key": "k" } });
 
+	// A same-name provider's own flags join the input of commands attached where it is provided.
+	const offlineApi = defineContext("api")
+		.flags({ offline: { type: "boolean", required: true } })
+		.setup(() => 1);
+	const usesApi = defineCommand("uses", (command) => command.use(api));
+	const swapped = new Crust("cli").provide(config(), offlineApi()).add(usesApi);
+	void swapped.run(["uses"], { flags: { "api-key": "k", offline: true } });
+	// @ts-expect-error -- the provider's required "offline" flag is missing
+	void swapped.run(["uses"], { flags: { "api-key": "k" } });
+	const viaExtension = new Crust("cli")
+		.provide(config())
+		.extend(defineExtension(defineExtensionId("offline-api")).provide(offlineApi()))
+		.add(usesApi);
+	// @ts-expect-error -- the same for an Extension-provided same-name Context
+	void viaExtension.run(["uses"], { flags: { "api-key": "k" } });
+
 	// A command may provide a flag-owning Context it uses; another Context with its flags collides.
 	defineCommand("local", (command) => command.use(config).provide(config()));
 	const other = defineContext("other")

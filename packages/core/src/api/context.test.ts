@@ -787,7 +787,7 @@ describe("Context-owned flags at use sites", () => {
 			.flags({ token: { type: "string", required: true } })
 			.setup(() => "declared");
 		const provided = defineContext("auth")
-			.flags({ offline: { type: "boolean" } })
+			.flags({ offline: { type: "boolean", required: true } })
 			.setup(({ flags }) => `provided:${String(flags.offline)}`);
 		const seen: unknown[] = [];
 		const cmd = defineCommand("cmd", (command) =>
@@ -799,11 +799,65 @@ describe("Context-owned flags at use sites", () => {
 		const app = new Crust("cli").provide(provided()).add(cmd);
 
 		expect(flagsOf((await app.snapshot()).subCommands.cmd!)).toEqual(["token", "offline"]);
-		await unwrap(app.run(["cmd"], { flags: { token: "t" } }));
-		expect(seen).toEqual(["t", "provided:undefined"]);
-		await expect(unwrap(app.run(["cmd"], {} as never))).rejects.toThrow(
-			'Missing required flag "--token"',
+		await unwrap(app.run(["cmd"], { flags: { token: "t", offline: true } }));
+		expect(seen).toEqual(["t", "provided:true"]);
+		await expect(
+			// @ts-expect-error -- the provider's required flag is part of the attached command's input
+			unwrap(app.run(["cmd"], { flags: { token: "t" } })),
+		).rejects.toThrow('Missing required flag "--offline"');
+	});
+
+	it("lets a same-name provider customize a declared flag but not its value type", async () => {
+		const verbose = defineFlag({ type: "boolean" });
+		const declared = defineContext("logging")
+			.flags({ verbose })
+			.setup(({ flags }) => flags.verbose);
+		const customized = defineContext("logging")
+			.flags({ verbose: { ...verbose, short: "v", default: true } })
+			.setup(({ flags }) => flags.verbose);
+		const cmd = defineCommand("cmd", (command) =>
+			command.use(declared).action(async ({ ctx, flags }) => [flags.verbose, await ctx.logging]),
 		);
+		const app = new Crust("cli").provide(customized()).add(cmd);
+		expect((await app.snapshot()).subCommands.cmd!.flags.verbose).toMatchObject({
+			short: "v",
+			default: true,
+		});
+		expect(await unwrap(app.run(["cmd"]))).toMatchObject({ result: [true, true] });
+
+		const retyped = defineContext("logging")
+			.flags({ verbose: { type: "string" } })
+			.setup(() => true);
+		const invalid = new Crust("cli").provide(retyped()).add(cmd);
+		await expect(invalid.snapshot()).rejects.toThrow(
+			'Flag "verbose" of Context "logging" collides with the provider\'s definition',
+		);
+	});
+
+	it("parses every declared same-name Context's flags, batched or chained", async () => {
+		const first = defineContext("auth")
+			.flags({ one: { type: "string" } })
+			.setup(() => 1);
+		const second = defineContext("auth")
+			.flags({ two: { type: "string", required: true } })
+			.setup(() => 2);
+		const batched = defineCommand("batched", (command) => command.use(first, second));
+		const chained = defineCommand("chained", (command) => command.use(first).use(second));
+		const app = new Crust("cli").provide(first()).add(batched, chained);
+
+		const snapshot = await app.snapshot();
+		expect(flagsOf(snapshot.subCommands.batched!)).toEqual(["one", "two"]);
+		expect(flagsOf(snapshot.subCommands.chained!)).toEqual(["one", "two"]);
+		await expect(
+			// @ts-expect-error -- the second declaration's required flag is part of the input
+			unwrap(app.run(["batched"], { flags: { one: "1" } })),
+		).rejects.toThrow('Missing required flag "--two"');
+		await expect(
+			// @ts-expect-error -- the same for chained declarations
+			unwrap(app.run(["chained"], { flags: { one: "1" } })),
+		).rejects.toThrow('Missing required flag "--two"');
+		await unwrap(app.run(["batched"], { flags: { one: "1", two: "2" } }));
+		await unwrap(app.run(["chained"], { flags: { one: "1", two: "2" } }));
 	});
 
 	it("follows a used Context's dependencies even when the command provides it", async () => {

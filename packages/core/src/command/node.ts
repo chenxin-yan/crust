@@ -143,41 +143,83 @@ export function registerFlag(
 }
 
 /**
- * Register `flags` as owned by the Context `name`. A flag this Context already installed with an
- * equal definition is kept, so the declared and the provided Context of one name share their
- * flags; any other spelling clash is a collision.
+ * Register `flags` as owned by the Context `name`. The flags a `.use()` declares type the command;
+ * the provider's flags are what its setup reads. A flag both define stays installed once: equal
+ * definitions are shared, and the provider may customize a declared flag's spelling, help, or
+ * default (its definition wins) but not the values the declared type promises.
  */
-export function registerContextFlags(node: CommandNode, name: string, flags: FlagsDef): void {
-	const installed = node.flagContexts.get(name) ?? [];
-	const added: string[] = [];
+export function registerContextFlags(
+	node: CommandNode,
+	name: string,
+	flags: FlagsDef,
+	source: "declared" | "provided",
+): void {
+	const installed = [...(node.flagContexts.get(name) ?? [])];
 	for (const [flag, def] of Object.entries(flags)) {
-		if (installed.includes(flag) && sameDefinition(node.ownedFlags[flag], def)) continue;
-		registerFlag(node, flag, def, "owned");
-		added.push(flag);
+		if (!installed.includes(flag)) {
+			registerFlag(node, flag, def, "owned");
+			installed.push(flag);
+			continue;
+		}
+		const current = node.ownedFlags[flag]!;
+		if (sameDefinition(current, def)) continue;
+		const [declared, provided] = source === "provided" ? [current, def] : [def, current];
+		if (!keepsDeclaredValues(declared, provided)) {
+			throw new CrustError(
+				"DEFINITION",
+				`Flag "${flag}" of Context "${name}" collides with the provider's definition on command "${node.meta.name}"`,
+				{ subject: "flag", name: flag, reason: "flag-collision" },
+			);
+		}
+		if (source === "provided") replaceFlag(node, flag, def);
 	}
-	node.flagContexts = new Map(node.flagContexts).set(name, [...installed, ...added]);
+	node.flagContexts = new Map(node.flagContexts).set(name, installed);
 }
 
 /**
  * Register the owned flags of each declared Context and, transitively, of the Contexts its setup
- * uses. The declared factory's flags are the ones the types expose; the flags of the instance
- * `node` resolves by that name (another same-name factory's, or an `.of()` double) are the ones
- * its setup reads, so both are installed. Dependencies of both are followed.
+ * uses, together with the flags of the instance `node` resolves by each name (another same-name
+ * factory's, or an `.of()` double). Dependencies of both are followed. Factories are visited once
+ * each, so two same-name factories declared together both contribute.
  */
 export function installContextFlags(
 	node: CommandNode,
 	factories: readonly AnyContextFactory[],
-	visited: Set<string> = new Set(),
+	visited: Set<AnyContextFactory> = new Set(),
 ): void {
 	for (const factory of factories) {
+		if (visited.has(factory)) continue;
+		visited.add(factory);
 		const name = factory.contextName;
-		if (visited.has(name)) continue;
-		visited.add(name);
 		const provided = node.contexts.findLast(({ instance }) => instance.name === name)?.instance;
-		registerContextFlags(node, name, factory.ownedFlags);
-		if (provided) registerContextFlags(node, name, provided.ownedFlags);
+		registerContextFlags(node, name, factory.ownedFlags, "declared");
+		if (provided) registerContextFlags(node, name, provided.ownedFlags, "provided");
 		installContextFlags(node, provided ? [...factory.use, ...provided.use] : factory.use, visited);
 	}
+}
+
+// Whether every value `provided` parses fits the type `declared` promises the action.
+function keepsDeclaredValues(declared: FlagDef, provided: FlagDef): boolean {
+	if (
+		declared.type !== provided.type ||
+		Boolean(declared.multiple) !== Boolean(provided.multiple)
+	) {
+		return false;
+	}
+	if (declared.parse !== provided.parse || declared.schema !== provided.schema) return false;
+	const present = (def: FlagDef) => def.required === true || def.default !== undefined;
+	if (present(declared) && !present(provided)) return false;
+	const choices = declared.choices;
+	return choices === undefined || (provided.choices?.every((c) => choices.includes(c)) ?? false);
+}
+
+function replaceFlag(node: CommandNode, name: string, def: FlagDef): void {
+	delete node.ownedFlags[name];
+	delete node.effectiveFlags[name];
+	for (const [spelling, entry] of node.flagSpellings) {
+		if (entry.canonicalName === name) node.flagSpellings.delete(spelling);
+	}
+	registerFlag(node, name, def, "owned");
 }
 
 /** Names of the Contexts `factories` declare, with their dependencies, transitively. */
