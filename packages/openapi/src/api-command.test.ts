@@ -598,12 +598,16 @@ describe("apiClient", () => {
 	});
 
 	it("follows redirects itself so auth headers never reach another origin", async () => {
-		const seen: Record<string, { method?: string; key?: unknown; type?: unknown }> = {};
+		const seen: Record<
+			string,
+			{ method?: string; key?: unknown; type?: unknown; cookie?: unknown }
+		> = {};
 		const record: RequestListener = (request, response) => {
 			seen[`${request.headers.host} ${request.url}`] = {
 				method: request.method,
 				key: request.headers["x-api-key"],
 				type: request.headers["content-type"],
+				cookie: request.headers.cookie,
 			};
 			response.end("ok");
 		};
@@ -613,6 +617,7 @@ describe("apiClient", () => {
 				"/v1/moved": "/v1/here",
 				"/v1/away": `${other.url}/landing`,
 				"/v1/away-overridden": `${other.url}/landing-overridden`,
+				"/v1/away-cookie": `${other.url}/landing-cookie`,
 				"/v1/created": "/v1/result",
 			}[request.url ?? ""];
 			if (location === undefined) return record(request, response);
@@ -630,6 +635,7 @@ describe("apiClient", () => {
 							await client.fetch("/moved"),
 							await client.fetch("/away"),
 							await client.fetch("/away-overridden", { headers: { "X-Api-Key": "override" } }),
+							await client.fetch("/away-cookie", { headers: { Cookie: "session=secret" } }),
 							await client.fetch("/created", {
 								method: "POST",
 								body: "{}",
@@ -644,7 +650,10 @@ describe("apiClient", () => {
 		try {
 			const { stdout, stderr } = await captureExecute(app, ["probe"]);
 
-			expect({ stdout, stderr }).toEqual({ stdout: "200 ok\n200 ok\n200 ok\n200 ok", stderr: "" });
+			expect({ stdout, stderr }).toEqual({
+				stdout: "200 ok\n200 ok\n200 ok\n200 ok\n200 ok",
+				stderr: "",
+			});
 		} finally {
 			api.close();
 			other.close();
@@ -654,6 +663,7 @@ describe("apiClient", () => {
 			[`${apiHost} /v1/here`]: { method: "GET", key: "secret" },
 			[`${new URL(other.url).host} /landing`]: { method: "GET" },
 			[`${new URL(other.url).host} /landing-overridden`]: { method: "GET" },
+			[`${new URL(other.url).host} /landing-cookie`]: { method: "GET" },
 			[`${apiHost} /v1/result`]: { method: "GET", key: "secret" },
 		});
 	});

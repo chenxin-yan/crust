@@ -24,7 +24,7 @@ export interface ApiClient {
 	 * with the `auth` headers the request does not set itself, and the invocation's signal
 	 * unless `init.signal` is given. Redirects are followed here
 	 * (up to 20 per request, http: and https: only); one to another origin than the base URL's
-	 * continues without `Authorization` or any header named like an `auth` header.
+	 * continues without `Authorization`, `Cookie`, `Proxy-Authorization`, or any header named like an `auth` header.
 	 */
 	fetch(path: string, init?: RequestInit): Promise<Response>;
 }
@@ -98,7 +98,13 @@ export const apiClient: ContextFactory<"api", ApiClientOptions, ApiClient> =
 	/* @__PURE__ */ defineContext("api").setup(async (input, options: ApiClientOptions) => {
 		const origin = new URL(options.baseUrl).origin;
 		const authHeaders = new Headers(await options.auth?.(input));
-		const credentialHeaders = ["authorization", ...authHeaders.keys()];
+		// The headers the Fetch standard strips on a cross-origin redirect, plus every auth header name.
+		const credentialHeaders = [
+			"authorization",
+			"cookie",
+			"proxy-authorization",
+			...authHeaders.keys(),
+		];
 
 		const firstHop = (url: URL, init: RequestInit = {}): Hop => ({
 			url,
