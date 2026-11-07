@@ -500,6 +500,35 @@ describe("Crust .add() with inline definitions", () => {
 		await expect(app.snapshot()).rejects.toThrow('No provider for Context "db"');
 	});
 
+	it("does not demand the dependencies an .of() value of a used Extension dropped", async () => {
+		const config = defineContext("config").setup(() => "configuration");
+		const db = defineContext("db")
+			.use(config)
+			.setup(async ({ ctx }) => `db:${await ctx.config}`);
+		const bound = defineExtension(defineExtensionId("test:bound")).provide(db.of("bound db"));
+		const query = defineCommand("query", (command) =>
+			command.use(bound).action(async ({ ctx }) => await ctx.db),
+		);
+
+		const app = new Crust("cli").extend(bound).add(query);
+		expect(await app.run(["query"], {})).toMatchObject({
+			status: "completed",
+			result: "bound db",
+		});
+	});
+
+	it("matches a used Extension copy by its defining id, as .extend() does", async () => {
+		const value = defineContext("value").setup(() => "ok");
+		const original = defineExtension(defineExtensionId("test:original")).provide(value());
+		const copy = { ...original, id: defineExtensionId("test:copy") };
+		const query = defineCommand("query", (command) =>
+			command.use(copy).action(async ({ ctx }) => await ctx.value),
+		);
+
+		const app = new Crust("cli").extend(copy).add(query);
+		expect(await app.run(["query"], {})).toMatchObject({ status: "completed", result: "ok" });
+	});
+
 	it("rejects a command that uses an Extension the application does not extend", async () => {
 		const greeter = defineContext("greeter").setup(() => "hi");
 		const greeting = defineExtension(defineExtensionId("test:greeting"))
