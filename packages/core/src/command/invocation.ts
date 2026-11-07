@@ -596,9 +596,6 @@ async function dispatch(
 		return result;
 	};
 
-	// `async` turns a synchronous selector throw into a rejection.
-	const selectRenderer = async () => prepared.renderer?.select(extensionContext);
-
 	let outcome: InvocationOutcome;
 	try {
 		try {
@@ -612,7 +609,7 @@ async function dispatch(
 				// Flags are bound, so the selector still chooses how a setup failure renders. The setup
 				// failure is the root cause: a failing selector or flush must not replace it.
 				try {
-					output.choose(await selectRenderer());
+					if (prepared.renderer) output.choose(await prepared.renderer.select(extensionContext));
 				} catch {
 					// No renderer yet means the default below; a chosen one still renders the failure.
 				}
@@ -621,7 +618,7 @@ async function dispatch(
 				settingUp = false;
 			}
 			// After every setup, so the selector sees what setups bound; before any handler output.
-			output.choose(await selectRenderer());
+			if (prepared.renderer) output.choose(await prepared.renderer.select(extensionContext));
 			const handler =
 				selectHandler(prepared.handlers, parsed, resolvedNode === rootNode) ??
 				(resolvedNode.run ? undefined : prepared.noAction);
