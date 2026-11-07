@@ -40,7 +40,7 @@ Next steps:                                              # stderr, see below
     my-cli status staging
 ```
 
-Failures become one line of JSON on stderr: [`CrustError`](/docs/api/errors)'s `toJSON()`, or `{ "message" }` for any other error. Exit codes don't change, so an agent still checks them first. Make the message itself actionable; see [error handling](/docs/guide/error-handling).
+Failures become one line of JSON on stderr: [`CrustError`](/docs/api/errors)'s `toJSON()`, or `{ "message" }` for any other error. Failures before flags are bound, such as an unknown flag, still print Core's plain `Error:` line (see [`json()` limitations](/docs/modules/extensions/json#limitations)). Exit codes don't change, so an agent still checks them first. Make the message itself actionable; see [error handling](/docs/guide/error-handling).
 
 ## Output schemas and end-to-end types
 
