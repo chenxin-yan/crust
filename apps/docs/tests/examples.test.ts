@@ -57,6 +57,48 @@ it.each([
 	},
 );
 
+it.each([
+	[
+		["deploy", "--input", '{"target":"staging","release":"v2"}'],
+		0,
+		"Deploying v2 to staging\n",
+		"Next steps:\n  Watch the rollout:\n    my-cli status staging\n",
+	],
+	[
+		["deploy", "prod", "--json"],
+		0,
+		'{"target":"prod","release":"latest","dryRun":false}\n',
+		"Deploying latest to prod\nNext steps:\n  Watch the rollout:\n    my-cli status prod\n",
+	],
+	[
+		["status", "prod", "--json"],
+		0,
+		'{"type":"event","data":{"step":"build"}}\n{"type":"event","data":{"step":"ship"}}\n{"type":"result","data":{"target":"prod","healthy":true}}\n',
+		"build: done\nship: done\n",
+	],
+	[
+		["destroy", "prod"],
+		1,
+		"",
+		'Error: "my-cli destroy" is destructive and needs confirmation; pass --yes to run it.\n',
+	],
+	[["destroy", "prod", "--yes"], 0, "Deleted prod\n", ""],
+	[["deploy", "prod", "--dry-run"], 0, "Would deploy latest to prod\n", ""],
+	[["status", "prod", "--dry-run"], 1, "", 'Error: "my-cli status" does not support --dry-run.\n'],
+	[["init"], 1, "", "Error: Prompts require an interactive terminal (TTY).\n"],
+	[["init", "--name", "demo"], 0, "Created demo in us-east-1\n", ""],
+])("agents guide example %j prints what the guide shows", (argv, exitCode, stdout, stderr) => {
+	const result = spawnSync(
+		"bun",
+		[fileURLToPath(new URL("../examples/guide/agents.ts", import.meta.url)), ...argv],
+		{ encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 10_000 },
+	);
+	expect(result.error).toBeUndefined();
+	expect(result.status).toBe(exitCode);
+	expect(result.stdout).toBe(stdout);
+	expect(result.stderr).toBe(stderr);
+});
+
 it("build guide example names its root after the guide's `bin` launcher", async () => {
 	const example = await read("../examples/guide/build.ts");
 	const guide = await read("../content/docs/guide/build-and-distribution.mdx");

@@ -1,0 +1,165 @@
+---
+title: Building CLIs for agents
+description: Make a CLI that coding agents and scripts can drive without guessing.
+---
+
+An agent runs your CLI the way a script does: it passes argv, reads stdout and stderr, and checks the exit code. It has no TTY to answer prompts and no eyes for colors or tables, and it pays for every token of output it reads. A CLI works well for agents when its input and output have a documented shape, it describes itself, and it fails loudly instead of waiting or guessing.
+
+Crust adds none of this by default. Each piece below is an opt-in Extension or command declaration, and each section links to its reference page. Register the agent-facing Extensions on the root, in any order:
+
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../examples/guide/agents.ts#app
+</include>
+
+The commands used below are in [`examples/guide/agents.ts`](https://github.com/chenxin-yan/crust/blob/main/apps/docs/examples/guide/agents.ts).
+
+## Structured input
+
+[`input()`](/docs/modules/extensions/input) adds `--input`, which takes every argument and flag as one JSON object, inline, from a file (`@path`), or from stdin (`-`). An agent writes one JSON object instead of quoting and ordering argv tokens:
+
+```sh
+$ my-cli deploy --input '{"target":"staging","release":"v2"}'
+Deploying v2 to staging
+Next steps:
+  Watch the rollout:
+    my-cli status staging
+```
+
+The object is converted and validated exactly like argv, and arguments and flags given on argv win over its keys. It has the same shape `schema` describes and the [MCP](#mcp) server accepts.
+
+## JSON output
+
+Write for people with `stdout(text)` and return data for programs. [`json()`](/docs/modules/extensions/json) adds `--json`, which prints the Command Action's return value as one line of JSON on stdout and moves everything else to stderr:
+
+```sh
+$ my-cli deploy prod --json
+Deploying latest to prod                              # stderr
+{"target":"prod","release":"latest","dryRun":false}   # stdout
+Next steps:                                           # stderr, see below
+  Watch the rollout:
+    my-cli status prod
+```
+
+Failures become one line of JSON on stderr: [`CrustError`](/docs/api/errors)'s `toJSON()`, or `{ "message" }` for any other error. Exit codes don't change, so an agent still checks them first. Make the message itself actionable; see [error handling](/docs/guide/error-handling).
+
+## Output schemas and end-to-end types
+
+Declare the result's shape with [`.output(schema)`](/docs/guide/values-and-validation#command-results):
+
+<include lang="ts" meta='title="deploy.ts"'>
+  ../../../examples/guide/agents.ts#deploy
+</include>
+
+One declaration does three jobs: TypeScript checks the action's return value against the schema, Crust validates it at runtime (a mismatch fails with the `OUTPUT` code instead of printing a wrong shape), and, when the schema library can produce JSON Schema, it reaches `schema`, MCP, and skills. Code that calls [`app.run()`](/docs/api/crust#runpath-input-options) gets `outcome.result` typed as the schema's output.
+
+## Streaming
+
+A long-running command can report progress as data. Write its action as an [async generator](/docs/guide/commands#stream-events): each `yield` is an event and the `return` value is the result.
+
+<include lang="ts">../../../examples/guide/agents.ts#status</include>
+
+People see only what the action writes. With `--json`, [`json()` streams NDJSON](/docs/modules/extensions/json#generator-actions) that always ends with exactly one result or error line:
+
+```sh
+$ my-cli status prod --json
+{"type":"event","data":{"step":"build"}}
+{"type":"event","data":{"step":"ship"}}
+{"type":"result","data":{"target":"prod","healthy":true}}
+```
+
+The same events reach `run()`'s `onEvent` callback and [MCP progress notifications](/docs/modules/mcp#progress).
+
+## Discovery
+
+An agent learns a CLI from what it prints about itself, so write `description`s for commands, arguments, and flags: every surface below reads them.
+
+- [`help()`](/docs/modules/extensions/help) prints `--help` for people and agents alike.
+- [`schema()`](/docs/modules/extensions/schema) adds `schema [path...]`, which prints a command's `input` and `output` JSON Schema and whether it is `destructive`, and `--llms`, which prints a Markdown index of every visible command.
+
+```sh
+$ my-cli schema deploy
+{"input":{"type":"object","properties":{"target":{"type":"string","enum":["staging","prod"]},…},"required":["target"]},"output":{…}}
+```
+
+## Destructive commands and `--yes`
+
+Mark commands that are hard to undo with [`destructive`](/docs/api/types#commandmeta):
+
+<include lang="ts">../../../examples/guide/agents.ts#destroy</include>
+
+Core never reads the mark. [`confirmation()`](/docs/modules/extensions/confirmation) asks before such a command on a TTY; anywhere else, such as an agent's shell, it fails with a message naming `--yes` instead of running, and never exits 0:
+
+```sh
+$ my-cli destroy prod < /dev/null
+Error: "my-cli destroy" is destructive and needs confirmation; pass --yes to run it.
+$ my-cli destroy prod --yes
+Deleted prod
+```
+
+MCP advertises the mark as `destructiveHint`, `schema` prints `destructive: true`, and skills tell agents to confirm with the user first.
+
+## Dry run
+
+[`dryRun()`](/docs/modules/extensions/dry-run) adds `--dry-run` and a `dryRun` Context. A command opts in with `.use(dryRunContext)` and branches on `await ctx.dryRun`, as `deploy` does above. A command that doesn't opt in rejects `--dry-run` instead of running for real:
+
+```sh
+$ my-cli deploy prod --dry-run
+Would deploy latest to prod
+$ my-cli status prod --dry-run
+Error: "my-cli status" does not support --dry-run.
+```
+
+## Next steps
+
+Tell the agent what to run next instead of leaving it to guess. With [`nextSteps()`](/docs/modules/extensions/next-steps), an action adds follow-up commands with `(await ctx.next).add(path, input, description)`, as `deploy` does above, and `nextSteps({ onError })` returns recovery commands for errors you recognize with `instanceof`. The steps print to stderr as runnable command lines, after success or failure:
+
+```sh
+$ my-cli deploy prod
+Deploying latest to prod
+Next steps:
+  Watch the rollout:
+    my-cli status prod
+```
+
+## Prompts without a TTY
+
+A prompt waits for an answer an agent can't give. Make every prompt answerable from the command line, and fail when it isn't:
+
+<include lang="ts">../../../examples/guide/agents.ts#prompts</include>
+
+- `initial` from a flag skips the prompt when the flag is given, on any terminal.
+- An explicit `default` is returned without asking when there is no TTY (except for `password()`).
+- A prompt with neither rejects with [`NonInteractiveError`](/docs/modules/prompts#non-interactive-environments) without a TTY, so the command fails instead of hanging:
+
+```sh
+$ my-cli init < /dev/null
+Error: Prompts require an interactive terminal (TTY).
+$ my-cli init --name demo < /dev/null
+Created demo in us-east-1
+```
+
+Crust doesn't detect agents or add a global `--no-input`: the TTY check is the rule.
+
+## MCP
+
+[`@crustjs/mcp`](/docs/modules/mcp) serves your commands as MCP tools with `<cli> mcp`. Each tool's input schema is the same flat object `--input` takes; `.output()` schemas, `destructive` marks, and generator events become the tool's output schema, annotations, and progress notifications.
+
+## Skills
+
+[`@crustjs/skills`](/docs/modules/skills) renders an agent skill from your commands at build time, with output schemas and confirmation notes for destructive commands, and adds a `skills` command that installs it into agents' skill directories.
+
+## The `api` command
+
+For a CLI backed by an HTTP API, [`@crustjs/openapi`](/docs/modules/openapi) adds a `gh api`-style `api` command: an agent can list and read the bundled OpenAPI document offline and call endpoints your commands don't wrap yet, with your CLI's base URL and auth.
+
+## Checklist
+
+- Every command, argument, and flag has a `description`.
+- Results are returned, not only printed, and declared with `.output()`.
+- [`json()`](/docs/modules/extensions/json), [`input()`](/docs/modules/extensions/input), and [`schema()`](/docs/modules/extensions/schema) are registered.
+- Long-running commands yield events.
+- Commands that are hard to undo are `destructive`, with [`confirmation()`](/docs/modules/extensions/confirmation) registered.
+- Commands that can preview use `dryRunContext`.
+- Error messages say what to do next; known failures have recovery steps from [`nextSteps()`](/docs/modules/extensions/next-steps).
+- Every prompt has a flag for `initial` or a `default`.
+- Optionally: an MCP server, a packaged skill, and an `api` command.
