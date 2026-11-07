@@ -123,6 +123,12 @@ describe(".output()", () => {
 		expect(await app.run([])).toMatchObject({ result: { id: 2, role: "member" } });
 	});
 
+	it("awaits a promise the schema outputs, as its result type declares", async () => {
+		const app = new Crust("cli").output(z.promise(z.number())).action(async () => 3);
+
+		expect(await app.run([])).toMatchObject({ status: "completed", result: 3 });
+	});
+
 	it("validates with schemas that have no JSON Schema converter", async () => {
 		const app = new Crust("cli").output(anything).action(() => 42);
 
