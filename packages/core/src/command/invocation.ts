@@ -34,6 +34,7 @@ import {
 } from "./extensions-install.ts";
 import {
 	addedChildrenOf,
+	checkProvidedContextFlags,
 	childEntriesOf,
 	cloneFlagRegistry,
 	commandDefinitionInternal,
@@ -431,6 +432,7 @@ export function buildExtensionTree(
 		}
 		// Extension hooks run on every command, so the Contexts they use parse their flags everywhere.
 		installContextFlags(prepared, hookContexts);
+		checkProvidedContextFlags(prepared, hookContexts);
 		applyNodeContextSections(prepared, path, sectionContextsFor(prepared, isRoot));
 		freezeNode(prepared);
 		return prepared;

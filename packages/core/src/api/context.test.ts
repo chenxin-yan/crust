@@ -782,29 +782,69 @@ describe("Context-owned flags at use sites", () => {
 		);
 	});
 
-	it("parses both the declared and the provided Context's flags under a same-name provider", async () => {
-		const declared = defineContext("auth")
-			.flags({ token: { type: "string", required: true } })
-			.setup(() => "declared");
-		const provided = defineContext("auth")
+	it("rejects a same-name provider whose flags the use site does not parse", async () => {
+		const declared = defineContext("auth").setup(() => "declared");
+		const supplied = defineContext("auth")
 			.flags({ offline: { type: "boolean", required: true } })
-			.setup(({ flags }) => `provided:${String(flags.offline)}`);
-		const seen: unknown[] = [];
-		const cmd = defineCommand("cmd", (command) =>
-			command.use(declared).action(async ({ ctx, flags }) => {
-				type _Token = Expect<Equal<typeof flags.token, string>>;
-				seen.push(flags.token, await ctx.auth);
-			}),
+			.setup(() => "supplied");
+		const notParsed = {
+			code: "DEFINITION",
+			details: { subject: "context", name: "auth", reason: "context-flags-not-parsed" },
+		};
+		const cmd = defineCommand("cmd", (command) => command.use(declared));
+		const leaf = defineCommand("leaf", (command) => command.use(declared));
+		const group = defineCommand("group", (command) => command.use(declared).add(leaf));
+		const fromExtension = defineExtension(defineExtensionId("auth")).provide(supplied());
+		const hooked = defineExtension(defineExtensionId("audit")).use(declared);
+		const list = defineCommand("list", (command) => command.action(() => "list"));
+		const apps = [
+			new Crust("cli").provide(supplied()).add(cmd),
+			// A reusable command nested in another resolves the providers of the whole path.
+			new Crust("cli").provide(supplied()).add(group),
+			// Extension providers replace root providers made before `.extend()`, in either order.
+			// @ts-expect-error -- TypeScript rejects the replacement too (FIX_DUPLICATE_CONTEXT)
+			new Crust("cli").provide(declared()).add(cmd).extend(fromExtension),
+			// @ts-expect-error -- TypeScript rejects the replacement too (FIX_DUPLICATE_CONTEXT)
+			new Crust("cli").provide(declared()).extend(fromExtension).add(cmd),
+			// Hooks use the Context on every command, which resolves the same provider.
+			new Crust("cli").provide(supplied()).extend(hooked).add(list),
+		];
+		for (const app of apps) {
+			await expect(app.snapshot()).rejects.toMatchObject(notParsed);
+		}
+		await expect(new Crust("cli").provide(supplied()).add(cmd).snapshot()).rejects.toThrow(
+			'Context "auth" provided to command "cmd" owns flag "offline", which the command does not parse',
 		);
-		const app = new Crust("cli").provide(provided()).add(cmd);
+		// The root, which provides it, parses its flags; a command that does not use it is unaffected.
+		const fine = await new Crust("cli").provide(supplied()).add(list).snapshot();
+		expect(flagsOf(fine)).toEqual(["offline"]);
+		// A later root provider shadows the Extension's, so the command resolves the declared one.
+		const shadowed = new Crust("cli")
+			.extend(fromExtension)
+			// @ts-expect-error -- TypeScript rejects the shadowing too (FIX_DUPLICATE_CONTEXT)
+			.provide(declared());
+		await expect(shadowed.add(cmd).snapshot()).resolves.toBeDefined();
+	});
 
-		expect(flagsOf((await app.snapshot()).subCommands.cmd!)).toEqual(["token", "offline"]);
-		await unwrap(app.run(["cmd"], { flags: { token: "t", offline: true } }));
-		expect(seen).toEqual(["t", "provided:true"]);
+	it("rejects a same-name provider whose dependencies own flags the use site does not parse", async () => {
+		const config = defineContext("config")
+			.flags({ region: { type: "string", required: true } })
+			.setup(() => "config");
+		const declared = defineContext("auth").setup(() => "declared");
+		const supplied = defineContext("auth")
+			.use(config)
+			.setup(() => "supplied");
+		const cmd = defineCommand("cmd", (command) => command.use(declared));
 		await expect(
-			// @ts-expect-error -- the provider's required flag is part of the attached command's input
-			unwrap(app.run(["cmd"], { flags: { token: "t" } })),
-		).rejects.toThrow('Missing required flag "--offline"');
+			new Crust("cli").provide(config(), supplied()).add(cmd).snapshot(),
+		).rejects.toMatchObject({
+			code: "DEFINITION",
+			details: { subject: "context", name: "config", reason: "context-flags-not-parsed" },
+		});
+		// Declaring the dependency too makes the command parse its flags.
+		const both = defineCommand("cmd", (command) => command.use(declared, config));
+		const app = new Crust("cli").provide(config(), supplied()).add(both);
+		expect(flagsOf((await app.snapshot()).subCommands.cmd!)).toEqual(["region"]);
 	});
 
 	it("lets a same-name provider customize a declared flag but not its value type", async () => {
@@ -832,6 +872,67 @@ describe("Context-owned flags at use sites", () => {
 		await expect(invalid.snapshot()).rejects.toThrow(
 			'Flag "verbose" of Context "logging" collides with the provider\'s definition',
 		);
+	});
+
+	it("lets a same-name provider change a declared flag's default value but not its presence", async () => {
+		const declared = defineContext("mode")
+			.flags({ mode: { type: "string", default: "a" } })
+			.setup(({ flags }) => flags.mode);
+		const cmd = defineCommand("cmd", (command) =>
+			command.use(declared).action(async ({ ctx, flags }) => [flags.mode, await ctx.mode]),
+		);
+		const otherDefault = defineContext("mode")
+			.flags({ mode: { type: "string", default: "b" } })
+			.setup(({ flags }) => flags.mode);
+		const app = new Crust("cli").provide(otherDefault()).add(cmd);
+		expect(await unwrap(app.run(["cmd"]))).toMatchObject({ result: ["b", "b"] });
+		expect(await unwrap(app.run(["cmd"], { flags: { mode: "x" } }))).toMatchObject({
+			result: ["x", "x"],
+		});
+
+		// Required input the declared definition does not require, or a value it no longer
+		// guarantees, would break the declared types.
+		const required = defineContext("mode")
+			.flags({ mode: { type: "string", required: true } })
+			.setup(() => "required");
+		const optional = defineContext("mode")
+			.flags({ mode: { type: "string" } })
+			.setup(() => "optional");
+		for (const provider of [required(), optional()]) {
+			await expect(new Crust("cli").provide(provider).add(cmd).snapshot()).rejects.toThrow(
+				'Flag "mode" of Context "mode" collides with the provider\'s definition',
+			);
+		}
+	});
+
+	it("keeps installed flags of a same-name root provider beside an Extension provider", async () => {
+		const old = defineContext("auth")
+			.flags({ old: { type: "string" } })
+			.setup(() => 1);
+		const current = defineContext("auth")
+			.flags({ current: { type: "string" } })
+			.setup(() => 1);
+		const ext = defineExtension(defineExtensionId("auth")).provide(current()).use(current);
+		const list = defineCommand("list", (command) => command.action(() => "list"));
+		// @ts-expect-error -- TypeScript rejects the replacement too (FIX_DUPLICATE_CONTEXT)
+		const app = new Crust("cli").provide(old()).extend(ext);
+		const snapshot = await app.add(list).snapshot();
+		expect(flagsOf(snapshot).sort()).toEqual(["current", "old"]);
+		expect(flagsOf(snapshot.subCommands.list!)).toEqual(["current"]);
+	});
+
+	it("shares the flags of a used Context's dependency that the command provides", async () => {
+		const config = defineContext("config")
+			.flags({ region: { type: "string" } })
+			.setup(() => 1);
+		const plain = defineContext("auth").setup(() => 1);
+		const dependent = defineContext("auth")
+			.use(config)
+			.setup(() => 1);
+		// `plain` is visited first under the same name; `dependent`'s dependency is still declared.
+		const cmd = defineCommand("cmd", (command) => command.use(plain, dependent).provide(config()));
+		const snapshot = await new Crust("cli").provide(plain(), config()).add(cmd).snapshot();
+		expect(flagsOf(snapshot.subCommands.cmd!)).toEqual(["region"]);
 	});
 
 	it("parses every declared same-name Context's flags, batched or chained", async () => {

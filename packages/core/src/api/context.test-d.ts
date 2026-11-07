@@ -405,21 +405,40 @@ function _typecheckTypesContextFlagsAtUseSites() {
 	// @ts-expect-error -- inline inheritance stops at the reusable status
 	void inherited.run(["group", "status"], { flags: { "api-key": "k" } });
 
-	// A same-name provider's own flags join the input of commands attached where it is provided.
+	// A use site parses only the declared Contexts' flags; a same-name provider adding one is a
+	// runtime DEFINITION error, so it never joins the input.
 	const offlineApi = defineContext("api")
 		.flags({ offline: { type: "boolean", required: true } })
 		.setup(() => 1);
 	const usesApi = defineCommand("uses", (command) => command.use(api));
 	const swapped = new Crust("cli").provide(config(), offlineApi()).add(usesApi);
-	void swapped.run(["uses"], { flags: { "api-key": "k", offline: true } });
-	// @ts-expect-error -- the provider's required "offline" flag is missing
 	void swapped.run(["uses"], { flags: { "api-key": "k" } });
-	const viaExtension = new Crust("cli")
-		.provide(config())
-		.extend(defineExtension(defineExtensionId("offline-api")).provide(offlineApi()))
-		.add(usesApi);
-	// @ts-expect-error -- the same for an Extension-provided same-name Context
-	void viaExtension.run(["uses"], { flags: { "api-key": "k" } });
+	// @ts-expect-error -- "offline" is not a declared flag of the used Context
+	void swapped.run(["uses"], { flags: { "api-key": "k", offline: true } });
+
+	// Where a provider's customized definition meets the declared one in a builder, the provider's
+	// (the parsed one) types the shared flag instead of an uninhabitable intersection.
+	const declaredMode = defineContext("mode")
+		.flags({ mode: { type: "string", default: "a" } })
+		.setup(() => 1);
+	const customizedMode = defineContext("mode")
+		.flags({ mode: { type: "string", default: "b" } })
+		.setup(() => 1);
+	defineCommand("same", (command) =>
+		command
+			.use(declaredMode)
+			.provide(customizedMode())
+			.action(({ flags }) => {
+				type _Mode = Expect<Equal<typeof flags.mode, string>>;
+			}),
+	);
+	const modeApp = new Crust("cli")
+		.provide(customizedMode())
+		.command("inline", (command) => command.use(declaredMode));
+	void modeApp.run(["inline"], { flags: { mode: "x" } });
+	type _InlineMode = Expect<
+		Equal<(typeof modeApp)["_types"]["tree"]["inline"]["flags"]["mode"]["default"], "b">
+	>;
 
 	// A command may provide a flag-owning Context it uses; another Context with its flags collides.
 	defineCommand("local", (command) => command.use(config).provide(config()));

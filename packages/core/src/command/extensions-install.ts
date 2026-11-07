@@ -131,16 +131,19 @@ export function installExtensionProviders(
 		contexts.push({ instance });
 	}
 	for (const context of parent.contexts.slice(next)) contexts.push({ ...context });
+	// Accumulated per name: a same-name parent provider's flags stay installed beside these.
+	const flagContexts = new Map<string, readonly string[]>();
+	for (const [name, flags] of [
+		...providers.map(({ instance }) => [instance.name, Object.keys(instance.ownedFlags)] as const),
+		...parent.flagContexts,
+	]) {
+		flagContexts.set(name, [...(flagContexts.get(name) ?? []), ...flags]);
+	}
 	const node: CommandNode = {
 		...parent,
 		localFlags: {},
 		ownedFlags: {},
-		flagContexts: new Map([
-			...providers.map(
-				({ instance }) => [instance.name, Object.keys(instance.ownedFlags)] as const,
-			),
-			...parent.flagContexts,
-		]),
+		flagContexts,
 		effectiveFlags: {},
 		flagSpellings: new Map(),
 		contexts,
