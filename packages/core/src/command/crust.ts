@@ -1412,8 +1412,17 @@ export class Crust<
 		const factories: AnyContextFactory[] = [];
 		const extensions: ExtensionId[] = [];
 		for (const source of sources) {
-			if ("contextName" in source) factories.push(definingOf(source));
-			else extensions.push(source.id);
+			if ("contextName" in source) {
+				factories.push(definingOf(source));
+				continue;
+			}
+			extensions.push(source.id);
+			// An instance's provided Contexts are known, so they are demanded like factories;
+			// a factory's are known only per call, so only its id is checked.
+			if (typeof source !== "function") {
+				const { provide }: { readonly provide: readonly AnyContextInstance[] } = definingOf(source);
+				factories.push(...provide.map((instance) => instance.factory));
+			}
 		}
 		return this._clone<
 			AfterUse<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Us, Meta>
