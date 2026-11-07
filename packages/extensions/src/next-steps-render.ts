@@ -56,7 +56,8 @@ function stepArgv(root: CommandSnapshot, step: NextStep): string[] {
 	const positionals: string[] = [];
 	let omitted: string | undefined;
 	for (const arg of command.args) {
-		const value = args[arg.name];
+		// hasOwn: an argument named `constructor` or `__proto__` must not read Object.prototype.
+		const value = Object.hasOwn(args, arg.name) ? args[arg.name] : undefined;
 		if (value === undefined) {
 			omitted ??= arg.name;
 			continue;
