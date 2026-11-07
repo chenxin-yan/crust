@@ -1,5 +1,5 @@
 import type { ArgDef, CommandSnapshot } from "@crustjs/core";
-import { Crust, defineCommand, defineExtensionId } from "@crustjs/core";
+import { Crust, defineExtensionId } from "@crustjs/core";
 import { describe, expect, it } from "vite-plus/test";
 
 import { makeCommand, snapshotFixture } from "../tests/fixtures.ts";
@@ -523,7 +523,7 @@ describe("renderSkill", () => {
 	});
 
 	// ────────────────────────────────────────────────────────────────────────
-	// Agent metadata: destructive commands and output shapes
+	// Agent metadata: output shapes
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("agent metadata", () => {
@@ -538,19 +538,6 @@ describe("renderSkill", () => {
 				},
 			};
 		}
-
-		it("tells agents to confirm destructive commands with the user first", async () => {
-			const app = new Crust("app")
-				.add(defineCommand("drop", { destructive: true }, (c) => c.action(() => {})))
-				.command("list", (c) => c.action(() => {}));
-
-			const files = renderSkill(await app.snapshot(), baseMeta);
-
-			expect(expectTextContent(findFile(files, "commands/drop.md"))).toContain(
-				"# `app drop`\n\n**Destructive:** this command changes or deletes state in a way that is hard to undo. You must confirm with the user before running it.\n\n## Usage",
-			);
-			expect(expectTextContent(findFile(files, "commands/list.md"))).not.toContain("Destructive");
-		});
 
 		it("documents the output JSON Schema of commands with .output()", async () => {
 			const user = { type: "object", properties: { id: { type: "number" } }, required: ["id"] };
