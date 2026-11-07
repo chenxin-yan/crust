@@ -1,17 +1,20 @@
 //#region deploy
 import { defineCommand } from "@crustjs/core";
-import { dryRunContext, nextStepsContext } from "@crustjs/extensions";
+import { nextStepsContext } from "@crustjs/extensions";
 import { z } from "zod";
 
 const deploy = defineCommand("deploy", { description: "Deploy a release" }, (cmd) =>
 	cmd
-		.use(dryRunContext, nextStepsContext)
+		.use(nextStepsContext)
 		.args({ name: "target", type: "string", required: true, choices: ["staging", "prod"] })
-		.flags({ release: { type: "string", default: "latest", description: "Release to deploy" } })
+		.flags({
+			release: { type: "string", default: "latest", description: "Release to deploy" },
+			"dry-run": { type: "boolean", description: "Print what would be deployed" },
+		})
 		// [!code highlight]
 		.output(z.object({ target: z.string(), release: z.string(), dryRun: z.boolean() }))
 		.action(async ({ args, flags, ctx, stdout }) => {
-			const dryRun = await ctx.dryRun;
+			const dryRun = flags["dry-run"] === true;
 			stdout(`${dryRun ? "Would deploy" : "Deploying"} ${flags.release} to ${args.target}`);
 			if (!dryRun) {
 				(await ctx.next).add(["status"], { args: { target: args.target } }, "Watch the rollout");
@@ -19,18 +22,6 @@ const deploy = defineCommand("deploy", { description: "Deploy a release" }, (cmd
 			// [!code highlight]
 			return { target: args.target, release: flags.release, dryRun };
 		}),
-);
-//#endregion
-
-//#region destroy
-const destroy = defineCommand(
-	"destroy",
-	// [!code highlight]
-	{ description: "Delete an environment", destructive: true },
-	(cmd) =>
-		cmd
-			.args({ name: "target", type: "string", required: true })
-			.action(({ args, stdout }) => stdout(`Deleted ${args.target}`)),
 );
 //#endregion
 
@@ -67,11 +58,11 @@ const init = defineCommand("init", { description: "Create a project" }, (cmd) =>
 
 //#region app
 import { Crust } from "@crustjs/core";
-import { confirmation, dryRun, help, input, json, nextSteps, schema } from "@crustjs/extensions";
+import { help, input, json, nextSteps, schema } from "@crustjs/extensions";
 
 export const app = new Crust("my-cli", { description: "Deploy releases" })
-	.extend(help(), input(), json(), schema(), confirmation(), dryRun(), nextSteps())
-	.add(deploy, destroy, status, init);
+	.extend(help(), input(), json(), schema(), nextSteps())
+	.add(deploy, status, init);
 //#endregion
 
 if (import.meta.main) await app.execute();

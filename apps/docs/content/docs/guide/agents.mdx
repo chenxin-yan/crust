@@ -76,39 +76,20 @@ The same events reach `run()`'s `onEvent` callback. Under MCP, each yield sends 
 An agent learns a CLI from what it prints about itself, so write `description`s for commands, arguments, and flags: every surface below reads them.
 
 - [`help()`](/docs/modules/extensions/help) prints `--help` for people and agents alike.
-- [`schema()`](/docs/modules/extensions/schema) adds `schema [path...]`, which prints a command's `input` and `output` JSON Schema and whether it is `destructive`, and `--llms`, which prints a Markdown index of every visible command.
+- [`schema()`](/docs/modules/extensions/schema) adds `schema [path...]`, which prints a command's `input` and `output` JSON Schema, and `--llms`, which prints a Markdown index of every visible command.
 
 ```sh
 $ my-cli schema deploy
 {"input":{"type":"object","properties":{"target":{"type":"string","enum":["staging","prod"]},…},"required":["target"]},"output":{…}}
 ```
 
-## Destructive commands and `--yes`
-
-Mark commands that are hard to undo with [`destructive`](/docs/api/types#commandmeta):
-
-<include lang="ts">../../../examples/guide/agents.ts#destroy</include>
-
-Core never reads the mark. [`confirmation()`](/docs/modules/extensions/confirmation) asks before such a command on a TTY; anywhere else, such as an agent's shell, it fails with a message naming `--yes` instead of running, and never exits 0:
-
-```sh
-$ my-cli destroy prod < /dev/null
-Error: "my-cli destroy" is destructive and needs confirmation; pass --yes to run it.
-$ my-cli destroy prod --yes
-Deleted prod
-```
-
-MCP advertises the mark as `destructiveHint`, `schema` prints `destructive: true`, and skills tell agents to confirm with the user first.
-
 ## Dry run
 
-[`dryRun()`](/docs/modules/extensions/dry-run) adds `--dry-run` and a `dryRun` Context. A command opts in with `.use(dryRunContext)` and branches on `await ctx.dryRun`, as `deploy` does above. A command that doesn't opt in rejects `--dry-run` instead of running for real:
+A command that can preview declares its own `dry-run` flag and branches on it, as `deploy` does above. Commands without the flag reject `--dry-run` as an unknown flag instead of running for real:
 
 ```sh
 $ my-cli deploy prod --dry-run
 Would deploy latest to prod
-$ my-cli status prod --dry-run
-Error: "my-cli status" does not support --dry-run.
 ```
 
 ## Next steps
@@ -144,11 +125,11 @@ Crust doesn't detect agents or add a global `--no-input`: the TTY check is the r
 
 ## MCP
 
-[`@crustjs/mcp`](/docs/modules/mcp) serves your commands as MCP tools with `<cli> mcp`. Each tool's input schema is the same flat object `--input` takes; `.output()` schemas, `destructive` marks, and generator events become the tool's output schema, annotations, and progress notifications.
+[`@crustjs/mcp`](/docs/modules/mcp) serves your commands as MCP tools with `<cli> mcp`. Each tool's input schema is the same flat object `--input` takes; `.output()` schemas and generator events become the tool's output schema and progress notifications.
 
 ## Skills
 
-[`@crustjs/skills`](/docs/modules/skills) renders an agent skill from your commands at build time, with output schemas and confirmation notes for destructive commands, and adds a `skills` command that installs it into agents' skill directories.
+[`@crustjs/skills`](/docs/modules/skills) renders an agent skill from your commands at build time, with output schemas, and adds a `skills` command that installs it into agents' skill directories.
 
 ## The `api` command
 
@@ -160,8 +141,7 @@ For a CLI backed by an HTTP API, [`@crustjs/openapi`](/docs/modules/openapi) add
 - Results are returned, not only printed, and declared with `.output()`.
 - [`json()`](/docs/modules/extensions/json), [`input()`](/docs/modules/extensions/input), and [`schema()`](/docs/modules/extensions/schema) are registered.
 - Long-running commands yield events.
-- Commands that are hard to undo are `destructive`, with [`confirmation()`](/docs/modules/extensions/confirmation) registered.
-- Commands that can preview use `dryRunContext`.
+- Commands that can preview declare a `dry-run` flag.
 - Error messages say what to do next; known failures have recovery steps from [`nextSteps()`](/docs/modules/extensions/next-steps).
 - Every prompt has a flag for `initial` or a `default`.
 - Optionally: an MCP server, a packaged skill, and an `api` command.
