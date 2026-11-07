@@ -1,3 +1,5 @@
+import type { InferInput, InferOutput, StandardSchema } from "@crustjs/utils/schema";
+
 import {
 	validateContextAvailability,
 	definingOf,
@@ -713,7 +715,10 @@ type CollisionSpellings<
 	// reads it (ExtensionCommandsOf); other steps pass it through unread, `undefined` included.
 	ExtensionCommandSpellings extends string | undefined = never,
 	RecursiveFlags extends FlagsDef = {},
+	// The `.output()` schema and the action's awaited return, each checked against the other.
+	Output extends OutputState | undefined = InitialOutputState,
 > = {
+	readonly output: Output;
 	readonly actionDeps: ActionDeps;
 	readonly extensionCommands: ExtensionCommandSpellings;
 	readonly recursiveFlags: RecursiveFlags;
@@ -727,6 +732,7 @@ type CollisionSpellings<
 
 // Explicit `| undefined`: mapped types over these members (e.g. `Omit`) keep it under exactOptionalPropertyTypes.
 type AnyCollisionSpellings = {
+	readonly output?: OutputState | undefined;
 	readonly actionDeps?: ContextMap | undefined;
 	readonly extensionCommands?: string | undefined;
 	readonly recursiveFlags?: FlagsDef | undefined;
@@ -759,6 +765,57 @@ type ExtensionCommandsOf<S extends AnyCollisionSpellings> = [S["extensionCommand
 
 /** Recursive Extension flags registered so far; see `TreeWithRecursiveFlags`. */
 type AppRecursiveFlagsOf<S extends AnyCollisionSpellings> = Exclude<S["recursiveFlags"], undefined>;
+
+/**
+ * `schema` is the `.output()` schema; `actionReturn` wraps the action's awaited return
+ * (`undefined` before any `.action()`), kept apart from the result the schema produces.
+ */
+type OutputState = {
+	readonly schema: StandardSchema | undefined;
+	readonly actionReturn: readonly [unknown] | undefined;
+};
+
+// `actionReturn` stays open (no action, or any) so a builder annotated with the default state,
+// such as `CommandDefinitionBuilder<F, A>`, still accepts one after `.action()`.
+type InitialOutputState = {
+	readonly schema: undefined;
+	readonly actionReturn: readonly [unknown] | undefined;
+};
+
+type OutputStateOf<S extends AnyCollisionSpellings> = Exclude<S["output"], undefined>;
+
+type OutputSchemaOf<S extends AnyCollisionSpellings> = Exclude<
+	OutputStateOf<S>["schema"],
+	undefined
+>;
+
+type ActionReturnOf<S extends AnyCollisionSpellings> = OutputStateOf<S>["actionReturn"];
+
+/** What the action may return: anything, or the `.output()` schema's input (possibly awaited). */
+type ActionReturn<S extends AnyCollisionSpellings> = [OutputSchemaOf<S>] extends [never]
+	? unknown
+	: InferInput<OutputSchemaOf<S>> | PromiseLike<InferInput<OutputSchemaOf<S>>>;
+
+/**
+ * The command result: the awaited action return, or the `.output()` schema's output,
+ * awaited too because the invocation resolves any promise the schema returns.
+ */
+type ActionResult<S extends AnyCollisionSpellings, R> = [OutputSchemaOf<S>] extends [never]
+	? Awaited<R>
+	: Awaited<InferOutput<OutputSchemaOf<S>>>;
+
+// `.output()` after `.action()` checks the action's awaited return against the new schema;
+// a state that may have no action (see `InitialOutputState`) has nothing to check.
+type OutputResultBrand<
+	Return extends readonly [unknown] | undefined,
+	S extends StandardSchema,
+> = undefined extends Return
+	? {}
+	: [NonNullable<Return>[0]] extends [InferInput<S>]
+		? {}
+		: {
+				readonly FIX_OUTPUT: "The action's result does not match this output schema's input type";
+			};
 
 // Record spellings are derived from `Flags` on demand instead of accumulated in `Sp`.
 type AfterFlags<State extends BuilderState, F extends FlagsDef> = Crust<
@@ -820,7 +877,8 @@ type AfterUse<
 		ProvidersOf<CollisionSp>,
 		ActionDepsOf<CollisionSp>,
 		CollisionSp["extensionCommands"],
-		AppRecursiveFlagsOf<CollisionSp>
+		AppRecursiveFlagsOf<CollisionSp>,
+		CollisionSp["output"]
 	>,
 	Result,
 	Meta,
@@ -858,7 +916,8 @@ type AfterProvide<
 		MergeProviders<ProvidersOf<CollisionSp>, ContextsOutput<Cs>>,
 		ActionDepsOf<CollisionSp>,
 		CollisionSp["extensionCommands"],
-		AppRecursiveFlagsOf<CollisionSp>
+		AppRecursiveFlagsOf<CollisionSp>,
+		CollisionSp["output"]
 	>,
 	Result,
 	Meta,
@@ -886,8 +945,43 @@ type AfterAction<
 	Sp,
 	Tree,
 	CtxFlags,
-	Omit<CollisionSp, "actionDeps"> & { readonly actionDeps: Ctx },
-	Awaited<R>,
+	Omit<CollisionSp, "actionDeps" | "output"> & {
+		readonly actionDeps: Ctx;
+		readonly output: {
+			readonly schema: OutputStateOf<CollisionSp>["schema"];
+			readonly actionReturn: readonly [Awaited<R>];
+		};
+	},
+	ActionResult<CollisionSp, R>,
+	Meta,
+	string,
+	Caps
+>;
+
+type AfterOutput<
+	Flags extends FlagsDef,
+	A extends ArgsDef,
+	Ctx extends ContextMap,
+	Sibs extends string,
+	Sp extends string,
+	Tree extends object,
+	CtxFlags extends FlagsDef,
+	CollisionSp extends AnyCollisionSpellings,
+	S extends StandardSchema,
+	Meta extends RootCommandMeta | undefined,
+	Caps extends "app" | "recipe",
+> = Crust<
+	Flags,
+	A,
+	Ctx,
+	Sibs,
+	Sp,
+	Tree,
+	CtxFlags,
+	Omit<CollisionSp, "output"> & {
+		readonly output: { readonly schema: S; readonly actionReturn: ActionReturnOf<CollisionSp> };
+	},
+	Awaited<InferOutput<S>>,
 	Meta,
 	string,
 	Caps
@@ -926,7 +1020,8 @@ type AfterExtend<
 		ActionDepsOf<CollisionSp>,
 		// An open call adds no precise entries (see ExtensionCommandTree).
 		ExtensionCommandsOf<CollisionSp> | KnownSpellings<ExtensionsCommandSpellings<Es>>,
-		AppRecursiveFlagsOf<CollisionSp> & RecursiveExtensionFlags<Es>
+		AppRecursiveFlagsOf<CollisionSp> & RecursiveExtensionFlags<Es>,
+		CollisionSp["output"]
 	>,
 	Result,
 	Meta,
@@ -954,7 +1049,8 @@ type AfterAdd<
 		ProvidersOf<State["collision"]>,
 		ActionDepsOf<State["collision"]>,
 		State["collision"]["extensionCommands"],
-		AppRecursiveFlagsOf<State["collision"]>
+		AppRecursiveFlagsOf<State["collision"]>,
+		State["collision"]["output"]
 	>,
 	State["result"],
 	State["meta"],
@@ -1074,7 +1170,8 @@ type MissingRootMetaBrand<E, Defined extends RootMetaKey> =
  * - `CtxFlags` — Context-owned flags accumulated by `.provide()`, inherited by
  *   the shapes of definitions added afterwards (recursive Extension flags reach
  *   every command and are applied where shapes are read; see `TreeWithRecursiveFlags`)
- * - `Result` — awaited return type of this command's action
+ * - `Result` — this command's result type: the awaited `.output()` schema output, or
+ *   else the awaited return type of its action
  * - `Meta` — authored root metadata available to Extension requirements
  * - `Caps` — root application or configure-only recipe capabilities
  *
@@ -1375,11 +1472,41 @@ export class Crust<
 	}
 
 	/**
+	 * Declare the shape of this command's result with a Standard Schema
+	 * (Zod, Valibot, ArkType, …).
+	 *
+	 * Declare it before `.action()`: TypeScript then checks the action's return
+	 * against the schema's input type. After the action resolves, Core validates
+	 * its result with the schema and returns the schema's output as the result,
+	 * typed in `run()`; a command without an action validates `undefined`. Nothing is
+	 * validated when an Extension flag handler or `noAction` takes over. A result
+	 * the schema rejects fails the invocation with an `OUTPUT` {@link CrustError}.
+	 * Tooling reads the result's JSON Schema from `CommandSnapshot.outputSchema`.
+	 *
+	 * After `.action()`, TypeScript checks the action's awaited return against the new
+	 * schema's input instead. Calling `.output()` again replaces the schema. The
+	 * original builder is not mutated.
+	 *
+	 * @param schema - Standard Schema for the action result
+	 * @returns A new `Crust` instance with the output schema registered
+	 */
+	output<S extends StandardSchema>(
+		schema: S & OutputResultBrand<ActionReturnOf<CollisionSp>, S>,
+	): AfterOutput<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, S, Meta, Caps> {
+		return this._clone<
+			AfterOutput<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, S, Meta, Caps>
+		>({ outputSchema: schema });
+	}
+
+	/**
 	 * Define the Command Action — the function that implements this
 	 * command's behavior after its inputs are ready.
 	 *
 	 * The action receives a {@link CrustCommandContext} with `args` typed from
 	 * `.args()` and `flags` typed from the accumulated `Flags`.
+	 *
+	 * After `.output(schema)`, the action must return the schema's input type
+	 * (or a promise of it), and the command result is typed as the schema's output.
 	 *
 	 * Calling `.action()` again replaces the command behavior and its Context obligations
 	 * on the new builder. Later local providers must satisfy the bound Context value types;
@@ -1390,7 +1517,7 @@ export class Crust<
 	 */
 	// Keeps class parameters: it runs once per builder, and on a builder union `ctx` must stay
 	// the union of every branch's Contexts, which a single inferred `State` cannot express.
-	action<R>(
+	action<R extends ActionReturn<CollisionSp>>(
 		action: (ctx: NoInfer<CrustCommandContext<A, Flags, Ctx>>) => R,
 	): AfterAction<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, R, Meta, Caps> {
 		// SAFETY: dispatch reconstructs this node's context from its own validated definitions.

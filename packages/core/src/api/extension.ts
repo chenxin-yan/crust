@@ -48,7 +48,11 @@ import {
 // Extension — the public integration contract
 // ────────────────────────────────────────────────────────────────────────────
 
-/** How an invocation settled; `completed` carries the Command Action's awaited return value (`undefined` without an action). */
+/**
+ * How an invocation settled; `completed` carries the command's result: the awaited
+ * `.output()` schema output when declared, otherwise the Command Action's awaited
+ * return value (`undefined` without an action).
+ */
 export type InvocationOutcome =
 	| { readonly status: "completed"; readonly result: unknown }
 	| { readonly status: "handled"; readonly by: ExtensionId }
@@ -236,8 +240,9 @@ export interface Renderer {
 	/** A line the Command Action or a Context wrote with `stderr()`. Default: the invocation's stderr. */
 	diag(line: string): void;
 	/**
-	 * The Command Action's awaited return value, only when the invocation ran an action that
-	 * completed; called before `postRun`. A throw becomes the invocation's failure. Default: ignored.
+	 * The Command Action's awaited return value, after any `.output()` schema validated it, only
+	 * when the invocation ran an action that completed; called before `postRun`. A throw becomes
+	 * the invocation's failure. Default: ignored.
 	 */
 	result?(value: unknown): void;
 	/**
@@ -311,7 +316,8 @@ export interface ExtensionHooks<
 	/**
 	 * Runs after the invocation settles, in reverse `.extend()` order. This is the
 	 * `finally` slot for cleanup and post-run side effects. A `completed` outcome
-	 * carries the Command Action's awaited return value as `result`.
+	 * carries the command's result as `result`: the awaited `.output()` schema output
+	 * when declared, otherwise the Command Action's awaited return value.
 	 */
 	readonly postRun?: (
 		ctx: ExtensionContext<F, Deps, MetaKeys>,

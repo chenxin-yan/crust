@@ -1,3 +1,5 @@
+import type { StandardSchema } from "@crustjs/utils/schema";
+
 import type { AnyContextFactory, AnyContextInstance } from "../api/context.ts";
 import type { ExtensionData } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
@@ -67,6 +69,8 @@ export interface CommandNode {
 	extensionPositions?: ReadonlyMap<ExtensionId, number>;
 	/** The Command Action */
 	run?: CommandAction;
+	/** Schema from `.output()` that validates and transforms the action result */
+	outputSchema?: StandardSchema;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
