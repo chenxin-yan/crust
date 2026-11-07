@@ -8,7 +8,7 @@ import {
 	defineExtensionId,
 	type RunOutcome,
 } from "@crustjs/core";
-import { nextSteps, nextStepsContext } from "@crustjs/extensions";
+import { nextSteps } from "@crustjs/extensions";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -207,29 +207,31 @@ describe("createMcpServer", () => {
 
 	it("carries nextSteps() blocks in completed and failed tool results", async () => {
 		class NotLoggedInError extends Error {}
+		const status = defineCommand("status", (c) => c.action(() => {}));
+		const login = defineCommand("login", (c) => c.action(() => {}));
 		const app = new Crust("cli")
 			.extend(
 				nextSteps({
 					onError: (error) =>
 						error instanceof NotLoggedInError
-							? [{ command: ["login"], description: "Log in" }]
+							? [{ command: login, description: "Log in" }]
 							: undefined,
 				}),
 			)
 			.add(
 				defineCommand("deploy", (c) =>
 					c
-						.use(nextStepsContext)
+						.use(nextSteps)
 						.flags({ fail: { type: "boolean" } })
 						.action(async ({ flags, ctx }) => {
-							(await ctx.next).add(["status"], undefined, "Check the deployment");
+							(await ctx.nextSteps).add(status, undefined, "Check the deployment");
 							if (flags.fail) throw new NotLoggedInError("not logged in");
 							return { ok: true };
 						}),
 				),
-			)
-			.command("status", (c) => c.action(() => {}))
-			.command("login", (c) => c.action(() => {}));
+				status,
+				login,
+			);
 		const client = await connect(app);
 		expect(await client.callTool({ name: "deploy" })).toEqual({
 			content: [
