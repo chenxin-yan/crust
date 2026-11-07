@@ -27,8 +27,6 @@ export interface McpTool {
 	readonly inputSchema: McpToolInputSchema;
 	/** The command's `.output()` result in the shape of its `structuredContent`; see {@link toolsFromSnapshot}. */
 	readonly outputSchema?: McpToolOutputSchema;
-	/** Present only for commands with `meta.destructive`. */
-	readonly annotations?: { readonly destructiveHint: true };
 	/** Canonical command path for `app.run()`; `[]` is the root. */
 	readonly path: readonly string[];
 	/** Arg and flag names declared as `type: "url"`; their strings become `URL`s before `run()`. */
@@ -100,7 +98,6 @@ function toolOutputSchema(
  * `exclude` path is not a canonical command path (a typo or alias would
  * otherwise leave the command exposed).
  *
- * A command with `meta.destructive` gets `annotations: { destructiveHint: true }`.
  * A command whose snapshot has an `outputSchema` (from `.output()`) gets an MCP
  * `outputSchema` describing its `structuredContent`: object schemas as
  * themselves, schemas that exclude objects (e.g. `number`, `array`) wrapped as
@@ -157,9 +154,6 @@ export function toolsFromSnapshot(
 					: { description: command.meta.description }),
 				inputSchema: commandInputSchema(command, path),
 				...(outputSchema === undefined ? {} : { outputSchema }),
-				...(command.meta.destructive === true
-					? { annotations: { destructiveHint: true } as const }
-					: {}),
 				...commandInputFields(command),
 				path,
 			});

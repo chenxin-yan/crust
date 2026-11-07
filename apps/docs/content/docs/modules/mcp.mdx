@@ -81,8 +81,6 @@ The outcome of `app.run()` decides the tool result:
 
 A command with an [`.output()`](/docs/api/crust#outputschema) schema whose snapshot carries `outputSchema` advertises it as the tool's `outputSchema`, in the shape of its `structuredContent`. An object schema is advertised as is. A schema whose `type` excludes objects (`number`, `array`, `["string", "null"]`, …) is wrapped as `{ type: "object", properties: { result }, required: ["result"] }`, with `$schema` and `$defs` kept at the root. A schema that may describe an object or not (no top-level `type`, such as `anyOf`, or a `type` list including `"object"`), is not advertised, since its results may be sent either way; neither is a non-object schema that wrapping would break (a `$ref` outside `#/$defs/`, such as `"#"` or `"#/prefixItems/0"`, or another `$` keyword such as `$id`). MCP requires `structuredContent` from a tool with an `outputSchema`, so when such a tool's call ends with only captured stdout (a `handled` outcome, or a result that is not plain JSON), the result sets `isError`, with a line saying the result is missing before the stdout text.
 
-A command marked [`destructive`](/docs/api/types#commandmeta) advertises `annotations: { destructiveHint: true }`; other tools carry no `annotations`.
-
 Unknown tool names are protocol errors (`InvalidParams`), which is also how hidden and excluded commands present.
 
 ## Progress
@@ -107,6 +105,6 @@ When a `tools/call` request carries `_meta.progressToken`, each value an [async 
 
 <include lang="ts">../../../examples/modules/mcp.ts#manifest</include>
 
-The pure manifest, for tests or tooling that ships tool definitions without a server. Pass `await app.snapshot()` so Extension-contributed commands are included. Each entry carries the tool `name`, `description`, `inputSchema`, `outputSchema` and `annotations` when they apply, and the canonical `path` for `app.run()`.
+The pure manifest, for tests or tooling that ships tool definitions without a server. Pass `await app.snapshot()` so Extension-contributed commands are included. Each entry carries the tool `name`, `description`, `inputSchema`, `outputSchema` when it applies, and the canonical `path` for `app.run()`.
 
 <auto-type-table path="../../../../../packages/mcp/src/tools.ts" name="McpTool" />

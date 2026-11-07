@@ -139,15 +139,6 @@ describe("toolsFromSnapshot", () => {
 		expect(RAW_PROPERTY).toBe("raw");
 	});
 
-	it("marks destructive commands with destructiveHint and omits annotations otherwise", async () => {
-		const app = new Crust("cli")
-			.add(defineCommand("rm", { destructive: true }, (c) => c.action(noop)))
-			.add(defineCommand("ls", (c) => c.action(noop)));
-		const [rm, ls] = toolsFromSnapshot(await app.snapshot());
-		expect(rm?.annotations).toEqual({ destructiveHint: true });
-		expect(ls).not.toHaveProperty("annotations");
-	});
-
 	it("advertises output schemas in the shape structuredContent takes", async () => {
 		const DIALECT = "https://json-schema.org/draft/2020-12/schema";
 		const node = { type: "object", properties: { name: { type: "string" } } };
