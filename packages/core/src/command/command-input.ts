@@ -4,14 +4,18 @@ import { CrustError } from "../errors.ts";
 import type { RunInputPayload, RunInputValue, ValueType } from "../types.ts";
 import type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "./snapshot.ts";
 
-/** JSON Schema fragment for one property of a command's JSON input. */
+/**
+ * JSON Schema fragment for one property of a command's JSON input. Schema-backed
+ * definitions may carry any further keywords their JSON Schema declares.
+ */
 export interface CommandInputPropertySchema {
 	readonly type?: "string" | "number" | "boolean" | "array";
 	readonly description?: string;
-	readonly format?: "uri";
-	readonly enum?: readonly string[];
+	readonly format?: string;
+	readonly enum?: readonly (string | boolean)[];
 	readonly items?: CommandInputPropertySchema;
 	readonly default?: unknown;
+	readonly [keyword: string]: unknown;
 }
 
 /** JSON Schema for a command's input as one flat object keyed by arg and flag names. */
@@ -40,11 +44,39 @@ function valueSchema(
 			return { type: "boolean" };
 		case "string":
 		case "path":
-		// Only schema-backed args omit `type`; schema flags and custom `parse` are
-		// indistinguishable from core definitions and map by their token type.
+		// Only schema-backed args omit `type`; custom `parse` and schemas without a
+		// usable `inputSchema` map by their token type.
 		case undefined:
 			return { type: "string" };
 	}
+}
+
+/** `$ref`, `$defs`, `$id`, … resolve against the schema's own root, which nesting would move. */
+function hasRootKeyword(value: unknown): boolean {
+	if (typeof value !== "object" || value === null) return false;
+	return Object.entries(value).some(
+		([key, entry]) => (key.startsWith("$") && key !== "$comment") || hasRootKeyword(entry),
+	);
+}
+
+/**
+ * A schema-backed definition's `inputSchema` without `$schema`, when `run()`
+ * accepts what it describes: schema-backed values bind as their token, a string
+ * (a boolean for `type: "boolean"`), in an array for variadic and `multiple`.
+ */
+function schemaPropertySchema(
+	def: ArgSnapshot | FlagSnapshot,
+	list: boolean,
+): CommandInputPropertySchema | undefined {
+	if (def.inputSchema === undefined) return undefined;
+	const { $schema: _dialect, ...schema } = def.inputSchema;
+	const token = def.type === "boolean" ? "boolean" : "string";
+	const value = list ? schema.items : schema;
+	// `prefixItems` constrains leading elements that `items` does not cover.
+	if (list && (schema.type !== "array" || "prefixItems" in schema)) return undefined;
+	if (typeof value !== "object" || value === null || !("type" in value)) return undefined;
+	if (value.type !== token || hasRootKeyword(schema)) return undefined;
+	return schema;
 }
 
 function propertySchema(
@@ -52,7 +84,8 @@ function propertySchema(
 	list: boolean,
 ): CommandInputPropertySchema {
 	const value = valueSchema(def.type, def.choices);
-	const schema: CommandInputPropertySchema = list ? { type: "array", items: value } : value;
+	const schema: CommandInputPropertySchema =
+		schemaPropertySchema(def, list) ?? (list ? { type: "array", items: value } : value);
 	let defaultValue: unknown;
 	if (def.default !== undefined) {
 		try {
@@ -71,8 +104,10 @@ function propertySchema(
 	}
 	return {
 		...schema,
-		...(def.description === undefined ? {} : { description: def.description }),
-		...(defaultValue === undefined ? {} : { default: defaultValue }),
+		...(def.description === undefined || "description" in schema
+			? {}
+			: { description: def.description }),
+		...(defaultValue === undefined || "default" in schema ? {} : { default: defaultValue }),
 	};
 }
 
@@ -83,9 +118,15 @@ function formatPath(path: readonly string[]): string {
 /**
  * JSON Schema for a command's input as one flat object: each arg and flag by
  * name (variadic and `multiple` as arrays), plus {@link RAW_INPUT_PROPERTY}.
- * Mapped from the snapshot's declared types, so Standard Schema and custom
- * `parse` definitions appear as their token type, and only declared `required`
- * definitions are required. Defaults are `JSON.stringify` copies (`URL`s become
+ * Mapped from the snapshot's declared types, so custom `parse` definitions
+ * appear as their token type, and only declared `required` definitions are
+ * required. A Standard Schema definition appears as its `inputSchema` (without
+ * `$schema`, filling in a missing `description`) when that describes what
+ * `run()` accepts for it: top-level `type` `"string"` (`"boolean"` for
+ * `type: "boolean"` flags), or `"array"` with such `items` (and no `prefixItems`)
+ * for variadic and `multiple`, and no `$ref`, `$defs`, or other `$` keyword. Otherwise, e.g.
+ * `z.coerce.number()` (JSON Schema `number`), it appears as its token type.
+ * Defaults are `JSON.stringify` copies (`URL`s become
  * strings; nested `undefined`, functions, and symbols are dropped); defaults
  * that fail to serialize or hold non-finite numbers are omitted. `path` names the command in the error thrown when an arg and a flag
  * share a name, or a definition is named `raw`.

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { z } from "zod";
 
 import { CrustError } from "../errors.ts";
 import {
@@ -14,6 +15,16 @@ const noop = () => {};
 const passthrough = {
 	"~standard": { version: 1 as const, vendor: "test", validate: (value: unknown) => ({ value }) },
 };
+
+/** Standard Schema whose input converts to `jsonSchema`. */
+function withInputJsonSchema(jsonSchema: Record<string, unknown>) {
+	return {
+		"~standard": {
+			...passthrough["~standard"],
+			jsonSchema: { input: () => jsonSchema, output: () => ({}) },
+		},
+	};
+}
 
 const send = defineCommand("send", (c) =>
 	c
@@ -160,6 +171,76 @@ describe("commandInputSchema", () => {
 		});
 		// Schema-owned requiredness is invisible; a custom parser's `required` is declared and kept.
 		expect(schema.required).toEqual(["level"]);
+	});
+
+	it("advertises a schema's input JSON Schema when run() accepts its type", async () => {
+		const app = new Crust("cli")
+			.args(
+				{ name: "level", schema: z.enum(["low", "high"]), description: "How loud" },
+				{ name: "names", schema: z.array(z.string().min(3)), variadic: true },
+			)
+			.flags({
+				endpoint: { type: "string", schema: z.url().describe("Where to send") },
+				label: { type: "string", schema: z.string().min(3).default("abc") },
+				on: { type: "boolean", schema: z.boolean() },
+				contact: { type: "string", schema: z.email() },
+				confirm: {
+					type: "boolean",
+					schema: withInputJsonSchema({ type: "boolean", enum: [true] }),
+				},
+			})
+			.action(noop);
+		const { properties } = commandInputSchema(await app.snapshot(), []);
+		expect(properties).toMatchObject({
+			level: { type: "string", enum: ["low", "high"], description: "How loud" },
+			names: { type: "array", items: { type: "string", minLength: 3 } },
+			endpoint: { type: "string", format: "uri", description: "Where to send" },
+			label: { type: "string", minLength: 3, default: "abc" },
+			on: { type: "boolean" },
+			contact: { type: "string", format: "email" },
+			confirm: { type: "boolean", enum: [true] },
+		});
+		for (const name of ["level", "names", "endpoint", "label", "on", "contact"]) {
+			expect(properties[name]).not.toHaveProperty("$schema");
+		}
+	});
+
+	it("maps a schema whose JSON Schema run() would reject by its token type", async () => {
+		const node = z.object({ name: z.string() });
+		// Type-compatible, but its `$ref` would resolve against the command input schema's root.
+		const referencing = withInputJsonSchema({
+			type: "string",
+			allOf: [{ $ref: "#/$defs/Name" }],
+			$defs: { Name: { minLength: 1 } },
+		});
+		const app = new Crust("cli")
+			.args({ name: "ids", schema: z.string(), variadic: true })
+			.flags({
+				port: { type: "string", schema: z.coerce.number(), description: "Port" },
+				any: { type: "string", schema: z.union([z.string(), z.number()]) },
+				when: { type: "string", schema: z.coerce.date() },
+				ref: { type: "string", schema: referencing },
+				tags: { type: "string", multiple: true, schema: z.array(node) },
+				// `items` covers only the rest; the numeric prefix would fail string binding.
+				pair: {
+					type: "string",
+					multiple: true,
+					schema: z.tuple([z.coerce.number()], z.string()),
+				},
+			})
+			.action(noop);
+		const { properties } = commandInputSchema(await app.snapshot(), []);
+		expect(properties).toMatchObject({
+			ids: { type: "array", items: { type: "string" } },
+			port: { type: "string", description: "Port" },
+			any: { type: "string" },
+			when: { type: "string" },
+			ref: { type: "string" },
+			tags: { type: "array", items: { type: "string" } },
+		});
+		expect(properties.port).toEqual({ type: "string", description: "Port" });
+		expect(properties.ref).toEqual({ type: "string" });
+		expect(properties.pair).toEqual({ type: "array", items: { type: "string" } });
 	});
 
 	it("accepts prototype-named definitions as own properties", async () => {

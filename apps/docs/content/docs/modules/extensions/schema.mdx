@@ -35,7 +35,7 @@ The command also returns the object, so [`run()`](/docs/api/crust#runpath-input-
 const outcome = await app.run(["schema"], { args: { path: ["deploy"] } });
 ```
 
-Standard Schema–backed arguments and flags are described by their token type, like other definitions, not by their schema.
+Standard Schema–backed arguments and flags are described by their schema's input JSON Schema when `run()` accepts that shape, and by their token type otherwise; see the [MCP input mapping](/docs/modules/mcp#tools).
 
 ## `--llms`
 

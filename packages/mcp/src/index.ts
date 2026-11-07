@@ -14,5 +14,11 @@ export {
 	serveStdio,
 	toolResultFromOutcome,
 } from "./server.ts";
-export type { McpPropertySchema, McpTool, McpToolInputSchema, McpToolsOptions } from "./tools.ts";
+export type {
+	McpPropertySchema,
+	McpTool,
+	McpToolInputSchema,
+	McpToolOutputSchema,
+	McpToolsOptions,
+} from "./tools.ts";
 export { toolsFromSnapshot } from "./tools.ts";
