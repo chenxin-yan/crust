@@ -25,7 +25,7 @@ $ my-cli --llms
 Prints one line of JSON describing the command at `path`, or the root command when `path` is omitted:
 
 - `input`: the JSON Schema of the command's arguments and flags as one flat object, from [`commandInputSchema()`](/docs/modules/core#tooling-subpath). This is the object [`input()`](/docs/modules/extensions/input)'s `--input` and the [MCP](/docs/modules/mcp) server accept.
-- `output`: the draft 2020-12 JSON Schema of the result, from the command's [`.output()`](/docs/api/crust#outputschema) schema. It is omitted when the command has no `.output()` or its schema cannot produce JSON Schema (see [`standardJsonSchema()`](/docs/modules/core#tooling-subpath)); it is never an empty `{}`.
+- `output`: the draft 2020-12 JSON Schema of the result, from the command's [`.output()`](/docs/api/crust#outputschema) schema. It is omitted when the command has no `.output()` or its schema cannot produce JSON Schema (see [`standardJsonSchema()`](/docs/modules/core#tooling-subpath)), rather than replaced by an empty `{}` schema; a converter's own result is printed as is.
 - `destructive`: `true` when the command's metadata marks it [`destructive`](/docs/api/types#commandmeta); omitted otherwise.
 
 Path segments are canonical command names or aliases, like routing; hidden commands resolve too. An unknown segment fails with a [`COMMAND_NOT_FOUND`](/docs/api/errors) error naming the path up to it, such as `Unknown command "remote ad".`; [`didYouMean()`](/docs/modules/extensions/did-you-mean) presents it like any unknown command.
