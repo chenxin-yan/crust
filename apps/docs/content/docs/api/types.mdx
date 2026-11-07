@@ -118,7 +118,7 @@ Renderers filter sections for their audience first, then merge entries with the 
 
 ## Command Snapshots
 
-Command Snapshots are frozen, serializable descriptions of the command tree. They omit Command Actions, parsers, schemas, and Context functions; a command's `.output()` schema appears only as its JSON Schema, `outputSchema`. Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots. Declared in [`snapshot.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/snapshot.ts).
+Command Snapshots are frozen, serializable descriptions of the command tree. They omit Command Actions, parsers, schemas, and Context functions; a command's `.output()` schema appears only as its JSON Schema, `outputSchema`, when the schema can produce one. Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots. Declared in [`snapshot.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/snapshot.ts).
 
 ### `CommandSnapshot`
 
