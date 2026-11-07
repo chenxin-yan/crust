@@ -20,9 +20,12 @@ import {
 
 const API: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:openapi");
 
-/** An OpenAPI document; only `paths` and local `$ref` targets are read. */
+/**
+ * An OpenAPI document; only `paths` and local `$ref` targets are read. Keys of `paths`
+ * not starting with `/`, such as `x-*` extensions, are skipped.
+ */
 export interface OpenApiSpec {
-	readonly paths?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+	readonly paths?: Readonly<Record<string, unknown>>;
 	readonly [key: string]: unknown;
 }
 
@@ -106,7 +109,8 @@ function pathItem(
 
 function operations(spec: OpenApiSpec): { method: string; path: string; operation: object }[] {
 	return Object.entries(spec.paths ?? {}).flatMap(([path, item]) => {
-		const resolved = pathItem(spec, item);
+		if (!path.startsWith("/") || typeof item !== "object" || item === null) return [];
+		const resolved = pathItem(spec, item as Readonly<Record<string, unknown>>);
 		return METHODS.flatMap((method) => {
 			const operation = resolved[method];
 			return typeof operation === "object" && operation !== null
@@ -151,11 +155,12 @@ function resolveRefs(value: unknown, spec: OpenApiSpec, chain: readonly string[]
  */
 function specFor(spec: OpenApiSpec, target: string): unknown {
 	const paths = spec.paths ?? {};
-	const found = Object.hasOwn(paths, target)
-		? paths[target]
-		: operations(spec).find(
-				({ operation }) => (operation as { operationId?: unknown }).operationId === target,
-			)?.operation;
+	const found =
+		target.startsWith("/") && Object.hasOwn(paths, target)
+			? paths[target]
+			: operations(spec).find(
+					({ operation }) => (operation as { operationId?: unknown }).operationId === target,
+				)?.operation;
 	if (found === undefined) {
 		throw new Error(`No operation or path "${target}" in the OpenAPI spec`);
 	}
@@ -399,8 +404,10 @@ export const apiCommand: ExtensionFactory<
 /** A page body as one NDJSON line: JSON compacted, any other text (even empty) as a JSON string. */
 function compactJson(text: string): string {
 	try {
-		return JSON.stringify(JSON.parse(text));
+		JSON.parse(text);
 	} catch {
 		return JSON.stringify(text);
 	}
+	// Drops whitespace outside strings instead of re-serializing, which would round numbers to doubles.
+	return text.replace(/"(?:[^"\\]|\\.)*"|\s+/g, (token) => (token[0] === '"' ? token : ""));
 }
