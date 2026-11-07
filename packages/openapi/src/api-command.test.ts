@@ -501,8 +501,10 @@ describe("api <path>", () => {
 	it.each([
 		["node", process.execPath, ["--input-type=module"]],
 		["bun", "bun", []],
-	])("reads --body - from stdin that already ended as empty on %s", (_runtime, command, options) => {
-		const script = `
+	])(
+		"reads --body - from stdin that already ended as empty on %s",
+		(_runtime, command, options) => {
+			const script = `
 			import { Crust } from "@crustjs/core";
 			import { apiCommand } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "api-command.ts")).href)};
 			globalThis.fetch = async (url, init) => new Response(init.method + " [" + init.body + "]");
@@ -510,17 +512,18 @@ describe("api <path>", () => {
 			const app = new Crust("tool").extend(apiCommand({ spec: {}, baseUrl: "https://api.example.com" }));
 			process.exitCode = await app.execute({ argv: ["api", "/echo", "--body", "-"] });
 		`;
-		const run = spawnSync(command, [...options, "-e", script], {
-			cwd: join(import.meta.dirname, ".."),
-			input: '{"name":"ada"}',
-			encoding: "utf8",
-			timeout: 10_000,
-		});
+			const run = spawnSync(command, [...options, "-e", script], {
+				cwd: join(import.meta.dirname, ".."),
+				input: '{"name":"ada"}',
+				encoding: "utf8",
+				timeout: 10_000,
+			});
 
-		expect(run.stderr).toBe("");
-		expect(run.stdout.trim()).toBe("POST []");
-		expect(run.status).toBe(0);
-	});
+			expect(run.stderr).toBe("");
+			expect(run.stdout.trim()).toBe("POST []");
+			expect(run.status).toBe(0);
+		},
+	);
 });
 
 describe("apiClient", () => {
