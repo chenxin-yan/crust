@@ -87,6 +87,35 @@ describe("snapshotCommand", () => {
 		expect(snapshot.subCommands.ls?.meta).not.toHaveProperty("destructive");
 	});
 
+	it("projects the Context names a command declares with its own .use(), in order", async () => {
+		const auth = defineContext("auth").setup(() => ({}));
+		const db = defineContext("db").setup(() => ({}));
+		const app = new Crust("cli")
+			.provide(auth(), db())
+			.add(defineCommand("deploy", (command) => command.use(db, auth).action(() => {})))
+			.command("remote", (command) =>
+				command.use(auth).command("ls", (child) => child.action(() => {})),
+			);
+		const snapshot = await app.snapshot();
+
+		expect(snapshot.uses).toEqual([]);
+		expect(snapshot.subCommands.deploy?.uses).toEqual(["db", "auth"]);
+		expect(snapshot.subCommands.remote?.uses).toEqual(["auth"]);
+		// Own only: the parent's .use() and .provide() do not make a child use a Context.
+		expect(snapshot.subCommands.remote?.subCommands.ls?.uses).toEqual([]);
+		expect(Object.isFrozen(snapshot.subCommands.deploy?.uses)).toBe(true);
+	});
+
+	it("projects uses for a child not built yet when the invocation reads it", async () => {
+		const db = defineContext("db").setup(() => ({}));
+		const app = new Crust("cli")
+			.provide(db())
+			.add(defineCommand("deploy", (command) => command.use(db).action(() => {})))
+			.action(({ rootCommand }) => rootCommand.subCommands.deploy?.uses);
+
+		expect(await app.run([])).toMatchObject({ status: "completed", result: ["db"] });
+	});
+
 	it("is serializable: no functions, URL defaults become strings", () => {
 		const snapshot = snapshotCommand(buildTree());
 

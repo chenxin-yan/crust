@@ -71,6 +71,7 @@ export function renderHelpText(
 						hasAction: false,
 						args: [],
 						flags: {},
+						uses: [],
 						subCommands: {},
 					},
 				]),

@@ -120,7 +120,7 @@ const serve = new Crust("serve").flags({
 
 ## `.use(...factories)`
 
-Recipe-only. Declares the Context factories a reusable definition consumes, without providing instances. The call requires at least one factory; repeated calls accumulate. At runtime, the demands and their transitive dependencies are checked when the definition materializes, not at `.add()`.
+Recipe-only. Declares the Context factories a reusable definition consumes, without providing instances. The call requires at least one factory; repeated calls accumulate. At runtime, the demands and their transitive dependencies are checked when the definition materializes, not at `.add()`. The command's [`CommandSnapshot`](/docs/api/types#commandsnapshot) lists the declared Context names in `uses`.
 
 ## `.provide(...instances)`
 

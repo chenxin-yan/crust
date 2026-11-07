@@ -1,3 +1,4 @@
+import { contextNameOf } from "../api/context.ts";
 import { standardJsonSchema } from "../parsing/schema.ts";
 import { isFlagNegatable } from "../parsing/spellings.ts";
 import type {
@@ -108,6 +109,7 @@ export interface FlagSnapshot {
  * //   hasAction: true,
  * //   args: [{ name: "name", type: "string", required: true }],
  * //   flags: { force: { type: "boolean", short: "f", negatable: true } },
+ * //   uses: [],
  * //   subCommands: {},
  * // }
  * ```
@@ -121,6 +123,12 @@ export interface CommandSnapshot {
 	readonly args: readonly ArgSnapshot[];
 	/** Effective flags keyed by canonical flag name. */
 	readonly flags: Readonly<Record<string, FlagSnapshot>>;
+	/**
+	 * Names of the Contexts this command declares with its own `.use()`, in
+	 * declaration order (`[]` when none). A parent's `.use()` or a `.provide()`
+	 * does not add a name here.
+	 */
+	readonly uses: readonly string[];
 	/**
 	 * Draft 2020-12 JSON Schema of the action result, from the command's
 	 * `.output()` schema (`~standard.jsonSchema.output`). Absent without
@@ -341,6 +349,7 @@ export function createSnapshotProjector(
 				hasAction: { enumerable: true, get: () => body().hasAction },
 				args: { enumerable: true, get: () => body().args },
 				flags: { enumerable: true, get: () => body().flags },
+				uses: { enumerable: true, get: () => body().uses },
 				outputSchema: { enumerable: true, get: () => body().outputSchema },
 				subCommands: { enumerable: true, get: () => body().subCommands },
 			}),
@@ -392,6 +401,7 @@ function projectNode(
 		hasAction: node.run !== undefined,
 		args: Object.freeze(node.args.map(snapshotArg)),
 		flags: Object.freeze(flags),
+		uses: Object.freeze(node.demands.map(contextNameOf)),
 		...(outputSchema ? { outputSchema } : {}),
 		subCommands,
 	});
