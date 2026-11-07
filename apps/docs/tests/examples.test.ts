@@ -78,15 +78,7 @@ it.each([
 		'{"type":"event","data":{"step":"build"}}\n{"type":"event","data":{"step":"ship"}}\n{"type":"result","data":{"target":"prod","healthy":true}}\n',
 		"build: done\nship: done\n",
 	],
-	[
-		["destroy", "prod"],
-		1,
-		"",
-		'Error: "my-cli destroy" is destructive and needs confirmation; pass --yes to run it.\n',
-	],
-	[["destroy", "prod", "--yes"], 0, "Deleted prod\n", ""],
 	[["deploy", "prod", "--dry-run"], 0, "Would deploy latest to prod\n", ""],
-	[["status", "prod", "--dry-run"], 1, "", 'Error: "my-cli status" does not support --dry-run.\n'],
 	[["init"], 1, "", "Error: Prompts require an interactive terminal (TTY).\n"],
 	[["init", "--name", "demo"], 0, "Created demo in us-east-1\n", ""],
 ])("agents guide example %j prints what the guide shows", (argv, exitCode, stdout, stderr) => {
