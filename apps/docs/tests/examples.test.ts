@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Crust } from "@crustjs/core";
@@ -97,6 +99,22 @@ it.each([
 	expect(result.status).toBe(exitCode);
 	expect(result.stdout).toBe(stdout);
 	expect(result.stderr).toBe(stderr);
+});
+
+it("error-handling example reports an unreadable config as is, not as missing", async () => {
+	const cwd = await mkdtemp(join(tmpdir(), "crust-docs-"));
+	try {
+		await mkdir(join(cwd, "app.config.json"));
+		const result = spawnSync(
+			"bun",
+			[fileURLToPath(new URL("../examples/guide/error-handling.ts", import.meta.url)), "config"],
+			{ cwd, encoding: "utf8", timeout: 10_000 },
+		);
+		expect(result.status).toBe(1);
+		expect(result.stderr).toMatch(/^Error: EISDIR/);
+	} finally {
+		await rm(cwd, { recursive: true, force: true });
+	}
 });
 
 it("build guide example names its root after the guide's `bin` launcher", async () => {
