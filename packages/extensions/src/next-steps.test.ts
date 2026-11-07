@@ -332,4 +332,47 @@ describe("nextSteps", () => {
 			].join("\n"),
 		);
 	});
+
+	it("renders omitted prototype-named arguments as omitted", async () => {
+		const seen: unknown[] = [];
+		const app = new Crust("app")
+			.extend(nextSteps())
+			.command("target", (cmd) =>
+				cmd
+					.args({ name: "constructor", type: "string" }, { name: "__proto__", type: "string" })
+					.action(({ args }) => void seen.push({ ...args })),
+			)
+			.command("suggest", (cmd) =>
+				cmd.use(nextStepsContext).action(async ({ ctx }) => {
+					const next = await ctx.next;
+					next.add(["target"]);
+					next.add(["target"], { args: { constructor: "x" } });
+				}),
+			);
+
+		const { stderr } = await captureExecute(app, ["suggest"]);
+		const lines = stderr.split("\n").slice(1);
+		expect(lines).toEqual(["  app target", "  app target x"]);
+		for (const line of lines) {
+			expect(await captureExecute(app, shellWords(line.trim()).slice(1))).toMatchObject({
+				exitCode: 0,
+			});
+		}
+		const omitted: unknown = {};
+		expect(seen).toEqual([omitted, { constructor: "x" }]);
+	});
+
+	it("keeps a completed result when writing to stderr throws", async () => {
+		const outcome = await appWith().run(
+			["deploy"],
+			{ args: { env: "prod" } },
+			{
+				stderr: () => {
+					throw new Error("stderr closed");
+				},
+			},
+		);
+
+		expect(outcome).toMatchObject({ status: "completed", result: { env: "prod" } });
+	});
 });

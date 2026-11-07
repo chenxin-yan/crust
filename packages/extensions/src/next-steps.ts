@@ -93,7 +93,10 @@ export const nextSteps: ExtensionFactory<
 					for (const note of notes) context.stderr(`nextSteps(): ${note}`);
 					if (text) context.stderr(text);
 				} catch (error) {
-					context.stderr(`nextSteps(): ${errorMessage(error)}`);
+					// The report itself may fail (e.g. a throwing stderr sink); it must not escape either.
+					try {
+						context.stderr(`nextSteps(): ${errorMessage(error)}`);
+					} catch {}
 				}
 			}),
 );
