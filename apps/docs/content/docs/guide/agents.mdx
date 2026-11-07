@@ -58,7 +58,7 @@ A long-running command can report progress as data. Write its action as an [asyn
 
 <include lang="ts">../../../examples/guide/agents.ts#status</include>
 
-People see only what the action writes. With `--json`, [`json()` streams NDJSON](/docs/modules/extensions/json#generator-actions) that always ends with exactly one result or error line:
+People see only what the action writes. With `--json`, [`json()` streams NDJSON](/docs/modules/extensions/json#generator-actions) that ends with one result or error line:
 
 ```sh
 $ my-cli status prod --json
@@ -66,6 +66,8 @@ $ my-cli status prod --json
 {"type":"event","data":{"step":"ship"}}
 {"type":"result","data":{"target":"prod","healthy":true}}
 ```
+
+A cancelled invocation (exit code 130), or a failure another Extension's `onError` hook claims, ends the stream without that line (see [`json()` limitations](/docs/modules/extensions/json#limitations)), so check the exit status rather than waiting for it.
 
 The same events reach `run()`'s `onEvent` callback and [MCP progress notifications](/docs/modules/mcp#progress).
 
