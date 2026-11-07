@@ -8,6 +8,7 @@ import {
 	defineExtensionId,
 	type RunOutcome,
 } from "@crustjs/core";
+import { nextSteps } from "@crustjs/extensions";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -192,6 +193,63 @@ describe("createMcpServer", () => {
 		const client = await connect(fixture);
 		const result = await client.callTool({ name: "print", arguments: { bail: true } });
 		expect(result.content).toEqual([{ type: "text", text: "bailed" }]);
+	});
+
+	it("appends captured stderr as a text block after the result", async () => {
+		const client = await connect(fixture);
+		expect(await client.callTool({ name: "print" })).toEqual({
+			content: [
+				{ type: "text", text: "plain output" },
+				{ type: "text", text: "noise" },
+			],
+		});
+	});
+
+	it("carries nextSteps() blocks in completed and failed tool results", async () => {
+		class NotLoggedInError extends Error {}
+		const status = defineCommand("status", (c) => c.action(() => {}));
+		const login = defineCommand("login", (c) => c.action(() => {}));
+		const app = new Crust("cli")
+			.extend(
+				nextSteps({
+					onError: (error) =>
+						error instanceof NotLoggedInError
+							? [{ command: login, description: "Log in" }]
+							: undefined,
+				}),
+			)
+			.add(
+				defineCommand("deploy", (c) =>
+					c
+						.use(nextSteps)
+						.flags({ fail: { type: "boolean" } })
+						.action(async ({ flags, ctx }) => {
+							(await ctx.nextSteps).add(status, undefined, "Check the deployment");
+							if (flags.fail) throw new NotLoggedInError("not logged in");
+							return { ok: true };
+						}),
+				),
+				status,
+				login,
+			);
+		const client = await connect(app);
+		expect(await client.callTool({ name: "deploy" })).toEqual({
+			content: [
+				{ type: "text", text: JSON.stringify({ ok: true }, null, 2) },
+				{ type: "text", text: "Next steps:\n  Check the deployment:\n    cli status" },
+			],
+			structuredContent: { ok: true },
+		});
+		expect(await client.callTool({ name: "deploy", arguments: { fail: true } })).toEqual({
+			content: [
+				{ type: "text", text: "Error: not logged in" },
+				{
+					type: "text",
+					text: "Next steps:\n  Log in:\n    cli login\n  Check the deployment:\n    cli status",
+				},
+			],
+			isError: true,
+		});
 	});
 
 	it("forwards cancellation per invocation and closes active Contexts on disconnect", async () => {
@@ -453,6 +511,30 @@ describe("toolResultFromOutcome", () => {
 		result,
 		stdout: "out",
 		stderr: "",
+	});
+
+	it.each([
+		[
+			"completed",
+			completed({ a: 1 }),
+			{ content: [{ type: "text", text: '{\n  "a": 1\n}' }], structuredContent: { a: 1 } },
+		],
+		[
+			"handled",
+			{ status: "handled" as const, by: defineExtensionId("test:h"), stdout: "out", stderr: "" },
+			{ content: [{ type: "text", text: "out" }] },
+		],
+		[
+			"failed",
+			{ status: "failed" as const, error: new Error("boom"), stdout: "", stderr: "" },
+			{ content: [{ type: "text", text: "Error: boom" }], isError: true },
+		],
+	])("appends non-empty stderr after a %s result", (_label, outcome, withoutStderr) => {
+		expect(toolResultFromOutcome(outcome)).toEqual(withoutStderr);
+		expect(toolResultFromOutcome({ ...outcome, stderr: "warn" })).toEqual({
+			...withoutStderr,
+			content: [...withoutStderr.content, { type: "text", text: "warn" }],
+		});
 	});
 
 	it("falls back to stdout when a result getter throws", () => {

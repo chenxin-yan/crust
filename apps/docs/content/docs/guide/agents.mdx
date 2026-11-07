@@ -141,7 +141,7 @@ Crust doesn't detect agents or add a global `--no-input`: the TTY check is the r
 
 ## MCP
 
-[`@crustjs/mcp`](/docs/modules/mcp) serves your commands as MCP tools with `<cli> mcp`. Each tool's input schema is the same flat object `--input` takes; `.output()` schemas and generator events become the tool's output schema and progress notifications.
+[`@crustjs/mcp`](/docs/modules/mcp) serves your commands as MCP tools with `<cli> mcp`. Each tool's input schema is the same flat object `--input` takes; `.output()` schemas and generator events become the tool's output schema and progress notifications. What a call writes to stderr, next steps included, follows its result in the tool result.
 
 ## Skills
 
