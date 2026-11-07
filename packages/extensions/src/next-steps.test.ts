@@ -222,7 +222,9 @@ describe("nextSteps", () => {
 			.extend(nextSteps())
 			.add(db)
 			.command("suggest", (cmd) =>
-				cmd.use(nextSteps).action(async ({ ctx }) => void (await ctx.nextSteps).add(migrate)),
+				cmd.use(nextSteps).action(async ({ ctx }) => {
+					(await ctx.nextSteps).add(migrate);
+				}),
 			);
 
 		expect((await captureExecute(app, ["suggest"])).stderr).toBe("Next steps:\n  app db migrate");
