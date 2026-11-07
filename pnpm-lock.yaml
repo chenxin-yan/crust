@@ -566,6 +566,9 @@ importers:
 
   packages/openapi:
     dependencies:
+      '@crustjs/utils':
+        specifier: workspace:^
+        version: link:../utils
       typescript:
         specifier: ^7.0.0
         version: 7.0.2

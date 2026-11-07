@@ -210,40 +210,12 @@ function parseHeader(header: string): [string, string] {
 	return entry;
 }
 
-/**
- * All of stdin, read asynchronously so Ctrl-C can cancel a read waiting on an open pipe.
- * shortcut: copied from `@crustjs/extensions` input(); share it if a third package needs it.
- */
-async function readStdin(signal: AbortSignal): Promise<string> {
-	signal.throwIfAborted();
-	const { stdin } = process;
-	const chunks: Buffer[] = [];
-	const done = Promise.withResolvers<string>();
-	// Strings arrive when something already called `stdin.setEncoding()`.
-	const onData = (chunk: Buffer | string) =>
-		void chunks.push(typeof chunk === "string" ? Buffer.from(chunk, "utf8") : chunk);
-	const onEnd = () => done.resolve(Buffer.concat(chunks).toString("utf8"));
-	const onAbort = () => done.reject(signal.reason);
-	stdin.on("data", onData).once("end", onEnd).once("error", done.reject);
-	signal.addEventListener("abort", onAbort, { once: true });
-	// A `data` listener does not restart a stream an earlier consumer paused.
-	stdin.resume();
-	try {
-		return await done.promise;
-	} finally {
-		signal.removeEventListener("abort", onAbort);
-		stdin.off("data", onData).off("end", onEnd).off("error", done.reject);
-		// Paused stdin no longer keeps the process alive after a cancelled read.
-		stdin.pause();
-	}
-}
-
 /** Inline text, `@path` (relative to the working directory), or `-` (all of stdin). */
 async function readBody(value: string, signal: AbortSignal): Promise<string> {
 	if (value !== "-" && !value.startsWith("@")) return value;
 	try {
 		return value === "-"
-			? await readStdin(signal)
+			? await (await import("@crustjs/utils/process")).readStdin(signal)
 			: process.getBuiltinModule("node:fs").readFileSync(value.slice(1), "utf8");
 	} catch (cause) {
 		// Cancellation stays an abort, not a PARSE failure.
@@ -341,8 +313,9 @@ export const apiCommand: ExtensionFactory<
 							if (flags.paginate && paginate === undefined) {
 								throw new Error("--paginate: this CLI does not configure pagination");
 							}
+							let url: URL;
 							try {
-								baseOriginUrl(client.baseUrl, args.path);
+								url = baseOriginUrl(client.baseUrl, args.path);
 							} catch (cause) {
 								const message = cause instanceof Error ? cause.message : String(cause);
 								throw new CrustError("PARSE", message, { argument: "path" }).withCause(cause);
@@ -360,10 +333,9 @@ export const apiCommand: ExtensionFactory<
 							if (fields.length > 0) {
 								// Fields go in the query when the method takes no body or --body is the body.
 								if (body !== undefined || method === "GET" || method === "HEAD") {
-									const query = new URLSearchParams(
-										fields.map(([key, value]): [string, string] => [key, String(value)]),
-									);
-									path += `${path.includes("?") ? "&" : "?"}${query.toString()}`;
+									// Through the URL, so a `#fragment` in the path does not swallow the query.
+									for (const [key, value] of fields) url.searchParams.append(key, String(value));
+									path = url.href;
 								} else {
 									requestBody = JSON.stringify(Object.fromEntries(fields));
 								}

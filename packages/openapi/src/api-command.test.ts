@@ -240,6 +240,13 @@ describe("api <path>", () => {
 		});
 	});
 
+	it("puts -X GET fields before the URL's fragment", async () => {
+		const calls = stubFetch();
+		await captureExecute(buildApp(), ["api", "/users#section", "-X", "GET", "-F", "page=2"]);
+
+		expect(calls[0]?.url).toBe("https://api.example.com/v1/users?page=2#section");
+	});
+
 	it("sends --body as the request body and lets -H override auth", async () => {
 		const calls = stubFetch();
 		await captureExecute(buildApp(), [
@@ -487,6 +494,31 @@ describe("api <path>", () => {
 
 		expect(run.stderr).toBe("");
 		expect(run.stdout.trim()).toBe('POST {"name":"ada"}');
+		expect(run.status).toBe(0);
+	});
+
+	// An earlier consumer, such as input() for `--input -`, read stdin to EOF.
+	it.each([
+		["node", process.execPath, ["--input-type=module"]],
+		["bun", "bun", []],
+	])("reads --body - from stdin that already ended as empty on %s", (_runtime, command, options) => {
+		const script = `
+			import { Crust } from "@crustjs/core";
+			import { apiCommand } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "api-command.ts")).href)};
+			globalThis.fetch = async (url, init) => new Response(init.method + " [" + init.body + "]");
+			for await (const _ of process.stdin);
+			const app = new Crust("tool").extend(apiCommand({ spec: {}, baseUrl: "https://api.example.com" }));
+			process.exitCode = await app.execute({ argv: ["api", "/echo", "--body", "-"] });
+		`;
+		const run = spawnSync(command, [...options, "-e", script], {
+			cwd: join(import.meta.dirname, ".."),
+			input: '{"name":"ada"}',
+			encoding: "utf8",
+			timeout: 10_000,
+		});
+
+		expect(run.stderr).toBe("");
+		expect(run.stdout.trim()).toBe("POST []");
 		expect(run.status).toBe(0);
 	});
 });
