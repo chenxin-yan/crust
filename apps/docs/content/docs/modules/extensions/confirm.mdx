@@ -1,0 +1,34 @@
+---
+title: Confirm
+description: Ask before a destructive change, or take --yes.
+---
+
+## Usage
+
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../../examples/modules/extensions/confirm.ts
+</include>
+
+```sh
+$ my-cli drop --yes
+Dropped
+
+$ my-cli drop < /dev/null
+Error: Confirmation required: Drop the database? Pass --yes to confirm.
+```
+
+`confirm()` provides the `confirm` Context. A command that declares it with [`.use(confirm)`](/docs/guide/extensions#use-an-extensions-contexts-from-a-command) calls `(await ctx.confirm)(message)` before changing anything; the call resolves once the change is confirmed and throws otherwise, so the code after it runs only when confirmed. Without `.extend(confirm())` on the app, `.use(confirm)` is a type error, and preparing the app throws a `DEFINITION` error.
+
+## Behavior
+
+The Context owns a boolean `--yes` flag, so every command accepts it. When the command calls `confirm(message)`:
+
+- with `--yes`, it resolves without asking;
+- when stdin and stderr are both terminals, it shows a yes/no prompt with `message` on stderr, defaulting to No. Yes resolves; No throws `Not confirmed: <message> Nothing was changed.` (exit code 1). Ctrl-C cancels the command (exit code 130);
+- otherwise it throws the exported `ConfirmationRequiredError`, `Confirmation required: <message> Pass --yes to confirm.` (exit code 1), so a script or an agent never waits on a prompt and never succeeds unconfirmed.
+
+`--yes` is a normal flag, so [`input()`](/docs/modules/extensions/input) can supply it too: `--input '{"yes":true}'`. The prompt from [`@crustjs/prompts`](/docs/modules/prompts) loads only when a command asks.
+
+## Limitations
+
+`--yes` is a Context-owned flag installed on every command, so a command cannot declare its own `yes` flag while `confirm()` is registered.
