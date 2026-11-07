@@ -1474,9 +1474,10 @@ export class Crust<
 	 * Declare it before `.action()`: TypeScript then checks the action's return
 	 * against the schema's input type. After the action resolves, Core validates
 	 * its result with the schema and returns the schema's output as the result,
-	 * typed in `run()`; a command without an action validates `undefined`. A result
-	 * the schema rejects fails the invocation with an `OUTPUT` {@link CrustError}. Tooling reads the result's JSON Schema from
-	 * `CommandSnapshot.outputSchema`.
+	 * typed in `run()`; a command without an action validates `undefined`. Nothing is
+	 * validated when an Extension flag handler or `noAction` takes over. A result
+	 * the schema rejects fails the invocation with an `OUTPUT` {@link CrustError}.
+	 * Tooling reads the result's JSON Schema from `CommandSnapshot.outputSchema`.
 	 *
 	 * After `.action()`, TypeScript checks the action's awaited return against the new
 	 * schema's input instead. Calling `.output()` again replaces the schema. The
