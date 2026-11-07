@@ -175,6 +175,17 @@ describe("toolsFromSnapshot", () => {
 			.command("loop", (c) =>
 				c.output(jsonSchemaOutput({ type: "array", items: { $ref: "#" } })).action(() => []),
 			)
+			.command("pointer", (c) =>
+				c
+					.output(
+						jsonSchemaOutput({
+							type: "array",
+							prefixItems: [{ type: "string" }],
+							items: { $ref: "#/prefixItems/0" },
+						}),
+					)
+					.action(() => []),
+			)
 			.command("plain", (c) => c.output(passthrough).action(() => 1));
 		const outputs = Object.fromEntries(
 			toolsFromSnapshot(await app.snapshot()).map((tool) => [tool.name, tool.outputSchema]),
@@ -195,8 +206,9 @@ describe("toolsFromSnapshot", () => {
 			},
 			// Results may be objects or not, so structuredContent may or may not be wrapped.
 			maybe: undefined,
-			// `#` would point at the wrapper.
+			// `#` and `#/prefixItems/0` would resolve against the wrapper.
 			loop: undefined,
+			pointer: undefined,
 			plain: undefined,
 		});
 	});
