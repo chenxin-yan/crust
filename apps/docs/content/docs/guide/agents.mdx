@@ -29,7 +29,7 @@ The object is converted and validated exactly like argv, and arguments and flags
 
 ## JSON output
 
-Write for people with `stdout(text)` and return data for programs. [`json()`](/docs/modules/extensions/json) adds `--json`, which prints the Command Action's return value as one line of JSON on stdout and moves everything else to stderr:
+Write for people with `stdout(text)` and return data for programs. [`json()`](/docs/modules/extensions/json) adds `--json`, which prints the Command Action's return value as one line of JSON on stdout and moves the action's and Contexts' `stdout()` writes to stderr:
 
 ```sh
 $ my-cli deploy prod --json
@@ -69,7 +69,7 @@ $ my-cli status prod --json
 
 A cancelled invocation (exit code 130), or a failure another Extension's `onError` hook claims, ends the stream without that line (see [`json()` limitations](/docs/modules/extensions/json#limitations)), so check the exit status rather than waiting for it.
 
-The same events reach `run()`'s `onEvent` callback and [MCP progress notifications](/docs/modules/mcp#progress).
+The same events reach `run()`'s `onEvent` callback. Under MCP, each yield sends a [progress notification](/docs/modules/mcp#progress) when the client asks for progress; it carries a count, and a string event becomes its message.
 
 ## Discovery
 
