@@ -190,27 +190,6 @@ export type ContextsOutput<Cs extends readonly AnyContextInstance[]> =
 						: never
 				>;
 
-type ContextFlagsOutput<C> = C extends AnyContextInstance
-	? DefiningOf<C> extends ContextInstance<infer Name, any, infer OF, any>
-		? NamedOutput<Name, OF>
-		: never
-	: never;
-
-type StaticContextsFlagsByName<Cs extends readonly unknown[], Acc = {}> = Cs extends readonly [
-	...infer Init,
-	infer Last,
-]
-	? StaticContextsFlagsByName<Init, MergeProviders<ContextFlagsOutput<Last>, Acc>>
-	: Acc;
-
-/** Each provided Context's owned flags by Context name; the last provider of a name wins. */
-export type ContextsFlagsByName<Cs extends readonly AnyContextInstance[]> =
-	IsStaticTuple<Cs> extends true
-		? StaticContextsFlagsByName<FoldableContexts<Cs>>
-		: Cs[number] extends never
-			? {}
-			: Record<string, FlagsDef>;
-
 type StaticContextsOwnedFlags<
 	Cs extends readonly unknown[],
 	Acc extends FlagsDef = {},

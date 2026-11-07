@@ -139,7 +139,7 @@ export function registerFlag(
  * Register `flags` as owned by the Context `name`. The flags a `.use()` declares type the command;
  * the provider's flags are what its setup reads. A flag both define stays installed once: equal
  * definitions are shared, and the provider may customize a declared flag's spelling, help, or
- * default (its definition wins) but not the values the declared type promises.
+ * default value (its definition wins) but not the values or presence the declared type promises.
  */
 export function registerContextFlags(
 	node: CommandNode,
@@ -171,27 +171,69 @@ export function registerContextFlags(
 
 /**
  * Register the owned flags of each declared Context and, transitively, of the Contexts its setup
- * uses, together with the flags of the instance `node` resolves by each name (another same-name
- * factory's, or an `.of()` double). Dependencies of both are followed. Factories are visited once
- * each, so two same-name factories declared together both contribute.
+ * uses: what the types know. Factories are visited once each, so two same-name factories declared
+ * together both contribute. {@link checkProvidedContextFlags} checks the resolved providers.
  */
 export function installContextFlags(
 	node: CommandNode,
 	factories: readonly AnyContextFactory[],
-	visited: Set<AnyContextFactory> = new Set(),
 ): void {
-	for (const factory of factories) {
-		if (visited.has(factory)) continue;
-		visited.add(factory);
-		const name = factory.contextName;
-		const provided = node.contexts.findLast(({ instance }) => instance.name === name)?.instance;
-		registerContextFlags(node, name, factory.ownedFlags, "declared");
-		if (provided) registerContextFlags(node, name, provided.ownedFlags, "provided");
-		installContextFlags(node, provided ? [...factory.use, ...provided.use] : factory.use, visited);
+	for (const factory of declaredContextFactories(factories)) {
+		registerContextFlags(node, factory.contextName, factory.ownedFlags, "declared");
 	}
 }
 
-// Whether every value `provided` parses fits the type `declared` promises the action.
+/**
+ * Once `node`'s providers are final: each Context `factories` declare (transitively), and each
+ * dependency of its resolved provider, must resolve to a provider whose owned flags `node` already
+ * parses, compatibly. A same-name provider may customize a declared flag (its definition wins)
+ * but not add one: the types know only the declared Contexts' flags.
+ */
+export function checkProvidedContextFlags(
+	node: CommandNode,
+	factories: readonly AnyContextFactory[],
+): void {
+	const names = declaredContextNames(factories);
+	// A Set visits names added while iterating, so providers' dependencies are checked too.
+	for (const name of names) {
+		const provided = node.contexts.findLast(({ instance }) => instance.name === name)?.instance;
+		if (!provided) continue;
+		const installed = node.flagContexts.get(name) ?? [];
+		const unparsed = Object.keys(provided.ownedFlags).find((flag) => !installed.includes(flag));
+		if (unparsed !== undefined) {
+			throw new CrustError(
+				"DEFINITION",
+				`Context "${name}" provided to command "${node.meta.name}" owns flag "${unparsed}", which the command does not parse: the Contexts it declares with .use() do not own it. Declare the provider's own Context, or add the flag to the declared one.`,
+				{ subject: "context", name, reason: "context-flags-not-parsed" },
+			);
+		}
+		registerContextFlags(node, name, provided.ownedFlags, "provided");
+		for (const dependency of provided.use) names.add(dependency.contextName);
+	}
+}
+
+/** Declared factories and their dependencies, transitively, each once. */
+function declaredContextFactories(factories: readonly AnyContextFactory[]): AnyContextFactory[] {
+	const visited = new Set<AnyContextFactory>();
+	const visit = (list: readonly AnyContextFactory[]): void => {
+		for (const factory of list) {
+			if (visited.has(factory)) continue;
+			visited.add(factory);
+			visit(factory.use);
+		}
+	};
+	visit(factories);
+	return [...visited];
+}
+
+/** Names of the Contexts whose flags {@link installContextFlags} installs for `factories`. */
+export function declaredContextNames(factories: readonly AnyContextFactory[]): Set<string> {
+	return new Set(declaredContextFactories(factories).map((factory) => factory.contextName));
+}
+
+// Whether every value `provided` parses fits the type `declared` promises the action: the same
+// value type, a value whenever the declared one guarantees it, and input required only if the
+// declared one requires it too.
 function keepsDeclaredValues(declared: FlagDef, provided: FlagDef): boolean {
 	if (
 		declared.type !== provided.type ||
@@ -202,6 +244,8 @@ function keepsDeclaredValues(declared: FlagDef, provided: FlagDef): boolean {
 	if (declared.parse !== provided.parse || declared.schema !== provided.schema) return false;
 	const present = (def: FlagDef) => def.required === true || def.default !== undefined;
 	if (present(declared) && !present(provided)) return false;
+	const inputRequired = (def: FlagDef) => def.required === true && def.default === undefined;
+	if (inputRequired(provided) && !inputRequired(declared)) return false;
 	const choices = declared.choices;
 	return choices === undefined || (provided.choices?.every((c) => choices.includes(c)) ?? false);
 }
@@ -213,19 +257,6 @@ function replaceFlag(node: CommandNode, name: string, def: FlagDef): void {
 		if (entry.canonicalName === name) node.flagSpellings.delete(spelling);
 	}
 	registerFlag(node, name, def, "owned");
-}
-
-/** Names of the Contexts `factories` declare, with their dependencies, transitively. */
-export function declaredContextNames(
-	factories: readonly AnyContextFactory[],
-	names: Set<string> = new Set(),
-): Set<string> {
-	for (const factory of factories) {
-		if (names.has(factory.contextName)) continue;
-		names.add(factory.contextName);
-		declaredContextNames(factory.use, names);
-	}
-	return names;
 }
 
 // Frozen flag definitions compare structurally; functions and schema objects by identity.

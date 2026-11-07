@@ -8,7 +8,7 @@ A Context's owned flags now appear only on commands whose `ctx` exposes the Cont
 - a reusable command that declares it with `.use()`, together with the flags of the Contexts its setup uses, transitively
 - for an Extension-provided Context: the root, its inline children, and the commands that `.use()` it; every command when the Extension's hooks `.use()` it
 
-A command that `.use()`s a Context may also `.provide()` it; the two share its flags. When a different same-name Context fulfills a `.use()`, the command parses both Contexts' flags; for a flag both define, the provider may change its spelling, help, or default, but a definition that changes the values the declared one promises is a `DEFINITION` error.
+A command that `.use()`s a Context may also `.provide()` it; the two share its flags. A command that `.use()`s a Context parses only the declared Contexts' flags: a different same-name Context that fulfills the `.use()` (or one its setup uses) must not own other flags, or preparing the app fails with a `DEFINITION` error, reason `context-flags-not-parsed`. For a flag both define, the provider may change its spelling, help, default value, or narrow its `choices`, but a definition that changes the values or presence the declared one promises is a `DEFINITION` error.
 
 Parsing, help, completions, manual pages, snapshots, and typed `run()` agree: elsewhere the flag is unknown. `.use()` also adds the flags to the command's `flags` type. Pulling a flag-owning Context on a command that does not parse its flags (only possible through an untyped access) fails with a `DEFINITION` error, reason `context-flags-not-parsed`.
 
