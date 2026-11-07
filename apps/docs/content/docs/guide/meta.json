@@ -8,6 +8,7 @@
     "contexts",
     "extensions",
     "error-handling",
+    "agents",
     "testing",
     "runtime-support",
     "build-and-distribution"
