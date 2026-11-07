@@ -796,10 +796,13 @@ type ActionReturn<S extends AnyCollisionSpellings> = [OutputSchemaOf<S>] extends
 	? unknown
 	: InferInput<OutputSchemaOf<S>> | PromiseLike<InferInput<OutputSchemaOf<S>>>;
 
-/** The command result: the awaited action return, or the `.output()` schema's output. */
+/**
+ * The command result: the awaited action return, or the `.output()` schema's output,
+ * awaited too because the invocation resolves any promise the schema returns.
+ */
 type ActionResult<S extends AnyCollisionSpellings, R> = [OutputSchemaOf<S>] extends [never]
 	? Awaited<R>
-	: InferOutput<OutputSchemaOf<S>>;
+	: Awaited<InferOutput<OutputSchemaOf<S>>>;
 
 // `.output()` after `.action()` checks the action's awaited return against the new schema;
 // a state that may have no action (see `InitialOutputState`) has nothing to check.
@@ -978,7 +981,7 @@ type AfterOutput<
 	Omit<CollisionSp, "output"> & {
 		readonly output: { readonly schema: S; readonly actionReturn: ActionReturnOf<CollisionSp> };
 	},
-	InferOutput<S>,
+	Awaited<InferOutput<S>>,
 	Meta,
 	string,
 	Caps
