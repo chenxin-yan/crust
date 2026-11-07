@@ -1170,7 +1170,8 @@ type MissingRootMetaBrand<E, Defined extends RootMetaKey> =
  * - `CtxFlags` — Context-owned flags accumulated by `.provide()`, inherited by
  *   the shapes of definitions added afterwards (recursive Extension flags reach
  *   every command and are applied where shapes are read; see `TreeWithRecursiveFlags`)
- * - `Result` — awaited return type of this command's action
+ * - `Result` — this command's result type: the awaited `.output()` schema output, or
+ *   else the awaited return type of its action
  * - `Meta` — authored root metadata available to Extension requirements
  * - `Caps` — root application or configure-only recipe capabilities
  *

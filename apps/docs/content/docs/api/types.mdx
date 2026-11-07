@@ -171,7 +171,7 @@ JSON inputs accept JSON primitives, structurally JSON-compatible objects, and ar
 
 The inferred return value of `run()`. Every branch carries readonly captured `stdout` and `stderr`. Narrow `status` before reading its branch-specific field:
 
-- `completed`: the action's awaited `result`.
+- `completed`: the `result`: the awaited output of the command's [`.output()`](/docs/api/crust#outputschema) schema, or else the action's awaited return value.
 - `handled`: the handling Extension id, `by`.
 - `failed`: the original thrown `error`.
 
@@ -382,7 +382,7 @@ The context `setup` receives: the same [`ExtensionContext`](#extensioncontext) o
   name="InvocationOutcome"
 />
 
-`postRun` receives `completed` with the action's awaited `result` (`undefined` for a command without an action), `handled` with `by` naming the Extension whose flag handler or `noAction` ended the invocation, or `failed` with the thrown value. On `failed`, `by` names the Extension whose `onError` claimed the failure.
+`postRun` receives `completed` with the `result` `run()` returns (the awaited [`.output()`](/docs/api/crust#outputschema) schema output when the command declares one, otherwise the action's awaited return value, `undefined` for a command without an action); `handled` with `by` naming the Extension whose flag handler or `noAction` ended the invocation; or `failed` with the thrown value. On `failed`, `by` names the Extension whose `onError` claimed the failure.
 
 ### `ExtensionSectionContribution`
 
