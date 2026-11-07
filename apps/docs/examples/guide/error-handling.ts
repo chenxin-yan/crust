@@ -46,24 +46,27 @@ async function createProject() {
 const prompted = new Crust("scaffold").action(createProject);
 //#endregion
 
-//#region custom-message
-import { defineExtension, defineExtensionId } from "@crustjs/core";
+//#region error-class
+import { readFile } from "node:fs/promises";
 
-class ConfigError extends Error {}
+// [!code highlight:3]
+export class ConfigNotFoundError extends Error {
+	override name = "ConfigNotFoundError";
+}
 
-const configErrors = defineExtension(defineExtensionId("config-errors")).onError(
-	(error, { stderr }) => {
+async function loadConfig(path: string) {
+	try {
+		return await readFile(path, "utf8");
+	} catch (cause) {
+		// Only a missing file means "run init"; rethrow permission and other failures as is.
+		if ((cause as NodeJS.ErrnoException).code !== "ENOENT") throw cause;
 		// [!code highlight]
-		if (!(error instanceof ConfigError)) return;
-		stderr(`Error: ${error.message}`);
-		stderr("Hint: Run init to create the config file.");
-		// [!code highlight]
-		return true;
-	},
-);
+		throw new ConfigNotFoundError(`No ${path} found. Run \`app init\` to create one.`, { cause });
+	}
+}
 
-const configured = new Crust("app").extend(configErrors).action(() => {
-	throw new ConfigError("Config file not found.");
+const configured = new Crust("app").action(async () => {
+	await loadConfig("app.config.json");
 });
 //#endregion
 
@@ -73,8 +76,8 @@ const cancelled = new Crust("app").action(() => {
 async function inspectFailure() {
 	//#region tests
 	const outcome = await configured.run([]);
-	if (outcome.status === "failed" && outcome.error instanceof ConfigError) {
-		console.log(outcome.error.message); // Config file not found.
+	if (outcome.status === "failed" && outcome.error instanceof ConfigNotFoundError) {
+		console.log(outcome.error.message); // No app.config.json found. Run `app init` to create one.
 	}
 	//#endregion
 }
@@ -83,7 +86,7 @@ if (import.meta.main) {
 	const example = {
 		validate: declared,
 		cleanup: deploy,
-		custom: configured,
+		config: configured,
 		cancel: cancelled,
 		prompt: prompted,
 	}[process.argv[2] ?? ""];
