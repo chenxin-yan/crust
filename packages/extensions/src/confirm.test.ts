@@ -83,10 +83,8 @@ describe("confirm", () => {
 
 	it("rejects a command that uses confirm without extending confirm()", async () => {
 		// @ts-expect-error -- runtime regression deliberately exercises the preparation check.
-		const error = await new Crust("app")
-			.add(drop)
-			.snapshot()
-			.catch((caught: unknown) => caught);
+		const unextended = new Crust("app").add(drop);
+		const error = await unextended.snapshot().catch((caught: unknown) => caught);
 		expect(error).toBeInstanceOf(CrustError);
 		expect(error).toMatchObject({
 			code: "DEFINITION",
