@@ -33,7 +33,7 @@ function buildCli() {
 	return new Crust("mycli", { description: "Test CLI" })
 		.extend(schema(), help())
 		.add(
-			defineCommand("deploy", { description: "Deploy the app", destructive: true }, (cmd) =>
+			defineCommand("deploy", { description: "Deploy the app" }, (cmd) =>
 				cmd
 					.args({
 						name: "target",
@@ -65,7 +65,7 @@ function buildCli() {
 }
 
 describe("schema", () => {
-	it("prints a command's input and output JSON Schema and its destructive mark", async () => {
+	it("prints a command's input and output JSON Schema", async () => {
 		const { stdout, stderr, exitCode } = await captureExecute(buildCli(), ["schema", "deploy"]);
 
 		expect({ stderr, exitCode }).toEqual({ stderr: "", exitCode: 0 });
@@ -90,7 +90,6 @@ describe("schema", () => {
 				required: ["target"],
 			},
 			output: deployResult,
-			destructive: true,
 		});
 	});
 
@@ -164,8 +163,6 @@ describe("schema", () => {
 				"## `mycli deploy <target> [options]`",
 				"",
 				"Deploy the app",
-				"",
-				"**Destructive.**",
 				"",
 				"Arguments:",
 				"",
