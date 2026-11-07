@@ -6,6 +6,7 @@ import { runInteractive } from "@crustjs/testing/interactive";
 import { describe, expect, it } from "vite-plus/test";
 
 import { ConfirmationRequiredError, confirmation } from "./confirmation.ts";
+import { input } from "./input.ts";
 
 function appWithRm() {
 	return new Crust("app")
@@ -55,6 +56,23 @@ describe("confirmation", () => {
 			stderr: "",
 			exitCode: 0,
 		});
+	});
+
+	it.each([
+		["confirmation first", () => [confirmation(), input()] as const],
+		["input first", () => [input(), confirmation()] as const],
+	])("takes yes from --input without prompting (%s)", async (_order, extensions) => {
+		const app = new Crust("app")
+			.extend(...extensions())
+			.add(
+				defineCommand("rm", { destructive: true }, (cmd) =>
+					cmd.action(({ stdout }) => stdout("removed")),
+				),
+			);
+
+		expect(
+			await nonInteractive(() => captureExecute(app, ["rm", "--input", '{"yes":true}'])),
+		).toEqual({ stdout: "removed", stderr: "", exitCode: 0 });
 	});
 
 	it("runs commands not marked destructive without --yes", async () => {
