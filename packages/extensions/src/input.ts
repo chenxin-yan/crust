@@ -65,11 +65,14 @@ async function readInput(value: string, signal: AbortSignal): Promise<string> {
  * flags as one JSON object keyed by their names, plus `raw` for passthrough
  * values: inline JSON, `@path` to read a file, or `-` to read stdin. Values given
  * on argv win over the same keys; every other key replaces the environment value
- * or default.
+ * or default. It binds in `setup`, so every `preRun` sees the values whatever the
+ * `.extend()` order, and `--input` is read even when a flag handler such as
+ * `--help` takes over.
  */
 export const input: ExtensionFactory<[], {}, [], typeof inputFlags> =
 	/* @__PURE__ */ defineExtension(JSON_INPUT).factory((extension) =>
-		extension.flags(inputFlags).preRun(async (context) => {
+		// Setup, not preRun: setups all run before the first preRun, so no check misses the values.
+		extension.flags(inputFlags).setup(async (context) => {
 			if (typeof context.flags.input !== "string") return;
 			const text = await readInput(context.flags.input, context.signal);
 			let values: unknown;

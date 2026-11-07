@@ -5,12 +5,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { Crust, CrustError } from "@crustjs/core";
+import { Crust, CrustError, defineExtension, defineExtensionId } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { help } from "./help.ts";
 import { input } from "./input.ts";
+import { json } from "./json.ts";
 
 function deployApp() {
 	return new Crust("app")
@@ -187,16 +188,53 @@ describe("input", () => {
 		});
 	});
 
-	it("never reads --input when a flag handler such as --help takes over", async () => {
+	it("reads --input before a flag handler such as --help takes over", async () => {
 		const app = new Crust("app").extend(input(), help()).action(() => "ran");
-		const { stdout, exitCode } = await captureExecute(app, [
+
+		const valid = await captureExecute(app, ["--input", "{}", "--help"]);
+		const unreadable = await captureExecute(app, [
 			"--input",
 			"@/nonexistent/crust-input.json",
 			"--help",
 		]);
 
-		expect(exitCode).toBe(0);
-		expect(stdout).toContain("--input");
+		expect(valid.exitCode).toBe(0);
+		expect(valid.stdout).toContain("--input");
+		expect(unreadable).toMatchObject({ stdout: "", exitCode: 1 });
+		expect(unreadable.stderr).toContain("--input: cannot read");
+	});
+
+	it("binds before every preRun, including one registered before input()", async () => {
+		const seen: unknown[] = [];
+		const check = defineExtension(defineExtensionId("check")).preRun(
+			({ flags }) => void seen.push(flags.region),
+		);
+		const app = new Crust("app")
+			.extend(check, input())
+			.flags({ region: { type: "string", default: "us" } })
+			.action(() => {});
+
+		expect(await captureExecute(app, ["--input", '{"region":"eu"}'])).toMatchObject({
+			exitCode: 0,
+		});
+		expect(seen).toEqual(["eu"]);
+	});
+
+	// The renderer is chosen after every setup, so json() sees the bound flag in either order.
+	it.each([
+		["input first", () => [input(), json()] as const],
+		["json first", () => [json(), input()] as const],
+	])("keeps stdout for the result when JSON input sets json() (%s)", async (_order, extensions) => {
+		const app = new Crust("app").extend(...extensions()).action(({ stdout }) => {
+			stdout("working");
+			return { ok: true };
+		});
+
+		expect(await captureExecute(app, ["--input", '{"json":true}'])).toEqual({
+			stdout: '{"ok":true}',
+			stderr: "working",
+			exitCode: 0,
+		});
 	});
 
 	it("renders an --input error through execute() with exit code 1", async () => {
@@ -254,7 +292,7 @@ describe("input", () => {
 			const script = `
 			import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
 			import { input } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "input.ts")).href)};
-			const ready = defineExtension(defineExtensionId("ready")).preRun(({ stderr }) => stderr("ready"));
+			const ready = defineExtension(defineExtensionId("ready")).setup(({ stderr }) => stderr("ready"));
 			const app = new Crust("app").extend(ready, input()).action(() => {});
 			process.exitCode = await app.execute({ argv: ["--input", "-"] });
 		`;
