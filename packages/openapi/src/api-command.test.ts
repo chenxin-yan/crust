@@ -384,6 +384,53 @@ describe("api <path>", () => {
 		expect(calls).toEqual([]);
 	});
 
+	it.each([
+		["https://evil.example/x", "https://evil.example/x"],
+		["https:\\\\evil.example/x", "https://evil.example/x"],
+		["https://api.example.com@evil.example/x", "https://api.example.com@evil.example/x"],
+		["http://api.example.com/v1/users", "http://api.example.com/v1/users"],
+		["https://api.example.com:8443/v1/users", "https://api.example.com:8443/v1/users"],
+	])(
+		"rejects %s off the base URL's origin as a PARSE error before any request",
+		async (path, href) => {
+			const calls = stubFetch();
+			const message = `Cannot request ${href}: only URLs on https://api.example.com are allowed`;
+			for (const app of [buildApp(), buildApp({ auth: undefined })]) {
+				const outcome = await app.run(["api"], {
+					args: { path },
+					flags: { header: ["Authorization: Bearer secret", "X-Api-Key: secret"] },
+				});
+
+				expect(outcome.status).toBe("failed");
+				expect(outcome.status === "failed" && outcome.error).toMatchObject({
+					code: "PARSE",
+					message,
+				});
+				expect(await captureExecute(app, ["api", path, "-H", "Authorization: x"])).toEqual({
+					stdout: "",
+					stderr: `Error: ${message}`,
+					exitCode: 1,
+				});
+			}
+			expect(calls).toEqual([]);
+		},
+	);
+
+	it.each([
+		["//evil.example/x", "https://api.example.com/v1/evil.example/x"],
+		["\\\\evil.example/x", "https://api.example.com/v1///evil.example/x"],
+		["https://api.example.com/other", "https://api.example.com/other"],
+		["HTTPS://API.EXAMPLE.COM:443/v1/users", "https://api.example.com/v1/users"],
+	])("keeps %s on the base URL's origin", async (path, url) => {
+		const calls = stubFetch();
+		const { exitCode } = await captureExecute(buildApp(), ["api", path, "-H", "X-Api-Key: k"]);
+
+		expect(exitCode).toBe(0);
+		expect(calls).toMatchObject([
+			{ url, headers: { authorization: "Bearer secret", "x-api-key": "k" } },
+		]);
+	});
+
 	// Tests run on Node; spawn each runtime so stdin is a real pipe.
 	it.each([
 		["node", process.execPath, ["--input-type=module"]],
@@ -433,7 +480,7 @@ describe("apiClient", () => {
 		});
 	});
 
-	it("sends auth headers only to the base URL's origin and calls auth once per invocation", async () => {
+	it("allows absolute URLs on the base URL's origin and calls auth once per invocation", async () => {
 		const auth = vi.fn(() => ({ authorization: "Bearer secret" }));
 		const calls = stubFetch();
 		const app = buildApp({ auth }).add(
@@ -441,7 +488,7 @@ describe("apiClient", () => {
 				command.use(apiClient).action(async ({ ctx }) => {
 					const api = await ctx.api;
 					await api.fetch("https://api.example.com/v1/a");
-					await api.fetch("https://elsewhere.example.com/b");
+					await api.fetch("/b");
 				}),
 			),
 		);
@@ -449,10 +496,44 @@ describe("apiClient", () => {
 
 		expect(calls.map(({ url, headers }) => [url, headers.authorization])).toEqual([
 			["https://api.example.com/v1/a", "Bearer secret"],
-			["https://elsewhere.example.com/b", undefined],
+			["https://api.example.com/v1/b", "Bearer secret"],
 		]);
 		expect(auth).toHaveBeenCalledTimes(1);
 	});
+
+	it.each([undefined, () => ({ "X-Api-Key": "secret" })])(
+		"rejects a URL off the base URL's origin with a TypeError before any request (auth: %s)",
+		async (auth) => {
+			const calls = stubFetch();
+			const errors: unknown[] = [];
+			const app = buildApp({ auth }).add(
+				defineCommand("leak", {}, (command) =>
+					command.use(apiClient).action(async ({ ctx }) => {
+						const api = await ctx.api;
+						const headers = { authorization: "Bearer secret", "x-api-key": "secret" };
+						for (const path of [
+							"https://elsewhere.example.com/b",
+							"https://api.example.com@elsewhere.example.com/b",
+						]) {
+							errors.push(await api.fetch(path, { headers }).catch((error: unknown) => error));
+						}
+					}),
+				),
+			);
+			await captureExecute(app, ["leak"]);
+
+			expect(errors).toEqual([
+				new TypeError(
+					"Cannot request https://elsewhere.example.com/b: only URLs on https://api.example.com are allowed",
+				),
+				new TypeError(
+					"Cannot request https://api.example.com@elsewhere.example.com/b: only URLs on https://api.example.com are allowed",
+				),
+			]);
+			expect(errors.every((error) => error instanceof TypeError)).toBe(true);
+			expect(calls).toEqual([]);
+		},
+	);
 
 	it.each([
 		[20, { stdout: "done", stderr: "", exitCode: 0 }],

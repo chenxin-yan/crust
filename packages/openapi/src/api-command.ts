@@ -10,7 +10,13 @@ import {
 	defineExtensionId,
 } from "@crustjs/core";
 
-import { type ApiClient, type ApiClientOptions, apiClient, fetchNextPage } from "./client.ts";
+import {
+	type ApiClient,
+	type ApiClientOptions,
+	apiClient,
+	baseOriginUrl,
+	fetchNextPage,
+} from "./client.ts";
 
 const API: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:openapi");
 
@@ -329,6 +335,12 @@ export const apiCommand: ExtensionFactory<
 							}
 							if (flags.paginate && paginate === undefined) {
 								throw new Error("--paginate: this CLI does not configure pagination");
+							}
+							try {
+								baseOriginUrl(client.baseUrl, args.path);
+							} catch (cause) {
+								const message = cause instanceof Error ? cause.message : String(cause);
+								throw new CrustError("PARSE", message, { argument: "path" }).withCause(cause);
 							}
 
 							const fields = (flags.field ?? []).map(parseField);
