@@ -34,8 +34,16 @@ function failureText({ error }: FailedOutcome): string {
  * as themselves, other JSON values wrapped as `{ result }`) plus a text block
  * holding the value's JSON. Any other `completed` result, and every `handled`
  * outcome, returns the captured stdout as text. `failed` sets `isError`.
+ * Non-empty captured stderr (warnings, next steps) follows as one more text
+ * block, whatever the status.
  */
 export function toolResultFromOutcome(outcome: RunOutcome<unknown>): CallToolResult {
+	const result = resultFromOutcome(outcome);
+	if (!outcome.stderr) return result;
+	return { ...result, content: [...result.content, { type: "text", text: outcome.stderr }] };
+}
+
+function resultFromOutcome(outcome: RunOutcome<unknown>): CallToolResult {
 	switch (outcome.status) {
 		case "completed": {
 			try {
