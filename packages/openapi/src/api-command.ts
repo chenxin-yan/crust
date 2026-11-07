@@ -53,15 +53,50 @@ export class ApiResponseError extends Error {
 
 const METHODS = ["get", "put", "post", "delete", "options", "head", "patch", "trace"] as const;
 
+/** The value a local `$ref` (`#/...`) points to in `spec`, or `undefined`. */
+function refTarget(spec: OpenApiSpec, ref: string): unknown {
+	let target: unknown = spec;
+	for (const token of ref.slice(1).split("/").slice(1)) {
+		const key = decodeURIComponent(token).replaceAll("~1", "/").replaceAll("~0", "~");
+		target =
+			typeof target === "object" && target !== null && Object.hasOwn(target, key)
+				? (target as Record<string, unknown>)[key]
+				: undefined;
+	}
+	return target;
+}
+
+/** A Path Item with its own local `$ref`s (e.g. to `components.pathItems`) followed; sibling keys win. */
+function pathItem(
+	spec: OpenApiSpec,
+	item: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+	let current: Record<string, unknown> = item;
+	const seen = new Set<string>();
+	for (
+		let ref = current.$ref;
+		typeof ref === "string" && ref.startsWith("#") && !seen.has(ref);
+		ref = current.$ref
+	) {
+		seen.add(ref);
+		const target = refTarget(spec, ref);
+		if (typeof target !== "object" || target === null || Array.isArray(target)) break;
+		const { $ref: _ref, ...siblings } = current;
+		current = { ...target, ...siblings };
+	}
+	return current;
+}
+
 function operations(spec: OpenApiSpec): { method: string; path: string; operation: object }[] {
-	return Object.entries(spec.paths ?? {}).flatMap(([path, item]) =>
-		METHODS.flatMap((method) => {
-			const operation = item[method];
+	return Object.entries(spec.paths ?? {}).flatMap(([path, item]) => {
+		const resolved = pathItem(spec, item);
+		return METHODS.flatMap((method) => {
+			const operation = resolved[method];
 			return typeof operation === "object" && operation !== null
 				? [{ method, path, operation }]
 				: [];
-		}),
-	);
+		});
+	});
 }
 
 /** One line per operation: `METHOD path operationId summary`, omitting what the spec lacks. */
@@ -80,14 +115,7 @@ function resolveRefs(value: unknown, spec: OpenApiSpec, chain: readonly string[]
 	if (typeof value !== "object" || value === null) return value;
 	const { $ref, ...siblings } = value as { $ref?: unknown };
 	if (typeof $ref === "string" && $ref.startsWith("#") && !chain.includes($ref)) {
-		let target: unknown = spec;
-		for (const token of $ref.slice(1).split("/").slice(1)) {
-			const key = decodeURIComponent(token).replaceAll("~1", "/").replaceAll("~0", "~");
-			target =
-				typeof target === "object" && target !== null && Object.hasOwn(target, key)
-					? (target as Record<string, unknown>)[key]
-					: undefined;
-		}
+		const target = refTarget(spec, $ref);
 		if (target !== undefined) {
 			const resolved = resolveRefs(target, spec, [...chain, $ref]);
 			return typeof resolved === "object" && resolved !== null && !Array.isArray(resolved)
@@ -335,11 +363,11 @@ export const apiCommand: ExtensionFactory<
 		),
 );
 
-/** A JSON page on one line for NDJSON; anything else is printed as is. */
+/** A page body as one NDJSON line: JSON compacted, any other text (even empty) as a JSON string. */
 function compactJson(text: string): string {
 	try {
 		return JSON.stringify(JSON.parse(text));
 	} catch {
-		return text;
+		return JSON.stringify(text);
 	}
 }
