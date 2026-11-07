@@ -74,6 +74,33 @@ describe("json", () => {
 		},
 	);
 
+	it.each(["json first", "json last"])(
+		"renders another Extension's setup failure as JSON after its Context output (%s)",
+		async (order) => {
+			const logger = defineContext("logger").setup(({ stdout }) => {
+				stdout("logger:setup");
+				return stdout;
+			});
+			const failing = defineExtension(defineExtensionId("failing"))
+				.provide(logger())
+				.use(logger)
+				.setup(async ({ ctx }) => {
+					await ctx.logger;
+					throw new Error("setup failed");
+				});
+			const base = new Crust("app");
+			const app = (
+				order === "json first" ? base.extend(json(), failing) : base.extend(failing, json())
+			).action(() => ({ ok: true }));
+
+			expect(await captureExecute(app, ["--json"])).toEqual({
+				stdout: "",
+				stderr: 'logger:setup\n{"message":"setup failed"}',
+				exitCode: 1,
+			});
+		},
+	);
+
 	it("changes nothing without --json", async () => {
 		const app = appReturning(() => {
 			throw new Error("boom");
