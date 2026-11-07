@@ -29,9 +29,11 @@ function errorData(error: unknown): unknown {
  * the action's and Contexts' `stdout()` and `stderr()` lines go to stderr, and
  * failures are written to stderr as JSON. An async generator action streams
  * NDJSON on stdout instead: one `{"type":"event","data":…}` line per yield,
- * then one `{"type":"result","data":…}` or `{"type":"error","error":…}` line.
- * Exit codes are unchanged. Adds a "JSON output" section to the root
- * command's documentation saying so.
+ * then one `{"type":"result","data":…}` or `{"type":"error","error":…}` line. A
+ * cancelled invocation (exit code 130), or a failure another Extension's
+ * `onError` hook claims, ends the stream without that final line, so consumers
+ * should check the exit status. Exit codes are unchanged. Adds a
+ * "JSON output" section to the root command's documentation saying so.
  */
 export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__ */ defineExtension(
 	JSON_OUTPUT,
