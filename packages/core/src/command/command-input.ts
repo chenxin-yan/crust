@@ -72,7 +72,8 @@ function schemaPropertySchema(
 	const { $schema: _dialect, ...schema } = def.inputSchema;
 	const token = def.type === "boolean" ? "boolean" : "string";
 	const value = list ? schema.items : schema;
-	if (list && schema.type !== "array") return undefined;
+	// `prefixItems` constrains leading elements that `items` does not cover.
+	if (list && (schema.type !== "array" || "prefixItems" in schema)) return undefined;
 	if (typeof value !== "object" || value === null || !("type" in value)) return undefined;
 	if (value.type !== token || hasRootKeyword(schema)) return undefined;
 	return schema;
@@ -122,8 +123,8 @@ function formatPath(path: readonly string[]): string {
  * required. A Standard Schema definition appears as its `inputSchema` (without
  * `$schema`, filling in a missing `description`) when that describes what
  * `run()` accepts for it: top-level `type` `"string"` (`"boolean"` for
- * `type: "boolean"` flags), or `"array"` with such `items` for variadic and
- * `multiple`, and no `$ref`, `$defs`, or other `$` keyword. Otherwise, e.g.
+ * `type: "boolean"` flags), or `"array"` with such `items` (and no `prefixItems`)
+ * for variadic and `multiple`, and no `$ref`, `$defs`, or other `$` keyword. Otherwise, e.g.
  * `z.coerce.number()` (JSON Schema `number`), it appears as its token type.
  * Defaults are `JSON.stringify` copies (`URL`s become
  * strings; nested `undefined`, functions, and symbols are dropped); defaults
