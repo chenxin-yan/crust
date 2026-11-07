@@ -20,6 +20,7 @@ import type {
 	LocalSpellingsOf,
 } from "../validation/flags.brands.ts";
 import type {
+	IsAny,
 	IsStaticTuple,
 	IsUnion,
 	IsClosedName,
@@ -121,7 +122,9 @@ export interface ContextFactory<
 	Value,
 	OF extends FlagsDef = {},
 	Deps extends ContextMap = {},
-> extends Defining<ContextFactory<Name, Options, Value, OF, Deps>> {
+	// Flags a command that uses this Context parses: its own and its setup dependencies', transitively.
+	UF extends FlagsDef = OF,
+> extends Defining<ContextFactory<Name, Options, Value, OF, Deps, UF>> {
 	/** Options may be omitted when their type accepts `undefined` (including no-option `void`). */
 	(
 		...options: undefined extends Options ? [options?: Options] : [options: Options]
@@ -129,8 +132,12 @@ export interface ContextFactory<
 	readonly contextName: Name;
 	/** @internal — declared direct dependency factories */
 	readonly use: readonly AnyContextFactory[];
+	/** @internal — owned flags, installed on the commands that use this Context */
+	readonly ownedFlags: FlagsDef;
 	of(value: Value): ContextInstance<Name, Value, OF, {}>;
 	readonly _deps?: Deps;
+	/** @internal — phantom carrying the flags `.use()` installs */
+	readonly _useFlags?: UF;
 }
 
 export type AnyContextFactory = ContextFactory<string, any, any, any, any>;
@@ -251,6 +258,22 @@ type FactoriesDeps<Fs extends readonly AnyContextFactory[], Acc = {}> = Fs exten
 	? FactoriesDeps<T, Acc & FactoryDeps<H>>
 	: Acc;
 
+// A widened factory may own any flags.
+type FactoryUseFlags<F> =
+	DefiningOf<F> extends { readonly _useFlags?: infer UF extends FlagsDef }
+		? IsAny<UF> extends true
+			? FlagsDef
+			: UF
+		: {};
+
+/** Flags a command parses for the Contexts it uses: their own and their dependencies', transitively. */
+export type ContextUseFlags<
+	Fs extends readonly AnyContextFactory[],
+	Acc extends FlagsDef = {},
+> = Fs extends readonly [infer H, ...infer T extends readonly AnyContextFactory[]]
+	? ContextUseFlags<T, AppendedFlags<Acc, FactoryUseFlags<H>>>
+	: Acc;
+
 export type ContextDependencies<Use extends readonly AnyContextFactory[]> =
 	IsStaticTuple<Use> extends true
 		? FactoriesOutput<Use> & FactoriesDeps<Use>
@@ -305,12 +328,25 @@ export interface ContextBuilder<
 	 */
 	setup<Value, Args extends readonly [options?: unknown] = []>(
 		setup: (input: ContextSetup<OF, ContextDependencies<Use>>, ...args: Args) => Awaitable<Value>,
-	): ContextFactory<Name, ContextOptionsOf<Args>, Value, OF, ContextDependencies<Use>>;
+	): ContextFactory<
+		Name,
+		ContextOptionsOf<Args>,
+		Value,
+		OF,
+		ContextDependencies<Use>,
+		ContextUseFlags<Use, OF>
+	>;
 }
 
 // Only a definitely empty state takes the first-call fast path; unions retain their uncertainty.
 type AppendedFlags<OF extends FlagsDef, F extends FlagsDef> =
-	IsUnion<OF> extends true ? OF & F : keyof OF extends never ? F : OF & F;
+	IsUnion<OF> extends true
+		? OF & F
+		: keyof OF extends never
+			? F
+			: keyof F extends never
+				? OF
+				: OF & F;
 
 type ErasedContextBuilder = ContextBuilder<string, any, any>;
 type ErasedContextOptions = Parameters<AnyContextFactory>[0];
@@ -374,6 +410,7 @@ function createContextFactory(
 		instance(use, (input) => setup(input, options));
 	factory.contextName = name;
 	factory.use = use;
+	factory.ownedFlags = ownedFlags;
 	factory.of = (value: ContextValue): AnyContextInstance =>
 		instance(Object.freeze([]), () => value);
 	// SAFETY: the mutable factory is fully populated before widening to the runtime registry type.

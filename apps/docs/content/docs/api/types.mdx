@@ -223,7 +223,7 @@ Declared in [`api/context.ts`](https://github.com/chenxin-yan/crust/blob/main/pa
 `defineContext(name)` starts an immutable definition. `.use()`, `.flags()`, and `.sections()` append and return new frozen builders; the original is unchanged. The terminal `.setup(callback)` returns a [`ContextFactory`](#contextfactory). An unfinished builder cannot be provided or used as a factory.
 
 - `.use(...factories)` declares the dependencies setup reads from `ctx`. Literal lists retain exact types; widened arrays declare open dependencies checked at runtime during composition. Empty calls are allowed.
-- `.flags(flags)` declares owned flags from one record keyed by flag name. Definitions are copied, and spellings are checked against earlier calls both by TypeScript and when the method runs.
+- `.flags(flags)` declares owned flags from one record keyed by flag name. Definitions are copied, and spellings are checked against earlier calls both by TypeScript and when the method runs. Only commands whose `ctx` exposes the Context parse them; see [Flags owned by a Context](/docs/guide/contexts#flags-owned-by-a-context).
 - `.sections(...sections)` declares [`CommandSectionInput`](#commandsectioninput) documentation, validated and frozen at declaration. It documents only the providing command (the root for Extension-provided Contexts); duplicate titles from other Contexts or command sections fail preparation. See [Context-owned documentation](/docs/guide/contexts#documentation-owned-by-a-context).
 - Setup receives types from the preceding declarations. Annotate its second parameter for factory options without restating `ctx`, flag, or return types:
 
@@ -282,7 +282,7 @@ Declared in [`api/extension.ts`](https://github.com/chenxin-yan/crust/blob/main/
 
 `defineExtension(id)` starts an immutable fluent definition; `defineExtension<MetaKeys>(id)` also [requires root metadata](#rootmetakey). Every method except `.factory()` returns a new frozen handle, and every handle is an `Extension` accepted by `.extend()`. There is no final build step.
 
-- Collection methods append on repeated calls. `.use()` declares Contexts the hooks consume. `.provide()` installs Context instances application-wide regardless of chain position; hooks see them only if also declared with `.use()`. `.flags()` owns flags. `.add()` contributes `defineCommand()` definitions at the root.
+- Collection methods append on repeated calls. `.use()` declares Contexts the hooks consume; every command parses the flags they own. `.provide()` installs Context instances application-wide regardless of chain position; hooks see them only if also declared with `.use()`, and their flags are parsed only by the root, its inline children, and commands that `.use()` them. `.flags()` owns flags. `.add()` contributes `defineCommand()` definitions at the root.
 - Lifecycle setters replace the previous callback: `.setup()`, `.noAction()`, `.preRun()`, `.postRun()`, and `.onError()` set the [hooks](#extensionhooks); `.handle(flag, run, options)` sets the [handler](#extensionhandleoptions) for one owned flag; `.sections(snapshot)` returns [section contributions](#extensionsectioncontribution); `.build(ctx)` returns [`BuildArtifacts`](#buildartifacts) for build tooling to write.
 - Each callback is typed by the declarations made before it in the chain.
 - Flag spellings and contributed command names are checked for collisions by TypeScript and when the method runs.

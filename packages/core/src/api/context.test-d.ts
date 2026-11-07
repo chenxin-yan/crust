@@ -290,3 +290,52 @@ function _typecheckChecksLiteralContextSections() {
 		.setup(() => "value");
 	type _Value = Expect<Equal<Awaited<ReturnType<ReturnType<typeof env>["setup"]>>, string>>;
 }
+
+// types Context-owned flags only on commands that parse them
+function _typecheckTypesContextFlagsAtUseSites() {
+	const region = defineFlag({ type: "string" });
+	const config = defineContext("config")
+		.flags({ region })
+		.setup(() => 1);
+	const api = defineContext("api")
+		.use(config)
+		.flags({ "api-key": apiKey })
+		.setup(() => 1);
+	type _UseFlags = Expect<
+		Equal<keyof NonNullable<(typeof api)["_useFlags"]>, "api-key" | "region">
+	>;
+	const deploy = defineCommand("deploy", (command) =>
+		command.use(api).action(({ flags }) => {
+			type _Region = Expect<Equal<typeof flags.region, string | undefined>>;
+			type _ApiKey = Expect<Equal<(typeof flags)["api-key"], string | undefined>>;
+		}),
+	);
+	const status = defineCommand("status", (command) => command);
+	const app = new Crust("cli")
+		.provide(config(), api())
+		.add(deploy, status)
+		.command("inline", (command) => command);
+	void app.run(["deploy"], { flags: { region: "eu", "api-key": "k" } });
+	void app.run(["inline"], { flags: { region: "eu", "api-key": "k" } });
+	// @ts-expect-error -- status does not use api, so it does not parse its flags
+	void app.run(["status"], { flags: { "api-key": "k" } });
+
+	const confirm = defineContext("confirm")
+		.flags({ yes: { type: "boolean" } })
+		.setup(() => true);
+	const provided = defineExtension(defineExtensionId("provided")).provide(confirm());
+	const hooked = defineExtension(defineExtensionId("hooked")).use(confirm).provide(confirm());
+	const providedApp = new Crust("cli")
+		.extend(provided)
+		.add(status)
+		.command("inline", (command) => command);
+	void providedApp.run([], { flags: { yes: true } });
+	void providedApp.run(["inline"], { flags: { yes: true } });
+	// @ts-expect-error -- an Extension-provided Context's flags reach only commands that use it
+	void providedApp.run(["status"], { flags: { yes: true } });
+	// The flags of a Context the hooks use reach every command.
+	void new Crust("cli")
+		.extend(hooked)
+		.add(status)
+		.run(["status"], { flags: { yes: true } });
+}

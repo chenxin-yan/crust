@@ -64,11 +64,7 @@ function _privateCommandProof() {
 	const outcome = app.run(["child"], { flags: { token: "value" } });
 	type _result = Expect<Equal<typeof outcome, Promise<RunOutcome<number>>>>;
 	new Crust("app")
-		.provide(
-			defineContext("owner")
-				.flags({ token: { type: "string" } })
-				.setup(() => 1)(),
-		)
+		.extend(defineExtension(id).flags({ token: { type: "string" } }))
 		// @ts-expect-error Structural copies retain carried flag relations.
 		.add(copy);
 	const db = defineContext("db").setup(() => 1);
@@ -155,11 +151,9 @@ function _recipeHolderProof() {
 		return b;
 	}
 	const child = defineCommand("child", (c) => identity(c.flags({ token: { type: "number" } })));
-	const owner = defineContext("owner")
-		.flags({ token: { type: "string" } })
-		.setup(() => 1);
+	const owner = defineExtension(id).flags({ token: { type: "string" } });
 	// @ts-expect-error Generic identity retains the destination collision proof.
-	new Crust("app").provide(owner()).add(child);
+	new Crust("app").extend(owner).add(child);
 }
 
 function _openInlineOwnedFlags() {
@@ -344,14 +338,11 @@ function _providersAfterPendingCommands() {
 		.setup(() => 1);
 	const child = defineCommand("child", (c) => c.flags({ token: { type: "boolean" } }));
 	const ext = defineExtension(id).add(child);
-	// @ts-expect-error -- providers added later reach pending contributed commands
+	// Contributed commands parse only the Context flags they use, in either attachment order.
 	new Crust("app").extend(ext).provide(owner());
-	// @ts-expect-error -- the opposite attachment order has the same relation
 	new Crust("app").provide(owner()).extend(ext);
 	const nested = defineExtension(id).add(defineCommand("parent", (c) => c.add(child)));
-	// @ts-expect-error -- descendant spellings participate in pending relations
 	new Crust("app").extend(nested).provide(owner());
-	// Ordinary children have already materialized; later providers remain positional.
 	new Crust("app").add(child).provide(owner());
 }
 

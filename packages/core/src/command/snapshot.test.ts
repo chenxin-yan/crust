@@ -84,14 +84,14 @@ describe("snapshotCommand", () => {
 		expect("parse" in (clone.args[0] as object)).toBe(false);
 	});
 
-	it("projects Context-owned flags at the provider and later descendants", async () => {
+	it("projects Context-owned flags at the provider and the commands that use the Context", async () => {
 		const apiKey = defineFlag({ type: "string", short: "k" });
 		const auth = defineContext("auth")
 			.flags({ "api-key": apiKey })
 			.setup(() => ({}));
 		const app = new Crust("cli")
 			.provide(auth())
-			.add(defineCommand("deploy", (command) => command.action(() => {})));
+			.add(defineCommand("deploy", (command) => command.use(auth).action(() => {})));
 
 		const snapshot = await app.snapshot();
 		expect(snapshot.flags["api-key"]).toEqual({

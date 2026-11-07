@@ -445,7 +445,7 @@ describe("Crust .add() with inline definitions", () => {
 		const app = new Crust("cli")
 			.flags({ port: { type: "number" } })
 			.provide(logging())
-			.add(defineCommand("sub", (cmd) => cmd.flags({ output: { type: "string" } })));
+			.add(defineCommand("sub", (cmd) => cmd.use(logging).flags({ output: { type: "string" } })));
 
 		expect((await app.snapshot()).subCommands.sub?.flags).toEqual({
 			verbose: { type: "boolean", negatable: true },
@@ -1871,7 +1871,7 @@ describe("Crust .execute()", () => {
 			.provide(logging())
 			.add(
 				defineCommand("sub", (cmd) =>
-					cmd.action((ctx) => {
+					cmd.use(logging).action((ctx) => {
 						subFlags = ctx.flags;
 					}),
 				),
@@ -1893,7 +1893,7 @@ describe("Crust .execute()", () => {
 
 		const app = new Crust("cli").provide(logging()).add(
 			defineCommand("sub", (cmd) =>
-				cmd.action((ctx) => {
+				cmd.use(logging).action((ctx) => {
 					subFlags = ctx.flags;
 				}),
 			),

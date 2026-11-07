@@ -37,8 +37,14 @@ export interface CommandNode {
 	meta: CommandMeta;
 	/** Flags defined directly on this command via `.flags()` */
 	localFlags: FlagsDef;
-	/** Accumulated flags owned by Contexts provided on this command path */
+	/** Flags owned by the Contexts in {@link flagContexts}, plus recursive Extension flags once prepared */
 	ownedFlags: FlagsDef;
+	/**
+	 * Names of the Contexts whose owned flags this command parses: provided here, inherited by
+	 * an inline `.command()` child, declared with `.use()` (with their dependencies), or used by
+	 * an Extension hook. Never mutated; changes assign a new array.
+	 */
+	flagContexts: readonly string[];
 	/** Context-owned and local flags merged for parsing */
 	effectiveFlags: FlagsDef;
 	/** Cached canonical/short/alias table for the effective flags. */
@@ -85,6 +91,7 @@ export function createCommandNode(name: string): CommandNode {
 		meta: { name },
 		localFlags: {},
 		ownedFlags: {},
+		flagContexts: [],
 		effectiveFlags: {},
 		flagSpellings: new Map(),
 		args: [],
@@ -126,6 +133,28 @@ export function registerFlag(
 	node.flagSpellings.set(name, { ...entry, kind: "canonical" });
 	if (def.short !== undefined) node.flagSpellings.set(def.short, { ...entry, kind: "short" });
 	for (const alias of def.aliases ?? []) node.flagSpellings.set(alias, { ...entry, kind: "alias" });
+}
+
+/**
+ * Register the owned flags of each Context and, transitively, of the Contexts its setup uses,
+ * once per Context name: a Context already parsed here (such as one an inline child inherited)
+ * adds nothing. Flags come from the instance `node` resolves by that name, which may be another
+ * same-name factory's; dependencies are both factories', so an `.of()` double parses the same flags.
+ */
+export function installContextFlags(
+	node: CommandNode,
+	factories: readonly AnyContextFactory[],
+): void {
+	for (const factory of factories) {
+		const name = factory.contextName;
+		if (node.flagContexts.includes(name)) continue;
+		node.flagContexts = [...node.flagContexts, name];
+		const provided = node.contexts.findLast(({ instance }) => instance.name === name)?.instance;
+		for (const [flag, def] of Object.entries((provided ?? factory).ownedFlags)) {
+			registerFlag(node, flag, def, "owned");
+		}
+		installContextFlags(node, provided ? [...factory.use, ...provided.use] : factory.use);
+	}
 }
 
 /** Copy the flag registry so `registerFlag` on the copy leaves `node` untouched. */

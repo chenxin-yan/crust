@@ -46,6 +46,8 @@ export interface ContextResolver {
 /** Internal lazy invocation container. Public consumers receive scoped Context bags. */
 export function createContextResolver(
 	contexts: readonly AnyContextInstance[],
+	// Names of the Contexts whose owned flags the invoked command parses.
+	flagContexts: readonly string[],
 	io: InvocationIO,
 	disposal: AsyncDisposableStack,
 	signal: AbortSignal,
@@ -154,7 +156,17 @@ export function createContextResolver(
 				),
 			);
 		}
-		if (validatedFlags === undefined && Object.keys(context.ownedFlags).length > 0) {
+		const ownsFlags = Object.keys(context.ownedFlags).length > 0;
+		if (ownsFlags && !flagContexts.includes(name)) {
+			return handledRejection(
+				new CrustError(
+					"DEFINITION",
+					`Context "${name}" owns flags that this command does not parse${originSuffix}. Declare it with .use(${name}) on the command that reads it.`,
+					{ subject: "context", name, reason: "context-flags-not-parsed" },
+				),
+			);
+		}
+		if (validatedFlags === undefined && ownsFlags) {
 			return handledRejection(
 				new CrustError(
 					"DEFINITION",
