@@ -1,5 +1,6 @@
 import type { CommandSnapshot, ExtensionContext, ValueType } from "@crustjs/core";
 import type { RunInputValue } from "@crustjs/core/tooling";
+import { parseJsonValue } from "@crustjs/utils/json";
 
 import type { NextStep } from "./next-steps.ts";
 
@@ -15,9 +16,20 @@ function argvValue(value: RunInputValue, type: ValueType | undefined, label: str
 	// Argv reads numbers with `Number()`: it accepts `Infinity` (JSON would print `null`) but rejects `NaN`.
 	if (typeof value === "number" && type !== "json") {
 		if (Number.isNaN(value)) throw new Error(`${label} value NaN has no argv spelling`);
-		return String(value);
+		return Object.is(value, -0) ? "-0" : String(value);
 	}
-	return value instanceof URL ? value.href : JSON.stringify(value);
+	if (value instanceof URL) return value.href;
+	if (type !== "json") return JSON.stringify(value);
+	// Skip values `JSON.stringify` would change (non-finite numbers, `-0`, …) instead of suggesting other data.
+	try {
+		return JSON.stringify(parseJsonValue(value), (_key, item: unknown) => {
+			if (Object.is(item, -0)) throw new TypeError("-0 does not survive JSON");
+			return item;
+		});
+	} catch (cause) {
+		const reason = cause instanceof Error ? cause.message : String(cause);
+		throw new Error(`${label} value has no JSON spelling (${reason})`, { cause });
+	}
 }
 
 /** The argv after the application name for `names`' command; throws a reason when `input` does not fit it. */

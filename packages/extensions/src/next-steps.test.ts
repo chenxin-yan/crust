@@ -384,7 +384,7 @@ describe("nextSteps", () => {
 		]);
 	});
 
-	it("replays infinite numbers and skips NaN, which argv cannot spell", async () => {
+	it("replays infinite numbers and negative zero and skips NaN, which argv cannot spell", async () => {
 		const seen: unknown[] = [];
 		const wait = defineCommand("wait", (cmd) =>
 			cmd
@@ -400,18 +400,60 @@ describe("nextSteps", () => {
 					const next = await ctx.nextSteps;
 					next.add(wait, { args: { at: -Infinity }, flags: { timeout: Infinity } });
 					next.add(wait, { flags: { timeout: Number.NaN } });
+					next.add(wait, { args: { at: -0 }, flags: { timeout: -0 } });
 				}),
 			);
 
 		const { stderr } = await captureExecute(app, ["suggest"]);
-		expect(stderr.split("\n")).toEqual([
+		const lines = stderr.split("\n");
+		expect(lines).toEqual([
 			'nextSteps(): skipped "app wait": "--timeout" value NaN has no argv spelling',
 			"Next steps:",
 			"  app wait --timeout Infinity -- -Infinity",
+			"  app wait --timeout=-0 -- -0",
 		]);
-		const line = stderr.split("\n").at(-1)!.trim();
-		expect(await captureExecute(app, shellWords(line).slice(1))).toMatchObject({ exitCode: 0 });
-		expect(seen).toEqual([[{ at: -Infinity }, { timeout: Infinity }]]);
+		for (const line of lines.slice(2)) {
+			expect(await captureExecute(app, shellWords(line.trim()).slice(1))).toMatchObject({
+				exitCode: 0,
+			});
+		}
+		expect(seen).toEqual([
+			[{ at: -Infinity }, { timeout: Infinity }],
+			[{ at: -0 }, { timeout: -0 }],
+		]);
+	});
+
+	it("skips json values JSON would change and replays the rest", async () => {
+		const seen: unknown[] = [];
+		const show = defineCommand("show", (cmd) =>
+			cmd.flags({ meta: { type: "json" } }).action(({ flags }) => void seen.push(flags.meta)),
+		);
+		const app = new Crust("app")
+			.extend(nextSteps())
+			.add(show)
+			.command("suggest", (cmd) =>
+				cmd.use(nextSteps).action(async ({ ctx }) => {
+					const next = await ctx.nextSteps;
+					next.add(show, { flags: { meta: { limit: Infinity } } });
+					next.add(show, { flags: { meta: [Number.NaN] } });
+					next.add(show, { flags: { meta: { at: -0 } } });
+					next.add(show, { flags: { meta: { limit: 5, tags: ["a"] } } });
+				}),
+			);
+
+		const { stderr } = await captureExecute(app, ["suggest"]);
+		const lines = stderr.split("\n");
+		expect(lines).toEqual([
+			'nextSteps(): skipped "app show": "--meta" value has no JSON spelling (Not JSON data)',
+			'nextSteps(): skipped "app show": "--meta" value has no JSON spelling (Not JSON data)',
+			'nextSteps(): skipped "app show": "--meta" value has no JSON spelling (-0 does not survive JSON)',
+			"Next steps:",
+			`  app show --meta '{"limit":5,"tags":["a"]}'`,
+		]);
+		expect(await captureExecute(app, shellWords(lines.at(-1)!.trim()).slice(1))).toMatchObject({
+			exitCode: 0,
+		});
+		expect(seen).toEqual([{ limit: 5, tags: ["a"] }]);
 	});
 
 	it("skips a repeatable flag value its delimiter would split or drop", async () => {
