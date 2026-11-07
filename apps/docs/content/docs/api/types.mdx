@@ -97,7 +97,7 @@ Invalid literal names, defaults, and parsers fail typecheck. Dynamic definitions
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="CommandMeta" />
 
-`version` comes from `new Crust(name, { version })` and appears on the root snapshot. `hidden` removes a command from help, completion, man-page, typo-suggestion, and skill listings without disabling routing. `sections` are rendered by help and man after their built-in sections. `destructive` marks a command whose run is hard to undo; set it in `defineCommand()` config or, for a root action, in `new Crust(name, { destructive: true })`. Core never reads it; it appears in the Command Snapshot for Extensions and tooling.
+`version` comes from `new Crust(name, { version })` and appears on the root snapshot. `hidden` removes a command from help, completion, man-page, typo-suggestion, and skill listings without disabling routing. `sections` are rendered by help and man after their built-in sections. `destructive` marks a command whose run is hard to undo; set it in `defineCommand()` config or, for a root action, in `new Crust(name, { destructive: true })`. Core never reads it; it appears in the Command Snapshot for Extensions and tooling, such as [`confirmation()`](/docs/modules/extensions/confirmation).
 
 ### `CommandSectionInput`
 

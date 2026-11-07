@@ -9,6 +9,7 @@
     "update-notifier",
     "json",
     "input",
-    "schema"
+    "schema",
+    "confirmation"
   ]
 }
