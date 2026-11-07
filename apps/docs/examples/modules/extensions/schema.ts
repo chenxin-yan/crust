@@ -3,7 +3,7 @@ import { schema } from "@crustjs/extensions";
 import { z } from "zod";
 
 const app = new Crust("my-cli").extend(schema()).add(
-	defineCommand("deploy", { description: "Deploy the app", destructive: true }, (cmd) =>
+	defineCommand("deploy", { description: "Deploy the app" }, (cmd) =>
 		cmd
 			.args({ name: "target", type: "string", required: true, choices: ["staging", "prod"] })
 			.output(z.object({ id: z.string() }))

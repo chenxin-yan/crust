@@ -43,7 +43,6 @@ export function commandSchema(root: CommandSnapshot, path: readonly string[]): C
 	return {
 		input: commandInputSchema(command, canonical),
 		...(command.outputSchema ? { output: command.outputSchema } : {}),
-		...(command.meta.destructive === true ? { destructive: true } : {}),
 	};
 }
 
@@ -60,13 +59,12 @@ function item(token: string, label: string, description: string): string {
 	return `- ${token}${label}${description ? `: ${description}` : ""}`;
 }
 
-/** Compact Markdown index of every visible command: usage, description, destructive mark, args, and flags. */
+/** Compact Markdown index of every visible command: usage, description, args, and flags. */
 export function renderCommandIndex(root: CommandSnapshot): string {
 	const lines = [`# ${root.meta.name}`];
-	const visit = (doc: CommandDocumentation, command: CommandSnapshot) => {
+	const visit = (doc: CommandDocumentation) => {
 		lines.push("", `## \`${doc.usage}\``);
 		if (doc.description) lines.push("", doc.description);
-		if (command.meta.destructive === true) lines.push("", "**Destructive.**");
 		if (doc.args.length > 0) {
 			lines.push("", "Arguments:", "");
 			for (const arg of doc.args) {
@@ -97,9 +95,8 @@ export function renderCommandIndex(root: CommandSnapshot): string {
 				);
 			}
 		}
-		// Children are the visible subcommands, keyed by their last path segment.
-		for (const child of doc.children) visit(child, command.subCommands[child.path.at(-1)!]!);
+		for (const child of doc.children) visit(child);
 	};
-	visit(buildCommandDocumentation(root), root);
+	visit(buildCommandDocumentation(root));
 	return lines.join("\n");
 }

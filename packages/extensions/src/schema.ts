@@ -17,8 +17,6 @@ export interface CommandSchema {
 	readonly input: CommandInputSchema;
 	/** Draft 2020-12 JSON Schema of the result; absent without a convertible `.output()` schema. */
 	readonly output?: Readonly<Record<string, unknown>>;
-	/** Present when the command's metadata marks it `destructive`. */
-	readonly destructive?: true;
 }
 
 const PATH_ARG_DESCRIPTION = "Command path, e.g. `remote add`; omit for the root command";
@@ -54,7 +52,7 @@ type SchemaCommandDefinition = CommandDefinition<
 
 /**
  * Contributes a `schema [path...]` command that prints one line of JSON,
- * `{ input, output?, destructive? }`, for the command at `path` (the root when
+ * `{ input, output? }`, for the command at `path` (the root when
  * omitted), and a root-only `--llms` flag that prints a Markdown index of every
  * visible command.
  */
