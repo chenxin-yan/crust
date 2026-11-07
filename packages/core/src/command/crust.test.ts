@@ -465,6 +465,48 @@ describe("Crust .add() with inline definitions", () => {
 			'No provider for Context "db"',
 		);
 	});
+
+	it("gives a command the Contexts of an Extension it uses", async () => {
+		const greeter = defineContext("greeter").setup(() => (name: string) => `hi ${name}`);
+		const greeting = defineExtension(defineExtensionId("test:greeting"))
+			.provide(greeter())
+			.factory((extension) => extension);
+		const hello = defineCommand("hello", (command) =>
+			command.use(greeting).action(async ({ ctx }) => (await ctx.greeter)("factory")),
+		);
+		const hey = defineCommand("hey", (command) =>
+			command.use(greeting()).action(async ({ ctx }) => (await ctx.greeter)("instance")),
+		);
+		const app = new Crust("cli").extend(greeting()).add(hello, hey);
+
+		expect(await app.run(["hello"], {})).toMatchObject({
+			status: "completed",
+			result: "hi factory",
+		});
+		expect(await app.run(["hey"], {})).toMatchObject({
+			status: "completed",
+			result: "hi instance",
+		});
+	});
+
+	it("rejects a command that uses an Extension the application does not extend", async () => {
+		const greeter = defineContext("greeter").setup(() => "hi");
+		const greeting = defineExtension(defineExtensionId("test:greeting"))
+			.provide(greeter())
+			.factory((extension) => extension);
+		const hello = defineCommand("hello", (command) => command.use(greeting));
+
+		// @ts-expect-error -- runtime regression deliberately exercises the preparation check.
+		const app = new Crust("cli").add(hello);
+		const error = await app.snapshot().catch((caught: unknown) => caught);
+		expect(error).toBeInstanceOf(CrustError);
+		expect(error).toMatchObject({
+			code: "DEFINITION",
+			message:
+				'Command "cli hello" uses Extension "test:greeting", which the application does not extend',
+			details: { subject: "extension", name: "test:greeting", reason: "missing-extension" },
+		});
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────

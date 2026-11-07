@@ -29,7 +29,7 @@ import type {
 	ProvideChecks,
 	ProvidedContextSpellings,
 } from "../validation/flags.brands.ts";
-import type { IsClosedName, IsUnion } from "../validation/shared.ts";
+import type { IsClosedName, IsStaticTuple, IsUnion } from "../validation/shared.ts";
 import {
 	definingOf,
 	sealHandle,
@@ -501,6 +501,41 @@ export interface Extension<
 
 /** @internal Broad Extension constraint; contravariance requires the full metadata key set. */
 export type AnyExtension = Extension<any, any, any, any, RootMetaKey>;
+
+/** @internal Broad Extension factory constraint. */
+export type AnyExtensionFactory = ((...args: any[]) => AnyExtension) & { readonly id: ExtensionId };
+
+/**
+ * What a command's `.use()` accepts: a Context factory, or an Extension or Extension factory,
+ * which stands for the Contexts that Extension provides.
+ */
+export type UseSource = AnyContextFactory | AnyExtension | AnyExtensionFactory;
+
+type ExtensionContexts<E> =
+	DefiningOf<E> extends ExtensionData<any, infer Provide, any, any, RootMetaKey>
+		? ContextsOutput<Provide> & ContextsDependencies<Provide>
+		: {};
+
+type UseSourceContexts<S> = S extends AnyContextFactory
+	? ContextDependencies<[S]>
+	: S extends AnyExtensionFactory
+		? ExtensionContexts<ReturnType<S>>
+		: ExtensionContexts<S>;
+
+// Tail-recursive so one `.use()` takes 46+ sources without TS2589.
+type UseSourcesContexts<Us extends readonly unknown[], Acc = {}> = Us extends readonly [
+	infer H,
+	...infer T,
+]
+	? UseSourcesContexts<T, Acc & UseSourceContexts<H>>
+	: Acc;
+
+/** The Contexts (and their dependencies) a `.use()` call demands. */
+export type UsedContexts<Us extends readonly UseSource[]> = Us extends readonly AnyContextFactory[]
+	? ContextDependencies<Us>
+	: IsStaticTuple<Us> extends true
+		? UseSourcesContexts<Us>
+		: Record<string, ContextValue>;
 
 type ExtensionProvidesOutput<E> =
 	DefiningOf<E> extends ExtensionData<any, infer Provide, any, any, RootMetaKey>

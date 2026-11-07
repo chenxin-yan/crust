@@ -355,6 +355,16 @@ export function buildExtensionTree(
 	};
 
 	const prepare = (source: CommandNode, path: string, isRoot: boolean): CommandNode => {
+		// Extension providers are application-wide, so an extended Extension's Contexts reach every command.
+		for (const id of source.usedExtensions) {
+			if (!extensions.some((extension) => extension.id === id)) {
+				throw new CrustError(
+					"DEFINITION",
+					`Command "${path}" uses Extension "${id}", which the application does not extend`,
+					{ subject: "extension", name: id, reason: "missing-extension" },
+				);
+			}
+		}
 		const entries = new Map<string, ChildEntry>(
 			isRoot
 				? addedChildrenOf(source).map((cell) => [

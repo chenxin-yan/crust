@@ -122,6 +122,8 @@ const serve = new Crust("serve").flags({
 
 Recipe-only. Declares the Context factories a reusable definition consumes, without providing instances. The call requires at least one factory; repeated calls accumulate. At runtime, the demands and their transitive dependencies are checked when the definition materializes, not at `.add()`.
 
+An Extension, or an Extension factory, also counts as a factory list: `.use(time)` declares every Context `time()` provides, with the same compile-time checks. At runtime, the app must extend that Extension (matched by id); otherwise preparation throws a `DEFINITION` error with `reason: "missing-extension"`. See [Use an Extension's Contexts from a command](/docs/guide/extensions#use-an-extensions-contexts-from-a-command).
+
 ## `.provide(...instances)`
 
 Attaches Context instances created by invoking `defineContext()` factories. The Context is available to this command and to descendants added **after** this call, and is constructed lazily when its `ctx` property is first read.
