@@ -170,7 +170,7 @@ Extensions apply to every command the same way, whether it was added before or a
 
 ## `.output(schema)`
 
-Declares the command's result with a [Standard Schema](https://standardschema.dev). Call it before `.action()`: TypeScript then requires the action to return the schema's input type, or a promise of it. After the action resolves, Crust validates its result with the schema and the schema's output, awaited, becomes the `result`, typed in `run()`. A result the schema rejects fails the invocation with an [`OUTPUT`](/docs/api/errors#outputerrordetails) error, exit `1` under `execute()`. A command without an action passes `undefined` to the schema, whose output becomes the result. An invocation an Extension's flag handler or `noAction` takes over ends `handled`, with no result to validate. A later `.output()` replaces the schema. Without `.output()`, results are not validated.
+Declares the command's result with a [Standard Schema](https://standardschema.dev). Call it before `.action()`: TypeScript then requires the action to return the schema's input type, or a promise of it; an async generator action must `return` it. After the action resolves, Crust validates its result with the schema and the schema's output, awaited, becomes the `result`, typed in `run()`. A result the schema rejects fails the invocation with an [`OUTPUT`](/docs/api/errors#outputerrordetails) error, exit `1` under `execute()`. A command without an action passes `undefined` to the schema, whose output becomes the result. An invocation an Extension's flag handler or `noAction` takes over ends `handled`, with no result to validate. A later `.output()` replaces the schema. Without `.output()`, results are not validated.
 
 ```ts
 const whoami = new Crust("whoami")
@@ -183,6 +183,8 @@ const whoami = new Crust("whoami")
 ## `.action(action)`
 
 Defines the Command Action. It runs after routing, parsing, Extension setups, `preRun` hooks, and validation, unless an Extension's flag handler took over. Its awaited return value becomes the `result` of typed `run()` calls, unless [`.output()`](#outputschema) declares it. A later `.action()` replaces both the action and its result type.
+
+An `async function*` action [streams events](/docs/guide/commands#stream-events): each yielded value is delivered live to the selected [renderer's `event`](/docs/api/types#renderer) and the caller's `onEvent` option, and collected in the outcome's `events`; its `return` value is the result. Crust never prints events. An action that returns an async generator object, an object with `next`, `return`, and `throw` methods and `Symbol.asyncIterator`, streams the same way.
 
 ```ts
 const greet = new Crust("greet")
@@ -246,14 +248,14 @@ Editors complete command names, argument and flag names, and the action's result
 - TypeScript rejects unknown argument, flag, and top-level keys, including in inputs held in variables. Keys set to `undefined` count as omitted. At runtime, unknown argument or flag keys return a failed outcome before the action runs.
 - `raw` reaches the action as `rawArgs`, like tokens after `--` that no declared argument consumed. It never fills `args`.
 - The path alone selects the command. Unknown path segments return a `COMMAND_NOT_FOUND` failure, even when the nearest parent has an action.
-- For genuinely dynamic paths and input, use an `AnyCrust` view; it resolves to `RunOutcome<unknown>`.
+- For genuinely dynamic paths and input, use an `AnyCrust` view; it resolves to `RunOutcome<unknown, readonly unknown[] | undefined>`, since any command may stream events.
 
-`run()` resolves after cleanup to a [`RunOutcome`](/docs/api/types#runoutcomeresult), with captured output and a `completed`, `handled`, or `failed` status.
+`run()` resolves after cleanup to a [`RunOutcome`](/docs/api/types#runoutcomeresult-events), with captured output and a `completed`, `handled`, or `failed` status.
 
 - `run()` never renders errors, calls `onError`, or changes `process.exitCode`. Eager authoring checks throw at the builder call; deferred definition errors encountered during `run()` produce a `failed` outcome.
 - Captured writes are joined with `"\n"`. `stdout` and `stderr` are captured separately, so their relative order is not preserved.
 - Default `@crustjs/prompts` and `@crustjs/progress` output is captured into `stderr`. Direct `console` or `process` writes, subprocesses, and files are not captured.
-- `options.stdout` / `options.stderr` also receive writes live. `options.signal` cancels the invocation. `run()` never installs a `SIGINT` handler.
+- `options.stdout` / `options.stderr` also receive writes live. `options.onEvent` receives each event an async generator action yields, live. `options.signal` cancels the invocation. `run()` never installs a `SIGINT` handler.
 - Preparation is cached per builder and shared by later `run()`, `execute()`, and `snapshot()` calls on it. Pending commands materialize as needed; `snapshot()` visits the full tree.
 
 For terminal interaction in tests, use `execute()` or [`runInteractive`](/docs/modules/testing#runinteractiveapp-path-input).
@@ -280,6 +282,7 @@ Runs the terminal boundary: parses `process.argv.slice(2)` (or `options.argv`), 
 - A failure renders once, through Extension `onError` hooks and then the selected [renderer's `error`](/docs/api/types#renderer) or Core's default rendering. Cancellation is offered to `onError` hooks; if none claims it, the abort itself renders nothing, but cleanup failures that accompany it still render. See [propagation boundaries](/docs/api/errors#propagation-boundaries).
 - On macOS and Linux, each default `stdout(text)` / `stderr(text)` line is written synchronously to file descriptor 1 or 2, so it arrives complete even when the action calls `process.exit()` right after, and patching `process.stdout.write` does not capture it. On Windows, default output goes through `process.stdout` / `process.stderr`.
 - `options.io` captures rendered output in tests, including default prompt and progress output. It does not provide prompt input.
+- `options.onEvent` receives each event an async generator action yields, live. Events are never printed.
 - The first Ctrl-C aborts the invocation's `signal` with an `AbortError`. Work that honors the signal stops, then `postRun` hooks and Context cleanup run. A second Ctrl-C removes Core's listener and reaches the runtime's default handling unless another listener still owns the signal. A SIGINT handled within 50 ms of the first counts as the same Ctrl-C: `npm run`, `npx`, `bun run`, and pnpm relay the terminal's SIGINT, so one press can arrive twice. Presses that arrive while the event loop is blocked are handled together and count as one Ctrl-C; press again once it is responsive to force the exit.
 
 ### Invocation order
@@ -295,7 +298,7 @@ Runs the terminal boundary: parses `process.argv.slice(2)` (or `options.argv`), 
 7. Check required values and positional structure.
 8. Apply Standard Schemas and aggregate their issues.
 9. Construct Contexts as they are first pulled.
-10. Run the Command Action, validate its result with the [`.output()`](#outputschema) schema, if any, and pass it to the renderer's `result`, if any.
+10. Run the Command Action, validate its result with the [`.output()`](#outputschema) schema, if any, and pass it to the renderer's `result`, if any. An async generator action runs to its `return` first; Core calls the renderer's `stream` before its first event, then hands each event it yields to the renderer's `event` and then `options.onEvent` before it resumes.
 11. Run Extension `postRun` hooks in reverse registration order with the outcome.
 12. Run deferred cleanup, including cleanup deferred by Extension setups, and dispose Contexts in reverse registration order.
 

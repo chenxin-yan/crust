@@ -16,10 +16,15 @@ export interface InvocationIO {
 	stderr: (text: string) => void;
 }
 
-/** Caller options for one programmatic `run()` invocation: IO callbacks plus cancellation. */
+/** Caller options for one programmatic `run()` invocation: IO callbacks, action events, and cancellation. */
 export interface InvocationOptions extends Partial<InvocationIO> {
 	/** Aborting it aborts the invocation's `ctx.signal` with the same reason. */
 	signal?: AbortSignal;
+	/**
+	 * Receives each value an async generator Command Action yields, as it is yielded,
+	 * after the selected Renderer's `event`. A throw fails the invocation.
+	 */
+	onEvent?: (event: unknown) => void;
 }
 
 /**
@@ -46,6 +51,11 @@ export interface ExecuteOptions {
 	 * `AbortError`, regardless of the caller's reason.
 	 */
 	signal?: AbortSignal;
+	/**
+	 * Receives each value an async generator Command Action yields, as it is yielded,
+	 * after the selected Renderer's `event`. Core never prints events. A throw fails the invocation.
+	 */
+	onEvent?: (event: unknown) => void;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

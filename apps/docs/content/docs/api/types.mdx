@@ -145,16 +145,16 @@ Snapshots from Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details
 
 Declared in [`command/typed-run.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/typed-run.ts). These types back [`run()`](/docs/api/crust#runpath-input-options), [`at()`](/docs/api/crust#atpath), and the [`@crustjs/testing`](/docs/modules/testing) helpers.
 
-| Type                                 | Role                                                                       |
-| ------------------------------------ | -------------------------------------------------------------------------- |
-| `CommandTree`                        | Compile-time command tree accumulated by `.add()` and `.command()`         |
-| `CommandPath<Tree>`                  | Every valid path through the tree, including the root path `[]`            |
-| `CommandShape` / `CommandShapeAt`    | Argument, flag, subtree, and result types of the command a path selects    |
-| `RunInput<Shape>`                    | Structured `args` / `flags` / `raw` input; omits sections the shape lacks  |
-| `InputArgs` / `InputFlags`           | Pre-parse input value types used by `RunInput`                             |
-| `RunInputArguments` / `RunArguments` | Argument tuples that make `input` optional when nothing is required        |
-| `CommandHandle<Shape>`               | Path-bound invoker returned by `at()`: a readonly `path` and `run()`       |
-| `AnyCrust`                           | Any completed application; broad `run()` resolves to `RunOutcome<unknown>` |
+| Type                                 | Role                                                                                              |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| `CommandTree`                        | Compile-time command tree accumulated by `.add()` and `.command()`                                |
+| `CommandPath<Tree>`                  | Every valid path through the tree, including the root path `[]`                                   |
+| `CommandShape` / `CommandShapeAt`    | Argument, flag, subtree, result, and event types of the command a path selects                    |
+| `RunInput<Shape>`                    | Structured `args` / `flags` / `raw` input; omits sections the shape lacks                         |
+| `InputArgs` / `InputFlags`           | Pre-parse input value types used by `RunInput`                                                    |
+| `RunInputArguments` / `RunArguments` | Argument tuples that make `input` optional when nothing is required                               |
+| `CommandHandle<Shape>`               | Path-bound invoker returned by `at()`: a readonly `path` and `run()`                              |
+| `AnyCrust`                           | Any completed application; broad `run()` resolves to `RunOutcome<unknown>` plus optional `events` |
 
 ```ts
 import type { CommandPath, CommandShapeAt, RunInput } from "@crustjs/core";
@@ -167,13 +167,15 @@ type GreetInput = RunInput<CommandShapeAt<(typeof app)["_types"]["shape"], reado
 
 JSON inputs accept JSON primitives, structurally JSON-compatible objects, and arrays; `Date`, `bigint`, and functions are excluded. `url` inputs accept `URL`.
 
-### `RunOutcome<Result>`
+### `RunOutcome<Result, Events>`
 
 The inferred return value of `run()`. Every branch carries readonly captured `stdout` and `stderr`. Narrow `status` before reading its branch-specific field:
 
-- `completed`: the `result`: the awaited output of the command's [`.output()`](/docs/api/crust#outputschema) schema, or else the action's awaited return value.
+- `completed`: the `result`: the awaited output of the command's [`.output()`](/docs/api/crust#outputschema) schema, or else the action's awaited return value (an async generator's `return` value).
 - `handled`: the handling Extension id, `by`.
 - `failed`: the original thrown `error`.
+
+`Events` is the array of values an [async generator action](/docs/guide/commands#stream-events) yields, inferred from its yields, or `undefined` (the default) for any other command. When it is an array, `completed` carries `events`, `[]` if the action yielded nothing, and `failed` carries the events yielded so far once the action started. Without it, neither branch has `events`.
 
 See the [source declaration](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/typed-run.ts) for the union and [`run()`](/docs/api/crust#runpath-input-options) for a narrowing example and capture behavior. Extension `postRun` hooks receive [`InvocationOutcome`](#invocationoutcome) instead, which carries the result but no captured output.
 
@@ -355,7 +357,7 @@ See [propagation boundaries](/docs/api/errors#propagation-boundaries) for hook t
 
 <auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Renderer" />
 
-Returned by an Extension's [`.renderer()`](/docs/guide/extensions#renderers) selector. It receives the Command Action's and Contexts' `stdout()` lines as `text` and `stderr()` lines as `diag`, the completed action's result, and, in `execute()` only, a failure no `onError` hook claimed. Extension `ctx.stdout` and `ctx.stderr` bypass it. Output written before Core calls the selector waits and goes through the chosen renderer, including when a setup throws. Without a `.renderer()` in the application, nothing waits. Routing and argv syntax failures happen before flags are bound and render by default. Without `result` the result is not printed; without `error` Core writes its `Error: message` lines. Exit codes don't change.
+Returned by an Extension's [`.renderer()`](/docs/guide/extensions#renderers) selector. It receives the Command Action's and Contexts' `stdout()` lines as `text` and `stderr()` lines as `diag`, the completed action's result, a `stream` signal and each `event` of an [async generator action](/docs/guide/commands#stream-events), and, in `execute()` only, a failure no `onError` hook claimed. Extension `ctx.stdout` and `ctx.stderr` bypass it. Output written before Core calls the selector waits and goes through the chosen renderer, including when a setup throws. Without a `.renderer()` in the application, nothing waits. Routing and argv syntax failures happen before flags are bound and render by default. Without `result` the result is not printed, and without `event` events are not; without `error` Core writes its `Error: message` lines. Exit codes don't change.
 
 ### `ExtensionHandleOptions`
 
@@ -385,6 +387,8 @@ The context `setup` receives: the same [`ExtensionContext`](#extensioncontext) o
 />
 
 `postRun` receives `completed` with the `result` `run()` returns (the awaited [`.output()`](/docs/api/crust#outputschema) schema output when the command declares one, otherwise the action's awaited return value, `undefined` for a command without an action); `handled` with `by` naming the Extension whose flag handler or `noAction` ended the invocation; or `failed` with the thrown value. On `failed`, `by` names the Extension whose `onError` claimed the failure.
+
+After an [async generator action](/docs/guide/commands#stream-events), `completed` and `failed` also carry its yielded values as frozen `events` (`[]` when it yielded none); `events` is absent for any other action, a command without one, and failures before the action ran. Its presence tells a streaming action from an ordinary one.
 
 ### `ExtensionSectionContribution`
 
