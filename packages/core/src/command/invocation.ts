@@ -517,6 +517,8 @@ async function dispatch(
 	onFailure?: (error: CaughtError, context: ExtensionContext) => Promise<ExtensionId | undefined>,
 ): Promise<{ status: "completed"; result: unknown } | { status: "handled"; by: ExtensionId }> {
 	const { rootNode, extensions } = prepared;
+	// Nothing to wait for without a selector: action-side output stays immediate and in order.
+	if (!prepared.renderer) output.choose(undefined);
 
 	// Routing and syntax parsing — failures flow directly to the caller. Value errors
 	// wait in `parsed.valueError` for `terminal()`, so a `--help` handler still wins.
@@ -607,9 +609,13 @@ async function dispatch(
 				for (const extension of extensions) await extension.hooks.setup?.(extensionContext);
 			} catch (error) {
 				settingUp = false;
-				// Flags are bound, so the selector still chooses how a setup failure renders. If it
-				// fails too, the default renders the setup failure, the root cause, not the selector's.
-				output.choose(await selectRenderer().catch(() => undefined));
+				// Flags are bound, so the selector still chooses how a setup failure renders. The setup
+				// failure is the root cause: a failing selector or flush must not replace it.
+				try {
+					output.choose(await selectRenderer());
+				} catch {
+					// No renderer yet means the default below; a chosen one still renders the failure.
+				}
 				throw error;
 			} finally {
 				settingUp = false;

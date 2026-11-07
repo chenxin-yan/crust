@@ -1686,7 +1686,7 @@ describe("Extension renderer", () => {
 	});
 
 	/** An Extension whose setup writes through a Context, then throws. */
-	function brokenSetup() {
+	function brokenSetup(failure: unknown = new Error("setup failed")) {
 		const logger = defineContext("logger").setup(({ stdout }) => {
 			stdout("logger:setup");
 			return stdout;
@@ -1696,7 +1696,7 @@ describe("Extension renderer", () => {
 			.use(logger)
 			.setup(async ({ ctx }) => {
 				await ctx.logger;
-				throw new Error("setup failed");
+				throw failure;
 			});
 	}
 
@@ -1733,6 +1733,60 @@ describe("Extension renderer", () => {
 			expect(await execute(app, [], lines)).toBe(1);
 			expect(lines).toEqual(["selector", "stdout:logger:setup", "stderr:Error: setup failed"]);
 		}
+	});
+
+	it("keeps a setup failure when flushing waiting output through the renderer throws", async () => {
+		const lines: string[] = [];
+		const seen: string[] = [];
+		const render = defineExtension(defineExtensionId("render"))
+			.renderer(() => ({
+				...tagging(lines),
+				text() {
+					throw new Error("formatter failed");
+				},
+			}))
+			.onError((error) => void seen.push(`onError:${(error as Error).message}`))
+			.postRun((_ctx, outcome) => {
+				if (outcome.status === "failed") seen.push(`postRun:${(outcome.error as Error).message}`);
+			});
+
+		const failing = new Crust("cli").extend(render, brokenSetup()).action(() => {});
+		expect(await execute(failing, [], lines)).toBe(1);
+		expect(lines).toEqual(["error:setup failed"]);
+		expect(seen).toEqual(["onError:setup failed", "postRun:setup failed"]);
+		await expect(failing.run([])).resolves.toMatchObject({
+			status: "failed",
+			error: { message: "setup failed" },
+		});
+
+		lines.length = 0;
+		const cancelled = new Crust("cli")
+			.extend(render, brokenSetup(new DOMException("stop", "AbortError")))
+			.action(() => {});
+		expect(await execute(cancelled, [], lines)).toBe(130);
+		expect(lines).toEqual([]);
+	});
+
+	it("writes Context output immediately when no Extension sets a renderer", async () => {
+		const lines: string[] = [];
+		const logger = defineContext("logger").setup(({ stdout }) => {
+			stdout("initializing");
+			return stdout;
+		});
+		const early = defineExtension(defineExtensionId("early"))
+			.provide(logger())
+			.use(logger)
+			.setup(async ({ ctx, stdout }) => {
+				await ctx.logger;
+				lines.push("pulled");
+				stdout("ready");
+			});
+		const app = new Crust("cli").extend(early).action(() => {});
+
+		expect(await execute(app, [], lines)).toBe(0);
+		expect(lines).toEqual(["stdout:initializing", "pulled", "stdout:ready"]);
+		const outcome = await app.run([]);
+		expect(outcome.stdout).toBe("initializing\nready");
 	});
 
 	it("renders routing and selector failures by default", async () => {

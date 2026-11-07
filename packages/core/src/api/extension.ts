@@ -246,9 +246,11 @@ export interface ExtensionHooks<
 	 * handler, so it sees what setups bound. Return (or resolve to) `undefined` to keep Core's
 	 * default; Core awaits the selector, so it can lazy-load a formatter. A throw or rejection
 	 * fails the invocation, rendered by default. Action and Context output written before then
-	 * waits and goes through the selected renderer. When a setup throws, Core still calls the
-	 * selector (flags are bound) and renders the failure through the selected renderer; if the
-	 * selector then fails too, the setup failure renders by default. Routing and argv syntax
+	 * waits and goes through the selected renderer; without a selector in the application, it is
+	 * written immediately. When a setup throws, Core still calls the selector (flags are bound)
+	 * and renders the failure through the selected renderer; if the selector then fails too, the
+	 * setup failure renders by default. A selector or renderer that throws there never replaces
+	 * the setup failure. Routing and argv syntax
 	 * failures, before any setup, always render by default.
 	 * At most one Extension in an application may set it.
 	 */
