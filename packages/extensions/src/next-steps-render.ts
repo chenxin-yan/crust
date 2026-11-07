@@ -1,4 +1,4 @@
-import type { CommandSnapshot } from "@crustjs/core";
+import type { CommandSnapshot, ValueType } from "@crustjs/core";
 import type { RunInputValue } from "@crustjs/core/tooling";
 
 import type { NextStep } from "./next-steps.ts";
@@ -9,8 +9,9 @@ function shellQuote(token: string): string {
 		: `'${token.replaceAll("'", String.raw`'\''`)}'`;
 }
 
-function argvValue(value: RunInputValue): string {
-	if (typeof value === "string") return value;
+/** Argv parses a `json` value with `JSON.parse`, so even a string value needs its JSON encoding. */
+function argvValue(value: RunInputValue, type: ValueType | undefined): string {
+	if (typeof value === "string" && type !== "json") return value;
 	return value instanceof URL ? value.href : JSON.stringify(value);
 }
 
@@ -35,7 +36,14 @@ function stepArgv(root: CommandSnapshot, step: NextStep): string[] {
 				else if (flag.negatable) options.push(`--no-${name}`);
 				continue;
 			}
-			const text = argvValue(item);
+			const text = argvValue(item, flag.type);
+			// The parser splits each occurrence on the delimiter and drops empty pieces.
+			if (flag.delimiter !== undefined && (text === "" || text.includes(flag.delimiter))) {
+				const problem = text === "" ? "is dropped by" : "contains";
+				throw new Error(
+					`"--${name}" value ${JSON.stringify(text)} ${problem} its delimiter ${JSON.stringify(flag.delimiter)}`,
+				);
+			}
 			// The parser reads a separate token starting with "-" as a flag, not a value.
 			options.push(...(text.startsWith("-") ? [`--${name}=${text}`] : [`--${name}`, text]));
 		}
@@ -55,13 +63,22 @@ function stepArgv(root: CommandSnapshot, step: NextStep): string[] {
 		}
 		if (omitted !== undefined)
 			throw new Error(`argument "${arg.name}" follows omitted "${omitted}"`);
-		positionals.push(...(arg.variadic && Array.isArray(value) ? value : [value]).map(argvValue));
+		positionals.push(
+			...(arg.variadic && Array.isArray(value) ? value : [value]).map((item) =>
+				argvValue(item, arg.type),
+			),
+		);
 	}
 	// Tokens after `--` fill unfilled positional arguments before they reach `rawArgs`.
 	if (raw.length > 0 && (omitted !== undefined || command.args.at(-1)?.variadic)) {
 		throw new Error("raw tokens would fill a positional argument");
 	}
-	const separator = raw.length > 0 || positionals.some((token) => token.startsWith("-"));
+	// After `--` a positional is never read as a flag, nor routed as a subcommand name or alias.
+	const separator =
+		raw.length > 0 ||
+		(positionals.length > 0 &&
+			(Object.keys(command.subCommands).length > 0 ||
+				positionals.some((token) => token.startsWith("-"))));
 	return [...step.command, ...options, ...(separator ? ["--"] : []), ...positionals, ...raw];
 }
 
