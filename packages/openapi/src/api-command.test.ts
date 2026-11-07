@@ -247,6 +247,20 @@ describe("api <path>", () => {
 		expect(calls[0]?.url).toBe("https://api.example.com/v1/users?page=2#section");
 	});
 
+	it("keeps the path's own query as written when adding -X GET fields", async () => {
+		const calls = stubFetch();
+		await captureExecute(buildApp(), [
+			"api",
+			"/users?q=a%20b,c&flag#s",
+			"-X",
+			"GET",
+			"-F",
+			"page=2",
+		]);
+
+		expect(calls[0]?.url).toBe("https://api.example.com/v1/users?q=a%20b,c&flag&page=2#s");
+	});
+
 	it("sends --body as the request body and lets -H override auth", async () => {
 		const calls = stubFetch();
 		await captureExecute(buildApp(), [

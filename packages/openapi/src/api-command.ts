@@ -333,8 +333,12 @@ export const apiCommand: ExtensionFactory<
 							if (fields.length > 0) {
 								// Fields go in the query when the method takes no body or --body is the body.
 								if (body !== undefined || method === "GET" || method === "HEAD") {
-									// Through the URL, so a `#fragment` in the path does not swallow the query.
-									for (const [key, value] of fields) url.searchParams.append(key, String(value));
+									const query = new URLSearchParams(
+										fields.map(([key, value]): [string, string] => [key, String(value)]),
+									).toString();
+									// Through `url.search`, so a `#fragment` does not swallow the query and the
+									// path's own query stays as written (`searchParams` would re-encode it).
+									url.search = url.search === "" ? query : `${url.search.slice(1)}&${query}`;
 									path = url.href;
 								} else {
 									requestBody = JSON.stringify(Object.fromEntries(fields));
