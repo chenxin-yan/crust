@@ -10,6 +10,7 @@ import { defineEnv } from "../../packages/env/dist/index.js";
 import { help } from "../../packages/extensions/dist/index.js";
 import * as man from "../../packages/man/dist/index.js";
 import { createMcpServer } from "../../packages/mcp/dist/index.js";
+import { apiCommand } from "../../packages/openapi/dist/index.js";
 import * as progress from "../../packages/progress/dist/index.js";
 import {
 	assertTTY,
@@ -30,6 +31,7 @@ const roots = {
 	extensions: help,
 	man: man.man,
 	mcp: createMcpServer,
+	openapi: apiCommand,
 	progress: progress.progress,
 	prompts: createPrompts,
 	skills: loadPackagedSkills,

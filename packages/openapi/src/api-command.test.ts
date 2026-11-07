@@ -43,6 +43,8 @@ const spec = {
 				properties: {
 					name: { $ref: "#/components/schemas/Name", description: "Display name" },
 					friends: { type: "array", items: { $ref: "#/components/schemas/User" } },
+					nick: { $ref: "#%2Fcomponents%2Fschemas%2FName" },
+					tag: { $ref: "#Tag" },
 				},
 			},
 			Name: { type: "string", minLength: 1 },
@@ -120,7 +122,7 @@ describe("api --list and --spec", () => {
 		expect(calls).toEqual([]);
 	});
 
-	it("prints an operation by operationId with $refs resolved and cycles kept as $ref", async () => {
+	it("prints an operation by operationId with $refs resolved (URI-encoded too), cycles and non-pointer fragments kept", async () => {
 		const { stdout, exitCode } = await captureExecute(buildApp(), ["api", "--spec", "createUser"]);
 
 		expect(exitCode).toBe(0);
@@ -134,6 +136,8 @@ describe("api --list and --spec", () => {
 							properties: {
 								name: { type: "string", minLength: 1, description: "Display name" },
 								friends: { type: "array", items: { $ref: "#/components/schemas/User" } },
+								nick: { type: "string", minLength: 1 },
+								tag: { $ref: "#Tag" },
 							},
 						},
 					},
@@ -307,11 +311,29 @@ describe("api <path>", () => {
 		[["api"], 'Error: Missing required argument "<path>" (or pass --list or --spec)'],
 		[["api", "/users", "-F", "novalue"], 'Error: --field: expected key=value, got "novalue"'],
 		[["api", "/users", "-H", "NoColon"], 'Error: --header: expected "Key: Value", got "NoColon"'],
+		[
+			["api", "/users", "-F", "amount=1e309"],
+			'Error: --field: "amount=1e309" is out of range for a number',
+		],
 	])("fails before any request for %j", async (argv, message) => {
 		const calls = stubFetch();
 		const { stderr, exitCode } = await captureExecute(buildApp(), argv);
 
 		expect({ stderr, exitCode }).toEqual({ stderr: message, exitCode: 1 });
+		expect(calls).toEqual([]);
+	});
+
+	it("rejects a header the platform refuses as a PARSE error before any request", async () => {
+		const calls = stubFetch();
+		const { stderr, exitCode } = await captureExecute(buildApp(), [
+			"api",
+			"/users",
+			"-H",
+			"Bad Header: value",
+		]);
+
+		expect(exitCode).toBe(1);
+		expect(stderr).toMatch(/^Error: --header: invalid header "Bad Header: value" \(.+\)$/);
 		expect(calls).toEqual([]);
 	});
 
@@ -400,6 +422,7 @@ describe("apiClient", () => {
 			const location = {
 				"/v1/moved": "/v1/here",
 				"/v1/away": `${other.url}/landing`,
+				"/v1/away-overridden": `${other.url}/landing-overridden`,
 				"/v1/created": "/v1/result",
 			}[request.url ?? ""];
 			if (location === undefined) return record(request, response);
@@ -416,6 +439,7 @@ describe("apiClient", () => {
 						for (const response of [
 							await client.fetch("/moved"),
 							await client.fetch("/away"),
+							await client.fetch("/away-overridden", { headers: { "X-Api-Key": "override" } }),
 							await client.fetch("/created", {
 								method: "POST",
 								body: "{}",
@@ -430,7 +454,7 @@ describe("apiClient", () => {
 		try {
 			const { stdout, stderr } = await captureExecute(app, ["probe"]);
 
-			expect({ stdout, stderr }).toEqual({ stdout: "200 ok\n200 ok\n200 ok", stderr: "" });
+			expect({ stdout, stderr }).toEqual({ stdout: "200 ok\n200 ok\n200 ok\n200 ok", stderr: "" });
 		} finally {
 			api.close();
 			other.close();
@@ -439,6 +463,7 @@ describe("apiClient", () => {
 		expect(seen).toEqual({
 			[`${apiHost} /v1/here`]: { method: "GET", key: "secret" },
 			[`${new URL(other.url).host} /landing`]: { method: "GET" },
+			[`${new URL(other.url).host} /landing-overridden`]: { method: "GET" },
 			[`${apiHost} /v1/result`]: { method: "GET", key: "secret" },
 		});
 	});
