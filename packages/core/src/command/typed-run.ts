@@ -13,6 +13,7 @@ import type {
 import type { IsStaticTuple } from "../validation/shared.ts";
 
 export declare const commandProviders: unique symbol;
+export declare const inlineCommand: unique symbol;
 
 /** Compile-time description of one command's programmatic input and action result. */
 export interface CommandShape<
@@ -21,8 +22,11 @@ export interface CommandShape<
 	Children extends object = {},
 	Result = unknown,
 	Providers extends Record<string, ContextValue> = Record<string, ContextValue>,
+	Inline extends boolean = boolean,
 > {
 	readonly [commandProviders]?: Providers;
+	/** `true` for a command defined with `.command()`, which parses the Context flags its `ctx` exposes. */
+	readonly [inlineCommand]?: Inline;
 	readonly args: A;
 	readonly flags: F;
 	readonly children: Children;

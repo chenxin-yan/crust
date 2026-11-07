@@ -40,11 +40,11 @@ export interface CommandNode {
 	/** Flags owned by the Contexts in {@link flagContexts}, plus recursive Extension flags once prepared */
 	ownedFlags: FlagsDef;
 	/**
-	 * Names of the Contexts whose owned flags this command parses: provided here, inherited by
-	 * an inline `.command()` child, declared with `.use()` (with their dependencies), or used by
-	 * an Extension hook. Never mutated; changes assign a new array.
+	 * The Contexts whose owned flags this command parses, by name, with the flag names installed
+	 * for each: provided here, inherited by an inline `.command()` child, declared with `.use()`
+	 * (with their dependencies), or used by an Extension hook. Never mutated; changes assign a new map.
 	 */
-	flagContexts: readonly string[];
+	flagContexts: ReadonlyMap<string, readonly string[]>;
 	/** Context-owned and local flags merged for parsing */
 	effectiveFlags: FlagsDef;
 	/** Cached canonical/short/alias table for the effective flags. */
@@ -91,7 +91,7 @@ export function createCommandNode(name: string): CommandNode {
 		meta: { name },
 		localFlags: {},
 		ownedFlags: {},
-		flagContexts: [],
+		flagContexts: new Map(),
 		effectiveFlags: {},
 		flagSpellings: new Map(),
 		args: [],
@@ -136,25 +136,74 @@ export function registerFlag(
 }
 
 /**
- * Register the owned flags of each Context and, transitively, of the Contexts its setup uses,
- * once per Context name: a Context already parsed here (such as one an inline child inherited)
- * adds nothing. Flags come from the instance `node` resolves by that name, which may be another
- * same-name factory's; dependencies are both factories', so an `.of()` double parses the same flags.
+ * Register `flags` as owned by the Context `name`. A flag this Context already installed with an
+ * equal definition is kept, so the declared and the provided Context of one name share their
+ * flags; any other spelling clash is a collision.
+ */
+export function registerContextFlags(node: CommandNode, name: string, flags: FlagsDef): void {
+	const installed = node.flagContexts.get(name) ?? [];
+	const added: string[] = [];
+	for (const [flag, def] of Object.entries(flags)) {
+		if (installed.includes(flag) && sameDefinition(node.ownedFlags[flag], def)) continue;
+		registerFlag(node, flag, def, "owned");
+		added.push(flag);
+	}
+	node.flagContexts = new Map(node.flagContexts).set(name, [...installed, ...added]);
+}
+
+/**
+ * Register the owned flags of each declared Context and, transitively, of the Contexts its setup
+ * uses. The declared factory's flags are the ones the types expose; the flags of the instance
+ * `node` resolves by that name (another same-name factory's, or an `.of()` double) are the ones
+ * its setup reads, so both are installed. Dependencies of both are followed.
  */
 export function installContextFlags(
 	node: CommandNode,
 	factories: readonly AnyContextFactory[],
+	visited: Set<string> = new Set(),
 ): void {
 	for (const factory of factories) {
 		const name = factory.contextName;
-		if (node.flagContexts.includes(name)) continue;
-		node.flagContexts = [...node.flagContexts, name];
+		if (visited.has(name)) continue;
+		visited.add(name);
 		const provided = node.contexts.findLast(({ instance }) => instance.name === name)?.instance;
-		for (const [flag, def] of Object.entries((provided ?? factory).ownedFlags)) {
-			registerFlag(node, flag, def, "owned");
-		}
-		installContextFlags(node, provided ? [...factory.use, ...provided.use] : factory.use);
+		registerContextFlags(node, name, factory.ownedFlags);
+		if (provided) registerContextFlags(node, name, provided.ownedFlags);
+		installContextFlags(node, provided ? [...factory.use, ...provided.use] : factory.use, visited);
 	}
+}
+
+/** Names of the Contexts `factories` declare, with their dependencies, transitively. */
+export function declaredContextNames(
+	factories: readonly AnyContextFactory[],
+	names: Set<string> = new Set(),
+): Set<string> {
+	for (const factory of factories) {
+		if (names.has(factory.contextName)) continue;
+		names.add(factory.contextName);
+		declaredContextNames(factory.use, names);
+	}
+	return names;
+}
+
+// Frozen flag definitions compare structurally; functions and schema objects by identity.
+function sameDefinition(a: unknown, b: unknown): boolean {
+	if (a === b) return true;
+	if (Array.isArray(a)) {
+		return Array.isArray(b) && a.length === b.length && a.every((v, i) => sameDefinition(v, b[i]));
+	}
+	if (!isPlainObject(a) || !isPlainObject(b)) return false;
+	const keys = Object.keys(a);
+	return (
+		keys.length === Object.keys(b).length &&
+		keys.every((key) => Object.hasOwn(b, key) && sameDefinition(a[key], b[key]))
+	);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	if (typeof value !== "object" || value === null) return false;
+	const proto: unknown = Object.getPrototypeOf(value);
+	return proto === Object.prototype || proto === null;
 }
 
 /** Copy the flag registry so `registerFlag` on the copy leaves `node` untouched. */

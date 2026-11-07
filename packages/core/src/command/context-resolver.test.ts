@@ -20,7 +20,7 @@ describe("createContextResolver", () => {
 			await using disposal = new AsyncDisposableStack();
 			const resolver = createContextResolver(
 				[gate()],
-				["gate"],
+				new Map([["gate", ["token"]]]),
 				{ stdout: () => {}, stderr: () => {} },
 				disposal,
 				new AbortController().signal,
@@ -44,7 +44,7 @@ describe("createContextResolver", () => {
 		await using missingDisposal = new AsyncDisposableStack();
 		const missing = createContextResolver(
 			[],
-			[],
+			new Map(),
 			{ stdout: () => {}, stderr: () => {} },
 			missingDisposal,
 			new AbortController().signal,
@@ -56,7 +56,7 @@ describe("createContextResolver", () => {
 			await using disposal = new AsyncDisposableStack();
 			disposed = createContextResolver(
 				[service()],
-				[],
+				new Map(),
 				{ stdout: () => {}, stderr: () => {} },
 				disposal,
 				new AbortController().signal,
@@ -77,7 +77,7 @@ describe("createContextResolver", () => {
 		await using disposal = new AsyncDisposableStack();
 		const bag = createContextResolver(
 			[instance],
-			[],
+			new Map(),
 			{ stdout: () => {}, stderr: () => {} },
 			disposal,
 			new AbortController().signal,
@@ -123,7 +123,7 @@ describe("createContextResolver", () => {
 			await using disposal = new AsyncDisposableStack();
 			const resolver = createContextResolver(
 				[late(), slow(), fresh()],
-				[],
+				new Map(),
 				{ stdout: () => {}, stderr: () => {} },
 				disposal,
 				new AbortController().signal,
