@@ -63,8 +63,7 @@ function escapeTableCell(value: string): string {
  *
  * Command names are trimmed and lowercased for file names and invocations; children and
  * flags render alphabetically, and only sections whose audience includes skills render.
- * Runnable commands marked `destructive` tell agents to confirm with the user first, and
- * those with an output JSON Schema (from `.output()`) document it.
+ * Runnable commands with an output JSON Schema (from `.output()`) document it.
  *
  * @param snapshot - Command Snapshot of the root command
  * @param meta - Skill metadata for frontmatter and naming
@@ -86,7 +85,7 @@ export function renderSkill(snapshot: CommandSnapshot, meta: SkillMeta): Rendere
 
 	// 2. commands/ — per-command markdown files
 	const parents = new Map<CommandDocumentation, CommandDocumentation>();
-	// Documentation omits destructive and output metadata, so pair each node with its snapshot.
+	// Documentation omits output metadata, so pair each node with its snapshot.
 	const commands = new Map([[root, snapshot]]);
 	for (const node of allNodes) {
 		for (const child of node.children) {
@@ -383,16 +382,7 @@ function renderRunnableCommandSections(
 	node: CommandDocumentation,
 	command: CommandSnapshot,
 ): string[] {
-	const lines: string[] = [];
-
-	if (command.meta.destructive === true) {
-		lines.push(
-			"**Destructive:** this command changes or deletes state in a way that is hard to undo. You must confirm with the user before running it.",
-			"",
-		);
-	}
-
-	lines.push("## Usage", "", "```", node.usage, "```", "");
+	const lines = ["## Usage", "", "```", node.usage, "```", ""];
 
 	if (node.args.length > 0) {
 		lines.push("## Arguments", "", ...renderArgsTable(node.args), "");
