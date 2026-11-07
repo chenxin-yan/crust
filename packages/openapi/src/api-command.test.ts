@@ -1,5 +1,8 @@
 import { spawnSync } from "node:child_process";
+import { once } from "node:events";
 import { mkdtempSync, writeFileSync } from "node:fs";
+import { type RequestListener, createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -28,8 +31,12 @@ const spec = {
 			get: { operationId: "getUser" },
 			delete: {},
 		},
+		"/teams": { $ref: "#/components/pathItems/Teams" },
 	},
 	components: {
+		pathItems: {
+			Teams: { get: { operationId: "listTeams", summary: "List teams" } },
+		},
 		schemas: {
 			User: {
 				type: "object",
@@ -79,6 +86,20 @@ function buildApp(options: Partial<ApiCommandOptions> = {}) {
 	);
 }
 
+/** A real HTTP server on a free local port, so `fetch()` follows redirects for real. */
+async function listen(handler: RequestListener) {
+	const server = createServer(handler).listen(0, "127.0.0.1");
+	await once(server, "listening");
+	const { port } = server.address() as AddressInfo;
+	return {
+		url: `http://127.0.0.1:${port}`,
+		close: () => {
+			server.closeAllConnections();
+			server.close();
+		},
+	};
+}
+
 afterEach(() => {
 	vi.unstubAllGlobals();
 });
@@ -94,6 +115,7 @@ describe("api --list and --spec", () => {
 			"POST /users createUser",
 			"GET /users/{id} getUser",
 			"DELETE /users/{id}",
+			"GET /teams listTeams List teams",
 		]);
 		expect(calls).toEqual([]);
 	});
@@ -118,6 +140,13 @@ describe("api --list and --spec", () => {
 				},
 			},
 		});
+	});
+
+	it("finds an operation through a referenced Path Item", async () => {
+		const { stdout, exitCode } = await captureExecute(buildApp(), ["api", "--spec", "listTeams"]);
+
+		expect(exitCode).toBe(0);
+		expect(JSON.parse(stdout)).toEqual({ operationId: "listTeams", summary: "List teams" });
 	});
 
 	it("prints a path item by path, including its shared parameters", async () => {
@@ -252,6 +281,19 @@ describe("api <path>", () => {
 		]);
 	});
 
+	it("prints non-JSON --paginate pages, even empty ones, as JSON strings", async () => {
+		const pages = ["first\nsecond", ""];
+		stubFetch(({ url }) => new Response(pages[Number(new URL(url).searchParams.get("page"))]));
+		let pagesSeen = 0;
+		const app = buildApp({
+			paginate: () => (pagesSeen++ === 0 ? { path: "/notes?page=1" } : undefined),
+		});
+		const { stdout, exitCode } = await captureExecute(app, ["api", "/notes?page=0", "--paginate"]);
+
+		expect(exitCode).toBe(0);
+		expect(stdout.split("\n").map((line) => JSON.parse(line))).toEqual(["first\nsecond", ""]);
+	});
+
 	it("rejects --paginate when the CLI configures no paginate()", async () => {
 		const calls = stubFetch();
 		const { stderr, exitCode } = await captureExecute(buildApp(), ["api", "/users", "--paginate"]);
@@ -341,5 +383,63 @@ describe("apiClient", () => {
 			["https://elsewhere.example.com/b", undefined],
 		]);
 		expect(auth).toHaveBeenCalledTimes(1);
+	});
+
+	it("follows redirects itself so auth headers never reach another origin", async () => {
+		const seen: Record<string, { method?: string; key?: unknown; type?: unknown }> = {};
+		const record: RequestListener = (request, response) => {
+			seen[`${request.headers.host} ${request.url}`] = {
+				method: request.method,
+				key: request.headers["x-api-key"],
+				type: request.headers["content-type"],
+			};
+			response.end("ok");
+		};
+		const other = await listen(record);
+		const api = await listen((request, response) => {
+			const location = {
+				"/v1/moved": "/v1/here",
+				"/v1/away": `${other.url}/landing`,
+				"/v1/created": "/v1/result",
+			}[request.url ?? ""];
+			if (location === undefined) return record(request, response);
+			response.writeHead(request.url === "/v1/created" ? 303 : 302, { location }).end();
+		});
+		const app = new Crust("tool")
+			.extend(
+				apiCommand({ spec, baseUrl: `${api.url}/v1`, auth: () => ({ "X-Api-Key": "secret" }) }),
+			)
+			.add(
+				defineCommand("probe", {}, (command) =>
+					command.use(apiClient).action(async ({ ctx, stdout }) => {
+						const client = await ctx.api;
+						for (const response of [
+							await client.fetch("/moved"),
+							await client.fetch("/away"),
+							await client.fetch("/created", {
+								method: "POST",
+								body: "{}",
+								headers: { "content-type": "application/json" },
+							}),
+						]) {
+							stdout(`${response.status} ${await response.text()}`);
+						}
+					}),
+				),
+			);
+		try {
+			const { stdout, stderr } = await captureExecute(app, ["probe"]);
+
+			expect({ stdout, stderr }).toEqual({ stdout: "200 ok\n200 ok\n200 ok", stderr: "" });
+		} finally {
+			api.close();
+			other.close();
+		}
+		const apiHost = new URL(api.url).host;
+		expect(seen).toEqual({
+			[`${apiHost} /v1/here`]: { method: "GET", key: "secret" },
+			[`${new URL(other.url).host} /landing`]: { method: "GET" },
+			[`${apiHost} /v1/result`]: { method: "GET", key: "secret" },
+		});
 	});
 });
