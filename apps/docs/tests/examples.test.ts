@@ -67,10 +67,10 @@ it.each([
 		"Next steps:\n  Watch the rollout:\n    my-cli status staging\n",
 	],
 	[
-		["deploy", "prod", "--json"],
+		["deploy", "staging", "--json"],
 		0,
-		'{"target":"prod","release":"latest","dryRun":false}\n',
-		"Deploying latest to prod\nNext steps:\n  Watch the rollout:\n    my-cli status prod\n",
+		'{"target":"staging","release":"latest","dryRun":false}\n',
+		"Deploying latest to staging\nNext steps:\n  Watch the rollout:\n    my-cli status staging\n",
 	],
 	[
 		["status", "prod", "--json"],
@@ -79,6 +79,18 @@ it.each([
 		"build: done\nship: done\n",
 	],
 	[["deploy", "prod", "--dry-run"], 0, "Would deploy latest to prod\n", ""],
+	[
+		["deploy", "prod"],
+		1,
+		"",
+		"Error: Confirmation required: Deploy latest to prod? Pass --yes to confirm.\n",
+	],
+	[
+		["deploy", "prod", "--yes"],
+		0,
+		"Deploying latest to prod\n",
+		"Next steps:\n  Watch the rollout:\n    my-cli status prod\n",
+	],
 	[["init"], 1, "", "Error: Prompts require an interactive terminal (TTY).\n"],
 	[["init", "--name", "demo"], 0, "Created demo in us-east-1\n", ""],
 ])("agents guide example %j prints what the guide shows", (argv, exitCode, stdout, stderr) => {
