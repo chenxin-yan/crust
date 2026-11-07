@@ -7,6 +7,29 @@ import { type NextStepsOptions, nextSteps, nextStepsContext } from "./next-steps
 
 class NotLoggedInError extends Error {}
 
+/** POSIX shell word splitting for the single-quoted lines nextSteps() prints. */
+function shellWords(line: string): string[] {
+	const words: string[] = [];
+	let word: string | undefined;
+	for (let i = 0; i < line.length; i++) {
+		const char = line[i]!;
+		if (char === " ") {
+			if (word !== undefined) words.push(word);
+			word = undefined;
+		} else if (char === "'") {
+			const end = line.indexOf("'", i + 1);
+			word = (word ?? "") + line.slice(i + 1, end);
+			i = end;
+		} else if (char === "\\") {
+			word = (word ?? "") + line[++i];
+		} else {
+			word = (word ?? "") + char;
+		}
+	}
+	if (word !== undefined) words.push(word);
+	return words;
+}
+
 function appWith(options?: NextStepsOptions) {
 	return new Crust("app")
 		.extend(nextSteps(options))
@@ -234,5 +257,79 @@ describe("nextSteps", () => {
 				"Error: not logged in\nnextSteps(): onError: boom\nNext steps:\n  Check the deployment:\n    app status prod\n  app logs",
 			exitCode: 1,
 		});
+	});
+
+	it("replays each suggested command line to the input it was built from", async () => {
+		const seen: unknown[] = [];
+		const app = new Crust("app")
+			.extend(nextSteps())
+			.args({ name: "target", type: "string" })
+			.action(({ args }) => void seen.push(["app", args]))
+			.add(
+				defineCommand("delete", { aliases: ["rm"] }, (cmd) =>
+					cmd.action(() => void seen.push(["delete"])),
+				),
+			)
+			.command("show", (cmd) =>
+				cmd
+					.args({ name: "doc", type: "json" })
+					.flags({
+						meta: { type: "json" },
+						metas: { type: "json", multiple: true },
+						tags: { type: "string", multiple: true, delimiter: "," },
+					})
+					.action(({ args, flags }) => void seen.push(["show", args, flags])),
+			)
+			.command("suggest", (cmd) =>
+				cmd.use(nextStepsContext).action(async ({ ctx }) => {
+					const next = await ctx.next;
+					next.add([], { args: { target: "delete" } });
+					next.add([], { args: { target: "rm" } });
+					next.add(["show"], {
+						args: { doc: "123" },
+						flags: { meta: "hello", metas: ["1", "x"], tags: ["a", "b"] },
+					});
+				}),
+			);
+
+		const { stderr } = await captureExecute(app, ["suggest"]);
+		const lines = stderr.split("\n").slice(1);
+		expect(lines).toEqual([
+			"  app -- delete",
+			"  app -- rm",
+			`  app show --meta '"hello"' --metas '"1"' --metas '"x"' --tags a --tags b '"123"'`,
+		]);
+		for (const line of lines) {
+			expect(await captureExecute(app, shellWords(line.trim()).slice(1))).toMatchObject({
+				exitCode: 0,
+			});
+		}
+		expect(seen).toEqual([
+			["app", { target: "delete" }],
+			["app", { target: "rm" }],
+			["show", { doc: "123" }, { meta: "hello", metas: ["1", "x"], tags: ["a", "b"] }],
+		]);
+	});
+
+	it("skips a repeatable flag value its delimiter would split or drop", async () => {
+		const app = new Crust("app")
+			.extend(nextSteps())
+			.command("tag", (cmd) =>
+				cmd.flags({ tags: { type: "string", multiple: true, delimiter: "," } }).action(() => {}),
+			)
+			.command("suggest", (cmd) =>
+				cmd.use(nextStepsContext).action(async ({ ctx }) => {
+					const next = await ctx.next;
+					next.add(["tag"], { flags: { tags: ["a,b"] } });
+					next.add(["tag"], { flags: { tags: [""] } });
+				}),
+			);
+
+		expect((await captureExecute(app, ["suggest"])).stderr).toBe(
+			[
+				'nextSteps(): skipped "app tag": "--tags" value "a,b" contains its delimiter ","',
+				'nextSteps(): skipped "app tag": "--tags" value "" is dropped by its delimiter ","',
+			].join("\n"),
+		);
 	});
 });
