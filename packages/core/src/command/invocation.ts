@@ -23,7 +23,7 @@ import {
 import { applyOutputSchema, applySchemas } from "../parsing/schema.ts";
 import type { ExecuteOptions, InvocationIO, InvocationOptions, RunInputPayload } from "../types.ts";
 import { createContextResolver } from "./context-resolver.ts";
-import type { CrustCommandContext } from "./crust.ts";
+import type { CommandDefinition, CrustCommandContext } from "./crust.ts";
 import {
 	applyExtensionSections,
 	applyNodeContextSections,
@@ -37,6 +37,7 @@ import {
 	childEntriesOf,
 	cloneFlagRegistry,
 	commandDefinitionInternal,
+	commandPathOf,
 	lazyChildRecord,
 	registerFlag,
 	type AddedChild,
@@ -369,7 +370,12 @@ export function buildExtensionTree(
 			isRoot
 				? addedChildrenOf(source).map((cell) => [
 						cell.name,
-						{ name: cell.name, meta: cell.meta, resolve: () => rootChild(cell) },
+						{
+							name: cell.name,
+							meta: cell.meta,
+							resolve: () => rootChild(cell),
+							definition: cell.definition,
+						},
 					])
 				: childEntriesOf(source).map((entry) => [entry.name, entry]),
 		);
@@ -399,6 +405,7 @@ export function buildExtensionTree(
 						meta,
 						resolve: () =>
 							(child ??= materializeCommandDefinition(definition, source, extension.id)),
+						definition,
 					});
 				}
 			}
@@ -582,6 +589,7 @@ async function dispatch(
 			return snapshots.command;
 		},
 		commandPath: Object.freeze([...route.commandPath]),
+		commandPathOf: (definition: CommandDefinition) => commandPathOf(rootNode, definition),
 		get args() {
 			return bound.args;
 		},
@@ -770,6 +778,7 @@ async function renderFailure(
 				return snapshots.command;
 			},
 			commandPath: Object.freeze(route ? [...route.commandPath] : [prepared.rootNode.meta.name]),
+			commandPathOf: (definition) => commandPathOf(prepared.rootNode, definition),
 			args: Object.freeze({}),
 			flags: Object.freeze({}),
 			rawArgs: [],
