@@ -42,6 +42,7 @@ export type DefinitionErrorReason =
 	| "context-cycle"
 	| "context-defer-after-setup"
 	| "context-during-disposal"
+	| "context-flags-not-parsed"
 	| "default-outside-choices"
 	| "delimiter-without-multiple"
 	| "duplicate-arg"

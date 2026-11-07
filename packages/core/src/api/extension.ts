@@ -8,6 +8,7 @@ import type {
 	CommandMeta,
 	RuntimeCommandSectionInput,
 	FlagDef,
+	FlagsDef,
 	InferFlags,
 	InvocationIO,
 	MergeProviders,
@@ -36,6 +37,7 @@ import {
 	type ContextBag,
 	type ContextDependencies,
 	type ContextMap,
+	type ContextUseFlags,
 	type ContextValue,
 	type ContextsDependencies,
 	type ContextsOutput,
@@ -369,9 +371,12 @@ export interface ExtensionData<
 	>[],
 	out MetaKeys extends RootMetaKey = never,
 	HookDeps extends ContextMap = Deps,
+	HookFlags extends FlagsDef = {},
 > {
 	/** @internal Hook demands are distinct from command/provider attachment dependencies. */
 	readonly _hookDeps?: HookDeps;
+	/** @internal — phantom: flags of the Contexts hooks use, which every command parses */
+	readonly _hookFlags?: HookFlags;
 	readonly [extensionHookProof]?: (deps: HookDeps) => void;
 	readonly id: ExtensionId;
 	readonly flags: Readonly<Record<string, ExtensionFlagDef>>;
@@ -406,7 +411,10 @@ export interface Extension<
 	>[],
 	out MetaKeys extends RootMetaKey = never,
 	HookDeps extends ContextMap = Deps,
-> extends Defining<ExtensionData<Deps, Provide, FlagDefs, Commands, MetaKeys, HookDeps>> {
+	HookFlags extends FlagsDef = {},
+> extends Defining<
+	ExtensionData<Deps, Provide, FlagDefs, Commands, MetaKeys, HookDeps, HookFlags>
+> {
 	readonly id: ExtensionId;
 }
 
@@ -458,7 +466,10 @@ export type ExtensionFactory<
 	Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
 	MetaKeys extends RootMetaKey = never,
 	HookDeps extends ContextMap = Deps,
-> = ((...args: Args) => Extension<Deps, Provide, Flags, Commands, MetaKeys, HookDeps>) & {
+	HookFlags extends FlagsDef = {},
+> = ((
+	...args: Args
+) => Extension<Deps, Provide, Flags, Commands, MetaKeys, HookDeps, HookFlags>) & {
 	readonly id: ExtensionId;
 };
 
@@ -470,10 +481,11 @@ type ExtensionFactoryOf<Args extends readonly unknown[], E> =
 			infer Flags,
 			infer Commands,
 			infer MetaKeys,
-			infer HookDeps
+			infer HookDeps,
+			infer HookFlags
 		>
 	>
-		? ExtensionFactory<Args, Deps, Provide, Flags, Commands, MetaKeys, HookDeps>
+		? ExtensionFactory<Args, Deps, Provide, Flags, Commands, MetaKeys, HookDeps, HookFlags>
 		: never;
 
 type ExtensionHook<
@@ -502,11 +514,13 @@ export interface ExtensionBuilder<
 	OF,
 	Commands,
 	MetaKeys,
-	ContextDependencies<Use>
+	ContextDependencies<Use>,
+	ContextUseFlags<Use>
 > {
 	/**
 	 * Declare Contexts the hooks read from `ctx`. This consumes only: the
-	 * application (or `.provide()`) must supply each Context.
+	 * application (or `.provide()`) must supply each Context. Hooks run on every
+	 * command, so every command parses the flags these Contexts own.
 	 */
 	use<const Fs extends readonly [AnyContextFactory, ...AnyContextFactory[]]>(
 		...factories: Fs
@@ -514,6 +528,8 @@ export interface ExtensionBuilder<
 	/**
 	 * Provide Contexts application-wide, regardless of chain position. Provided
 	 * Contexts are not exposed to this Extension's hooks unless also declared with `.use()`.
+	 * Their owned flags are parsed by the root, its inline `.command()` children, and the
+	 * commands that `.use()` them; by every command when this Extension's hooks use them.
 	 */
 	provide<const Cs extends readonly AnyContextInstance[]>(
 		...instances: KnownContextInstances<Cs> & ProvideChecks<DeclaredSpellings<OF, Provide>, Cs>

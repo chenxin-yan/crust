@@ -266,6 +266,19 @@ function _typecheckAcceptsWidenedAndEmptyUseSpreads(deps: readonly AnyContextFac
 		.setup(() => 1);
 	type _Empty = Expect<Equal<NonNullable<(typeof empty)["_deps"]>, {}>>;
 	new Crust("cli").provide(empty());
+	type _EmptyFlags = Expect<Equal<NonNullable<(typeof empty)["_useFlags"]>, {}>>;
+
+	// Widened dependencies may own any flags, so commands that use the Context accept open flags.
+	const owned = defineContext("owned")
+		.flags({ "api-key": apiKey })
+		.use(...deps)
+		.setup(() => 1);
+	const user = defineCommand("user", (command) => command.use(owned));
+	const app = new Crust("cli").provide(owned()).add(user);
+	void app.run(["user"], { flags: { "api-key": "k", anything: "x" } });
+	type _KnownKept = Expect<
+		Equal<NonNullable<(typeof owned)["_useFlags"]>["api-key"]["type"], "string">
+	>;
 }
 
 // checks literal Context sections like command sections
@@ -289,4 +302,112 @@ function _typecheckChecksLiteralContextSections() {
 		.sections()
 		.setup(() => "value");
 	type _Value = Expect<Equal<Awaited<ReturnType<ReturnType<typeof env>["setup"]>>, string>>;
+}
+
+// types Context-owned flags only on commands that parse them
+function _typecheckTypesContextFlagsAtUseSites() {
+	const region = defineFlag({ type: "string" });
+	const config = defineContext("config")
+		.flags({ region })
+		.setup(() => 1);
+	const api = defineContext("api")
+		.use(config)
+		.flags({ "api-key": apiKey })
+		.setup(() => 1);
+	type _UseFlags = Expect<
+		Equal<keyof NonNullable<(typeof api)["_useFlags"]>, "api-key" | "region">
+	>;
+	const deploy = defineCommand("deploy", (command) =>
+		command.use(api).action(({ flags }) => {
+			type _Region = Expect<Equal<typeof flags.region, string | undefined>>;
+			type _ApiKey = Expect<Equal<(typeof flags)["api-key"], string | undefined>>;
+		}),
+	);
+	const status = defineCommand("status", (command) => command);
+	const app = new Crust("cli")
+		.provide(config(), api())
+		.add(deploy, status)
+		.command("inline", (command) => command);
+	void app.run(["deploy"], { flags: { region: "eu", "api-key": "k" } });
+	void app.run(["inline"], { flags: { region: "eu", "api-key": "k" } });
+	// @ts-expect-error -- status does not use api, so it does not parse its flags
+	void app.run(["status"], { flags: { "api-key": "k" } });
+
+	const confirm = defineContext("confirm")
+		.flags({ yes: { type: "boolean" } })
+		.setup(() => true);
+	const provided = defineExtension(defineExtensionId("provided")).provide(confirm());
+	const hooked = defineExtension(defineExtensionId("hooked")).use(confirm).provide(confirm());
+	const providedApp = new Crust("cli")
+		.extend(provided)
+		.add(status)
+		.command("inline", (command) => command);
+	void providedApp.run([], { flags: { yes: true } });
+	void providedApp.run(["inline"], { flags: { yes: true } });
+	// @ts-expect-error -- an Extension-provided Context's flags reach only commands that use it
+	void providedApp.run(["status"], { flags: { yes: true } });
+	// The flags of a Context the hooks use reach every command.
+	void new Crust("cli")
+		.extend(hooked)
+		.add(status)
+		.run(["status"], { flags: { yes: true } });
+
+	// Inline commands added before `.extend()` parse Extension-provided Context flags too;
+	// a reusable command below an inline one parses only what it uses.
+	const early = new Crust("cli")
+		.command("group", (command) => command.add(status).command("leaf", (leaf) => leaf))
+		.extend(provided);
+	void early.run(["group"], { flags: { yes: true } });
+	void early.run(["group", "leaf"], { flags: { yes: true } });
+	// @ts-expect-error -- the reusable status below the inline group does not use confirm
+	void early.run(["group", "status"], { flags: { yes: true } });
+	const inherited = new Crust("cli")
+		.provide(config(), api())
+		.command("group", (command) => command.add(status));
+	void inherited.run(["group"], { flags: { "api-key": "k" } });
+	// @ts-expect-error -- inline inheritance stops at the reusable status
+	void inherited.run(["group", "status"], { flags: { "api-key": "k" } });
+
+	// A use site parses only the declared Contexts' flags; a same-name provider adding one is a
+	// runtime DEFINITION error, so it never joins the input.
+	const offlineApi = defineContext("api")
+		.flags({ offline: { type: "boolean", required: true } })
+		.setup(() => 1);
+	const usesApi = defineCommand("uses", (command) => command.use(api));
+	const swapped = new Crust("cli").provide(config(), offlineApi()).add(usesApi);
+	void swapped.run(["uses"], { flags: { "api-key": "k" } });
+	// @ts-expect-error -- "offline" is not a declared flag of the used Context
+	void swapped.run(["uses"], { flags: { "api-key": "k", offline: true } });
+
+	// Where a provider's customized definition meets the declared one in a builder, the provider's
+	// (the parsed one) types the shared flag instead of an uninhabitable intersection.
+	const declaredMode = defineContext("mode")
+		.flags({ mode: { type: "string", default: "a" } })
+		.setup(() => 1);
+	const customizedMode = defineContext("mode")
+		.flags({ mode: { type: "string", default: "b" } })
+		.setup(() => 1);
+	defineCommand("same", (command) =>
+		command
+			.use(declaredMode)
+			.provide(customizedMode())
+			.action(({ flags }) => {
+				type _Mode = Expect<Equal<typeof flags.mode, string>>;
+			}),
+	);
+	const modeApp = new Crust("cli")
+		.provide(customizedMode())
+		.command("inline", (command) => command.use(declaredMode));
+	void modeApp.run(["inline"], { flags: { mode: "x" } });
+	type _InlineMode = Expect<
+		Equal<(typeof modeApp)["_types"]["tree"]["inline"]["flags"]["mode"]["default"], "b">
+	>;
+
+	// A command may provide a flag-owning Context it uses; another Context with its flags collides.
+	defineCommand("local", (command) => command.use(config).provide(config()));
+	const other = defineContext("other")
+		.flags({ region })
+		.setup(() => 1);
+	// @ts-expect-error -- "region" collides with the used config Context's flag
+	defineCommand("other", (command) => command.use(config).provide(other()));
 }

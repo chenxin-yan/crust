@@ -9,6 +9,7 @@ import {
 	type ContextMap,
 	type ContextsOutput,
 	type ContextsOwnedFlags,
+	type ContextUseFlags,
 	type DefiningOf,
 } from "../api/context.ts";
 import type {
@@ -94,11 +95,15 @@ import {
 	type AddedChild,
 	type CommandAction,
 	type CommandNode,
+	checkProvidedContextFlags,
 	cloneCommandNode,
 	cloneFlagRegistry,
 	commandDefinitionInternal,
 	createCommandNode,
 	childEntriesOf,
+	declaredContextNames,
+	installContextFlags,
+	registerContextFlags,
 	registerFlag,
 } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
@@ -196,6 +201,8 @@ interface CommandDefinitionInternal {
 	readonly name: string;
 	readonly recipe: (command: AnyCommandDefinitionBuilder) => AnyCommandDefinitionBuilder;
 	readonly meta: Omit<CommandMeta, "name">;
+	/** Defined with `.command()`: it sees the parent's Contexts in `ctx`, so it parses their flags too. */
+	readonly inline?: true;
 }
 
 type CommandInputShape<S extends CommandShape> = {
@@ -289,8 +296,12 @@ function materializeCommandDefinition(
 		string,
 		"recipe"
 	>(name);
-	for (const [flagName, def] of Object.entries(parent.ownedFlags)) {
-		registerFlag(child._node, flagName, def, "owned");
+	// A reusable definition parses only the flags of the Contexts it declares with `.use()`.
+	if (internal.inline) {
+		for (const [flagName, def] of Object.entries(parent.ownedFlags)) {
+			registerFlag(child._node, flagName, def, "owned");
+		}
+		child._node.flagContexts = parent.flagContexts;
 	}
 	child._node.contexts = parent.contexts.map((context) => ({ ...context }));
 
@@ -321,6 +332,8 @@ function materializeCommandDefinition(
 	);
 
 	childNode.meta = { name, ...internal.meta };
+	// Its Contexts are final now; the recipe may `.provide()` after `.use()`.
+	checkProvidedContextFlags(childNode, childNode.demands);
 	return childNode;
 }
 
@@ -347,7 +360,7 @@ export type CommandDefinitionBuilder<
 	Sp,
 	Tree,
 	CtxFlags,
-	CollisionSpellings<never, never, {}, never, Deps, Providers>,
+	CollisionSpellings<never, never, {}, Deps, Providers>,
 	Result,
 	{},
 	string,
@@ -378,18 +391,20 @@ type DepsOfBuilder<B> =
 // Match only established spellings; open siblings must not replace a known shape.
 // Distribute over `D`: a variadic `.add(a, b)` passes the definition union, and a
 // non-distributive check would infer the union of every sibling's shape.
-type DefinitionShapeForSpelling<D, Spelling extends string> = D extends unknown
+type DefinitionEntryForSpelling<
+	D,
+	Spelling extends string,
+	CF extends FlagsDef | false,
+> = D extends unknown
 	? CommandDefinitionData<D> extends { readonly _shape?: infer Shape extends CommandShape }
 		? Spelling extends CommandDefinitionSpellings<D>
-			? Shape
+			? EntryShape<Shape, CF>
 			: never
 		: never
 	: never;
 
-// Added definitions inherit the parent path's Context-owned flags at runtime
-// (materialization seeds the child with `parent.ownedFlags`), so the typed shape
-// merges them too — deeply, because nested definitions materialize against the
-// same inherited flag namespace. Local parent flags never inherit and stay out.
+// Applies flags that reach a whole subtree (recursive Extension flags) to a shape and every
+// descendant. Local parent flags never inherit and stay out.
 type ShapeWithInheritedFlags<S, CF extends FlagsDef> = keyof CF extends never
 	? S
 	: S extends CommandShape<infer SA, infer SF, infer SC, infer SR, infer P>
@@ -402,9 +417,31 @@ type ShapeWithInheritedFlags<S, CF extends FlagsDef> = keyof CF extends never
 			>
 		: never;
 
+// Inline `.command()` children inherit the parent's Context-owned flags at runtime
+// (materialization seeds them with `parent.ownedFlags`), so the typed shape merges them too.
+// Only one level: an inline child's own inline children merge them at their `.command()`,
+// and a reusable child below parses only the Context flags it uses. The mark lets readers
+// add Extension-provided Context flags to inline commands added before `.extend()`.
+type InlineShape<S, CF extends FlagsDef> =
+	S extends CommandShape<infer SA, infer SF, infer SC, infer SR, infer P>
+		? CommandShape<SA, keyof CF extends never ? SF : ProviderFlagsFirst<CF, SF>, SC, SR, P, true>
+		: never;
+
+// A provider's definition of a flag that a used Context also declares is the one parsed (it may
+// customize spelling, help, or default), so shared keys take `P`'s; otherwise a plain intersection.
+type ProviderFlagsFirst<P extends FlagsDef, D extends FlagsDef> = string extends keyof P
+	? P & D
+	: [keyof P & keyof D] extends [never]
+		? P & D
+		: P & Omit<D, keyof P>;
+
+// `false`: reusable definitions, which parse only the Context flags they use: the declared
+// Contexts' (a same-name provider may not add any; see `checkProvidedContextFlags`).
+type EntryShape<S, CF extends FlagsDef | false> = [CF] extends [FlagsDef] ? InlineShape<S, CF> : S;
+
 type DefinitionsTree<
 	Ds extends readonly CommandDefinition<any, any, any, any>[],
-	CtxFlags extends FlagsDef = {},
+	CtxFlags extends FlagsDef | false = false,
 > = [Ds] extends [
 	readonly [
 		{
@@ -421,25 +458,26 @@ type DefinitionsTree<
 		: IsUnion<Ds[number]> extends true
 			? DefinitionsTreeSlow<Ds, CtxFlags>
 			: [IsClosedName<N>, IsClosedName<Al[number]>] extends [true, true]
-				? { [K in N | Al[number]]: ShapeWithInheritedFlags<S, CtxFlags> }
+				? { [K in N | Al[number]]: EntryShape<S, CtxFlags> }
 				: DefinitionsTreeSlow<Ds, CtxFlags>
 	: DefinitionsTreeSlow<Ds, CtxFlags>;
 
 type DefinitionsTreeSlow<
 	Ds extends readonly CommandDefinition<any, any, any, any>[],
-	CtxFlags extends FlagsDef = {},
+	CtxFlags extends FlagsDef | false,
 > =
 	string extends AttachedCommandSpellings<Ds>
 		? Record<string, CommandShape> & KnownDefinitionTree<Ds, CtxFlags>
 		: {
-				[K in CommandDefinitionSpellings<Ds[number]>]: ShapeWithInheritedFlags<
-					DefinitionShapeForSpelling<Ds[number], K>,
+				[K in CommandDefinitionSpellings<Ds[number]>]: DefinitionEntryForSpelling<
+					Ds[number],
+					K,
 					CtxFlags
 				>;
 			};
 
 // Accumulates in tail position so a long batch with a runtime-only name stays clear of TS2589.
-type KnownDefinitionTree<Ds extends readonly unknown[], CF extends FlagsDef, Acc = {}> =
+type KnownDefinitionTree<Ds extends readonly unknown[], CF extends FlagsDef | false, Acc = {}> =
 	IsUnion<Ds> extends true
 		? Acc
 		: Ds extends readonly [infer H, ...infer T]
@@ -450,10 +488,7 @@ type KnownDefinitionTree<Ds extends readonly unknown[], CF extends FlagsDef, Acc
 						(IsUnion<H> extends true
 							? {}
 							: {
-									[K in CommandDefinitionSpellings<H>]: ShapeWithInheritedFlags<
-										DefinitionShapeForSpelling<H, K>,
-										CF
-									>;
+									[K in CommandDefinitionSpellings<H>]: DefinitionEntryForSpelling<H, K, CF>;
 								})
 				>
 			: Acc;
@@ -484,16 +519,29 @@ type ExtensionOwnFlags<E> = [E] extends [never]
 	: DefiningOf<E> extends { _flagDefs?: FlagsDef }
 		? ExtensionFlagDefsOf<E>
 		: {};
+type ExtensionProvidedFlags<E> = ContextsOwnedFlags<ExtensionProviders<E>>;
+/** Flags of the Contexts an Extension's hooks use: every command parses them. */
+type ExtensionHookFlags<E> = [E] extends [never]
+	? {}
+	: DefiningOf<E> extends { readonly _hookFlags?: infer F extends FlagsDef }
+		? F
+		: {};
 
+// The root's: it provides the Extension Contexts, so it parses their flags too.
 type ExtensionFlags<Es extends readonly AnyExtension[], Acc = {}> = Es extends readonly [
 	infer H,
 	...infer T extends readonly AnyExtension[],
 ]
-	? ExtensionFlags<T, Acc & ExtensionOwnFlags<H> & ContextsOwnedFlags<ExtensionProviders<H>>>
+	? ExtensionFlags<
+			T,
+			Acc & ExtensionOwnFlags<H> & ExtensionProvidedFlags<H> & ExtensionHookFlags<H>
+		>
 	: Acc &
 			(keyof ExtensionOwnFlags<Es[number]> extends never
-				? keyof ContextsOwnedFlags<ExtensionProviders<Es[number]>> extends never
-					? {}
+				? keyof ExtensionProvidedFlags<Es[number]> extends never
+					? keyof ExtensionHookFlags<Es[number]> extends never
+						? {}
+						: FlagsDef
 					: FlagsDef
 				: FlagsDef);
 
@@ -503,17 +551,23 @@ type RecursiveExtensionFlags<Es extends readonly AnyExtension[], Acc = {}> = Es 
 	infer H,
 	...infer T extends readonly AnyExtension[],
 ]
-	? RecursiveExtensionFlags<
-			T,
-			Acc & RecursiveFlagsOf<H> & ContextsOwnedFlags<ExtensionProviders<H>>
-		>
+	? RecursiveExtensionFlags<T, Acc & RecursiveFlagsOf<H> & ExtensionHookFlags<H>>
 	: Acc & ExtensionFlags<Es>;
+
+// Fold of `ExtensionProvidedFlags`: inline `.command()` children added after `.extend()` inherit them.
+type ExtensionsProvidedFlags<Es extends readonly AnyExtension[], Acc = {}> = Es extends readonly [
+	infer H,
+	...infer T extends readonly AnyExtension[],
+]
+	? ExtensionsProvidedFlags<T, Acc & ExtensionProvidedFlags<H>>
+	: Acc;
 
 type TreeWithInheritedFlags<Tree, F extends FlagsDef> = {
 	[K in keyof Tree]: ShapeWithInheritedFlags<Tree[K], F>;
 };
 
-// Recursive Extension flags reach every command at runtime, whenever it was added, so stored
+// Recursive Extension flags (and the flags of Contexts Extension hooks use) reach every command
+// at runtime, whenever it was added, so stored
 // shapes leave them out and readers apply the accumulated set once. Flagging the tree on each
 // `.extend()` nested one mapped type per call (TS2589 at about 50 calls), and resolving it
 // eagerly instead re-walked every existing command per call. Leaving them out also keeps the
@@ -522,6 +576,26 @@ type TreeWithRecursiveFlags<Tree extends object, R extends FlagsDef> = keyof R e
 	? Tree
 	: TreeWithInheritedFlags<Tree, R>;
 
+// Extension-provided Context flags reach the root's inline `.command()` children (and theirs),
+// whenever they were added, like the root's own providers reach later ones. Reusable commands
+// stop the walk: they parse only the Context flags they use.
+type TreeWithInlineFlags<Tree extends object, F extends FlagsDef> = keyof F extends never
+	? Tree
+	: InlineScopeTree<Tree, F>;
+
+type InlineScopeTree<Tree, F extends FlagsDef> = {
+	[K in keyof Tree]: Tree[K] extends CommandShape<
+		infer SA,
+		infer SF,
+		infer SC,
+		infer SR,
+		infer P,
+		true
+	>
+		? CommandShape<SA, ProviderFlagsFirst<F, SF>, InlineScopeTree<SC, F>, SR, P, true>
+		: Tree[K];
+};
+
 /** The root shape that typed `run()`, `at()` and `_types` read. */
 type AppShape<
 	A extends ArgsDef,
@@ -529,7 +603,12 @@ type AppShape<
 	Tree extends object,
 	Result,
 	S extends AnyCollisionSpellings,
-> = CommandShape<A, F, TreeWithRecursiveFlags<Tree, AppRecursiveFlagsOf<S>>, Result>;
+> = CommandShape<
+	A,
+	F,
+	TreeWithRecursiveFlags<TreeWithInlineFlags<Tree, AppInlineFlagsOf<S>>, AppRecursiveFlagsOf<S>>,
+	Result
+>;
 
 // Extension commands join the tree like `.add()`: a colliding command is a definition error.
 // Resolving with `infer R` keeps a chain of `.extend()` calls from deferring one nested tree per
@@ -537,7 +616,6 @@ type AppShape<
 type ExtensionCommandTree<
 	Tree,
 	Es extends readonly AnyExtension[],
-	CF extends FlagsDef,
 	ExtensionCommandSpellings extends string,
 > =
 	// A spelling TypeScript can't see may be a same-id re-registration replacing an earlier
@@ -550,7 +628,7 @@ type ExtensionCommandTree<
 				Record<string, CommandShape> extends infer R extends object
 			? R
 			: never
-		: Tree & DefinitionsTree<ExtensionCommands<Es>, CF> extends infer R extends object
+		: Tree & DefinitionsTree<ExtensionCommands<Es>> extends infer R extends object
 			? R
 			: never;
 
@@ -699,13 +777,12 @@ async function runAt(
 // ────────────────────────────────────────────────────────────────────────────
 
 type CollisionSpellings<
-	// Known spellings of Extension flags that reach every command (recursive own flags and
-	// provided Context flags): the Extension flags a command below the root can collide with at
-	// runtime. Root-only (`recursive: false`) flags join only `Sp`.
+	// Known spellings of Extension flags that reach every command (recursive own flags): the
+	// Extension flags a command below the root can collide with at runtime. Root-only
+	// (`recursive: false`) flags and Extension-provided Context flags join only `Sp`.
 	Extensions extends string = never,
 	Tree extends string = never,
 	Demands extends ContextMap = {},
-	Pending extends string = never,
 	RecipeDeps extends ContextMap = {},
 	Providers extends Record<string, ContextValue> = {},
 	ActionDeps extends ContextMap = {},
@@ -713,11 +790,13 @@ type CollisionSpellings<
 	// reads it (ExtensionCommandsOf); other steps pass it through unread, `undefined` included.
 	ExtensionCommandSpellings extends string | undefined = never,
 	RecursiveFlags extends FlagsDef = {},
+	// Extension-provided Context flags registered so far; see `TreeWithInlineFlags`.
+	InlineFlags extends FlagsDef = {},
 > = {
 	readonly actionDeps: ActionDeps;
 	readonly extensionCommands: ExtensionCommandSpellings;
 	readonly recursiveFlags: RecursiveFlags;
-	readonly pending: Pending;
+	readonly inlineFlags: InlineFlags;
 	readonly demands: Demands;
 	readonly extension: Extensions;
 	readonly tree: Tree;
@@ -730,7 +809,7 @@ type AnyCollisionSpellings = {
 	readonly actionDeps?: ContextMap | undefined;
 	readonly extensionCommands?: string | undefined;
 	readonly recursiveFlags?: FlagsDef | undefined;
-	readonly pending: string;
+	readonly inlineFlags?: FlagsDef | undefined;
 	readonly demands: ContextMap;
 	readonly extension: string;
 	readonly tree: string;
@@ -759,6 +838,9 @@ type ExtensionCommandsOf<S extends AnyCollisionSpellings> = [S["extensionCommand
 
 /** Recursive Extension flags registered so far; see `TreeWithRecursiveFlags`. */
 type AppRecursiveFlagsOf<S extends AnyCollisionSpellings> = Exclude<S["recursiveFlags"], undefined>;
+
+/** Extension-provided Context flags registered so far; see `TreeWithInlineFlags`. */
+type AppInlineFlagsOf<S extends AnyCollisionSpellings> = Exclude<S["inlineFlags"], undefined>;
 
 // Record spellings are derived from `Flags` on demand instead of accumulated in `Sp`.
 type AfterFlags<State extends BuilderState, F extends FlagsDef> = Crust<
@@ -804,23 +886,23 @@ type AfterUse<
 	Fs extends readonly AnyContextFactory[],
 	Meta extends RootCommandMeta | undefined,
 > = Crust<
-	Flags,
+	ProviderFlagsFirst<Flags, ContextUseFlags<Fs>>,
 	A,
 	MergeContext<Ctx, ContextDependencies<Fs>>,
 	Sibs,
-	Sp,
+	Sp | LocalSpellingsOf<ContextUseFlags<Fs>>,
 	Tree,
-	CtxFlags,
+	ProviderFlagsFirst<CtxFlags, ContextUseFlags<Fs>>,
 	CollisionSpellings<
 		CollisionSp["extension"],
 		CollisionSp["tree"],
 		CollisionSp["demands"],
-		CollisionSp["pending"],
 		MergeContext<RecipeDepsOf<CollisionSp>, ContextDependencies<Fs>>,
 		ProvidersOf<CollisionSp>,
 		ActionDepsOf<CollisionSp>,
 		CollisionSp["extensionCommands"],
-		AppRecursiveFlagsOf<CollisionSp>
+		AppRecursiveFlagsOf<CollisionSp>,
+		AppInlineFlagsOf<CollisionSp>
 	>,
 	Result,
 	Meta,
@@ -842,23 +924,23 @@ type AfterProvide<
 	Meta extends RootCommandMeta | undefined,
 	Caps extends "app" | "recipe",
 > = Crust<
-	Flags & ContextsOwnedFlags<Cs>,
+	ProviderFlagsFirst<ContextsOwnedFlags<Cs>, Flags>,
 	A,
 	MergeProviders<Ctx, ContextsOutput<Cs>>,
 	Sibs,
 	Sp | LocalSpellingsOf<ContextsOwnedFlags<Cs>>,
 	Tree,
-	CtxFlags & ContextsOwnedFlags<Cs>,
+	ProviderFlagsFirst<ContextsOwnedFlags<Cs>, CtxFlags>,
 	CollisionSpellings<
 		CollisionSp["extension"],
 		CollisionSp["tree"],
 		CollisionSp["demands"],
-		CollisionSp["pending"],
 		RecipeDepsOf<CollisionSp>,
 		MergeProviders<ProvidersOf<CollisionSp>, ContextsOutput<Cs>>,
 		ActionDepsOf<CollisionSp>,
 		CollisionSp["extensionCommands"],
-		AppRecursiveFlagsOf<CollisionSp>
+		AppRecursiveFlagsOf<CollisionSp>,
+		AppInlineFlagsOf<CollisionSp>
 	>,
 	Result,
 	Meta,
@@ -914,19 +996,19 @@ type AfterExtend<
 	MergeProviders<Ctx, ExtensionsProvidesOutput<Es>>,
 	Sibs | KnownExtensionsCommandSpellings<Es>,
 	Sp | ExtensionsSpellings<Es>,
-	ExtensionCommandTree<Tree, Es, CtxFlags, ExtensionCommandsOf<CollisionSp>>,
-	CtxFlags,
+	ExtensionCommandTree<Tree, Es, ExtensionCommandsOf<CollisionSp>>,
+	CtxFlags & ExtensionsProvidedFlags<Es>,
 	CollisionSpellings<
 		CollisionSp["extension"] | RecursiveExtensionsSpellings<Es>,
 		CollisionSp["tree"] | KnownSpellings<DefinitionTreeSpellings<ExtensionCommands<Es>>>,
 		CollisionSp["demands"] & ExtensionDemandValues<Es>,
-		CollisionSp["pending"] | KnownSpellings<DefinitionTreeSpellings<ExtensionCommands<Es>>>,
 		RecipeDepsOf<CollisionSp>,
 		MergeProviders<ProvidersOf<CollisionSp>, ExtensionsProvidesOutput<Es>>,
 		ActionDepsOf<CollisionSp>,
 		// An open call adds no precise entries (see ExtensionCommandTree).
 		ExtensionCommandsOf<CollisionSp> | KnownSpellings<ExtensionsCommandSpellings<Es>>,
-		AppRecursiveFlagsOf<CollisionSp> & RecursiveExtensionFlags<Es>
+		AppRecursiveFlagsOf<CollisionSp> & RecursiveExtensionFlags<Es>,
+		AppInlineFlagsOf<CollisionSp> & ExtensionsProvidedFlags<Es>
 	>,
 	Result,
 	Meta,
@@ -937,24 +1019,26 @@ type AfterExtend<
 type AfterAdd<
 	State extends BuilderState,
 	Ds extends readonly CommandDefinition<any, any, any, any>[],
+	// Context-owned flags the added commands inherit: inline `.command()` children only.
+	Inherited extends FlagsDef | false = false,
 > = Crust<
 	State["flags"],
 	State["args"],
 	State["ctx"],
 	State["sibs"] | KnownCommandSpellings<Ds>,
 	State["sp"],
-	State["tree"] & DefinitionsTree<Ds, State["ctxFlags"]>,
+	State["tree"] & DefinitionsTree<Ds, Inherited>,
 	State["ctxFlags"],
 	CollisionSpellings<
 		State["collision"]["extension"],
 		State["collision"]["tree"] | KnownSpellings<DefinitionTreeSpellings<Ds>>,
 		State["collision"]["demands"],
-		State["collision"]["pending"],
 		RecipeDepsOf<State["collision"]>,
 		ProvidersOf<State["collision"]>,
 		ActionDepsOf<State["collision"]>,
 		State["collision"]["extensionCommands"],
-		AppRecursiveFlagsOf<State["collision"]>
+		AppRecursiveFlagsOf<State["collision"]>,
+		AppInlineFlagsOf<State["collision"]>
 	>,
 	State["result"],
 	State["meta"],
@@ -1065,15 +1149,15 @@ type MissingRootMetaBrand<E, Defined extends RootMetaKey> =
  * Chainable builder for defining CLI commands with full type inference.
  *
  * Generic parameters:
- * - `Flags` — flags defined locally or installed by provided Contexts
+ * - `Flags` — flags defined locally or installed by provided or used Contexts
  * - `A` — positional argument definitions
  * - `Ctx` — provided Context values
  * - `Sibs` — statically known sibling command names and aliases already registered
  * - `Sp` — accumulated flag spellings used for collision checks
  * - `Tree` — command shapes accumulated by `.add()` for typed `run()`
- * - `CtxFlags` — Context-owned flags accumulated by `.provide()`, inherited by
- *   the shapes of definitions added afterwards (recursive Extension flags reach
- *   every command and are applied where shapes are read; see `TreeWithRecursiveFlags`)
+ * - `CtxFlags` — Context-owned flags accumulated by `.provide()` and `.use()`, inherited
+ *   by the shapes of inline `.command()` children added afterwards (recursive Extension
+ *   flags reach every command and are applied where shapes are read; see `TreeWithRecursiveFlags`)
  * - `Result` — awaited return type of this command's action
  * - `Meta` — authored root metadata available to Extension requirements
  * - `Caps` — root application or configure-only recipe capabilities
@@ -1300,7 +1384,10 @@ export class Crust<
 
 	/**
 	 * Declare Contexts this command consumes without supplying their values.
-	 * Factory references are retained while setup stays lazy.
+	 * Factory references are retained while setup stays lazy. The command, and its
+	 * inline `.command()` children added afterwards, parse the flags these Contexts
+	 * own, and those of the Contexts their setup uses, transitively. A same-name provider that
+	 * owns other flags is a `DEFINITION` error when the command materializes.
 	 */
 	use<const Fs extends readonly [AnyContextFactory, ...AnyContextFactory[]] = never>(
 		this: { readonly _types: { readonly caps: "recipe" } },
@@ -1311,11 +1398,15 @@ export class Crust<
 	use<const Fs extends readonly [AnyContextFactory, ...AnyContextFactory[]]>(
 		...factories: Fs
 	): AfterUse<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Fs, Meta> {
-		return this._clone<
+		const demands = factories.map(definingOf);
+		const cloned = this._clone<
 			AfterUse<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Fs, Meta>
 		>({
-			demands: [...this._node.demands, ...factories.map(definingOf)],
+			...cloneFlagRegistry(this._node),
+			demands: [...this._node.demands, ...demands],
 		});
+		installContextFlags(cloned._node, demands);
+		return cloned;
 	}
 
 	/**
@@ -1324,15 +1415,19 @@ export class Crust<
 	 * Contexts are inherited by descendant commands and constructed lazily when
 	 * their `ctx` property is accessed. Dependency order within one call does not
 	 * affect construction. Disposable values are released in
-	 * reverse construction order after post-run hooks. TypeScript rejects known Context-owned flag collisions, including pending
-	 * Extension commands. Consuming operations throw `DEFINITION` for actual collisions.
+	 * reverse construction order after post-run hooks.
+	 *
+	 * Context-owned flags are parsed by this command, by inline `.command()` children
+	 * added afterwards, and by reusable commands that declare the Context with `.use()`.
+	 * TypeScript rejects known Context-owned flag collisions on this command; consuming
+	 * operations throw `DEFINITION` for actual collisions.
 	 *
 	 * Context `sections` document only this command, never descendants. Preparation throws
 	 * `DEFINITION` when one repeats a section title already on this command.
 	 */
 	provide<const Cs extends readonly AnyContextInstance[] = never>(
 		...instances: KnownContextInstances<Cs> &
-			ProvideChecks<Sp | LocalSpellingsOf<Flags> | CollisionSp["pending"], Cs> &
+			ProvideChecks<Sp | LocalSpellingsOf<Flags>, Cs, keyof RecipeDepsOf<CollisionSp>> &
 			ValidateContextNames<Caps extends "recipe" ? ProvidersOf<CollisionSp> : Ctx, Cs> &
 			ValidateContextDeps<Ctx, Cs> &
 			DeclaredDependencyValuesBrand<
@@ -1365,10 +1460,21 @@ export class Crust<
 			contexts: [...this._node.contexts, ...instances.map((instance) => ({ instance }))],
 			providedContexts: [...this._node.providedContexts, ...instances],
 		});
+		const declared = declaredContextNames(this._node.demands);
 		for (const instance of instances) {
+			// Fulfilling this command's own `.use()` demand shares the flags `.use()` installed.
+			if (declared.has(instance.name)) {
+				registerContextFlags(cloned._node, instance.name, instance.ownedFlags, "provided");
+				continue;
+			}
 			for (const [name, definition] of Object.entries(instance.ownedFlags)) {
 				registerFlag(cloned._node, name, definition, "owned");
 			}
+			const installed = cloned._node.flagContexts.get(instance.name) ?? [];
+			cloned._node.flagContexts = new Map(cloned._node.flagContexts).set(instance.name, [
+				...installed,
+				...Object.keys(instance.ownedFlags),
+			]);
 		}
 
 		return cloned;
@@ -1431,9 +1537,9 @@ export class Crust<
 		...extensions: Es & {
 			[I in keyof Es]: (ExtensionCommandDefs<Es[I]> extends ValidateDefinitionFlags<
 				ExtensionCommandDefs<Es[I]>,
-				// Flags inherited so far; same-call and later Extension flags check these commands
+				// Recursive flags so far; same-call and later Extension flags check these commands
 				// through `ValidateExtensionFlags`'s `Below` set.
-				CollisionSp["extension"] | KnownSpellings<LocalSpellingsOf<CtxFlags>>
+				CollisionSp["extension"]
 			>
 				? {}
 				: {
@@ -1503,10 +1609,7 @@ export class Crust<
 			ValidateCommandDefinitions<Ds, State["sibs"]> &
 			ValidateDeclaredDeps<State["ctx"], Ds> &
 			DefinitionDescendantValuesBrand<Ds, State["collision"]["demands"]> &
-			ValidateDefinitionFlags<
-				Ds,
-				State["collision"]["extension"] | KnownSpellings<LocalSpellingsOf<State["ctxFlags"]>>
-			>
+			ValidateDefinitionFlags<Ds, State["collision"]["extension"]>
 	): AfterAdd<State, Ds>;
 
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
@@ -1516,15 +1619,15 @@ export class Crust<
 	}
 
 	/**
-	 * Define a subcommand inline (sugar for `.add(defineCommand(name, recipe))`),
-	 * on the root or inside another command's recipe.
+	 * Define a subcommand inline, on the root or inside another command's recipe.
 	 *
 	 * The recipe builder is seeded with the Contexts and Context-owned flags
 	 * accumulated on this builder so far — the call site. In a recipe, those are
 	 * its `.use()` and `.provide()` Contexts. Contexts provided after `.command()`
 	 * are not visible to it, matching the positional runtime semantics of
-	 * `.provide()`. Extract to `defineCommand` when a command needs its own file
-	 * or reuse.
+	 * `.provide()`. Unlike `.add(defineCommand(name, recipe))`, the command parses
+	 * those Contexts' flags without `.use()`, because its `ctx` exposes them.
+	 * Extract to `defineCommand` when a command needs its own file or reuse.
 	 */
 	command<
 		const N extends string,
@@ -1553,7 +1656,8 @@ export class Crust<
 			NoInfer<DescendantValuesBrand<{ child: ShapeOfBuilder<B> }, State["collision"]["demands"]>>,
 	): AfterAdd<
 		State,
-		readonly [CommandDefinition<N, readonly [], ShapeOfBuilder<B>, DepsOfBuilder<B>>]
+		readonly [CommandDefinition<N, readonly [], ShapeOfBuilder<B>, DepsOfBuilder<B>>],
+		State["ctxFlags"]
 	>;
 
 	command<const N extends string, B extends AnyCommandDefinitionBuilder>(
@@ -1578,12 +1682,17 @@ export class Crust<
 		) => CommandDefinition;
 		// SAFETY: the erased recipe still returns the builder it receives; materialization re-validates that at runtime.
 		const definition = define(name, recipe as unknown as CommandRecipe);
+		const internal = Object.freeze({
+			...definition[commandDefinitionInternal],
+			inline: true as const,
+		});
 		return this._addDefinitions<
 			AfterAdd<
 				this["_state"],
-				readonly [CommandDefinition<N, readonly [], ShapeOfBuilder<B>, DepsOfBuilder<B>>]
+				readonly [CommandDefinition<N, readonly [], ShapeOfBuilder<B>, DepsOfBuilder<B>>],
+				CtxFlags
 			>
-		>([definition]);
+		>([{ ...definition, [commandDefinitionInternal]: internal }]);
 	}
 
 	private _addDefinitions<Out>(definitions: readonly CommandDefinition[]): Out {

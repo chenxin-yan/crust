@@ -262,7 +262,7 @@ it("keeps same-name Context replacement order inside checked Extensions", async 
 	).toThrow("default must be one of choices");
 });
 
-it("checked providers validate pending contributed commands lazily against final owned flags", async () => {
+it("keeps root providers' flags off contributed commands that do not use them", async () => {
 	let recipes = 0;
 	let setups = 0;
 	const owner = defineContext("owner")
@@ -278,16 +278,13 @@ it("checked providers validate pending contributed commands lazily against final
 	const ext = defineExtension(defineExtensionId("pending-commands")).add(
 		defineCommand("parent", (c) => c.add(child)),
 	);
-	const root = new Crust("app").extend(ext);
 	const widened: AnyContextInstance = owner();
-	const app = root.provide(widened);
+	const app = new Crust("app").extend(ext).provide(widened);
 	expect(recipes).toBe(0);
+	const snapshot = await app.snapshot();
+	expect(snapshot.flags.token?.type).toBe("string");
+	expect(snapshot.subCommands.parent?.subCommands.child?.flags.token?.type).toBe("boolean");
 	expect(setups).toBe(0);
-	await expect(app.snapshot()).rejects.toThrow("collides");
-	expect(setups).toBe(0);
-	// The checked clone does not change the original registration or positional child scope.
-	await expect(root.snapshot()).resolves.toBeDefined();
-	await expect(new Crust("app").add(child).provide(owner()).snapshot()).resolves.toBeDefined();
 });
 
 it("checked Extensions validate earlier pending commands against new flags and provider flags lazily", async () => {
@@ -307,10 +304,11 @@ it("checked Extensions validate earlier pending commands against new flags and p
 		const pending = defineExtension(defineExtensionId("pending")).add(
 			defineCommand("parent", (c) => c.add(child)),
 		);
+		// A provided Context reaches every command only when the Extension's hooks use it.
 		const addition =
 			source === "flags"
 				? defineExtension(defineExtensionId("addition")).flags({ token: { type: "string" } })
-				: defineExtension(defineExtensionId("addition")).provide(owner());
+				: defineExtension(defineExtensionId("addition")).use(owner).provide(owner());
 		const root = new Crust("app").extend(pending);
 		const app = root.extend(addition);
 		expect(recipes).toBe(0);
@@ -319,14 +317,14 @@ it("checked Extensions validate earlier pending commands against new flags and p
 		expect(recipes).toBe(1);
 		expect(setups).toBe(0);
 		await expect(root.snapshot()).resolves.toBeDefined();
-		// @ts-expect-error -- the types also see this collision; the runtime check is what's under test
+		// The flags of Contexts hooks use are checked at runtime only, so this union type-checks.
 		await expect(new Crust("app").extend(addition).extend(pending).snapshot()).rejects.toThrow(
 			"collides",
 		);
 	}
 });
 
-it("checked inputs validate open inherited flags without changing positional provider scope", async () => {
+it("checked inputs validate open provider flags only where they are parsed", async () => {
 	const owner = defineContext("owner")
 		.flags({ token: { type: "string", required: true } })
 		.setup(() => 1);
@@ -335,10 +333,8 @@ it("checked inputs validate open inherited flags without changing positional pro
 		c.add(defineCommand("leaf", (c) => c.action(() => "leaf"))),
 	);
 	const inherited = new Crust("app").provide(...providers).add(child);
-	await expect(unwrap(inherited.run(["child", "leaf"], {}))).rejects.toThrow(
-		"Missing required flag",
-	);
-	expect(await inherited.run(["child", "leaf"], { flags: { token: "ok" } })).toMatchObject({
+	await expect(unwrap(inherited.run([], {}))).rejects.toThrow("Missing required flag");
+	expect(await inherited.run(["child", "leaf"], {})).toMatchObject({
 		status: "completed",
 		result: "leaf",
 	});
@@ -445,9 +441,9 @@ it("rejects retired Extension provider flags in both registration forms without 
 	const id = defineExtensionId("retired-provider");
 	const old = defineExtension(id).provide(provider());
 	const replacement = defineExtension(id);
-	const grand = defineCommand("grand", (g) => g.action(() => "grand"));
-	const child = defineCommand("child", (c) => c.add(grand));
-	const original = new Crust("app").extend(old).add(child);
+	const original = new Crust("app")
+		.extend(old)
+		.command("child", (c) => c.command("grand", (g) => g.action(() => "grand")));
 	await expect(
 		unwrap(original.extend(replacement).run(["child", "grand"], { flags: { provided: "value" } })),
 	).rejects.toThrow('Unknown flag "--provided"');
@@ -517,10 +513,11 @@ it("retires actually inherited provider flags even below a later Context shadow"
 		.flags({ inherited: { type: "string", required: true } })
 		.setup(() => "original");
 	const shadow = defineContext("shadowed").setup(() => 42);
-	const child = defineCommand("child", (c) => c.provide(shadow()).action(() => "child"));
 	const id = defineExtensionId("retired-shadowed-provider");
 	const old = defineExtension(id).provide(provider());
-	const original = new Crust("app").extend(old).add(child);
+	const original = new Crust("app")
+		.extend(old)
+		.command("child", (c) => c.provide(shadow()).action(() => "child"));
 	await expect(
 		unwrap(original.extend(defineExtension(id)).run(["child"], { flags: { inherited: "value" } })),
 	).rejects.toThrow('Unknown flag "--inherited"');

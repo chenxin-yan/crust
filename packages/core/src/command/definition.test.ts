@@ -76,7 +76,7 @@ describe("command definitions", () => {
 		);
 	});
 
-	it("propagates Context-owned flags only to definitions added after provide()", async () => {
+	it("parses Context-owned flags only in definitions that use the Context", async () => {
 		const calls: string[] = [];
 		const apiKey = defineFlag({ type: "string" });
 		const auth = defineContext("auth")
@@ -166,21 +166,24 @@ describe("command definitions", () => {
 		void rejectedForms;
 	});
 
-	it("rejects a recipe-provided Context flag colliding with an ancestor Context's flag", async () => {
+	it("rejects a recipe-provided Context flag colliding with a used Context's flag", async () => {
 		const db = defineContext("db")
 			.flags({ conn: { type: "string" } })
 			.setup(() => ({}));
 		const cache = defineContext("cache")
 			.flags({ conn: { type: "number" } })
 			.setup(() => ({}));
-		// Checked attachment validates the sealed recipe against this destination.
-		const sub = defineCommand("sub", (cmd) => cmd.provide(cache()).action(() => {}));
-		const app = new Crust("cli").provide(db());
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		const invalid = app.add(sub);
-		await expect(invalid.snapshot()).rejects.toThrow(
+		const sub = defineCommand("sub", (cmd) =>
+			// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+			cmd.use(db).provide(cache()),
+		);
+		const app = new Crust("cli").provide(db()).add(sub);
+		await expect(app.snapshot()).rejects.toThrow(
 			'Flag "conn" collides with existing flag "conn" on command "sub"',
 		);
+		// Without `.use(db)`, the recipe does not parse db's flags, so nothing collides.
+		const free = defineCommand("sub", (cmd) => cmd.provide(cache()));
+		await expect(new Crust("cli").provide(db()).add(free).snapshot()).resolves.toBeDefined();
 	});
 
 	it("keeps retained builders unchanged when a batch recipe throws", async () => {

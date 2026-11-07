@@ -284,14 +284,15 @@ export type RecursiveOwnFlags<F> = keyof F extends never
 				};
 
 /**
- * Known spellings an Extension puts on every command, not just the root: recursive flags and
- * provided Context-owned flags. Only these can collide with a flag below the root at runtime.
+ * Known spellings an Extension puts on every command, not just the root: its recursive flags.
+ * Only these can collide with a flag below the root at runtime. Provided Context-owned flags
+ * reach only the root, inline children, and commands that use the Context; flags of Contexts the
+ * hooks use reach every command but stay out: a command using the same Context shares them.
  */
 type RecursiveExtensionSpellings<E> =
-	| (ExtensionFlagDefsOf<E> extends infer F extends FlagsDef
-			? KnownSpellings<LocalSpellingsOf<Pick<F, RecursiveFlagKeys<F>>>>
-			: never)
-	| KnownSpellings<ExtensionProvidedSpellings<E>>;
+	ExtensionFlagDefsOf<E> extends infer F extends FlagsDef
+		? KnownSpellings<LocalSpellingsOf<Pick<F, RecursiveFlagKeys<F>>>>
+		: never;
 
 // Per key and per part, so a `recursive: boolean` flag or an open record doesn't hide the rest:
 // only flags that are certainly recursive (the default, or `recursive: true`) count. An optional
@@ -431,17 +432,29 @@ export type RecursiveExtensionsSpellings<
  * against instances earlier in the same `.provide(a(), b())` call. Without
  * the batch check a same-call collision silently resolves last-write-wins,
  * and a required flag shadowed by a peer's alias becomes impossible to supply.
+ * A Context named in `Declared` fulfills the command's own `.use()` demand and
+ * shares the flags `.use()` installed; the runtime checks that they agree.
  */
 export type ProvideChecks<
 	Sp extends string,
 	Cs extends readonly unknown[],
+	Declared extends PropertyKey = never,
 	// Accumulating in tail position lets one `.provide()` take 46+ Contexts without TS2589.
 	Acc extends readonly unknown[] = readonly [],
 > = Cs extends readonly [infer H, ...infer T extends readonly unknown[]]
 	? ProvideChecks<
 			Sp | KnownSpellings<LocalSpellingsOf<ContextOwnedFlags<H>>>,
 			T,
-			readonly [...Acc, H & ContextFlagCollisionBrand<H, Sp>]
+			Declared,
+			readonly [
+				...Acc,
+				H &
+					(H extends { readonly name: infer N }
+						? [N] extends [Declared]
+							? {}
+							: ContextFlagCollisionBrand<H, Sp>
+						: ContextFlagCollisionBrand<H, Sp>),
+			]
 		>
 	: Acc extends readonly []
 		? Cs

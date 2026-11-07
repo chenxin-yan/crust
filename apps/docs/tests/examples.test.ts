@@ -3,9 +3,11 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import { Crust } from "@crustjs/core";
+import { help } from "@crustjs/extensions";
 import { expect, it } from "vite-plus/test";
 
 import { database } from "../examples/guide/contexts-setup";
+import { audited, list } from "../examples/guide/extensions-provider-flags";
 import { app as extensionsExample } from "../examples/modules/extensions/index";
 
 const read = (path: string) => readFile(new URL(path, import.meta.url), "utf8");
@@ -23,6 +25,18 @@ it("the disposable Context example cleans up after success and failure", async (
 			fail ? "database opened\ndatabase closed" : "database opened\nselect 1: ok\ndatabase closed",
 		);
 	}
+});
+
+it("the audited confirmation example reads its Context only after a completed run", async () => {
+	const app = new Crust("my-cli").extend(audited, help()).add(list);
+	expect(await app.run(["list"], { flags: { help: true } })).toMatchObject({
+		status: "handled",
+		by: "crust:help",
+	});
+	const outcome = await app.run(["list"], { flags: { yes: true } });
+	expect(outcome.status).toBe("completed");
+	expect(outcome.stdout.trim()).toBe("a b");
+	expect(outcome.stderr).toContain("confirmation skipped with --yes");
 });
 
 it("extensions example prints the version for `--version` on the actionless root", async () => {
