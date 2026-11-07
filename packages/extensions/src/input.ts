@@ -16,40 +16,12 @@ const inputFlags = {
 	},
 } as const;
 
-/**
- * All of stdin. Read asynchronously: a synchronous read would block the event loop, so
- * Ctrl-C could not cancel an `--input -` waiting on an open pipe or terminal.
- */
-async function readStdin(signal: AbortSignal): Promise<string> {
-	signal.throwIfAborted();
-	const { stdin } = process;
-	const chunks: Buffer[] = [];
-	const done = Promise.withResolvers<string>();
-	// Strings arrive when something already called `stdin.setEncoding()`.
-	const onData = (chunk: Buffer | string) =>
-		void chunks.push(typeof chunk === "string" ? Buffer.from(chunk, "utf8") : chunk);
-	const onEnd = () => done.resolve(Buffer.concat(chunks).toString("utf8"));
-	const onAbort = () => done.reject(signal.reason);
-	stdin.on("data", onData).once("end", onEnd).once("error", done.reject);
-	signal.addEventListener("abort", onAbort, { once: true });
-	// A `data` listener does not restart a stream an earlier consumer paused.
-	stdin.resume();
-	try {
-		return await done.promise;
-	} finally {
-		signal.removeEventListener("abort", onAbort);
-		stdin.off("data", onData).off("end", onEnd).off("error", done.reject);
-		// Paused stdin no longer keeps the process alive after a cancelled read.
-		stdin.pause();
-	}
-}
-
 /** Inline JSON, `@path` (relative to the working directory), or `-` (all of stdin). */
 async function readInput(value: string, signal: AbortSignal): Promise<string> {
 	if (value !== "-" && !value.startsWith("@")) return value;
 	try {
 		return value === "-"
-			? await readStdin(signal)
+			? await (await import("@crustjs/utils/process")).readStdin(signal)
 			: process.getBuiltinModule("node:fs").readFileSync(value.slice(1), "utf8");
 	} catch (cause) {
 		// Cancellation stays an abort, not a PARSE failure.
