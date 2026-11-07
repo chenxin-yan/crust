@@ -38,6 +38,7 @@
     "@crustjs/extensions": "workspace:*",
     "@crustjs/man": "workspace:*",
     "@crustjs/mcp": "workspace:*",
+    "@crustjs/openapi": "workspace:*",
     "@crustjs/progress": "workspace:*",
     "@crustjs/prompts": "workspace:*",
     "@crustjs/skills": "workspace:*",

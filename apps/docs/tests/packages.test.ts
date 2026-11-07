@@ -80,7 +80,7 @@ describe("remarkPackageTable", () => {
 		});
 		expect(Object.fromEntries(groups.map((group, index) => [group, rows[index]]))).toEqual({
 			spine: ["core", "extensions", "crust", "man", "skills"].map(expectedRow),
-			"add-on": ["effect", "env", "mcp", "testing"].map(expectedRow),
+			"add-on": ["effect", "env", "mcp", "openapi", "testing"].map(expectedRow),
 			standalone: ["create", "progress", "prompts", "store", "style", "tui"].map(expectedRow),
 		});
 	});

@@ -1,0 +1,65 @@
+{
+	"name": "@crustjs/openapi",
+	"version": "0.0.0",
+	"description": "Call a CLI's HTTP API and browse its OpenAPI spec from an api command",
+	"type": "module",
+	"sideEffects": false,
+	"license": "MIT",
+	"author": "chenxin-yan",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/chenxin-yan/crust.git",
+		"directory": "packages/openapi"
+	},
+	"homepage": "https://crustjs.com",
+	"bugs": {
+		"url": "https://github.com/chenxin-yan/crust/issues"
+	},
+	"keywords": [
+		"cli",
+		"crust",
+		"openapi",
+		"api",
+		"http",
+		"bun"
+	],
+	"files": [
+		"dist"
+	],
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"build": "vp run build:task",
+		"dev": "vp pack --watch",
+		"check:types": "vp run check:types:task",
+		"test": "vp run test:task",
+		"prepack": "cp ../../LICENSE LICENSE",
+		"postpack": "rm -f LICENSE"
+	},
+	"devDependencies": {
+		"@crustjs/config": "workspace:*",
+		"@crustjs/core": "workspace:*",
+		"@crustjs/testing": "workspace:*",
+		"vite-plus": "catalog:"
+	},
+	"peerDependencies": {
+		"@crustjs/core": "workspace:^",
+		"typescript": "^7.0.0"
+	},
+	"peerDependenciesMeta": {
+		"typescript": {
+			"optional": true
+		}
+	},
+	"engines": {
+		"bun": ">=1.4.0",
+		"node": ">=24"
+	}
+}
