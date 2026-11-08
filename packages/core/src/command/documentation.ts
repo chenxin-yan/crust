@@ -61,8 +61,8 @@ export interface DocumentationArg {
 	readonly choices?: readonly string[];
 	/** Default value used when the argument is omitted, e.g. `3000`. */
 	readonly default?: unknown;
-	/** `true` when the value is a secret Crust never prints. */
-	readonly sensitive: boolean;
+	/** `true` when the value is a secret Crust never prints; always set by {@link buildCommandDocumentation}. */
+	readonly sensitive?: boolean;
 }
 
 /**
@@ -114,8 +114,8 @@ export interface DocumentationFlag {
 	readonly env?: FlagSnapshot["env"];
 	/** Delimiter that splits string argv values of a repeatable flag into occurrences. */
 	readonly delimiter?: string;
-	/** `true` when the value is a secret Crust never prints. */
-	readonly sensitive: boolean;
+	/** `true` when the value is a secret Crust never prints; always set by {@link buildCommandDocumentation}. */
+	readonly sensitive?: boolean;
 }
 
 /**
