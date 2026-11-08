@@ -1,7 +1,8 @@
 import { Crust, defineCommand } from "@crustjs/core";
+import { commandInputFields, commandInputSchema } from "@crustjs/core/tooling";
 import { describe, expect, it } from "vite-plus/test";
 
-import { toolsFromSnapshot } from "./tools.ts";
+import { RAW_PROPERTY, toolsFromSnapshot } from "./tools.ts";
 
 const noop = () => {};
 /** Minimal hand-rolled Standard Schema; the snapshot never sees it. */
@@ -74,139 +75,6 @@ describe("toolsFromSnapshot", () => {
 		expect(root).toMatchObject({ name: "cli", path: [] });
 	});
 
-	it("maps snapshot definitions onto JSON Schema", async () => {
-		const app = new Crust("cli").add(
-			defineCommand("send", (c) =>
-				c
-					.args(
-						{ name: "target", type: "string", required: true, description: "Where" },
-						{ name: "level", type: "string", choices: ["low", "high"], default: "low" },
-						{ name: "files", type: "path", variadic: true },
-					)
-					.flags({
-						count: { type: "number", required: true, default: 1 },
-						"dry-run": { type: "boolean" },
-						origin: { type: "url", multiple: true },
-						payload: { type: "json", description: "Any JSON" },
-						port: { type: "string", parse: Number },
-						mode: { type: "string", schema: passthrough },
-					})
-					.action(noop),
-			),
-		);
-		const [tool] = toolsFromSnapshot(await app.snapshot());
-		expect(tool?.inputSchema).toEqual({
-			type: "object",
-			properties: {
-				target: { type: "string", description: "Where" },
-				level: { type: "string", enum: ["low", "high"], default: "low" },
-				files: { type: "array", items: { type: "string" } },
-				count: { type: "number", default: 1 },
-				"dry-run": { type: "boolean" },
-				origin: { type: "array", items: { type: "string", format: "uri" } },
-				payload: { description: "Any JSON" },
-				port: { type: "string" },
-				mode: { type: "string" },
-				raw: {
-					type: "array",
-					items: { type: "string" },
-					description: "Passthrough values, received as `rawArgs`; they never fill arguments",
-				},
-			},
-			required: ["target"],
-		});
-		expect(tool?.urlFields).toEqual(["origin"]);
-		expect(tool?.argNames).toEqual(["target", "level", "files"]);
-	});
-
-	it("omits unserializable defaults and detaches serializable defaults for discovery", async () => {
-		const cycle = { self: {} };
-		cycle.self = cycle;
-		const throwing = {
-			get value() {
-				throw new Error("default getter");
-			},
-		};
-		const ordinary = { value: 1 };
-		const app = new Crust("cli")
-			.flags({
-				cycle: { type: "json", default: cycle },
-				bigint: { type: "json", default: 1n, required: true },
-				throwing: { type: "json", default: throwing },
-				ordinary: { type: "json", default: ordinary },
-				url: { type: "url", default: new URL("https://example.com/") },
-			})
-			.action(noop);
-		const tools = toolsFromSnapshot(await app.snapshot());
-		const properties = tools[0]!.inputSchema.properties;
-		for (const name of ["cycle", "bigint", "throwing"]) {
-			expect(properties[name]).not.toHaveProperty("default");
-		}
-		expect(tools[0]!.inputSchema.required).toBeUndefined();
-		expect(properties.ordinary?.default).toEqual(ordinary);
-		expect(properties.ordinary?.default).not.toBe(ordinary);
-		expect(properties.url?.default).toBe("https://example.com/");
-		expect(() => JSON.stringify(tools)).not.toThrow();
-	});
-
-	it("omits defaults containing non-finite numbers, which JSON would publish as null", async () => {
-		const app = new Crust("cli")
-			.flags({
-				limit: { type: "number", default: Infinity },
-				bounds: { type: "number", multiple: true, default: [0, -Infinity] },
-				config: { type: "json", default: { ratio: Number.NaN } },
-			})
-			.action(noop);
-		const properties = toolsFromSnapshot(await app.snapshot())[0]!.inputSchema.properties;
-		for (const name of ["limit", "bounds", "config"]) {
-			expect(properties[name]).not.toHaveProperty("default");
-		}
-	});
-
-	it("maps schema and custom-parse definitions by token type; only declared required is required", async () => {
-		const app = new Crust("cli").add(
-			defineCommand("check", (c) =>
-				c
-					.args({ name: "id", schema: passthrough })
-					.flags({
-						mode: { type: "string", schema: passthrough },
-						on: { type: "boolean", schema: passthrough },
-						port: { type: "string", parse: Number },
-						level: { type: "string", parse: Number, required: true },
-					})
-					.action(noop),
-			),
-		);
-		const [tool] = toolsFromSnapshot(await app.snapshot());
-		expect(tool?.inputSchema.properties).toMatchObject({
-			id: { type: "string" },
-			mode: { type: "string" },
-			on: { type: "boolean" },
-			port: { type: "string" },
-			level: { type: "string" },
-		});
-		// Schema-owned requiredness is invisible; a custom parser's `required` is declared and kept.
-		expect(tool?.inputSchema.required).toEqual(["level"]);
-	});
-
-	it("accepts prototype-named definitions as own properties", async () => {
-		const app = new Crust("cli").add(
-			defineCommand("probe", (c) =>
-				c
-					.args({ name: "__proto__", type: "string" })
-					.flags({ constructor: { type: "string" }, hasOwnProperty: { type: "boolean" } })
-					.action(noop),
-			),
-		);
-		const [tool] = toolsFromSnapshot(await app.snapshot());
-		const properties = tool!.inputSchema.properties;
-		expect(Object.hasOwn(properties, "__proto__")).toBe(true);
-		expect(Object.getPrototypeOf(properties)).toBeNull();
-		expect(properties["constructor"]).toEqual({ type: "string" });
-		expect(properties["hasOwnProperty"]).toEqual({ type: "boolean" });
-		expect(tool!.argNames).toEqual(["__proto__"]);
-	});
-
 	it("rejects tool-name collisions after filtering, naming both paths", async () => {
 		const colliding = new Crust("cli")
 			.add(defineCommand("a_b", (c) => c.action(noop)))
@@ -234,7 +102,34 @@ describe("toolsFromSnapshot", () => {
 		);
 	});
 
-	it("rejects an arg and flag sharing a name, or a definition named raw", async () => {
+	it("takes each tool's input schema and split metadata from core tooling", async () => {
+		const app = new Crust("cli").add(
+			defineCommand("send", (c) =>
+				c
+					.args({ name: "target", type: "string", required: true })
+					.flags({
+						origin: { type: "url", multiple: true },
+						mode: { type: "string", schema: passthrough },
+					})
+					.action(noop),
+			),
+		);
+		const snapshot = await app.snapshot();
+		const command = snapshot.subCommands.send!;
+		expect(toolsFromSnapshot(snapshot)).toEqual([
+			{
+				name: "send",
+				inputSchema: commandInputSchema(command, ["send"]),
+				urlFields: ["origin"],
+				argNames: ["target"],
+				path: ["send"],
+			},
+		]);
+		expect(commandInputFields(command)).toEqual({ urlFields: ["origin"], argNames: ["target"] });
+		expect(RAW_PROPERTY).toBe("raw");
+	});
+
+	it("rejects a command whose flat input would declare a name twice", async () => {
 		const shared = new Crust("cli").add(
 			defineCommand("x", (c) =>
 				c
@@ -247,10 +142,5 @@ describe("toolsFromSnapshot", () => {
 		expect(() => toolsFromSnapshot(sharedSnapshot)).toThrow(
 			'Command "x" declares "name" more than once',
 		);
-		const raw = new Crust("cli").add(
-			defineCommand("y", (c) => c.flags({ raw: { type: "string" } }).action(noop)),
-		);
-		const rawSnapshot = await raw.snapshot();
-		expect(() => toolsFromSnapshot(rawSnapshot)).toThrow('declares "raw" more than once');
 	});
 });

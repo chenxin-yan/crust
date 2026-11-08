@@ -3,12 +3,24 @@
 //
 // Crust.snapshot() is the supported in-process Command Snapshot API. The
 // package root is for invocation-time authoring; this subpath owns build- and
-// render-time helpers, the lockstep first-party subprocess protocol, and the
-// flag value pipeline for first-party packages that bind values without argv.
+// render-time helpers, the lockstep first-party subprocess protocol, the
+// flag value pipeline for first-party packages that bind values without argv,
+// and the mapping between a command and its flat JSON input.
 // ────────────────────────────────────────────────────────────────────────────
 
 export { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
 export { SNAPSHOT_PATH_ENV } from "./command/invocation.ts";
+export {
+	commandInputFields,
+	commandInputSchema,
+	parseCommandInput,
+	RAW_INPUT_PROPERTY,
+} from "./command/command-input.ts";
+export type {
+	CommandInputFields,
+	CommandInputPropertySchema,
+	CommandInputSchema,
+} from "./command/command-input.ts";
 export {
 	buildCommandDocumentation,
 	formatDefault,
@@ -25,4 +37,5 @@ export { INSTALLED_COMMAND_NAME_RULE, isInstalledCommandName } from "./installed
 export { parseFlagValues } from "./parsing/parser.ts";
 export type { FlagEnvironment } from "./parsing/parser.ts";
 export { isListed, sectionsFor, visibleSectionsFor } from "./sections.ts";
+export type { RunInputPayload, RunInputValue } from "./types.ts";
 export type { LocalValueBrand } from "./validation/shared.ts";
