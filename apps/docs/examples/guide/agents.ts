@@ -21,7 +21,10 @@ const deploy = defineCommand("deploy", { description: "Deploy a release" }, (cmd
 				stdout(`Would deploy ${release} to ${target}`);
 				return { target, release, dryRun: true };
 			}
-			if (target === "prod") await (await ctx.confirm)(`Deploy ${release} to prod?`);
+			if (target === "prod") {
+				const ask = await ctx.confirm;
+				await ask(`Deploy ${release} to prod?`);
+			}
 			stdout(`Deploying ${release} to ${target}`);
 			(await ctx.nextSteps).add(status, { args: { target } }, "Watch the rollout");
 			// [!code highlight]
