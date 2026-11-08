@@ -122,6 +122,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 				flag.choices,
 				undefined,
 				flag.env?.name,
+				flag.sensitive,
 			);
 			if (body) lines.push(...bodyLines(body));
 		}
@@ -131,7 +132,14 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		lines.push(".Sh ARGUMENTS", ".Bl -tag -width 12n");
 		for (const arg of model.args) {
 			lines.push(`.It Ar ${arg.name}${arg.variadic ? " ..." : ""}`);
-			const body = formatDescription(arg.description, arg.default, arg.choices);
+			const body = formatDescription(
+				arg.description,
+				arg.default,
+				arg.choices,
+				undefined,
+				undefined,
+				arg.sensitive,
+			);
 			if (body) lines.push(...bodyLines(body));
 		}
 		lines.push(".El");

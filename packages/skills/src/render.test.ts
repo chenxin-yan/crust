@@ -719,6 +719,31 @@ describe("renderSkill", () => {
 			);
 		});
 
+		it("tells agents to pass sensitive values through their env variable", async () => {
+			const cmd = makeCommand({
+				meta: { name: "login" },
+				args: [{ name: "password", type: "string", sensitive: true }],
+				flags: {
+					token: {
+						type: "string",
+						description: "API token",
+						sensitive: true,
+						env: { name: "ACME_TOKEN" },
+					},
+				},
+				run() {},
+			});
+
+			const login = expectTextContent(findFile(await render(cmd), "commands/login.md"));
+
+			expect(login).toContain(
+				"| `--token` | string | No | API token. Secret: pass via `$ACME_TOKEN`; never inline it in shared logs `[env: ACME_TOKEN]` |",
+			);
+			expect(login).toContain(
+				"| `password` | string | No | Secret: never inline it in shared logs |",
+			);
+		});
+
 		it("formats defaults like Core help and displays other value types as strings", async () => {
 			const schemaArg = {
 				name: "target",

@@ -473,7 +473,15 @@ function renderFlagsTable(flags: readonly DocumentationFlag[]): string[] {
 
 function formatFieldDescription(field: DocumentationArg | DocumentationFlag): string {
 	const flag = "multiple" in field ? field : undefined;
-	const description = [field.description, flag?.multiple ? "Can be specified multiple times" : ""]
+	const env = flag?.env?.name;
+	const secret = field.sensitive
+		? `Secret: ${env ? `pass via \`$${env}\`; ` : ""}never inline it in shared logs`
+		: "";
+	const description = [
+		field.description,
+		flag?.multiple ? "Can be specified multiple times" : "",
+		secret,
+	]
 		.filter(Boolean)
 		.join(". ");
 	return (
@@ -482,7 +490,7 @@ function formatFieldDescription(field: DocumentationArg | DocumentationFlag): st
 			field.default,
 			field.choices,
 			(annotation) => `\`${annotation}\``,
-			flag?.env?.name,
+			env,
 		) || "-"
 	);
 }

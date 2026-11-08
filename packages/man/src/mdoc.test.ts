@@ -298,6 +298,25 @@ describe("renderManPageMdoc", () => {
 		expect(mdoc).not.toContain(process.env.HOME as string);
 	});
 
+	it("marks sensitive flags and args Secret. and keeps the env name", async () => {
+		const app = new Crust("demo", { description: "Demo." })
+			.args({ name: "password", type: "string", sensitive: true })
+			.flags({
+				token: {
+					type: "string",
+					sensitive: true,
+					env: { name: "ACME_TOKEN" },
+					description: "API token",
+				},
+			})
+			.action(() => {});
+
+		const mdoc = renderManPageMdoc({ root: await app.snapshot(), section: 1 });
+
+		expect(mdoc).toContain("Secret. API token [env: ACME_TOKEN]");
+		expect(mdoc).toContain(".It Ar password\nSecret.");
+	});
+
 	it("renders positional-arg `choices` in the ARGUMENTS section", async () => {
 		const app = new Crust("demo", { description: "Demo." })
 			.args({
