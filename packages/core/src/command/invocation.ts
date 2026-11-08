@@ -14,6 +14,7 @@ import type {
 import { CrustError, type CaughtError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import {
+	bindStructuredInput,
 	parseArgs,
 	parseStructured,
 	validateParsed,
@@ -521,12 +522,14 @@ async function dispatch(
 	if (!prepared.renderer) output.choose(undefined);
 
 	// Routing and syntax parsing — failures flow directly to the caller. Value errors
-	// wait in `parsed.valueError` for `terminal()`, so a `--help` handler still wins.
+	// wait in `parsed.valueErrors` for `terminal()`, so a `--help` handler still wins.
 	const { argv, route, parsed } =
 		"argv" in input
 			? resolveArgvInput(rootNode, input.argv)
 			: resolveStructuredInput(rootNode, input.path, input.input);
 	const resolvedNode = route.command;
+	// `bindInput` replaces this; hooks and `terminal()` read it live.
+	let bound = parsed;
 
 	// One resource scope and resolver span pre-run, the action, and post-run.
 	await using disposal = new AsyncDisposableStack();
@@ -546,11 +549,20 @@ async function dispatch(
 			return snapshots.command;
 		},
 		commandPath: Object.freeze([...route.commandPath]),
-		args: parsed.args,
-		flags: parsed.flags,
-		rawArgs: parsed.rawArgs,
+		get args() {
+			return bound.args;
+		},
+		get flags() {
+			return bound.flags;
+		},
+		get rawArgs() {
+			return bound.rawArgs;
+		},
 		signal,
 		ctx: resolver.bag(extensions.flatMap((extension) => extension.use)),
+		bindInput(payload: RunInputPayload) {
+			bound = bindStructuredInput(resolvedNode, parsed, payload);
+		},
 		stdout: output.io.stdout,
 		stderr: output.io.stderr,
 		defer(cleanup: () => void | PromiseLike<void>) {
@@ -567,11 +579,11 @@ async function dispatch(
 	onExtensionContext?.(extensionContext);
 
 	const terminal = async () => {
-		validateParsed(resolvedNode, parsed);
+		validateParsed(resolvedNode, bound);
 
 		// Standard Schemas on arg/flag definitions own value validation and
 		// transformation; actions and flag-owning Contexts receive schema outputs.
-		const validated = await applySchemas(resolvedNode, parsed);
+		const validated = await applySchemas(resolvedNode, bound);
 		resolver.setValidatedFlags(validated.flags);
 		if (!resolvedNode.run) return;
 
@@ -579,7 +591,7 @@ async function dispatch(
 			args: validated.args,
 			flags: validated.flags,
 			ctx: resolver.bag(contexts),
-			rawArgs: parsed.rawArgs,
+			rawArgs: bound.rawArgs,
 			signal,
 			get command() {
 				return snapshots.command;
@@ -723,6 +735,8 @@ async function renderFailure(
 			signal,
 			stdout: output.io.stdout,
 			stderr: output.io.stderr,
+			// No action runs after a failure this early, so there is nothing to bind.
+			bindInput() {},
 			ctx: unavailableContext,
 		} satisfies ExtensionContext);
 	}
