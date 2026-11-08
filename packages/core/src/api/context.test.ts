@@ -997,7 +997,7 @@ describe("Context-owned flags at use sites", () => {
 		const group = defineCommand("group", (command) =>
 			command.use(declared).command("leaf", (leaf) =>
 				leaf.action(async ({ ctx, stdout }) => {
-					stdout(String(await ctx.mode));
+					stdout(await ctx.mode);
 				}),
 			),
 		);
