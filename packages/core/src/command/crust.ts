@@ -946,13 +946,14 @@ type OutputResultBrand<
 /** Extension-provided Context flags registered so far; see `TreeWithInlineFlags`. */
 type AppInlineFlagsOf<S extends AnyCollisionSpellings> = Exclude<S["inlineFlags"], undefined>;
 
-// Record spellings are derived from `Flags` on demand instead of accumulated in `Sp`.
+// Only the new record's spellings join `Sp`: re-deriving them from `Flags` on each `.flags()`
+// call would re-walk every flag a used Context installs, once per command.
 type AfterFlags<State extends BuilderState, F extends FlagsDef> = Crust<
 	State["flags"] & F,
 	State["args"],
 	State["ctx"],
 	State["sibs"],
-	State["sp"],
+	State["sp"] | LocalSpellingsOf<F>,
 	State["tree"],
 	State["ctxFlags"],
 	State["collision"],
@@ -1479,7 +1480,7 @@ export class Crust<
 	// `StateReceiver`; extend keeps a this-bound phantom.
 	flags<const F extends FlagsInput, State extends BuilderState = ExplicitTypeArgumentsError>(
 		this: StateReceiver<State>,
-		flags: F & FlagRecordErrors<F, State["sp"] | LocalSpellingsOf<State["flags"]>>,
+		flags: F & FlagRecordErrors<F, State["sp"]>,
 	): AfterFlags<State, DefinedFlags<F>>;
 
 	flags(record: unknown): unknown {
