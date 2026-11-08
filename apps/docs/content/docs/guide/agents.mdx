@@ -158,6 +158,8 @@ $ my-cli init --name demo < /dev/null
 Created demo in us-east-1
 ```
 
+[`confirm()`](/docs/modules/extensions/confirm) is stricter: it also refuses with `ConfirmationRequiredError` when `CI` is set (to anything but an empty string, `0`, or `false` in any letter case), because a CI job can run on a pseudo-terminal that nobody answers.
+
 Crust doesn't detect agents or add a global `--no-input`: the TTY check is the rule.
 
 ## MCP

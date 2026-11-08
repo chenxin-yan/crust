@@ -4,7 +4,7 @@ import { Crust, CrustError, defineCommand } from "@crustjs/core";
 import { withTerminalIO } from "@crustjs/prompts";
 import { createPromptIO, type Key } from "@crustjs/prompts/testing";
 import { captureExecute } from "@crustjs/testing";
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { ConfirmationRequiredError, confirm } from "./confirm.ts";
 import { input } from "./input.ts";
@@ -29,6 +29,10 @@ async function answer(...keys: Key[]) {
 }
 
 describe("confirm", () => {
+	// The prompt shows only outside CI; the runner may be a CI job.
+	beforeEach(() => vi.stubEnv("CI", undefined));
+	afterEach(() => vi.unstubAllEnvs());
+
 	it("resolves without asking under --yes", async () => {
 		expect(await captureExecute(app, ["drop", "--yes"])).toEqual({
 			stdout: "dropped",
@@ -58,6 +62,23 @@ describe("confirm", () => {
 		});
 		const outcome = await app.run(["drop"]);
 		expect(outcome.status === "failed" && outcome.error).toBeInstanceOf(ConfirmationRequiredError);
+	});
+
+	it("fails with ConfirmationRequiredError on a terminal under CI", async () => {
+		vi.stubEnv("CI", "true");
+		const harness = createPromptIO();
+		expect(await withTerminalIO(harness.io, () => captureExecute(app, ["drop"]))).toEqual({
+			stdout: "",
+			stderr: "Error: Confirmation required: Drop the database? Pass --yes to confirm.",
+			exitCode: 1,
+		});
+		expect(harness.screen()).toBe("");
+	});
+
+	it.each(["", "0", "FALSE"])("prompts on a terminal when CI=%j", async (ci) => {
+		vi.stubEnv("CI", ci);
+		const { screen: _screen, ...result } = await answer("y", "enter");
+		expect(result).toEqual({ stdout: "dropped", stderr: "", exitCode: 0 });
 	});
 
 	it("runs when the prompt is accepted", async () => {
