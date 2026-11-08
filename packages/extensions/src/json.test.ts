@@ -132,7 +132,7 @@ describe("json", () => {
 		expect(snapshot.meta.sections).toEqual([
 			expect.objectContaining({
 				title: "JSON output",
-				body: "With --json, stdout is one line of JSON (the command's result) and nothing else; other output goes to stderr. Failures print as JSON on stderr. Exit codes are unchanged.",
+				body: "--json prints the command's result as JSON on stdout and moves its other output to stderr.",
 			}),
 		]);
 		expect((await captureExecute(app, ["--help"])).stdout).toContain("JSON output:");
