@@ -116,6 +116,38 @@ describe("createMcpServer", () => {
 		});
 	});
 
+	it("advertises sensitive values writeOnly and never returns them in errors", async () => {
+		const SECRET = "SENTINEL-s3cr3t";
+		const app = new Crust("vault").add(
+			defineCommand("login", (c) =>
+				c
+					.flags({
+						token: {
+							type: "string",
+							sensitive: true,
+							parse: (raw: string) => {
+								throw new Error(`rejected ${raw}`);
+							},
+						},
+						endpoint: { type: "url", sensitive: true },
+					})
+					.action(() => "ok"),
+			),
+		);
+		const client = await connect(app);
+		const { tools } = await client.listTools();
+		expect(tools[0]?.inputSchema.properties).toMatchObject({
+			token: { type: "string", format: "password", writeOnly: true },
+			endpoint: { type: "string", format: "uri", writeOnly: true },
+		});
+		for (const args of [{ token: SECRET }, { endpoint: SECRET }]) {
+			const result = await client.callTool({ name: "login", arguments: args });
+			expect(result.isError).toBe(true);
+			expect(JSON.stringify(result)).toContain("Invalid value for --");
+			expect(JSON.stringify(result)).not.toContain(SECRET);
+		}
+	});
+
 	it("runs typed input, converting url fields and passing raw through", async () => {
 		const client = await connect(fixture);
 		const result = await client.callTool({
