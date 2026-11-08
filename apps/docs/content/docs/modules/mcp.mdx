@@ -4,6 +4,8 @@ title: "MCP"
 
 `@crustjs/mcp` turns the Command Snapshot into an MCP tool manifest and routes every tool call through typed `app.run()`. No per-command glue: the same definitions that drive parsing, help, and completion drive the JSON Schema each tool advertises.
 
+MCP serves clients that call tools instead of running a shell; [how agents use your CLI](/docs/guide/agents#how-agents-use-your-cli) shows where it fits beside the shell and skills.
+
 ## Install
 
 ```npm

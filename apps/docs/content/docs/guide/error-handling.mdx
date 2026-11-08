@@ -50,22 +50,27 @@ Closed database
 
 Context-managed resources don't need action-level `try`/`finally`. If disposal also fails, Crust adds `Cleanup failed: …` without hiding the original failure. See [failure propagation](/docs/api/errors#propagation-boundaries) for lifecycle details.
 
-## Customize the message
+## Define error classes
 
-Use an Extension's `onError` hook to add context for a known error:
+When the same failure is thrown from several places, or tests and callers need to recognize it, give it a class:
 
-<include lang="ts">../../../examples/guide/error-handling.ts#custom-message</include>
+<include lang="ts">../../../examples/guide/error-handling.ts#error-class</include>
 
-```text
-Error: Config file not found.
-Hint: Run init to create the config file.
+```sh
+$ app
+Error: No app.config.json found. Run `app init` to create one.
+# exit 1
 ```
 
-- Return `true` after rendering to stop later hooks and the default rendering.
-- Return nothing to pass the error to the next hook in `.extend()` order, then to the [renderer's `error`](/docs/api/types#renderer) if an Extension chose one, or Core's default rendering. A hook that throws passes the original error on the same way. Like `catch` blocks, the first hook that claims an error wins, so register specific handlers before broad ones.
-- Hooks only run for `execute()`. Rendering this `ConfigError` still exits with status 1; it doesn't turn failure into success.
+- Recognize it with `instanceof`, never by message text, in [`run()` outcomes](#handle-errors-in-code), tests, and [`nextSteps({ onError })`](#suggest-the-fix).
+- Pass the underlying failure as `{ cause }` to keep it for debugging. Crust renders only the message.
+- Setting `name` is optional: it labels stack traces and [MCP](/docs/modules/mcp#results) tool errors (`<name>: <message>`). Crust never reads `name` or any other field of your errors to decide what to do, except `AbortError` for [cancellation](#cancellation).
 
-[`didYouMean()`](/docs/modules/extensions/did-you-mean) uses this hook for command suggestions. See [`onError`](/docs/api/types#extensionhooks) for the full contract.
+## Suggest the fix
+
+To print the fix as a runnable command, register [`nextSteps()`](/docs/modules/extensions/next-steps) and return recovery steps from its `onError` option for the errors you recognize with `instanceof`. They print after the error message as `Next steps:`, as shell-quoted command lines checked against your command tree.
+
+To change how failures are presented, write an Extension with an [`onError`](/docs/api/types#extensionhooks) hook. The first hook that returns `true` claims the failure and replaces the default `Error:` line; the exit status stays 1. [`didYouMean()`](/docs/modules/extensions/did-you-mean) uses this hook for command suggestions.
 
 ## Cancellation
 
@@ -85,6 +90,14 @@ The first Ctrl+C during `execute()` aborts the action's `signal`. Pass it to can
 
 The outcome preserves the original error unless disposal also fails; then a `SuppressedError` contains both failures.
 
-Framework errors use [`CrustError`](/docs/api/errors). Check `error instanceof CrustError`, then `.is(code)`—not message text. Application errors don't need this wrapper.
-
 To assert rendered messages and exit codes, use [`captureExecute()`](/docs/guide/testing#capture-terminal-behavior) from `@crustjs/testing`.
+
+## Framework errors
+
+Crust reports its own failures as [`CrustError`](/docs/api/errors): unknown commands, argv syntax, conversion and validation of arguments and flags, results that fail [`.output()`](/docs/guide/values-and-validation#command-results), and mistakes in command or Extension definitions. Each carries a `code`, such as `PARSE`, `VALIDATION`, or `COMMAND_NOT_FOUND`.
+
+- Branch on the code, not message text: after `error instanceof CrustError`, `error.is("VALIDATION")` also narrows `details`, such as the schema issues and their `flags.<name>` paths.
+- `toJSON()` returns `code`, `message`, and `details` when present. [`json()`](/docs/modules/extensions/json) prints it for `--json` failures, and MCP reports `<code>: <message>`.
+- Don't throw `CrustError` for your own failures: its codes describe Crust's. Throw an `Error` or [your own class](#define-error-classes).
+
+See the [errors reference](/docs/api/errors) for every code, its `details`, and where failures propagate.
