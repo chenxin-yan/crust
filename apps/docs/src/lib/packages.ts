@@ -10,6 +10,7 @@ import env from "../../../../packages/env/package.json" with { type: "json" };
 import extensions from "../../../../packages/extensions/package.json" with { type: "json" };
 import man from "../../../../packages/man/package.json" with { type: "json" };
 import mcp from "../../../../packages/mcp/package.json" with { type: "json" };
+import openapi from "../../../../packages/openapi/package.json" with { type: "json" };
 import progress from "../../../../packages/progress/package.json" with { type: "json" };
 import prompts from "../../../../packages/prompts/package.json" with { type: "json" };
 import skills from "../../../../packages/skills/package.json" with { type: "json" };
@@ -34,6 +35,7 @@ export const PACKAGES = {
 	extensions,
 	man,
 	mcp,
+	openapi,
 	progress,
 	prompts,
 	skills,
