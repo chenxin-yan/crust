@@ -46,6 +46,7 @@ export type DefinitionErrorReason =
 	| "delimiter-without-multiple"
 	| "duplicate-arg"
 	| "duplicate-no-action"
+	| "duplicate-renderer"
 	| "duplicate-section"
 	| "empty-delimiter"
 	| "empty-env"

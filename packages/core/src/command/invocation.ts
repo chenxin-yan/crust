@@ -5,9 +5,11 @@ import { validateContextAvailability } from "../api/context.ts";
 import type {
 	ExtensionData,
 	ExtensionHandler,
+	ExtensionHooks,
 	ExtensionSetupContext,
 	ExtensionContext,
 	InvocationOutcome,
+	Renderer,
 } from "../api/extension.ts";
 import { CrustError, type CaughtError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
@@ -65,6 +67,49 @@ interface PreparedInvocation {
 	/** Handlers by flag name; Extension flags never collide, so each flag has at most one. */
 	handlers: ReadonlyMap<string, BoundHandler>;
 	noAction?: { readonly by: ExtensionId; readonly run: ExtensionHandler<any, any, any>["run"] };
+	renderer?: {
+		readonly by: ExtensionId;
+		readonly select: NonNullable<ExtensionHooks<any, any, any>["renderer"]>;
+	};
+}
+
+/**
+ * Routes the Command Action's and Contexts' output through the invocation's Renderer.
+ * Writes made before it is chosen, such as by a Context a setup pulled, wait in order.
+ */
+interface InvocationOutput {
+	/** The invocation's IO, which Extensions write to directly. */
+	readonly io: InvocationIO;
+	/** What the Command Action and Contexts write through. */
+	readonly routed: InvocationIO;
+	/** `undefined` until {@link InvocationOutput.choose} runs. */
+	readonly renderer: Renderer | undefined;
+	/** Choose the renderer (`undefined` keeps the default) and flush waiting writes through it. */
+	choose(renderer: Renderer | undefined): void;
+}
+
+function createInvocationOutput(io: InvocationIO): InvocationOutput {
+	let waiting: (readonly [kind: "text" | "diag", line: string])[] = [];
+	let renderer: Renderer | undefined;
+	const write = (kind: "text" | "diag", line: string) => {
+		if (renderer) renderer[kind](line);
+		else waiting.push([kind, line]);
+	};
+	return {
+		io,
+		// Spread first, as Context setups receive it: injected io may carry runtime extras.
+		routed: { ...io, stdout: (line) => write("text", line), stderr: (line) => write("diag", line) },
+		get renderer() {
+			return renderer;
+		},
+		choose(selected) {
+			const chosen = selected ?? { text: io.stdout, diag: io.stderr };
+			renderer = chosen;
+			const flushed = waiting;
+			waiting = [];
+			for (const [kind, line] of flushed) chosen[kind](line);
+		},
+	};
 }
 
 /**
@@ -225,6 +270,7 @@ export function buildExtensionTree(
 		.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 	const handlers = new Map<string, BoundHandler>();
 	let noAction: PreparedInvocation["noAction"];
+	let renderer: PreparedInvocation["renderer"];
 	for (const extension of extensions) {
 		for (const [flag, handler] of Object.entries(extension.handlers)) {
 			const def = extension.flags[flag];
@@ -234,6 +280,17 @@ export function buildExtensionTree(
 				rootOnly: def?.recursive === false,
 				boolean: def?.type === "boolean",
 			});
+		}
+		if (extension.hooks.renderer) {
+			// Two renderers could only be ranked by `.extend()` order.
+			if (renderer) {
+				throw new CrustError(
+					"DEFINITION",
+					`Extensions "${renderer.by}" and "${extension.id}" both set renderer; an application can have one`,
+					{ subject: "extension", name: extension.id, reason: "duplicate-renderer" },
+				);
+			}
+			renderer = { by: extension.id, select: extension.hooks.renderer };
 		}
 		if (!extension.hooks.noAction) continue;
 		// Two fallbacks could only be ranked by `.extend()` order.
@@ -344,6 +401,7 @@ export function buildExtensionTree(
 		extensions,
 		handlers,
 		...(noAction && { noAction }),
+		...(renderer && { renderer }),
 	};
 }
 
@@ -453,12 +511,14 @@ function selectHandler(
 async function dispatch(
 	input: InvocationInput,
 	prepared: PreparedInvocation,
-	io: InvocationIO,
+	output: InvocationOutput,
 	signal: AbortSignal,
 	onExtensionContext?: (context: ExtensionContext) => void,
 	onFailure?: (error: CaughtError, context: ExtensionContext) => Promise<ExtensionId | undefined>,
 ): Promise<{ status: "completed"; result: unknown } | { status: "handled"; by: ExtensionId }> {
 	const { rootNode, extensions } = prepared;
+	// Nothing to wait for without a selector: action-side output stays immediate and in order.
+	if (!prepared.renderer) output.choose(undefined);
 
 	// Routing and syntax parsing — failures flow directly to the caller. Value errors
 	// wait in `parsed.valueError` for `terminal()`, so a `--help` handler still wins.
@@ -471,7 +531,7 @@ async function dispatch(
 	// One resource scope and resolver span pre-run, the action, and post-run.
 	await using disposal = new AsyncDisposableStack();
 	const contexts = resolvedNode.contexts.map(({ instance }) => instance);
-	const resolver = createContextResolver(contexts, io, disposal, signal);
+	const resolver = createContextResolver(contexts, output.routed, disposal, signal);
 
 	const snapshots = lazySnapshots(prepared, resolvedNode);
 	// Setups register cleanup only while they run; one shared object keeps per-invocation
@@ -491,8 +551,8 @@ async function dispatch(
 		rawArgs: parsed.rawArgs,
 		signal,
 		ctx: resolver.bag(extensions.flatMap((extension) => extension.use)),
-		stdout: io.stdout,
-		stderr: io.stderr,
+		stdout: output.io.stdout,
+		stderr: output.io.stderr,
 		defer(cleanup: () => void | PromiseLike<void>) {
 			if (!settingUp) {
 				throw new CrustError(
@@ -527,11 +587,13 @@ async function dispatch(
 			get rootCommand() {
 				return snapshots.rootCommand;
 			},
-			stdout: io.stdout,
-			stderr: io.stderr,
+			stdout: output.routed.stdout,
+			stderr: output.routed.stderr,
 		} satisfies CrustCommandContext;
 
-		return await resolvedNode.run(context);
+		const result = await resolvedNode.run(context);
+		output.renderer?.result?.(result);
+		return result;
 	};
 
 	let outcome: InvocationOutcome;
@@ -542,9 +604,21 @@ async function dispatch(
 			settingUp = true;
 			try {
 				for (const extension of extensions) await extension.hooks.setup?.(extensionContext);
+			} catch (error) {
+				settingUp = false;
+				// Flags are bound, so the selector still chooses how a setup failure renders. The setup
+				// failure is the root cause: a failing selector or flush must not replace it.
+				try {
+					if (prepared.renderer) output.choose(await prepared.renderer.select(extensionContext));
+				} catch {
+					// No renderer yet means the default below; a chosen one still renders the failure.
+				}
+				throw error;
 			} finally {
 				settingUp = false;
 			}
+			// After every setup, so the selector sees what setups bound; before any handler output.
+			if (prepared.renderer) output.choose(await prepared.renderer.select(extensionContext));
 			const handler =
 				selectHandler(prepared.handlers, parsed, resolvedNode === rootNode) ??
 				(resolvedNode.run ? undefined : prepared.noAction);
@@ -559,6 +633,8 @@ async function dispatch(
 				outcome = { status: "completed", result: await terminal() };
 			}
 		} catch (error) {
+			// A failing selector leaves no renderer: the failure and the output waiting for it render by default.
+			if (!output.renderer) output.choose(undefined);
 			const by = await onFailure?.(error, extensionContext);
 			outcome = { status: "failed", error, ...(by === undefined ? {} : { by }) };
 		}
@@ -588,12 +664,12 @@ async function dispatch(
 		: { status: "completed", result: outcome.result };
 }
 
-/** Render one failure through Extension onError hooks, ending in Core's default renderer. */
+/** Render one failure through Extension onError hooks, ending in the Renderer's `error` or Core's default. */
 async function renderFailure(
 	error: CaughtError,
 	argv: readonly string[],
 	prepared: PreparedInvocation,
-	io: InvocationIO,
+	output: InvocationOutput,
 	signal: AbortSignal,
 	extensionContext: ExtensionContext | undefined,
 	silentDefault = false,
@@ -645,8 +721,8 @@ async function renderFailure(
 			flags: Object.freeze({}),
 			rawArgs: [],
 			signal,
-			stdout: io.stdout,
-			stderr: io.stderr,
+			stdout: output.io.stdout,
+			stderr: output.io.stderr,
 			ctx: unavailableContext,
 		} satisfies ExtensionContext);
 	}
@@ -660,7 +736,17 @@ async function renderFailure(
 	}
 	// Cancellation (AbortError) has no default rendering — a user abort
 	// is not an error to report unless an onError hook claims it.
-	if (!silentDefault) io.stderr(describeFailure(error));
+	if (silentDefault) return undefined;
+	const renderer = output.renderer;
+	if (renderer?.error) {
+		try {
+			renderer.error(error);
+			return undefined;
+		} catch {
+			// As with onError: rendering must not hide the original invocation failure.
+		}
+	}
+	output.io.stderr(describeFailure(error));
 	return undefined;
 }
 
@@ -693,7 +779,7 @@ export async function runInvocation(
 		};
 		const outcome = await withAmbientTerminalIO(resolvedIO, async () => {
 			const prepared = prepareInvocation(node, materializeCommandDefinition);
-			return await dispatch(input, prepared, resolvedIO, signal);
+			return await dispatch(input, prepared, createInvocationOutput(resolvedIO), signal);
 		});
 		return { ...outcome, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
 	} catch (error) {
@@ -767,13 +853,14 @@ export async function executeInvocation(
 		// An inherited ignore (background job) stays: listening would make SIGINT fatal again.
 		if (!isSignalIgnored("SIGINT")) process.on("SIGINT", onSigint);
 
+		const output = createInvocationOutput(io);
 		let extensionContext: ExtensionContext | undefined;
 		let rendered: { error: CaughtError } | undefined;
 		try {
 			await dispatch(
 				{ argv },
 				prepared,
-				io,
+				output,
 				signal,
 				(context) => {
 					extensionContext = context;
@@ -782,7 +869,7 @@ export async function executeInvocation(
 					rendered = { error };
 					const cancelled = isAbortError(error);
 					process.exitCode = cancelled ? EXIT_CODE_CANCELLED : 1;
-					return renderFailure(error, argv, prepared, io, signal, context, cancelled);
+					return renderFailure(error, argv, prepared, output, signal, context, cancelled);
 				},
 			);
 		} catch (error) {
@@ -808,7 +895,7 @@ export async function executeInvocation(
 				// Cancellation keeps its dedicated exit code while allowing Extension
 				// onError hooks to render a message. Core's default stays silent.
 				if (!rendered) {
-					await renderFailure(error, argv, prepared, io, signal, extensionContext, true);
+					await renderFailure(error, argv, prepared, output, signal, extensionContext, true);
 				}
 				process.exitCode = EXIT_CODE_CANCELLED;
 				return EXIT_CODE_CANCELLED;
@@ -817,7 +904,7 @@ export async function executeInvocation(
 			// what Extension onError hooks do.
 			process.exitCode = 1;
 			if (!rendered) {
-				await renderFailure(error, argv, prepared, io, signal, extensionContext);
+				await renderFailure(error, argv, prepared, output, signal, extensionContext);
 			}
 			return 1;
 		} finally {

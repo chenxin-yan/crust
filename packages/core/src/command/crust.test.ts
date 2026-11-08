@@ -1564,6 +1564,422 @@ describe("Extension setup, flag handlers, and noAction", () => {
 	});
 });
 
+describe("Extension renderer", () => {
+	let originalExitCode: number | string | null | undefined;
+
+	beforeEach(() => {
+		originalExitCode = process.exitCode;
+	});
+
+	afterEach(() => {
+		process.exitCode = originalExitCode ?? 0;
+	});
+
+	/** A renderer that tags every member call, so tests read one ordered transcript. */
+	function tagging(lines: string[]) {
+		return {
+			text: (line: string) => void lines.push(`text:${line}`),
+			diag: (line: string) => void lines.push(`diag:${line}`),
+			result: (value: unknown) => void lines.push(`result:${JSON.stringify(value)}`),
+			error: (error: unknown) => void lines.push(`error:${(error as Error).message}`),
+		};
+	}
+
+	/** Execute with captured IO; stdout and stderr share one transcript, tagged by stream. */
+	async function execute(app: AnyCrust, argv: string[], lines: string[]) {
+		return app.execute({
+			argv,
+			io: {
+				stdout: (line) => void lines.push(`stdout:${line}`),
+				stderr: (line) => void lines.push(`stderr:${line}`),
+			},
+		});
+	}
+
+	it("routes action and Context output and the result through the renderer, but not the Extension's own output", async () => {
+		const lines: string[] = [];
+		const logger = defineContext("logger").setup(({ stderr }) => stderr);
+		const render = defineExtension(defineExtensionId("render"))
+			.renderer(() => tagging(lines))
+			.preRun((ctx) => ctx.stdout("preRun"))
+			.postRun((ctx, outcome) => ctx.stderr(`postRun:${outcome.status}`));
+		const app = new Crust("cli")
+			.provide(logger())
+			.extend(render)
+			.add(
+				defineCommand("log", (cmd) =>
+					cmd.use(logger).action(async ({ ctx, stdout }) => {
+						stdout("action");
+						(await ctx.logger)("logged");
+						return { ok: true };
+					}),
+				),
+			);
+
+		expect(await execute(app, ["log"], lines)).toBe(0);
+		expect(lines).toEqual([
+			"stdout:preRun",
+			"text:action",
+			"diag:logged",
+			'result:{"ok":true}',
+			"stderr:postRun:completed",
+		]);
+	});
+
+	it("chooses the renderer after every setup and flushes earlier action-side output through it in order", async () => {
+		const lines: string[] = [];
+		const logger = defineContext("logger").setup(({ stdout, stderr }) => {
+			stdout("logger:setup");
+			stderr("logger:diag");
+			return stdout;
+		});
+		const early = defineExtension(defineExtensionId("early"))
+			.provide(logger())
+			.use(logger)
+			.setup(async ({ ctx }) => void (await ctx.logger));
+		let configured = false;
+		const seen: boolean[] = [];
+		const render = defineExtension(defineExtensionId("render"))
+			.setup(() => void (configured = true))
+			.renderer(() => (seen.push(configured), tagging(lines)));
+		// The selector runs after every setup, so `.extend()` order doesn't matter.
+		const app = new Crust("cli")
+			.extend(render, early)
+			.add(
+				defineCommand("log", (cmd) =>
+					cmd.use(logger).action(async ({ ctx }) => (await ctx.logger)("logger:action")),
+				),
+			);
+
+		expect(await execute(app, ["log"], lines)).toBe(0);
+		expect(seen).toEqual([true]);
+		expect(lines).toEqual([
+			"text:logger:setup",
+			"diag:logger:diag",
+			"text:logger:action",
+			"result:undefined",
+		]);
+	});
+
+	it("keeps the default for an undefined selection and for omitted members", async () => {
+		const lines: string[] = [];
+		const render = defineExtension(defineExtensionId("render"))
+			.flags({ tagged: { type: "boolean" } })
+			.renderer((ctx) =>
+				ctx.flags.tagged === true
+					? {
+							text: (line) => void lines.push(`text:${line}`),
+							diag: (line) => void lines.push(`diag:${line}`),
+						}
+					: undefined,
+			);
+		const app = new Crust("cli").extend(render).action(({ stdout }) => {
+			stdout("action");
+			throw new Error("boom");
+		});
+
+		expect(await execute(app, [], lines)).toBe(1);
+		expect(lines).toEqual(["stdout:action", "stderr:Error: boom"]);
+		lines.length = 0;
+		expect(await execute(app, ["--tagged"], lines)).toBe(1);
+		expect(lines).toEqual(["text:action", "stderr:Error: boom"]);
+	});
+
+	/** An Extension whose setup writes through a Context, then throws. */
+	function brokenSetup(failure: unknown = new Error("setup failed")) {
+		const logger = defineContext("logger").setup(({ stdout }) => {
+			stdout("logger:setup");
+			return stdout;
+		});
+		return defineExtension(defineExtensionId("broken"))
+			.provide(logger())
+			.use(logger)
+			.setup(async ({ ctx }) => {
+				await ctx.logger;
+				throw failure;
+			});
+	}
+
+	it("routes a setup failure, and the output waiting for it, through the renderer an argv flag selected", async () => {
+		const lines: string[] = [];
+		const render = defineExtension(defineExtensionId("render"))
+			.flags({ tagged: { type: "boolean" } })
+			.renderer((ctx) => (ctx.flags.tagged === true ? tagging(lines) : undefined))
+			.onError(() => void lines.push("onError"));
+		const app = new Crust("cli").extend(render, brokenSetup()).action(() => {});
+
+		expect(await execute(app, ["--tagged"], lines)).toBe(1);
+		expect(lines).toEqual(["text:logger:setup", "onError", "error:setup failed"]);
+		lines.length = 0;
+		expect(await execute(app, [], lines)).toBe(1);
+		expect(lines).toEqual(["stdout:logger:setup", "onError", "stderr:Error: setup failed"]);
+	});
+
+	it("renders a setup failure by default when the selector then throws or rejects", async () => {
+		const lines: string[] = [];
+		for (const select of [
+			() => {
+				lines.push("selector");
+				throw new Error("no renderer");
+			},
+			async () => {
+				lines.push("selector");
+				throw new Error("no async renderer");
+			},
+		]) {
+			lines.length = 0;
+			const render = defineExtension(defineExtensionId("render")).renderer(select);
+			const app = new Crust("cli").extend(render, brokenSetup()).action(() => {});
+			expect(await execute(app, [], lines)).toBe(1);
+			expect(lines).toEqual(["selector", "stdout:logger:setup", "stderr:Error: setup failed"]);
+		}
+	});
+
+	it("keeps a setup failure when flushing waiting output through the renderer throws", async () => {
+		const lines: string[] = [];
+		const seen: string[] = [];
+		const render = defineExtension(defineExtensionId("render"))
+			.renderer(() => ({
+				...tagging(lines),
+				text() {
+					throw new Error("formatter failed");
+				},
+			}))
+			.onError((error) => void seen.push(`onError:${(error as Error).message}`))
+			.postRun((_ctx, outcome) => {
+				if (outcome.status === "failed") seen.push(`postRun:${(outcome.error as Error).message}`);
+			});
+
+		const failing = new Crust("cli").extend(render, brokenSetup()).action(() => {});
+		expect(await execute(failing, [], lines)).toBe(1);
+		expect(lines).toEqual(["error:setup failed"]);
+		expect(seen).toEqual(["onError:setup failed", "postRun:setup failed"]);
+		await expect(failing.run([])).resolves.toMatchObject({
+			status: "failed",
+			error: { message: "setup failed" },
+		});
+
+		lines.length = 0;
+		const cancelled = new Crust("cli")
+			.extend(render, brokenSetup(new DOMException("stop", "AbortError")))
+			.action(() => {});
+		expect(await execute(cancelled, [], lines)).toBe(130);
+		expect(lines).toEqual([]);
+	});
+
+	it("writes Context output immediately when no Extension sets a renderer", async () => {
+		const lines: string[] = [];
+		const logger = defineContext("logger").setup(({ stdout }) => {
+			stdout("initializing");
+			return stdout;
+		});
+		const early = defineExtension(defineExtensionId("early"))
+			.provide(logger())
+			.use(logger)
+			.setup(async ({ ctx, stdout }) => {
+				await ctx.logger;
+				lines.push("pulled");
+				stdout("ready");
+			});
+		const app = new Crust("cli").extend(early).action(() => {});
+
+		expect(await execute(app, [], lines)).toBe(0);
+		expect(lines).toEqual(["stdout:initializing", "pulled", "stdout:ready"]);
+		const outcome = await app.run([]);
+		expect(outcome.stdout).toBe("initializing\nready");
+	});
+
+	it("renders routing and selector failures by default", async () => {
+		const lines: string[] = [];
+		let selected = false;
+		const render = defineExtension(defineExtensionId("render")).renderer(
+			() => ((selected = true), tagging(lines)),
+		);
+		const routed = new Crust("cli")
+			.extend(render)
+			.add(defineCommand("known", (cmd) => cmd.action(() => {})));
+		expect(await execute(routed, ["nope"], lines)).toBe(1);
+		expect(selected).toBe(false);
+		expect(lines).toEqual([expect.stringMatching(/^stderr:Error: /)]);
+
+		lines.length = 0;
+		const throwing = defineExtension(defineExtensionId("render")).renderer(() => {
+			throw new Error("no renderer");
+		});
+		expect(
+			await execute(
+				new Crust("cli").extend(throwing).action(() => {}),
+				[],
+				lines,
+			),
+		).toBe(1);
+		expect(lines).toEqual(["stderr:Error: no renderer"]);
+
+		lines.length = 0;
+		const rejecting = defineExtension(defineExtensionId("render")).renderer(async () => {
+			throw new Error("no async renderer");
+		});
+		expect(
+			await execute(
+				new Crust("cli").extend(rejecting).action(() => {}),
+				[],
+				lines,
+			),
+		).toBe(1);
+		expect(lines).toEqual(["stderr:Error: no async renderer"]);
+	});
+
+	it("awaits an async selector before any handler, preRun, or action runs", async () => {
+		const lines: string[] = [];
+		const logger = defineContext("logger").setup(({ stdout }) => {
+			stdout("logger:setup");
+			return stdout;
+		});
+		const render = defineExtension(defineExtensionId("render"))
+			.provide(logger())
+			.use(logger)
+			.setup(async ({ ctx }) => void (await ctx.logger))
+			.renderer(async () => {
+				await new Promise((resolve) => setTimeout(resolve, 0));
+				lines.push("selected");
+				return tagging(lines);
+			})
+			.preRun(() => void lines.push("preRun"));
+		const app = new Crust("cli").extend(render).action(() => ({ ok: true }));
+
+		expect(await execute(app, [], lines)).toBe(0);
+		expect(lines).toEqual(["selected", "text:logger:setup", "preRun", 'result:{"ok":true}']);
+	});
+
+	it("calls error once after onError hooks decline or throw, never when one claims the failure", async () => {
+		const lines: string[] = [];
+		let claim: boolean | "throw" = false;
+		const presenter = defineExtension(defineExtensionId("presenter")).onError((error, ctx) => {
+			if (claim === "throw") throw new Error("hook broke");
+			if (!claim) return false;
+			ctx.stderr(`claimed:${(error as Error).message}`);
+			return true;
+		});
+		const render = defineExtension(defineExtensionId("render")).renderer(() => tagging(lines));
+		const app = new Crust("cli").extend(presenter, render).action(() => {
+			throw new Error("boom");
+		});
+
+		expect(await execute(app, [], lines)).toBe(1);
+		expect(lines).toEqual(["error:boom"]);
+		lines.length = 0;
+		claim = "throw";
+		expect(await execute(app, [], lines)).toBe(1);
+		expect(lines).toEqual(["error:boom"]);
+		lines.length = 0;
+		claim = true;
+		expect(await execute(app, [], lines)).toBe(1);
+		expect(lines).toEqual(["stderr:claimed:boom"]);
+	});
+
+	it("calls error for postRun and cleanup failures after a successful action", async () => {
+		const lines: string[] = [];
+		const render = defineExtension(defineExtensionId("render")).renderer(() => tagging(lines));
+		const late = defineExtension(defineExtensionId("late")).postRun(() => {
+			throw new Error("postRun failed");
+		});
+		const leaky = defineExtension(defineExtensionId("leaky")).setup(({ defer }) =>
+			defer(() => {
+				throw new Error("cleanup failed");
+			}),
+		);
+
+		expect(
+			await execute(
+				new Crust("cli").extend(render, late).action(() => 1),
+				[],
+				lines,
+			),
+		).toBe(1);
+		expect(lines).toEqual(["result:1", "error:postRun failed"]);
+		lines.length = 0;
+		expect(
+			await execute(
+				new Crust("cli").extend(render, leaky).action(() => 1),
+				[],
+				lines,
+			),
+		).toBe(1);
+		expect(lines).toEqual(["result:1", "error:cleanup failed"]);
+	});
+
+	it("falls back to Core's rendering when error throws, and stays silent on cancellation", async () => {
+		const lines: string[] = [];
+		const render = defineExtension(defineExtensionId("render")).renderer(() => ({
+			...tagging(lines),
+			error() {
+				throw new Error("renderer broke");
+			},
+		}));
+		const app = new Crust("cli").extend(render).action(() => {
+			throw new Error("boom");
+		});
+		expect(await execute(app, [], lines)).toBe(1);
+		expect(lines).toEqual(["stderr:Error: boom"]);
+
+		lines.length = 0;
+		const cancelled = new Crust("cli")
+			.extend(defineExtension(defineExtensionId("render")).renderer(() => tagging(lines)))
+			.action(() => {
+				throw new DOMException("stop", "AbortError");
+			});
+		expect(await execute(cancelled, [], lines)).toBe(130);
+		expect(lines).toEqual([]);
+	});
+
+	it("calls result only for a completed action, and a throwing result fails the invocation", async () => {
+		const lines: string[] = [];
+		const outcomes: string[] = [];
+		const render = defineExtension(defineExtensionId("render"))
+			.flags({ info: { type: "boolean" } })
+			.handle("info", (ctx) => ctx.stdout("info"))
+			.renderer(() => ({
+				...tagging(lines),
+				result(value) {
+					if (value === "bad") throw new Error("cannot render bad");
+					lines.push(`result:${String(value)}`);
+				},
+			}))
+			.postRun((_ctx, outcome) => void outcomes.push(outcome.status));
+		const app = new Crust("cli").extend(render).add(
+			defineCommand("good", (cmd) => cmd.action(() => "good")),
+			defineCommand("bad", (cmd) => cmd.action(() => "bad")),
+			defineCommand("group", (cmd) => cmd),
+		);
+
+		expect(await execute(app, ["good", "--info"], lines)).toBe(0);
+		expect(await execute(app, ["group"], lines)).toBe(0);
+		expect(lines).toEqual(["stdout:info"]);
+		lines.length = 0;
+
+		await expect(app.run(["good"])).resolves.toMatchObject({ status: "completed" });
+		expect(lines).toEqual(["result:good"]);
+		lines.length = 0;
+		const failed = await app.run(["bad"]);
+		expect(failed).toMatchObject({ status: "failed", error: { message: "cannot render bad" } });
+		// run() never renders failures; the caller reads outcome.error.
+		expect(lines).toEqual([]);
+		expect(outcomes).toEqual(["handled", "completed", "completed", "failed"]);
+	});
+
+	it("rejects two renderer Extensions", async () => {
+		const render = (name: string) =>
+			defineExtension(defineExtensionId(name)).renderer(() => undefined);
+		await expect(new Crust("cli").extend(render("a"), render("b")).snapshot()).rejects.toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				message: 'Extensions "a" and "b" both set renderer; an application can have one',
+				details: expect.objectContaining({ reason: "duplicate-renderer" }),
+			}),
+		);
+	});
+});
+
 // ────────────────────────────────────────────────────────────────────────────
 // .execute() — Full execution pipeline tests
 // ────────────────────────────────────────────────────────────────────────────

@@ -10,6 +10,7 @@ import {
 	type Extension,
 	type ExtensionFactory,
 	type InvocationOutcome,
+	type Renderer,
 } from "./extension.ts";
 
 function _metadataRequirements() {
@@ -368,4 +369,27 @@ function _postRunOutcome() {
 			type _result = Expect<Equal<typeof outcome.result, unknown>>;
 		}
 	});
+}
+
+function _rendererSelector() {
+	const logger = defineContext("logger").setup(() => "logger");
+	const owned = defineExtension(defineExtensionId("test:renderer"))
+		.use(logger)
+		.flags({ json: { type: "boolean" } });
+	owned.renderer((ctx) => {
+		type _json = Expect<Equal<typeof ctx.flags.json, boolean | undefined>>;
+		type _logger = Expect<Equal<typeof ctx.ctx.logger, Promise<string>>>;
+		// @ts-expect-error The selector runs after setups, so it cannot register cleanup.
+		void ctx.defer;
+		return ctx.flags.json === true
+			? { text() {}, diag() {}, result(_value: unknown) {} }
+			: undefined;
+	});
+	// @ts-expect-error A renderer handles both text and diagnostics.
+	owned.renderer(() => ({ text() {} }));
+	// Core awaits the selector, so it can lazy-load a formatter.
+	owned.renderer(async () => ({ text() {}, diag() {} }));
+	// @ts-expect-error A resolved renderer still handles both text and diagnostics.
+	owned.renderer(async () => ({ text() {} }));
+	const _renderer: Renderer = { text() {}, diag() {}, error(_error: unknown) {} };
 }
