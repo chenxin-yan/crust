@@ -333,7 +333,7 @@ export function buildExtensionTree(
 	const providers: ExtensionProvider[] = extensions.flatMap((extension) => {
 		// SAFETY: .extend() records a position for every id it adds to the list.
 		const position = node.extensionPositions!.get(extension.id)!;
-		return extension.provide.map((instance) => ({ instance, position }));
+		return extension.provide.map((instance) => ({ instance, position, extension: extension.id }));
 	});
 	const hookContexts = extensions.flatMap((extension) => extension.use);
 	// The definitions of one `.add()` call share its parent.

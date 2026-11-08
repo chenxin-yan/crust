@@ -106,6 +106,7 @@ export function sectionContextsFor(
 export interface ExtensionProvider {
 	readonly instance: AnyContextInstance;
 	readonly position: number;
+	readonly extension: ExtensionId;
 }
 
 /**
@@ -124,11 +125,11 @@ export function installExtensionProviders(
 	// positions never decrease along the final Extension list.
 	const contexts: CommandContext[] = [];
 	let next = 0;
-	for (const { instance, position } of providers) {
+	for (const { instance, position, extension } of providers) {
 		while (next < position && next < parent.contexts.length) {
 			contexts.push({ ...parent.contexts[next++]! });
 		}
-		contexts.push({ instance });
+		contexts.push({ instance, extension });
 	}
 	for (const context of parent.contexts.slice(next)) contexts.push({ ...context });
 	// Accumulated per name: a same-name parent provider's flags stay installed beside these.

@@ -689,6 +689,54 @@ describe("Context-owned flags at use sites", () => {
 		});
 	});
 
+	it("parses them on commands that .use() the Extension, by value or factory, and their inline children", async () => {
+		const confirm = defineContext("confirm")
+			.flags({ yes: { type: "boolean" } })
+			.setup(({ flags }) => flags.yes === true);
+		const byValue = defineExtension(defineExtensionId("confirm")).provide(confirm());
+		const byFactory = byValue.factory((extension) => extension);
+		const list = defineCommand("list", (command) => command.action(() => "list"));
+		const removeByValue = defineCommand("remove", (command) =>
+			command
+				.use(byValue)
+				.command("all", (all) => all.action(async ({ ctx }) => await ctx.confirm))
+				.action(async ({ ctx, flags }) => {
+					type _Typed = Expect<Equal<(typeof flags)["yes"], boolean | undefined>>;
+					return await ctx.confirm;
+				}),
+		);
+		const removeByFactory = defineCommand("remove", (command) =>
+			command
+				.use(byFactory)
+				.command("all", (all) => all.action(async ({ ctx }) => await ctx.confirm))
+				.action(async ({ ctx, flags }) => {
+					type _Typed = Expect<Equal<(typeof flags)["yes"], boolean | undefined>>;
+					return await ctx.confirm;
+				}),
+		);
+		const apps = [
+			new Crust("cli").extend(byValue).add(removeByValue, list),
+			new Crust("cli").extend(byFactory()).add(removeByFactory, list),
+		] as const;
+
+		for (const app of apps) {
+			const snapshot = await app.snapshot();
+			expect(flagsOf(snapshot.subCommands.remove!)).toEqual(["yes"]);
+			expect(flagsOf(snapshot.subCommands.remove!.subCommands.all!)).toEqual(["yes"]);
+			expect(flagsOf(snapshot.subCommands.list!)).toEqual([]);
+			expect(await unwrap(app.run(["remove"], { flags: { yes: true } }))).toMatchObject({
+				result: true,
+			});
+			expect(await unwrap(app.run(["remove", "all"], { flags: { yes: true } }))).toMatchObject({
+				result: true,
+			});
+			await expect(
+				// @ts-expect-error -- list does not use the Extension, so it does not parse --yes
+				unwrap(app.run(["list"], { flags: { yes: true } })),
+			).rejects.toThrow('Unknown flag "--yes"');
+		}
+	});
+
 	it("puts the flags of Contexts an Extension hook uses on every command", async () => {
 		for (const source of ["extension", "app"] as const) {
 			const seen: unknown[] = [];

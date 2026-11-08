@@ -15,6 +15,7 @@ import {
 } from "../api/context.ts";
 import type {
 	AnyExtension,
+	AnyExtensionFactory,
 	Extension,
 	ExtensionData,
 	ExtensionsProvidesOutput,
@@ -85,6 +86,7 @@ import type {
 import type {
 	IsAny,
 	IsClosedName,
+	IsStaticTuple,
 	IsUnion,
 	KnownSpellings,
 	UnionToIntersection,
@@ -106,6 +108,7 @@ import {
 	createCommandNode,
 	childEntriesOf,
 	declaredContextNames,
+	demandedFactories,
 	installContextFlags,
 	registerContextFlags,
 	registerFlag,
@@ -337,10 +340,7 @@ function materializeCommandDefinition(
 
 	childNode.meta = { name, ...internal.meta };
 	// Its Contexts are final now; the recipe may `.provide()` after `.use()`.
-	checkProvidedContextFlags(
-		childNode,
-		childNode.demands.filter((demand) => "contextName" in demand),
-	);
+	checkProvidedContextFlags(childNode, demandedFactories(childNode.demands));
 	return childNode;
 }
 
@@ -577,6 +577,26 @@ type ExtensionsProvidedFlags<Es extends readonly AnyExtension[], Acc = {}> = Es 
 ]
 	? ExtensionsProvidedFlags<T, Acc & ExtensionProvidedFlags<H>>
 	: Acc;
+
+// shortcut: an Extension source types only its provided Contexts' own flags; `.use()` also parses
+// their setup dependencies' at runtime. Carry use flags on instances if an Extension needs them typed.
+type UseSourceFlags<S> = S extends AnyContextFactory
+	? ContextUseFlags<[S]>
+	: ExtensionProvidedFlags<S extends AnyExtensionFactory ? ReturnType<S> : S>;
+
+type UseSourcesFlags<Us extends readonly unknown[], Acc = {}> = Us extends readonly [
+	infer H,
+	...infer T,
+]
+	? UseSourcesFlags<T, Acc & UseSourceFlags<H>>
+	: Acc;
+
+/** Flags a command parses for a `.use()` call: an Extension stands for the Contexts it provides. */
+type UsedContextFlags<Us extends readonly UseSource[]> = Us extends readonly AnyContextFactory[]
+	? ContextUseFlags<Us>
+	: IsStaticTuple<Us> extends true
+		? UseSourcesFlags<Us>
+		: FlagsDef;
 
 type TreeWithInheritedFlags<Tree, F extends FlagsDef> = {
 	[K in keyof Tree]: ShapeWithInheritedFlags<Tree[K], F>;
@@ -986,13 +1006,13 @@ type AfterUse<
 	Us extends readonly UseSource[],
 	Meta extends RootCommandMeta | undefined,
 > = Crust<
-	ProviderFlagsFirst<Flags, ContextUseFlags<Us>>,
+	ProviderFlagsFirst<Flags, UsedContextFlags<Us>>,
 	A,
 	MergeContext<Ctx, UsedContexts<Us>>,
 	Sibs,
-	Sp | LocalSpellingsOf<ContextUseFlags<Us>>,
+	Sp | LocalSpellingsOf<UsedContextFlags<Us>>,
 	Tree,
-	ProviderFlagsFirst<CtxFlags, ContextUseFlags<Us>>,
+	ProviderFlagsFirst<CtxFlags, UsedContextFlags<Us>>,
 	CollisionSpellings<
 		CollisionSp["extension"],
 		CollisionSp["tree"],
@@ -1548,18 +1568,19 @@ export class Crust<
 		...sources: Us
 	): AfterUse<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Us, Meta> {
 		const demands: (AnyContextInstance | AnyContextFactory)[] = [];
-		const factories: AnyContextFactory[] = [];
 		const extensions: ExtensionId[] = [];
 		for (const source of sources) {
 			if ("contextName" in source) {
-				const factory = definingOf(source);
-				demands.push(factory);
-				factories.push(factory);
+				demands.push(definingOf(source));
 				continue;
 			}
-			// A factory's provided Contexts are known only per call, so only its id is checked.
+			// A factory's provided Contexts are known only per call: the extended Extension's, which
+			// its providers tag on this node when the app materializes the command (none otherwise).
 			if (typeof source === "function") {
 				extensions.push(source.id);
+				for (const { instance, extension } of this._node.contexts) {
+					if (extension === source.id) demands.push(instance);
+				}
 				continue;
 			}
 			// An instance is matched by its defining id, as `.extend()` registers it, and its
@@ -1579,7 +1600,7 @@ export class Crust<
 			demands: [...this._node.demands, ...demands],
 			usedExtensions: [...this._node.usedExtensions, ...extensions],
 		});
-		installContextFlags(cloned._node, factories);
+		installContextFlags(cloned._node, demandedFactories(demands));
 		return cloned;
 	}
 
@@ -1634,9 +1655,7 @@ export class Crust<
 			contexts: [...this._node.contexts, ...instances.map((instance) => ({ instance }))],
 			providedContexts: [...this._node.providedContexts, ...instances],
 		});
-		const declared = declaredContextNames(
-			this._node.demands.filter((demand) => "contextName" in demand),
-		);
+		const declared = declaredContextNames(demandedFactories(this._node.demands));
 		for (const instance of instances) {
 			// Fulfilling this command's own `.use()` demand shares the flags `.use()` installed.
 			if (declared.has(instance.name)) {

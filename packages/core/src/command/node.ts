@@ -20,6 +20,8 @@ export type CommandAction = (ctx: CrustCommandContext) => unknown;
 
 export interface CommandContext {
 	instance: AnyContextInstance;
+	/** The Extension whose `.provide()` supplied it; a command's `.use()` of that Extension declares it. */
+	extension?: ExtensionId;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -217,6 +219,11 @@ export function checkProvidedContextFlags(
 		registerContextFlags(node, name, provided.ownedFlags, "provided");
 		for (const dependency of provided.use) names.add(dependency.contextName);
 	}
+}
+
+/** The factories `demands` declare: a demanded instance (an Extension's provided Context) declares its own. */
+export function demandedFactories(demands: CommandNode["demands"]): AnyContextFactory[] {
+	return demands.map((demand) => ("contextName" in demand ? demand : demand.factory));
 }
 
 /** Declared factories and their dependencies, transitively, each once. */
