@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 
 import { defineExtension } from "../api/extension.ts";
 import { defineExtensionId } from "../identity.ts";
-import { Crust, type CommandDefinition, defineCommand } from "./crust.ts";
+import { type AnyCrust, Crust, type CommandDefinition, defineCommand } from "./crust.ts";
 import { SNAPSHOT_PATH_ENV } from "./invocation.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
 
@@ -546,6 +546,95 @@ describe("Invocation pipeline — commandPathOf", () => {
 			process.exitCode = originalExitCode ?? 0;
 		}
 		expect(found).toEqual([["app", "db", "migrate"]]);
+	});
+});
+
+describe("Invocation pipeline — sensitive values on argv", () => {
+	const SECRET = "SENTINEL-s3cr3t";
+	const warning = (label: string, advice: string) =>
+		`Warning: ${label} was passed on the command line, where process lists, shell history and transcripts can see it. ${advice}`;
+	// Binds `key`, and tags lines written through the renderer's `diag`.
+	const tag = defineExtension(defineExtensionId("tag"))
+		.setup((ctx) => ctx.bindInput({ flags: { key: SECRET } }))
+		.renderer(({ stderr }) => ({ text: stderr, diag: (line) => stderr(`diag:${line}`) }));
+	const app = new Crust("cli")
+		.extend(tag)
+		.args({ name: "password", type: "string", sensitive: true })
+		.flags({
+			token: { type: "string", sensitive: true, env: { name: "ACME_TOKEN" } },
+			keys: { type: "string", multiple: true, sensitive: true },
+			key: { type: "string", sensitive: true },
+			name: { type: "string" },
+		})
+		.action(() => {});
+
+	afterEach(() => {
+		vi.unstubAllEnvs();
+	});
+
+	async function execute(target: AnyCrust, argv: string[]) {
+		const lines: string[] = [];
+		const originalExitCode = process.exitCode;
+		try {
+			const exitCode = await target.execute({
+				argv,
+				io: {
+					stdout: (line) => void lines.push(`stdout:${line}`),
+					stderr: (line) => void lines.push(`stderr:${line}`),
+				},
+			});
+			return { exitCode, lines };
+		} finally {
+			process.exitCode = originalExitCode ?? 0;
+		}
+	}
+
+	it("warns once per sensitive field given on argv, through the renderer's diag", async () => {
+		const { exitCode, lines } = await execute(app, [
+			SECRET,
+			"--token",
+			SECRET,
+			"--keys",
+			SECRET,
+			"--keys",
+			SECRET,
+			"--name",
+			"x",
+		]);
+		expect(exitCode).toBe(0);
+		expect(lines).toEqual([
+			`stderr:diag:${warning("<password>", "Pass it through an environment variable instead.")}`,
+			`stderr:diag:${warning("--token", "Use $ACME_TOKEN instead.")}`,
+			`stderr:diag:${warning("--keys", "Pass it through an environment variable instead.")}`,
+		]);
+	});
+
+	it("keeps the exit code of a failing invocation", async () => {
+		const { exitCode, lines } = await execute(app, ["--token", SECRET, "--nope"]);
+		// Routing fails before values are known, so nothing is warned about.
+		expect(exitCode).toBe(1);
+		expect(lines.join("\n")).not.toContain("Warning:");
+		const failing = new Crust("cli")
+			.flags({ token: { type: "string", sensitive: true } })
+			.action(() => {
+				throw new Error("boom");
+			});
+		const failed = await execute(failing, ["--token", SECRET]);
+		expect(failed.exitCode).toBe(1);
+		expect(failed.lines).toEqual([
+			`stderr:${warning("--token", "Pass it through an environment variable instead.")}`,
+			"stderr:Error: boom",
+		]);
+	});
+
+	it("does not warn for env or bound values, or under run()", async () => {
+		vi.stubEnv("ACME_TOKEN", SECRET);
+		expect((await execute(app, [])).lines).toEqual([]);
+		const outcome = await app.run([], {
+			args: { password: SECRET },
+			flags: { token: SECRET, keys: [SECRET] },
+		});
+		expect(outcome).toMatchObject({ status: "completed", stderr: "" });
 	});
 });
 

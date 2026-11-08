@@ -594,6 +594,30 @@ function isAsyncGenerator(value: unknown): value is AsyncGenerator {
 	}
 }
 
+/** One warning per `sensitive` value given on argv, where process lists and shell history see it. */
+function warnSensitiveArgv(
+	node: CommandNode,
+	sources: ArgvParseResult["sources"],
+	write: (line: string) => void,
+): void {
+	const fields = [
+		...node.args.map((def) => [`<${def.name}>`, def, sources.args[def.name]] as const),
+		...Object.entries(node.effectiveFlags).map(
+			([name, def]) => [`--${name}`, def, sources.flags[name]] as const,
+		),
+	];
+	for (const [label, def, source] of fields) {
+		if (!def.sensitive || source !== "argv") continue;
+		const advice =
+			"env" in def && def.env
+				? `Use $${def.env.name} instead.`
+				: "Pass it through an environment variable instead.";
+		write(
+			`Warning: ${label} was passed on the command line, where process lists, shell history and transcripts can see it. ${advice}`,
+		);
+	}
+}
+
 /** One invocation's action events: the caller's live callback, and every event once a generator action starts. */
 interface ActionEventStream {
 	readonly onEvent?: ((event: unknown) => void) | undefined;
@@ -624,6 +648,8 @@ async function dispatch(
 			? resolveArgvInput(rootNode, input.argv)
 			: resolveStructuredInput(rootNode, input.path, input.input);
 	const resolvedNode = route.command;
+	// Only `execute()` passes argv. Binding never changes an argv source, and routed lines wait for the renderer.
+	if ("argv" in input) warnSensitiveArgv(resolvedNode, parsed.sources, output.routed.stderr);
 	// `bindInput` replaces this; hooks and `terminal()` read it live.
 	let bound = parsed;
 
