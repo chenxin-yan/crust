@@ -773,15 +773,17 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 			continue;
 		}
 		if (omittedArgument !== undefined) throw positionalGap(definition.name, omittedArgument);
-		suppliedArgs.add(definition.name);
 		if (definition.variadic) {
 			if (!isOccurrenceArray(value)) {
 				throw new CrustError("PARSE", `Expected an occurrence array for <${definition.name}>`);
 			}
 			positionals.push(...value);
+			// An empty array is zero occurrences, so like argv omission it supplies nothing.
+			if (value.length > 0) suppliedArgs.add(definition.name);
 		} else {
 			// A non-variadic JSON array is one positional value.
 			positionals.push(value);
+			suppliedArgs.add(definition.name);
 		}
 	}
 	// Only named records carry argument names to validate; argv has positional tokens.
@@ -831,7 +833,8 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 			flags: valueSources(Object.entries(command.effectiveFlags), (name) =>
 				present.has(name) ? "run" : undefined,
 			),
-			raw: raw === undefined ? undefined : ("run" as const),
+			// Like argv's leftover tokens, an empty `raw` is no passthrough.
+			raw: raw === undefined || raw.length === 0 ? undefined : ("run" as const),
 		}),
 	};
 }
@@ -885,8 +888,21 @@ export function bindStructuredInput(
 	);
 	const pick = (bound: Record<string, ParsedArgValue>, names: Record<string, unknown>) =>
 		Object.fromEntries(Object.keys(names).map((name) => [name, bound[name]]));
-	const boundSources = (names: Record<string, unknown>) =>
-		Object.fromEntries(Object.keys(names).map((name) => [name, "bound" as const]));
+	// Supplied keys take parseStructured's sources as bound, so an empty array reports its fallback.
+	const rebound = (
+		original: Readonly<Record<string, ValueSource>>,
+		names: Record<string, unknown>,
+		structuredSources: Readonly<Record<string, ValueSource>>,
+	): Readonly<Record<string, ValueSource>> =>
+		Object.freeze(
+			Object.fromEntries([
+				...Object.entries(original).filter(([name]) => !Object.hasOwn(names, name)),
+				...Object.entries(structuredSources).map(([name, source]): [string, ValueSource] => [
+					name,
+					source === "run" ? "bound" : source,
+				]),
+			]),
+		);
 	// A replaced flag's environment value error no longer applies.
 	const replaced = new Set(Object.keys(inputFlags).map((name) => `--${name}`));
 	const valueErrors = new Map(
@@ -899,9 +915,9 @@ export function bindStructuredInput(
 		flags: { ...parsed.flags, ...pick(structured.flags, inputFlags) },
 		rawArgs: raw === undefined ? parsed.rawArgs : structured.rawArgs,
 		sources: Object.freeze({
-			args: Object.freeze({ ...sources.args, ...boundSources(inputArgs) }),
-			flags: Object.freeze({ ...sources.flags, ...boundSources(inputFlags) }),
-			raw: raw === undefined ? sources.raw : ("bound" as const),
+			args: rebound(sources.args, inputArgs, structured.sources.args),
+			flags: rebound(sources.flags, inputFlags, structured.sources.flags),
+			raw: raw === undefined ? sources.raw : structured.sources.raw && ("bound" as const),
 		}),
 		valueErrors,
 	};

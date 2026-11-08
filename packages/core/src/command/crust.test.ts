@@ -1397,6 +1397,28 @@ describe("Extension named hooks", () => {
 			]);
 		});
 
+		it("reports an empty variadic, multiple-flag, or raw array as omitted under run() and bindInput", async () => {
+			const empty = { args: { files: [] }, flags: { tags: [], labels: [] }, raw: [] };
+			const seen: ExtensionContext["sources"][] = [];
+			const app = (bind: boolean) =>
+				new Crust("cli")
+					.flags({
+						tags: { type: "string", multiple: true, default: ["d"] },
+						labels: { type: "string", multiple: true },
+					})
+					.args({ name: "files", type: "string", variadic: true })
+					.extend(
+						defineExtension(defineExtensionId("recorder"))
+							.setup((ctx) => void (bind && ctx.bindInput(empty)))
+							.preRun((ctx) => void seen.push(ctx.sources)),
+					)
+					.action(() => {});
+			await unwrap(app(false).run([], empty));
+			expect(await app(true).execute({ argv: [] })).toBe(0);
+			const omitted = { args: {}, flags: { tags: "default" }, raw: undefined };
+			expect(seen).toEqual([omitted, omitted]);
+		});
+
 		it("keeps argv's passthrough tokens over bound raw", async () => {
 			const { app, seen } = recordingApp((ctx) => ctx.bindInput({ raw: ["bound"] }));
 			await app.execute({ argv: ["--", "a", "b", "c"] });
