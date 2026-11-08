@@ -12,7 +12,7 @@ import { captureExecute } from "@crustjs/testing";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { type ApiCommandOptions, apiCommand } from "./api-command.ts";
-import { apiClient } from "./client.ts";
+import { apiClient, fetchNextPage } from "./client.ts";
 
 const spec = {
 	openapi: "3.1.0",
@@ -793,11 +793,14 @@ describe("apiClient", () => {
 	it("allows absolute URLs on the base URL's origin and calls auth once per invocation", async () => {
 		const auth = vi.fn(() => ({ authorization: "Bearer secret" }));
 		const calls = stubFetch();
+		const authCalls: number[] = [];
 		const app = buildApp({ auth }).add(
 			defineCommand("sync", {}, (command) =>
 				command.use(apiClient).action(async ({ ctx }) => {
 					const api = await ctx.api;
+					authCalls.push(auth.mock.calls.length);
 					await api.fetch("https://api.example.com/v1/a");
+					authCalls.push(auth.mock.calls.length);
 					await api.fetch("/b");
 				}),
 			),
@@ -808,7 +811,36 @@ describe("apiClient", () => {
 			["https://api.example.com/v1/a", "Bearer secret"],
 			["https://api.example.com/v1/b", "Bearer secret"],
 		]);
+		// Not when the Context is read, only for the first request that sends credentials.
+		expect(authCalls).toEqual([0, 1]);
 		expect(auth).toHaveBeenCalledTimes(1);
+	});
+
+	it("never calls auth or sends its headers for a request with auth: false, its redirects and next pages", async () => {
+		const auth = vi.fn(() => ({ authorization: "Bearer secret", "X-Api-Key": "secret" }));
+		const calls = stubFetch(({ url }) =>
+			url.endsWith("/old")
+				? new Response(null, { status: 302, headers: { location: "/v1/new" } })
+				: new Response("{}"),
+		);
+		const app = buildApp({ auth }).add(
+			defineCommand("public", {}, (command) =>
+				command.use(apiClient).action(async ({ ctx }) => {
+					const api = await ctx.api;
+					await api.fetch("/old", { auth: false, headers: { accept: "application/json" } });
+					await fetchNextPage(api, "/users?page=2", { auth: false });
+				}),
+			),
+		);
+		const { exitCode } = await captureExecute(app, ["public"]);
+
+		expect(exitCode).toBe(0);
+		expect(calls.map(({ url, headers }) => [url, headers])).toEqual([
+			["https://api.example.com/v1/old", { accept: "application/json" }],
+			["https://api.example.com/v1/new", { accept: "application/json" }],
+			["https://api.example.com/v1/users?page=2", {}],
+		]);
+		expect(auth).not.toHaveBeenCalled();
 	});
 
 	it.each([undefined, () => ({ "X-Api-Key": "secret" })])(
