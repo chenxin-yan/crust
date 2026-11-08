@@ -41,7 +41,7 @@ export type ServicesOf<Input> = Input extends { readonly ctx: infer Bag }
  * up front and its services provided; `ctx` inference
  * is unchanged. A failure rethrows the original error so `execute()` renders
  * it unchanged, and interruption rethrows an `AbortError` so cancellation
- * exits with 130. Aborting the invocation's `ctx.signal` interrupts the fiber.
+ * exits with 130 (143 after SIGTERM). Aborting the invocation's `ctx.signal` interrupts the fiber.
  * A compile error saying a service is not assignable to `HandlerInput` means
  * no {@link layer} on the path provides that service.
  */
