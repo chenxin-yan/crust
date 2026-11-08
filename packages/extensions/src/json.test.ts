@@ -48,6 +48,13 @@ const disposeFails = defineContext("resource").setup(() => ({
 	},
 }));
 
+/** A second failing disposal: together with `disposeFails`, cleanup fails as one SuppressedError. */
+const cacheFails = defineContext("cache").setup(() => ({
+	[Symbol.dispose]() {
+		throw new CrustError("PARSE", "cache close failed");
+	},
+}));
+
 /** `execute()` with a caller signal, restoring the exit code it sets. */
 async function executeWithSignal(app: AnyCrust, argv: string[], signal: AbortSignal) {
 	const stdout: string[] = [];
@@ -318,18 +325,23 @@ describe("json", () => {
 		});
 	});
 
-	it("keeps the action's error JSON when Context disposal also fails", async () => {
+	it("keeps the action's error JSON and writes one cleanup line per failed disposal", async () => {
 		const app = new Crust("app")
 			.extend(json())
-			.provide(disposeFails())
+			.provide(disposeFails(), cacheFails())
 			.action(async ({ ctx }) => {
 				await ctx.resource;
+				await ctx.cache;
 				throw new Error("boom");
 			});
 
 		expect(await captureExecute(app, ["--json"])).toEqual({
 			stdout: "",
-			stderr: '{"message":"boom"}\n{"type":"cleanup","error":{"message":"dispose"}}',
+			stderr: [
+				'{"message":"boom"}',
+				'{"type":"cleanup","error":{"message":"dispose"}}',
+				'{"type":"cleanup","error":{"code":"PARSE","message":"cache close failed"}}',
+			].join("\n"),
 			exitCode: 1,
 		});
 	});
@@ -744,16 +756,20 @@ describe("json", () => {
 						throw new DOMException("stop", "AbortError");
 					}),
 				)
-				.provide(disposeFails())
+				.provide(disposeFails(), cacheFails())
 				.action(async function* ({ ctx }) {
 					await ctx.resource;
+					await ctx.cache;
 					yield "opened";
 					return { ok: true };
 				});
 
 			expect(await captureExecute(app, ["--json"])).toEqual({
 				stdout: '{"type":"event","data":"opened"}\n{"type":"result","data":{"ok":true}}',
-				stderr: '{"type":"cleanup","error":{"message":"dispose"}}',
+				stderr: [
+					'{"type":"cleanup","error":{"message":"dispose"}}',
+					'{"type":"cleanup","error":{"code":"PARSE","message":"cache close failed"}}',
+				].join("\n"),
 				exitCode: 130,
 			});
 		});
