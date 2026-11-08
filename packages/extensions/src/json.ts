@@ -1,4 +1,5 @@
 import {
+	type ExtensionContext,
 	type ExtensionFactory,
 	type ExtensionId,
 	CrustError,
@@ -23,17 +24,25 @@ function errorData(error: unknown): unknown {
 		: { message: error instanceof Error ? error.message : String(error) };
 }
 
+/** Per invocation: writes the `stdout()` lines its renderer still holds to stderr. */
+const flushHeld = /* @__PURE__ */ new WeakMap<ExtensionContext, () => void>();
+
 /**
  * Adds a recursive `--json` flag. With it, the Command Action's result is
  * printed to stdout as one line of JSON (nothing for an `undefined` result),
- * the action's and Contexts' `stdout()` and `stderr()` lines go to stderr, and
- * failures are written to stderr as JSON. An async generator action streams
- * NDJSON on stdout instead: one `{"type":"event","data":…}` line per yield,
- * then one `{"type":"result","data":…}` or `{"type":"error","error":…}` line. A
- * cancelled invocation (exit code 130), or a failure another Extension's
- * `onError` hook claims, ends the stream without that final line, so consumers
- * should check the exit status. Exit codes are unchanged. Adds a
+ * the action's and Contexts' `stderr()` lines go to stderr, and failures are
+ * written to stderr as JSON. Their `stdout()` lines go to stderr too, live,
+ * except in a command that declares `.output()`: it returns data, so its JSON
+ * result replaces that text, and the text is written to stderr only when the
+ * command returns nothing, fails, or is cancelled. An async generator action
+ * streams NDJSON on stdout instead: one `{"type":"event","data":…}` line per
+ * yield, then one `{"type":"result","data":…}` or `{"type":"error","error":…}`
+ * line. A cancelled invocation (exit code 130), or a failure another
+ * Extension's `onError` hook claims, ends the stream without that final line,
+ * so consumers should check the exit status. Exit codes are unchanged. Adds a
  * "JSON output" section to the root command's documentation saying so.
+ *
+ * @see https://crustjs.com/docs/modules/extensions/json
  */
 export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__ */ defineExtension(
 	JSON_OUTPUT,
@@ -44,7 +53,7 @@ export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__
 			{
 				command: [],
 				title: "JSON output",
-				body: "--json prints the command's result as JSON on stdout (NDJSON events for streaming commands) and moves its other output to stderr.",
+				body: "--json prints the command's result as JSON on stdout (NDJSON for streaming commands). Other output goes to stderr; commands that declare an output schema print only the JSON.",
 			},
 		])
 		.renderer(async (ctx) => {
@@ -70,27 +79,50 @@ export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__
 			// result line is out, a later failure goes to stderr so stdout keeps exactly one final line.
 			let streaming = false;
 			let ended = false;
+			// A `.output()` command's result is its data, so its `stdout()` text is held: dropped once a
+			// result is out, written to stderr otherwise. shortcut: held lines stay in memory until the
+			// invocation ends; add a size cap that flushes to stderr if anyone hits it.
+			let held: string[] | undefined = ctx.command.output ? [] : undefined;
+			let dropped = false;
+			const flush = () => {
+				if (!held) return;
+				const lines = held;
+				held = undefined;
+				for (const text of lines) ctx.stderr(text);
+			};
+			/** Write a serialized result line and drop held text. A serialization failure never gets here, so `error` flushes it. */
+			const emit = (data: string) => {
+				ctx.stdout(data);
+				if (held) {
+					held = undefined;
+					dropped = true;
+				}
+			};
+			// Cancellations, `run()` failures and claimed errors never reach `result` or `error`.
+			flushHeld.set(ctx, flush);
 			return {
-				text: ctx.stderr,
+				text(text) {
+					if (held) held.push(text);
+					else if (!dropped) ctx.stderr(text);
+				},
 				diag: ctx.stderr,
 				stream() {
 					streaming = true;
 				},
 				event: (value) => ctx.stdout(line("event", serialize(value, "an event"))),
 				result(value) {
-					if (streaming) {
+					if (value === undefined) {
 						// The stream still ends with one result line; an `undefined` result has no `data`.
-						ctx.stdout(
-							value === undefined
-								? '{"type":"result"}'
-								: line("result", serialize(value, "the command result")),
-						);
-						ended = true;
-					} else if (value !== undefined) {
-						ctx.stdout(serialize(value, "the command result"));
+						if (streaming) ctx.stdout('{"type":"result"}');
+						flush();
+					} else {
+						const data = serialize(value, "the command result");
+						emit(streaming ? line("result", data) : data);
 					}
+					ended = streaming;
 				},
 				error(error) {
+					flush();
 					if (streaming && !ended) {
 						ctx.stdout(JSON.stringify({ type: "error", error: errorData(error) }));
 					} else {
@@ -98,5 +130,6 @@ export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__
 					}
 				},
 			};
-		}),
+		})
+		.postRun((ctx) => flushHeld.get(ctx)?.()),
 );

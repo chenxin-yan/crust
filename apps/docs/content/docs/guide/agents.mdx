@@ -41,7 +41,7 @@ The object is converted and validated exactly like argv, and arguments and flags
 
 ## JSON output
 
-Write for people with `stdout(text)` and return data for programs. [`json()`](/docs/modules/extensions/json) adds `--json`, which prints the Command Action's return value as one line of JSON on stdout and moves the action's and Contexts' `stdout()` writes to stderr:
+Print for people with `stdout(text)`, return the data, and declare [`.output()`](#output-schemas-and-end-to-end-types). [`json()`](/docs/modules/extensions/json) adds `--json`, which prints the Command Action's return value as one line of JSON on stdout; its [contract](/docs/modules/extensions/json#behavior) says what happens to the text a command prints. Write progress every caller should see live, like `deploy`'s `Deploying` line, with `stderr()` or a spinner:
 
 ```sh
 $ my-cli deploy staging --json
@@ -177,7 +177,8 @@ For a CLI backed by an HTTP API, [`@crustjs/openapi`](/docs/modules/openapi) add
 ## Checklist
 
 - Every command, argument, and flag has a `description`.
-- Results are returned, not only printed, and declared with `.output()`.
+- Results are returned, not only printed.
+- Every command that returns data declares `.output()`: typed, validated, discoverable, and no duplicate text under `--json`.
 - [`json()`](/docs/modules/extensions/json), [`input()`](/docs/modules/extensions/input), and [`schema()`](/docs/modules/extensions/schema) are registered.
 - Long-running commands yield events.
 - Commands that can preview declare a `dry-run` flag.

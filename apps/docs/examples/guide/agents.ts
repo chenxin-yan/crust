@@ -13,7 +13,7 @@ const deploy = defineCommand("deploy", { description: "Deploy a release" }, (cmd
 		})
 		// [!code highlight]
 		.output(z.object({ target: z.string(), release: z.string(), dryRun: z.boolean() }))
-		.action(async ({ args, flags, ctx, stdout }) => {
+		.action(async ({ args, flags, ctx, stdout, stderr }) => {
 			const { target } = args;
 			const { release } = flags;
 			// Preview before confirming, so a dry run never prompts.
@@ -25,7 +25,8 @@ const deploy = defineCommand("deploy", { description: "Deploy a release" }, (cmd
 				const ask = await ctx.confirm;
 				await ask(`Deploy ${release} to prod?`);
 			}
-			stdout(`Deploying ${release} to ${target}`);
+			// stderr() stays live under --json, where the result replaces stdout() text.
+			stderr(`Deploying ${release} to ${target}`);
 			const steps = await ctx.nextSteps;
 			steps.add(status, { args: { target } }, "Watch the rollout");
 			// [!code highlight]

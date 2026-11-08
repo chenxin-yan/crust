@@ -8,7 +8,7 @@ import {
 	defineExtensionId,
 	type RunOutcome,
 } from "@crustjs/core";
-import { nextSteps } from "@crustjs/extensions";
+import { json, nextSteps } from "@crustjs/extensions";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -411,6 +411,29 @@ describe("createMcpServer", () => {
 		// The SDK client validates structuredContent against the advertised outputSchema.
 		expect((await client.callTool({ name: "rm" })).structuredContent).toEqual({ id: 1 });
 		expect((await client.callTool({ name: "count" })).structuredContent).toEqual({ result: 2 });
+	});
+
+	it("returns only the result when a call passes json: true to a command with .output()", async () => {
+		const app = new Crust("cli").extend(json()).add(
+			defineCommand("users", (c) =>
+				c.output(jsonSchemaOutput({ type: "object" })).action(({ stdout }) => {
+					stdout("ID  NAME");
+					return { id: 1 };
+				}),
+			),
+		);
+		const client = await connect(app);
+		const expected = {
+			content: [{ type: "text", text: JSON.stringify({ id: 1 }, null, 2) }],
+			structuredContent: { id: 1 },
+		};
+		expect(await client.callTool({ name: "users" })).toEqual(expected);
+		// json() holds the printed table under --json, so the result carries no stderr copy of it.
+		expect(await client.callTool({ name: "users", arguments: { json: true } })).toEqual(expected);
+		expect(await app.run(["users"], { flags: { json: true } })).toMatchObject({
+			stdout: '{"id":1}',
+			stderr: "",
+		});
 	});
 
 	it("reports text-only results of tools with an outputSchema as errors", async () => {
