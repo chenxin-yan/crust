@@ -18,7 +18,8 @@ const deploy = defineCommand("deploy", { description: "Deploy the app" }, (cmd) 
 		.action(async ({ args, ctx, stdout }) => {
 			if (!process.env.MY_CLI_TOKEN) throw new NotLoggedInError("Not logged in.");
 			stdout(`Deployed to ${args.env}`);
-			(await ctx.nextSteps).add(logs, { flags: { env: args.env } }, "Follow the logs");
+			const steps = await ctx.nextSteps;
+			steps.add(logs, { flags: { env: args.env } }, "Follow the logs");
 		}),
 );
 

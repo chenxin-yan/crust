@@ -70,7 +70,8 @@ function errorMessage(error: unknown): string {
  * Provides the `nextSteps` Context and, after an invocation completes or fails,
  * prints a `Next steps:` block to stderr: on failure the `onError` steps first,
  * then the steps the action added. A command declares the Context with
- * `.use(nextSteps)` and calls `(await ctx.nextSteps).add(definition, input?, description?)`.
+ * `.use(nextSteps)`, awaits `ctx.nextSteps`, and calls
+ * `.add(definition, input?, description?)` on it.
  * A step whose command the application does not add, or whose input does not match
  * it, is skipped with a note on stderr; printing never changes the invocation's result.
  */

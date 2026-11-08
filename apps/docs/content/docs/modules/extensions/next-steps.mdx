@@ -23,7 +23,7 @@ Next steps:
     my-cli login --sso
 ```
 
-`nextSteps(options?)` provides a [Context](/docs/guide/contexts) named `nextSteps`. A command declares it with `.use(nextSteps)`, which [uses the Contexts an Extension provides](/docs/guide/extensions#use-an-extensions-contexts-from-a-command), and calls `(await ctx.nextSteps).add(definition, input?, description?)` from its action:
+`nextSteps(options?)` provides a [Context](/docs/guide/contexts) named `nextSteps`. A command declares it with `.use(nextSteps)`, which [uses the Contexts an Extension provides](/docs/guide/extensions#use-an-extensions-contexts-from-a-command), and, from its action, awaits `ctx.nextSteps` and calls `.add(definition, input?, description?)` on it:
 
 - `definition`: the [command definition](/docs/api/crust#definecommandname-config-recipe) to suggest, such as `logs`. The step prints the path the application added it at, nested commands included.
 - `input`: arguments, flags, and `raw` tokens in the shape [`run()`](/docs/api/crust#runpath-input-options) takes them, typed from the definition's arguments and flags, such as `{ args: { env: "prod" }, flags: { force: true } }`.
