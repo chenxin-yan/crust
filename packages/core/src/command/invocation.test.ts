@@ -549,7 +549,7 @@ describe("Invocation pipeline — commandPathOf", () => {
 	});
 });
 
-describe("Invocation pipeline — inherited SIGINT ignore", () => {
+describe("Invocation pipeline — inherited signal ignores", () => {
 	// Bun keeps an inherited SIG_IGN (Node resets it at startup). The real executable, not a
 	// version-manager shim that may reset signals before exec.
 	const bunPath =
@@ -560,24 +560,31 @@ describe("Invocation pipeline — inherited SIGINT ignore", () => {
 				}).stdout?.trim()
 			: undefined;
 
-	it.skipIf(!bunPath)(
-		"keeps a background job immune to SIGINT on Bun",
-		async () => {
-			const dir = await mkdtemp(join(tmpdir(), "crust-ignored-sigint-"));
+	it.skipIf(!bunPath).each([
+		["SIGINT", "INT"],
+		["SIGTERM", "TERM"],
+	])(
+		"keeps a process started with %s ignored immune to it on Bun",
+		async (signal, trapName) => {
+			const dir = await mkdtemp(join(tmpdir(), "crust-ignored-signal-"));
 			const probe = join(dir, "probe.ts");
 			await writeFile(
 				probe,
 				`import { Crust } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "..", "index.ts")).href)};
 await new Crust("app").action(() => {}).execute({ argv: [] });
-process.kill(process.pid, "SIGINT");
+process.kill(process.pid, ${JSON.stringify(signal)});
 await new Promise((resolve) => setTimeout(resolve, 200));
 console.log("alive");`,
 			);
 			try {
-				const result = spawnSync("sh", ["-c", 'trap "" INT; exec "$0" "$1"', bunPath!, probe], {
-					encoding: "utf8",
-					timeout: 10_000,
-				});
+				const result = spawnSync(
+					"sh",
+					["-c", `trap "" ${trapName}; exec "$0" "$1"`, bunPath!, probe],
+					{
+						encoding: "utf8",
+						timeout: 10_000,
+					},
+				);
 				expect(result).toMatchObject({ status: 0, stdout: "alive\n" });
 			} finally {
 				await rm(dir, { recursive: true, force: true });

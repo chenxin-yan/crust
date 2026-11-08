@@ -84,6 +84,29 @@ describe("invocation cancellation signal", () => {
 		expect(stderr).toEqual([]);
 	});
 
+	it("execute({ signal }) keeps exit code 130 when SIGTERM arrives after the caller cancelled", async () => {
+		const before = process.listenerCount("SIGTERM");
+		const controller = new AbortController();
+		const started = Promise.withResolvers<void>();
+		const released = Promise.withResolvers<void>();
+		const exitCode = new Crust("cli")
+			.action(async ({ signal }) => {
+				started.resolve();
+				await released.promise;
+				signal.throwIfAborted();
+			})
+			.execute({ argv: [], io: quiet, signal: controller.signal });
+
+		await started.promise;
+		expect(process.listenerCount("SIGTERM")).toBe(before + 1);
+		controller.abort(new DOMException("Caller cancelled.", "AbortError"));
+		// Invoke Core's listener directly: emitting a real SIGTERM would reach the test runner.
+		process.listeners("SIGTERM").at(-1)!("SIGTERM");
+		released.resolve();
+
+		expect(await exitCode).toBe(130);
+	});
+
 	it("keeps a caller's non-AbortError reason and renders it as an ordinary failure", async () => {
 		const { ready, action } = awaitingSignal();
 		const controller = new AbortController();
@@ -101,38 +124,44 @@ describe("invocation cancellation signal", () => {
 		expect(stderr).toEqual(["Error: deadline exceeded"]);
 	});
 
-	it("execute() keeps exit code 130 when Context disposal fails after Ctrl-C", async () => {
-		const { ready, action } = awaitingSignal();
-		const seen: unknown[] = [];
-		const stderr: string[] = [];
-		const resource = defineContext("resource").setup(({ defer }) => {
-			defer(() => {
-				throw new Error("db close failed");
+	it.each([
+		["SIGINT", 130],
+		["SIGTERM", 143],
+	] as const)(
+		"execute() keeps the %s exit code %i when Context disposal fails after it",
+		async (name, code) => {
+			const { ready, action } = awaitingSignal();
+			const seen: unknown[] = [];
+			const stderr: string[] = [];
+			const resource = defineContext("resource").setup(({ defer }) => {
+				defer(() => {
+					throw new Error("db close failed");
+				});
 			});
-		});
-		const exitCode = new Crust("cli")
-			.provide(resource())
-			.extend(
-				defineExtension(defineExtensionId("errors")).onError((error) => {
-					seen.push(error);
-				}),
-			)
-			.action(async (ctx) => {
-				await ctx.ctx.resource;
-				return action(ctx);
-			})
-			.execute({ argv: [], io: { stdout() {}, stderr: (text) => stderr.push(text) } });
+			const exitCode = new Crust("cli")
+				.provide(resource())
+				.extend(
+					defineExtension(defineExtensionId("errors")).onError((error) => {
+						seen.push(error);
+					}),
+				)
+				.action(async (ctx) => {
+					await ctx.ctx.resource;
+					return action(ctx);
+				})
+				.execute({ argv: [], io: { stdout() {}, stderr: (text) => stderr.push(text) } });
 
-		await ready;
-		// Invoke Core's listener directly: emitting a real SIGINT would reach the test runner.
-		process.listeners("SIGINT").at(-1)!("SIGINT");
+			await ready;
+			// Invoke Core's listener directly: emitting a real signal would reach the test runner.
+			process.listeners(name).at(-1)!(name);
 
-		expect(await exitCode).toBe(130);
-		expect(process.exitCode).toBe(130);
-		expect(seen).toHaveLength(1);
-		expect((seen[0] as Error).name).toBe("AbortError");
-		expect(stderr).toEqual(["Cleanup failed: db close failed"]);
-	});
+			expect(await exitCode).toBe(code);
+			expect(process.exitCode).toBe(code);
+			expect(seen).toHaveLength(1);
+			expect((seen[0] as Error).name).toBe("AbortError");
+			expect(stderr).toEqual(["Cleanup failed: db close failed"]);
+		},
+	);
 
 	it("execute() keeps exit code 130 and renders only the dispose failure when an action's await using fails while aborting", async () => {
 		const { ready, action } = awaitingSignal();
@@ -240,35 +269,41 @@ describe("invocation cancellation signal", () => {
 		expect(stderr).toEqual(["Error: connection close failed\nError: query failed"]);
 	});
 
-	it("execute() turns the first SIGINT into an AbortError on ctx.signal and keeps listening until the invocation settles", async () => {
-		const before = process.listenerCount("SIGINT");
-		const { ready, action } = awaitingSignal();
-		let reason: unknown;
-		const cleanedUp = Promise.withResolvers<void>();
-		let listenersDuringCleanup = -1;
-		const app = new Crust("cli").action(async (ctx) => {
-			try {
-				await action(ctx);
-			} finally {
-				reason = ctx.signal.reason;
-				await cleanedUp.promise;
-				// A one-shot handler that re-raises when nobody listens (progress spinner) must still see Core here.
-				listenersDuringCleanup = process.listenerCount("SIGINT");
-			}
-		});
-		const exitCode = app.execute({ argv: [], io: quiet });
+	it.each([
+		["SIGINT", 130, "Interrupted by SIGINT."],
+		["SIGTERM", 143, "Terminated by SIGTERM."],
+	] as const)(
+		"execute() turns the first %s into an AbortError on ctx.signal, exits %i and keeps listening until the invocation settles",
+		async (name, code, message) => {
+			const before = process.listenerCount(name);
+			const { ready, action } = awaitingSignal();
+			let reason: unknown;
+			const cleanedUp = Promise.withResolvers<void>();
+			let listenersDuringCleanup = -1;
+			const app = new Crust("cli").action(async (ctx) => {
+				try {
+					await action(ctx);
+				} finally {
+					reason = ctx.signal.reason;
+					await cleanedUp.promise;
+					// A one-shot handler that re-raises when nobody listens (progress spinner) must still see Core here.
+					listenersDuringCleanup = process.listenerCount(name);
+				}
+			});
+			const exitCode = app.execute({ argv: [], io: quiet });
 
-		await ready;
-		expect(process.listenerCount("SIGINT")).toBe(before + 1);
-		// Invoke Core's listener directly: emitting a real SIGINT would reach the test runner.
-		process.listeners("SIGINT").at(-1)!("SIGINT");
-		cleanedUp.resolve();
+			await ready;
+			expect(process.listenerCount(name)).toBe(before + 1);
+			// Invoke Core's listener directly: emitting a real signal would reach the test runner.
+			process.listeners(name).at(-1)!(name);
+			cleanedUp.resolve();
 
-		expect(await exitCode).toBe(130);
-		expect((reason as Error).name).toBe("AbortError");
-		expect(listenersDuringCleanup).toBe(before + 1);
-		expect(process.listenerCount("SIGINT")).toBe(before);
-	});
+			expect(await exitCode).toBe(code);
+			expect(reason).toMatchObject({ name: "AbortError", message });
+			expect(listenersDuringCleanup).toBe(before + 1);
+			expect(process.listenerCount(name)).toBe(before);
+		},
+	);
 
 	it("a second SIGINT removes Core's listener and leaves termination to any remaining listener", async () => {
 		vi.useFakeTimers({ toFake: ["performance"] });

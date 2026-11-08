@@ -149,7 +149,7 @@ export interface CrustCommandContext<
 	rawArgs: string[];
 	/**
 	 * Aborted when the caller cancels the invocation (`execute({ signal })`,
-	 * `run(path, input, { signal })`, or the first `SIGINT` under `execute()`);
+	 * `run(path, input, { signal })`, or the first `SIGINT` or `SIGTERM` under `execute()`);
 	 * see `ExecuteOptions.signal` for how the abort reason maps to the exit code.
 	 */
 	signal: AbortSignal;
