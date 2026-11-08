@@ -80,7 +80,7 @@ describe("input", () => {
 		expect(snapshot.meta.sections).toEqual([
 			expect.objectContaining({
 				title: "JSON input",
-				body: '--input takes one JSON object keyed by the command\'s argument and flag names ("raw" for passthrough values): inline JSON, @file, or - for stdin. Arguments and flags given on the command line win.',
+				body: "--input takes the command's arguments and flags as one JSON object keyed by name. Values given on the command line win.",
 			}),
 		]);
 		expect((await captureExecute(app, ["--help"])).stdout).toContain("JSON input:");

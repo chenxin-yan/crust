@@ -50,7 +50,7 @@ export const input: ExtensionFactory<[], {}, [], typeof inputFlags> =
 				{
 					command: [],
 					title: "JSON input",
-					body: '--input takes one JSON object keyed by the command\'s argument and flag names ("raw" for passthrough values): inline JSON, @file, or - for stdin. Arguments and flags given on the command line win.',
+					body: "--input takes the command's arguments and flags as one JSON object keyed by name. Values given on the command line win.",
 				},
 			])
 			// Setup, not preRun: setups all run before the first preRun, so no check misses the values.
