@@ -185,12 +185,13 @@ function isObjectLike(value: CaughtError): value is object {
 }
 
 /**
- * One `label: message` line per underlying failure. `SuppressedError` chains and
+ * The underlying failures of one caught value: `SuppressedError` chains and
  * `AggregateError`s contribute their members, not their own boilerplate message,
- * so a disposal failure never renders as a bare `Error: `.
+ * so a disposal failure never renders as a bare `Error: `. A member that cannot be
+ * read, and the cut-off when there are too many, become marker `Error`s.
  */
-function describeFailure(error: CaughtError, label = "Error"): string {
-	const messages: string[] = [];
+function failureMembers(error: CaughtError): CaughtError[] {
+	const members: CaughtError[] = [];
 	// Arbitrary thrown values: every read below may hit a throwing getter or Proxy
 	// trap, and members may reference their container, so each node is visited
 	// inside its own try with an identity guard. A shared node budget bounds both
@@ -203,7 +204,7 @@ function describeFailure(error: CaughtError, label = "Error"): string {
 		if (truncated) return;
 		if (remaining === 0) {
 			truncated = true;
-			messages.push("[additional failures omitted]");
+			members.push(new Error("[additional failures omitted]"));
 			return;
 		}
 		remaining--;
@@ -211,7 +212,7 @@ function describeFailure(error: CaughtError, label = "Error"): string {
 		try {
 			member = read();
 		} catch {
-			messages.push("[unreadable failure]");
+			members.push(new Error("[unreadable failure]"));
 			return;
 		}
 		visit(member);
@@ -222,33 +223,49 @@ function describeFailure(error: CaughtError, label = "Error"): string {
 				if (seen.has(value)) return;
 				seen.add(value);
 			}
-			const before = messages.length;
+			const before = members.length;
 			if (isSuppressedError(value)) {
 				visitMember(() => value.error);
 				visitMember(() => value.suppressed);
-				if (messages.length > before) return;
+				if (members.length > before) return;
 			} else if (value instanceof AggregateError) {
 				// Only a genuine AggregateError expands: an ordinary error that happens to
 				// carry an `errors` array keeps its own message. The property is writable,
 				// so a hostile value may have replaced the array.
-				const members: unknown = value.errors;
-				if (Array.isArray(members)) {
-					for (let index = 0; index < members.length; index++) {
-						visitMember(() => members[index]);
+				const errors: unknown = value.errors;
+				if (Array.isArray(errors)) {
+					for (let index = 0; index < errors.length; index++) {
+						visitMember(() => errors[index]);
 						if (truncated) break;
 					}
-					if (messages.length > before) return;
+					if (members.length > before) return;
 				}
 			}
-			// Empty containers fall back to their own string form rather than an
-			// empty line. Coerce inside the try: a message object's toString may throw.
-			messages.push(String((value instanceof Error && value.message) || value));
+			// Empty containers stand for themselves rather than rendering nothing.
+			members.push(value);
 		} catch {
-			messages.push("[unreadable failure]");
+			members.push(new Error("[unreadable failure]"));
 		}
 	};
 	visitMember(() => error);
-	return messages.map((message) => `${label}: ${message}`).join("\n");
+	return members;
+}
+
+/** The text Core renders for one underlying failure. */
+function failureMessage(failure: CaughtError): string {
+	try {
+		// Coerce inside the try: a message object's toString may throw.
+		return String((failure instanceof Error && failure.message) || failure);
+	} catch {
+		return "[unreadable failure]";
+	}
+}
+
+/** One `label: message` line per underlying failure (see {@link failureMembers}). */
+function describeFailure(error: CaughtError, label = "Error"): string {
+	return failureMembers(error)
+		.map((failure) => `${label}: ${failureMessage(failure)}`)
+		.join("\n");
 }
 
 function freezeNode(node: CommandNode): void {
@@ -904,18 +921,21 @@ async function renderFailure(
 	return undefined;
 }
 
-/** Render one cleanup failure through the Renderer's `cleanup`, else as Core's `label: message` lines. */
+/** Render each underlying cleanup failure through the Renderer's `cleanup`, else as Core's `label: message` lines. */
 function renderCleanupFailure(error: CaughtError, output: InvocationOutput, label: string): void {
 	const renderer = output.renderer;
-	if (renderer?.cleanup) {
+	if (!renderer?.cleanup) {
+		output.io.stderr(describeFailure(error, label));
+		return;
+	}
+	for (const failure of failureMembers(error)) {
 		try {
-			renderer.cleanup(error);
-			return;
+			renderer.cleanup(failure);
 		} catch {
 			// A failing renderer must never hide the cleanup failure.
+			output.io.stderr(`${label}: ${failureMessage(failure)}`);
 		}
 	}
-	output.io.stderr(describeFailure(error, label));
 }
 
 /** Explicitly injected IO opts an invocation into the ambient terminal scope. */

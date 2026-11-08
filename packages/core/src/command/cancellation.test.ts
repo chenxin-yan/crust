@@ -167,15 +167,19 @@ describe("invocation cancellation signal", () => {
 		["SIGINT", 130],
 		["SIGTERM", 143],
 	] as const)(
-		"execute() passes a Context disposal failure after %s to the renderer's cleanup and exits %i",
+		"execute() passes each Context disposal failure after %s to the renderer's cleanup and exits %i",
 		async (name, code) => {
 			const { ready, action } = awaitingSignal();
 			const cleanups: unknown[] = [];
 			const stderr: string[] = [];
-			const disposalError = new Error("db close failed");
+			const dbError = new Error("db close failed");
+			const cacheError = new Error("cache close failed");
 			const resource = defineContext("resource").setup(({ defer }) => {
 				defer(() => {
-					throw disposalError;
+					throw dbError;
+				});
+				defer(() => {
+					throw cacheError;
 				});
 			});
 			const exitCode = new Crust("cli")
@@ -199,7 +203,8 @@ describe("invocation cancellation signal", () => {
 
 			expect(await exitCode).toBe(code);
 			expect(process.exitCode).toBe(code);
-			expect(cleanups).toEqual([disposalError]);
+			// Two failing cleanups reach Core as one SuppressedError; the renderer gets each failure.
+			expect(cleanups).toEqual([dbError, cacheError]);
 			expect(stderr).toEqual([]);
 		},
 	);
