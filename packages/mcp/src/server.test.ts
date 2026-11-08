@@ -10,6 +10,7 @@ import {
 } from "@crustjs/core";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { createMcpServer, toolResultFromOutcome } from "./server.ts";
@@ -312,7 +313,151 @@ describe("createMcpServer", () => {
 			writeSync.mockRestore();
 		}
 	});
+
+	it("advertises output schemas that the results' structuredContent satisfies", async () => {
+		const DIALECT = "https://json-schema.org/draft/2020-12/schema";
+		const user = {
+			type: "object",
+			properties: { id: { type: "number" } },
+			required: ["id"],
+			additionalProperties: false,
+		};
+		const app = new Crust("cli")
+			.add(
+				defineCommand("rm", (c) =>
+					c.output(jsonSchemaOutput({ $schema: DIALECT, ...user })).action(() => ({ id: 1 })),
+				),
+			)
+			.add(
+				defineCommand("count", (c) =>
+					c.output(jsonSchemaOutput({ $schema: DIALECT, type: "number" })).action(() => 2),
+				),
+			);
+		const client = await connect(app);
+		const { tools } = await client.listTools();
+		expect(tools).toMatchObject([
+			{
+				name: "rm",
+				outputSchema: { $schema: DIALECT, ...user },
+			},
+			{
+				name: "count",
+				outputSchema: {
+					$schema: DIALECT,
+					type: "object",
+					properties: { result: { type: "number" } },
+					required: ["result"],
+				},
+			},
+		]);
+		// The SDK client validates structuredContent against the advertised outputSchema.
+		expect((await client.callTool({ name: "rm" })).structuredContent).toEqual({ id: 1 });
+		expect((await client.callTool({ name: "count" })).structuredContent).toEqual({ result: 2 });
+	});
+
+	it("reports text-only results of tools with an outputSchema as errors", async () => {
+		const app = new Crust("cli")
+			.add(
+				defineCommand("count", (c) =>
+					c.output(jsonSchemaOutput({ type: "number" })).action(() => -0),
+				),
+			)
+			.extend(finisher);
+		const client = await connect(app);
+		await client.listTools();
+		// An Extension handling the call leaves only stdout, which cannot satisfy the outputSchema.
+		const unmet = {
+			type: "text",
+			text: "The command finished without a JSON result for this tool's outputSchema; its stdout follows",
+		};
+		expect(await client.callTool({ name: "count", arguments: { bail: true } })).toEqual({
+			content: [unmet, { type: "text", text: "bailed" }],
+			isError: true,
+		});
+		// -0 does not survive JSON, so the result falls back to stdout.
+		expect(await client.callTool({ name: "count" })).toEqual({
+			content: [unmet, { type: "text", text: "" }],
+			isError: true,
+		});
+	});
+
+	it("sends progress notifications for yielded events when the request has a progress token", async () => {
+		const app = new Crust("cli").add(
+			defineCommand("sync", (c) =>
+				c.action(async function* () {
+					yield "fetching";
+					yield { done: 1, total: 2 };
+					yield "writing";
+					return { synced: 2 };
+				}),
+			),
+		);
+		const client = await connect(app);
+		const progress: unknown[] = [];
+		const result = await client.callTool({ name: "sync" }, undefined, {
+			onprogress: (notification) => progress.push(notification),
+		});
+		expect(result.structuredContent).toEqual({ synced: 2 });
+		expect(progress).toEqual([
+			{ progress: 1, message: "fetching" },
+			{ progress: 2 },
+			{ progress: 3, message: "writing" },
+		]);
+	});
+
+	it("sends no progress notifications without a progress token", async () => {
+		const app = new Crust("cli").add(
+			defineCommand("sync", (c) =>
+				c.action(async function* () {
+					yield "fetching";
+					return { synced: 1 };
+				}),
+			),
+		);
+		const client = await connect(app);
+		const notifications: unknown[] = [];
+		client.fallbackNotificationHandler = async (notification) => {
+			notifications.push(notification);
+		};
+		const result = await client.callTool({ name: "sync" });
+		expect(result.structuredContent).toEqual({ synced: 1 });
+		expect(notifications).toEqual([]);
+	});
+
+	it("keeps the tool result when a progress notification fails to send", async () => {
+		const app = new Crust("cli").add(
+			defineCommand("sync", (c) =>
+				c.action(async function* () {
+					yield "fetching";
+					return { synced: 1 };
+				}),
+			),
+		);
+		const client = await connect(app);
+		const notification = vi
+			.spyOn(Server.prototype, "notification")
+			.mockRejectedValue(new Error("transport gone"));
+		try {
+			const result = await client.callTool({ name: "sync" }, undefined, { onprogress: () => {} });
+			expect(notification).toHaveBeenCalledOnce();
+			expect(result.structuredContent).toEqual({ synced: 1 });
+		} finally {
+			notification.mockRestore();
+		}
+	});
 });
+
+/** Standard Schema whose output converts to `jsonSchema`. */
+function jsonSchemaOutput(jsonSchema: Record<string, unknown>) {
+	return {
+		"~standard": {
+			version: 1 as const,
+			vendor: "test",
+			validate: (value: unknown) => ({ value }),
+			jsonSchema: { input: () => jsonSchema, output: () => jsonSchema },
+		},
+	};
+}
 
 interface Cyclic {
 	self?: Cyclic;
