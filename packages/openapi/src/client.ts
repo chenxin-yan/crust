@@ -7,7 +7,8 @@ export interface ApiClientOptions {
 	 * Headers added to requests to the base URL's origin, e.g. an `Authorization` header, or any
 	 * default header such as `User-Agent` or an API-version header. All of them are treated as
 	 * credentials: they are never sent off the base URL's origin.
-	 * Called once per invocation, when a command first reads the Context.
+	 * Called at most once per invocation, on the first request that sends credentials: never
+	 * for a command that only reads the Context, nor for requests with `auth: false`.
 	 */
 	readonly auth?: (
 		input: ContextSetup,
@@ -27,8 +28,10 @@ export interface ApiClient {
 	 * unless `init.signal` is given. Redirects are followed here
 	 * (up to 20 per request, http: and https: only); one to another origin than the base URL's
 	 * continues without `Authorization`, `Cookie`, `Proxy-Authorization`, or any header named like an `auth` header.
+	 * With `auth: false` (e.g. a public operation), neither the request nor its redirects
+	 * call `auth` or carry its headers.
 	 */
-	fetch(path: string, init?: RequestInit): Promise<Response>;
+	fetch(path: string, init?: RequestInit & { readonly auth?: false }): Promise<Response>;
 }
 
 /** `path` joined below `baseUrl`, keeping the base's own path; absolute URLs pass through. */
@@ -56,6 +59,8 @@ export function baseOriginUrl(baseUrl: string, path: string): URL {
 interface Hop {
 	readonly url: URL;
 	readonly init: RequestInit & { readonly headers: Headers };
+	/** Whether the `auth` headers go with requests to the base URL's origin. */
+	readonly auth: boolean;
 	/** Redirects followed to reach `url`: one count for the whole chain, across origins. */
 	readonly redirects: number;
 }
@@ -85,7 +90,7 @@ const nextPageFetchers = new WeakMap<ApiClient, ApiClient["fetch"]>();
 export function fetchNextPage(
 	client: ApiClient,
 	path: string,
-	init?: RequestInit,
+	init?: Parameters<ApiClient["fetch"]>[1],
 ): Promise<Response> {
 	const fetchNext = nextPageFetchers.get(client);
 	if (fetchNext === undefined) throw new TypeError("fetchNextPage: not an apiClient Context value");
@@ -99,18 +104,22 @@ export function fetchNextPage(
 export const apiClient: ContextFactory<"api", ApiClientOptions, ApiClient> =
 	/* @__PURE__ */ defineContext("api").setup(async (input, options: ApiClientOptions) => {
 		const origin = new URL(options.baseUrl).origin;
-		const authHeaders = new Headers(await options.auth?.(input));
-		// The headers the Fetch standard strips on a cross-origin redirect, plus every auth header name.
-		const credentialHeaders = [
-			"authorization",
-			"cookie",
-			"proxy-authorization",
-			...authHeaders.keys(),
-		];
+		// The headers the Fetch standard strips on a cross-origin redirect, plus every auth header name once `auth` ran.
+		const credentialHeaders = ["authorization", "cookie", "proxy-authorization"];
+		let authHeaders: Promise<Headers> | undefined;
+		async function loadAuthHeaders(): Promise<Headers> {
+			const headers = new Headers(await options.auth?.(input));
+			credentialHeaders.push(...headers.keys());
+			return headers;
+		}
 
-		const firstHop = (url: URL, init: RequestInit = {}): Hop => ({
+		const firstHop = (
+			url: URL,
+			{ auth, ...init }: Parameters<ApiClient["fetch"]>[1] = {},
+		): Hop => ({
 			url,
 			init: { ...init, headers: new Headers(init.headers), signal: init.signal ?? input.signal },
+			auth: auth !== false,
 			redirects: 0,
 		});
 
@@ -142,7 +151,7 @@ export const apiClient: ContextFactory<"api", ApiClientOptions, ApiClient> =
 			// The request may override an auth header's value; it is a credential either way.
 			if (target.origin !== origin) for (const name of credentialHeaders) headers.delete(name);
 			const redirects = from.redirects + (status === undefined ? 0 : 1);
-			return { url: target, init: { ...from.init, method, body, headers }, redirects };
+			return { ...from, url: target, init: { ...from.init, method, body, headers }, redirects };
 		}
 
 		// Redirects are followed here, not by `fetch()`, which would forward headers other than
@@ -151,8 +160,8 @@ export const apiClient: ContextFactory<"api", ApiClientOptions, ApiClient> =
 			const redirect = hop.init.redirect ?? "follow";
 			for (;;) {
 				const headers = new Headers(hop.init.headers);
-				if (hop.url.origin === origin) {
-					for (const [name, value] of authHeaders) {
+				if (hop.auth && hop.url.origin === origin) {
+					for (const [name, value] of await (authHeaders ??= loadAuthHeaders())) {
 						if (!headers.has(name)) headers.set(name, value);
 					}
 				}
