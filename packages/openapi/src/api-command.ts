@@ -16,6 +16,7 @@ import {
 	apiClient,
 	baseOriginUrl,
 	fetchNextPage,
+	resolveUrl,
 } from "./client.ts";
 
 const API: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:openapi");
@@ -48,6 +49,7 @@ export interface ApiCommandOptions extends ApiClientOptions {
 	 * The next page's request for `--paginate`, or `undefined` after the last page.
 	 * Receives a copy of each successful response, so it may read the body. The next page
 	 * must be http(s); off the base URL's origin it is requested without credential headers.
+	 * Returning the previous request again (same URL and method, `init` reused) fails instead of looping.
 	 */
 	readonly paginate?: (
 		response: Response,
@@ -387,8 +389,10 @@ export const apiCommand: ExtensionFactory<
 
 							const api = await ctx.api;
 							let request: ApiRequest = { path, init: { method, headers, body: requestBody } };
+							// Snapshot at send time: a reused `init` may be mutated by `paginate` afterwards.
+							let sentMethod = method;
 							let response = await api.fetch(request.path, request.init);
-							for (;;) {
+							for (let pageNumber = 2; ; pageNumber++) {
 								// Bun types `clone()` as undici's Response, which lacks Bun's Headers extras.
 								const page = flags.paginate ? (response.clone() as Response) : undefined;
 								const text = await response.text();
@@ -406,7 +410,21 @@ export const apiCommand: ExtensionFactory<
 								const next: ApiRequest | undefined =
 									page && paginate ? await paginate(page) : undefined;
 								if (next === undefined) return;
-								request = { path: next.path, init: next.init ?? request.init };
+								const nextInit = next.init ?? request.init;
+								const nextUrl = resolveUrl(client.baseUrl, next.path).href;
+								// shortcut: compares only with the previous request, so a longer cycle (A→B→A) still loops; upgrade to a seen-set if that shows up.
+								const nextMethod = nextInit?.method ?? "GET";
+								if (
+									nextInit === request.init &&
+									nextMethod === sentMethod &&
+									nextUrl === resolveUrl(client.baseUrl, request.path).href
+								) {
+									throw new Error(
+										`--paginate: page ${pageNumber} repeats the previous request (${nextMethod} ${nextUrl})`,
+									);
+								}
+								request = { path: next.path, init: nextInit };
+								sentMethod = nextMethod;
 								response = await fetchNextPage(api, request.path, request.init);
 							}
 						}),

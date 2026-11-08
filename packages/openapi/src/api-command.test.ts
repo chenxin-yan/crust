@@ -476,6 +476,85 @@ describe("api <path>", () => {
 		]);
 	});
 
+	it("follows a 3-page --paginate chain", async () => {
+		const calls = stubFetch(({ url }) => {
+			const page = Number(new URL(url).searchParams.get("page") ?? 1);
+			return new Response(JSON.stringify({ page, next: page < 3 ? page + 1 : undefined }));
+		});
+		const app = buildApp({
+			paginate: async (response) => {
+				const { next } = (await response.json()) as { next?: number };
+				return next === undefined ? undefined : { path: `/users?page=${next}` };
+			},
+		});
+		const { stdout, exitCode } = await captureExecute(app, ["api", "/users", "--paginate"]);
+
+		expect(exitCode).toBe(0);
+		expect(stdout.split("\n")).toEqual([
+			'{"page":1,"next":2}',
+			'{"page":2,"next":3}',
+			'{"page":3}',
+		]);
+		expect(calls).toHaveLength(3);
+	});
+
+	it("fails when a --paginate page repeats the previous request, keeping the printed pages", async () => {
+		const calls = stubFetch(() => new Response('{"items":[1]}'));
+		let pagesSeen = 0;
+		const app = buildApp({
+			// Bounded, so the test fails instead of hanging if the guard is missing.
+			paginate: () => (pagesSeen++ < 3 ? { path: "https://api.example.com/v1/users" } : undefined),
+		});
+		const { stdout, stderr, exitCode } = await captureExecute(app, ["api", "/users", "--paginate"]);
+
+		expect({ stdout, stderr, exitCode }).toEqual({
+			stdout: '{"items":[1]}',
+			stderr:
+				"Error: --paginate: page 2 repeats the previous request (GET https://api.example.com/v1/users)",
+			exitCode: 1,
+		});
+		expect(calls).toHaveLength(1);
+	});
+
+	it("follows a --paginate page with the same URL and a reused init whose method changed", async () => {
+		const calls = stubFetch();
+		const shared: RequestInit = { method: "HEAD" };
+		let pagesSeen = 0;
+		const app = buildApp({
+			paginate: () => {
+				pagesSeen++;
+				if (pagesSeen === 2) shared.method = "GET";
+				return pagesSeen <= 2 ? { path: "/users", init: shared } : undefined;
+			},
+		});
+		const { exitCode } = await captureExecute(app, ["api", "/users", "--paginate"]);
+
+		expect(exitCode).toBe(0);
+		expect(calls.map(({ method }) => method)).toEqual(["GET", "HEAD", "GET"]);
+	});
+
+	it("follows a --paginate page with the same URL but a new init", async () => {
+		const calls = stubFetch(({ body }) => new Response(body ?? "{}"));
+		const app = buildApp({
+			paginate: async (response) => {
+				const { cursor } = (await response.json()) as { cursor?: number };
+				return cursor === 1
+					? { path: "/search", init: { method: "POST", body: '{"cursor":2}' } }
+					: undefined;
+			},
+		});
+		const { stdout, exitCode } = await captureExecute(app, [
+			"api",
+			"/search",
+			"--paginate",
+			"--body",
+			'{"cursor":1}',
+		]);
+
+		expect({ stdout, exitCode }).toEqual({ stdout: '{"cursor":1}\n{"cursor":2}', exitCode: 0 });
+		expect(calls).toHaveLength(2);
+	});
+
 	it("compacts --paginate pages without changing numbers or strings", async () => {
 		stubFetch(
 			() =>
