@@ -352,7 +352,7 @@ export type ValidateExtensionFlags<
 // ────────────────────────────────────────────────────────────────────────────
 
 // Widened (`any`) definitions opt out instead of recursing.
-type ShapeSpellings<S> =
+export type ShapeSpellings<S> =
 	IsAny<S> extends true
 		? string
 		: S extends { readonly flags: infer F extends FlagsDef; readonly children: infer C }
@@ -373,8 +373,14 @@ export type TreeSpellings<Tree> =
 				: never
 			: never;
 
-type DefinitionSpellings<D> =
-	CommandDefinitionData<D> extends { readonly _shape?: infer S } ? ShapeSpellings<S> : never;
+// Distributed: inferring from a union of `_spellings` methods would intersect their parameters.
+type DefinitionSpellings<D> = D extends unknown
+	? CommandDefinitionData<D> extends { _spellings?(spellings: infer S extends string): void }
+		? S
+		: CommandDefinitionData<D> extends { readonly _shape?: infer S }
+			? ShapeSpellings<S>
+			: never
+	: never;
 
 /** Flag spellings contributed by a tuple of command definitions. */
 export type DefinitionTreeSpellings<Ds extends readonly unknown[]> = DefinitionSpellings<
@@ -382,24 +388,26 @@ export type DefinitionTreeSpellings<Ds extends readonly unknown[]> = DefinitionS
 >;
 
 /**
- * Extension-collision brand over a built command shape. Shared by `.add()`
- * (via {@link ValidateDefinitionFlags}) and inline `.command()`, whose recipe
- * builder exposes a shape instead of a definition tuple.
+ * Extension-collision brand over a built command shape, for inline `.command()`, whose
+ * recipe builder exposes a shape instead of a definition ({@link ValidateDefinitionFlags}).
  */
-export type ShapeFlagCollisionBrand<S, Ext extends string> = CollisionBrand<
+export type ShapeFlagCollisionBrand<S, Ext extends string> = ExtensionFlagSpellingBrand<
 	ShapeSpellings<S>,
+	Ext
+>;
+
+type ExtensionFlagSpellingBrand<Sp extends string, Ext extends string> = CollisionBrand<
+	Sp,
 	Ext,
 	"FIX_ALIAS_COLLISION",
 	"Flag spelling ",
 	" collides with a registered Extension flag"
 >;
 
-type DefinitionFlagCollisionBrand<D, Ext extends string> =
-	CommandDefinitionData<D> extends {
-		readonly _shape?: infer S;
-	}
-		? ShapeFlagCollisionBrand<S, Ext>
-		: {};
+type DefinitionFlagCollisionBrand<D, Ext extends string> = ExtensionFlagSpellingBrand<
+	DefinitionSpellings<D>,
+	Ext
+>;
 
 /**
  * Validate an added definition tree's flag spellings against already-registered

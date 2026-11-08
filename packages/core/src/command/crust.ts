@@ -75,6 +75,7 @@ import type {
 	ProvideChecks,
 	DefinitionTreeSpellings,
 	ShapeFlagCollisionBrand,
+	ShapeSpellings,
 	ValidateDefinitionFlags,
 	ValidateExtensionFlags,
 	ExtensionFlagDefsOf,
@@ -226,16 +227,21 @@ export interface CommandDefinition<
 	Aliases extends readonly string[] = readonly string[],
 	Shape extends CommandShape = CommandShape,
 	Deps extends ContextMap = {},
+	// Known flag spellings of the shape's tree. `defineCommand` passes the recipe's accumulated
+	// spellings: deriving them from `Shape` re-walks every flag a used Context installs.
+	Spellings extends string = ShapeSpellings<Shape>,
 > {
 	/** The subcommand name this definition is added under */
 	readonly name: Name;
 	/** The same definition under a different name; configured aliases travel with it. */
-	as<const N extends string>(name: N): CommandDefinition<N, Aliases, Shape, Deps>;
+	as<const N extends string>(name: N): CommandDefinition<N, Aliases, Shape, Deps, Spellings>;
 	/** @internal */
 	readonly [commandDefinitionInternal]: CommandDefinitionInternal & {
 		readonly _aliases?: Aliases;
 		readonly _shape?: Shape;
 		readonly _deps?: Deps;
+		// A method, so its bivariant parameter never decides assignability between definitions.
+		_spellings?(spellings: Spellings): void;
 		readonly proof?: [Shape] extends [never]
 			? unknown
 			: string extends keyof Shape["flags"] | keyof Deps
@@ -379,6 +385,17 @@ type ShapeOfBuilder<B> = [B] extends [never]
 	: B extends { readonly _recipeTypes: { shape: infer S extends CommandShape } }
 		? S
 		: never;
+
+// A recipe's `Sp` holds every spelling of its `Flags`, added by `.use()`, `.provide()` and
+// `.flags()`; `tree` holds its children's.
+type SpellingsOfBuilder<B> = B extends {
+	readonly _state: {
+		readonly sp: infer Sp extends string;
+		readonly collision: { readonly tree: infer Tree extends string };
+	};
+}
+	? KnownSpellings<Sp> | Tree
+	: never;
 
 // Deps accumulated by `.use()` calls inside the recipe; `defineCommand` and
 // `Crust.command()` extract them from the recipe's returned builder type.
@@ -724,7 +741,13 @@ export function defineCommand<
 >(
 	name: Name,
 	recipe: CommandRecipe<Builder>,
-): CommandDefinition<Name, readonly [], ShapeOfBuilder<Builder>, DepsOfBuilder<Builder>>;
+): CommandDefinition<
+	Name,
+	readonly [],
+	ShapeOfBuilder<Builder>,
+	DepsOfBuilder<Builder>,
+	SpellingsOfBuilder<Builder>
+>;
 export function defineCommand<
 	const Name extends string,
 	const C extends CommandConfig,
@@ -733,7 +756,13 @@ export function defineCommand<
 	name: Name,
 	config: C & LocalCommandConfigBrand<Name, C>,
 	recipe: CommandRecipe<Builder>,
-): CommandDefinition<Name, AliasesOf<C>, ShapeOfBuilder<Builder>, DepsOfBuilder<Builder>>;
+): CommandDefinition<
+	Name,
+	AliasesOf<C>,
+	ShapeOfBuilder<Builder>,
+	DepsOfBuilder<Builder>,
+	SpellingsOfBuilder<Builder>
+>;
 
 export function defineCommand(
 	nameInput: string,
