@@ -3,6 +3,8 @@ import { captureExecute } from "@crustjs/testing";
 import { describe, expect, it } from "vite-plus/test";
 
 import { help } from "./help.ts";
+import { input } from "./input.ts";
+import { json } from "./json.ts";
 import { schema } from "./schema.ts";
 
 const deployResult = {
@@ -205,6 +207,40 @@ describe("schema", () => {
 				"- `-h`, `--help` (boolean): Show help",
 			].join("\n"),
 		);
+	});
+
+	it("--llms renders each listed command's sections visible to schema() after its flags", async () => {
+		const schemaExtension = schema();
+		const cli = new Crust("mycli", {
+			sections: [
+				{ title: "Auth", body: "Set MYCLI_TOKEN." },
+				{ title: "Not for schema", body: "Help only.", except: [schemaExtension] },
+			],
+		})
+			.extend(schemaExtension, json(), input())
+			.add(
+				defineCommand(
+					"deploy",
+					{ sections: [{ title: "Safety", body: "Run preview first." }] },
+					(cmd) => cmd.action(() => {}),
+				),
+				defineCommand(
+					"internal",
+					{ hidden: true, sections: [{ title: "Secret", body: "Hidden body." }] },
+					(cmd) => cmd.action(() => {}),
+				),
+			)
+			.action(() => {});
+
+		const { stdout } = await captureExecute(cli, ["--llms"]);
+		const [root, deploy] = stdout.split("\n## ").slice(1);
+
+		expect(root).toMatch(
+			/- `--llms` [^\n]*\n\n### Auth\n\nSet MYCLI_TOKEN\.\n\n### JSON output\n\n--json [^\n]*\n\n### JSON input\n\n--input [^\n]*\n$/,
+		);
+		expect(deploy).toMatch(/\n\n### Safety\n\nRun preview first\.\n$/);
+		expect(stdout).not.toContain("Not for schema");
+		expect(stdout).not.toContain("Secret");
 	});
 
 	it("--llms is root-only", async () => {

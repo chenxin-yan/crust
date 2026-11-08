@@ -1,10 +1,11 @@
-import { type CommandSnapshot, CrustError } from "@crustjs/core";
+import { type CommandSnapshot, CrustError, type ExtensionId } from "@crustjs/core";
 import {
 	type CommandDocumentation,
 	buildCommandDocumentation,
 	commandInputSchema,
 	formatDescription,
 	isListed,
+	sectionsFor,
 } from "@crustjs/core/tooling";
 
 import type { CommandSchema } from "./schema.ts";
@@ -59,8 +60,11 @@ function item(token: string, label: string, description: string): string {
 	return `- ${token}${label}${description ? `: ${description}` : ""}`;
 }
 
-/** Compact Markdown index of every visible command: usage, description, args, and flags. */
-export function renderCommandIndex(root: CommandSnapshot): string {
+/**
+ * Compact Markdown index of every visible command: usage, description, args,
+ * flags, and the documentation sections visible to `consumer`.
+ */
+export function renderCommandIndex(root: CommandSnapshot, consumer: ExtensionId): string {
 	const lines = [`# ${root.meta.name}`];
 	const visit = (doc: CommandDocumentation) => {
 		lines.push("", `## \`${doc.usage}\``);
@@ -94,6 +98,9 @@ export function renderCommandIndex(root: CommandSnapshot): string {
 					),
 				);
 			}
+		}
+		for (const section of sectionsFor(doc.sections, consumer)) {
+			lines.push("", `### ${section.title}`, "", section.body);
 		}
 		for (const child of doc.children) visit(child);
 	};

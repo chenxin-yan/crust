@@ -54,7 +54,7 @@ type SchemaCommandDefinition = CommandDefinition<
  * Contributes a `schema [path...]` command that prints one line of JSON,
  * `{ input, output? }`, for the command at `path` (the root when
  * omitted), and a root-only `--llms` flag that prints a Markdown index of every
- * visible command.
+ * visible command, including the documentation sections visible to `schema()`.
  */
 export const schema: ExtensionFactory<
 	[],
@@ -88,6 +88,6 @@ export const schema: ExtensionFactory<
 		)
 		.handle("llms", async ({ rootCommand, stdout }) => {
 			const { renderCommandIndex } = await import("./schema-render.ts");
-			stdout(renderCommandIndex(rootCommand));
+			stdout(renderCommandIndex(rootCommand, SCHEMA));
 		}),
 );
