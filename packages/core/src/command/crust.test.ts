@@ -1603,11 +1603,11 @@ describe("Extension named hooks", () => {
 
 		it("surfaces the original error after preRun, which sees the invalid flag unset", async () => {
 			const cases: Array<[string[], Record<string, string>, string]> = [
-				[["--port", "abc"], {}, 'Expected number for --port, got "abc"'],
-				[[], { PORT: "abc" }, 'Expected number for --port, got "abc"'],
-				[["serve"], { PORT: "abc" }, 'Expected number for --port, got "abc"'],
-				[["--mode", "slow"], {}, 'Invalid value "slow" for --mode. Expected one of: fast, safe'],
-				[["nan"], {}, 'Expected number for <count>, got "nan"'],
+				[["--port", "abc"], {}, "Expected a number for --port."],
+				[[], { PORT: "abc" }, "Expected a number for --port (from $PORT)."],
+				[["serve"], { PORT: "abc" }, "Expected a number for --port (from $PORT)."],
+				[["--mode", "slow"], {}, "Invalid value for --mode. Expected one of: fast, safe"],
+				[["nan"], {}, "Expected a number for <count>."],
 			];
 			const { execute, seen, errors, actions } = deferringApp();
 			for (const [argv, env, message] of cases) {
@@ -3370,6 +3370,93 @@ describe("Crust .execute()", () => {
 			expect(await app.execute({ argv: [] })).toBe(1);
 			expect(stderrChunks).toEqual(["Error: validation failed"]);
 		});
+	});
+});
+
+describe("value errors never echo the raw value", () => {
+	const SECRET = "s3cr3t-sentinel";
+	afterEach(() => vi.unstubAllEnvs());
+
+	function valueApp() {
+		const errors: unknown[] = [];
+		const observer = defineExtension(defineExtensionId("observer")).onError(
+			(error) => void errors.push(error),
+		);
+		const app = new Crust("cli")
+			.flags({
+				port: { type: "number", env: { name: "R3_PORT" } },
+				mode: { type: "string", choices: ["fast", "safe"], env: { name: "R3_MODE" } },
+				home: { type: "url", env: { name: "R3_HOME" } },
+				data: { type: "json", env: { name: "R3_DATA" } },
+			})
+			.args({ name: "count", type: "number" })
+			.extend(observer)
+			.action(() => {});
+		async function execute(argv: string[]) {
+			const stderr: string[] = [];
+			const exitCode = await app.execute({
+				argv,
+				io: { stdout: () => {}, stderr: (line) => void stderr.push(line) },
+			});
+			return { exitCode, stderr: stderr.join("\n"), error: errors.at(-1) };
+		}
+		return { app, execute };
+	}
+
+	/** The sentinel is absent from every message, `details`, and cause in the chain. */
+	function expectNoEcho(error: unknown): void {
+		expect(error).toBeInstanceOf(CrustError);
+		for (let current = error; current !== undefined;) {
+			if (!(current instanceof Error)) {
+				expect(String(current)).not.toContain(SECRET);
+				break;
+			}
+			expect(current.message).not.toContain(SECRET);
+			if (current instanceof CrustError) {
+				expect(JSON.stringify(current.details ?? {})).not.toContain(SECRET);
+			}
+			current = current.cause;
+		}
+	}
+
+	it.each([
+		[["--port", SECRET], "Expected a number for --port."],
+		[["--mode", SECRET], "Invalid value for --mode. Expected one of: fast, safe"],
+		[["--home", SECRET], "Invalid URL for --home (missing protocol — e.g. https://example.com)."],
+		[["--data", SECRET], "Invalid JSON for --data. Tip: wrap JSON in single quotes"],
+		[[SECRET], "Expected a number for <count>."],
+	])("execute() with argv %j", async (argv, message) => {
+		const { exitCode, stderr, error } = await valueApp().execute(argv);
+		expect(exitCode).toBe(1);
+		expect(stderr).toContain(message);
+		expect(stderr).not.toContain(SECRET);
+		expectNoEcho(error);
+	});
+
+	it.each([
+		["R3_PORT", "Expected a number for --port (from $R3_PORT)."],
+		["R3_MODE", "Invalid value for --mode (from $R3_MODE). Expected one of: fast, safe"],
+		[
+			"R3_HOME",
+			"Invalid URL for --home (from $R3_HOME) (missing protocol — e.g. https://example.com).",
+		],
+		["R3_DATA", "Invalid JSON for --data (from $R3_DATA). Tip: wrap JSON in single quotes"],
+	])("execute() with %s names the variable", async (variable, message) => {
+		vi.stubEnv(variable, SECRET);
+		const { exitCode, stderr, error } = await valueApp().execute([]);
+		expect(exitCode).toBe(1);
+		expect(stderr).toContain(message);
+		expect(stderr).not.toContain(SECRET);
+		expectNoEcho(error);
+	});
+
+	it.each([
+		[{ flags: { mode: SECRET } }, "Invalid value for --mode. Expected one of: fast, safe"],
+		[{ args: { count: SECRET } }, "Expected number for <count>"],
+	] as const)("run() with %j", async (input, message) => {
+		const outcome = await valueApp().app.run([], input as RunInputPayload);
+		expect(outcome).toMatchObject({ status: "failed", error: { message } });
+		if (outcome.status === "failed") expectNoEcho(outcome.error);
 	});
 });
 

@@ -46,7 +46,7 @@ describe("parseArgs — number flags", () => {
 
 	it("throws CrustError with PARSE code on non-numeric value", () => {
 		expect(() => parseAndValidate(cmd, ["--port", "abc"])).toThrow(
-			expect.objectContaining({ code: "PARSE", message: 'Expected number for --port, got "abc"' }),
+			expect.objectContaining({ code: "PARSE", message: "Expected a number for --port." }),
 		);
 	});
 
@@ -56,10 +56,12 @@ describe("parseArgs — number flags", () => {
 			flags: { port: { type: "number", default: 3000, env: { name: "PORT" } } },
 		});
 		for (const raw of ["", "  "]) {
-			const message = `Expected number for --port, got "${raw}"`;
+			const message = "Expected a number for --port.";
 			expect(() => parseAndValidate(envCmd, ["--port", raw], {})).toThrow(message);
 			expect(() => parseAndValidate(envCmd, [`--port=${raw}`], {})).toThrow(message);
-			expect(() => parseAndValidate(envCmd, [], { PORT: raw })).toThrow(message);
+			expect(() => parseAndValidate(envCmd, [], { PORT: raw })).toThrow(
+				"Expected a number for --port (from $PORT).",
+			);
 		}
 	});
 
@@ -75,7 +77,7 @@ describe("parseArgs — number flags", () => {
 		expect(parsed.flags.port).toBeUndefined();
 		expect(parsed.valueErrors?.get("--port")).toMatchObject({
 			code: "PARSE",
-			message: 'Expected number for --port, got "abc"',
+			message: "Expected a number for --port.",
 		});
 		// A value error outranks missing-required, as when it was thrown during parsing.
 		expect(() => validateParsed(deferred, parsed)).toThrow(parsed.valueErrors?.get("--port"));
@@ -999,10 +1001,10 @@ describe("parseArgs \u2014 env fallback", () => {
 		expect(parsed.flags.home).toEqual(new URL("https://example.com"));
 
 		expect(() => parseAndValidate(cmd, [], { APP_PORT: "nope" })).toThrow(
-			'Expected number for --port, got "nope"',
+			"Expected a number for --port (from $APP_PORT).",
 		);
 		expect(() => parseAndValidate(cmd, [], { APP_MODE: "test" })).toThrow(
-			'Invalid value "test" for --mode. Expected one of: dev, prod',
+			"Invalid value for --mode (from $APP_MODE). Expected one of: dev, prod",
 		);
 	});
 
@@ -1164,7 +1166,7 @@ describe("parseArgs \u2014 delimiter", () => {
 		expect(parsed.flags.tags).toEqual(["a", "b"]);
 		expect(parsed.flags.ports).toEqual([80, 443]);
 		expect(() => parseAndValidate(cmd, [], { APP_PORTS: "80:nope" })).toThrow(
-			'Expected number for --ports, got "nope"',
+			"Expected a number for --ports (from $APP_PORTS).",
 		);
 	});
 
@@ -1315,10 +1317,10 @@ describe("parseStructured", () => {
 		);
 		expect(seen).toEqual(["80", "80"]);
 		expect(() => parseStructured(command, { flags: { port: "90" } })).toThrow(
-			'Invalid value "90" for --port. Expected one of: 80',
+			"Invalid value for --port. Expected one of: 80",
 		);
 		expect(() => parseStructured(command, { args: { port: "90" } })).toThrow(
-			'Invalid value "90" for <port>. Expected one of: 80',
+			"Invalid value for <port>. Expected one of: 80",
 		);
 		expect(seen).toEqual(["80", "80"]);
 	});
@@ -1456,7 +1458,10 @@ describe("parseFlagValues", () => {
 				{ port: { type: "number", default: 1, env: { name: "PORT" } } },
 				{ PORT: "" },
 			),
-		).rejects.toMatchObject({ code: "PARSE", message: 'Expected number for --port, got ""' });
+		).rejects.toMatchObject({
+			code: "PARSE",
+			message: "Expected a number for --port (from $PORT).",
+		});
 		await expect(
 			parseFlagValues({ key: { type: "string", required: true, env: { name: "KEY" } } }, {}),
 		).rejects.toMatchObject({ code: "VALIDATION" });

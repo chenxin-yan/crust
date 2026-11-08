@@ -5,7 +5,6 @@ import {
 	defineExtension,
 	defineExtensionId,
 } from "@crustjs/core";
-import type { RunInputPayload } from "@crustjs/core/tooling";
 
 const JSON_INPUT: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:input");
 
@@ -89,15 +88,6 @@ export const input: ExtensionFactory<[], {}, [], typeof inputFlags> =
 				const supplied = Object.fromEntries(
 					Object.entries(values).filter(([name]) => !given.has(name)),
 				);
-				let payload: RunInputPayload;
-				try {
-					payload = parseCommandInput(context.command, supplied);
-				} catch (cause) {
-					if (cause instanceof CrustError) throw cause;
-					// parseCommandInput throws a TypeError for an invalid `url` value.
-					const reason = cause instanceof Error ? cause.message : String(cause);
-					throw new CrustError("PARSE", `--input: expected a URL (${reason})`).withCause(cause);
-				}
-				context.bindInput(payload);
+				context.bindInput(parseCommandInput(context.command, supplied));
 			}),
 	);

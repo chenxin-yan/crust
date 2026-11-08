@@ -180,8 +180,15 @@ describe("createMcpServer", () => {
 			name: "echo",
 			arguments: { word: "x", origin: "not a url" },
 		});
-		expect(badUrl.isError).toBe(true);
-		expect(badUrl.content).toEqual([{ type: "text", text: expect.stringMatching(/^TypeError: /) }]);
+		expect(badUrl).toMatchObject({
+			isError: true,
+			content: [
+				{
+					type: "text",
+					text: "PARSE: Invalid URL for --origin (missing protocol — e.g. https://example.com).",
+				},
+			],
+		});
 		const badRaw = await client.callTool({ name: "echo", arguments: { word: "x", raw: "nope" } });
 		expect(badRaw).toMatchObject({
 			isError: true,

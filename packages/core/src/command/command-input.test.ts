@@ -349,8 +349,24 @@ describe("parseCommandInput", () => {
 		expect(() => parseCommandInput(snapshot, values)).toThrow(new CrustError("PARSE", message));
 	});
 
-	it("lets an invalid URL throw the URL constructor's TypeError", async () => {
+	it("rejects an invalid URL with PARSE, without the value or a cause", async () => {
 		const snapshot = await sendSnapshot();
-		expect(() => parseCommandInput(snapshot, { home: "nope" })).toThrow(TypeError);
+		for (const values of [{ home: "s3cr3t" }, { origin: ["https://a.example/", "s3cr3t"] }]) {
+			const name = Object.keys(values)[0];
+			const error = (() => {
+				try {
+					parseCommandInput(snapshot, values);
+				} catch (caught) {
+					return caught;
+				}
+			})();
+			expect(error).toEqual(
+				new CrustError(
+					"PARSE",
+					`Invalid URL for --${name} (missing protocol — e.g. https://example.com).`,
+				),
+			);
+			expect(error).toHaveProperty("cause", undefined);
+		}
 	});
 });

@@ -154,7 +154,11 @@ describe("input", () => {
 		],
 		["JSON null", "null", /^--input: expected a JSON object keyed by argument and flag names/],
 		["an unreadable file", "@/nonexistent/crust-input.json", /^--input: cannot read/],
-		["an invalid URL", '{"target":"prod","origin":"not a url"}', /^--input: expected a URL \(/],
+		[
+			"an invalid URL",
+			'{"target":"prod","origin":"not a url"}',
+			/^Invalid URL for --origin \(missing protocol — e\.g\. https:\/\/example\.com\)\.$/,
+		],
 	])("fails with a PARSE error for %s", async (_label, payload, message) => {
 		const error = await failure(payload);
 

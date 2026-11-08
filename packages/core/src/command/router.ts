@@ -70,14 +70,23 @@ function findAliasMatch(
 	return null;
 }
 
-/** A known, well-formed flag token and whether it reads the next argv token as its value. */
+/**
+ * A known, well-formed flag token, whether it reads the next argv token as its value,
+ * and its `spelling` without an inline value (`--token=x` → `--token`, `-tx` → `-t`).
+ */
 function matchKnownFlag(
 	spellings: ReadonlyMap<string, FlagSpelling>,
 	token: string,
-): { consumesValue: boolean } | null {
+): { consumesValue: boolean; spelling: string } | null {
 	const match = matchFlagToken(spellings, token);
 	if (match === undefined || match instanceof CrustError) return null;
-	return { consumesValue: match.pending !== undefined };
+	// An inline value is always the token's suffix; a long one follows "=".
+	const inline = match.occurrences.find(({ value }) => typeof value === "string")?.value;
+	const spelling =
+		typeof inline === "string"
+			? token.slice(0, token.length - inline.length - (token.startsWith("--") ? 1 : 0))
+			: token;
+	return { consumesValue: match.pending !== undefined, spelling };
 }
 
 /**
@@ -126,7 +135,7 @@ export function resolveCommand(command: CommandNode, argv: readonly string[]): C
 	// shape the parent's definition implied. Re-validated against every
 	// command routing descends into so the resolved command is guaranteed to
 	// parse the re-prepended tokens.
-	const skippedFlagChecks: { token: string; consumesValue: boolean }[] = [];
+	const skippedFlagChecks: { token: string; spelling: string; consumesValue: boolean }[] = [];
 
 	// Every skipped flag must be recognized by the child with the same token
 	// shape — a same-spelling flag that is boolean here and value-taking there
@@ -137,13 +146,13 @@ export function resolveCommand(command: CommandNode, argv: readonly string[]): C
 	const assertFlagsForwardable = (child: CommandNode, candidate: string): void => {
 		if (skippedFlagChecks.length === 0) return;
 		const childSpellings = child.flagSpellings;
-		for (const { token, consumesValue } of skippedFlagChecks) {
+		for (const { token, spelling, consumesValue } of skippedFlagChecks) {
 			const match = matchKnownFlag(childSpellings, token);
 			if (match !== null && match.consumesValue === consumesValue) continue;
 			throw new CrustError(
 				"PARSE",
-				`Flag "${token}" cannot be used before subcommand "${candidate}" because "${candidate}" does not accept it.`,
-				{ flag: token, reason: "flag-not-forwardable" },
+				`Flag "${spelling}" cannot be used before subcommand "${candidate}" because "${candidate}" does not accept it.`,
+				{ flag: spelling, reason: "flag-not-forwardable" },
 			);
 		}
 	};
@@ -167,7 +176,11 @@ export function resolveCommand(command: CommandNode, argv: readonly string[]): C
 			const match = matchKnownFlag(current.flagSpellings, candidate);
 			if (!match) break;
 			skippedFlagTokens.push(candidate);
-			skippedFlagChecks.push({ token: candidate, consumesValue: match.consumesValue });
+			skippedFlagChecks.push({
+				token: candidate,
+				spelling: match.spelling,
+				consumesValue: match.consumesValue,
+			});
 			routedArgv = routedArgv.slice(1);
 			const value = routedArgv[0];
 			if (match.consumesValue && value !== undefined) {

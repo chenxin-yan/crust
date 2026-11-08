@@ -362,6 +362,26 @@ describe("resolveCommand — known-flag skipping", () => {
 		);
 	});
 
+	it("names a rejected inline-value flag without its value", () => {
+		const translate = makeNode({ meta: "translate", run() {} });
+		const root = makeNode({
+			meta: "app",
+			flags: { token: { type: "string", short: "t", description: "token" } },
+			subCommands: { translate },
+		});
+		for (const [token, flag] of [
+			["--token=s3cr3t", "--token"],
+			["-ts3cr3t", "-t"],
+		]) {
+			expect(() => resolveCommand(root, [token!, "translate"])).toThrow(
+				expect.objectContaining({
+					message: `Flag "${flag}" cannot be used before subcommand "translate" because "translate" does not accept it.`,
+					details: { flag, reason: "flag-not-forwardable" },
+				}),
+			);
+		}
+	});
+
 	it("validates forwarded flags when descending through an alias", () => {
 		const translate = makeNode({ meta: "translate", run() {} });
 		translate.meta.aliases = ["tr"];
