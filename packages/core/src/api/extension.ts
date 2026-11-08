@@ -293,8 +293,9 @@ export interface Renderer {
 	/**
 	 * A cleanup failure, in `execute()` only: a Context disposal or deferred cleanup that failed
 	 * after a failure was already rendered (or claimed by `onError`), or cleanup that failed
-	 * while a cancellation unwound, once per failure. The exit code is unchanged. If it throws,
-	 * Core renders the cleanup failure itself. Default: Core's `Cleanup failed: <message>` lines
+	 * while a cancellation unwound, once per failure: several cleanups that fail together, which
+	 * arrive as a `SuppressedError` chain or an `AggregateError`, are passed one by one. The exit
+	 * code is unchanged. If it throws, Core renders that cleanup failure itself. Default: Core's `Cleanup failed: <message>` lines
 	 * on stderr (`Error: <message>` for an action's own cleanup during a cancellation).
 	 */
 	cleanup?(error: unknown): void;
