@@ -15,8 +15,15 @@ async function runSchema(
 	issues: ValidationIssue[],
 	sensitiveLabel?: string,
 ): Promise<{ readonly ok: false } | { readonly ok: true; readonly value: unknown }> {
-	// Standard Schema validation is async-capable, including promises from other realms.
-	const result = await schema["~standard"].validate(raw);
+	let result: Awaited<ReturnType<StandardSchema["~standard"]["validate"]>>;
+	try {
+		// Standard Schema validation is async-capable, including promises from other realms.
+		result = await schema["~standard"].validate(raw);
+	} catch (error) {
+		// A thrown or rejected error can quote a sensitive value as much as an issue can.
+		if (sensitiveLabel === undefined) throw error;
+		result = { issues: [] };
+	}
 
 	if (result.issues) {
 		// Issue messages and nested paths can quote a sensitive value; report only the field.

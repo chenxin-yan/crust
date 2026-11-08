@@ -187,6 +187,49 @@ describe("Standard Schema on flag definitions", () => {
 		expect(result.stdout + result.stderr).not.toContain(SECRET);
 	});
 
+	it("reports a sensitive schema that throws or rejects with a fixed message", async () => {
+		const SECRET = "SENTINEL-s3cr3t";
+		const throwing: StandardSchema<string | undefined, string> = {
+			"~standard": {
+				version: 1,
+				vendor: "crust-test",
+				validate: (raw) => {
+					throw new Error(String(raw));
+				},
+			},
+		};
+		const rejecting: StandardSchema<string | undefined, string> = {
+			"~standard": {
+				version: 1,
+				vendor: "crust-test",
+				validate: async (raw) => Promise.reject(new Error(String(raw))),
+			},
+		};
+		for (const secret of [throwing, rejecting]) {
+			const app = new Crust("cli")
+				.flags({ token: { type: "string", schema: secret, sensitive: true } })
+				.action(() => {});
+			const outcome = await app.run([], { flags: { token: SECRET } });
+			if (outcome.status !== "failed") throw new Error("Expected failure");
+			const error = outcome.error;
+			if (!(error instanceof CrustError) || !error.is("VALIDATION")) throw error;
+			expect(error.details?.issues).toEqual([
+				{ path: "flags.token", message: "Invalid value for --token." },
+			]);
+			expect(error.cause).toBeUndefined();
+
+			const result = await executeCrust(app, ["--token", SECRET]);
+			expect(result.stderr).toContain("Invalid value for --token.");
+			expect(result.stdout + result.stderr).not.toContain(SECRET);
+		}
+
+		// Ordinary fields keep the validator's own error.
+		const plain = new Crust("cli")
+			.flags({ token: { type: "string", schema: throwing } })
+			.action(() => {});
+		await expect(unwrap(plain.run([], { flags: { token: "visible" } }))).rejects.toThrow("visible");
+	});
+
 	it("multiple schema flags receive the raw value array", async () => {
 		let received: string | undefined;
 		const csv = schema<string[] | undefined, string>((raw) => ({
