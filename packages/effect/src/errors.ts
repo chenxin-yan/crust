@@ -24,19 +24,22 @@ const ParseBase: TaggedCrustError<"CrustParseError", "PARSE"> = tagged("CrustPar
 const CommandNotFoundBase: TaggedCrustError<"CrustCommandNotFoundError", "COMMAND_NOT_FOUND"> =
 	tagged("CrustCommandNotFoundError");
 const EnvBase: TaggedCrustError<"CrustEnvError", "ENV"> = tagged("CrustEnvError");
+const OutputBase: TaggedCrustError<"CrustOutputError", "OUTPUT"> = tagged("CrustOutputError");
 
 export class CrustDefinitionError extends DefinitionBase {}
 export class CrustValidationError extends ValidationBase {}
 export class CrustParseError extends ParseBase {}
 export class CrustCommandNotFoundError extends CommandNotFoundBase {}
 export class CrustEnvError extends EnvBase {}
+export class CrustOutputError extends OutputBase {}
 
 export type CrustTaggedError =
 	| CrustDefinitionError
 	| CrustValidationError
 	| CrustParseError
 	| CrustCommandNotFoundError
-	| CrustEnvError;
+	| CrustEnvError
+	| CrustOutputError;
 
 const fields = <C extends CrustErrorCode>(error: CrustError<C>): CrustErrorFields<C> => ({
 	message: error.message,
@@ -50,7 +53,8 @@ export function fromCrustError(error: CrustError): CrustTaggedError {
 	if (error.is("VALIDATION")) return new CrustValidationError(fields(error));
 	if (error.is("PARSE")) return new CrustParseError(fields(error));
 	if (error.is("ENV")) return new CrustEnvError(fields(error));
-	// SAFETY: only five codes exist and `is()` narrows `this`, not the remainder, so this is COMMAND_NOT_FOUND.
+	if (error.is("OUTPUT")) return new CrustOutputError(fields(error));
+	// SAFETY: only six codes exist and `is()` narrows `this`, not the remainder, so this is COMMAND_NOT_FOUND.
 	return new CrustCommandNotFoundError(fields(error as CrustError<"COMMAND_NOT_FOUND">));
 }
 
@@ -60,7 +64,8 @@ function isCrustTaggedError(value: unknown): value is CrustTaggedError {
 		value instanceof CrustValidationError ||
 		value instanceof CrustParseError ||
 		value instanceof CrustCommandNotFoundError ||
-		value instanceof CrustEnvError
+		value instanceof CrustEnvError ||
+		value instanceof CrustOutputError
 	);
 }
 

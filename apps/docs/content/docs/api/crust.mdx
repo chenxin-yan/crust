@@ -166,9 +166,21 @@ const app = new Crust("my-cli", { version: "1.2.3" }).extend(version(), help());
 
 Extensions apply to every command the same way, whether it was added before or after `.extend()`. Contexts an Extension provides reach every command. Between a root `.provide()` and an Extension-provided Context of the same name, the later call wins, as the types infer; a command's own `.provide()` always wins. Flags those Contexts own come first on every command, before the command's own flags. Extension commands are built on first use, like added definitions, and recursive Extension flags (the default) are registered on each command as it is built; flags with `recursive: false` are registered only on the root, so only the root's flags can collide with them. Extensions must come from `defineExtension()`.
 
+## `.output(schema)`
+
+Declares the command's result with a [Standard Schema](https://standardschema.dev). Call it before `.action()`: TypeScript then requires the action to return the schema's input type, or a promise of it. After the action resolves, Crust validates its result with the schema and the schema's output, awaited, becomes the `result`, typed in `run()`. A result the schema rejects fails the invocation with an [`OUTPUT`](/docs/api/errors#outputerrordetails) error, exit `1` under `execute()`. A command without an action passes `undefined` to the schema, whose output becomes the result. An invocation an Extension's flag handler or `noAction` takes over ends `handled`, with no result to validate. A later `.output()` replaces the schema. Without `.output()`, results are not validated.
+
+```ts
+const whoami = new Crust("whoami")
+  .output(z.object({ id: z.number(), name: z.string() }))
+  .action(() => ({ id: 1, name: "ada" }));
+```
+
+`.output()` after `.action()`, including a replacement schema, also works: TypeScript checks the action's already-inferred awaited return against the new schema's input. A command's [`CommandSnapshot`](/docs/api/types#commandsnapshot) exposes the schema's output as JSON Schema in `outputSchema`, when the schema can produce one (see [`standardJsonSchema()`](/docs/modules/core#tooling-subpath)).
+
 ## `.action(action)`
 
-Defines the Command Action. It runs after routing, parsing, Extension setups, `preRun` hooks, and validation, unless an Extension's flag handler took over. Its awaited return value becomes the `result` of typed `run()` calls. A later `.action()` replaces both the action and its result type.
+Defines the Command Action. It runs after routing, parsing, Extension setups, `preRun` hooks, and validation, unless an Extension's flag handler took over. Its awaited return value becomes the `result` of typed `run()` calls, unless [`.output()`](#outputschema) declares it. A later `.action()` replaces both the action and its result type.
 
 ```ts
 const greet = new Crust("greet")
@@ -281,7 +293,7 @@ Runs the terminal boundary: parses `process.argv.slice(2)` (or `options.argv`), 
 7. Check required values and positional structure.
 8. Apply Standard Schemas and aggregate their issues.
 9. Construct Contexts as they are first pulled.
-10. Run the Command Action and pass its result to the renderer's `result`, if any.
+10. Run the Command Action, validate its result with the [`.output()`](#outputschema) schema, if any, and pass it to the renderer's `result`, if any.
 11. Run Extension `postRun` hooks in reverse registration order with the outcome.
 12. Run deferred cleanup, including cleanup deferred by Extension setups, and dispose Contexts in reverse registration order.
 
