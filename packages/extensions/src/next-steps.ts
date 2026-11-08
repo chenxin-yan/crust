@@ -74,7 +74,8 @@ function errorMessage(error: unknown): string {
  * `.add(definition, input?, description?)` on it.
  * A step whose command the application does not add, or whose input does not match
  * it, is skipped with a note on stderr; printing never changes the invocation's result.
- * A `sensitive` argument or flag value prints as `<redacted>`.
+ * A `sensitive` flag with an `env` binding is omitted, since the environment supplies it;
+ * any other `sensitive` argument or flag value prints as `<redacted>`.
  */
 export const nextSteps: ExtensionFactory<
 	[options?: NextStepsOptions],

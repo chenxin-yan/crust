@@ -479,7 +479,7 @@ describe("nextSteps", () => {
 		);
 	});
 
-	it("prints sensitive values as <redacted> and names only the flag in a delimiter note", async () => {
+	it("omits env-bound sensitive flags, prints other sensitive values as <redacted>, and names only the flag in a delimiter note", async () => {
 		const SECRET = "SENTINEL-s3cr3t";
 		const login = defineCommand("login", (cmd) =>
 			cmd
@@ -487,6 +487,8 @@ describe("nextSteps", () => {
 				.flags({
 					token: { type: "string", sensitive: true },
 					keys: { type: "string", multiple: true, delimiter: ",", sensitive: true },
+					// The environment supplies it, so the step omits it, even when required.
+					apiKey: { type: "string", sensitive: true, required: true, env: { name: "API_KEY" } },
 				})
 				.action(() => {}),
 		);
@@ -498,9 +500,9 @@ describe("nextSteps", () => {
 					const next = await ctx.nextSteps;
 					next.add(login, {
 						args: { password: SECRET },
-						flags: { token: `-${SECRET}`, keys: [SECRET, SECRET] },
+						flags: { token: `-${SECRET}`, keys: [SECRET, SECRET], apiKey: SECRET },
 					});
-					next.add(login, { flags: { keys: [`${SECRET},${SECRET}`] } });
+					next.add(login, { flags: { keys: [`${SECRET},${SECRET}`], apiKey: SECRET } });
 				}),
 			);
 

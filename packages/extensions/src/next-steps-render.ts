@@ -45,6 +45,8 @@ function stepArgv(
 		if (value === undefined) continue;
 		if (!Object.hasOwn(command.flags, name)) throw new Error(`unknown flag "--${name}"`);
 		const flag = command.flags[name]!;
+		// The environment supplies it when the step runs, so the command line need not.
+		if (flag.sensitive && flag.env) continue;
 		for (const item of flag.multiple && Array.isArray(value) ? value : [value]) {
 			if (flag.type === "boolean") {
 				if (typeof item !== "boolean") throw new Error(`"--${name}" value is not a boolean`);
