@@ -1,0 +1,42 @@
+---
+title: Schema
+description: Describe commands as JSON Schema and Markdown for agents and tools.
+---
+
+## Usage
+
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../../examples/modules/extensions/schema.ts
+</include>
+
+```sh
+$ my-cli schema deploy
+{"input":{"type":"object","properties":{"target":{"type":"string","enum":["staging","prod"]},"raw":{…}},"required":["target"]},"output":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object",…}}
+
+$ my-cli --llms
+# my-cli
+…
+```
+
+`schema()` adds a `schema [path...]` command and a root-only boolean `--llms` flag.
+
+## `schema [path...]`
+
+Prints one line of JSON describing the command at `path`, or the root command when `path` is omitted:
+
+- `input`: the JSON Schema of the command's arguments and flags as one flat object, from [`commandInputSchema()`](/docs/modules/core#tooling-subpath). This is the object [`input()`](/docs/modules/extensions/input)'s `--input` and the [MCP](/docs/modules/mcp) server accept.
+- `output`: the draft 2020-12 JSON Schema of the result, from the command's [`.output()`](/docs/api/crust#outputschema) schema. It is omitted when the command has no `.output()` or its schema cannot produce JSON Schema (see [`standardJsonSchema()`](/docs/modules/core#tooling-subpath)), rather than replaced by an empty `{}` schema; a converter's own result is printed as is.
+
+Path segments are canonical command names or aliases, like routing; hidden commands resolve too. An unknown segment fails with a [`COMMAND_NOT_FOUND`](/docs/api/errors) error naming the path up to it, such as `Unknown command "remote ad".`; [`didYouMean()`](/docs/modules/extensions/did-you-mean) presents it like any unknown command.
+
+The command also returns the object, so [`run()`](/docs/api/crust#runpath-input-options) gets it as the outcome's `result`:
+
+```ts
+const outcome = await app.run(["schema"], { args: { path: ["deploy"] } });
+```
+
+Standard Schema–backed arguments and flags are described by their token type, like other definitions, not by their schema.
+
+## `--llms`
+
+Prints a compact Markdown index of every visible command: a `## ` heading with its usage line, its description, then its arguments and flags with their types, descriptions, defaults, choices, and environment variables, then its [documentation sections](/docs/guide/extensions#section-consumers) as `### ` headings. Hidden commands are left out. A section with `except: [schema]`, or an `only` list without `schema`, is left out too. `--llms` takes over the invocation like `--help`; it is a root-only flag, so `my-cli deploy --llms` is an unknown flag.
