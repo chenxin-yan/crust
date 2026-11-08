@@ -4,7 +4,9 @@ export interface ApiClientOptions {
 	/** URL request paths resolve against, e.g. `https://api.example.com/v1`. */
 	readonly baseUrl: string;
 	/**
-	 * Headers added to requests to the base URL's origin, e.g. an `Authorization` header.
+	 * Headers added to requests to the base URL's origin, e.g. an `Authorization` header, or any
+	 * default header such as `User-Agent` or an API-version header. All of them are treated as
+	 * credentials: they are never sent off the base URL's origin.
 	 * Called once per invocation, when a command first reads the Context.
 	 */
 	readonly auth?: (
