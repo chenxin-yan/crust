@@ -349,15 +349,17 @@ export interface ContextBuilder<
 	>;
 }
 
-// Only a definitely empty state takes the first-call fast path; unions retain their uncertainty.
+// Only a definitely empty record is dropped; a union of disjoint records also has no common keys.
 type AppendedFlags<OF extends FlagsDef, F extends FlagsDef> =
 	IsUnion<OF> extends true
 		? OF & F
 		: keyof OF extends never
 			? F
-			: keyof F extends never
-				? OF
-				: OF & F;
+			: IsUnion<F> extends true
+				? OF & F
+				: keyof F extends never
+					? OF
+					: OF & F;
 
 type ErasedContextBuilder = ContextBuilder<string, any, any>;
 type ErasedContextOptions = Parameters<AnyContextFactory>[0];

@@ -465,6 +465,30 @@ function _typecheckTypesContextFlagsAtUseSites() {
 		Equal<(typeof modeApp)["_types"]["tree"]["inline"]["flags"]["mode"]["default"], "b">
 	>;
 
+	// A conditional dependency's flags stay beside the Context's own, as either alternative.
+	const a = defineContext("a")
+		.flags({ a: { type: "string" } })
+		.setup(() => 1);
+	const b = defineContext("b")
+		.flags({ b: { type: "string" } })
+		.setup(() => 1);
+	const dependency = Math.random() > 0.5 ? a : b;
+	const keyed = defineContext("keyed")
+		.flags({ key: { type: "string" } })
+		.use(dependency)
+		.setup(() => 1);
+	defineCommand("keyed", (command) =>
+		command.use(keyed).action(({ flags }) => {
+			type _Flags = Expect<
+				Equal<
+					typeof flags,
+					| { key: string | undefined; a: string | undefined }
+					| { key: string | undefined; b: string | undefined }
+				>
+			>;
+		}),
+	);
+
 	// A command may provide a flag-owning Context it uses; another Context with its flags collides.
 	defineCommand("local", (command) => command.use(config).provide(config()));
 	const other = defineContext("other")
