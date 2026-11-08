@@ -115,7 +115,7 @@ Would deploy latest to prod
 
 ## Confirmation
 
-Ask before a change that is hard to undo, without stalling an agent on a prompt. With [`confirm()`](/docs/modules/extensions/confirm), a command that `.use(confirm)` awaits `ctx.confirm` for the function, then awaits it with the message before the change, as `deploy` does for `prod`. `--yes`, or `"yes": true` in `--input`, confirms up front (only commands that `.use(confirm)` take it); on a terminal, the user answers a yes/no prompt; without a TTY, the command fails with `ConfirmationRequiredError` instead of waiting:
+Ask before a change that is hard to undo, without stalling an agent on a prompt. With [`confirm()`](/docs/modules/extensions/confirm), a command that `.use(confirm)` awaits `ctx.confirm` for the function, then awaits it with the message before the change, as `deploy` does for `prod`. `--yes`, or `"yes": true` in `--input`, confirms up front (on reusable commands, only those that `.use(confirm)`; see [where `--yes` is accepted](/docs/modules/extensions/confirm#behavior)); on a terminal, the user answers a yes/no prompt; without a TTY, the command fails with `ConfirmationRequiredError` instead of waiting:
 
 ```sh
 $ my-cli deploy prod < /dev/null
