@@ -149,6 +149,29 @@ function isSuppressedError(error: CaughtError): error is { error: unknown; suppr
 	);
 }
 
+/**
+ * A failure is cancellation when it is an `AbortError`, or a `SuppressedError` whose
+ * `suppressed` side is cancellation: cleanup that failed while unwinding it. Returns
+ * those cleanup failures (outermost first), or `undefined` when it is not cancellation.
+ */
+function cancellationCleanupFailures(error: CaughtError): CaughtError[] | undefined {
+	const failures: CaughtError[] = [];
+	const seen = new Set<object>();
+	try {
+		let current = error;
+		while (!isAbortError(current)) {
+			if (!isSuppressedError(current) || seen.has(current)) return undefined;
+			seen.add(current);
+			failures.push(current.error);
+			current = current.suppressed;
+		}
+	} catch {
+		// A throwing getter on an arbitrary thrown value makes it an ordinary failure.
+		return undefined;
+	}
+	return failures;
+}
+
 function isObjectLike(value: CaughtError): value is object {
 	return typeof value === "object" && value !== null;
 }
@@ -693,7 +716,6 @@ async function renderFailure(
 	output: InvocationOutput,
 	signal: AbortSignal,
 	extensionContext: ExtensionContext | undefined,
-	silentDefault = false,
 ): Promise<ExtensionId | undefined> {
 	// Reuse the dispatch context so per-invocation identity (e.g. WeakMap keys
 	// set in preRun) survives into onError. During dispatch its Contexts remain
@@ -758,9 +780,14 @@ async function renderFailure(
 	} catch {
 		// Rendering must not hide the original invocation failure.
 	}
-	// Cancellation (AbortError) has no default rendering — a user abort
-	// is not an error to report unless an onError hook claims it.
-	if (silentDefault) return undefined;
+	// A user abort is not an error to report unless an onError hook claims it. Cleanup
+	// that failed while unwinding it renders as Core's default lines: a Renderer's
+	// `error` never receives a cancellation.
+	const cleanupFailures = cancellationCleanupFailures(error);
+	if (cleanupFailures) {
+		for (const failure of cleanupFailures) output.io.stderr(describeFailure(failure));
+		return undefined;
+	}
 	const renderer = output.renderer;
 	if (renderer?.error) {
 		try {
@@ -891,16 +918,15 @@ export async function executeInvocation(
 				},
 				async (error, context) => {
 					rendered = { error };
-					const cancelled = isAbortError(error);
+					const cancelled = cancellationCleanupFailures(error) !== undefined;
 					process.exitCode = cancelled ? EXIT_CODE_CANCELLED : 1;
-					return renderFailure(error, argv, prepared, output, signal, context, cancelled);
+					return renderFailure(error, argv, prepared, output, signal, context);
 				},
 			);
 		} catch (error) {
 			// Disposal wraps the failure rendered above as `suppressed` (Object.is: the
 			// body may have thrown NaN or any primitive). Render only the cleanup side;
-			// onError hooks already ran and never saw it. A SuppressedError is never an
-			// AbortError, so cancellation with failed cleanup keeps exit code 1 below.
+			// onError hooks already ran and never saw it.
 			let cleanupFailure: { error: unknown } | undefined;
 			try {
 				if (
@@ -915,22 +941,17 @@ export async function executeInvocation(
 				// A throwing getter on an arbitrary thrown value must not replace the failure.
 			}
 			if (cleanupFailure) io.stderr(describeFailure(cleanupFailure.error, "Cleanup failed"));
-			if (isAbortError(error)) {
-				// Cancellation keeps its dedicated exit code while allowing Extension
-				// onError hooks to render a message. Core's default stays silent.
-				if (!rendered) {
-					await renderFailure(error, argv, prepared, output, signal, extensionContext, true);
-				}
-				process.exitCode = EXIT_CODE_CANCELLED;
-				return EXIT_CODE_CANCELLED;
-			}
-			// Core always preserves a nonzero failure outcome, regardless of
-			// what Extension onError hooks do.
-			process.exitCode = 1;
+			// Cancellation keeps exit code 130 even when cleanup failed while unwinding it
+			// (callers such as shell loops must still see the interrupt). Core always
+			// preserves a nonzero failure outcome, regardless of what onError hooks do.
+			const exitCode = cancellationCleanupFailures(error) === undefined ? 1 : EXIT_CODE_CANCELLED;
+			process.exitCode = exitCode;
 			if (!rendered) {
 				await renderFailure(error, argv, prepared, output, signal, extensionContext);
+				// Reassert: a presentation hook may have reassigned process.exitCode.
+				process.exitCode = exitCode;
 			}
-			return 1;
+			return exitCode;
 		} finally {
 			process.removeListener("SIGINT", onSigint);
 		}
