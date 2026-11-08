@@ -80,13 +80,49 @@ function schemaPropertySchema(
 	return schema;
 }
 
+const VALUE_KEYWORDS = new Set(["enum", "const", "default", "examples"]);
+/** Keywords whose object value maps names to subschemas, not keywords to values. */
+const SCHEMA_MAPS = new Set([
+	"properties",
+	"patternProperties",
+	"$defs",
+	"definitions",
+	"dependentSchemas",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** `value` and every subschema in it without keywords that list accepted or example values. */
+function withoutValues(value: unknown): unknown {
+	if (Array.isArray(value)) return value.map(withoutValues);
+	if (!isRecord(value)) return value;
+	// fromEntries defines own properties, so a `__proto__` key stays a key.
+	return Object.fromEntries(
+		Object.entries(value)
+			.filter(([key]) => !VALUE_KEYWORDS.has(key) && !key.startsWith("x-"))
+			.map(([key, entry]) => [
+				key,
+				SCHEMA_MAPS.has(key) && isRecord(entry)
+					? Object.fromEntries(
+							Object.entries(entry).map(([name, item]) => [name, withoutValues(item)]),
+						)
+					: withoutValues(entry),
+			]),
+	);
+}
+
 function propertySchema(
 	def: ArgSnapshot | FlagSnapshot,
 	list: boolean,
 ): CommandInputPropertySchema {
 	const value = valueSchema(def.type, def.choices);
+	let declared = schemaPropertySchema(def, list);
+	// A sensitive schema publishes none of its values. SAFETY: withoutValues keeps a record a record.
+	if (declared && def.sensitive) declared = withoutValues(declared) as CommandInputPropertySchema;
 	const schema: CommandInputPropertySchema =
-		schemaPropertySchema(def, list) ?? (list ? { type: "array", items: value } : value);
+		declared ?? (list ? { type: "array", items: value } : value);
 	let defaultValue: unknown;
 	if (def.default !== undefined) {
 		try {
@@ -111,7 +147,7 @@ function propertySchema(
 		...(defaultValue === undefined || "default" in schema ? {} : { default: defaultValue }),
 	};
 	if (!def.sensitive) return property;
-	// The snapshot already dropped a sensitive schema's values; core forbids a default.
+	// Core forbids a sensitive default or choices, and the schema's values are stripped above.
 	const password = (entry: CommandInputPropertySchema) =>
 		entry.type === "string" && entry.format === undefined
 			? { ...entry, format: "password" }
@@ -139,7 +175,8 @@ function formatPath(path: readonly string[]): string {
  * Defaults are `JSON.stringify` copies (`URL`s become
  * strings; nested `undefined`, functions, and symbols are dropped); defaults
  * that fail to serialize or hold non-finite numbers are omitted. A `sensitive` definition is
- * `writeOnly`, and its strings are `format: "password"` unless they declare another format.
+ * `writeOnly`, and its strings are `format: "password"` unless they declare another format;
+ * its JSON Schema loses every `enum`, `const`, `default`, `examples`, and `x-*` keyword.
  * `path` names the command in the error thrown when an arg and a flag
  * share a name, or a definition is named `raw`.
  */

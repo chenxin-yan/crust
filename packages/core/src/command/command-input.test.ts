@@ -122,7 +122,8 @@ describe("commandInputSchema", () => {
 		const snapshot = await app.snapshot();
 		expect(snapshot.args[0]?.sensitive).toBe(true);
 		expect(snapshot.flags.token?.sensitive).toBe(true);
-		expect(JSON.stringify(snapshot)).not.toContain("SENTINEL");
+		// Only the published JSON Schema drops the values; the snapshot keeps the schema as declared.
+		expect(snapshot.flags.schema?.inputSchema).toMatchObject({ default: "SENTINEL" });
 		const { properties } = commandInputSchema(snapshot, []);
 		expect(properties).toMatchObject({
 			password: { type: "string", format: "password", writeOnly: true, description: "Login" },
