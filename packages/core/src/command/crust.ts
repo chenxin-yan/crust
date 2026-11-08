@@ -82,6 +82,7 @@ import type {
 	LocalSpellingsOf,
 } from "../validation/flags.brands.ts";
 import type {
+	IsAny,
 	IsClosedName,
 	IsUnion,
 	KnownSpellings,
@@ -116,7 +117,7 @@ import type {
 	KnownCommandPath,
 	OmittableRunInput,
 	RunInput,
-	RunOutcome,
+	ShapeRunOutcome,
 	RunWithoutInputThis,
 	commandProviders,
 } from "./typed-run.ts";
@@ -395,13 +396,14 @@ type DefinitionShapeForSpelling<D, Spelling extends string> = D extends unknown
 // same inherited flag namespace. Local parent flags never inherit and stay out.
 type ShapeWithInheritedFlags<S, CF extends FlagsDef> = keyof CF extends never
 	? S
-	: S extends CommandShape<infer SA, infer SF, infer SC, infer SR, infer P>
+	: S extends CommandShape<infer SA, infer SF, infer SC, infer SR, infer P, infer SE>
 		? CommandShape<
 				SA,
 				MergeFlags<CF, SF>,
 				{ [K in keyof SC]: ShapeWithInheritedFlags<SC[K], CF> },
 				SR,
-				P
+				P,
+				SE
 			>
 		: never;
 
@@ -532,7 +534,14 @@ type AppShape<
 	Tree extends object,
 	Result,
 	S extends AnyCollisionSpellings,
-> = CommandShape<A, F, TreeWithRecursiveFlags<Tree, AppRecursiveFlagsOf<S>>, Result>;
+> = CommandShape<
+	A,
+	F,
+	TreeWithRecursiveFlags<Tree, AppRecursiveFlagsOf<S>>,
+	Result,
+	Record<string, ContextValue>,
+	ActionEvents<S>
+>;
 
 // Extension commands join the tree like `.add()`: a colliding command is a definition error.
 // Resolving with `infer R` keeps a chain of `.extend()` calls from deferring one nested tree per
@@ -688,7 +697,7 @@ async function runAt(
 	node: CommandNode,
 	path: readonly string[],
 	args: readonly unknown[],
-): Promise<RunOutcome<unknown>> {
+): Promise<ShapeRunOutcome<CommandShape>> {
 	// SAFETY: the public overloads constrain structured input to this runtime value union.
 	const input = (args[0] ?? {}) as RunInputPayload;
 	// SAFETY: the public overloads constrain the second argument to invocation options.
@@ -792,17 +801,43 @@ type OutputSchemaOf<S extends AnyCollisionSpellings> = Exclude<
 
 type ActionReturnOf<S extends AnyCollisionSpellings> = OutputStateOf<S>["actionReturn"];
 
-/** What the action may return: anything, or the `.output()` schema's input (possibly awaited). */
+/**
+ * What the action may return: anything, or the `.output()` schema's input (possibly awaited,
+ * or the `return` value of an async generator, itself possibly awaited).
+ */
 type ActionReturn<S extends AnyCollisionSpellings> = [OutputSchemaOf<S>] extends [never]
 	? unknown
-	: InferInput<OutputSchemaOf<S>> | PromiseLike<InferInput<OutputSchemaOf<S>>>;
+	:
+			| InferInput<OutputSchemaOf<S>>
+			| PromiseLike<InferInput<OutputSchemaOf<S>>>
+			| AsyncGenerator<unknown, InferInput<OutputSchemaOf<S>>>
+			| PromiseLike<AsyncGenerator<unknown, InferInput<OutputSchemaOf<S>>>>;
+
+/** An awaited action return's value: an async generator's `return` value, else itself. */
+type ActionValue<V> = V extends AsyncGenerator<any, infer Returned> ? Awaited<Returned> : V;
 
 /**
- * The command result: the awaited action return, or the `.output()` schema's output,
- * awaited too because the invocation resolves any promise the schema returns.
+ * The values an async generator action yields; `undefined` for any other (or no) action. Erased
+ * builder states (`AnyCrust`, whose `output` is optional, and `AnyCommandDefinitionBuilder`,
+ * whose action return is `any`) may hold any action, so stay open.
+ */
+type ActionEvents<S extends AnyCollisionSpellings> = undefined extends S["output"]
+	? readonly unknown[] | undefined
+	: IsAny<ActionReturnOf<S>> extends true
+		? readonly unknown[] | undefined
+		: ActionReturnOf<S> extends readonly [infer V]
+			? V extends AsyncGenerator<infer Event>
+				? readonly Event[]
+				: undefined
+			: undefined;
+
+/**
+ * The command result: the awaited action return (an async generator's `return` value), or the
+ * `.output()` schema's output, awaited too because the invocation resolves any promise the
+ * schema returns.
  */
 type ActionResult<S extends AnyCollisionSpellings, R> = [OutputSchemaOf<S>] extends [never]
-	? Awaited<R>
+	? ActionValue<Awaited<R>>
 	: Awaited<InferOutput<OutputSchemaOf<S>>>;
 
 // `.output()` after `.action()` checks the action's awaited return against the new schema;
@@ -812,7 +847,7 @@ type OutputResultBrand<
 	S extends StandardSchema,
 > = undefined extends Return
 	? {}
-	: [NonNullable<Return>[0]] extends [InferInput<S>]
+	: [ActionValue<NonNullable<Return>[0]>] extends [InferInput<S>]
 		? {}
 		: {
 				readonly FIX_OUTPUT: "The action's result does not match this output schema's input type";
@@ -1209,11 +1244,20 @@ export class Crust<
 
 	/** @internal — recipe state, without structural inference through builder methods. */
 	declare readonly _recipeTypes: {
-		readonly shape: CommandShape<A, Flags, Tree, Result, ProvidersOf<CollisionSp>>;
+		readonly shape: CommandShape<
+			A,
+			Flags,
+			Tree,
+			Result,
+			ProvidersOf<CollisionSp>,
+			ActionEvents<CollisionSp>
+		>;
 		readonly deps: RecipeDepsOf<CollisionSp>;
 		readonly proof?: (
 			state: [
-				CommandInputShape<CommandShape<A, Flags, Tree, Result, ProvidersOf<CollisionSp>>>,
+				CommandInputShape<
+					CommandShape<A, Flags, Tree, Result, ProvidersOf<CollisionSp>, ActionEvents<CollisionSp>>
+				>,
 				RecipeDepsOf<CollisionSp>,
 			],
 		) => void;
@@ -1532,6 +1576,10 @@ export class Crust<
 	 * After `.output(schema)`, the action must return the schema's input type
 	 * (or a promise of it), and the command result is typed as the schema's output.
 	 *
+	 * An `async function*` action streams events: each yielded value goes live to the selected
+	 * Renderer's `event` and the caller's `onEvent` option and is collected in the outcome's
+	 * `events`, and its `return` value is the result. Events are never printed by default.
+	 *
 	 * Calling `.action()` again replaces the command behavior and its Context obligations
 	 * on the new builder. Later local providers must satisfy the bound Context value types;
 	 * descendants may shadow independently. The original builder is not mutated.
@@ -1800,7 +1848,8 @@ export class Crust<
 	 * @param path - Typed path to the command to invoke (`[]` selects the root)
 	 * @param input - Structured argument, flag, and raw values
 	 * @param options - Optional `stdout(text)` / `stderr(text)` callbacks (also
-	 *                  exposed to Command Actions and Extensions) and an
+	 *                  exposed to Command Actions and Extensions), an `onEvent(event)`
+	 *                  callback for an async generator action's events, and an
 	 *                  `AbortSignal` that cancels the invocation
 	 */
 	// `Path` is only constrained to strings, and the parameter is not intersected with `Path`:
@@ -1811,9 +1860,7 @@ export class Crust<
 			{ readonly _types: { readonly caps: "app" } }
 		>,
 		path: KnownCommandPath<Path, Tree>,
-	): Promise<
-		RunOutcome<CommandShapeAt<AppShape<A, Flags, Tree, Result, CollisionSp>, Path>["result"]>
-	>;
+	): Promise<ShapeRunOutcome<CommandShapeAt<AppShape<A, Flags, Tree, Result, CollisionSp>, Path>>>;
 	run<
 		const Path extends readonly string[],
 		// Resolving the shape once here keeps contextual typing of a literal `input` from
@@ -1831,7 +1878,7 @@ export class Crust<
 		path: KnownCommandPath<Path, Tree>,
 		input: CheckedRunInput<S, Input> | OmittableRunInput<S>,
 		options?: InvocationOptions,
-	): Promise<RunOutcome<S["result"]>>;
+	): Promise<ShapeRunOutcome<S>>;
 	run<const Path extends readonly string[], const Input>(
 		this: { readonly _types: { readonly caps: "app" } },
 		path: KnownCommandPath<Path, Tree>,
@@ -1847,10 +1894,11 @@ export class Crust<
 		]
 			? readonly [options?: InvocationOptions]
 			: readonly [invalidInput: never]
-	): Promise<
-		RunOutcome<CommandShapeAt<AppShape<A, Flags, Tree, Result, CollisionSp>, Path>["result"]>
-	>;
-	async run(path: readonly string[], ...args: readonly unknown[]): Promise<RunOutcome<unknown>> {
+	): Promise<ShapeRunOutcome<CommandShapeAt<AppShape<A, Flags, Tree, Result, CollisionSp>, Path>>>;
+	async run(
+		path: readonly string[],
+		...args: readonly unknown[]
+	): Promise<ShapeRunOutcome<CommandShape>> {
 		return await runAt(this._node, path, args);
 	}
 
@@ -1876,7 +1924,7 @@ export class Crust<
 		const boundPath = Object.freeze([...path]);
 		return {
 			path: boundPath,
-			async run(...args: readonly unknown[]): Promise<RunOutcome<unknown>> {
+			async run(...args: readonly unknown[]): Promise<ShapeRunOutcome<CommandShape>> {
 				return await runAt(node, boundPath, args);
 			},
 		};
@@ -1893,7 +1941,8 @@ export class Crust<
 	 *
 	 * @param options - Optional overrides: custom `argv` and captured `io` for
 	 *                   in-process testing of exit codes and rendered failures,
-	 *                   and a caller `signal` that cancels the invocation
+	 *                   an `onEvent(event)` callback for an async generator action's
+	 *                   events, and a caller `signal` that cancels the invocation
 	 * @returns The terminal exit code (`0`, `1`, or `130` for cancellation)
 	 */
 	execute(

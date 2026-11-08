@@ -275,6 +275,23 @@ describe("createMcpServer", () => {
 		expect(omitted.structuredContent).toEqual({ own: "p", constructor: null, toString: null });
 	});
 
+	it("reads an ordinary result's next getter once", async () => {
+		let reads = 0;
+		const app = new Crust("getter").add(
+			defineCommand("probe", (c) =>
+				c.action(() => ({
+					get next() {
+						return ++reads;
+					},
+				})),
+			),
+		);
+		const client = await connect(app);
+		const result = await client.callTool({ name: "probe" });
+		expect(result.structuredContent).toEqual({ next: 1 });
+		expect(reads).toBe(1);
+	});
+
 	it("rejects unknown and hidden tools at the protocol level", async () => {
 		const client = await connect(fixture);
 		await expect(client.callTool({ name: "secret" })).rejects.toThrow("Tool secret not found");

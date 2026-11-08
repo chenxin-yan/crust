@@ -30,7 +30,7 @@ it("docs and landing hovers explain selected values without builder or boilerpla
 			"../../../examples/guide/arguments-variadic.ts": { files: "const files: string[]" },
 			"../../../examples/guide/arguments-choices.ts": { runtime: 'const runtime: "bun" | "node" | undefined' },
 			"../../../examples/guide/flags-values.ts": { flags: 'flags: { target: string[] | undefined; runtime: "bun" | "node"; tag: string | undefined; }' },
-			"../../../examples/guide/testing.ts#run": { outcome: "const outcome: RunOutcome<number>", result: "result: number" },
+			"../../../examples/guide/testing.ts#run": { outcome: "const outcome: RunOutcome<number, undefined>", result: "result: number" },
 			"../../../examples/guide/contexts-dependencies.ts": { config: "config: Promise<{ region: string; }>" },
 			"../../../examples/guide/extensions-consumer.ts": { sections: "sections: readonly CommandSection[]" },
 			"../../../examples/modules/env.ts#quick-example": { DATABASE_URL: "const DATABASE_URL: URL" },

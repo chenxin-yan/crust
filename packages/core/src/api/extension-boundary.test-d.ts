@@ -13,6 +13,9 @@ import type { RunOutcome } from "../index.ts";
 import { defineContext, type ContextInstance } from "./context.ts";
 import { defineExtension, type Extension } from "./extension.ts";
 
+// A command whose type is not statically known may be an async generator action.
+type OpenEvents = readonly unknown[] | undefined;
+
 const id = defineExtensionId("boundary");
 
 function _extensionBoundary(broad: Extension) {
@@ -142,7 +145,7 @@ function _spreadExtensionsOpenResults() {
 	const sibling = dynamic.run(["sibling"]);
 	type _sibling = Expect<Equal<typeof sibling, Promise<RunOutcome<boolean>>>>;
 	const other = dynamic.run(["other"]);
-	type _other = Expect<Equal<typeof other, Promise<RunOutcome<unknown>>>>;
+	type _other = Expect<Equal<typeof other, Promise<RunOutcome<unknown, OpenEvents>>>>;
 }
 
 function _recipeHolderProof() {
@@ -311,7 +314,7 @@ function _dynamicExtensionCommandsKeepAppResults(condition: boolean) {
 	const result = extended.run(["child"]);
 	type _result = Expect<Equal<typeof result, Promise<RunOutcome<number>>>>;
 	const other = extended.run(["other"]);
-	type _other = Expect<Equal<typeof other, Promise<RunOutcome<unknown>>>>;
+	type _other = Expect<Equal<typeof other, Promise<RunOutcome<unknown, OpenEvents>>>>;
 	const literal = defineExtension(id).add(defineCommand("lit", (c) => c.action(() => 1n)));
 	const chosen = root.extend(condition ? open : literal).run(["child"]);
 	type _chosen = Expect<Equal<typeof chosen, Promise<RunOutcome<number>>>>;
@@ -455,7 +458,7 @@ function _runtimeOnlyNamesMayReplaceSameIdCommands() {
 		.extend(first)
 		.extend(second);
 	const result = app.run(["child"]);
-	type _result = Expect<Equal<typeof result, Promise<RunOutcome<unknown>>>>;
+	type _result = Expect<Equal<typeof result, Promise<RunOutcome<unknown, OpenEvents>>>>;
 	const own = app.run(["own"]);
 	type _own = Expect<Equal<typeof own, Promise<RunOutcome<boolean>>>>;
 	// An earlier Extension's alias widens like its name.
@@ -463,7 +466,7 @@ function _runtimeOnlyNamesMayReplaceSameIdCommands() {
 		defineCommand("aliased", { aliases: ["al"] }, (c) => c.action(() => 1)),
 	);
 	const viaAlias = new Crust("app").extend(aliased).extend(second).run(["al"]);
-	type _viaAlias = Expect<Equal<typeof viaAlias, Promise<RunOutcome<unknown>>>>;
+	type _viaAlias = Expect<Equal<typeof viaAlias, Promise<RunOutcome<unknown, OpenEvents>>>>;
 	// Literal Extensions after the open one stay precise until another open call.
 	const third = defineExtension(defineExtensionId("third")).add(
 		defineCommand("third", (c) => c.action(() => 1n)),
@@ -473,7 +476,7 @@ function _runtimeOnlyNamesMayReplaceSameIdCommands() {
 	type _precise = Expect<Equal<typeof precise, Promise<RunOutcome<bigint>>>>;
 	const reopened = withThird.extend(second);
 	const replaced = reopened.run(["third"]);
-	type _replaced = Expect<Equal<typeof replaced, Promise<RunOutcome<unknown>>>>;
+	type _replaced = Expect<Equal<typeof replaced, Promise<RunOutcome<unknown, OpenEvents>>>>;
 	const added = reopened.run(["added"]);
 	type _added = Expect<Equal<typeof added, Promise<RunOutcome<string>>>>;
 	const stillOwn = reopened.run(["own"]);

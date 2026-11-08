@@ -13,6 +13,7 @@ import type {
 import type { IsStaticTuple } from "../validation/shared.ts";
 
 export declare const commandProviders: unique symbol;
+export declare const commandEvents: unique symbol;
 
 /** Compile-time description of one command's programmatic input and action result. */
 export interface CommandShape<
@@ -21,20 +22,61 @@ export interface CommandShape<
 	Children extends object = {},
 	Result = unknown,
 	Providers extends Record<string, ContextValue> = Record<string, ContextValue>,
+	Events extends readonly unknown[] | undefined = readonly unknown[] | undefined,
 > {
 	readonly [commandProviders]?: Providers;
+	// Optional so hand-written shapes stay valid. A method parameter is compared bivariantly, so
+	// an annotated shape that leaves Events open still matches a definition's exact Events.
+	[commandEvents]?(events: Events): void;
 	readonly args: A;
 	readonly flags: F;
 	readonly children: Children;
 	readonly result: Result;
 }
 
-/** Captured invocation after lifecycle cleanup. */
-export type RunOutcome<Result> = { readonly stdout: string; readonly stderr: string } & (
-	| { readonly status: "completed"; readonly result: Result }
+/**
+ * The values a command's async generator action yields, or `undefined` for any other command
+ * (and for shapes that do not declare them).
+ */
+type ShapeEvents<Shape> = typeof commandEvents extends keyof Shape
+	? Shape extends {
+			[commandEvents]?(events: infer Events extends readonly unknown[] | undefined): void;
+		}
+		? Events
+		: undefined
+	: undefined;
+
+// A generator action always reports `events` on completion; an unknown command may or may not.
+type CompletedEvents<Events extends readonly unknown[] | undefined> = [Events] extends [undefined]
+	? {}
+	: undefined extends Events
+		? { readonly events?: Exclude<Events, undefined> }
+		: { readonly events: Events };
+
+type FailedEvents<Events extends readonly unknown[] | undefined> = [Events] extends [undefined]
+	? {}
+	: { readonly events?: Exclude<Events, undefined> };
+
+/**
+ * Captured invocation after lifecycle cleanup. `Events` types the values an async generator
+ * action yields (`undefined`, the default, for any other command): `completed` always carries
+ * them as `events`, and `failed` does once the generator started.
+ */
+export type RunOutcome<Result, Events extends readonly unknown[] | undefined = undefined> = {
+	readonly stdout: string;
+	readonly stderr: string;
+} & (
+	| ({ readonly status: "completed"; readonly result: Result } & CompletedEvents<Events>)
 	| { readonly status: "handled"; readonly by: ExtensionId }
-	| { readonly status: "failed"; readonly error: unknown }
+	| ({ readonly status: "failed"; readonly error: unknown } & FailedEvents<Events>)
 );
+
+/** The {@link RunOutcome} of a command shape. */
+// A resolved conditional shows in hovers as the `RunOutcome<…>` it resolves to; a plain alias
+// would show as `ShapeRunOutcome<…>` with the whole command shape spelled out.
+export type ShapeRunOutcome<Shape extends CommandShape> = [Shape] extends [CommandShape]
+	? RunOutcome<Shape["result"], ShapeEvents<Shape>>
+	: never;
 
 /** Compile-time command tree accumulated by `.add()`. */
 export type CommandTree = Record<string, CommandShape>;
@@ -264,15 +306,15 @@ export type RunWithoutInputThis<Shape extends CommandShape, This> = [Shape] exte
 export interface CommandHandle<Shape extends CommandShape> {
 	/** The typed path this handle was created with (`[]` selects the root). */
 	readonly path: readonly string[];
-	run(this: RunWithoutInputThis<Shape, unknown>): Promise<RunOutcome<Shape["result"]>>;
+	run(this: RunWithoutInputThis<Shape, unknown>): Promise<ShapeRunOutcome<Shape>>;
 	run<const Input extends RunInput<Shape> | OmittableRunInput<Shape> = RunInput<Shape>>(
 		input: CheckedRunInput<Shape, Input> | OmittableRunInput<Shape>,
 		options?: InvocationOptions,
-	): Promise<RunOutcome<Shape["result"]>>;
+	): Promise<ShapeRunOutcome<Shape>>;
 	run<const Input>(
 		input: Input,
 		...validation: [Input] extends [CompatibleRunInput<Shape, Input>]
 			? readonly [options?: InvocationOptions]
 			: readonly [invalidInput: never]
-	): Promise<RunOutcome<Shape["result"]>>;
+	): Promise<ShapeRunOutcome<Shape>>;
 }
