@@ -11,7 +11,7 @@ export interface ExecutableApp {
 export interface CapturedExecute {
 	readonly stdout: string;
 	readonly stderr: string;
-	/** The exit code `execute()` established (`0`, `1`, or `130` for cancellation). */
+	/** The exit code `execute()` established (`0`, `1`, or `130` for cancellation, `143` after `SIGTERM`). */
 	readonly exitCode: number;
 }
 
@@ -21,7 +21,7 @@ let exitCodeBeforeExecuteCaptures: typeof process.exitCode;
 
 /**
  * Drive the terminal `execute()` path in-process: exit-code protocol,
- * Extension `onError` rendering, and cancellation (130) are all observable
+ * Extension `onError` rendering, and cancellation (130, or 143 after SIGTERM) are all observable
  * without spawning a subprocess.
  */
 export async function captureExecute(

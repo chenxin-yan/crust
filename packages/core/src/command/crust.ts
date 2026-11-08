@@ -1941,13 +1941,14 @@ export class Crust<
 	 * This is the terminal CLI boundary — call it on the root builder. It
 	 * renders a failure once (through Extension `onError` hooks, ending in the
 	 * chosen Renderer's `error` or Core's default rendering), sets `process.exitCode` (`1`, or
-	 * `130` for an `AbortError` cancellation), and resolves to the exit code.
+	 * `130` for an `AbortError` cancellation, `143` when `SIGTERM` cancelled it), and resolves
+	 * to the exit code.
 	 *
 	 * @param options - Optional overrides: custom `argv` and captured `io` for
 	 *                   in-process testing of exit codes and rendered failures,
 	 *                   an `onEvent(event)` callback for an async generator action's
 	 *                   events, and a caller `signal` that cancels the invocation
-	 * @returns The terminal exit code (`0`, `1`, or `130` for cancellation)
+	 * @returns The terminal exit code (`0`, `1`, or `130` for cancellation, `143` after `SIGTERM`)
 	 */
 	execute(
 		this: { readonly _types: { readonly caps: "app" } },
