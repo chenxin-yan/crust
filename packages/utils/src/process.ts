@@ -73,6 +73,13 @@ export function bindToProcessLifetime(binding: LifetimeBinding): () => void {
 	};
 }
 
+/** `token` as one POSIX shell word: kept bare when it has only safe characters, else single-quoted. */
+export function shellQuote(token: string): string {
+	return /^[A-Za-z0-9_./:=@%+-]+$/.test(token)
+		? token
+		: `'${token.replaceAll("'", String.raw`'\''`)}'`;
+}
+
 const WINDOWS_SHELL_UNSAFE = /[\0\r\n"%!^`<>&|]/;
 const WINDOWS_SHELL_META = /([()\][%!^"`<>&|;, *?])/g;
 

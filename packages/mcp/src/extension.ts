@@ -9,6 +9,7 @@ import {
 	type ExtensionId,
 } from "@crustjs/core";
 import { isCompiledExecutable } from "@crustjs/utils/artifacts";
+import { shellQuote } from "@crustjs/utils/process";
 
 import { createMcpServer, serveStdio } from "./server.ts";
 import { MCP_COMMAND_NAME, type McpToolsOptions } from "./tools.ts";
@@ -66,12 +67,6 @@ export function renderClientConfig(client: McpClient, name: string, launch: McpL
 	const config =
 		client === "vscode" ? { servers: { [name]: entry } } : { mcpServers: { [name]: entry } };
 	return JSON.stringify(config, null, 2);
-}
-
-function shellQuote(token: string): string {
-	return /^[A-Za-z0-9_./:=@%+-]+$/.test(token)
-		? token
-		: `'${token.replaceAll("'", String.raw`'\''`)}'`;
 }
 
 /** `claude mcp add <name> -- <command> <args…>` registers the server without editing config files by hand. */

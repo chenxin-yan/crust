@@ -16,7 +16,17 @@ import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { isErrnoException } from "./error.ts";
-import { getWindowsShimCommand, runProcess, which } from "./process.ts";
+import { getWindowsShimCommand, runProcess, shellQuote, which } from "./process.ts";
+
+describe("shellQuote", () => {
+	it("keeps safe words bare and single-quotes empty, apostrophe, and punctuation words", () => {
+		expect(shellQuote("a/b.txt")).toBe("a/b.txt");
+		expect(shellQuote("--name=x@1")).toBe("--name=x@1");
+		expect(shellQuote("")).toBe("''");
+		expect(shellQuote("it's")).toBe(String.raw`'it'\''s'`);
+		expect(shellQuote("a b;$(rm)|&`*")).toBe("'a b;$(rm)|&`*'");
+	});
+});
 
 describe("getWindowsShimCommand", () => {
 	it("only selects command shims on Windows when shell mode was not requested", () => {
