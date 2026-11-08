@@ -132,8 +132,7 @@ interface ArgDefBase {
 	schema?: never;
 	/**
 	 * Marks the value as a secret. Crust never prints this value. It can't hide argv from the
-	 * OS (`ps`, shell history), so prefer `env`: this is redaction, not a security boundary,
-	 * and `execute()` warns on stderr when the value comes from argv.
+	 * OS (`ps`, shell history), so prefer `env`: this is redaction, not a security boundary.
 	 *
 	 * Value errors say only `Invalid value for <label>.`, `nextSteps()` omits an env-bound flag
 	 * and prints `<redacted>` for any other value, help and man pages say `Secret.`, and JSON
@@ -252,8 +251,7 @@ interface SchemaArgDef {
 	schema: StandardSchema;
 	/**
 	 * Marks the value as a secret. Crust never prints this value. It can't hide argv from the
-	 * OS (`ps`, shell history), so prefer `env`: this is redaction, not a security boundary,
-	 * and `execute()` warns on stderr when the value comes from argv.
+	 * OS (`ps`, shell history), so prefer `env`: this is redaction, not a security boundary.
 	 *
 	 * Value errors say only `Invalid value for <label>.`, `nextSteps()` omits an env-bound flag
 	 * and prints `<redacted>` for any other value, help and man pages say `Secret.`, and JSON
@@ -313,8 +311,7 @@ interface FlagDefBase {
 	schema?: never;
 	/**
 	 * Marks the value as a secret. Crust never prints this value. It can't hide argv from the
-	 * OS (`ps`, shell history), so prefer `env`: this is redaction, not a security boundary,
-	 * and `execute()` warns on stderr when the value comes from argv.
+	 * OS (`ps`, shell history), so prefer `env`: this is redaction, not a security boundary.
 	 *
 	 * Value errors say only `Invalid value for <label>.`, `nextSteps()` omits an env-bound flag
 	 * and prints `<redacted>` for any other value, help and man pages say `Secret.`, and JSON

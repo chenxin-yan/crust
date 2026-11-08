@@ -63,7 +63,7 @@ const flags = {
 
 `env` is consulted by terminal parsing only when the flag has no argv occurrence: argv wins over env, and env wins over `default`. The env value goes through the same conversion as an argv token and satisfies `required`. Help, man pages, and generated skills show `[env: NAME]`, never the value. Structured [`run()`](/docs/api/crust#runpath-input-options) input ignores `env`.
 
-`sensitive: true` marks a secret on any argument or flag, schema-backed ones included: value errors say only `Invalid value for --token.`, help and man pages say `Secret.`, JSON Schema marks it `writeOnly`, and `execute()` warns on stderr when the value comes from argv. Combining it with `default`, `choices`, or `type: "boolean"` throws a `DEFINITION` error. See [Secrets](/docs/guide/arguments-and-flags#secrets).
+`sensitive: true` marks a secret on any argument or flag, schema-backed ones included: value errors say only `Invalid value for --token.`, help and man pages say `Secret.`, and JSON Schema marks it `writeOnly`. Combining it with `default`, `choices`, or `type: "boolean"` throws a `DEFINITION` error. See [Secrets](/docs/guide/arguments-and-flags#secrets).
 
 `delimiter` splits string argv occurrences; `env.delimiter` independently splits environment text. Both require `multiple: true` and drop empty segments. Boolean argv switches are never split.
 

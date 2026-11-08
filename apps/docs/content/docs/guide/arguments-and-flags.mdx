@@ -215,13 +215,13 @@ Mark a flag or argument that holds a secret with `sensitive: true`, like `token`
 - The JSON Schema that [`schema()`](/docs/modules/extensions/schema), [`input()`](/docs/modules/extensions/input), and MCP publish marks it `writeOnly`, and a string also `format: "password"` unless it declares another format. These are hints for clients, not protection. A schema-backed field publishes no `enum`, `const`, `default`, `examples`, or `x-*` keywords.
 - Generated skills tell agents to pass it through its variable, never inline.
 
-This is redaction, not a security boundary: Crust can't hide argv from the OS. A value given on the command line shows up in `ps`, shell history, and agent transcripts, so pass secrets through `env` (or stdin, where a command reads it). When a sensitive value comes from argv anyway, `execute()` prints one warning per field on stderr, through the renderer's diagnostics so [`json()`](/docs/modules/extensions/json) keeps stdout clean. The exit code is unchanged, and [`run()`](/docs/api/crust#runpath-input-options) (MCP, embedding) never warns:
+This is redaction, not a security boundary: Crust can't hide argv from the OS. A value given on the command line shows up in `ps`, shell history, and agent transcripts, so pass secrets through `env` (or stdin, where a command reads it).
 
-```txt
-Warning: --token was passed on the command line, where process lists, shell history and transcripts can see it. Use $PUBLISH_TOKEN instead.
-```
+Crust never prints the value; if you want to nudge users toward the env var, check where the value came from. An Extension's [`ctx.sources`](/docs/api/types#extensioncontext) says whether each value came from `argv`, `env`, or elsewhere:
 
-Without an `env` binding, the warning ends with "Pass it through an environment variable instead." Values from `env` or bound by an Extension such as `input()` never warn.
+<include lang="ts" meta='title="src/deploy.ts"'>
+  ../../../examples/guide/flags-secrets.ts
+</include>
 
 A sensitive definition can't declare `default` or `choices`, because help and JSON Schema publish both. It can't be a boolean either: a boolean's value is which spelling is on argv (`--flag` or `--no-flag`), so a suggested command can't show it without revealing it. These definitions type-check but throw a `DEFINITION` error.
 
