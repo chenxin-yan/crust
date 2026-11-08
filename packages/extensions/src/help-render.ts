@@ -98,7 +98,14 @@ export function renderHelpText(
 				(arg) =>
 					[
 						formatArgText(arg.token, arg.required),
-						formatDescription(arg.description, arg.default, arg.choices, dim),
+						formatDescription(
+							arg.description,
+							arg.default,
+							arg.choices,
+							dim,
+							undefined,
+							arg.sensitive,
+						),
 					] as const,
 			),
 		),
@@ -109,7 +116,14 @@ export function renderHelpText(
 				(flag) =>
 					[
 						cyan(flag.spellings.join(", ") + (flag.type === "boolean" ? "" : ` <${flag.type}>`)),
-						formatDescription(flag.description, flag.default, flag.choices, dim, flag.env?.name),
+						formatDescription(
+							flag.description,
+							flag.default,
+							flag.choices,
+							dim,
+							flag.env?.name,
+							flag.sensitive,
+						),
 					] as const,
 			),
 		),

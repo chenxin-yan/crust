@@ -249,4 +249,21 @@ describe("schema", () => {
 		expect(exitCode).toBe(1);
 		expect(stderr).toContain("--llms");
 	});
+
+	it("--llms marks sensitive values Secret. and schema publishes them writeOnly", async () => {
+		const cli = new Crust("mycli")
+			.extend(schema())
+			.flags({ token: { type: "string", sensitive: true, env: { name: "ACME_TOKEN" } } })
+			.action(() => {});
+
+		expect((await captureExecute(cli, ["--llms"])).stdout).toContain(
+			"- `--token` (string): Secret. [env: ACME_TOKEN]",
+		);
+		const { stdout } = await captureExecute(cli, ["schema"]);
+		expect(JSON.parse(stdout).input.properties.token).toEqual({
+			type: "string",
+			format: "password",
+			writeOnly: true,
+		});
+	});
 });

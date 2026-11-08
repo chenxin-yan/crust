@@ -76,7 +76,14 @@ export function renderCommandIndex(root: CommandSnapshot, consumer: ExtensionId)
 					item(
 						`\`${arg.token}\``,
 						valueLabel(arg.type, false, false),
-						formatDescription(arg.description, arg.default, arg.choices),
+						formatDescription(
+							arg.description,
+							arg.default,
+							arg.choices,
+							undefined,
+							undefined,
+							arg.sensitive,
+						),
 					),
 				);
 			}
@@ -94,6 +101,7 @@ export function renderCommandIndex(root: CommandSnapshot, consumer: ExtensionId)
 							flag.choices,
 							undefined,
 							flag.env?.name,
+							flag.sensitive,
 						),
 					),
 				);

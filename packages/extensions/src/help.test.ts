@@ -396,4 +396,23 @@ describe("help", () => {
 		expect(process.env.HOME).toBeTruthy();
 		expect(plain).not.toContain(process.env.HOME as string);
 	});
+
+	it("renderHelp marks sensitive args and flags Secret. and keeps the env name", async () => {
+		const command = new Crust("app")
+			.args({ name: "password", type: "string", sensitive: true })
+			.flags({
+				token: {
+					type: "string",
+					sensitive: true,
+					env: { name: "ACME_TOKEN" },
+					description: "API token",
+				},
+			})
+			.action(() => {});
+		const lines = stripAnsi(await renderHelp(await command.snapshot())).split("\n");
+		expect(lines.find((l) => l.includes("--token"))).toMatch(
+			/--token <string> +Secret\. API token \[env: ACME_TOKEN\]$/,
+		);
+		expect(lines).toContainEqual(expect.stringMatching(/^ +\[password\] +Secret\.$/));
+	});
 });

@@ -479,6 +479,44 @@ describe("nextSteps", () => {
 		);
 	});
 
+	it("prints sensitive values as <redacted> and names only the flag in a delimiter note", async () => {
+		const SECRET = "SENTINEL-s3cr3t";
+		const login = defineCommand("login", (cmd) =>
+			cmd
+				.args({ name: "password", type: "string", sensitive: true })
+				.flags({
+					token: { type: "string", sensitive: true },
+					keys: { type: "string", multiple: true, delimiter: ",", sensitive: true },
+					remember: { type: "boolean", sensitive: true },
+				})
+				.action(() => {}),
+		);
+		const app = new Crust("app")
+			.extend(nextSteps())
+			.add(login)
+			.command("suggest", (cmd) =>
+				cmd.use(nextSteps).action(async ({ ctx }) => {
+					const next = await ctx.nextSteps;
+					next.add(login, {
+						args: { password: SECRET },
+						flags: { token: `-${SECRET}`, keys: [SECRET, SECRET], remember: true },
+					});
+					next.add(login, { flags: { keys: [`${SECRET},${SECRET}`] } });
+				}),
+			);
+
+		const { stderr } = await captureExecute(app, ["suggest"]);
+		// `--remember` is a switch, so it stays; the last `<redacted>` is the password argument.
+		expect(stderr).toBe(
+			[
+				'nextSteps(): skipped "app login": "--keys" value contains its delimiter ","',
+				"Next steps:",
+				"  app login --token <redacted> --keys <redacted> --keys <redacted> --remember <redacted>",
+			].join("\n"),
+		);
+		expect(stderr).not.toContain(SECRET);
+	});
+
 	it("renders omitted prototype-named arguments as omitted", async () => {
 		const seen: unknown[] = [];
 		const target = defineCommand("target", (cmd) =>

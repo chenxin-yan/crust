@@ -40,7 +40,9 @@ async function readInput(value: string, signal: AbortSignal): Promise<string> {
  * or default. It binds in `setup`, so every `preRun` sees the values whatever the
  * `.extend()` order, and `--input` is read even when a flag handler such as
  * `--help` takes over. Adds a "JSON input" section to the root command's
- * documentation saying so.
+ * documentation saying so. When the routed command has a `sensitive` argument or flag,
+ * malformed JSON reports only `--input is not valid JSON`, since the parser's message can
+ * quote the text.
  */
 export const input: ExtensionFactory<[], {}, [], typeof inputFlags> =
 	/* @__PURE__ */ defineExtension(JSON_INPUT).factory((extension) =>
@@ -61,6 +63,11 @@ export const input: ExtensionFactory<[], {}, [], typeof inputFlags> =
 				try {
 					values = JSON.parse(text);
 				} catch (cause) {
+					// The parser's message can quote the text, which may hold a sensitive value.
+					const { args, flags } = context.command;
+					if ([...args, ...Object.values(flags)].some((def) => def.sensitive)) {
+						throw new CrustError("PARSE", "--input is not valid JSON");
+					}
 					const reason = cause instanceof Error ? cause.message : String(cause);
 					throw new CrustError("PARSE", `--input: invalid JSON (${reason})`).withCause(cause);
 				}

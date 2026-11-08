@@ -5,6 +5,9 @@ import { shellQuote } from "@crustjs/utils/process";
 
 import type { NextStep } from "./next-steps.ts";
 
+/** Stands in for a sensitive value; printed unquoted as `<redacted>`. */
+const REDACTED = Symbol("redacted");
+
 /** Argv parses a `json` value with `JSON.parse`, so even a string value needs its JSON encoding. */
 function argvValue(value: RunInputValue, type: ValueType | undefined, label: string): string {
 	if (typeof value === "string" && type !== "json") return value;
@@ -32,12 +35,12 @@ function stepArgv(
 	root: CommandSnapshot,
 	names: readonly string[],
 	input: NextStep["input"],
-): string[] {
+): (string | typeof REDACTED)[] {
 	let command = root;
 	for (const name of names) command = command.subCommands[name]!;
 	const { args = {}, flags = {}, raw = [] } = input ?? {};
 
-	const options: string[] = [];
+	const options: (string | typeof REDACTED)[] = [];
 	for (const [name, value] of Object.entries(flags)) {
 		if (value === undefined) continue;
 		if (!Object.hasOwn(command.flags, name)) throw new Error(`unknown flag "--${name}"`);
@@ -54,9 +57,14 @@ function stepArgv(
 			// The parser splits each occurrence on the delimiter and drops empty pieces.
 			if (flag.delimiter !== undefined && (text === "" || text.includes(flag.delimiter))) {
 				const problem = text === "" ? "is dropped by" : "contains";
+				const quoted = flag.sensitive ? "" : ` ${JSON.stringify(text)}`;
 				throw new Error(
-					`"--${name}" value ${JSON.stringify(text)} ${problem} its delimiter ${JSON.stringify(flag.delimiter)}`,
+					`"--${name}" value${quoted} ${problem} its delimiter ${JSON.stringify(flag.delimiter)}`,
 				);
+			}
+			if (flag.sensitive) {
+				options.push(`--${name}`, REDACTED);
+				continue;
 			}
 			// The parser reads a separate token starting with "-" as a flag, not a value.
 			options.push(...(text.startsWith("-") ? [`--${name}=${text}`] : [`--${name}`, text]));
@@ -67,7 +75,7 @@ function stepArgv(
 		if (!command.args.some((arg) => arg.name === name))
 			throw new Error(`unknown argument "${name}"`);
 	}
-	const positionals: string[] = [];
+	const positionals: (string | typeof REDACTED)[] = [];
 	let omitted: string | undefined;
 	for (const arg of command.args) {
 		// hasOwn: an argument named `constructor` or `__proto__` must not read Object.prototype.
@@ -79,9 +87,10 @@ function stepArgv(
 		if (omitted !== undefined)
 			throw new Error(`argument "${arg.name}" follows omitted "${omitted}"`);
 		positionals.push(
-			...(arg.variadic && Array.isArray(value) ? value : [value]).map((item) =>
-				argvValue(item, arg.type, `argument "${arg.name}"`),
-			),
+			...(arg.variadic && Array.isArray(value) ? value : [value]).map((item) => {
+				const text = argvValue(item, arg.type, `argument "${arg.name}"`);
+				return arg.sensitive ? REDACTED : text;
+			}),
 		);
 	}
 	// Tokens after `--` fill unfilled positional arguments before they reach `rawArgs`.
@@ -93,7 +102,7 @@ function stepArgv(
 		raw.length > 0 ||
 		(positionals.length > 0 &&
 			(Object.keys(command.subCommands).length > 0 ||
-				positionals.some((token) => token.startsWith("-"))));
+				positionals.some((token) => token !== REDACTED && token.startsWith("-"))));
 	return [...names, ...options, ...(separator ? ["--"] : []), ...positionals, ...raw];
 }
 
@@ -110,7 +119,7 @@ export function renderNextSteps(
 	const lines: string[] = [];
 	for (const step of steps) {
 		let path: readonly string[] | undefined;
-		let argv: string[];
+		let argv: (string | typeof REDACTED)[];
 		try {
 			path = commandPathOf(step.command);
 			if (!path) throw new Error("the application does not add this command");
@@ -120,7 +129,9 @@ export function renderNextSteps(
 			notes.push(`skipped "${name}": ${error instanceof Error ? error.message : String(error)}`);
 			continue;
 		}
-		const line = [root.meta.name, ...argv].map(shellQuote).join(" ");
+		const line = [root.meta.name, ...argv]
+			.map((token) => (token === REDACTED ? "<redacted>" : shellQuote(token)))
+			.join(" ");
 		lines.push(...(step.description ? [`  ${step.description}:`, `    ${line}`] : [`  ${line}`]));
 	}
 	return { notes, text: lines.length > 0 ? ["Next steps:", ...lines].join("\n") : "" };

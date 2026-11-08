@@ -163,6 +163,59 @@ describe("input", () => {
 		expect((error as CrustError).message).toMatch(message);
 	});
 
+	describe("sensitive fields", () => {
+		const SECRET = "SENTINEL-s3cr3t";
+		const secretApp = () =>
+			new Crust("app")
+				.extend(input())
+				.flags({
+					token: {
+						type: "string",
+						sensitive: true,
+						parse: (raw: string) => {
+							throw new Error(`rejected ${raw}`);
+						},
+					},
+					endpoint: { type: "url", sensitive: true },
+				})
+				.action(() => {});
+
+		it.each([
+			["malformed JSON", `{"token":"${SECRET}`, "--input is not valid JSON", undefined],
+			[
+				"a rejected value",
+				`{"token":"${SECRET}"}`,
+				"Invalid value for --token.",
+				{ flag: "token" },
+			],
+			[
+				"an invalid URL",
+				`{"endpoint":"${SECRET}"}`,
+				"Invalid value for --endpoint.",
+				{ flag: "endpoint" },
+			],
+		])("reports %s without the secret", async (_label, payload, message, details) => {
+			const outcome = await secretApp().run([], { flags: { input: payload } });
+			if (outcome.status !== "failed") throw new Error(`expected a failure, got ${outcome.status}`);
+			const error = outcome.error;
+			expect(error).toBeInstanceOf(CrustError);
+			expect(error).toMatchObject({ code: "PARSE", message });
+			expect((error as CrustError).details).toEqual(details);
+			expect((error as CrustError).cause).toBeUndefined();
+			expect(JSON.stringify((error as CrustError).toJSON())).not.toContain(SECRET);
+
+			const run = await captureExecute(secretApp().extend(json()), ["--json", "--input", payload]);
+			expect(run.stderr).toContain(message);
+			expect(run.stdout + run.stderr).not.toContain(SECRET);
+		});
+
+		it("keeps the parser's detail for malformed JSON on commands without sensitive fields", async () => {
+			expect(((await failure("{target")) as CrustError).message).toMatch(
+				/^--input: invalid JSON \(/,
+			);
+		});
+	});
+
 	it("reports unknown keys and mistyped values as the structured binder does", async () => {
 		expect(await failure('{"target":"prod","nope":1}')).toMatchObject({
 			code: "PARSE",
