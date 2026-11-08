@@ -516,6 +516,23 @@ describe("api <path>", () => {
 		expect(calls).toHaveLength(1);
 	});
 
+	it("follows a --paginate page with the same URL and a reused init whose method changed", async () => {
+		const calls = stubFetch();
+		const shared: RequestInit = { method: "HEAD" };
+		let pagesSeen = 0;
+		const app = buildApp({
+			paginate: () => {
+				pagesSeen++;
+				if (pagesSeen === 2) shared.method = "GET";
+				return pagesSeen <= 2 ? { path: "/users", init: shared } : undefined;
+			},
+		});
+		const { exitCode } = await captureExecute(app, ["api", "/users", "--paginate"]);
+
+		expect(exitCode).toBe(0);
+		expect(calls.map(({ method }) => method)).toEqual(["GET", "HEAD", "GET"]);
+	});
+
 	it("follows a --paginate page with the same URL but a new init", async () => {
 		const calls = stubFetch(({ body }) => new Response(body ?? "{}"));
 		const app = buildApp({
