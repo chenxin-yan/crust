@@ -248,7 +248,8 @@ export interface Renderer {
 	result?(value: unknown): void;
 	/**
 	 * A failure, in `execute()` only, at most once per invocation, after every `onError` hook
-	 * declined it; never for a cancellation, which Core does not render. If it throws, Core
+	 * declined it; never for a cancellation, which Core does not render (cleanup failures that
+	 * accompany one print as Core's default lines). If it throws, Core
 	 * renders the original failure. Default: Core's `Error: <message>` lines on stderr.
 	 */
 	error?(error: unknown): void;

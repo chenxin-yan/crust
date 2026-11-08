@@ -3038,7 +3038,7 @@ describe("Crust .execute()", () => {
 			},
 		);
 
-		it("exits 1 and renders only the cleanup failure when cancellation cleanup fails", async () => {
+		it("exits 130 and renders only the cleanup failure when cancellation cleanup fails", async () => {
 			const seen: unknown[] = [];
 			const app = new Crust("cli")
 				.provide(failingDisposer("db close failed")())
@@ -3048,8 +3048,8 @@ describe("Crust .execute()", () => {
 					throw new DOMException("Prompt was cancelled.", "AbortError");
 				});
 
-			expect(await app.execute({ argv: [] })).toBe(1);
-			expect(process.exitCode).toBe(1);
+			expect(await app.execute({ argv: [] })).toBe(130);
+			expect(process.exitCode).toBe(130);
 			expect(seen).toHaveLength(1);
 			expect(stderrChunks).toEqual(["Cleanup failed: db close failed"]);
 		});
