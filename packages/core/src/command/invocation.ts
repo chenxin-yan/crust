@@ -130,9 +130,16 @@ function createInvocationOutput(io: InvocationIO): InvocationOutput {
  */
 export const SNAPSHOT_PATH_ENV = "CRUST_INTERNAL_SNAPSHOT_PATH";
 
-/** A SIGINT this soon after the first is the same Ctrl-C relayed by a parent process. */
-const RELAYED_SIGINT_WINDOW_MS = 50;
+/** A signal this soon after the first is the same one relayed by a parent process or a group kill. */
+const RELAYED_SIGNAL_WINDOW_MS = 50;
 const EXIT_CODE_CANCELLED = 130;
+/** Signals `execute()` turns into cancellation: the abort message and the 128+n exit code. */
+const CANCELLING_SIGNALS = {
+	SIGINT: { message: "Interrupted by SIGINT.", exitCode: EXIT_CODE_CANCELLED },
+	SIGTERM: { message: "Terminated by SIGTERM.", exitCode: 143 },
+} as const;
+type CancellingSignal = keyof typeof CANCELLING_SIGNALS;
+const CANCELLING_SIGNAL_NAMES = Object.keys(CANCELLING_SIGNALS) as CancellingSignal[];
 
 function isAbortError(error: CaughtError): boolean {
 	if (!(error instanceof Error)) return false;
@@ -969,7 +976,7 @@ export async function executeInvocation(
 ): Promise<number> {
 	const argv = options?.argv ?? process.argv.slice(2);
 	const io: InvocationIO = { ...DEFAULT_IO, ...options?.io };
-	// One controller per invocation so SIGINT and a caller signal share `ctx.signal`.
+	// One controller per invocation so SIGINT, SIGTERM and a caller signal share `ctx.signal`.
 	const controller = new AbortController();
 	const signal = options?.signal
 		? AbortSignal.any([options.signal, controller.signal])
@@ -1010,21 +1017,26 @@ export async function executeInvocation(
 
 		// Persistent, not `once`: spinner-style one-shot listeners re-raise SIGINT only when nobody listens.
 		let interruptedAt = Number.NEGATIVE_INFINITY;
-		const onSigint = (): void => {
+		// A caller's `options.signal` abort keeps 130 even when a signal arrives after it.
+		let cancelledExitCode: number = EXIT_CODE_CANCELLED;
+		const onSignal = (name: CancellingSignal): void => {
 			if (!controller.signal.aborted) {
 				interruptedAt = performance.now();
-				controller.abort(new DOMException("Interrupted by SIGINT.", "AbortError"));
+				if (!signal.aborted) cancelledExitCode = CANCELLING_SIGNALS[name].exitCode;
+				controller.abort(new DOMException(CANCELLING_SIGNALS[name].message, "AbortError"));
 				return;
 			}
 			// `npm run`, `npx`, `bun run`, and pnpm relay the terminal's SIGINT to their child as well
-			// (npm/cli#8164), so one Ctrl-C arrives twice within a millisecond; a person pressing
-			// twice takes far longer.
-			if (performance.now() - interruptedAt < RELAYED_SIGINT_WINDOW_MS) return;
-			process.removeListener("SIGINT", onSigint);
-			if (process.listenerCount("SIGINT") === 0) process.kill(process.pid, "SIGINT");
+			// (npm/cli#8164), and a forwarded SIGTERM can meet a process-group kill, so one signal
+			// arrives twice within a millisecond; a person pressing twice takes far longer.
+			if (performance.now() - interruptedAt < RELAYED_SIGNAL_WINDOW_MS) return;
+			process.removeListener(name, onSignal);
+			if (process.listenerCount(name) === 0) process.kill(process.pid, name);
 		};
-		// An inherited ignore (background job) stays: listening would make SIGINT fatal again.
-		if (!isSignalIgnored("SIGINT")) process.on("SIGINT", onSigint);
+		// An inherited ignore (background job, `nohup`) stays: listening would make the signal fatal again.
+		for (const name of CANCELLING_SIGNAL_NAMES) {
+			if (!isSignalIgnored(name)) process.on(name, onSignal);
+		}
 
 		const output = createInvocationOutput(io);
 		let extensionContext: ExtensionContext | undefined;
@@ -1042,7 +1054,7 @@ export async function executeInvocation(
 				async (error, context) => {
 					rendered = { error };
 					const cancelled = cancellationCleanupFailures(error) !== undefined;
-					process.exitCode = cancelled ? EXIT_CODE_CANCELLED : 1;
+					process.exitCode = cancelled ? cancelledExitCode : 1;
 					return renderFailure(error, argv, prepared, output, signal, context);
 				},
 			);
@@ -1064,10 +1076,10 @@ export async function executeInvocation(
 				// A throwing getter on an arbitrary thrown value must not replace the failure.
 			}
 			if (cleanupFailure) io.stderr(describeFailure(cleanupFailure.error, "Cleanup failed"));
-			// Cancellation keeps exit code 130 even when cleanup failed while unwinding it
-			// (callers such as shell loops must still see the interrupt). Core always
-			// preserves a nonzero failure outcome, regardless of what onError hooks do.
-			const exitCode = cancellationCleanupFailures(error) === undefined ? 1 : EXIT_CODE_CANCELLED;
+			// Cancellation keeps its exit code (130, or 143 after SIGTERM) even when cleanup failed
+			// while unwinding it (callers such as shell loops must still see the interrupt). Core
+			// always preserves a nonzero failure outcome, regardless of what onError hooks do.
+			const exitCode = cancellationCleanupFailures(error) === undefined ? 1 : cancelledExitCode;
 			process.exitCode = exitCode;
 			if (!rendered) {
 				await renderFailure(error, argv, prepared, output, signal, extensionContext);
@@ -1076,7 +1088,7 @@ export async function executeInvocation(
 			}
 			return exitCode;
 		} finally {
-			process.removeListener("SIGINT", onSigint);
+			for (const name of CANCELLING_SIGNAL_NAMES) process.removeListener(name, onSignal);
 		}
 		return 0;
 	};

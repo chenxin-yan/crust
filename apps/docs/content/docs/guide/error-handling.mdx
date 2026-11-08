@@ -80,7 +80,7 @@ Ctrl+C in a Crust prompt raises an `AbortError`. By default, `execute()` prints 
 
 Keep side effects after prompts so cancelling leaves nothing to undo. To cancel explicitly, throw `new DOMException("Cancelled", "AbortError")`.
 
-The first Ctrl+C during `execute()` aborts the action's `signal`. Pass it to cancellable APIs such as `fetch(url, { signal })`; work that ignores it keeps running. An `AbortError` still allows cleanup; if cleanup fails, its failure renders and the exit code stays 130. See [`execute()`](/docs/api/crust#executeoptions) for caller signals and repeated Ctrl+C.
+The first Ctrl+C during `execute()` aborts the action's `signal`. Pass it to cancellable APIs such as `fetch(url, { signal })`; work that ignores it keeps running. An `AbortError` still allows cleanup; if cleanup fails, its failure renders and the exit code stays 130. `SIGTERM`, sent by `docker stop`, Kubernetes, `timeout`, and CI cancellation, cancels the same way and exits 143. See [`execute()`](/docs/api/crust#executeoptions) for caller signals and repeated signals.
 
 ## Handle errors in code
 
