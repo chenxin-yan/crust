@@ -102,6 +102,43 @@ function _typecheckBrandsInlineUseDemandsThatTheCallSiteDoesNotProvide() {
 	void invalidCompositions;
 }
 
+// .use() takes an Extension or its factory for the Contexts it provides
+function _typecheckUseTakesAnExtensionForTheContextsItProvides() {
+	const config = defineContext("config").setup(() => ({ url: "memory://" }));
+	const greeter = defineContext("greeter").setup(() => (name: string) => `hi ${name}`);
+	const greeting = defineExtension(defineExtensionId("greeting"))
+		.provide(greeter())
+		.factory((extension) => extension);
+	const viaFactory = defineCommand("hello", (cmd) =>
+		cmd.use(greeting).action(async ({ ctx }) => {
+			type _Greeter = Expect<Equal<Awaited<typeof ctx.greeter>, (name: string) => string>>;
+		}),
+	);
+	const viaInstance = defineCommand("hey", (cmd) =>
+		cmd.use(config, greeting()).action(async ({ ctx }) => {
+			type _Greeter = Expect<Equal<Awaited<typeof ctx.greeter>, (name: string) => string>>;
+			type _Config = Expect<Equal<Awaited<typeof ctx.config>, { url: string }>>;
+		}),
+	);
+
+	new Crust("cli").provide(config()).extend(greeting()).add(viaFactory, viaInstance);
+	new Crust("cli")
+		.extend(greeting())
+		.command("inline", (cmd) =>
+			cmd.use(greeting).action(async ({ ctx }) => void (await ctx.greeter)),
+		);
+
+	const invalidCompositions = () => {
+		// @ts-expect-error -- the Extension providing greeter is not extended at .add()
+		new Crust("cli").add(viaFactory);
+		// @ts-expect-error -- the Extension providing greeter is not extended at the inline call site
+		new Crust("cli").command("inline", (cmd) => cmd.use(greeting).action(() => {}));
+		// @ts-expect-error -- an Extension's own Contexts do not satisfy the command's other demands
+		new Crust("cli").extend(greeting()).add(viaInstance);
+	};
+	void invalidCompositions;
+}
+
 // keeps .use() brand parity for defineCommand at .add() and .extend()
 function _typecheckKeepsUseBrandParityForDefineCommandAtAddAndExtend() {
 	const config = defineContext("config").setup(() => ({ url: "memory://" }));

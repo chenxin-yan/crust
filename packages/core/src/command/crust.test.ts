@@ -465,6 +465,88 @@ describe("Crust .add() with inline definitions", () => {
 			'No provider for Context "db"',
 		);
 	});
+
+	it("gives a command the Contexts of an Extension it uses", async () => {
+		const greeter = defineContext("greeter").setup(() => (name: string) => `hi ${name}`);
+		const greeting = defineExtension(defineExtensionId("test:greeting"))
+			.provide(greeter())
+			.factory((extension) => extension);
+		const hello = defineCommand("hello", (command) =>
+			command.use(greeting).action(async ({ ctx }) => (await ctx.greeter)("factory")),
+		);
+		const hey = defineCommand("hey", (command) =>
+			command.use(greeting()).action(async ({ ctx }) => (await ctx.greeter)("instance")),
+		);
+		const app = new Crust("cli").extend(greeting()).add(hello, hey);
+
+		expect(await app.run(["hello"], {})).toMatchObject({
+			status: "completed",
+			result: "hi factory",
+		});
+		expect(await app.run(["hey"], {})).toMatchObject({
+			status: "completed",
+			result: "hi instance",
+		});
+	});
+
+	it("checks the Contexts of a used Extension instance, not only its id", async () => {
+		const db = defineContext("db").setup(() => "db");
+		const base = defineExtension(defineExtensionId("test:storage"));
+		const full = base.provide(db());
+		const query = defineCommand("query", (command) => command.use(full));
+
+		// @ts-expect-error -- runtime regression: the extended same-id variant provides no db.
+		const app = new Crust("cli").extend(base).add(query);
+		await expect(app.snapshot()).rejects.toThrow('No provider for Context "db"');
+	});
+
+	it("does not demand the dependencies an .of() value of a used Extension dropped", async () => {
+		const config = defineContext("config").setup(() => "configuration");
+		const db = defineContext("db")
+			.use(config)
+			.setup(async ({ ctx }) => `db:${await ctx.config}`);
+		const bound = defineExtension(defineExtensionId("test:bound")).provide(db.of("bound db"));
+		const query = defineCommand("query", (command) =>
+			command.use(bound).action(async ({ ctx }) => await ctx.db),
+		);
+
+		const app = new Crust("cli").extend(bound).add(query);
+		expect(await app.run(["query"], {})).toMatchObject({
+			status: "completed",
+			result: "bound db",
+		});
+	});
+
+	it("matches a used Extension copy by its defining id, as .extend() does", async () => {
+		const value = defineContext("value").setup(() => "ok");
+		const original = defineExtension(defineExtensionId("test:original")).provide(value());
+		const copy = { ...original, id: defineExtensionId("test:copy") };
+		const query = defineCommand("query", (command) =>
+			command.use(copy).action(async ({ ctx }) => await ctx.value),
+		);
+
+		const app = new Crust("cli").extend(copy).add(query);
+		expect(await app.run(["query"], {})).toMatchObject({ status: "completed", result: "ok" });
+	});
+
+	it("rejects a command that uses an Extension the application does not extend", async () => {
+		const greeter = defineContext("greeter").setup(() => "hi");
+		const greeting = defineExtension(defineExtensionId("test:greeting"))
+			.provide(greeter())
+			.factory((extension) => extension);
+		const hello = defineCommand("hello", (command) => command.use(greeting));
+
+		// @ts-expect-error -- runtime regression deliberately exercises the preparation check.
+		const app = new Crust("cli").add(hello);
+		const error = await app.snapshot().catch((caught: unknown) => caught);
+		expect(error).toBeInstanceOf(CrustError);
+		expect(error).toMatchObject({
+			code: "DEFINITION",
+			message:
+				'Command "cli hello" uses Extension "test:greeting", which the application does not extend',
+			details: { subject: "extension", name: "test:greeting", reason: "missing-extension" },
+		});
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
