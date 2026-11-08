@@ -17,7 +17,7 @@ $ my-cli deploy --input @deploy.json
 $ echo '{"target":"prod"}' | my-cli deploy --input -
 ```
 
-`input()` adds a recursive string `--input` flag. Without it, nothing changes. `--input` is read and bound in `setup`, before any flag handler or `preRun`, so every `preRun` check sees its values whatever the `.extend()` order. It is read even when a flag handler such as `--help` takes over: `--input - --help` waits for stdin to end before printing help, and an invalid `--input` fails the command instead of showing help.
+`input()` adds a recursive string `--input` flag. Without it, nothing changes. It also adds a "JSON input" section to the root command's help, man page, and generated skills that states this input contract, so an agent reading the CLI's documentation knows what `--input` takes. `--input` is read and bound in `setup`, before any flag handler or `preRun`, so every `preRun` check sees its values whatever the `.extend()` order. It is read even when a flag handler such as `--help` takes over: `--input - --help` waits for stdin to end before printing help, and an invalid `--input` fails the command instead of showing help.
 
 ## Behavior
 

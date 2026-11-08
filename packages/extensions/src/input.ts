@@ -39,55 +39,65 @@ async function readInput(value: string, signal: AbortSignal): Promise<string> {
  * on argv win over the same keys; every other key replaces the environment value
  * or default. It binds in `setup`, so every `preRun` sees the values whatever the
  * `.extend()` order, and `--input` is read even when a flag handler such as
- * `--help` takes over.
+ * `--help` takes over. Adds a "JSON input" section to the root command's
+ * documentation saying so.
  */
 export const input: ExtensionFactory<[], {}, [], typeof inputFlags> =
 	/* @__PURE__ */ defineExtension(JSON_INPUT).factory((extension) =>
-		// Setup, not preRun: setups all run before the first preRun, so no check misses the values.
-		extension.flags(inputFlags).setup(async (context) => {
-			if (typeof context.flags.input !== "string") return;
-			const text = await readInput(context.flags.input, context.signal);
-			let values: unknown;
-			try {
-				values = JSON.parse(text);
-			} catch (cause) {
-				const reason = cause instanceof Error ? cause.message : String(cause);
-				throw new CrustError("PARSE", `--input: invalid JSON (${reason})`).withCause(cause);
-			}
-			if (typeof values !== "object" || values === null || Array.isArray(values)) {
-				throw new CrustError(
-					"PARSE",
-					"--input: expected a JSON object keyed by argument and flag names",
+		extension
+			.flags(inputFlags)
+			.sections(() => [
+				{
+					command: [],
+					title: "JSON input",
+					body: '--input takes one JSON object keyed by the command\'s argument and flag names ("raw" for passthrough values): inline JSON, @file, or - for stdin. Arguments and flags given on the command line win.',
+				},
+			])
+			// Setup, not preRun: setups all run before the first preRun, so no check misses the values.
+			.setup(async (context) => {
+				if (typeof context.flags.input !== "string") return;
+				const text = await readInput(context.flags.input, context.signal);
+				let values: unknown;
+				try {
+					values = JSON.parse(text);
+				} catch (cause) {
+					const reason = cause instanceof Error ? cause.message : String(cause);
+					throw new CrustError("PARSE", `--input: invalid JSON (${reason})`).withCause(cause);
+				}
+				if (typeof values !== "object" || values === null || Array.isArray(values)) {
+					throw new CrustError(
+						"PARSE",
+						"--input: expected a JSON object keyed by argument and flag names",
+					);
+				}
+				const { commandInputSchema, parseCommandInput, RAW_INPUT_PROPERTY } =
+					await import("@crustjs/core/tooling");
+				try {
+					// Throws when an arg and a flag share a name or one is named `raw`: keys would be ambiguous.
+					commandInputSchema(context.command, context.commandPath);
+				} catch (cause) {
+					const reason = cause instanceof Error ? cause.message : String(cause);
+					throw new CrustError("PARSE", `--input: ${reason}`).withCause(cause);
+				}
+				// Drop keys argv gave before conversion, so an invalid overridden value never fails.
+				const { args, flags, raw } = context.sources;
+				const given = new Set(
+					[...Object.entries(args), ...Object.entries(flags), [RAW_INPUT_PROPERTY, raw]]
+						.filter(([, source]) => source === "argv")
+						.map(([name]) => name),
 				);
-			}
-			const { commandInputSchema, parseCommandInput, RAW_INPUT_PROPERTY } =
-				await import("@crustjs/core/tooling");
-			try {
-				// Throws when an arg and a flag share a name or one is named `raw`: keys would be ambiguous.
-				commandInputSchema(context.command, context.commandPath);
-			} catch (cause) {
-				const reason = cause instanceof Error ? cause.message : String(cause);
-				throw new CrustError("PARSE", `--input: ${reason}`).withCause(cause);
-			}
-			// Drop keys argv gave before conversion, so an invalid overridden value never fails.
-			const { args, flags, raw } = context.sources;
-			const given = new Set(
-				[...Object.entries(args), ...Object.entries(flags), [RAW_INPUT_PROPERTY, raw]]
-					.filter(([, source]) => source === "argv")
-					.map(([name]) => name),
-			);
-			const supplied = Object.fromEntries(
-				Object.entries(values).filter(([name]) => !given.has(name)),
-			);
-			let payload: RunInputPayload;
-			try {
-				payload = parseCommandInput(context.command, supplied);
-			} catch (cause) {
-				if (cause instanceof CrustError) throw cause;
-				// parseCommandInput throws a TypeError for an invalid `url` value.
-				const reason = cause instanceof Error ? cause.message : String(cause);
-				throw new CrustError("PARSE", `--input: expected a URL (${reason})`).withCause(cause);
-			}
-			context.bindInput(payload);
-		}),
+				const supplied = Object.fromEntries(
+					Object.entries(values).filter(([name]) => !given.has(name)),
+				);
+				let payload: RunInputPayload;
+				try {
+					payload = parseCommandInput(context.command, supplied);
+				} catch (cause) {
+					if (cause instanceof CrustError) throw cause;
+					// parseCommandInput throws a TypeError for an invalid `url` value.
+					const reason = cause instanceof Error ? cause.message : String(cause);
+					throw new CrustError("PARSE", `--input: expected a URL (${reason})`).withCause(cause);
+				}
+				context.bindInput(payload);
+			}),
 	);

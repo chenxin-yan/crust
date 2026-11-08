@@ -71,6 +71,22 @@ describe("input", () => {
 		});
 	});
 
+	it("documents --input in a root help section that subcommands do not repeat", async () => {
+		const app = new Crust("app")
+			.extend(input(), help())
+			.command("deploy", (cmd) => cmd.action(() => {}));
+		const snapshot = await app.snapshot();
+
+		expect(snapshot.meta.sections).toEqual([
+			expect.objectContaining({
+				title: "JSON input",
+				body: '--input takes one JSON object keyed by the command\'s argument and flag names ("raw" for passthrough values): inline JSON, @file, or - for stdin. Arguments and flags given on the command line win.',
+			}),
+		]);
+		expect((await captureExecute(app, ["--help"])).stdout).toContain("JSON input:");
+		expect((await captureExecute(app, ["deploy", "--help"])).stdout).not.toContain("JSON input:");
+	});
+
 	it("lets arguments and flags given on argv win over the same JSON keys", async () => {
 		const { stdout } = await captureExecute(deployApp(), [
 			"staging",
