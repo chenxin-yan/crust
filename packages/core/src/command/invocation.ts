@@ -903,11 +903,11 @@ async function renderFailure(
 		// Rendering must not hide the original invocation failure.
 	}
 	// A user abort is not an error to report unless an onError hook claims it. Cleanup
-	// that failed while unwinding it renders as Core's default lines: a Renderer's
-	// `error` never receives a cancellation.
+	// that failed while unwinding it goes to the Renderer's `cleanup`: its `error` never
+	// receives a cancellation.
 	const cleanupFailures = cancellationCleanupFailures(error);
 	if (cleanupFailures) {
-		for (const failure of cleanupFailures) output.io.stderr(describeFailure(failure));
+		for (const failure of cleanupFailures) renderCleanupFailure(failure, output, "Error");
 		return undefined;
 	}
 	const renderer = output.renderer;
@@ -921,6 +921,20 @@ async function renderFailure(
 	}
 	output.io.stderr(describeFailure(error));
 	return undefined;
+}
+
+/** Render one cleanup failure through the Renderer's `cleanup`, else as Core's `label: message` lines. */
+function renderCleanupFailure(error: CaughtError, output: InvocationOutput, label: string): void {
+	const renderer = output.renderer;
+	if (renderer?.cleanup) {
+		try {
+			renderer.cleanup(error);
+			return;
+		} catch {
+			// A failing renderer must never hide the cleanup failure.
+		}
+	}
+	output.io.stderr(describeFailure(error, label));
 }
 
 /** Explicitly injected IO opts an invocation into the ambient terminal scope. */
@@ -1061,7 +1075,7 @@ export async function executeInvocation(
 		} catch (error) {
 			// Disposal wraps the failure rendered above as `suppressed` (Object.is: the
 			// body may have thrown NaN or any primitive). Render only the cleanup side;
-			// onError hooks already ran and never saw it.
+			// onError hooks and the Renderer's `error` already ran and never see it.
 			let cleanupFailure: { error: unknown } | undefined;
 			try {
 				if (
@@ -1075,7 +1089,7 @@ export async function executeInvocation(
 			} catch {
 				// A throwing getter on an arbitrary thrown value must not replace the failure.
 			}
-			if (cleanupFailure) io.stderr(describeFailure(cleanupFailure.error, "Cleanup failed"));
+			if (cleanupFailure) renderCleanupFailure(cleanupFailure.error, output, "Cleanup failed");
 			// Cancellation keeps its exit code (130, or 143 after SIGTERM) even when cleanup failed
 			// while unwinding it (callers such as shell loops must still see the interrupt). Core
 			// always preserves a nonzero failure outcome, regardless of what onError hooks do.

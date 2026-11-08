@@ -163,6 +163,47 @@ describe("invocation cancellation signal", () => {
 		},
 	);
 
+	it.each([
+		["SIGINT", 130],
+		["SIGTERM", 143],
+	] as const)(
+		"execute() passes a Context disposal failure after %s to the renderer's cleanup and exits %i",
+		async (name, code) => {
+			const { ready, action } = awaitingSignal();
+			const cleanups: unknown[] = [];
+			const stderr: string[] = [];
+			const disposalError = new Error("db close failed");
+			const resource = defineContext("resource").setup(({ defer }) => {
+				defer(() => {
+					throw disposalError;
+				});
+			});
+			const exitCode = new Crust("cli")
+				.provide(resource())
+				.extend(
+					defineExtension(defineExtensionId("render")).renderer((ctx) => ({
+						text: ctx.stdout,
+						diag: ctx.stderr,
+						cleanup: (error) => cleanups.push(error),
+					})),
+				)
+				.action(async (ctx) => {
+					await ctx.ctx.resource;
+					return action(ctx);
+				})
+				.execute({ argv: [], io: { stdout() {}, stderr: (text) => stderr.push(text) } });
+
+			await ready;
+			// Invoke Core's listener directly: emitting a real signal would reach the test runner.
+			process.listeners(name).at(-1)!(name);
+
+			expect(await exitCode).toBe(code);
+			expect(process.exitCode).toBe(code);
+			expect(cleanups).toEqual([disposalError]);
+			expect(stderr).toEqual([]);
+		},
+	);
+
 	it("execute() keeps exit code 130 and renders only the dispose failure when an action's await using fails while aborting", async () => {
 		const { ready, action } = awaitingSignal();
 		const controller = new AbortController();
@@ -198,40 +239,53 @@ describe("invocation cancellation signal", () => {
 		expect(stderr).toEqual(["Error: connection close failed"]);
 	});
 
-	it("renders a cancellation's cleanup failure as Core's lines, never through a renderer's error", async () => {
-		const { ready, action } = awaitingSignal();
-		const controller = new AbortController();
-		const rendered: unknown[] = [];
-		const stderr: string[] = [];
-		const exitCode = new Crust("cli")
-			.extend(
-				defineExtension(defineExtensionId("render")).renderer((ctx) => ({
-					text: ctx.stdout,
-					diag: ctx.stderr,
-					error: (error) => rendered.push(error),
-				})),
-			)
-			.action(async (ctx) => {
-				await using _connection = {
-					async [Symbol.asyncDispose]() {
-						throw new Error("connection close failed");
-					},
-				};
-				return await action(ctx);
-			})
-			.execute({
-				argv: [],
-				io: { stdout() {}, stderr: (text) => stderr.push(text) },
-				signal: controller.signal,
-			});
+	it.each([
+		["with cleanup", true],
+		["without cleanup", false],
+	])(
+		"renders a cancellation's cleanup failure through a renderer %s, never its error",
+		async (_, withCleanup) => {
+			const { ready, action } = awaitingSignal();
+			const controller = new AbortController();
+			const rendered: unknown[] = [];
+			const cleanups: unknown[] = [];
+			const stderr: string[] = [];
+			const exitCode = new Crust("cli")
+				.extend(
+					defineExtension(defineExtensionId("render")).renderer((ctx) => ({
+						text: ctx.stdout,
+						diag: ctx.stderr,
+						error: (error) => rendered.push(error),
+						...(withCleanup && { cleanup: (error: unknown) => cleanups.push(error) }),
+					})),
+				)
+				.action(async (ctx) => {
+					await using _connection = {
+						async [Symbol.asyncDispose]() {
+							throw new Error("connection close failed");
+						},
+					};
+					return await action(ctx);
+				})
+				.execute({
+					argv: [],
+					io: { stdout() {}, stderr: (text) => stderr.push(text) },
+					signal: controller.signal,
+				});
 
-		await ready;
-		controller.abort(new DOMException("Caller cancelled.", "AbortError"));
+			await ready;
+			controller.abort(new DOMException("Caller cancelled.", "AbortError"));
 
-		expect(await exitCode).toBe(130);
-		expect(rendered).toEqual([]);
-		expect(stderr).toEqual(["Error: connection close failed"]);
-	});
+			expect(await exitCode).toBe(130);
+			expect(rendered).toEqual([]);
+			if (withCleanup) {
+				expect(cleanups).toEqual([expect.objectContaining({ message: "connection close failed" })]);
+				expect(stderr).toEqual([]);
+			} else {
+				expect(stderr).toEqual(["Error: connection close failed"]);
+			}
+		},
+	);
 
 	it("execute() keeps exit code 130 when an onError hook rendering a postRun AbortError resets process.exitCode", async () => {
 		const exitCode = await new Crust("cli")

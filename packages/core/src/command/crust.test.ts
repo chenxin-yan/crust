@@ -2368,6 +2368,40 @@ describe("Extension renderer", () => {
 		expect(lines).toEqual(["result:1", "error:cleanup failed"]);
 	});
 
+	it("calls cleanup for a disposal failure after a rendered failure, else writes Core's line", async () => {
+		const lines: string[] = [];
+		let cleanup: ((error: unknown) => void) | undefined;
+		const render = defineExtension(defineExtensionId("render")).renderer(() => ({
+			...tagging(lines),
+			...(cleanup && { cleanup }),
+		}));
+		const leaky = defineExtension(defineExtensionId("leaky")).setup(({ defer }) =>
+			defer(() => {
+				throw new Error("db close failed");
+			}),
+		);
+		const app = new Crust("cli").extend(render, leaky).action(() => {
+			throw new Error("boom");
+		});
+
+		cleanup = (error) => void lines.push(`cleanup:${(error as Error).message}`);
+		expect(await execute(app, [], lines)).toBe(1);
+		expect(lines).toEqual(["error:boom", "cleanup:db close failed"]);
+
+		lines.length = 0;
+		cleanup = undefined;
+		expect(await execute(app, [], lines)).toBe(1);
+		expect(lines).toEqual(["error:boom", "stderr:Cleanup failed: db close failed"]);
+
+		// A failing renderer must never hide the cleanup failure.
+		lines.length = 0;
+		cleanup = () => {
+			throw new Error("renderer broke");
+		};
+		expect(await execute(app, [], lines)).toBe(1);
+		expect(lines).toEqual(["error:boom", "stderr:Cleanup failed: db close failed"]);
+	});
+
 	it("falls back to Core's rendering when error throws, and stays silent on cancellation", async () => {
 		const lines: string[] = [];
 		const render = defineExtension(defineExtensionId("render")).renderer(() => ({
