@@ -172,9 +172,11 @@ export function installContextFlags(
 }
 
 /**
- * Once `node`'s providers are final, for the `declared` Contexts (with their dependencies): a
- * provider of another factory must own exactly the flags of each same-name declaration, the
- * flags `node` parses; and the Contexts such a provider uses must own only flags `node` parses.
+ * Once `node`'s providers are final, for the `declared` Contexts (with their dependencies): the
+ * installed definition of each declared flag, possibly shared with a same-name Context installed
+ * earlier, must equal the declared one; a provider of another factory must own exactly the flags
+ * of each same-name declaration; and the Contexts such a provider uses must own only flags `node`
+ * parses.
  */
 export function checkProvidedContextFlags(
 	node: CommandNode,
@@ -188,6 +190,14 @@ export function checkProvidedContextFlags(
 	const replacementDependencies: AnyContextFactory[] = [];
 	for (const factory of factories) {
 		const name = factory.contextName;
+		for (const [flag, def] of Object.entries(factory.ownedFlags)) {
+			if (sameFlag(node.ownedFlags[flag]!, def)) continue;
+			throw new CrustError(
+				"DEFINITION",
+				`Flag "${flag}" that command "${node.meta.name}" parses for Context "${name}" differs from the definition of the Context "${name}" it declares with .use(). Same-name Contexts on one command must own the same flags: change the declared Context, or use the same factory.`,
+				{ subject: "context", name, reason: "context-flags-not-parsed" },
+			);
+		}
 		const provider = providers.get(name);
 		if (!provider || provider.factory === factory) continue;
 		if (!sameFlags(factory.ownedFlags, provider.ownedFlags)) {
@@ -247,13 +257,14 @@ function sameFlags(a: FlagsDef, b: FlagsDef): boolean {
 	const names = Object.keys(a);
 	return (
 		names.length === Object.keys(b).length &&
-		names.every((name) => {
-			if (!Object.hasOwn(b, name)) return false;
-			const { schema: schemaA, ...restA } = a[name]!;
-			const { schema: schemaB, ...restB } = b[name]!;
-			return schemaA === schemaB && sameDefinition(restA, restB);
-		})
+		names.every((name) => Object.hasOwn(b, name) && sameFlag(a[name]!, b[name]!))
 	);
+}
+
+function sameFlag(a: FlagDef, b: FlagDef): boolean {
+	const { schema: schemaA, ...restA } = a;
+	const { schema: schemaB, ...restB } = b;
+	return schemaA === schemaB && sameDefinition(restA, restB);
 }
 
 // Frozen flag definitions compare structurally; functions and class instances by identity.

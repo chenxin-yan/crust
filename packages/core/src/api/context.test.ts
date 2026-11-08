@@ -1045,6 +1045,34 @@ describe("Context-owned flags at use sites", () => {
 		});
 	});
 
+	it("rejects an inline child declaring a same-name Context whose flags differ from the inherited ones", async () => {
+		const first = defineContext("mode")
+			.flags({ mode: { type: "string", default: "a" } })
+			.setup(({ flags }) => flags.mode);
+		const second = defineContext("mode")
+			.flags({ mode: { type: "number", default: 42 } })
+			.setup(({ flags }) => flags.mode.toFixed(0));
+		const app = new Crust("cli").provide(first()).command("child", (command) =>
+			command
+				.use(second)
+				.provide(second())
+				.action(async ({ ctx }) => await ctx.mode),
+		);
+		await expect(app.snapshot()).rejects.toMatchObject({
+			code: "DEFINITION",
+			details: { subject: "context", name: "mode", reason: "context-flags-not-parsed" },
+		});
+		expect(await app.run(["child"])).toMatchObject({
+			status: "failed",
+			error: { code: "DEFINITION" },
+		});
+		// The same flags, inherited and declared, are shared.
+		const same = new Crust("cli")
+			.provide(first())
+			.command("child", (command) => command.use(first).action(async ({ ctx }) => await ctx.mode));
+		expect(await unwrap(same.run(["child"]))).toMatchObject({ result: "a" });
+	});
+
 	it("checks a used Context against a same-name provider of an inline child", async () => {
 		const declared = defineContext("mode")
 			.flags({ mode: { type: "string" } })
