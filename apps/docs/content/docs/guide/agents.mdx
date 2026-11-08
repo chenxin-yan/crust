@@ -143,7 +143,7 @@ Next steps:
 
 ## Secrets
 
-Agent transcripts are logged and shared, so keep secrets out of them. Mark tokens and passwords `sensitive: true` and give them an `env` binding: errors, next steps, help, and JSON Schema then never print the value, the schema marks it `writeOnly`, and generated skills tell the agent to pass it through the variable. See [Secrets](/docs/guide/arguments-and-flags#secrets).
+Agent transcripts are logged and shared, so keep secrets out of them. Mark tokens and passwords `sensitive: true` and give them an `env` binding: errors, help, and JSON Schema then never print the value, next steps leave the flag out, and generated skills tell the agent to pass it through the variable. A secret an agent puts on the command line is already in its transcript, so `execute()` warns on stderr to use the variable instead. This is redaction, not a security boundary: `writeOnly` in the JSON Schema is only a hint to clients. See [Secrets](/docs/guide/arguments-and-flags#secrets).
 
 ## Prompts without a TTY
 

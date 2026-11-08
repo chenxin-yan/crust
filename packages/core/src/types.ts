@@ -132,12 +132,13 @@ interface ArgDefBase {
 	schema?: never;
 	/**
 	 * Marks the value as a secret. Crust never prints this value. It can't hide argv from the
-	 * OS (`ps`, shell history), so prefer `env`.
+	 * OS (`ps`, shell history), so prefer `env`: this is redaction, not a security boundary,
+	 * and `execute()` warns on stderr when the value comes from argv.
 	 *
-	 * Value errors say only `Invalid value for <label>.`, `nextSteps()` prints `<redacted>`,
-	 * help and man pages say `Secret.`, and JSON Schema marks it `writeOnly`. Cannot be
-	 * combined with `default` or `choices`, which are published, or `type: "boolean"`,
-	 * whose value is its spelling on argv.
+	 * Value errors say only `Invalid value for <label>.`, `nextSteps()` omits an env-bound flag
+	 * and prints `<redacted>` for any other value, help and man pages say `Secret.`, and JSON
+	 * Schema marks it `writeOnly`. Combining it with `default` or `choices`, which are published,
+	 * or `type: "boolean"`, whose value is its spelling on argv, throws a `DEFINITION` error.
 	 */
 	sensitive?: true;
 	/**
@@ -251,12 +252,13 @@ interface SchemaArgDef {
 	schema: StandardSchema;
 	/**
 	 * Marks the value as a secret. Crust never prints this value. It can't hide argv from the
-	 * OS (`ps`, shell history), so prefer `env`.
+	 * OS (`ps`, shell history), so prefer `env`: this is redaction, not a security boundary,
+	 * and `execute()` warns on stderr when the value comes from argv.
 	 *
-	 * Value errors say only `Invalid value for <label>.`, `nextSteps()` prints `<redacted>`,
-	 * help and man pages say `Secret.`, and JSON Schema marks it `writeOnly`. Cannot be
-	 * combined with `default` or `choices`, which are published, or `type: "boolean"`,
-	 * whose value is its spelling on argv.
+	 * Value errors say only `Invalid value for <label>.`, `nextSteps()` omits an env-bound flag
+	 * and prints `<redacted>` for any other value, help and man pages say `Secret.`, and JSON
+	 * Schema marks it `writeOnly`. Combining it with `default` or `choices`, which are published,
+	 * or `type: "boolean"`, whose value is its spelling on argv, throws a `DEFINITION` error.
 	 */
 	sensitive?: true;
 	type?: never;
@@ -311,12 +313,13 @@ interface FlagDefBase {
 	schema?: never;
 	/**
 	 * Marks the value as a secret. Crust never prints this value. It can't hide argv from the
-	 * OS (`ps`, shell history), so prefer `env`.
+	 * OS (`ps`, shell history), so prefer `env`: this is redaction, not a security boundary,
+	 * and `execute()` warns on stderr when the value comes from argv.
 	 *
-	 * Value errors say only `Invalid value for <label>.`, `nextSteps()` prints `<redacted>`,
-	 * help and man pages say `Secret.`, and JSON Schema marks it `writeOnly`. Cannot be
-	 * combined with `default` or `choices`, which are published, or `type: "boolean"`,
-	 * whose value is its spelling on argv.
+	 * Value errors say only `Invalid value for <label>.`, `nextSteps()` omits an env-bound flag
+	 * and prints `<redacted>` for any other value, help and man pages say `Secret.`, and JSON
+	 * Schema marks it `writeOnly`. Combining it with `default` or `choices`, which are published,
+	 * or `type: "boolean"`, whose value is its spelling on argv, throws a `DEFINITION` error.
 	 */
 	sensitive?: true;
 }

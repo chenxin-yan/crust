@@ -210,14 +210,22 @@ An explicit argv occurrence always wins over the environment, even when it split
 Mark a flag or argument that holds a secret with `sensitive: true`, like `token` above. Crust never prints its value:
 
 - A value that fails conversion or validation (`choices`, `parse`, `url`, `json`, `number`, or a schema issue or exception) reports only `Invalid value for --token.`, or `Invalid value for <name>.` for an argument. The error's `details` name the field, and no cause is attached.
-- [`nextSteps()`](/docs/modules/extensions/next-steps) suggests `--token <redacted>`.
+- [`nextSteps()`](/docs/modules/extensions/next-steps) leaves a sensitive flag with an `env` binding out of the suggested command, since the environment supplies it when the command runs. Any other sensitive value is suggested as `--token <redacted>`.
 - Help and man pages start its description with `Secret.` and still show `[env: PUBLISH_TOKEN]`.
-- The JSON Schema that [`schema()`](/docs/modules/extensions/schema), [`input()`](/docs/modules/extensions/input), and MCP publish marks it `writeOnly`, and a string also `format: "password"` unless it declares another format. A schema-backed field publishes no `enum`, `const`, `default`, `examples`, or `x-*` keywords.
+- The JSON Schema that [`schema()`](/docs/modules/extensions/schema), [`input()`](/docs/modules/extensions/input), and MCP publish marks it `writeOnly`, and a string also `format: "password"` unless it declares another format. These are hints for clients, not protection. A schema-backed field publishes no `enum`, `const`, `default`, `examples`, or `x-*` keywords.
 - Generated skills tell agents to pass it through its variable, never inline.
 
-A sensitive definition can't declare `default` or `choices`, because help and JSON Schema publish both. It can't be a boolean either: a boolean's value is which spelling is on argv (`--flag` or `--no-flag`), so a suggested command can't show it without revealing it. TypeScript rejects these definitions when it can see them, and the rest throw a `DEFINITION` error.
+This is redaction, not a security boundary: Crust can't hide argv from the OS. A value given on the command line shows up in `ps`, shell history, and agent transcripts, so pass secrets through `env` (or stdin, where a command reads it). When a sensitive value comes from argv anyway, `execute()` prints one warning per field on stderr, through the renderer's diagnostics so [`json()`](/docs/modules/extensions/json) keeps stdout clean. The exit code is unchanged, and [`run()`](/docs/api/crust#runpath-input-options) (MCP, embedding) never warns:
 
-Crust can't hide argv from the OS: a value given on the command line shows up in `ps` and shell history, so prefer `env`. Protection also starts only once Crust matches a token to its definition. A malformed token that fails before then is echoed in the error, such as `--tokenabc`, which is an unknown flag.
+```txt
+Warning: --token was passed on the command line, where process lists, shell history and transcripts can see it. Use $PUBLISH_TOKEN instead.
+```
+
+Without an `env` binding, the warning ends with "Pass it through an environment variable instead." Values from `env` or bound by an Extension such as `input()` never warn.
+
+A sensitive definition can't declare `default` or `choices`, because help and JSON Schema publish both. It can't be a boolean either: a boolean's value is which spelling is on argv (`--flag` or `--no-flag`), so a suggested command can't show it without revealing it. These definitions type-check but throw a `DEFINITION` error.
+
+Protection starts only once Crust matches a token to its definition. A malformed token that fails before then is echoed in the error, such as `--tokenabc`, which is an unknown flag.
 
 ### Values that start with `-`
 
