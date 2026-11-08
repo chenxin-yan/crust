@@ -52,7 +52,7 @@ Use a final variadic argument when the command accepts any number of values in t
 
 ```sh
 $ run python
-Error: Invalid value "python" for <runtime>. Expected one of: bun, node
+Error: Invalid value for <runtime>. Expected one of: bun, node
 ```
 
 Use `choices` when the accepted strings are known in advance. The Command Action gets their string union, plus `undefined` here because the argument is neither required nor defaulted, and an invalid value fails before the action runs.
@@ -89,7 +89,7 @@ In this example, neither flag has `required`, `default`, or an environment bindi
 
 ```sh
 $ serve --port nope
-Error: Expected number for --port, got "nope"
+Error: Expected a number for --port.
 ```
 
 Invalid values are reported after [flag handlers and `preRun` hooks](/docs/guide/extensions#hooks) and take precedence over missing required values, so `serve --port nope --help` still prints help. Malformed argv, such as an unknown flag or `serve --port --help`, fails before any hook runs.
@@ -170,7 +170,7 @@ An invalid value fails before the action runs:
 
 ```sh
 $ serve --runtime python
-Error: Invalid value "python" for --runtime. Expected one of: bun, node
+Error: Invalid value for --runtime. Expected one of: bun, node
 $ echo $?
 1
 ```
@@ -204,6 +204,10 @@ publishing to npm tags=latest,beta,next
 ```
 
 An explicit argv occurrence always wins over the environment, even when it splits to zero occurrences. Invalid argv values fail rather than trying env; invalid environment values, including a blank `PORT=` for a number flag, fail rather than trying the default. Like invalid argv values, they do not block `--help` or `--version`. Zero occurrences after splitting follow the existing default/required or schema rules. Help, man pages, and generated skills list the variable as `[env: PUBLISH_TOKEN]` and never print its value. Programmatic [`run()`](/docs/api/crust#runpath-input-options) binds structured input directly: it does not read the environment and never splits arrays. Positional arguments have no `env`; use a flag.
+
+### Secrets
+
+Bind a secret such as an API token to an `env` variable, as `PUBLISH_TOKEN` above, instead of asking for it on argv, where it lands in shell history and process listings. Don't put tokens in [`nextSteps`](/docs/modules/extensions/next-steps) input: steps print as command lines. Crust's own value errors [never print values](/docs/guide/error-handling#errors-never-echo-values); they name the flag and its variable instead. Messages from your own `parse` functions and schemas are your text, so keep values out of them.
 
 ### Values that start with `-`
 
