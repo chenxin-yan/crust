@@ -339,8 +339,9 @@ function materializeCommandDefinition(
 	);
 
 	childNode.meta = { name, ...internal.meta };
-	// Its Contexts are final now; the recipe may `.provide()` after `.use()`.
-	checkProvidedContextFlags(childNode, demandedFactories(childNode.demands));
+	// Its Contexts are final now; the recipe may `.provide()` after `.use()`. An inline child
+	// checks the Contexts it inherited too: its parent's flags were copied before that parent's check.
+	checkProvidedContextFlags(childNode, childNode.flagContexts.keys());
 	return childNode;
 }
 

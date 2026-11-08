@@ -193,16 +193,13 @@ export function installContextFlags(
 }
 
 /**
- * Once `node`'s providers are final: each Context `factories` declare (transitively), and each
- * dependency of its resolved provider, must resolve to a provider whose owned flags `node` already
- * parses, compatibly. A same-name provider may customize a declared flag (its definition wins)
- * but not add one: the types know only the declared Contexts' flags.
+ * Once `node`'s providers are final: each Context `contexts` names, and each dependency of its
+ * resolved provider, must resolve to a provider whose owned flags `node` already parses,
+ * compatibly. A same-name provider may customize a declared flag (its definition wins) but not
+ * add one: the types know only the declared Contexts' flags.
  */
-export function checkProvidedContextFlags(
-	node: CommandNode,
-	factories: readonly AnyContextFactory[],
-): void {
-	const names = declaredContextNames(factories);
+export function checkProvidedContextFlags(node: CommandNode, contexts: Iterable<string>): void {
+	const names = new Set(contexts);
 	// A Set visits names added while iterating, so providers' dependencies are checked too.
 	for (const name of names) {
 		const provided = node.contexts.findLast(({ instance }) => instance.name === name)?.instance;

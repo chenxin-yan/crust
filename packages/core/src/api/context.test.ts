@@ -987,6 +987,39 @@ describe("Context-owned flags at use sites", () => {
 		}
 	});
 
+	it("applies a same-name provider's customizations on inline children of the use site", async () => {
+		const declared = defineContext("mode")
+			.flags({ mode: { type: "string", default: "a", choices: ["a", "b", "c"] } })
+			.setup(({ flags }) => flags.mode);
+		const customized = defineContext("mode")
+			.flags({ mode: { type: "string", default: "b", aliases: ["md"], choices: ["a", "b"] } })
+			.setup(({ flags }) => flags.mode);
+		const group = defineCommand("group", (command) =>
+			command.use(declared).command("leaf", (leaf) =>
+				leaf.action(async ({ ctx, stdout }) => {
+					stdout(String(await ctx.mode));
+				}),
+			),
+		);
+		const app = new Crust("cli").provide(customized()).add(group);
+
+		const snapshot = await app.snapshot();
+		expect(snapshot.subCommands.group!.subCommands.leaf!.flags.mode).toEqual(
+			snapshot.subCommands.group!.flags.mode,
+		);
+		expect(snapshot.subCommands.group!.subCommands.leaf!.flags.mode).toMatchObject({
+			default: "b",
+			aliases: ["md"],
+			choices: ["a", "b"],
+		});
+		const lines: string[] = [];
+		const io = { stdout: (line: string) => void lines.push(line), stderr: () => {} };
+		expect(await app.execute({ argv: ["group", "leaf"], io })).toBe(0);
+		expect(await app.execute({ argv: ["group", "leaf", "--md", "a"], io })).toBe(0);
+		expect(await app.execute({ argv: ["group", "leaf", "--mode", "c"], io })).toBe(1);
+		expect(lines).toEqual(["b", "a"]);
+	});
+
 	it("keeps installed flags of a same-name root provider beside an Extension provider", async () => {
 		const old = defineContext("auth")
 			.flags({ old: { type: "string" } })
