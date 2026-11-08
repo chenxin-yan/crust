@@ -36,8 +36,14 @@ export interface ApiRequest {
 }
 
 export interface ApiCommandOptions extends ApiClientOptions {
-	/** The OpenAPI document bundled with the CLI, e.g. an imported JSON file; read offline. */
-	readonly spec: OpenApiSpec;
+	/**
+	 * The OpenAPI document, e.g. an imported JSON file bundled with the CLI and read offline;
+	 * or a loader for it, called with the invocation's signal only when `api --list` or
+	 * `api --spec` runs, e.g. a lazy `import()` of the JSON file that keeps it out of startup.
+	 */
+	readonly spec:
+		| OpenApiSpec
+		| ((input: { signal: AbortSignal }) => OpenApiSpec | Promise<OpenApiSpec>);
 	/**
 	 * The next page's request for `--paginate`, or `undefined` after the last page.
 	 * Receives a copy of each successful response, so it may read the body. The next page
@@ -118,6 +124,33 @@ function operations(spec: OpenApiSpec): { method: string; path: string; operatio
 				: [];
 		});
 	});
+}
+
+/** `spec`, or what its loader returns; a failure other than cancellation becomes a plain `Error`. */
+async function loadSpec(
+	spec: ApiCommandOptions["spec"],
+	signal: AbortSignal,
+): Promise<OpenApiSpec> {
+	if (typeof spec !== "function") return spec;
+	let loaded: unknown;
+	try {
+		loaded = await spec({ signal });
+	} catch (cause) {
+		// Core treats any AbortError as cancellation, so it passes through like the signal's reason.
+		if ((signal.aborted && cause === signal.reason) || (cause as Error)?.name === "AbortError") {
+			throw cause;
+		}
+		const reason = cause instanceof Error ? cause.message : String(cause);
+		throw new Error(`api: cannot load the OpenAPI document (${reason})`, { cause });
+	}
+	// The tag also rejects a module namespace returned instead of its default export.
+	const tag = Object.prototype.toString.call(loaded).slice(8, -1);
+	if (tag !== "Object") {
+		throw new Error(
+			`api: cannot load the OpenAPI document (expected a plain object, got ${tag.toLowerCase()})`,
+		);
+	}
+	return loaded as OpenApiSpec;
 }
 
 /** One line per operation: `METHOD path operationId summary`, omitting what the spec lacks. */
@@ -272,7 +305,7 @@ type ApiCommandDefinition = CommandDefinition<
 
 /**
  * Provides the {@link apiClient} Context and contributes `api`: `api --list` and
- * `api --spec <operationId|path>` read the bundled spec offline; `api <path>` sends
+ * `api --spec <operationId|path>` read the spec (calling its loader, if any); `api <path>` sends
  * a request through the client, prints the response body to stdout, and fails with
  * {@link ApiResponseError} on a non-2xx status.
  */
@@ -297,11 +330,11 @@ export const apiCommand: ExtensionFactory<
 						.flags(apiFlags)
 						.action(async ({ args, flags, ctx, signal, stdout }) => {
 							if (flags.list) {
-								for (const line of listOperations(spec)) stdout(line);
+								for (const line of listOperations(await loadSpec(spec, signal))) stdout(line);
 								return;
 							}
 							if (flags.spec !== undefined) {
-								stdout(JSON.stringify(specFor(spec, flags.spec)));
+								stdout(JSON.stringify(specFor(await loadSpec(spec, signal), flags.spec)));
 								return;
 							}
 							if (args.path === undefined) {

@@ -190,6 +190,121 @@ describe("api --list and --spec", () => {
 	});
 });
 
+describe("spec loader", () => {
+	it("is called once per --list or --spec invocation with its signal, never for requests or app commands", async () => {
+		stubFetch();
+		const loader = vi.fn(async (_input: { signal: AbortSignal }) => spec);
+		const app = buildApp({ spec: loader }).add(
+			defineCommand("me", {}, (command) =>
+				command.use(apiClient).action(async ({ ctx }) => {
+					await (await ctx.api).fetch("/me");
+				}),
+			),
+		);
+
+		expect((await captureExecute(app, ["api", "/users"])).exitCode).toBe(0);
+		expect((await captureExecute(app, ["me"])).exitCode).toBe(0);
+		expect(loader).not.toHaveBeenCalled();
+
+		expect((await captureExecute(app, ["api", "--list"])).stdout).toContain("GET /users listUsers");
+		expect(loader).toHaveBeenCalledTimes(1);
+		expect(loader.mock.calls[0]?.[0]).toEqual({ signal: expect.any(AbortSignal) });
+
+		const controller = new AbortController();
+		const outcome = await app.run(
+			["api"],
+			{ flags: { spec: "getUser" } },
+			{ signal: controller.signal },
+		);
+		expect(outcome).toMatchObject({ status: "completed", stdout: '{"operationId":"getUser"}' });
+		expect(loader).toHaveBeenCalledTimes(2);
+		controller.abort();
+		expect(loader.mock.calls[1]?.[0].signal.aborted).toBe(true);
+	});
+
+	it("accepts a synchronous loader", async () => {
+		const { stdout } = await captureExecute(buildApp({ spec: () => spec }), [
+			"api",
+			"--spec",
+			"getUser",
+		]);
+
+		expect(stdout).toBe('{"operationId":"getUser"}');
+	});
+
+	it.each([
+		["rejects", () => Promise.reject(new Error("ENOENT openapi.json"))],
+		[
+			"throws",
+			() => {
+				throw new Error("ENOENT openapi.json");
+			},
+		],
+	])("fails with the loader's reason and cause when it %s", async (_, loader) => {
+		const outcome = await buildApp({ spec: loader }).run(["api"], { flags: { list: true } });
+
+		expect(outcome.status).toBe("failed");
+		const error = outcome.status === "failed" ? outcome.error : undefined;
+		expect(error).toBeInstanceOf(Error);
+		expect(error).not.toHaveProperty("code");
+		expect(error).toMatchObject({
+			message: "api: cannot load the OpenAPI document (ENOENT openapi.json)",
+			cause: new Error("ENOENT openapi.json"),
+		});
+		expect(await captureExecute(buildApp({ spec: loader }), ["api", "--list"])).toEqual({
+			stdout: "",
+			stderr: "Error: api: cannot load the OpenAPI document (ENOENT openapi.json)",
+			exitCode: 1,
+		});
+	});
+
+	it.each([
+		["null", null],
+		["array", []],
+		["string", "{}"],
+		["module", { default: spec, [Symbol.toStringTag]: "Module" }],
+	])("fails when the loader resolves to %s instead of a plain object", async (kind, value) => {
+		const app = buildApp({ spec: async () => value as never });
+
+		expect(await captureExecute(app, ["api", "--spec", "getUser"])).toEqual({
+			stdout: "",
+			stderr: `Error: api: cannot load the OpenAPI document (expected a plain object, got ${kind})`,
+			exitCode: 1,
+		});
+	});
+
+	it.each([
+		["the signal's reason", (signal: AbortSignal) => signal.reason],
+		["an AbortError", () => new DOMException("This operation was aborted", "AbortError")],
+	])("passes cancellation through unchanged as %s", async (_, reason) => {
+		const controller = new AbortController();
+		let thrown: unknown;
+		const app = buildApp({
+			spec: ({ signal }) =>
+				new Promise((_, reject) => {
+					signal.addEventListener("abort", () => reject((thrown = reason(signal))));
+					controller.abort();
+				}),
+		});
+		const outcome = await app.run(
+			["api"],
+			{ flags: { list: true } },
+			{ signal: controller.signal },
+		);
+
+		expect(outcome.status === "failed" && outcome.error).toBe(thrown);
+	});
+
+	it("passes an AbortError through unchanged even when the signal is not aborted", async () => {
+		const abort = new DOMException("This operation was aborted", "AbortError");
+		const outcome = await buildApp({ spec: () => Promise.reject(abort) }).run(["api"], {
+			flags: { list: true },
+		});
+
+		expect(outcome.status === "failed" && outcome.error).toBe(abort);
+	});
+});
+
 describe("api <path>", () => {
 	it("GETs the path below the base URL with auth and prints the body", async () => {
 		const calls = stubFetch(() => new Response('[{"name":"ada"}]\n'));

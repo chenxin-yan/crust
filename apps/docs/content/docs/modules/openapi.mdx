@@ -18,7 +18,18 @@ The package has a peer dependency on `@crustjs/core` and depends on `@crustjs/ut
   ../../../examples/modules/openapi.ts
 </include>
 
-`apiCommand()` provides the [`apiClient`](#apiclient) Context and contributes one `api` command. Pass the OpenAPI document as an object, typically a bundled JSON import, so `--list` and `--spec` never touch the network. `apiCommand.id` is the Extension identity.
+`apiCommand()` provides the [`apiClient`](#apiclient) Context and contributes one `api` command. `apiCommand.id` is the Extension identity.
+
+Pass the OpenAPI document as an object, typically a bundled JSON import: it matches the CLI's version, and `--list` and `--spec` work offline without a token. To keep a large document out of startup, pass a loader instead, such as a lazy `import()`:
+
+```ts
+apiCommand({
+  spec: async () => (await import("./openapi.json", { with: { type: "json" } })).default,
+  baseUrl: "https://api.example.com/v1",
+});
+```
+
+The loader runs only for `api --list` and `api --spec`, once per invocation, and receives the invocation's `signal`, so it may also fetch the document from a URL with your own caching and error policy. A loader that throws, or returns anything but a plain object (such as the module namespace instead of its `default` export), fails the command with `api: cannot load the OpenAPI document (<reason>)` and exit code 1; the signal's reason or an `AbortError` is rethrown unchanged, as [cancellation](/docs/api/errors#cancellation).
 
 <auto-type-table
   path="../../../../../packages/openapi/src/api-command.ts"
