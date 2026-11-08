@@ -131,7 +131,7 @@ Next steps:
 
 ## Next steps
 
-Tell the agent what to run next instead of leaving it to guess. With [`nextSteps()`](/docs/modules/extensions/next-steps), a command that `.use(nextSteps)` adds follow-up commands by definition with `(await ctx.nextSteps).add(status, input, description)`, as `deploy` does above, and `nextSteps({ onError })` returns recovery commands for errors you recognize with `instanceof`. The steps print to stderr as runnable command lines, after success or failure:
+Tell the agent what to run next instead of leaving it to guess. With [`nextSteps()`](/docs/modules/extensions/next-steps), a command that `.use(nextSteps)` awaits `ctx.nextSteps` and calls `.add(status, input, description)` on it to add follow-up commands by definition, as `deploy` does above, and `nextSteps({ onError })` returns recovery commands for errors you recognize with `instanceof`. The steps print to stderr as runnable command lines, after success or failure:
 
 ```sh
 $ my-cli deploy staging

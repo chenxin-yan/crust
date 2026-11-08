@@ -26,7 +26,8 @@ const deploy = defineCommand("deploy", { description: "Deploy a release" }, (cmd
 				await ask(`Deploy ${release} to prod?`);
 			}
 			stdout(`Deploying ${release} to ${target}`);
-			(await ctx.nextSteps).add(status, { args: { target } }, "Watch the rollout");
+			const steps = await ctx.nextSteps;
+			steps.add(status, { args: { target } }, "Watch the rollout");
 			// [!code highlight]
 			return { target, release, dryRun: false };
 		}),
