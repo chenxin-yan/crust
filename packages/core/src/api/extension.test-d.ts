@@ -5,7 +5,12 @@ import { defineExtensionId } from "../identity.ts";
 import type { CommandSection } from "../types.ts";
 import type { ParsedFlagValue } from "../types.ts";
 import { defineContext, type DefiningOf } from "./context.ts";
-import { defineExtension, type Extension, type ExtensionFactory } from "./extension.ts";
+import {
+	defineExtension,
+	type Extension,
+	type ExtensionFactory,
+	type InvocationOutcome,
+} from "./extension.ts";
 
 function _metadataRequirements() {
 	const ID = defineExtensionId("test:metadata");
@@ -352,4 +357,15 @@ function _handleCallbacks() {
 	});
 	// @ts-expect-error Cleanup is registered with `defer`, not returned.
 	owned.setup(() => () => {});
+}
+
+function _postRunOutcome() {
+	defineExtension(defineExtensionId("test:outcome")).postRun((_ctx, outcome) => {
+		type _outcome = Expect<Equal<typeof outcome, InvocationOutcome>>;
+		// @ts-expect-error The result exists only once the outcome is narrowed to completed.
+		void outcome.result;
+		if (outcome.status === "completed") {
+			type _result = Expect<Equal<typeof outcome.result, unknown>>;
+		}
+	});
 }
