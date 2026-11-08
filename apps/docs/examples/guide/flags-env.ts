@@ -2,7 +2,7 @@ import { Crust } from "@crustjs/core";
 
 const publish = new Crust("publish")
 	.flags({
-		token: { type: "string", env: { name: "PUBLISH_TOKEN" }, required: true },
+		token: { type: "string", env: { name: "PUBLISH_TOKEN" }, required: true, sensitive: true },
 		registry: { type: "string", env: { name: "PUBLISH_REGISTRY" }, default: "npm" },
 		tag: {
 			type: "string",

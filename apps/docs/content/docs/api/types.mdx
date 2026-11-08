@@ -63,6 +63,8 @@ const flags = {
 
 `env` is consulted by terminal parsing only when the flag has no argv occurrence: argv wins over env, and env wins over `default`. The env value goes through the same conversion as an argv token and satisfies `required`. Help, man pages, and generated skills show `[env: NAME]`, never the value. Structured [`run()`](/docs/api/crust#runpath-input-options) input ignores `env`.
 
+`sensitive: true` marks a secret on any argument or flag, schema-backed ones included: value errors say only `Invalid value for --token.`, help and man pages say `Secret.`, and JSON Schema marks it `writeOnly`. It can't be combined with `default` or `choices`. See [Secrets](/docs/guide/arguments-and-flags#secrets).
+
 `delimiter` splits string argv occurrences; `env.delimiter` independently splits environment text. Both require `multiple: true` and drop empty segments. Boolean argv switches are never split.
 
 Schema-backed flags set `type: "string" | "boolean"` only to declare whether a value token follows, plus `schema` and the syntax fields `description`, `short`, `aliases`, `multiple`, `env`, `delimiter`, and (boolean only) `noNegate`. The schema receives the raw `string | undefined` or `boolean | undefined`; with `multiple: true` it receives an array when the flag appears and `undefined` when omitted.
@@ -139,7 +141,7 @@ Snapshots from Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details
 
 <auto-type-table path="../../../../../packages/core/src/command/snapshot.ts" name="FlagSnapshot" />
 
-`required` is the effective requiredness the parser enforces: it is absent when the definition has a `default`. `URL` defaults become strings. `env` records the variable name and delimiter, never the value. Object-valued JSON defaults are shared references, not copies; treat them as immutable.
+`required` is the effective requiredness the parser enforces: it is absent when the definition has a `default`. `URL` defaults become strings. `env` records the variable name and delimiter, never the value. `sensitive` is `true` for a secret, and its `inputSchema` has no `enum`, `const`, `default`, `examples`, or `x-*` keywords. Object-valued JSON defaults are shared references, not copies; treat them as immutable.
 
 ## Typed invocation
 

@@ -141,6 +141,10 @@ Next steps:
     my-cli status staging
 ```
 
+## Secrets
+
+Agent transcripts are logged and shared, so keep secrets out of them. Mark tokens and passwords `sensitive: true` and give them an `env` binding: errors, next steps, help, and JSON Schema then never print the value, the schema marks it `writeOnly`, and generated skills tell the agent to pass it through the variable. See [Secrets](/docs/guide/arguments-and-flags#secrets).
+
 ## Prompts without a TTY
 
 A prompt waits for an answer an agent can't give. Make every prompt answerable from the command line, and fail when it isn't:
@@ -186,4 +190,5 @@ For a CLI backed by an HTTP API, [`@crustjs/openapi`](/docs/modules/openapi) add
 - Commands that change things call [`confirm()`](/docs/modules/extensions/confirm)'s `ctx.confirm` first, after any dry-run preview.
 - Error messages say what to do next; known failures have recovery steps from [`nextSteps()`](/docs/modules/extensions/next-steps).
 - Every prompt has a flag for `initial` or a `default`.
+- Secrets are `sensitive: true` flags with an `env` binding.
 - Optionally: an MCP server, a packaged skill, and an `api` command.

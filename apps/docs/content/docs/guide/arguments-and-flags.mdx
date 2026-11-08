@@ -205,6 +205,20 @@ publishing to npm tags=latest,beta,next
 
 An explicit argv occurrence always wins over the environment, even when it splits to zero occurrences. Invalid argv values fail rather than trying env; invalid environment values, including a blank `PORT=` for a number flag, fail rather than trying the default. Like invalid argv values, they do not block `--help` or `--version`. Zero occurrences after splitting follow the existing default/required or schema rules. Help, man pages, and generated skills list the variable as `[env: PUBLISH_TOKEN]` and never print its value. Programmatic [`run()`](/docs/api/crust#runpath-input-options) binds structured input directly: it does not read the environment and never splits arrays. Positional arguments have no `env`; use a flag.
 
+### Secrets
+
+Mark a flag or argument that holds a secret with `sensitive: true`, like `token` above. Crust never prints its value:
+
+- A value that fails conversion or validation (`choices`, `parse`, `url`, `json`, `number`, or a schema issue) reports only `Invalid value for --token.`, or `Invalid value for <name>.` for an argument. The error's `details` name the field, and no cause is attached.
+- [`nextSteps()`](/docs/modules/extensions/next-steps) suggests `--token <redacted>`.
+- Help and man pages start its description with `Secret.` and still show `[env: PUBLISH_TOKEN]`.
+- The JSON Schema that [`schema()`](/docs/modules/extensions/schema), [`input()`](/docs/modules/extensions/input), and MCP publish marks it `writeOnly`, and a string also `format: "password"` unless it declares another format. A schema-backed field publishes no `enum`, `const`, `default`, `examples`, or `x-*` keywords.
+- Generated skills tell agents to pass it through its variable, never inline.
+
+A sensitive definition can't declare `default` or `choices`, because help and JSON Schema publish both. TypeScript rejects a literal one, and a computed one throws a `DEFINITION` error.
+
+Crust can't hide argv from the OS: a value given on the command line shows up in `ps` and shell history, so prefer `env`. Protection also starts only once Crust matches a token to its definition. A malformed token that fails before then is echoed in the error, such as `--tokenabc`, which is an unknown flag.
+
 ### Values that start with `-`
 
 For a value-taking flag, attach a dash-leading value with `=` so it is not mistaken for another flag. For a positional argument, pass the value after `--`, as in `seek -- -5`; tokens after `--` fill positional arguments before [`rawArgs`](#pass-through-raw-tokens).

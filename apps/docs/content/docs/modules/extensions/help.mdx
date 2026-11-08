@@ -25,7 +25,7 @@ Options:
 
 `help()` owns the recursive `--help` and `-h` flag. It also shows help when the selected command has no Command Action. `--help` is an eager [handler](/docs/guide/extensions#write-your-own): it wins over every non-eager flag handler, such as `deploy --preview --help`, and between `--help` and `--version` the flag given first wins. The fallback runs as a `noAction` hook, only when no flag handler took over, so `my-cli --version` still prints the version on an action-less root. Subcommands are listed from their `defineCommand()` metadata without running their recipes, so a command whose recipe throws still appears.
 
-A flag that takes a value shows its type after its spellings, such as `-p, --port <number>`. Boolean flags show none. Choices, defaults, and env variables follow the description. A label too wide for its column widens the column, so descriptions stay aligned.
+A flag that takes a value shows its type after its spellings, such as `-p, --port <number>`. Boolean flags show none. Choices, defaults, and env variables follow the description; a [`sensitive`](/docs/guide/arguments-and-flags#secrets) one's description starts with `Secret.`. A label too wide for its column widens the column, so descriptions stay aligned.
 
 ## Section consumer
 
