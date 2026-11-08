@@ -327,10 +327,9 @@ describe("json", () => {
 				throw new Error("boom");
 			});
 
-		// Core renders the cleanup side itself after the action error was rendered.
 		expect(await captureExecute(app, ["--json"])).toEqual({
 			stdout: "",
-			stderr: '{"message":"boom"}\nCleanup failed: dispose',
+			stderr: '{"message":"boom"}\n{"type":"cleanup","error":{"message":"dispose"}}',
 			exitCode: 1,
 		});
 	});
@@ -714,6 +713,48 @@ describe("json", () => {
 				stdout: '{"type":"event","data":"opened"}\n{"type":"result","data":{"ok":true}}',
 				stderr: '{"message":"dispose"}',
 				exitCode: 1,
+			});
+		});
+
+		it("writes a disposal failure after a failed stream's error line as cleanup JSON on stderr", async () => {
+			const app = new Crust("app")
+				.extend(json())
+				.provide(disposeFails())
+				.action(async function* ({ ctx }) {
+					await ctx.resource;
+					yield 1;
+					throw new CrustError("PARSE", "bad value");
+				});
+
+			expect(await captureExecute(app, ["--json"])).toEqual({
+				stdout: [
+					'{"type":"event","data":1}',
+					'{"type":"error","error":{"code":"PARSE","message":"bad value"}}',
+				].join("\n"),
+				stderr: '{"type":"cleanup","error":{"message":"dispose"}}',
+				exitCode: 1,
+			});
+		});
+
+		it("keeps one final stdout line when cleanup fails while a cancellation after the result unwinds", async () => {
+			const app = new Crust("app")
+				.extend(
+					json(),
+					defineExtension(defineExtensionId("late-abort")).postRun(() => {
+						throw new DOMException("stop", "AbortError");
+					}),
+				)
+				.provide(disposeFails())
+				.action(async function* ({ ctx }) {
+					await ctx.resource;
+					yield "opened";
+					return { ok: true };
+				});
+
+			expect(await captureExecute(app, ["--json"])).toEqual({
+				stdout: '{"type":"event","data":"opened"}\n{"type":"result","data":{"ok":true}}',
+				stderr: '{"type":"cleanup","error":{"message":"dispose"}}',
+				exitCode: 130,
 			});
 		});
 
