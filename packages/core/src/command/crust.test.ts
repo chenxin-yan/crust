@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { unwrap } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
-import { defineExtension } from "../api/extension.ts";
+import { type ExtensionContext, defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
@@ -1304,6 +1304,131 @@ describe("Extension named hooks", () => {
 				.add(defineCommand("known", (cmd) => cmd.action(() => {})));
 			expect(await app.execute({ argv: ["nope"] })).toBe(1);
 			expect(flags).toEqual({});
+		});
+	});
+
+	describe("sources", () => {
+		function recordingApp(bind: (ctx: ExtensionContext) => void = () => {}) {
+			const seen: ExtensionContext["sources"][] = [];
+			const recorder = defineExtension(defineExtensionId("recorder"))
+				.setup((ctx) => {
+					seen.push(ctx.sources);
+					bind(ctx);
+				})
+				.preRun((ctx) => void seen.push(ctx.sources))
+				.onError((_error, ctx) => void seen.push(ctx.sources));
+			const app = new Crust("cli")
+				.flags({
+					name: { type: "string", default: "dflt" },
+					verbose: { type: "boolean", short: "V" },
+					color: { type: "boolean" },
+					port: { type: "number", env: { name: "SOURCES_PORT" } },
+					tags: { type: "string", multiple: true, delimiter: "," },
+					count: { type: "number" },
+				})
+				.args({ name: "source", type: "string" })
+				.args({ name: "target", type: "string", default: "tgt" })
+				.extend(recorder)
+				.action(() => {});
+			return { app, seen };
+		}
+
+		afterEach(() => vi.unstubAllEnvs());
+
+		it("reports argv, env, and default by canonical name and omits names without a value", async () => {
+			vi.stubEnv("SOURCES_PORT", "9000");
+			const { app, seen } = recordingApp();
+			const argv = ["a", "-V", "--no-color", "--tags", "", "--", "b", "--x"];
+			expect(await app.execute({ argv, io: { stdout: () => {} } })).toBe(0);
+			expect(seen[0]).toEqual({
+				args: { source: "argv", target: "argv" },
+				flags: { name: "default", verbose: "argv", color: "argv", port: "env", tags: "argv" },
+				raw: "argv",
+			});
+			expect(Object.isFrozen(seen[0])).toBe(true);
+			expect(Object.isFrozen(seen[0]?.flags)).toBe(true);
+		});
+
+		it("reports no passthrough when `--` has no tokens left over", async () => {
+			const { app, seen } = recordingApp();
+			await app.execute({ argv: ["--name", "x", "--"] });
+			expect(seen[0]).toEqual({
+				args: { target: "default" },
+				flags: { name: "argv" },
+				raw: undefined,
+			});
+		});
+
+		it("reports typed run() input as run", async () => {
+			vi.stubEnv("SOURCES_PORT", "9000");
+			const { app, seen } = recordingApp();
+			await unwrap(
+				app.run([], { args: { source: "a" }, flags: { verbose: true, port: 1 }, raw: ["r"] }),
+			);
+			expect(seen[0]).toEqual({
+				args: { source: "run", target: "default" },
+				flags: { name: "default", verbose: "run", port: "run" },
+				raw: "run",
+			});
+		});
+
+		it("reads bound keys live, and a later bindInput reverts keys it no longer supplies", async () => {
+			vi.stubEnv("SOURCES_PORT", "9000");
+			const { app, seen } = recordingApp((ctx) => {
+				ctx.bindInput({ args: { source: "x" }, flags: { name: "a", port: 1 }, raw: ["r"] });
+				seen.push(ctx.sources);
+				ctx.bindInput({ flags: { name: "b", verbose: true } });
+			});
+			expect(await app.execute({ argv: ["-V"] })).toBe(0);
+			const original = {
+				args: { target: "default" },
+				flags: { name: "default", verbose: "argv", port: "env" },
+				raw: undefined,
+			};
+			expect(seen).toEqual([
+				original,
+				{
+					args: { source: "bound", target: "default" },
+					flags: { name: "bound", verbose: "argv", port: "bound" },
+					raw: "bound",
+				},
+				// argv still wins for verbose; port and source revert to the original parse.
+				{ ...original, flags: { ...original.flags, name: "bound" } },
+			]);
+		});
+
+		it("reports an empty variadic, multiple-flag, or raw array as omitted under run() and bindInput", async () => {
+			const empty = { args: { files: [] }, flags: { tags: [], labels: [] }, raw: [] };
+			const seen: ExtensionContext["sources"][] = [];
+			const app = (bind: boolean) =>
+				new Crust("cli")
+					.flags({
+						tags: { type: "string", multiple: true, default: ["d"] },
+						labels: { type: "string", multiple: true },
+					})
+					.args({ name: "files", type: "string", variadic: true })
+					.extend(
+						defineExtension(defineExtensionId("recorder"))
+							.setup((ctx) => void (bind && ctx.bindInput(empty)))
+							.preRun((ctx) => void seen.push(ctx.sources)),
+					)
+					.action(() => {});
+			await unwrap(app(false).run([], empty));
+			expect(await app(true).execute({ argv: [] })).toBe(0);
+			const omitted = { args: {}, flags: { tags: "default" }, raw: undefined };
+			expect(seen).toEqual([omitted, omitted]);
+		});
+
+		it("keeps argv's passthrough tokens over bound raw", async () => {
+			const { app, seen } = recordingApp((ctx) => ctx.bindInput({ raw: ["bound"] }));
+			await app.execute({ argv: ["--", "a", "b", "c"] });
+			expect(seen.at(-1)?.raw).toBe("argv");
+		});
+
+		it("is empty in the routing-failure onError context", async () => {
+			const { app, seen } = recordingApp();
+			await app.execute({ argv: ["--nope"], io: { stderr: () => {} } });
+			expect(seen).toEqual([{ args: {}, flags: {}, raw: undefined }]);
 		});
 	});
 

@@ -558,6 +558,9 @@ async function dispatch(
 		get rawArgs() {
 			return bound.rawArgs;
 		},
+		get sources() {
+			return bound.sources;
+		},
 		signal,
 		ctx: resolver.bag(extensions.flatMap((extension) => extension.use)),
 		bindInput(payload: RunInputPayload) {
@@ -732,6 +735,7 @@ async function renderFailure(
 			args: Object.freeze({}),
 			flags: Object.freeze({}),
 			rawArgs: [],
+			sources: Object.freeze({ args: Object.freeze({}), flags: Object.freeze({}), raw: undefined }),
 			signal,
 			stdout: output.io.stdout,
 			stderr: output.io.stderr,

@@ -13,6 +13,7 @@ export type {
 export { didYouMean } from "./did-you-mean.ts";
 export type { DidYouMeanOptions } from "./did-you-mean.ts";
 export { help, renderHelp } from "./help.ts";
+export { input } from "./input.ts";
 export { json } from "./json.ts";
 export { noColor } from "./no-color.ts";
 export { updateNotifier } from "./update-notifier.ts";

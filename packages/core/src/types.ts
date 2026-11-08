@@ -855,6 +855,12 @@ export type RawParsedArgs<A extends ArgsDef> = number extends A["length"]
 	? Record<string, ParsedArgValue>
 	: { [D in A[number] as D["name"]]: RawArgValue<D> };
 
+/**
+ * Where an argument's or flag's current value came from: given on `argv`, typed `run()`
+ * input, the flag's `env` variable, `ExtensionContext.bindInput`, or the definition's `default`.
+ */
+export type ValueSource = "argv" | "run" | "env" | "bound" | "default";
+
 /** A declared default on any argument or flag definition. */
 export type DeclaredDefault = (ArgDef | FlagDef)["default"];
 /** Syntax-parsed input, before required and Standard Schema validation. */

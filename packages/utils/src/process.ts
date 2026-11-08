@@ -234,6 +234,37 @@ export async function runProcess(
 	}
 }
 
+/**
+ * All of stdin as UTF-8 text. Read asynchronously: a synchronous read would block the
+ * event loop, so Ctrl-C could not cancel a read waiting on an open pipe or terminal.
+ * Rejects with `signal.reason` on abort. Stdin an earlier consumer already read to EOF
+ * reads as `""`, since its `end` event cannot fire again.
+ */
+export async function readStdin(signal: AbortSignal): Promise<string> {
+	signal.throwIfAborted();
+	const { stdin } = process;
+	if (stdin.readableEnded || stdin.destroyed) return "";
+	const chunks: Buffer[] = [];
+	const done = Promise.withResolvers<string>();
+	// Strings arrive when something already called `stdin.setEncoding()`.
+	const onData = (chunk: Buffer | string) =>
+		void chunks.push(typeof chunk === "string" ? Buffer.from(chunk, "utf8") : chunk);
+	const onEnd = () => done.resolve(Buffer.concat(chunks).toString("utf8"));
+	const onAbort = () => done.reject(signal.reason);
+	stdin.on("data", onData).once("end", onEnd).once("error", done.reject);
+	signal.addEventListener("abort", onAbort, { once: true });
+	// A `data` listener does not restart a stream an earlier consumer paused.
+	stdin.resume();
+	try {
+		return await done.promise;
+	} finally {
+		signal.removeEventListener("abort", onAbort);
+		stdin.off("data", onData).off("end", onEnd).off("error", done.reject);
+		// Paused stdin no longer keeps the process alive after a cancelled read.
+		stdin.pause();
+	}
+}
+
 function isExecutableFile(path: string): boolean {
 	const { accessSync, constants, statSync } = process.getBuiltinModule("node:fs");
 	try {
