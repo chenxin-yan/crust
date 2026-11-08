@@ -209,13 +209,13 @@ An explicit argv occurrence always wins over the environment, even when it split
 
 Mark a flag or argument that holds a secret with `sensitive: true`, like `token` above. Crust never prints its value:
 
-- A value that fails conversion or validation (`choices`, `parse`, `url`, `json`, `number`, or a schema issue) reports only `Invalid value for --token.`, or `Invalid value for <name>.` for an argument. The error's `details` name the field, and no cause is attached.
+- A value that fails conversion or validation (`choices`, `parse`, `url`, `json`, `number`, or a schema issue or exception) reports only `Invalid value for --token.`, or `Invalid value for <name>.` for an argument. The error's `details` name the field, and no cause is attached.
 - [`nextSteps()`](/docs/modules/extensions/next-steps) suggests `--token <redacted>`.
 - Help and man pages start its description with `Secret.` and still show `[env: PUBLISH_TOKEN]`.
 - The JSON Schema that [`schema()`](/docs/modules/extensions/schema), [`input()`](/docs/modules/extensions/input), and MCP publish marks it `writeOnly`, and a string also `format: "password"` unless it declares another format. A schema-backed field publishes no `enum`, `const`, `default`, `examples`, or `x-*` keywords.
 - Generated skills tell agents to pass it through its variable, never inline.
 
-A sensitive definition can't declare `default` or `choices`, because help and JSON Schema publish both. TypeScript rejects a literal one, and a computed one throws a `DEFINITION` error.
+A sensitive definition can't declare `default` or `choices`, because help and JSON Schema publish both. It can't be a boolean either: a boolean's value is which spelling is on argv (`--flag` or `--no-flag`), so a suggested command can't show it without revealing it. TypeScript rejects these definitions when it can see them, and the rest throw a `DEFINITION` error.
 
 Crust can't hide argv from the OS: a value given on the command line shows up in `ps` and shell history, so prefer `env`. Protection also starts only once Crust matches a token to its definition. A malformed token that fails before then is echoed in the error, such as `--tokenabc`, which is an unknown flag.
 
