@@ -76,7 +76,9 @@ export interface ContextInstance<
 	Value = unknown,
 	OF extends FlagsDef = FlagsDef,
 	Deps extends ContextMap = Record<string, ContextValue>,
-> extends Defining<ContextInstance<Name, Value, OF, Deps>> {
+	// Flags a command that uses this Context parses: its own and its setup dependencies', transitively.
+	UF extends FlagsDef = OF,
+> extends Defining<ContextInstance<Name, Value, OF, Deps, UF>> {
 	readonly [contextProof]?: string extends keyof OF | keyof Deps
 		? unknown
 		: (state: [OF, Deps]) => void;
@@ -92,6 +94,8 @@ export interface ContextInstance<
 	readonly _ownedFlags?: OF;
 	/** @internal — phantom carrying the transitive dependency closure */
 	readonly _deps?: Deps;
+	/** @internal — phantom carrying the flags a `.use()` of an Extension providing it installs */
+	readonly _useFlags?: UF;
 }
 
 /** Any Context instance: the open bound for provider lists; never evidence for trusted attachment. */
@@ -128,13 +132,13 @@ export interface ContextFactory<
 	/** Options may be omitted when their type accepts `undefined` (including no-option `void`). */
 	(
 		...options: undefined extends Options ? [options?: Options] : [options: Options]
-	): ContextInstance<Name, Value, OF, Deps>;
+	): ContextInstance<Name, Value, OF, Deps, UF>;
 	readonly contextName: Name;
 	/** @internal — declared direct dependency factories */
 	readonly use: readonly AnyContextFactory[];
 	/** @internal — owned flags, installed on the commands that use this Context */
 	readonly ownedFlags: FlagsDef;
-	of(value: Value): ContextInstance<Name, Value, OF, {}>;
+	of(value: Value): ContextInstance<Name, Value, OF, {}, UF>;
 	readonly _deps?: Deps;
 	/** @internal — phantom carrying the flags `.use()` installs */
 	readonly _useFlags?: UF;
@@ -258,7 +262,7 @@ type FactoriesDeps<Fs extends readonly AnyContextFactory[], Acc = {}> = Fs exten
 	? FactoriesDeps<T, Acc & FactoryDeps<H>>
 	: Acc;
 
-// A widened factory may own any flags.
+// A widened factory or instance may own any flags.
 type FactoryUseFlags<F> =
 	DefiningOf<F> extends { readonly _useFlags?: infer UF extends FlagsDef }
 		? IsAny<UF> extends true

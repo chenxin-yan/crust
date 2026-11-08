@@ -737,6 +737,40 @@ describe("Context-owned flags at use sites", () => {
 		}
 	});
 
+	it("parses and types the flags of an Extension-provided Context's dependencies on .use() of the Extension", async () => {
+		const config = defineContext("config")
+			.flags({ region: { type: "string", required: true } })
+			.setup(({ flags }) => flags.region);
+		const api = defineContext("api")
+			.use(config)
+			.setup(async ({ ctx }) => `api:${await ctx.config}`);
+		const byValue = defineExtension(defineExtensionId("api")).provide(api());
+		const byFactory = byValue.factory((extension) => extension);
+		const valueUser = defineCommand("call", (command) =>
+			command.use(byValue).action(async ({ ctx, flags }) => {
+				type _Typed = Expect<Equal<typeof flags.region, string>>;
+				return await ctx.api;
+			}),
+		);
+		const factoryUser = defineCommand("call", (command) =>
+			command.use(byFactory).action(async ({ ctx, flags }) => {
+				type _Typed = Expect<Equal<typeof flags.region, string>>;
+				return await ctx.api;
+			}),
+		);
+		const apps = [
+			new Crust("cli").provide(config()).extend(byValue).add(valueUser),
+			new Crust("cli").provide(config()).extend(byFactory()).add(factoryUser),
+		] as const;
+
+		for (const app of apps) {
+			expect(flagsOf((await app.snapshot()).subCommands.call!)).toEqual(["region"]);
+			expect(await unwrap(app.run(["call"], { flags: { region: "eu" } }))).toMatchObject({
+				result: "api:eu",
+			});
+		}
+	});
+
 	it("puts the flags of Contexts an Extension hook uses on every command", async () => {
 		for (const source of ["extension", "app"] as const) {
 			const seen: unknown[] = [];

@@ -342,6 +342,31 @@ function _typecheckChecksLiteralContextSections() {
 }
 
 // types Context-owned flags only on commands that parse them
+// .use(extension) types the flags of the provided Contexts' setup dependencies, value or factory
+function _typecheckTypesTransitiveFlagsOfExtensionUseSources() {
+	const config = defineContext("config")
+		.flags({ region: { type: "string", required: true } })
+		.setup(({ flags }) => flags.region);
+	const api = defineContext("api")
+		.use(config)
+		.setup(async ({ ctx }) => `api:${await ctx.config}`);
+	const value = defineExtension(defineExtensionId("api")).provide(api());
+	const factory = value.factory((extension) => extension);
+	const byValue = defineCommand("value", (command) =>
+		command.use(value).action(({ flags }) => {
+			type _Region = Expect<Equal<typeof flags.region, string>>;
+		}),
+	);
+	const byFactory = defineCommand("factory", (command) =>
+		command.use(factory).action(({ flags }) => {
+			type _Region = Expect<Equal<typeof flags.region, string>>;
+		}),
+	);
+	const app = new Crust("cli").provide(config()).extend(factory()).add(byValue, byFactory);
+	void app.run(["value"], { flags: { region: "eu" } });
+	void app.run(["factory"], { flags: { region: "eu" } });
+}
+
 function _typecheckTypesContextFlagsAtUseSites() {
 	const region = defineFlag({ type: "string" });
 	const config = defineContext("config")

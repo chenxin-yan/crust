@@ -578,11 +578,11 @@ type ExtensionsProvidedFlags<Es extends readonly AnyExtension[], Acc = {}> = Es 
 	? ExtensionsProvidedFlags<T, Acc & ExtensionProvidedFlags<H>>
 	: Acc;
 
-// shortcut: an Extension source types only its provided Contexts' own flags; `.use()` also parses
-// their setup dependencies' at runtime. Carry use flags on instances if an Extension needs them typed.
-type UseSourceFlags<S> = S extends AnyContextFactory
-	? ContextUseFlags<[S]>
-	: ExtensionProvidedFlags<S extends AnyExtensionFactory ? ReturnType<S> : S>;
+type UseSourceFlags<S> = ContextUseFlags<
+	S extends AnyContextFactory
+		? [S]
+		: ExtensionProviders<S extends AnyExtensionFactory ? ReturnType<S> : S>
+>;
 
 type UseSourcesFlags<Us extends readonly unknown[], Acc = {}> = Us extends readonly [
 	infer H,
