@@ -101,7 +101,6 @@ import {
 	type AddedChild,
 	type CommandAction,
 	type CommandNode,
-	checkProvidedContextFlags,
 	cloneCommandNode,
 	cloneFlagRegistry,
 	commandDefinitionInternal,
@@ -110,7 +109,6 @@ import {
 	declaredContextNames,
 	demandedFactories,
 	installContextFlags,
-	registerContextFlags,
 	registerFlag,
 } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
@@ -339,9 +337,6 @@ function materializeCommandDefinition(
 	);
 
 	childNode.meta = { name, ...internal.meta };
-	// Its Contexts are final now; the recipe may `.provide()` after `.use()`. An inline child
-	// checks the Contexts it inherited too: its parent's flags were copied before that parent's check.
-	checkProvidedContextFlags(childNode, childNode.flagContexts.keys());
 	return childNode;
 }
 
@@ -433,27 +428,11 @@ type ShapeWithInheritedFlags<S, CF extends FlagsDef> = keyof CF extends never
 // add Extension-provided Context flags to inline commands added before `.extend()`.
 type InlineShape<S, CF extends FlagsDef> =
 	S extends CommandShape<infer SA, infer SF, infer SC, infer SR, infer P, infer SE>
-		? CommandShape<
-				SA,
-				keyof CF extends never ? SF : ProviderFlagsFirst<CF, SF>,
-				SC,
-				SR,
-				P,
-				SE,
-				true
-			>
+		? CommandShape<SA, keyof CF extends never ? SF : MergeFlags<CF, SF>, SC, SR, P, SE, true>
 		: never;
 
-// A provider's definition of a flag that a used Context also declares is the one parsed (it may
-// customize spelling, help, or default), so shared keys take `P`'s; otherwise a plain intersection.
-type ProviderFlagsFirst<P extends FlagsDef, D extends FlagsDef> = string extends keyof P
-	? P & D
-	: [keyof P & keyof D] extends [never]
-		? P & D
-		: P & Omit<D, keyof P>;
-
 // `false`: reusable definitions, which parse only the Context flags they use: the declared
-// Contexts' (a same-name provider may not add any; see `checkProvidedContextFlags`).
+// Contexts' (a same-name provider must own exactly those; see `checkProvidedContextFlags`).
 type EntryShape<S, CF extends FlagsDef | false> = [CF] extends [FlagsDef] ? InlineShape<S, CF> : S;
 
 type DefinitionsTree<
@@ -630,7 +609,7 @@ type InlineScopeTree<Tree, F extends FlagsDef> = {
 		infer SE,
 		true
 	>
-		? CommandShape<SA, ProviderFlagsFirst<F, SF>, InlineScopeTree<SC, F>, SR, P, SE, true>
+		? CommandShape<SA, MergeFlags<F, SF>, InlineScopeTree<SC, F>, SR, P, SE, true>
 		: Tree[K];
 };
 
@@ -1007,13 +986,13 @@ type AfterUse<
 	Us extends readonly UseSource[],
 	Meta extends RootCommandMeta | undefined,
 > = Crust<
-	ProviderFlagsFirst<Flags, UsedContextFlags<Us>>,
+	Flags & UsedContextFlags<Us>,
 	A,
 	MergeContext<Ctx, UsedContexts<Us>>,
 	Sibs,
 	Sp | LocalSpellingsOf<UsedContextFlags<Us>>,
 	Tree,
-	ProviderFlagsFirst<CtxFlags, UsedContextFlags<Us>>,
+	CtxFlags & UsedContextFlags<Us>,
 	CollisionSpellings<
 		CollisionSp["extension"],
 		CollisionSp["tree"],
@@ -1046,13 +1025,13 @@ type AfterProvide<
 	Meta extends RootCommandMeta | undefined,
 	Caps extends "app" | "recipe",
 > = Crust<
-	ProviderFlagsFirst<ContextsOwnedFlags<Cs>, Flags>,
+	Flags & ContextsOwnedFlags<Cs>,
 	A,
 	MergeProviders<Ctx, ContextsOutput<Cs>>,
 	Sibs,
 	Sp | LocalSpellingsOf<ContextsOwnedFlags<Cs>>,
 	Tree,
-	ProviderFlagsFirst<ContextsOwnedFlags<Cs>, CtxFlags>,
+	CtxFlags & ContextsOwnedFlags<Cs>,
 	CollisionSpellings<
 		CollisionSp["extension"],
 		CollisionSp["tree"],
@@ -1557,8 +1536,8 @@ export class Crust<
 	 * Factory references are retained while setup stays lazy. An Extension, or
 	 * Extension factory, stands for the Contexts that Extension provides. The command,
 	 * and its inline `.command()` children added afterwards, parse the flags these
-	 * Contexts own, and those of the Contexts their setup uses, transitively. A same-name provider that
-	 * owns other flags is a `DEFINITION` error when the command materializes.
+	 * Contexts own, and those of the Contexts their setup uses, transitively. A same-name provider of
+	 * another factory must own exactly the declared flags, or preparing the app throws `DEFINITION`.
 	 */
 	use<const Us extends readonly [UseSource, ...UseSource[]] = never>(
 		this: { readonly _types: { readonly caps: "recipe" } },
@@ -1658,18 +1637,17 @@ export class Crust<
 		});
 		const declared = declaredContextNames(demandedFactories(this._node.demands));
 		for (const instance of instances) {
-			// Fulfilling this command's own `.use()` demand shares the flags `.use()` installed.
-			if (declared.has(instance.name)) {
-				registerContextFlags(cloned._node, instance.name, instance.ownedFlags, "provided");
-				continue;
-			}
-			for (const [name, definition] of Object.entries(instance.ownedFlags)) {
-				registerFlag(cloned._node, name, definition, "owned");
+			const flags = Object.keys(instance.ownedFlags);
+			// Fulfilling this command's own `.use()` demand shares the flags `.use()` installed;
+			// preparation checks that the provider owns exactly those.
+			if (flags.length === 0 || declared.has(instance.name)) continue;
+			for (const name of flags) {
+				registerFlag(cloned._node, name, instance.ownedFlags[name]!, "owned");
 			}
 			const installed = cloned._node.flagContexts.get(instance.name) ?? [];
 			cloned._node.flagContexts = new Map(cloned._node.flagContexts).set(instance.name, [
 				...installed,
-				...Object.keys(instance.ownedFlags),
+				...flags,
 			]);
 		}
 

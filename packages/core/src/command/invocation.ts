@@ -35,11 +35,11 @@ import {
 import {
 	addedChildrenOf,
 	checkProvidedContextFlags,
-	declaredContextNames,
 	childEntriesOf,
 	cloneFlagRegistry,
 	commandDefinitionInternal,
 	commandPathOf,
+	demandedFactories,
 	installContextFlags,
 	lazyChildRecord,
 	registerFlag,
@@ -433,7 +433,9 @@ export function buildExtensionTree(
 		}
 		// Extension hooks run on every command, so the Contexts they use parse their flags everywhere.
 		installContextFlags(prepared, hookContexts);
-		checkProvidedContextFlags(prepared, declaredContextNames(hookContexts));
+		// Its providers and flags are final only now: the recipe may `.provide()` after `.use()`,
+		// and hook-used Contexts' flags are parsed by every command.
+		checkProvidedContextFlags(prepared, [...demandedFactories(prepared.demands), ...hookContexts]);
 		applyNodeContextSections(prepared, path, sectionContextsFor(prepared, isRoot));
 		freezeNode(prepared);
 		return prepared;

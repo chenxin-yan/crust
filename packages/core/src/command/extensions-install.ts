@@ -138,7 +138,7 @@ export function installExtensionProviders(
 		...providers.map(({ instance }) => [instance.name, Object.keys(instance.ownedFlags)] as const),
 		...parent.flagContexts,
 	]) {
-		flagContexts.set(name, [...(flagContexts.get(name) ?? []), ...flags]);
+		if (flags.length > 0) flagContexts.set(name, [...(flagContexts.get(name) ?? []), ...flags]);
 	}
 	const node: CommandNode = {
 		...parent,

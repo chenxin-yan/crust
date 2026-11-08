@@ -441,29 +441,39 @@ function _typecheckTypesContextFlagsAtUseSites() {
 	// @ts-expect-error -- "offline" is not a declared flag of the used Context
 	void swapped.run(["uses"], { flags: { "api-key": "k", offline: true } });
 
-	// Where a provider's customized definition meets the declared one in a builder, the provider's
-	// (the parsed one) types the shared flag instead of an uninhabitable intersection.
-	const declaredMode = defineContext("mode")
+	// Same-name factories owning the same flags (the only ones a provider may replace) type the
+	// shared flag as declared, batched, chained, provided, or through an Extension's hooks.
+	const firstMode = defineContext("mode")
 		.flags({ mode: { type: "string", default: "a" } })
 		.setup(() => 1);
-	const customizedMode = defineContext("mode")
-		.flags({ mode: { type: "string", default: "b" } })
-		.setup(() => 1);
-	defineCommand("same", (command) =>
+	const secondMode = defineContext("mode")
+		.flags({ mode: { type: "string", default: "a" } })
+		.setup(() => 2);
+	const batched = defineCommand("batched", (command) =>
+		command.use(firstMode, secondMode).action(({ flags }) => {
+			type _Mode = Expect<Equal<typeof flags.mode, string>>;
+		}),
+	);
+	const chained = defineCommand("chained", (command) =>
 		command
-			.use(declaredMode)
-			.provide(customizedMode())
+			.use(firstMode)
+			.use(secondMode)
+			.provide(secondMode())
 			.action(({ flags }) => {
 				type _Mode = Expect<Equal<typeof flags.mode, string>>;
 			}),
 	);
 	const modeApp = new Crust("cli")
-		.provide(customizedMode())
-		.command("inline", (command) => command.use(declaredMode));
+		.provide(secondMode())
+		.add(batched, chained)
+		.command("inline", (command) => command.use(firstMode));
+	void modeApp.run(["batched"], { flags: { mode: "x" } });
+	void modeApp.run(["chained"], { flags: { mode: "x" } });
 	void modeApp.run(["inline"], { flags: { mode: "x" } });
-	type _InlineMode = Expect<
-		Equal<(typeof modeApp)["_types"]["tree"]["inline"]["flags"]["mode"]["default"], "b">
-	>;
+	const modeExtension = defineExtension(defineExtensionId("mode"))
+		.provide(secondMode())
+		.use(firstMode);
+	void new Crust("cli").extend(modeExtension).run([], { flags: { mode: "x" } });
 
 	// A conditional dependency's flags stay beside the Context's own, as either alternative.
 	const a = defineContext("a")

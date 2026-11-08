@@ -853,18 +853,21 @@ describe("Context-owned flags at use sites", () => {
 		expect(await unwrap(app.run(["local"], { flags: { "api-key": "k" } }))).toMatchObject({
 			result: "auth:k",
 		});
-		// A same-name provider with another definition of the flag is a genuine collision,
-		// which only the runtime sees: the types do not track flags per Context name.
+		// A same-name provider with another definition of the flag only the runtime sees: the types
+		// do not track flags per Context name.
 		const other = defineContext("auth")
 			.flags({ "api-key": { type: "number" } })
 			.setup(() => "other");
 		const conflicting = defineCommand("local", (command) => command.use(auth).provide(other()));
-		await expect(new Crust("cli").provide(auth()).add(conflicting).snapshot()).rejects.toThrow(
-			"collides",
-		);
+		await expect(
+			new Crust("cli").provide(auth()).add(conflicting).snapshot(),
+		).rejects.toMatchObject({
+			code: "DEFINITION",
+			details: { subject: "context", name: "auth", reason: "context-flags-not-parsed" },
+		});
 	});
 
-	it("rejects a same-name provider whose flags the use site does not parse", async () => {
+	it("rejects a same-name provider that owns flags the declared Context does not", async () => {
 		const declared = defineContext("auth").setup(() => "declared");
 		const supplied = defineContext("auth")
 			.flags({ offline: { type: "boolean", required: true } })
@@ -895,7 +898,7 @@ describe("Context-owned flags at use sites", () => {
 			await expect(app.snapshot()).rejects.toMatchObject(notParsed);
 		}
 		await expect(new Crust("cli").provide(supplied()).add(cmd).snapshot()).rejects.toThrow(
-			'Context "auth" provided to command "cmd" owns flag "offline", which the command does not parse',
+			'Context "auth" provided to command "cmd" does not own the same flags as the Context "auth" it declares with .use()',
 		);
 		// The root, which provides it, parses its flags; a command that does not use it is unaffected.
 		const fine = await new Crust("cli").provide(supplied()).add(list).snapshot();
@@ -927,97 +930,60 @@ describe("Context-owned flags at use sites", () => {
 		const both = defineCommand("cmd", (command) => command.use(declared, config));
 		const app = new Crust("cli").provide(config(), supplied()).add(both);
 		expect(flagsOf((await app.snapshot()).subCommands.cmd!)).toEqual(["region"]);
-	});
-
-	it("lets a same-name provider customize a declared flag but not its value type", async () => {
-		const verbose = defineFlag({ type: "boolean" });
-		const declared = defineContext("logging")
-			.flags({ verbose })
-			.setup(({ flags }) => flags.verbose);
-		const customized = defineContext("logging")
-			.flags({ verbose: { ...verbose, short: "v", default: true } })
-			.setup(({ flags }) => flags.verbose);
-		const cmd = defineCommand("cmd", (command) =>
-			command.use(declared).action(async ({ ctx, flags }) => [flags.verbose, await ctx.logging]),
+		// So does an Extension whose hooks use it: every command parses its flags.
+		const reading = defineCommand("cmd", (command) =>
+			command.use(declared).action(async ({ ctx }) => await ctx.auth),
 		);
-		const app = new Crust("cli").provide(customized()).add(cmd);
-		expect((await app.snapshot()).subCommands.cmd!.flags.verbose).toMatchObject({
-			short: "v",
-			default: true,
+		const hooked = defineExtension(defineExtensionId("config-hook"))
+			.use(config)
+			.preRun(() => {});
+		const hookedApp = new Crust("cli").provide(config(), supplied()).extend(hooked).add(reading);
+		expect(flagsOf((await hookedApp.snapshot()).subCommands.cmd!)).toEqual(["region"]);
+		expect(await unwrap(hookedApp.run(["cmd"], { flags: { region: "eu" } }))).toMatchObject({
+			result: "supplied",
 		});
-		expect(await unwrap(app.run(["cmd"]))).toMatchObject({ result: [true, true] });
-
-		const retyped = defineContext("logging")
-			.flags({ verbose: { type: "string" } })
-			.setup(() => true);
-		const invalid = new Crust("cli").provide(retyped()).add(cmd);
-		await expect(invalid.snapshot()).rejects.toThrow(
-			'Flag "verbose" of Context "logging" collides with the provider\'s definition',
-		);
 	});
 
-	it("lets a same-name provider change a declared flag's default value but not its presence", async () => {
+	it("accepts a same-name provider only with exactly the declared flag definitions", async () => {
+		const mode = defineFlag({ type: "string", default: "a" });
 		const declared = defineContext("mode")
-			.flags({ mode: { type: "string", default: "a" } })
-			.setup(({ flags }) => flags.mode);
-		const cmd = defineCommand("cmd", (command) =>
-			command.use(declared).action(async ({ ctx, flags }) => [flags.mode, await ctx.mode]),
-		);
-		const otherDefault = defineContext("mode")
-			.flags({ mode: { type: "string", default: "b" } })
-			.setup(({ flags }) => flags.mode);
-		const app = new Crust("cli").provide(otherDefault()).add(cmd);
-		expect(await unwrap(app.run(["cmd"]))).toMatchObject({ result: ["b", "b"] });
-		expect(await unwrap(app.run(["cmd"], { flags: { mode: "x" } }))).toMatchObject({
-			result: ["x", "x"],
-		});
-
-		// Required input the declared definition does not require, or a value it no longer
-		// guarantees, would break the declared types.
-		const required = defineContext("mode")
-			.flags({ mode: { type: "string", required: true } })
-			.setup(() => "required");
-		const optional = defineContext("mode")
-			.flags({ mode: { type: "string" } })
-			.setup(() => "optional");
-		for (const provider of [required(), optional()]) {
-			await expect(new Crust("cli").provide(provider).add(cmd).snapshot()).rejects.toThrow(
-				'Flag "mode" of Context "mode" collides with the provider\'s definition',
-			);
-		}
-	});
-
-	it("applies a same-name provider's customizations on inline children of the use site", async () => {
-		const declared = defineContext("mode")
-			.flags({ mode: { type: "string", default: "a", choices: ["a", "b", "c"] } })
-			.setup(({ flags }) => flags.mode);
-		const customized = defineContext("mode")
-			.flags({ mode: { type: "string", default: "b", aliases: ["md"], choices: ["a", "b"] } })
-			.setup(({ flags }) => flags.mode);
+			.flags({ mode })
+			.setup(({ flags }) => `declared:${flags.mode}`);
 		const group = defineCommand("group", (command) =>
-			command.use(declared).command("leaf", (leaf) =>
-				leaf.action(async ({ ctx, stdout }) => {
-					stdout(await ctx.mode);
-				}),
-			),
+			command
+				.use(declared)
+				.action(async ({ ctx, flags }) => [flags.mode, await ctx.mode])
+				.command("leaf", (leaf) => leaf.action(async ({ ctx }) => await ctx.mode)),
 		);
-		const app = new Crust("cli").provide(customized()).add(group);
-
-		const snapshot = await app.snapshot();
-		expect(snapshot.subCommands.group!.subCommands.leaf!.flags.mode).toEqual(
-			snapshot.subCommands.group!.flags.mode,
-		);
-		expect(snapshot.subCommands.group!.subCommands.leaf!.flags.mode).toMatchObject({
-			default: "b",
-			aliases: ["md"],
-			choices: ["a", "b"],
+		// Another factory with equal definitions, or a `.of()` double, replaces it.
+		const same = defineContext("mode")
+			.flags({ mode: { type: "string", default: "a" } })
+			.setup(({ flags }) => `same:${flags.mode}`);
+		const sameApp = new Crust("cli").provide(same()).add(group);
+		expect(await unwrap(sameApp.run(["group"], { flags: { mode: "x" } }))).toMatchObject({
+			result: ["x", "same:x"],
 		});
-		const lines: string[] = [];
-		const io = { stdout: (line: string) => void lines.push(line), stderr: () => {} };
-		expect(await app.execute({ argv: ["group", "leaf"], io })).toBe(0);
-		expect(await app.execute({ argv: ["group", "leaf", "--md", "a"], io })).toBe(0);
-		expect(await app.execute({ argv: ["group", "leaf", "--mode", "c"], io })).toBe(1);
-		expect(lines).toEqual(["b", "a"]);
+		expect(await unwrap(sameApp.run(["group", "leaf"]))).toMatchObject({ result: "same:a" });
+		const double = new Crust("cli").provide(declared.of("double")).add(group);
+		expect(await unwrap(double.run(["group"]))).toMatchObject({ result: ["a", "double"] });
+
+		// Any other definition, a missing flag, or an extra one is a definition error.
+		const others = [
+			defineContext("mode").flags({ mode: { type: "string", default: "b" } }),
+			defineContext("mode").flags({ mode: { type: "string", default: "a", short: "m" } }),
+			defineContext("mode").flags({ mode: { type: "number", default: 1 } }),
+			defineContext("mode"),
+			defineContext("mode").flags({ mode, extra: { type: "boolean" } }),
+		].map((builder) => builder.setup(() => "other"));
+		for (const other of others) {
+			await expect(new Crust("cli").provide(other()).add(group).snapshot()).rejects.toMatchObject({
+				code: "DEFINITION",
+				details: { subject: "context", name: "mode", reason: "context-flags-not-parsed" },
+			});
+		}
+		await expect(new Crust("cli").provide(others[0]!()).add(group).snapshot()).rejects.toThrow(
+			"change the declared Context, or provide the same factory (for example its .of())",
+		);
 	});
 
 	it("keeps installed flags of a same-name root provider beside an Extension provider", async () => {
@@ -1050,30 +1016,49 @@ describe("Context-owned flags at use sites", () => {
 		expect(flagsOf(snapshot.subCommands.cmd!)).toEqual(["region"]);
 	});
 
-	it("parses every declared same-name Context's flags, batched or chained", async () => {
-		const first = defineContext("auth")
-			.flags({ one: { type: "string" } })
-			.setup(() => 1);
-		const second = defineContext("auth")
-			.flags({ two: { type: "string", required: true } })
-			.setup(() => 2);
-		const batched = defineCommand("batched", (command) => command.use(first, second));
-		const chained = defineCommand("chained", (command) => command.use(first).use(second));
-		const app = new Crust("cli").provide(first()).add(batched, chained);
-
-		const snapshot = await app.snapshot();
-		expect(flagsOf(snapshot.subCommands.batched!)).toEqual(["one", "two"]);
-		expect(flagsOf(snapshot.subCommands.chained!)).toEqual(["one", "two"]);
-		await expect(
-			// @ts-expect-error -- the second declaration's required flag is part of the input
-			unwrap(app.run(["batched"], { flags: { one: "1" } })),
-		).rejects.toThrow('Missing required flag "--two"');
-		await expect(
-			// @ts-expect-error -- the same for chained declarations
-			unwrap(app.run(["chained"], { flags: { one: "1" } })),
-		).rejects.toThrow('Missing required flag "--two"');
-		await unwrap(app.run(["batched"], { flags: { one: "1", two: "2" } }));
-		await unwrap(app.run(["chained"], { flags: { one: "1", two: "2" } }));
+	it("checks every declared same-name Context against the provider, in any order", async () => {
+		const optional = defineContext("mode")
+			.flags({ mode: { type: "string" } })
+			.setup(() => "optional");
+		const defaulted = defineContext("mode")
+			.flags({ mode: { type: "string", default: "a" } })
+			.setup(() => "defaulted");
+		const equal = defineContext("mode")
+			.flags({ mode: { type: "string", default: "a" } })
+			.setup(() => "equal");
+		const commands = {
+			batched: defineCommand("cmd", (command) => command.use(optional, defaulted)),
+			reversed: defineCommand("cmd", (command) => command.use(defaulted, optional)),
+			chained: defineCommand("cmd", (command) => command.use(optional).use(defaulted)),
+			chainedReversed: defineCommand("cmd", (command) => command.use(defaulted).use(optional)),
+		};
+		for (const [order, cmd] of Object.entries(commands)) {
+			await expect(
+				new Crust("cli").provide(defaulted()).add(cmd).snapshot(),
+				order,
+			).rejects.toMatchObject({
+				code: "DEFINITION",
+				details: { subject: "context", name: "mode", reason: "context-flags-not-parsed" },
+			});
+		}
+		// Declarations owning the same flags pass whichever one provides.
+		const both = defineCommand("cmd", (command) =>
+			command.use(defaulted, equal).action(({ flags }) => flags.mode),
+		);
+		const reversed = defineCommand("cmd", (command) =>
+			command
+				.use(equal)
+				.use(defaulted)
+				.action(({ flags }) => flags.mode),
+		);
+		for (const cmd of [both, reversed]) {
+			for (const provider of [defaulted(), equal()]) {
+				const app = new Crust("cli").provide(provider).add(cmd);
+				expect(await unwrap(app.run(["cmd"], { flags: { mode: "x" } }))).toMatchObject({
+					result: "x",
+				});
+			}
+		}
 	});
 
 	it("follows a used Context's dependencies even when the command provides it", async () => {
