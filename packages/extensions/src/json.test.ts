@@ -123,6 +123,22 @@ describe("json", () => {
 		});
 	});
 
+	it("documents --json in a root help section that subcommands do not repeat", async () => {
+		const app = new Crust("app")
+			.extend(json(), help())
+			.command("deploy", (cmd) => cmd.action(() => {}));
+		const snapshot = await app.snapshot();
+
+		expect(snapshot.meta.sections).toEqual([
+			expect.objectContaining({
+				title: "JSON output",
+				body: "With --json, stdout is one line of JSON (the command's result) and nothing else; other output goes to stderr. Failures print as JSON on stderr. Exit codes are unchanged.",
+			}),
+		]);
+		expect((await captureExecute(app, ["--help"])).stdout).toContain("JSON output:");
+		expect((await captureExecute(app, ["deploy", "--help"])).stdout).not.toContain("JSON output:");
+	});
+
 	it("prints nothing on stdout for an undefined result", async () => {
 		const app = appReturning(() => undefined);
 

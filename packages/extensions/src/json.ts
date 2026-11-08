@@ -29,33 +29,43 @@ function errorJson(error: unknown): string {
  * Adds a recursive `--json` flag. With it, the Command Action's result is
  * printed to stdout as one line of JSON (nothing for an `undefined` result),
  * the action's and Contexts' `stdout()` and `stderr()` lines go to stderr, and
- * failures are written to stderr as JSON. Exit codes are unchanged.
+ * failures are written to stderr as JSON. Exit codes are unchanged. Adds a
+ * "JSON output" section to the root command's documentation saying so.
  */
 export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__ */ defineExtension(
 	JSON_OUTPUT,
 ).factory((extension) =>
-	extension.flags(jsonFlags).renderer(async (ctx) => {
-		if (ctx.flags.json !== true) return undefined;
-		// Loaded only under --json, keeping it out of every CLI's startup.
-		const { parseJsonValue } = await import("@crustjs/utils/json");
-		return {
-			text: ctx.stderr,
-			diag: ctx.stderr,
-			result(value) {
-				if (value === undefined) return;
-				let text: string;
-				try {
-					text = JSON.stringify(parseJsonValue(value), (_key, item) => {
-						if (Object.is(item, -0)) throw new TypeError("-0 does not survive JSON");
-						return item;
-					});
-				} catch (cause) {
-					const reason = cause instanceof Error ? ` (${cause.message})` : "";
-					throw new Error(`--json: the command result is not JSON data${reason}.`, { cause });
-				}
-				ctx.stdout(text);
+	extension
+		.flags(jsonFlags)
+		.sections(() => [
+			{
+				command: [],
+				title: "JSON output",
+				body: "With --json, stdout is one line of JSON (the command's result) and nothing else; other output goes to stderr. Failures print as JSON on stderr. Exit codes are unchanged.",
 			},
-			error: (error) => ctx.stderr(errorJson(error)),
-		};
-	}),
+		])
+		.renderer(async (ctx) => {
+			if (ctx.flags.json !== true) return undefined;
+			// Loaded only under --json, keeping it out of every CLI's startup.
+			const { parseJsonValue } = await import("@crustjs/utils/json");
+			return {
+				text: ctx.stderr,
+				diag: ctx.stderr,
+				result(value) {
+					if (value === undefined) return;
+					let text: string;
+					try {
+						text = JSON.stringify(parseJsonValue(value), (_key, item) => {
+							if (Object.is(item, -0)) throw new TypeError("-0 does not survive JSON");
+							return item;
+						});
+					} catch (cause) {
+						const reason = cause instanceof Error ? ` (${cause.message})` : "";
+						throw new Error(`--json: the command result is not JSON data${reason}.`, { cause });
+					}
+					ctx.stdout(text);
+				},
+				error: (error) => ctx.stderr(errorJson(error)),
+			};
+		}),
 );

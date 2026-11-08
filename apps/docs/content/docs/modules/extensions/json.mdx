@@ -15,7 +15,7 @@ Deploying...                                  # stderr
 {"id":"dep_42","url":"https://example.com"}   # stdout
 ```
 
-`json()` adds a recursive boolean `--json` flag. Without it, nothing changes.
+`json()` adds a recursive boolean `--json` flag. Without it, nothing changes. It also adds a "JSON output" section to the root command's help, man page, and generated skills that states this output contract, so an agent reading the CLI's documentation knows what `--json` prints.
 
 ## Behavior
 
