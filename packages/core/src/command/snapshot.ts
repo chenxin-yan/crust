@@ -142,6 +142,11 @@ export interface CommandSnapshot {
 	 */
 	readonly outputSchema?: Readonly<Record<string, unknown>>;
 	/**
+	 * `true` when the command declared `.output()`, whether or not its schema can produce
+	 * {@link CommandSnapshot.outputSchema}; absent otherwise.
+	 */
+	readonly output?: true;
+	/**
 	 * Direct subcommand snapshots keyed by canonical name (includes hidden ones). In
 	 * invocation snapshots a pending child exposes `meta` (except `meta.sections`)
 	 * without being built; reading anything else builds it.
@@ -357,6 +362,7 @@ export function createSnapshotProjector(
 				args: { enumerable: true, get: () => body().args },
 				flags: { enumerable: true, get: () => body().flags },
 				outputSchema: { enumerable: true, get: () => body().outputSchema },
+				output: { enumerable: true, get: () => body().output },
 				subCommands: { enumerable: true, get: () => body().subCommands },
 			}),
 		);
@@ -407,6 +413,7 @@ function projectNode(
 		args: Object.freeze(node.args.map(snapshotArg)),
 		flags: Object.freeze(flags),
 		...(outputSchema ? { outputSchema } : {}),
+		...(node.outputSchema ? { output: true as const } : {}),
 		subCommands,
 	});
 }

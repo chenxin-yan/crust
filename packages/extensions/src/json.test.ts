@@ -1,4 +1,5 @@
 import {
+	type AnyCrust,
 	Crust,
 	CrustError,
 	defineContext,
@@ -6,6 +7,7 @@ import {
 	defineExtensionId,
 } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
+import type { StandardSchema } from "@crustjs/utils/schema";
 import { describe, expect, it } from "vite-plus/test";
 
 import { help } from "./help.ts";
@@ -23,11 +25,45 @@ function appReturning(result: () => unknown) {
 	});
 }
 
+/** A Standard Schema without Standard JSON Schema support: declaring it is what counts. */
+const anything: StandardSchema = {
+	"~standard": { version: 1, vendor: "crust-test", validate: (value) => ({ value }) },
+};
+
+/** An app whose action prints for humans with `stdout()` and declares `.output()`. */
+function outputAppReturning(result: () => unknown) {
+	return new Crust("app")
+		.extend(json())
+		.output(anything)
+		.action(({ stdout }) => {
+			stdout("table row 1");
+			stdout("table row 2");
+			return result();
+		});
+}
+
 const disposeFails = defineContext("resource").setup(() => ({
 	[Symbol.dispose]() {
 		throw new Error("dispose");
 	},
 }));
+
+/** `execute()` with a caller signal, restoring the exit code it sets. */
+async function executeWithSignal(app: AnyCrust, argv: string[], signal: AbortSignal) {
+	const stdout: string[] = [];
+	const stderr: string[] = [];
+	const previous = process.exitCode;
+	try {
+		const exitCode = await app.execute({
+			argv,
+			io: { stdout: (line) => stdout.push(line), stderr: (line) => stderr.push(line) },
+			signal,
+		});
+		return { stdout, stderr, exitCode };
+	} finally {
+		process.exitCode = previous;
+	}
+}
 
 describe("json", () => {
 	it("prints the action result as JSON on stdout and moves action output to stderr", async () => {
@@ -132,7 +168,7 @@ describe("json", () => {
 		expect(snapshot.meta.sections).toEqual([
 			expect.objectContaining({
 				title: "JSON output",
-				body: "--json prints the command's result as JSON on stdout (NDJSON events for streaming commands) and moves its other output to stderr.",
+				body: "--json prints the command's result as JSON on stdout (NDJSON for streaming commands). Other output goes to stderr; commands that declare an output schema print only the JSON.",
 			}),
 		]);
 		expect((await captureExecute(app, ["--help"])).stdout).toContain("JSON output:");
@@ -321,6 +357,234 @@ describe("json", () => {
 
 		expect(stderr).toMatch(/^Error: /);
 		expect(exitCode).toBe(1);
+	});
+
+	describe("commands with .output()", () => {
+		it("prints only the JSON result, dropping stdout() text", async () => {
+			const app = outputAppReturning(() => ({ id: 7 }));
+
+			expect(await captureExecute(app, ["--json"])).toEqual({
+				stdout: '{"id":7}',
+				stderr: "",
+				exitCode: 0,
+			});
+			expect(await app.run([], { flags: { json: true } })).toEqual({
+				status: "completed",
+				result: { id: 7 },
+				stdout: '{"id":7}',
+				stderr: "",
+			});
+		});
+
+		it("changes nothing without --json", async () => {
+			expect(
+				await captureExecute(
+					outputAppReturning(() => ({ id: 7 })),
+					[],
+				),
+			).toEqual({ stdout: "table row 1\ntable row 2", stderr: "", exitCode: 0 });
+		});
+
+		it("writes held text to stderr, in order, for an undefined result", async () => {
+			expect(
+				await captureExecute(
+					outputAppReturning(() => undefined),
+					["--json"],
+				),
+			).toEqual({ stdout: "", stderr: "table row 1\ntable row 2", exitCode: 0 });
+		});
+
+		it("writes held text to stderr before the error JSON", async () => {
+			const app = outputAppReturning(() => {
+				throw new Error("boom");
+			});
+
+			expect(await captureExecute(app, ["--json"])).toEqual({
+				stdout: "",
+				stderr: 'table row 1\ntable row 2\n{"message":"boom"}',
+				exitCode: 1,
+			});
+		});
+
+		it("writes held text to stderr before a serialization error", async () => {
+			const { stdout, stderr, exitCode } = await captureExecute(
+				outputAppReturning(() => 1n),
+				["--json"],
+			);
+
+			expect({ stdout, exitCode }).toEqual({ stdout: "", exitCode: 1 });
+			const lines = stderr.split("\n");
+			expect(lines.slice(0, 2)).toEqual(["table row 1", "table row 2"]);
+			expect(JSON.parse(lines[2]!).message).toMatch(/^--json: the command result is not JSON data/);
+		});
+
+		it("keeps stderr() lines live while stdout() text is held", async () => {
+			const log: string[] = [];
+			const app = new Crust("app")
+				.extend(json())
+				.flags({ empty: { type: "boolean" } })
+				.output(anything)
+				.action(({ stdout, stderr, flags }) => {
+					stdout("held");
+					stderr("live");
+					log.push("resumed");
+					return flags.empty ? undefined : { ok: true };
+				});
+			const io = {
+				stdout: (line: string) => log.push(line),
+				stderr: (line: string) => log.push(`stderr:${line}`),
+			};
+
+			await app.execute({ argv: ["--json"], io });
+			expect(log.splice(0)).toEqual(["stderr:live", "resumed", '{"ok":true}']);
+			await app.execute({ argv: ["--json", "--empty"], io });
+			expect(log).toEqual(["stderr:live", "resumed", "stderr:held"]);
+		});
+
+		it("streams NDJSON and drops held text once the result line has data", async () => {
+			const app = new Crust("app")
+				.extend(json())
+				.output(anything)
+				.action(async function* ({ stdout }) {
+					stdout("working");
+					yield 1;
+					return { synced: 1 };
+				});
+
+			expect(await captureExecute(app, ["--json"])).toEqual({
+				stdout: '{"type":"event","data":1}\n{"type":"result","data":{"synced":1}}',
+				stderr: "",
+				exitCode: 0,
+			});
+		});
+
+		it("writes held text to stderr when a generator returns nothing", async () => {
+			const app = new Crust("app")
+				.extend(json())
+				.output(anything)
+				.action(async function* ({ stdout }) {
+					stdout("working");
+					yield 1;
+				});
+
+			expect(await captureExecute(app, ["--json"])).toEqual({
+				stdout: '{"type":"event","data":1}\n{"type":"result"}',
+				stderr: "working",
+				exitCode: 0,
+			});
+		});
+
+		it("writes held text to stderr when a run() invocation fails", async () => {
+			const failure = new Error("boom");
+			const app = outputAppReturning(() => {
+				throw failure;
+			});
+
+			expect(await app.run([], { flags: { json: true } })).toEqual({
+				status: "failed",
+				error: failure,
+				stdout: "",
+				stderr: "table row 1\ntable row 2",
+			});
+		});
+
+		it("writes held text to stderr after a failure another Extension claims", async () => {
+			const claimer = defineExtension(defineExtensionId("claimer")).onError((_error, ctx) => {
+				ctx.stderr("claimed");
+				return true;
+			});
+			const app = new Crust("app")
+				.extend(json(), claimer)
+				.output(anything)
+				.action(({ stdout }) => {
+					stdout("working");
+					throw new Error("boom");
+				});
+
+			expect(await captureExecute(app, ["--json"])).toEqual({
+				stdout: "",
+				stderr: "claimed\nworking",
+				exitCode: 1,
+			});
+		});
+
+		it("writes held text to stderr when the action is cancelled", async () => {
+			const controller = new AbortController();
+			const app = new Crust("app")
+				.extend(json())
+				.output(anything)
+				.action(({ stdout, signal }) => {
+					stdout("working");
+					controller.abort(new DOMException("Caller cancelled.", "AbortError"));
+					signal.throwIfAborted();
+				});
+
+			expect(await executeWithSignal(app, ["--json"], controller.signal)).toEqual({
+				stdout: [],
+				stderr: ["working"],
+				exitCode: 130,
+			});
+		});
+
+		it.each(["json first", "json last"])(
+			"writes held Context text to stderr when an earlier setup is cancelled (%s)",
+			async (order) => {
+				const controller = new AbortController();
+				const logger = defineContext("logger").setup(({ stdout }) => {
+					stdout("logger:setup");
+					return stdout;
+				});
+				const cancelling = defineExtension(defineExtensionId("cancelling"))
+					.provide(logger())
+					.use(logger)
+					.setup(async ({ ctx, signal }) => {
+						await ctx.logger;
+						controller.abort(new DOMException("Caller cancelled.", "AbortError"));
+						signal.throwIfAborted();
+					});
+				const base = new Crust("app");
+				const app = (
+					order === "json first" ? base.extend(json(), cancelling) : base.extend(cancelling, json())
+				)
+					.output(anything)
+					.action(() => ({ ok: true }));
+
+				expect(await executeWithSignal(app, ["--json"], controller.signal)).toEqual({
+					stdout: [],
+					stderr: ["logger:setup"],
+					exitCode: 130,
+				});
+			},
+		);
+
+		it("discards late disposer text after a result, and writes it to stderr after a flush", async () => {
+			const closing = defineContext("closing").setup(({ stdout }) => ({
+				[Symbol.dispose]() {
+					stdout("closed");
+				},
+			}));
+			const app = new Crust("app")
+				.extend(json())
+				.provide(closing())
+				.flags({ empty: { type: "boolean" } })
+				.output(anything)
+				.action(async ({ ctx, stdout, flags }) => {
+					await ctx.closing;
+					stdout("working");
+					return flags.empty ? undefined : { ok: true };
+				});
+
+			expect(await captureExecute(app, ["--json"])).toEqual({
+				stdout: '{"ok":true}',
+				stderr: "",
+				exitCode: 0,
+			});
+			expect(await captureExecute(app, ["--json", "--empty"])).toEqual({
+				stdout: "",
+				stderr: "working\nclosed",
+				exitCode: 0,
+			});
+		});
 	});
 
 	describe("generator actions", () => {

@@ -19,12 +19,54 @@ Deploying...                                  # stderr
 
 ## Behavior
 
-With `--json`:
+With `--json`, stdout carries only JSON: the command's result, or NDJSON for streaming commands. Pipes and files always get clean data.
 
 - The Command Action's return value is printed to stdout as one line of JSON. An action that returns `undefined` prints nothing.
-- The action's and Contexts' `stdout()` and `stderr()` lines go to stderr, keeping stdout for the JSON. This includes output a Context writes while another Extension's `setup` pulls it. Output an Extension writes with its own `stdout`, such as `--help`, is never moved.
 - A failure is written to stderr as one line of JSON instead of the `Error:` line. A [`CrustError`](/docs/api/errors) prints its `toJSON()` (`{ "code", "message", "details"? }`); any other error prints `{ "message": error.message }`, and a thrown non-`Error` value prints `{ "message": String(value) }`. No other field of an application error is read.
+- The action's and Contexts' `stderr()` lines, spinners, and progress go to stderr as they're written.
 - Exit codes are unchanged.
+
+### Text printed with `stdout()`
+
+What happens to the text a command prints with `stdout()` depends on whether it declares [`.output()`](/docs/guide/values-and-validation#command-results):
+
+| Command                                                      | Under `--json`, its `stdout()` text…          | stderr                        |
+| ------------------------------------------------------------ | --------------------------------------------- | ----------------------------- |
+| declares `.output()` and returns data                        | is dropped, because the JSON is the same data | no duplicate text             |
+| declares `.output()`, returns nothing, fails or is cancelled | is written to stderr when the command ends    | the text, then any error JSON |
+| no `.output()`                                               | moves to stderr as it's printed (live)        | the text                      |
+
+A command that declares `.output()` returns data, so its result replaces the table it prints for people:
+
+<include lang="ts" meta='title="users.ts"'>
+  ../../../../examples/modules/extensions/json-output.ts#users
+</include>
+
+```sh
+$ my-cli users --json
+[{"id":1,"name":"Ada"},{"id":2,"name":"Linus"}]   # stdout; nothing on stderr
+```
+
+If `users` returned nothing, failed, or was cancelled, its table would be written to stderr when it ended, followed by any error JSON:
+
+```sh
+$ my-cli users --json
+ID  NAME                         # stderr
+1   Ada                          # stderr
+{"message":"connection reset"}   # stderr
+```
+
+`deploy` in [Usage](#usage) has no `.output()`, so `Deploying...` moves to stderr as it's printed. This includes output a Context writes, even while another Extension's `setup` pulls it. Output an Extension writes with its own `stdout`, such as `--help`, is never moved.
+
+Write progress and instructions that must appear while the command runs (for example a login URL) with `stderr()` or a spinner. They're always live:
+
+<include lang="ts" meta='title="login.ts"'>
+  ../../../../examples/modules/extensions/json-output.ts#login
+</include>
+
+<Callout title="stdout vs stderr">
+A terminal shows both streams, so a person running `my-cli users --json` sees everything. Pipes, `>`, and agents read only stdout: `my-cli users --json | jq '.[0].name'` and `my-cli users --json > users.json` get just the JSON, while stderr still goes to the terminal. That's why data goes to stdout and messages for people go to stderr.
+</Callout>
 
 The result must be JSON data: finite numbers, strings, booleans, `null`, and plain arrays and objects of them. A result JSON cannot represent exactly, such as a `BigInt`, a cycle, a function, `-0`, or a class instance like `Date` or `Map`, fails the command with exit code 1 and an error naming the problem. Convert such values before returning them, for example `date.toISOString()`.
 
@@ -42,13 +84,14 @@ $ tool sync --json
 - Each yielded value prints as `{"type":"event","data":…}` as soon as it is yielded.
 - The stream ends with exactly one `{"type":"result","data":…}` line for the `return` value, even when it is `undefined` (the line then has no `data`), or, if the command fails after the action started, one `{"type":"error","error":…}` line with the same error JSON as above. That failure is not also written to stderr.
 - Events and the result must be JSON data, as above; one that is not, including a yielded `undefined`, fails the command with an error line. Only an `undefined` result is allowed.
+- In a command that declares `.output()`, its `stdout()` text is dropped once the result line carries data, and written to stderr for an `undefined` result or a failure, as [above](#text-printed-with-stdout).
 - A failure before the action started, such as a validation error, prints stderr JSON as for any other action. A failure after the result line, such as a Context cleanup failure, also goes to stderr, so stdout never has two final lines.
 
 An ordinary action keeps the bare result line.
 
 `json()` sets the invocation's [renderer](/docs/guide/extensions#renderers), and an application can have only one, so it can't be combined with another Extension that sets `.renderer()`.
 
-Under [`run()`](/docs/api/crust#runpath-input-options), pass `{ flags: { json: true } }`: the JSON result is captured in the outcome's `stdout`. A failure is not rendered under `run()`; read it from `outcome.error`. For a generator action, `outcome.stdout` holds the event lines and the result line, but no error line.
+Under [`run()`](/docs/api/crust#runpath-input-options), pass `{ flags: { json: true } }`: the JSON result is captured in the outcome's `stdout`. A failure is not rendered under `run()`; read it from `outcome.error`. For a command that declares `.output()` and returns data, `outcome.stdout` holds only the JSON and `outcome.stderr` none of its `stdout()` text. For a generator action, `outcome.stdout` holds the event lines and the result line, but no error line.
 
 ## Limitations
 

@@ -178,7 +178,7 @@ const whoami = new Crust("whoami")
   .action(() => ({ id: 1, name: "ada" }));
 ```
 
-`.output()` after `.action()`, including a replacement schema, also works: TypeScript checks the action's already-inferred awaited return against the new schema's input. A command's [`CommandSnapshot`](/docs/api/types#commandsnapshot) exposes the schema's output as JSON Schema in `outputSchema`, when the schema can produce one (see [`standardJsonSchema()`](/docs/modules/core#tooling-subpath)).
+`.output()` after `.action()`, including a replacement schema, also works: TypeScript checks the action's already-inferred awaited return against the new schema's input. A command's [`CommandSnapshot`](/docs/api/types#commandsnapshot) has `output: true` and exposes the schema's output as JSON Schema in `outputSchema`, when the schema can produce one (see [`standardJsonSchema()`](/docs/modules/core#tooling-subpath)). Declaring `.output()` also tells [`json()`](/docs/modules/extensions/json#text-printed-with-stdout) that the result is the command's output, so under `--json` the text it prints with `stdout()` is dropped in favor of the JSON.
 
 ## `.action(action)`
 

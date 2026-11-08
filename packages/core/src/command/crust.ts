@@ -1549,7 +1549,11 @@ export class Crust<
 	 * typed in `run()`; a command without an action validates `undefined`. Nothing is
 	 * validated when an Extension flag handler or `noAction` takes over. A result
 	 * the schema rejects fails the invocation with an `OUTPUT` {@link CrustError}.
-	 * Tooling reads the result's JSON Schema from `CommandSnapshot.outputSchema`.
+	 * Tooling reads the result's JSON Schema from `CommandSnapshot.outputSchema`,
+	 * and `CommandSnapshot.output` is `true` either way. Declaring it also tells
+	 * `json()` that the result is the command's output: under `--json`, stdout
+	 * carries only the JSON and the text the action prints with `stdout()` is dropped
+	 * in favor of it ({@link https://crustjs.com/docs/modules/extensions/json}).
 	 *
 	 * After `.action()`, TypeScript checks the action's awaited return against the new
 	 * schema's input instead. Calling `.output()` again replaces the schema. The

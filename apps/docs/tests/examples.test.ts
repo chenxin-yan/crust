@@ -63,8 +63,8 @@ it.each([
 	[
 		["deploy", "--input", '{"target":"staging","release":"v2"}'],
 		0,
-		"Deploying v2 to staging\n",
-		"Next steps:\n  Watch the rollout:\n    my-cli status staging\n",
+		"",
+		"Deploying v2 to staging\nNext steps:\n  Watch the rollout:\n    my-cli status staging\n",
 	],
 	[
 		["deploy", "staging", "--json"],
@@ -88,8 +88,8 @@ it.each([
 	[
 		["deploy", "prod", "--yes"],
 		0,
-		"Deploying latest to prod\n",
-		"Next steps:\n  Watch the rollout:\n    my-cli status prod\n",
+		"",
+		"Deploying latest to prod\nNext steps:\n  Watch the rollout:\n    my-cli status prod\n",
 	],
 	[["init"], 1, "", "Error: Prompts require an interactive terminal (TTY).\n"],
 	[["init", "--name", "demo"], 0, "Created demo in us-east-1\n", ""],

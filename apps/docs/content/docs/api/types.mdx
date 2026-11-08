@@ -118,7 +118,7 @@ Renderers filter sections for their audience first, then merge entries with the 
 
 ## Command Snapshots
 
-Command Snapshots are frozen, serializable descriptions of the command tree. They omit Command Actions, parsers, schemas, and Context functions; a command's `.output()` schema appears only as its JSON Schema, `outputSchema`, and a schema-backed arg or flag's schema only as its input JSON Schema, `inputSchema`, when the schema can produce one. Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots. Declared in [`snapshot.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/snapshot.ts).
+Command Snapshots are frozen, serializable descriptions of the command tree. They omit Command Actions, parsers, schemas, and Context functions; a command's `.output()` schema appears only as `output: true` plus its JSON Schema, `outputSchema`, and a schema-backed arg or flag's schema only as its input JSON Schema, `inputSchema`; each JSON Schema is present only when the schema can produce one. Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots. Declared in [`snapshot.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/snapshot.ts).
 
 ### `CommandSnapshot`
 
@@ -127,7 +127,7 @@ Command Snapshots are frozen, serializable descriptions of the command tree. The
   name="CommandSnapshot"
 />
 
-Snapshots from Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details build pending commands only when read. A child's `meta`, except `meta.sections`, comes from its `defineCommand()` config, so reading it never runs the recipe. Reading the child's `meta.sections`, `hasAction`, `args`, `flags`, `outputSchema`, or `subCommands` builds it and throws any recipe error. `app.snapshot()` builds the full tree up front.
+Snapshots from Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details build pending commands only when read. A child's `meta`, except `meta.sections`, comes from its `defineCommand()` config, so reading it never runs the recipe. Reading the child's `meta.sections`, `hasAction`, `args`, `flags`, `outputSchema`, `output`, or `subCommands` builds it and throws any recipe error. `app.snapshot()` builds the full tree up front.
 
 `flags` contains effective local and Context-owned flags. `meta.sections` holds each command-authored, Context-owned, and Extension-contributed section separately; same-title merging happens only when a renderer consumes them.
 
