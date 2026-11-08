@@ -44,7 +44,7 @@ export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__
 			{
 				command: [],
 				title: "JSON output",
-				body: "--json prints the command's result as JSON on stdout and moves its other output to stderr.",
+				body: '--json prints the command\'s result as JSON on stdout and moves its other output to stderr. A streaming command instead prints NDJSON on stdout: one {"type":"event",…} line per event, ending with one {"type":"result",…} or {"type":"error",…} line.',
 			},
 		])
 		.renderer(async (ctx) => {
