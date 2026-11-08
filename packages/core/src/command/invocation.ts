@@ -948,6 +948,8 @@ export async function executeInvocation(
 			process.exitCode = exitCode;
 			if (!rendered) {
 				await renderFailure(error, argv, prepared, output, signal, extensionContext);
+				// Reassert: a presentation hook may have reassigned process.exitCode.
+				process.exitCode = exitCode;
 			}
 			return exitCode;
 		} finally {

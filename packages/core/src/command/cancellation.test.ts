@@ -169,6 +169,24 @@ describe("invocation cancellation signal", () => {
 		expect(stderr).toEqual(["Error: connection close failed"]);
 	});
 
+	it("execute() keeps exit code 130 when an onError hook rendering a postRun AbortError resets process.exitCode", async () => {
+		const exitCode = await new Crust("cli")
+			.extend(
+				defineExtension(defineExtensionId("late-abort"))
+					.postRun(() => {
+						throw new DOMException("Cancelled during postRun.", "AbortError");
+					})
+					.onError(() => {
+						process.exitCode = 0;
+					}),
+			)
+			.action(() => {})
+			.execute({ argv: [], io: quiet });
+
+		expect(exitCode).toBe(130);
+		expect(process.exitCode).toBe(130);
+	});
+
 	it("execute() exits 1 for an action's SuppressedError that does not wrap cancellation", async () => {
 		const stderr: string[] = [];
 		const exitCode = await new Crust("cli")
