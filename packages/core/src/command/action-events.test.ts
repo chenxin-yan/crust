@@ -274,6 +274,34 @@ describe("async generator actions", () => {
 		expect(error).toMatchObject({ error: close, suppressed: consumer });
 	});
 
+	it("exits 130 and prints the cleanup failure when closing a cancelled generator throws", async () => {
+		const controller = new AbortController();
+		const stderr: string[] = [];
+		const app = new Crust("cli").action(async function* () {
+			try {
+				yield 1;
+			} finally {
+				// oxlint-disable-next-line no-unsafe-finally -- simulates a cleanup failure.
+				throw new Error("close");
+			}
+		});
+
+		const previous = process.exitCode;
+		try {
+			const exitCode = await app.execute({
+				argv: [],
+				io: { ...quiet, stderr: (text) => stderr.push(text) },
+				signal: controller.signal,
+				onEvent: () => controller.abort(new DOMException("Caller cancelled.", "AbortError")),
+			});
+
+			expect(exitCode).toBe(130);
+			expect(stderr).toEqual(["Error: close"]);
+		} finally {
+			process.exitCode = previous;
+		}
+	});
+
 	it("validates the returned value with .output()", async () => {
 		const app = new Crust("cli").output(z.object({ count: z.number() })).action(async function* () {
 			yield "progress";
