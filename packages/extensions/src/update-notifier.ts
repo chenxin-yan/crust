@@ -11,6 +11,8 @@ import {
 } from "@crustjs/core";
 import type { PackageManager } from "@crustjs/utils/package-manager";
 
+import { isCI } from "./is-ci.ts";
+
 const UPDATE_NOTIFIER: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:update-notifier");
 
 export type UpdateNotifierPackageManager = PackageManager;
@@ -151,12 +153,7 @@ const DEFAULT_REGISTRY_URL = "https://registry.npmjs.org";
 
 /** CI runs, redirected stderr, and the user's opt-out skip the check entirely. */
 function isUpdateCheckSuppressed(): boolean {
-	const ci = process.env.CI;
-	return (
-		(!!ci && ci !== "0" && ci.toLowerCase() !== "false") ||
-		!!process.env.NO_UPDATE_NOTIFIER ||
-		!process.stderr?.isTTY
-	);
+	return isCI() || !!process.env.NO_UPDATE_NOTIFIER || !process.stderr?.isTTY;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
