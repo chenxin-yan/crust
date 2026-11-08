@@ -83,6 +83,8 @@ $ my-cli schema deploy
 {"input":{"type":"object","properties":{"target":{"type":"string","enum":["staging","prod"]},…},"required":["target"]},"output":{…}}
 ```
 
+`json()` and `input()` document themselves in root help, with "JSON output" and "JSON input" sections. Document your CLI's own conventions an agent needs, such as exit codes and environment variables, with [documentation sections](/docs/guide/commands#documentation-sections).
+
 ## Dry run
 
 A command that can preview declares its own `dry-run` flag and branches on it, as `deploy` does above. It returns the preview before it asks for [confirmation](#confirmation), so a dry run never prompts. Commands without the flag reject `--dry-run` as an unknown flag instead of running for real:

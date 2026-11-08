@@ -57,7 +57,7 @@ Move a subcommand into its own file with `defineCommand()`, then attach it with 
   ../../../examples/guide/commands-split-files/commands/greet.ts
 </include>
 
-Importing a command definition does not run its action. The optional second argument supplies metadata, such as the description shown in help. Help and typo suggestions list a command from this metadata without running its recipe. See the [`defineCommand()` options](/docs/api/crust#definecommandname-config-recipe) for aliases, custom usage, additional sections, and hiding commands from listings.
+Importing a command definition does not run its action. The optional second argument supplies metadata, such as the description shown in help. Help and typo suggestions list a command from this metadata without running its recipe. See the [`defineCommand()` options](/docs/api/crust#definecommandname-config-recipe) for aliases, custom usage, and hiding commands from listings, and [Documentation sections](#documentation-sections) for adding your own help text.
 
 </Step>
 <Step>
@@ -86,6 +86,31 @@ Hello, Ada!
 
 </Step>
 </Steps>
+
+## Documentation sections
+
+Document what help can't infer, such as exit codes or environment variables, with `sections`: in a command's `defineCommand()` config, or in `new Crust()` metadata for the root.
+
+<include lang="ts" meta='title="src/cli.ts"'>
+  ../../../examples/guide/commands-sections.ts
+</include>
+
+```sh
+$ my-cli deploy --help
+my-cli deploy - Deploy a release
+
+Usage:
+  my-cli deploy [options]
+
+Options:
+  -h, --help                   Show help
+
+Exit codes:
+  0  Deployed
+  1  Deploy failed
+```
+
+Help, [manual pages](/docs/modules/man), and [skills](/docs/modules/skills) render each section after the built-in ones, on that command only. Limit a section to some of them with `only` or `except`; see [`CommandSectionInput`](/docs/api/types#commandsectioninput). [Contexts](/docs/guide/contexts#documentation-owned-by-a-context) and [Extensions](/docs/guide/extensions#command-sections) can add sections too.
 
 ## Run commands from code
 

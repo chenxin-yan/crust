@@ -105,6 +105,21 @@ it.each([
 	expect(result.stderr).toBe(stderr);
 });
 
+it("commands guide sections example prints what the guide shows", async () => {
+	const result = spawnSync(
+		"bun",
+		[
+			fileURLToPath(new URL("../examples/guide/commands-sections.ts", import.meta.url)),
+			"deploy",
+			"--help",
+		],
+		{ encoding: "utf8", timeout: 10_000 },
+	);
+	const guide = await read("../content/docs/guide/commands.mdx");
+	expect(result.status).toBe(0);
+	expect(guide).toContain(`$ my-cli deploy --help\n${result.stdout}\`\`\``);
+});
+
 it("error-handling example reports an unreadable config as is, not as missing", async () => {
 	const cwd = await mkdtemp(join(tmpdir(), "crust-docs-"));
 	try {
