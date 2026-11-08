@@ -1,5 +1,6 @@
 import { Crust, defineCommand } from "@crustjs/core";
 import { commandInputFields, commandInputSchema } from "@crustjs/core/tooling";
+import { confirm } from "@crustjs/extensions";
 import { describe, expect, it } from "vite-plus/test";
 
 import { RAW_PROPERTY, toolsFromSnapshot } from "./tools.ts";
@@ -137,6 +138,20 @@ describe("toolsFromSnapshot", () => {
 		]);
 		expect(commandInputFields(command)).toEqual({ urlFields: ["origin"], argNames: ["target"] });
 		expect(RAW_PROPERTY).toBe("raw");
+	});
+
+	it("lists confirm()'s yes input only on tools whose command uses confirm", async () => {
+		const app = new Crust("fixture")
+			.extend(confirm())
+			.add(defineCommand("drop", (c) => c.use(confirm).action(noop)))
+			.add(defineCommand("list", (c) => c.action(noop)));
+		const properties = Object.fromEntries(
+			toolsFromSnapshot(await app.snapshot()).map(({ name, inputSchema }) => [
+				name,
+				Object.keys(inputSchema.properties),
+			]),
+		);
+		expect(properties).toEqual({ drop: ["yes", "raw"], list: ["raw"] });
 	});
 
 	it("advertises output schemas in the shape structuredContent takes", async () => {

@@ -106,6 +106,7 @@ export function sectionContextsFor(
 export interface ExtensionProvider {
 	readonly instance: AnyContextInstance;
 	readonly position: number;
+	readonly extension: ExtensionId;
 }
 
 /**
@@ -124,17 +125,26 @@ export function installExtensionProviders(
 	// positions never decrease along the final Extension list.
 	const contexts: CommandContext[] = [];
 	let next = 0;
-	for (const { instance, position } of providers) {
+	for (const { instance, position, extension } of providers) {
 		while (next < position && next < parent.contexts.length) {
 			contexts.push({ ...parent.contexts[next++]! });
 		}
-		contexts.push({ instance });
+		contexts.push({ instance, extension });
 	}
 	for (const context of parent.contexts.slice(next)) contexts.push({ ...context });
+	// Accumulated per name: a same-name parent provider's flags stay installed beside these.
+	const flagContexts = new Map<string, readonly string[]>();
+	for (const [name, flags] of [
+		...providers.map(({ instance }) => [instance.name, Object.keys(instance.ownedFlags)] as const),
+		...parent.flagContexts,
+	]) {
+		if (flags.length > 0) flagContexts.set(name, [...(flagContexts.get(name) ?? []), ...flags]);
+	}
 	const node: CommandNode = {
 		...parent,
 		localFlags: {},
 		ownedFlags: {},
+		flagContexts,
 		effectiveFlags: {},
 		flagSpellings: new Map(),
 		contexts,

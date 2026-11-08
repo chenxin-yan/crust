@@ -21,14 +21,14 @@ Error: Confirmation required: Drop the database? Pass --yes to confirm.
 
 ## Behavior
 
-The Context owns a boolean `--yes` flag, so every command accepts it. When the command calls `ask(message)`:
+The Context owns a boolean `--yes` flag. Commands that `.use(confirm)` accept it, as do the root and its inline `.command()` children; other commands reject it as an unknown flag. When the command calls `ask(message)`:
 
 - with `--yes`, it resolves without asking;
 - when stdin and stderr are both terminals and `CI` is unset (an empty string, `0`, or `false` in any letter case counts as unset), it shows a yes/no prompt with `message` on stderr, defaulting to No. Yes resolves; No throws `Not confirmed: <message> Nothing was changed.` (exit code 1). Ctrl-C cancels the command (exit code 130);
 - otherwise it throws the exported `ConfirmationRequiredError`, `Confirmation required: <message> Pass --yes to confirm.` (exit code 1), so a script, an agent, or a CI job with a pseudo-terminal never waits on a prompt and never succeeds unconfirmed.
 
-`--yes` is a normal flag, so [`input()`](/docs/modules/extensions/input) can supply it too: `--input '{"yes":true}'`. The prompt from [`@crustjs/prompts`](/docs/modules/prompts) loads only when a command asks.
+`--yes` is a normal flag, so [`input()`](/docs/modules/extensions/input) can supply it too where it is accepted: `--input '{"yes":true}'`. Likewise, only those commands list it in `--help`, [`schema`](/docs/modules/extensions/schema), and [MCP](/docs/modules/mcp) tool inputs. The prompt from [`@crustjs/prompts`](/docs/modules/prompts) loads only when a command asks.
 
 ## Limitations
 
-`--yes` is a Context-owned flag installed on every command, so a command cannot declare its own `yes` flag while `confirm()` is registered.
+`--yes` is a Context-owned flag, so a command that accepts it cannot declare its own `yes` flag while `confirm()` is registered.

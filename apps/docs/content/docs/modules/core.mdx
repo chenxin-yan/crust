@@ -26,7 +26,7 @@ The root action prints `hello!` when `verbose` is true. The `wave` command is an
   ../../../examples/modules/core.ts#context
 </include>
 
-A Context can own the flags needed by its setup. `.provide()` installs that Context on the current command and commands added later; see [Contexts](/docs/guide/contexts).
+A Context can own the flags needed by its setup. `.provide()` installs that Context on the current command and commands added later. Its flags are parsed by the providing command, its inline `.command()` children, and reusable commands that declare it with `.use()`; see [Flags owned by a Context](/docs/guide/contexts#flags-owned-by-a-context).
 
 ## Runtime exports
 

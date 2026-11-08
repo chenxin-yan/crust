@@ -116,7 +116,7 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 			.setup(() => ({}));
 		const app = new Crust("cli")
 			.provide(auth())
-			.add(defineCommand("deploy", (command) => command.action(() => {})));
+			.add(defineCommand("deploy", (command) => command.use(auth).action(() => {})));
 
 		const result = await executeCrust(app, ["deploy"]);
 		expect(result.exitCode).toBe(1);
@@ -134,8 +134,8 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 			});
 		const app = new Crust("cli").provide(auth()).add(
 			defineCommand("deploy", (command) =>
-				command.action(({ flags, stdout }) => {
-					stdout(`token=${String((flags as { token?: string }).token)}`);
+				command.use(auth).action(({ flags, stdout }) => {
+					stdout(`token=${String(flags.token)}`);
 				}),
 			),
 		);
@@ -233,9 +233,10 @@ describe("integration: split-file definitions end-to-end", () => {
 
 	it("reuses a definition across satisfying parents, renamed via .as()", async () => {
 		const first = new Crust("first").provide(logging()).add(listCommand);
+		// Another same-name factory may satisfy the `.use(logging)` if it owns the same flags.
 		const defaultLogging = defineContext("logging")
-			.flags({ verbose: { ...verbose, default: true } })
-			.setup(({ flags }) => flags);
+			.flags({ verbose })
+			.setup(({ flags }) => ({ verbose: flags.verbose ?? true }));
 		const second = new Crust("second").provide(defaultLogging()).add(listCommand.as("show"));
 
 		expect((await executeCrust(first, ["list", "pods"])).stdout).toContain("verbose=undefined");

@@ -257,10 +257,11 @@ function _commandCompositionBoundary(definitions: readonly ReturnType<typeof def
 		.flags({ token: { type: "string" } })
 		.setup(() => 1);
 	const colliding = defineCommand("child", (b) => b.flags({ token: { type: "number" } }));
-	// @ts-expect-error -- sealed recipes must prove their relation to inherited Context flags
+	// Sealed recipes parse only the Context flags they use, so nothing is inherited to collide
 	new Crust("cli").provide(owner()).add(colliding);
-	// @ts-expect-error -- nested sealed recipes share the inherited Context namespace
 	defineCommand("parent", (b) => b.provide(owner()).add(colliding));
+	// @ts-expect-error -- a used Context's flags join the command's own namespace
+	defineCommand("used", (b) => b.use(owner).flags({ token: { type: "number" } }));
 }
 
 function _contextProofCannotBeForged() {
@@ -495,6 +496,7 @@ function _openInheritedFlags(recursive: boolean) {
 	const inherited = new Crust("app").provide(...providers).add(child);
 	void inherited.run(["child"]);
 	void inherited.run(["child", "leaf"]);
+	// @ts-expect-error -- reusable commands that do not use the Context do not parse its flags
 	void inherited.run(["child", "leaf"], { flags: { token: "ok" } });
 	// Ordinary providers added later do not retroactively reach materialized children.
 	void new Crust("app")

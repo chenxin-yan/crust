@@ -317,8 +317,8 @@ function _typecheckTypesPulledCapabilitiesAndLocalValuesInActions() {
 								const log = await ctx.logging;
 								type _target = Expect<Equal<typeof args.target, string>>;
 								type _verbose = Expect<Equal<typeof log.verbose, boolean>>;
-								// @ts-expect-error -- ancestor-owned flags are parsed but not action-visible
-								void flags.verbose;
+								// A used Context's flags are action-visible
+								type _flag = Expect<Equal<typeof flags.verbose, boolean | undefined>>;
 								// @ts-expect-error -- root-local flags do not propagate
 								void flags.rootOnly;
 							}),
@@ -545,7 +545,7 @@ function _typecheckOpenRecursiveFlagsKeepKnownChildChecks(dynamic: Record<string
 			.extend(open)
 			// @ts-expect-error -- the child's "pflag" collides with the inherited Context flag
 			.command("child", (c) => c.flags({ pflag: { type: "string" } }));
-		// @ts-expect-error -- the Extension command's "pflag" collides with the inherited Context flag
+		// Extension commands parse only the Context flags they use, so "pflag" is free there
 		new Crust("app").provide(owner()).extend(open).extend(pflagCommand);
 		// @ts-expect-error -- the Extension command's "trace" collides with the recursive Extension flag
 		new Crust("app").extend(trace).extend(open).extend(traceCommand);
@@ -576,9 +576,9 @@ function _typecheckRecursiveFlagsBesideUncertainOnes(
 		.flags({ pflag: { type: "string" } })
 		.setup(() => 1);
 	const open = defineExtension(defineExtensionId("open-provider")).flags(dynamic).provide(owner());
+	// The provided Context's flag reaches only commands that use it, despite the open record
 	void new Crust("app")
 		.extend(open)
-		// @ts-expect-error -- the provided Context's flag reaches the child despite the open record
 		.add(defineCommand("child", (command) => command.flags({ pflag: { type: "string" } })));
 }
 

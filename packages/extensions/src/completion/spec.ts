@@ -119,8 +119,8 @@ export interface CompletionCommand {
 	description?: string;
 	/**
 	 * Flags visible on this command. `CommandDocumentation.flags` already
-	 * includes Context-owned and local flags, so propagating flags appear at
-	 * every depth — matching what the parser actually accepts at this level.
+	 * includes the Context-owned flags this command parses and its local flags,
+	 * matching what the parser actually accepts at this level.
 	 */
 	flags: readonly CompletionFlag[];
 	/** Positional arguments declared on this command. */

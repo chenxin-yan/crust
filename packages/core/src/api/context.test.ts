@@ -602,6 +602,615 @@ describe("Context-owned flags", () => {
 	});
 });
 
+describe("Context-owned flags at use sites", () => {
+	const flagsOf = (snapshot: { readonly flags: object }) => Object.keys(snapshot.flags);
+
+	it("parses them on the provider, inline children, and reusable commands that use the Context", async () => {
+		const seen: string[] = [];
+		const auth = defineContext("auth")
+			.flags({ "api-key": apiKey })
+			.setup(({ flags }) => ({ apiKey: flags["api-key"] }));
+		const deploy = defineCommand("deploy", (command) =>
+			command.use(auth).action(async ({ ctx, flags }) => {
+				type _Typed = Expect<Equal<(typeof flags)["api-key"], string | undefined>>;
+				seen.push(String((await ctx.auth).apiKey));
+			}),
+		);
+		const status = defineCommand("status", (command) => command.action(() => "status"));
+		const app = new Crust("cli")
+			.provide(auth())
+			.add(deploy, status)
+			.command("inline", (command) =>
+				command.action(async ({ ctx }) => {
+					seen.push(String((await ctx.auth).apiKey));
+				}),
+			);
+
+		const snapshot = await app.snapshot();
+		expect(flagsOf(snapshot)).toEqual(["api-key"]);
+		expect(flagsOf(snapshot.subCommands.deploy!)).toEqual(["api-key"]);
+		expect(flagsOf(snapshot.subCommands.inline!)).toEqual(["api-key"]);
+		expect(flagsOf(snapshot.subCommands.status!)).toEqual([]);
+
+		await unwrap(app.run(["deploy"], { flags: { "api-key": "one" } }));
+		await unwrap(app.run(["inline"], { flags: { "api-key": "two" } }));
+		expect(seen).toEqual(["one", "two"]);
+		const io = { stdout: () => {}, stderr: () => {} };
+		expect(await app.execute({ argv: ["status", "--api-key", "x"], io })).toBe(1);
+		expect(await app.execute({ argv: ["--api-key", "x", "status"], io })).toBe(1);
+		await expect(
+			// @ts-expect-error -- status does not use auth, so it does not parse --api-key
+			unwrap(app.run(["status"], { flags: { "api-key": "x" } })),
+		).rejects.toThrow('Unknown flag "--api-key"');
+	});
+
+	it("follows the used Context's own dependencies and reaches inline children of the user", async () => {
+		const region = defineFlag({ type: "string", default: "eu" });
+		const config = defineContext("config")
+			.flags({ region })
+			.setup(({ flags }) => flags.region);
+		const api = defineContext("api")
+			.use(config)
+			.flags({ "api-key": apiKey })
+			.setup(async ({ ctx, flags }) => `${await ctx.config}:${flags["api-key"]}`);
+		const group = defineCommand("group", (command) =>
+			command.use(api).command("leaf", (leaf) => leaf.action(async ({ ctx }) => await ctx.api)),
+		);
+		const app = new Crust("cli").provide(config(), api()).add(group);
+
+		const snapshot = await app.snapshot();
+		expect(flagsOf(snapshot.subCommands.group!)).toEqual(["api-key", "region"]);
+		expect(flagsOf(snapshot.subCommands.group!.subCommands.leaf!)).toEqual(["api-key", "region"]);
+		expect(
+			await unwrap(app.run(["group", "leaf"], { flags: { "api-key": "k", region: "us" } })),
+		).toMatchObject({ result: "us:k" });
+		// An .of() double skips setup but parses the same flags.
+		const doubled = await new Crust("cli").provide(config(), api.of("fake")).add(group).snapshot();
+		expect(flagsOf(doubled.subCommands.group!)).toEqual(["api-key", "region"]);
+	});
+
+	it("puts an Extension-provided Context's flags on the root and the commands that use it", async () => {
+		const confirm = defineContext("confirm")
+			.flags({ yes: { type: "boolean" } })
+			.setup(({ flags }) => flags.yes === true);
+		const ext = defineExtension(defineExtensionId("confirm")).provide(confirm());
+		const remove = defineCommand("remove", (command) =>
+			command.use(confirm).action(async ({ ctx }) => await ctx.confirm),
+		);
+		const list = defineCommand("list", (command) => command.action(() => "list"));
+		const app = new Crust("cli").extend(ext).add(remove, list);
+
+		const snapshot = await app.snapshot();
+		expect(flagsOf(snapshot)).toEqual(["yes"]);
+		expect(flagsOf(snapshot.subCommands.remove!)).toEqual(["yes"]);
+		expect(flagsOf(snapshot.subCommands.list!)).toEqual([]);
+		expect(await unwrap(app.run(["remove"], { flags: { yes: true } }))).toMatchObject({
+			result: true,
+		});
+	});
+
+	it("parses them on commands that .use() the Extension, by value or factory, and their inline children", async () => {
+		const confirm = defineContext("confirm")
+			.flags({ yes: { type: "boolean" } })
+			.setup(({ flags }) => flags.yes === true);
+		const byValue = defineExtension(defineExtensionId("confirm")).provide(confirm());
+		const byFactory = byValue.factory((extension) => extension);
+		const list = defineCommand("list", (command) => command.action(() => "list"));
+		const removeByValue = defineCommand("remove", (command) =>
+			command
+				.use(byValue)
+				.command("all", (all) => all.action(async ({ ctx }) => await ctx.confirm))
+				.action(async ({ ctx, flags }) => {
+					type _Typed = Expect<Equal<(typeof flags)["yes"], boolean | undefined>>;
+					return await ctx.confirm;
+				}),
+		);
+		const removeByFactory = defineCommand("remove", (command) =>
+			command
+				.use(byFactory)
+				.command("all", (all) => all.action(async ({ ctx }) => await ctx.confirm))
+				.action(async ({ ctx, flags }) => {
+					type _Typed = Expect<Equal<(typeof flags)["yes"], boolean | undefined>>;
+					return await ctx.confirm;
+				}),
+		);
+		const apps = [
+			new Crust("cli").extend(byValue).add(removeByValue, list),
+			new Crust("cli").extend(byFactory()).add(removeByFactory, list),
+		] as const;
+
+		for (const app of apps) {
+			const snapshot = await app.snapshot();
+			expect(flagsOf(snapshot.subCommands.remove!)).toEqual(["yes"]);
+			expect(flagsOf(snapshot.subCommands.remove!.subCommands.all!)).toEqual(["yes"]);
+			expect(flagsOf(snapshot.subCommands.list!)).toEqual([]);
+			expect(await unwrap(app.run(["remove"], { flags: { yes: true } }))).toMatchObject({
+				result: true,
+			});
+			expect(await unwrap(app.run(["remove", "all"], { flags: { yes: true } }))).toMatchObject({
+				result: true,
+			});
+			await expect(
+				// @ts-expect-error -- list does not use the Extension, so it does not parse --yes
+				unwrap(app.run(["list"], { flags: { yes: true } })),
+			).rejects.toThrow('Unknown flag "--yes"');
+		}
+	});
+
+	it("parses and types the flags of an Extension-provided Context's dependencies on .use() of the Extension", async () => {
+		const config = defineContext("config")
+			.flags({ region: { type: "string", required: true } })
+			.setup(({ flags }) => flags.region);
+		const api = defineContext("api")
+			.use(config)
+			.setup(async ({ ctx }) => `api:${await ctx.config}`);
+		const byValue = defineExtension(defineExtensionId("api")).provide(api());
+		const byFactory = byValue.factory((extension) => extension);
+		const valueUser = defineCommand("call", (command) =>
+			command.use(byValue).action(async ({ ctx, flags }) => {
+				type _Typed = Expect<Equal<typeof flags.region, string>>;
+				return await ctx.api;
+			}),
+		);
+		const factoryUser = defineCommand("call", (command) =>
+			command.use(byFactory).action(async ({ ctx, flags }) => {
+				type _Typed = Expect<Equal<typeof flags.region, string>>;
+				return await ctx.api;
+			}),
+		);
+		const apps = [
+			new Crust("cli").provide(config()).extend(byValue).add(valueUser),
+			new Crust("cli").provide(config()).extend(byFactory()).add(factoryUser),
+		] as const;
+
+		for (const app of apps) {
+			expect(flagsOf((await app.snapshot()).subCommands.call!)).toEqual(["region"]);
+			expect(await unwrap(app.run(["call"], { flags: { region: "eu" } }))).toMatchObject({
+				result: "api:eu",
+			});
+		}
+	});
+
+	it("puts the flags of Contexts an Extension hook uses on every command", async () => {
+		for (const source of ["extension", "app"] as const) {
+			const seen: unknown[] = [];
+			const confirm = defineContext("confirm")
+				.flags({ yes: { type: "boolean" } })
+				.setup(({ flags }) => flags.yes === true);
+			const base = defineExtension(defineExtensionId("confirm"))
+				.use(confirm)
+				.postRun(async ({ ctx }) => void seen.push(await ctx.confirm));
+			const list = defineCommand("list", (command) => command.action(() => "list"));
+			const app =
+				source === "extension"
+					? new Crust("cli").extend(base.provide(confirm())).add(list)
+					: new Crust("cli").provide(confirm()).extend(base).add(list);
+
+			const snapshot = await app.snapshot();
+			expect(flagsOf(snapshot.subCommands.list!)).toEqual(["yes"]);
+			await unwrap(app.run(["list"], { flags: { yes: true } }));
+			expect(seen).toEqual([true]);
+		}
+	});
+
+	it("stops inline inheritance at a reusable command below an inline one", async () => {
+		const auth = defineContext("auth")
+			.flags({ "api-key": apiKey })
+			.setup(() => "auth");
+		const status = defineCommand("status", (command) => command.action(() => "status"));
+		const app = new Crust("cli")
+			.provide(auth())
+			.command("group", (group) =>
+				group.add(status).command("leaf", (leaf) => leaf.action(() => "leaf")),
+			);
+
+		const group = (await app.snapshot()).subCommands.group!;
+		expect(flagsOf(group)).toEqual(["api-key"]);
+		expect(flagsOf(group.subCommands.leaf!)).toEqual(["api-key"]);
+		expect(flagsOf(group.subCommands.status!)).toEqual([]);
+		await unwrap(app.run(["group", "leaf"], { flags: { "api-key": "k" } }));
+		await expect(
+			// @ts-expect-error -- the reusable status does not use auth
+			unwrap(app.run(["group", "status"], { flags: { "api-key": "k" } })),
+		).rejects.toThrow('Unknown flag "--api-key"');
+	});
+
+	it("gives inline commands an Extension-provided Context's flags in either attachment order", async () => {
+		const confirm = defineContext("confirm")
+			.flags({ yes: { type: "boolean" } })
+			.setup(({ flags }) => flags.yes === true);
+		const ext = defineExtension(defineExtensionId("confirm")).provide(confirm());
+		const before = new Crust("cli")
+			.command("early", (command) =>
+				command.command("nested", (nested) => nested.action(() => "nested")),
+			)
+			.extend(ext);
+		const after = new Crust("cli")
+			.extend(ext)
+			.command("early", (command) =>
+				command.command("nested", (nested) => nested.action(() => "nested")),
+			);
+
+		await unwrap(before.run(["early"], { flags: { yes: true } }));
+		await unwrap(before.run(["early", "nested"], { flags: { yes: true } }));
+		await unwrap(after.run(["early"], { flags: { yes: true } }));
+		await unwrap(after.run(["early", "nested"], { flags: { yes: true } }));
+	});
+
+	it("lets a command provide a Context it uses, reusing the used Context's flags", async () => {
+		const auth = defineContext("auth")
+			.flags({ "api-key": apiKey })
+			.setup(({ flags }) => `auth:${flags["api-key"]}`);
+		const local = defineCommand("local", (command) =>
+			command
+				.use(auth)
+				.provide(auth())
+				.action(async ({ ctx }) => await ctx.auth),
+		);
+		const app = new Crust("cli").provide(auth()).add(local);
+
+		expect(flagsOf((await app.snapshot()).subCommands.local!)).toEqual(["api-key"]);
+		expect(await unwrap(app.run(["local"], { flags: { "api-key": "k" } }))).toMatchObject({
+			result: "auth:k",
+		});
+		// A same-name provider with another definition of the flag only the runtime sees: the types
+		// do not track flags per Context name.
+		const other = defineContext("auth")
+			.flags({ "api-key": { type: "number" } })
+			.setup(() => "other");
+		const conflicting = defineCommand("local", (command) => command.use(auth).provide(other()));
+		await expect(
+			new Crust("cli").provide(auth()).add(conflicting).snapshot(),
+		).rejects.toMatchObject({
+			code: "DEFINITION",
+			details: { subject: "context", name: "auth", reason: "context-flags-not-parsed" },
+		});
+	});
+
+	it("rejects a same-name provider that owns flags the declared Context does not", async () => {
+		const declared = defineContext("auth").setup(() => "declared");
+		const supplied = defineContext("auth")
+			.flags({ offline: { type: "boolean", required: true } })
+			.setup(() => "supplied");
+		const notParsed = {
+			code: "DEFINITION",
+			details: { subject: "context", name: "auth", reason: "context-flags-not-parsed" },
+		};
+		const cmd = defineCommand("cmd", (command) => command.use(declared));
+		const leaf = defineCommand("leaf", (command) => command.use(declared));
+		const group = defineCommand("group", (command) => command.use(declared).add(leaf));
+		const fromExtension = defineExtension(defineExtensionId("auth")).provide(supplied());
+		const hooked = defineExtension(defineExtensionId("audit")).use(declared);
+		const list = defineCommand("list", (command) => command.action(() => "list"));
+		const apps = [
+			new Crust("cli").provide(supplied()).add(cmd),
+			// A reusable command nested in another resolves the providers of the whole path.
+			new Crust("cli").provide(supplied()).add(group),
+			// Extension providers replace root providers made before `.extend()`, in either order.
+			// @ts-expect-error -- TypeScript rejects the replacement too (FIX_DUPLICATE_CONTEXT)
+			new Crust("cli").provide(declared()).add(cmd).extend(fromExtension),
+			// @ts-expect-error -- TypeScript rejects the replacement too (FIX_DUPLICATE_CONTEXT)
+			new Crust("cli").provide(declared()).extend(fromExtension).add(cmd),
+			// Hooks use the Context on every command, which resolves the same provider.
+			new Crust("cli").provide(supplied()).extend(hooked).add(list),
+		];
+		for (const app of apps) {
+			await expect(app.snapshot()).rejects.toMatchObject(notParsed);
+		}
+		await expect(new Crust("cli").provide(supplied()).add(cmd).snapshot()).rejects.toThrow(
+			'Context "auth" provided to command "cmd" does not own the same flags as the Context "auth" it declares with .use()',
+		);
+		// The root, which provides it, parses its flags; a command that does not use it is unaffected.
+		const fine = await new Crust("cli").provide(supplied()).add(list).snapshot();
+		expect(flagsOf(fine)).toEqual(["offline"]);
+		// A later root provider shadows the Extension's, so the command resolves the declared one.
+		const shadowed = new Crust("cli")
+			.extend(fromExtension)
+			// @ts-expect-error -- TypeScript rejects the shadowing too (FIX_DUPLICATE_CONTEXT)
+			.provide(declared());
+		await expect(shadowed.add(cmd).snapshot()).resolves.toBeDefined();
+	});
+
+	it("rejects a same-name provider whose dependencies own flags the use site does not parse", async () => {
+		const config = defineContext("config")
+			.flags({ region: { type: "string", required: true } })
+			.setup(() => "config");
+		const declared = defineContext("auth").setup(() => "declared");
+		const supplied = defineContext("auth")
+			.use(config)
+			.setup(() => "supplied");
+		const cmd = defineCommand("cmd", (command) => command.use(declared));
+		await expect(
+			new Crust("cli").provide(config(), supplied()).add(cmd).snapshot(),
+		).rejects.toMatchObject({
+			code: "DEFINITION",
+			details: { subject: "context", name: "config", reason: "context-flags-not-parsed" },
+		});
+		// Declaring the dependency too makes the command parse its flags.
+		const both = defineCommand("cmd", (command) => command.use(declared, config));
+		const app = new Crust("cli").provide(config(), supplied()).add(both);
+		expect(flagsOf((await app.snapshot()).subCommands.cmd!)).toEqual(["region"]);
+		// So does an Extension whose hooks use it: every command parses its flags.
+		const reading = defineCommand("cmd", (command) =>
+			command.use(declared).action(async ({ ctx }) => await ctx.auth),
+		);
+		const hooked = defineExtension(defineExtensionId("config-hook"))
+			.use(config)
+			.preRun(() => {});
+		const hookedApp = new Crust("cli").provide(config(), supplied()).extend(hooked).add(reading);
+		expect(flagsOf((await hookedApp.snapshot()).subCommands.cmd!)).toEqual(["region"]);
+		expect(await unwrap(hookedApp.run(["cmd"], { flags: { region: "eu" } }))).toMatchObject({
+			result: "supplied",
+		});
+	});
+
+	it("accepts a same-name provider only with exactly the declared flag definitions", async () => {
+		const mode = defineFlag({ type: "string", default: "a" });
+		const declared = defineContext("mode")
+			.flags({ mode })
+			.setup(({ flags }) => `declared:${flags.mode}`);
+		const group = defineCommand("group", (command) =>
+			command
+				.use(declared)
+				.action(async ({ ctx, flags }) => [flags.mode, await ctx.mode])
+				.command("leaf", (leaf) => leaf.action(async ({ ctx }) => await ctx.mode)),
+		);
+		// Another factory with equal definitions, or a `.of()` double, replaces it.
+		const same = defineContext("mode")
+			.flags({ mode: { type: "string", default: "a" } })
+			.setup(({ flags }) => `same:${flags.mode}`);
+		const sameApp = new Crust("cli").provide(same()).add(group);
+		expect(await unwrap(sameApp.run(["group"], { flags: { mode: "x" } }))).toMatchObject({
+			result: ["x", "same:x"],
+		});
+		expect(await unwrap(sameApp.run(["group", "leaf"]))).toMatchObject({ result: "same:a" });
+		const double = new Crust("cli").provide(declared.of("double")).add(group);
+		expect(await unwrap(double.run(["group"]))).toMatchObject({ result: ["a", "double"] });
+
+		// Any other definition, a missing flag, or an extra one is a definition error.
+		const others = [
+			defineContext("mode").flags({ mode: { type: "string", default: "b" } }),
+			defineContext("mode").flags({ mode: { type: "string", default: "a", short: "m" } }),
+			defineContext("mode").flags({ mode: { type: "number", default: 1 } }),
+			defineContext("mode"),
+			defineContext("mode").flags({ mode, extra: { type: "boolean" } }),
+		].map((builder) => builder.setup(() => "other"));
+		for (const other of others) {
+			await expect(new Crust("cli").provide(other()).add(group).snapshot()).rejects.toMatchObject({
+				code: "DEFINITION",
+				details: { subject: "context", name: "mode", reason: "context-flags-not-parsed" },
+			});
+		}
+		await expect(new Crust("cli").provide(others[0]!()).add(group).snapshot()).rejects.toThrow(
+			"change the declared Context, or provide the same factory (for example its .of())",
+		);
+	});
+
+	it("keeps installed flags of a same-name root provider beside an Extension provider", async () => {
+		const old = defineContext("auth")
+			.flags({ old: { type: "string" } })
+			.setup(() => 1);
+		const current = defineContext("auth")
+			.flags({ current: { type: "string" } })
+			.setup(() => 1);
+		const ext = defineExtension(defineExtensionId("auth")).provide(current()).use(current);
+		const list = defineCommand("list", (command) => command.action(() => "list"));
+		// @ts-expect-error -- TypeScript rejects the replacement too (FIX_DUPLICATE_CONTEXT)
+		const app = new Crust("cli").provide(old()).extend(ext);
+		const snapshot = await app.add(list).snapshot();
+		expect(flagsOf(snapshot).sort()).toEqual(["current", "old"]);
+		expect(flagsOf(snapshot.subCommands.list!)).toEqual(["current"]);
+	});
+
+	it("shares the flags of a used Context's dependency that the command provides", async () => {
+		const config = defineContext("config")
+			.flags({ region: { type: "string" } })
+			.setup(() => 1);
+		const plain = defineContext("auth").setup(() => 1);
+		const dependent = defineContext("auth")
+			.use(config)
+			.setup(() => 1);
+		// `plain` is visited first under the same name; `dependent`'s dependency is still declared.
+		const cmd = defineCommand("cmd", (command) => command.use(plain, dependent).provide(config()));
+		const snapshot = await new Crust("cli").provide(plain(), config()).add(cmd).snapshot();
+		expect(flagsOf(snapshot.subCommands.cmd!)).toEqual(["region"]);
+	});
+
+	it("compares a same-name provider's flag schemas by identity", async () => {
+		const standard = {
+			version: 1 as const,
+			vendor: "test",
+			validate: (value: unknown) => ({ value }),
+		};
+		const schema = { "~standard": standard };
+		const lookalike = { "~standard": standard };
+		const declared = defineContext("mode")
+			.flags({ mode: { type: "string", schema } })
+			.setup(() => "declared");
+		const cmd = defineCommand("cmd", (command) =>
+			command.use(declared).action(async ({ ctx }) => await ctx.mode),
+		);
+		const same = defineContext("mode")
+			.flags({ mode: { type: "string", schema } })
+			.setup(() => "same");
+		const other = defineContext("mode")
+			.flags({ mode: { type: "string", schema: lookalike } })
+			.setup(() => "other");
+		expect(await unwrap(new Crust("cli").provide(same()).add(cmd).run(["cmd"]))).toMatchObject({
+			result: "same",
+		});
+		await expect(new Crust("cli").provide(other()).add(cmd).snapshot()).rejects.toMatchObject({
+			code: "DEFINITION",
+			details: { subject: "context", name: "mode", reason: "context-flags-not-parsed" },
+		});
+	});
+
+	it("rejects an inline child declaring a same-name Context whose flags differ from the inherited ones", async () => {
+		const first = defineContext("mode")
+			.flags({ mode: { type: "string", default: "a" } })
+			.setup(({ flags }) => flags.mode);
+		const second = defineContext("mode")
+			.flags({ mode: { type: "number", default: 42 } })
+			.setup(({ flags }) => flags.mode.toFixed(0));
+		const app = new Crust("cli").provide(first()).command("child", (command) =>
+			command
+				.use(second)
+				.provide(second())
+				.action(async ({ ctx }) => await ctx.mode),
+		);
+		await expect(app.snapshot()).rejects.toMatchObject({
+			code: "DEFINITION",
+			details: { subject: "context", name: "mode", reason: "context-flags-not-parsed" },
+		});
+		expect(await app.run(["child"])).toMatchObject({
+			status: "failed",
+			error: { code: "DEFINITION" },
+		});
+		// The same flags, inherited and declared, are shared.
+		const same = new Crust("cli")
+			.provide(first())
+			.command("child", (command) => command.use(first).action(async ({ ctx }) => await ctx.mode));
+		expect(await unwrap(same.run(["child"]))).toMatchObject({ result: "a" });
+	});
+
+	it("checks a used Context against a same-name provider of an inline child", async () => {
+		const declared = defineContext("mode")
+			.flags({ mode: { type: "string" } })
+			.setup(() => "declared");
+		const flagless = defineContext("mode").setup(() => "flagless");
+		const group = (provider: typeof declared | typeof flagless) =>
+			defineCommand("group", (command) =>
+				command
+					.use(declared)
+					.command("leaf", (leaf) =>
+						leaf.command("deep", (deep) =>
+							deep.provide(provider.of("replaced")).action(async ({ ctx }) => await ctx.mode),
+						),
+					),
+			);
+		const app = new Crust("cli").provide(declared()).add(group(declared));
+		expect(await unwrap(app.run(["group", "leaf", "deep"]))).toMatchObject({ result: "replaced" });
+		await expect(
+			new Crust("cli").provide(declared()).add(group(flagless)).snapshot(),
+		).rejects.toMatchObject({
+			code: "DEFINITION",
+			details: { subject: "context", name: "mode", reason: "context-flags-not-parsed" },
+		});
+	});
+
+	it("registers several flag-owning Contexts per call and leaves the earlier builder unchanged", async () => {
+		const one = defineContext("one")
+			.flags({ one: { type: "string" } })
+			.setup(() => 1);
+		const two = defineContext("two")
+			.flags({ two: { type: "string" } })
+			.setup(() => 2);
+		const root = new Crust("cli");
+		const both = root.provide(one(), two());
+		const cmd = defineCommand("cmd", (command) =>
+			command.use(one, two).action(async ({ ctx }) => [await ctx.one, await ctx.two]),
+		);
+		const app = both
+			.add(cmd)
+			.command("inline", (command) =>
+				command.action(async ({ ctx }) => [await ctx.one, await ctx.two]),
+			);
+
+		expect(flagsOf(await root.snapshot())).toEqual([]);
+		expect(flagsOf(await both.snapshot())).toEqual(["one", "two"]);
+		const flags = { one: "1", two: "2" };
+		expect(await unwrap(app.run(["cmd"], { flags }))).toMatchObject({ result: [1, 2] });
+		expect(await unwrap(app.run(["inline"], { flags }))).toMatchObject({ result: [1, 2] });
+	});
+
+	it("checks every declared same-name Context against the provider, in any order", async () => {
+		const optional = defineContext("mode")
+			.flags({ mode: { type: "string" } })
+			.setup(() => "optional");
+		const defaulted = defineContext("mode")
+			.flags({ mode: { type: "string", default: "a" } })
+			.setup(() => "defaulted");
+		const equal = defineContext("mode")
+			.flags({ mode: { type: "string", default: "a" } })
+			.setup(() => "equal");
+		const commands = {
+			batched: defineCommand("cmd", (command) => command.use(optional, defaulted)),
+			reversed: defineCommand("cmd", (command) => command.use(defaulted, optional)),
+			chained: defineCommand("cmd", (command) => command.use(optional).use(defaulted)),
+			chainedReversed: defineCommand("cmd", (command) => command.use(defaulted).use(optional)),
+		};
+		for (const [order, cmd] of Object.entries(commands)) {
+			await expect(
+				new Crust("cli").provide(defaulted()).add(cmd).snapshot(),
+				order,
+			).rejects.toMatchObject({
+				code: "DEFINITION",
+				details: { subject: "context", name: "mode", reason: "context-flags-not-parsed" },
+			});
+		}
+		// Declarations owning the same flags pass whichever one provides.
+		const both = defineCommand("cmd", (command) =>
+			command.use(defaulted, equal).action(({ flags }) => flags.mode),
+		);
+		const reversed = defineCommand("cmd", (command) =>
+			command
+				.use(equal)
+				.use(defaulted)
+				.action(({ flags }) => flags.mode),
+		);
+		for (const cmd of [both, reversed]) {
+			for (const provider of [defaulted(), equal()]) {
+				const app = new Crust("cli").provide(provider).add(cmd);
+				expect(await unwrap(app.run(["cmd"], { flags: { mode: "x" } }))).toMatchObject({
+					result: "x",
+				});
+			}
+		}
+	});
+
+	it("follows a used Context's dependencies even when the command provides it", async () => {
+		const region = defineFlag({ type: "string" });
+		const config = defineContext("config")
+			.flags({ region })
+			.setup(({ flags }) => flags.region);
+		const api = defineContext("api")
+			.use(config)
+			.setup(async ({ ctx }) => await ctx.config);
+		const cmd = defineCommand("cmd", (command) =>
+			command
+				.provide(api.of("fake"))
+				.use(api)
+				.action(async ({ ctx }) => await ctx.config),
+		);
+		const app = new Crust("cli").provide(config(), api()).add(cmd);
+
+		expect(flagsOf((await app.snapshot()).subCommands.cmd!)).toEqual(["region"]);
+		expect(await unwrap(app.run(["cmd"], { flags: { region: "us" } }))).toMatchObject({
+			result: "us",
+		});
+	});
+
+	it("rejects pulling a flag-owning Context on a command that does not parse its flags", async () => {
+		const auth = defineContext("auth")
+			.flags({ "api-key": apiKey })
+			.setup(() => "auth");
+		const status = defineCommand("status", (command) =>
+			// Untyped access: TypeScript only exposes `ctx.auth` after `.use(auth)`.
+			command.action(async ({ ctx }) => await (ctx as unknown as { auth: Promise<string> }).auth),
+		);
+		const outcome = await new Crust("cli").provide(auth()).add(status).run(["status"]);
+
+		expect(outcome).toMatchObject({
+			status: "failed",
+			error: {
+				code: "DEFINITION",
+				details: { subject: "context", name: "auth", reason: "context-flags-not-parsed" },
+			},
+		});
+		expect(outcome.status === "failed" && String(outcome.error)).toContain(".use(auth)");
+	});
+});
+
 describe("Context setup dependencies", () => {
 	it("exposes the transitive dependency closure at runtime", async () => {
 		expect.assertions(1);

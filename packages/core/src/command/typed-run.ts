@@ -14,6 +14,7 @@ import type { IsStaticTuple } from "../validation/shared.ts";
 
 export declare const commandProviders: unique symbol;
 export declare const commandEvents: unique symbol;
+export declare const inlineCommand: unique symbol;
 
 /** Compile-time description of one command's programmatic input and action result. */
 export interface CommandShape<
@@ -23,11 +24,14 @@ export interface CommandShape<
 	Result = unknown,
 	Providers extends Record<string, ContextValue> = Record<string, ContextValue>,
 	Events extends readonly unknown[] | undefined = readonly unknown[] | undefined,
+	Inline extends boolean = boolean,
 > {
 	readonly [commandProviders]?: Providers;
 	// Optional so hand-written shapes stay valid. A method parameter is compared bivariantly, so
 	// an annotated shape that leaves Events open still matches a definition's exact Events.
 	[commandEvents]?(events: Events): void;
+	/** `true` for a command defined with `.command()`, which parses the Context flags its `ctx` exposes. */
+	readonly [inlineCommand]?: Inline;
 	readonly args: A;
 	readonly flags: F;
 	readonly children: Children;

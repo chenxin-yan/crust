@@ -1,12 +1,14 @@
 import { setTimeout } from "node:timers/promises";
 
 import { Crust, CrustError, defineCommand } from "@crustjs/core";
+import { commandInputSchema } from "@crustjs/core/tooling";
 import { withTerminalIO } from "@crustjs/prompts";
 import { createPromptIO, type Key } from "@crustjs/prompts/testing";
 import { captureExecute } from "@crustjs/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { ConfirmationRequiredError, confirm } from "./confirm.ts";
+import { help } from "./help.ts";
 import { input } from "./input.ts";
 
 const drop = defineCommand("drop", (cmd) =>
@@ -99,6 +101,29 @@ describe("confirm", () => {
 	it("treats Ctrl-C at the prompt as cancellation", async () => {
 		const { screen: _screen, ...result } = await answer("ctrl+c");
 		expect(result).toEqual({ stdout: "", stderr: "", exitCode: 130 });
+	});
+
+	it("offers --yes only on commands that use confirm", async () => {
+		const list = defineCommand("list", (cmd) => cmd.action(({ stdout }) => stdout("listed")));
+		const scoped = new Crust("app").extend(confirm(), input(), help()).add(drop, list);
+
+		expect((await captureExecute(scoped, ["drop", "--help"])).stdout).toContain("--yes");
+		expect((await captureExecute(scoped, ["list", "--help"])).stdout).not.toContain("--yes");
+		const snapshot = await scoped.snapshot();
+		const inputKeys = (path: "drop" | "list") =>
+			Object.keys(commandInputSchema(snapshot.subCommands[path]!, [path]).properties);
+		expect(inputKeys("drop")).toContain("yes");
+		expect(inputKeys("list")).not.toContain("yes");
+		expect(await captureExecute(scoped, ["list", "--input", '{"yes":true}'])).toEqual({
+			stdout: "",
+			stderr: 'Error: Unknown flag "--yes"',
+			exitCode: 1,
+		});
+		expect(await captureExecute(scoped, ["list", "--yes"])).toEqual({
+			stdout: "",
+			stderr: 'Error: Unknown flag "--yes"',
+			exitCode: 1,
+		});
 	});
 
 	it("rejects a command that uses confirm without extending confirm()", async () => {

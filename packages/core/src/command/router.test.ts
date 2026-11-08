@@ -206,8 +206,8 @@ describe("resolveCommand — aliases", () => {
 
 describe("resolveCommand — known-flag skipping", () => {
 	function makeContextOwnedRoot(): CommandNode {
-		// Context-owned flags propagate into every descendant's effectiveFlags;
-		// the fixture mirrors that so routing's forwardability gate passes.
+		// Context-owned flags reach descendants that use the Context (or inline
+		// children); the fixture mirrors that so routing's forwardability gate passes.
 		const owned: FlagsDef = {
 			"api-key": { type: "string", short: "k", aliases: ["token"] },
 		};

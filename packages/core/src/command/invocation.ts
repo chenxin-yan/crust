@@ -34,10 +34,13 @@ import {
 } from "./extensions-install.ts";
 import {
 	addedChildrenOf,
+	checkProvidedContextFlags,
 	childEntriesOf,
 	cloneFlagRegistry,
 	commandDefinitionInternal,
 	commandPathOf,
+	demandedFactories,
+	installContextFlags,
 	lazyChildRecord,
 	registerFlag,
 	type AddedChild,
@@ -331,8 +334,9 @@ export function buildExtensionTree(
 	const providers: ExtensionProvider[] = extensions.flatMap((extension) => {
 		// SAFETY: .extend() records a position for every id it adds to the list.
 		const position = node.extensionPositions!.get(extension.id)!;
-		return extension.provide.map((instance) => ({ instance, position }));
+		return extension.provide.map((instance) => ({ instance, position, extension: extension.id }));
 	});
+	const hookContexts = extensions.flatMap((extension) => extension.use);
 	// The definitions of one `.add()` call share its parent.
 	const installed = new Map<CommandNode, CommandNode>();
 	const withProviders = (parent: CommandNode): CommandNode => {
@@ -427,6 +431,15 @@ export function buildExtensionTree(
 		for (const { name, def, recursive } of extensionFlags) {
 			if (isRoot || recursive) registerFlag(prepared, name, def, "owned");
 		}
+		// Extension hooks run on every command, so the Contexts they use parse their flags everywhere.
+		installContextFlags(prepared, hookContexts);
+		// Its providers and flags are final only now: the recipe may `.provide()` after `.use()`,
+		// and hook-used Contexts' flags are parsed by every command.
+		checkProvidedContextFlags(prepared, [
+			...prepared.inheritedDemands,
+			...demandedFactories(prepared.demands),
+			...hookContexts,
+		]);
 		applyNodeContextSections(prepared, path, sectionContextsFor(prepared, isRoot));
 		freezeNode(prepared);
 		return prepared;
@@ -606,7 +619,13 @@ async function dispatch(
 	// One resource scope and resolver span pre-run, the action, and post-run.
 	await using disposal = new AsyncDisposableStack();
 	const contexts = resolvedNode.contexts.map(({ instance }) => instance);
-	const resolver = createContextResolver(contexts, output.routed, disposal, signal);
+	const resolver = createContextResolver(
+		contexts,
+		resolvedNode.flagContexts,
+		output.routed,
+		disposal,
+		signal,
+	);
 
 	const snapshots = lazySnapshots(prepared, resolvedNode);
 	// Setups register cleanup only while they run; one shared object keeps per-invocation
