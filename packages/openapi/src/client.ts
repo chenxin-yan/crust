@@ -32,7 +32,7 @@ export interface ApiClient {
 }
 
 /** `path` joined below `baseUrl`, keeping the base's own path; absolute URLs pass through. */
-function resolveUrl(baseUrl: string, path: string): URL {
+export function resolveUrl(baseUrl: string, path: string): URL {
 	return URL.canParse(path)
 		? new URL(path)
 		: new URL(`${baseUrl.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`);
