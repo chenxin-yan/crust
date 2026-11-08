@@ -15,6 +15,7 @@ import type {
 	RawParsedFlags,
 	RunInputPayload,
 	RunInputValue,
+	ValueSource,
 	ValueType,
 } from "../types.ts";
 import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";
@@ -53,8 +54,12 @@ export interface ArgvParseResult<
 	flagOrder: readonly string[];
 	/** Positional arguments supplied by argv or typed `run()` input; later bound input cannot skip one. */
 	suppliedArgs?: ReadonlySet<string>;
-	/** Inputs given on argv by label (`--flag`, `<arg>`, `--` for passthrough tokens); see {@link bindStructuredInput}. */
-	argvLabels?: ReadonlySet<string>;
+	/** `ExtensionContext.sources`; {@link bindStructuredInput} keeps the values argv gave. */
+	sources: {
+		readonly args: Readonly<Record<string, ValueSource>>;
+		readonly flags: Readonly<Record<string, ValueSource>>;
+		readonly raw: "argv" | "run" | "bound" | undefined;
+	};
 	/** Argv/env value errors by definition label, in binding order; {@link validateParsed} throws the first. */
 	valueErrors?: ReadonlyMap<string, CrustError>;
 }
@@ -607,6 +612,23 @@ function coerceStructuredFlag(name: string, def: FlagDef, value: RunInputValue):
 	return coerceStructuredValue(def, value, label);
 }
 
+/**
+ * Frozen value sources for definitions: `source(name)` for a supplied one, else `default`
+ * when it declares one; definitions without a value are left out.
+ */
+function valueSources(
+	definitions: readonly (readonly [string, ArgDef | FlagDef])[],
+	source: (name: string) => ValueSource | undefined,
+): Readonly<Record<string, ValueSource>> {
+	const entries: [string, ValueSource][] = [];
+	for (const [name, def] of definitions) {
+		const chosen = source(name) ?? (def.default === undefined ? undefined : "default");
+		if (chosen) entries.push([name, chosen]);
+	}
+	// fromEntries defines own properties, so an argument named `__proto__` stays a key.
+	return Object.freeze(Object.fromEntries(entries));
+}
+
 /** Both front doors share binding, defaults, and canonical flag validation. */
 function bind<A extends ArgsDef, F extends FlagsDef, V, W>(
 	command: CommandNode & { args: A; effectiveFlags: F },
@@ -642,7 +664,7 @@ function bind<A extends ArgsDef, F extends FlagsDef, V, W>(
  * @param command - The command whose arg/flag definitions drive the parsing
  * @param argv - The argv array to parse (typically `process.argv.slice(2)`)
  * @param env - Environment consulted for `FlagDef.env` fallbacks; pass `{}` to parse without one
- * @returns Parsed args, flags, excessArgs (positionals before `--` not consumed by a declared argument), rawArgs (tokens after `--` not consumed by a declared argument), the labels argv supplied, and any deferred valueErrors
+ * @returns Parsed args, flags, excessArgs (positionals before `--` not consumed by a declared argument), rawArgs (tokens after `--` not consumed by a declared argument), each value's source, and any deferred valueErrors
  * @throws {CrustError} On malformed argv: unknown flags, a missing option value, or a negated `noNegate` flag
  */
 export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
@@ -652,10 +674,11 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 ): ArgvParseResult<A, F> {
 	const { positionals, separatorIndex, flagValues } = tokenizeArgv(command, argv);
 	const valueErrors = new Map<string, CrustError>();
+	const flagInput = applyEnvAndDelimiter(command.effectiveFlags, flagValues, env);
 	const { args, flags, consumed, present } = bind(
 		command,
 		positionals,
-		applyEnvAndDelimiter(command.effectiveFlags, flagValues, env),
+		flagInput,
 		coerceToken,
 		coerceFlagValue,
 		(error, label) => valueErrors.set(label, error),
@@ -664,12 +687,19 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 	const rawArgs = positionals.slice(Math.max(consumed, separatorIndex));
 	// Declared arguments take one positional each (a variadic, last, takes the rest).
 	const suppliedArgs = new Set(command.args.slice(0, positionals.length).map(({ name }) => name));
-	// Presence is read before delimiter splitting, so `--tags ""` counts as given.
-	const argvLabels = new Set([
-		...Object.keys(flagValues).map((name) => `--${name}`),
-		...[...suppliedArgs].map((name) => `<${name}>`),
-		...(rawArgs.length > 0 ? ["--"] : []),
-	]);
+	const sources = Object.freeze({
+		args: valueSources(
+			command.args.map((def) => [def.name, def] as const),
+			(name) => (suppliedArgs.has(name) ? "argv" : undefined),
+		),
+		// argv > env > default, as applyEnvAndDelimiter chose. Presence is read before
+		// delimiter splitting, so `--tags ""` counts as argv.
+		flags: valueSources(Object.entries(command.effectiveFlags), (name) => {
+			if (Object.hasOwn(flagValues, name)) return "argv";
+			return Object.hasOwn(flagInput, name) && flagInput[name] !== undefined ? "env" : undefined;
+		}),
+		raw: rawArgs.length > 0 ? ("argv" as const) : undefined,
+	});
 	return {
 		args,
 		flags,
@@ -682,7 +712,7 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 			...[...present].filter((name) => !Object.hasOwn(flagValues, name)).sort(),
 		],
 		...(suppliedArgs.size > 0 && { suppliedArgs }),
-		...(argvLabels.size > 0 && { argvLabels }),
+		sources,
 		...(valueErrors.size > 0 && { valueErrors }),
 	};
 }
@@ -793,6 +823,16 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 		rawArgs: [...(raw ?? [])],
 		flagOrder,
 		...(suppliedArgs.size > 0 && { suppliedArgs }),
+		sources: Object.freeze({
+			args: valueSources(
+				command.args.map((def) => [def.name, def] as const),
+				(name) => (suppliedArgs.has(name) ? "run" : undefined),
+			),
+			flags: valueSources(Object.entries(command.effectiveFlags), (name) =>
+				present.has(name) ? "run" : undefined,
+			),
+			raw: raw === undefined ? undefined : ("run" as const),
+		}),
 	};
 }
 
@@ -813,16 +853,19 @@ export function bindStructuredInput(
 	parsed: ArgvParseResult,
 	input: RunInputPayload,
 ): ArgvParseResult {
-	const given = parsed.argvLabels ?? new Set<string>();
-	const supplied = (record: RunInputPayload["args"], label: (name: string) => string) =>
+	const { sources } = parsed;
+	const supplied = (
+		record: RunInputPayload["args"],
+		given: Readonly<Record<string, ValueSource>>,
+	) =>
 		Object.fromEntries(
 			Object.entries(record ?? {}).filter(
-				([name, value]) => value !== undefined && !given.has(label(name)),
+				([name, value]) => value !== undefined && given[name] !== "argv",
 			),
 		);
-	const inputArgs = supplied(input.args, (name) => `<${name}>`);
-	const inputFlags = supplied(input.flags, (name) => `--${name}`);
-	const raw = given.has("--") ? undefined : input.raw;
+	const inputArgs = supplied(input.args, sources.args);
+	const inputFlags = supplied(input.flags, sources.flags);
+	const raw = sources.raw === "argv" ? undefined : input.raw;
 	// Typed `run()` order over the merged positionals, kept ones included.
 	let omitted: string | undefined;
 	for (const { name } of command.args) {
@@ -842,6 +885,8 @@ export function bindStructuredInput(
 	);
 	const pick = (bound: Record<string, ParsedArgValue>, names: Record<string, unknown>) =>
 		Object.fromEntries(Object.keys(names).map((name) => [name, bound[name]]));
+	const boundSources = (names: Record<string, unknown>) =>
+		Object.fromEntries(Object.keys(names).map((name) => [name, "bound" as const]));
 	// A replaced flag's environment value error no longer applies.
 	const replaced = new Set(Object.keys(inputFlags).map((name) => `--${name}`));
 	const valueErrors = new Map(
@@ -853,6 +898,11 @@ export function bindStructuredInput(
 		args: { ...parsed.args, ...pick(structured.args, inputArgs) },
 		flags: { ...parsed.flags, ...pick(structured.flags, inputFlags) },
 		rawArgs: raw === undefined ? parsed.rawArgs : structured.rawArgs,
+		sources: Object.freeze({
+			args: Object.freeze({ ...sources.args, ...boundSources(inputArgs) }),
+			flags: Object.freeze({ ...sources.flags, ...boundSources(inputFlags) }),
+			raw: raw === undefined ? sources.raw : ("bound" as const),
+		}),
 		valueErrors,
 	};
 }

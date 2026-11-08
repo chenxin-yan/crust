@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { unwrap } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
-import { defineExtension } from "../api/extension.ts";
+import { type ExtensionContext, defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
@@ -1307,23 +1307,27 @@ describe("Extension named hooks", () => {
 		});
 	});
 
-	describe("argvProvided", () => {
-		function recordingApp() {
-			const seen: unknown[] = [];
+	describe("sources", () => {
+		function recordingApp(bind: (ctx: ExtensionContext) => void = () => {}) {
+			const seen: ExtensionContext["sources"][] = [];
 			const recorder = defineExtension(defineExtensionId("recorder"))
-				.preRun((ctx) => {
-					ctx.bindInput({ flags: { name: "json" } });
-					seen.push(ctx.argvProvided);
+				.setup((ctx) => {
+					seen.push(ctx.sources);
+					bind(ctx);
 				})
-				.onError((_error, ctx) => void seen.push(ctx.argvProvided));
+				.preRun((ctx) => void seen.push(ctx.sources))
+				.onError((_error, ctx) => void seen.push(ctx.sources));
 			const app = new Crust("cli")
 				.flags({
 					name: { type: "string", default: "dflt" },
 					verbose: { type: "boolean", short: "V" },
-					port: { type: "number", env: { name: "PROVIDED_PORT" } },
+					color: { type: "boolean" },
+					port: { type: "number", env: { name: "SOURCES_PORT" } },
+					tags: { type: "string", multiple: true, delimiter: "," },
+					count: { type: "number" },
 				})
 				.args({ name: "source", type: "string" })
-				.args({ name: "target", type: "string" })
+				.args({ name: "target", type: "string", default: "tgt" })
 				.extend(recorder)
 				.action(() => {});
 			return { app, seen };
@@ -1331,28 +1335,78 @@ describe("Extension named hooks", () => {
 
 		afterEach(() => vi.unstubAllEnvs());
 
-		it("lists argv's arguments, canonical flag names, and passthrough tokens, ignoring env and bindInput", async () => {
-			vi.stubEnv("PROVIDED_PORT", "9000");
+		it("reports argv, env, and default by canonical name and omits names without a value", async () => {
+			vi.stubEnv("SOURCES_PORT", "9000");
 			const { app, seen } = recordingApp();
-			expect(
-				await app.execute({ argv: ["a", "-V", "--", "b", "--x"], io: { stdout: () => {} } }),
-			).toBe(0);
-			expect(seen).toEqual([{ args: ["source", "target"], flags: ["verbose"], raw: true }]);
+			const argv = ["a", "-V", "--no-color", "--tags", "", "--", "b", "--x"];
+			expect(await app.execute({ argv, io: { stdout: () => {} } })).toBe(0);
+			expect(seen[0]).toEqual({
+				args: { source: "argv", target: "argv" },
+				flags: { name: "default", verbose: "argv", color: "argv", port: "env", tags: "argv" },
+				raw: "argv",
+			});
 			expect(Object.isFrozen(seen[0])).toBe(true);
+			expect(Object.isFrozen(seen[0]?.flags)).toBe(true);
 		});
 
 		it("reports no passthrough when `--` has no tokens left over", async () => {
 			const { app, seen } = recordingApp();
 			await app.execute({ argv: ["--name", "x", "--"] });
-			expect(seen).toEqual([{ args: [], flags: ["name"], raw: false }]);
+			expect(seen[0]).toEqual({
+				args: { target: "default" },
+				flags: { name: "argv" },
+				raw: undefined,
+			});
 		});
 
-		it("is empty under typed run() and in the routing-failure onError context", async () => {
+		it("reports typed run() input as run", async () => {
+			vi.stubEnv("SOURCES_PORT", "9000");
 			const { app, seen } = recordingApp();
-			await app.run([], { args: { source: "a" }, flags: { verbose: true }, raw: ["r"] });
+			await unwrap(
+				app.run([], { args: { source: "a" }, flags: { verbose: true, port: 1 }, raw: ["r"] }),
+			);
+			expect(seen[0]).toEqual({
+				args: { source: "run", target: "default" },
+				flags: { name: "default", verbose: "run", port: "run" },
+				raw: "run",
+			});
+		});
+
+		it("reads bound keys live, and a later bindInput reverts keys it no longer supplies", async () => {
+			vi.stubEnv("SOURCES_PORT", "9000");
+			const { app, seen } = recordingApp((ctx) => {
+				ctx.bindInput({ args: { source: "x" }, flags: { name: "a", port: 1 }, raw: ["r"] });
+				seen.push(ctx.sources);
+				ctx.bindInput({ flags: { name: "b", verbose: true } });
+			});
+			expect(await app.execute({ argv: ["-V"] })).toBe(0);
+			const original = {
+				args: { target: "default" },
+				flags: { name: "default", verbose: "argv", port: "env" },
+				raw: undefined,
+			};
+			expect(seen).toEqual([
+				original,
+				{
+					args: { source: "bound", target: "default" },
+					flags: { name: "bound", verbose: "argv", port: "bound" },
+					raw: "bound",
+				},
+				// argv still wins for verbose; port and source revert to the original parse.
+				{ ...original, flags: { ...original.flags, name: "bound" } },
+			]);
+		});
+
+		it("keeps argv's passthrough tokens over bound raw", async () => {
+			const { app, seen } = recordingApp((ctx) => ctx.bindInput({ raw: ["bound"] }));
+			await app.execute({ argv: ["--", "a", "b", "c"] });
+			expect(seen.at(-1)?.raw).toBe("argv");
+		});
+
+		it("is empty in the routing-failure onError context", async () => {
+			const { app, seen } = recordingApp();
 			await app.execute({ argv: ["--nope"], io: { stderr: () => {} } });
-			const empty = { args: [], flags: [], raw: false };
-			expect(seen).toEqual([empty, empty]);
+			expect(seen).toEqual([{ args: {}, flags: {}, raw: undefined }]);
 		});
 	});
 

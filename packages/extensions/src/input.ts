@@ -70,8 +70,12 @@ export const input: ExtensionFactory<[], {}, [], typeof inputFlags> =
 				throw new CrustError("PARSE", `--input: ${reason}`).withCause(cause);
 			}
 			// Drop keys argv gave before conversion, so an invalid overridden value never fails.
-			const { args, flags, raw } = context.argvProvided;
-			const given = new Set([...args, ...flags, ...(raw ? [RAW_INPUT_PROPERTY] : [])]);
+			const { args, flags, raw } = context.sources;
+			const given = new Set(
+				[...Object.entries(args), ...Object.entries(flags), [RAW_INPUT_PROPERTY, raw]]
+					.filter(([, source]) => source === "argv")
+					.map(([name]) => name),
+			);
 			const supplied = Object.fromEntries(
 				Object.entries(values).filter(([name]) => !given.has(name)),
 			);

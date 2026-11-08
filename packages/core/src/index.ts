@@ -101,5 +101,6 @@ export type {
 	ParsedFlagValue,
 	ParseResult,
 	ValidatedInput,
+	ValueSource,
 	ValueType,
 } from "./types.ts";

@@ -508,24 +508,6 @@ function selectHandler(
 	return first;
 }
 
-/** Splits parse labels (`--flag`, `<arg>`, `--`) into `ExtensionContext.argvProvided`. */
-function argvProvidedFrom(
-	labels: ReadonlySet<string> | undefined,
-): ExtensionContext["argvProvided"] {
-	const given = [...(labels ?? [])];
-	return Object.freeze({
-		args: Object.freeze(
-			given.filter((label) => label.startsWith("<")).map((label) => label.slice(1, -1)),
-		),
-		flags: Object.freeze(
-			given
-				.filter((label) => label.startsWith("--") && label !== "--")
-				.map((label) => label.slice(2)),
-		),
-		raw: given.includes("--"),
-	});
-}
-
 /** Resolve, parse, and run one invocation without rendering failures. */
 async function dispatch(
 	input: InvocationInput,
@@ -576,7 +558,9 @@ async function dispatch(
 		get rawArgs() {
 			return bound.rawArgs;
 		},
-		argvProvided: argvProvidedFrom(parsed.argvLabels),
+		get sources() {
+			return bound.sources;
+		},
 		signal,
 		ctx: resolver.bag(extensions.flatMap((extension) => extension.use)),
 		bindInput(payload: RunInputPayload) {
@@ -751,7 +735,7 @@ async function renderFailure(
 			args: Object.freeze({}),
 			flags: Object.freeze({}),
 			rawArgs: [],
-			argvProvided: argvProvidedFrom(undefined),
+			sources: Object.freeze({ args: Object.freeze({}), flags: Object.freeze({}), raw: undefined }),
 			signal,
 			stdout: output.io.stdout,
 			stderr: output.io.stderr,

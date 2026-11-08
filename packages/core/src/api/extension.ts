@@ -14,6 +14,7 @@ import type {
 	ParsedArgValue,
 	ParsedFlagValue,
 	RunInputPayload,
+	ValueSource,
 } from "../types.ts";
 import type {
 	KnownCommandSpellings,
@@ -162,18 +163,18 @@ export interface ExtensionContext<
 	 */
 	readonly rawArgs: readonly string[];
 	/**
-	 * What argv gave explicitly: declared argument names, canonical flag names (aliases and
-	 * `--no-<name>` included, environment values not), and whether passthrough tokens were
-	 * left after `--`. It reflects argv only, never values bound later by
-	 * {@link ExtensionContext.bindInput}; empty under typed `run()` and in `onError` after a
-	 * routing or argv-syntax failure.
+	 * Where each current value came from, keyed by declared argument name and canonical flag
+	 * name; a name without a value is absent. `argv` covers aliases, `--no-<name>`, and
+	 * `--tags ""`; `raw` is `argv` when passthrough tokens were left after `--`. It reads live:
+	 * after {@link ExtensionContext.bindInput}, supplied keys report `bound`. Empty in `onError`
+	 * after a routing or argv-syntax failure.
 	 *
-	 * @example `{ args: ["target"], flags: ["trace"], raw: true }`
+	 * @example `{ args: { target: "argv" }, flags: { trace: "env", port: "default" }, raw: undefined }`
 	 */
-	readonly argvProvided: {
-		readonly args: readonly string[];
-		readonly flags: readonly string[];
-		readonly raw: boolean;
+	readonly sources: {
+		readonly args: Readonly<Record<string, ValueSource>>;
+		readonly flags: Readonly<Record<string, ValueSource>>;
+		readonly raw: "argv" | "run" | "bound" | undefined;
 	};
 	/**
 	 * Aborted when the caller cancels the invocation (`execute({ signal })`,
@@ -192,7 +193,7 @@ export interface ExtensionContext<
 	 * replaces the environment value or default, converted exactly as typed `run()` input is.
 	 * Under typed `run()` nothing came from argv, so supplied keys replace the typed input.
 	 * Each call re-binds against the original input, so the last call wins. Afterwards
-	 * `args`, `flags`, and `rawArgs` report the bound values, and validation and the Command
+	 * `args`, `flags`, `rawArgs`, and `sources` report the bound values, and validation and the Command
 	 * Action use them. Flag handlers are chosen from the original input, so a bound flag never
 	 * selects one, even when bound in `setup`. A no-op in `onError` after a routing or argv-syntax failure.
 	 *
