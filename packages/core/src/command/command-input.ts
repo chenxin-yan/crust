@@ -206,7 +206,8 @@ function isString(value: JsonValue): value is string {
  * definitions become `URL`s, and `undefined` entries are skipped.
  *
  * @throws {CrustError} `PARSE` when a value is not JSON data, `raw` is not an array of strings,
- *   or a `sensitive` `url` value is not a valid URL
+ *   or a `sensitive` `url` value is not a valid URL; a `sensitive` definition's failure reports
+ *   only `Invalid value for <label>.`
  * @throws {TypeError} when any other `url` value is not a valid URL
  */
 export function parseCommandInput(
@@ -218,6 +219,16 @@ export function parseCommandInput(
 	const flags: Record<string, RunInputValue> = Object.create(null);
 	const { argNames, urlFields } = commandInputFields(command);
 	const toUrl = (value: JsonValue) => (isString(value) ? new URL(value) : value);
+	// The fixed error a `sensitive` definition reports instead, since some messages quote values.
+	const sensitiveError = (name: string) => {
+		const isArg = argNames.includes(name);
+		const def = isArg
+			? command.args.find((arg) => arg.name === name)
+			: Object.hasOwn(command.flags, name)
+				? command.flags[name]
+				: undefined;
+		return def?.sensitive ? sensitiveValueError(isArg ? `<${name}>` : `--${name}`) : undefined;
+	};
 	let raw: readonly string[] | undefined;
 	for (const [name, value] of Object.entries(values)) {
 		if (value === undefined) continue;
@@ -225,7 +236,7 @@ export function parseCommandInput(
 		try {
 			given = parseJsonValue(value);
 		} catch {
-			throw new CrustError("PARSE", `Expected a JSON value for "${name}"`);
+			throw sensitiveError(name) ?? new CrustError("PARSE", `Expected a JSON value for "${name}"`);
 		}
 		if (name === RAW_INPUT_PROPERTY) {
 			if (!Array.isArray(given) || !given.every(isString)) {
@@ -243,9 +254,7 @@ export function parseCommandInput(
 			(isArg ? args : flags)[name] = Array.isArray(given) ? given.map(toUrl) : toUrl(given);
 		} catch (error) {
 			// Some runtimes quote the input in the URL error.
-			const def = isArg ? command.args.find((arg) => arg.name === name) : command.flags[name];
-			if (def?.sensitive) throw sensitiveValueError(isArg ? `<${name}>` : `--${name}`);
-			throw error;
+			throw sensitiveError(name) ?? error;
 		}
 	}
 	return raw === undefined ? { args, flags } : { args, flags, raw };

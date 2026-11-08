@@ -209,6 +209,25 @@ describe("input", () => {
 			expect(run.stdout + run.stderr).not.toContain(SECRET);
 		});
 
+		it("reports a scalar variadic and a non-JSON number for sensitive keys with a fixed message", async () => {
+			const app = new Crust("app")
+				.extend(input())
+				.args({ name: "keys", type: "string", variadic: true, sensitive: true })
+				.flags({ pin: { type: "number", sensitive: true } })
+				.action(() => {});
+			for (const [payload, message, details] of [
+				[`{"keys":"${SECRET}"}`, "Invalid value for <keys>.", { argument: "keys" }],
+				// JSON.parse reads 1e400 as Infinity, which is not JSON data.
+				['{"pin":1e400}', "Invalid value for --pin.", { flag: "pin" }],
+			] as const) {
+				const outcome = await app.run([], { flags: { input: payload } });
+				if (outcome.status !== "failed")
+					throw new Error(`expected a failure, got ${outcome.status}`);
+				expect(outcome.error).toBeInstanceOf(CrustError);
+				expect(outcome.error).toMatchObject({ code: "PARSE", message, details });
+			}
+		});
+
 		it("keeps the parser's detail for malformed JSON on commands without sensitive fields", async () => {
 			expect(((await failure("{target")) as CrustError).message).toMatch(
 				/^--input: invalid JSON \(/,

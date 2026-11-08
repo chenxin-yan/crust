@@ -782,7 +782,10 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 		if (omittedArgument !== undefined) throw positionalGap(definition.name, omittedArgument);
 		if (definition.variadic) {
 			if (!isOccurrenceArray(value)) {
-				throw new CrustError("PARSE", `Expected an occurrence array for <${definition.name}>`);
+				const label = `<${definition.name}>`;
+				throw definition.sensitive
+					? sensitiveValueError(label)
+					: new CrustError("PARSE", `Expected an occurrence array for ${label}`);
 			}
 			positionals.push(...value);
 			// An empty array is zero occurrences, so like argv omission it supplies nothing.
