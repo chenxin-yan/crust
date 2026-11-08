@@ -13,6 +13,18 @@ Crust adds none of this by default. Each piece below is an opt-in Extension or c
 
 The commands used below are in [`examples/guide/agents.ts`](https://github.com/chenxin-yan/crust/blob/main/apps/docs/examples/guide/agents.ts).
 
+## How agents use your CLI
+
+An agent runs commands in one of two ways: from a shell, with argv, `--input`, `--json`, and exit codes, or as [MCP](#mcp) tool calls. From a shell, it finds commands on demand with `--help`, `--llms`, and `schema <path>`, or ahead of time from an installed [skill](#skills); either way it then runs the same CLI, so `json()`, `input()`, `confirm()`, and `nextSteps()` serve both.
+
+| Path          | Fits                                                                              |
+| ------------- | --------------------------------------------------------------------------------- |
+| Shell         | Any coding agent, since every one has a shell; the foundation the others build on |
+| Shell + skill | Agents that load skills; the skill saves the discovery calls                      |
+| MCP           | Clients that call tools instead of running a shell                                |
+
+Skills and MCP each add one `.extend()`, and every path reads the same command snapshot, so a command declared once reaches all of them.
+
 ## Structured input
 
 [`input()`](/docs/modules/extensions/input) adds `--input`, which takes every argument and flag as one JSON object, inline, from a file (`@path`), or from stdin (`-`). An agent writes one JSON object instead of quoting and ordering argv tokens:
@@ -75,8 +87,15 @@ The same events reach `run()`'s `onEvent` callback. Under MCP, each yield sends 
 
 An agent learns a CLI from what it prints about itself, so write `description`s for commands, arguments, and flags: every surface below reads them.
 
-- [`help()`](/docs/modules/extensions/help) prints `--help` for people and agents alike.
-- [`schema()`](/docs/modules/extensions/schema) adds `schema [path...]`, which prints a command's `input` and `output` JSON Schema, and `--llms`, which prints a Markdown index of every visible command.
+| Surface                                                            | When it fits                                                                                                                |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `--help` from [`help()`](/docs/modules/extensions/help)            | One command, for people and agents                                                                                          |
+| `--llms` from [`schema()`](/docs/modules/extensions/schema)        | The whole CLI in compact Markdown, documentation sections included; an agent's first call                                   |
+| `schema <path>` from [`schema()`](/docs/modules/extensions/schema) | One command's `input` and `output` JSON Schema, before building `--input` or parsing `--json`, or for code generation       |
+| [Skills](#skills)                                                  | The same information, installed ahead of time into an agent's skill directory; the agent still runs the CLI                 |
+| [MCP](#mcp)                                                        | Tools for clients that call tools instead of a shell, with the same input schema and, where MCP can carry it, output schema |
+
+They all read the same command snapshot (descriptions, arguments and flags, `.output()`, sections), so declaring something once updates every surface. [How agents use your CLI](#how-agents-use-your-cli) says which path fits which agent.
 
 ```sh
 $ my-cli schema deploy
