@@ -136,7 +136,8 @@ interface ArgDefBase {
 	 *
 	 * Value errors say only `Invalid value for <label>.`, `nextSteps()` prints `<redacted>`,
 	 * help and man pages say `Secret.`, and JSON Schema marks it `writeOnly`. Cannot be
-	 * combined with `default` or `choices`, which are published.
+	 * combined with `default` or `choices`, which are published, or `type: "boolean"`,
+	 * whose value is its spelling on argv.
 	 */
 	sensitive?: true;
 	/**
@@ -254,7 +255,8 @@ interface SchemaArgDef {
 	 *
 	 * Value errors say only `Invalid value for <label>.`, `nextSteps()` prints `<redacted>`,
 	 * help and man pages say `Secret.`, and JSON Schema marks it `writeOnly`. Cannot be
-	 * combined with `default` or `choices`, which are published.
+	 * combined with `default` or `choices`, which are published, or `type: "boolean"`,
+	 * whose value is its spelling on argv.
 	 */
 	sensitive?: true;
 	type?: never;
@@ -313,7 +315,8 @@ interface FlagDefBase {
 	 *
 	 * Value errors say only `Invalid value for <label>.`, `nextSteps()` prints `<redacted>`,
 	 * help and man pages say `Secret.`, and JSON Schema marks it `writeOnly`. Cannot be
-	 * combined with `default` or `choices`, which are published.
+	 * combined with `default` or `choices`, which are published, or `type: "boolean"`,
+	 * whose value is its spelling on argv.
 	 */
 	sensitive?: true;
 }

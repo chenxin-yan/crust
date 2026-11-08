@@ -79,6 +79,7 @@ export type DefinitionErrorReason =
 	| "reserved-name"
 	| "reserved-no-prefix"
 	| "reserved-spelling"
+	| "sensitive-boolean"
 	| "sensitive-choices"
 	| "sensitive-default"
 	| "unknown-handle-flag"

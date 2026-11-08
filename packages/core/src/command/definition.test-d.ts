@@ -92,14 +92,12 @@ function _typecheckRequiresARecipe(
 }
 
 {
-	// `sensitive` is accepted on every arg and flag variant and leaves inference unchanged
+	// `sensitive` is accepted on every non-boolean arg and flag variant and leaves inference unchanged
 	const secret = {} as StandardSchema<string | undefined, string>;
-	const flag = {} as StandardSchema<boolean | undefined, boolean>;
 	new Crust("cli")
 		.args(
 			{ name: "string", type: "string", sensitive: true, parse: (raw: string) => raw.length },
 			{ name: "number", type: "number", sensitive: true },
-			{ name: "boolean", type: "boolean", sensitive: true },
 			{ name: "url", type: "url", sensitive: true },
 			{ name: "path", type: "path", sensitive: true },
 			{ name: "json", type: "json", sensitive: true },
@@ -108,14 +106,12 @@ function _typecheckRequiresARecipe(
 		.flags({
 			string: { type: "string", sensitive: true, env: { name: "STRING" } },
 			number: { type: "number", sensitive: true },
-			boolean: { type: "boolean", sensitive: true, noNegate: true },
 			url: { type: "url", sensitive: true },
 			path: { type: "path", sensitive: true },
 			json: { type: "json", sensitive: true },
 			strings: { type: "string", multiple: true, delimiter: ",", sensitive: true },
 			numbers: { type: "number", multiple: true, sensitive: true },
 			schema: { type: "string", schema: secret, sensitive: true },
-			toggle: { type: "boolean", schema: flag, sensitive: true },
 		})
 		.action(({ args, flags }) => {
 			type _string = Expect<Equal<typeof args.string, number | undefined>>;

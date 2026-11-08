@@ -147,7 +147,11 @@ import type {
 			{ name: "a"; type: "string"; sensitive: true; default: "x" },
 			{ name: "b"; type: "string"; sensitive: true; choices: ["x"] },
 			{ name: "c"; type: "string"; sensitive: true },
+			{ name: "d"; type: "boolean"; sensitive: true },
 		]
+	>;
+	type _boolean = Expect<
+		Equal<Checked[3]["FIX_SENSITIVE_BOOLEAN"], "sensitive values cannot be booleans">
 	>;
 	type _default = Expect<
 		Equal<Checked[0]["FIX_SENSITIVE_DEFAULT"], "sensitive values cannot declare a default">

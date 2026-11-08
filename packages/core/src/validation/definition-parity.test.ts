@@ -234,6 +234,25 @@ describe("flag values", () => {
 				a: { type: "string", sensitive: true, choices: ["x"] },
 			}),
 		).toThrow(definitionError("sensitive-choices"));
+		const toggle = {
+			"~standard": {
+				version: 1 as const,
+				vendor: "test",
+				validate: (value: unknown) => ({ value }),
+			},
+		};
+		expect(() =>
+			new Crust("cli").flags({
+				// @ts-expect-error -- a sensitive boolean's value is its spelling on argv
+				a: { type: "boolean", sensitive: true },
+			}),
+		).toThrow(definitionError("sensitive-boolean"));
+		expect(() =>
+			new Crust("cli").flags({
+				// @ts-expect-error -- a sensitive schema-backed boolean too
+				a: { type: "boolean", schema: toggle, sensitive: true },
+			}),
+		).toThrow(definitionError("sensitive-boolean"));
 	});
 
 	// Types reject the definition; runtime cannot tell a parser is async until it returns a Promise.
@@ -386,6 +405,12 @@ describe("arguments", () => {
 				{ name: "a", type: "string", sensitive: true, choices: ["x"] },
 			),
 		).toThrow(definitionError("sensitive-choices"));
+		expect(() =>
+			new Crust("cli").args(
+				// @ts-expect-error -- a sensitive boolean's value is its spelling on argv
+				{ name: "a", type: "boolean", sensitive: true },
+			),
+		).toThrow(definitionError("sensitive-boolean"));
 	});
 });
 

@@ -119,11 +119,17 @@ type AsyncParseBrand<T> = T extends { parse?: (...args: never[]) => infer R }
 			}
 	: {};
 
-/** Brand a `sensitive` definition with a default or choices: help and JSON Schema publish both. */
+/**
+ * Brand a `sensitive` definition with a default or choices, which help and JSON Schema publish,
+ * or a boolean type, whose value is its spelling on argv.
+ */
 type SensitivePublishedBrand<T> = T extends { sensitive: true }
-	? (T extends { default: {} | null }
-			? { readonly FIX_SENSITIVE_DEFAULT: "sensitive values cannot declare a default" }
+	? (T extends { type: "boolean" }
+			? { readonly FIX_SENSITIVE_BOOLEAN: "sensitive values cannot be booleans" }
 			: {}) &
+			(T extends { default: {} | null }
+				? { readonly FIX_SENSITIVE_DEFAULT: "sensitive values cannot declare a default" }
+				: {}) &
 			(T extends { choices: readonly string[] }
 				? { readonly FIX_SENSITIVE_CHOICES: "sensitive values cannot declare choices" }
 				: {})

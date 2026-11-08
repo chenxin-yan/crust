@@ -252,10 +252,14 @@ import type {
 			ok: { type: "string"; sensitive: true; env: { name: "TOKEN" } };
 			defaulted: { type: "string"; sensitive: true; default: "x" };
 			chosen: { type: "string"; sensitive: true; choices: ["x"] };
+			toggle: { type: "boolean"; sensitive: true };
 		},
 		never
 	>;
-	type _secretClean = Expect<Equal<keyof Secret, "defaulted" | "chosen">>;
+	type _secretClean = Expect<Equal<keyof Secret, "defaulted" | "chosen" | "toggle">>;
+	type _secretBoolean = Expect<
+		Equal<Secret["toggle"]["FIX_SENSITIVE_BOOLEAN"], "sensitive values cannot be booleans">
+	>;
 	type _secretDefault = Expect<
 		Equal<Secret["defaulted"]["FIX_SENSITIVE_DEFAULT"], "sensitive values cannot declare a default">
 	>;
