@@ -246,27 +246,6 @@ import type {
 	type _named = Expect<Equal<Named["c"]["FIX_DEFAULT_CHOICE"], "default must be one of choices">>;
 	type _clean = Expect<Equal<keyof Named, "c">>;
 
-	// sensitive flags cannot declare the published default or choices
-	type Secret = FlagRecordErrors<
-		{
-			ok: { type: "string"; sensitive: true; env: { name: "TOKEN" } };
-			defaulted: { type: "string"; sensitive: true; default: "x" };
-			chosen: { type: "string"; sensitive: true; choices: ["x"] };
-			toggle: { type: "boolean"; sensitive: true };
-		},
-		never
-	>;
-	type _secretClean = Expect<Equal<keyof Secret, "defaulted" | "chosen" | "toggle">>;
-	type _secretBoolean = Expect<
-		Equal<Secret["toggle"]["FIX_SENSITIVE_BOOLEAN"], "sensitive values cannot be booleans">
-	>;
-	type _secretDefault = Expect<
-		Equal<Secret["defaulted"]["FIX_SENSITIVE_DEFAULT"], "sensitive values cannot declare a default">
-	>;
-	type _secretChoices = Expect<
-		Equal<Secret["chosen"]["FIX_SENSITIVE_CHOICES"], "sensitive values cannot declare choices">
-	>;
-
 	// every flag in a collision carries it, against peers and existing spellings
 	type Collisions = {
 		a: { type: "boolean"; short: "z" };

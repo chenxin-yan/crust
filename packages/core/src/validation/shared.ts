@@ -119,22 +119,6 @@ type AsyncParseBrand<T> = T extends { parse?: (...args: never[]) => infer R }
 			}
 	: {};
 
-/**
- * Brand a `sensitive` definition with a default or choices, which help and JSON Schema publish,
- * or a boolean type, whose value is its spelling on argv.
- */
-type SensitivePublishedBrand<T> = T extends { sensitive: true }
-	? (T extends { type: "boolean" }
-			? { readonly FIX_SENSITIVE_BOOLEAN: "sensitive values cannot be booleans" }
-			: {}) &
-			(T extends { default: {} | null }
-				? { readonly FIX_SENSITIVE_DEFAULT: "sensitive values cannot declare a default" }
-				: {}) &
-			(T extends { choices: readonly string[] }
-				? { readonly FIX_SENSITIVE_CHOICES: "sensitive values cannot declare choices" }
-				: {})
-	: {};
-
 /** Brand literal defaults that fall outside a literal `choices` tuple. */
 type DefaultWithinChoicesBrand<T> = T extends {
 	choices: readonly (infer Choice extends string)[];
@@ -209,7 +193,5 @@ export type IsClosedName<N extends string> = false extends (
 
 /** Reject independently provable invalid local values, including members of uncertain definitions. */
 export type LocalValueBrand<T> = UnionToIntersection<
-	T extends unknown
-		? AsyncParseBrand<T> & DefaultWithinChoicesBrand<T> & SensitivePublishedBrand<T>
-		: never
+	T extends unknown ? AsyncParseBrand<T> & DefaultWithinChoicesBrand<T> : never
 >;

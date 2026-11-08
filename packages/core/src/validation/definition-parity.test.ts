@@ -215,46 +215,6 @@ describe("flag values", () => {
 		).toThrow(definitionError("delimiter-without-multiple"));
 	});
 
-	it("rejects sensitive flags with a default or choices, which are published", () => {
-		expect(() =>
-			new Crust("cli").flags({
-				// @ts-expect-error -- a sensitive default is published
-				a: { type: "string", sensitive: true, default: "x" },
-			}),
-		).toThrow(definitionError("sensitive-default"));
-		expect(() =>
-			new Crust("cli").flags({
-				// @ts-expect-error -- a sensitive multiple default is published
-				a: { type: "number", multiple: true, sensitive: true, default: [1] },
-			}),
-		).toThrow(definitionError("sensitive-default"));
-		expect(() =>
-			new Crust("cli").flags({
-				// @ts-expect-error -- sensitive choices are published
-				a: { type: "string", sensitive: true, choices: ["x"] },
-			}),
-		).toThrow(definitionError("sensitive-choices"));
-		const toggle = {
-			"~standard": {
-				version: 1 as const,
-				vendor: "test",
-				validate: (value: unknown) => ({ value }),
-			},
-		};
-		expect(() =>
-			new Crust("cli").flags({
-				// @ts-expect-error -- a sensitive boolean's value is its spelling on argv
-				a: { type: "boolean", sensitive: true },
-			}),
-		).toThrow(definitionError("sensitive-boolean"));
-		expect(() =>
-			new Crust("cli").flags({
-				// @ts-expect-error -- a sensitive schema-backed boolean too
-				a: { type: "boolean", schema: toggle, sensitive: true },
-			}),
-		).toThrow(definitionError("sensitive-boolean"));
-	});
-
 	// Types reject the definition; runtime cannot tell a parser is async until it returns a Promise.
 	it("rejects async parse when the flag is parsed, not when it is defined", async () => {
 		const app = new Crust("cli")
@@ -393,24 +353,6 @@ describe("arguments", () => {
 				{ name: "a", type: "string", choices: ["x"], default: "z" },
 			),
 		).toThrow(definitionError("default-outside-choices"));
-		expect(() =>
-			new Crust("cli").args(
-				// @ts-expect-error -- a sensitive default is published
-				{ name: "a", type: "string", sensitive: true, default: "x" },
-			),
-		).toThrow(definitionError("sensitive-default"));
-		expect(() =>
-			new Crust("cli").args(
-				// @ts-expect-error -- sensitive choices are published
-				{ name: "a", type: "string", sensitive: true, choices: ["x"] },
-			),
-		).toThrow(definitionError("sensitive-choices"));
-		expect(() =>
-			new Crust("cli").args(
-				// @ts-expect-error -- a sensitive boolean's value is its spelling on argv
-				{ name: "a", type: "boolean", sensitive: true },
-			),
-		).toThrow(definitionError("sensitive-boolean"));
 	});
 });
 
@@ -495,6 +437,42 @@ describe("valid controls", () => {
 
 // Values typed as plain `string` carry no literal for a brand to check.
 describe("runtime-only values", () => {
+	// No brand: types accept these definitions, and only the runtime check rejects them.
+	it("rejects sensitive definitions that are booleans or declare a default or choices", () => {
+		const toggle = {
+			"~standard": {
+				version: 1 as const,
+				vendor: "test",
+				validate: (value: unknown) => ({ value }),
+			},
+		};
+		const cli = new Crust("cli");
+		expect(() => cli.flags({ a: { type: "string", sensitive: true, default: "x" } })).toThrow(
+			definitionError("sensitive-default"),
+		);
+		expect(() =>
+			cli.flags({ a: { type: "number", multiple: true, sensitive: true, default: [1] } }),
+		).toThrow(definitionError("sensitive-default"));
+		expect(() => cli.flags({ a: { type: "string", sensitive: true, choices: ["x"] } })).toThrow(
+			definitionError("sensitive-choices"),
+		);
+		expect(() => cli.flags({ a: { type: "boolean", sensitive: true } })).toThrow(
+			definitionError("sensitive-boolean"),
+		);
+		expect(() => cli.flags({ a: { type: "boolean", schema: toggle, sensitive: true } })).toThrow(
+			definitionError("sensitive-boolean"),
+		);
+		expect(() => cli.args({ name: "a", type: "string", sensitive: true, default: "x" })).toThrow(
+			definitionError("sensitive-default"),
+		);
+		expect(() => cli.args({ name: "a", type: "string", sensitive: true, choices: ["x"] })).toThrow(
+			definitionError("sensitive-choices"),
+		);
+		expect(() => cli.args({ name: "a", type: "boolean", sensitive: true })).toThrow(
+			definitionError("sensitive-boolean"),
+		);
+	});
+
 	it("rejects dynamic names the types cannot see", () => {
 		const name: string = "a b";
 		expect(() => new Crust("cli").flags({ [name]: { type: "string" } })).toThrow(

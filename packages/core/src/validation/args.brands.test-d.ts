@@ -139,25 +139,3 @@ import type {
 	type _valid = Expect<Equal<Extract<keyof Valid[0], "FIX_DEFAULT_CHOICE">, never>>;
 	type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_DEFAULT_CHOICE">, never>>;
 }
-
-{
-	// brands sensitive args that declare the published default or choices
-	type Checked = ValidateArgs<
-		readonly [
-			{ name: "a"; type: "string"; sensitive: true; default: "x" },
-			{ name: "b"; type: "string"; sensitive: true; choices: ["x"] },
-			{ name: "c"; type: "string"; sensitive: true },
-			{ name: "d"; type: "boolean"; sensitive: true },
-		]
-	>;
-	type _boolean = Expect<
-		Equal<Checked[3]["FIX_SENSITIVE_BOOLEAN"], "sensitive values cannot be booleans">
-	>;
-	type _default = Expect<
-		Equal<Checked[0]["FIX_SENSITIVE_DEFAULT"], "sensitive values cannot declare a default">
-	>;
-	type _choices = Expect<
-		Equal<Checked[1]["FIX_SENSITIVE_CHOICES"], "sensitive values cannot declare choices">
-	>;
-	type _clean = Expect<Equal<Extract<keyof Checked[2], `FIX_${string}`>, never>>;
-}

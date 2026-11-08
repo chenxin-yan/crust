@@ -599,7 +599,7 @@ type DefinedRecord<F> = false extends StrictNulls
 		: never;
 
 // Only these fields can make one flag invalid on its own; other flags need name checks only.
-type RiskyFlagField = "short" | "aliases" | "choices" | "parse" | "env" | "delimiter" | "sensitive";
+type RiskyFlagField = "short" | "aliases" | "choices" | "parse" | "env" | "delimiter";
 
 type RecordFlagBrand<
 	F,
