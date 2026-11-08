@@ -5,7 +5,7 @@ import {
 	type ValidationIssue,
 } from "@crustjs/utils/schema";
 
-import { CrustError } from "../errors.ts";
+import { CrustError, sensitiveValueError } from "../errors.ts";
 import type { ArgsDef, FlagsDef, ParseResult, ValidatedInput } from "../types.ts";
 
 async function runSchema(
@@ -13,12 +13,18 @@ async function runSchema(
 	raw: unknown,
 	path: readonly PropertyKey[],
 	issues: ValidationIssue[],
+	sensitiveLabel?: string,
 ): Promise<{ readonly ok: false } | { readonly ok: true; readonly value: unknown }> {
 	// Standard Schema validation is async-capable, including promises from other realms.
 	const result = await schema["~standard"].validate(raw);
 
 	if (result.issues) {
-		issues.push(...normalizeStandardIssues(result.issues, path));
+		// Issue messages and nested paths can quote a sensitive value; report only the field.
+		const reported =
+			sensitiveLabel === undefined
+				? result.issues
+				: [{ message: sensitiveValueError(sensitiveLabel).message }];
+		issues.push(...normalizeStandardIssues(reported, path));
 		return { ok: false };
 	}
 	return { ok: true, value: result.value };
@@ -45,13 +51,21 @@ export async function applySchemas<A extends ArgsDef = ArgsDef, F extends FlagsD
 
 	for (const def of node.args) {
 		if (def.schema === undefined) continue;
-		const result = await runSchema(def.schema, args.get(def.name), ["args", def.name], issues);
+		const label = def.sensitive ? `<${def.name}>` : undefined;
+		const result = await runSchema(
+			def.schema,
+			args.get(def.name),
+			["args", def.name],
+			issues,
+			label,
+		);
 		if (result.ok) args.set(def.name, result.value);
 	}
 
 	for (const [name, def] of Object.entries(node.effectiveFlags)) {
 		if (def.schema === undefined) continue;
-		const result = await runSchema(def.schema, flags.get(name), ["flags", name], issues);
+		const label = def.sensitive ? `--${name}` : undefined;
+		const result = await runSchema(def.schema, flags.get(name), ["flags", name], issues, label);
 		if (result.ok) flags.set(name, result.value);
 	}
 

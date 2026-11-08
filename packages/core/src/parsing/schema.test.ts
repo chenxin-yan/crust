@@ -153,6 +153,40 @@ describe("Standard Schema on flag definitions", () => {
 		]);
 	});
 
+	it("reports a sensitive field's issues with a fixed message and keeps other issues", async () => {
+		const SECRET = "SENTINEL-s3cr3t";
+		// Issue messages and paths may quote the value they reject.
+		const echoing = schema<string | undefined, string>((raw) => ({
+			issues: [{ message: `rejected ${raw}`, path: [String(raw)] }],
+		}));
+		const app = new Crust("cli")
+			.args({ name: "password", schema: echoing, sensitive: true })
+			.flags({
+				token: { type: "string", schema: echoing, sensitive: true },
+				port: { type: "string", schema: port() },
+			})
+			.action(() => {});
+
+		const outcome = await app.run([], {
+			args: { password: SECRET },
+			flags: { token: SECRET, port: "nope" },
+		});
+		if (outcome.status !== "failed") throw new Error("Expected failure");
+		const error = outcome.error;
+		if (!(error instanceof CrustError) || !error.is("VALIDATION")) throw error;
+		expect(error.details?.issues).toEqual([
+			{ path: "args.password", message: "Invalid value for <password>." },
+			{ path: "flags.token", message: "Invalid value for --token." },
+			{ path: "flags.port", message: "expected a positive integer" },
+		]);
+		expect(error.cause).toBeUndefined();
+		expect(JSON.stringify(error.toJSON())).not.toContain(SECRET);
+
+		const result = await executeCrust(app, [SECRET, "--token", SECRET]);
+		expect(result.stderr).toContain("Invalid value for --token.");
+		expect(result.stdout + result.stderr).not.toContain(SECRET);
+	});
+
 	it("multiple schema flags receive the raw value array", async () => {
 		let received: string | undefined;
 		const csv = schema<string[] | undefined, string>((raw) => ({

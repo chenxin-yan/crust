@@ -215,6 +215,27 @@ describe("flag values", () => {
 		).toThrow(definitionError("delimiter-without-multiple"));
 	});
 
+	it("rejects sensitive flags with a default or choices, which are published", () => {
+		expect(() =>
+			new Crust("cli").flags({
+				// @ts-expect-error -- a sensitive default is published
+				a: { type: "string", sensitive: true, default: "x" },
+			}),
+		).toThrow(definitionError("sensitive-default"));
+		expect(() =>
+			new Crust("cli").flags({
+				// @ts-expect-error -- a sensitive multiple default is published
+				a: { type: "number", multiple: true, sensitive: true, default: [1] },
+			}),
+		).toThrow(definitionError("sensitive-default"));
+		expect(() =>
+			new Crust("cli").flags({
+				// @ts-expect-error -- sensitive choices are published
+				a: { type: "string", sensitive: true, choices: ["x"] },
+			}),
+		).toThrow(definitionError("sensitive-choices"));
+	});
+
 	// Types reject the definition; runtime cannot tell a parser is async until it returns a Promise.
 	it("rejects async parse when the flag is parsed, not when it is defined", async () => {
 		const app = new Crust("cli")
@@ -353,6 +374,18 @@ describe("arguments", () => {
 				{ name: "a", type: "string", choices: ["x"], default: "z" },
 			),
 		).toThrow(definitionError("default-outside-choices"));
+		expect(() =>
+			new Crust("cli").args(
+				// @ts-expect-error -- a sensitive default is published
+				{ name: "a", type: "string", sensitive: true, default: "x" },
+			),
+		).toThrow(definitionError("sensitive-default"));
+		expect(() =>
+			new Crust("cli").args(
+				// @ts-expect-error -- sensitive choices are published
+				{ name: "a", type: "string", sensitive: true, choices: ["x"] },
+			),
+		).toThrow(definitionError("sensitive-choices"));
 	});
 });
 

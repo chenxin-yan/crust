@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import type { StandardSchema } from "@crustjs/utils/schema";
 import { describe, expect, it } from "vite-plus/test";
 
-import { makeNode, unwrap } from "../../tests/helpers.ts";
+import { executeCrust, makeNode, unwrap } from "../../tests/helpers.ts";
 import { Crust } from "../command/crust.ts";
 import { createCommandNode } from "../command/node.ts";
 import { CrustError } from "../errors.ts";
@@ -1495,5 +1495,111 @@ describe("parseFlagValues", () => {
 			name: "CRUST",
 			inherited: undefined,
 		});
+	});
+});
+
+describe("sensitive definitions", () => {
+	const SECRET = "SENTINEL-s3cr3t";
+
+	/** The fixed error a sensitive field reports, with nothing that could quote its value. */
+	function expectRedacted(error: unknown, label: string, details: object) {
+		expect(error).toBeInstanceOf(CrustError);
+		const crustError = error as CrustError;
+		expect(crustError.message).toBe(`Invalid value for ${label}.`);
+		expect(crustError.details).toEqual(details);
+		expect(crustError.cause).toBeUndefined();
+		expect(JSON.stringify(crustError.toJSON())).not.toContain(SECRET);
+		expect(String(crustError.stack)).not.toContain(SECRET);
+	}
+
+	function caught(run: () => unknown): unknown {
+		try {
+			run();
+		} catch (error) {
+			return error;
+		}
+		throw new Error("expected a throw");
+	}
+
+	const echoing = (raw: string) => {
+		throw new Error(`rejected ${raw}`);
+	};
+
+	const flags = {
+		token: { type: "string", sensitive: true, parse: echoing, env: { name: "TOKEN" } },
+		endpoint: { type: "url", sensitive: true },
+		config: { type: "json", sensitive: true },
+		pin: { type: "number", sensitive: true },
+		keys: { type: "string", multiple: true, sensitive: true, parse: echoing },
+	} as const;
+	const cmd = makeNode({
+		meta: "test",
+		args: [{ name: "password", type: "string", sensitive: true, parse: echoing }] as const,
+		flags,
+	});
+
+	it("reports argv and env coercion failures with a fixed message", () => {
+		const cases: [string[], Record<string, string>, string, object][] = [
+			[["--token", SECRET], {}, "--token", { flag: "token" }],
+			[[], { TOKEN: SECRET }, "--token", { flag: "token" }],
+			[["--endpoint", SECRET], {}, "--endpoint", { flag: "endpoint" }],
+			[["--config", `{${SECRET}`], {}, "--config", { flag: "config" }],
+			[["--pin", SECRET], {}, "--pin", { flag: "pin" }],
+			[["--keys", "ok", "--keys", SECRET], {}, "--keys", { flag: "keys" }],
+			[[SECRET], {}, "<password>", { argument: "password" }],
+		];
+		for (const [argv, env, label, details] of cases) {
+			expectRedacted(
+				caught(() => parseAndValidate(cmd, argv, env)),
+				label,
+				details,
+			);
+		}
+	});
+
+	it("reports structured input failures with a fixed message", () => {
+		expectRedacted(
+			caught(() => parseStructured(cmd, { flags: { token: SECRET } })),
+			"--token",
+			{ flag: "token" },
+		);
+		expectRedacted(
+			caught(() => parseStructured(cmd, { flags: { pin: SECRET } })),
+			"--pin",
+			{ flag: "pin" },
+		);
+		expectRedacted(
+			caught(() => parseStructured(cmd, { args: { password: SECRET } })),
+			"<password>",
+			{ argument: "password" },
+		);
+	});
+
+	it("reports parseFlagValues failures with a fixed message", async () => {
+		const error = await parseFlagValues(
+			{ token: { type: "string", sensitive: true, parse: echoing, env: { name: "TOKEN" } } },
+			{ TOKEN: SECRET },
+		).catch((caughtError: unknown) => caughtError);
+		expectRedacted(error, "--token", { flag: "token" });
+	});
+
+	it("keeps the secret out of execute() output", async () => {
+		const app = new Crust("cli")
+			.flags({ token: { type: "string", sensitive: true, parse: echoing } })
+			.action(() => {});
+		const result = await executeCrust(app, ["--token", SECRET]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("Invalid value for --token.");
+		expect(result.stdout + result.stderr).not.toContain(SECRET);
+	});
+
+	it("still echoes a malformed token that fails before flag resolution", async () => {
+		// Boundary: core only knows a value is sensitive once it is bound to its definition.
+		const app = new Crust("cli")
+			.flags({ token: { type: "string", sensitive: true } })
+			.action(() => {});
+		// A missing `=` makes the whole token an unknown flag spelling.
+		const result = await executeCrust(app, [`--token${SECRET}`]);
+		expect(result.stderr).toContain(SECRET);
 	});
 });

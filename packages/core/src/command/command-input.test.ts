@@ -93,6 +93,60 @@ describe("commandInputSchema", () => {
 		});
 	});
 
+	it("marks sensitive definitions writeOnly and publishes none of a schema's values", async () => {
+		const secret = withInputJsonSchema({
+			$schema: "https://json-schema.org/draft/2020-12/schema",
+			type: "string",
+			minLength: 8,
+			default: "SENTINEL",
+			examples: ["SENTINEL"],
+			"x-example": "SENTINEL",
+			anyOf: [{ type: "string", const: "SENTINEL" }, { enum: ["SENTINEL"] }],
+		});
+		const list = withInputJsonSchema({
+			type: "array",
+			items: { type: "string", enum: ["SENTINEL"] },
+			default: ["SENTINEL"],
+		});
+		const app = new Crust("cli")
+			.args({ name: "password", type: "string", sensitive: true, description: "Login" })
+			.flags({
+				token: { type: "string", sensitive: true, env: { name: "TOKEN" } },
+				pin: { type: "number", sensitive: true },
+				endpoint: { type: "url", sensitive: true },
+				keys: { type: "string", multiple: true, sensitive: true },
+				schema: { type: "string", schema: secret, sensitive: true },
+				schemas: { type: "string", multiple: true, schema: list, sensitive: true },
+			})
+			.action(noop);
+		const snapshot = await app.snapshot();
+		expect(snapshot.args[0]?.sensitive).toBe(true);
+		expect(snapshot.flags.token?.sensitive).toBe(true);
+		expect(JSON.stringify(snapshot)).not.toContain("SENTINEL");
+		const { properties } = commandInputSchema(snapshot, []);
+		expect(properties).toMatchObject({
+			password: { type: "string", format: "password", writeOnly: true, description: "Login" },
+			token: { type: "string", format: "password", writeOnly: true },
+			pin: { type: "number", writeOnly: true },
+			endpoint: { type: "string", format: "uri", writeOnly: true },
+			keys: { type: "array", items: { type: "string", format: "password" }, writeOnly: true },
+			schema: {
+				type: "string",
+				minLength: 8,
+				anyOf: [{ type: "string" }, {}],
+				format: "password",
+				writeOnly: true,
+			},
+			schemas: {
+				type: "array",
+				items: { type: "string", format: "password" },
+				writeOnly: true,
+			},
+		});
+		expect(properties.pin).not.toHaveProperty("format");
+		expect(JSON.stringify(properties)).not.toContain("SENTINEL");
+	});
+
 	it("omits unserializable defaults and detaches serializable defaults for discovery", async () => {
 		const cycle = { self: {} };
 		cycle.self = cycle;
@@ -316,6 +370,33 @@ describe("parseCommandInput", () => {
 		});
 		expect(Object.getPrototypeOf(input.args)).toBeNull();
 		expect(Object.getPrototypeOf(input.flags)).toBeNull();
+	});
+
+	it("reports an invalid URL for a sensitive field with a fixed message", async () => {
+		const snapshot = await new Crust("cli")
+			.args({ name: "callback", type: "url", sensitive: true })
+			.flags({ endpoint: { type: "url", multiple: true, sensitive: true } })
+			.action(noop)
+			.snapshot();
+		const cases = [
+			[
+				{ endpoint: ["https://ok.example/", "SENTINEL"] },
+				"Invalid value for --endpoint.",
+				{ flag: "endpoint" },
+			],
+			[{ callback: "SENTINEL" }, "Invalid value for <callback>.", { argument: "callback" }],
+		] as const;
+		for (const [values, message, details] of cases) {
+			let caught: unknown;
+			try {
+				parseCommandInput(snapshot, values);
+			} catch (error) {
+				caught = error;
+			}
+			expect(caught).toBeInstanceOf(CrustError);
+			expect(caught).toMatchObject({ code: "PARSE", message, details });
+			expect((caught as CrustError).cause).toBeUndefined();
+		}
 	});
 
 	it("leaves unknown names to run() validation and omits raw when absent", async () => {

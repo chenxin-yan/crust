@@ -154,6 +154,15 @@ export function ownDefinition<const D extends ArgDef | FlagDef>(
 	subject: "flag" | "argument",
 	name: string | undefined,
 ): D {
+	// Help, man pages, and JSON Schema publish defaults and choices.
+	const published = def.default !== undefined ? "default" : def.choices ? "choices" : undefined;
+	if (def.sensitive && published) {
+		throw new CrustError(
+			"DEFINITION",
+			`${subject === "flag" ? "Flag" : "Argument"}${name === undefined ? "" : ` "${name}"`} is sensitive, so it cannot declare ${published}`,
+			{ subject, ...(name === undefined ? {} : { name }), reason: `sensitive-${published}` },
+		);
+	}
 	if (def.choices && def.default !== undefined) {
 		const values = "multiple" in def && def.multiple ? def.default : [def.default];
 		for (const value of values) {

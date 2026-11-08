@@ -1,6 +1,6 @@
 import { type JsonValue, parseJsonValue } from "@crustjs/utils/json";
 
-import { CrustError } from "../errors.ts";
+import { CrustError, sensitiveValueError } from "../errors.ts";
 import type { RunInputPayload, RunInputValue, ValueType } from "../types.ts";
 import type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "./snapshot.ts";
 
@@ -15,6 +15,7 @@ export interface CommandInputPropertySchema {
 	readonly enum?: readonly (string | boolean)[];
 	readonly items?: CommandInputPropertySchema;
 	readonly default?: unknown;
+	readonly writeOnly?: boolean;
 	readonly [keyword: string]: unknown;
 }
 
@@ -102,13 +103,22 @@ function propertySchema(
 			// Advisory metadata must not break discovery; run() still owns the actual default.
 		}
 	}
-	return {
+	const property: CommandInputPropertySchema = {
 		...schema,
 		...(def.description === undefined || "description" in schema
 			? {}
 			: { description: def.description }),
 		...(defaultValue === undefined || "default" in schema ? {} : { default: defaultValue }),
 	};
+	if (!def.sensitive) return property;
+	// The snapshot already dropped a sensitive schema's values; core forbids a default.
+	const password = (entry: CommandInputPropertySchema) =>
+		entry.type === "string" && entry.format === undefined
+			? { ...entry, format: "password" }
+			: entry;
+	return list && property.items
+		? { ...property, items: password(property.items), writeOnly: true }
+		: { ...password(property), writeOnly: true };
 }
 
 function formatPath(path: readonly string[]): string {
@@ -128,7 +138,9 @@ function formatPath(path: readonly string[]): string {
  * `z.coerce.number()` (JSON Schema `number`), it appears as its token type.
  * Defaults are `JSON.stringify` copies (`URL`s become
  * strings; nested `undefined`, functions, and symbols are dropped); defaults
- * that fail to serialize or hold non-finite numbers are omitted. `path` names the command in the error thrown when an arg and a flag
+ * that fail to serialize or hold non-finite numbers are omitted. A `sensitive` definition is
+ * `writeOnly`, and its strings are `format: "password"` unless they declare another format.
+ * `path` names the command in the error thrown when an arg and a flag
  * share a name, or a definition is named `raw`.
  */
 export function commandInputSchema(
@@ -193,8 +205,9 @@ function isString(value: JsonValue): value is string {
  * name goes to `flags`, where `run()` rejects unknown ones. Strings for `url`
  * definitions become `URL`s, and `undefined` entries are skipped.
  *
- * @throws {CrustError} `PARSE` when a value is not JSON data or `raw` is not an array of strings
- * @throws {TypeError} when a `url` value is not a valid URL
+ * @throws {CrustError} `PARSE` when a value is not JSON data, `raw` is not an array of strings,
+ *   or a `sensitive` `url` value is not a valid URL
+ * @throws {TypeError} when any other `url` value is not a valid URL
  */
 export function parseCommandInput(
 	command: CommandSnapshot,
@@ -221,11 +234,19 @@ export function parseCommandInput(
 			raw = given;
 			continue;
 		}
-		(argNames.includes(name) ? args : flags)[name] = urlFields.includes(name)
-			? Array.isArray(given)
-				? given.map(toUrl)
-				: toUrl(given)
-			: given;
+		const isArg = argNames.includes(name);
+		if (!urlFields.includes(name)) {
+			(isArg ? args : flags)[name] = given;
+			continue;
+		}
+		try {
+			(isArg ? args : flags)[name] = Array.isArray(given) ? given.map(toUrl) : toUrl(given);
+		} catch (error) {
+			// Some runtimes quote the input in the URL error.
+			const def = isArg ? command.args.find((arg) => arg.name === name) : command.flags[name];
+			if (def?.sensitive) throw sensitiveValueError(isArg ? `<${name}>` : `--${name}`);
+			throw error;
+		}
 	}
 	return raw === undefined ? { args, flags } : { args, flags, raw };
 }

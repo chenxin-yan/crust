@@ -131,6 +131,15 @@ interface ArgDefBase {
 	/** Not supported with core value options — see {@link SchemaArgDef} */
 	schema?: never;
 	/**
+	 * Marks the value as a secret. Crust never prints this value. It can't hide argv from the
+	 * OS (`ps`, shell history), so prefer `env`.
+	 *
+	 * Value errors say only `Invalid value for <label>.`, `nextSteps()` prints `<redacted>`,
+	 * help and man pages say `Secret.`, and JSON Schema marks it `writeOnly`. Cannot be
+	 * combined with `default` or `choices`, which are published.
+	 */
+	sensitive?: true;
+	/**
 	 * When `true`, collects all remaining positional values into an array.
 	 *
 	 * The validated output is always an array, never `undefined`.
@@ -239,6 +248,15 @@ interface SchemaArgDef {
 	variadic?: true;
 	/** Standard Schema that owns coercion, defaults, requiredness, and validation */
 	schema: StandardSchema;
+	/**
+	 * Marks the value as a secret. Crust never prints this value. It can't hide argv from the
+	 * OS (`ps`, shell history), so prefer `env`.
+	 *
+	 * Value errors say only `Invalid value for <label>.`, `nextSteps()` prints `<redacted>`,
+	 * help and man pages say `Secret.`, and JSON Schema marks it `writeOnly`. Cannot be
+	 * combined with `default` or `choices`, which are published.
+	 */
+	sensitive?: true;
 	type?: never;
 	required?: never;
 	default?: never;
@@ -289,6 +307,15 @@ interface FlagDefBase {
 	required?: true;
 	/** Not supported with core value options — see {@link SchemaStringFlagDef} */
 	schema?: never;
+	/**
+	 * Marks the value as a secret. Crust never prints this value. It can't hide argv from the
+	 * OS (`ps`, shell history), so prefer `env`.
+	 *
+	 * Value errors say only `Invalid value for <label>.`, `nextSteps()` prints `<redacted>`,
+	 * help and man pages say `Secret.`, and JSON Schema marks it `writeOnly`. Cannot be
+	 * combined with `default` or `choices`, which are published.
+	 */
+	sensitive?: true;
 }
 
 /** Environment fallback for terminal parsing; structured `run()` never reads it. */

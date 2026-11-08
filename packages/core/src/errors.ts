@@ -79,6 +79,8 @@ export type DefinitionErrorReason =
 	| "reserved-name"
 	| "reserved-no-prefix"
 	| "reserved-spelling"
+	| "sensitive-choices"
+	| "sensitive-default"
 	| "unknown-handle-flag"
 	| "variadic-position";
 
@@ -242,4 +244,16 @@ export class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error
 			details: this.details,
 		};
 	}
+}
+
+/**
+ * The only error a `sensitive` definition's value reports: messages and causes of
+ * `choices`, `parse`, and coercion failures can quote the value.
+ */
+export function sensitiveValueError(label: string): CrustError<"PARSE"> {
+	return new CrustError(
+		"PARSE",
+		`Invalid value for ${label}.`,
+		label.startsWith("--") ? { flag: label.slice(2) } : { argument: label.slice(1, -1) },
+	);
 }

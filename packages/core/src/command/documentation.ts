@@ -14,7 +14,8 @@ export function formatDefault(value: DeclaredDefault): string {
 }
 
 /**
- * Format a definition's description and optional env/default/choice annotations.
+ * Format a definition's description and optional env/default/choice annotations,
+ * prefixed with `Secret.` for a `sensitive` definition.
  * `env` is the variable *name* only; renderers never see its value.
  */
 export function formatDescription(
@@ -23,8 +24,9 @@ export function formatDescription(
 	choices: readonly string[] | undefined,
 	formatAnnotation: (annotation: string) => string = (annotation) => annotation,
 	env?: string,
+	sensitive?: boolean,
 ): string {
-	const parts = description ? [description] : [];
+	const parts = [...(sensitive ? ["Secret."] : []), ...(description ? [description] : [])];
 	if (env !== undefined) parts.push(formatAnnotation(`[env: ${env}]`));
 	if (defaultValue !== undefined) {
 		parts.push(formatAnnotation(`[default: ${formatDefault(defaultValue)}]`));
@@ -59,6 +61,8 @@ export interface DocumentationArg {
 	readonly choices?: readonly string[];
 	/** Default value used when the argument is omitted, e.g. `3000`. */
 	readonly default?: unknown;
+	/** `true` when the value is a secret Crust never prints. */
+	readonly sensitive: boolean;
 }
 
 /**
@@ -110,6 +114,8 @@ export interface DocumentationFlag {
 	readonly env?: FlagSnapshot["env"];
 	/** Delimiter that splits string argv values of a repeatable flag into occurrences. */
 	readonly delimiter?: string;
+	/** `true` when the value is a secret Crust never prints. */
+	readonly sensitive: boolean;
 }
 
 /**
@@ -189,6 +195,7 @@ function documentationFlags(flags: CommandSnapshot["flags"]): readonly Documenta
 			default: def.default,
 			env: def.env,
 			delimiter: def.delimiter,
+			sensitive: def.sensitive === true,
 		});
 	});
 }
@@ -204,6 +211,7 @@ export function buildCommandDocumentation(
 			token: argToken(arg),
 			required: arg.required === true,
 			variadic: arg.variadic === true,
+			sensitive: arg.sensitive === true,
 		}),
 	);
 	const children = Object.entries(command.subCommands).flatMap(([name, child]) =>

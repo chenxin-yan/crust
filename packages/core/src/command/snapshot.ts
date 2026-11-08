@@ -47,10 +47,13 @@ export interface ArgSnapshot {
 	readonly choices?: readonly string[];
 	/** Declared default value; `URL` defaults are serialized to their `href` string. */
 	readonly default?: unknown;
+	/** `true` when the value is a secret Crust never prints. */
+	readonly sensitive?: boolean;
 	/**
 	 * Draft 2020-12 JSON Schema of the values a schema-backed arg accepts
 	 * (`~standard.jsonSchema.input`). Absent without a schema or when the schema
-	 * cannot produce JSON Schema. Not frozen: treat it as immutable.
+	 * cannot produce JSON Schema. A sensitive arg's schema has no `enum`, `const`,
+	 * `default`, `examples`, or `x-*` keywords. Not frozen: treat it as immutable.
 	 */
 	readonly inputSchema?: Readonly<Record<string, unknown>>;
 }
@@ -91,10 +94,13 @@ export interface FlagSnapshot {
 	readonly env?: Readonly<NonNullable<FlagDef["env"]>>;
 	/** Delimiter that splits string argv values of a repeatable flag into occurrences. */
 	readonly delimiter?: string;
+	/** `true` when the value is a secret Crust never prints. */
+	readonly sensitive?: boolean;
 	/**
 	 * Draft 2020-12 JSON Schema of the values a schema-backed flag accepts
 	 * (`~standard.jsonSchema.input`). Absent without a schema or when the schema
-	 * cannot produce JSON Schema. Not frozen: treat it as immutable.
+	 * cannot produce JSON Schema. A sensitive flag's schema has no `enum`, `const`,
+	 * `default`, `examples`, or `x-*` keywords. Not frozen: treat it as immutable.
 	 */
 	readonly inputSchema?: Readonly<Record<string, unknown>>;
 }
@@ -180,6 +186,46 @@ function serializableDefault(value: DeclaredDefault): SerializableDefault {
 	return value;
 }
 
+const VALUE_KEYWORDS = new Set(["enum", "const", "default", "examples"]);
+/** Keywords whose object value maps names to subschemas, not keywords to values. */
+const SCHEMA_MAPS = new Set([
+	"properties",
+	"patternProperties",
+	"$defs",
+	"definitions",
+	"dependentSchemas",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** `value` and every subschema in it without keywords that list accepted or example values. */
+function withoutValues(value: unknown): unknown {
+	if (Array.isArray(value)) return value.map(withoutValues);
+	if (!isRecord(value)) return value;
+	// fromEntries defines own properties, so a `__proto__` key stays a key.
+	return Object.fromEntries(
+		Object.entries(value)
+			.filter(([key]) => !VALUE_KEYWORDS.has(key) && !key.startsWith("x-"))
+			.map(([key, entry]) => [
+				key,
+				SCHEMA_MAPS.has(key) && isRecord(entry)
+					? Object.fromEntries(
+							Object.entries(entry).map(([name, item]) => [name, withoutValues(item)]),
+						)
+					: withoutValues(entry),
+			]),
+	);
+}
+
+/** A schema-backed definition's input JSON Schema; a sensitive one publishes none of its values. */
+function inputSchemaOf(def: ArgDef | FlagDef): Record<string, unknown> | undefined {
+	const schema = def.schema && standardJsonSchema(def.schema, "input");
+	// SAFETY: withoutValues keeps a record a record.
+	return schema && def.sensitive ? (withoutValues(schema) as Record<string, unknown>) : schema;
+}
+
 /** The parser fills a missing value from its default, so a defaulted def is never required. */
 function effectiveRequired(def: ArgDef | FlagDef): boolean | undefined {
 	return def.default === undefined ? def.required : undefined;
@@ -194,7 +240,8 @@ function snapshotArg(def: ArgDef): ArgSnapshot {
 		variadic: def.variadic,
 		choices: def.choices ? Object.freeze([...def.choices]) : undefined,
 		default: serializableDefault(def.default),
-		inputSchema: def.schema && standardJsonSchema(def.schema, "input"),
+		sensitive: def.sensitive,
+		inputSchema: inputSchemaOf(def),
 	});
 }
 
@@ -212,7 +259,8 @@ function snapshotFlag(def: FlagDef): FlagSnapshot {
 		default: serializableDefault(def.default),
 		env: def.env ? freezeCompact({ name: def.env.name, delimiter: def.env.delimiter }) : undefined,
 		delimiter: def.delimiter,
-		inputSchema: def.schema && standardJsonSchema(def.schema, "input"),
+		sensitive: def.sensitive,
+		inputSchema: inputSchemaOf(def),
 	});
 }
 

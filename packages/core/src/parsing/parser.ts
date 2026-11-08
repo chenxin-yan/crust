@@ -1,7 +1,7 @@
 import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
 
 import type { CommandNode } from "../command/node.ts";
-import { CrustError } from "../errors.ts";
+import { CrustError, sensitiveValueError } from "../errors.ts";
 import type {
 	ArgDef,
 	ArgsDef,
@@ -188,15 +188,16 @@ function coerceToken(
  * definition stays unset (not defaulted) so the invocation can still reach `preRun`.
  */
 function coerceOrDefer<T>(
+	def: ArgDef | FlagDef,
 	coerce: () => T,
 	defer: DeferValueError | undefined,
 	label: string,
 ): T | undefined {
-	if (!defer) return coerce();
 	try {
 		return coerce();
-	} catch (error) {
-		if (!(error instanceof CrustError)) throw error;
+	} catch (caught) {
+		const error = def.sensitive ? sensitiveValueError(label) : caught;
+		if (!defer || !(error instanceof CrustError)) throw error;
 		defer(error, label);
 		return undefined;
 	}
@@ -305,7 +306,7 @@ function resolveFlags<F extends FlagsDef, V>(
 			(def.multiple && Array.isArray(parsedValue) && parsedValue.length === 0);
 		if (!absent) {
 			present?.add(name);
-			resolved[name] = coerceOrDefer(() => coerce(name, def, parsedValue), defer, `--${name}`);
+			resolved[name] = coerceOrDefer(def, () => coerce(name, def, parsedValue), defer, `--${name}`);
 			continue;
 		}
 
@@ -380,11 +381,17 @@ function resolveArgs<A extends ArgsDef, V>(
 			resolved[name] =
 				remaining.length === 0 && def.default !== undefined
 					? [resolveDefault(def, label)]
-					: coerceOrDefer(() => remaining.map((v, i) => coerce(def, v, label, i)), defer, label);
+					: coerceOrDefer(
+							def,
+							() => remaining.map((v, i) => coerce(def, v, label, i)),
+							defer,
+							label,
+						);
 			index = positionals.length;
 		} else if (index < positionals.length) {
 			// SAFETY: the bounds check above proves this positional exists.
 			resolved[name] = coerceOrDefer(
+				def,
 				() => coerce(def, positionals[index] as V, label),
 				defer,
 				label,
