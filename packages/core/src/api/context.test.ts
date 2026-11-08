@@ -1016,6 +1016,85 @@ describe("Context-owned flags at use sites", () => {
 		expect(flagsOf(snapshot.subCommands.cmd!)).toEqual(["region"]);
 	});
 
+	it("compares a same-name provider's flag schemas by identity", async () => {
+		const standard = {
+			version: 1 as const,
+			vendor: "test",
+			validate: (value: unknown) => ({ value }),
+		};
+		const schema = { "~standard": standard };
+		const lookalike = { "~standard": standard };
+		const declared = defineContext("mode")
+			.flags({ mode: { type: "string", schema } })
+			.setup(() => "declared");
+		const cmd = defineCommand("cmd", (command) =>
+			command.use(declared).action(async ({ ctx }) => await ctx.mode),
+		);
+		const same = defineContext("mode")
+			.flags({ mode: { type: "string", schema } })
+			.setup(() => "same");
+		const other = defineContext("mode")
+			.flags({ mode: { type: "string", schema: lookalike } })
+			.setup(() => "other");
+		expect(await unwrap(new Crust("cli").provide(same()).add(cmd).run(["cmd"]))).toMatchObject({
+			result: "same",
+		});
+		await expect(new Crust("cli").provide(other()).add(cmd).snapshot()).rejects.toMatchObject({
+			code: "DEFINITION",
+			details: { subject: "context", name: "mode", reason: "context-flags-not-parsed" },
+		});
+	});
+
+	it("checks a used Context against a same-name provider of an inline child", async () => {
+		const declared = defineContext("mode")
+			.flags({ mode: { type: "string" } })
+			.setup(() => "declared");
+		const flagless = defineContext("mode").setup(() => "flagless");
+		const group = (provider: typeof declared | typeof flagless) =>
+			defineCommand("group", (command) =>
+				command
+					.use(declared)
+					.command("leaf", (leaf) =>
+						leaf.command("deep", (deep) =>
+							deep.provide(provider.of("replaced")).action(async ({ ctx }) => await ctx.mode),
+						),
+					),
+			);
+		const app = new Crust("cli").provide(declared()).add(group(declared));
+		expect(await unwrap(app.run(["group", "leaf", "deep"]))).toMatchObject({ result: "replaced" });
+		await expect(
+			new Crust("cli").provide(declared()).add(group(flagless)).snapshot(),
+		).rejects.toMatchObject({
+			code: "DEFINITION",
+			details: { subject: "context", name: "mode", reason: "context-flags-not-parsed" },
+		});
+	});
+
+	it("registers several flag-owning Contexts per call and leaves the earlier builder unchanged", async () => {
+		const one = defineContext("one")
+			.flags({ one: { type: "string" } })
+			.setup(() => 1);
+		const two = defineContext("two")
+			.flags({ two: { type: "string" } })
+			.setup(() => 2);
+		const root = new Crust("cli");
+		const both = root.provide(one(), two());
+		const cmd = defineCommand("cmd", (command) =>
+			command.use(one, two).action(async ({ ctx }) => [await ctx.one, await ctx.two]),
+		);
+		const app = both
+			.add(cmd)
+			.command("inline", (command) =>
+				command.action(async ({ ctx }) => [await ctx.one, await ctx.two]),
+			);
+
+		expect(flagsOf(await root.snapshot())).toEqual([]);
+		expect(flagsOf(await both.snapshot())).toEqual(["one", "two"]);
+		const flags = { one: "1", two: "2" };
+		expect(await unwrap(app.run(["cmd"], { flags }))).toMatchObject({ result: [1, 2] });
+		expect(await unwrap(app.run(["inline"], { flags }))).toMatchObject({ result: [1, 2] });
+	});
+
 	it("checks every declared same-name Context against the provider, in any order", async () => {
 		const optional = defineContext("mode")
 			.flags({ mode: { type: "string" } })

@@ -307,6 +307,10 @@ function materializeCommandDefinition(
 			registerFlag(child._node, flagName, def, "owned");
 		}
 		child._node.flagContexts = parent.flagContexts;
+		child._node.inheritedDemands = [
+			...parent.inheritedDemands,
+			...demandedFactories(parent.demands),
+		];
 	}
 	child._node.contexts = parent.contexts.map((context) => ({ ...context }));
 
@@ -1635,21 +1639,24 @@ export class Crust<
 			contexts: [...this._node.contexts, ...instances.map((instance) => ({ instance }))],
 			providedContexts: [...this._node.providedContexts, ...instances],
 		});
-		const declared = declaredContextNames(demandedFactories(this._node.demands));
+		const declared = declaredContextNames([
+			...this._node.inheritedDemands,
+			...demandedFactories(this._node.demands),
+		]);
+		// Shared with this builder: copied once, on the first change.
+		let flagContexts: Map<string, readonly string[]> | undefined;
 		for (const instance of instances) {
 			const flags = Object.keys(instance.ownedFlags);
-			// Fulfilling this command's own `.use()` demand shares the flags `.use()` installed;
-			// preparation checks that the provider owns exactly those.
+			// Fulfilling a `.use()` demand of this command or an inline ancestor shares the flags it
+			// installed; preparation checks that the provider owns exactly those.
 			if (flags.length === 0 || declared.has(instance.name)) continue;
 			for (const name of flags) {
 				registerFlag(cloned._node, name, instance.ownedFlags[name]!, "owned");
 			}
-			const installed = cloned._node.flagContexts.get(instance.name) ?? [];
-			cloned._node.flagContexts = new Map(cloned._node.flagContexts).set(instance.name, [
-				...installed,
-				...flags,
-			]);
+			flagContexts ??= new Map(this._node.flagContexts);
+			flagContexts.set(instance.name, [...(flagContexts.get(instance.name) ?? []), ...flags]);
 		}
+		if (flagContexts) cloned._node.flagContexts = flagContexts;
 
 		return cloned;
 	}

@@ -435,7 +435,11 @@ export function buildExtensionTree(
 		installContextFlags(prepared, hookContexts);
 		// Its providers and flags are final only now: the recipe may `.provide()` after `.use()`,
 		// and hook-used Contexts' flags are parsed by every command.
-		checkProvidedContextFlags(prepared, [...demandedFactories(prepared.demands), ...hookContexts]);
+		checkProvidedContextFlags(prepared, [
+			...prepared.inheritedDemands,
+			...demandedFactories(prepared.demands),
+			...hookContexts,
+		]);
 		applyNodeContextSections(prepared, path, sectionContextsFor(prepared, isRoot));
 		freezeNode(prepared);
 		return prepared;

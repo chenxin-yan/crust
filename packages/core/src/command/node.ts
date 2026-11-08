@@ -68,6 +68,11 @@ export interface CommandNode {
 	providedContexts: readonly AnyContextInstance[];
 	/** Declared command demands; validated when recipes are materialized. */
 	demands: readonly (AnyContextInstance | AnyContextFactory)[];
+	/**
+	 * The factories inline `.command()` ancestors declared before this command: it parses their
+	 * flags too, so preparation checks them against this command's providers.
+	 */
+	inheritedDemands: readonly AnyContextFactory[];
 	/** Ids of Extensions this command uses for their Contexts; preparation checks the app extends each. */
 	usedExtensions: readonly ExtensionId[];
 	/** Extensions registered via `.extend()` (root builder only) */
@@ -107,6 +112,7 @@ export function createCommandNode(name: string): CommandNode {
 		contexts: [],
 		providedContexts: [],
 		demands: [],
+		inheritedDemands: [],
 		usedExtensions: [],
 		extensions: [],
 		run: undefined,
@@ -153,13 +159,16 @@ export function installContextFlags(
 	node: CommandNode,
 	factories: readonly AnyContextFactory[],
 ): void {
+	// The map may be shared with other nodes: copy it once, on the first change.
+	let flagContexts: Map<string, readonly string[]> | undefined;
 	for (const { contextName, ownedFlags } of declaredContextFactories(factories)) {
-		const installed = node.flagContexts.get(contextName) ?? [];
+		const installed = (flagContexts ?? node.flagContexts).get(contextName) ?? [];
 		const added = Object.keys(ownedFlags).filter((flag) => !installed.includes(flag));
 		if (added.length === 0) continue;
 		for (const flag of added) registerFlag(node, flag, ownedFlags[flag]!, "owned");
-		node.flagContexts = new Map(node.flagContexts).set(contextName, [...installed, ...added]);
+		(flagContexts ??= new Map(node.flagContexts)).set(contextName, [...installed, ...added]);
 	}
+	if (flagContexts) node.flagContexts = flagContexts;
 }
 
 /**
@@ -181,7 +190,7 @@ export function checkProvidedContextFlags(
 		const name = factory.contextName;
 		const provider = providers.get(name);
 		if (!provider || provider.factory === factory) continue;
-		if (!sameDefinition(factory.ownedFlags, provider.ownedFlags)) {
+		if (!sameFlags(factory.ownedFlags, provider.ownedFlags)) {
 			throw new CrustError(
 				"DEFINITION",
 				`Context "${name}" provided to command "${node.meta.name}" does not own the same flags as the Context "${name}" it declares with .use(). A provider of another factory must own exactly the declared flags: change the declared Context, or provide the same factory (for example its .of()).`,
@@ -233,7 +242,21 @@ export function declaredContextNames(factories: readonly AnyContextFactory[]): S
 	return new Set(declaredContextFactories(factories).map((factory) => factory.contextName));
 }
 
-// Frozen flag records compare structurally; functions and schema objects by identity.
+// The same flag names with equal definitions; a schema, even a plain object, by identity.
+function sameFlags(a: FlagsDef, b: FlagsDef): boolean {
+	const names = Object.keys(a);
+	return (
+		names.length === Object.keys(b).length &&
+		names.every((name) => {
+			if (!Object.hasOwn(b, name)) return false;
+			const { schema: schemaA, ...restA } = a[name]!;
+			const { schema: schemaB, ...restB } = b[name]!;
+			return schemaA === schemaB && sameDefinition(restA, restB);
+		})
+	);
+}
+
+// Frozen flag definitions compare structurally; functions and class instances by identity.
 function sameDefinition(a: unknown, b: unknown): boolean {
 	if (a === b) return true;
 	if (Array.isArray(a)) {

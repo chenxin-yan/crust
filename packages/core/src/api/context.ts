@@ -279,9 +279,11 @@ export type ContextUseFlags<
 	: // A widened rest may hold any flag-owning factories, so its flags stay open.
 		[Fs[number]] extends [never]
 		? Acc
-		: keyof FactoryUseFlags<Fs[number]> extends never
-			? Acc
-			: AppendedFlags<Acc, FlagsDef>;
+		: IsUnion<FactoryUseFlags<Fs[number]>> extends true
+			? AppendedFlags<Acc, FlagsDef>
+			: keyof FactoryUseFlags<Fs[number]> extends never
+				? Acc
+				: AppendedFlags<Acc, FlagsDef>;
 
 export type ContextDependencies<Use extends readonly AnyContextFactory[]> =
 	IsStaticTuple<Use> extends true

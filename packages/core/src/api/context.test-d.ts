@@ -499,6 +499,19 @@ function _typecheckTypesContextFlagsAtUseSites() {
 		}),
 	);
 
+	// A widened dependency list may hold any of its flag-owning factories, so its flags stay open.
+	const deps: readonly (typeof a | typeof b)[] = [a, b];
+	const widened = defineContext("widened")
+		.flags({ key: { type: "string" } })
+		.use(...deps)
+		.setup(() => 1);
+	defineCommand("widened", (command) =>
+		command.use(widened).action(({ flags }) => {
+			type _Key = Expect<Equal<typeof flags.key, string | undefined>>;
+			type _Dependency = Expect<Equal<(typeof flags)["a"], unknown>>;
+		}),
+	);
+
 	// A command may provide a flag-owning Context it uses; another Context with its flags collides.
 	defineCommand("local", (command) => command.use(config).provide(config()));
 	const other = defineContext("other")
