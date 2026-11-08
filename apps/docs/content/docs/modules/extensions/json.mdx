@@ -28,12 +28,30 @@ With `--json`:
 
 The result must be JSON data: finite numbers, strings, booleans, `null`, and plain arrays and objects of them. A result JSON cannot represent exactly, such as a `BigInt`, a cycle, a function, `-0`, or a class instance like `Date` or `Map`, fails the command with exit code 1 and an error naming the problem. Convert such values before returning them, for example `date.toISOString()`.
 
+## Generator actions
+
+An [async generator action](/docs/guide/commands#stream-events) streams newline-delimited JSON (NDJSON) on stdout instead, so a consumer reads one channel line by line:
+
+```sh
+$ tool sync --json
+{"type":"event","data":{"file":"a.txt"}}   # written as the action yields
+{"type":"event","data":{"file":"b.txt"}}
+{"type":"result","data":{"synced":2}}
+```
+
+- Each yielded value prints as `{"type":"event","data":…}` as soon as it is yielded.
+- The stream ends with exactly one `{"type":"result","data":…}` line for the `return` value, even when it is `undefined` (the line then has no `data`), or, if the command fails after the action started, one `{"type":"error","error":…}` line with the same error JSON as above. That failure is not also written to stderr.
+- Events and the result must be JSON data, as above; one that is not, including a yielded `undefined`, fails the command with an error line. Only an `undefined` result is allowed.
+- A failure before the action started, such as a validation error, prints stderr JSON as for any other action. A failure after the result line, such as a Context cleanup failure, also goes to stderr, so stdout never has two final lines.
+
+An ordinary action keeps the bare result line.
+
 `json()` sets the invocation's [renderer](/docs/guide/extensions#renderers), and an application can have only one, so it can't be combined with another Extension that sets `.renderer()`.
 
-Under [`run()`](/docs/api/crust#runpath-input-options), pass `{ flags: { json: true } }`: the JSON result is captured in the outcome's `stdout`. A failure is not rendered under `run()`; read it from `outcome.error`.
+Under [`run()`](/docs/api/crust#runpath-input-options), pass `{ flags: { json: true } }`: the JSON result is captured in the outcome's `stdout`. A failure is not rendered under `run()`; read it from `outcome.error`. For a generator action, `outcome.stdout` holds the event lines and the result line, but no error line.
 
 ## Limitations
 
 Only failures before flags are bound print as plain text: unknown commands under a parent without a Command Action and argv syntax errors, such as an unknown flag or a flag missing its value. `--json` is not yet known, so `execute()` prints Core's default `Error:` line. A failure in an Extension's `setup`, such as an invalid [`--input`](/docs/modules/extensions/input), comes after binding and is JSON.
 
-If another Extension's `onError` hook claims a failure, it keeps that Extension's format. A Context cleanup failure after an already-rendered failure prints Core's plain-text `Cleanup failed:` line, and cleanup that fails while a cancellation unwinds prints Core's plain-text error lines.
+If another Extension's `onError` hook claims a failure, it keeps that Extension's format, and a generator action's stream ends without a final line. A cancelled invocation (exit code 130) is not rendered, so its stream also ends without one. A Context cleanup failure after an already-rendered failure prints Core's plain-text `Cleanup failed:` line, and cleanup that fails while a cancellation unwinds prints Core's plain-text error lines.
