@@ -11,9 +11,8 @@ import { input } from "./input.ts";
 
 const drop = defineCommand("drop", (cmd) =>
 	cmd.use(confirm).action(async ({ ctx, stdout }) => {
-		await (
-			await ctx.confirm
-		)("Drop the database?");
+		const ask = await ctx.confirm;
+		await ask("Drop the database?");
 		stdout("dropped");
 	}),
 );

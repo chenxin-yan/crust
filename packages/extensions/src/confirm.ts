@@ -41,7 +41,8 @@ const confirmContext = /* @__PURE__ */ defineContext("confirm")
 
 /**
  * Provides the `confirm` Context, which owns the `--yes` flag. Commands that
- * `.use(confirm)` call `(await ctx.confirm)(message)` before a destructive change.
+ * `.use(confirm)` await `ctx.confirm` for the function, then await it with the
+ * message before a destructive change.
  */
 export const confirm: ExtensionFactory<
 	[],
