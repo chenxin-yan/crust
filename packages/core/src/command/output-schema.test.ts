@@ -194,6 +194,39 @@ describe("CommandSnapshot.outputSchema", () => {
 	});
 });
 
+describe("CommandSnapshot.output", () => {
+	it("is true for a command with .output(), even when the schema cannot produce JSON Schema", async () => {
+		const app = new Crust("cli")
+			.output(anything)
+			.action(() => 1)
+			.command("plain", (cmd) => cmd.action(() => 1));
+
+		const snapshot = await app.snapshot();
+
+		expect(snapshot.output).toBe(true);
+		expect("outputSchema" in snapshot).toBe(false);
+		expect("output" in snapshot.subCommands.plain!).toBe(false);
+		expect(JSON.parse(JSON.stringify(snapshot)).output).toBe(true);
+	});
+
+	it("reaches routed and pending-child invocation snapshots", async () => {
+		const seen: unknown[] = [];
+		const app = new Crust("cli")
+			.output(anything)
+			.action(({ command, rootCommand }) => {
+				seen.push(command.output, rootCommand.subCommands.count!.output);
+				seen.push(rootCommand.subCommands.plain!.output);
+				return 1;
+			})
+			.command("count", (cmd) => cmd.output(anything).action(() => 1))
+			.command("plain", (cmd) => cmd.action(() => 1));
+
+		await app.run([]);
+
+		expect(seen).toEqual([true, true, undefined]);
+	});
+});
+
 describe("standardJsonSchema", () => {
 	it("converts the input or output type to draft 2020-12 JSON Schema", () => {
 		const schema = z.string().default("x");
