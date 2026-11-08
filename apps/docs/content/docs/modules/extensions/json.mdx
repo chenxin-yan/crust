@@ -1,0 +1,39 @@
+---
+title: JSON
+description: Print a command's result as machine-readable JSON.
+---
+
+## Usage
+
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../../examples/modules/extensions/json.ts
+</include>
+
+```sh
+$ my-cli deploy --json
+Deploying...                                  # stderr
+{"id":"dep_42","url":"https://example.com"}   # stdout
+```
+
+`json()` adds a recursive boolean `--json` flag. Without it, nothing changes. It also adds a "JSON output" section to the root command's help, man page, and generated skills that states this output contract, so an agent reading the CLI's documentation knows what `--json` prints.
+
+## Behavior
+
+With `--json`:
+
+- The Command Action's return value is printed to stdout as one line of JSON. An action that returns `undefined` prints nothing.
+- The action's and Contexts' `stdout()` and `stderr()` lines go to stderr, keeping stdout for the JSON. This includes output a Context writes while another Extension's `setup` pulls it. Output an Extension writes with its own `stdout`, such as `--help`, is never moved.
+- A failure is written to stderr as one line of JSON instead of the `Error:` line. A [`CrustError`](/docs/api/errors) prints its `toJSON()` (`{ "code", "message", "details"? }`); any other error prints `{ "message": error.message }`, and a thrown non-`Error` value prints `{ "message": String(value) }`. No other field of an application error is read.
+- Exit codes are unchanged.
+
+The result must be JSON data: finite numbers, strings, booleans, `null`, and plain arrays and objects of them. A result JSON cannot represent exactly, such as a `BigInt`, a cycle, a function, `-0`, or a class instance like `Date` or `Map`, fails the command with exit code 1 and an error naming the problem. Convert such values before returning them, for example `date.toISOString()`.
+
+`json()` sets the invocation's [renderer](/docs/guide/extensions#renderers), and an application can have only one, so it can't be combined with another Extension that sets `.renderer()`.
+
+Under [`run()`](/docs/api/crust#runpath-input-options), pass `{ flags: { json: true } }`: the JSON result is captured in the outcome's `stdout`. A failure is not rendered under `run()`; read it from `outcome.error`.
+
+## Limitations
+
+Only failures before flags are bound print as plain text: unknown commands under a parent without a Command Action and argv syntax errors, such as an unknown flag or a flag missing its value. `--json` is not yet known, so `execute()` prints Core's default `Error:` line. A failure in an Extension's `setup` comes after binding and is JSON.
+
+If another Extension's `onError` hook claims a failure, it keeps that Extension's format. A Context cleanup failure after an already-rendered failure prints Core's plain-text `Cleanup failed:` line.
