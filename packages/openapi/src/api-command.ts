@@ -136,19 +136,23 @@ async function loadSpec(
 	try {
 		loaded = await spec({ signal });
 	} catch (cause) {
-		// Core treats any AbortError as cancellation, so it passes through like the signal's reason.
-		if ((signal.aborted && cause === signal.reason) || (cause as Error)?.name === "AbortError") {
+		// Core treats any Error named AbortError as cancellation, so it passes through like the signal's reason.
+		if (
+			(signal.aborted && cause === signal.reason) ||
+			(cause instanceof Error && cause.name === "AbortError")
+		) {
 			throw cause;
 		}
 		const reason = cause instanceof Error ? cause.message : String(cause);
 		throw new Error(`api: cannot load the OpenAPI document (${reason})`, { cause });
 	}
-	// The tag also rejects a module namespace returned instead of its default export.
+	// The tag rejects a module namespace (null prototype) returned instead of its default export;
+	// the prototype rejects class instances.
 	const tag = Object.prototype.toString.call(loaded).slice(8, -1);
-	if (tag !== "Object") {
-		throw new Error(
-			`api: cannot load the OpenAPI document (expected a plain object, got ${tag.toLowerCase()})`,
-		);
+	const prototype = tag === "Object" ? Object.getPrototypeOf(loaded) : undefined;
+	if (tag !== "Object" || (prototype !== Object.prototype && prototype !== null)) {
+		const kind = tag === "Object" ? "class instance" : tag.toLowerCase();
+		throw new Error(`api: cannot load the OpenAPI document (expected a plain object, got ${kind})`);
 	}
 	return loaded as OpenApiSpec;
 }

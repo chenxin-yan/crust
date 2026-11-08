@@ -262,7 +262,17 @@ describe("spec loader", () => {
 		["null", null],
 		["array", []],
 		["string", "{}"],
-		["module", { default: spec, [Symbol.toStringTag]: "Module" }],
+		// Like a module namespace: null prototype, `Module` tag.
+		[
+			"module",
+			Object.assign(Object.create(null), { default: spec, [Symbol.toStringTag]: "Module" }),
+		],
+		[
+			"class instance",
+			new (class Spec {
+				paths = spec.paths;
+			})(),
+		],
 	])("fails when the loader resolves to %s instead of a plain object", async (kind, value) => {
 		const app = buildApp({ spec: async () => value as never });
 
@@ -271,6 +281,14 @@ describe("spec loader", () => {
 			stderr: `Error: api: cannot load the OpenAPI document (expected a plain object, got ${kind})`,
 			exitCode: 1,
 		});
+	});
+
+	it("accepts a plain object without a prototype", async () => {
+		const app = buildApp({ spec: async () => Object.assign(Object.create(null), spec) });
+
+		expect((await captureExecute(app, ["api", "--spec", "getUser"])).stdout).toBe(
+			'{"operationId":"getUser"}',
+		);
 	});
 
 	it.each([
@@ -302,6 +320,20 @@ describe("spec loader", () => {
 		});
 
 		expect(outcome.status === "failed" && outcome.error).toBe(abort);
+	});
+
+	it("wraps a thrown non-Error named AbortError as a load failure", async () => {
+		const thrown = { name: "AbortError" };
+		const outcome = await buildApp({ spec: () => Promise.reject(thrown) }).run(["api"], {
+			flags: { list: true },
+		});
+
+		const error = outcome.status === "failed" ? outcome.error : undefined;
+		expect(error).toBeInstanceOf(Error);
+		expect(error).toMatchObject({
+			message: "api: cannot load the OpenAPI document ([object Object])",
+		});
+		expect((error as Error).cause).toBe(thrown);
 	});
 });
 
