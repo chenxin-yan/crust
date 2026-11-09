@@ -178,7 +178,10 @@ export type DeclaredDepsOf<T> = (
 	? Deps
 	: {};
 
-/** Missing-dependency brand shared by `ValidateDeclaredDeps` and inline `.command()`. */
+/**
+ * Missing-dependency brand shared by `ValidateDeclaredDeps` and inline `.command()`. "Needed",
+ * not "used": the named command may be a group forwarding a descendant's demand.
+ */
 export type MissingDeclaredDependencyBrand<
 	T,
 	Known extends string,
@@ -190,7 +193,7 @@ export type MissingDeclaredDependencyBrand<
 			: {
 					readonly FIX_MISSING_DEPENDENCY: `Context "${Missing}"${[DefName<T>] extends [never]
 						? ""
-						: ` used by "${DefName<T>}"`} is not provided: .provide() it on an ancestor`;
+						: ` needed by "${DefName<T>}"`} is not provided: .provide() it on an ancestor`;
 				}
 		: never;
 
