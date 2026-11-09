@@ -1,6 +1,7 @@
 import { Crust } from "@crustjs/core";
 import { input } from "@crustjs/prompts";
-import { describe, expect, it } from "vite-plus/test";
+import { bold } from "@crustjs/style";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { runInteractive } from "./interactive.ts";
 
@@ -38,6 +39,42 @@ describe("runInteractive", () => {
 
 		expect(run.stdout()).toBe("Hello, Ada!\nBye");
 		expect(run.screen()).not.toContain("Hello, Ada!");
+	});
+
+	it("resolves done with the result and stderr captured like run()", async () => {
+		const app = new Crust("test-cli").action(async ({ stdout, stderr }) => {
+			const name = await input({ message: "Name?" });
+			stdout("saved");
+			stderr(`Hello, ${name}!`);
+			return { name };
+		});
+
+		const run = runInteractive(app, []);
+		await run.waitFor(/Name\?/);
+		run.type("Ada");
+		run.keys("return");
+
+		expect(await run.done).toEqual({
+			status: "completed",
+			result: { name: "Ada" },
+			stdout: "saved",
+			stderr: "Hello, Ada!",
+		});
+	});
+
+	it("captures plain styled stdout when the runner's stdout is a TTY", async () => {
+		const isTTY = process.stdout.isTTY;
+		Object.defineProperty(process.stdout, "isTTY", { configurable: true, value: true });
+		vi.stubEnv("FORCE_COLOR", undefined);
+		try {
+			const app = new Crust("test-cli").action(({ stdout }) => stdout(bold("Done")));
+			const run = runInteractive(app, []);
+			await run.done;
+			expect(run.stdout()).toBe("Done");
+		} finally {
+			Object.defineProperty(process.stdout, "isTTY", { configurable: true, value: isTTY });
+			vi.unstubAllEnvs();
+		}
 	});
 
 	it("waitFor rethrows the application error instead of hanging", async () => {

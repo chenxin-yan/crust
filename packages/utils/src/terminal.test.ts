@@ -4,8 +4,10 @@ import {
 	getAmbientTerminalIO,
 	getTerminalIO,
 	getTerminalSignal,
+	isStdoutCaptured,
 	registerLiveFrame,
 	withAmbientTerminalIO,
+	withCapturedStdout,
 	withProcessTerminalSignal,
 	withTerminalIO,
 	writeProcessOutput,
@@ -76,6 +78,20 @@ describe("terminal signal", () => {
 			});
 		});
 		expect(getTerminalSignal()).toBeUndefined();
+	});
+});
+
+describe("captured stdout", () => {
+	it("is scoped across async boundaries and shared by bundled module copies", async () => {
+		const copy = (await import(
+			new URL("./terminal.ts?copy=captured", import.meta.url).href
+		)) as typeof import("./terminal.ts");
+		expect(isStdoutCaptured()).toBe(false);
+		await withCapturedStdout(async () => {
+			await Promise.resolve();
+			expect(copy.isStdoutCaptured()).toBe(true);
+		});
+		expect(isStdoutCaptured()).toBe(false);
 	});
 });
 

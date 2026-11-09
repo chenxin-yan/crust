@@ -1,6 +1,6 @@
 import { PassThrough, Writable } from "node:stream";
 
-import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
+import { withAmbientTerminalIO, withCapturedStdout } from "@crustjs/utils/terminal";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { tick } from "../prompts/test-helpers.ts";
@@ -117,6 +117,12 @@ describe("runPrompt — default theme color", () => {
 
 	it("colors the default theme on a TTY output when stdout is piped", async () => {
 		expect(await renderDefaultTheme(true, false)).toContain("\x1b[36m?\x1b[39m");
+	});
+
+	it("colors the default theme on a TTY output when stdout is captured", async () => {
+		expect(await withCapturedStdout(() => renderDefaultTheme(true, true))).toContain(
+			"\x1b[36m?\x1b[39m",
+		);
 	});
 
 	// runPrompt refuses a non-TTY output, so check the theme it would resolve directly.

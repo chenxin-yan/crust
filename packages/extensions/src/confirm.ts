@@ -35,10 +35,10 @@ const confirmContext = /* @__PURE__ */ defineContext("confirm")
 	.flags(yesFlags)
 	.setup(({ flags }): Confirm => async (message) => {
 		if (flags.yes === true) return;
-		// Checked here, not in the lazy prompt module, so that module never imports a startup module.
-		const confirmed = isCI()
-			? undefined
-			: await (await import("./confirm-prompt.ts")).promptConfirmation(message);
+		// Read here, not in the lazy prompt module, so that module never imports a startup module.
+		const confirmed = await (
+			await import("./confirm-prompt.ts")
+		).promptConfirmation(message, isCI());
 		if (confirmed === undefined) throw new ConfirmationRequiredError(message);
 		if (!confirmed) throw new Error(`Not confirmed: ${message} Nothing was changed.`);
 	});

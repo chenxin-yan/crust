@@ -316,6 +316,7 @@ Editors complete command names, argument and flag names, and the action's result
 - `run()` never renders errors, calls `onError`, or changes `process.exitCode`. Eager authoring checks throw at the builder call; deferred definition errors encountered during `run()` produce a `failed` outcome.
 - Captured writes are joined with `"\n"`. `stdout` and `stderr` are captured separately, so their relative order is not preserved.
 - Default `@crustjs/prompts` and `@crustjs/progress` output is captured into `stderr`. Direct `console` or `process` writes, subprocesses, and files are not captured.
+- Captured stdout is not a terminal: [`@crustjs/style`](/docs/modules/style#color-control) default exports emit plain text into it unless `FORCE_COLOR` is set, whatever `process.stdout` is.
 - `options.stdout` / `options.stderr` also receive writes live. `options.onEvent` receives each event an async generator action yields, live, typed like the outcome's `events`. `options.signal` cancels the invocation. `run()` never installs a `SIGINT` or `SIGTERM` handler.
 - Preparation is cached per builder and shared by later `run()`, `execute()`, and `snapshot()` calls on it. Pending commands materialize as needed; `snapshot()` visits the full tree.
 
@@ -342,7 +343,7 @@ Runs the terminal boundary: parses `process.argv.slice(2)` (or `options.argv`), 
 - Exit codes are `0` on success, `1` on failure, and `130` for cancellation (`143` when `SIGTERM` cancelled it). `process.exitCode` is set on failure.
 - A failure renders once, through Extension `onError` hooks and then the selected [renderer's `error`](/docs/api/types#renderer) or Core's default rendering. Cancellation is offered to `onError` hooks; if none claims it, the abort itself renders nothing, but cleanup failures that accompany it still render. See [propagation boundaries](/docs/api/errors#propagation-boundaries).
 - On macOS and Linux, each default `stdout(text)` / `stderr(text)` line is written synchronously to file descriptor 1 or 2, so it arrives complete even when the action calls `process.exit()` right after, and patching `process.stdout.write` does not capture it. On Windows, default output goes through `process.stdout` / `process.stderr`.
-- `options.io` captures rendered output in tests, including default prompt and progress output. It does not provide prompt input. With `io` set, a cancelling signal only sets the exit code and never re-raises, so an in-process host keeps running.
+- `options.io` captures rendered output in tests, including default prompt and progress output. It does not provide prompt input. With `io` set, a cancelling signal only sets the exit code and never re-raises, so an in-process host keeps running. An injected `io.stdout` is not a terminal, so `@crustjs/style` default exports emit plain text into it unless `FORCE_COLOR` is set.
 - `options.onEvent` receives each event an async generator action yields, live. Events are never printed.
 - `options.env` is the environment flags' `env` bindings read; it defaults to `process.env`. Pass `{}` (or chosen variables) to isolate a test from the caller's shell.
 

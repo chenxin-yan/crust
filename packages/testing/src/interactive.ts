@@ -1,17 +1,32 @@
 import { setTimeout } from "node:timers/promises";
 
-import type { AnyCrust, CommandPath, CommandShapeAt, RunInputArguments } from "@crustjs/core";
+import type {
+	AnyCrust,
+	CommandPath,
+	CommandShapeAt,
+	RunInputArguments,
+	RunOutcome,
+	ShapeRunOutcome,
+} from "@crustjs/core";
 import { withTerminalIO } from "@crustjs/prompts";
 import { createPromptIO, type Key } from "@crustjs/prompts/testing";
 
-export interface InteractiveRun {
+/**
+ * A running interactive invocation. `Outcome` is the `run()` outcome of the selected command;
+ * `done` resolves with its `completed` or `handled` branch.
+ */
+export interface InteractiveRun<Outcome = RunOutcome<unknown, readonly unknown[] | undefined>> {
 	waitFor(pattern: RegExp, timeoutMs?: number): Promise<void>;
 	type(text: string): void;
 	keys(...namedKeys: Key[]): void;
 	screen(): string;
 	/** Text passed to the action's `stdout()` so far, joined with newlines like `RunOutcome.stdout`. */
 	stdout(): string;
-	readonly done: Promise<void>;
+	/**
+	 * Settles after cleanup like `app.run()`: resolves with the typed `result` (or the handling
+	 * Extension) and the captured `stdout` and `stderr`, or rejects with a failed outcome's `error`.
+	 */
+	readonly done: Promise<Exclude<Outcome, { readonly status: "failed" }>>;
 }
 
 /** Run an application with fake terminal streams for its prompts and stderr output. */
@@ -22,7 +37,7 @@ export function runInteractive<
 	app: App,
 	path: Path,
 	...args: RunInputArguments<CommandShapeAt<App["_types"]["shape"], Path>>
-): InteractiveRun {
+): InteractiveRun<ShapeRunOutcome<CommandShapeAt<App["_types"]["shape"], Path>>> {
 	const harness = createPromptIO();
 	const output = harness.io.output;
 	const [input] = args;
@@ -41,6 +56,11 @@ export function runInteractive<
 			})
 			.then((outcome) => {
 				if (outcome.status === "failed") throw outcome.error;
+				// SAFETY: the same Path + input link that types `app.run()` selects this outcome.
+				return outcome as Exclude<
+					ShapeRunOutcome<CommandShapeAt<App["_types"]["shape"], Path>>,
+					{ readonly status: "failed" }
+				>;
 			}),
 	);
 

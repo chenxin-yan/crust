@@ -1,7 +1,8 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { bold } from "@crustjs/style";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { captureExecute } from "./index.ts";
 
@@ -22,6 +23,19 @@ describe("captureExecute", () => {
 
 		const result = await captureExecute(app, []);
 		expect(result).toEqual({ stdout: "hello", stderr: "", exitCode: 0 });
+	});
+
+	it("captures plain styled text when the runner's stdout is a TTY", async () => {
+		const isTTY = process.stdout.isTTY;
+		Object.defineProperty(process.stdout, "isTTY", { configurable: true, value: true });
+		vi.stubEnv("FORCE_COLOR", undefined);
+		try {
+			const app = new Crust("test-cli").action(({ stdout }) => stdout(bold("Done")));
+			expect((await captureExecute(app, [])).stdout).toBe("Done");
+		} finally {
+			Object.defineProperty(process.stdout, "isTTY", { configurable: true, value: isTTY });
+			vi.unstubAllEnvs();
+		}
 	});
 
 	it("captures exit code 1 without leaking it to the process", async () => {
