@@ -302,8 +302,9 @@ class CommitAborted {
 /**
  * Renames `tempPath` over `filePath`, checking `beforeCommit` before every attempt.
  *
- * Windows refuses to replace a file another program (antivirus, an indexer, an
- * editor) holds open without delete sharing; such handles are usually brief.
+ * Windows refuses to replace a file that any process holds open, including another
+ * process reading this store, an antivirus scanner, or an indexer; such handles are
+ * usually brief.
  */
 async function commit(
 	tempPath: string,
@@ -521,7 +522,11 @@ async function removeOrphanMarkers(lockPath: string, token: string, staleMs: num
  * owner's token and was refreshed within half the stale threshold, so no waiter
  * can be taking it over. Call it immediately before committing any change (see
  * `beforeCommit` of {@link writeJson}): a holder that was frozen or suspended past
- * the threshold then fails instead of overwriting its successor's work.
+ * the threshold then fails instead of overwriting its successor's work. It fails
+ * rather than refreshing and carrying on (proper-lockfile keeps a lock whose mtime
+ * is still its own): once the heartbeat is older than half the threshold, a waiter
+ * may already have judged the lock stale and be removing it under its marker, and
+ * refreshing now cannot stop that removal.
  *
  * @throws {CrustStoreError} `IO` when the lock file cannot be created or inspected.
  */
