@@ -3,13 +3,18 @@ title: Build and distribution
 description: Configure, build, test, and publish your CLI.
 ---
 
-`crust build` turns your TypeScript entry into a **runtime package** (JavaScript for the user's installed runtime) or **standalone executables** (with the runtime embedded). The examples below use the `my-cli` command from [Quick Start](/docs/quick-start).
+`crust build` turns your TypeScript entry into one of two artifacts:
 
-**Building does not commit you to npm.** Distribute the same binaries through npm, release downloads, Homebrew, Scoop, or your own installer. Running a binary directly needs no separately installed Node.js or Bun. Node.js is required only by the generated npm launcher. [`crust publish`](#publish-with-crust-publish) handles npm; [other channels](#custom-distribution) use the built files with your own release tooling.
+- a **runtime package**: JavaScript for the runtime the user has installed;
+- **standalone executables**: one per platform, with the runtime embedded.
+
+The examples below use the `my-cli` command from [Quick Start](/docs/quick-start).
+
+**Building does not commit you to npm.** [`crust publish`](#publish-with-crust-publish) handles npm; [other channels](#custom-distribution) such as release downloads, Homebrew, or Scoop use the built binaries with your own tooling. Running a binary directly needs no Node.js or Bun; only the generated npm launcher needs Node.js.
 
 ## Set up `package.json`
 
-Scaffolded projects already have the build tooling and scripts. For an existing project, install the tool:
+Scaffolded projects are already set up. For an existing project, install the tool:
 
 ```npm
 npm install -D @crustjs/crust
@@ -33,22 +38,23 @@ Merge these fields into your `package.json`, keeping your dependencies:
 }
 ```
 
-The `bin` key must match your root command: `new Crust("my-cli")`. `"private": true` prevents accidentally publishing the source project; Crust generates separate publishable packages in `.crust/`.
-
-`crust.runtime` is the runtime your CLI runs on; [without it](/docs/modules/crust#packagejson-configuration) Crust infers one. `crust.artifact` is required and chooses what the build distributes, independently of the runtime:
+- **`bin`:** the key must match your root command, `new Crust("my-cli")`.
+- **`private`:** keeps the source project from being published. Crust generates separate publishable packages in `.crust/`.
+- **`crust.runtime`:** the runtime your CLI runs on. [Without it](/docs/modules/crust#packagejson-configuration), Crust infers one.
+- **`crust.artifact`:** required; what the build distributes, independent of the runtime. `--artifact package` or `--artifact binary` overrides it for one build.
 
 | Runtime | `"artifact": "package"`                         | `"artifact": "binary"`                                    |
 | ------- | ----------------------------------------------- | --------------------------------------------------------- |
 | `bun`   | Bun-targeted JavaScript; users need Bun         | Standalone executable per platform, with Bun embedded     |
 | `node`  | Node.js-targeted JavaScript; users need Node.js | Standalone executable per platform, with Node.js embedded |
 
-Crust stages npm metadata for either artifact kind, even if you never publish to npm. Binary builds include a Node.js launcher for npm distribution; direct binary distribution does not use it. See [choose an artifact to ship](#choose-an-artifact-to-ship) for what each choice costs your users. Runtime packages contain no embedded runtime: for example, Bun packages use `#!/usr/bin/env bun`, whether installed by npm or Bun. `--artifact package` or `--artifact binary` overrides `crust.artifact` for one build.
+Runtime packages embed no runtime: a Bun package starts with `#!/usr/bin/env bun`, however it is installed. Either artifact also gets npm metadata, even if you never publish to npm; see [choose an artifact to ship](#choose-an-artifact-to-ship).
 
-The commands below assume Node.js and Bun are installed; Node.js binaries need a `node` on `PATH` that [tsdown can build executables with](#nodejs-binaries). See [tooling requirements](/docs/modules/crust#install) and [runtime versions](/docs/guide/runtime-support#run-the-same-cli).
+The commands below assume Node.js and Bun are installed. Node.js binaries also need a `node` on `PATH` that [tsdown can build with](#nodejs-binaries). See [tooling requirements](/docs/modules/crust#install) and [runtime versions](/docs/guide/runtime-support#run-the-same-cli).
 
 ## Build
 
-For a quick local binary build, compile only for your machine:
+For a quick local binary, build only for your machine:
 
 ```sh
 npm run build -- --target host
@@ -56,7 +62,7 @@ npm run build -- --target host
 
 Runtime packages have no targets: run `npm run build` without `--target`.
 
-Builds replace `.crust/`; add it to `.gitignore`. On Linux x64 with Bun binaries selected, the output looks like this:
+Each build replaces `.crust/`; add it to `.gitignore`. On Linux x64 with Bun binaries:
 
 ```text
 .crust/
@@ -69,7 +75,7 @@ Builds replace `.crust/`; add it to `.gitignore`. On Linux x64 with Bun binaries
     └── bin/my-cli-bun-linux-x64         # standalone executable
 ```
 
-Runtime packages omit the platform directories; `root/bin/my-cli.js` is the bundle itself. [Generated manifests](/docs/modules/crust#staged-packagejson-files) describe which metadata and files are shipped.
+Runtime packages have no platform directories; `root/bin/my-cli.js` is the bundle itself. See [staged `package.json` files](/docs/modules/crust#staged-packagejson-files) for the generated metadata, and [`crust build` options](/docs/modules/crust#crust-build-options) for every flag.
 
 ### Choose release targets
 
@@ -81,43 +87,78 @@ npm run build
 npm run build -- --target bun-linux-x64 --target bun-darwin-arm64
 ```
 
-Publish every platform you intend to support—not just `host`. Set [`crust.targets`](/docs/modules/crust#packagejson-configuration) to keep a release subset in configuration. See [supported targets](/docs/modules/crust#supported-targets), including musl targets and prerequisites for Alpine Linux.
+Publish every platform you intend to support, not just `host`. Keep a release subset in [`crust.targets`](/docs/modules/crust#packagejson-configuration). See [supported targets](/docs/modules/crust#supported-targets), including musl targets for Alpine Linux.
 
 ### Binary runtime version
 
-Every binary embeds the version of the compiler that builds it: the first `bun` on `PATH`, else the Bun inside the `crust` executable; for Node.js, `node` on `PATH`. The build prints it as `Compiler:` and records it as `embeddedRuntimeVersion` in `.crust/manifest.json`, for cross-platform targets too.
+Every binary embeds the runtime version of the compiler that builds it:
 
-When `package.json` declares `engines.bun` or `engines.node`, that compiler must satisfy the semver range, or the build fails before replacing `.crust/`. A compiler whose `--version` does not exit within 30 seconds fails the build the same way, with cleanup targeting its POSIX process group or live Windows process tree. On POSIX, interrupting or exiting the build while the probe runs kills that group too. Descendants that leave the POSIX group or outlive their parent on Windows can escape cleanup. An exact version is a requirement, not a download request: Crust never installs or upgrades a compiler, so pin one with your version manager or CI. Runtime packages embed no runtime; their `engines` only describes what users need.
+- **Bun:** the first `bun` on `PATH`, else the Bun inside the `crust` executable.
+- **Node.js:** the `node` on `PATH`.
+
+The build prints it as `Compiler:` and records it as `embeddedRuntimeVersion` in `.crust/manifest.json`, for cross-platform targets too.
+
+If `package.json` declares `engines.bun` or `engines.node`, that compiler must satisfy the range, or the build fails before replacing `.crust/`. It also fails if the compiler's `--version` hangs.
+
+<Callout>
+  Crust never installs or upgrades a compiler, even for an exact `engines` version. Pin one with
+  your version manager or CI. Runtime packages embed no runtime; their `engines` only tells users
+  what they need.
+</Callout>
 
 ### Bun binary startup
 
-Bun binaries are precompiled to [bytecode](https://bun.com/docs/compiler/bytecode) by default, so they start without parsing their JavaScript. In one benchmark, a 30-command CLI on Linux x64 started in 11.7 ms instead of 21.6 ms, for about 2% more binary size. The bytecode is embedded next to the exact Bun runtime that produced it, so it always matches. Cross-compiled targets need Bun 1.4.1 or later to embed bytecode; older versions build them without it. Pass `--no-bytecode` to opt out.
+Bun binaries are precompiled to [bytecode](https://bun.com/docs/compiler/bytecode) by default, so they start without parsing their JavaScript. Pass `--no-bytecode` to opt out.
 
-Bytecode applies only to Bun binaries. Runtime packages run on whatever Bun the user has installed, which would ignore bytecode from another version, and Node.js uses a different engine, so `--bytecode` is rejected for both.
+- Cross-compiled targets need Bun 1.4.1 or later to embed bytecode; older versions build them without it.
+- `--bytecode` is rejected for runtime packages, which run on whatever Bun the user has, and for Node.js binaries, which use a different engine.
 
 ### Choose an artifact to ship
 
-A binary published to npm runs through the launcher. The root package's `bin/my-cli.js` is a small Node.js script: it finds the platform package that the package manager installed from `optionalDependencies` for the user's OS, CPU, and C library, then replaces itself with that package's binary (`process.execve`; Windows starts the binary as a child process instead). Anyone with Node.js can install a compiled CLI this way, but every run pays about one Node.js start before the binary's own, roughly 20 ms on Linux x64. In one benchmark of a 30-command CLI on Linux x64, that made the npm-installed binary slower to start than the same CLI as a Node.js runtime package: 35 ms against 28 ms.
+A binary installed from the root npm package runs through the launcher, `root/bin/my-cli.js`. This small Node.js script finds the platform package npm installed for the user's OS, CPU, and C library, then replaces itself with that binary (Windows starts it as a child process). Every run pays for one extra Node.js start, roughly 20 ms on Linux x64.
 
-- **Users install from npm and your CLI needs no Bun-only APIs:** ship a Node.js runtime package (`"runtime": "node", "artifact": "package"`). It has no launcher and is far smaller: the scaffolded CLI's package is about 50 KB, its Linux x64 Bun binary about 110 MB.
-- **Users want a binary:** ship it as [release downloads](#release-downloads) or through [Homebrew, Scoop, and other installers](#homebrew-scoop-and-other-installers), which run it with no launcher or Node.js. From npm, users can install the platform package directly, such as `npm install -g my-cli-linux-x64` ([named](/docs/modules/crust#staged-packagejson-files) after your package and the [platform alias](/docs/modules/crust#supported-targets)). Its `bin` points straight at the executable, so the installed command runs the binary itself, and its `os`, `cpu`, and `libc` fields make npm reject a package built for another platform. Users choose the package themselves, such as `my-cli-linux-x64-musl` on Alpine, and install either it or the root package: both provide the same command.
-- **Your CLI needs Bun's runtime and your users may not have Bun:** publish binaries through the root npm package. Users need only Node.js `>=24` to install and start them, and accept the launcher's startup cost.
+| Situation                                               | Ship                                                                                                                                                                                                              |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Users install from npm; your CLI needs no Bun-only APIs | A Node.js runtime package (`"runtime": "node", "artifact": "package"`). No launcher, often faster to start than a launched binary, and kilobytes instead of a ~100 MB binary.                                     |
+| Users want a binary                                     | [Release downloads](#release-downloads) or [Homebrew, Scoop, and other installers](#homebrew-scoop-and-other-installers): no launcher, no Node.js. On npm, users can install a platform package directly (below). |
+| Your CLI needs Bun's runtime and users may not have Bun | Binaries through the root npm package. Users need only Node.js `>=24` and accept the launcher's startup cost.                                                                                                     |
+
+A platform package, such as `npm install -g my-cli-linux-x64`, runs the binary without the launcher:
+
+- It is [named](/docs/modules/crust#staged-packagejson-files) after your package plus the [platform alias](/docs/modules/crust#supported-targets).
+- Its `bin` points straight at the executable, and its `os`, `cpu`, and `libc` fields make npm reject the wrong platform.
+- Users pick it themselves, such as `my-cli-linux-x64-musl` on Alpine, and install either it or the root package: both provide the same command.
 
 ### Node.js binaries
 
-Crust builds Node.js binaries with [tsdown's executable support](https://tsdown.dev/options/exe) (Node.js single executable applications). `@crustjs/crust` ships `tsdown` and `@tsdown/exe` as optional dependencies, so no global tsdown is needed. Package managers skip them when optional dependencies are disabled or the Node.js running the install is outside tsdown's engines, instead of failing the install; other builds do not need them, and a Node.js binary build then reports the missing backend before replacing `.crust/`. It never falls back to a project's own tsdown of another version: only the versions `@crustjs/crust` pins are used. Reinstall `@crustjs/crust` with optional dependencies enabled under a Node.js that meets tsdown's engines, such as the one you build with. The `node` on `PATH` runs the build and is embedded, so it must satisfy both your `engines.node` and the installed tsdown's own requirements: its package engines and its executable builder's minimum. With the bundled tsdown 0.23 that means Node.js 26 or later. Crust reads both requirements from tsdown and reports which one fails, before replacing `.crust/`.
+Crust builds Node.js binaries with [tsdown's executable support](https://tsdown.dev/options/exe) (Node.js single executable applications). `@crustjs/crust` ships `tsdown` and `@tsdown/exe` as optional dependencies, so no global tsdown is needed.
 
-These are build requirements, not your users' requirements: `engines.node` can keep your own range (for example `>=24`) as long as the build machine's Node.js satisfies it. Platform packages do not repeat `engines.node`, since running the executable needs no Node.js. The root package declares the npm launcher's own requirement instead, `>=24`, because the launcher replaces itself with the binary through `process.execve`. A root package that also publishes library `exports` keeps your `engines.node`, because consumers import that code on their own Node.js; the launcher still reports an unsupported Node.js at startup.
+**Build machine requirements** (not your users'):
 
-Every command is its own single-entry executable. Bun first bundles it for Node.js exactly like a Node.js runtime package, so `import.meta.main` and `require.main === module` stay true only in the command's own entry (ESM or CommonJS) and env files embed the same `PUBLIC_*` values; tsdown then turns that bundle into the executable. Bun is therefore required even with `--no-validate`, checked before replacing `.crust/`. Application dependencies are bundled into it; a build fails if an import other than a Node.js built-in would be left for the runtime to resolve. Native addons, computed imports, `crust.bunPlugins`, and `crust.external` are not supported.
+- **tsdown installed:** package managers skip optional dependencies when they are disabled or the installing Node.js is outside tsdown's engines. The build then reports the missing backend. Reinstall `@crustjs/crust` with optional dependencies under the Node.js you build with. A project's own tsdown is never used.
+- **A qualifying `node` on `PATH`:** it runs the build and is embedded, so it must satisfy your `engines.node`, tsdown's engines, and tsdown's executable minimum. With the bundled tsdown 0.23, that means Node.js 26 or later. The build names the requirement that fails.
+- **Bun:** each command is first bundled by Bun, even with `--no-validate`.
+- **Unpacking tools:** for each target, tsdown downloads the official Node.js archive of the same version once, verifies its checksum, and caches it. Archives unpack with the host's `tar`, plus `xz` for Linux targets under GNU tar, or `unzip` for Windows targets on non-Windows hosts. On Windows, put the native `tar` before Git Bash's GNU tar on `PATH`. Cached targets need none of these tools.
 
-For each target, tsdown downloads the official Node.js archive of exactly that version once, verifies its checksum, unpacks it, and caches it. Crust does this for every target before replacing `.crust/`, so a failed download or a missing unpacking tool keeps the previous build. Archives are unpacked with the host's `tar`, except Windows targets on non-Windows hosts, which need `unzip`; GNU tar, as on most Linux hosts, also needs `xz` for Linux targets. On Windows, put the native ZIP-capable `tar` before Git Bash's GNU tar on `PATH` (for example, use PowerShell with the standard Windows path). Cached targets need none of these tools. macOS executables are only code-signed when built on macOS; sign cross-built ones yourself before running them on Apple silicon.
+All of this is checked, and every archive downloaded, before `.crust/` is replaced, so a failure keeps the previous build.
 
-When the `node` on `PATH` is itself the official binary a target embeds, which means the host's own target built with a Node.js from nodejs.org (as installed by most version managers and `actions/setup-node`), Crust also embeds a [V8 code cache](https://nodejs.org/api/single-executable-applications.html#v8-code-cache-support) of the command, so it starts without compiling its JavaScript first. In one benchmark, a 30-command CLI on Linux x64 with Node.js 26 ran about 5% fewer instructions per start, 1 to 2 ms. V8 only accepts a cache written by that exact binary and its flags, so other targets, a distribution's or Homebrew's build of the same Node.js version, and builds with `NODE_OPTIONS` set get no cache rather than one that is rejected with a warning at every start. The build prints `Code cache: on`, or `off` with the reason, such as `cross-built` or a `node` that is not the official binary; when targets differ, it lists them per group, as in `on for linux-x64; off for darwin-arm64 (cross-built)`. Running a binary with V8 flags such as `--jitless` in `NODE_OPTIONS` makes Node.js reject its cache and print that warning.
+**Your users:** running the executable needs no Node.js, so platform packages omit `engines.node`. The root package declares the launcher's own `>=24` instead, unless it also publishes library `exports`, which keep your range. Your `engines.node` can stay as wide as you like, such as `>=24`, as long as the build machine satisfies it.
+
+**What gets bundled:** each command is its own executable, bundled like a Node.js runtime package, with all application dependencies and the same `PUBLIC_*` [env file values](#environment-variables). `import.meta.main` and `require.main === module` are true only in the command's entry.
+
+- A build fails if any import other than a Node.js built-in would be left unbundled.
+- Native addons, computed imports, `crust.bunPlugins`, and `crust.external` are not supported.
+- macOS executables are code-signed only when built on macOS. Sign cross-built ones yourself before running them on Apple silicon.
+
+**V8 code cache:** when the `node` on `PATH` is the official nodejs.org binary for the host's own target (as most version managers and `actions/setup-node` install), Crust also embeds a [V8 code cache](https://nodejs.org/api/single-executable-applications.html#v8-code-cache-support), so the command starts without compiling its JavaScript.
+
+- Other targets, distribution or Homebrew builds of Node.js, and builds with `NODE_OPTIONS` set get no cache.
+- The build prints `Code cache: on`, or `off` with a reason such as `cross-built`; mixed targets are listed per group, as in `on for linux-x64; off for darwin-arm64 (cross-built)`.
+- Running a binary with V8 flags such as `--jitless` in `NODE_OPTIONS` makes Node.js reject the cache and print a warning.
 
 ## Run locally
 
-Choose the entry you intend to distribute:
+Run the entry you intend to distribute before publishing:
 
 ```sh
 # npm's launcher route; requires Node.js:
@@ -129,11 +170,10 @@ node .crust/root/bin/my-cli.js --help
 ./.crust/linux-x64/bin/my-cli-bun-linux-x64 --help
 ```
 
-The direct executable's name depends on your command and target; Windows executables end in `.exe`.
-
-Run the staged entry before publishing. Binary launchers find their executables in the sibling platform directories; a runtime package's bundle runs directly, so start a Bun package with `bun .crust/root/bin/my-cli.js`.
-
-To test through `npm link`, link from `.crust/root`. Linking from the project root runs the source entry instead.
+- The executable's name depends on your command and target; Windows executables end in `.exe`.
+- The launcher finds its executables in the sibling platform directories.
+- A runtime package's bundle runs directly: start a Bun package with `bun .crust/root/bin/my-cli.js`.
+- To test through `npm link`, link from `.crust/root`. Linking from the project root runs the source entry instead.
 
 ## Publish with `crust publish`
 
@@ -148,9 +188,11 @@ npm login
 npm run release
 ```
 
-The dry run validates staged metadata and prints the plan **without contacting the registry**. Real publishing uses npm, uploads platform packages before the root, and stops on failure. Rerun to resume: existing `name@version` pairs are skipped, not overwritten or re-tagged.
+- `--dry-run` validates staged metadata and prints the plan **without contacting the registry**.
+- A real publish uses npm, uploads platform packages before the root, and stops on failure.
+- Rerun to resume: existing `name@version` pairs are skipped, never overwritten or re-tagged.
 
-For a scoped public package, add `"publishConfig": { "access": "public" }` to your project's `package.json` before building. Users install only the root package:
+For a scoped public package, add `"publishConfig": { "access": "public" }` to your `package.json` before building. Users install only the root package:
 
 ```sh
 npm install -g my-cli
@@ -171,17 +213,17 @@ permissions:
 
 After installing dependencies and building the release targets, run `npm run release`; do not run `npm login` in CI.
 
-npm runs inside each staged package, so it does not read the project's `.npmrc`. If you use a credentials file instead, select it explicitly:
+npm runs inside each staged package, so it does not read the project's `.npmrc`. To use a credentials file, select it explicitly, and keep it out of version control:
 
 ```sh
 NPM_CONFIG_USERCONFIG="$PWD/.npmrc" npm run release
 ```
 
-Keep credentials out of version control. Use `--registry` or `--tag` through the release script as needed; see [publish options and registry precedence](/docs/modules/crust#crust-publish-options).
+Pass `--registry` or `--tag` through the release script as needed; see [publish options and registry precedence](/docs/modules/crust#crust-publish-options).
 
 ## Custom distribution
 
-For standalone binaries, distribute the contents of `.crust/<platform>/bin/`: the executable for each command **and its adjacent data directories**. You do not need the npm root launcher or npm manifests to run these files. Users need a compatible OS, architecture and system libraries, plus any external tools your own application calls—not a separate JavaScript runtime.
+For standalone binaries, ship the contents of `.crust/<platform>/bin/`: each command's executable **and its adjacent data directories**. No npm launcher or manifest is needed. Users need a compatible OS, architecture, and system libraries, plus any external tools your CLI calls.
 
 ### Release downloads
 
@@ -193,7 +235,7 @@ tar -czf my-cli-linux-x64.tar.gz -C .crust/linux-x64/bin .
 sha256sum my-cli-linux-x64.tar.gz
 ```
 
-Upload the archive and its checksum to your release host, such as GitHub Releases. Create a separate archive for each supported platform; include your license and any other required distribution files. Users verify the checksum, extract the matching archive, and run the executable directly:
+Upload the archive and its checksum to your release host, such as GitHub Releases. Users verify the checksum, extract the matching archive, and run the executable directly:
 
 ```sh
 mkdir my-cli
@@ -201,20 +243,22 @@ tar -xzf my-cli-linux-x64.tar.gz -C my-cli
 ./my-cli/my-cli-bun-linux-x64 --help
 ```
 
-The same approach works for Node.js binaries using their [target names](/docs/modules/crust#supported-targets) and generated filenames. Preserve executable permissions, keep shipped directories next to the executable, and apply any required platform signing before creating the archive.
+- Create one archive per supported platform, with your license and other required files.
+- Node.js binaries work the same with their [target names](/docs/modules/crust#supported-targets) and filenames.
+- Preserve executable permissions, keep shipped directories next to the executable, and sign for each platform as required before archiving.
 
 ### Homebrew, Scoop, and other installers
 
-These channels use the same release archives; they do not need Crust's npm resolver:
+These channels use the same release archives:
 
 1. Build and host an archive for each platform you support.
 2. Create a [Homebrew formula](https://docs.brew.sh/Formula-Cookbook) or [Scoop manifest](https://github.com/ScoopInstaller/Scoop/wiki/App-Manifests) that selects the matching archive and verifies its checksum.
-3. Install the executable and its adjacent data directories together, then expose the command using the installer's link or shim mechanism. Do not move the executable away from its data directories.
+3. Install the executable together with its adjacent data directories, then expose the command with the installer's link or shim mechanism. Do not move the executable away from its data directories.
 4. Test the installed command from an unrelated working directory, including commands that read shipped assets.
 
-The installer supplies platform selection instead of the npm launcher, so **running the installed binary does not require Node.js**. Crust does not generate formulas/manifests or publish to these channels; maintain them with your own release tooling. You can offer npm and direct-binary installation for the same build.
+The installer selects the platform instead of the npm launcher, so **the installed binary does not need Node.js**. Crust does not generate formulas or manifests or publish to these channels. You can offer npm and direct-binary installation for the same build.
 
-Runtime packages can also be archived, but must retain the contents/layout of `.crust/root/` and still require their selected runtime. Copy or archive any output before the next build replaces `.crust/`.
+Runtime packages can be archived too, but must keep the layout of `.crust/root/` and still need their runtime. Copy any output you keep before the next build replaces `.crust/`.
 
 ## Customize the build
 
@@ -226,13 +270,13 @@ Runtime packages can also be archived, but must retain the contents/layout of `.
 }
 ```
 
-Create `templates/` in your project, then build. Read the shipped copy with `resolveArtifactDir("templates")` from `@crustjs/core`, rather than a path relative to the working directory. It works from the staged tree, an npm install, or a standalone executable. See [artifact paths](/docs/api/crust#resolveartifactdirname).
+Create `templates/` in your project, then build. Read the shipped copy with [`resolveArtifactDir("templates")`](/docs/api/crust#resolveartifactdirname) from `@crustjs/core`, not a path relative to the working directory. It works from the staged tree, an npm install, or a standalone executable.
 
-Extensions such as `man()`, `skill()`, and `completion()` generate their own directories during build preparation. That step runs entry-module top-level code, but not Command Actions. `--no-validate` skips preparation **and those Extension artifacts**; see [Extension artifacts](/docs/modules/crust#extension-artifacts).
+Extensions such as `man()`, `skill()`, and `completion()` generate their own directories during build preparation. Preparation runs your entry module's top-level code, but not Command Actions. `--no-validate` skips preparation **and those directories**; see [Extension artifacts](/docs/modules/crust#extension-artifacts).
 
 ### Keep dependencies external
 
-Runtime packages bundle every dependency by default. `crust.external` keeps the named packages out of the bundle and also ships them: they become `dependencies` of the staged root package, with their ranges from your `dependencies`, so npm installs them beside the bundle.
+Runtime packages bundle every dependency by default. `crust.external` leaves the named packages out of the bundle and adds them to the staged root package's `dependencies`, with the ranges from your `dependencies`, so npm installs them beside the bundle.
 
 ```json title="package.json (partial)"
 {
@@ -245,15 +289,17 @@ Runtime packages bundle every dependency by default. `crust.external` keeps the 
 }
 ```
 
-Use it for packages the CLI imports, runs, or reads files from at runtime:
+Use it for packages the CLI needs on disk at runtime:
 
 - native addons such as `better-sqlite3`, whose compiled binary cannot be bundled;
-- packages the CLI spawns or reads files from, such as resolving `typescript/package.json` and running its `tsc`; these need not be imported at all;
+- packages the CLI spawns or reads files from, such as running `typescript`'s `tsc`, even if never imported;
 - very large dependencies you would rather install than bundle.
 
-`crust.external` applies to Node and Bun runtime packages only; binaries reject it. Each entry must be a `dependencies` key with a publishable range, and `@crustjs/*` packages must stay bundled; see [`package.json` configuration](/docs/modules/crust#packagejson-configuration) for the rules and [staged `package.json` files](/docs/modules/crust#staged-packagejson-files) for the output.
+Rules:
 
-Validation executes each entry under Bun before bundling, with dependencies resolved from your project, so externals must be installed when you build. An entry that does not run a Crust app from `@crustjs/core` has no Command Snapshot and needs `--no-validate`.
+- Node and Bun runtime packages only; binaries reject it.
+- Each entry must be a `dependencies` key with a publishable range. `@crustjs/*` packages must stay bundled; see [`package.json` configuration](/docs/modules/crust#packagejson-configuration).
+- Validation runs each entry under Bun with your project's dependencies, so externals must be installed when you build. An entry that does not run a Crust app needs `--no-validate`.
 
 Limits:
 
@@ -262,7 +308,7 @@ Limits:
 
 ### Environment variables
 
-Keep secrets in runtime variables; use `PUBLIC_*` only for values safe to embed. Env files apply to either artifact. This entry reads one of each:
+Keep secrets in runtime variables; use `PUBLIC_*` only for values safe to embed. This entry reads one of each:
 
 <include lang="ts" meta='title="src/cli.ts"'>
   ../../../examples/guide/build.ts
@@ -272,7 +318,7 @@ Keep secrets in runtime variables; use `PUBLIC_*` only for values safe to embed.
 PUBLIC_API_ORIGIN=https://api.example.com
 ```
 
-Here with Bun binaries behind the Node launcher:
+Pass env files with `--env-file` (repeatable) for either artifact. Here with Bun binaries behind the Node launcher:
 
 ```sh
 npm run build -- --env-file .env.production
@@ -287,7 +333,7 @@ API_TOKEN=your-token node .crust/root/bin/my-cli.js
   Only `PUBLIC_*` variables are embedded from env files; anyone with the output can read them.
 </Callout>
 
-Bun executables also load `.env` from their working directory at startup, but do not load that directory's `bunfig.toml`.
+Bun executables also load `.env` from their working directory at startup, but not that directory's `bunfig.toml`.
 
 ### Add Bun bundler plugins
 
@@ -297,7 +343,7 @@ Bun executables also load `.env` from their working directory at startup, but do
 }
 ```
 
-Plugins apply to Bun binaries and to Bun and Node.js runtime packages, not build preparation; Node.js binaries reject them. If entry imports need the same transform during preparation, register a runtime plugin in `bunfig.toml` `preload` too. See [plugin configuration](/docs/modules/crust#packagejson-configuration) and the [TUI setup](/docs/modules/tui).
+Plugins apply to Bun binaries and to Bun and Node.js runtime packages, not to build preparation; Node.js binaries reject them. If entry imports need the same transform during preparation, also register a runtime plugin in `bunfig.toml` `preload`. See [plugin configuration](/docs/modules/crust#packagejson-configuration) and the [TUI setup](/docs/modules/tui).
 
 ### Programmatic builds
 
@@ -312,4 +358,4 @@ const result = await build({
 console.log(result.stageDir); // <cwd>/.crust
 ```
 
-Run with Bun, or with Node.js and `bun` on `PATH`; Node.js binaries also need a qualifying `node` on `PATH`. `build()` uses the same configuration as the CLI and returns artifact paths and Extension reports; it throws on failure. See the [options and result types](/docs/modules/crust#programmatic-api).
+`build()` uses the same configuration as the CLI, returns artifact paths and Extension reports, and throws on failure. Run it with Bun, or with Node.js and `bun` on `PATH`; Node.js binaries also need a qualifying `node` on `PATH`. See the [options and result types](/docs/modules/crust#programmatic-api).

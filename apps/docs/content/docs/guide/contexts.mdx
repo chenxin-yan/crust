@@ -3,7 +3,7 @@ title: Contexts
 description: Share dependencies across commands with lazy setup, automatic cleanup, and test replacements.
 ---
 
-A Context supplies a dependency, such as an API client or database connection, to your commands, exposing through `ctx`.
+A Context supplies a dependency, such as an API client or database connection, to your commands through `ctx`.
 
 Use a Context when commands share a service, setup or cleanup needs managing, or tests need a replacement. For stateless helpers, a plain import is enough.
 
@@ -45,7 +45,7 @@ To use the Contexts an [Extension](/docs/guide/extensions#use-an-extensions-cont
 
 ## Setup and cleanup
 
-Setup starts on first access to `ctx.database`. Once it succeeds, its value is shared for that invocation. Register cleanup with `defer()` as soon as you acquire a resource:
+Setup starts on first access to `ctx.database`. Once it succeeds, its value is shared for the rest of the invocation. Register cleanup with `defer()` as soon as you acquire a resource:
 
 <include lang="ts" meta='title="work.ts"'>
   ../../../examples/guide/contexts-lifecycle.ts
@@ -64,7 +64,9 @@ Error: query failed
 database closed
 ```
 
-Cleanup runs after `postRun` hooks. Deferred callbacks can be async and run in reverse registration order.
+- `ping` never reads the Context, so setup never runs.
+- Cleanup runs after `postRun` hooks, also when the action throws.
+- Deferred callbacks can be async and run in reverse registration order.
 
 ### Disposable values
 
@@ -76,7 +78,12 @@ Instead of `defer()`, the returned value can own its cleanup. Replace the `datab
 
 The commands and output stay the same. For asynchronous cleanup, use `async [Symbol.asyncDispose]()` instead of `[Symbol.dispose]()`.
 
-Crust disposes the value for you. Do not also close it with `defer()` or `await using`, or use it after the invocation ends. See the [lifecycle rules](/docs/api/crust#context-lifecycle) for ordering and cleanup dependencies.
+<Callout type="warn">
+  Crust disposes the value for you. Don't also close it with `defer()` or `await using`, or use it
+  after the invocation ends.
+</Callout>
+
+See the [lifecycle rules](/docs/api/crust#context-lifecycle) for ordering and cleanup dependencies.
 
 ### Cancellable setup
 
@@ -105,17 +112,27 @@ $ app version --api-url https://staging.example.com
 Error: Unknown flag "--api-url"
 ```
 
-A flag appears only on commands whose `ctx` exposes its Context, where it has an effect:
+Setup receives the validated values. A flag appears only on commands whose `ctx` exposes its Context:
 
-- The command that calls `.provide()`, and inline [`.command()`](/docs/api/crust#commandname-recipe) children added after it, such as `deploy`. Their `ctx` sees the Context without `.use()`.
-- A reusable command that declares the Context with `.use()`, such as `status`. It also parses the flags of the Contexts that Context's setup [uses](#contexts-that-use-other-contexts), transitively.
-- For a Context an [Extension provides](/docs/guide/extensions#dependency-injection): the root, its inline children, and the commands that `.use()` it. If the Extension's own hooks `.use()` the Context, every command parses its flags, because hooks run on every command.
+| Command                                                                                                                           | Parses the flag?                                                                                  |
+| --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| The one that calls `.provide()`, and inline [`.command()`](/docs/api/crust#commandname-recipe) children added after it (`deploy`) | Yes, without `.use()`                                                                             |
+| A reusable command that declares the Context with `.use()` (`status`)                                                             | Yes, plus the flags of Contexts its setup [uses](#contexts-that-use-other-contexts), transitively |
+| Any other command (`version`)                                                                                                     | No: rejected as unknown, and left out of help, completions, and man pages                         |
 
-A command that `.use()`s a Context may also `.provide()` it; the two share its flags. Such a command parses the flags of the Contexts it declares, as declared. A different Context of the same name may fulfill the `.use()` only if it owns exactly the same flags, with equal definitions, and the Contexts its setup uses own no flag the command doesn't parse; otherwise preparing the app throws a `DEFINITION` error (`context-flags-not-parsed`). To change a flag, change the declared Context; to replace only the value, provide the same factory, for example its [`.of()`](#replace-a-context-in-tests) double.
+For a Context an Extension provides, see [Dependency injection](/docs/guide/extensions#dependency-injection).
 
-Other commands, such as `version`, reject the flag as unknown, and help, completions, and manual pages leave it out. Setup receives the validated values. Reading a flag-owning Context on a command that does not parse its flags, which only an untyped access such as a cast allows, fails with a `DEFINITION` error (`context-flags-not-parsed`) that names the missing `.use()`. See [`.provide()`](/docs/api/crust#provideinstances) for collision rules.
+A command that `.use()`s a Context may also `.provide()` it; the two share its flags.
+
+- To replace only the value, provide the same factory, for example its [`.of()`](#replace-a-context-in-tests) double.
+- To change a flag, change the declared Context. A different same-name Context must own exactly the same flags; otherwise preparing the app throws a `DEFINITION` error (`context-flags-not-parsed`). See [`.use()`](/docs/api/crust#usefactories) for the exact rule.
+- Reading a flag-owning Context on a command that doesn't parse its flags, which only an untyped access such as a cast allows, throws the same error, naming the missing `.use()`.
+
+See [`.provide()`](/docs/api/crust#provideinstances) for collision rules.
 
 ## Documentation owned by a Context
+
+When a Context needs explaining, such as the environment variables it reads, document it with `.sections(...sections)` before `.setup()`. Sections take the same `{ title, body, only?, except? }` shape as a [command's own `sections`](/docs/api/types#commandsectioninput); repeated calls append.
 
 <include lang="ts" meta='title="app.ts"'>
   ../../../examples/guide/contexts-sections.ts
@@ -138,11 +155,13 @@ Environment:
   API_TOKEN  Token sent with every request
 ```
 
-When a Context needs explaining — the environment variables it reads, the files it opens — declare it with `.sections(...sections)` before `.setup()`. Each call appends to a new builder, taking the same `{ title, body, only?, except? }` shape as a [command's own `sections`](/docs/api/types#commandsectioninput). Sections are validated and copied when declared.
+- Unlike flags, sections document **only the command where the Context is provided**, not the commands below it. `.provide(api())` on the root puts them in root help; inside `db`, in `app db --help` only.
+- A Context an [Extension](/docs/guide/extensions) provides documents the root.
+- Help, [manual pages](/docs/modules/man), and other consumers of the [command snapshot](/docs/api/crust#snapshot) render them after the command's own sections.
+- A section title already on that command, from its own `sections` or another Context, makes preparing the app throw a `DEFINITION` error (`duplicate-section`).
+- When an Extension replaces a same-name Context, only the final provider's sections are used, including for `.of()` replacements.
 
-Unlike flags, sections document **only the command where the Context is provided**, never the commands below it: the reader sees them once, where the dependency is set up. `.provide(api())` on the root puts them in root help; `.provide(api())` inside `db` puts them in `app db --help` only. A Context provided by an [Extension](/docs/guide/extensions) documents the root once. Help, [manual pages](/docs/modules/man), and every other consumer of the [command snapshot](/docs/api/crust#snapshot) render them after the command's own sections, the same way.
-
-A Context section cannot reuse a title already on that command, from the command's own `sections` or another provided Context: preparing the app throws a `DEFINITION` error (`duplicate-section`). When an Extension replaces a same-name Context, only the final provider's sections are used, including for `.of()` replacements. [`@crustjs/env`](/docs/modules/env) uses this to document the variables its Context reads.
+[`@crustjs/env`](/docs/modules/env) uses this to document the variables its Context reads.
 
 ## Contexts that use other Contexts
 
@@ -167,6 +186,11 @@ Provide every dependency. Order within one `.provide()` call does not matter. Se
   ../../../examples/guide/contexts-doubles.ts#replacement
 </include>
 
-The command stays unchanged, but neither `database opened` nor its deferred `database closed` runs. Use a plain fake for repeated tests: a disposable supplied through `.of()` is still disposed by each invocation that reads it.
+The command stays unchanged, but neither `database opened` nor its deferred `database closed` runs.
+
+<Callout type="warn">
+  A disposable supplied through `.of()` is still disposed by each invocation that reads it. Use a
+  plain fake for repeated tests.
+</Callout>
 
 See [Testing](/docs/guide/testing) for `run()` and assertions, or [Context types](/docs/api/types#context-types) for the full API.

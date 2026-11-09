@@ -70,7 +70,7 @@ Error: No app.config.json found. Run `app init` to create one.
 
 To print the fix as a runnable command, register [`nextSteps()`](/docs/modules/extensions/next-steps) and return recovery steps from its `onError` option for the errors you recognize with `instanceof`. They print after the error message as `Next steps:`, as shell-quoted command lines checked against your command tree.
 
-To change how failures are presented, write an Extension with an [`onError`](/docs/api/types#extensionhooks) hook. The first hook that returns `true` claims the failure and replaces the default `Error:` line; the exit status stays 1. [`didYouMean()`](/docs/modules/extensions/did-you-mean) uses this hook for command suggestions.
+To change how failures are presented, write an Extension with an [`onError`](/docs/api/types#extensionhooks) hook. The first hook that returns `true` claims the failure and replaces the default `Error:` line; the exit status doesn't change. A [renderer's `error`](/docs/guide/extensions#renderers) handles failures no hook claimed. [`didYouMean()`](/docs/modules/extensions/did-you-mean) uses this hook for command suggestions.
 
 ## Cancellation
 
@@ -78,9 +78,14 @@ Ctrl+C in a Crust prompt raises an `AbortError`. By default, `execute()` prints 
 
 <include lang="ts">../../../examples/guide/error-handling.ts#cancellation</include>
 
-Keep side effects after prompts so cancelling leaves nothing to undo. To cancel explicitly, throw `new DOMException("Cancelled", "AbortError")`.
+Keep side effects after prompts so cancelling leaves nothing to undo.
 
-The first Ctrl+C during `execute()` aborts the action's `signal`. Pass it to cancellable APIs such as `fetch(url, { signal })`; work that ignores it keeps running. An `AbortError` still allows cleanup; if cleanup fails, its failure renders and the exit code stays 130. `SIGTERM`, sent by `docker stop`, Kubernetes, `timeout`, and CI cancellation, cancels the same way and exits 143. See [`execute()`](/docs/api/crust#executeoptions) for caller signals and repeated signals.
+- To cancel explicitly, throw `new DOMException("Cancelled", "AbortError")`.
+- The first Ctrl+C during `execute()` aborts the action's `signal`. Pass it to cancellable APIs such as `fetch(url, { signal })`; work that ignores it keeps running.
+- Cleanup still runs. If it fails, its failure prints and the exit code stays 130.
+- `SIGTERM`, sent by `docker stop`, Kubernetes, `timeout`, and CI cancellation, cancels the same way and exits 143.
+
+See [`execute()`](/docs/api/crust#executeoptions) for caller signals and repeated signals.
 
 ## Handle errors in code
 
@@ -94,7 +99,7 @@ To assert rendered messages and exit codes, use [`captureExecute()`](/docs/guide
 
 ## Framework errors
 
-Crust reports its own failures as [`CrustError`](/docs/api/errors): unknown commands, argv syntax, conversion and validation of arguments and flags, results that fail [`.output()`](/docs/guide/values-and-validation#command-results), and mistakes in command or Extension definitions. Each carries a `code`, such as `PARSE`, `VALIDATION`, or `COMMAND_NOT_FOUND`.
+Crust reports its own failures as [`CrustError`](/docs/api/errors): unknown commands, argv syntax, conversion and validation of arguments and flags, results that fail [`.output()`](/docs/guide/values-and-validation#command-results), missing or invalid [`@crustjs/env`](/docs/modules/env) variables, and mistakes in command or Extension definitions. Each carries a [`code`](/docs/api/errors#codes), such as `PARSE`, `VALIDATION`, or `COMMAND_NOT_FOUND`.
 
 - Branch on the code, not message text: after `error instanceof CrustError`, `error.is("VALIDATION")` also narrows `details`, such as the schema issues and their `flags.<name>` paths.
 - `toJSON()` returns `code`, `message`, and `details` when present. [`json()`](/docs/modules/extensions/json) prints it for `--json` failures, and MCP reports `<code>: <message>`.

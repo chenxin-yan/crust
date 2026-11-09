@@ -19,9 +19,11 @@ Available commands: deploy
 # exit 1
 ```
 
-`help()` adds `-h` and `--help` and shows help when this actionless root is invoked. The `.extend()` order doesn't change behavior: `--help --version` prints help and `--version --help` the version, the flag given first winning as in GNU tools, and `--no-color` applies to help output too.
+- `help()` adds `-h` and `--help`, and shows help when an actionless command, like this root, runs.
+- `.extend()` order doesn't change behavior. When several such flags are passed, the first one wins, as in GNU tools: `--help --version` prints help, `--version --help` the version.
+- `--no-color` applies to help output too.
 
-Call `.extend()` on the root builder, not inside a command recipe. See [built-in Extensions](/docs/modules/extensions) for the full list.
+Call `.extend()` on the root builder; registering Extensions inside a command recipe is a `DEFINITION` error. See [built-in Extensions](/docs/modules/extensions) for the full list.
 
 ## Write your own
 
@@ -40,21 +42,32 @@ $ deploy --preview
 nothing changed
 ```
 
-`.handle(flag, run)` takes over the invocation when the user passes a flag the Extension owns, unless it is a negated boolean such as `--no-preview`: `run` replaces `preRun`, validation, and the action, and `run()` reports a `handled` outcome. The flag name must come from the Extension's own `.flags()`, so a typo is a compile error. Validation includes invalid argv and environment values, so a handler wins over them; an invalid flag or argument reads as `undefined` in `ctx.flags` and `ctx.args`, not as its default, and doesn't trigger a handler.
+`.handle(flag, run)` takes over the invocation when the user passes that flag:
 
-When several handled flags are passed, the one given first on the command line wins, whatever the `.extend()` order. Pass `{ eager: true }` for flags that must win over every other handler, as `help()` and `version()` do: `deploy --preview --help` shows help. Typed `run()` input ranks handled flags by the key order of its `flags` object, and a flag set only through its `env` variable ranks after flags passed on the command line.
+- `run` replaces `preRun`, validation, and the action; `run()` reports a `handled` outcome.
+- A negated boolean such as `--no-preview` doesn't trigger it.
+- The flag must come from the Extension's own `.flags()`, so a typo is a compile error.
+- Invalid argv or environment values don't stop a handler. They read as `undefined` in `ctx.flags` and `ctx.args`, not as their default, and an invalid value of a handled flag doesn't trigger its handler.
+- When several handled flags are passed, the one given first on the command line wins, whatever the `.extend()` order. Pass `{ eager: true }` to rank a flag before every non-eager handler, as `help()` and `version()` do: `deploy --preview --help` shows help.
 
-Give each Extension a namespaced id such as `acme:preview`. Registering the same id again replaces the earlier registration. The types don't track ids yet: they still see the earlier registration's commands, so a re-registration that contributes the same literal command names, or a later command reusing one of them, is a compile-time collision even though the app runs.
+See [`ExtensionHandleOptions`](/docs/api/types#extensionhandleoptions) for how `env` values and typed `run()` input rank.
 
-Builder methods other than `.factory()` return new frozen Extensions; there is no finalization step. Declare flags and Contexts before the hooks that read them. Collection methods append; setting a hook again replaces its callback.
+### Configurable Extensions
 
-For configurable Extensions, chain `.factory()`:
+To accept options, chain `.factory()`:
 
 <include lang="ts" meta='title="banner.ts"'>
   ../../../examples/guide/extensions-factory.ts
 </include>
 
 Return a chain on the supplied Extension to keep its id. See [`ExtensionBuilder` and `ExtensionFactory`](/docs/api/types#extension-types) for the full contracts.
+
+### Ids and builders
+
+- Give each Extension a namespaced id, such as `acme:preview`, with `defineExtensionId()`.
+- Registering the same id again replaces the earlier registration. TypeScript doesn't track ids, though: if the re-registration contributes the same literal command names, or a later command reuses one, it is a compile-time collision even though the app runs.
+- Builder methods other than `.factory()` return new frozen Extensions; there is no build step.
+- Declare flags and Contexts before the hooks that read them. Collection methods such as `.flags()` append; setting a hook again replaces its callback.
 
 ## Owned flags and commands
 
@@ -71,7 +84,13 @@ $ my-cli doctor
 checking my-cli
 ```
 
-Contributed commands work like commands added with `.add()`, including typed `run()` paths. Like sibling commands, they cannot replace each other: a name or alias that collides with an app command or another Extension's command is a compile error, and a collision TypeScript can't see, such as a name chosen by a factory option, is a `DEFINITION` error when the app prepares. Such a name doesn't hide collisions among the other, statically known command names, but it makes `run()` results `unknown` for Extension commands registered up to and in that call, since a same-id re-registration may replace them; your own commands keep their result types. [`@crustjs/mcp`](/docs/modules/mcp) uses this pattern to install an `mcp` command that serves your commands as MCP tools.
+Contributed commands work like commands added with `.add()`, including typed `run()` paths.
+
+- A name or alias that collides with an app command or another Extension's command is a compile error.
+- A collision TypeScript can't see, such as a name chosen by a factory option, is a `DEFINITION` error when the app prepares.
+- Such a runtime-only name makes `run()` results `unknown` for the Extension commands registered up to and in that `.extend()` call, since a same-id re-registration may replace them. Your own commands keep their result types.
+
+[`@crustjs/mcp`](/docs/modules/mcp) uses this pattern to install an `mcp` command that serves your commands as MCP tools.
 
 ## Hooks
 
@@ -86,20 +105,41 @@ setup → handle → preRun → validation → action → postRun
   ../../../examples/guide/extensions-hooks.ts
 </include>
 
-- `setup` configures the process before anything prints, such as color or log level. Every setup runs, in `.extend()` order, before any handler; setups must not depend on each other. Register cleanup with `ctx.defer()`, as in a Context's setup: it runs after `postRun` hooks, in reverse order together with Context cleanup, including after a failure.
-- `.handle()` is the only way a flag takes over the invocation; see [Write your own](#write-your-own).
-- `noAction` runs when the command has no action and no handler took over, and ends the invocation as `handled`. Use it for fallbacks such as help for a command group. Only one Extension in an application may set it; a second is a `DEFINITION` error when the app prepares.
-- `preRun` runs only when the action will run, in `.extend()` order, before validation. Use it for checks and notices that must precede every action but never `--help` or `--version`, such as a login check or a deprecation warning. Throw to fail the invocation; `preRun` can't end it successfully.
-- `postRun` runs in reverse order after every invocation that reached hooks, including handled and failed ones. A `completed` outcome carries the command's result as `outcome.result`: the awaited output of its [`.output()`](/docs/api/crust#outputschema) schema if it declares one, otherwise the action's awaited return value (`undefined` for a command without an action). After an [async generator action](/docs/guide/commands#stream-events), `completed` and `failed` outcomes also carry its yielded values as `outcome.events` (`[]` if it yielded none). Preparation, routing, argv-parse, and typed `run()` input-binding failures happen before hooks and skip it; a `ctx.bindInput()` failure is a failure of the `setup` or `preRun` hook that called it and reaches it. Context cleanup runs afterwards.
-- `onError` renders terminal errors from `.execute()` in `.extend()` order; see [Error handling](/docs/guide/error-handling).
-- `.renderer()` chooses how the action's output is presented; see [Renderers](#renderers).
-- `ctx.bindInput({ args, flags, raw })` in `setup` or `preRun` binds structured input, such as a JSON object read from a flag like [`input()`](/docs/modules/extensions/input) does, into the invocation. Arguments, flags, and passthrough tokens given explicitly on argv win, even when equal to the default; every other supplied key replaces the environment value or default and is converted exactly as typed `run()` input. Under `run()` nothing came from argv, so supplied keys replace the typed input. The last call wins. Afterwards `ctx.args`, `ctx.flags`, and `ctx.rawArgs` show the bound values to every later hook, and validation and the action use them. Bind in `setup` so every `preRun` check sees the values whatever the `.extend()` order; it then also happens for `--help` and `--version`. Bind in `preRun` to do it only when the action will run. A bound flag never selects a handler. An unknown key, a positional argument supplied after an omitted earlier one, or a conversion failure (including a non-array value for a variadic argument or `multiple` flag) throws a `PARSE` error that fails the invocation like any other error from that hook: it reaches `onError` and `postRun`, and from `setup` it also stops any flag handler, `preRun`, and the action.
-- `ctx.sources` reports where each current value came from, keyed by argument name and canonical flag name: `"argv"`, `"run"`, `"env"`, `"bound"`, or `"default"`; a name without a value is absent, and `raw` covers passthrough tokens. It reads live, so keys `bindInput` supplied report `"bound"`. For example, with a boolean `verbose` flag (short `-V`) and a `port` flag read from `PORT`, `my-cli -V` with `PORT=9000` set gives `{ args: {}, flags: { verbose: "argv", port: "env" }, raw: undefined }`. An Extension that converts input before binding it can drop the keys argv gave first, so an invalid value argv overrides never fails.
-- `ctx.commandPathOf(definition)` returns where a command definition is mounted, as canonical names from the root like `ctx.commandPath`, or `undefined` when the app does not add it. It matches the definition object by identity, so an Extension that takes command definitions from app code can print their command lines.
+| Hook        | Runs                                                                   | Use it for                                                                            |
+| ----------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `setup`     | Every invocation, in `.extend()` order, before any handler             | Process settings such as color or log level                                           |
+| `.handle()` | When its flag is passed; ends the invocation as `handled`              | Flags that take over, like `--help`                                                   |
+| `noAction`  | The command has no action and no handler took over; ends `handled`     | Fallbacks such as help for a command group                                            |
+| `preRun`    | Only when the action will run, in `.extend()` order, before validation | Login checks, deprecation warnings                                                    |
+| `postRun`   | After every invocation that reached hooks, in reverse order            | Reporting the outcome                                                                 |
+| `onError`   | `execute()` failures, in `.extend()` order                             | Custom error output; see [Error handling](/docs/guide/error-handling#suggest-the-fix) |
 
-Only handlers and `noAction` can end an invocation early. Handlers are selected by the order of their flags on the command line, or by key order for typed `run()`; `noAction` runs only when the command has no action and no handler took over. Reordering `.extend()` changes neither choice, only what is meant to be ordered: setups, `preRun` checks, and `onError` hooks run in registration order, and `postRun` hooks and cleanups in reverse.
+- **`setup`:** every setup runs, so setups must not depend on each other. Register cleanup with `ctx.defer()`, as in a Context's setup. It runs after `postRun` hooks, in reverse order together with Context cleanup, including after a failure.
+- **`preRun`:** never runs for `--help`, `--version`, or `noAction`. Throw to fail the invocation; `preRun` can't end it successfully.
+- **`postRun`:** a `completed` outcome carries `outcome.result`: the [`.output()`](/docs/api/crust#outputschema) schema's output if the command declares one, otherwise the action's awaited return value. After an [async generator action](/docs/guide/commands#stream-events), `completed` and `failed` outcomes also carry its yielded values as `outcome.events`.
+- **Early failures:** routing, argv-parse, and typed `run()` input failures happen before the other hooks. Under `execute()`, `onError` still sees routing and argv-parse failures; `run()` never calls `onError` and returns a `failed` outcome.
+- **One per app:** only one Extension may set `noAction`, and only one `.renderer()`. A second is a `DEFINITION` error when the app prepares.
 
-Hook flags are **pre-validation values**, not schema outputs. Check values before using them. See [`ExtensionHooks`](/docs/api/types#extensionhooks) for the full lifecycle.
+Only handlers and `noAction` can end an invocation early, and reordering `.extend()` changes neither choice. It only orders setups, `preRun` checks, and `onError` hooks (registration order) and `postRun` hooks and cleanups (reverse).
+
+<Callout type="warn">
+  Hook flags are **pre-validation values**, not schema outputs. Check values before using them.
+</Callout>
+
+See [`ExtensionHooks`](/docs/api/types#extensionhooks) for the full lifecycle.
+
+### Hook context
+
+Besides `args`, `flags`, and output, a hook's `ctx` offers:
+
+- **`ctx.bindInput({ args, flags, raw })`** in `setup` or `preRun` binds structured input, such as JSON read from a flag, as [`input()`](/docs/modules/extensions/input) does. Values given explicitly on argv win; other supplied keys replace environment values and defaults, converted as typed `run()` input. Later hooks, validation, and the action see the bound values.
+  - Bind in `setup` so every `preRun` sees the values; it then also happens for `--help` and `--version`. Bind in `preRun` to bind only when the action will run.
+  - The last call wins, and a bound flag never selects a handler.
+  - An unknown key or a value that fails conversion throws a `PARSE` error from the calling hook.
+- **`ctx.sources`** reports where each value came from: `"argv"`, `"run"`, `"env"`, `"bound"`, or `"default"`. For example, with a boolean `verbose` flag (short `-V`) and a `port` flag read from `PORT`, `my-cli -V` with `PORT=9000` set gives `{ args: {}, flags: { verbose: "argv", port: "env" }, raw: undefined }`. Use it to skip the keys argv gave before converting input yourself.
+- **`ctx.commandPathOf(definition)`** returns where a command definition is mounted, such as `["my-cli", "deploy"]`, or `undefined`. Use it to print command lines for definitions that app code passes to your Extension.
+
+See [`ExtensionContext`](/docs/api/types#extensioncontext) for the exact rules.
 
 ### Renderers
 
@@ -109,13 +149,19 @@ Core decides when output happens; one Extension can decide how. `.renderer(selec
   ../../../examples/guide/extensions-renderer.ts
 </include>
 
-- `text` and `diag` receive each line the action or a Context writes with `stdout()` and `stderr()`. An Extension's own `ctx.stdout` and `ctx.stderr` bypass the renderer, so help and notices print as usual.
-- `result`, if set, receives the action's return value after the action completes and its [`.output()`](/docs/api/crust#outputschema) schema, if any, validates it, and before `postRun`. Throwing from it fails the invocation.
-- `stream`, if set, is called once when the action turns out to be an [async generator](/docs/guide/commands#stream-events), before its first event, so the renderer knows the invocation streams before `event`, `result`, or `error`. `event`, if set, receives each value the action yields, as it is yielded and before the caller's `onEvent` option. Throwing from either closes the generator and fails the invocation. Without `event`, events are not printed.
-- `error`, if set, replaces Core's `Error: message` rendering in `.execute()` when no `onError` hook claimed the failure. Core calls it at most once, never under `.run()`, where callers read `outcome.error`, and never for a cancellation.
-- `cleanup`, if set, replaces Core's `Cleanup failed: message` lines in `.execute()`: Core calls it once for each cleanup failure that follows an already-rendered failure or happens while a cancellation unwinds; cleanups that fail together are passed one by one, not as their `SuppressedError` or `AggregateError`. If it throws, Core writes its own lines, so a cleanup failure is never hidden. Exit codes don't change.
+| Member            | Receives                                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------------------- |
+| `text`, `diag`    | Each line the action or a Context writes with `stdout()` and `stderr()`                                       |
+| `result`          | The action's return value, after any `.output()` schema validated it, before `postRun`                        |
+| `stream`, `event` | A signal that the action is an [async generator](/docs/guide/commands#stream-events), then each yielded value |
+| `error`           | In `execute()` only, a failure no `onError` hook claimed; never a cancellation                                |
+| `cleanup`         | In `execute()` only, each cleanup failure Core would print as `Cleanup failed:`                               |
 
-Core calls `select` once per invocation, after every setup and before any flag handler, so it sees what setups bound. It may be `async`, for example to `import()` a formatter only when it is needed; Core awaits it. Output the action side writes earlier, such as from a Context a setup pulled, waits and then goes through the chosen renderer; without a `.renderer()` in the application, it is written immediately. A setup failure still goes through the chosen renderer: Core calls `select` after it, since flags are already bound, and falls back to the default if `select` fails too. A selector or renderer that throws there never replaces the setup failure. Routing and argv syntax errors happen before flags are bound and render by default. Only one Extension in an application may set `.renderer()`; a second is a `DEFINITION` error when the app prepares.
+- An Extension's own `ctx.stdout` and `ctx.stderr` bypass the renderer, so help and notices print as usual.
+- Optional members fall back to Core's behavior; without `event`, events aren't printed. Exit codes never change.
+- Throwing from `result`, `stream`, or `event` fails the invocation. If `error` or `cleanup` throws, Core prints the failure itself.
+- `select` runs once per invocation, after every setup and before any handler, and may be `async`, for example to `import()` a formatter lazily. Output written before it returns waits for the chosen renderer.
+- Routing and argv syntax errors happen before flags are bound, so they render by default.
 
 ## Dependency injection
 
@@ -131,9 +177,10 @@ ready
 outcome: completed
 ```
 
-`.provide()` installs Context instances across the command tree; `.use()` declares which factories the hooks need. An Extension that supplies and reads a Context needs both. To use an app-supplied Context instead, omit the Extension's `.provide()` and call `.provide(logger())` on the app before `.extend(logging)`. That order is a TypeScript rule: the app checks an Extension's dependencies when it prepares, so at runtime the reverse order works too.
-
-A provided Context's [documentation sections](/docs/guide/contexts#documentation-owned-by-a-context) appear once on the root, not on every command.
+- `.provide()` installs Context instances across the command tree.
+- `.use()` declares which factories the hooks need. An Extension that supplies and reads a Context needs both.
+- To use an app-supplied Context instead, omit the Extension's `.provide()` and call `.provide(logger())` on the app before `.extend(logging)`. TypeScript requires that order; at runtime, the reverse works too.
+- A provided Context's [documentation sections](/docs/guide/contexts#documentation-owned-by-a-context) appear once, on the root.
 
 A provided Context's [flags](/docs/guide/contexts#flags-owned-by-a-context) are parsed by the root, its inline `.command()` children, and the commands that `.use()` the Context or [the Extension](#use-an-extensions-contexts-from-a-command):
 
@@ -154,7 +201,7 @@ When the Extension's own hooks `.use()` the Context, every command parses its fl
   ../../../examples/guide/extensions-provider-flags.ts#hooks
 </include>
 
-A flag-owning Context requires successful validation. Use it in the action, or in `postRun` after validation has succeeded—not after an Extension handled the invocation early and skipped validation.
+A flag-owning Context requires successful validation. Read it in the action, or in `postRun` after a `completed` outcome—not after a handler skipped validation.
 
 ### Use an Extension's Contexts from a command
 
@@ -169,7 +216,9 @@ $ my-cli now
 12:00
 ```
 
-`.use(time)` and `.use(time())` both declare the Contexts `time()` provides, here `ctx.clock`, so the command does not import the Context factory, and it parses the flags they own. TypeScript requires those Contexts where the command is added, as for `.use(clock)`; when the app prepares, Core throws a `DEFINITION` error (`missing-extension`) if it does not extend that Extension.
+- `.use(time)` and `.use(time())` both declare the Contexts `time()` provides, here `ctx.clock`, and the command parses the flags they own.
+- The command doesn't need to import the Context factory.
+- TypeScript requires those Contexts where the command is added. At runtime, an app that doesn't extend the Extension throws a `DEFINITION` error (`missing-extension`) when it prepares.
 
 ## Required root metadata
 
@@ -179,9 +228,9 @@ An Extension that needs `version` can require it with `defineExtension<"version"
   ../../../examples/guide/extensions-metadata.ts
 </include>
 
-TypeScript rejects `.extend(stamp)` unless the root declares `version`. Bun and Node builds (`bun build`, or `crust build` for those runtimes) skip this check, so run `tsc --noEmit` first.
+TypeScript rejects `.extend(stamp)` unless the root declares `version`. Only TypeScript checks this: `bun`, `node`, and `crust build` don't type-check and the runtime [doesn't repeat it](/docs/api/crust#chaining-semantics), so run `tsc --noEmit` first.
 
-If a factory argument can supply the value instead, build the factory without a metadata requirement and annotate it with overloads. Only calls that omit the argument then require root metadata. Like the check above, TypeScript enforces this and the runtime [does not repeat it](/docs/api/crust#chaining-semantics), so in code that type-checks the implementation can rely on one of the two being set:
+If a factory argument can supply the value instead, build the factory without a metadata requirement and annotate it with overloads. Only calls that omit the argument then require root metadata, so code that type-checks can rely on one of the two being set:
 
 <include lang="ts" meta='title="metadata-optional.ts"'>
   ../../../examples/guide/extensions-metadata-optional.ts
@@ -204,7 +253,7 @@ Environment:
   Set DEPLOY_TOKEN before running.
 ```
 
-The callback runs when the application prepares and receives a snapshot containing contributed commands and flags, but no Extension-contributed sections. Commands it reads are built on demand, so a callback that reads only root metadata leaves the rest of the tree unbuilt. See [`ExtensionSectionContribution`](/docs/api/types#extensionsectioncontribution) for validation and audience rules.
+The callback runs when the app prepares. Its snapshot includes Extension commands and flags, but not Extension-contributed sections. See [`ExtensionSectionContribution`](/docs/api/types#extensionsectioncontribution) for validation and audience rules.
 
 ## Build hooks
 
@@ -221,9 +270,11 @@ Preparing Command Snapshot for my-cli...
   acme:manifest  1 file  acme-manifest/manifest.json
 ```
 
-Put files under an Extension-specific directory such as `acme-manifest/`. Loose files at the root of `.crust/artifacts/` are not copied into staged packages. Return file contents rather than writing into the build output yourself.
+- Return file contents; don't write into the build output yourself.
+- Put files under an Extension-specific directory such as `acme-manifest/`. Loose files at the root of `.crust/artifacts/` aren't copied into staged packages.
+- Hooks run in registration order, and section callbacks refresh after each one, so later hooks see sections based on earlier files. For example, register `skill()` before `man()` to list packaged skills in the man page.
 
-Hooks run in registration order. Section callbacks refresh after each hook, so later hooks can see sections based on earlier artifacts. For example, register `skill()` before `man()` to list packaged skills in the man page. See [`ExtensionBuildContext`](/docs/api/types#extensionbuildcontext) and [`BuildFile`](/docs/api/types#buildfile) for output and path rules.
+See [`ExtensionBuildContext`](/docs/api/types#extensionbuildcontext) and [`BuildFile`](/docs/api/types#buildfile) for output and path rules.
 
 ## Section consumers
 
@@ -247,6 +298,7 @@ Run preview first.
 ![preview](preview.png)
 ```
 
-`only: [webDocs]` keeps the Screenshots section out of other consumers, such as help. Use `except` to exclude consumers instead; both accept Extension values or ids.
+- `only: [webDocs]` keeps the Screenshots section out of other consumers, such as help. Use `except` to exclude consumers instead; both accept Extension values or ids.
+- `visibleSectionsFor(snapshot, id)` selects visible commands and merges same-title sections for that consumer. For one command, use `sectionsFor(sections, id)`.
 
-`visibleSectionsFor(snapshot, id)` selects visible commands and merges same-title sections for that consumer. For one command, use `sectionsFor(sections, id)`. Both come from [`@crustjs/core/tooling`](/docs/modules/core#tooling-subpath).
+Both come from [`@crustjs/core/tooling`](/docs/modules/core#tooling-subpath).

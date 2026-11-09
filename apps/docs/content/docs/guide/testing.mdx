@@ -3,13 +3,21 @@ title: Testing
 description: Test command results, terminal behavior, and prompts.
 ---
 
-Use `run()` for values and errors, `captureExecute()` for what a terminal user sees, and `runInteractive()` for prompts.
+Pick the helper that matches what you assert:
+
+| Helper             | Checks                                       |
+| ------------------ | -------------------------------------------- |
+| `run()`            | Results, errors, and captured output         |
+| `captureExecute()` | What a terminal user sees, and the exit code |
+| `runInteractive()` | Prompts driven by fake terminal input        |
+
+`run()` is built into every app. The other two come from `@crustjs/testing`:
 
 ```npm
 npm install -D @crustjs/testing
 ```
 
-`@crustjs/testing` requires `@crustjs/core` as a peer. `runInteractive()` lives in `@crustjs/testing/interactive` and also needs `@crustjs/prompts`; install it if your project does not already use it.
+`@crustjs/testing` requires `@crustjs/core` as a peer. `runInteractive()` lives in `@crustjs/testing/interactive` and also needs `@crustjs/prompts`; install it if your project doesn't already use it.
 
 ## Inspect values and errors
 
@@ -17,18 +25,32 @@ npm install -D @crustjs/testing
   ../../../examples/guide/testing.ts#run
 </include>
 
-`run()` answers whether a Command Action completed, was handled early by an Extension, or failed, and captures its result, error, `stdout`, and `stderr`. Its `RunOutcome` type is a union on `status`: narrow to `"completed"` before reading the typed `result`. Use it for tests and embedding; see the [full `run()` contract](/docs/api/crust#runpath-input-options).
+`run()` reports whether a Command Action completed, was handled early by an Extension, or failed, with its result, error, `stdout`, and `stderr`.
 
-When many tests target one subcommand, bind it once with [`app.at(path)`](/docs/api/crust#atpath) and call `handle.run(input?, options?)` with the same typed input and outcome.
+- Its `RunOutcome` type is a union on `status`: narrow to `"completed"` before reading the typed `result`.
+- When many tests target one subcommand, bind it once with [`app.at(path)`](/docs/api/crust#atpath) and call `handle.run(input?, options?)`, with the same typed input and outcome.
+
+See the [full `run()` contract](/docs/api/crust#runpath-input-options).
 
 ## Capture terminal behavior
 
 <include lang="ts">../../../examples/guide/testing.ts#capture-execute</include>
 
-`captureExecute()` answers what `execute()` would print and which exit code it would set. It includes Extension error rendering and restores the prior process exit state after the test; see the [`captureExecute()` reference](/docs/modules/testing#captureexecuteapp-argv). Patching `process.stdout.write` does not capture Crust's output: outside Windows, `execute()` writes synchronously to file descriptors 1 and 2. Use `captureExecute()` or pass `execute({ io })`.
+`captureExecute()` returns what `execute()` would print and the exit code it would set, including Extension error rendering. It restores the prior process exit state afterwards; see the [`captureExecute()` reference](/docs/modules/testing#captureexecuteapp-argv).
+
+<Callout type="warn">
+  Patching `process.stdout.write` doesn't capture Crust's output: outside Windows, `execute()`
+  writes synchronously to file descriptors 1 and 2. Use `captureExecute()`, or pass `io` to
+  `execute()`.
+</Callout>
 
 ## Drive prompts
 
 <include lang="ts">../../../examples/guide/testing.ts#interactive</include>
 
-`runInteractive()` answers what a user sees while a built-in prompt reads fake terminal input. `screen()` contains prompt, progress, and `stderr` output, while the action's `stdout` output is read with the handle's `stdout()` method; see the [`runInteractive()` reference](/docs/modules/testing#runinteractiveapp-path-input).
+`runInteractive()` shows what a user sees while a built-in prompt reads fake terminal input.
+
+- `screen()` contains prompt, progress, and `stderr` output.
+- The action's `stdout` output is read with the handle's `stdout()` method.
+
+See the [`runInteractive()` reference](/docs/modules/testing#runinteractiveapp-path-input).

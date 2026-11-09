@@ -2,7 +2,7 @@
 title: "Prompts"
 ---
 
-`@crustjs/prompts` exports seven terminal prompts, shared themes, injected terminal IO, and renderer helpers. Prompt UI writes to stderr by default.
+`@crustjs/prompts` exports terminal prompts, shared themes, injected terminal IO, and helpers for custom prompts. Prompt UI writes to stderr by default.
 
 ## Install
 
@@ -63,7 +63,7 @@ Password input masks active text and shows a fixed-length mask after submission.
 const proceed = await confirm({ message: "Continue?", default: false });
 ```
 
-Confirm returns a boolean. Left, Right, and Tab toggle the value; `y` and `h` select true, while `n` and `l` select false.
+Confirm returns a boolean. Left, Right, and Tab toggle the value; `y` and `h` select true, `n` and `l` select false, and Enter submits.
 
 <auto-type-table
   path="../../../../../packages/prompts/src/prompts/confirm.ts"
@@ -154,9 +154,12 @@ ci-user
 NonInteractiveError: Prompts require an interactive terminal (TTY).
 ```
 
-Every prompt returns `initial` without rendering when it is provided. A prompt renders only when both its input and its output are TTYs. Otherwise, such as when stdin is piped or stderr is redirected to a file, all prompts except `password()` can return an explicitly supplied `default`; otherwise they reject with `NonInteractiveError`.
+- With `initial`, every prompt returns it without rendering.
+- A prompt renders only when both its input and its output are TTYs.
+- Otherwise, such as when stdin is piped or stderr is redirected, a prompt returns an explicitly supplied `default` (`password()` has none) or rejects with `NonInteractiveError`. `confirm()` defaults to yes interactively, but without a TTY only an explicit `default` counts.
+- Ctrl+C rejects with a `DOMException` whose name is `AbortError`.
 
-Ctrl+C rejects with a `DOMException` whose name is `AbortError`.
+To check before prompting, `isTTY(input?)` reports whether the resolved input stream is a TTY, and `assertTTY(input?)` throws `NonInteractiveError` when it is not. Neither checks the output stream.
 
 ## Custom prompts
 

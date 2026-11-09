@@ -17,7 +17,14 @@ Available commands: deploy
 # exit code: 1
 ```
 
-`didYouMean()` handles `COMMAND_NOT_FOUND` during `execute()` presentation. Suggestions use visible sibling command names and aliases, then print the canonical name.
+`didYouMean()` presents `COMMAND_NOT_FOUND` errors in `execute()`. It suggests the visible sibling command closest to the typed name:
+
+- Candidates are command names and their aliases; the suggestion always prints the canonical name.
+- A candidate matches when it starts with the typed text or is a few edits away from it.
+- Prefix matches rank first, then fewer edits; ties go alphabetically.
+- Hidden commands are never suggested.
+
+Without a match, the message has no `Did you mean` part.
 
 ## API
 
@@ -30,6 +37,14 @@ new Crust("my-cli").extend(didYouMean({ mode: "help" }));
   name="DidYouMeanOptions"
 />
 
-`"error"` writes the message and available commands to stderr. `"help"` writes the message and parent help to stdout, while core keeps the nonzero exit code.
+| `mode`              | Output                                    |
+| ------------------- | ----------------------------------------- |
+| `"error"` (default) | Message and available commands, on stderr |
+| `"help"`            | Message and the parent's help, on stdout  |
 
-An action-bearing parent treats an unmatched token as a positional argument, so this Extension only suggests a command when routing produces `COMMAND_NOT_FOUND`. Programmatic `run()` returns the failed outcome without running presentation hooks.
+The exit code stays 1 in both modes.
+
+## Limitations
+
+- A parent with a Command Action treats an unknown token as a positional argument, so no `COMMAND_NOT_FOUND` occurs and nothing is suggested.
+- [`run()`](/docs/api/crust#runpath-input-options) returns the failed outcome without presenting it.

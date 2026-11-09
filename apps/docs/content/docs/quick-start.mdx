@@ -19,6 +19,8 @@ npx create-crust@latest my-cli
 cd my-cli
 ```
 
+The initializer asks for a runtime (Bun or Node.js), a build output, and whether to install dependencies and initialize Git. Pass [options](#create-crust-options) to skip the prompts.
+
 <Files>
   <Folder name="my-cli" defaultOpen>
     <Folder name="src" defaultOpen>
@@ -34,6 +36,8 @@ cd my-cli
 </Step>
 <Step>
 ### Run it
+
+The `dev` script runs `src/cli.ts` with your selected runtime:
 
 ```npm
 npm run dev -- Ada --greet Welcome
@@ -57,8 +61,8 @@ Arguments:
 
 Options:
   -g, --greet <string>         Greeting to use [default: "Hello"]
-  -v, --version                Show version number
   -h, --help                   Show help
+  -v, --version                Show version number
 ```
 
 </Step>
@@ -90,7 +94,11 @@ npm run build
 npm run start Ada
 ```
 
-`crust build` stages your selected artifact and npm packaging metadata in `.crust/`. npm is optional: standalone binaries embed their runtime and can also ship as [release downloads or through Homebrew and other installers](/docs/guide/build-and-distribution#custom-distribution), without the Node-based npm launcher. Runtime packages still require their selected runtime. See [Build and distribution](/docs/guide/build-and-distribution) for targets and output layouts.
+- `build` runs `crust build`, which stages your selected artifact and npm packaging metadata in `.crust/`.
+- `start` runs the built CLI from `.crust/root/bin/`.
+- `release` runs `crust publish` to publish the staged packages to npm.
+
+npm is optional: standalone binaries embed their runtime and can also ship as [release downloads or through Homebrew and other installers](/docs/guide/build-and-distribution#custom-distribution), without the Node-based npm launcher. Runtime packages still require their selected runtime. See [Build and distribution](/docs/guide/build-and-distribution) for targets and output layouts.
 
 <Callout type="info">
   `create-crust` and the `crust` CLI are themselves built with Crust; see the
@@ -99,6 +107,25 @@ npm run start Ada
 
 </Step>
 </Steps>
+
+## `create-crust` options
+
+`create-crust` prompts for every option you don't pass. Without an interactive terminal, prompts take their defaults.
+
+```npm
+npx create-crust@latest my-cli --runtime node --artifact binary --no-git
+```
+
+| Option                          | Default                                 | Effect                                                                                                                                                                |
+| ------------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `[directory]`                   | prompt, `my-cli`                        | Destination. Its basename (the current directory's for `.`) becomes the package and command name: letters, digits, `.`, `_`, and `-`, starting with a letter or digit |
+| `--runtime`                     | `bun`                                   | `bun` or `node`: the runtime used by the `dev` and `start` scripts and by `crust build`; saved as `crust.runtime` in `package.json`                                   |
+| `--artifact`                    | `binary` for Bun, `package` for Node.js | `binary`: a standalone executable with the runtime embedded. `package`: a JavaScript bundle that needs the runtime installed. Saved as `crust.artifact`               |
+| `--install`, `--no-install`     | install                                 | Install dependencies with the detected package manager                                                                                                                |
+| `--git`, `--no-git`             | initialize                              | Initialize a Git repository; skipped inside an existing one                                                                                                           |
+| `--overwrite`, `--no-overwrite` | prompt, don't overwrite                 | When the destination exists (or the current directory is not empty), overwrite conflicting files or abort                                                             |
+
+Scripts in the next steps and generated README use the package manager detected from the destination's lockfiles, then the one running `create-crust`, defaulting to npm. Node.js binaries have extra build requirements; see [Build and distribution](/docs/guide/build-and-distribution#nodejs-binaries).
 
 ## Manual setup
 

@@ -24,14 +24,14 @@ The `number` type converts `1.5` before the Command Action runs, so `flags.secon
 
 ## Built-in types
 
-| `type`    | Action value                                     |
-| --------- | ------------------------------------------------ |
-| `string`  | `string`                                         |
-| `number`  | `number`                                         |
-| `boolean` | `boolean`                                        |
-| `url`     | `URL`                                            |
-| `path`    | `string`, resolved against the working directory |
-| `json`    | `unknown`, the parsed token                      |
+| `type`    | Action value                                                                |
+| --------- | --------------------------------------------------------------------------- |
+| `string`  | `string`                                                                    |
+| `number`  | `number`                                                                    |
+| `boolean` | `boolean`                                                                   |
+| `url`     | `URL`                                                                       |
+| `path`    | `string`, absolute: `~` expanded and resolved against the working directory |
+| `json`    | `unknown`, the parsed token                                                 |
 
 With a built-in type, Crust also handles presence: `required` rejects a missing value, `default` fills one in, and `multiple` or `variadic` collects several. See [Arguments and Flags](/docs/guide/arguments-and-flags).
 
@@ -48,7 +48,11 @@ $ deploy
 deploying to the default region
 ```
 
-`parse` runs once on the raw string and its return type becomes the action value. Here `parse` returns `string[]`, and the flag is neither required nor defaulted, so the action receives `string[] | undefined`. It only converts. To reject a value, throw; the error is reported as `Failed to parse --regions: <message>`.
+`parse` takes the raw string and its return type becomes the action value. Here it returns `string[]`, and the flag is neither required nor defaulted, so the action receives `string[] | undefined`.
+
+- Only `type: "string"` definitions accept `parse`.
+- It runs after `choices` is checked, once per value for `multiple` and `variadic`, and on a declared `default` too.
+- To reject a value, throw; the error is reported as `Failed to parse --regions: <message>`.
 
 ## Schema-backed definitions
 
@@ -127,7 +131,8 @@ A command can declare what its action returns with `.output(schema)`, using the 
 </include>
 
 - **Compile time:** the action must return the schema's input type. Returning `{ id: "1" }` here is a TypeScript error.
-- **Runtime:** after the action resolves, Crust validates the result (`undefined` for a command without an action); an invocation an Extension handles, such as `--help`, has no result to validate. The schema's output becomes the `result` of `run()`, typed as such, so defaults and transforms apply. A rejected result fails with the `OUTPUT` code: `execute()` exits `1` and `run()` returns a failed outcome. It is a bug in the command, not in the user's input.
+- **Runtime:** after the action resolves, Crust validates the result (`undefined` for a command without an action). The schema's output becomes the typed `result` of `run()`, so defaults and transforms apply. An invocation an Extension handles, such as `--help`, has no result to validate.
+- **Rejected results:** fail with the `OUTPUT` code: `execute()` exits `1` and `run()` returns a failed outcome. This is a bug in the command, not in the user's input.
 - **Tooling:** the command's snapshot carries the output as JSON Schema in `outputSchema` when the schema can produce it. Zod 4.2+ and ArkType 2.1.28+ can; Valibot needs `toStandardJsonSchema()` from `@valibot/to-json-schema`.
 
 Declaring `.output()` also tells [`json()`](/docs/modules/extensions/json#text-printed-with-stdout) that the result _is_ the command's output, so under `--json` your printed text is dropped in favor of the JSON.

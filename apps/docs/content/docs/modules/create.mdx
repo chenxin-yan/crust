@@ -28,7 +28,10 @@ Pair it with any CLI and prompt libraries needed by your create tool.
 | `"./templates/base"`                            | The user's current working directory | Templates in the project where the command runs               |
 | `"/srv/templates/base"`                         | That exact filesystem path           | A location already resolved by your own code or configuration |
 
-Ship templates inside your generator with an `import.meta.url` URL: `npx`, `bun x`, and global installs run the generator from a cache while the working directory is the user's project, so a relative string would resolve there instead. Convert an existing filesystem path with `pathToFileURL()` rather than concatenating `file://`. Only `file:` URLs are accepted, and the template must be a directory.
+Ship templates inside your generator with an `import.meta.url` URL. `npx`, `bun x`, and global installs run the generator from a cache while the working directory is the user's project, so a relative string would resolve there instead.
+
+- Only `file:` URLs are accepted, and the template must be a directory.
+- Convert an existing filesystem path with `pathToFileURL()` rather than concatenating `file://`.
 
 ## Template conventions
 
@@ -39,7 +42,16 @@ Ship templates inside your generator with an `import.meta.url` URL: `npx`, `bun 
 }
 ```
 
-Text files replace `{{identifier}}` placeholders from `context`; missing values remain unchanged. Files with a null byte in their first 8 KiB are copied without interpolation.
+- Text files replace `{{identifier}}` placeholders from `context`; placeholders without a value stay unchanged.
+- Files with a null byte in their first 8 KiB are binary and copied without interpolation.
+
+```text
+templates/base/_gitignore   -> my-project/.gitignore
+templates/base/__tests__/   -> my-project/__tests__/
+```
+
+- A single leading `_` on a file name becomes `.`; `__` stays unchanged. Directory names are never renamed.
+- To layer templates, call `scaffold()` more than once with `conflict: "overwrite"`.
 
 ### Custom renderer
 
@@ -54,14 +66,9 @@ await scaffold({
 });
 ```
 
-Templates run through `render` as trusted code. Destination conflict and symlink checks still happen before any file is rendered; an error thrown or rejected by `render` fails `scaffold()`, and files written earlier in the call remain.
-
-```text
-templates/base/_gitignore   -> my-project/.gitignore
-templates/base/__tests__/   -> my-project/__tests__/
-```
-
-A single leading `_` on a filename becomes `.`, while `__` stays unchanged. Call `scaffold()` more than once with `conflict: "overwrite"` to layer templates.
+- Templates run through `render` as trusted code.
+- Destination conflict and symlink checks still happen before any file is rendered.
+- An error thrown or rejected by `render` fails `scaffold()`; files written earlier in the call remain.
 
 ## `scaffold(options)`
 
@@ -70,11 +77,22 @@ A single leading `_` on a filename becomes `.`, while `__` stays unchanged. Call
 
 See [Locating templates](#locating-templates) for how `template` resolves.
 
-The default `conflict: "abort"` throws for a non-empty destination. `"overwrite"` replaces conflicting files and leaves unrelated destination files in place.
+| `conflict`          | Non-empty destination                                                   |
+| ------------------- | ----------------------------------------------------------------------- |
+| `"abort"` (default) | Throws before writing                                                   |
+| `"overwrite"`       | Replaces conflicting files and leaves unrelated destination files alone |
 
-`dest` itself may be a symlink (its target is the destination), but an existing destination file or ancestor directory that is a symlink resolving outside that directory, or to a missing target, throws before any file is written. Symlinks that stay inside the destination are followed.
+Symlinks in the destination:
 
-Containment is checked again after rendering and before each write, including binary copies. A detected redirect of the canonical destination root or an escaping link introduced during rendering aborts the call; earlier writes remain. These path checks are not atomic with filesystem writes: use a destination whose directories cannot be concurrently modified by untrusted processes.
+- `dest` itself may be a symlink; its target is the destination.
+- Symlinks that stay inside the destination are followed.
+- An existing file or directory that is a symlink resolving outside the destination, or to a missing target, throws before any file is written.
+- Containment is checked again before each write, including binary copies. A redirected destination root or an escaping link created during rendering aborts the call; earlier writes remain.
+
+<Callout type="warn">
+  These path checks are not atomic with filesystem writes. Use a destination whose directories
+  untrusted processes cannot modify concurrently.
+</Callout>
 
 ## `runSteps(steps, cwd, options?)`
 
@@ -106,6 +124,8 @@ If Git has no `user.name` or `user.email`, `git-init` uses `Crust` / `crust@scaf
 interpolate("Hello, {{name}}!", { name: "world" }); // => "Hello, world!"
 ```
 
-`interpolate()` replaces placeholders in a string; it is the default `render`. `detectPackageManager(cwd?)` checks lockfiles, then `npm_config_user_agent`, and defaults to npm; `isInGitRepo(cwd?)` reports whether the path is inside a Git work tree.
+- `interpolate(content, context)` replaces placeholders in a string; it is the default `render`.
+- `detectPackageManager(cwd?)` returns a `PackageManager`: it checks lockfiles, then `npm_config_user_agent`, and defaults to npm.
+- `isInGitRepo(cwd?)` reports whether the path is inside a Git work tree.
 
-`PackageManager` is the type `detectPackageManager()` returns. The [package entry point](https://github.com/chenxin-yan/crust/blob/main/packages/create/src/index.ts) is the complete export list.
+The [package entry point](https://github.com/chenxin-yan/crust/blob/main/packages/create/src/index.ts) is the complete export list.

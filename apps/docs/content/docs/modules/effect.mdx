@@ -2,7 +2,7 @@
 title: "Effect"
 ---
 
-`@crustjs/effect` lets you author Command Actions and Contexts in [Effect](https://effect.website) idiom. Crust remains the runtime: routing, parsing, rendering, and cleanup are unchanged. It is a set of helpers, not an Extension, so it registers no flags, commands, or hooks.
+`@crustjs/effect` lets you write Command Actions and Contexts as [Effect](https://effect.website) programs. Crust still routes, parses, renders, and cleans up. It is a set of helpers, not an Extension, so it adds no flags, commands, or hooks.
 
 <Callout type="warn" title="Single copy of effect">
   `effect` is a peer dependency because a second copy breaks service identity. Make sure your app
@@ -44,13 +44,23 @@ Each `handler()` invocation runs one Effect program, provided with every `layer(
 | `Die` (defect)                   | Rethrown as-is; rendered like a plain thrown error (exit 1)                                                |
 | Interruption                     | An `AbortError` is rethrown; Core exits 130 (143 after `SIGTERM`) with no output, like prompt cancellation |
 
-The program and Layer builds run with the invocation's `signal`, so caller cancellation, Ctrl-C, or `SIGTERM` interrupts them. Interruption always becomes an `AbortError`, even when the caller aborted with a custom reason such as a `TimeoutError`. Layer finalizers still run; uninterruptible acquisition must settle before cleanup finishes.
+The program and Layer builds run with the invocation's `signal`, so caller cancellation, Ctrl-C, or `SIGTERM` interrupts them.
+
+- Interruption always becomes an `AbortError`, even when the caller aborted with a custom reason such as a `TimeoutError`.
+- Layer finalizers still run; uninterruptible acquisition must settle before cleanup finishes.
 
 ## `layer(name, layer)`
 
-Turns one fully composed Layer into an ordinary Crust Context factory whose value is the built `Context.Context`. The Layer must have no remaining requirements: compose it in Effect first, then pass the result. Attach it with `.provide(db())`, declare it in reusable definitions with `.use(db)`, and read it outside a handler as `Context.get(await ctx.db, Db)`.
+Turns one fully composed Layer into an ordinary Crust Context factory. Its value is the built `Context.Context`, typed `LayerValue<S>`.
 
-Each invocation builds the Layer in a fresh `Scope`, closed with the other Contexts after `postRun` hooks. Finalizers receive the handler's `Exit`, so an `Effect.acquireRelease` release can commit on success and roll back on failure or interruption. A Layer pulled without a `handler()` closes with `Exit.void`.
+- The Layer must have no remaining requirements: compose it in Effect first, then pass the result.
+- Attach it with `.provide(db())`, or declare it in a reusable definition with `.use(db)`.
+- Outside a handler, read a service as `Context.get(await ctx.db, Db)`.
+
+Each invocation builds the Layer in a fresh `Scope`, closed with the other Contexts after `postRun` hooks.
+
+- Finalizers receive the handler's `Exit`, so an `Effect.acquireRelease` release can commit on success and roll back on failure or interruption.
+- A Layer pulled without a `handler()` closes with `Exit.void`.
 
 <Callout title="Unshadowed layer() providers are built eagerly">
   When a `handler()` action starts, every `layer()` Context on the command path is built, whether or
@@ -62,33 +72,43 @@ Each invocation builds the Layer in a fresh `Scope`, closed with the other Conte
 
 <include lang="ts">../../../examples/modules/effect.ts#handler</include>
 
-`fn` receives the same input a plain action receives, with the same inference, and the action resolves with the program's success value. The program's requirements are checked against `ServicesOf<Input>`, the services of the `layer()` Contexts on the path: requiring a service with no `layer()` there is a compile error. A plain Context whose setup returns a `Context.Context`, or a `layer()` without a literal name, does not count.
+`fn` receives the same input as a plain action, with the same inference. The action resolves with the program's success value.
+
+The program's requirements are checked against `ServicesOf<Input>`, the services of the `layer()` Contexts on the path. Requiring any other service is a compile error. A plain Context whose setup returns a `Context.Context`, or a `layer()` without a literal name, provides nothing.
 
 ## `service(factory)`
 
 <include lang="ts">../../../examples/modules/effect.ts#service</include>
 
-Pulls a plain Crust Context inside a `handler()` program, typed by the factory's value. It is lazy like `ctx.<name>`, and repeated pulls share one build. It works only inside `handler()`: its Effect requires `HandlerInput`, which `@crustjs/effect` exports as a type for annotating reusable programs.
+Pulls a plain Crust Context inside a `handler()` program, typed by the factory's value.
 
-The effective provider on the path must come from the **same factory**, including its `.of(...)` test doubles. A missing factory, or a different factory with the same name, fails with a `CrustDefinitionError`. This is checked at runtime, not compile time.
+- It is lazy like `ctx.<name>`, and repeated pulls share one build.
+- It works only inside `handler()`: its Effect requires `HandlerInput`, which is exported for annotating reusable programs.
+- The effective provider on the path must come from the **same factory**, including its `.of(...)` test doubles. A missing provider, or a different factory with the same name, fails with a `CrustDefinitionError` at runtime, not compile time.
 
 ## Environment variables
 
-Install [`@crustjs/env`](/docs/modules/env) alongside the Effect adapter. `defineEnv()` returns a plain Crust Context, so the existing `service()` helper provides typed values and catchable errors without an additional Layer or adapter:
+[`@crustjs/env`](/docs/modules/env)'s `defineEnv()` returns a plain Crust Context, so `service()` reads it with typed values and catchable errors. No extra Layer or adapter is needed:
 
 <include lang="ts" meta="twoslash">
   ../../../examples/modules/effect-env.ts#env-example
 </include>
 
-`PORT` is a `number` and `API_TOKEN` is a `string`. Validation runs only when the program reads `service(env)`; repeated reads share the invocation's result. Providing the Context adds its Environment section to help and man pages without reading source values. Unhandled failures are restored to the original Core error for CLI reporting.
+- Validation runs only when the program reads `service(env)`; repeated reads share the invocation's result.
+- Unhandled failures are reported as the original Core `ENV` error.
 
-For commands that intentionally recover, such as a configuration diagnostic, catch `CrustEnvError`:
+To recover, for example in a configuration diagnostic, catch `CrustEnvError`:
 
 <include lang="ts">../../../examples/modules/effect-env.ts#env-recovery</include>
 
-`error.details.issues` contains all invalid or missing variables. Each `received` field is only `"missing"` or `"invalid"`, never the raw value. `service(env)` has the full `CrustTaggedError` error union: catching `CrustEnvError` leaves other failures, such as a missing provider, in the error channel. Definition mistakes still throw when `defineEnv()` is called, before the handler runs.
+- `error.details.issues` lists every invalid or missing variable, [without values](/docs/modules/env#errors).
+- `service(env)` fails with the full `CrustTaggedError` union: catching `CrustEnvError` leaves other failures, such as a missing provider, in the error channel.
+- Definition mistakes throw when `defineEnv()` is called, before the handler runs.
 
-Use `tryCrust(() => ctx.env)` for explicit action-input access. Avoid `Effect.promise(() => ctx.env)` when you want typed recovery: rejected promises become defects rather than catchable tagged failures.
+<Callout type="warn">
+  To read `ctx.env` from the action input instead, use `tryCrust(() => ctx.env)`. With
+  `Effect.promise(() => ctx.env)`, a rejection becomes a defect, not a catchable tagged failure.
+</Callout>
 
 Tests can bypass environment reads and validation with the same factory's `.of()`:
 
@@ -98,7 +118,7 @@ Tests can bypass environment reads and validation with the same factory's `.of()
 
 <include lang="ts">../../../examples/modules/effect.ts#tagged-errors</include>
 
-Each Core error code has a `Data.TaggedError` class: `CrustDefinitionError`, `CrustValidationError`, `CrustParseError`, `CrustCommandNotFoundError`, `CrustEnvError`, and `CrustOutputError`. Each carries `message`, typed `details`, and `cause` (the original `CrustError`). `CrustTaggedError` is their union.
+Each [Core error code](/docs/api/errors#codes) has a `Data.TaggedError` class: `CrustDefinitionError`, `CrustValidationError`, `CrustParseError`, `CrustCommandNotFoundError`, `CrustEnvError`, and `CrustOutputError`. Each carries `message`, typed `details`, and `cause` (the original `CrustError`). `CrustTaggedError` is their union.
 
 - `fromCrustError(error)` wraps a caught `CrustError` in the class for its `code`.
 - `tryCrust(thunk)` lifts a sync or async thunk into an Effect: a thrown `CrustError` fails with its tagged class, an `AbortError` interrupts the fiber, and anything else is a defect.

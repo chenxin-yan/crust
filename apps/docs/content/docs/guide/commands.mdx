@@ -16,18 +16,21 @@ $ bun src/cli.ts
 Hello!
 ```
 
-Print through the action's `stdout(text)` and `stderr(text)` rather than `console.log` or `process.stdout.write`. Crust owns only what goes through them: [`run()`](/docs/api/crust#runpath-input-options), [tests](/docs/guide/testing), and [MCP tools](/docs/modules/mcp) capture it, and it stays in order with Crust's own output, such as rendered errors. Direct writes bypass all of that.
+<Callout>
+  Print with the action's `stdout(text)` and `stderr(text)`, not `console.log` or
+  `process.stdout.write`. Only that output is captured by
+  [`run()`](/docs/api/crust#runpath-input-options), [tests](/docs/guide/testing), and [MCP
+  tools](/docs/modules/mcp), and kept in order with Crust's own output, such as rendered errors.
+</Callout>
 
-Choose how to add subcommands based on your app's size and how you want to organize and reuse its commands:
+Add subcommands in either way, or mix both in one app:
 
-- **Define inline with `.command()`** for small CLIs or short subcommands used only by this app.
-- **Use `defineCommand()` with `.add()`** when a growing CLI needs separate command files or reusable definitions.
-
-You can use both approaches in the same app.
+- **`.command()` inline:** small CLIs, or short subcommands used only by this app.
+- **`defineCommand()` + `.add()`:** separate command files or reusable definitions.
 
 ## Grow in one file
 
-Keep small subcommands alongside the root with `.command()`. Its callback defines the subcommand's flags and action, and can call `.command()` again to nest another level.
+`.command(name, callback)` defines a subcommand's flags and action in place. Call `.command()` inside the callback to nest another level.
 
 <include lang="ts" meta='title="src/cli.ts" twoslash'>
   ../../../examples/guide/commands.ts
@@ -57,7 +60,9 @@ Move a subcommand into its own file with `defineCommand()`, then attach it with 
   ../../../examples/guide/commands-split-files/commands/greet.ts
 </include>
 
-Importing a command definition does not run its action. The optional second argument supplies metadata, such as the description shown in help. Help and typo suggestions list a command from this metadata without running its recipe. See the [`defineCommand()` options](/docs/api/crust#definecommandname-config-recipe) for aliases, custom usage, and hiding commands from listings, and [Documentation sections](#documentation-sections) for adding your own help text.
+Importing a definition runs neither its recipe nor its action. The optional second argument is metadata: help and typo suggestions list the command from it, such as its `description`.
+
+See the [`defineCommand()` options](/docs/api/crust#definecommandname-config-recipe) for aliases, custom usage, and hidden commands, and [Documentation sections](#documentation-sections) for your own help text.
 
 </Step>
 <Step>
@@ -110,29 +115,38 @@ Exit codes:
   1  Deploy failed
 ```
 
-Help, [manual pages](/docs/modules/man), and [skills](/docs/modules/skills) render each section on that command only. Limit a section to some of them with `only` or `except`; see [`CommandSectionInput`](/docs/api/types#commandsectioninput). [Contexts](/docs/guide/contexts#documentation-owned-by-a-context) and [Extensions](/docs/guide/extensions#command-sections) can add sections too.
+- A section renders on its own command only, in help, [manual pages](/docs/modules/man), and [skills](/docs/modules/skills).
+- Limit it to some of those with `only` or `except`; see [`CommandSectionInput`](/docs/api/types#commandsectioninput).
+- [Contexts](/docs/guide/contexts#documentation-owned-by-a-context) and [Extensions](/docs/guide/extensions#command-sections) can add sections too.
 
 ## Run commands from code
 
-`.execute()` is the terminal entry point: it parses argv, renders errors, and sets the exit code. To call a command from your own code, such as a script, server, or test, use `.run()` with a typed path and structured input instead.
+`.execute()` is the terminal entry point: it parses argv, renders errors, and sets the exit code. From a script, server, or test, call `.run()` with a typed path and structured input instead.
 
 <include lang="ts" meta='title="src/script.ts"'>
   ../../../examples/guide/commands-split-files/script.ts
 </include>
 
-`run()` resolves to an outcome with the captured `stdout` and `stderr` and never renders errors, changes `process.exitCode`, or applies flag `env` fallbacks. Check `status` before reading the action's `result`. See the [`run()` reference](/docs/api/crust#runpath-input-options) for input rules and capture behavior, and [Testing](/docs/guide/testing) for using it in tests.
+`run()` resolves to an outcome with captured `stdout` and `stderr`. Check `status` before reading `result`.
+
+Unlike `.execute()`, it never renders errors, sets `process.exitCode`, or reads flag `env` fallbacks. See the [`run()` reference](/docs/api/crust#runpath-input-options) for input rules and [Testing](/docs/guide/testing) for tests.
 
 ## Stream events
 
-A long-running command can report progress to programs while it works. Write its action as an `async function*`: each `yield` emits an event, and the `return` value becomes the result.
+To report progress to programs while a command works, write its action as an `async function*`: each `yield` emits an event, and the `return` value becomes the result.
 
 <include lang="ts" meta='title="src/script.ts"'>
   ../../../examples/guide/commands-stream.ts
 </include>
 
-Events are for programs, not people: Crust never prints them, so a terminal user sees only what the action writes through `stdout(text)` and `stderr(text)`. `run()` and `execute()` deliver each event live to `options.onEvent`, after the [renderer](/docs/guide/extensions#renderers) an Extension selected, if any, receives it as `event`. The `run()` outcome carries every event as `events`, typed from the yields, both when the command completes and when it fails mid-stream; `events` is absent for ordinary actions. The action pauses at each `yield` until the renderer and callback have run. When the invocation's `signal` aborts, Crust closes the generator with `return()` at its next `yield`, so its `finally` blocks run, and the invocation fails with the abort reason; pass `signal` to the work between yields to stop sooner. A throwing renderer `event` or `onEvent` callback closes the generator the same way and fails the invocation. If closing the generator throws too, the invocation fails with a `SuppressedError` whose `error` is the cleanup failure and whose `suppressed` is the original failure, as with a failed [Context disposal](/docs/api/errors#propagation-boundaries); a cancelled invocation still exits `130` (`143` after `SIGTERM`) and prints the cleanup failure. An action that returns an async generator object, such as `async () => watch()`, streams the same way; other async iterables are ordinary results.
+Events are for programs: Crust never prints them. A terminal user sees only the action's `stdout(text)` and `stderr(text)`. To print events, add [`json()`](/docs/modules/extensions/json#generator-actions): with `--json`, events and the result stream as NDJSON on stdout.
 
-To print events on the command line, add the [`json()`](/docs/modules/extensions/json#generator-actions) Extension: with `--json`, a generator action streams its events and final result as NDJSON on stdout.
+- **Delivery:** each event goes live to the selected [renderer's](/docs/guide/extensions#renderers) `event`, if any, then to `options.onEvent` of `run()` or `execute()`. The action pauses at each `yield` until both return.
+- **Outcome:** `run()` collects every event in `outcome.events`, typed from the yields, whether the command completes or fails mid-stream. Ordinary actions have no `events`.
+- **Cancellation:** when the invocation's `signal` aborts, Crust closes the generator at its next `yield`, so its `finally` blocks run, and the invocation fails with the abort reason. Pass `signal` to the work between yields to stop sooner.
+- **Throwing consumers:** a throwing renderer `event` or `onEvent` closes the generator the same way and fails the invocation.
+- **Failed cleanup:** if closing the generator throws, the invocation fails with a `SuppressedError` (`error`: the cleanup failure, `suppressed`: the original), as with a failed [Context disposal](/docs/api/errors#propagation-boundaries). A cancelled invocation still exits `130` (`143` after `SIGTERM`).
+- **Returned generators:** an action that returns an async generator object, such as `async () => watch()`, streams the same way. Other async iterables are ordinary results.
 
 ## Unknown commands
 
@@ -143,6 +157,6 @@ $ echo $?
 1
 ```
 
-The single-file `tool` example defines `build`, not `deploy`. Because `tool` has subcommands but no action of its own, an unrecognized name produces an error and exit code `1`.
+`tool` from [Grow in one file](#grow-in-one-file) has subcommands but no action of its own, so an unknown name fails with exit code `1`.
 
-If the root has its own `.action()`, matching subcommands still take priority. Unmatched words are parsed as the root's [positional arguments](/docs/guide/arguments-and-flags#arguments) instead.
+If the parent has its own `.action()`, matching subcommands still win, and unmatched words become its [positional arguments](/docs/guide/arguments-and-flags#arguments).

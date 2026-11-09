@@ -2,7 +2,7 @@
 title: "Crust"
 ---
 
-`@crustjs/crust` provides the `crust` CLI. `crust build` stages runtime packages or standalone binaries in `.crust/`, together with npm packaging metadata. `crust publish` uploads the npm packages; [other distribution channels](/docs/guide/build-and-distribution#custom-distribution), such as release downloads or Homebrew, use the built binaries directly. The same build is available to scripts as [`build()`](#programmatic-api). The [Build and distribution guide](/docs/guide/build-and-distribution) walks through the workflow; this page is the reference.
+`@crustjs/crust` provides the `crust` CLI and its [`build()`](#programmatic-api) library. The [Build and distribution guide](/docs/guide/build-and-distribution) walks through the workflow; this page is the reference.
 
 ## Install
 
@@ -10,10 +10,13 @@ title: "Crust"
 npm install -D @crustjs/crust
 ```
 
-- Installed through npm, the `crust` command is a Node launcher for a standalone executable with Bun embedded. That launcher requires Node; a separate Bun installation is not needed. This is a build-tool installation requirement, not a requirement for users running your generated binaries directly.
-- Without `bun` on `PATH`, arm64 hosts cannot build their own target. The error names the targets you can build; otherwise install Bun.
-- `@crustjs/crust` optionally depends on `tsdown` and `@tsdown/exe`, which build [Node.js binaries](/docs/guide/build-and-distribution#nodejs-binaries) with the `node` on `PATH`. Other builds never load them, so an install that skipped them, for example under a Node.js outside tsdown's engines, still builds everything else.
-- The [`build()`](#programmatic-api) library is a plain JavaScript module, so it needs `bun` on `PATH` unless the script runs under Bun. `@crustjs/core` is a peer dependency so `BuildReport` is the same type your Extensions see.
+These are requirements of the build machine, not of users running your binaries:
+
+- The `crust` command runs on Node: it is a Node launcher for a standalone executable with Bun embedded, so no separate Bun install is needed.
+- Exception: on arm64 hosts, building the host's own target needs `bun` on `PATH`. The error names the targets you can build without it.
+- [Node.js binaries](/docs/guide/build-and-distribution#nodejs-binaries) need the optional dependencies `tsdown` and `@tsdown/exe`, plus `node` on `PATH`. Other builds never load them, so an install that skipped them still builds everything else.
+- The [`build()`](#programmatic-api) library needs `bun` on `PATH` unless the script runs under Bun.
+- `@crustjs/core` is a peer dependency, so `BuildReport` is the same type your Extensions see.
 
 ### npm installation caveat
 
@@ -36,18 +39,19 @@ crust build --artifact binary --target bun-linux-x64
 # ✓ Staged 2 npm package(s) successfully: (excerpt)
 ```
 
-[`crust build`](/docs/guide/build-and-distribution#build) validates your CLI and stages it in `.crust/`. [`crust publish`](/docs/guide/build-and-distribution#publish-with-crust-publish) publishes the staged npm packages, not release archives, Homebrew formulas, or other installer metadata.
+- [`crust build`](/docs/guide/build-and-distribution#build) validates your CLI and stages runtime packages or standalone binaries, with npm packaging metadata, in `.crust/`.
+- [`crust publish`](/docs/guide/build-and-distribution#publish-with-crust-publish) publishes the staged npm packages. Release downloads, Homebrew, and other [custom channels](/docs/guide/build-and-distribution#custom-distribution) use the built binaries directly.
 
 ### `crust build` options
 
-| Option                        | Type                | Default | Description                                                                                                                                                          |
-| ----------------------------- | ------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--artifact`                  | `package`, `binary` | none    | Artifact kind: a runtime package or standalone binaries. Overrides `crust.artifact`; one of them is required                                                         |
-| `-t, --target`                | string, repeatable  | none    | Canonical compiler target(s) for binaries, or `host` for this machine. Omit to stage `crust.targets`, or every target of the compiler. Rejected for runtime packages |
-| `--env-file`                  | string, repeatable  | none    | Explicit env file(s) used for build-time constants                                                                                                                   |
-| `--validate`, `--no-validate` | boolean             | `true`  | Materialize command definitions before compiling; `--no-validate` also skips Extension build hooks                                                                   |
-| `--minify`, `--no-minify`     | boolean             | `true`  | Minify the output; on unless `--no-minify`                                                                                                                           |
-| `--bytecode`, `--no-bytecode` | boolean             | `true`  | Precompile bun binaries to bytecode for faster startup; on for bun binaries unless `--no-bytecode`, rejected for runtime packages and node                           |
+| Option                        | Type                | Default             | Description                                                                                                                                                                         |
+| ----------------------------- | ------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--artifact`                  | `package`, `binary` | none                | Artifact kind: a runtime package or standalone binaries. Overrides `crust.artifact`; one of them is required                                                                        |
+| `-t, --target`                | string, repeatable  | none                | Canonical compiler target(s) for binaries, or `host` for this machine. Omit to stage `crust.targets`, or every target of the compiler. Rejected for runtime packages                |
+| `--env-file`                  | string, repeatable  | none                | Env file(s) whose [`PUBLIC_*` values](/docs/guide/build-and-distribution#environment-variables) are inlined                                                                         |
+| `--validate`, `--no-validate` | boolean             | `true`              | Materialize command definitions before compiling; `--no-validate` also skips Extension build hooks                                                                                  |
+| `--minify`, `--no-minify`     | boolean             | `true`              | Minify the output                                                                                                                                                                   |
+| `--bytecode`, `--no-bytecode` | boolean             | on for Bun binaries | Precompile Bun binaries to [bytecode](/docs/guide/build-and-distribution#bun-binary-startup) for faster startup. `--bytecode` is rejected for runtime packages and Node.js binaries |
 
 Command names, entry files, runtime, default targets, Bun bundler plugins, extra directories, and external dependencies are not flags: they come from [`bin`](#commands-and-entries-bin) and the [`crust` block](#packagejson-configuration) in `package.json`.
 
@@ -65,7 +69,7 @@ crust publish --dry-run
 | `--dry-run`  | boolean | `false` | Print publish order and commands without publishing |
 | `--registry` | string  | none    | Override the registry passed to npm publish         |
 
-`crust publish` reads `.crust/manifest.json` and fails with `Run crust build before crust publish` if there is none, or with `Stage is stale` if your `package.json` name or version no longer matches it. It uses `npm`, which must be on `PATH`, because npm supports [trusted publishing](https://docs.npmjs.com/trusted-publishers) from CI.
+`crust publish` reads `.crust/manifest.json`. It fails with `Staged manifest not found` if there is none, and with `Stage is stale` if your `package.json` name or version no longer matches it; both tell you to run `crust build` first. It uses `npm`, which must be on `PATH`, because npm supports [trusted publishing](https://docs.npmjs.com/trusted-publishers) from CI.
 
 - For each staged package, it checks `name@version` with `npm view` and runs `npm publish` only if that version is missing. Existing versions are skipped and never re-tagged, so rerunning after a failure resumes. `--dry-run` stays offline.
 - Before anything publishes, it verifies the manifest, that package names are unique, and that every package directory resolves inside the staging root.
@@ -94,18 +98,37 @@ crust publish --dry-run
 | `executable`         | `<platform>/bin/<command>-<target>`                | `command`, canonical `target`  |
 | `bundle`             | `root/bin/<command>.js` for runtime packages       | `command`                      |
 
-- `build()` validates `bin`, the `crust` block, and its options with the same errors the CLI prints, selects the compiler (checking `engines` for binaries, and tsdown's requirements for Node.js binaries, whose targets' Node.js binaries are also downloaded and unpacked then), then wipes `.crust/` and stages every package. `manifest.json` is written last.
-- It throws on failure and prints nothing; `onLog` receives each progress line with its stream.
+`build()` runs in this order:
+
+1. Validates `bin`, the `crust` block, and its options, with the same errors the CLI prints.
+2. Selects the compiler and checks it against `engines` (binaries) and tsdown's requirements (Node.js binaries). Node.js binary targets are downloaded and unpacked here.
+3. Wipes `.crust/` and stages every package, writing `manifest.json` last.
+
+- It prints nothing and throws on failure; `onLog` receives each progress line with its stream.
 - `BuildReport` is `@crustjs/core`'s type, re-exported.
-- Overlapping builds for the same real project directory reject before staging, including across processes and symlink aliases. An exclusive `.crust.lock` directory beside `.crust/` is removed on success or failure. If a process is interrupted, remove the leftover lock only after confirming no build is running. Consume staged artifacts before rebuilding; the lock does not protect publishing or other readers.
+
+<Callout type="warn">
+  Overlapping builds of the same project directory reject before staging, across processes and
+  symlink aliases. The lock is a `.crust.lock` directory beside `.crust/`, removed on success or
+  failure; after an interrupted build, remove it only once no build is running. The lock does not
+  protect publishing or other readers, so consume staged artifacts before rebuilding.
+</Callout>
 
 ## Build output
 
-`crust build` stages its output in `.crust/`: `manifest.json`, `root/`, one `<platform>/` per selected target for binaries, and `artifacts/` from Extension build hooks. The tree is ready for npm publishing, but npm is optional: distribute `<platform>/bin/` with its adjacent data for direct-binary installation. The executable embeds its runtime; only the npm launcher needs Node.js. Runtime packages instead use `root/` and require the user's selected runtime.
+`crust build` stages its output in `.crust/` (see [Build](/docs/guide/build-and-distribution#build) for the tree):
 
-The build checks that `package.json` has non-empty `name` and `version` before wiping the previous stage, even with `--no-validate`. See [Build](/docs/guide/build-and-distribution#build) for the tree and [Custom distribution](/docs/guide/build-and-distribution#custom-distribution) for release archives and installers.
+| Path            | Contents                                                                                |
+| --------------- | --------------------------------------------------------------------------------------- |
+| `manifest.json` | Package paths, publish order, `runtime`, `artifact`, and Extension build hook output    |
+| `root/`         | The root npm package: the npm launcher for binaries, or the bundle for runtime packages |
+| `<platform>/`   | One package per selected target (binaries only), with the executables in `bin/`         |
+| `artifacts/`    | Files from [Extension build hooks](#extension-artifacts)                                |
 
-`manifest.json` records the build's `runtime` and `artifact`. Binary builds also record `embeddedRuntimeVersion`, the version the selected compiler reported and embedded in every platform binary; runtime packages embed no runtime and omit it. See [Binary runtime version](/docs/guide/build-and-distribution#binary-runtime-version).
+- npm is optional: distribute `<platform>/bin/` with its adjacent data for [direct installation](/docs/guide/build-and-distribution#custom-distribution). The executable embeds its runtime; only the npm launcher needs Node.js.
+- Runtime packages use `root/` only and need the user's installed runtime.
+- Binary builds record `embeddedRuntimeVersion` in `manifest.json`: the compiler version embedded in every platform binary. See [Binary runtime version](/docs/guide/build-and-distribution#binary-runtime-version).
+- The build checks that `package.json` has a non-empty `name` and `version` before wiping the previous stage, even with `--no-validate`.
 
 ### Staged `package.json` files
 
@@ -144,7 +167,15 @@ Targets apply to binaries. `--target` overrides `crust.targets`; without either,
 
 Node.js targets use Node.js's own release names. Cross-platform builds download that target's official Node.js archive of the same version; see [Node.js binaries](/docs/guide/build-and-distribution#nodejs-binaries) for the unpacking tools and macOS signing.
 
-Each platform package contains `bin/<command>-<target>` (`.exe` on Windows) per command, and its `bin` points at those executables, so installing a platform package directly runs them without the launcher and the Node.js start it adds to every run; see [choose an artifact to ship](/docs/guide/build-and-distribution#choose-an-artifact-to-ship). The launcher supports only the targets included in the build. On POSIX it replaces itself with the binary (`process.execve`), so every signal and the exit status belong to the binary, as if it ran directly; this needs Node.js `>=24`, which binary-only root packages declare in `engines.node`. Roots that also publish library `exports` keep the project's range, but their launcher still requires a supported Node.js. Windows has no `execve`: there the launcher starts the binary, forwards `SIGTERM` and `SIGHUP`, never forwards `SIGINT` (the console delivers Ctrl-C to the binary directly), and exits with the binary's exit code or signal.
+### Platform packages and the npm launcher
+
+Each platform package contains `bin/<command>-<target>` (`.exe` on Windows) per command, and its `bin` points at those executables. Installing a platform package directly skips the launcher and the Node.js start it adds to every run; see [choose an artifact to ship](/docs/guide/build-and-distribution#choose-an-artifact-to-ship).
+
+The root package's launcher selects the platform package for the host:
+
+- It supports only the targets included in the build.
+- On POSIX it replaces itself with the binary (`process.execve`), so signals and the exit status belong to the binary. This needs Node.js `>=24`, which binary-only root packages declare in `engines.node`; roots that also publish library `exports` keep the project's range.
+- On Windows, which has no `execve`, it starts the binary, forwards `SIGTERM` and `SIGHUP`, and exits with the binary's exit code or signal. `SIGINT` is never forwarded: the console delivers Ctrl-C to the binary directly.
 
 ### Linux glibc and musl
 
@@ -195,9 +226,17 @@ Each `bin` key is an installed command name and each value is the TypeScript ent
 | `crust.include`    | Directories relative to the project root that `crust build` copies into `.crust/root/` (listed in `files`) and into each platform package's `bin/`.                                                                                                                                               |
 | `crust.external`   | Packages a Node or Bun runtime package leaves out of its bundles and ships as `dependencies` of the staged root package, with their `dependencies` ranges, in this order. See [Keep dependencies external](/docs/guide/build-and-distribution#keep-dependencies-external). Rejected for binaries. |
 
-`crust.include` entries must be existing directories inside the project, cannot be named `bin`, cannot be inside `.crust`, and cannot reuse an Extension artifact directory name. Names are compared ignoring letter case (`Bin`, `Assets` vs `assets`) because they alias on case-insensitive file systems. Symlinks are copied dereferenced and must resolve inside the project.
+`crust.include` rules:
 
-Each `crust.external` entry must be listed once and be a key of `dependencies`; a package only in `devDependencies`, `optionalDependencies`, or `peerDependencies` is rejected, as are subpaths and wildcards. Its range must be publishable, by the same rules as peer ranges above. `@crustjs/*` packages, and npm aliases of them such as `npm:@crustjs/utils@0.2.2`, cannot be external: core detects a built package through a value the bundler inlines, and an external Crust package would load a second copy of core. An empty list does nothing. These checks run before `.crust/` is wiped.
+- Entries must be existing directories inside the project. Symlinks are copied dereferenced and must resolve inside the project.
+- An entry cannot be named `bin`, be inside `.crust`, or reuse an Extension artifact directory name. Names are compared ignoring letter case (`Bin`, `Assets` vs `assets`), because they alias on case-insensitive file systems.
+
+`crust.external` rules, checked before `.crust/` is wiped:
+
+- Each entry is listed once and must be a key of `dependencies`. A package only in `devDependencies`, `optionalDependencies`, or `peerDependencies` is rejected, as are subpaths and wildcards.
+- Its range must be publishable, by the same rules as [peer ranges](#staged-packagejson-files).
+- `@crustjs/*` packages, and npm aliases of them such as `npm:@crustjs/utils@0.2.2`, cannot be external: an external Crust package would load a second copy of Core.
+- An empty list does nothing.
 
 ### Editor completion
 
