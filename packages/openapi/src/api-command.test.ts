@@ -638,11 +638,11 @@ describe("api <path>", () => {
 
 	it.each([
 		[["api"], 'Error: Missing required argument "<path>" (or pass --list or --spec)'],
-		[["api", "/users", "-F", "novalue"], 'Error: --field: expected key=value, got "novalue"'],
-		[["api", "/users", "-H", "NoColon"], 'Error: --header: expected "Key: Value", got "NoColon"'],
+		[["api", "/users", "-F", "s3cr3t"], "Error: Invalid -F value: expected key=value."],
+		[["api", "/users", "-H", "Bearer s3cr3t"], 'Error: Invalid -H value: expected "Name: value".'],
 		[
 			["api", "/users", "-F", "amount=1e309"],
-			'Error: --field: "amount=1e309" is out of range for a number',
+			'Error: Invalid -F value for "amount": the number is out of range.',
 		],
 	])("fails before any request for %j", async (argv, message) => {
 		const calls = stubFetch();
@@ -658,11 +658,13 @@ describe("api <path>", () => {
 			"api",
 			"/users",
 			"-H",
-			"Bad Header: value",
+			"Bad Header: s3cr3t",
 		]);
 
 		expect(exitCode).toBe(1);
-		expect(stderr).toMatch(/^Error: --header: invalid header "Bad Header: value" \(.+\)$/);
+		expect(stderr).toBe(
+			"Error: Invalid -H value: the header name or value has characters HTTP does not allow.",
+		);
 		expect(calls).toEqual([]);
 	});
 
