@@ -258,6 +258,50 @@ describe("execScriptBuild for Bun", () => {
 	});
 });
 
+describe("execScriptBuild for Node", () => {
+	const tempDirs: string[] = [];
+
+	afterEach(async () => {
+		await Promise.all(tempDirs.splice(0).map((path) => rm(path, { recursive: true, force: true })));
+	});
+
+	// create-crust scaffolds this shebang for runtime bun; Bun honors it over --target node.
+	for (const bunPlugins of [[], ["./plugin.ts"]]) {
+		const path = bunPlugins.length > 0 ? "the Bun.build driver" : "bun build";
+		it(`bundles a bun-shebang entry as Node code with ${path}`, async () => {
+			const directory = await mkdtemp(join(tmpdir(), "crust-node-package-test-"));
+			tempDirs.push(directory);
+			await writeFile(
+				join(directory, "plugin.ts"),
+				'export default { name: "noop", setup() {} };\n',
+			);
+			await writeFile(join(directory, "lib.ts"), 'export const from = "lib";\n');
+			await writeFile(
+				join(directory, "cli.ts"),
+				'#!/usr/bin/env bun\nimport { from } from "./lib.ts";\nif (import.meta.main) console.log(`main ${from}`);\n',
+			);
+			const outfile = join(directory, "out", "cli.js");
+			await execScriptBuild("node", join(directory, "cli.ts"), outfile, {
+				cwd: directory,
+				minify: false,
+				envFiles: [],
+				bunPlugins,
+				external: [],
+			});
+
+			const output = await readFile(outfile, "utf8");
+			expect(output.startsWith("#!/usr/bin/env node\n")).toBe(true);
+			expect(output).not.toContain("// @bun");
+			expect((await readdir(directory)).sort()).toEqual(["cli.ts", "lib.ts", "out", "plugin.ts"]);
+			const node = which("node");
+			if (node === null) return;
+			const run = spawnSync(node, [outfile], { encoding: "utf8", timeout: 10_000 });
+			expect(run.stderr).toBe("");
+			expect(run.stdout).toBe("main lib\n");
+		});
+	}
+});
+
 describe("execScriptBuild with crust.external", () => {
 	const tempDirs: string[] = [];
 

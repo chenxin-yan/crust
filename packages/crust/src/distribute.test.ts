@@ -630,6 +630,48 @@ describe("runDistributeBuild", () => {
 		await expect(stage(["skills/sub"], true)).rejects.toThrow('overlaps "skills"');
 	});
 
+	it("rejects crust.include files that npm leaves out of published packages", async () => {
+		const base = join(tmpDir, "templates", "base");
+		mkdirSync(join(base, "node_modules", "x"), { recursive: true });
+		mkdirSync(join(base, ".git"), { recursive: true });
+		mkdirSync(join(base, "build"), { recursive: true });
+		for (const name of [".gitignore", ".npmrc", "_gitignore", ".env", "package-lock.json"]) {
+			writeFileSync(join(base, name), "\n");
+		}
+		writeFileSync(join(base, "node_modules", "x", "index.js"), "\n");
+		writeFileSync(join(base, ".git", "HEAD"), "\n");
+		writeFileSync(join(base, "build", "config.gypi"), "\n");
+		const compiled: string[] = [];
+		const execute = async (_entryPath: string, outfilePath: string) => {
+			compiled.push(outfilePath);
+		};
+		const plan = createPlan(
+			tmpDir,
+			{ name: "include-cli", version: "0.1.0" },
+			{ include: ["templates"] },
+		);
+
+		const error = await runDistributeBuild(plan, bunDistribution(undefined, execute), io).then(
+			() => undefined,
+			(error: unknown) => error,
+		);
+		expect(error).toBeInstanceOf(Error);
+		const listed = (error as Error).message
+			.split("\n")
+			.filter((line) => line.startsWith("  templates"))
+			.map((line) => line.trim().replaceAll("\\", "/"))
+			.sort();
+		// Matches `npm pack --dry-run` (npm 11): node_modules, .env, and lockfiles in a subdirectory ship.
+		expect(listed).toEqual([
+			"templates/base/.git",
+			"templates/base/.gitignore",
+			"templates/base/.npmrc",
+			"templates/base/build/config.gypi",
+		]);
+		expect((error as Error).message).toContain("_gitignore");
+		expect(compiled).toEqual([]);
+	});
+
 	// Directory pairs live under different parents (or are created with recursive
 	// mkdir) so the fixture is the same on case-sensitive and case-insensitive hosts.
 	it("rejects case-only crust.include collisions before compiling", async () => {

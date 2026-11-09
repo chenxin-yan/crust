@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { chmod, readFile, rm, writeFile } from "node:fs/promises";
-import { isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { runProcess } from "@crustjs/utils/process";
@@ -249,6 +249,36 @@ export async function runBuildProcess(
 }
 
 /**
+ * Runs `build` on a copy of the entry without its shebang, written beside it so
+ * module resolution is unchanged. Bun bundles an entry whose shebang names bun
+ * as Bun code even for `--target node`: the output is marked `// @bun` and
+ * `import.meta.main` lowers to a `__require` Node lacks.
+ */
+async function withoutEntryShebang(
+	entryPath: string,
+	build: (entryPath: string) => Promise<void>,
+): Promise<void> {
+	const source = await readFile(entryPath, "utf8");
+	if (!source.startsWith("#!")) return build(entryPath);
+	const copyPath = join(
+		dirname(entryPath),
+		`.crust-entry-${randomBytes(6).toString("hex")}${extname(entryPath)}`,
+	);
+	// The emptied first line keeps line numbers in diagnostics.
+	await writeFile(copyPath, source.replace(/^#![^\n]*/, ""));
+	try {
+		await build(copyPath);
+	} catch (error) {
+		if (error instanceof Error) {
+			error.message = error.message.replaceAll(basename(copyPath), basename(entryPath));
+		}
+		throw error;
+	} finally {
+		await rm(copyPath, { force: true });
+	}
+}
+
+/**
  * Bundle a runtime package entry as ESM behind `#!/usr/bin/env <target>`: for
  * Node, or Bun-targeted so the installed bin launches with Bun rather than Node.
  */
@@ -260,46 +290,51 @@ export async function execScriptBuild(
 	runner: BuildRunner = resolveBunBuildRunner(),
 ): Promise<void> {
 	const { cwd, minify, envFiles, external } = settings;
-	if (settings.bunPlugins.length > 0) {
-		await runBunPluginDriver(
-			{
-				entrypoints: [entryPath],
-				minify,
-				env: "PUBLIC_*",
-				target,
-				format: "esm",
-				external,
-			},
-			outfilePath,
-			settings,
-			runner,
-		);
-	} else {
-		await runBuildProcess(
-			runner,
-			[
-				"build",
-				...toBunEnvFileArgs(envFiles),
-				"--env=PUBLIC_*",
-				"--define",
-				CRUST_BUILD_DEFINE_ARG,
-				"--target",
-				target,
-				"--format",
-				"esm",
-				...external.flatMap((name) => ["--external", name]),
-				"--outfile",
+	const build = async (entry: string) => {
+		if (settings.bunPlugins.length > 0) {
+			await runBunPluginDriver(
+				{
+					entrypoints: [entry],
+					minify,
+					env: "PUBLIC_*",
+					target,
+					format: "esm",
+					external,
+				},
 				outfilePath,
-				...(minify ? ["--minify"] : []),
-				entryPath,
-			],
-			outfilePath,
-			cwd,
-		);
-	}
+				settings,
+				runner,
+			);
+		} else {
+			await runBuildProcess(
+				runner,
+				[
+					"build",
+					...toBunEnvFileArgs(envFiles),
+					"--env=PUBLIC_*",
+					"--define",
+					CRUST_BUILD_DEFINE_ARG,
+					"--target",
+					target,
+					"--format",
+					"esm",
+					...external.flatMap((name) => ["--external", name]),
+					"--outfile",
+					outfilePath,
+					...(minify ? ["--minify"] : []),
+					entry,
+				],
+				outfilePath,
+				cwd,
+			);
+		}
+	};
+	await (target === "node" ? withoutEntryShebang(entryPath, build) : build(entryPath));
 
-	const output = await readFile(outfilePath, "utf8");
-	const shebang = `#!/usr/bin/env ${target}\n`;
-	await writeFile(outfilePath, shebang + output.replace(/^#![^\n]*(?:\n|$)/, ""));
+	const output = (await readFile(outfilePath, "utf8")).replace(/^#![^\n]*(?:\n|$)/, "");
+	if (target === "node" && output.startsWith("// @bun")) {
+		throw new Error(`Build failed for ${outfilePath}: Bun emitted Bun-only code for a Node bundle`);
+	}
+	await writeFile(outfilePath, `#!/usr/bin/env ${target}\n${output}`);
 	if (process.platform !== "win32") await chmod(outfilePath, 0o755);
 }

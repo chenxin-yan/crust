@@ -174,7 +174,8 @@ Each platform package contains `bin/<command>-<target>` (`.exe` on Windows) per 
 The root package's launcher selects the platform package for the host:
 
 - It supports only the targets included in the build.
-- On POSIX it replaces itself with the binary (`process.execve`), so signals and the exit status belong to the binary. This needs Node.js `>=24`, which binary-only root packages declare in `engines.node`; roots that also publish library `exports` keep the project's range.
+- On POSIX it replaces itself with the binary (`process.execve`), so signals sent to the command reach the binary and the exit status is the binary's. This needs Node.js `>=24`, which binary-only root packages declare in `engines.node`; roots that also publish library `exports` keep the project's range.
+- Signals ignored by whatever starts the command are not passed on: Node.js resets inherited ignores (except `SIGPIPE` and `SIGXFSZ`) before the launcher runs. Under `nohup` the binary still ends on `SIGHUP`, and as a background job of a non-interactive shell (`my-cli &` in a script) it still takes `SIGINT`. Run the platform binary directly when those ignores matter.
 - On Windows, which has no `execve`, it starts the binary, forwards `SIGTERM` and `SIGHUP`, and exits with the binary's exit code or signal. `SIGINT` is never forwarded: the console delivers Ctrl-C to the binary directly.
 
 ### Linux glibc and musl
@@ -230,6 +231,7 @@ Each `bin` key is an installed command name and each value is the TypeScript ent
 
 - Entries must be existing directories inside the project. Symlinks are copied dereferenced and must resolve inside the project.
 - An entry cannot be named `bin`, be inside `.crust`, or reuse an Extension artifact directory name. Names are compared ignoring letter case (`Bin`, `Assets` vs `assets`), because they alias on case-insensitive file systems.
+- Names that npm leaves out of every published package, in any directory, fail the build: `.gitignore`, `.npmignore`, `.npmrc`, `.git`, `.DS_Store`, `*.orig`, and the rest of npm's built-in ignore list. Rename them (`_gitignore`) and restore the name when your CLI copies them; [`scaffold()`](/docs/modules/create#template-conventions) restores a leading `_` as `.`.
 
 `crust.external` rules, checked before `.crust/` is wiped:
 
