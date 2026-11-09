@@ -65,6 +65,8 @@ String `choices` become static candidates. `path` and unconstrained `string` val
 
 Boolean flags do not consume a value. Hidden commands and their descendants are omitted.
 
+After `--`, no flags or subcommands are offered, and later words keep filling argument slots, as Core parses them. An [`afterDoubleDash`](/docs/guide/arguments-and-flags#only-after---) argument's values are offered only after `--`, and the other arguments' only before it.
+
 ## Package-manager and advanced setup
 
 ```sh

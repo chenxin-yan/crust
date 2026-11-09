@@ -49,14 +49,15 @@ After the invocation completes or fails, `nextSteps()` prints a `Next steps:` bl
 
 Each step prints as a shell-quoted command line built from the target command's [Command Snapshot](/docs/api/types#commandsnapshot): flags first, then positional arguments in declaration order, then any `raw` tokens after `--`.
 
-| Input                                                                | Printed as                                                       |
-| -------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| flag value                                                           | `--name value`, or `--name=value` when the value starts with `-` |
-| boolean `true` / `false`                                             | `--name` / `--no-name`                                           |
-| `multiple` flag or variadic argument array                           | repeated values                                                  |
-| number                                                               | text; `Infinity` and `-0` print as written                       |
-| `json` value                                                         | JSON, strings included: `"hello"` prints as `'"hello"'`          |
-| positionals, when the command has subcommands or one starts with `-` | after `--`, so no value is routed as a subcommand                |
+| Input                                                                       | Printed as                                                                  |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| flag value                                                                  | `--name value`, or `--name=value` when the value starts with `-`            |
+| boolean `true` / `false`                                                    | `--name` / `--no-name`                                                      |
+| `multiple` flag or variadic argument array                                  | repeated values                                                             |
+| number                                                                      | text; `Infinity` and `-0` print as written                                  |
+| `json` value                                                                | JSON, strings included: `"hello"` prints as `'"hello"'`                     |
+| positionals, when the command has subcommands or one starts with `-`        | after `--`, so no value is routed as a subcommand                           |
+| [`afterDoubleDash`](/docs/guide/arguments-and-flags#only-after---) argument | after `--`, before any `raw` tokens; the other positionals stay before `--` |
 
 ### Skipped steps
 
@@ -67,6 +68,7 @@ A step is skipped, with a `nextSteps():` note on stderr, when:
 - the application does not add its definition;
 - it names an unknown argument or flag;
 - it gives a positional argument after an omitted earlier one, or its `raw` tokens would fill a positional argument;
+- the command has an `afterDoubleDash` argument and a value before `--` starts with `-` or names a subcommand (only that argument reads after `--`);
 - a repeatable flag value is empty or contains the flag's `delimiter` (argv would split or drop it);
 - a number value is `NaN` (argv rejects it);
 - a `json` value would change through JSON: a non-finite number, `-0`, `undefined`, or anything else that is not plain JSON data;

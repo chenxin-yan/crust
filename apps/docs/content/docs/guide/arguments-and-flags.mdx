@@ -82,6 +82,28 @@ Tokens after `--` are never parsed as flags. Use them for wrapper commands that 
 - A variadic argument takes all of them.
 - The rest reach the Command Action as `rawArgs`.
 
+This follows the POSIX utility syntax guidelines ([Guideline 10](https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap12.html#tag_12_02)): tokens after `--` are operands, like the positionals before it. getopt, Node.js `util.parseArgs`, Commander, and clap behave the same way by default.
+
+#### Only after `--`
+
+<include lang="ts" meta="twoslash">
+  ../../../examples/guide/arguments-after-double-dash.ts
+</include>
+
+```sh
+$ run build core cli -- --watch
+build in core, cli: --watch
+```
+
+`afterDoubleDash: true` makes an argument take only the tokens after `--`, like clap's [`Arg::last`](https://docs.rs/clap/latest/clap/struct.Arg.html#method.last). Use it when the arguments before `--` and the ones after it belong to different consumers, as in `run <task> [packages...] -- <args...>`:
+
+- Only the last argument can set it. It can be variadic, and the argument before it can be variadic too.
+- The other arguments fill only from tokens before `--`, so a variadic before it stops at `--`.
+- Without variadic, it takes one token; the remaining tokens after `--` reach `rawArgs`.
+- If it is required and missing, the error says to pass it after `--`.
+- Help shows it after `[options]` as `[-- <extra>...]` (`run <task> [packages...] [options] [-- <extra>...]`), or `-- <extra>...` when required. Shell completion offers its values only after `--`.
+- [`run()`](/docs/api/crust#runpath-input-options), `--input`, and MCP supply it by name like any other argument.
+
 {/* TODO: remove once https://github.com/oven-sh/bun/issues/13984 ships; see the matching TODO in packages/core/src/command/invocation.ts. */}
 
 <Callout type="warn">
@@ -233,7 +255,7 @@ $ serve --tag -nightly
 Error: Missing value for flag "--tag"; to pass a value starting with "-", write --tag=<value>
 ```
 
-Attach a dash-leading flag value with `=`. For a positional argument, pass it after `--`, as in `seek -- -5`; see [raw tokens](#pass-through-raw-tokens).
+Attach a dash-leading flag value with `=`. For a positional argument, pass it after `--`, as in `seek -- -5`: POSIX treats every token after `--` as an operand, even one that starts with `-`; see [raw tokens](#pass-through-raw-tokens). Arguments before an [`afterDoubleDash`](#only-after---) argument read nothing after `--`, so give them such values through a flag instead.
 
 ### Reuse across commands
 

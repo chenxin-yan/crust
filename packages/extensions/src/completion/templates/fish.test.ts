@@ -111,7 +111,7 @@ describe("renderFish", () => {
 		const script = renderFish(fixture, "mycli", "1.0.0");
 		// At depth `[deploy]` the leaf-block list is `prod` (its only
 		// child); the helper rejects when `prod` has already appeared.
-		expect(script).toContain("-n '__mycli_path_at_arg \\'deploy dep\\' \\'*0\\' \\'prod\\''");
+		expect(script).toContain("-n '__mycli_path_at_arg \\'deploy dep\\' \\'<*0\\' \\'prod\\''");
 	});
 
 	it("emits boolean flags without -r/-x", () => {
@@ -407,6 +407,10 @@ describeIfFish("renderFish · subprocess completion", () => {
 			["vcli --region us deploy ", []],
 			// After `--`, flag-shaped tokens are positionals and take no value.
 			["vcli deploy prod -- --profile ", ["delta", "gamma"]],
+			["vcli deploy prod -- ", ["alpha", "beta"]],
+			// Core routes nothing after `--`.
+			["vcli -- deploy ", []],
+			["vcli -- ", []],
 		] as const) {
 			const candidates = await complete(path, line);
 			expect({ line, candidates }).toEqual({ line, candidates: [...expected] });
@@ -443,6 +447,82 @@ describeIfFish("renderFish · subprocess completion", () => {
 			}
 		}
 	});
+});
+
+describeIfFish("renderFish · afterDoubleDash", () => {
+	it("offers it only after `--`, the other arguments only before, and no flags after", async () => {
+		const choice = (
+			name: string,
+			choices: string[],
+			extra: { variadic?: boolean; afterDoubleDash?: true } = {},
+		): CompletionCommand["args"][number] => ({
+			name,
+			type: "string",
+			required: false,
+			variadic: false,
+			choices,
+			...extra,
+		});
+		const watch: CompletionCommand["flags"][number] = {
+			name: "watch",
+			spellings: ["--watch"],
+			type: "boolean",
+			takesValue: false,
+		};
+		const spec: CompletionCommand = {
+			name: "mycli",
+			flags: [],
+			args: [],
+			subCommands: [
+				{
+					name: "run",
+					flags: [watch],
+					args: [
+						choice("task", ["lint"]),
+						choice("pkgs", ["cli"], { variadic: true }),
+						choice("extra", ["fix"], { variadic: true, afterDoubleDash: true }),
+					],
+					subCommands: [],
+				},
+				{
+					name: "exec",
+					flags: [],
+					args: [choice("pod", ["web"]), choice("cmd", ["ls"], { afterDoubleDash: true })],
+					subCommands: [],
+				},
+			],
+		};
+		const tmpDir = await mkdtemp(join(tmpdir(), "fish-dd-"));
+		try {
+			const path = join(tmpDir, "mycli.fish");
+			await writeFile(path, renderFish(spec, "mycli", "1.0.0"), "utf8");
+			for (const [line, expected] of [
+				["mycli run ", ["lint"]],
+				["mycli run lint ", ["cli"]],
+				["mycli run lint cli cli ", ["cli"]],
+				["mycli run lint --w", ["--watch"]],
+				["mycli run lint -- ", ["fix"]],
+				["mycli run -- x ", ["fix"]],
+				["mycli run lint -- --w", []],
+				["mycli exec web ", []],
+				["mycli exec web -- ", ["ls"]],
+				["mycli exec web -- ls ", []],
+			] as const) {
+				const driver = `source ${shQuoteForFish(path)}; complete -C ${shQuoteForFish(line)}`;
+				const { exitCode, stdout, stderr } = await runBoundedProcess("fish", ["-c", driver], {
+					timeout: 4_000,
+				});
+				expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
+				const candidates = stdout
+					.split("\n")
+					.filter((candidate) => candidate !== "")
+					.map((candidate) => candidate.split("\t")[0]!);
+				expect({ line, candidates }).toEqual({ line, candidates: [...expected] });
+			}
+		} finally {
+			await rm(tmpDir, { recursive: true, force: true });
+		}
+	}, 30_000);
 });
 
 async function isFishAvailable(): Promise<boolean> {

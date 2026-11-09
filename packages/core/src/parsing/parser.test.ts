@@ -229,6 +229,17 @@ describe("parseArgs — '--' separator", () => {
 		expect(result.rawArgs).toEqual(["--help"]);
 	});
 
+	it("binds a dash-led value given after -- to a required positional (POSIX)", () => {
+		const cmd = makeNode({
+			meta: { name: "seek" },
+			args: [{ name: "offset", type: "number", required: true }],
+		});
+		const result = parseArgs(cmd, ["--", "-5"]);
+		expect(result.args).toEqual({ offset: -5 });
+		expect(result.rawArgs).toEqual([]);
+		expect(() => validateParsed(cmd, result)).not.toThrow();
+	});
+
 	it("still reports excess positionals before -- once every declared one is filled", () => {
 		const cmd = makeNode({
 			meta: { name: "test" },
@@ -238,6 +249,76 @@ describe("parseArgs — '--' separator", () => {
 		expect(result.args.file).toBe("a");
 		expect(result.excessArgs).toEqual(["b"]);
 		expect(result.rawArgs).toEqual(["c"]);
+	});
+});
+
+describe("parseArgs — afterDoubleDash", () => {
+	const run = makeNode({
+		meta: { name: "run" },
+		args: [
+			{ name: "task", type: "string", required: true },
+			{ name: "pkgs", type: "string", variadic: true },
+			{ name: "extra", type: "string", variadic: true, afterDoubleDash: true },
+		],
+		flags: { watch: { type: "boolean" } },
+	});
+
+	it("stops the variadic before it at -- and takes every token after", () => {
+		const result = parseArgs(run, ["build", "core", "cli", "--watch", "--", "--watch", "-5", "--"]);
+		expect(result.args).toEqual({
+			task: "build",
+			pkgs: ["core", "cli"],
+			extra: ["--watch", "-5", "--"],
+		});
+		expect(result.flags.watch).toBe(true);
+		expect(result.rawArgs).toEqual([]);
+		expect(result.sources.args).toEqual({ task: "argv", pkgs: "argv", extra: "argv" });
+	});
+
+	it("never fills earlier positionals from tokens after --", () => {
+		const result = parseArgs(run, ["--", "build"]);
+		expect(result.args).toEqual({ task: undefined, pkgs: [], extra: ["build"] });
+		expect(() => validateParsed(run, result)).toThrow(/^Missing required argument "<task>"$/);
+		expect(parseArgs(run, ["build"]).args).toEqual({ task: "build", pkgs: [], extra: [] });
+	});
+
+	it("takes one token when single and passes the rest to rawArgs", () => {
+		const cmd = makeNode({
+			meta: { name: "exec" },
+			args: [
+				{ name: "pod", type: "string", required: true },
+				{ name: "command", type: "string", afterDoubleDash: true },
+			],
+		});
+		const result = parseArgs(cmd, ["web", "--", "ls", "-la"]);
+		expect(result.args).toEqual({ pod: "web", command: "ls" });
+		expect(result.rawArgs).toEqual(["-la"]);
+		expect(result.excessArgs).toEqual([]);
+		// Tokens before `--` never reach it.
+		expect(parseArgs(cmd, ["web", "ls"]).excessArgs).toEqual(["ls"]);
+	});
+
+	it("reports a required one given before -- as missing, with a hint", () => {
+		const cmd = makeNode({
+			meta: { name: "test" },
+			args: [{ name: "script", type: "string", required: true, afterDoubleDash: true }],
+		});
+		const result = parseArgs(cmd, ["build"]);
+		expect(result.excessArgs).toEqual(["build"]);
+		expect(() => validateParsed(cmd, { ...result, excessArgs: [] })).toThrow(
+			'Missing required argument "<script>" (pass it after "--")',
+		);
+		expect(parseArgs(cmd, ["--", "build"]).args).toEqual({ script: "build" });
+	});
+
+	it("binds structured input by name, even with an earlier argument omitted", () => {
+		const result = parseStructured(run, {
+			args: { task: "build", extra: ["--watch"] },
+			raw: ["x"],
+		});
+		expect(result.args).toEqual({ task: "build", pkgs: [], extra: ["--watch"] });
+		expect(result.rawArgs).toEqual(["x"]);
+		expect(result.sources.args).toEqual({ task: "run", extra: "run" });
 	});
 });
 

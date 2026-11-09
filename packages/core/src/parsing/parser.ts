@@ -345,13 +345,17 @@ function validateRequiredArgs<A extends ArgsDef>(argsDef: A, resolvedArgs: RawPa
 		const missing = def.variadic
 			? !Array.isArray(value) || value.length === 0
 			: value === undefined;
-		if (missing) throw new CrustError("VALIDATION", `Missing required argument "<${def.name}>"`);
+		// It reads nothing before `--`, so say where its value goes.
+		const hint = def.afterDoubleDash ? ' (pass it after "--")' : "";
+		if (missing)
+			throw new CrustError("VALIDATION", `Missing required argument "<${def.name}>"${hint}`);
 	}
 }
 
 /**
  * Resolve positional argument definitions against the parsed positional tokens.
- * Handles variadic args, coercion, and default values.
+ * Handles variadic args, coercion, and default values. An `afterDoubleDash`
+ * argument reads `afterDoubleDash` instead of `positionals`.
  *
  * Never throws for missing required values; {@link validateParsed} enforces
  * required constraints.
@@ -361,9 +365,11 @@ function resolveArgs<A extends ArgsDef, V>(
 	positionals: readonly V[],
 	coerce: (def: ArgDef, value: V, label: string, index?: number) => ParsedArgValue,
 	defer?: DeferValueError,
+	afterDoubleDash: readonly V[] = [],
 ) {
 	const resolved: Record<string, ParsedArgValue> = {};
 	let index = 0;
+	let consumedAfterDoubleDash = 0;
 
 	for (const def of argsDef) {
 		const { name } = def;
@@ -376,29 +382,30 @@ function resolveArgs<A extends ArgsDef, V>(
 			configurable: true,
 		});
 
+		const tokens = def.afterDoubleDash ? afterDoubleDash : positionals;
+		const start = def.afterDoubleDash ? 0 : index;
+		let next = start;
 		if (def.variadic) {
-			const remaining = positionals.slice(index);
+			const remaining = tokens.slice(start);
 			// Supplied values replace the scalar default; omission yields it as the only element.
 			resolved[name] =
 				remaining.length === 0 && def.default !== undefined
 					? [resolveDefault(def, label)]
 					: coerceOrDefer(() => remaining.map((v, i) => coerce(def, v, label, i)), defer, label);
-			index = positionals.length;
-		} else if (index < positionals.length) {
+			next = tokens.length;
+		} else if (start < tokens.length) {
 			// SAFETY: the bounds check above proves this positional exists.
-			resolved[name] = coerceOrDefer(
-				() => coerce(def, positionals[index] as V, label),
-				defer,
-				label,
-			);
-			index++;
+			resolved[name] = coerceOrDefer(() => coerce(def, tokens[start] as V, label), defer, label);
+			next++;
 		} else {
 			resolved[name] = resolveDefault(def, label);
 		}
+		if (def.afterDoubleDash) consumedAfterDoubleDash = next;
+		else index = next;
 	}
 
 	// SAFETY: the loop writes exactly every declared argument name; mapped generic keys cannot be correlated at runtime.
-	return { args: resolved as RawParsedArgs<A>, consumed: index };
+	return { args: resolved as RawParsedArgs<A>, consumed: index, consumedAfterDoubleDash };
 }
 
 /** One flag occurrence read from an argv token. */
@@ -521,7 +528,8 @@ function tokenizeArgv(command: CommandNode, argv: readonly string[]) {
 	for (let index = 0; index < argv.length; index++) {
 		// SAFETY: index < argv.length.
 		const arg = argv[index]!;
-		// POSIX guideline 10: every token after the first `--` is an operand.
+		// POSIX guideline 10: every token after the first `--` is an operand
+		// (https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap12.html#tag_12_02).
 		if (arg === "--") {
 			const separatorIndex = positionals.length;
 			positionals.push(...argv.slice(index + 1));
@@ -650,11 +658,16 @@ function bind<A extends ArgsDef, F extends FlagsDef, V, W>(
 	coerceArg: (def: ArgDef, value: V, label: string, index?: number) => ParsedArgValue,
 	coerceFlag: (name: string, def: FlagDef, value: W) => ParsedFlagValue,
 	defer?: DeferValueError,
+	afterDoubleDash?: readonly V[],
 ) {
 	// Flags given a value, so an omission that resolves to a default never orders as supplied.
 	const present = new Set<string>();
 	const flags = resolveFlags(command.effectiveFlags, flagValues, coerceFlag, defer, present);
-	return { ...resolveArgs(command.args, positionals, coerceArg, defer), flags, present };
+	return {
+		...resolveArgs(command.args, positionals, coerceArg, defer, afterDoubleDash),
+		flags,
+		present,
+	};
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -677,6 +690,10 @@ function bind<A extends ArgsDef, F extends FlagsDef, V, W>(
  * @param command - The command whose arg/flag definitions drive the parsing
  * @param argv - The argv array to parse (typically `process.argv.slice(2)`)
  * @param env - Environment consulted for `FlagDef.env` fallbacks; pass `{}` to parse without one
+ * Tokens after the first `--` are never flags. They fill the declared arguments left
+ * empty, unless the last argument sets `afterDoubleDash`: then only that argument reads
+ * them, and earlier arguments read only tokens before `--`.
+ *
  * @returns Parsed args, flags, excessArgs (positionals before `--` not consumed by a declared argument), rawArgs (tokens after `--` not consumed by a declared argument), each value's source, and any deferred valueErrors
  * @throws {CrustError} On malformed argv: unknown flags, a missing option value, or a negated `noNegate` flag
  */
@@ -685,21 +702,36 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 	argv: string[],
 	env: FlagEnvironment = process.env,
 ): ArgvParseResult<A, F> {
-	const { positionals, separatorIndex, flagValues } = tokenizeArgv(command, argv);
+	const tokens = tokenizeArgv(command, argv);
+	const { separatorIndex, flagValues } = tokens;
+	// An `afterDoubleDash` argument reads the tokens after `--`; the others read the ones before it.
+	const lastArg = command.args.at(-1);
+	const split = lastArg?.afterDoubleDash === true;
+	const positionals = split ? tokens.positionals.slice(0, separatorIndex) : tokens.positionals;
+	const afterDoubleDash = split ? tokens.positionals.slice(separatorIndex) : [];
 	const valueErrors = new Map<string, CrustError>();
 	const flagInput = applyEnvAndDelimiter(command.effectiveFlags, flagValues, env);
-	const { args, flags, consumed, present } = bind(
+	const { args, flags, consumed, consumedAfterDoubleDash, present } = bind(
 		command,
 		positionals,
 		flagInput,
 		coerceToken,
 		coerceFlagValue,
 		(error, label) => valueErrors.set(label, error),
+		afterDoubleDash,
 	);
 	// Tokens after `--` are operands: declared positionals take them first, the rest pass through.
-	const rawArgs = positionals.slice(Math.max(consumed, separatorIndex));
+	const rawArgs = split
+		? afterDoubleDash.slice(consumedAfterDoubleDash)
+		: positionals.slice(Math.max(consumed, separatorIndex));
 	// Declared arguments take one positional each (a variadic, last, takes the rest).
-	const suppliedArgs = new Set(command.args.slice(0, positionals.length).map(({ name }) => name));
+	const suppliedArgs = new Set(
+		command.args
+			.filter(({ afterDoubleDash: after }) => !after)
+			.slice(0, positionals.length)
+			.map(({ name }) => name),
+	);
+	if (split && afterDoubleDash.length > 0) suppliedArgs.add(lastArg.name);
 	const sources = Object.freeze({
 		args: valueSources(
 			command.args.map((def) => [def.name, def] as const),
@@ -774,6 +806,7 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 ): ArgvParseResult<A, F> {
 	const { args: inputArgs, flags: inputFlags, raw } = input;
 	const positionals: RunInputValue[] = [];
+	const afterDoubleDash: RunInputValue[] = [];
 	const suppliedArgs = new Set<string>();
 	let omittedArgument: string | undefined;
 	for (const definition of command.args) {
@@ -785,17 +818,20 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 			omittedArgument = definition.name;
 			continue;
 		}
-		if (omittedArgument !== undefined) throw positionalGap(definition.name, omittedArgument);
+		// Argv gives it after `--`, so it never follows the arguments before it.
+		const target = definition.afterDoubleDash ? afterDoubleDash : positionals;
+		if (omittedArgument !== undefined && !definition.afterDoubleDash)
+			throw positionalGap(definition.name, omittedArgument);
 		if (definition.variadic) {
 			if (!isOccurrenceArray(value)) {
 				throw new CrustError("PARSE", `Expected an occurrence array for <${definition.name}>`);
 			}
-			positionals.push(...value);
+			target.push(...value);
 			// An empty array is zero occurrences, so like argv omission it supplies nothing.
 			if (value.length > 0) suppliedArgs.add(definition.name);
 		} else {
 			// A non-variadic JSON array is one positional value.
-			positionals.push(value);
+			target.push(value);
 			suppliedArgs.add(definition.name);
 		}
 	}
@@ -828,6 +864,8 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 		inputFlags ?? {},
 		coerceStructuredValue,
 		coerceStructuredFlag,
+		undefined,
+		afterDoubleDash,
 	);
 	// Key order stands in for command-line order; values are not re-read, so getters run once.
 	const flagOrder = Object.keys(inputFlags ?? {}).filter((name) => present.has(name));
@@ -884,9 +922,9 @@ export function bindStructuredInput(
 	const raw = sources.raw === "argv" ? undefined : input.raw;
 	// Typed `run()` order over the merged positionals, kept ones included.
 	let omitted: string | undefined;
-	for (const { name } of command.args) {
+	for (const { name, afterDoubleDash } of command.args) {
 		if (!parsed.suppliedArgs?.has(name) && !Object.hasOwn(inputArgs, name)) omitted = name;
-		else if (omitted !== undefined) throw positionalGap(name, omitted);
+		else if (omitted !== undefined && !afterDoubleDash) throw positionalGap(name, omitted);
 	}
 	// Bind only the supplied definitions; unknown keys still fail against the narrowed command.
 	const structured = parseStructured(

@@ -245,6 +245,43 @@ describe("commandInputSchema", () => {
 		expect(properties.pair).toEqual({ type: "array", items: { type: "string" } });
 	});
 
+	it("maps an afterDoubleDash arg to a normal property that notes the --", async () => {
+		const app = new Crust("cli").add(
+			defineCommand("run", (c) =>
+				c
+					.args(
+						{ name: "task", type: "string", required: true },
+						{ name: "extra", type: "string", variadic: true, afterDoubleDash: true },
+					)
+					.action(noop),
+			),
+			defineCommand("exec", (c) =>
+				c
+					.args({
+						name: "command",
+						type: "string",
+						required: true,
+						afterDoubleDash: true,
+						description: "Command to run",
+					})
+					.action(noop),
+			),
+		);
+		const snapshot = await app.snapshot();
+		const run = commandInputSchema(snapshot.subCommands.run!, ["run"]);
+		expect(run.properties.extra).toEqual({
+			type: "array",
+			items: { type: "string" },
+			description: "Given after `--` on the command line",
+		});
+		const exec = commandInputSchema(snapshot.subCommands.exec!, ["exec"]);
+		expect(exec.properties.command).toEqual({
+			type: "string",
+			description: "Command to run (given after `--` on the command line)",
+		});
+		expect(exec.required).toEqual(["command"]);
+	});
+
 	it("accepts prototype-named definitions as own properties", async () => {
 		const app = new Crust("cli").add(
 			defineCommand("probe", (c) =>

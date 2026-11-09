@@ -116,6 +116,27 @@ describe("help", () => {
 		expect(lines).toContain("  -f, --force, --no-force      Force it");
 	});
 
+	it("renderHelp shows an afterDoubleDash argument after -- and [options]", async () => {
+		const command = new Crust("run")
+			.flags({ watch: { type: "boolean", description: "Watch" } })
+			.args(
+				{ name: "task", type: "string", required: true },
+				{ name: "pkgs", type: "string", variadic: true },
+				{
+					name: "extra",
+					type: "string",
+					variadic: true,
+					afterDoubleDash: true,
+					description: "Extra",
+				},
+			);
+
+		const lines = stripAnsi(await renderHelp(await command.snapshot())).split("\n");
+
+		expect(lines).toContain("  run <task> [pkgs...] [options] [-- <extra>...]");
+		expect(lines).toContain("  [-- <extra>...]    Extra");
+	});
+
 	it("renderHelp widens a column to fit its longest label", async () => {
 		const command = new Crust("app").flags({
 			"output-directory": {

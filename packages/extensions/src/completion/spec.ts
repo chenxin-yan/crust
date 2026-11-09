@@ -86,6 +86,12 @@ interface CompletionArgBase {
 	 * candidates beyond the declared positional slot.
 	 */
 	variadic: boolean;
+	/**
+	 * `true` when the argument takes only the tokens after `--` (per
+	 * `ArgDef.afterDoubleDash`); only the last argument sets it. Templates
+	 * offer its values only after `--`, and the other arguments' only before.
+	 */
+	afterDoubleDash?: true;
 }
 
 /** Description of a single positional argument attached to a command. */

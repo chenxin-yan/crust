@@ -224,6 +224,25 @@ describe("renderSkill", () => {
 			expect(copy?.content).toContain("| `extras...` | string | No | Extra files |");
 		});
 
+		it("prefixes an afterDoubleDash argument with --", async () => {
+			const cmd = makeCommand({
+				meta: { name: "run" },
+				args: [
+					{ name: "task", type: "string", required: true },
+					{ name: "extra", type: "string", variadic: true, afterDoubleDash: true },
+				] as ArgDef[],
+				run() {},
+			});
+			const files = renderSkill(await snapshotFixture(cmd), {
+				name: "run",
+				description: "Run",
+				version: "1.0.0",
+			});
+			expect(findFile(files, "commands/run.md")?.content).toContain(
+				"| `-- extra...` | string | No | - |",
+			);
+		});
+
 		it("omits arguments and flags sections when neither is defined", async () => {
 			const cmd = makeCommand({
 				meta: { name: "serve" },

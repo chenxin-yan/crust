@@ -27,6 +27,12 @@ function argvValue(value: RunInputValue, type: ValueType | undefined, label: str
 	}
 }
 
+function isSubcommandSpelling(command: CommandSnapshot, token: string): boolean {
+	return Object.entries(command.subCommands).some(
+		([name, child]) => name === token || child.meta.aliases?.includes(token),
+	);
+}
+
 /** The argv after the application name for `names`' command; throws a reason when `input` does not fit it. */
 function stepArgv(
 	root: CommandSnapshot,
@@ -68,24 +74,44 @@ function stepArgv(
 			throw new Error(`unknown argument "${name}"`);
 	}
 	const positionals: string[] = [];
+	const afterDoubleDash: string[] = [];
+	const last = command.args.at(-1);
 	let omitted: string | undefined;
 	for (const arg of command.args) {
 		// hasOwn: an argument named `constructor` or `__proto__` must not read Object.prototype.
 		const value = Object.hasOwn(args, arg.name) ? args[arg.name] : undefined;
 		if (value === undefined) {
-			omitted ??= arg.name;
+			if (!arg.afterDoubleDash) omitted ??= arg.name;
 			continue;
 		}
-		if (omitted !== undefined)
+		// An `afterDoubleDash` argument reads only tokens after `--`, so earlier omissions don't shift it.
+		if (omitted !== undefined && !arg.afterDoubleDash)
 			throw new Error(`argument "${arg.name}" follows omitted "${omitted}"`);
-		positionals.push(
+		(arg.afterDoubleDash ? afterDoubleDash : positionals).push(
 			...(arg.variadic && Array.isArray(value) ? value : [value]).map((item) =>
 				argvValue(item, arg.type, `argument "${arg.name}"`),
 			),
 		);
 	}
+	if (last?.afterDoubleDash) {
+		// Tokens after `--` fill the `afterDoubleDash` argument before they reach `rawArgs`.
+		if (raw.length > 0 && (last.variadic || afterDoubleDash.length === 0)) {
+			throw new Error(`raw tokens would fill argument "${last.name}"`);
+		}
+		// `--` belongs to that argument, so the ones before it have no escape from flag and subcommand parsing.
+		for (const [index, token] of positionals.entries()) {
+			if (token.startsWith("-") && token !== "-") {
+				throw new Error(`argument value ${JSON.stringify(token)} starts with "-" before "--"`);
+			}
+			if (index === 0 && isSubcommandSpelling(command, token)) {
+				throw new Error(`argument value ${JSON.stringify(token)} names a subcommand`);
+			}
+		}
+		const after = [...afterDoubleDash, ...raw];
+		return [...names, ...options, ...positionals, ...(after.length > 0 ? ["--", ...after] : [])];
+	}
 	// Tokens after `--` fill unfilled positional arguments before they reach `rawArgs`.
-	if (raw.length > 0 && (omitted !== undefined || command.args.at(-1)?.variadic)) {
+	if (raw.length > 0 && (omitted !== undefined || last?.variadic)) {
 		throw new Error("raw tokens would fill a positional argument");
 	}
 	// After `--` a positional is never read as a flag, nor routed as a subcommand name or alias.

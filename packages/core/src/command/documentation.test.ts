@@ -69,6 +69,31 @@ describe("buildCommandDocumentation", () => {
 		expect(model.flags).toMatchObject([{ name: "region", required: false }]);
 	});
 
+	it("renders an afterDoubleDash arg after -- and [options], like clap's last", async () => {
+		const run = await docs(
+			new Crust("run")
+				.flags({ watch: { type: "boolean" } })
+				.args(
+					{ name: "task", type: "string", required: true },
+					{ name: "pkgs", type: "string", variadic: true },
+					{ name: "extra", type: "string", variadic: true, afterDoubleDash: true },
+				)
+				.action(() => {}),
+		);
+		expect(run.usage).toBe("run <task> [pkgs...] [options] [-- <extra>...]");
+		expect(run.args.map((arg) => [arg.token, arg.afterDoubleDash])).toEqual([
+			["<task>", false],
+			["[pkgs...]", false],
+			["[-- <extra>...]", true],
+		]);
+		const exec = await docs(
+			new Crust("exec")
+				.args({ name: "command", type: "string", required: true, afterDoubleDash: true })
+				.action(() => {}),
+		);
+		expect(exec.usage).toBe("exec -- <command>");
+	});
+
 	it("uses explicit usage unchanged", async () => {
 		const model = await docs(new Crust("app", { usage: "app FILE" }).action(() => {}));
 		expect(model.usage).toBe("app FILE");

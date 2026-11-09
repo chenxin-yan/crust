@@ -128,3 +128,55 @@ import type { AppendArgsChecks, AppendArgsErrors, ValidateArgs } from "./args.br
 	type _valid = Expect<Equal<Extract<keyof Valid[0], "FIX_DEFAULT_CHOICE">, never>>;
 	type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_DEFAULT_CHOICE">, never>>;
 }
+
+{
+	// afterDoubleDash: only on the last argument, and a variadic may precede it
+	type Message = 'Only the last positional argument can take the tokens after "--"';
+	type TaskRunner = readonly [
+		{ name: "task"; type: "string"; required: true },
+		{ name: "pkgs"; type: "string"; variadic: true },
+		{ name: "extra"; type: "string"; variadic: true; afterDoubleDash: true },
+	];
+	type _taskRunner = Expect<Equal<ValidateArgs<TaskRunner>, TaskRunner>>;
+
+	type NotLast = ValidateArgs<
+		readonly [
+			{ name: "extra"; type: "string"; afterDoubleDash: true },
+			{ name: "file"; type: "string" },
+		]
+	>;
+	type _notLast = Expect<Equal<NotLast[0]["FIX_AFTER_DOUBLE_DASH_POSITION"], Message>>;
+	type _notLastSecond = Expect<Equal<Extract<keyof NotLast[1], `FIX_${string}`>, never>>;
+
+	// The variadic must sit right before the afterDoubleDash argument.
+	type Gap = ValidateArgs<
+		readonly [
+			{ name: "pkgs"; type: "string"; variadic: true },
+			{ name: "file"; type: "string" },
+			{ name: "extra"; type: "string"; afterDoubleDash: true },
+		]
+	>;
+	type _gap = Expect<
+		Equal<Gap[0]["FIX_VARIADIC_POSITION"], "Only the last positional argument can be variadic">
+	>;
+
+	// Across `.args()` calls
+	type AfterLast = AppendArgsChecks<
+		readonly [{ name: "extra"; type: "string"; afterDoubleDash: true }],
+		readonly [{ name: "file"; type: "string" }]
+	>;
+	type _afterLast = Expect<Equal<AfterLast[0]["FIX_AFTER_DOUBLE_DASH_POSITION"], Message>>;
+	type AfterVariadic = readonly [{ name: "extra"; type: "string"; afterDoubleDash: true }];
+	type _afterVariadic = Expect<
+		Equal<
+			AppendArgsChecks<readonly [{ name: "pkgs"; type: "string"; variadic: true }], AfterVariadic>,
+			AfterVariadic
+		>
+	>;
+	type _afterVariadicErrors = Expect<
+		Equal<
+			AppendArgsErrors<readonly [{ name: "pkgs"; type: "string"; variadic: true }], AfterVariadic>,
+			unknown
+		>
+	>;
+}

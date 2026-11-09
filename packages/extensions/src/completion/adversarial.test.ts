@@ -122,6 +122,48 @@ describe("renderBash · behavioural · -- and --name=value", () => {
 				args: [],
 				subCommands: [{ name: "deploy", flags: [], args: [], subCommands: [] }],
 			},
+			{
+				name: "seek",
+				flags: [{ name: "watch", spellings: ["--watch"], type: "boolean", takesValue: false }],
+				args: [
+					{ name: "task", type: "string", required: true, variadic: false, choices: ["lint"] },
+					{ name: "pkgs", type: "string", required: false, variadic: true, choices: ["cli"] },
+				],
+				subCommands: [],
+			},
+			{
+				name: "run",
+				flags: [{ name: "watch", spellings: ["--watch"], type: "boolean", takesValue: false }],
+				args: [
+					{ name: "task", type: "string", required: true, variadic: false, choices: ["lint"] },
+					{ name: "pkgs", type: "string", required: false, variadic: true, choices: ["cli"] },
+					{
+						name: "extra",
+						type: "string",
+						required: false,
+						variadic: true,
+						afterDoubleDash: true,
+						choices: ["fix"],
+					},
+				],
+				subCommands: [],
+			},
+			{
+				name: "exec",
+				flags: [],
+				args: [
+					{ name: "pod", type: "string", required: true, variadic: false, choices: ["web"] },
+					{
+						name: "cmd",
+						type: "string",
+						required: true,
+						variadic: false,
+						afterDoubleDash: true,
+						choices: ["ls"],
+					},
+				],
+				subCommands: [],
+			},
 		],
 	};
 
@@ -187,6 +229,29 @@ for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
 		// so the candidate set is empty (filename completion happens via
 		// `complete -o default` at the bash level).
 		expect(candidates).toEqual([]);
+	});
+
+	it("after `--`, positionals keep filling argument slots but flags are never offered", async () => {
+		expect(await complete(["mycli", "seek", "--", ""])).toEqual(["lint"]);
+		expect(await complete(["mycli", "seek", "lint", "--", ""])).toEqual(["cli"]);
+		expect(await complete(["mycli", "seek", "--", "-x", ""])).toEqual(["cli"]);
+		expect(await complete(["mycli", "seek", "lint", "--", "--"])).toEqual([]);
+		expect(await complete(["mycli", "seek", "lint", "--w"])).toEqual(["--watch"]);
+		// Core routes nothing after `--`.
+		expect(await complete(["mycli", "--", ""])).toEqual([]);
+	});
+
+	it("offers an afterDoubleDash argument only after `--`, and the others only before", async () => {
+		expect(await complete(["mycli", "run", ""])).toEqual(["lint"]);
+		expect(await complete(["mycli", "run", "lint", ""])).toEqual(["cli"]);
+		expect(await complete(["mycli", "run", "lint", "cli", "cli", ""])).toEqual(["cli"]);
+		expect(await complete(["mycli", "run", "lint", "--", ""])).toEqual(["fix"]);
+		expect(await complete(["mycli", "run", "--", "x", ""])).toEqual(["fix"]);
+		expect(await complete(["mycli", "run", "--", "--w"])).toEqual([]);
+		expect(await complete(["mycli", "exec", "web", ""])).toEqual([]);
+		expect(await complete(["mycli", "exec", "web", "--", ""])).toEqual(["ls"]);
+		// A single one takes one token; the rest reach rawArgs.
+		expect(await complete(["mycli", "exec", "web", "--", "ls", ""])).toEqual([]);
 	});
 
 	it("after a free-form value flag, no subcommand candidates are offered", async () => {
