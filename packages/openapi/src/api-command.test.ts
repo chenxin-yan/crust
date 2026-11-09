@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { Crust, defineCommand } from "@crustjs/core";
+import { Crust, CrustError, defineCommand } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -667,6 +667,24 @@ describe("api <path>", () => {
 		);
 		expect(calls).toEqual([]);
 	});
+
+	it.each(["Bearer s3cr3t", "Bad Header: s3cr3t"])(
+		"keeps the -H text out of the error's cause and details for %j",
+		async (header) => {
+			stubFetch();
+			const outcome = await buildApp().run(["api"], {
+				args: { path: "/users" },
+				flags: { header: [header] },
+			});
+
+			expect(outcome.status).toBe("failed");
+			const error = outcome.status === "failed" ? outcome.error : undefined;
+			expect(error).toBeInstanceOf(CrustError);
+			expect((error as CrustError).cause).toBeUndefined();
+			expect((error as CrustError).details).toEqual({ flag: "header" });
+			expect(JSON.stringify((error as CrustError).toJSON())).not.toContain("s3cr3t");
+		},
+	);
 
 	it.each([
 		["https://evil.example/x", "https://evil.example/x"],
