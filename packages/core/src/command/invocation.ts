@@ -544,14 +544,13 @@ export function prepareInvocation(
 }
 
 /** An invocation starts from terminal argv or a typed path plus structured values. */
-type InvocationInput =
+type InvocationInput = (
 	| { readonly argv: readonly string[] }
-	| {
-			readonly path: readonly string[];
-			readonly input: RunInputPayload;
-			/** Fallbacks for omitted flags' `env` bindings; `run()` passes only what its caller gave. */
-			readonly env?: FlagEnvironment | undefined;
-	  };
+	| { readonly path: readonly string[]; readonly input: RunInputPayload }
+) & {
+	/** Fallbacks for omitted flags' `env` bindings; `process.env` unless the caller gave one. */
+	readonly env?: FlagEnvironment | undefined;
+};
 
 interface ResolvedInput {
 	argv: readonly string[];
@@ -559,9 +558,13 @@ interface ResolvedInput {
 	parsed: ArgvParseResult;
 }
 
-function resolveArgvInput(root: CommandNode, argv: readonly string[]): ResolvedInput {
+function resolveArgvInput(
+	root: CommandNode,
+	argv: readonly string[],
+	env: FlagEnvironment,
+): ResolvedInput {
 	const route = resolveCommand(root, argv);
-	return { argv, route, parsed: parseArgs(route.command, route.argv) };
+	return { argv, route, parsed: parseArgs(route.command, route.argv, env) };
 }
 
 /** Resolve a typed path, rejecting any element the router cannot consume as a command. */
@@ -681,10 +684,11 @@ async function dispatch(
 
 	// Routing and syntax parsing — failures flow directly to the caller. Value errors
 	// wait in `parsed.valueErrors` for `terminal()`, so a `--help` handler still wins.
+	const env = input.env ?? process.env;
 	const { argv, route, parsed } =
 		"argv" in input
-			? resolveArgvInput(rootNode, input.argv)
-			: resolveStructuredInput(rootNode, input.path, input.input, input.env ?? {});
+			? resolveArgvInput(rootNode, input.argv, env)
+			: resolveStructuredInput(rootNode, input.path, input.input, env);
 	const resolvedNode = route.command;
 	// `bindInput` replaces this; hooks and `terminal()` read it live.
 	let bound = parsed;
@@ -1039,7 +1043,7 @@ export async function runInvocation(
 			async () => {
 				const prepared = prepareInvocation(node, materializeCommandDefinition);
 				return await dispatch(
-					"path" in input ? { ...input, env } : input,
+					{ ...input, env },
 					prepared,
 					createInvocationOutput(resolvedIO),
 					signal,
@@ -1150,7 +1154,7 @@ export async function executeInvocation(
 		let exitCode = 0;
 		try {
 			await dispatch(
-				{ argv },
+				{ argv, env: options?.env },
 				prepared,
 				output,
 				signal,

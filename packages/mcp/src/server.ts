@@ -150,10 +150,8 @@ export async function createMcpServer(
 			await app.run(
 				tool.path as never,
 				input as never,
-				// The client configures the server's environment (e.g. an MCP `env` block) for env-backed flags.
-				onEvent === undefined
-					? { signal, env: process.env }
-					: { signal, env: process.env, onEvent },
+				// Env-backed flags read the server's process.env, which the client configures (e.g. an MCP `env` block).
+				onEvent === undefined ? { signal } : { signal, onEvent },
 			),
 		);
 		// MCP requires structuredContent from a tool with an outputSchema unless isError is set.

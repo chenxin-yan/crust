@@ -71,7 +71,7 @@ const flags = {
 } satisfies FlagsDef;
 ```
 
-`env` is consulted only when the flag has no value: no argv occurrence, or omitted from structured [`run()`](/docs/api/crust#runpath-input-options) input. The given value wins over env, and env wins over `default`. The env value goes through the same conversion as an argv token and satisfies `required`. Terminal parsing and MCP tool calls read `process.env`; `run()` reads only its `env` option. Help, man pages, and generated skills show `[env: NAME]`, never the value.
+`env` is consulted only when the flag has no value: no argv occurrence, or omitted from structured [`run()`](/docs/api/crust#runpath-input-options) input. The given value wins over env, and env wins over `default`. The env value goes through the same conversion as an argv token and satisfies `required`. Variables come from `process.env`, or from the `env` option of [`run()`](/docs/api/crust#runpath-input-options) and [`execute()`](/docs/api/crust#executeoptions) when given; MCP tool calls read the server's `process.env`. Help, man pages, and generated skills show `[env: NAME]`, never the value.
 
 `delimiter` splits string argv occurrences; `env.delimiter` independently splits environment text. Both require `multiple: true` and drop empty segments. Boolean argv switches are never split.
 
@@ -363,7 +363,7 @@ Reports where each current value came from as a [`ValueSource`](#valuesource), k
 | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `argv`    | Given on argv. An alias or `--no-<name>` reports the canonical name; a flag counts as given by the `bindInput` rule above, so `--tags ""` is `argv` |
 | `run`     | Typed `run()` input. An empty array for a variadic argument, a `multiple` flag, or `raw` gives no value, as on argv                                 |
-| `env`     | The flag's `env` variable (argv invocations only)                                                                                                   |
+| `env`     | The flag's `env` variable                                                                                                                           |
 | `bound`   | Supplied by `bindInput`                                                                                                                             |
 | `default` | The definition's default                                                                                                                            |
 

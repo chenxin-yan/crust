@@ -2061,7 +2061,7 @@ export class Crust<
 	 *                  exposed to Command Actions and Extensions), an `onEvent(event)`
 	 *                  callback for an async generator action's events, an
 	 *                  `AbortSignal` that cancels the invocation, and the `env` that
-	 *                  omitted flags' `env` bindings read (never `process.env` by default)
+	 *                  omitted flags' `env` bindings read (`process.env` by default)
 	 */
 	// `Path` is only constrained to strings, and the parameter is not intersected with `Path`:
 	// either would erase the partial literal editors use for completions (see `KnownCommandPath`).
@@ -2161,7 +2161,8 @@ export class Crust<
 	 * @param options - Optional overrides: custom `argv` and captured `io` for
 	 *                   in-process testing of exit codes and rendered failures,
 	 *                   an `onEvent(event)` callback for an async generator action's
-	 *                   events, and a caller `signal` that cancels the invocation
+	 *                   events, a caller `signal` that cancels the invocation, and the
+	 *                   `env` that flags' `env` bindings read (`process.env` by default)
 	 * @returns The terminal exit code (`0`, `1`, or `130` for cancellation, `143` after `SIGTERM`)
 	 */
 	execute(

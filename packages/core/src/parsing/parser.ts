@@ -805,8 +805,8 @@ function positionalGap(argument: string, omitted: string): CrustError {
  * then its default. Like {@link parseArgs}, an invalid environment value is
  * deferred to `valueErrors`; invalid supplied values throw.
  *
- * @param env - Environment consulted for omitted flags' `FlagDef.env` fallbacks; none by default, so
- *   structured input never reads `process.env` unless its caller passes it (MCP passes the server's)
+ * @param env - Environment consulted for omitted flags' `FlagDef.env` fallbacks; none by default
+ *   (invocations pass the caller's `env` option or `process.env`)
  */
 export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
 	command: CommandNode & { args: A; effectiveFlags: F },
