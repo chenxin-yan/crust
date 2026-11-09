@@ -46,6 +46,8 @@ pnpm --dir packages/core run test --run
 pnpm --dir apps/docs exec vp test run
 ```
 
+For documentation changes, run the docs gates in [`apps/docs/README.md`](apps/docs/README.md#validation).
+
 For specialized smoke-test setup and commands, see the [package](.github/workflows/ci-packages.yml) and [create-crust](.github/workflows/ci-create-crust.yml) CI workflows. Run opt-in suites directly with `vp test run <file>` in the owning package.
 
 ## Pull Requests

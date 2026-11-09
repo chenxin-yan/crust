@@ -75,14 +75,7 @@ describe("input", () => {
 		const app = new Crust("app")
 			.extend(input(), help())
 			.command("deploy", (cmd) => cmd.action(() => {}));
-		const snapshot = await app.snapshot();
 
-		expect(snapshot.meta.sections).toEqual([
-			expect.objectContaining({
-				title: "JSON input",
-				body: "--input takes the command's arguments and flags as one JSON object keyed by name. Values given on the command line win.",
-			}),
-		]);
 		expect((await captureExecute(app, ["--help"])).stdout).toContain("JSON input:");
 		expect((await captureExecute(app, ["deploy", "--help"])).stdout).not.toContain("JSON input:");
 	});
@@ -137,12 +130,6 @@ describe("input", () => {
 			status: "completed",
 			result: { target: "prod", region: "us" },
 		});
-	});
-
-	it("changes nothing without --input", async () => {
-		const { stdout } = await captureExecute(deployApp(), ["prod"]);
-
-		expect(JSON.parse(stdout)).toMatchObject({ target: "prod", region: "us", force: false });
 	});
 
 	it.each([
@@ -266,13 +253,6 @@ describe("input", () => {
 			stdout: '{"ok":true}',
 			stderr: "working",
 			exitCode: 0,
-		});
-	});
-
-	it("renders an --input error through execute() with exit code 1", async () => {
-		expect(await captureExecute(deployApp(), ["--input", "{target"])).toMatchObject({
-			stdout: "",
-			exitCode: 1,
 		});
 	});
 

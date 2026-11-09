@@ -501,10 +501,6 @@ function _optionalDefinitionsStillChecked(
 }
 
 function _defineFlagChecksItsDefinition() {
-	// @ts-expect-error -- short flags must be one character
-	defineFlag({ type: "string", short: "oo" });
-	// @ts-expect-error -- default outside choices
-	defineFlag({ type: "string", choices: ["a"], default: "b" });
 	const verbose = defineFlag({ type: "boolean", short: "v" });
 	new Crust("cli")
 		.flags({ verbose })

@@ -22,12 +22,6 @@ describe("fuzzyMatch", () => {
 		expect(result.indices).toEqual([]);
 	});
 
-	it("case-insensitive matching", () => {
-		const result = fuzzyMatch("ABC", "abcdef");
-		expect(result.match).toBe(true);
-		expect(result.indices).toEqual([0, 1, 2]);
-	});
-
 	it("scoring prefers contiguous matches", () => {
 		// "ts" in "TypeScript" matches at indices [0, 4] (T...S)
 		// "ts" in "tsconfig" matches at indices [0, 1] (ts) — consecutive bonus

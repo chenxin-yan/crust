@@ -2,7 +2,7 @@
 title: "Man"
 ---
 
-`@crustjs/man` generates manual pages at build time. `crust publish` only reads and publishes output already staged by a package build.
+`@crustjs/man` renders an mdoc(7) manual page from your command definitions: during `crust build` through the `man()` Extension, or from your own script.
 
 ## Install
 
@@ -25,9 +25,11 @@ const app = new Crust("my-cli").extend(man());
 .crust/artifacts/man/my-cli.1
 ```
 
-`man()` registers a build hook; registering it writes nothing. During `crust build`, the hook returns `man/<name>.<section>`, which the build writes, copies into the staged packages, and records as an artifact owned by `crust:man`.
+`man()` only registers a [build hook](/docs/modules/crust#extension-artifacts); it writes nothing at runtime. During `crust build`, the hook returns `man/<name>.<section>`, which the build writes, copies into the staged packages, and records as an artifact of `crust:man`.
 
-Pass `man({ section: 5 })` to change the section and filename. The page is named after the root command, which [`crust build` requires to match the installed command](/docs/modules/crust#commands-and-entries-bin). The `man.id` static exposes the Extension identity used for section filtering.
+- The page is named after the root command, which [`crust build` requires to match the installed command](/docs/modules/crust#commands-and-entries-bin).
+- Pass `man({ section: 5 })` to change the section and file name.
+- `man.id` is the Extension identity, for [section filtering](#page-contents).
 
 <auto-type-table path="../../../../../packages/man/src/extension.ts" name="ManOptions" />
 
@@ -46,9 +48,23 @@ await writeManPage({ root, outfile: "man/my-cli.1" });
   name="WriteManPageOptions"
 />
 
-`writeManPage()` renders a Command Snapshot, creates parent directories, and writes the page; the build hook does not use it. `section` defaults to `1`; `date` overrides the `.Dd` value.
+`writeManPage()` renders a Command Snapshot, creates parent directories, and writes the page. Use it for a custom pipeline outside `crust build`, such as a package script:
 
-Without `date`, rendering uses `SOURCE_DATE_EPOCH` in UTC when set, then the current local date. Generated dates use the English `Month D, YYYY` form expected by mdoc.
+```json title="package.json"
+{
+  "scripts": { "generate:man": "bun run scripts/generate-man.ts" },
+  "files": ["dist", "man"],
+  "man": ["./man/my-cli.1"]
+}
+```
+
+```sh
+npm run generate:man
+man -l man/my-cli.1
+mandoc -T lint -W warning man/my-cli.1
+```
+
+Here `scripts/generate-man.ts` imports your app and calls `writeManPage()` as above; npm's `man` field installs the page.
 
 ## `renderManPageMdoc(options)`
 
@@ -65,11 +81,16 @@ console.log(source.startsWith(".Dd ")); // => true
   name="RenderManPageMdocOptions"
 />
 
-`renderManPageMdoc()` returns mdoc text without writing a file. It accepts a prepared Command Snapshot, not a live definition.
+`renderManPageMdoc()` returns mdoc text without writing a file. It accepts a Command Snapshot, not a live definition.
 
-The renderer lists immediate visible children in the root summary and collects visible subcommand sections under `.Sh COMMANDS`. Sections targeted to `man` are audience-filtered, same-title sections merge at their first position, and section titles are uppercased (`Files` renders as `.Sh FILES`).
+## Page contents
 
-Descriptions, usage lines, and section bodies are plain text: backslashes and leading `.` or `'` are escaped, so `C:\tmp` or `\fB` render literally rather than as roff.
+The page documents the root command: name, synopsis, description, `SUBCOMMANDS` (immediate visible children), `OPTIONS`, and `ARGUMENTS`.
+
+- Root [documentation sections](/docs/guide/commands#documentation-sections) follow as their own `.Sh`, with uppercased titles (`Files` renders as `.Sh FILES`). Same-title sections merge at their first position.
+- Sections of visible subcommands are collected under `.Sh COMMANDS`.
+- Descriptions, usage lines, and section bodies are plain text: backslashes and leading `.` or `'` are escaped, so `C:\tmp` or `\fB` render literally rather than as roff.
+- Without `date`, `.Dd` uses `SOURCE_DATE_EPOCH` in UTC when set, then the current local date, in the English `Month D, YYYY` form mdoc expects.
 
 ```ts
 new Crust("my-cli", {
@@ -78,21 +99,3 @@ new Crust("my-cli", {
 ```
 
 Use `only: [man]` to include a section only in manual pages, or `except: [man]` to omit it there.
-
-## Package script
-
-```json
-{
-  "scripts": { "generate:man": "bun run scripts/generate-man.ts" },
-  "files": ["dist", "man"],
-  "man": ["./man/my-cli.1"]
-}
-```
-
-```npm
-npm run generate:man
-man -l man/my-cli.1
-mandoc -T lint -W warning man/my-cli.1
-```
-
-Use `writeManPage()` for a custom pipeline outside the Extension build lifecycle.

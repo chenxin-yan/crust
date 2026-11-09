@@ -14,7 +14,7 @@ $ my-cli --version
 my-cli v1.2.3
 ```
 
-`version()` owns the root-only `--version` and `-v` flag. It writes through the invocation's stdout callback and handles the invocation before the Command Action.
+`version()` owns the root-only `--version` and `-v` flag. It prints to stdout instead of running the Command Action. Subcommands reject it: `my-cli deploy --version` is an unknown flag.
 
 ## API
 
@@ -24,7 +24,9 @@ version("1.2.3");
 version(() => process.env.APP_VERSION ?? "dev");
 ```
 
-Without an explicit value, `version()` requires root `version` metadata. A value typed `string | undefined` still requires that metadata, as described by [`RootMetaKey`](/docs/api/types#rootmetakey). An explicit value affects only the version flag and does not populate root metadata for completion, skills, or other Extensions.
+- Without an explicit value, `version()` requires root `version` metadata; omitting it is a type error. A value typed `string | undefined` still requires that metadata, as described by [`RootMetaKey`](/docs/api/types#rootmetakey).
+- A function value is called when the flag is handled.
+- An explicit value affects only the version flag. It does not set root metadata for completion, skills, or other Extensions.
 
 ```ts
 version("1.2.3", { format: "plain" });
@@ -37,4 +39,4 @@ version("1.2.3", { format: "plain" });
   name="VersionOptions"
 />
 
-A format function returns the line written for the flag. An explicit value may be a string or a function that resolves a string when the flag is handled.
+A `format` function receives the resolved version and the [Extension context](/docs/api/types#extensioncontext) and returns the line to print.

@@ -8,8 +8,6 @@ function _typecheckRejectsStaticallyKnownEmptyNamesWhereEachDefinitionIsConsumed
 	const command = defineCommand("valid", (builder) => builder);
 	// @ts-expect-error -- argument names must be non-empty
 	defineArg("", { type: "string" });
-	// @ts-expect-error -- command names must be non-empty
-	app.add(defineCommand("", (builder) => builder));
 	// @ts-expect-error -- renamed command names must be non-empty
 	app.add(command.as(""));
 }

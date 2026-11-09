@@ -10,6 +10,7 @@ import defaultMdxComponents from "fumadocs-ui/mdx";
 import { Suspense } from "react";
 
 import { LLMCopyButton, ViewOptions } from "@/components/ai/page-actions";
+import { CommunityLinks } from "@/components/community-links";
 import { baseOptions } from "@/lib/layout.shared";
 import { buildPageMeta, siteConfig } from "@/lib/seo";
 import { source } from "@/lib/source";
@@ -87,6 +88,7 @@ const clientLoader = browserCollections.docs.createClientLoader({
 							...defaultMdxComponents,
 							...Twoslash,
 							TypeTable,
+							CommunityLinks,
 						}}
 					/>
 				</DocsBody>

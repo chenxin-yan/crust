@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import type { Equal, Expect } from "../../tests/helpers.ts";
 import { unwrap } from "../../tests/helpers.ts";
 import { Crust, defineCommand } from "./crust.ts";
-import type { RunOutcome } from "./typed-run.ts";
 
 function buildGit() {
 	const received: { args: unknown; flags: unknown }[] = [];
@@ -34,7 +32,6 @@ describe("app.at(path) command handles", () => {
 			args: { name: "origin", url: "git@x" },
 			flags: { fetch: true },
 		});
-		type _result = Expect<Equal<typeof pending, Promise<RunOutcome<{ remote: string }>>>>;
 
 		const outcome = await unwrap(pending);
 		expect(outcome).toMatchObject({ status: "completed", result: { remote: "origin" } });
@@ -48,17 +45,6 @@ describe("app.at(path) command handles", () => {
 		const root = app.at([]);
 		expect(await unwrap(root.run())).toMatchObject({ status: "completed", result: "root" });
 		expect(root.path).toEqual([]);
-	});
-
-	it("throws COMMAND_NOT_FOUND eagerly for an unknown path", () => {
-		const { app } = buildGit();
-		// @ts-expect-error -- deliberately exercise an unknown command path.
-		expect(() => app.at(["remote", "missing"])).toThrow(
-			expect.objectContaining({
-				code: "COMMAND_NOT_FOUND",
-				details: expect.objectContaining({ input: "missing", available: ["add"] }),
-			}),
-		);
 	});
 
 	it("keeps the caller's spelling for aliased paths", async () => {

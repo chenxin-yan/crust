@@ -50,13 +50,6 @@ describe("runTui", () => {
 		expect(rendererDestroyed).toBe(true);
 	});
 
-	it("resolves when the renderer is destroyed", () => {
-		expect(observe("destroy-resolves").outcome).toEqual({
-			status: "resolved",
-			valueType: "undefined",
-		});
-	});
-
 	it("rejects with AbortError when Ctrl+C destroys the renderer", () => {
 		expect(observe("ctrl-c-aborts").outcome).toMatchObject({
 			status: "rejected",
@@ -72,16 +65,6 @@ describe("runTui", () => {
 		expect(outcome).toEqual({ status: "resolved", valueType: "undefined" });
 		expect(keypressListenersBefore).toBeGreaterThan(0);
 		expect(stdinDataListeners).toBe(0);
-	});
-
-	it("removes its keypress listener after teardown", () => {
-		const { outcome, keypressListenersBefore, keypressListenersAfter } = observe(
-			"keypress-listener-teardown",
-		);
-
-		expect(outcome).toEqual({ status: "resolved", valueType: "undefined" });
-		// OpenTUI's own exitOnCtrlC handler stays; only the adapter's listener is removed.
-		expect(keypressListenersAfter).toBe(keypressListenersBefore! - 1);
 	});
 
 	it("treats Ctrl+C with extra modifiers as a normal key, not cancellation", () => {

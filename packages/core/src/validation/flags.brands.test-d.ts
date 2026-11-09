@@ -4,25 +4,12 @@ import type {
 	ContextOwnedFlags,
 	FlagRecordErrors,
 	LocalSpellingsOf,
-	DefinitionTreeSpellings,
 	ProvideChecks,
-	SpellingsOf,
 	TreeSpellings,
 	ValidateDefinitionFlags,
 	ValidateExtensionFlags,
 	LocalFlagBrand,
 } from "./flags.brands.ts";
-
-{
-	// extracts all literal spellings from an existing flags record
-	type Existing = {
-		verbose: { type: "boolean"; short: "v" };
-		output: { type: "string"; aliases: ["out", "destination"] };
-	};
-	type _check = Expect<
-		Equal<SpellingsOf<Existing>, "verbose" | "v" | "output" | "out" | "destination">
-	>;
-}
 
 {
 	// derives local spellings from a closed flag record; a dynamic record stays open
@@ -151,8 +138,6 @@ import type {
 			};
 		};
 	};
-	type _spellings = Expect<Equal<DefinitionTreeSpellings<readonly [Def]>, "force">>;
-
 	type Branded = ValidateDefinitionFlags<readonly [Def], "force">;
 	type _collision = Expect<
 		Equal<

@@ -24,7 +24,10 @@ Both print:
 Hello, Ada!
 ```
 
-Node.js 24+ can run both the published libraries and the TypeScript command above. Use `"type": "module"` in `package.json` and erasable TypeScript syntax—no enums or parameter properties. See [Node's type stripping](https://nodejs.org/docs/latest-v24.x/api/typescript.html#type-stripping) for its limits.
+Node.js runs the TypeScript file directly by stripping its types. For that:
+
+- Set `"type": "module"` in `package.json`.
+- Use erasable TypeScript syntax only: no enums or parameter properties. See [Node's type stripping](https://nodejs.org/docs/latest-v24.x/api/typescript.html#type-stripping) for its limits.
 
 ## Choose a runtime for your project
 
@@ -32,14 +35,25 @@ Node.js 24+ can run both the published libraries and the TypeScript command abov
 npx create-crust@latest my-cli --runtime node
 ```
 
-This selects Node.js for the generated `dev` script, TypeScript settings, and target runtime. The next wizard question selects the build output independently; pass `--artifact package` or `--artifact binary` to skip it. All four combinations are supported. Defaults are Node.js packages and Bun binaries. Pass `--runtime bun` for Bun, the default runtime. See [package setup](/docs/guide/build-and-distribution#set-up-packagejson) for the build and release scripts.
+- `--runtime` selects the runtime for the generated `dev` script, TypeScript settings, and target runtime.
+- The build output is a separate choice (`--artifact`); all four runtime/artifact combinations work. See the [`create-crust` options](https://github.com/chenxin-yan/crust/tree/main/packages/create-crust#options) for choices and defaults.
+
+See [package setup](/docs/guide/build-and-distribution#set-up-packagejson) for the build and release scripts.
 
 **The package manager does not choose the runtime.** npm, pnpm, Yarn, and Bun can install dependencies for either Bun or Node.js projects.
 
 ## Build separately from running
 
-You don't need Bun to run Node.js source. **`crust build` is separate, Bun-powered tooling**, even when producing Node.js output. The packaged CLI can use its embedded Bun runtime; Node.js binaries additionally require a `node` on `PATH` that meets [tsdown's executable requirements](/docs/guide/build-and-distribution#nodejs-binaries) (Node.js 26+ with the bundled tsdown).
+You don't need Bun to run Node.js source, but **`crust build` is Bun-powered tooling**, even when producing Node.js output.
 
-The runtime does not choose the output: `crust.artifact` does. A runtime package is JavaScript for the user's installed Bun or Node.js; a standalone binary embeds Bun or Node.js and needs no separately installed JavaScript runtime.
+- Installed from npm, `crust` embeds its own Bun, so you usually don't need to install Bun. The exception is building an arm64 host's own binary target; see [installing `@crustjs/crust`](/docs/modules/crust#install).
+- Node.js binaries also need a `node` on `PATH` that meets [tsdown's executable requirements](/docs/guide/build-and-distribution#nodejs-binaries).
 
-The distribution channel is a separate choice. npm's generated launcher needs Node.js to select and start a binary; [direct downloads, Homebrew, or other installers](/docs/guide/build-and-distribution#custom-distribution) can run that same binary without the launcher or Node.js. `crust publish` handles npm only. Continue to [Build and distribution](/docs/guide/build-and-distribution) for targets and release layouts.
+The runtime doesn't choose the output; `crust.artifact` does:
+
+| Artifact          | What users need                   |
+| ----------------- | --------------------------------- |
+| Runtime package   | Bun or Node.js installed          |
+| Standalone binary | Nothing: it embeds Bun or Node.js |
+
+The distribution channel is a third choice. npm's generated launcher needs Node.js to select and start a binary; [direct downloads, Homebrew, or other installers](/docs/guide/build-and-distribution#custom-distribution) run the same binary without it. `crust publish` handles npm only. Continue to [Build and distribution](/docs/guide/build-and-distribution) for targets and release layouts.

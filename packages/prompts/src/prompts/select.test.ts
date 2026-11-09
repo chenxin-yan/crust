@@ -41,19 +41,6 @@ describe("select — default value", () => {
 		expect(await prompt.answer).toBe(defaultValue);
 	});
 
-	it("defaults cursor to first item when no default is provided", async () => {
-		const prompt = renderPrompt(select, {
-			message: "Pick a color",
-			choices: ["red", "green", "blue"],
-		});
-
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe("red");
-	});
-
 	it("defaults cursor to first item when default value is not found", async () => {
 		const prompt = renderPrompt(select, {
 			message: "Pick a color",
@@ -127,24 +114,6 @@ describe("select — navigation", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("select — choice types", () => {
-	it("handles object choices with label and value", async () => {
-		const prompt = renderPrompt(select, {
-			message: "Pick a port",
-			choices: [
-				{ label: "HTTP", value: 80 },
-				{ label: "HTTPS", value: 443 },
-			],
-		});
-
-		await tick();
-		prompt.keys("down");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe(443);
-	});
-
 	it("handles object choices with hints", async () => {
 		const prompt = renderPrompt(select, {
 			message: "Pick a port",

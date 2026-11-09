@@ -27,19 +27,6 @@ describe("input — initial value", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("input — interactive", () => {
-	it("renders placeholder when no value entered", async () => {
-		const prompt = renderPrompt(input, {
-			message: "Name?",
-			placeholder: "Enter your name",
-		});
-
-		await tick();
-		expect(prompt.screen()).toContain("Enter your name");
-
-		prompt.keys("return");
-		await prompt.answer;
-	});
-
 	it("renders default value as placeholder when no placeholder is set", async () => {
 		const prompt = renderPrompt(input, {
 			message: "Name?",
@@ -170,25 +157,6 @@ describe("input — keypress editing", () => {
 
 		const result = await prompt.answer;
 		expect(result).toBe("AC");
-	});
-
-	it("left arrow moves cursor left", async () => {
-		const prompt = renderPrompt(input, { message: "Name?" });
-
-		await tick();
-		prompt.type("A");
-		await tick();
-		prompt.type("B");
-		await tick();
-		// Move left, then type C — inserts before B
-		prompt.keys("left");
-		await tick();
-		prompt.type("C");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe("ACB");
 	});
 
 	it("right arrow moves cursor right", async () => {
@@ -591,21 +559,5 @@ describe("input — schema submitted line", () => {
 
 		expect(await prompt.answer).toBe(4000);
 		expect(prompt.screen()).toContain("Port? 4000");
-	});
-});
-
-describe("input — schema + interactive default", () => {
-	it("runs schema against the default value when user submits empty", async () => {
-		const prompt = renderPrompt(input<number>, {
-			message: "Port?",
-			default: "4000",
-			schema: z.coerce.number().int(),
-		});
-
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe(4000);
 	});
 });

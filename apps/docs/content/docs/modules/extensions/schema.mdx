@@ -41,4 +41,10 @@ Standard Schema–backed arguments and flags are described by their schema's inp
 
 ## `--llms`
 
-Prints a compact Markdown index of every visible command: a `## ` heading with its usage line, its description, then its arguments and flags with their types, descriptions, defaults, choices, and environment variables, then its [documentation sections](/docs/guide/extensions#section-consumers) as `### ` headings. Hidden commands are left out. A section with `except: [schema]`, or an `only` list without `schema`, is left out too. `--llms` takes over the invocation like `--help`; it is a root-only flag, so `my-cli deploy --llms` is an unknown flag.
+Prints a compact Markdown index of every visible command. Each command gets:
+
+- a `## ` heading with its usage line, then its description;
+- its arguments and flags with their types, descriptions, defaults, choices, and environment variables;
+- its [documentation sections](/docs/guide/extensions#section-consumers) as `### ` headings, except those with `except: [schema]` or an `only` list without `schema`.
+
+Hidden commands are left out. `--llms` takes over the invocation like `--help`. It is root-only, so `my-cli deploy --llms` is an unknown flag.

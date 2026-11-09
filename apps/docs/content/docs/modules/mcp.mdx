@@ -2,7 +2,7 @@
 title: "MCP"
 ---
 
-`@crustjs/mcp` turns the Command Snapshot into an MCP tool manifest and routes every tool call through typed `app.run()`. No per-command glue: the same definitions that drive parsing, help, and completion drive the JSON Schema each tool advertises.
+`@crustjs/mcp` serves your commands as [MCP](https://modelcontextprotocol.io) tools. Each tool's JSON Schema comes from the same definitions that drive parsing and help, and every call runs through `app.run()`, with no per-command glue.
 
 MCP serves clients that call tools instead of running a shell; [how agents use your CLI](/docs/guide/agents#how-agents-use-your-cli) shows where it fits beside the shell and skills.
 
@@ -21,20 +21,21 @@ The package has a peer dependency on `@crustjs/core` and depends on `@modelconte
 `mcpExtension()` owns two commands:
 
 - `<cli> mcp` serves the application over stdio until the client disconnects. Stdout carries protocol frames, so the Command Action writes nothing else to it; command output is captured per call instead.
-- `<cli> mcp config [--client claude|cursor|vscode]` prints the client configuration snippet on stdout, and for Claude also prints a `claude mcp add` one-liner on stderr.
+- `<cli> mcp config [--client claude|cursor|vscode]` prints the client configuration snippet on stdout. `--client` defaults to `claude`, which also prints a `claude mcp add` one-liner on stderr.
 
-`app` is a callback because the Extension is installed while the application is still being assembled; it runs when `mcp` runs. Returning the variable being assigned needs an explicit `(): AnyCrust =>` return annotation, or TypeScript reports the variable as referenced in its own initializer. `mcpExtension.id` is the Extension identity.
+`app` is a callback, called when `mcp` runs, because the Extension is installed before the application is complete. To return the variable being assigned, annotate the callback `(): AnyCrust =>`; otherwise TypeScript reports the variable as referenced in its own initializer. `mcpExtension.id` is the Extension identity.
 
 <auto-type-table path="../../../../../packages/mcp/src/extension.ts" name="McpExtensionOptions" />
 
 ### Client configuration
 
-`mcp config` derives the launch command from the running process. A compiled executable (`bun build --compile` or a Node single executable application) launches itself with `args: ["mcp"]`; a Node or Bun source entry or Node bundle relaunches through `process.execPath` with `process.execArgv` before the entry path. Claude Code, Claude Desktop, and Cursor read `mcpServers`; VS Code's `.vscode/mcp.json` reads `servers`.
+`mcp config` derives the launch command from the running process:
 
-Set `launch: { command, args }` to override it; `args` must include `mcp`.
+- A compiled executable (`bun build --compile` or a Node single executable application) launches itself with `args: ["mcp"]`.
+- A Node or Bun source entry, or a Node bundle, relaunches through `process.execPath`, with `process.execArgv` before the entry path.
+- Claude Code, Claude Desktop, and Cursor read `mcpServers`; VS Code's `.vscode/mcp.json` reads `servers`.
 
-- Use it to drop development-only flags such as inspectors or watch mode.
-- The working directory and environment such as `NODE_OPTIONS` are not preserved. Use absolute paths and configure the client's environment separately.
+Set `launch: { command, args }` to override it, for example to drop development-only flags such as inspectors or watch mode; `args` must include `mcp`. The working directory and environment, such as `NODE_OPTIONS`, are not preserved: use absolute paths and configure the client's environment separately.
 
 ```json
 {
@@ -52,26 +53,20 @@ Nothing is written into client configuration files; paste the snippet or run the
 
 ## Tools
 
-A command becomes a tool when it is visible (not `hidden`, nor under a hidden command), has a Command Action, is not the `mcp` command, and is not under an `exclude` path. The root is a tool only when it has an action. Every `exclude` path must be a canonical command path (hidden commands and paths under another excluded command count); a misspelled path or an alias throws, listing each unknown path, instead of leaving the command exposed.
+A command becomes a tool when it:
 
-The tool name is the canonical command path joined with `_` (`deploy api` becomes `deploy_api`); the root uses its own name, and aliases never become tools. That join is not injective, so `toolsFromSnapshot` throws when two commands map to one name (`a_b` and `a b`, or the root and a subcommand named after it), naming both paths. It also throws when a name falls outside the MCP tool-name rule (1–128 characters of `A-Z a-z 0-9 _ - .`).
+- has a Command Action (so the root is a tool only when it has one)
+- is visible: not `hidden`, nor under a hidden command
+- is not the `mcp` command, an `exclude` path, or under one
 
-Each tool's `inputSchema` is one flat object built from the snapshot by [`commandInputSchema()`](/docs/modules/core#tooling-subpath), and call arguments go back through `parseCommandInput()`:
+Every `exclude` path must be a canonical command path; hidden commands and paths under another excluded command count. A misspelled path or an alias throws, listing each unknown path, instead of leaving the command exposed.
 
-| Definition                     | Schema                                                                                                              |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| `type: "string"` / `"path"`    | `{ type: "string" }`                                                                                                |
-| `type: "number"` / `"boolean"` | `{ type: "number" }` / `{ type: "boolean" }`                                                                        |
-| `type: "url"`                  | `{ type: "string", format: "uri" }`; the string becomes a `URL` before `run()`                                      |
-| `type: "json"`                 | `{}` (any JSON)                                                                                                     |
-| `choices`                      | `{ type: "string", enum }`                                                                                          |
-| `variadic` / `multiple`        | `{ type: "array", items }`                                                                                          |
-| `required` without `default`   | listed in `required`                                                                                                |
-| Standard Schema                | Its input JSON Schema when `run()` accepts that shape; otherwise the declared token type (`string` for schema args) |
-| custom `parse`                 | The declared token type; the command validates and transforms when it runs                                          |
-| every tool                     | `raw: { type: "array", items: { type: "string" } }`, delivered to the action as `rawArgs`                           |
+The tool name is the canonical command path joined with `_` (`deploy api` becomes `deploy_api`); the root uses its own name, and aliases never become tools. Building the tool list throws, naming the paths, when:
 
-A Standard Schema definition's snapshot carries the schema's input JSON Schema (`inputSchema`) when it can produce one (Zod 4.2+, ArkType 2.1.28+, Valibot through `toStandardJsonSchema()`). Schema-backed values reach `run()` as their token, a string (a boolean for `type: "boolean"` flags), so that JSON Schema is advertised, without `$schema`, only when its top-level `type` is that token type, or `array` with such `items` and no `prefixItems` for `variadic` and `multiple`, and it has no `$ref`, `$defs`, or other `$` keyword. `z.enum([...])`, `z.string().min(3)`, and `z.url()` keep their `enum`, `minLength`, and `format`; `z.coerce.number()` (JSON Schema `number`) falls back to `{ type: "string" }`, since a JSON number would fail the string binding. The definition's `description` fills in when the JSON Schema has none. Schema-owned requiredness is invisible: schema-backed definitions are advertised as optional, while a custom `parse` definition keeps its declared `required`. An arg and a flag with the same name, or a definition named `raw`, are rejected. Defaults are advertised as `JSON.stringify` copies, so `URL`s become strings and nested `undefined`, functions, and symbols are dropped; defaults that fail to serialize or hold non-finite numbers are omitted from the manifest. Either way, `run()` still applies the declared default.
+- two commands map to one name, such as `a_b` and `a b`, or the root and a subcommand named after it
+- a name breaks the MCP tool-name rule: 1–128 characters of `A-Z a-z 0-9 _ - .`
+
+Each tool's `inputSchema` comes from [`commandInputSchema()`](/docs/modules/core#command-input-as-json), and call arguments go back through `parseCommandInput()`.
 
 ## Results
 
@@ -79,23 +74,45 @@ The outcome of `app.run()` decides the tool result:
 
 - A `completed` result that is plain JSON (finite numbers, strings, booleans, `null`, arrays, and plain objects of those) is returned as `structuredContent` plus a text block with the same JSON. Arrays and primitives are wrapped as `{ "result": value }`.
 - Any other `completed` result (`undefined`, `Date`, `Map`, class instances, `BigInt`, `NaN`, cycles) and every `handled` outcome return the captured stdout as text. The result is copied once before serialization, so getters run once and `toJSON` is not called.
-- A `failed` outcome sets `isError` with `<code>: <message>` for a `CrustError`, `<name>: <message>` for other errors.
+- A `failed` outcome sets `isError` with `<code>: <message>` for a `CrustError`, `<name>: <message>` for other errors. Arguments that cannot become `run()` input, such as an invalid URL or a `raw` that is not an array of strings, fail the same way with `PARSE`.
 
 Whatever the outcome, non-empty captured stderr follows as one more text block, so warnings and [`nextSteps()`](/docs/modules/extensions/next-steps)' `Next steps:` block (recovery steps included on failure) reach the client. It changes neither `structuredContent` nor `isError`.
 
-A command with an [`.output()`](/docs/api/crust#outputschema) schema whose snapshot carries `outputSchema` advertises it as the tool's `outputSchema`, in the shape of its `structuredContent`. An object schema is advertised as is. A schema whose `type` excludes objects (`number`, `array`, `["string", "null"]`, …) is wrapped as `{ type: "object", properties: { result }, required: ["result"] }`, with `$schema` and `$defs` kept at the root. A schema that may describe an object or not (no top-level `type`, such as `anyOf`, or a `type` list including `"object"`), is not advertised, since its results may be sent either way; neither is a non-object schema that wrapping would break (a `$ref` outside `#/$defs/`, such as `"#"` or `"#/prefixItems/0"`, or another `$` keyword such as `$id`). MCP requires `structuredContent` from a tool with an `outputSchema`, so when such a tool's call ends with only captured stdout (a `handled` outcome, or a result that is not plain JSON), the result sets `isError`, with a line saying the result is missing before the stdout text.
-
 Unknown tool names are protocol errors (`InvalidParams`), which is also how hidden and excluded commands present.
+
+### Output schema
+
+A command whose [`.output()`](/docs/api/crust#outputschema) schema converts to JSON Schema advertises it as the tool's `outputSchema`, in the shape of its `structuredContent`:
+
+| Output JSON Schema                                                                                   | Advertised `outputSchema`                                                                         |
+| ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `type: "object"`                                                                                     | As is                                                                                             |
+| A `type` that excludes objects (`number`, `array`, `["string", "null"]`, …)                          | `{ type: "object", properties: { result }, required: ["result"] }`, `$schema` and `$defs` at root |
+| May or may not be an object (no top-level `type`, such as `anyOf`, or a `type` list with `"object"`) | None, since results may be sent either way                                                        |
+| Non-object, with a `$ref` outside `#/$defs/` (such as `"#"`) or another `$` keyword such as `$id`    | None, since wrapping would break it                                                               |
+
+MCP requires `structuredContent` from a tool with an `outputSchema`. When such a tool's call ends with only captured stdout (a `handled` outcome, or a result that is not plain JSON), the result sets `isError`, with a line saying the result is missing before the stdout text.
 
 ## Progress
 
-When a `tools/call` request carries `_meta.progressToken`, each value an [async generator action](/docs/guide/commands#stream-events) yields sends a `notifications/progress` for that token: `progress` counts the events so far (1, 2, …), and a string event becomes its `message`; other events send no `message`. Without a token, no notifications are sent. A notification that fails to send is dropped without failing the call. The tool result is still the action's return value.
+When a `tools/call` request carries `_meta.progressToken`, each value an [async generator action](/docs/guide/commands#stream-events) yields sends a `notifications/progress` for that token:
+
+- `progress` counts the events so far (1, 2, …).
+- A string event becomes its `message`; other events send no `message`.
+- A notification that fails to send is dropped without failing the call.
+
+Without a token, no notifications are sent. Either way, the tool result is the action's return value.
 
 ## Headless primitives
 
 <include lang="ts">../../../examples/modules/mcp.ts#headless</include>
 
-`createMcpServer(app, options?)` returns the SDK's low-level `Server` with `tools/list` and `tools/call` handlers, named after the root command with its `version` (or `0.0.0`). Each call runs `app.run(path, input, { signal })` with its own captured output, plus an `onEvent` that sends [progress](#progress) when the request carries a progress token. Client cancellation aborts only that call and disconnecting aborts all of them; actions must honor `signal` to stop. `serveStdio(server)` connects the stdio transport and resolves when the client disconnects.
+`createMcpServer(app, options?)` returns the SDK's low-level `Server` with `tools/list` and `tools/call` handlers. `serveStdio(server)` connects the stdio transport and resolves when the client disconnects.
+
+- The server is named after the root command, with its `version` or `DEFAULT_SERVER_VERSION` (`0.0.0`).
+- Each call runs `app.run(path, input, { signal })` with its own captured output, plus an `onEvent` that sends [progress](#progress) when the request carries a progress token.
+- Client cancellation aborts only that call; disconnecting aborts all of them. Actions must honor `signal` to stop.
+- `toolResultFromOutcome(outcome)` is the outcome-to-result conversion described in [Results](#results), without the `outputSchema` check.
 
 <Callout type="warn">
   Over stdio, protocol frames own the process's stdout. Output written through the invocation's
@@ -112,3 +129,13 @@ When a `tools/call` request carries `_meta.progressToken`, each value an [async 
 The pure manifest, for tests or tooling that ships tool definitions without a server. Pass `await app.snapshot()` so Extension-contributed commands are included. Each entry carries the tool `name`, `description`, `inputSchema`, `outputSchema` when it applies, and the canonical `path` for `app.run()`.
 
 <auto-type-table path="../../../../../packages/mcp/src/tools.ts" name="McpTool" />
+
+## Other exports
+
+These build the [`mcp config`](#client-configuration) output yourself:
+
+- `currentLaunch()` returns the launch for the running process; `resolveLaunch(execPath, entry, compiled, execArgv?)` computes one from explicit values.
+- `renderClientConfig(client, name, launch)` and `renderClaudeAddCommand(name, launch)` render the snippet and the one-liner.
+- `MCP_CLIENTS` lists the supported `--client` values, and `MCP` is the Extension identity, the same as `mcpExtension.id`.
+
+The [package entry point](https://github.com/chenxin-yan/crust/blob/main/packages/mcp/src/index.ts) is the complete export list, including the `McpClient`, `McpLaunch`, and schema types.

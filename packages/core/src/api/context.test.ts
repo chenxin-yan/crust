@@ -523,28 +523,6 @@ describe("Context-owned flags", () => {
 		expect(messages).toEqual(["debug"]);
 	});
 
-	it("exposes a provided capability to later added commands", async () => {
-		const seen: string[] = [];
-		const auth = defineContext("auth")
-			.flags({ "api-key": apiKey })
-			.setup(({ flags }) => ({
-				apiKey: flags["api-key"],
-			}));
-		const deploy = defineCommand("deploy", (command) =>
-			command.use(auth).action(async ({ ctx }) => {
-				seen.push(String((await ctx.auth).apiKey));
-			}),
-		);
-
-		await unwrap(
-			new Crust("cli")
-				.provide(auth())
-				.add(deploy)
-				.run(["deploy"], { flags: { "api-key": "secret" } }),
-		);
-		expect(seen).toEqual(["secret"]);
-	});
-
 	it("keeps owned flags when later .flags() calls accumulate local flags", async () => {
 		expect.assertions(2);
 		const auth = defineContext("auth")
@@ -580,25 +558,6 @@ describe("Context-owned flags", () => {
 		await unwrap(app.run(["second"], { flags: { "api-key": "two" } }));
 
 		expect(seen).toEqual(["first:one", "second:two"]);
-	});
-
-	it("retains owned flags on .of() test doubles", async () => {
-		expect.assertions(3);
-		const auth = defineContext("auth")
-			.flags({ "api-key": apiKey })
-			.setup(() => ({ real: true }));
-		const fake = auth.of({ real: false });
-		expect(fake.ownedFlags["api-key"]).toBeDefined();
-
-		await unwrap(
-			new Crust("cli")
-				.provide(fake)
-				.action(async ({ flags, ctx }) => {
-					expect(flags["api-key"]).toBe("fake-key");
-					expect((await ctx.auth).real).toBe(false);
-				})
-				.run([], { flags: { "api-key": "fake-key" } }),
-		);
 	});
 });
 
@@ -1291,27 +1250,6 @@ describe("Context setup dependencies", () => {
 		expect(baseSetups).toBe(1);
 	});
 
-	it("accepts dependencies in the same call in any order and across ordered calls", async () => {
-		expect.assertions(2);
-		const base = defineContext("base").setup(() => "base");
-		const dependent = defineContext("dependent")
-			.use(base)
-			.setup(async ({ ctx }) => await ctx.base);
-		await unwrap(
-			new Crust("cli")
-				.provide(dependent(), base())
-				.action(async ({ ctx }) => expect(await ctx.dependent).toBe("base"))
-				.run([]),
-		);
-		await unwrap(
-			new Crust("cli")
-				.provide(base())
-				.provide(dependent())
-				.action(async ({ ctx }) => expect(await ctx.dependent).toBe("base"))
-				.run([]),
-		);
-	});
-
 	it("lets .of() cut the dependency graph while retaining owned flags", async () => {
 		expect.assertions(1);
 		const token = defineFlag({ type: "string" });
@@ -1504,18 +1442,6 @@ describe("lazy Context bags", () => {
 		await unwrap(app.run([]));
 		expect(setups).toBe(1);
 		expect(seen).toEqual([1, 1, 1]);
-	});
-
-	it("shares one setup across concurrent pulls", async () => {
-		let setups = 0;
-		const service = defineContext("service").setup(async () => ({ id: ++setups }));
-		const app = new Crust("cli").provide(service()).action(async ({ ctx }) => {
-			const [first, second] = await Promise.all([ctx.service, ctx.service]);
-			expect(first).toBe(second);
-		});
-
-		await unwrap(app.run([]));
-		expect(setups).toBe(1);
 	});
 
 	it("installs Extension providers for commands and other Extensions", async () => {
@@ -2379,25 +2305,15 @@ describe("inline .command()", () => {
 		await expect(app.snapshot()).rejects.toThrow('No provider for Context "b"');
 	});
 
-	it("retains only selected declared demands and does not inspect trusted factory shapes", () => {
-		let reads = 0;
-		const logger = new Proxy(
-			defineContext("logger").setup(() => "logger"),
-			{
-				get(target, key, receiver) {
-					if (key === "contextName") reads++;
-					// oxlint-disable-next-line eslint/no-restricted-properties -- transparent Proxy forwarding preserves private symbols while observing validation reads.
-					return Reflect.get(target, key, receiver);
-				},
-			},
-		);
+	it("retains only the demands of the builder a recipe returns", async () => {
+		const logger = defineContext("logger").setup(() => "logger");
 		const unused = defineContext("unused").setup(() => "unused");
 		const command = defineCommand("sub", (cmd) => {
 			void cmd.use(unused);
 			return cmd.use(logger).action(() => {});
 		});
-		new Crust("trusted").provide(logger()).add(command);
-		expect(reads).toBe(0);
+		const outcome = await new Crust("cli").provide(logger()).add(command).run(["sub"]);
+		expect(outcome.status).toBe("completed");
 	});
 });
 

@@ -20,7 +20,7 @@ When the registry reports version `2.0.0`, the action writes `Done` to stdout an
 ╰──────────────────────────────────────╯
 ```
 
-The hook checks only after a completed Command Action. Network, registry, cache, and response failures do not change a successful outcome.
+The hook checks only after a completed Command Action, and awaits the check before the invocation ends. Network, registry, cache, and response failures do not change a successful outcome. A notice for the same latest version is shown once while the cache remembers it.
 
 ## When checks are skipped
 
@@ -39,9 +39,10 @@ The TTY check reads `process.stderr` even when `run()` or `execute()` receives c
   name="UpdateNotifierOptions"
 />
 
-The current version must come from `currentVersion` or root metadata. Without a string `currentVersion`, `.extend()` rejects the extension at compile time unless the root declares `version`.
-
-The network timeout does not bound cache operations or the whole hook. Version comparison follows SemVer precedence, and notices for the same latest version are suppressed across sequential cached invocations.
+- The current version comes from `currentVersion` or root metadata. Without a string `currentVersion`, `.extend()` is a type error unless the root declares `version`.
+- The notice appears when npm's `latest` dist-tag is newer by SemVer precedence.
+- `timeoutMs` bounds only the registry request, not cache operations or the whole hook.
+- `updateDocsUrl` adds a `See <url> to update` line to the notice.
 
 ## Update command
 
@@ -52,7 +53,13 @@ updateNotifier({
 });
 ```
 
-A string displays a fixed command. A resolver receives `{ packageName, packageManager }`, while a scope creates the standard command for npm, pnpm, Yarn, or Bun. Resolvers and package-manager detection run only when a notice is shown.
+Without `updateCommand`, the notice suggests no command. Otherwise:
+
+- a string displays a fixed command;
+- `{ scope: "global" | "local" }` builds the standard install command for the detected package manager (npm, pnpm, Yarn, or Bun), such as `pnpm add -g my-cli@latest`;
+- a resolver receives `{ packageName, packageManager }` and returns the command.
+
+Resolvers and package-manager detection run only when a notice is shown.
 
 ```ts
 updateNotifier({
@@ -72,7 +79,7 @@ updateNotifier({
 });
 ```
 
-The default adapter stores state under the package's platform state directory. Set `cache: false` to skip all cache reads and writes.
+The default adapter stores state in `update-notifier.json` under the package's platform [state directory](/docs/modules/store#storage-paths), and ignores state cached for a different `registryUrl`. An unreadable cache counts as empty. Set `cache: false` to skip all cache reads and writes and check on every run.
 
 <auto-type-table
   path="../../../../../../packages/extensions/src/update-notifier.ts"
@@ -83,4 +90,4 @@ The default adapter stores state under the package's platform state directory. S
   ../../../../examples/modules/extensions/update-notifier-cache.ts
 </include>
 
-A custom adapter reads `UpdateNotifierState | null | undefined` and writes `UpdateNotifierState`. Adapter failures are treated as soft failures.
+A custom adapter reads `UpdateNotifierState | null | undefined` and writes `UpdateNotifierState`. A failing `read()` counts as an empty cache, and `write()` failures are ignored.

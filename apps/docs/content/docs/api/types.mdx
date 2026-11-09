@@ -97,7 +97,7 @@ Invalid literal names, defaults, and parsers fail typecheck. Dynamic definitions
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="CommandMeta" />
 
-`version` comes from `new Crust(name, { version })` and appears on the root snapshot. `hidden` removes a command from help, completion, man-page, typo-suggestion, and skill listings without disabling routing. `sections` are rendered by help and man after their built-in sections.
+`version` comes from `new Crust(name, { version })` and appears on the root snapshot. `hidden` removes a command from generated listings and suggestions without disabling routing. `sections` are rendered by documentation Extensions after their built-in sections.
 
 ### `CommandSectionInput`
 
@@ -326,11 +326,41 @@ Dynamic or conditional records do not claim typed ownership of hook values. An o
 
 `args` and `flags` are syntax-parsed values. Hooks do not change Command Action types.
 
-`commandPathOf(definition)` finds where a [command definition](/docs/api/crust#definecommandname-config-recipe) is mounted: the canonical names from the root through the command added from it, in the form of `commandPath`, or `undefined` when the application does not mount it. It matches the definition object passed to `.add()` or an Extension's `.add()`, so a `.as()` copy is a different definition; one added more than once resolves to its shallowest path, then the first added. The search builds the commands it passes, running their recipes, so an Extension can turn a definition into a command line without the definition knowing its parent.
+#### `commandPathOf(definition)`
 
-`bindInput({ args, flags, raw })` binds structured input from `setup` or `preRun`, with the conversion typed `run()` uses. Keys given explicitly on argv are kept and their supplied values are never converted: a flag counts as given whenever it appears on argv (including `--no-<name>`, a value equal to its default, or `--tags ""`), a positional argument when argv supplied it, and `raw` when argv has passthrough tokens after `--`. Supplied values replace environment values (including an invalid one) and defaults. Positional arguments still follow typed `run()` order: kept argv or typed `run()` positionals count as supplied, and bound input cannot skip one. Values that are not replaced are kept as bound, without re-running defaults or `parse`. Each call re-binds against the original input, so the last call wins. Bound values are visible to every later hook; binding in `setup` lets each `preRun` see them whatever the `.extend()` order. Flag handlers are chosen from the original input, so a bound flag never selects one, even when bound in `setup`. A failure fails the invocation as an error thrown from the calling hook would.
+Returns where a [command definition](/docs/api/crust#definecommandname-config-recipe) is mounted, in the form of `commandPath`, or `undefined` when the application does not mount it. An Extension can use it to turn a definition into a command line without the definition knowing its parent.
 
-`sources` reports where each current value came from as a [`ValueSource`](#valuesource), keyed by declared argument name (`args`) and canonical flag name (`flags`). A name is absent when none of these sources gave it a value: argv (`argv`; an alias or `--no-<name>` reports the canonical name, and a flag counts as given by the same rule as above, so `--tags ""` is `argv`), typed `run()` input (`run`; from `run()` or `bindInput`, an empty array for a variadic argument, a `multiple` flag, or `raw` gives no value, as on argv), the flag's `env` variable (`env`, argv only), or the definition's default (`default`). `raw` is `argv` when passthrough tokens are left after `--`, `run` when typed `run()` supplied `raw`, `bound` when `bindInput` did, and otherwise `undefined`. It reads live: after `bindInput`, the keys it supplied report `bound`, and since each call re-binds against the original input, keys a later call no longer supplies report their original source again. In the `onError` context after a routing or argv-syntax failure it is `{ args: {}, flags: {}, raw: undefined }`. Use it to drop the keys argv gave before converting structured input yourself, so an invalid overridden value never fails.
+- It matches the definition object passed to `.add()` or an Extension's `.add()`, so a `.as()` copy is a different definition.
+- A definition added more than once resolves to its shallowest path, then the first added.
+- The search builds the commands it passes, running their recipes.
+
+#### `bindInput({ args, flags, raw })`
+
+Binds structured input from `setup` or `preRun`, with the conversion typed `run()` uses.
+
+- Keys given explicitly on argv are kept, and their supplied values are never converted. A flag counts as given whenever it appears on argv (including `--no-<name>`, a value equal to its default, or `--tags ""`); a positional argument when argv supplied it; `raw` when argv has passthrough tokens after `--`.
+- Supplied values replace environment values (including an invalid one) and defaults. Values that are not replaced are kept as bound, without re-running defaults or `parse`.
+- Positional arguments follow typed `run()` order: kept argv or `run()` positionals count as supplied, and bound input cannot skip one.
+- Each call re-binds against the original input, so the last call wins. Bound values are visible to every later hook; binding in `setup` lets each `preRun` see them whatever the `.extend()` order.
+- Flag handlers are chosen from the original input, so a bound flag never selects one, even when bound in `setup`.
+- A failure fails the invocation as an error thrown from the calling hook would.
+
+#### `sources`
+
+Reports where each current value came from as a [`ValueSource`](#valuesource), keyed by declared argument name (`args`) and canonical flag name (`flags`). A name is absent when no source gave it a value.
+
+| Source    | Meaning                                                                                                                                             |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `argv`    | Given on argv. An alias or `--no-<name>` reports the canonical name; a flag counts as given by the `bindInput` rule above, so `--tags ""` is `argv` |
+| `run`     | Typed `run()` input. An empty array for a variadic argument, a `multiple` flag, or `raw` gives no value, as on argv                                 |
+| `env`     | The flag's `env` variable (argv invocations only)                                                                                                   |
+| `bound`   | Supplied by `bindInput`                                                                                                                             |
+| `default` | The definition's default                                                                                                                            |
+
+- `raw` is `argv` when passthrough tokens are left after `--`, `run` when typed `run()` supplied `raw`, `bound` when `bindInput` did, and otherwise `undefined`.
+- It reads live: after `bindInput`, the keys it supplied report `bound`; keys a later call no longer supplies report their original source again.
+- In `onError` after a routing or argv syntax failure, it is `{ args: {}, flags: {}, raw: undefined }`.
+- Use it to drop the keys argv gave before converting structured input yourself, so an invalid overridden value never fails.
 
 ### `ValueSource`
 
@@ -357,7 +387,20 @@ See [propagation boundaries](/docs/api/errors#propagation-boundaries) for hook t
 
 <auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Renderer" />
 
-Returned by an Extension's [`.renderer()`](/docs/guide/extensions#renderers) selector. It receives the Command Action's and Contexts' `stdout()` lines as `text` and `stderr()` lines as `diag`, the completed action's result, a `stream` signal and each `event` of an [async generator action](/docs/guide/commands#stream-events), and, in `execute()` only, a failure no `onError` hook claimed and each cleanup failure Core would otherwise write as `Cleanup failed:` lines, including cleanup that fails while a cancellation unwinds. Extension `ctx.stdout` and `ctx.stderr` bypass it. Output written before Core calls the selector waits and goes through the chosen renderer, including when a setup throws. Without a `.renderer()` in the application, nothing waits. Routing and argv syntax failures happen before flags are bound and render by default. Without `result` the result is not printed, and without `event` events are not; without `error` Core writes its `Error: message` lines, and without `cleanup`, or if it throws, its own cleanup lines. Exit codes don't change.
+Returned by an Extension's [`.renderer()`](/docs/guide/extensions#renderers) selector. It receives:
+
+- the Command Action's and Contexts' `stdout()` lines as `text`, and `stderr()` lines as `diag`;
+- the completed action's `result`;
+- a `stream` signal and each `event` of an [async generator action](/docs/guide/commands#stream-events);
+- in `execute()` only, an `error` no `onError` hook claimed, and each `cleanup` failure Core would otherwise write as `Cleanup failed:` lines, including cleanup that fails while a cancellation unwinds.
+
+Behavior:
+
+- Extension `ctx.stdout` and `ctx.stderr` bypass it.
+- Output written before Core calls the selector waits and goes through the chosen renderer, including when a setup throws. Without a `.renderer()` in the application, nothing waits.
+- Routing and argv syntax failures happen before flags are bound and render by default.
+- A missing method falls back: without `result` the result is not printed, and without `event` events are not; without `error` Core writes its `Error: message` lines; without `cleanup`, or if it throws, Core writes its own cleanup lines.
+- Exit codes don't change.
 
 ### `ExtensionHandleOptions`
 
@@ -366,9 +409,18 @@ Returned by an Extension's [`.renderer()`](/docs/guide/extensions#renderers) sel
   name="ExtensionHandleOptions"
 />
 
-`.handle(flag, run, options)` binds `run` to a flag the Extension declared with `.flags()`; another name is a compile error, and a name hidden by a dynamic flag record that the Extension doesn't own is a `DEFINITION` error (`unknown-handle-flag`). Calling `.handle()` again for the same flag replaces its handler. A handler fires when the flag is supplied on argv, through its `env` variable, or in typed `run()` input, unless it is a negated boolean (`false`, or only `false` occurrences of a repeatable boolean); a defaulted, omitted, or invalid value fires nothing. A handler for a `recursive: false` flag fires only on the root, so a subcommand may own an unrelated flag with the same name.
+`.handle(flag, run, options)` binds `run` to a flag the Extension declared with `.flags()`.
 
-Selection doesn't depend on `.extend()` order: eager handlers first, then the others; within each group the flag given first on the command line wins. Flags set only through `env` rank after argv flags, by name. Typed `run()` input ranks by the key order of its `flags` object.
+- Another name is a compile error. A name hidden by a dynamic flag record that the Extension doesn't own is a `DEFINITION` error (`unknown-handle-flag`).
+- Calling `.handle()` again for the same flag replaces its handler.
+- A handler fires when the flag is supplied on argv, through its `env` variable, or in typed `run()` input, unless it is a negated boolean (`false`, or only `false` occurrences of a repeatable boolean). A defaulted, omitted, or invalid value fires nothing.
+- A handler for a `recursive: false` flag fires only on the root, so a subcommand may own an unrelated flag with the same name.
+
+Selection doesn't depend on `.extend()` order:
+
+- Eager handlers first, then the others.
+- Within each group, the flag given first on the command line wins. Flags set only through `env` rank after argv flags, by name.
+- Typed `run()` input ranks by the key order of its `flags` object.
 
 ### `ExtensionSetupContext`
 

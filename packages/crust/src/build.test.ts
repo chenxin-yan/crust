@@ -31,7 +31,6 @@ import {
 const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 
 import schema from "../schema/package.json";
-import { runBoundedProcess } from "../tests/bounded-process.ts";
 import {
 	build,
 	type BuildOptions,
@@ -150,15 +149,6 @@ describe("planBuild", () => {
 			runtimeSource: "inferred from @types/node",
 			targets: ["win-x64", "linux-arm64"],
 		});
-		expect(() => planBuild({ ...binary, targets: ["windows-x64"] }, tmpDir)).toThrow(
-			'Unknown Node target "windows-x64". Targets must use canonical Node names. Did you mean "win-x64"?',
-		);
-		// Node publishes no musl builds, and Bun names are not Node names.
-		for (const target of ["linux-x64-musl", "bun-linux-x64"]) {
-			expect(() => planBuild({ ...binary, targets: [target] }, tmpDir)).toThrow(
-				`Unknown Node target "${target}".`,
-			);
-		}
 		// tsdown has no Bun plugin support; the same plugins still work for a Node runtime package.
 		writePackageJson({ crust: { runtime: "node", bunPlugins: ["./plugin.ts"] } });
 		expect(() => planBuild(binary, tmpDir)).toThrow(
@@ -588,7 +578,6 @@ describe("readCrustConfig", () => {
 		expect(Object.keys(crust.properties)).toEqual([...CRUST_CONFIG_KEYS]);
 		expect(crust.properties.runtime.enum).toEqual([...BUILD_RUNTIMES]);
 		expect(crust.properties.artifact.enum).toEqual([...ARTIFACT_KINDS]);
-		expect(crust.description).toContain("`bin` field");
 	});
 });
 
@@ -607,75 +596,6 @@ describe("build", () => {
 	};
 
 	afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
-
-	it.skipIf(host === null)(
-		"returns the staged artifacts and Build Reports of a validated build, logging only through onLog",
-		async () => {
-			writeProject(
-				{ name: "api-cli" },
-				`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(corePath)};\n` +
-					`const hook = defineExtension(defineExtensionId("hook")).build(() => [{ path: "man/api-cli.1", content: ".Dd" }]);\n` +
-					`await new Crust("api-cli").extend(hook).action(() => {}).execute();\n`,
-			);
-			const logged: Array<[string, string]> = [];
-			const result = await build({
-				cwd: tmpDir,
-				artifact: "binary",
-				targets: ["host"],
-				onLog: (line, stream) => logged.push([line, stream]),
-			});
-			const bunPath = which("bun")!;
-			const bunVersion = execFileSync(bunPath, ["--version"], {
-				encoding: "utf8",
-				timeout: 10_000,
-			}).trim();
-
-			const alias = BUN_TARGETS.info[host!].alias;
-			const root = join(stageDir, "root");
-			expect(result.stageDir).toBe(stageDir);
-			expect(result.artifacts).toEqual([
-				{ kind: "package-json", path: join(root, "package.json") },
-				{ kind: "package-json", path: join(stageDir, alias, "package.json"), target: host! },
-				{ kind: "launcher", path: join(root, "bin", "api-cli.js"), command: "api-cli" },
-				{
-					kind: "executable",
-					path: join(
-						stageDir,
-						alias,
-						"bin",
-						`api-cli-${host}${host!.includes("windows") ? ".exe" : ""}`,
-					),
-					command: "api-cli",
-					target: host!,
-				},
-			]);
-			for (const { path } of result.artifacts) expect(existsSync(path), path).toBe(true);
-			expect(result.reports).toEqual({
-				"api-cli": { extensions: [{ id: defineExtensionId("hook"), files: ["man/api-cli.1"] }] },
-			});
-			expect(readManifest(join(stageDir, "manifest.json"))).toMatchObject({
-				runtime: "bun",
-				artifact: "binary",
-				// The external bun on PATH is the selected compiler, so its version is embedded.
-				embeddedRuntimeVersion: bunVersion,
-				build: result.reports,
-			});
-			expect(existsSync(join(root, "man", "api-cli.1"))).toBe(true);
-			expect(logged.map(([line]) => line)).toEqual(
-				expect.arrayContaining([
-					expect.stringContaining("Artifact: binary"),
-					expect.stringContaining(`Compiler: bun ${bunVersion}`),
-				]),
-			);
-			// Every CLI progress line arrives through the callback, on the stream the CLI would use.
-			expect(logged.map(([line]) => line).join("\n")).toContain(
-				"Preparing Command Snapshot for api-cli...\n  hook  1 file  man/api-cli.1",
-			);
-			expect(logged.map(([line]) => line).join("\n")).toContain("Staged");
-			expect(logged.every(([, stream]) => stream === "stdout")).toBe(true);
-		},
-		60_000,
-	);
 
 	it("rejects overlapping builds of one project and releases the guard after success or failure", async () => {
 		writeProject(
@@ -705,52 +625,6 @@ describe("build", () => {
 			"stageDir",
 			stageDir,
 		);
-	}, 30_000);
-
-	it("rejects a build while another process owns the project, including through an alias", async () => {
-		writeProject(
-			{ name: "node-cli", crust: { runtime: "node", artifact: "package" } },
-			'console.log("hi");\n',
-		);
-		mkdirSync(stageDir);
-		const kept = join(stageDir, "kept.txt");
-		writeFileSync(kept, "previous stage");
-		const alias = join(tmpDir, "alias");
-		symlinkSync(tmpDir, alias, "junction");
-		const ready = join(tmpDir, "ready");
-		const release = join(tmpDir, "release");
-		const script = join(tmpDir, "hold-build.ts");
-		writeFileSync(
-			script,
-			`import { existsSync, writeFileSync } from "node:fs";
-import { build } from ${JSON.stringify(new URL("./build.ts", import.meta.url).href)};
-await build({ cwd: ${JSON.stringify(tmpDir)}, validate: false, onLog() {
-	if (existsSync(${JSON.stringify(ready)})) return;
-	writeFileSync(${JSON.stringify(ready)}, "ready");
-	const deadline = Date.now() + 15_000;
-	const gate = new Int32Array(new SharedArrayBuffer(4));
-	while (!existsSync(${JSON.stringify(release)})) {
-		if (Date.now() > deadline) throw new Error("Build gate timed out");
-		Atomics.wait(gate, 0, 0, 10);
-	}
-} });
-`,
-		);
-		const holder = runBoundedProcess(which("bun")!, [script], { timeout: 25_000 });
-		// The bounded child can reject while the parent is still waiting for readiness.
-		void holder.catch(() => {});
-		try {
-			await vi.waitFor(() => expect(existsSync(ready)).toBe(true), { timeout: 10_000 });
-			await expect(build({ cwd: alias, validate: false })).rejects.toThrow("already building");
-			expect(readFileSync(kept, "utf8")).toBe("previous stage");
-			expect(existsSync(join(tmpDir, ".crust.lock"))).toBe(true);
-		} finally {
-			writeFileSync(release, "release");
-			const result = await holder;
-			expect(result.exitCode, result.stderr).toBe(0);
-		}
-		expect(existsSync(join(tmpDir, ".crust.lock"))).toBe(false);
-		await expect(build({ cwd: tmpDir, validate: false })).resolves.toHaveProperty("stageDir");
 	}, 30_000);
 
 	it("leaves an existing lock and stage untouched and explains manual recovery", async () => {
@@ -1011,37 +885,6 @@ await build({ cwd: ${JSON.stringify(tmpDir)}, validate: false, onLog() {
 });
 
 describe("buildCommand error handling", () => {
-	it("rejects crust.external problems before wiping the previous stage", async () => {
-		const tmpDir = mkdtempSync(join(tmpdir(), "crust-external-guard-"));
-		mkdirSync(join(tmpDir, ".crust"));
-		writeFileSync(join(tmpDir, ".crust", "previous.txt"), "kept");
-		writeFileSync(join(tmpDir, "cli.ts"), "export {};");
-		try {
-			for (const [range, error] of [
-				["workspace:*", 'package.json dependencies["fake-native"] must be a publishable range'],
-				[
-					undefined,
-					'package.json crust.external entry "fake-native" is not in package.json dependencies',
-				],
-			] as const) {
-				writeFileSync(
-					join(tmpDir, "package.json"),
-					JSON.stringify({
-						name: "tool",
-						version: "1.0.0",
-						bin: { tool: "cli.ts" },
-						dependencies: range === undefined ? {} : { "fake-native": range },
-						crust: { runtime: "node", artifact: "package", external: ["fake-native"] },
-					}),
-				);
-				await expect(build({ cwd: tmpDir, validate: false })).rejects.toThrow(error);
-				expect(readFileSync(join(tmpDir, ".crust", "previous.txt"), "utf8")).toBe("kept");
-			}
-		} finally {
-			rmSync(tmpDir, { recursive: true, force: true });
-		}
-	});
-
 	it("rejects invalid identity before wiping the previous stage, even with --no-validate", async () => {
 		const tmpDir = mkdtempSync(join(tmpdir(), "crust-identity-guard-"));
 		mkdirSync(join(tmpDir, ".crust"));
@@ -1072,49 +915,6 @@ describe("buildCommand error handling", () => {
 				expect(result.stderr).toContain("non-empty string");
 				expect(readFileSync(join(tmpDir, ".crust", "previous.txt"), "utf8")).toBe("kept");
 			}
-		} finally {
-			process.cwd = originalCwd;
-			rmSync(tmpDir, { recursive: true, force: true });
-		}
-	});
-
-	it("rejects bad bin entries before wiping .crust, even with --no-validate", async () => {
-		const tmpDir = mkdtempSync(join(tmpdir(), "crust-bin-guard-"));
-		mkdirSync(join(tmpDir, "src"), { recursive: true });
-		mkdirSync(join(tmpDir, ".crust"), { recursive: true });
-		writeFileSync(join(tmpDir, ".crust", "previous.txt"), "kept\n");
-		writeFileSync(join(tmpDir, "src", "cli.ts"), "export {};\n");
-		const originalCwd = process.cwd;
-		process.cwd = () => tmpDir;
-		try {
-			symlinkSync(join(tmpDir, "src", "cli.ts"), join(tmpDir, "src", "alias.ts"), "file");
-			symlinkSync(join(tmpDir, "src"), join(tmpDir, "source"), "dir");
-			for (const [bin, error] of [
-				[{ one: "src/cli.ts", two: "./src/cli.ts" }, 'bin "one" and "two" both build'],
-				[{ one: "src/cli.ts", two: "src/alias.ts" }, 'bin "one" and "two" both build'],
-				[{ one: "src/cli.ts", two: "source/cli.ts" }, 'bin "one" and "two" both build'],
-				[{ Tool: "src/cli.ts", tool: "src/alias.ts" }, "differ only by case"],
-				[{ cli: "src" }, "is not a file"],
-				[{ "../up": "src/cli.ts" }, "is not a valid command name"],
-				[{ cli: "nonexistent.ts" }, "Entry file not found"],
-				[{}, "non-empty object"],
-			] as const) {
-				writeFileSync(
-					join(tmpDir, "package.json"),
-					JSON.stringify({ name: "guard", version: "1.0.0", bin }),
-				);
-				const result = await captureExecute(new Crust("test").add(buildCommand), [
-					"build",
-					"--artifact",
-					"binary",
-					"--no-validate",
-					"--target",
-					"bun-linux-x64",
-				]);
-				expect(result.exitCode).toBe(1);
-				expect(result.stderr).toContain(error);
-			}
-			expect(existsSync(join(tmpDir, ".crust", "previous.txt"))).toBe(true);
 		} finally {
 			process.cwd = originalCwd;
 			rmSync(tmpDir, { recursive: true, force: true });

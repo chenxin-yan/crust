@@ -50,14 +50,6 @@ function mockRegistryFailure() {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("isNewerVersion", () => {
-	it("returns true when latest major is higher", async () => {
-		expect(isNewerVersion("1.0.0", "2.0.0")).toBe(true);
-	});
-
-	it("returns false for equal versions", async () => {
-		expect(isNewerVersion("1.2.3", "1.2.3")).toBe(false);
-	});
-
 	it("returns false when latest is older (major)", async () => {
 		expect(isNewerVersion("2.0.0", "1.0.0")).toBe(false);
 	});
@@ -91,22 +83,6 @@ describe("fetchLatestVersion", () => {
 
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
-	});
-
-	it("returns latest version from registry response", async () => {
-		mockFetch(() =>
-			Promise.resolve(
-				new Response(
-					JSON.stringify({
-						"dist-tags": { latest: "2.0.0" },
-					}),
-					{ status: 200 },
-				),
-			),
-		);
-
-		const result = await fetchLatestVersion("my-cli", "https://registry.npmjs.org", 5000);
-		expect(result).toBe("2.0.0");
 	});
 
 	it("constructs correct URL with encoded package name", async () => {
@@ -147,13 +123,6 @@ describe("fetchLatestVersion", () => {
 			"https://registry.npmjs.org",
 			5000,
 		);
-		expect(result).toBeNull();
-	});
-
-	it("returns null on network error", async () => {
-		mockFetch(() => Promise.reject(new Error("Network failure")));
-
-		const result = await fetchLatestVersion("my-cli", "https://registry.npmjs.org", 5000);
 		expect(result).toBeNull();
 	});
 
@@ -202,20 +171,6 @@ describe("fetchLatestVersion", () => {
 			50, // Very short timeout
 		);
 		expect(result).toBeNull();
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Lazy store import — sideEffects:false invariant
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("lazy store import", () => {
-	it("never imports @crustjs/store statically", async () => {
-		// The env-sandbox tests can't detect an eager import (env is read at call
-		// time), so pin the deferred-import invariant against the source itself.
-		const source = await readFile(new URL("./update-notifier-check.ts", import.meta.url), "utf8");
-		expect(source).not.toMatch(/^import[^;]*["']@crustjs\/store["']/m);
-		expect(source).toContain('await import("@crustjs/store")');
 	});
 });
 

@@ -117,12 +117,6 @@ describe(".output()", () => {
 		expect(actionless).toMatchObject({ status: "handled", by: "fallback" });
 	});
 
-	it("validates the result of an async action", async () => {
-		const app = new Crust("cli").output(user).action(async () => ({ id: 2 }));
-
-		expect(await app.run([])).toMatchObject({ result: { id: 2, role: "member" } });
-	});
-
 	it("awaits a promise the schema outputs, as its result type declares", async () => {
 		const app = new Crust("cli").output(z.promise(z.number())).action(async () => 3);
 

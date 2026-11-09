@@ -18,12 +18,6 @@ function _typecheckRejectsInvalidChoiceDefaultsAndReservedSpellingsAtTheBuilderC
 	new Crust("cli").flags({ safe: { type: "boolean", aliases: ["__proto__"] } });
 }
 
-// rejects defaults outside literal choices at the builder call
-function _typecheckRejectsDefaultsOutsideLiteralChoicesAtTheBuilderCall() {
-	// @ts-expect-error -- default falls outside the literal choices
-	new Crust("cli").args({ name: "mode", type: "string", choices: ["a", "b"], default: "z" });
-}
-
 function _optionalParserDefinitions() {
 	type OptionalAsyncDefinition = {
 		readonly type: "string";

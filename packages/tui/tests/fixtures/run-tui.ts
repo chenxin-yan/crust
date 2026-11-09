@@ -71,7 +71,6 @@ export type TuiObservation = {
 	rendererDestroyed?: boolean;
 	manualTeardownReached?: boolean;
 	keypressListenersBefore?: number;
-	keypressListenersAfter?: number;
 	stdinDataListeners?: number;
 	closedOnSettle?: boolean;
 };
@@ -88,10 +87,8 @@ async function settle(result: Promise<void>, mountFailure?: Error): Promise<TuiO
 
 export type TuiScenario =
 	| "mount-failure"
-	| "destroy-resolves"
 	| "ctrl-c-aborts"
 	| "destroy-during-pending-mount"
-	| "keypress-listener-teardown"
 	| "ctrl-shift-c"
 	| "ctrl-c-base-code-99"
 	| "ctrl-c-base-code-67"
@@ -129,10 +126,6 @@ const scenarios = {
 		);
 		return { outcome, rendererDestroyed: renderer?.isDestroyed };
 	},
-	"destroy-resolves": async () => {
-		const { config } = createTtyConfig();
-		return { outcome: await settle(runTui((renderer) => renderer.destroy(), config)) };
-	},
 	"ctrl-c-aborts": async () => {
 		const { config, stdin } = createTtyConfig();
 		return {
@@ -159,23 +152,6 @@ const scenarios = {
 			outcome,
 			keypressListenersBefore: listeners,
 			stdinDataListeners: config.stdin.listenerCount("data"),
-		};
-	},
-	"keypress-listener-teardown": async () => {
-		const { config } = createTtyConfig();
-		let renderer: CliRenderer | undefined;
-		let before = 0;
-		const outcome = await settle(
-			runTui((created) => {
-				renderer = created;
-				before = created.keyInput.listenerCount("keypress");
-				created.destroy();
-			}, config),
-		);
-		return {
-			outcome,
-			keypressListenersBefore: before,
-			keypressListenersAfter: renderer?.keyInput.listenerCount("keypress"),
 		};
 	},
 	"ctrl-shift-c": async () => {

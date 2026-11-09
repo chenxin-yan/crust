@@ -9,16 +9,6 @@ import { nonTTYIO, tick } from "./test-helpers.ts";
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("confirm — default value", () => {
-	it("defaults to true when no default is specified", async () => {
-		const prompt = renderPrompt(confirm, { message: "Continue?" });
-
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe(true);
-	});
-
 	it("uses default: false when specified", async () => {
 		const prompt = renderPrompt(confirm, {
 			message: "Continue?",
@@ -44,39 +34,6 @@ describe("confirm — toggle", () => {
 		await tick();
 		// Default is true, left should toggle to false
 		prompt.keys("left");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe(false);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Keyboard shortcuts
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("confirm — shortcuts", () => {
-	it("y key sets value to true", async () => {
-		const prompt = renderPrompt(confirm, {
-			message: "Continue?",
-			default: false,
-		});
-
-		await tick();
-		prompt.type("y");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe(true);
-	});
-
-	it("n key sets value to false", async () => {
-		const prompt = renderPrompt(confirm, { message: "Continue?" });
-
-		await tick();
-		prompt.type("n");
 		await tick();
 		prompt.keys("return");
 

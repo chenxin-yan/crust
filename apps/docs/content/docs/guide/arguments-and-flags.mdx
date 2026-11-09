@@ -27,9 +27,19 @@ $ convert report.md
 report.md -> json
 $ convert report.md yaml draft
 report.md -> yaml (draft)
+$ convert
+Error: Missing required argument "<input>"
 ```
 
-Positional values fill definitions in order. Set `required: true` when omission should fail, use `default` for a fallback, and leave both out for an optional value. These definitions infer `string`, `string`, and `string | undefined` in the Command Action; see [`ArgDef`](/docs/api/types#argdef) for the full definition.
+Positional values fill definitions in order. Each definition is one of:
+
+| Definition       | Omitted value                | Type in the action    |
+| ---------------- | ---------------------------- | --------------------- |
+| `required: true` | Fails before the action runs | `string`              |
+| `default: value` | The default                  | `string`              |
+| Neither          | `undefined`                  | `string \| undefined` |
+
+See [`ArgDef`](/docs/api/types#argdef) for every option.
 
 ### Variadic arguments
 
@@ -42,7 +52,7 @@ $ copy dist a.ts b.ts
 2 files to /home/me/project/dist
 ```
 
-Use a final variadic argument when the command accepts any number of values in that position. The Command Action receives those values as an array; `type: "path"` resolves each value against the working directory.
+A final `variadic: true` argument takes any number of values as an array. `type: "path"` resolves each value against the working directory.
 
 ### Choices
 
@@ -55,7 +65,7 @@ $ run python
 Error: Invalid value for <runtime>. Expected one of: bun, node
 ```
 
-Use `choices` when the accepted strings are known in advance. The Command Action gets their string union, plus `undefined` here because the argument is neither required nor defaulted, and an invalid value fails before the action runs.
+`choices` types the value as their string union (plus `undefined` here, since the argument is neither required nor defaulted). Any other value fails before the action runs.
 
 ### Pass through raw tokens
 
@@ -66,11 +76,21 @@ $ wrap -- --watch src
 --watch src
 ```
 
-Tokens after `--` are never parsed as flags. They fill any declared positional arguments still unfilled, and the rest reach the Command Action as `rawArgs`. Use this for wrapper commands that pass options to another tool. A command with no positional arguments, like `wrap`, receives every token after `--`; an optional argument takes the first one (`wrap [target] -- --watch src` binds `target` to `--watch`), and a variadic argument takes them all, leaving `rawArgs` empty.
+Tokens after `--` are never parsed as flags. Use them for wrapper commands that pass options to another tool:
+
+- They first fill declared positional arguments that are still empty: `wrap [target] -- --watch src` binds `target` to `--watch`.
+- A variadic argument takes all of them.
+- The rest reach the Command Action as `rawArgs`.
+
+{/* TODO: remove once https://github.com/oven-sh/bun/issues/13984 ships; see the matching TODO in packages/core/src/command/invocation.ts. */}
+
+<Callout type="warn">
+  Bun currently drops a leading `--` when it runs a script
+  ([oven-sh/bun#13984](https://github.com/oven-sh/bun/issues/13984)), so `bun src/cli.ts -- --watch`
+  arrives as `--watch`. Node.js and standalone binaries are unaffected. Under Bun, write `-- --`.
+</Callout>
 
 ## Flags
-
-Use boolean flags for switches and value-taking flags for named settings.
 
 <include lang="ts" meta='title="src/cli.ts" twoslash'>
   ../../../examples/guide/flags.ts
@@ -81,18 +101,17 @@ $ serve --color --port 3000
 color=true port=3000
 $ serve
 color=undefined port=undefined
-```
-
-`.flags()` takes one record: each key is a flag's name without the `--` prefix. A user types `--color --port 3000`, and the action reads `flags.color` and the converted number in `flags.port`. Quote a name that is not an identifier, such as `"dry-run"`, and read it as `flags["dry-run"]`. A name must not contain whitespace or `=`, or start with `-`: TypeScript rejects such a literal name, and a computed one throws a `DEFINITION` error.
-
-In this example, neither flag has `required`, `default`, or an environment binding, so omitting it gives an action value of `undefined`. When supplied, a value-taking flag needs one value, so `serve --port` fails. Built-in types convert CLI text and reject invalid input, including a blank number, before the action runs:
-
-```sh
 $ serve --port nope
 Error: Expected a number for --port.
 ```
 
-Invalid values are reported after [flag handlers and `preRun` hooks](/docs/guide/extensions#hooks) and take precedence over missing required values, so `serve --port nope --help` still prints help. Malformed argv, such as an unknown flag or `serve --port --help`, fails before any hook runs.
+`.flags()` takes one record keyed by flag name, without the `--` prefix. Use boolean flags for switches and value-taking flags for named settings.
+
+- **Names:** quote a name that is not an identifier, such as `"dry-run"`, and read it as `flags["dry-run"]`. A name must not contain whitespace or `=`, or start with `-`. TypeScript rejects such a literal name; a computed one throws a `DEFINITION` error.
+- **Omitted:** a flag without `required`, `default`, or an `env` binding is `undefined`.
+- **Values:** a value-taking flag needs one value, so `serve --port` fails. Built-in types convert the text and reject invalid input, including a blank number, before the action runs.
+
+Malformed argv, such as an unknown flag or `serve --port --help`, fails before any hook runs. Invalid values fail later, after [flag handlers and `preRun` hooks](/docs/guide/extensions#hooks), so `serve --port nope --help` with [`help()`](/docs/modules/extensions/help) still prints help. An invalid value is reported before a missing required one.
 
 ### Required and defaulted values
 
@@ -100,23 +119,16 @@ Invalid values are reported after [flag handlers and `preRun` hooks](/docs/guide
   ../../../examples/guide/flags-required.ts
 </include>
 
-Use `default` when omission should choose a value. This success case omits `--registry`, so the action receives its `npm` default. The action does not print the token:
-
 ```sh
 $ publish --token example
 publishing to npm
-```
-
-Set `required: true` when a value must be supplied. This example has no environment binding, so a missing required flag fails before the action runs:
-
-```sh
 $ publish
 Error: Missing required flag "--token"
 $ echo $?
 1
 ```
 
-Both defaulted and required values are non-optional in the action.
+`default` fills in an omitted value, like `registry` above. `required: true` fails before the action runs when the value is missing. Either way, the value is non-optional in the action.
 
 ### Aliases and negation
 
@@ -124,21 +136,17 @@ Both defaulted and required values are non-optional in the action.
   ../../../examples/guide/flags-aliases.ts
 </include>
 
-Set `short` for a one-character (one code point) alias and `aliases` for long aliases. Every spelling writes to the property named by the flag's key:
-
 ```sh
 $ serve --colour
 color=true
 $ serve -c
 color=true
-```
-
-Boolean flags also accept `--no-<name>` and `--no-<alias>` unless `noNegate: true`:
-
-```sh
 $ serve --no-colour
 color=false
 ```
+
+- `short` sets a one-character (one code point) alias; `aliases` sets long aliases. Every spelling writes to the flag's key.
+- Boolean flags also accept `--no-<name>` and `--no-<alias>`, unless `noNegate: true`.
 
 See the [`.flags()` contract](/docs/api/crust#flagsflags) for all accepted spellings.
 
@@ -148,27 +156,22 @@ See the [`.flags()` contract](/docs/api/crust#flagsflags) for all accepted spell
   ../../../examples/guide/flags-values.ts
 </include>
 
-Set `multiple: true` when a flag may occur more than once. Without a `delimiter`, each occurrence contributes one value in order:
-
 ```sh
 $ serve --target linux -t darwin
 targets=linux,darwin runtime=bun tag=undefined
 ```
 
-Without a default or environment binding, omitting a repeated flag gives `undefined`. Repeat the flag for every value, or configure a [delimiter](#environment-variables). In `--target linux darwin`, `darwin` is a positional argument, not another target.
+`multiple: true` lets a flag occur more than once; each occurrence adds one value, in order. Omitted, it is `undefined` unless it has a default or `env` binding.
+
+Repeat the flag for every value, or set a [`delimiter`](#delimiters). In `--target linux darwin`, `darwin` is a positional argument, not another target.
 
 ### Flag choices
 
-Use `choices` for a fixed set of strings. An accepted value reaches the action:
+`choices` restricts a flag to a fixed set of strings, like `runtime` above:
 
 ```sh
 $ serve --runtime node
 targets=undefined runtime=node tag=undefined
-```
-
-An invalid value fails before the action runs:
-
-```sh
 $ serve --runtime python
 Error: Invalid value for --runtime. Expected one of: bun, node
 $ echo $?
@@ -181,8 +184,6 @@ $ echo $?
   ../../../examples/guide/flags-env.ts
 </include>
 
-Set `env: { name: "VARIABLE" }` to read a flag from that environment variable when it is absent from argv. Precedence is argv, then env, then `default`; an environment value also satisfies `required`. Environment bindings are declarations: variables are read during terminal invocation, not when defining the flag.
-
 ```sh
 $ PUBLISH_TOKEN=example publish
 publishing to npm tags=undefined
@@ -190,11 +191,26 @@ $ PUBLISH_TOKEN=example PUBLISH_REGISTRY=github publish --registry jsr
 publishing to jsr tags=undefined
 ```
 
-After its own optional splitting, the environment value enters the same conversion and validation path as argv, so `type` conversion, `choices`, `parse`, and schemas apply unchanged. Boolean flags accept `true` or `1` as true; any other value is false, and a `noNegate` flag rejects a false value the way it rejects `--no-<name>`.
+`env: { name: "VARIABLE" }` reads a flag from that variable when argv omits it. Variables are read when the command runs, not when the flag is defined.
 
-The two delimiters are independent: flag-level `delimiter` splits string argv occurrences, while `env.delimiter` splits environment text. Both require `multiple: true`, use nonempty literal separators, and drop empty segments. TypeScript rejects an empty literal `env.name`, `delimiter`, or `env.delimiter`; a computed empty value throws a `DEFINITION` error. Neither inherits the other's setting; without `env.delimiter`, the entire environment value is one occurrence. Boolean argv switches remain `--flag` / `--no-flag` (not `--flag=true,false`); repeated booleans can use `env: { name: "FEATURES", delimiter: "," }` for environment text such as `true,false`.
+- **Precedence:** argv, then env, then `default`. An environment value satisfies `required`.
+- **Validation:** environment text goes through the same `type` conversion, `choices`, `parse`, and schemas as argv.
+- **Booleans:** `true` or `1` is true; any other value is false. A `noNegate` flag rejects a false value, as it rejects `--no-<name>`.
+- **Invalid values:** an invalid argv value fails instead of trying env; an invalid environment value, including a blank `PORT=` for a number flag, fails instead of using the default. Neither blocks `--help` or `--version`.
+- **Docs:** generated documentation lists the variable as `[env: PUBLISH_TOKEN]`, never its value.
+- **Programmatic calls:** [`run()`](/docs/api/crust#runpath-input-options) never reads the environment.
+- **Arguments:** positional arguments have no `env`; use a flag.
 
-The example above uses commas on argv and colons in `PUBLISH_TAGS`:
+#### Delimiters
+
+Split a `multiple: true` flag's values with two independent settings:
+
+| Setting         | Splits                   | Without it                      |
+| --------------- | ------------------------ | ------------------------------- |
+| `delimiter`     | Each string argv value   | Each occurrence is one value    |
+| `env.delimiter` | The environment variable | The whole variable is one value |
+
+The example uses commas on argv and colons in `PUBLISH_TAGS`:
 
 ```sh
 $ PUBLISH_TOKEN=example PUBLISH_TAGS=latest::beta publish
@@ -203,15 +219,12 @@ $ PUBLISH_TOKEN=example publish --tag latest,beta --tag next
 publishing to npm tags=latest,beta,next
 ```
 
-An explicit argv occurrence always wins over the environment, even when it splits to zero occurrences. Invalid argv values fail rather than trying env; invalid environment values, including a blank `PORT=` for a number flag, fail rather than trying the default. Like invalid argv values, they do not block `--help` or `--version`. Zero occurrences after splitting follow the existing default/required or schema rules. Help, man pages, and generated skills list the variable as `[env: PUBLISH_TOKEN]` and never print its value. Programmatic [`run()`](/docs/api/crust#runpath-input-options) binds structured input directly: it does not read the environment and never splits arrays. Positional arguments have no `env`; use a flag.
-
-### Secrets
-
-Bind a secret such as an API token to an `env` variable, as `PUBLISH_TOKEN` above, instead of asking for it on argv, where it lands in shell history and process listings. Don't put tokens in [`nextSteps`](/docs/modules/extensions/next-steps) input: steps print as command lines. Crust's own value errors [never print values](/docs/guide/error-handling#errors-never-echo-values); they name the flag and its variable instead. Messages from your own `parse` functions and schemas are your text, so keep values out of them.
+- Both require `multiple: true` and a nonempty literal separator. TypeScript rejects an empty literal `env.name`, `delimiter`, or `env.delimiter`; a computed empty value throws a `DEFINITION` error.
+- Empty segments are dropped. Zero values after splitting follow the usual default, required, and schema rules, but an argv occurrence still wins over the environment.
+- [`run()`](/docs/api/crust#runpath-input-options) takes arrays and never splits them.
+- Boolean argv stays `--flag` / `--no-flag`. Repeated booleans can split environment text such as `true,false` with `env: { name: "FEATURES", delimiter: "," }`.
 
 ### Values that start with `-`
-
-For a value-taking flag, attach a dash-leading value with `=` so it is not mistaken for another flag. For a positional argument, pass the value after `--`, as in `seek -- -5`; tokens after `--` fill positional arguments before [`rawArgs`](#pass-through-raw-tokens).
 
 ```sh
 $ serve --tag=-nightly
@@ -220,13 +233,13 @@ $ serve --tag -nightly
 Error: Missing value for flag "--tag"; to pass a value starting with "-", write --tag=<value>
 ```
 
+Attach a dash-leading flag value with `=`. For a positional argument, pass it after `--`, as in `seek -- -5`; see [raw tokens](#pass-through-raw-tokens).
+
 ### Reuse across commands
 
 <include lang="ts" meta='title="src/tools.ts"'>
   ../../../examples/guide/flags-reuse.ts
 </include>
-
-Use `defineFlag()` when several commands need the same definition. Attach it under a key on every command that should parse the flag; the key names the flag, so `{ format }` defines `--format`. Both commands above consume `format`:
 
 ```sh
 $ tools print --format yaml
@@ -235,6 +248,8 @@ $ tools inspect
 inspect as json
 ```
 
+`defineFlag()` creates one definition for several commands. Attach it under a key on each command that should parse it; the key names the flag, so `{ format }` defines `--format`.
+
 ## Validation
 
-Built-in conversion covers common values such as the `number` flag above. For custom parsers and Standard Schemas, see [Values and validation](/docs/guide/values-and-validation).
+Built-in types cover common values, such as the `number` flag above. For custom parsers and Standard Schemas, see [Values and validation](/docs/guide/values-and-validation).

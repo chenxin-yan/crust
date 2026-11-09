@@ -12,7 +12,7 @@ pnpm run dev
 - Property tables can omit readonly modifiers, unions, overloads and generic constraints. Label signature sketches as summaries and link owning source files for exact contracts. Source links track `main`; installed declarations describe released versions.
 - Keep behavior, computed defaults and rationale authored; `@default` is documentation, not runtime verification. Label curated export summaries as curated.
 - A package's `package.json` `description` is its only description. Package pages (`modules/<slug>.mdx` or `modules/<slug>/index.mdx`) take it as their frontmatter `description`, and `<PackageTable group="…" />` on the modules overview renders it (`package-pages.ts`); package READMEs and the root README table repeat it verbatim, checked by `scripts/package-descriptions.test.ts`.
-- Keep complete, high-risk examples in `examples/` and embed them with `<include lang="ts">…</include>` so the docs TypeScript project checks them. Partial sketches can remain MDX fences.
+- Keep complete, high-risk examples in `examples/` and embed them with `<include lang="ts">…</include>` so the docs TypeScript project checks them. Embed part of a file with `file.ts#name` and `//#region name` / `//#endregion` markers. Partial sketches can remain MDX fences.
 
 ## Validation
 

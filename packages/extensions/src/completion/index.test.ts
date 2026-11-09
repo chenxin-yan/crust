@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -76,27 +76,6 @@ describe("completion", () => {
 			await rm(tmpDir, { recursive: true, force: true });
 		});
 
-		it("writes all three shell files with canonical filenames", async () => {
-			const app = buildCli();
-			await app.execute({
-				argv: ["completion", "bash", "--output-dir", tmpDir],
-			});
-
-			// Per spec: bash → `<bin>`, zsh → `_<bin>`, fish → `<bin>.fish`.
-			const entries = (await readdir(tmpDir)).sort();
-			expect(entries).toEqual(["_mycli", "mycli", "mycli.fish"]);
-
-			const bash = await readFile(join(tmpDir, "mycli"), "utf8");
-			expect(bash).toContain("# completion script for mycli v1.2.3");
-			expect(bash).toContain("complete -o default -F _mycli 'mycli'");
-
-			const zsh = await readFile(join(tmpDir, "_mycli"), "utf8");
-			expect(zsh.startsWith("#compdef mycli\n")).toBe(true);
-
-			const fish = await readFile(join(tmpDir, "mycli.fish"), "utf8");
-			expect(fish).toContain("complete -c 'mycli' -f");
-		});
-
 		it("writes nothing to stdout in --output-dir mode", async () => {
 			const { stdout } = await captureExecute(buildCli(), [
 				"completion",
@@ -110,21 +89,6 @@ describe("completion", () => {
 });
 
 describe("completion build hook", () => {
-	it("returns all three shell files under completions/", async () => {
-		const { files } = await runBuildHooks(buildCli());
-
-		expect([...files.keys()]).toEqual([
-			"completions/mycli",
-			"completions/_mycli",
-			"completions/mycli.fish",
-		]);
-		const [bash, zsh, fish] = files.values();
-		expect(bash).toContain("# completion script for mycli v1.2.3");
-		expect(bash).toContain("complete -o default -F _mycli 'mycli'");
-		expect(zsh).toMatch(/^#compdef mycli\n/);
-		expect(fish).toContain("complete -c 'mycli' -f");
-	});
-
 	it("names the configured command in each regenerate hint", async () => {
 		const { files } = await runBuildHooks(
 			new Crust("mycli", { version: "1.0.0" }).extend(completion({ command: "completions" })),

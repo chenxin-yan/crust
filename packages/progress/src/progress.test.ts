@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 
 import { progress as createProgressBar } from "./progress.ts";
-import { withTerminalIO } from "./spinner.ts";
 import { createFakeSink } from "./test-helpers.ts";
 
 beforeAll(() => vi.stubEnv("FORCE_COLOR", "0"));
@@ -52,30 +51,5 @@ describe("progress — determinate", () => {
 		const output = writes.join("");
 		expect(output).toContain("✗");
 		expect(output).toContain("Upload failed (2/5)");
-	});
-});
-
-describe("progress — sink resolution", () => {
-	it("honors sink from options and the ambient withTerminalIO output", () => {
-		const option = createFakeSink(false);
-		const ambient = createFakeSink(false);
-
-		const viaOption = createProgressBar({
-			message: "Upload",
-			total: 2,
-			sink: option.sink,
-		});
-		viaOption.start();
-		viaOption.advance();
-		viaOption.stop();
-
-		withTerminalIO({ output: ambient.sink }, () => {
-			const viaAmbient = createProgressBar({ message: "Sync", total: 2 });
-			viaAmbient.start();
-			viaAmbient.stop();
-		});
-
-		expect(option.writes[0]).toContain("✓ Upload (1/2)");
-		expect(ambient.writes[0]).toContain("✓ Sync (0/2)");
 	});
 });

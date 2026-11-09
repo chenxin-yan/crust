@@ -41,10 +41,6 @@ function _extensionBoundary(broad: Extension) {
 	);
 	const result = contributed.run(["child"], { flags: { trace: true } });
 	type _Result = Expect<Equal<typeof result, Promise<RunOutcome<number>>>>;
-	const needsVersion = defineExtension<"version">(id);
-	// @ts-expect-error Checked collections retain erased metadata requirements.
-	new Crust("app").extend(needsVersion);
-	new Crust("app", { version: "1" }).extend(needsVersion);
 	const list = [empty];
 	new Crust("app").extend(...list);
 	new Crust("app").extend(broad);

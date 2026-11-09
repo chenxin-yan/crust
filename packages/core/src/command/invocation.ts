@@ -1008,6 +1008,9 @@ export async function executeInvocation(
 	options: ExecuteOptions | undefined,
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): Promise<number> {
+	// TODO: Bun drops a leading `--` from process.argv when running a script, so `bun cli.ts -- --x`
+	// arrives as `--x` (https://github.com/oven-sh/bun/issues/13984). Crust cannot recover it here;
+	// guide/arguments-and-flags.mdx documents the `-- --` workaround. Drop that callout once fixed.
 	const argv = options?.argv ?? process.argv.slice(2);
 	const io: InvocationIO = { ...DEFAULT_IO, ...options?.io };
 	// One controller per invocation so SIGINT, SIGTERM and a caller signal share `ctx.signal`.

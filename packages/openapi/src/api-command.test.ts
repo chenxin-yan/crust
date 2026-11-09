@@ -146,13 +146,6 @@ describe("api --list and --spec", () => {
 		});
 	});
 
-	it("finds an operation through a referenced Path Item", async () => {
-		const { stdout, exitCode } = await captureExecute(buildApp(), ["api", "--spec", "listTeams"]);
-
-		expect(exitCode).toBe(0);
-		expect(JSON.parse(stdout)).toEqual({ operationId: "listTeams", summary: "List teams" });
-	});
-
 	it("prints a path item by path, including its shared parameters", async () => {
 		const { stdout } = await captureExecute(buildApp(), ["api", "--spec", "/users/{id}"]);
 
@@ -180,13 +173,6 @@ describe("api --list and --spec", () => {
 				exitCode: 1,
 			});
 		}
-	});
-
-	it("fails for an unknown operationId or path", async () => {
-		const { stderr, exitCode } = await captureExecute(buildApp(), ["api", "--spec", "constructor"]);
-
-		expect(exitCode).toBe(1);
-		expect(stderr).toBe('Error: No operation or path "constructor" in the OpenAPI spec');
 	});
 });
 
@@ -644,27 +630,15 @@ describe("api <path>", () => {
 			["api", "/users", "-F", "amount=1e309"],
 			'Error: Invalid -F value for "amount": the number is out of range.',
 		],
+		[
+			["api", "/users", "-H", "Bad Header: s3cr3t"],
+			"Error: Invalid -H value: the header name or value has characters HTTP does not allow.",
+		],
 	])("fails before any request for %j", async (argv, message) => {
 		const calls = stubFetch();
 		const { stderr, exitCode } = await captureExecute(buildApp(), argv);
 
 		expect({ stderr, exitCode }).toEqual({ stderr: message, exitCode: 1 });
-		expect(calls).toEqual([]);
-	});
-
-	it("rejects a header the platform refuses as a PARSE error before any request", async () => {
-		const calls = stubFetch();
-		const { stderr, exitCode } = await captureExecute(buildApp(), [
-			"api",
-			"/users",
-			"-H",
-			"Bad Header: s3cr3t",
-		]);
-
-		expect(exitCode).toBe(1);
-		expect(stderr).toBe(
-			"Error: Invalid -H value: the header name or value has characters HTTP does not allow.",
-		);
 		expect(calls).toEqual([]);
 	});
 

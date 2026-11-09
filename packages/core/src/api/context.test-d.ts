@@ -1,12 +1,7 @@
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { Crust, defineCommand } from "../command/crust.ts";
 import { defineExtensionId } from "../identity.ts";
-import {
-	type AnyContextFactory,
-	type ContextFactory,
-	type ContextValue,
-	defineContext,
-} from "./context.ts";
+import { type AnyContextFactory, type ContextFactory, defineContext } from "./context.ts";
 import { defineExtension } from "./extension.ts";
 import { defineFlag } from "./flags.ts";
 
@@ -294,16 +289,13 @@ function _typecheckAcceptsWidenedAndEmptyUseSpreads(deps: readonly AnyContextFac
 	const dynamic = defineContext("dynamic")
 		.use(...deps)
 		.setup(async ({ ctx }) => ctx.anything);
-	type _Open = Expect<Equal<NonNullable<(typeof dynamic)["_deps"]>, Record<string, ContextValue>>>;
 	// Open closures are checked by the runtime availability check at composition.
 	new Crust("cli").provide(dynamic());
 
 	const empty = defineContext("empty")
 		.use()
 		.setup(() => 1);
-	type _Empty = Expect<Equal<NonNullable<(typeof empty)["_deps"]>, {}>>;
 	new Crust("cli").provide(empty());
-	type _EmptyFlags = Expect<Equal<NonNullable<(typeof empty)["_useFlags"]>, {}>>;
 
 	// Widened dependencies may own any flags, so commands that use the Context accept open flags.
 	const owned = defineContext("owned")
@@ -313,9 +305,6 @@ function _typecheckAcceptsWidenedAndEmptyUseSpreads(deps: readonly AnyContextFac
 	const user = defineCommand("user", (command) => command.use(owned));
 	const app = new Crust("cli").provide(owned()).add(user);
 	void app.run(["user"], { flags: { "api-key": "k", anything: "x" } });
-	type _KnownKept = Expect<
-		Equal<NonNullable<(typeof owned)["_useFlags"]>["api-key"]["type"], "string">
-	>;
 }
 
 // checks literal Context sections like command sections
@@ -376,9 +365,6 @@ function _typecheckTypesContextFlagsAtUseSites() {
 		.use(config)
 		.flags({ "api-key": apiKey })
 		.setup(() => 1);
-	type _UseFlags = Expect<
-		Equal<keyof NonNullable<(typeof api)["_useFlags"]>, "api-key" | "region">
-	>;
 	const deploy = defineCommand("deploy", (command) =>
 		command.use(api).action(({ flags }) => {
 			type _Region = Expect<Equal<typeof flags.region, string | undefined>>;

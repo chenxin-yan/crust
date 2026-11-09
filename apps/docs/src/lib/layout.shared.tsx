@@ -5,7 +5,7 @@ import { siteConfig } from "./seo";
 /** GitHub Project tracking what ships next; linked from the nav and the landing hero badge. */
 export const roadmapUrl = "https://github.com/users/chenxin-yan/projects/10";
 
-function DiscordIcon() {
+export function DiscordIcon() {
 	return (
 		<svg role="img" viewBox="0 0 24 24" fill="currentColor" width={20} height={20}>
 			<title>Discord</title>

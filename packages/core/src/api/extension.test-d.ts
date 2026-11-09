@@ -4,7 +4,7 @@ import type { CommandSnapshot } from "../command/snapshot.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { CommandSection } from "../types.ts";
 import type { ParsedFlagValue } from "../types.ts";
-import { defineContext, type DefiningOf } from "./context.ts";
+import { defineContext } from "./context.ts";
 import {
 	defineExtension,
 	type Extension,
@@ -245,9 +245,6 @@ function _fluentInference() {
 	// @ts-expect-error The factory keeps its argument types.
 	logging(123);
 	const extension = logging("docs");
-	type Data = DefiningOf<typeof extension>;
-	type _flags = Expect<Equal<keyof NonNullable<Data["_flagDefs"]>, "verbose">>;
-	type _commands = Expect<Equal<Data["commands"], readonly [typeof command]>>;
 	const app = new Crust("app", { version: "1" }).extend(extension);
 	void app.run(["docs"], { flags: { verbose: true } });
 	app.action(async ({ ctx }) => {

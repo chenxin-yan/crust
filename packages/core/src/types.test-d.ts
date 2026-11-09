@@ -16,24 +16,10 @@ import type {
 
 // InferArgs type inference
 {
-	// maps basic "string" arg to string | undefined
-	type Args = readonly [{ name: "name"; type: "string" }];
-	type Result = InferArgs<Args>;
-	type _check = Expect<Equal<Result, { name: string | undefined }>>;
-}
-
-{
 	// schema args infer the schema output, untouched by choices narrowing
 	type Args = readonly [{ name: "url"; schema: StandardSchema<string | undefined, URL> }];
 	type Result = InferArgs<Args>;
 	type _check = Expect<Equal<Result, { url: URL }>>;
-}
-
-{
-	// maps required arg to non-optional type
-	type Args = readonly [{ name: "name"; type: "string"; required: true }];
-	type Result = InferArgs<Args>;
-	type _check = Expect<Equal<Result, { name: string }>>;
 }
 
 {
@@ -77,24 +63,10 @@ import type {
 
 // InferFlags type inference
 {
-	// maps basic "string" flag to string | undefined
-	type Flags = { output: { type: "string" } };
-	type Result = InferFlags<Flags>;
-	type _check = Expect<Equal<Result, { output: string | undefined }>>;
-}
-
-{
 	// maps required flag to non-optional type
 	type Flags = { name: { type: "string"; required: true } };
 	type Result = InferFlags<Flags>;
 	type _check = Expect<Equal<Result, { name: string }>>;
-}
-
-{
-	// maps flag with default to non-optional type
-	type Flags = { port: { type: "number"; default: 8080 } };
-	type Result = InferFlags<Flags>;
-	type _check = Expect<Equal<Result, { port: number }>>;
 }
 
 {

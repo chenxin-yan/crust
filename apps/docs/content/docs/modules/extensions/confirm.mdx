@@ -17,17 +17,28 @@ $ my-cli drop < /dev/null
 Error: Confirmation required: Drop the database? Pass --yes to confirm.
 ```
 
-`confirm()` provides the `confirm` Context. A command that declares it with [`.use(confirm)`](/docs/guide/extensions#use-an-extensions-contexts-from-a-command) awaits `ctx.confirm` for the function, then awaits it with the message before changing anything; that call resolves once the change is confirmed and throws otherwise, so the code after it runs only when confirmed. Without `.extend(confirm())` on the app, `.use(confirm)` is a type error, and preparing the app throws a `DEFINITION` error.
+`confirm()` provides the `confirm` Context:
+
+1. Declare it with [`.use(confirm)`](/docs/guide/extensions#use-an-extensions-contexts-from-a-command).
+2. `await ctx.confirm` to get the `ask` function.
+3. `await ask(message)` before changing anything. It resolves once confirmed and throws otherwise, so the code after it runs only when confirmed.
+
+Without `.extend(confirm())` on the app, `.use(confirm)` is a type error, and preparing the app throws a `DEFINITION` error.
 
 ## Behavior
 
 The Context owns a boolean `--yes` flag. Commands that `.use(confirm)` accept it, as do the root and its inline `.command()` children; other commands reject it as an unknown flag. When the command calls `ask(message)`:
 
 - with `--yes`, it resolves without asking;
-- when stdin and stderr are both terminals and `CI` is unset (an empty string, `0`, or `false` in any letter case counts as unset), it shows a yes/no prompt with `message` on stderr, defaulting to No. Yes resolves; No throws `Not confirmed: <message> Nothing was changed.` (exit code 1). Ctrl-C cancels the command (exit code 130);
+- when stdin and stderr are both terminals (or a [`withTerminalIO`](/docs/modules/prompts#injecting-io) scope supplies TTY streams) and `CI` is unset (an empty string, `0`, or `false` in any letter case counts as unset), it shows a yes/no prompt with `message` on stderr, defaulting to No. Yes resolves; No throws `Not confirmed: <message> Nothing was changed.` (exit code 1). Ctrl-C cancels the command (exit code 130);
 - otherwise it throws the exported `ConfirmationRequiredError`, `Confirmation required: <message> Pass --yes to confirm.` (exit code 1), so a script, an agent, or a CI job with a pseudo-terminal never waits on a prompt and never succeeds unconfirmed.
 
-`--yes` is a normal flag, so [`input()`](/docs/modules/extensions/input) can supply it too where it is accepted: `--input '{"yes":true}'`. Likewise, only those commands list it in `--help`, [`schema`](/docs/modules/extensions/schema), and [MCP](/docs/modules/mcp) tool inputs. The prompt from [`@crustjs/prompts`](/docs/modules/prompts) loads only when a command asks.
+`--yes` is a normal flag:
+
+- [`input()`](/docs/modules/extensions/input) can supply it where it is accepted: `--input '{"yes":true}'`.
+- Only commands that accept it list it in `--help`, [`schema`](/docs/modules/extensions/schema), and [MCP](/docs/modules/mcp) tool inputs.
+
+The prompt from [`@crustjs/prompts`](/docs/modules/prompts) loads only when a command asks.
 
 ## Limitations
 

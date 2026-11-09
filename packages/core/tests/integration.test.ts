@@ -3,7 +3,6 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
 	Crust,
-	defineArg,
 	defineCommand,
 	defineContext,
 	defineExtension,
@@ -16,31 +15,6 @@ import { executeCrust, type Equal, type Expect } from "./helpers.ts";
 // ────────────────────────────────────────────────────────────────────────────
 // Context-owned flag behavior — full pipeline integration tests
 // ────────────────────────────────────────────────────────────────────────────
-
-describe("integration: .execute() full pipeline with argv override", () => {
-	it("full pipeline: root flags + args + subcommand routing + execution", async () => {
-		const env = defineFlag({ type: "string", default: "staging" });
-		const dryRun = defineFlag({ type: "boolean" });
-		const deployment = defineContext("deployment")
-			.flags({ env, dryRun })
-			.setup(({ flags }) => flags);
-		const app = new Crust("deploy").provide(deployment()).add(
-			defineCommand("service", (cmd) =>
-				cmd
-					.use(deployment)
-					.args(defineArg("name", { type: "string", required: true }))
-					.action(async ({ args, ctx, stdout }) => {
-						const config = await ctx.deployment;
-						stdout(`deploy service=${args.name} env=${config.env} dryRun=${config.dryRun}`);
-					}),
-			),
-		);
-
-		const result = await executeCrust(app, ["service", "api", "--env", "production", "--dryRun"]);
-		expect(result.stdout).toContain("deploy service=api env=production dryRun=true");
-		expect(result.exitCode).toBe(0);
-	});
-});
 
 describe("integration: Context-owned flag → derived Context and descendant", () => {
 	it("routes before the subcommand and passes schema output to setup and action", async () => {

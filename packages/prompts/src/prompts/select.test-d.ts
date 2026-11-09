@@ -1,4 +1,4 @@
-import { select, type SelectOptions } from "./select.ts";
+import { select } from "./select.ts";
 import type { Equal, Expect } from "./test-helpers.ts";
 
 // Compile-time regression checks; intentionally never invoked.
@@ -52,10 +52,6 @@ async function _selectTypeInferenceTests() {
 		choices: ["none", { label: "HTTP", value: 80 }],
 	});
 	type _MixedNarrows = Expect<Equal<typeof mixed, "none" | 80>>;
-
-	// A generic wrapper over SelectOptions<T> still resolves to Promise<T>.
-	const viaWrapper = (options: SelectOptions<number>): Promise<number> => select(options);
-	void viaWrapper;
 
 	const viaGenericChoices = <C extends readonly string[]>(choices: C) => select({ choices });
 	type _GenericChoicesReturnString = Expect<

@@ -11,7 +11,12 @@ Framework definition, routing, parsing, and validation failures use `CrustError`
   ../../../examples/api/errors.ts#handle
 </include>
 
-After `instanceof CrustError`, `code` is the union of codes, and checking `code` or calling `.is(code)` narrows `details` to that code's shape. `.withCause(cause)` sets `cause` and returns the error. `toJSON()` returns `code`, `message`, and `details`, and omits `cause`. The constructor's details argument is required for `COMMAND_NOT_FOUND`, `ENV`, and `OUTPUT`. See the [declaration](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/errors.ts) for the exact generic contract.
+- After `instanceof CrustError`, checking `code` or calling `.is(code)` narrows `details` to that code's shape.
+- `.withCause(cause)` sets `cause` and returns the error.
+- `toJSON()` returns `code`, `message`, and `details` (`CrustErrorJson`), and omits `cause`.
+- `new CrustError(code, message, details?)` requires `details` for `COMMAND_NOT_FOUND`, `ENV`, and `OUTPUT`.
+
+See the [declaration](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/errors.ts) for the exact generic contract.
 
 ## Codes
 
@@ -36,15 +41,43 @@ With `execute()`, an unmatched subcommand token becomes a positional argument if
 
 <auto-type-table path="../../../../../packages/core/src/errors.ts" name="DefinitionErrorDetails" />
 
-`reason` is typed as Core's known values (`DefinitionErrorReason`) but stays open to any string, since other packages add their own. Context failures set `reason`: `missing-context` for an unprovided Context, `missing-extension` for a command that uses an Extension the app does not extend, `context-cycle` for a dependency cycle, `flags-before-validation` when a flag-owning Context is pulled before validation, `context-flags-not-parsed` when a flag-owning Context is pulled on a command that does not parse its flags (declare it with `.use()`), or when preparation finds that a same-name provider fulfilling a `.use()` does not own exactly the declared Contexts' flags (or uses a Context owning flags the command does not parse), `context-during-disposal` when a never-built Context is pulled once cleanup has begun, and `context-after-disposal` for any pull after disposal.
+`reason` is typed as Core's known values ([`DefinitionErrorReason`](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/errors.ts)) but accepts any string, since other packages add their own. Common reasons (curated):
 
-Flag definitions set `reason: "integer-like-name"` for an integer-like flag name (`"0"`, `"10"`, any digit-only name without a leading zero), which JavaScript records can list before other keys, `reason: "invalid-spelling"` for a name, alias, or `short` that contains whitespace or starts with `-`, or a name or alias that contains `=`, and `reason: "invalid-flags"` when `.flags()` receives a `null` or `undefined` record or definition, or a record whose prototype is not `Object.prototype` or `null`, such as one written with a literal `__proto__` key. Any other non-object definition, such as a string or an array, is a TypeScript error and is not checked at runtime.
+| `reason`                                                                          | Raised when                                                                                                                                                                                  |
+| --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `empty-name`, `reserved-name`, `invalid-name`, `invalid-alias`, `alias-collision` | A command name or alias breaks the [naming rules](/docs/api/crust#command-names)                                                                                                             |
+| `command-collision`, `flag-collision`                                             | Two commands or two flag spellings collide                                                                                                                                                   |
+| `empty-spelling`, `invalid-spelling`                                              | A flag name, alias, or `short` is empty, contains whitespace, or starts with `-`; or a name or alias contains `=`                                                                            |
+| `integer-like-name`                                                               | A flag name is integer-like (`"0"`, `"10"`), which JavaScript records list before other keys                                                                                                 |
+| `reserved-no-prefix`                                                              | A flag name or alias starts with `no-`, which is reserved for boolean negation                                                                                                               |
+| `invalid-flags`                                                                   | `.flags()` receives a `null` or `undefined` record or definition, or a record whose prototype is not `Object.prototype` or `null` (such as one written with a literal `__proto__` key)       |
+| `missing-context`                                                                 | A Context is pulled or demanded but not provided                                                                                                                                             |
+| `missing-extension`                                                               | A command `.use()`s an Extension the app does not extend                                                                                                                                     |
+| `context-cycle`                                                                   | Context dependencies form a cycle                                                                                                                                                            |
+| `flags-before-validation`                                                         | A flag-owning Context is pulled before validation, such as in `preRun`                                                                                                                       |
+| `context-flags-not-parsed`                                                        | A flag-owning Context is pulled on a command that does not parse its flags (declare it with `.use()`), or a same-name provider fulfilling a `.use()` does not own exactly the declared flags |
+| `context-during-disposal`                                                         | A never-built Context is pulled once cleanup has begun (already-built Contexts stay readable)                                                                                                |
+| `context-after-disposal`                                                          | Any Context is pulled after disposal                                                                                                                                                         |
+| `duplicate-section`                                                               | A Context's section title matches a command section or another Context's section on the same command                                                                                         |
+
+Other non-object definitions, such as a string or an array, are TypeScript errors and are not checked at runtime.
 
 ### `ParseErrorDetails`
 
 <auto-type-table path="../../../../../packages/core/src/errors.ts" name="ParseErrorDetails" />
 
-`reason` is typed as Core's known values (`ParseErrorReason`) but stays open to any string, since other packages add their own. These argv flag errors set `flag` and `reason`: `unknown-flag` for an unrecognized flag, `missing-value` when a value-taking flag has no value (`Missing value for flag "--count"`), and `unexpected-value` when a boolean flag is given one with `=` (`Flag "--force" does not take a value`). Negating a `noNegate` boolean (`--no-quiet`) is a `PARSE` error without details.
+`reason` is typed as Core's known values (`ParseErrorReason`) but accepts any string, since other packages add their own.
+
+| `reason`               | Sets       | Raised when                                                                       |
+| ---------------------- | ---------- | --------------------------------------------------------------------------------- |
+| `unknown-flag`         | `flag`     | argv or `run()` input names an undeclared flag (`Unknown flag "--nope"`)          |
+| `missing-value`        | `flag`     | A value-taking flag has no value (`Missing value for flag "--count"`)             |
+| `unexpected-value`     | `flag`     | A boolean flag is given a value with `=` (`Flag "--force" does not take a value`) |
+| `flag-not-forwardable` | `flag`     | A flag written before a subcommand name is not accepted by that subcommand        |
+| `unknown-argument`     | `argument` | `run()` input names an undeclared argument                                        |
+| `positional-gap`       | `argument` | `run()` input supplies an argument after an omitted one                           |
+
+Invalid values (type conversion, `choices`, `parse`) and negating a `noNegate` boolean (`--no-quiet`) are `PARSE` errors without details.
 
 ### `ValidationErrorDetails`
 
@@ -88,16 +121,37 @@ Every issue the `.output()` schema reports for one result is aggregated into one
 | Extension hooks before the action (including `bindInput`), validation, Context setup, Command Action, `.output()` validation | `failed` outcome after `postRun` hooks | Rendered via `onError`; exit `1`                                                            |
 | Cancellation (an `AbortError`, even when cleanup then fails)                                                                 | `failed` outcome                       | Offered to `onError`, else only cleanup failures render; exit `130` (`143` after `SIGTERM`) |
 
-`.add()` checks sibling names and aliases immediately, but does not run recipes or validate their inherited flags and Context demands. Those checks happen when commands materialize on first use. `.extend()` checks nothing at the call: collisions between Extension-provided flags and the app's flags, Extension commands that collide with another root command, and missing Contexts for an Extension's `.use()` or `.provide()`, are preparation errors. `await app.snapshot()` materializes and validates the full tree without running Command Actions, rejecting with any deferred definition or preparation error. `at()` can also throw deferred definition errors while resolving a path. Context setup and Command Action failures are not wrapped in `CrustError`.
+When definition checks run:
 
-- After a lifecycle failure, every `postRun` hook still runs in reverse registration order, and constructed Contexts and cleanup deferred by Extension setups are disposed afterwards.
+- `.add()` checks sibling names and aliases immediately. Recipes, inherited flags, and Context demands are checked when commands materialize on first use; `at()` can also throw these while resolving a path.
+- `.extend()` checks nothing at the call. Extension flag and command collisions and missing Contexts for an Extension's `.use()` or `.provide()` are preparation errors.
+- `await app.snapshot()` materializes and validates the full tree without running Command Actions, and rejects with any deferred definition or preparation error.
+
+After a lifecycle failure:
+
+- Context setup and Command Action failures are not wrapped in `CrustError`.
+- Every `postRun` hook still runs in reverse registration order; then constructed Contexts and cleanup deferred by Extension setups are disposed.
 - An invocation failure takes precedence over `postRun` failures. After a successful invocation, the first `postRun` failure escapes once the remaining hooks run.
 - When invocation and disposal both fail, the escaping error is a `SuppressedError`: `.error` is the disposal failure and `.suppressed` is the invocation failure.
 - `run()` returns the escaping error and all captured output, including cleanup output. It never calls `onError` or changes `process.exitCode`.
 
-`execute()` renders a failure once. Extension `onError` hooks are presentation only and cannot turn a failure into success: they run in registration order until one returns a truthy value. If none claims the failure, the [renderer's `error`](/docs/api/types#renderer) renders it when an Extension chose a renderer that has one; otherwise Core writes one `Error: message` line per underlying failure (each member of a `SuppressedError` chain or `AggregateError`). If cleanup fails after a failure was already rendered, Core passes it to the [renderer's `cleanup`](/docs/api/types#renderer), or writes `Cleanup failed: message` lines without one, never calling `onError` or the renderer's `error` again.
+### Rendering in `execute()`
 
-For Extension `setup`, flag handler, `noAction`, and `preRun` failures, and validation, Context setup, action, and `.output()` failures, `onError` runs before `postRun` while Contexts are live. A `postRun` or disposal failure reaches `onError` after cleanup, when Context pulls reject. Routing and parse failures receive empty `args` and `flags` and no Contexts; `command` is the routed command when routing succeeded and the root otherwise. Argv syntax failures are unknown flags, missing option values, and negating a `noNegate` flag; an invalid argv or environment value (conversion, `choices`, `parse`) keeps code `PARSE` but surfaces during validation, after flag handlers and `preRun` and with live Contexts, so a `--help` handler still runs first. See [error handling](/docs/guide/error-handling) for worked examples.
+`execute()` renders a failure once:
+
+1. Extension `onError` hooks run in registration order until one returns a truthy value. They are presentation only and cannot turn a failure into success.
+2. If none claims it, the [renderer's `error`](/docs/api/types#renderer) renders it, when an Extension chose a renderer that has one.
+3. Otherwise Core writes one `Error: message` line per underlying failure (each member of a `SuppressedError` chain or `AggregateError`).
+
+If cleanup fails after a failure was already rendered, Core passes it to the [renderer's `cleanup`](/docs/api/types#renderer), or writes `Cleanup failed: message` lines without one. It never calls `onError` or the renderer's `error` again.
+
+When `onError` runs:
+
+- Extension `setup`, flag handler, `noAction`, and `preRun` failures, and validation, Context setup, action, and `.output()` failures: before `postRun`, while Contexts are live.
+- `postRun` and disposal failures: after cleanup, when Context pulls reject.
+- Routing and argv syntax failures: with empty `args` and `flags` and no Contexts. `command` is the routed command when routing succeeded, and the root otherwise.
+
+Argv syntax failures are unknown flags, missing option values, and negating a `noNegate` flag. An invalid argv or environment value (conversion, `choices`, `parse`) is also `PARSE`, but surfaces during validation: after flag handlers and `preRun`, with live Contexts, so a `--help` handler still runs first. See [error handling](/docs/guide/error-handling) for worked examples.
 
 ## Cancellation
 
@@ -107,4 +161,8 @@ Every invocation carries a `signal`, shared by Context setups, Extension hooks, 
 
 When work throws the signal's reason, as `signal.throwIfAborted()` does, that error decides the exit path. Ctrl-C and a bare `controller.abort()` supply an `AbortError`, which exits `130` silently (`SIGTERM` exits `143`); a custom reason such as a `TimeoutError` renders and exits `1`. [`@crustjs/effect`](/docs/modules/effect) turns interruption into an `AbortError` regardless of the reason.
 
-Cleanup that fails while cancellation unwinds wraps it in a `SuppressedError`, and a `SuppressedError` whose `.suppressed` side is cancellation is still cancellation: `execute()` exits `130`, or `143` after `SIGTERM`. `onError` hooks receive the failure as usual. If none claims it, only the cleanup failures render, never the abort: each goes to the renderer's `cleanup` when it has one; otherwise a failed Context disposal renders as `Cleanup failed: message`, and a `SuppressedError` thrown by the action's own `await using` renders its disposal failure as `Error: message`.
+Cleanup that fails while cancellation unwinds wraps it in a `SuppressedError`. A `SuppressedError` whose `.suppressed` side is cancellation is still cancellation:
+
+- `execute()` exits `130`, or `143` after `SIGTERM`.
+- `onError` hooks receive the failure as usual.
+- If no hook claims it, only the cleanup failures render, never the abort. Each goes to the renderer's `cleanup` when it has one. Otherwise a failed Context disposal renders as `Cleanup failed: message`, and a `SuppressedError` thrown by the action's own `await using` renders its disposal failure as `Error: message`.

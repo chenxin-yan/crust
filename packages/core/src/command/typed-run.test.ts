@@ -24,26 +24,6 @@ interface JsonRunCapture {
 	flags: { config: unknown };
 }
 describe("typed programmatic invocation", () => {
-	it("returns the selected action result with path-specific types", async () => {
-		const inspect = defineCommand("inspect", (command) =>
-			command.action(() => ({ kind: "child" as const, size: 42 })),
-		);
-		const app = new Crust("cli").action(() => ({ kind: "root" as const })).add(inspect);
-
-		const rootResult = app.run([]);
-		const childResult = app.run(["inspect"]);
-		type _root = Expect<Equal<typeof rootResult, Promise<RunOutcome<{ kind: "root" }>>>>;
-		type _child = Expect<
-			Equal<typeof childResult, Promise<RunOutcome<{ kind: "child"; size: number }>>>
-		>;
-
-		expect(await rootResult).toMatchObject({ status: "completed", result: { kind: "root" } });
-		expect(await childResult).toMatchObject({
-			status: "completed",
-			result: { kind: "child", size: 42 },
-		});
-	});
-
 	it("runs statically known Extension commands, aliases, flags, and typed results", async () => {
 		const tools = defineExtension(defineExtensionId("tools"))
 			.flags({ trace: { type: "boolean" }, version: { type: "boolean", recursive: false } })
@@ -74,26 +54,6 @@ describe("typed programmatic invocation", () => {
 		const pending = app.run(["scan"], { flags: { trace: true } });
 		type _result = Expect<Equal<typeof pending, Promise<RunOutcome<{ kind: "extension" }>>>>;
 		expect(await pending).toMatchObject({ status: "completed", result: { kind: "extension" } });
-	});
-
-	it("keeps widened Extension commands runtime-only", async () => {
-		let ran = false;
-		const dynamic: Extension = defineExtension(defineExtensionId("dynamic")).add(
-			defineCommand("generated", (command) =>
-				command.action(() => {
-					ran = true;
-				}),
-			),
-		);
-		const app = new Crust("cli").extend(dynamic);
-
-		function typecheckHarness() {
-			void app.run(["generated"]);
-		}
-		void typecheckHarness;
-
-		await app.execute({ argv: ["generated"] });
-		expect(ran).toBe(true);
 	});
 
 	it("opens child results when a later Extension can replace any canonical child", async () => {

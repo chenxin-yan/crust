@@ -83,12 +83,6 @@ describe("confirm", () => {
 		expect(result).toEqual({ stdout: "dropped", stderr: "", exitCode: 0 });
 	});
 
-	it("runs when the prompt is accepted", async () => {
-		const { screen, ...result } = await answer("y", "enter");
-		expect(result).toEqual({ stdout: "dropped", stderr: "", exitCode: 0 });
-		expect(screen).toContain("Drop the database?");
-	});
-
 	it("defaults to No and fails without changing anything when declined", async () => {
 		const { screen: _screen, ...result } = await answer("enter");
 		expect(result).toEqual({

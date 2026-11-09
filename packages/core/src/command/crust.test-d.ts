@@ -9,52 +9,6 @@ import type { FlagDef } from "../types.ts";
 import { Crust, defineCommand } from "./crust.ts";
 
 // Compile-time regression checks; intentionally never invoked.
-// .flags() updates Flags generic
-function _typecheckFlagsUpdatesFlagsGeneric() {
-	const app = new Crust("test").flags({
-		verbose: { type: "boolean", short: "v" },
-		port: { type: "number", default: 3000 },
-	});
-
-	// Extract the Flags type from the phantom _types property
-	type AppFlags = (typeof app)["_types"]["flags"];
-
-	type _checkVerbose = Expect<
-		Equal<AppFlags["verbose"], { readonly type: "boolean"; readonly short: "v" }>
-	>;
-	type _checkPort = Expect<
-		Equal<AppFlags["port"], { readonly type: "number"; readonly default: 3000 }>
-	>;
-}
-
-// .args() updates A generic
-function _typecheckArgsUpdatesAGeneric() {
-	const app = new Crust("test").args(
-		{ name: "file", type: "string", required: true },
-		{ name: "count", type: "number", default: 1 },
-	);
-
-	type AppArgs = (typeof app)["_types"]["args"];
-
-	type _checkIsReadonly = Expect<
-		Equal<
-			AppArgs,
-			readonly [
-				{
-					readonly name: "file";
-					readonly type: "string";
-					readonly required: true;
-				},
-				{
-					readonly name: "count";
-					readonly type: "number";
-					readonly default: 1;
-				},
-			]
-		>
-	>;
-}
-
 // rejects conditional calls that would silently erase rest-parameter inference
 function _typecheckRejectsVariadicMethodsOnConditionalBuilderUnion(condition: boolean) {
 	const text = defineContext("db").setup(() => "text");
@@ -326,20 +280,6 @@ function _typecheckTypesPulledCapabilitiesAndLocalValuesInActions() {
 				),
 			),
 		);
-}
-
-// action receives InferArgs<A> for args
-function _typecheckActionReceivesInferArgsAForArgs() {
-	new Crust("test")
-		.args(
-			{ name: "file", type: "string", required: true },
-			{ name: "count", type: "number", default: 5 },
-		)
-		.action((_ctx) => {
-			type CtxArgs = typeof _ctx.args;
-			type _checkFile = Expect<Equal<CtxArgs["file"], string>>;
-			type _checkCount = Expect<Equal<CtxArgs["count"], number>>;
-		});
 }
 
 // brands statically known Extension command collisions at .extend()

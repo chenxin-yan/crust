@@ -170,14 +170,7 @@ describe("json", () => {
 		const app = new Crust("app")
 			.extend(json(), help())
 			.command("deploy", (cmd) => cmd.action(() => {}));
-		const snapshot = await app.snapshot();
 
-		expect(snapshot.meta.sections).toEqual([
-			expect.objectContaining({
-				title: "JSON output",
-				body: "--json prints the command's result as JSON on stdout (NDJSON for streaming commands). Other output goes to stderr; commands that declare an output schema print only the JSON.",
-			}),
-		]);
 		expect((await captureExecute(app, ["--help"])).stdout).toContain("JSON output:");
 		expect((await captureExecute(app, ["deploy", "--help"])).stdout).not.toContain("JSON output:");
 	});

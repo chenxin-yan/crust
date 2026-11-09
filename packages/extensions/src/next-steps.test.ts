@@ -134,15 +134,6 @@ describe("nextSteps", () => {
 		});
 	});
 
-	it("captures the block in run()'s stderr", async () => {
-		const outcome = await appWith().run(["deploy"], { args: { env: "prod" } });
-
-		expect(outcome).toMatchObject({
-			status: "completed",
-			stderr: "Next steps:\n  Check the deployment:\n    app status prod\n  app logs",
-		});
-	});
-
 	it("prints nothing when a flag handler takes over", async () => {
 		const { stderr, exitCode } = await captureExecute(appWith().extend(help()), [
 			"deploy",

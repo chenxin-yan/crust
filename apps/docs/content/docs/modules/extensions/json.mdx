@@ -15,7 +15,7 @@ Deploying...                                  # stderr
 {"id":"dep_42","url":"https://example.com"}   # stdout
 ```
 
-`json()` adds a recursive boolean `--json` flag. Without it, nothing changes. It also adds a "JSON output" section to the root command's help, man page, and generated skills that states this output contract, so an agent reading the CLI's documentation knows what `--json` prints.
+`json()` adds a recursive boolean `--json` flag. Without the flag, nothing changes. It also adds a "JSON output" section to the root command's help, man page, and generated skills, so an agent reading the CLI's documentation knows what `--json` prints.
 
 ## Behavior
 
@@ -90,12 +90,17 @@ $ tool sync --json
 
 An ordinary action keeps the bare result line.
 
-`json()` sets the invocation's [renderer](/docs/guide/extensions#renderers), and an application can have only one, so it can't be combined with another Extension that sets `.renderer()`.
+## Under `run()`
 
-Under [`run()`](/docs/api/crust#runpath-input-options), pass `{ flags: { json: true } }`: the JSON result is captured in the outcome's `stdout`. A failure is not rendered under `run()`; read it from `outcome.error`. For a command that declares `.output()` and returns data, `outcome.stdout` holds only the JSON and `outcome.stderr` none of its `stdout()` text. For a generator action, `outcome.stdout` holds the event lines and the result line, but no error line.
+Pass `{ flags: { json: true } }` to [`run()`](/docs/api/crust#runpath-input-options):
+
+- `outcome.stdout` holds the JSON result. For a generator action, it holds the event lines and the result line, but no error line.
+- A failure is not rendered; read it from `outcome.error`.
+- For a command that declares `.output()` and returns data, `outcome.stdout` holds only the JSON and `outcome.stderr` none of its `stdout()` text.
 
 ## Limitations
 
-Only failures before flags are bound print as plain text: unknown commands under a parent without a Command Action and argv syntax errors, such as an unknown flag or a flag missing its value. `--json` is not yet known, so `execute()` prints Core's default `Error:` line. A failure in an Extension's `setup`, such as an invalid [`--input`](/docs/modules/extensions/input), comes after binding and is JSON.
-
-If another Extension's `onError` hook claims a failure, it keeps that Extension's format, and a generator action's stream ends without a final line. A cancelled invocation (exit code 130, or 143 after `SIGTERM`) is not rendered, so its stream also ends without one.
+- `json()` sets the invocation's [renderer](/docs/guide/extensions#renderers). An application can have only one, so `json()` can't be combined with another Extension that sets `.renderer()`.
+- Failures before flags are bound print as plain text, because `--json` is not yet known: unknown commands under a parent without a Command Action, and argv syntax errors such as an unknown flag or a flag missing its value. `execute()` prints Core's default `Error:` line for them. A failure in an Extension's `setup`, such as an invalid [`--input`](/docs/modules/extensions/input), comes after binding and is JSON.
+- If another Extension's `onError` hook claims a failure, it keeps that Extension's format, and a generator action's stream ends without a final line.
+- A cancelled invocation (exit code 130, or 143 after `SIGTERM`) is not rendered, so its stream also ends without a final line.

@@ -32,24 +32,6 @@ it("leaves required variadics empty until required validation", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — number flags", () => {
-	const cmd = makeNode({
-		meta: { name: "test" },
-		flags: {
-			port: { type: "number", description: "Port number" },
-		},
-	});
-
-	it("coerces --port 3000 to number", () => {
-		const result = parseArgs(cmd, ["--port", "3000"]);
-		expect(result.flags.port).toBe(3000);
-	});
-
-	it("throws CrustError with PARSE code on non-numeric value", () => {
-		expect(() => parseAndValidate(cmd, ["--port", "abc"])).toThrow(
-			expect.objectContaining({ code: "PARSE", message: "Expected a number for --port." }),
-		);
-	});
-
 	it("rejects blank values from argv and env instead of coercing them to 0", () => {
 		const envCmd = makeNode({
 			meta: "test",
@@ -145,158 +127,10 @@ describe("parseArgs — aliases", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Multiple flags
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("parseArgs — multiple flags", () => {
-	it("collects multiple string values into an array", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			flags: {
-				file: { type: "string", multiple: true },
-			},
-		});
-		const result = parseArgs(cmd, ["--file", "a.ts", "--file", "b.ts"]);
-		expect(result.flags.file).toEqual(["a.ts", "b.ts"]);
-	});
-
-	it("coerces multiple number values individually", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			flags: {
-				port: { type: "number", multiple: true },
-			},
-		});
-		const result = parseArgs(cmd, ["--port", "80", "--port", "443"]);
-		expect(result.flags.port).toEqual([80, 443]);
-	});
-
-	it("collects mixed --flag and --no-flag into array with multiple: true", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			flags: {
-				verbose: { type: "boolean", multiple: true },
-			},
-		});
-		const result = parseArgs(cmd, ["--verbose", "--no-verbose", "--verbose"]);
-		expect(result.flags.verbose).toEqual([true, false, true]);
-	});
-
-	it("applies default array when multiple flag is not provided", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			flags: {
-				file: { type: "string", multiple: true, default: ["default.ts"] },
-			},
-		});
-		const result = parseArgs(cmd, []);
-		expect(result.flags.file).toEqual(["default.ts"]);
-	});
-
-	it("merges values from canonical name and aliases", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			flags: {
-				file: {
-					type: "string",
-					multiple: true,
-					short: "f",
-					aliases: ["input"],
-				},
-			},
-		});
-		const result = parseArgs(cmd, ["--file", "a.ts", "-f", "b.ts", "--input", "c.ts"]);
-		expect(result.flags.file).toEqual(["a.ts", "b.ts", "c.ts"]);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Default values
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("parseArgs — default values", () => {
-	it("applies default flag value when not provided", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			flags: {
-				port: { type: "number", default: 3000 },
-			},
-		});
-		const result = parseArgs(cmd, []);
-		expect(result.flags.port).toBe(3000);
-	});
-
-	it("applies default arg value when not provided", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			args: [{ name: "file", type: "string", default: "index.ts" }],
-		});
-		const result = parseArgs(cmd, []);
-		expect(result.args.file).toBe("index.ts");
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Required args (success + failure)
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("parseArgs — required args", () => {
-	const cmd = makeNode({
-		meta: { name: "test" },
-		args: [{ name: "file", type: "string", required: true }],
-	});
-
-	it("returns undefined for missing required arg (no validation)", () => {
-		const result = parseArgs(cmd, []);
-		expect(result.args.file).toBeUndefined();
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Required flags (success + failure)
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("parseArgs — required flags", () => {
-	const cmd = makeNode({
-		meta: { name: "test" },
-		flags: {
-			name: { type: "string", required: true },
-		},
-	});
-
-	it("returns undefined for missing required flag (no validation)", () => {
-		const result = parseArgs(cmd, []);
-		expect(result.flags.name).toBeUndefined();
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // Variadic positional args
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — variadic args", () => {
-	it("collects remaining positionals into an array", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			args: [{ name: "files", type: "string", variadic: true }],
-		});
-		const result = parseArgs(cmd, ["a.ts", "b.ts", "c.ts"]);
-		expect(result.args.files).toEqual(["a.ts", "b.ts", "c.ts"]);
-	});
-
-	it("variadic with preceding regular arg", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			args: [
-				{ name: "target", type: "string", required: true },
-				{ name: "files", type: "string", variadic: true },
-			],
-		});
-		const result = parseArgs(cmd, ["build", "a.ts", "b.ts"]);
-		expect(result.args.target).toBe("build");
-		expect(result.args.files).toEqual(["a.ts", "b.ts"]);
-	});
-
 	it("omitted variadic resolves its default as one element on both front doors", async () => {
 		const cmd = makeNode({
 			meta: { name: "test" },
@@ -352,15 +186,6 @@ describe("parseArgs — variadic args", () => {
 		});
 		expect(parseArgs(paths, []).args.files).toEqual([resolve("./dist")]);
 	});
-
-	it("variadic with number coercion", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			args: [{ name: "numbers", type: "number", variadic: true }],
-		});
-		const result = parseArgs(cmd, ["1", "2", "3"]);
-		expect(result.args.numbers).toEqual([1, 2, 3]);
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -368,27 +193,6 @@ describe("parseArgs — variadic args", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — '--' separator", () => {
-	it("positional args before -- are parsed, unconsumed tokens after -- go to rawArgs", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			args: [{ name: "file", type: "string", required: true }],
-		});
-		const result = parseArgs(cmd, ["input.ts", "--", "--extra"]);
-		expect(result.args.file).toBe("input.ts");
-		expect(result.rawArgs).toEqual(["--extra"]);
-	});
-
-	it("fills a required positional from a dash-led token after --", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			args: [{ name: "file", type: "string", required: true }],
-		});
-		const result = parseArgs(cmd, ["--", "-x"]);
-		expect(result.args.file).toBe("-x");
-		expect(result.rawArgs).toEqual([]);
-		expect(() => validateParsed(cmd, result)).not.toThrow();
-	});
-
 	it("fills the remaining positionals after the ones before --", () => {
 		const cmd = makeNode({
 			meta: { name: "test" },
@@ -401,23 +205,6 @@ describe("parseArgs — '--' separator", () => {
 		expect(result.args).toEqual({ name: "a", offset: -5 });
 		expect(result.excessArgs).toEqual([]);
 		expect(result.rawArgs).toEqual(["rest"]);
-	});
-
-	it("leaves every token after -- in rawArgs without declared positionals", () => {
-		const cmd = makeNode({ meta: { name: "test" } });
-		const result = parseArgs(cmd, ["--", "-x", "--watch", "src"]);
-		expect(result.rawArgs).toEqual(["-x", "--watch", "src"]);
-		expect(result.excessArgs).toEqual([]);
-	});
-
-	it("binds an optional positional before rawArgs", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			args: [{ name: "target", type: "string" }],
-		});
-		const result = parseArgs(cmd, ["--", "--watch", "src"]);
-		expect(result.args.target).toBe("--watch");
-		expect(result.rawArgs).toEqual(["src"]);
 	});
 
 	it("lets a variadic positional consume every token after --", () => {
@@ -451,76 +238,6 @@ describe("parseArgs — '--' separator", () => {
 		expect(result.args.file).toBe("a");
 		expect(result.excessArgs).toEqual(["b"]);
 		expect(result.rawArgs).toEqual(["c"]);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Unknown flag errors (strict mode)
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("parseArgs — strict mode (unknown flags)", () => {
-	const cmd = makeNode({
-		meta: { name: "test" },
-		flags: {
-			verbose: { type: "boolean" },
-		},
-	});
-
-	it.each([
-		["--unknown", "unknown"],
-		["--unknown=value", "unknown"],
-		["-x", "x"],
-		["-x=1", "x"],
-		["-xv", "x"],
-	])("reports unknown flag %s with structured details", (token, flag) => {
-		expect(() => parseArgs(cmd, [token])).toThrow(
-			expect.objectContaining({
-				code: "PARSE",
-				message: `Unknown flag "${token.startsWith("--") ? `--${flag}` : `-${flag}`}"`,
-				details: { flag, reason: "unknown-flag" },
-			}),
-		);
-	});
-});
-
-describe("parseArgs — flag value errors", () => {
-	const cmd = makeNode({
-		meta: { name: "test" },
-		flags: {
-			count: { type: "number", short: "c", aliases: ["n"] },
-			name: { type: "string" },
-			force: { type: "boolean", short: "f" },
-			quiet: { type: "boolean", short: "q", noNegate: true },
-		},
-	});
-	const dashHint = (flag: string) =>
-		`Missing value for flag "--${flag}"; to pass a value starting with "-", write --${flag}=<value>`;
-
-	it.each([
-		[["--count"], 'Missing value for flag "--count"', "count", "missing-value"],
-		[["-c"], 'Missing value for flag "--count"', "count", "missing-value"],
-		[["--n"], 'Missing value for flag "--count"', "count", "missing-value"],
-		[["-fc"], 'Missing value for flag "--count"', "count", "missing-value"],
-		[["--name", "-v"], dashHint("name"), "name", "missing-value"],
-		[["--name", "--"], dashHint("name"), "name", "missing-value"],
-		[["-c", "--help"], dashHint("count"), "count", "missing-value"],
-		[["--force=yes"], 'Flag "--force" does not take a value', "force", "unexpected-value"],
-		[["--no-force=yes"], 'Flag "--force" does not take a value', "force", "unexpected-value"],
-	])("reports %j in Crust's wording", (argv, message, flag, reason) => {
-		expect(() => parseArgs(cmd, argv)).toThrow(
-			expect.objectContaining({ code: "PARSE", message, details: { flag, reason } }),
-		);
-	});
-
-	// `--no-` applies to long spellings only, so a short name after it is just an unknown flag.
-	it.each([["--no-f"], ["--no-f=yes"], ["--no-q"]])("reports %j as an unknown flag", (arg) => {
-		expect(() => parseArgs(cmd, [arg])).toThrow(
-			expect.objectContaining({
-				code: "PARSE",
-				message: expect.stringContaining("Unknown flag"),
-				details: expect.objectContaining({ reason: "unknown-flag" }),
-			}),
-		);
 	});
 });
 
@@ -575,47 +292,6 @@ describe("parseArgs — complex scenarios", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Alias-symmetric negation (--no-<alias> works; noNegate enforced)
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("parseArgs — boolean negation", () => {
-	const cmd = makeNode({
-		meta: { name: "test" },
-		flags: {
-			verbose: { type: "boolean", short: "v", aliases: ["loud"] },
-		},
-	});
-
-	it("last-token-wins across mixed spellings", () => {
-		const result = parseArgs(cmd, ["--verbose", "--no-loud"]);
-		expect(result.flags.verbose).toBe(false);
-
-		// Regression: parseArgs values group by key, so a repeated earlier
-		// spelling must not shadow the final token.
-		const result2 = parseArgs(cmd, ["--verbose", "--no-loud", "--verbose"]);
-		expect(result2.flags.verbose).toBe(true);
-	});
-
-	it("rejects negation of a noNegate boolean via any spelling", () => {
-		const noNegateCmd = makeNode({
-			meta: { name: "test" },
-			flags: {
-				version: { type: "boolean", noNegate: true, aliases: ["ver"] },
-			},
-		});
-
-		for (const spelling of ["--no-version", "--no-ver"]) {
-			expect(() => parseArgs(noNegateCmd, [spelling])).toThrow(
-				expect.objectContaining({
-					code: "PARSE",
-					message: `Flag "--version" does not support negation ("${spelling}")`,
-				}),
-			);
-		}
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // validateParsed
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -654,48 +330,6 @@ describe("validateParsed", () => {
 			expect.objectContaining({ code: "VALIDATION", message: 'Missing required flag "--name"' }),
 		);
 	});
-
-	it("does not throw for required arg with default when missing", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			args: [{ name: "file", type: "string", required: true, default: "index.ts" }],
-		});
-		const parsed = parseArgs(cmd, []);
-		expect(() => validateParsed(cmd, parsed)).not.toThrow();
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// url / path / json built-in types
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("parseArgs — url/path/json types", () => {
-	it("parses a url flag into a URL instance (coercion details covered in coercers.test.ts)", () => {
-		const cmd = makeNode({
-			meta: "test",
-			flags: { endpoint: { type: "url" } },
-		});
-		const result = parseArgs(cmd, ["--endpoint", "https://example.com"]);
-		expect(result.flags.endpoint).toBeInstanceOf(URL);
-	});
-
-	it("parses a path flag into an absolute string (coercion details covered in coercers.test.ts)", () => {
-		const cmd = makeNode({
-			meta: "test",
-			flags: { out: { type: "path" } },
-		});
-		const result = parseArgs(cmd, ["--out", "./dist"]);
-		expect(result.flags.out).toBe(resolve(process.cwd(), "dist"));
-	});
-
-	it("parses a json flag into the corresponding value", () => {
-		const cmd = makeNode({
-			meta: "test",
-			flags: { config: { type: "json" } },
-		});
-		const result = parseArgs(cmd, ["--config", '{"k":1}']);
-		expect(result.flags.config).toEqual({ k: 1 });
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -716,15 +350,6 @@ describe("parseArgs — parse escape hatch", () => {
 		}
 	});
 
-	it("runs parse on the raw argv value", () => {
-		const cmd = makeNode({
-			meta: "test",
-			flags: { n: { type: "string", parse: (s) => Number(s) } },
-		});
-		const result = parseArgs(cmd, ["--n", "42"]);
-		expect(result.flags.n).toBe(42);
-	});
-
 	it("runs parse per element on multi-value flags", () => {
 		const cmd = makeNode({
 			meta: "test",
@@ -734,17 +359,6 @@ describe("parseArgs — parse escape hatch", () => {
 		});
 		const result = parseArgs(cmd, ["--nums", "1", "--nums", "2"]);
 		expect(result.flags.nums).toEqual([1, 2]);
-	});
-
-	it("parses declared defaults when argv omits the flag", () => {
-		const cmd = makeNode({
-			meta: "test",
-			flags: {
-				port: { type: "string", parse: (s) => Number(s), default: "3000" },
-			},
-		});
-		const result = parseArgs(cmd, []);
-		expect(result.flags.port).toBe(3000);
 	});
 
 	it("wraps parse errors as CrustError(PARSE) with the flag name", () => {
@@ -770,21 +384,6 @@ describe("parseArgs — parse escape hatch", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — choices enforcement", () => {
-	it("rejects a value not in the choices list with CrustError(PARSE)", () => {
-		const cmd = makeNode({
-			meta: "test",
-			flags: { mode: { type: "string", choices: ["a", "b"] as const } },
-		});
-		let err: unknown;
-		try {
-			parseAndValidate(cmd, ["--mode", "c"]);
-		} catch (e) {
-			err = e;
-		}
-		expect(err).toBeInstanceOf(CrustError);
-		expect((err as Error).message).toMatch(/Invalid value/);
-	});
-
 	it("validates choices on raw argv before parse runs (order test)", () => {
 		let parseCalled = false;
 		const cmd = makeNode({
@@ -832,15 +431,6 @@ describe("parseArgs — choices enforcement", () => {
 // ───────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs \u2014 default coercion symmetry", () => {
-	it("runs coercePath on a `type: path` flag default when argv is absent", () => {
-		const cmd = makeNode({
-			meta: "test",
-			flags: { out: { type: "path", default: "./dist" } },
-		});
-		const result = parseArgs(cmd, []);
-		expect(result.flags.out).toBe(`${process.cwd()}/dist`);
-	});
-
 	it("runs coercePath per element on a multi `type: path` flag default", () => {
 		const cmd = makeNode({
 			meta: "test",

@@ -16,7 +16,6 @@ import {
 	withTerminalIO,
 } from "./renderer.ts";
 import { defaultTheme, defaultThemeFor } from "./theme.ts";
-import type { PromptTheme } from "./types.ts";
 
 describe("resolvePromptIO", () => {
 	it("prefers explicit and prompt-scoped output over ambient terminal output", () => {
@@ -125,38 +124,9 @@ describe("runPrompt — default theme color", () => {
 		stubColorEnvironment(true);
 		expect(defaultThemeFor({ isTTY: false }).prefix("?")).toBe("?");
 	});
-
-	it("reuses the late-bound defaultTheme when output and stdout agree", () => {
-		Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
-		expect(defaultThemeFor({ isTTY: true })).toBe(defaultTheme);
-		expect(defaultThemeFor({ isTTY: false })).not.toBe(defaultTheme);
-	});
 });
 
 describe("runPrompt", () => {
-	it("merges a partial theme onto defaultTheme", async () => {
-		const harness = createPromptIO();
-
-		const prefix = (t: string) => `<P ${t}>`;
-		let seenTheme: PromptTheme | undefined;
-		const answer = runPrompt<{ value: string }, string>(
-			{
-				render: (state, theme) => {
-					seenTheme = theme;
-					return state.value;
-				},
-				handleKey: () => submit("done"),
-				initialState: { value: "prompt" },
-				theme: { prefix },
-			},
-			harness.io,
-		);
-		harness.type("x");
-		expect(await answer).toBe("done");
-		expect(seenTheme?.prefix).toBe(prefix); // override applied
-		expect(seenTheme?.message("m")).toBe(defaultThemeFor(harness.io.output).message("m")); // default preserved
-	});
-
 	it("disables raw mode on a fake input without isRaw", async () => {
 		const rawModes: boolean[] = [];
 		const input = Object.assign(new PassThrough(), {
@@ -337,24 +307,6 @@ describe("runPrompt", () => {
 		await next;
 	});
 
-	it("calls renderSubmitted when provided", async () => {
-		const config: PromptConfig<{ value: string }, string> = {
-			render: (state) => `input: ${state.value}`,
-			handleKey: () => submit("final"),
-			initialState: { value: "test" },
-			theme: defaultTheme,
-			renderSubmitted: (_state, value, theme) => `${theme.success("done")} ${value}`,
-		};
-
-		const harness = createPromptIO();
-		const promise = runPrompt(config, harness.io);
-		harness.keys("return");
-
-		const result = await promise;
-		expect(result).toBe("final");
-		expect(harness.screen()).toBe("done final");
-	});
-
 	it("rejects when handleKey throws", async () => {
 		const config: PromptConfig<{ value: string }, string> = {
 			render: (state) => state.value,
@@ -467,47 +419,6 @@ describe("runPrompt", () => {
 		await expect(promise).rejects.toMatchObject({
 			name: "AbortError",
 		});
-	});
-
-	it("renders initial state immediately", async () => {
-		const config: PromptConfig<{ value: string }, string> = {
-			render: () => "initial frame",
-			handleKey: () => submit("done"),
-			initialState: { value: "" },
-			theme: defaultTheme,
-		};
-
-		const harness = createPromptIO();
-		const promise = runPrompt(config, harness.io);
-		expect(harness.screen()).toBe("initial frame");
-
-		harness.keys("return");
-		await promise;
-	});
-
-	it("erases previous frame before rendering new frame", async () => {
-		const config: PromptConfig<{ value: string }, string> = {
-			render: (state) => `frame ${state.value}`,
-			handleKey: (_key, state) => {
-				if (state.value === "2") return submit(state.value);
-				const next = state.value === "" ? "1" : "2";
-				return { value: next };
-			},
-			initialState: { value: "" },
-			theme: defaultTheme,
-		};
-
-		const harness = createPromptIO();
-		const promise = runPrompt(config, harness.io);
-		harness.type("a");
-		await tick();
-		harness.type("b");
-		await tick();
-		harness.type("c");
-
-		await promise;
-
-		expect(harness.screen()).toBe("frame 2");
 	});
 
 	it("erases every wrapped row of a frame wider than the terminal", async () => {

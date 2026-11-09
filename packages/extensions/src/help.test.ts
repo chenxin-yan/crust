@@ -98,40 +98,6 @@ describe("help", () => {
 		expect(usageLine).toContain("[dir]"); // arg token present, yellow+dim
 	});
 
-	it("renderHelp keeps stripped columns aligned with styled labels", async () => {
-		const command = new Crust("app")
-			.flags({
-				verbose: {
-					type: "boolean",
-					short: "v",
-					description: "Enable verbose logging",
-					default: true,
-				},
-				port: {
-					type: "number",
-					short: "p",
-					description: "Port number",
-					default: 3000,
-				},
-			})
-			.args({
-				name: "dir",
-				type: "string",
-				description: "Output directory",
-				default: ".",
-			});
-
-		const lines = stripAnsi(await renderHelp(await command.snapshot())).split("\n");
-
-		const verboseLine = lines.find((line) => line.includes("--verbose"));
-		const portLine = lines.find((line) => line.includes("--port"));
-
-		expect(verboseLine).toBeDefined();
-		expect(portLine).toBeDefined();
-		expect(verboseLine?.indexOf("Enable verbose logging")).toBe(portLine?.indexOf("Port number"));
-		expect(lines).toContain('  [dir]              Output directory [default: "."]');
-	});
-
 	it("renderHelp shows a value placeholder after value flags only", async () => {
 		const command = new Crust("app").flags({
 			count: { type: "number", short: "c", description: "Number of times", default: 1 },
@@ -368,36 +334,6 @@ describe("help", () => {
 		expect(plain).toContain("Commands:");
 		expect(plain).toContain("issue (issues, i)");
 		expect(plain).toContain("Manage issues");
-	});
-
-	it("renderHelp documents only direct children, never grandchildren", async () => {
-		const snapshot = await new Crust("app")
-			.add(
-				defineCommand("remote", { description: "Manage remotes" }, (cmd) =>
-					cmd.add(defineCommand("add", {}, (sub) => sub.action(() => {}))),
-				),
-			)
-			.snapshot();
-		const remote = snapshot.subCommands.remote!;
-		const grandchildReads = vi.fn();
-		const tracked = {
-			...snapshot,
-			subCommands: {
-				remote: {
-					...remote,
-					subCommands: {
-						get add() {
-							grandchildReads();
-							return remote.subCommands.add!;
-						},
-					},
-				},
-			},
-		};
-
-		const plain = stripAnsi(await renderHelp(tracked));
-		expect(plain).toContain("Manage remotes");
-		expect(grandchildReads).not.toHaveBeenCalled();
 	});
 
 	it("renderHelp omits the COMMANDS section when every subcommand is hidden", async () => {

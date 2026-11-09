@@ -3,9 +3,9 @@ title: Building CLIs for agents
 description: Make a CLI that coding agents and scripts can drive without guessing.
 ---
 
-An agent runs your CLI the way a script does: it passes argv, reads stdout and stderr, and checks the exit code. It has no TTY to answer prompts and no eyes for colors or tables, and it pays for every token of output it reads. A CLI works well for agents when its input and output have a documented shape, it describes itself, and it fails loudly instead of waiting or guessing.
+An agent runs your CLI like a script: it passes argv, reads stdout and stderr, and checks the exit code. It has no TTY for prompts and pays for every token it reads. Give it documented input and output shapes, self-description, and loud failures instead of waiting or guessing.
 
-Crust adds none of this by default. Each piece below is an opt-in Extension or command declaration, and each section links to its reference page. Register the agent-facing Extensions on the root, in any order:
+Each piece below is an opt-in Extension or command declaration. Register the agent-facing Extensions on the root, in any order:
 
 <include lang="ts" meta='title="cli.ts"'>
   ../../../examples/guide/agents.ts#app
@@ -15,7 +15,7 @@ The commands used below are in [`examples/guide/agents.ts`](https://github.com/c
 
 ## How agents use your CLI
 
-An agent runs commands in one of two ways: from a shell, with argv, `--input`, `--json`, and exit codes, or as [MCP](#mcp) tool calls. From a shell, it finds commands on demand with `--help`, `--llms`, and `schema <path>`, or ahead of time from an installed [skill](#skills); either way it then runs the same CLI, so `json()`, `input()`, `confirm()`, and `nextSteps()` serve both.
+An agent either runs commands from a shell (argv, `--input`, `--json`, exit codes) or calls them as [MCP](#mcp) tools. From a shell, it discovers commands with `--help`, `--llms`, and `schema <path>`, or ahead of time from an installed [skill](#skills).
 
 | Path          | Fits                                                                              |
 | ------------- | --------------------------------------------------------------------------------- |
@@ -23,11 +23,11 @@ An agent runs commands in one of two ways: from a shell, with argv, `--input`, `
 | Shell + skill | Agents that load skills; the skill saves the discovery calls                      |
 | MCP           | Clients that call tools instead of running a shell                                |
 
-Skills and MCP each add one `.extend()`, and every path reads the same command snapshot, so a command declared once reaches all of them.
+Skills and MCP each add one `.extend()`. Every path reads the same command snapshot, so a command declared once reaches all of them.
 
 ## Structured input
 
-[`input()`](/docs/modules/extensions/input) adds `--input`, which takes every argument and flag as one JSON object, inline, from a file (`@path`), or from stdin (`-`). An agent writes one JSON object instead of quoting and ordering argv tokens:
+[`input()`](/docs/modules/extensions/input) adds `--input`: every argument and flag as one JSON object, inline, from a file (`@path`), or from stdin (`-`). No quoting or ordering of argv tokens:
 
 ```sh
 $ my-cli deploy --input '{"target":"staging","release":"v2"}'
@@ -37,11 +37,13 @@ Next steps:
     my-cli status staging
 ```
 
-The object is converted and validated exactly like argv, and arguments and flags given on argv win over its keys. It has the same shape `schema` describes and the [MCP](#mcp) server accepts.
+- The object is converted and validated exactly like argv.
+- Arguments and flags given on argv win over its keys.
+- It has the shape `schema` describes and the [MCP](#mcp) server accepts.
 
 ## JSON output
 
-Print for people with `stdout(text)`, return the data, and declare [`.output()`](#output-schemas-and-end-to-end-types). [`json()`](/docs/modules/extensions/json) adds `--json`, which prints the Command Action's return value as one line of JSON on stdout; its [contract](/docs/modules/extensions/json#behavior) says what happens to the text a command prints. Write progress every caller should see live, like `deploy`'s `Deploying` line, with `stderr()` or a spinner:
+Print for people with `stdout(text)`, return the data, and declare [`.output()`](#output-schemas-and-end-to-end-types). [`json()`](/docs/modules/extensions/json) adds `--json`, which prints the action's return value as one line of JSON on stdout; see its [contract](/docs/modules/extensions/json#behavior) for printed text. Write live progress, like `deploy`'s `Deploying` line, with `stderr()` or a spinner:
 
 ```sh
 $ my-cli deploy staging --json
@@ -52,7 +54,9 @@ Next steps:                                              # stderr, see below
     my-cli status staging
 ```
 
-Failures become one line of JSON on stderr: [`CrustError`](/docs/api/errors)'s `toJSON()`, or `{ "message" }` for any other error. Failures before flags are bound, such as an unknown flag, still print Core's plain `Error:` line (see [`json()` limitations](/docs/modules/extensions/json#limitations)). Exit codes don't change, so an agent still checks them first. Make the message itself actionable; see [error handling](/docs/guide/error-handling).
+- Failures become one line of JSON on stderr: [`CrustError`](/docs/api/errors)'s `toJSON()`, or `{ "message" }` for any other error.
+- Failures before flags are bound, such as an unknown flag, still print Core's plain `Error:` line; see [`json()` limitations](/docs/modules/extensions/json#limitations).
+- Exit codes don't change, so an agent still checks them first. Make messages actionable; see [error handling](/docs/guide/error-handling).
 
 ## Output schemas and end-to-end types
 
@@ -62,11 +66,15 @@ Declare the result's shape with [`.output(schema)`](/docs/guide/values-and-valid
   ../../../examples/guide/agents.ts#deploy
 </include>
 
-One declaration does three jobs: TypeScript checks the action's return value against the schema, Crust validates it at runtime (a mismatch fails with the `OUTPUT` code instead of printing a wrong shape), and, when the schema library can produce JSON Schema, it reaches `schema`, MCP, and skills. Code that calls [`app.run()`](/docs/api/crust#runpath-input-options) gets `outcome.result` typed as the schema's output.
+One declaration:
+
+- **Types:** TypeScript checks the action's return value, and [`app.run()`](/docs/api/crust#runpath-input-options) types `outcome.result` as the schema's output.
+- **Validates:** a mismatch at runtime fails with the `OUTPUT` code instead of printing a wrong shape.
+- **Documents:** when the schema library can produce JSON Schema, it reaches `schema`, MCP, and skills.
 
 ## Streaming
 
-A long-running command can report progress as data. Write its action as an [async generator](/docs/guide/commands#stream-events): each `yield` is an event and the `return` value is the result.
+Report progress as data by writing the action as an [async generator](/docs/guide/commands#stream-events): each `yield` is an event and the `return` value is the result.
 
 <include lang="ts">../../../examples/guide/agents.ts#status</include>
 
@@ -79,13 +87,13 @@ $ my-cli status prod --json
 {"type":"result","data":{"target":"prod","healthy":true}}
 ```
 
-A cancelled invocation (exit code 130, or 143 after `SIGTERM`), or a failure another Extension's `onError` hook claims, ends the stream without that line (see [`json()` limitations](/docs/modules/extensions/json#limitations)), so check the exit status rather than waiting for it.
+A cancelled invocation (exit code 130, or 143 after `SIGTERM`), or a failure another Extension's `onError` hook claims, ends the stream without that last line ([`json()` limitations](/docs/modules/extensions/json#limitations)). Check the exit status rather than waiting for it.
 
-The same events reach `run()`'s `onEvent` callback. Under MCP, each yield sends a [progress notification](/docs/modules/mcp#progress) when the client asks for progress; it carries a count, and a string event becomes its message.
+The same events reach `run()`'s `onEvent` callback. Under MCP, each yield sends a [progress notification](/docs/modules/mcp#progress) when the client asks for progress: it carries a count, and a string event becomes its message.
 
 ## Discovery
 
-An agent learns a CLI from what it prints about itself, so write `description`s for commands, arguments, and flags: every surface below reads them.
+An agent learns a CLI from what it prints about itself. Write `description`s for commands, arguments, and flags: every surface below reads them.
 
 | Surface                                                            | When it fits                                                                                                                |
 | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
@@ -95,18 +103,18 @@ An agent learns a CLI from what it prints about itself, so write `description`s 
 | [Skills](#skills)                                                  | The same information, installed ahead of time into an agent's skill directory; the agent still runs the CLI                 |
 | [MCP](#mcp)                                                        | Tools for clients that call tools instead of a shell, with the same input schema and, where MCP can carry it, output schema |
 
-They all read the same command snapshot (descriptions, arguments and flags, `.output()`, sections), so declaring something once updates every surface. [How agents use your CLI](#how-agents-use-your-cli) says which path fits which agent.
+All of them read the same command snapshot (descriptions, arguments and flags, `.output()`, sections).
 
 ```sh
 $ my-cli schema deploy
 {"input":{"type":"object","properties":{"target":{"type":"string","enum":["staging","prod"]},…},"required":["target"]},"output":{…}}
 ```
 
-`json()` and `input()` document themselves in root help, with "JSON output" and "JSON input" sections. Document your CLI's own conventions an agent needs, such as exit codes and environment variables, with [documentation sections](/docs/guide/commands#documentation-sections).
+`json()` and `input()` add "JSON output" and "JSON input" sections to root help. Document your own conventions, such as exit codes and environment variables, with [documentation sections](/docs/guide/commands#documentation-sections).
 
 ## Dry run
 
-A command that can preview declares its own `dry-run` flag and branches on it, as `deploy` does above. It returns the preview before it asks for [confirmation](#confirmation), so a dry run never prompts. Commands without the flag reject `--dry-run` as an unknown flag instead of running for real:
+A command that can preview declares its own `dry-run` flag and returns the preview before asking for [confirmation](#confirmation), as `deploy` does above, so a dry run never prompts. Commands without the flag reject `--dry-run` as unknown instead of running for real:
 
 ```sh
 $ my-cli deploy prod --dry-run
@@ -115,7 +123,15 @@ Would deploy latest to prod
 
 ## Confirmation
 
-Ask before a change that is hard to undo, without stalling an agent on a prompt. With [`confirm()`](/docs/modules/extensions/confirm), a command that `.use(confirm)` awaits `ctx.confirm` for the function, then awaits it with the message before the change, as `deploy` does for `prod`. `--yes`, or `"yes": true` in `--input`, confirms up front (on reusable commands, only those that `.use(confirm)`; see [where `--yes` is accepted](/docs/modules/extensions/confirm#behavior)); on a terminal, the user answers a yes/no prompt; without a TTY, the command fails with `ConfirmationRequiredError` instead of waiting:
+Ask before a change that is hard to undo, without stalling an agent. With [`confirm()`](/docs/modules/extensions/confirm), a command calls `.use(confirm)`, awaits `ctx.confirm` for the function, and awaits that with a message before the change, as `deploy` does for `prod`.
+
+| Caller                                 | Result                                 |
+| -------------------------------------- | -------------------------------------- |
+| `--yes`, or `"yes": true` in `--input` | Confirmed up front                     |
+| A person on a terminal                 | Yes/no prompt; "no" fails              |
+| No TTY, or `CI` set                    | Fails with `ConfirmationRequiredError` |
+
+On reusable commands, only those that `.use(confirm)` accept `--yes`; see [where `--yes` is accepted](/docs/modules/extensions/confirm#behavior). `CI` counts as set unless it is empty, `0`, or `false` in any letter case, because a CI job can run on a pseudo-terminal nobody answers.
 
 ```sh
 $ my-cli deploy prod < /dev/null
@@ -127,11 +143,16 @@ Next steps:
     my-cli status prod
 ```
 
-`.use(confirm)` and `.use(nextSteps)` take the Extension itself: [using an Extension](/docs/guide/extensions#use-an-extensions-contexts-from-a-command) uses the Contexts it provides, and the app must `.extend()` it.
+`.use(confirm)` and `.use(nextSteps)` take the Extension itself, which [uses the Contexts it provides](/docs/guide/extensions#use-an-extensions-contexts-from-a-command); the app must `.extend()` it.
 
 ## Next steps
 
-Tell the agent what to run next instead of leaving it to guess. With [`nextSteps()`](/docs/modules/extensions/next-steps), a command that `.use(nextSteps)` awaits `ctx.nextSteps` and calls `.add(status, input, description)` on it to add follow-up commands by definition, as `deploy` does above, and `nextSteps({ onError })` returns recovery commands for errors you recognize with `instanceof`. The steps print to stderr as runnable command lines, after success or failure:
+Tell the agent what to run next. With [`nextSteps()`](/docs/modules/extensions/next-steps):
+
+- After success, a command that `.use(nextSteps)` awaits `ctx.nextSteps` and calls `.add(command, input, description)` with a command definition, as `deploy` does above.
+- After failure, `nextSteps({ onError })` returns recovery commands for errors you recognize with `instanceof`.
+
+Steps print to stderr as runnable command lines:
 
 ```sh
 $ my-cli deploy staging
@@ -143,12 +164,12 @@ Next steps:
 
 ## Prompts without a TTY
 
-A prompt waits for an answer an agent can't give. Make every prompt answerable from the command line, and fail when it isn't:
+A prompt waits for an answer an agent can't give. Make every prompt answerable from the command line, and fail otherwise:
 
 <include lang="ts">../../../examples/guide/agents.ts#prompts</include>
 
 - `initial` from a flag skips the prompt when the flag is given, on any terminal.
-- An explicit `default` is returned without asking when there is no TTY (except for `password()`).
+- An explicit `default` is returned without asking when there is no TTY. `password()` has no `default`.
 - A prompt with neither rejects with [`NonInteractiveError`](/docs/modules/prompts#non-interactive-environments) without a TTY, so the command fails instead of hanging:
 
 ```sh
@@ -158,13 +179,15 @@ $ my-cli init --name demo < /dev/null
 Created demo in us-east-1
 ```
 
-[`confirm()`](/docs/modules/extensions/confirm) is stricter: it also refuses with `ConfirmationRequiredError` when `CI` is set (to anything but an empty string, `0`, or `false` in any letter case), because a CI job can run on a pseudo-terminal that nobody answers.
-
-Crust doesn't detect agents or add a global `--no-input`: the TTY check is the rule.
+Crust doesn't detect agents or add a global `--no-input`: the TTY check is the rule. [`confirm()`](/docs/modules/extensions/confirm) also refuses under `CI`, as [above](#confirmation).
 
 ## MCP
 
-[`@crustjs/mcp`](/docs/modules/mcp) serves your commands as MCP tools with `<cli> mcp`. Each tool's input schema is the same flat object `--input` takes; `.output()` schemas and generator events become the tool's output schema and progress notifications. What a call writes to stderr, next steps included, follows its result in the tool result.
+[`@crustjs/mcp`](/docs/modules/mcp) serves your commands as MCP tools with `<cli> mcp`.
+
+- Each tool's input schema is the flat object `--input` takes.
+- `.output()` schemas and generator events become the tool's output schema and progress notifications.
+- What a call writes to stderr, next steps included, follows its result in the tool result.
 
 ## Skills
 

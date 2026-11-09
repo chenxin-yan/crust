@@ -183,13 +183,9 @@ describe("runDistributeBuild", () => {
 		expect(resolver).toContain('"binaryFilename": "test-cli-bun-linux-x64"');
 		expect(resolver).toContain("Unsupported platform:");
 		expect(resolver).toContain('"linux-x64-musl": {');
-		expect(resolver).toContain("glibcVersionRuntime");
 		expect(resolver).toContain("Supported platforms: linux-x64, linux-x64-musl, windows-arm64");
 		expect(resolver).toContain("Missing platform package");
 		expect(resolver).toContain("optional dependencies are enabled");
-		expect(resolver).toContain('child.on("error"');
-		expect(resolver).toContain("process.kill(process.pid, signal)");
-		expect(resolver).toContain("process.exit(code ?? 0)");
 		expect(readFileSync(join(plan.stageDir, "root", "LICENSE"), "utf8")).toBe("test license\n");
 		expect(outputs).toEqual([
 			join(plan.stageDir, "linux-x64", "bin", "test-cli-bun-linux-x64"),

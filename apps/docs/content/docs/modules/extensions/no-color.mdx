@@ -24,6 +24,13 @@ my-cli --no-color        # NO_COLOR=1; FORCE_COLOR is cleared
 my-cli deploy --no-color # the flag is recursive
 ```
 
-The Extension restores the previous environment values after the command finishes. Overlapping programmatic runs may share a direction (all `--color` or all `--no-color`); previous ambient values return only after the last run finishes. Starting a run with the opposing flag while another is in flight throws a `CrustError` in its `setup` hook, because the environment is process-global and cannot hold both values. Setups run before any flag handler, so `--help --no-color` prints help without color whatever the `.extend()` order.
+- The previous values are restored after the command finishes. Child processes started meanwhile inherit the new values.
+- The variables are set before any flag handler runs, so `--help --no-color` prints help without color whatever the `.extend()` order.
+- When neither flag is present, the environment is unchanged and [`@crustjs/style` color detection](/docs/modules/style#color-control) applies as usual.
 
-When neither flag is present, the Extension leaves the environment unchanged. `@crustjs/style` remains responsible for environment and TTY-based color detection.
+<Callout title="Overlapping programmatic runs">
+  The environment is process-global. Overlapping [`run()`](/docs/api/crust#runpath-input-options)
+  calls may share a direction (all `--color` or all `--no-color`); the previous values return after
+  the last one finishes. Starting a run with the opposing flag while another is in flight fails it
+  with a `DEFINITION` `CrustError`.
+</Callout>

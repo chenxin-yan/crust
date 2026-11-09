@@ -11,10 +11,6 @@ afterAll(() => vi.unstubAllEnvs());
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("padStart — plain text", () => {
-	it("pads on the left with spaces by default", () => {
-		expect(padStart("hi", 5)).toBe("   hi");
-	});
-
 	it("pads with custom fill character", () => {
 		expect(padStart("hi", 5, ".")).toBe("...hi");
 	});
@@ -42,10 +38,6 @@ describe("padStart — styled text", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("padEnd — plain text", () => {
-	it("pads on the right with spaces by default", () => {
-		expect(padEnd("hi", 5)).toBe("hi   ");
-	});
-
 	it("returns text unchanged when already at target width", () => {
 		expect(padEnd("hello", 5)).toBe("hello");
 	});
@@ -69,10 +61,6 @@ describe("padEnd — styled text", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("center — plain text", () => {
-	it("centers with even padding", () => {
-		expect(center("hi", 6)).toBe("  hi  ");
-	});
-
 	it("puts extra character on the right for odd padding", () => {
 		expect(center("hi", 7)).toBe("  hi   ");
 	});

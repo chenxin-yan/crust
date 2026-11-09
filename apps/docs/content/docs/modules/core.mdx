@@ -26,7 +26,7 @@ The root action prints `hello!` when `verbose` is true. The `wave` command is an
   ../../../examples/modules/core.ts#context
 </include>
 
-A Context can own the flags needed by its setup. `.provide()` installs that Context on the current command and commands added later. Its flags are parsed by the providing command, its inline `.command()` children, and reusable commands that declare it with `.use()`; see [Flags owned by a Context](/docs/guide/contexts#flags-owned-by-a-context).
+A Context can own the flags its setup needs. Those flags are parsed by the command that calls `.provide()`, its inline `.command()` children, and reusable commands that declare the Context with `.use()`. See [Flags owned by a Context](/docs/guide/contexts#flags-owned-by-a-context).
 
 ## Runtime exports
 
@@ -62,6 +62,8 @@ if (outcome.status === "completed") console.log(outcome.stdout); // => o/
 
 ## Tooling subpath
 
+`@crustjs/core/tooling` holds build- and render-time helpers for Command Snapshots, documentation trees, [section filtering](/docs/guide/extensions#section-consumers), and formatting. It moves in lockstep with first-party tooling; application authoring and invocation APIs stay at the package root.
+
 ```ts
 import { defineExtensionId } from "@crustjs/core";
 import { buildCommandDocumentation, visibleSectionsFor } from "@crustjs/core/tooling";
@@ -87,12 +89,65 @@ const visible = visibleSectionsFor(snapshot, defineExtensionId("acme:web-docs"))
 | `RAW_INPUT_PROPERTY`                                                               | Name of the passthrough input property (`"raw"`)                   |
 | `standardJsonSchema()`                                                             | Converts a Standard Schema's input or output type to JSON Schema   |
 
-`@crustjs/core/tooling` contains build- and render-time helpers for Command Snapshots, documentation trees, [section filtering](/docs/guide/extensions#section-consumers), and formatting. They move in lockstep with first-party tooling. Application authoring and invocation APIs stay at the package root. `SNAPSHOT_PATH_ENV` and `BUILD_OUT_DIR_ENV` name the variables `crust build` sets when it runs a source entry to prepare its snapshot; do not set them in your CLI.
+The [tooling entry point](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/tooling.ts) is the full export list.
 
-An installed command name uses letters, digits, `.`, `_`, and `-`, and starts with a letter or digit. `crust build` applies this rule to `bin` keys, `create-crust` to project names, and `completion()` to the root command name, which `crust build` requires to match the installed command.
+<Callout type="warn">
+  `crust build` sets `SNAPSHOT_PATH_ENV` and `BUILD_OUT_DIR_ENV` when it runs a source entry to
+  prepare its snapshot. Do not set them in your CLI.
+</Callout>
 
-`parseFlagValues(flags, env)` reuses terminal flag conversion without argv: environment splitting, choices, parsers or built-in coercion, defaults, requiredness, and Standard Schemas. Invalid definitions reject with `DEFINITION`; value failures reject with `PARSE` or `VALIDATION`. Core's messages name the variable, never its value; Standard Schema issue messages are the validator's own and may quote it. [`@crustjs/env`](/docs/modules/env) aggregates and redacts those failures for environment validation.
+### Installed command names
 
-`commandInputSchema(command, path)` describes a command's input as one flat JSON object: every arg and flag by name, plus `raw` for passthrough values the action receives as `rawArgs`. A Standard Schema definition appears as its snapshot `inputSchema` when `run()` accepts what that describes, otherwise by its token type. [`@crustjs/mcp`](/docs/modules/mcp#tools) advertises it as each tool's `inputSchema`, and the MCP page lists how each definition maps; [`input()`](/docs/modules/extensions/input) accepts the same object from `--input`, and [`schema()`](/docs/modules/extensions/schema) prints it. It throws, naming `path`, when an arg and a flag share a name or a definition is named `raw`. `parseCommandInput(command, values)` turns such an object back into `run()` input: arg names fill `args`, `raw` fills `raw`, other names go to `flags`, and `url` strings become `URL`s; `commandInputFields(command)` returns those arg and `url` field names. `undefined` entries are skipped; any other value that is not JSON data, a `raw` that is not an array of strings, or an invalid `url` string rejects with `PARSE` (for a URL, the same `Invalid URL for --name.` error argv gives, without the value); `run()` then validates the input like any structured invocation.
+An installed command name uses letters, digits, `.`, `_`, and `-`, and starts with a letter or digit. Use it to check a name before installing a command under it.
 
-`standardJsonSchema(schema, "input" | "output")` returns the draft 2020-12 JSON Schema of a Standard Schema's input or output type through its [Standard JSON Schema](https://standardschema.dev/json-schema) converter, `~standard.jsonSchema`. Zod 4.2+ and ArkType 2.1.28+ provide one; wrap a Valibot schema with `toStandardJsonSchema()` from `@valibot/to-json-schema`. It returns `undefined` when the schema has no converter or the converter throws, as Zod does for a transform's output. Snapshots carry a command's [`.output()`](/docs/api/crust#outputschema) schema converted this way as `outputSchema`, and an arg or flag schema's input as `inputSchema`.
+### Flag values without argv
+
+`parseFlagValues(flags, env)` runs the flag pipeline on environment values only: delimiter splitting, choices, `parse` or built-in coercion, defaults, requiredness, and Standard Schemas.
+
+- Invalid definitions reject with `DEFINITION`; bad values reject with `PARSE` or `VALIDATION`.
+- Core's messages name the variable, never its value. Standard Schema issue messages are the validator's own and may quote it.
+
+### Command input as JSON
+
+`commandInputSchema(command, path)` describes a command's input as one flat JSON object: every arg and flag by name, plus `raw` for the passthrough values the action receives as `rawArgs`.
+
+It throws, naming `path`, when an arg and a flag share a name or a definition is named `raw`.
+
+| Definition                     | Schema                                                                                                              |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `type: "string"` / `"path"`    | `{ type: "string" }`                                                                                                |
+| `type: "number"` / `"boolean"` | `{ type: "number" }` / `{ type: "boolean" }`                                                                        |
+| `type: "url"`                  | `{ type: "string", format: "uri" }`; the string becomes a `URL` before `run()`                                      |
+| `type: "json"`                 | `{}` (any JSON)                                                                                                     |
+| `choices`                      | `{ type: "string", enum }`                                                                                          |
+| `variadic` / `multiple`        | `{ type: "array", items }`                                                                                          |
+| `required` without `default`   | listed in `required`                                                                                                |
+| Standard Schema                | Its input JSON Schema when `run()` accepts that shape; otherwise the declared token type (`string` for schema args) |
+| custom `parse`                 | The declared token type; the command validates and transforms when it runs                                          |
+| every command                  | `raw: { type: "array", items: { type: "string" } }`, delivered to the action as `rawArgs`                           |
+
+Standard Schema definitions:
+
+- Their input JSON Schema comes from the schema's converter (Zod 4.2+, ArkType 2.1.28+, Valibot through `toStandardJsonSchema()`); see [`standardJsonSchema()`](#json-schema-from-a-standard-schema).
+- Schema-backed values reach `run()` as their token: a string, or a boolean for `type: "boolean"` flags. So the JSON Schema is used, without `$schema`, only when its top-level `type` is that token type (or `array` of it, without `prefixItems`, for `variadic` and `multiple`) and it has no `$ref`, `$defs`, or other `$` keyword.
+- `z.enum([...])`, `z.string().min(3)`, and `z.url()` keep their `enum`, `minLength`, and `format`. `z.coerce.number()` (JSON Schema `number`) falls back to `{ type: "string" }`, since a JSON number would fail the string binding.
+- The definition's `description` fills in when the JSON Schema has none.
+- Schema-owned requiredness is invisible: schema-backed definitions are advertised as optional. A custom `parse` definition keeps its declared `required`.
+
+Defaults are advertised as `JSON.stringify` copies: `URL`s become strings, and nested `undefined`, functions, and symbols are dropped. Defaults that fail to serialize or hold non-finite numbers are omitted. Either way, `run()` still applies the declared default.
+
+`parseCommandInput(command, values)` turns such an object back into `run()` input; `run()` then validates it like any structured invocation.
+
+- Arg names fill `args`, `raw` fills `raw`, and every other name goes to `flags`.
+- Strings for `url` definitions become `URL`s. `commandInputFields(command)` returns the arg names and `url` field names it uses.
+- `undefined` entries are skipped.
+- It rejects with `PARSE` for a value that is not JSON data, a `raw` that is not an array of strings, or an invalid URL (the same `Invalid URL for --name.` error argv gives, without the value).
+
+### JSON Schema from a Standard Schema
+
+`standardJsonSchema(schema, "input" | "output")` returns the draft 2020-12 JSON Schema of a Standard Schema's input or output type, through its [Standard JSON Schema](https://standardschema.dev/json-schema) converter (`~standard.jsonSchema`).
+
+- Zod 4.2+ and ArkType 2.1.28+ provide a converter. Wrap a Valibot schema with `toStandardJsonSchema()` from `@valibot/to-json-schema`.
+- It returns `undefined` when the schema has no converter or the converter throws, as Zod does for a transform's output.
+
+Snapshots use it: a command's [`.output()`](/docs/api/crust#outputschema) schema appears as `outputSchema`, and an arg or flag schema's input as `inputSchema`.

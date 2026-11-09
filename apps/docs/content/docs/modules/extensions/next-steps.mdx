@@ -23,28 +23,60 @@ Next steps:
     my-cli login --sso
 ```
 
-`nextSteps(options?)` provides a [Context](/docs/guide/contexts) named `nextSteps`. A command declares it with `.use(nextSteps)`, which [uses the Contexts an Extension provides](/docs/guide/extensions#use-an-extensions-contexts-from-a-command), and, from its action, awaits `ctx.nextSteps` and calls `.add(definition, input?, description?)` on it:
+`nextSteps(options?)` provides a [Context](/docs/guide/contexts) named `nextSteps`. A command declares it with [`.use(nextSteps)`](/docs/guide/extensions#use-an-extensions-contexts-from-a-command), then, from its action, awaits `ctx.nextSteps` and calls `.add(definition, input?, description?)` on it:
 
 - `definition`: the [command definition](/docs/api/crust#definecommandname-config-recipe) to suggest, such as `logs`. The step prints the path the application added it at, nested commands included.
 - `input`: arguments, flags, and `raw` tokens in the shape [`run()`](/docs/api/crust#runpath-input-options) takes them, typed from the definition's arguments and flags, such as `{ args: { env: "prod" }, flags: { force: true } }`.
 - `description`: what the step is for, printed above its command line.
 
-`options.onError(error)` returns recovery steps for a failed invocation, as `{ command, input?, description? }` objects whose `command` is a definition, or `undefined` for none. Their `input` is not typed from the definition, but it is checked when the block is printed like any other step's. `onError` receives the thrown value as-is: match it yourself, for example with `instanceof`. `nextSteps()` never reads fields such as `name` or `message` to pick steps.
+`options.onError(error)` returns recovery steps for a failed invocation, or `undefined` for none:
+
+- Each step is a `{ command, input?, description? }` object whose `command` is a definition.
+- Its `input` is not typed from the definition, but it is checked when the block is printed like any other step's.
+- `onError` receives the thrown value as-is: match it yourself, for example with `instanceof`.
 
 The app must `.extend(nextSteps())` for a command that uses it: TypeScript rejects the `.add()` otherwise, and preparing the app throws a `DEFINITION` error (`missing-extension`).
 
 ## Behavior
 
-After the invocation completes or fails, `nextSteps()` prints a `Next steps:` block to stderr as plain text, whatever other Extensions are registered, including [`json()`](/docs/modules/extensions/json). On a failure, `onError` steps come first, then the steps the action added before it failed. In `execute()`, the block follows the error message. Nothing is printed when there are no steps, or when a flag handler such as `--help` took over.
+After the invocation completes or fails, `nextSteps()` prints a `Next steps:` block to stderr as plain text, even under [`json()`](/docs/modules/extensions/json).
 
-Each step is rendered as a shell-quoted command line from the target command's [Command Snapshot](/docs/api/types#commandsnapshot): flags as `--name value` (`--name=value` when the value starts with `-`), `true` as `--name` and `false` as `--no-name`, `multiple` flag and variadic argument arrays as repeated values, numbers as text (`Infinity` prints as `Infinity` and `-0` as `-0`), `json` values as JSON (strings included, so `"hello"` prints as `'"hello"'`), and positional arguments in declaration order, after `--` when one starts with `-` or the command has subcommands, so a value is never routed as a subcommand name or alias. Under [`run()`](/docs/api/crust#runpath-input-options) the block is captured in `outcome.stderr`.
+- On a failure, `onError` steps come first, then the steps the action added before it failed. In `execute()`, the block follows the error message.
+- Nothing is printed when there are no steps, or when a flag handler such as `--help` took over.
+- Under [`run()`](/docs/api/crust#runpath-input-options), the block is captured in `outcome.stderr`.
 
-Steps are checked when the block is printed. Each definition is looked up in the application with [`commandPathOf()`](/docs/api/types#extensioncontext), by identity, so a [`.as()`](/docs/api/crust#definecommandname-config-recipe) copy is a different definition; one added more than once prints its shallowest path. A step whose definition the application does not add, that names an unknown argument or flag, that gives a positional argument after an omitted earlier one, whose `raw` tokens would fill a positional argument, whose repeatable flag value is empty or contains the flag's `delimiter` (argv would split or drop it), whose number value is `NaN` (argv rejects it), whose `json` value JSON would change (a non-finite number, `-0`, `undefined`, or anything else that is not plain JSON data), or whose boolean flag value is not a boolean is skipped with a `nextSteps():` note on stderr. A throwing `onError` is reported the same way. Printing never changes the invocation's exit code or result.
+### Command lines
+
+Each step prints as a shell-quoted command line built from the target command's [Command Snapshot](/docs/api/types#commandsnapshot): flags first, then positional arguments in declaration order, then any `raw` tokens after `--`.
+
+| Input                                                                | Printed as                                                       |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| flag value                                                           | `--name value`, or `--name=value` when the value starts with `-` |
+| boolean `true` / `false`                                             | `--name` / `--no-name`                                           |
+| `multiple` flag or variadic argument array                           | repeated values                                                  |
+| number                                                               | text; `Infinity` and `-0` print as written                       |
+| `json` value                                                         | JSON, strings included: `"hello"` prints as `'"hello"'`          |
+| positionals, when the command has subcommands or one starts with `-` | after `--`, so no value is routed as a subcommand                |
+
+### Skipped steps
+
+Steps are checked when the block is printed. Each definition is looked up in the application with [`commandPathOf()`](/docs/api/types#extensioncontext), by identity: a [`.as()`](/docs/api/crust#definecommandname-config-recipe) copy is a different definition, and one added more than once prints its shallowest path.
+
+A step is skipped, with a `nextSteps():` note on stderr, when:
+
+- the application does not add its definition;
+- it names an unknown argument or flag;
+- it gives a positional argument after an omitted earlier one, or its `raw` tokens would fill a positional argument;
+- a repeatable flag value is empty or contains the flag's `delimiter` (argv would split or drop it);
+- a number value is `NaN` (argv rejects it);
+- a `json` value would change through JSON: a non-finite number, `-0`, `undefined`, or anything else that is not plain JSON data;
+- a boolean flag value is not a boolean.
+
+A throwing `onError` is reported the same way. Printing never changes the invocation's exit code or result.
 
 ## Limitations
 
-Steps print from `postRun`, so they follow failures in the action, in validation, and in Context setup. Routing failures, such as an unknown command, argv syntax errors, such as a missing flag value, and invalid typed `run()` input fail before `postRun` runs, so no steps are printed for them; [`didYouMean()`](/docs/modules/extensions/did-you-mean) covers unknown commands.
-
-A `false` value for a `noNegate` boolean flag has no command-line spelling and is left out.
-
-The root command has no definition, so it cannot be a step. Looking a definition up builds the commands it searches; one whose recipe throws skips the step with that error as the note.
+- Steps print after failures in the action, in validation, and in Context setup. Routing failures (an unknown command), argv syntax errors (a missing flag value), and invalid typed `run()` input fail earlier, so no steps print for them; [`didYouMean()`](/docs/modules/extensions/did-you-mean) covers unknown commands.
+- A `false` value for a `noNegate` boolean flag has no command-line spelling and is left out.
+- The root command has no definition, so it cannot be a step.
+- Looking a definition up builds the commands it searches; if one's recipe throws, the step is skipped with that error as the note.

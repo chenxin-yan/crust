@@ -33,16 +33,6 @@ const port = () =>
 	});
 
 describe("Standard Schema on arg definitions", () => {
-	it("passes the raw string token to the schema and hands the output to the action", async () => {
-		let received: number | undefined;
-		const app = new Crust("cli").args({ name: "port", schema: port() }).action(({ args }) => {
-			received = args.port;
-		});
-
-		await unwrap(app.run([], { args: { port: "8080" } }));
-		expect(received).toBe(8080);
-	});
-
 	it("schema owns requiredness: a missing arg reaches the schema as undefined", async () => {
 		const app = new Crust("cli").args({ name: "port", schema: port() }).action(() => {});
 

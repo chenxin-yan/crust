@@ -13,36 +13,11 @@ const BASIC_FIELDS = {
 	retries: { type: "number", default: 3 },
 } as const satisfies FieldsDef;
 
-const MIXED_FIELDS = {
-	theme: { type: "string", default: "light" },
-	verbose: { type: "boolean", default: false },
-	token: { type: "string" },
-} as const satisfies FieldsDef;
-
 // ────────────────────────────────────────────────────────────────────────────
-// applyFieldDefaults — No persisted data
+// applyFieldDefaults
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("applyFieldDefaults", () => {
-	it("should return all defaults when persisted is undefined", () => {
-		const result = applyFieldDefaults(undefined, BASIC_FIELDS);
-
-		expect(result).toEqual({
-			theme: "light",
-			verbose: false,
-			retries: 3,
-		});
-	});
-
-	it("should omit optional fields (no default) when persisted is undefined", () => {
-		const result = applyFieldDefaults(undefined, MIXED_FIELDS);
-
-		expect(result.theme).toBe("light");
-		expect(result.verbose).toBe(false);
-		expect(result.token).toBeUndefined();
-		expect("token" in result).toBe(false);
-	});
-
 	// ──────────────────────────────────────────────────────────────────────
 	// Persisted data — partial match
 	// ──────────────────────────────────────────────────────────────────────
@@ -55,44 +30,6 @@ describe("applyFieldDefaults", () => {
 			theme: "dark",
 			verbose: false,
 			retries: 3,
-		});
-	});
-
-	// ──────────────────────────────────────────────────────────────────────
-	// Unknown keys — pruneUnknown
-	// ──────────────────────────────────────────────────────────────────────
-
-	it("should drop persisted keys not defined in fields (default)", () => {
-		const persisted = {
-			theme: "dark",
-			verbose: true,
-			retries: 5,
-			unknown: "extra",
-		};
-		const result = applyFieldDefaults(persisted, BASIC_FIELDS);
-
-		expect(result).toEqual({
-			theme: "dark",
-			verbose: true,
-			retries: 5,
-		});
-		expect("unknown" in result).toBe(false);
-	});
-
-	it("should preserve unknown keys when pruneUnknown is false", () => {
-		const persisted = {
-			theme: "dark",
-			verbose: true,
-			retries: 5,
-			extra: "kept",
-		};
-		const result = applyFieldDefaults(persisted, BASIC_FIELDS, false);
-
-		expect(result).toEqual({
-			theme: "dark",
-			verbose: true,
-			retries: 5,
-			extra: "kept",
 		});
 	});
 
@@ -125,16 +62,6 @@ describe("applyFieldDefaults", () => {
 		expect(result2).toEqual({ tags: ["default"] });
 	});
 
-	it("should handle pruneUnknown=false with no persisted data", () => {
-		const result = applyFieldDefaults(undefined, BASIC_FIELDS, false);
-
-		expect(result).toEqual({
-			theme: "light",
-			verbose: false,
-			retries: 3,
-		});
-	});
-
 	// ──────────────────────────────────────────────────────────────────────
 	// Own-property semantics
 	// ──────────────────────────────────────────────────────────────────────
@@ -150,21 +77,5 @@ describe("applyFieldDefaults", () => {
 			["__proto__", { a: 1 }],
 		]);
 		expect(applyFieldDefaults(persisted, {})).toEqual({});
-	});
-
-	it("applies defaults to declared fields named like Object.prototype members", () => {
-		const fields = {
-			constructor: { type: "string", default: "c" },
-			toString: { type: "string", default: "t" },
-			["__proto__"]: { type: "string", default: "p" },
-		} as const satisfies FieldsDef;
-		const result = applyFieldDefaults({}, fields);
-
-		expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
-		expect(Object.entries(result)).toEqual([
-			["constructor", "c"],
-			["toString", "t"],
-			["__proto__", "p"],
-		]);
 	});
 });

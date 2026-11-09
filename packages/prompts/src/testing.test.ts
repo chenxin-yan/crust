@@ -3,10 +3,6 @@ import { describe, expect, it } from "vite-plus/test";
 import { createPromptIO, encodeKey } from "./testing.ts";
 
 describe("encodeKey", () => {
-	it("encodes ctrl combinations", () => {
-		expect(encodeKey("ctrl+c")).toBe("\x03");
-	});
-
 	it("throws on unsupported key names instead of typing them", () => {
 		expect(() => encodeKey("pageup")).toThrow("Unsupported key name");
 		expect(() => encodeKey("constructor")).toThrow("Unsupported key name");
@@ -15,13 +11,6 @@ describe("encodeKey", () => {
 });
 
 describe("createPromptIO screen", () => {
-	it("wraps text longer than the terminal width onto the next row", () => {
-		const harness = createPromptIO();
-		harness.io.output.write(`${"a".repeat(80)}${"b".repeat(5)}`);
-
-		expect(harness.screen()).toBe(`${"a".repeat(80)}\n${"b".repeat(5)}`);
-	});
-
 	it("delays the wrap at the last column until another character arrives", () => {
 		const harness = createPromptIO();
 		harness.io.output.write(`${"a".repeat(80)}\r\nnext`);

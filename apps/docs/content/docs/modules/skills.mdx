@@ -16,11 +16,22 @@ npm install @crustjs/skills
 
 <include lang="ts">../../../examples/modules/skills.ts#write</include>
 
-`writeSkills()` generates one skill directory from `app` (a `SKILL.md` plus one file per command under `commands/`) and copies any authored `extras`. It replaces a dedicated output directory named `skills` and returns paths relative to it. An authored skill with the generated skill's name replaces the generated one. An authored `SKILL.md` must give `name` and `description` as one-line plain or quoted YAML values; block scalars (`|`, `>-`) are rejected.
+`writeSkills()` generates one skill directory from `app` (a `SKILL.md` plus one file per command under `commands/`) and copies any authored `extras`.
 
-Command file names are trimmed and lowercased: each command renders to `<name>.md`, and each nested command group also gets a `<name>` directory. Before replacing output, generation rejects command names containing path separators or equal to `.` or `..`, and generated file or directory names with control characters, Windows-reserved characters, device names (such as `con.md` or `nul.txt.md`), or a trailing dot (so a `trailing.` group fails, while a `trailing.` command renders to `trailing..md`). It also rejects file/file and file/directory collisions after lowercasing and canonical Unicode normalization, including composed/decomposed spellings that alias on macOS. Unicode normalization is only used for collision checks; generated paths and command invocations retain their original Unicode spelling.
+- `outDir` must be a dedicated directory named `skills`: it is replaced on every call. The returned paths are relative to it.
+- An authored skill with the generated skill's name replaces the generated one.
+- An authored `SKILL.md` must give `name` and `description` as one-line plain or quoted YAML values; block scalars (`|`, `>-`) are rejected.
+- A runnable command with an [`.output()`](/docs/api/crust#outputschema) schema that converts to JSON Schema gets an `Output` section with that JSON Schema on one line, without its `$schema` key.
 
-A runnable command whose snapshot carries `outputSchema` (from an [`.output()`](/docs/api/crust#outputschema) schema with a JSON Schema converter) gets an `Output` section with that JSON Schema on one line, without its `$schema` key.
+### Generated file names
+
+Command file names are trimmed and lowercased: each command renders to `<name>.md`, and each nested command group also gets a `<name>` directory. Before replacing output, generation fails on:
+
+- command names containing path separators, or equal to `.` or `..`;
+- file or directory names with control characters, Windows-reserved characters, device names (such as `con.md` or `nul.txt.md`), or a trailing dot (a `trailing.` group fails, while a `trailing.` command renders to `trailing..md`);
+- names that collide after lowercasing and Unicode normalization, including composed/decomposed spellings that alias on macOS.
+
+Normalization is only used for collision checks; generated paths and command invocations keep their original Unicode spelling.
 
 <auto-type-table path="../../../../../packages/skills/src/build.ts" name="WriteSkillsOptions" />
 
@@ -30,7 +41,11 @@ Use `writeSkillsFromSnapshot()` when a prepared Command Snapshot is available. O
 
 <include lang="ts">../../../examples/modules/skills.ts#extension</include>
 
-The Extension registers `my-cli skills` (alias `skill`) with `install`, `uninstall`, and `repair` subcommands; bare `my-cli skills` is shorthand for `skills install`. A custom `command` name replaces the default command without adding the alias. Pass it as a string literal so `app.run()` keeps type-checking command paths and flags; a `command` typed as `string` leaves the command tree unchecked, and if it collides with an app command the app fails with a `DEFINITION` error when it prepares. It also contributes an `Agent skills` root section, excluded from the generated skills with `except: [skill]`, that lists each packaged skill and its source directory.
+The Extension registers `my-cli skills` (alias `skill`) with `install`, `uninstall`, and `repair` subcommands; bare `my-cli skills` is shorthand for `skills install`.
+
+- A custom `command` name replaces the default command, without the alias. Pass it as a string literal so `app.run()` keeps type-checking command paths and flags; a `command` typed as `string` leaves the command tree unchecked.
+- A command name that collides with an app command fails with a `DEFINITION` error when the app prepares.
+- It adds an `Agent skills` section to the root command's documentation, such as help and man pages, listing each packaged skill and its source directory. It uses `except: [skill]`, so generated skills leave it out.
 
 During `crust build`, the Extension's build hook renders generated and authored skills under `skills/`, recorded as artifacts owned by `crust:skills`. At runtime the commands read them from [`resolveArtifactDir("skills")`](/docs/api/crust#resolveartifactdirname), so run `crust build` before using them; until then help shows a note instead of failing.
 
@@ -59,7 +74,11 @@ project: .agents/skills/my-cli -> ../../node_modules/my-cli/skills/my-cli
 global:  ~/.agents/skills/my-cli -> /usr/lib/node_modules/my-cli/skills/my-cli
 ```
 
-Project links are relative and global links are absolute. Before each Command Action, the `preRun` hook of an installed CLI repairs Crust-owned links whose target no longer exists unless `autoUpdate: false`; it does not create links that were never installed, and it leaves a link to another live installed copy of the CLI (global versus project-local, `npx`) alone so the copies do not take it from each other. `skills repair` re-points such a link to the running copy. Running from source (`bun run`, `node`) skips it, so trying a checkout never moves an installed CLI's links to that checkout's build. Run `skills repair` there to relink deliberately.
+Project links are relative and global links are absolute. Before each Command Action, an installed CLI repairs Crust-owned links whose target no longer exists, unless `autoUpdate: false`:
+
+- It never creates links that were not installed.
+- It leaves a link to another live installed copy of the CLI (global versus project-local, `npx`) alone, so the copies do not take it from each other. `skills repair` re-points such a link to the running copy.
+- Running from source (`bun run`, `node`) skips the repair, so trying a checkout never moves an installed CLI's links to its build. Run `skills repair` there to relink deliberately.
 
 A link is Crust-owned when its textual target ends in `skills/<name>`. Real directories and foreign links conflict unless `force: true` is passed to low-level installation.
 

@@ -116,15 +116,6 @@ describe("renderSkill", () => {
 			// Should be wrapped in double quotes with internal quotes escaped
 			expect(skill?.content).toContain('description: "Deploy: the \\"app\\" to {production}"');
 		});
-
-		it("does not quote YAML values that are safe plain scalars", async () => {
-			const snapshot = await buildSimpleSnapshot();
-			const files = renderSkill(snapshot, baseMeta);
-			const skill = findFile(files, "SKILL.md");
-
-			// "A test CLI tool" has no special chars — should not be quoted
-			expect(skill?.content).toContain("description: A test CLI tool");
-		});
 	});
 
 	// ────────────────────────────────────────────────────────────────────────

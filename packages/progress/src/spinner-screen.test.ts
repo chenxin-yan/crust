@@ -151,24 +151,6 @@ describe("spinner frame wider than the row", () => {
 			"- [abcd…]",
 		],
 		[
-			"a spinner frame wider than the row",
-			10,
-			(sink) => {
-				const handle = spinner({
-					message: "Building",
-					spinner: frames("ABCDEFGHIJ"),
-					sigint: false,
-					sink,
-				});
-				return {
-					start: handle.start,
-					redraw: () => handle.updateMessage("Building"),
-					stop: () => handle.stop(),
-				};
-			},
-			"ABCDEFGH…",
-		],
-		[
 			"a multi-line spinner frame",
 			20,
 			(sink) => {

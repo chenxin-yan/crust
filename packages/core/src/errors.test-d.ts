@@ -3,10 +3,7 @@ import {
 	CrustError,
 	type CrustErrorCode,
 	type CrustErrorDetails,
-	type DefinitionErrorDetails,
-	type DefinitionErrorReason,
 	type ParseErrorDetails,
-	type ParseErrorReason,
 } from "./errors.ts";
 
 function _instanceofKeepsCodeUnion(error: unknown) {
@@ -68,14 +65,7 @@ function _instanceofSubclassShapes(error: unknown) {
 	}
 }
 
-function _reasonsAutocompleteButStayOpen() {
-	type _parse = Expect<
-		Equal<ParseErrorDetails["reason"], ParseErrorReason | (string & {}) | undefined>
-	>;
-	type _definition = Expect<
-		Equal<DefinitionErrorDetails["reason"], DefinitionErrorReason | (string & {}) | undefined>
-	>;
-	type _known = Expect<Equal<Extract<ParseErrorReason, "unknown-flag">, "unknown-flag">>;
+function _reasonsStayOpen() {
 	// Satellite packages add their own reasons.
 	new CrustError("DEFINITION", "env", { name: "PORT", reason: "flag-only-key" });
 }

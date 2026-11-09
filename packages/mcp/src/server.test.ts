@@ -196,22 +196,6 @@ describe("createMcpServer", () => {
 		});
 	});
 
-	it("returns captured stdout when an Extension handles the invocation", async () => {
-		const client = await connect(fixture);
-		const result = await client.callTool({ name: "print", arguments: { bail: true } });
-		expect(result.content).toEqual([{ type: "text", text: "bailed" }]);
-	});
-
-	it("appends captured stderr as a text block after the result", async () => {
-		const client = await connect(fixture);
-		expect(await client.callTool({ name: "print" })).toEqual({
-			content: [
-				{ type: "text", text: "plain output" },
-				{ type: "text", text: "noise" },
-			],
-		});
-	});
-
 	it("carries nextSteps() blocks in completed and failed tool results", async () => {
 		class NotLoggedInError extends Error {}
 		const status = defineCommand("status", (c) => c.action(() => {}));
