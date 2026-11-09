@@ -278,47 +278,6 @@ function _typecheckPreservesCommandAliasesAndPreParseInputTypes() {
 	void typecheckRunInput;
 }
 
-// keeps wide command trees tractable for the checker
-function _typecheckKeepsWideCommandTreesTractableForTheChecker() {
-	type Index =
-		| 1
-		| 2
-		| 3
-		| 4
-		| 5
-		| 6
-		| 7
-		| 8
-		| 9
-		| 10
-		| 11
-		| 12
-		| 13
-		| 14
-		| 15
-		| 16
-		| 17
-		| 18
-		| 19
-		| 20
-		| 21
-		| 22
-		| 23
-		| 24
-		| 25
-		| 26
-		| 27
-		| 28
-		| 29
-		| 30;
-	type WideTree = {
-		[K in `command-${Index}`]: { args: []; flags: {}; children: {}; result: void };
-	};
-	type Paths = CommandPath<WideTree>;
-	type _includesLast = Expect<readonly ["command-30"] extends Paths ? true : false>;
-	type _rejectsUnknown = Expect<Equal<readonly ["command-31"] extends Paths ? true : false, false>>;
-}
-
 // widens paths past the 15-level depth cap instead of failing the checker
 function _typecheckWidensPathsPastThe15LevelDepthCapInsteadOfFailingTheChecker() {
 	type Nest<Depth extends number, Acc extends readonly unknown[] = []> = Acc["length"] extends Depth

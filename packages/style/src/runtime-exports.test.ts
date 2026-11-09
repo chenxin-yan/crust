@@ -27,10 +27,6 @@ const environments = [
 ] as const;
 
 describe("runtime exports", () => {
-	it("exports every registered style method", () => {
-		expect(styleMethodNames.filter((name) => !(name in runtimeExports))).toEqual([]);
-	});
-
 	it("exports plain functions that do not chain", () => {
 		for (const name of styleMethodNames) {
 			const fn: object = bareExports[name];

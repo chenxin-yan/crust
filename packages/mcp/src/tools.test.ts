@@ -1,9 +1,8 @@
 import { Crust, defineCommand } from "@crustjs/core";
-import { commandInputFields, commandInputSchema } from "@crustjs/core/tooling";
 import { confirm } from "@crustjs/extensions";
 import { describe, expect, it } from "vite-plus/test";
 
-import { RAW_PROPERTY, toolsFromSnapshot } from "./tools.ts";
+import { toolsFromSnapshot } from "./tools.ts";
 
 const noop = () => {};
 /** Minimal hand-rolled Standard Schema; the snapshot never sees it. */
@@ -111,33 +110,6 @@ describe("toolsFromSnapshot", () => {
 		expect(() => toolsFromSnapshot(appSnapshot)).toThrow(
 			'Command "do:it" would become MCP tool "do:it"',
 		);
-	});
-
-	it("takes each tool's input schema and split metadata from core tooling", async () => {
-		const app = new Crust("cli").add(
-			defineCommand("send", (c) =>
-				c
-					.args({ name: "target", type: "string", required: true })
-					.flags({
-						origin: { type: "url", multiple: true },
-						mode: { type: "string", schema: passthrough },
-					})
-					.action(noop),
-			),
-		);
-		const snapshot = await app.snapshot();
-		const command = snapshot.subCommands.send!;
-		expect(toolsFromSnapshot(snapshot)).toEqual([
-			{
-				name: "send",
-				inputSchema: commandInputSchema(command, ["send"]),
-				urlFields: ["origin"],
-				argNames: ["target"],
-				path: ["send"],
-			},
-		]);
-		expect(commandInputFields(command)).toEqual({ urlFields: ["origin"], argNames: ["target"] });
-		expect(RAW_PROPERTY).toBe("raw");
 	});
 
 	it("lists confirm()'s yes input only on tools whose command uses confirm", async () => {

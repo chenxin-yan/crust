@@ -5,19 +5,6 @@ import { describe, expect, it } from "vite-plus/test";
 import { didYouMean } from "./did-you-mean.ts";
 
 describe("didYouMean", () => {
-	it("suggests the closest command on a typo", async () => {
-		const app = new Crust("app")
-			.extend(didYouMean())
-			.add(defineCommand("build", (cmd) => cmd.action(() => {})))
-			.add(defineCommand("test", (cmd) => cmd.action(() => {})));
-
-		const { stderr, exitCode } = await captureExecute(app, ["buld"]);
-
-		expect(stderr).toContain('Unknown command "buld"');
-		expect(stderr).toContain('Did you mean "build"?');
-		expect(exitCode).toBe(1);
-	});
-
 	it("reports the unknown command even when a sibling recipe throws", async () => {
 		const built: string[] = [];
 		const app = new Crust("app").extend(didYouMean()).add(

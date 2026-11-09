@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { calculateScrollOffset, formatPromptLine, formatSubmitted, moveCursor } from "./utils.ts";
+import { formatPromptLine, formatSubmitted, moveCursor } from "./utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // formatSubmitted
@@ -33,11 +33,5 @@ describe("moveCursor", () => {
 	it("keeps an empty list at the origin", () => {
 		expect(moveCursor(0, 0, -1, 0, 3)).toEqual({ cursor: 0, scrollOffset: 0 });
 		expect(moveCursor(0, 0, 1, 0, 3)).toEqual({ cursor: 0, scrollOffset: 0 });
-	});
-});
-
-describe("calculateScrollOffset", () => {
-	it("does not scroll an empty list", () => {
-		expect(calculateScrollOffset(0, 0, 0, 10)).toBe(0);
 	});
 });

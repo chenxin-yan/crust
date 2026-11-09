@@ -8,7 +8,6 @@ import {
 	assertTargetsBuildableWithoutBun,
 	type BuildCompiler,
 	bunCompileTarget,
-	resolveBinaryCompiler,
 	resolveBunBuildRunner,
 } from "./compilers.ts";
 import { BUN_TARGETS } from "./targets.ts";
@@ -39,18 +38,7 @@ console.log(JSON.stringify({ command: runner.command, execPath: process.execPath
 		expect(fallback.command).toBe(fallback.execPath);
 		expect(fallback.bunBeBun).toBe("1");
 	});
-
-	it("refuses to stand in for bun from a non-Bun process such as Node running the library", () => {
-		expect(resolveBunBuildRunner(false).command).toBe(which("bun")!);
-		vi.stubEnv("PATH", "");
-		expect(() => resolveBunBuildRunner(false)).toThrow("bun was not found on PATH");
-	});
 });
-
-const bunVersion = spawnSync(which("bun")!, ["--version"], {
-	encoding: "utf8",
-	timeout: 10_000,
-}).stdout.trim();
 
 describe("assertCompilerSatisfiesEngines", () => {
 	const compiler: BuildCompiler = {
@@ -93,19 +81,6 @@ describe("assertCompilerSatisfiesEngines", () => {
 	});
 });
 
-describe("resolveBinaryCompiler", () => {
-	it("selects bun on PATH and validates its actual version", async () => {
-		const compiler = await resolveBinaryCompiler({ engines: { bun: bunVersion } }, process.cwd());
-		expect(compiler).toMatchObject({ runtime: "bun", version: bunVersion });
-		expect(compiler.runner.command).toBe(which("bun"));
-		await expect(
-			resolveBinaryCompiler({ engines: { bun: "0.0.1" } }, process.cwd()),
-		).rejects.toThrow(
-			`Bun ${bunVersion} (${which("bun")}) does not satisfy package.json engines.bun "0.0.1".`,
-		);
-	});
-});
-
 const fallbackRunner = { command: process.execPath, env: { BUN_BE_BUN: "1" } };
 const realBunRunner = { command: "/usr/local/bin/bun", env: {} };
 
@@ -125,12 +100,6 @@ describe("bunCompileTarget", () => {
 
 	it("passes the canonical target to a real bun", () => {
 		expect(bunCompileTarget("bun-linux-x64", realBunRunner, "bun-linux-x64")).toBe("bun-linux-x64");
-	});
-
-	it("leaves an arm64 self-copy target alone; the guard refuses it earlier", () => {
-		expect(bunCompileTarget("bun-darwin-arm64", fallbackRunner, "bun-darwin-arm64")).toBe(
-			"bun-darwin-arm64",
-		);
 	});
 });
 

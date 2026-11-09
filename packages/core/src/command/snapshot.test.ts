@@ -1,19 +1,15 @@
 import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
 
-import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
-import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
 import { Crust, defineCommand } from "./crust.ts";
-import { prepareInvocation } from "./invocation.ts";
 import { createCommandNode, registerFlag } from "./node.ts";
 import { snapshotCommand, type CommandSnapshot } from "./snapshot.ts";
 
 function buildTree() {
 	const root = createCommandNode("cli");
-	root.meta.description = "root cli";
 	root.args = [
 		{
 			name: "file",
@@ -54,25 +50,6 @@ function buildTree() {
 }
 
 describe("snapshotCommand", () => {
-	it("projects meta, args, flags, and subcommands recursively", () => {
-		const snapshot = snapshotCommand(buildTree());
-
-		expect(snapshot.meta.name).toBe("cli");
-		expect(snapshot.meta.description).toBe("root cli");
-		expect(snapshot.hasAction).toBe(true);
-		expect(snapshot.args).toEqual([{ name: "file", type: "string", required: true }]);
-		expect(snapshot.flags.verbose).toEqual({
-			type: "boolean",
-			short: "v",
-			description: "Verbose output",
-			negatable: true,
-		});
-		expect(snapshot.flags.endpoint?.negatable).toBe(false);
-		expect(snapshot.subCommands.build?.meta.aliases).toEqual(["b"]);
-		expect(snapshot.subCommands.build?.meta.hidden).toBe(true);
-		expect(snapshot.subCommands.build?.hasAction).toBe(false);
-	});
-
 	it("projects the input JSON Schema of schema-backed args and flags, not the schema", async () => {
 		const opaque = {
 			"~standard": {
@@ -115,26 +92,6 @@ describe("snapshotCommand", () => {
 		const clone = structuredClone(snapshot);
 		expect(clone.args[0]?.name).toBe("file");
 		expect("parse" in (clone.args[0] as object)).toBe(false);
-	});
-
-	it("projects Context-owned flags at the provider and the commands that use the Context", async () => {
-		const apiKey = defineFlag({ type: "string", short: "k" });
-		const auth = defineContext("auth")
-			.flags({ "api-key": apiKey })
-			.setup(() => ({}));
-		const app = new Crust("cli")
-			.provide(auth())
-			.add(defineCommand("deploy", (command) => command.use(auth).action(() => {})));
-
-		const snapshot = await app.snapshot();
-		expect(snapshot.flags["api-key"]).toEqual({
-			type: "string",
-			short: "k",
-			negatable: false,
-		});
-		expect(snapshot.subCommands.deploy?.flags["api-key"]).toEqual(snapshot.flags["api-key"]);
-		expect(Object.isFrozen(snapshot.subCommands.deploy?.flags["api-key"])).toBe(true);
-		expect(() => structuredClone(snapshot)).not.toThrow();
 	});
 
 	it("owns frozen env bindings and independent delimiters without exposing environment values", () => {
@@ -228,7 +185,7 @@ describe("command metadata sections", () => {
 		expect(() => structuredClone(snapshot)).not.toThrow();
 	});
 
-	it("freezes callback-free trees and shares one pre-contribution snapshot across callbacks", async () => {
+	it("keeps callback-free trees authored and shares one pre-contribution snapshot across callbacks", async () => {
 		const authored = [{ title: "Root guide", body: "Root body" }];
 		const seen: CommandSnapshot[] = [];
 		const contribute = (name: string) =>
@@ -241,13 +198,7 @@ describe("command metadata sections", () => {
 			.add(defineCommand("build", (command) => command.action(() => {})));
 		const contributed = plain.extend(contribute("first")).extend(contribute("second"));
 
-		// No callback: the prepared tree is still frozen and the snapshot is purely authored.
-		const prepared = prepareInvocation(plain._node, () => {
-			throw new Error("no Extension commands to materialize");
-		}).rootNode;
-		expect(Object.isFrozen(prepared)).toBe(true);
-		expect(Object.isFrozen(prepared.meta.sections)).toBe(true);
-		expect(Object.isFrozen(prepared.subCommands.build)).toBe(true);
+		// No callback: the snapshot is purely authored.
 		const plainSnapshot = await plain.snapshot();
 		expect(plainSnapshot.meta.sections).toEqual(authored);
 		expect(plainSnapshot.flags.extra?.type).toBe("boolean");

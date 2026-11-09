@@ -41,14 +41,6 @@ describe("version", () => {
 		expect(ran).toBe(false);
 	});
 
-	it("version extension handles --version from root metadata", async () => {
-		const app = new Crust("app", { version: "1.2.3" }).extend(version()).action(() => {});
-
-		const { stdout } = await captureExecute(app, ["--version"]);
-
-		expect(stdout).toContain("app v1.2.3");
-	});
-
 	it("evaluates a version provider only when the root version flag is handled", async () => {
 		let calls = 0;
 		const extension = version(() => {

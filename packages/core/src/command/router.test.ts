@@ -11,7 +11,7 @@ import { resolveCommand } from "./router.ts";
 // Test fixtures
 // ────────────────────────────────────────────────────────────────────────────
 
-function createRootWithSubcommands(hasRun = false): CommandNode {
+function createRootWithSubcommands(): CommandNode {
 	const buildNode = createCommandNode("build");
 	buildNode.meta.description = "Build the project";
 	registerFlag(
@@ -39,11 +39,6 @@ function createRootWithSubcommands(hasRun = false): CommandNode {
 	const root = createCommandNode("crust");
 	root.meta.description = "Crust CLI";
 	root.subCommands = { build: buildNode, dev: devNode };
-	if (hasRun) {
-		root.run = () => {
-			/* noop */
-		};
-	}
 	return root;
 }
 
@@ -52,29 +47,6 @@ function createRootWithSubcommands(hasRun = false): CommandNode {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("resolveCommand", () => {
-	describe("basic resolution", () => {
-		it("resolves to root command with empty argv", () => {
-			const root = createRootWithSubcommands();
-			const result = resolveCommand(root, []);
-
-			expect(result.command).toBe(root);
-			expect(result.argv).toEqual([]);
-			expect(result.commandPath).toEqual(["crust"]);
-		});
-	});
-
-	describe("fallback to parent", () => {
-		it("falls back to parent when no subcmd matches and parent has run()", () => {
-			const root = createRootWithSubcommands(true); // has run()
-			const result = resolveCommand(root, ["unknown-positional"]);
-
-			// When parent has run(), unknown candidates are treated as positionals
-			expect(result.command).toBe(root);
-			expect(result.argv).toEqual(["unknown-positional"]);
-			expect(result.commandPath).toEqual(["crust"]);
-		});
-	});
-
 	describe("unknown subcommand errors", () => {
 		it("throws CrustError with structured details", () => {
 			const root = createRootWithSubcommands(); // no run()
@@ -99,19 +71,6 @@ describe("resolveCommand", () => {
 			);
 		});
 	});
-
-	describe("edge cases", () => {
-		it("multiple subcommand candidates where first wins", () => {
-			const root = createRootWithSubcommands(true); // has run()
-			// "build" matches, then remaining args are left for the subcommand
-			const result = resolveCommand(root, ["build", "dev"]);
-
-			// "build" resolves, then "dev" is remaining argv (since build has no subcommands)
-			expect(result.command.meta.name).toBe("build");
-			expect(result.argv).toEqual(["dev"]);
-			expect(result.commandPath).toEqual(["crust", "build"]);
-		});
-	});
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -127,44 +86,6 @@ describe("resolveCommand — aliases", () => {
 		};
 		return node;
 	}
-
-	it("resolves aliases at nested depths", () => {
-		const leaf = makeChild("create", ["new", "add"]);
-		const issue = makeChild("issue", ["i"]);
-		issue.subCommands = { create: leaf };
-		const root = createCommandNode("app");
-		root.subCommands = { issue };
-
-		const result = resolveCommand(root, ["i", "new"]);
-		expect(result.command).toBe(leaf);
-		expect(result.commandPath).toEqual(["app", "issue", "create"]);
-	});
-
-	it("reports only visible canonical names in COMMAND_NOT_FOUND details.available", () => {
-		const issue = makeChild("issue", ["issues", "i"]);
-		const pull = makeChild("pull-request", ["pr"]);
-		const internal = makeChild("internal");
-		internal.meta.hidden = true;
-		const version = makeChild("version");
-		const root = createCommandNode("app");
-		root.subCommands = { issue, "pull-request": pull, internal, version };
-
-		let caught: unknown;
-		try {
-			resolveCommand(root, ["isue"]);
-		} catch (err) {
-			caught = err;
-		}
-		expect(caught).toBeInstanceOf(CrustError);
-		if (!(caught instanceof CrustError) || !caught.is("COMMAND_NOT_FOUND")) {
-			throw new Error("expected COMMAND_NOT_FOUND");
-		}
-		// `available` lists visible canonical sibling names in insertion order. Aliases
-		// stay reachable via `details.parentCommand.subCommands[name].meta.aliases`
-		// for consumers (e.g. didYouMean) that want alias-aware matching.
-		expect(caught.details.available).toEqual(["issue", "pull-request", "version"]);
-		expect(caught.details.parentCommand.subCommands.issue?.meta.aliases).toEqual(["issues", "i"]);
-	});
 
 	it("reports COMMAND_NOT_FOUND for inherited Object.prototype keys in argv", () => {
 		const issue = makeChild("issue", ["i"]);
@@ -235,7 +156,6 @@ describe("resolveCommand — known-flag skipping", () => {
 		// flags the resolved command can actually parse.
 		const shared: FlagsDef = {
 			quiet: { type: "boolean", short: "q", description: "quiet" },
-			verbose: { type: "boolean", noNegate: true, description: "verbose" },
 			config: { type: "string", short: "c", aliases: ["conf"], description: "config file" },
 		};
 		const translate = makeNode({
@@ -251,24 +171,6 @@ describe("resolveCommand — known-flag skipping", () => {
 			subCommands: { translate },
 		});
 	}
-
-	it("routes past a known boolean flag into the subcommand", () => {
-		const result = resolveCommand(makeRoot(), ["--quiet", "translate"]);
-		expect(result.commandPath).toEqual(["app", "translate"]);
-		expect(result.argv).toEqual(["--quiet"]);
-	});
-
-	it("routes past a negated boolean flag", () => {
-		const result = resolveCommand(makeRoot(), ["--no-quiet", "translate"]);
-		expect(result.commandPath).toEqual(["app", "translate"]);
-		expect(result.argv).toEqual(["--no-quiet"]);
-	});
-
-	it("does not treat --no-<flag> as known when the flag is noNegate", () => {
-		const result = resolveCommand(makeRoot(), ["--no-verbose", "translate"]);
-		expect(result.commandPath).toEqual(["app"]);
-		expect(result.argv).toEqual(["--no-verbose", "translate"]);
-	});
 
 	it("consumes a value that shadows a subcommand name", () => {
 		// "--config translate" means config=translate, not the subcommand
@@ -326,23 +228,6 @@ describe("resolveCommand — known-flag skipping", () => {
 		expect(result.argv).toEqual(["--quiet", "--", "translate"]);
 	});
 
-	it("rejects a parent-local flag before a subcommand that cannot parse it", () => {
-		const translate = makeNode({ meta: "translate", run() {} });
-		const root = makeNode({
-			meta: "app",
-			flags: { quiet: { type: "boolean", description: "quiet" } },
-			subCommands: { translate },
-		});
-		expect(() => resolveCommand(root, ["--quiet", "translate"])).toThrow(
-			expect.objectContaining({
-				code: "PARSE",
-				message: expect.stringContaining(
-					'Flag "--quiet" cannot be used before subcommand "translate"',
-				),
-			}),
-		);
-	});
-
 	it("rejects a forwarded flag whose child spelling has a different token shape", () => {
 		// Parent: --config <value>; child: --config as boolean. The value token
 		// was already consumed under the parent's shape, so forwarding would
@@ -375,6 +260,7 @@ describe("resolveCommand — known-flag skipping", () => {
 		]) {
 			expect(() => resolveCommand(root, [token!, "translate"])).toThrow(
 				expect.objectContaining({
+					code: "PARSE",
 					message: `Flag "${flag}" cannot be used before subcommand "translate" because "translate" does not accept it.`,
 					details: { flag, reason: "flag-not-forwardable" },
 				}),

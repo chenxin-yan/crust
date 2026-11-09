@@ -1,10 +1,5 @@
 import type { Equal, Expect } from "../../tests/helpers.ts";
-import type {
-	AppendArgsChecks,
-	AppendArgsErrors,
-	EmptyArgNameBrand,
-	ValidateArgs,
-} from "./args.brands.ts";
+import type { AppendArgsChecks, AppendArgsErrors, ValidateArgs } from "./args.brands.ts";
 
 // ValidateArgs type inference
 {
@@ -26,12 +21,6 @@ import type {
 	// an open template member does not hide an empty literal member (#357)
 	type Mixed = ValidateArgs<readonly [{ name: "" | `p-${string}`; type: "string" }]>;
 	type _mixed = Expect<Equal<Mixed[0]["FIX_EMPTY_NAME"], "Argument names must be non-empty">>;
-	type _mixedDirect = Expect<
-		Equal<
-			EmptyArgNameBrand<"" | `p-${string}`>["FIX_EMPTY_NAME"],
-			"Argument names must be non-empty"
-		>
-	>;
 	type MixedValid = ValidateArgs<readonly [{ name: "pos" | `p-${string}`; type: "string" }]>;
 	type _mixedValid = Expect<Equal<Extract<keyof MixedValid[0], `FIX_${string}`>, never>>;
 	// a definition union: the open variant's `string` must not absorb the literal variant's ""

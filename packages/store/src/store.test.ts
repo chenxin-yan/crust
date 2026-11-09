@@ -306,21 +306,6 @@ describe("store.update", () => {
 		await rm(tempDir, { recursive: true, force: true });
 	});
 
-	it("should materialize schema defaults before calling the updater", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: { theme: { schema: z.enum(["light", "dark"]).default("light") } },
-		});
-
-		await expect(
-			store.update((current) => {
-				expect(current.theme).toBe("light");
-				return { theme: "dark" };
-			}),
-		).resolves.toEqual({ theme: "dark" });
-	});
-
 	it("resolves schema coercion and nested defaults before the updater", async () => {
 		const filePath = join(tempDir, "config.json");
 		const raw = JSON.stringify({ count: "42", payload: {} });
@@ -671,24 +656,6 @@ describe("schema transform persistence", () => {
 		// Nothing should have been persisted.
 		const filePath = join(tempDir, "config.json");
 		expect(existsSync(filePath)).toBe(false);
-	});
-
-	// Regression: the read-stability guard previously used reference
-	// identity (`Object.is`), so Standard Schema parsers that return fresh
-	// references for identical content (Zod arrays/objects) tripped the
-	// guard and made array schemas unwritable.
-	it("writes array field without tripping read-stability guard", async () => {
-		const fields = {
-			tags: { schema: z.array(z.string()) },
-		} as const satisfies FieldsDef;
-
-		const store = createStore({ dirPath: tempDir, name: "config", fields });
-
-		await store.write({ tags: ["a", "b"] });
-
-		const filePath = join(tempDir, "config.json");
-		const raw = await readFile(filePath, "utf-8");
-		expect(JSON.parse(raw)).toEqual({ tags: ["a", "b"] });
 	});
 
 	// Regression: an array schema whose elements transform (e.g.

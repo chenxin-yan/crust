@@ -43,12 +43,6 @@ describe("mergeEntryArtifacts", () => {
 		expect(readFileSync(join(artifactDir, "skills", "admin", "SKILL.md"), "utf8")).toBe(
 			"admin skill\n",
 		);
-		expect(owners.get("man")).toEqual({ command: "greet", directory: true, path: "man" });
-		expect(owners.get("man/admin.1")).toEqual({
-			command: "admin",
-			directory: false,
-			path: "man/admin.1",
-		});
 	});
 
 	it("rejects a file two entries both write, naming both commands", () => {

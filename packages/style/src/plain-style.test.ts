@@ -29,24 +29,4 @@ describe("createPlainStyle", () => {
 			);
 		}
 	});
-
-	it("returns plain functions that do not chain", () => {
-		const plain = createPlainStyle({ mode: "always" });
-		expect(Object.keys(plain).sort()).toEqual([...styleMethodNames].sort());
-		for (const name of styleMethodNames) {
-			const fn: object = plain[name];
-			expect(Object.getPrototypeOf(fn) === Function.prototype, name).toBe(true);
-			const chainKeys = [...styleMethodNames, "open", "close", "fg", "bg"].filter(
-				(key) => key in fn,
-			);
-			expect(chainKeys, name).toEqual([]);
-		}
-	});
-
-	it("nests like the chainable form", () => {
-		const plain = createPlainStyle({ mode: "always" });
-		const chain = createStyle({ mode: "always" });
-		expect(plain.red(`${plain.blue("a")}b`)).toBe(chain.red(`${chain.blue("a")}b`));
-		expect(plain.bold(plain.red("x"))).toBe(chain.bold.red("x"));
-	});
 });

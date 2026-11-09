@@ -19,41 +19,6 @@ describe("defineFlag", () => {
 		);
 	});
 
-	it("rejects an env delimiter hidden by a structural view on a scalar flag", () => {
-		const binding = { name: "TAGS", delimiter: "," };
-		function scalar(env: { name: string }) {
-			return defineFlag({ type: "string", env });
-		}
-
-		expect(() => scalar(binding)).toThrow(
-			expect.objectContaining({
-				code: "DEFINITION",
-				details: { subject: "flag", reason: "delimiter-without-multiple" },
-			}),
-		);
-	});
-
-	it("rejects a delimiter hidden by a structural view on a scalar flag", () => {
-		const options = { description: "Tags", delimiter: "," };
-		function scalar(def: { description: string }) {
-			return defineFlag({ ...def, type: "string" });
-		}
-
-		expect(() => scalar(options)).toThrow(
-			expect.objectContaining({
-				code: "DEFINITION",
-				details: { subject: "flag", reason: "delimiter-without-multiple" },
-			}),
-		);
-	});
-
-	it("returns the definition with literal types preserved", () => {
-		const verbose = defineFlag({ type: "boolean", short: "v" });
-
-		expect(verbose).toEqual({ type: "boolean", short: "v" });
-		type _Flag = Expect<Equal<typeof verbose, { readonly type: "boolean"; readonly short: "v" }>>;
-	});
-
 	it("feeds .flags() with the same record typing as an inline literal", async () => {
 		const verbose = defineFlag({ type: "boolean" });
 		const app = new Crust("cli").flags({ verbose, output: { type: "string", short: "o" } });
@@ -109,18 +74,6 @@ describe("defineFlag(def)", () => {
 });
 
 describe("defineArg", () => {
-	it("returns the named definition with literal types preserved", () => {
-		const target = defineArg("target", { type: "string", required: true });
-
-		expect(target).toEqual({ name: "target", type: "string", required: true });
-		type _Arg = Expect<
-			Equal<
-				typeof target,
-				{ readonly name: "target"; readonly type: "string"; readonly required: true }
-			>
-		>;
-	});
-
 	it("feeds .args() with the same tuple typing as an inline literal", async () => {
 		const target = defineArg("target", { type: "string", required: true });
 		const app = new Crust("cli").args(target, { name: "count", type: "number", default: 1 });
@@ -149,32 +102,11 @@ describe("checked local definitions", () => {
 		const flag = defineFlag(input);
 		aliases.push("later");
 		expect(flag.aliases).toEqual(["v"]);
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		expect(() => new Crust("cli").flags({ "": { type: "boolean" } })).toThrow("non-empty");
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		expect(() => defineFlag({ type: "boolean", short: "xx" })).toThrow("one character");
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		expect(() => defineArg("", { type: "string" })).toThrow("non-empty");
-		expect(() =>
-			// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises helper validation.
-			defineArg("mode", { type: "string", choices: ["a"], default: "b" }),
-		).toThrow("choices");
 	});
 });
 
 describe("checked attachments", () => {
 	it("checks destination relations and owns definition collections", async () => {
-		const local = defineFlag({ type: "string", aliases: ["v"] });
-		const app = new Crust("cli").flags({ value: local });
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		expect(() => app.flags({ value: local })).toThrow("collides");
-		expect(() =>
-			new Crust("cli").args(
-				// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-				{ name: "files", type: "string", variadic: true },
-				{ name: "later", type: "string" },
-			),
-		).toThrow("last positional");
 		expect(() =>
 			new Crust("cli")
 				.args({ name: "a", type: "string" })

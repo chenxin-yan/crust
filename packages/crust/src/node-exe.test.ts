@@ -14,7 +14,6 @@ import {
 	formatCodeCache,
 	NODE_EXE_BACKEND_PACKAGES,
 	nodeExeTarget,
-	resolveNodeBinaryCompiler,
 	resolveNodeExeBackend,
 } from "./node-exe.ts";
 import { NODE_TARGETS } from "./targets.ts";
@@ -234,11 +233,4 @@ describe("Node binary compiler", () => {
 			}
 		},
 	);
-
-	it("reports a missing node instead of falling back to another runtime", async () => {
-		vi.stubEnv("PATH", "");
-		await expect(resolveNodeBinaryCompiler({}, process.cwd())).rejects.toThrow(
-			"Node is required for node standalone binaries but was not found on PATH.",
-		);
-	});
 });

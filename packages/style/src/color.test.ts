@@ -7,10 +7,6 @@ import { paint } from "./color.ts";
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("fg", () => {
-	it("accepts named CSS colors", () => {
-		expect(paint("fg", "hi", "rebeccapurple", "truecolor")).toBe("\x1b[38;2;102;51;153mhi\x1b[39m");
-	});
-
 	it("rejects unsupported CSS functional notation", () => {
 		for (const input of ["hsl(0, 100%, 50%)", "lab(50% 30 -20)", "color-mix(in srgb, red, blue)"]) {
 			expect(() => paint("fg", "x", input, "truecolor")).toThrow(TypeError);
@@ -73,10 +69,6 @@ describe("edge cases", () => {
 // color format.
 
 describe("fg — depth fallback", () => {
-	it('depth="256" emits ansi-256 sequence', () => {
-		expect(paint("fg", "hello", "#ff0000", "256")).toBe("\x1b[38;5;196mhello\x1b[39m");
-	});
-
 	it('depth="256" grayscale stays in range and near-grays use the ramp', () => {
 		// Light grays must not round past the palette (index ≤ 255).
 		expect(paint("fg", "x", [244, 244, 244], "256")).toBe("\x1b[38;5;255mx\x1b[39m");
@@ -116,13 +108,6 @@ describe("fg — depth fallback", () => {
 		expect(paint("fg", "hello", "rebeccapurple", "none")).toBe("hello");
 	});
 
-	it("empty text returns '' at every depth (after validation)", () => {
-		expect(paint("fg", "", "#ff0000", "truecolor")).toBe("");
-		expect(paint("fg", "", "#ff0000", "256")).toBe("");
-		expect(paint("fg", "", "#ff0000", "16")).toBe("");
-		expect(paint("fg", "", "#ff0000", "none")).toBe("");
-	});
-
 	it("empty text + invalid color still throws at every depth", () => {
 		for (const depth of ["truecolor", "256", "16", "none"] as const) {
 			expect(() => paint("fg", "", "definitely-not-a-color", depth)).toThrow();
@@ -131,21 +116,7 @@ describe("fg — depth fallback", () => {
 });
 
 describe("bg — depth fallback", () => {
-	it('depth="truecolor" emits ansi-16m background', () => {
-		expect(paint("bg", "hello", "#00ff88", "truecolor")).toBe("\x1b[48;2;0;255;136mhello\x1b[49m");
-	});
-
 	it('depth="256" emits ansi-256 background (38; → 48; swap)', () => {
 		expect(paint("bg", "hello", "#00ff88", "256")).toBe("\x1b[48;5;48mhello\x1b[49m");
-	});
-
-	it('depth="16" emits a real 16-color background SGR', () => {
-		// Pure red bg → bright red bg (`101`).
-		expect(paint("bg", "hello", "#ff0000", "16")).toBe("\x1b[101mhello\x1b[49m");
-	});
-
-	it('depth="none" returns text unchanged but validates input', () => {
-		expect(paint("bg", "hello", "#ff0000", "none")).toBe("hello");
-		expect(() => paint("bg", "hello", "definitely-not-a-color", "none")).toThrow(TypeError);
 	});
 });

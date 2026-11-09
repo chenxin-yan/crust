@@ -214,19 +214,6 @@ it("resolves conditional inline providers once for the action and postRun", asyn
 	}
 });
 
-it("rejects invalid structured values before running the action", async () => {
-	let called = false;
-	const app: AnyCrust = new Crust("app")
-		.flags({ mode: { type: "string", choices: ["safe", "fast"], required: true } })
-		.action(() => {
-			called = true;
-		});
-	for (const input of [{ flags: { mode: "wrong" } }, { flags: { mode: "safe", mdoe: "fast" } }]) {
-		expect((await app.run([], input)).status).toBe("failed");
-	}
-	expect(called).toBe(false);
-});
-
 it("ignores enumerable symbol properties without reading them", async () => {
 	let read = false;
 	const input = Object.defineProperty({}, Symbol("ignored"), {

@@ -54,6 +54,7 @@ function crustOutcome(flags: FlagsDef, argv: string[]): Outcome {
 		return { flags: parsed.flags, positionals: parsed.excessArgs, operands: parsed.rawArgs };
 	} catch (error) {
 		if (!(error instanceof CrustError)) throw error;
+		expect(error.code).toBe("PARSE");
 		return { error: error.message, details: error.details };
 	}
 }

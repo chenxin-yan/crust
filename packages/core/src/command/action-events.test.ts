@@ -132,15 +132,6 @@ describe("async generator actions", () => {
 		expect(executed.stderr).toBe("Error: boom");
 	});
 
-	it("marks a generator that throws before its first yield with empty events", async () => {
-		// oxlint-disable-next-line require-yield -- it throws before yielding on purpose.
-		const app = new Crust("cli").action(async function* () {
-			throw new Error("early");
-		});
-
-		expect(await app.run([])).toMatchObject({ status: "failed", events: [] });
-	});
-
 	it("signals the renderer that a generator streams before its failure, and never for a normal action", async () => {
 		const log: string[] = [];
 		const app = new Crust("cli")

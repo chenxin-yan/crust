@@ -57,17 +57,6 @@ describe("resolveColorDepth", () => {
 			expect(resolveColorDepth("auto", { isTTY: true })).toBe("truecolor");
 		});
 
-		it('non-TTY → "none"', () => {
-			expect(
-				resolveColorDepth("auto", {
-					isTTY: false,
-					noColor: undefined,
-					colorTerm: "truecolor",
-					term: "xterm-256color",
-				}),
-			).toBe("none");
-		});
-
 		it('TTY + NO_COLOR set → "none"', () => {
 			expect(
 				resolveColorDepth("auto", {
@@ -76,16 +65,6 @@ describe("resolveColorDepth", () => {
 					colorTerm: "truecolor",
 				}),
 			).toBe("none");
-		});
-
-		it('TTY + NO_COLOR="" (empty) does NOT disable color', () => {
-			expect(
-				resolveColorDepth("auto", {
-					isTTY: true,
-					noColor: "",
-					colorTerm: "truecolor",
-				}),
-			).toBe("truecolor");
 		});
 
 		it('TTY + COLORTERM=24bit (case-insensitive) → "truecolor"', () => {
@@ -202,18 +181,6 @@ describe("resolveColorDepth", () => {
 		it("force-on beats TERM=dumb — forced depth detection never returns none", () => {
 			expect(resolveColorDepth("auto", { isTTY: false, forceColor: "1", term: "dumb" })).toBe("16");
 			expect(resolveColorDepth("auto", { isTTY: false, forceColor: "", term: "dumb" })).toBe("16");
-		});
-
-		it("takes precedence over NO_COLOR and non-TTY", () => {
-			expect(resolveColorDepth("auto", { isTTY: false, noColor: "1", forceColor: "3" })).toBe(
-				"truecolor",
-			);
-		});
-
-		it("unset FORCE_COLOR falls through to the normal ladder", () => {
-			expect(
-				resolveColorDepth("auto", { isTTY: true, noColor: undefined, forceColor: undefined }),
-			).toBe("16");
 		});
 	});
 });

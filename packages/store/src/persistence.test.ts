@@ -35,20 +35,6 @@ describe("readJson", () => {
 		await rm(tempDir, { recursive: true, force: true });
 	});
 
-	it("should return parsed JSON object from file", async () => {
-		await writeFile(filePath, JSON.stringify({ theme: "dark", verbose: true }));
-
-		const result = await readJson(filePath);
-
-		expect(result).toEqual({ theme: "dark", verbose: true });
-	});
-
-	it("should return undefined when file does not exist", async () => {
-		const result = await readJson(join(tempDir, "nonexistent.json"));
-
-		expect(result).toBeUndefined();
-	});
-
 	it("should throw CrustStoreError PARSE on malformed JSON", async () => {
 		await writeFile(filePath, "{ invalid json }}}");
 

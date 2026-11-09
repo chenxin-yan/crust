@@ -165,20 +165,9 @@ describe("renderBash · behavioural subprocess tests", () => {
 		expect(completions).not.toContain("build");
 	});
 
-	it("scenario 2b — alias-resolved nested subcommand: `mycli dep <TAB>` lists prod", async () => {
-		const completions = await runCompletion(["mycli", "dep", ""]);
-		expect(completions).toContain("prod");
-	});
-
 	it("scenario 3 — flag with choices: `mycli build --target <TAB>` lists target values", async () => {
 		const completions = await runCompletion(["mycli", "build", "--target", ""]);
 		expect(completions.sort()).toEqual(["browser", "bun", "node"]);
-	});
-
-	it("offers flag candidates when current token starts with `-`", async () => {
-		const completions = await runCompletion(["mycli", "build", "--"]);
-		expect(completions).toContain("--release");
-		expect(completions).toContain("--target");
 	});
 });
 

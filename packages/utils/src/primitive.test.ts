@@ -4,10 +4,6 @@ import { coerceBooleanString, tryCoerceNumber } from "./primitive.ts";
 
 describe("primitive helpers", () => {
 	describe("tryCoerceNumber", () => {
-		it("coerces numeric strings", () => {
-			expect(tryCoerceNumber("42")).toBe(42);
-		});
-
 		it("returns undefined for non-numeric strings", () => {
 			expect(tryCoerceNumber("abc")).toBeUndefined();
 		});

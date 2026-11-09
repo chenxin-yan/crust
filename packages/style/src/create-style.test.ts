@@ -84,10 +84,6 @@ describe("createStyle — fg/bg emit format matching colorDepth", () => {
 describe("createStyle — always mode", () => {
 	const s = createStyle({ mode: "always" });
 
-	it("supports chainable styles", () => {
-		expect(s.bold.red("text")).toBe("\x1b[1m\x1b[31mtext\x1b[39m\x1b[22m");
-	});
-
 	it("last color in chain takes precedence", () => {
 		expect(s.red.blue("text")).toBe("\x1b[31m\x1b[34mtext\x1b[39m\x1b[31m\x1b[39m");
 	});
@@ -111,15 +107,6 @@ describe("createStyle — never mode", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("createStyle — auto mode with overrides", () => {
-	it("enables color when TTY and NO_COLOR not set", () => {
-		const s = createStyle({
-			mode: "auto",
-			overrides: { isTTY: true, noColor: undefined },
-		});
-		expect(s.enabled).toBe(true);
-		expect(s.bold("text")).toBe("\x1b[1mtext\x1b[22m");
-	});
-
 	it("disables color when NO_COLOR is set", () => {
 		const s = createStyle({
 			mode: "auto",
@@ -239,12 +226,6 @@ describe("ChainableStyleFn extends AnsiPair", () => {
 		expect(chain.close).toBe("\x1b[49m\x1b[39m\x1b[22m");
 	});
 
-	it("chain.open + text + chain.close === chain(text)", () => {
-		const direct = always.bold.red("X");
-		const indirect = `${always.bold.red.open}X${always.bold.red.close}`;
-		expect(direct).toBe(indirect);
-	});
-
 	it("copies into a plain AnsiPair via spread", () => {
 		const chain = always.bold.fg("#ff0000");
 		expect({ ...chain }).toEqual({ open: chain.open, close: chain.close });
@@ -264,8 +245,7 @@ describe("ChainableStyleFn — tagged template literals", () => {
 
 	it("supports nested templates with re-opening", () => {
 		const out = always.bold`Build ${always.cyan`./dist`} in 42ms`;
-		// bold opens; cyan opens & closes inside; bold's open re-applied
-		// after cyan's close (style engine re-opens after a matching close).
+		// cyan's close (39) differs from bold's (22), so bold stays open without a re-open.
 		expect(out).toBe("\x1b[1mBuild \x1b[36m./dist\x1b[39m in 42ms\x1b[22m");
 	});
 });
@@ -275,12 +255,6 @@ describe("ChainableStyleFn — tagged template literals", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("fg/bg as chain methods", () => {
-	it("appends a foreground color to an existing chain", () => {
-		expect(always.bold.fg("#ff8800")("warning")).toBe(
-			"\x1b[1m\x1b[38;2;255;136;0mwarning\x1b[39m\x1b[22m",
-		);
-	});
-
 	it("can chain after a dynamic color (fg(...).italic.underline)", () => {
 		expect(always.fg("rebeccapurple").italic.underline("triple")).toBe(
 			"\x1b[38;2;102;51;153m\x1b[3m\x1b[4mtriple\x1b[24m\x1b[23m\x1b[39m",

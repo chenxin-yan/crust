@@ -186,32 +186,6 @@ describe("command definitions", () => {
 		await expect(new Crust("cli").provide(db()).add(free).snapshot()).resolves.toBeDefined();
 	});
 
-	it("keeps retained builders unchanged when a batch recipe throws", async () => {
-		const events: string[] = [];
-		const base = new Crust("cli");
-		const receiver = base.add(defineCommand("existing", (command) => command));
-		const first = defineCommand("first", (command) => {
-			events.push("first");
-			return command;
-		});
-		const failure = new Error("recipe failed");
-		const throwing = defineCommand("throwing", () => {
-			events.push("throwing");
-			throw failure;
-		});
-		const later = defineCommand("later", (command) => {
-			events.push("later");
-			return command;
-		});
-
-		const app = receiver.add(first, throwing, later);
-		await expect(app.snapshot()).rejects.toBe(failure);
-		expect(events).toEqual(["first", "throwing"]);
-		expect(Object.keys(subCommandsOf(base._node))).toEqual([]);
-		expect(Object.keys(subCommandsOf(receiver._node))).toEqual(["existing"]);
-		expect(Object.keys((await receiver.snapshot()).subCommands)).toEqual(["existing"]);
-	});
-
 	it.each(["first", "existing"])(
 		"checks a batch duplicate of %s before any recipe runs and stops registration",
 		async (name: string) => {

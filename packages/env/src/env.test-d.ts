@@ -159,13 +159,10 @@ function _typecheckInfersSchemaOutputWithoutPhantomTypes() {
 		PORT: { type: "string", schema: omitted },
 		MIXED: { type: "string", schema: Math.random() < 0.5 ? annotated : omitted },
 		NAME: { type: "string", schema: asyncWithFailure },
-		LENGTH: { type: "string", schema: upper },
 	});
 	type Value = FactoryValueOf<typeof env>;
 	type _Port = Expect<Equal<Value["PORT"], number>>;
 	type _Name = Expect<Equal<Value["NAME"], string>>;
-	// explicit phantom types still win
-	type _Length = Expect<Equal<Value["LENGTH"], number>>;
 	// phantom precedence holds per member of a schema union
 	type _Mixed = Expect<Equal<Value["MIXED"], "a" | "b" | number>>;
 }

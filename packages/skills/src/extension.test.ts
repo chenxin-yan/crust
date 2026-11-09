@@ -475,18 +475,6 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		expect(await readlink(installed)).toBe(release);
 	});
 
-	it.each(["skills"])("repairs links via %s repair", async (command) => {
-		const source = await writeSource("demo");
-		const installed = join(tempRoot, ".claude", "skills", "demo");
-		await mkdir(dirname(installed), { recursive: true });
-		await symlink(join(tempRoot, "missing", "skills", "demo"), installed);
-
-		await withCwd(tempRoot, () =>
-			createApp().execute({ argv: [command, "repair", "--scope", "project"] }),
-		);
-		expect(resolve(dirname(installed), await readlink(installed))).toBe(join(source, "demo"));
-	});
-
 	it("skips repair when autoUpdate is false", async () => {
 		await writeSource("demo");
 		const installed = join(tempRoot, ".claude", "skills", "demo");

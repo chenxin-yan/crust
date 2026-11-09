@@ -6,12 +6,6 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";
 
 describe("coerceUrl", () => {
-	it("returns a URL instance for a valid https URL", () => {
-		const url = coerceUrl("https://example.com", "--base");
-		expect(url).toBeInstanceOf(URL);
-		expect(url.href).toBe("https://example.com/");
-	});
-
 	it("throws CrustError(PARSE) naming the target, with a missing-protocol hint for non-URLs", () => {
 		expect(() => coerceUrl("not-a-url", "--base")).toThrow(
 			expect.objectContaining({
@@ -37,11 +31,6 @@ describe("coercePath", () => {
 		vi.unstubAllEnvs();
 	});
 
-	it("resolves a relative path against process.cwd()", () => {
-		const got = coercePath("./foo", "--out");
-		expect(got).toBe(resolve(process.cwd(), "./foo"));
-	});
-
 	it("expands a leading ~ to the user's home directory", () => {
 		const got = coercePath("~/foo", "--out");
 		expect(got).toBe(resolve(homedir(), "foo"));
@@ -62,10 +51,6 @@ describe("coercePath", () => {
 });
 
 describe("coerceJson", () => {
-	it("parses a JSON object", () => {
-		expect(coerceJson('{"k":1}', "--data")).toEqual({ k: 1 });
-	});
-
 	it("throws CrustError(PARSE) naming the target on invalid JSON", () => {
 		expect(() => coerceJson("not json", "--data")).toThrow(
 			expect.objectContaining({

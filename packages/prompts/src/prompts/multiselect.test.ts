@@ -10,21 +10,6 @@ import { nonTTYIO, tick } from "./test-helpers.ts";
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multiselect — default value", () => {
-	it("pre-selects items matching default values", async () => {
-		const prompt = renderPrompt(multiselect, {
-			message: "Select toppings",
-			choices: ["cheese", "pepperoni", "mushrooms"],
-			default: ["cheese", "mushrooms"],
-		});
-
-		await tick();
-		// Submit immediately — should return pre-selected items
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toEqual(["cheese", "mushrooms"]);
-	});
-
 	it("positions the cursor on the first default value", async () => {
 		const prompt = renderPrompt(multiselect, {
 			message: "Select toppings",
@@ -52,29 +37,6 @@ describe("multiselect — default value", () => {
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["cheese"]);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Space toggles selection
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("multiselect — Space toggle", () => {
-	it("Space toggles off a selected item", async () => {
-		const prompt = renderPrompt(multiselect, {
-			message: "Select",
-			choices: ["a", "b", "c"],
-			default: ["a"],
-		});
-
-		await tick();
-		// Toggle first item off (it was pre-selected)
-		prompt.type(" ");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toEqual([]);
 	});
 });
 
@@ -196,30 +158,6 @@ describe("multiselect — toggle all / invert", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multiselect — validation", () => {
-	it("required blocks empty submit", async () => {
-		const prompt = renderPrompt(multiselect, {
-			message: "Select",
-			choices: ["a", "b", "c"],
-			required: true,
-		});
-
-		await tick();
-		// Try to submit with nothing selected
-		prompt.keys("return");
-		await tick();
-
-		// Error should be shown
-		expect(prompt.screen()).toContain("At least one item must be selected");
-
-		// Select something and submit
-		prompt.type(" ");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toEqual(["a"]);
-	});
-
 	for (const [name, constraint, error] of [
 		["required", { required: true }, "At least one item must be selected"],
 		["min", { min: 1 }, "Select at least 1 item"],

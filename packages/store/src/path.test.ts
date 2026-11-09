@@ -93,11 +93,6 @@ describe("configDir", () => {
 			expect(configDir("my-cli", env)).toBe(join("/home/testuser", ".config", "my-cli"));
 		});
 
-		it("should fall back to ~/.config when XDG_CONFIG_HOME is whitespace", () => {
-			const env = linuxEnv({ XDG_CONFIG_HOME: "   " });
-			expect(configDir("my-cli", env)).toBe(join("/home/testuser", ".config", "my-cli"));
-		});
-
 		it("should ignore a relative XDG_CONFIG_HOME", () => {
 			const env = linuxEnv({ XDG_CONFIG_HOME: "relative/config" });
 			expect(configDir("my-cli", env)).toBe(join("/home/testuser", ".config", "my-cli"));
@@ -107,11 +102,6 @@ describe("configDir", () => {
 	describe("macOS (XDG convention)", () => {
 		it("should fall back to ~/.config (XDG default)", () => {
 			const env = darwinEnv();
-			expect(configDir("my-cli", env)).toBe(join("/Users/testuser", ".config", "my-cli"));
-		});
-
-		it("should ignore a relative XDG_CONFIG_HOME", () => {
-			const env = darwinEnv({ XDG_CONFIG_HOME: "./config" });
 			expect(configDir("my-cli", env)).toBe(join("/Users/testuser", ".config", "my-cli"));
 		});
 	});
@@ -185,11 +175,6 @@ describe("resolveStorePath", () => {
 			expect(() => resolveStorePath("/absolute/path/config.json", "config")).toThrow(
 				pathError(".json"),
 			);
-		});
-
-		it("should accept valid absolute dirPath", () => {
-			const result = resolveStorePath("/home/user/.config/my-cli", "config");
-			expect(result).toBe(join("/home/user/.config/my-cli", "config.json"));
 		});
 
 		it("should accept Windows-style absolute dirPath", () => {

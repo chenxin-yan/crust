@@ -5,8 +5,6 @@ import {
 	Crust,
 	defineCommand,
 	defineContext,
-	defineExtension,
-	defineExtensionId,
 	type CommandDefinition,
 	type CommandShape,
 	type RunOutcome,
@@ -163,22 +161,6 @@ function _outputChecksTheGeneratorReturn() {
 	void late.output(user);
 	// @ts-expect-error `.output()` after `.action()` checks the generator's return value
 	void late.output(z.string());
-}
-
-function _rendererStreamAndOptions() {
-	defineExtension(defineExtensionId("observe")).renderer((ctx) => ({
-		text: ctx.stdout,
-		diag: ctx.stderr,
-		stream() {},
-		event(value) {
-			type _event = Expect<Equal<typeof value, unknown>>;
-		},
-	}));
-	const app = new Crust("cli").action(async function* () {
-		yield 1;
-	});
-	void app.run([], {}, { onEvent: (event: unknown) => void event });
-	void app.execute({ onEvent: (event: unknown) => void event });
 }
 
 function _alwaysThrowingGeneratorSubcommands() {

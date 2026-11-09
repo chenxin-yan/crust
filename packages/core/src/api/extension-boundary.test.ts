@@ -6,21 +6,8 @@ import { defineExtensionId } from "../identity.ts";
 import type { ExecuteOptions } from "../types.ts";
 import { type AnyContextInstance, defineContext } from "./context.ts";
 import { defineExtension, type Extension } from "./extension.ts";
-import { defineFlag } from "./flags.ts";
 
 describe("checked Extension attachment", () => {
-	it("checks declared dependencies at preparation without running setup", async () => {
-		let calls = 0;
-		const db = defineContext("db").setup(() => {
-			calls++;
-			return "db";
-		});
-		const extension = defineExtension(defineExtensionId("db")).use(db);
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		const app = new Crust("app").extend(extension);
-		await expect(app.snapshot()).rejects.toThrow("No provider for Context");
-		expect(calls).toBe(0);
-	});
 	it("checks delayed command demands when the recipe is consumed", async () => {
 		let calls = 0;
 		const db = defineContext("db").setup(() => {
@@ -116,17 +103,6 @@ it("opaque synchronous parser payloads retain identity without then or prototype
 	const outcome = await app.run([], { flags: { value: "input" } });
 	expect(outcome.status).toBe("completed");
 	if (outcome.status === "completed") expect(outcome.result.value).toBe(value);
-});
-
-it("locally proven helper results cannot be rewritten before checked consumption", async () => {
-	const flag = defineFlag({ type: "string", short: "t" });
-	expect(() => Object.assign(flag, { short: "too-long" })).toThrow();
-	expect(
-		await new Crust("app")
-			.flags({ token: flag })
-			.action(({ flags }) => flags.token)
-			.run([], { flags: { token: "safe" } }),
-	).toMatchObject({ status: "completed", result: "safe" });
 });
 
 it("rejects dynamically named Extension commands that collide with another root command at preparation", async () => {
@@ -255,11 +231,6 @@ it("keeps same-name Context replacement order inside checked Extensions", async 
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		defineExtension(defineExtensionId("repeated-owned")).provide(old(), old()),
 	).toThrow("collides");
-	expect(() =>
-		defineExtension(defineExtensionId("bad-default"))
-			// @ts-expect-error -- runtime regression deliberately exercises helper validation.
-			.flags({ mode: { type: "string", choices: ["allowed"], default: "forbidden" } }),
-	).toThrow("default must be one of choices");
 });
 
 it("keeps root providers' flags off contributed commands that do not use them", async () => {

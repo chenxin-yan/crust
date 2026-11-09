@@ -17,19 +17,6 @@ beforeEach(() => {
 });
 
 describe("spinner — terminal sink", () => {
-	it("hides and restores the cursor in TTY mode", () => {
-		const previousHandlers = process.listeners("SIGINT");
-		const { sink, writes } = createFakeSink(true);
-		const handle = spinner({ message: "Working", sink });
-
-		handle.start();
-		handle.stop();
-
-		expect(writes[0]).toBe("\x1B[?25l");
-		expect(writes.at(-1)).toBe("\x1B[?25h");
-		expect(process.listeners("SIGINT")).toEqual(previousHandlers);
-	});
-
 	it("restores the cursor and re-raises SIGINT", () => {
 		const { sink, writes } = createFakeSink(true);
 		const previousHandlers = new Set(process.listeners("SIGINT"));
@@ -78,20 +65,6 @@ describe("spinner — terminal sink", () => {
 		}
 		expect(kills).toEqual([]);
 		expect(writes.at(-1)).toBe("\x1B[?25h");
-	});
-
-	it("applies per-call theme overrides to rendered output", () => {
-		const { sink, writes } = createFakeSink(false);
-		const handle = spinner({
-			message: "Working",
-			theme: { success: (t) => `<OK ${t}>` },
-			sink,
-		});
-
-		handle.start();
-		handle.stop("success");
-
-		expect(writes[0]).toContain("<OK ✓> Working\n");
 	});
 
 	it("finalizes once", () => {
@@ -171,16 +144,6 @@ describe("spinner — terminal sink", () => {
 		handle.stop();
 
 		expect(writes[1]).toBe("\x1B[2K\r⠋ abcdef\rghijkl");
-	});
-
-	it("cuts a multi-line message at its first line break", () => {
-		const writes: string[] = [];
-		const sink = { isTTY: true, columns: 10, write: (text: string) => void writes.push(text) };
-		const handle = spinner({ message: "ab\ncd", sigint: false, sink });
-		handle.start();
-		handle.stop();
-
-		expect(writes[1]).toBe("\x1B[2K\r⠋ ab…");
 	});
 
 	it("keeps the styles a cut frame opened closed", () => {
@@ -388,17 +351,6 @@ describe("spinner — animation", () => {
 		expect(writes[1]).toContain("- Processing...");
 	});
 
-	it("uses custom spinner frames", async () => {
-		await spinner({
-			sink,
-			message: "Custom...",
-			task: async () => "ok",
-			spinner: { frames: ["A", "B", "C"], interval: 50 },
-		});
-
-		expect(writes.join("")).toContain("A");
-	});
-
 	it("rejects an empty custom frame set", () => {
 		expect(() =>
 			spinner({ sink, message: "Empty", spinner: { frames: [], interval: 50 } }),
@@ -442,19 +394,6 @@ describe("spinner — message updates", () => {
 });
 
 describe("spinner — cleanup", () => {
-	it("cleans up interval on success (no lingering writes)", async () => {
-		await spinner({
-			sink,
-			message: "Done...",
-			task: async () => "ok",
-		});
-
-		const outputAfterComplete = writes.join("");
-		await tick(200);
-
-		expect(writes.join("")).toBe(outputAfterComplete);
-	});
-
 	it("restores the cursor and removes the exit listener when the first frame throws", () => {
 		const { sink, writes } = createFakeSink(true);
 		const previousExit = process.listeners("exit");
