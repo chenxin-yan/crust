@@ -1036,6 +1036,9 @@ export async function executeInvocation(
 		return process.exit(0);
 	}
 
+	// Injected `io` marks an in-process host (tests, `@crustjs/testing`, possibly with fake
+	// timers): it must survive a cancelling signal, so it gets only the exit code.
+	const inProcess = hasInjectedIO(options?.io);
 	const invoke = async (): Promise<number> => {
 		let prepared: PreparedInvocation;
 		try {
@@ -1056,10 +1059,14 @@ export async function executeInvocation(
 		let interruptedAt = Number.NEGATIVE_INFINITY;
 		// A caller's `options.signal` abort keeps 130 even when a signal arrives after it.
 		let cancelledExitCode: number = EXIT_CODE_CANCELLED;
+		let cancelledBy: CancellingSignal | undefined;
 		const onSignal = (name: CancellingSignal): void => {
 			if (!controller.signal.aborted) {
 				interruptedAt = performance.now();
-				if (!signal.aborted) cancelledExitCode = CANCELLING_SIGNALS[name].exitCode;
+				if (!signal.aborted) {
+					cancelledBy = name;
+					cancelledExitCode = CANCELLING_SIGNALS[name].exitCode;
+				}
 				controller.abort(new DOMException(CANCELLING_SIGNALS[name].message, "AbortError"));
 				return;
 			}
@@ -1078,6 +1085,7 @@ export async function executeInvocation(
 		const output = createInvocationOutput(io);
 		let extensionContext: ExtensionContext | undefined;
 		let rendered: { error: CaughtError } | undefined;
+		let exitCode = 0;
 		try {
 			await dispatch(
 				{ argv },
@@ -1116,19 +1124,32 @@ export async function executeInvocation(
 			// Cancellation keeps its exit code (130, or 143 after SIGTERM) even when cleanup failed
 			// while unwinding it (callers such as shell loops must still see the interrupt). Core
 			// always preserves a nonzero failure outcome, regardless of what onError hooks do.
-			const exitCode = cancellationCleanupFailures(error) === undefined ? 1 : cancelledExitCode;
+			exitCode = cancellationCleanupFailures(error) === undefined ? 1 : cancelledExitCode;
 			process.exitCode = exitCode;
 			if (!rendered) {
 				await renderFailure(error, argv, prepared, output, signal, extensionContext);
 				// Reassert: a presentation hook may have reassigned process.exitCode.
 				process.exitCode = exitCode;
 			}
-			return exitCode;
 		} finally {
+			// A signal that arrived while synchronous work blocked the event loop is still pending,
+			// and Node and Bun drop it once no listener remains: one macrotask turn delivers it.
+			if (!inProcess) await new Promise((resolve) => setImmediate(resolve));
 			for (const name of CANCELLING_SIGNAL_NAMES) process.removeListener(name, onSignal);
 		}
-		return 0;
+		if (cancelledBy === undefined) return exitCode;
+
+		// SIGINT/SIGTERM cancelled the run: it ends by that signal whether the action threw, failed,
+		// or ignored the abort and completed, so supervisors never read success and shells see
+		// WIFSIGNALED (bash stops a loop only for a child killed by SIGINT). The exit code stays as
+		// the fallback when the re-raise can't kill: another listener owns the signal, or Windows,
+		// where `process.kill` on self is a forced kill without the 128+n status.
+		process.exitCode = cancelledExitCode;
+		if (!inProcess && process.platform !== "win32" && process.listenerCount(cancelledBy) === 0) {
+			process.kill(process.pid, cancelledBy);
+		}
+		return cancelledExitCode;
 	};
 
-	return await (hasInjectedIO(options?.io) ? withAmbientTerminalIO(io, invoke) : invoke());
+	return await (inProcess ? withAmbientTerminalIO(io, invoke) : invoke());
 }

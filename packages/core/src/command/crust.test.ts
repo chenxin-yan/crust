@@ -2354,6 +2354,22 @@ describe("Crust .execute()", () => {
 		expect(stderrChunks.join("\n")).toContain("Operation cancelled");
 	});
 
+	it("preserves the cancellation exit code after onError hooks", async () => {
+		const exitCodeOverride = defineExtension(defineExtensionId("exit-code-override")).onError(
+			() => {
+				process.exitCode = 1;
+			},
+		);
+
+		const app = new Crust("test").extend(exitCodeOverride).action(() => {
+			throw new DOMException("Prompt was cancelled.", "AbortError");
+		});
+
+		await app.execute({ argv: [] });
+
+		expect(process.exitCode).toBe(130);
+	});
+
 	it("does not run a runnable parent for a typoed subcommand", async () => {
 		let ran = false;
 		const app = new Crust("gyst")

@@ -364,6 +364,33 @@ describe("invocation cancellation signal", () => {
 		},
 	);
 
+	it.each([
+		["SIGINT", 130, "completes"],
+		["SIGTERM", 143, "completes"],
+		["SIGTERM", 143, "fails"],
+	] as const)(
+		"execute() exits with the %s code %i when the action ignores the abort and %s",
+		async (name, code, outcome) => {
+			const started = Promise.withResolvers<void>();
+			const released = Promise.withResolvers<void>();
+			const exitCode = new Crust("cli")
+				.action(async () => {
+					started.resolve();
+					await released.promise;
+					if (outcome === "fails") throw new Error("write failed");
+				})
+				.execute({ argv: [], io: quiet });
+
+			await started.promise;
+			// Invoke Core's listener directly: emitting a real signal would reach the test runner.
+			process.listeners(name).at(-1)!(name);
+			released.resolve();
+
+			expect(await exitCode).toBe(code);
+			expect(process.exitCode).toBe(code);
+		},
+	);
+
 	it("a second SIGINT removes Core's listener and leaves termination to any remaining listener", async () => {
 		vi.useFakeTimers({ toFake: ["performance"] });
 		onTestFinished(() => void vi.useRealTimers());

@@ -2097,7 +2097,9 @@ export class Crust<
 	 * renders a failure once (through Extension `onError` hooks, ending in the
 	 * chosen Renderer's `error` or Core's default rendering), sets `process.exitCode` (`1`, or
 	 * `130` for an `AbortError` cancellation, `143` when `SIGTERM` cancelled it), and resolves
-	 * to the exit code.
+	 * to the exit code. After a `SIGINT` or `SIGTERM` cancelled the run, the exit code is
+	 * `130` / `143` whatever the action did, and without injected `io` the process then
+	 * re-raises the signal and dies by it instead of resolving.
 	 *
 	 * @param options - Optional overrides: custom `argv` and captured `io` for
 	 *                   in-process testing of exit codes and rendered failures,
