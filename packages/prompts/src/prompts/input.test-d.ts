@@ -27,4 +27,9 @@ async function _inputTypeInferenceTests() {
 	void input({ validate: schemaInWrongSlot });
 	// @ts-expect-error — schema and validate are exclusive
 	void input({ schema: z.string(), validate: () => {} });
+
+	// The IO argument carries a cancellation signal.
+	void input({ message: "?" }, { signal: AbortSignal.timeout(1000) });
+	// @ts-expect-error — `signal` takes an AbortSignal
+	void input({ message: "?" }, { signal: true });
 }

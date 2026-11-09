@@ -3,7 +3,14 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { stringWidth } from "@crustjs/style";
-import { getTerminalIO, processStderr, type TerminalOutput } from "@crustjs/utils/terminal";
+import { isSignalIgnored } from "@crustjs/utils/signals";
+import {
+	getTerminalIO,
+	getTerminalSignal,
+	processStderr,
+	registerLiveFrame,
+	type TerminalOutput,
+} from "@crustjs/utils/terminal";
 
 import { defaultThemeFor } from "./theme.ts";
 import type { PartialProgressTheme, ProgressTheme } from "./theme.ts";
@@ -54,14 +61,17 @@ export type SpinnerOutcome = "success" | "error";
 /**
  * SIGINT policy for interactive spinners.
  *
- * - `"exit"` (default): install a `SIGINT` handler that restores the cursor
- *   and re-raises `SIGINT`, so the process terminates with normal signal
- *   semantics (shells observe exit status 130).
+ * - `"exit"` (default): install a `SIGINT` handler. When no other listener owns
+ *   `SIGINT`, it restores the cursor and re-raises `SIGINT`, so the process
+ *   terminates with normal signal semantics (shells observe exit status 130).
+ *   When another listener owns it (Crust's `execute()` does), the spinner keeps
+ *   running and that owner's cancellation stops it.
  * - `false`: install no handler — the application owns SIGINT and should
  *   `stop()` the spinner (restoring the cursor) in its own cleanup.
  *
  * The handler is a real `process` signal listener even when output goes to
- * an injected sink, so prefer `false` under test harnesses.
+ * an injected sink, so prefer `false` under test harnesses. A `SIGINT` the
+ * process inherited as ignored stays ignored.
  */
 export type SpinnerSigintPolicy = "exit" | false;
 
@@ -88,6 +98,13 @@ export interface SpinnerHandleOptions {
 	 * the same writer as Core's default `stderr`.
 	 */
 	readonly sink?: TerminalOutput;
+	/**
+	 * Stops the spinner with `✗` and its current message when aborted while it runs, unless
+	 * `stop()` is called in the same turn (a `finally` that cancellation reaches). Defaults to
+	 * the ambient {@link withTerminalIO} signal, which inside a Crust command is the invocation's
+	 * `signal`. A spinner started after the abort, to show cleanup, ignores it.
+	 */
+	readonly signal?: AbortSignal;
 }
 
 export interface SpinnerHandle {
@@ -192,6 +209,7 @@ export function createSpinnerHandle(
 	const isInteractive = sink.isTTY ?? false;
 	const { frames, interval } = resolveSpinner(options.spinner);
 	const sigint = options.sigint ?? "exit";
+	const signal = options.signal ?? getTerminalSignal();
 
 	let currentMessage = options.message;
 	let frameIndex = 0;
@@ -200,6 +218,9 @@ export function createSpinnerHandle(
 	let timerId: ReturnType<typeof setInterval> | undefined;
 	let sigintHandler: (() => void) | undefined;
 	let exitHandler: (() => void) | undefined;
+	let releaseFrame: (() => void) | undefined;
+	// Deferred a turn so a `stop()` with its own message, run by the cancellation itself, wins.
+	const onAbort = () => setImmediate(() => handle.stop("error"));
 
 	function drawFrame(): void {
 		const width = (sink.columns || 80) - 1;
@@ -228,12 +249,16 @@ export function createSpinnerHandle(
 			process.removeListener("exit", exitHandler);
 			exitHandler = undefined;
 		}
+		releaseFrame?.();
+		releaseFrame = undefined;
+		signal?.removeEventListener("abort", onAbort);
 	}
 
-	return {
+	const handle: SpinnerHandle = {
 		start() {
 			if (started || finished) return;
 			started = true;
+			if (signal && !signal.aborted) signal.addEventListener("abort", onAbort, { once: true });
 			if (!isInteractive) return;
 
 			sink.write(HIDE_CURSOR);
@@ -257,22 +282,30 @@ export function createSpinnerHandle(
 				frameIndex = (frameIndex + 1) % frames.length;
 				drawFrame();
 			}, interval);
+			releaseFrame = registerLiveFrame({
+				clear: () => sink.write(ERASE_LINE + CURSOR_TO_START),
+				redraw: drawFrame,
+			});
 
-			if (sigint === "exit") {
-				sigintHandler = () => {
+			// An inherited ignore (background job) stays: listening would make SIGINT fatal again.
+			if (sigint === "exit" && !isSignalIgnored("SIGINT")) {
+				const handler = () => {
+					// `once` already removed this listener for an emitted signal.
+					process.removeListener("SIGINT", handler);
+					sigintHandler = undefined;
+					// A host that kept its own persistent listener (Crust's `execute()`) already ran it
+					// for this signal and owns the cancellation, which stops the spinner; re-raising
+					// would invoke it twice.
+					if (process.listenerCount("SIGINT") > 0) return;
 					cleanup();
 					finished = true;
 					sink.write(SHOW_CURSOR);
-					// `once` already removed this listener. With no listeners left the
-					// re-raise hits the default disposition and terminates with real
-					// signal semantics — shells observe exit status 130. A host that
-					// kept its own persistent listener already ran it for this signal;
-					// re-raising would invoke it twice, so leave termination to it.
-					if (process.listenerCount("SIGINT") === 0) {
-						process.kill(process.pid, "SIGINT");
-					}
+					// With no listeners left the re-raise hits the default disposition and terminates
+					// with real signal semantics — shells observe exit status 130.
+					process.kill(process.pid, "SIGINT");
 				};
-				process.once("SIGINT", sigintHandler);
+				sigintHandler = handler;
+				process.once("SIGINT", handler);
 			}
 		},
 
@@ -308,6 +341,7 @@ export function createSpinnerHandle(
 			if (renderFailure) throw renderFailure.error;
 		},
 	};
+	return handle;
 }
 
 /**

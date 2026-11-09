@@ -20,6 +20,12 @@ export type RunProcessOptions = {
 	 * SIGHUP under `nohup`) is left ignored: it neither kills the group nor rejects the call.
 	 */
 	timeout?: number;
+	/**
+	 * Aborting it sends the child `SIGTERM` (POSIX process groups: the whole group, killed) and
+	 * rejects with `signal.reason` once the child exits. An already-aborted signal rejects
+	 * before spawning.
+	 */
+	signal?: AbortSignal;
 };
 
 export type RunProcessResult = {
@@ -170,6 +176,7 @@ export async function runProcess(
 	args: readonly string[] = [],
 	options: RunProcessOptions = {},
 ): Promise<RunProcessResult> {
+	options.signal?.throwIfAborted();
 	// Node's CVE-2024-27980 hardening rejects direct .cmd/.bat spawning.
 	const windowsShimCommand = getWindowsShimCommand(command, args, options.shell);
 	const collect = (options.stdio ?? "collect") === "collect";
@@ -222,6 +229,15 @@ export async function runProcess(
 				},
 			})
 		: () => {};
+	const onAbort = () => {
+		try {
+			if (detached) killProcessTree(proc);
+			else proc.kill("SIGTERM");
+		} catch {
+			// The child already exited; its close settles the call.
+		}
+	};
+	options.signal?.addEventListener("abort", onAbort, { once: true });
 
 	const { text } = process.getBuiltinModule("node:stream/consumers");
 	const { once } = process.getBuiltinModule("node:events");
@@ -234,10 +250,12 @@ export async function runProcess(
 			]),
 			stopped,
 		]);
+		options.signal?.throwIfAborted();
 		return { exitCode, stdout, stderr };
 	} finally {
 		clearTimeout(timer);
 		release();
+		options.signal?.removeEventListener("abort", onAbort);
 	}
 }
 

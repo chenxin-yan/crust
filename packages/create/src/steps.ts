@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 
 import { runProcess, which } from "@crustjs/utils/process";
-import { writeProcessOutput } from "@crustjs/utils/terminal";
+import { getTerminalSignal, writeProcessOutput } from "@crustjs/utils/terminal";
 
 import { detectPackageManager } from "./detect.ts";
 import type { PostScaffoldStep, RunStepsOptions } from "./types.ts";
@@ -20,7 +20,8 @@ import type { PostScaffoldStep, RunStepsOptions } from "./types.ts";
  *
  * @param steps - Array of {@link PostScaffoldStep} objects to execute.
  * @param cwd - The working directory for steps (typically the scaffold dest).
- * @param options - Where non-fatal warnings go; see {@link RunStepsOptions}.
+ * @param options - Where non-fatal warnings go and what cancels the steps; see {@link RunStepsOptions}.
+ * @throws `signal.reason` when the signal aborts, after the running child exits.
  *
  * @example
  * ```ts
@@ -40,19 +41,21 @@ export async function runSteps(
 	options: RunStepsOptions = {},
 ): Promise<void> {
 	const stderr = options.stderr ?? ((text) => writeProcessOutput(2, `${text}\n`));
+	const signal = options.signal ?? getTerminalSignal();
 	for (const step of steps) {
+		signal?.throwIfAborted();
 		switch (step.type) {
 			case "install":
-				await runInstall(cwd);
+				await runInstall(cwd, signal);
 				break;
 			case "git-init":
-				await runGitInit(cwd, step.commit);
+				await runGitInit(cwd, step.commit, signal);
 				break;
 			case "open-editor":
 				await runOpenEditor(cwd, stderr);
 				break;
 			case "command":
-				await runCommand(step.cmd, step.cwd ?? cwd);
+				await runCommand(step.cmd, step.cwd ?? cwd, signal);
 				break;
 		}
 	}
@@ -65,7 +68,7 @@ export async function runSteps(
 /**
  * Detect the package manager and run its install command.
  */
-async function runInstall(cwd: string): Promise<void> {
+async function runInstall(cwd: string, signal: AbortSignal | undefined): Promise<void> {
 	const pm = detectPackageManager(cwd);
 	const executable = which(pm);
 	if (!executable) {
@@ -75,6 +78,7 @@ async function runInstall(cwd: string): Promise<void> {
 	const { exitCode } = await runProcess(executable, ["install"], {
 		cwd,
 		stdio: "inherit",
+		signal,
 	});
 	if (exitCode !== 0) {
 		throw new Error(`"${pm} install" exited with code ${exitCode}`);
@@ -85,18 +89,22 @@ async function runInstall(cwd: string): Promise<void> {
  * Initialize a git repository. If a commit message is provided,
  * stage all files and create an initial commit.
  */
-async function runGitInit(cwd: string, commit?: string): Promise<void> {
+async function runGitInit(
+	cwd: string,
+	commit: string | undefined,
+	signal: AbortSignal | undefined,
+): Promise<void> {
 	const git = which("git");
 	if (!git) {
 		throw new Error('"git" was not found on PATH. Install Git and try again.');
 	}
 
-	await spawnChecked(git, ["init"], cwd, "git init");
+	await spawnChecked(git, ["init"], cwd, "git init", signal);
 
 	if (commit) {
-		const identityArgs = await fallbackGitIdentityArgs(cwd, git);
-		await spawnChecked(git, ["add", "."], cwd, "git add");
-		await spawnChecked(git, [...identityArgs, "commit", "-m", commit], cwd, "git commit");
+		const identityArgs = await fallbackGitIdentityArgs(cwd, git, signal);
+		await spawnChecked(git, ["add", "."], cwd, "git add", signal);
+		await spawnChecked(git, [...identityArgs, "commit", "-m", commit], cwd, "git commit", signal);
 	}
 }
 
@@ -139,8 +147,12 @@ async function runOpenEditor(cwd: string, stderr: (text: string) => void): Promi
 }
 
 /** Run an arbitrary command string through the platform shell. */
-async function runCommand(cmd: string, cwd: string): Promise<void> {
-	const { exitCode } = await runProcess(cmd, [], { cwd, shell: true, stdio: "inherit" });
+async function runCommand(
+	cmd: string,
+	cwd: string,
+	signal: AbortSignal | undefined,
+): Promise<void> {
+	const { exitCode } = await runProcess(cmd, [], { cwd, shell: true, stdio: "inherit", signal });
 	if (exitCode !== 0) {
 		throw new Error(`Command "${cmd}" exited with code ${exitCode}`);
 	}
@@ -157,23 +169,33 @@ async function runCommand(cmd: string, cwd: string): Promise<void> {
  * to fail. The fallback applies to the initial commit only and is never
  * written to the repo config, so later commits use the user's own identity.
  */
-async function fallbackGitIdentityArgs(cwd: string, git: string): Promise<string[]> {
+async function fallbackGitIdentityArgs(
+	cwd: string,
+	git: string,
+	signal: AbortSignal | undefined,
+): Promise<string[]> {
 	const args: string[] = [];
-	if (!(await hasGitConfig(git, "user.name", cwd))) {
+	if (!(await hasGitConfig(git, "user.name", cwd, signal))) {
 		args.push("-c", "user.name=Crust");
 	}
-	if (!(await hasGitConfig(git, "user.email", cwd))) {
+	if (!(await hasGitConfig(git, "user.email", cwd, signal))) {
 		args.push("-c", "user.email=crust@scaffolded.project");
 	}
 	return args;
 }
 
 /** Probe a git config key; non-zero exit means it is unset. */
-async function hasGitConfig(git: string, key: string, cwd: string): Promise<boolean> {
+async function hasGitConfig(
+	git: string,
+	key: string,
+	cwd: string,
+	signal: AbortSignal | undefined,
+): Promise<boolean> {
 	const { exitCode } = await runProcess(git, ["config", key], {
 		cwd,
 		stdio: "collect",
 		stdout: "ignore",
+		signal,
 	});
 	return exitCode === 0;
 }
@@ -186,11 +208,13 @@ async function spawnChecked(
 	args: readonly string[],
 	cwd: string,
 	label: string,
+	signal: AbortSignal | undefined,
 ): Promise<void> {
 	const { exitCode, stderr } = await runProcess(command, args, {
 		cwd,
 		stdio: "collect",
 		stdout: "ignore",
+		signal,
 	});
 	if (exitCode !== 0) {
 		throw new Error(

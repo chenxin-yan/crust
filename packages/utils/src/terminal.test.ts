@@ -3,7 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
 	getAmbientTerminalIO,
 	getTerminalIO,
+	getTerminalSignal,
+	registerLiveFrame,
 	withAmbientTerminalIO,
+	withProcessTerminalSignal,
 	withTerminalIO,
 	writeProcessOutput,
 } from "./terminal.ts";
@@ -58,8 +61,78 @@ describe("ambient terminal IO", () => {
 	});
 });
 
+describe("terminal signal", () => {
+	it("resolves the scope's signal before the process-wide one", async () => {
+		const processSignal = new AbortController().signal;
+		const scoped = new AbortController().signal;
+
+		await withProcessTerminalSignal(processSignal, async () => {
+			await Promise.resolve();
+			expect(getTerminalSignal()).toBe(processSignal);
+			withTerminalIO({ signal: scoped }, () => {
+				withTerminalIO({ output: { write: () => {} } }, () => {
+					expect(getTerminalSignal()).toBe(scoped);
+				});
+			});
+		});
+		expect(getTerminalSignal()).toBeUndefined();
+	});
+});
+
 describe("writeProcessOutput", () => {
 	afterEach(() => vi.restoreAllMocks());
+
+	/** Capture fd writes, with `ttys` reporting as terminals. */
+	function captureWrites(ttys: readonly number[]): string[] {
+		const written: string[] = [];
+		vi.spyOn(process.getBuiltinModule("node:tty"), "isatty").mockImplementation((fd) =>
+			ttys.includes(fd),
+		);
+		vi.spyOn(process.getBuiltinModule("node:fs"), "writeSync").mockImplementation(((
+			fd: number,
+			buffer: Uint8Array,
+			offset?: number,
+		) => {
+			written.push(`${fd}:${Buffer.from(buffer.subarray(offset)).toString("utf8")}`);
+			return buffer.length - (offset ?? 0);
+		}) as typeof import("node:fs").writeSync);
+		return written;
+	}
+
+	it.skipIf(process.platform === "win32")(
+		"erases a live frame before a line to a terminal and redraws it after",
+		() => {
+			const written = captureWrites([1, 2]);
+			const release = registerLiveFrame({
+				clear: () => written.push("clear"),
+				redraw: () => written.push("redraw"),
+			});
+			try {
+				writeProcessOutput(1, "built\n");
+				writeProcessOutput(2, "partial");
+			} finally {
+				release();
+			}
+			writeProcessOutput(2, "after\n");
+
+			expect(written).toEqual(["clear", "1:built\n", "redraw", "clear", "2:partial", "2:after\n"]);
+		},
+	);
+
+	it.skipIf(process.platform === "win32")("leaves the frame alone for a redirected fd", () => {
+		const written = captureWrites([2]);
+		const release = registerLiveFrame({
+			clear: () => written.push("clear"),
+			redraw: () => written.push("redraw"),
+		});
+		try {
+			writeProcessOutput(1, "to a file\n");
+		} finally {
+			release();
+		}
+
+		expect(written).toEqual(["1:to a file\n"]);
+	});
 
 	// Windows writes through the process streams instead.
 	it.skipIf(process.platform === "win32")(

@@ -1,5 +1,6 @@
 import { setTimeout as tick } from "node:timers/promises";
 
+import { writeProcessOutput } from "@crustjs/utils/terminal";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { type TerminalOutput, spinner, withTerminalIO } from "./spinner.ts";
@@ -42,7 +43,7 @@ describe("spinner — terminal sink", () => {
 		expect(process.listeners("SIGINT")).not.toContain(handler);
 	});
 
-	it("does not re-raise SIGINT when the host keeps its own listener", () => {
+	it("leaves SIGINT to a host that keeps its own listener and still prints the final line", () => {
 		const { sink, writes } = createFakeSink(true);
 		const hostListener = () => {};
 		process.on("SIGINT", hostListener);
@@ -64,7 +65,54 @@ describe("spinner — terminal sink", () => {
 			process.removeListener("SIGINT", hostListener);
 		}
 		expect(kills).toEqual([]);
-		expect(writes.at(-1)).toBe("\x1B[?25h");
+		expect(writes.at(-1)).not.toBe("\x1B[?25h");
+
+		// The host's cancellation reaches the action's cleanup, whose final line still renders.
+		handle.stop("error", "Cancelled");
+		expect(writes.slice(-2)).toEqual(["\x1B[2K\r✗ Cancelled\n", "\x1B[?25h"]);
+	});
+
+	it("stops with ✗ when its signal aborts while it runs", async () => {
+		const { sink, writes } = createFakeSink(true);
+		const controller = new AbortController();
+		const handle = spinner({ message: "Working", sigint: false, sink, signal: controller.signal });
+		handle.start();
+
+		controller.abort();
+		await new Promise((resolve) => setImmediate(resolve));
+
+		expect(writes.slice(-2)).toEqual(["\x1B[2K\r✗ Working\n", "\x1B[?25h"]);
+	});
+
+	it("keeps the final line a stop() in the abort's own turn renders", async () => {
+		const { sink, writes } = createFakeSink(false);
+		const controller = new AbortController();
+		const handle = spinner({ message: "Working", sink, signal: controller.signal });
+		handle.start();
+		controller.signal.addEventListener("abort", () => handle.stop("error", "Cancelled"));
+
+		controller.abort();
+		await new Promise((resolve) => setImmediate(resolve));
+
+		expect(writes).toEqual(["✗ Cancelled\n"]);
+	});
+
+	it("follows the ambient signal and ignores one that aborted before it started", async () => {
+		const { sink, writes } = createFakeSink(false);
+		const controller = new AbortController();
+		const handle = withTerminalIO({ signal: controller.signal }, () =>
+			spinner({ message: "Working", sink }),
+		);
+		handle.start();
+		controller.abort();
+		await new Promise((resolve) => setImmediate(resolve));
+		expect(writes).toEqual(["✗ Working\n"]);
+
+		const cleanup = spinner({ message: "Cleaning up", sink, signal: controller.signal });
+		cleanup.start();
+		await new Promise((resolve) => setImmediate(resolve));
+		cleanup.stop();
+		expect(writes).toEqual(["✗ Working\n", "✓ Cleaning up\n"]);
 	});
 
 	it("finalizes once", () => {
@@ -161,6 +209,47 @@ describe("spinner — terminal sink", () => {
 
 		expect(writes[1]).toBe("\x1B[2K\r\x1B[35mABCDEFGH…\x1B[39m");
 	});
+});
+
+describe("spinner — process output", () => {
+	it.skipIf(process.platform === "win32")(
+		"erases its frame before a Crust output line and redraws it below until stopped",
+		() => {
+			const { sink, writes } = createFakeSink(true);
+			const lines: string[] = [];
+			vi.spyOn(process.getBuiltinModule("node:tty"), "isatty").mockReturnValue(true);
+			vi.spyOn(process.getBuiltinModule("node:fs"), "writeSync").mockImplementation(((
+				_fd: number,
+				buffer: Uint8Array,
+				offset?: number,
+			) => {
+				lines.push(Buffer.from(buffer.subarray(offset)).toString("utf8"));
+				writes.push("<line>");
+				return buffer.length - (offset ?? 0);
+			}) as typeof import("node:fs").writeSync);
+			try {
+				const handle = spinner({ message: "Building", sigint: false, sink });
+				handle.start();
+				writeProcessOutput(1, "pkg-a: built\n");
+				handle.stop();
+				writeProcessOutput(1, "done\n");
+			} finally {
+				vi.restoreAllMocks();
+			}
+
+			expect(lines).toEqual(["pkg-a: built\n", "done\n"]);
+			expect(writes).toEqual([
+				"\x1B[?25l",
+				"\x1B[2K\r⠋ Building",
+				"\x1B[2K\r",
+				"<line>",
+				"\x1B[2K\r⠋ Building",
+				"\x1B[2K\r✓ Building\n",
+				"\x1B[?25h",
+				"<line>",
+			]);
+		},
+	);
 });
 
 describe("spinner — sink resolution", () => {

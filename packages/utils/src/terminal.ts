@@ -21,6 +21,8 @@ export interface TerminalOutput {
 export interface TerminalIO {
 	readonly input?: TerminalInput;
 	readonly output?: TerminalOutput;
+	/** Cancels terminal interactions (prompts, spinners, child processes) when aborted. */
+	readonly signal?: AbortSignal;
 }
 
 const ignoreStreamError = () => {};
@@ -84,14 +86,58 @@ function writeFd(fd: 1 | 2, text: string): void {
  * load), and no async tail for a `process.exit()` to truncate. Writes queued on those streams
  * by other code are a separate queue and are not ordered with these. Windows keeps the stream
  * writer: its console handling transcodes text, while raw bytes to a legacy console can garble
- * non-ASCII output.
+ * non-ASCII output. A write to a terminal erases the live frame ({@link registerLiveFrame})
+ * first and redraws it after a complete line.
  */
 export function writeProcessOutput(fd: 1 | 2, text: string): void {
+	const frame = globals[LIVE_FRAME_KEY];
+	if (frame === undefined || interrupting || !process.getBuiltinModule("node:tty").isatty(fd)) {
+		writeRaw(fd, text);
+		return;
+	}
+	interrupting = true;
+	try {
+		frame.clear();
+		writeRaw(fd, text);
+		// Mid-line text keeps the row; the frame's next draw replaces it.
+		if (text.endsWith("\n")) frame.redraw();
+	} finally {
+		interrupting = false;
+	}
+}
+
+function writeRaw(fd: 1 | 2, text: string): void {
 	if (process.platform === "win32") writeStream(fd === 1 ? process.stdout : process.stderr, text);
 	else writeFd(fd, text);
 }
 
-/** Standard error as {@link TerminalOutput}, written through {@link writeProcessOutput}. */
+/** A row redrawn in place on the terminal, such as a spinner frame. */
+export interface LiveFrame {
+	/** Erase the row, leaving the cursor at its start. */
+	readonly clear: () => void;
+	/** Draw the row again at the cursor. */
+	readonly redraw: () => void;
+}
+
+/** Guards a frame whose own sink writes through {@link writeProcessOutput}. */
+let interrupting = false;
+
+/**
+ * Make `frame` the live frame until the returned function runs: while it is live, each
+ * {@link writeProcessOutput} to a terminal erases it first and redraws it below a written line,
+ * so log lines never keep the frame's text in front of them. A newer frame replaces it.
+ */
+export function registerLiveFrame(frame: LiveFrame): () => void {
+	globals[LIVE_FRAME_KEY] = frame;
+	return () => {
+		if (globals[LIVE_FRAME_KEY] === frame) globals[LIVE_FRAME_KEY] = undefined;
+	};
+}
+
+/**
+ * Standard error as {@link TerminalOutput}, on the same writer as {@link writeProcessOutput}.
+ * It never interrupts a live frame, so a frame can draw through it.
+ */
 export const processStderr: TerminalOutput = {
 	get isTTY() {
 		return process.getBuiltinModule("node:tty").isatty(2);
@@ -100,7 +146,7 @@ export const processStderr: TerminalOutput = {
 	get columns() {
 		return process.stderr.columns;
 	},
-	write: (text) => writeProcessOutput(2, text),
+	write: (text) => writeRaw(2, text),
 };
 
 /** Line-oriented output callbacks ambiently supplied by Core invocations. */
@@ -111,9 +157,13 @@ export interface AmbientTerminalIO {
 
 const STORAGE_KEY: unique symbol = Symbol.for("crustjs.terminal.io");
 const AMBIENT_CALLBACKS_KEY: unique symbol = Symbol.for("crustjs.terminal.ambient-callbacks");
+const PROCESS_SIGNAL_KEY: unique symbol = Symbol.for("crustjs.terminal.process-signal");
+const LIVE_FRAME_KEY: unique symbol = Symbol.for("crustjs.terminal.live-frame");
 type TerminalGlobals = {
 	[STORAGE_KEY]?: AsyncLocalStorage<TerminalIO>;
 	[AMBIENT_CALLBACKS_KEY]?: WeakMap<TerminalOutput, AmbientTerminalIO>;
+	[PROCESS_SIGNAL_KEY]?: AbortSignal;
+	[LIVE_FRAME_KEY]?: LiveFrame;
 };
 // SAFETY: only declares the optional symbol slots read and initialized below.
 const globals = globalThis as TerminalGlobals;
@@ -137,9 +187,37 @@ export function withTerminalIO<T>(io: TerminalIO, fn: () => T): T {
 		{
 			input: io.input ?? current?.input,
 			output: io.output ?? current?.output,
+			signal: io.signal ?? current?.signal,
 		},
 		fn,
 	);
+}
+
+/**
+ * The signal that cancels terminal interactions here: the async scope's `signal`
+ * ({@link withTerminalIO}), else the one {@link withProcessTerminalSignal} set, if any.
+ */
+export function getTerminalSignal(): AbortSignal | undefined {
+	// Read without creating the scope storage: loading `node:async_hooks` costs Bun startup.
+	return globals[STORAGE_KEY]?.getStore()?.signal ?? globals[PROCESS_SIGNAL_KEY];
+}
+
+/**
+ * Make `signal` the process-wide fallback for {@link getTerminalSignal} until `fn` settles.
+ * For Core's terminal `execute()`, which owns the process; in-process invocations use the
+ * async scope instead.
+ */
+export async function withProcessTerminalSignal<T>(
+	signal: AbortSignal,
+	fn: () => Promise<T>,
+): Promise<T> {
+	const previous = globals[PROCESS_SIGNAL_KEY];
+	globals[PROCESS_SIGNAL_KEY] = signal;
+	try {
+		return await fn();
+	} finally {
+		globals[PROCESS_SIGNAL_KEY] = previous;
+	}
 }
 
 /** Return the terminal streams in the current async scope, if any. */
@@ -167,8 +245,15 @@ function lineBufferedOutput(io: AmbientTerminalIO): TerminalOutput {
 	return output;
 }
 
-/** Run a function with Core's line-oriented output bridged into the terminal stream scope. */
-export function withAmbientTerminalIO<T>(io: AmbientTerminalIO, fn: () => T): T {
+/**
+ * Run a function with Core's line-oriented output bridged into the terminal stream scope,
+ * and the invocation's `signal` as the scope's signal.
+ */
+export function withAmbientTerminalIO<T>(
+	io: AmbientTerminalIO,
+	fn: () => T,
+	signal?: AbortSignal,
+): T {
 	const current = storage().getStore();
 	return withTerminalIO(
 		{
@@ -178,6 +263,7 @@ export function withAmbientTerminalIO<T>(io: AmbientTerminalIO, fn: () => T): T 
 				current?.output && !ambientCallbacks().has(current.output)
 					? current.output
 					: lineBufferedOutput(io),
+			signal,
 		},
 		fn,
 	);
