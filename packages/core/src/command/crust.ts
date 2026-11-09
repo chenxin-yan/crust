@@ -16,6 +16,7 @@ import {
 import type {
 	AnyExtension,
 	AnyExtensionFactory,
+	DuplicateRendererBrand,
 	Extension,
 	ExtensionData,
 	ExtensionsProvidesOutput,
@@ -124,6 +125,7 @@ import type {
 	KnownCommandPath,
 	OmittableRunInput,
 	RunInput,
+	ShapeEvent,
 	ShapeRunOutcome,
 	RunWithoutInputThis,
 	commandProviders,
@@ -1814,6 +1816,7 @@ export class Crust<
 				> &
 				ExtensionCheckAt<ValidateExtensionCommands<Es, Sibs>, I> &
 				ExtensionCheckAt<ValidateExtensionProvides<Es, Ctx>, I> &
+				DuplicateRendererBrand<Es, Es[I]> &
 				// Checked here, not in the constraint, so a missing key gets a readable brand.
 				MissingRootMetaBrand<Es[I], DefinedRootMetaKeys<Meta>>;
 		}
@@ -2036,7 +2039,7 @@ export class Crust<
 			: never,
 		path: KnownCommandPath<Path, Tree>,
 		input: CheckedRunInput<S, Input> | OmittableRunInput<S>,
-		options?: InvocationOptions,
+		options?: InvocationOptions<ShapeEvent<S>>,
 	): Promise<ShapeRunOutcome<S>>;
 	run<const Path extends readonly string[], const Input>(
 		this: { readonly _types: { readonly caps: "app" } },
@@ -2051,7 +2054,11 @@ export class Crust<
 				Input
 			>,
 		]
-			? readonly [options?: InvocationOptions]
+			? readonly [
+					options?: InvocationOptions<
+						ShapeEvent<CommandShapeAt<AppShape<A, Flags, Tree, Result, CollisionSp>, NoInfer<Path>>>
+					>,
+				]
 			: readonly [invalidInput: never]
 	): Promise<ShapeRunOutcome<CommandShapeAt<AppShape<A, Flags, Tree, Result, CollisionSp>, Path>>>;
 	async run(

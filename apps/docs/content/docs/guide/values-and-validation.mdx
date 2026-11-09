@@ -85,12 +85,17 @@ A schema definition cannot also set `parse`, `choices`, `default`, or `required`
 | Allowed values | `choices: ["a", "b"]`    | `z.enum(["a", "b"])`              |
 | Range or shape | `parse` plus a throw     | `.int().min(1).max(65535)`        |
 
+`z.coerce.number()` reads a blank value (`--port ""`) as `0`, where `type: "number"` rejects it. To reject blanks, write `z.string().trim().min(1).pipe(z.coerce.number())`.
+
 For the scalar port argument above, omission passes `undefined` to the schema. `.default(3000)` substitutes the default; replacing it with `.optional()` preserves `undefined` and infers `number | undefined`. Without either, this number schema rejects omission. Other schemas may handle `undefined` differently; an omitted variadic argument receives `[]`.
 
 ### What the schema receives
 
 - An argument omits `type`. The schema receives `string | undefined`, or `string[]` with `variadic`.
 - A flag keeps `type: "string"` or `type: "boolean"` so the parser knows whether a value token follows. The schema receives `string | undefined` or `boolean | undefined`, or arrays with `multiple`.
+- Values from a flag's `env` variable and from typed `run()` input arrive in the same shapes.
+
+TypeScript checks the schema's input type against these shapes. `z.number()` on a string flag is a compile error, since every run would fail; write `z.coerce.number()`, whose input is `unknown`, or a pipeline that starts from a string such as `z.string().transform(...)`. A narrower input, such as `z.enum(["a", "b"])`, is fine: rejecting the other strings is validation. Whether the schema accepts `undefined` is up to it, since that decides requiredness.
 
 See [`ArgDef`](/docs/api/types#argdef) and [`FlagDef`](/docs/api/types#flagdef) for the full contracts.
 
@@ -100,7 +105,7 @@ See [`ArgDef`](/docs/api/types#argdef) and [`FlagDef`](/docs/api/types#flagdef) 
 
 <include lang="ts">../../../examples/guide/types-schema.ts#compile-time</include>
 
-These lines continue `serve.ts` and only construct definitions. TypeScript rejects an asynchronous `parse` and a `type` on a schema argument, and accepts `type: "string"` on a schema flag; see the [`.args()`](/docs/api/crust#argsdefs) and [`.flags()`](/docs/api/crust#flagsflags) contracts.
+These lines continue `serve.ts` and only construct definitions. TypeScript rejects an asynchronous `parse`, a `type` on a schema argument, a schema that cannot accept the value the parser hands it, and a flag that is both `required` and defaulted, and accepts `type: "string"` on a schema flag; see the [`.args()`](/docs/api/crust#argsdefs) and [`.flags()`](/docs/api/crust#flagsflags) contracts.
 
 TypeScript also infers the action value. For `type` or `parse`, it is the converted type, `T | undefined` unless `required` or `default` is set, and an array with `multiple` or `variadic`. For a schema, it is the schema's output type, which already reflects its defaults and optionality.
 

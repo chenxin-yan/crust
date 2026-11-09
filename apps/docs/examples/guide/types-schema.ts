@@ -24,4 +24,10 @@ new Crust("serve").flags({ port: { type: "string", schema: Port } });
 
 // @ts-expect-error a schema argument owns conversion, so it cannot also set `type`
 new Crust("serve").args({ name: "port", type: "string", schema: Port });
+
+// @ts-expect-error a string flag hands its schema a string: write z.coerce.number()
+new Crust("serve").flags({ port: { type: "string", schema: z.number() } });
+
+// @ts-expect-error the default fills an omitted flag, so `required` could never fail
+new Crust("serve").flags({ host: { type: "string", required: true, default: "localhost" } });
 //#endregion

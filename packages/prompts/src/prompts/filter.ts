@@ -26,23 +26,23 @@ import { formatPromptLine, formatSubmitted, renderChoiceList } from "../core/uti
 /** Options for the {@link filter} prompt. */
 export interface FilterOptions<T> {
 	/** The prompt message displayed to the user */
-	readonly message?: string;
+	readonly message?: string | undefined;
 	/** List of choices — strings or `{ label, value, hint? }` objects */
 	readonly choices: readonly Choice<T>[];
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
-	readonly initial?: T;
+	readonly initial?: T | undefined;
 	/** Default value — matches a choice using reference equality for object values. Returned automatically in non-interactive environments. */
-	readonly default?: T;
+	readonly default?: T | undefined;
 	/** Placeholder text shown when the query input is empty */
-	readonly placeholder?: string;
+	readonly placeholder?: string | undefined;
 	/**
 	 * Maximum number of visible filtered results before scrolling.
 	 *
 	 * @default 10
 	 */
-	readonly maxVisible?: number;
+	readonly maxVisible?: number | undefined;
 	/** Per-prompt theme overrides */
-	readonly theme?: PartialPromptTheme;
+	readonly theme?: PartialPromptTheme | undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

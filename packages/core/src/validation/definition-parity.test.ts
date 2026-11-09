@@ -191,6 +191,12 @@ describe("flag values", () => {
 		).toThrow(definitionError("default-outside-choices"));
 		expect(() =>
 			new Crust("cli").flags({
+				// @ts-expect-error -- a default discharges `required`
+				a: { type: "string", required: true, default: "x" },
+			}),
+		).toThrow(definitionError("required-default"));
+		expect(() =>
+			new Crust("cli").flags({
 				// @ts-expect-error -- delimiter requires multiple
 				a: { type: "string", delimiter: "," },
 			}),

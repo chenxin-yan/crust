@@ -89,7 +89,9 @@ export async function applyOutputSchema(schema: StandardSchema, result: unknown)
  *
  * Returns `undefined` when the schema has no converter (e.g. a Valibot schema
  * not wrapped with `toStandardJsonSchema`) or the converter throws because the
- * type cannot be represented (e.g. a Zod transform's output).
+ * type cannot be represented (e.g. a Zod transform's output). The result is a
+ * plain JSON copy: converters may attach extra keys (Zod adds a non-enumerable
+ * `~standard`) that JSON data checks reject.
  *
  * @example
  * ```ts
@@ -106,7 +108,7 @@ export function standardJsonSchema(
 	const jsonSchema = props.jsonSchema;
 	if (typeof jsonSchema?.[direction] !== "function") return undefined;
 	try {
-		return jsonSchema[direction]({ target: "draft-2020-12" });
+		return JSON.parse(JSON.stringify(jsonSchema[direction]({ target: "draft-2020-12" })));
 	} catch {
 		return undefined;
 	}

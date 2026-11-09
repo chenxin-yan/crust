@@ -35,7 +35,7 @@ const args = [
 
 A core variadic value is always an array. A required core variadic without a default resolves to a nonempty tuple; an omitted variadic with a scalar `default` resolves to `[default]`. `parse` runs once per element.
 
-A schema-backed argument has `name`, optional `description` and `variadic`, and a Standard Schema that receives `string | undefined` (or `string[]` when variadic). The schema owns coercion, defaults, requiredness, choices, and validation, so `type`, `required`, `default`, `choices`, and `parse` are unavailable. Its output type reaches the Command Action.
+A schema-backed argument has `name`, optional `description` and `variadic`, and a Standard Schema that receives `string | undefined` (or `string[]` when variadic). The schema owns coercion, defaults, requiredness, choices, and validation, so `type`, `required`, `default`, `choices`, and `parse` are unavailable. Its output type reaches the Command Action. TypeScript rejects a schema whose input type cannot accept a present value (`z.number()` instead of `z.coerce.number()`).
 
 ```ts
 const args = [{ name: "port", schema: z.coerce.number().int().min(1) }] as const satisfies ArgsDef;
@@ -61,11 +61,13 @@ const flags = {
 } satisfies FlagsDef;
 ```
 
+A flag cannot set both `required: true` and a `default`: TypeScript rejects it, and so does `.flags()` at runtime (`DEFINITION`, reason `required-default`). A `default` that may be `undefined` keeps `required` in effect when it is.
+
 `env` is consulted by terminal parsing only when the flag has no argv occurrence: argv wins over env, and env wins over `default`. The env value goes through the same conversion as an argv token and satisfies `required`. Help, man pages, and generated skills show `[env: NAME]`, never the value. Structured [`run()`](/docs/api/crust#runpath-input-options) input ignores `env`.
 
 `delimiter` splits string argv occurrences; `env.delimiter` independently splits environment text. Both require `multiple: true` and drop empty segments. Boolean argv switches are never split.
 
-Schema-backed flags set `type: "string" | "boolean"` only to declare whether a value token follows, plus `schema` and the syntax fields `description`, `short`, `aliases`, `multiple`, `env`, `delimiter`, and (boolean only) `noNegate`. The schema receives the raw `string | undefined` or `boolean | undefined`; with `multiple: true` it receives an array when the flag appears and `undefined` when omitted.
+Schema-backed flags set `type: "string" | "boolean"` only to declare whether a value token follows, plus `schema` and the syntax fields `description`, `short`, `aliases`, `multiple`, `env`, `delimiter`, and (boolean only) `noNegate`. The schema receives the raw `string | undefined` or `boolean | undefined`; with `multiple: true` it receives an array when the flag appears and `undefined` when omitted. As for arguments, TypeScript rejects a schema whose input type cannot accept a present value.
 
 ```ts
 const flags = {
@@ -295,7 +297,7 @@ Declared in [`api/extension.ts`](https://github.com/chenxin-yan/crust/blob/main/
 
 A callable `(...args) => Extension` with the handle's `id`. `.factory((extension, ...args) => ...)` keeps the callback's parameters after the handle, including optional and defaulted ones, and infers flags, dependencies, providers, and commands. `define` must return an Extension with the same id, typically a chain on the received handle; otherwise the call throws a `DEFINITION` error (`factory-id-mismatch`).
 
-When annotating a published factory, preserve literal tuples for precise typed invocation, and preserve its metadata keys if it requires root metadata. If only some calls require metadata, annotate the factory with overloads; see [required root metadata](/docs/guide/extensions#required-root-metadata). See [authoring an Extension](/docs/guide/extensions#write-your-own).
+When annotating a published factory, preserve literal tuples for precise typed invocation, and preserve its metadata keys if it requires root metadata. Pass `true` as the last type argument (`Renders`) when it sets a renderer, so `.extend()` can reject a second renderer in the same call; the default, `boolean`, leaves that to the runtime check. If only some calls require metadata, annotate the factory with overloads; see [required root metadata](/docs/guide/extensions#required-root-metadata). See [authoring an Extension](/docs/guide/extensions#write-your-own).
 
 ### `Extension`
 

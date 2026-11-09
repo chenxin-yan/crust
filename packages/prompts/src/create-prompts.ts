@@ -20,7 +20,7 @@ export interface CreatePromptsOptions {
 	 * Per-call `theme` options layer on top; unspecified slots
 	 * fall back to `defaultTheme`.
 	 */
-	readonly theme?: PartialPromptTheme;
+	readonly theme?: PartialPromptTheme | undefined;
 }
 
 /**
@@ -66,7 +66,7 @@ export function createPrompts(options: CreatePromptsOptions = {}): PromptsInstan
 	const overrides = { ...options.theme };
 	// Layer instance overrides under per-call overrides; each prompt merges
 	// the combined partial onto defaultTheme itself.
-	const themed = <O extends { readonly theme?: PartialPromptTheme }>(opts: O): O => ({
+	const themed = <O extends { readonly theme?: PartialPromptTheme | undefined }>(opts: O): O => ({
 		...opts,
 		theme: { ...overrides, ...opts.theme },
 	});

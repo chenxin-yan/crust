@@ -50,6 +50,13 @@ type ShapeEvents<Shape> = typeof commandEvents extends keyof Shape
 		: undefined
 	: undefined;
 
+/** One value a command's async generator action yields; `unknown` for any other command. */
+export type ShapeEvent<Shape> = [Exclude<ShapeEvents<Shape>, undefined>] extends [
+	readonly (infer Event)[],
+]
+	? Event
+	: unknown;
+
 // A generator action always reports `events` on completion; an unknown command may or may not.
 type CompletedEvents<Events extends readonly unknown[] | undefined> = [Events] extends [undefined]
 	? {}
@@ -163,7 +170,7 @@ export type CommandShapeAt<
 type RunSection<Name extends string, Values> = keyof Values extends never
 	? {}
 	: {} extends Values
-		? { [K in Name]?: Values }
+		? { [K in Name]?: Values | undefined }
 		: { [K in Name]: Values };
 
 /** Structured values bound directly against the selected command's definitions; no argv is produced. */
@@ -180,7 +187,7 @@ export type RunInput<Shape extends CommandShape> = RunSection<
 				: NonNullable<RunInputPayload["flags"]>
 			: InputFlags<Shape["flags"]>
 	> & {
-		readonly raw?: readonly string[];
+		readonly raw?: readonly string[] | undefined;
 	};
 
 // Check each prefix separately so JSON compatibility cannot recombine positional branches.
@@ -243,7 +250,7 @@ export type RunInputArguments<Shape extends CommandShape> =
 
 export type RunArguments<Shape extends CommandShape> = readonly [
 	...RunInputArguments<Shape>,
-	options?: InvocationOptions,
+	options?: InvocationOptions<ShapeEvent<Shape>>,
 ];
 
 type KeysOf<T> = T extends unknown ? keyof T : never;
@@ -313,12 +320,12 @@ export interface CommandHandle<Shape extends CommandShape> {
 	run(this: RunWithoutInputThis<Shape, unknown>): Promise<ShapeRunOutcome<Shape>>;
 	run<const Input extends RunInput<Shape> | OmittableRunInput<Shape> = RunInput<Shape>>(
 		input: CheckedRunInput<Shape, Input> | OmittableRunInput<Shape>,
-		options?: InvocationOptions,
+		options?: InvocationOptions<ShapeEvent<Shape>>,
 	): Promise<ShapeRunOutcome<Shape>>;
 	run<const Input>(
 		input: Input,
 		...validation: [Input] extends [CompatibleRunInput<Shape, Input>]
-			? readonly [options?: InvocationOptions]
+			? readonly [options?: InvocationOptions<ShapeEvent<Shape>>]
 			: readonly [invalidInput: never]
 	): Promise<ShapeRunOutcome<Shape>>;
 }

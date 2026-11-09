@@ -226,7 +226,7 @@ function _typecheckPreservesCommandAliasesAndPreParseInputTypes() {
 				mode: { type: "string", choices: ["dev", "prod"], required: true },
 				retries: { type: "string", parse: Number },
 				color: { type: "boolean", default: true },
-				env: { type: "string", required: true, default: "prod" },
+				env: { type: "string", default: "prod" },
 				version: { type: "boolean", noNegate: true },
 			})
 			.action(() => {}),
