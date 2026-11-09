@@ -41,7 +41,7 @@ describe("readJson", () => {
 		await expect(readJson(filePath)).rejects.toMatchObject({
 			name: "CrustStoreError",
 			code: "PARSE",
-			message: expect.stringContaining("Malformed JSON"),
+			message: `Malformed JSON in store file: ${filePath}`,
 			details: { path: filePath },
 			cause: expect.any(SyntaxError),
 		});

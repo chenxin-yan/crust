@@ -116,7 +116,7 @@ type Expect<T extends true> = T;
 		type _Brand = Expect<
 			Equal<
 				CreateStoreOptions<typeof invalidFields>["fields"]["payload"]["FIX_JSON_OUTPUT"],
-				"store schema output must be JSON-compatible data (no Date, Map, bigint, or functions)"
+				"store schema output must be JSON data: objects, arrays, strings, finite numbers, booleans, or null (not Date, Map, Set, bigint, functions, or undefined outside optional properties)"
 			>
 		>;
 	}

@@ -147,7 +147,7 @@ type JsonCompatibleFields<F extends FieldsDef> = {
 		? Exclude<InferOutput<S>, undefined> extends JsonCompatible<Exclude<InferOutput<S>, undefined>>
 			? F[K]
 			: F[K] & {
-					readonly FIX_JSON_OUTPUT: "store schema output must be JSON-compatible data (no Date, Map, bigint, or functions)";
+					readonly FIX_JSON_OUTPUT: "store schema output must be JSON data: objects, arrays, strings, finite numbers, booleans, or null (not Date, Map, Set, bigint, functions, or undefined outside optional properties)";
 				}
 		: F[K];
 };
@@ -283,10 +283,14 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 	fields: F & JsonCompatibleFields<F>;
 
 	/**
-	 * When `true` (the default), persisted keys not present in `fields`
-	 * are dropped on read. Set to `false` to preserve unknown keys.
+	 * What mutations do with persisted keys not present in `fields`.
 	 *
-	 * @default true
+	 * `read()` returns only the declared fields either way. When `false` (the
+	 * default), `write`, `update`, and `patch` keep unknown keys in the file, so
+	 * an older app version or another tool sharing the file never deletes
+	 * fields it does not know. Set to `true` to drop them on the next mutation.
+	 *
+	 * @default false
 	 */
 	pruneUnknown?: boolean;
 
@@ -341,8 +345,9 @@ export type StoreUpdater<TConfig> = (current: TConfig) => NoInfer<TConfig>;
  *
  * Provides `read`, `write`, `update`, `patch`, and `reset` operations for a
  * single typed config object persisted as JSON on the local filesystem.
- * Mutations are not serialized, including overlapping calls in one process.
- * Await mutations sequentially for each file; coordinate multiple processes externally.
+ * `write`, `update`, `patch`, and `reset` on the same file run one at a time in
+ * call order, across store instances in one process, and hold an advisory lock
+ * file (`<name>.json.lock`) across processes.
  *
  * @typeParam TConfig - The inferred config shape from field definitions.
  *
@@ -400,9 +405,9 @@ export interface Store<TConfig> {
 	 * the updater, validates the result, and persists. Invalid current state
 	 * rejects before the callback runs; use `write` or `patch` to initialize or repair.
 	 *
-	 * The final file replacement is atomic, but the read-modify-write sequence
-	 * is not serialized, even within one process. Await mutations sequentially
-	 * to avoid lost updates; coordinate multiple processes externally.
+	 * The read-modify-write runs after earlier mutations of the same file settle
+	 * and under its cross-process lock, so concurrent updates are never lost.
+	 * The final file replacement is atomic.
 	 *
 	 * @param updater - Function receiving current config and returning updated config.
 	 * @returns The persisted config, including schema transformations.
@@ -420,7 +425,8 @@ export interface Store<TConfig> {
 	 * applied but has not undergone full field validation, allowing repairs. The
 	 * merged result is validated before persistence. Explicit `undefined` is rejected
 	 * for defaulted core fields; optional core fields and schema-owned optionality
-	 * remain supported. Await mutations sequentially to avoid lost updates.
+	 * remain supported. Like {@link Store.update}, the read-modify-write is
+	 * serialized and locked.
 	 *
 	 * @param partial - A partial subset of the config to merge in.
 	 * @returns The persisted config, including schema transformations.
