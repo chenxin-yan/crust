@@ -48,7 +48,7 @@
 		"@crustjs/utils": "workspace:^"
 	},
 	"peerDependencies": {
-		"typescript": "^7.0.0"
+		"typescript": ">=5.9.0"
 	},
 	"peerDependenciesMeta": {
 		"typescript": {
