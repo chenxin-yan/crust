@@ -148,8 +148,8 @@ const serve = new Crust("serve").flags({
 - A record with an index signature, such as one built with `Object.fromEntries()`, is checked when the call runs; literal keys beside it or in later `.flags()` calls are still checked by TypeScript, against each other but not against the dynamic flags.
 - Long names, aliases, and `short` spellings must not collide with other flags visible on the command.
 - Names, aliases, and `short` are written without dashes: each must be non-empty, contain no whitespace, and not start with `-`. Names and aliases must also not contain `=`, because `--name=value` splits there. TypeScript rejects literal spellings that break this; dynamic ones throw a `DEFINITION` error, with `reason: "empty-spelling"` for an empty spelling and `"invalid-spelling"` for the rest.
-- One-character names and aliases accept one or two dashes: `aliases: ["P"]` accepts `-P` and `--P`. Help, completion, man, and skills output list both.
-- Boolean flags accept `--no-<spelling>` for the name and every long alias. `noNegate: true` rejects negation with a `PARSE` error and hides it from help, completion, and man output. Names and aliases beginning with `no-` are reserved.
+- One-character names and aliases accept one or two dashes: `aliases: ["P"]` accepts `-P` and `--P`. Generated docs list both.
+- Boolean flags accept `--no-<spelling>` for the name and every long alias. `noNegate: true` rejects negation with a `PARSE` error and hides it from generated docs. Names and aliases beginning with `no-` are reserved.
 - Schema-backed flags still set `type: "string" | "boolean"` to declare whether a value token follows; the schema receives the raw value, including `undefined` when omitted.
 - Flags declared here do not reach subcommands. To share flags with descendants, give them to a [Context](/docs/guide/contexts) and `.provide()` it.
 
@@ -236,7 +236,6 @@ const whoami = new Crust("whoami")
 - A command without an action passes `undefined` to the schema, whose output becomes the result. A `handled` invocation (a flag handler or `noAction` took over) has no result to validate.
 - A later `.output()` replaces the schema. Without `.output()`, results are not validated.
 - The command's [`CommandSnapshot`](/docs/api/types#commandsnapshot) has `output: true` and, when the schema can produce one, its output JSON Schema in `outputSchema` (see [`standardJsonSchema()`](/docs/modules/core#tooling-subpath)).
-- Declaring `.output()` tells [`json()`](/docs/modules/extensions/json#text-printed-with-stdout) the result is the command's output, so under `--json` the text it prints with `stdout()` is dropped in favor of the JSON.
 
 ## `.action(action)`
 
@@ -285,7 +284,7 @@ The recipe sees the Contexts and Context-owned flags available before the call, 
 
 ## `.snapshot()`
 
-Resolves to a frozen [`CommandSnapshot`](/docs/api/types#commandsnapshot) for tooling such as help, man-page, skill, and build generators. It materializes all pending command recipes and Extension contributions and validates the full tree, including inherited flags, Context demands, and documentation sections, without calling Command Actions. Use it to catch deferred definition errors before accepting invocations; it rejects if validation fails.
+Resolves to a frozen [`CommandSnapshot`](/docs/api/types#commandsnapshot) for tooling such as documentation and build generators. It materializes all pending command recipes and Extension contributions and validates the full tree, including inherited flags, Context demands, and documentation sections, without calling Command Actions. Use it to catch deferred definition errors before accepting invocations; it rejects if validation fails.
 
 ```ts
 const snapshot = await app.snapshot();
@@ -305,7 +304,7 @@ Editors complete command names, argument and flag names, and the action's result
 
 - Values bind directly against definitions without producing argv, then flow through parsers, schemas, Contexts, and the action. Custom parsers and schemas still receive their raw input, usually strings.
 - Supplied positionals must form a prefix. `undefined` means omitted. An empty `multiple` array means zero occurrences.
-- Structured input binding never reads `process.env`, so a flag's `env` fallback does not apply. Only [`.execute()`](#executeoptions) uses flag environment fallbacks. Contexts such as [`@crustjs/env`](/docs/modules/env) can still read the environment when pulled.
+- Structured input binding never reads `process.env`, so a flag's `env` fallback does not apply. Only [`.execute()`](#executeoptions) uses flag environment fallbacks. Contexts can still read the environment when pulled.
 - TypeScript rejects unknown argument, flag, and top-level keys, including in inputs held in variables. Keys set to `undefined` count as omitted. At runtime, unknown argument or flag keys return a failed outcome before the action runs.
 - `raw` reaches the action as `rawArgs`, like tokens after `--` that no declared argument consumed. It never fills `args`.
 - The path alone selects the command. Unknown path segments return a `COMMAND_NOT_FOUND` failure, even when the nearest parent has an action.

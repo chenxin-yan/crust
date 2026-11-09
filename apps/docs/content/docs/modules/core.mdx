@@ -98,11 +98,7 @@ The [tooling entry point](https://github.com/chenxin-yan/crust/blob/main/package
 
 ### Installed command names
 
-An installed command name uses letters, digits, `.`, `_`, and `-`, and starts with a letter or digit. It is checked by:
-
-- `crust build`, for `bin` keys
-- `create-crust`, for project names
-- `completion()`, for the root command name, which `crust build` requires to match the installed command
+An installed command name uses letters, digits, `.`, `_`, and `-`, and starts with a letter or digit. Use it to check a name before installing a command under it.
 
 ### Flag values without argv
 
@@ -111,15 +107,34 @@ An installed command name uses letters, digits, `.`, `_`, and `-`, and starts wi
 - Invalid definitions reject with `DEFINITION`; bad values reject with `PARSE` or `VALIDATION`.
 - Core's messages name the variable, never its value. Standard Schema issue messages are the validator's own and may quote it.
 
-[`@crustjs/env`](/docs/modules/env) builds on it and redacts every failure.
-
 ### Command input as JSON
 
 `commandInputSchema(command, path)` describes a command's input as one flat JSON object: every arg and flag by name, plus `raw` for the passthrough values the action receives as `rawArgs`.
 
-- It throws, naming `path`, when an arg and a flag share a name or a definition is named `raw`.
-- [`@crustjs/mcp`](/docs/modules/mcp#tools) advertises it as each tool's `inputSchema`; that page lists how each definition maps, including Standard Schemas.
-- [`input()`](/docs/modules/extensions/input) accepts the same object from `--input`, and [`schema()`](/docs/modules/extensions/schema) prints it.
+It throws, naming `path`, when an arg and a flag share a name or a definition is named `raw`.
+
+| Definition                     | Schema                                                                                                              |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `type: "string"` / `"path"`    | `{ type: "string" }`                                                                                                |
+| `type: "number"` / `"boolean"` | `{ type: "number" }` / `{ type: "boolean" }`                                                                        |
+| `type: "url"`                  | `{ type: "string", format: "uri" }`; the string becomes a `URL` before `run()`                                      |
+| `type: "json"`                 | `{}` (any JSON)                                                                                                     |
+| `choices`                      | `{ type: "string", enum }`                                                                                          |
+| `variadic` / `multiple`        | `{ type: "array", items }`                                                                                          |
+| `required` without `default`   | listed in `required`                                                                                                |
+| Standard Schema                | Its input JSON Schema when `run()` accepts that shape; otherwise the declared token type (`string` for schema args) |
+| custom `parse`                 | The declared token type; the command validates and transforms when it runs                                          |
+| every command                  | `raw: { type: "array", items: { type: "string" } }`, delivered to the action as `rawArgs`                           |
+
+Standard Schema definitions:
+
+- Their input JSON Schema comes from the schema's converter (Zod 4.2+, ArkType 2.1.28+, Valibot through `toStandardJsonSchema()`); see [`standardJsonSchema()`](#json-schema-from-a-standard-schema).
+- Schema-backed values reach `run()` as their token: a string, or a boolean for `type: "boolean"` flags. So the JSON Schema is used, without `$schema`, only when its top-level `type` is that token type (or `array` of it, without `prefixItems`, for `variadic` and `multiple`) and it has no `$ref`, `$defs`, or other `$` keyword.
+- `z.enum([...])`, `z.string().min(3)`, and `z.url()` keep their `enum`, `minLength`, and `format`. `z.coerce.number()` (JSON Schema `number`) falls back to `{ type: "string" }`, since a JSON number would fail the string binding.
+- The definition's `description` fills in when the JSON Schema has none.
+- Schema-owned requiredness is invisible: schema-backed definitions are advertised as optional. A custom `parse` definition keeps its declared `required`.
+
+Defaults are advertised as `JSON.stringify` copies: `URL`s become strings, and nested `undefined`, functions, and symbols are dropped. Defaults that fail to serialize or hold non-finite numbers are omitted. Either way, `run()` still applies the declared default.
 
 `parseCommandInput(command, values)` turns such an object back into `run()` input; `run()` then validates it like any structured invocation.
 

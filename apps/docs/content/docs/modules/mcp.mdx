@@ -66,33 +66,7 @@ The tool name is the canonical command path joined with `_` (`deploy api` become
 - two commands map to one name, such as `a_b` and `a b`, or the root and a subcommand named after it
 - a name breaks the MCP tool-name rule: 1–128 characters of `A-Z a-z 0-9 _ - .`
 
-Each tool's `inputSchema` is one flat object built from the snapshot by [`commandInputSchema()`](/docs/modules/core#tooling-subpath), and call arguments go back through `parseCommandInput()`:
-
-| Definition                     | Schema                                                                                                              |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| `type: "string"` / `"path"`    | `{ type: "string" }`                                                                                                |
-| `type: "number"` / `"boolean"` | `{ type: "number" }` / `{ type: "boolean" }`                                                                        |
-| `type: "url"`                  | `{ type: "string", format: "uri" }`; the string becomes a `URL` before `run()`                                      |
-| `type: "json"`                 | `{}` (any JSON)                                                                                                     |
-| `choices`                      | `{ type: "string", enum }`                                                                                          |
-| `variadic` / `multiple`        | `{ type: "array", items }`                                                                                          |
-| `required` without `default`   | listed in `required`                                                                                                |
-| Standard Schema                | Its input JSON Schema when `run()` accepts that shape; otherwise the declared token type (`string` for schema args) |
-| custom `parse`                 | The declared token type; the command validates and transforms when it runs                                          |
-| every tool                     | `raw: { type: "array", items: { type: "string" } }`, delivered to the action as `rawArgs`                           |
-
-Standard Schema definitions:
-
-- Their input JSON Schema comes from the schema's converter (Zod 4.2+, ArkType 2.1.28+, Valibot through `toStandardJsonSchema()`); see [`standardJsonSchema()`](/docs/modules/core#json-schema-from-a-standard-schema).
-- Schema-backed values reach `run()` as their token: a string, or a boolean for `type: "boolean"` flags. So the JSON Schema is advertised, without `$schema`, only when its top-level `type` is that token type (or `array` of it, without `prefixItems`, for `variadic` and `multiple`) and it has no `$ref`, `$defs`, or other `$` keyword.
-- `z.enum([...])`, `z.string().min(3)`, and `z.url()` keep their `enum`, `minLength`, and `format`. `z.coerce.number()` (JSON Schema `number`) falls back to `{ type: "string" }`, since a JSON number would fail the string binding.
-- The definition's `description` fills in when the JSON Schema has none.
-- Schema-owned requiredness is invisible: schema-backed definitions are advertised as optional. A custom `parse` definition keeps its declared `required`.
-
-Other rules:
-
-- An arg and a flag with the same name, or a definition named `raw`, are rejected.
-- Defaults are advertised as `JSON.stringify` copies: `URL`s become strings, and nested `undefined`, functions, and symbols are dropped. Defaults that fail to serialize or hold non-finite numbers are omitted. Either way, `run()` still applies the declared default.
+Each tool's `inputSchema` comes from [`commandInputSchema()`](/docs/modules/core#command-input-as-json), and call arguments go back through `parseCommandInput()`.
 
 ## Results
 

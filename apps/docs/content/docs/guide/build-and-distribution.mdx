@@ -272,7 +272,7 @@ Runtime packages can be archived too, but must keep the layout of `.crust/root/`
 
 Create `templates/` in your project, then build. Read the shipped copy with [`resolveArtifactDir("templates")`](/docs/api/crust#resolveartifactdirname) from `@crustjs/core`, not a path relative to the working directory. It works from the staged tree, an npm install, or a standalone executable.
 
-Extensions such as `man()`, `skill()`, and `completion()` generate their own directories during build preparation. Preparation runs your entry module's top-level code, but not Command Actions. `--no-validate` skips preparation **and those directories**; see [Extension artifacts](/docs/modules/crust#extension-artifacts).
+Extensions can generate their own directories during build preparation. Preparation runs your entry module's top-level code, but not Command Actions. `--no-validate` skips preparation **and those directories**; see [Extension artifacts](/docs/modules/crust#extension-artifacts).
 
 ### Keep dependencies external
 

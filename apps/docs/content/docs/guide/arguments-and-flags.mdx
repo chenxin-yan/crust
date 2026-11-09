@@ -82,10 +82,12 @@ Tokens after `--` are never parsed as flags. Use them for wrapper commands that 
 - A variadic argument takes all of them.
 - The rest reach the Command Action as `rawArgs`.
 
+{/* TODO: remove once https://github.com/oven-sh/bun/issues/13984 ships; see the matching TODO in packages/core/src/command/invocation.ts. */}
+
 <Callout type="warn">
-  When Bun runs a script, such as `bun src/cli.ts` or a Bun runtime package, it drops a `--` that is
-  the first argument: `wrap -- --watch src` reaches the CLI as `wrap --watch src`. Standalone
-  binaries and Node.js keep it. Under Bun, write `-- --` in that position.
+  Bun currently drops a leading `--` when it runs a script
+  ([oven-sh/bun#13984](https://github.com/oven-sh/bun/issues/13984)), so `bun src/cli.ts -- --watch`
+  arrives as `--watch`. Node.js and standalone binaries are unaffected. Under Bun, write `-- --`.
 </Callout>
 
 ## Flags
@@ -195,7 +197,7 @@ publishing to jsr tags=undefined
 - **Validation:** environment text goes through the same `type` conversion, `choices`, `parse`, and schemas as argv.
 - **Booleans:** `true` or `1` is true; any other value is false. A `noNegate` flag rejects a false value, as it rejects `--no-<name>`.
 - **Invalid values:** an invalid argv value fails instead of trying env; an invalid environment value, including a blank `PORT=` for a number flag, fails instead of using the default. Neither blocks `--help` or `--version`.
-- **Help:** help, man pages, and skills list the variable as `[env: PUBLISH_TOKEN]`, never its value.
+- **Docs:** generated documentation lists the variable as `[env: PUBLISH_TOKEN]`, never its value.
 - **Programmatic calls:** [`run()`](/docs/api/crust#runpath-input-options) never reads the environment.
 - **Arguments:** positional arguments have no `env`; use a flag.
 
@@ -221,14 +223,6 @@ publishing to npm tags=latest,beta,next
 - Empty segments are dropped. Zero values after splitting follow the usual default, required, and schema rules, but an argv occurrence still wins over the environment.
 - [`run()`](/docs/api/crust#runpath-input-options) takes arrays and never splits them.
 - Boolean argv stays `--flag` / `--no-flag`. Repeated booleans can split environment text such as `true,false` with `env: { name: "FEATURES", delimiter: "," }`.
-
-### Secrets
-
-Read a secret such as an API token from an `env` variable, like `PUBLISH_TOKEN` above, not from argv, where it lands in shell history and process listings.
-
-- Crust's own value errors [never print values](/docs/guide/error-handling#errors-never-echo-values); they name the flag and its variable.
-- Messages from your own `parse` functions and schemas are your text, so keep values out of them.
-- Don't pass tokens to [`nextSteps`](/docs/modules/extensions/next-steps): steps print as command lines.
 
 ### Values that start with `-`
 

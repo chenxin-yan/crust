@@ -105,14 +105,14 @@ setup → handle → preRun → validation → action → postRun
   ../../../examples/guide/extensions-hooks.ts
 </include>
 
-| Hook        | Runs                                                                   | Use it for                                                                            |
-| ----------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `setup`     | Every invocation, in `.extend()` order, before any handler             | Process settings such as color or log level                                           |
-| `.handle()` | When its flag is passed; ends the invocation as `handled`              | Flags that take over, like `--help`                                                   |
-| `noAction`  | The command has no action and no handler took over; ends `handled`     | Fallbacks such as help for a command group                                            |
-| `preRun`    | Only when the action will run, in `.extend()` order, before validation | Login checks, deprecation warnings                                                    |
-| `postRun`   | After every invocation that reached hooks, in reverse order            | Reporting the outcome                                                                 |
-| `onError`   | `execute()` failures, in `.extend()` order                             | Custom error output; see [Error handling](/docs/guide/error-handling#suggest-the-fix) |
+| Hook        | Runs                                                                   | Use it for                                                                                   |
+| ----------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `setup`     | Every invocation, in `.extend()` order, before any handler             | Process settings such as color or log level                                                  |
+| `.handle()` | When its flag is passed; ends the invocation as `handled`              | Flags that take over, like `--help`                                                          |
+| `noAction`  | The command has no action and no handler took over; ends `handled`     | Fallbacks such as help for a command group                                                   |
+| `preRun`    | Only when the action will run, in `.extend()` order, before validation | Login checks, deprecation warnings                                                           |
+| `postRun`   | After every invocation that reached hooks, in reverse order            | Reporting the outcome                                                                        |
+| `onError`   | `execute()` failures, in `.extend()` order                             | Custom error output; see [Error handling](/docs/guide/error-handling#customize-error-output) |
 
 - **`setup`:** every setup runs, so setups must not depend on each other. Register cleanup with `ctx.defer()`, as in a Context's setup. It runs after `postRun` hooks, in reverse order together with Context cleanup, including after a failure.
 - **`preRun`:** never runs for `--help`, `--version`, or `noAction`. Throw to fail the invocation; `preRun` can't end it successfully.

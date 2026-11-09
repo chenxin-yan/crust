@@ -19,7 +19,7 @@ npx create-crust@latest my-cli
 cd my-cli
 ```
 
-The initializer asks for a runtime (Bun or Node.js), a build output, and whether to install dependencies and initialize Git. Pass [options](#create-crust-options) to skip the prompts.
+The initializer asks for a runtime (Bun or Node.js), a build output, and whether to install dependencies and initialize Git. Pass [flags](https://github.com/chenxin-yan/crust/tree/main/packages/create-crust#options) to skip the prompts.
 
 <Files>
   <Folder name="my-cli" defaultOpen>
@@ -107,25 +107,6 @@ npm is optional: standalone binaries embed their runtime and can also ship as [r
 
 </Step>
 </Steps>
-
-## `create-crust` options
-
-`create-crust` prompts for every option you don't pass. Without an interactive terminal, prompts take their defaults.
-
-```npm
-npx create-crust@latest my-cli --runtime node --artifact binary --no-git
-```
-
-| Option                          | Default                                 | Effect                                                                                                                                                                |
-| ------------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `[directory]`                   | prompt, `my-cli`                        | Destination. Its basename (the current directory's for `.`) becomes the package and command name: letters, digits, `.`, `_`, and `-`, starting with a letter or digit |
-| `--runtime`                     | `bun`                                   | `bun` or `node`: the runtime used by the `dev` and `start` scripts and by `crust build`; saved as `crust.runtime` in `package.json`                                   |
-| `--artifact`                    | `binary` for Bun, `package` for Node.js | `binary`: a standalone executable with the runtime embedded. `package`: a JavaScript bundle that needs the runtime installed. Saved as `crust.artifact`               |
-| `--install`, `--no-install`     | install                                 | Install dependencies with the detected package manager                                                                                                                |
-| `--git`, `--no-git`             | initialize                              | Initialize a Git repository; skipped inside an existing one                                                                                                           |
-| `--overwrite`, `--no-overwrite` | prompt, don't overwrite                 | When the destination exists (or the current directory is not empty), overwrite conflicting files or abort                                                             |
-
-Scripts in the next steps and generated README use the package manager detected from the destination's lockfiles, then the one running `create-crust`, defaulting to npm. Node.js binaries have extra build requirements; see [Build and distribution](/docs/guide/build-and-distribution#nodejs-binaries).
 
 ## Manual setup
 

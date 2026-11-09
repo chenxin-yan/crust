@@ -19,8 +19,8 @@ Hello!
 <Callout>
   Print with the action's `stdout(text)` and `stderr(text)`, not `console.log` or
   `process.stdout.write`. Only that output is captured by
-  [`run()`](/docs/api/crust#runpath-input-options), [tests](/docs/guide/testing), and [MCP
-  tools](/docs/modules/mcp), and kept in order with Crust's own output, such as rendered errors.
+  [`run()`](/docs/api/crust#runpath-input-options), and [tests](/docs/guide/testing), and kept in
+  order with Crust's own output, such as rendered errors.
 </Callout>
 
 Add subcommands in either way, or mix both in one app:
@@ -72,7 +72,7 @@ See the [`defineCommand()` options](/docs/api/crust#definecommandname-config-rec
   ../../../examples/guide/commands-split-files/app.ts
 </include>
 
-Set the CLI's name and description here, along with shared [Extensions](/docs/guide/extensions) such as `help()`.
+Set the CLI's name and description here, along with shared [Extensions](/docs/guide/extensions).
 
 </Step>
 <Step>
@@ -115,8 +115,8 @@ Exit codes:
   1  Deploy failed
 ```
 
-- A section renders on its own command only, in help, [manual pages](/docs/modules/man), and [skills](/docs/modules/skills).
-- Limit it to some of those with `only` or `except`; see [`CommandSectionInput`](/docs/api/types#commandsectioninput).
+- A section renders on its own command only, in every Extension that documents commands.
+- Limit it to some of them with `only` or `except`; see [`CommandSectionInput`](/docs/api/types#commandsectioninput).
 - [Contexts](/docs/guide/contexts#documentation-owned-by-a-context) and [Extensions](/docs/guide/extensions#command-sections) can add sections too.
 
 ## Run commands from code
@@ -139,7 +139,7 @@ To report progress to programs while a command works, write its action as an `as
   ../../../examples/guide/commands-stream.ts
 </include>
 
-Events are for programs: Crust never prints them. A terminal user sees only the action's `stdout(text)` and `stderr(text)`. To print events, add [`json()`](/docs/modules/extensions/json#generator-actions): with `--json`, events and the result stream as NDJSON on stdout.
+Events are for programs: Crust never prints them. A terminal user sees only the action's `stdout(text)` and `stderr(text)`.
 
 - **Delivery:** each event goes live to the selected [renderer's](/docs/guide/extensions#renderers) `event`, if any, then to `options.onEvent` of `run()` or `execute()`. The action pauses at each `yield` until both return.
 - **Outcome:** `run()` collects every event in `outcome.events`, typed from the yields, whether the command completes or fails mid-stream. Ordinary actions have no `events`.

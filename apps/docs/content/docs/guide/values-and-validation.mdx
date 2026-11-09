@@ -135,6 +135,4 @@ A command can declare what its action returns with `.output(schema)`, using the 
 - **Rejected results:** fail with the `OUTPUT` code: `execute()` exits `1` and `run()` returns a failed outcome. This is a bug in the command, not in the user's input.
 - **Tooling:** the command's snapshot carries the output as JSON Schema in `outputSchema` when the schema can produce it. Zod 4.2+ and ArkType 2.1.28+ can; Valibot needs `toStandardJsonSchema()` from `@valibot/to-json-schema`.
 
-Declaring `.output()` also tells [`json()`](/docs/modules/extensions/json#text-printed-with-stdout) that the result _is_ the command's output, so under `--json` your printed text is dropped in favor of the JSON.
-
 Without `.output()`, results are neither validated nor described. See [`.output()`](/docs/api/crust#outputschema).
