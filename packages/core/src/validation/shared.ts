@@ -207,9 +207,21 @@ type SchemaTokens<T> = T extends { variadic: true }
 // An input narrower than the token (an enum, a literal) is validation, so overlap is enough.
 type AcceptsTokens<V, Input> = [V] extends [Input]
 	? true
-	: [Extract<Input, V extends readonly (infer E)[] ? readonly E[] : V>] extends [never]
+	: [V] extends [readonly (infer E)[]]
+		? true extends AcceptsTokenElements<E, Extract<Input, readonly unknown[]>>
+			? true
+			: false
+		: [Extract<Input, V>] extends [never]
+			? false
+			: true;
+
+// Per position: a fixed tuple (`[unknown, unknown]` from coercing members) neither extends
+// the token array nor contains it, yet overlaps it when every position accepts a token.
+type AcceptsTokenElements<E, A> = A extends readonly unknown[]
+	? false extends { [I in keyof A]: AcceptsTokens<E, A[I]> }[number]
 		? false
-		: true;
+		: true
+	: never;
 
 type SchemaInputMessage<T> = T extends { variadic: true } | { multiple: true }
 	? `schema input must accept ${SchemaTokenName<T>}[]; use an array schema`

@@ -42,6 +42,16 @@ function _typecheckSchemaInputAcceptsTheParserValue() {
 			port: { type: "string", schema: port() },
 		});
 
+	// a fixed-length tuple overlaps the token array when every position accepts a token
+	const coercedPair = z.tuple([z.coerce.number(), z.coerce.number()]);
+	const mixedPair = z.tuple([z.union([z.string(), z.number()]), z.enum(["a", "b"])]);
+	new Crust("cli").args({ name: "pair", variadic: true, schema: coercedPair }).flags({
+		pair: { type: "string", multiple: true, schema: coercedPair },
+		mixed: { type: "string", multiple: true, schema: mixedPair },
+		switches: { type: "boolean", multiple: true, schema: z.tuple([z.boolean(), z.literal(true)]) },
+	});
+	new Crust("cli").args({ name: "mixed", variadic: true, schema: mixedPair });
+
 	// @ts-expect-error -- receives a string token
 	new Crust("cli").args({ name: "n", schema: z.number() });
 	// @ts-expect-error -- a variadic receives string[]
@@ -65,6 +75,24 @@ function _typecheckSchemaInputAcceptsTheParserValue() {
 	new Crust("cli").flags({
 		// @ts-expect-error -- a multiple flag receives string[]
 		tag: { type: "string", multiple: true, schema: z.string().optional() },
+	});
+	new Crust("cli").flags({
+		// @ts-expect-error -- a tuple position must accept a string token
+		pair: { type: "string", multiple: true, schema: z.tuple([z.number()]) },
+	});
+	new Crust("cli").flags({
+		// @ts-expect-error -- every tuple position must accept a string token
+		pair: { type: "string", multiple: true, schema: z.tuple([z.coerce.number(), z.number()]) },
+	});
+	// @ts-expect-error -- a variadic tuple position must accept a string token
+	new Crust("cli").args({
+		name: "pair",
+		variadic: true,
+		schema: z.tuple([z.string(), z.number()]),
+	});
+	new Crust("cli").flags({
+		// @ts-expect-error -- a boolean tuple position must accept a boolean token
+		on: { type: "boolean", multiple: true, schema: z.tuple([z.string()]) },
 	});
 	// @ts-expect-error -- reusable definitions are checked too
 	defineFlag({ type: "string", schema: z.number() });
