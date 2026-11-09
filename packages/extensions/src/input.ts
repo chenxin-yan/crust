@@ -55,13 +55,21 @@ export const input: ExtensionFactory<[], {}, [], typeof inputFlags> =
 			// Setup, not preRun: setups all run before the first preRun, so no check misses the values.
 			.setup(async (context) => {
 				if (typeof context.flags.input !== "string") return;
-				const text = await readInput(context.flags.input, context.signal);
+				const inputValue = context.flags.input;
+				const text = await readInput(inputValue, context.signal);
 				let values: unknown;
 				try {
 					values = JSON.parse(text);
-				} catch (cause) {
-					const reason = cause instanceof Error ? cause.message : String(cause);
-					throw new CrustError("PARSE", `--input: invalid JSON (${reason})`).withCause(cause);
+				} catch {
+					// No engine reason or cause: newer engines quote a snippet of the input.
+					throw new CrustError(
+						"PARSE",
+						inputValue === "-"
+							? "--input: invalid JSON from stdin."
+							: inputValue.startsWith("@")
+								? `--input: invalid JSON in "${inputValue.slice(1)}".`
+								: "--input: invalid inline JSON.",
+					);
 				}
 				if (typeof values !== "object" || values === null || Array.isArray(values)) {
 					throw new CrustError(

@@ -146,7 +146,7 @@ describe("input", () => {
 	});
 
 	it.each([
-		["unparseable JSON", "{target", /^--input: invalid JSON \(/],
+		["unparseable JSON", '{"token":"s3cr3t', /^--input: invalid inline JSON\.$/],
 		[
 			"a JSON array",
 			'["prod"]',
@@ -167,6 +167,18 @@ describe("input", () => {
 		expect((error as CrustError).message).toMatch(message);
 	});
 
+	it("names a malformed @file without quoting its JSON or attaching the parse error", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "crust-input-"));
+		tempDirs.push(dir);
+		const file = join(dir, "input.json");
+		writeFileSync(file, '{"token":"s3cr3t');
+
+		const error = await failure(`@${file}`);
+
+		expect(error).toMatchObject({ code: "PARSE", message: `--input: invalid JSON in "${file}".` });
+		expect((error as Error).cause).toBeUndefined();
+	});
+
 	it("reports unknown keys and mistyped values as the structured binder does", async () => {
 		expect(await failure('{"target":"prod","nope":1}')).toMatchObject({
 			code: "PARSE",
@@ -174,7 +186,7 @@ describe("input", () => {
 		});
 		expect(await failure('{"target":"prod","force":"yes"}')).toMatchObject({
 			code: "PARSE",
-			message: "Expected boolean for --force",
+			message: "Expected a boolean for --force.",
 		});
 	});
 
@@ -335,7 +347,7 @@ describe("input", () => {
 			timeout: 10_000,
 		});
 
-		expect(run.stderr).toContain("--input: invalid JSON");
+		expect(run.stderr).toContain("--input: invalid JSON from stdin.");
 		expect(run.status).toBe(1);
 	});
 
