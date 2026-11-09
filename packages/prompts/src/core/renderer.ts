@@ -6,6 +6,7 @@ import * as readline from "node:readline";
 
 import { stringWidth } from "@crustjs/style";
 import {
+	getProcessTerminalSignal,
 	getTerminalIO,
 	getTerminalSignal,
 	type TerminalIO,
@@ -361,27 +362,27 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Pr
 				output.write("\n");
 				cleanup();
 				const cancelled = new DOMException("Prompt was cancelled.", "AbortError");
-				// Raw mode turns Ctrl+C into a keypress. When a SIGINT owner (Crust's execute()) is
-				// listening on the real terminal, deliver the signal too, so it cancels the run and the
-				// process ends by SIGINT like a Ctrl+C anywhere else (shell loops stop). Without an
-				// owner the signal would kill outright, so standalone prompts keep only the rejection;
+				// Raw mode turns Ctrl+C into a keypress. Inside Crust's terminal execute(), which owns
+				// SIGINT on the real terminal, deliver the signal too, so it cancels the run and the
+				// process ends by SIGINT like a Ctrl+C anywhere else (shell loops stop). Elsewhere a
+				// SIGINT listener may be a library like signal-exit that re-raises and kills, so
+				// prompts outside execute() keep only the rejection, as other prompt libraries do;
 				// on Windows process.kill() always terminates.
 				if (
 					process.platform === "win32" ||
 					stdin !== process.stdin ||
+					signal === undefined ||
+					signal.aborted ||
+					signal !== getProcessTerminalSignal() ||
 					process.listenerCount("SIGINT") === 0
 				) {
-					reject(cancelled);
+					reject(signal?.aborted ? signal.reason : cancelled);
 					return;
 				}
 				process.kill(process.pid, "SIGINT");
-				if (!signal || signal.aborted) {
-					reject(signal?.reason ?? cancelled);
-					return;
-				}
 				// Node delivers the signal on a later event-loop turn; rejecting first would let the
-				// run finish before the owner sees it. Settle when the owner aborts the signal, or
-				// shortly after if this signal isn't the one it aborts.
+				// run finish before execute() sees it. Settle when execute() aborts the signal, or
+				// shortly after if another listener took the signal first.
 				const fallback = setTimeout(() => {
 					signal.removeEventListener("abort", onOwnerAbort);
 					reject(cancelled);

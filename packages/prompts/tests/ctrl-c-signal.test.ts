@@ -15,8 +15,12 @@ beforeAll(() => {
 	}
 });
 
+const utilsTerminal = join(promptsPkg, "../utils/dist/terminal.js");
+
+// OWNER=crust: like Crust's execute(), a SIGINT listener aborts the process-wide terminal signal.
+// OWNER=foreign: a SIGINT listener outside execute(), such as signal-exit.
 const PROBE = `import { input } from ${JSON.stringify(join(promptsPkg, "dist/index.js"))};
-// Like Crust's execute(): the SIGINT owner aborts the signal the prompt was given.
+import { withProcessTerminalSignal } from ${JSON.stringify(utilsTerminal)};
 const controller = new AbortController();
 if (process.env.OWNER) {
 	process.on("SIGINT", () => {
@@ -24,8 +28,10 @@ if (process.env.OWNER) {
 		controller.abort(new DOMException("Interrupted by SIGINT.", "AbortError"));
 	});
 }
+const prompt = () => input({ message: "Name?" });
 try {
-	await input({ message: "Name?" }, { signal: controller.signal });
+	if (process.env.OWNER === "crust") await withProcessTerminalSignal(controller.signal, prompt);
+	else await prompt();
 } catch (error) {
 	console.log(\`rejected \${error.name}: \${error.message}\`);
 }
@@ -53,11 +59,11 @@ console.log(JSON.stringify({ code, signal: proc.signalCode, out }));
 
 function ctrlC(
 	runtime: string,
-	owner: boolean,
+	owner?: "crust" | "foreign",
 ): { code: number; signal: string | null; out: string } {
 	const result = spawnSync(bun!, ["-e", DRIVER], {
 		encoding: "utf8",
-		env: { ...process.env, PROBE, RUNTIME: runtime, ...(owner && { OWNER: "1" }) },
+		env: { ...process.env, PROBE, RUNTIME: runtime, ...(owner && { OWNER: owner }) },
 		timeout: 15_000,
 	});
 	return JSON.parse(result.stdout);
@@ -68,16 +74,23 @@ const runtimes = bun ? [bun, ...(which("node") ? ["node"] : [])] : [];
 describe.skipIf(!bun || process.platform === "win32").each(runtimes)(
 	"Ctrl+C in a prompt (%s)",
 	(runtime) => {
-		// Node delivers a self-sent signal on a later turn, so the prompt must wait for the owner.
-		it("delivers SIGINT to the owner and rejects with the owner's abort reason", () => {
-			const { code, out } = ctrlC(runtime, true);
+		// Node delivers a self-sent signal on a later turn, so the prompt waits for execute()'s abort.
+		it("inside execute(), delivers SIGINT and rejects with its abort reason", () => {
+			const { code, out } = ctrlC(runtime, "crust");
 			expect(out).toContain("owner got SIGINT");
 			expect(out).toContain("rejected AbortError: Interrupted by SIGINT.");
 			expect(code).toBe(0);
 		});
 
+		it("outside execute(), leaves a foreign SIGINT listener alone and only rejects", () => {
+			const { code, signal, out } = ctrlC(runtime, "foreign");
+			expect(out).toContain("rejected AbortError: Prompt was cancelled.");
+			expect(out).not.toContain("owner got SIGINT");
+			expect({ code, signal }).toEqual({ code: 0, signal: null });
+		});
+
 		it("only rejects when nothing owns SIGINT", () => {
-			const { code, signal, out } = ctrlC(runtime, false);
+			const { code, signal, out } = ctrlC(runtime);
 			expect(out).toContain("rejected AbortError: Prompt was cancelled.");
 			expect(out).not.toContain("owner got SIGINT");
 			expect({ code, signal }).toEqual({ code: 0, signal: null });
