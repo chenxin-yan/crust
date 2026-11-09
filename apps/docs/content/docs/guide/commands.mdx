@@ -30,7 +30,7 @@ Add subcommands in either way, or mix both in one app:
 
 ## Grow in one file
 
-`.command(name, callback)` defines a subcommand's flags and action in place. Call `.command()` inside the callback to nest another level.
+`.command(name, config?, callback)` defines a subcommand's flags and action in place. The optional `config` is the same metadata `defineCommand()` takes, such as the `description` help lists. Call `.command()` inside the callback to nest another level.
 
 <include lang="ts" meta='title="src/cli.ts" twoslash'>
   ../../../examples/guide/commands.ts

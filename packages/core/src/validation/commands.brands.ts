@@ -286,6 +286,20 @@ export type LocalSectionsBrand<C> = "sections" extends keyof C
 export type LocalCommandConfigBrand<N extends string, C> = ValidateCommandConfig<N, C> &
 	LocalSectionsBrand<C>;
 
+/** Inline `.command(name, config, recipe)` aliases, checked like `.add()` checks a definition's. */
+export type InlineCommandAliasesBrand<
+	N extends string,
+	C,
+	Existing extends string,
+> = CommandCollisionBrand<NarrowAliases<AliasesOf<C>>, Existing> &
+	(N & AliasMembers<AliasesOf<C>> extends infer Dup extends string
+		? [Dup] extends [never]
+			? {}
+			: {
+					readonly FIX_ALIAS_SHAPE: `Command "${Dup}" must not list its own canonical name as an alias`;
+				}
+		: never);
+
 // Fast path for the common `.add(def)`: one definition with a closed, non-union name. A
 // conditional definition keeps the slow path even when its variants share a name.
 export type AttachedCommandSpellings<Ds extends readonly unknown[]> = [Ds] extends [
