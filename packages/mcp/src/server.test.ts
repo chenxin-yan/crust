@@ -164,7 +164,7 @@ describe("createMcpServer", () => {
 		const wrongType = await client.callTool({ name: "echo", arguments: { word: 1 } });
 		expect(wrongType).toMatchObject({
 			isError: true,
-			content: [{ type: "text", text: "PARSE: Expected string for <word>" }],
+			content: [{ type: "text", text: "PARSE: Expected a string for <word>." }],
 		});
 		const crust = await client.callTool({ name: "fail" });
 		expect(crust).toMatchObject({

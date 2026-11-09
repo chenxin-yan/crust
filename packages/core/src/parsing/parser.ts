@@ -559,6 +559,16 @@ function isOccurrenceArray(value: RunInputValue | undefined): value is readonly 
 	return Array.isArray(value);
 }
 
+/** What a typed value of each type must be, worded like argv's `Expected a number for --port.` */
+const STRUCTURED_EXPECTATIONS: Readonly<Record<ValueType, string>> = {
+	string: "a string",
+	path: "a string",
+	number: "a number",
+	boolean: "a boolean",
+	url: "a URL",
+	json: "a JSON value",
+};
+
 function validateStructuredValue(def: ArgDef | FlagDef, value: RunInputValue, label: string): void {
 	const type = def.schema ? (def.type === "boolean" ? "boolean" : "string") : def.type;
 	let valid: boolean;
@@ -583,7 +593,8 @@ function validateStructuredValue(def: ArgDef | FlagDef, value: RunInputValue, la
 	} else {
 		valid = typeof value === (type === "path" ? "string" : type);
 	}
-	if (!valid) throw new CrustError("PARSE", `Expected ${type} for ${label}`);
+	if (!valid)
+		throw new CrustError("PARSE", `Expected ${STRUCTURED_EXPECTATIONS[type]} for ${label}.`);
 	if (value === false && "noNegate" in def && def.noNegate) {
 		throw new CrustError("PARSE", `Flag "${label}" does not support negation`);
 	}

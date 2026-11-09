@@ -1352,7 +1352,7 @@ describe("Extension named hooks", () => {
 					await app.execute({ argv: [], io: { stderr: (line) => void stderr.push(line) } }),
 				).toBe(1);
 				expect(errors).toEqual([expect.objectContaining({ code: "PARSE" })]);
-				expect(stderr.join("\n")).toContain("Expected number for --port");
+				expect(stderr.join("\n")).toContain("Expected a number for --port.");
 				expect(outcomes).toEqual(["failed"]);
 				expect(actions).toEqual([]);
 			},
@@ -3452,7 +3452,7 @@ describe("value errors never echo the raw value", () => {
 
 	it.each([
 		[{ flags: { mode: SECRET } }, "Invalid value for --mode. Expected one of: fast, safe"],
-		[{ args: { count: SECRET } }, "Expected number for <count>"],
+		[{ args: { count: SECRET } }, "Expected a number for <count>."],
 	] as const)("run() with %j", async (input, message) => {
 		const outcome = await valueApp().app.run([], input as RunInputPayload);
 		expect(outcome).toMatchObject({ status: "failed", error: { message } });

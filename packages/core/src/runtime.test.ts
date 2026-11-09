@@ -49,10 +49,10 @@ describe("runtime structured invocation", () => {
 				// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 				app.run([], { flags: { endpoint: "https://example.com" } }),
 			),
-		).rejects.toThrow("Expected url");
+		).rejects.toThrow("Expected a URL for --endpoint.");
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		await expect(unwrap(app.run([], { flags: { config: [endpoint] } }))).rejects.toThrow(
-			"Expected json",
+			"Expected a JSON value for --config.",
 		);
 	});
 
@@ -83,7 +83,9 @@ describe("runtime structured invocation", () => {
 		});
 		expect(schemas).toBe(0);
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		await expect(unwrap(app.run([], { flags: { config: 3 } }))).rejects.toThrow("Expected string");
+		await expect(unwrap(app.run([], { flags: { config: 3 } }))).rejects.toThrow(
+			"Expected a string for --config.",
+		);
 	});
 });
 
