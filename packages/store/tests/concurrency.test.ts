@@ -46,6 +46,19 @@ await withFileLock(file, async () => {
 }, { operation: "write", staleMs: Number(staleMs) });
 `;
 
+// Holds the lock, then blocks its event loop for `freezeMs` (a suspended or frozen
+// process: no heartbeat) before writing `{ id }` to `<dir>/doc.json`.
+const FROZEN_CHILD_SOURCE = `import { join } from "node:path";
+import { withFileLock, writeJson } from ${JSON.stringify(persistenceEntry)};
+const [dir, id, freezeMs] = process.argv.slice(2);
+const file = join(dir, "doc.json");
+await withFileLock(file, async (assertOwned) => {
+	process.stdout.write("locked\\n");
+	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(freezeMs));
+	await writeJson(file, { id }, { beforeCommit: assertOwned });
+}, { operation: "write", staleMs: 300 });
+`;
+
 function runChild(
 	script: string,
 	args: readonly string[],
@@ -110,6 +123,28 @@ it("keeps a live holder's lock past the stale threshold", { timeout: 60_000 }, a
 	await Promise.all([slow, fast]);
 	expect(readList(dir)).toEqual(["slow", "fast"]);
 });
+
+it(
+	"fails a frozen holder's write once another process took its lock",
+	{ timeout: 60_000 },
+	async () => {
+		const dir = join(workDir, "frozen-holder");
+		mkdirSync(dir);
+		const script = join(workDir, "frozen.ts");
+		writeFileSync(script, FROZEN_CHILD_SOURCE);
+
+		let locked: Promise<void> | undefined;
+		const frozen = runChild(script, [dir, "frozen", "1500"], (child) => {
+			locked = waitForLine(child, "locked");
+		});
+		await locked;
+		const successor = runChild(script, [dir, "successor", "0"]);
+
+		await expect(frozen).rejects.toThrow(/Lost the lock on store file/);
+		await successor;
+		expect(JSON.parse(readFileSync(join(dir, "doc.json"), "utf-8"))).toEqual({ id: "successor" });
+	},
+);
 
 it("recovers a dead owner's lock once among 20 racing processes", { timeout: 90_000 }, async () => {
 	const script = join(workDir, "lock.ts");

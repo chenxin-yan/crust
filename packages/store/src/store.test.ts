@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, utimesSync, writeFileSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -1046,6 +1046,56 @@ describe("concurrent mutations", () => {
 		await utimes(lockPath, longAgo, longAgo);
 		expect(await store.patch({ n: 3 })).toEqual({ n: 3 });
 		expect(await readdir(tempDir)).toEqual(["counter.json"]);
+	});
+
+	it("fails a mutation whose lock it lost instead of writing", async () => {
+		const filePath = join(tempDir, "counter.json");
+		const lockPath = `${filePath}.lock`;
+		const store = counter();
+		await store.write({ n: 1 });
+		const lost = { code: "IO", message: `Lost the lock on store file: ${filePath}` };
+
+		// Another process took the lock over while the updater ran.
+		const successor = JSON.stringify({ pid: process.pid, host: hostname(), token: "successor" });
+		await expect(
+			store.update((current) => {
+				writeFileSync(lockPath, successor);
+				return { n: current.n + 1 };
+			}),
+		).rejects.toMatchObject(lost);
+		expect(await readFile(lockPath, "utf-8")).toBe(successor);
+		await rm(lockPath);
+
+		// The heartbeat stalled for over half the stale threshold, so a waiter may be taking it.
+		await expect(
+			store.update((current) => {
+				const stalled = new Date(Date.now() - 6_000);
+				utimesSync(lockPath, stalled, stalled);
+				return { n: current.n + 1 };
+			}),
+		).rejects.toMatchObject(lost);
+
+		expect(await store.read()).toEqual({ n: 1 });
+		expect(await readdir(tempDir)).toEqual(["counter.json"]);
+	});
+
+	it("removes reclaim markers that crashed processes left behind", async () => {
+		const marker = (name: string) => join(tempDir, `counter.json.lock.${name}`);
+		const dead = JSON.stringify({ pid: 2 ** 31 - 2, host: hostname() });
+		await writeFile(marker("gone.0"), dead);
+		await writeFile(marker("unknown.3"), dead);
+		await writeFile(marker("remote.1"), JSON.stringify({ pid: 1, host: "elsewhere" }));
+		const longAgo = new Date(Date.now() - 60_000);
+		await utimes(marker("remote.1"), longAgo, longAgo);
+		// A live process may still be using this one.
+		await writeFile(marker("busy.0"), JSON.stringify({ pid: process.pid, host: hostname() }));
+
+		await counter().patch({ n: 1 });
+
+		expect((await readdir(tempDir)).toSorted()).toEqual([
+			"counter.json",
+			"counter.json.lock.busy.0",
+		]);
 	});
 
 	it("does not create a missing directory to reset", async () => {

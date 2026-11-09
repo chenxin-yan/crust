@@ -6,6 +6,7 @@ import {
 	chmod,
 	mkdir,
 	open,
+	readdir,
 	readFile,
 	rename,
 	rm,
@@ -27,7 +28,7 @@ import type { StoreDocument } from "./types.ts";
 // WriteJsonOptions — File/directory permission control
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Permission options for {@link writeJson}. */
+/** Permission and commit options for {@link writeJson}. */
 export interface WriteJsonOptions {
 	/**
 	 * Unix permission bits for the persisted file (e.g. `0o600`).
@@ -51,6 +52,13 @@ export interface WriteJsonOptions {
 	 * sets bits that a common umask would clear (e.g. `0o755` under `umask 0o027`).
 	 */
 	directoryMode?: number;
+
+	/**
+	 * Runs immediately before each attempt to rename the temp file into place;
+	 * a rejection aborts the write, leaving the file untouched. Used to confirm the
+	 * caller still holds its {@link withFileLock} lock.
+	 */
+	beforeCommit?: () => Promise<void>;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -160,11 +168,16 @@ async function ensureDirectory(filePath: string, mode: number | undefined): Prom
  *
  * Steps:
  * 1. Creates the parent directory if it does not exist.
- * 2. Writes serialized JSON to a temporary file in the same directory.
- * 3. Renames the temp file to the target path (atomic on most filesystems).
+ * 2. Writes serialized JSON to a temporary file in the same directory and
+ *    flushes it to disk (`fsync`), so a crash after the rename cannot leave an
+ *    empty or partial file in place.
+ * 3. Runs `beforeCommit`, then renames the temp file to the target path (atomic
+ *    on local filesystems). On Windows, a rename blocked by another program's
+ *    open handle (`EPERM`, `EACCES`, `EBUSY`) is retried for a few seconds.
  *
  * If any step fails, the function cleans up the temp file (best-effort) and
- * throws a `CrustStoreError` with `IO` code.
+ * throws a `CrustStoreError` with `IO` code; a `beforeCommit` rejection is
+ * rethrown as is.
  *
  * @param filePath - Absolute path to the target JSON store file.
  * @param data - The value to serialize and persist.
@@ -186,7 +199,13 @@ export async function writeJson(
 
 	try {
 		const json = JSON.stringify(data, null, "\t");
-		await writeFile(tempPath, json, { encoding: "utf-8", mode: fileMode });
+		const handle = await open(tempPath, "w", fileMode);
+		try {
+			await handle.writeFile(json, "utf-8");
+			await handle.sync();
+		} finally {
+			await handle.close();
+		}
 		// Enforce `fileMode` exactly regardless of `umask`. Done on the temp inode
 		// before rename, which preserves the mode — so the final file is never
 		// momentarily world-readable.
@@ -206,9 +225,10 @@ export async function writeJson(
 	}
 
 	try {
-		await rename(tempPath, filePath);
+		await commit(tempPath, filePath, options.beforeCommit);
 	} catch (err: unknown) {
 		await rm(tempPath, { force: true }).catch(() => {});
+		if (err instanceof CommitAborted) throw err.reason;
 
 		throw new CrustStoreError(
 			"IO",
@@ -219,6 +239,42 @@ export async function writeJson(
 			},
 			err,
 		);
+	}
+}
+
+/** How long a rename blocked by another program's open handle is retried on Windows. */
+const RENAME_RETRY_MS = 5_000;
+const MAX_RETRY_DELAY_MS = 100;
+const BUSY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
+
+/** Carries a `beforeCommit` rejection past the rename error wrapping. */
+class CommitAborted {
+	constructor(readonly reason: unknown) {}
+}
+
+/**
+ * Renames `tempPath` over `filePath`, checking `beforeCommit` before every attempt.
+ *
+ * Windows refuses to replace a file another program (antivirus, an indexer, an
+ * editor) holds open without delete sharing; such handles are usually brief.
+ */
+async function commit(
+	tempPath: string,
+	filePath: string,
+	beforeCommit: (() => Promise<void>) | undefined,
+): Promise<void> {
+	const start = Date.now();
+	for (let delay = 1; ; delay = Math.min(delay * 2, MAX_RETRY_DELAY_MS)) {
+		await beforeCommit?.().catch((err: unknown) => {
+			throw new CommitAborted(err);
+		});
+		try {
+			return await rename(tempPath, filePath);
+		} catch (err: unknown) {
+			const busy = isWindows() && isErrnoException(err) && BUSY_CODES.has(err.code ?? "");
+			if (!busy || Date.now() - start >= RENAME_RETRY_MS) throw err;
+		}
+		await sleep(delay);
 	}
 }
 
@@ -233,9 +289,14 @@ export async function writeJson(
  * already-absent file is not an error.
  *
  * @param filePath - Absolute path to the JSON store file to delete.
+ * @param beforeCommit - Runs first; a rejection is rethrown and nothing is deleted.
  * @throws {CrustStoreError} `IO` on filesystem deletion failures other than ENOENT.
  */
-export async function deleteJson(filePath: string): Promise<void> {
+export async function deleteJson(
+	filePath: string,
+	beforeCommit?: () => Promise<void>,
+): Promise<void> {
+	await beforeCommit?.();
 	try {
 		await rm(filePath, { force: true });
 	} catch (err: unknown) {
@@ -261,7 +322,6 @@ export async function deleteJson(filePath: string): Promise<void> {
  * the lock's mtime every quarter of this, however long its mutation takes.
  */
 const STALE_LOCK_MS = 10_000;
-const MAX_RETRY_DELAY_MS = 100;
 
 interface LockOwner {
 	readonly pid: number;
@@ -336,10 +396,12 @@ async function isStaleLock(path: string, contents: string, staleMs: number): Pro
  * deleted by anyone but their holder; a marker whose holder died is bypassed via
  * the next level, which live processes again race for with `wx`.
  *
+ * A marker whose holder died stays until the next lock holder removes it
+ * ({@link removeOrphanMarkers}).
+ *
  * shortcut: a marker holder stalled for longer than `staleMs` between re-read and
- * unlink can still be bypassed and then unlink a successor; a crash inside that
- * window leaves the marker file behind. Both need a process frozen or killed
- * within a few syscalls; upgrade to an OS-level lock if that is ever observed.
+ * unlink can still be bypassed and then unlink a successor. That needs a process
+ * frozen within a few syscalls; upgrade to an OS-level lock if it is ever observed.
  */
 async function removeLock(
 	lockPath: string,
@@ -373,6 +435,31 @@ async function removeLock(
 }
 
 /**
+ * Removes abandoned reclaim markers (`<lock>.<token>.<level>`), so crashes do
+ * not leave files behind.
+ *
+ * Called while holding the lock with `token`. Any other token's lock is gone for
+ * good, so its markers can never authorize an unlink; removing an abandoned
+ * one (judged as {@link removeLock} judges it before bypassing) is as safe as
+ * the bypass itself.
+ */
+async function removeOrphanMarkers(lockPath: string, token: string, staleMs: number) {
+	const dir = dirname(lockPath);
+	const prefix = `${basename(lockPath)}.`;
+	for (const name of await readdir(dir)) {
+		const id = name.slice(prefix.length);
+		if (!name.startsWith(prefix) || !/^[\w-]+\.\d+$/.test(id) || id.startsWith(`${token}.`)) {
+			continue;
+		}
+		const marker = join(dir, name);
+		const held = await readLock(marker);
+		if (held !== undefined && (await isStaleLock(marker, held, staleMs))) {
+			await rm(marker, { force: true });
+		}
+	}
+}
+
+/**
  * Runs `fn` while holding `<filePath>.lock`, an advisory lock shared by every
  * process that uses this function on the same file.
  *
@@ -382,11 +469,17 @@ async function removeLock(
  * is gone or whose heartbeat stopped for 10 seconds. The lock is released after
  * `fn` settles, unless another process already took it over.
  *
+ * `fn` receives `assertOwned`, which rejects unless the lock still holds this
+ * owner's token and was refreshed within half the stale threshold, so no waiter
+ * can be taking it over. Call it immediately before committing any change (see
+ * `beforeCommit` of {@link writeJson}): a holder that was frozen or suspended past
+ * the threshold then fails instead of overwriting its successor's work.
+ *
  * @throws {CrustStoreError} `IO` when the lock file cannot be created or inspected.
  */
 export async function withFileLock<T>(
 	filePath: string,
-	fn: () => Promise<T>,
+	fn: (assertOwned: () => Promise<void>) => Promise<T>,
 	options: FileLockOptions,
 ): Promise<T> {
 	const lockPath = `${filePath}.lock`;
@@ -418,7 +511,7 @@ export async function withFileLock<T>(
 			if (err instanceof CrustStoreError) throw err;
 			if (isErrnoException(err) && err.code === "ENOENT") {
 				// No directory means no store file: nothing to delete, nothing to guard.
-				if (options.operation === "delete") return await fn();
+				if (options.operation === "delete") return await fn(async () => {});
 				await ensureDirectory(filePath, options.directoryMode);
 				continue;
 			}
@@ -439,13 +532,43 @@ export async function withFileLock<T>(
 		delay = Math.min(delay * 2, MAX_RETRY_DELAY_MS);
 	}
 
+	await removeOrphanMarkers(lockPath, owner.token, staleMs).catch(() => {});
+
+	/** Whether the lock holds our token and was refreshed less than `maxAge` ago. */
+	const ownsLock = async (maxAge: number): Promise<boolean> => {
+		// Stat first: if the read then finds our token, the stat saw our lock too.
+		try {
+			if (Date.now() - (await stat(lockPath)).mtimeMs >= maxAge) return false;
+		} catch (err: unknown) {
+			if (isErrnoException(err) && err.code === "ENOENT") return false;
+			throw err;
+		}
+		return (await readLock(lockPath)) === contents;
+	};
 	const heartbeat = setInterval(() => {
-		const now = new Date();
-		utimes(lockPath, now, now).catch(() => {});
+		// Never revive a lock that went stale: a waiter may already be removing it.
+		ownsLock(staleMs)
+			.then((owned) => {
+				if (!owned) return clearInterval(heartbeat);
+				const now = new Date();
+				return utimes(lockPath, now, now);
+			})
+			.catch(() => {});
 	}, staleMs / 4);
 	heartbeat.unref();
+	// Half the stale threshold leaves the caller that much time to commit before any waiter may act.
+	const assertOwned = async () => {
+		const owned = await ownsLock(staleMs / 2).catch((err: unknown) => err);
+		if (owned === true) return;
+		throw new CrustStoreError(
+			"IO",
+			`Lost the lock on store file: ${filePath}`,
+			{ path: filePath, operation: options.operation },
+			owned === false ? undefined : owned,
+		);
+	};
 	try {
-		return await fn();
+		return await fn(assertOwned);
 	} finally {
 		clearInterval(heartbeat);
 		// Waits out a waiter that is judging this lock stale (only after a stalled heartbeat).

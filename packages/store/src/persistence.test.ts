@@ -1,12 +1,24 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, open, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { deleteJson, readJson, writeJson } from "./persistence.ts";
+
+// Error codes the next `rename` calls fail with, as when another program holds the target open.
+const renameFailures = vi.hoisted((): string[] => []);
+vi.mock("node:fs/promises", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("node:fs/promises")>();
+	const rename = vi.fn(async (from: string, to: string) => {
+		const code = renameFailures.shift();
+		if (code !== undefined) throw Object.assign(new Error(code), { code });
+		return actual.rename(from, to);
+	});
+	return { ...actual, rename, default: { ...actual, rename } };
+});
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
@@ -144,6 +156,77 @@ describe("writeJson", () => {
 		});
 	});
 
+	it("flushes the temp file to disk before renaming it into place", async () => {
+		await mkdir(tempDir);
+		const probe = await open(join(tempDir, "probe"), "w");
+		const sync = vi.spyOn(Object.getPrototypeOf(probe), "sync");
+		await probe.close();
+		try {
+			await writeJson(filePath, { data: true });
+
+			expect(sync).toHaveBeenCalledTimes(1);
+			expect(sync.mock.invocationCallOrder[0]).toBeLessThan(
+				vi.mocked(rename).mock.invocationCallOrder.at(-1) ?? 0,
+			);
+		} finally {
+			sync.mockRestore();
+		}
+	});
+
+	it("aborts before the rename when beforeCommit throws", async () => {
+		await writeJson(filePath, { data: 1 });
+		const lost = new Error("lost the lock");
+
+		await expect(
+			writeJson(filePath, { data: 2 }, { beforeCommit: () => Promise.reject(lost) }),
+		).rejects.toBe(lost);
+		expect(JSON.parse(await readFile(filePath, "utf-8"))).toEqual({ data: 1 });
+		expect(await readdir(tempDir)).toEqual(["config.json"]);
+	});
+
+	it.skipIf(process.platform === "win32")(
+		"does not retry a failed rename outside Windows",
+		async () => {
+			renameFailures.push("EPERM");
+
+			await expect(writeJson(filePath, { data: true })).rejects.toMatchObject({
+				code: "IO",
+				message: `Failed to finalize store file: ${filePath}`,
+				cause: { code: "EPERM" },
+			});
+			expect(await readdir(tempDir)).toEqual([]);
+		},
+	);
+
+	describe("on Windows", () => {
+		const platform = process.platform;
+		beforeEach(() => {
+			Object.defineProperty(process, "platform", { value: "win32" });
+		});
+		afterEach(() => {
+			Object.defineProperty(process, "platform", { value: platform });
+			renameFailures.length = 0;
+		});
+
+		it("retries a rename that another program's open handle blocks", async () => {
+			renameFailures.push("EPERM", "EBUSY", "EACCES");
+
+			await writeJson(filePath, { data: true });
+
+			expect(renameFailures).toEqual([]);
+			expect(JSON.parse(await readFile(filePath, "utf-8"))).toEqual({ data: true });
+			expect(await readdir(tempDir)).toEqual(["config.json"]);
+		});
+
+		it("does not retry other rename errors", async () => {
+			renameFailures.push("ENOENT", "EPERM");
+
+			await expect(writeJson(filePath, { data: true })).rejects.toMatchObject({
+				cause: { code: "ENOENT" },
+			});
+		});
+	});
+
 	it("should throw CrustStoreError IO when directory creation fails", async () => {
 		await mkdir(tempDir);
 		const parentFile = join(tempDir, "not-a-directory");
@@ -175,6 +258,14 @@ describe("deleteJson", () => {
 
 	afterEach(async () => {
 		await rm(tempDir, { recursive: true, force: true });
+	});
+
+	it("keeps the file when beforeCommit throws", async () => {
+		await writeFile(filePath, "{}");
+		const lost = new Error("lost the lock");
+
+		await expect(deleteJson(filePath, () => Promise.reject(lost))).rejects.toBe(lost);
+		expect(existsSync(filePath)).toBe(true);
 	});
 
 	it("should throw CrustStoreError IO on permission denied", async () => {
