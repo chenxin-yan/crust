@@ -64,8 +64,9 @@ export type SpinnerOutcome = "success" | "error";
  * - `"exit"` (default): install a `SIGINT` handler. When no other listener owns
  *   `SIGINT`, it restores the cursor and re-raises `SIGINT`, so the process
  *   terminates with normal signal semantics (shells observe exit status 130).
- *   When another listener owns it (Crust's `execute()` does), the spinner keeps
- *   running and that owner's cancellation stops it.
+ *   When another listener owns it (Crust's `execute()` does), that owner ends
+ *   the process and the spinner stops with `✗` on the next turn, unless a
+ *   `stop()` in the signal's own turn renders its final line first.
  * - `false`: install no handler — the application owns SIGINT and should
  *   `stop()` the spinner (restoring the cursor) in its own cleanup.
  *
@@ -294,9 +295,13 @@ export function createSpinnerHandle(
 					process.removeListener("SIGINT", handler);
 					sigintHandler = undefined;
 					// A host that kept its own persistent listener (Crust's `execute()`) already ran it
-					// for this signal and owns the cancellation, which stops the spinner; re-raising
-					// would invoke it twice.
-					if (process.listenerCount("SIGINT") > 0) return;
+					// for this signal and owns ending the process; re-raising would invoke it twice. Stop
+					// like an abort, so a host whose cancellation never reaches the spinner (its own
+					// listener, an unrelated `signal`) is not kept alive by the animation timer.
+					if (process.listenerCount("SIGINT") > 0) {
+						onAbort();
+						return;
+					}
 					cleanup();
 					finished = true;
 					sink.write(SHOW_CURSOR);

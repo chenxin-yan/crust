@@ -86,10 +86,10 @@ Calling `advance()` before `start()` changes the count without repainting. The u
 const handle = spinner({ message: "Working", sigint: false });
 ```
 
-| `sigint`           | On `SIGINT` while an interactive indicator runs                                                                                                                                                             |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `"exit"` (default) | Restores the cursor and re-raises `SIGINT` when no other listener remains (exit 130). When another listener owns `SIGINT`, as Crust's `execute()` does, keeps running so that owner's cancellation stops it |
-| `false`            | Installs no handler; call `stop()` from your own cleanup                                                                                                                                                    |
+| `sigint`           | On `SIGINT` while an interactive indicator runs                                                                                                                                                                                     |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"exit"` (default) | Restores the cursor and re-raises `SIGINT` when no other listener remains (exit 130). When another listener owns `SIGINT`, as Crust's `execute()` does, leaves ending the process to that owner and stops with `✗` on the next turn |
+| `false`            | Installs no handler; call `stop()` from your own cleanup                                                                                                                                                                            |
 
 Inside a Crust command the default works: Ctrl-C aborts the invocation's `signal`, which stops the indicator with its final line (see [Cancellation](#cancellation)). A `SIGINT` the process inherited as ignored stays ignored. The handler is a real process listener even with an injected `sink`, so prefer `false` in tests. Calling `process.exit()` while an interactive indicator runs restores the cursor under either policy when the sink writes synchronously.
 

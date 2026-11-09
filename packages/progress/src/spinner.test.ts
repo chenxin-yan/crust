@@ -72,6 +72,28 @@ describe("spinner — terminal sink", () => {
 		expect(writes.slice(-2)).toEqual(["\x1B[2K\r✗ Cancelled\n", "\x1B[?25h"]);
 	});
 
+	it("stops with ✗ a turn after SIGINT when the host's listener leaves it running", async () => {
+		const { sink, writes } = createFakeSink(true);
+		// A host that cleans up without aborting the spinner's signal: the frame must not spin on.
+		const hostListener = () => {};
+		process.on("SIGINT", hostListener);
+		const previousHandlers = new Set(process.listeners("SIGINT"));
+		const handle = spinner({ message: "Working", sink });
+		handle.start();
+		const handler = process.listeners("SIGINT").find((listener) => !previousHandlers.has(listener));
+		try {
+			handler?.("SIGINT");
+		} finally {
+			process.removeListener("SIGINT", hostListener);
+		}
+
+		await new Promise((resolve) => setImmediate(resolve));
+
+		expect(writes.slice(-2)).toEqual(["\x1B[2K\r✗ Working\n", "\x1B[?25h"]);
+		handle.stop("error", "Cancelled");
+		expect(writes.slice(-2)).toEqual(["\x1B[2K\r✗ Working\n", "\x1B[?25h"]);
+	});
+
 	it("stops with ✗ when its signal aborts while it runs", async () => {
 		const { sink, writes } = createFakeSink(true);
 		const controller = new AbortController();
