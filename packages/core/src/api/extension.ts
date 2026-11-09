@@ -286,10 +286,19 @@ export interface Renderer {
 	/**
 	 * A failure, in `execute()` only, at most once per invocation, after every `onError` hook
 	 * declined it; never for a cancellation, which Core does not render (cleanup failures that
-	 * accompany one print as Core's default lines). If it throws, Core
+	 * accompany one go to `cleanup`). If it throws, Core
 	 * renders the original failure. Default: Core's `Error: <message>` lines on stderr.
 	 */
 	error?(error: unknown): void;
+	/**
+	 * A cleanup failure, in `execute()` only: a Context disposal or deferred cleanup that failed
+	 * after a failure was already rendered (or claimed by `onError`), or cleanup that failed
+	 * while a cancellation unwound, once per failure: several cleanups that fail together, which
+	 * arrive as a `SuppressedError` chain or an `AggregateError`, are passed one by one. The exit
+	 * code is unchanged. If it throws, Core renders that cleanup failure itself. Default: Core's `Cleanup failed: <message>` lines
+	 * on stderr (`Error: <message>` for an action's own cleanup during a cancellation).
+	 */
+	cleanup?(error: unknown): void;
 }
 
 /** Options for {@link ExtensionBuilder.handle}. */
