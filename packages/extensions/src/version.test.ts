@@ -29,13 +29,13 @@ describe("version", () => {
 			});
 		}
 
-		vi.stubEnv("PORT", "abc");
-		expect(await captureExecute(app, ["--version"])).toMatchObject({
+		const env = { PORT: "abc" };
+		expect(await captureExecute(app, ["--version"], { env })).toMatchObject({
 			stdout: "app v1.2.3",
 			stderr: "",
 			exitCode: 0,
 		});
-		const failed = await captureExecute(app, []);
+		const failed = await captureExecute(app, [], { env });
 		expect(failed.stderr).toContain("Expected a number for --port (from $PORT).");
 		expect(failed.exitCode).toBe(1);
 		expect(ran).toBe(false);

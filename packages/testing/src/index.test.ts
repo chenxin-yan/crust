@@ -38,6 +38,38 @@ describe("captureExecute", () => {
 		}
 	});
 
+	it("strips escape codes under FORCE_COLOR unless raw is set", async () => {
+		vi.stubEnv("FORCE_COLOR", "1");
+		try {
+			const app = new Crust("test-cli").action(({ stdout, stderr }) => {
+				stdout(bold("Done"));
+				stderr(bold("Warn"));
+			});
+			expect(await captureExecute(app, [])).toMatchObject({ stdout: "Done", stderr: "Warn" });
+			expect(await captureExecute(app, [], { raw: true })).toMatchObject({
+				stdout: "\x1b[1mDone\x1b[22m",
+				stderr: "\x1b[1mWarn\x1b[22m",
+			});
+		} finally {
+			vi.unstubAllEnvs();
+		}
+	});
+
+	it("reads flags' env fallbacks only from the env option", async () => {
+		vi.stubEnv("CRUST_TEST_TOKEN", "from-shell");
+		try {
+			const app = new Crust("test-cli")
+				.flags({ token: { type: "string", env: { name: "CRUST_TEST_TOKEN" }, default: "none" } })
+				.action(({ flags, stdout }) => stdout(flags.token));
+			expect((await captureExecute(app, [])).stdout).toBe("none");
+			expect((await captureExecute(app, [], { env: { CRUST_TEST_TOKEN: "given" } })).stdout).toBe(
+				"given",
+			);
+		} finally {
+			vi.unstubAllEnvs();
+		}
+	});
+
 	it("captures exit code 1 without leaking it to the process", async () => {
 		process.exitCode = 7;
 		const app = new Crust("test-cli").action(() => {

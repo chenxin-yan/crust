@@ -1,11 +1,19 @@
-import type { InvocationIO } from "@crustjs/core";
+import type { ExecuteOptions, InvocationIO } from "@crustjs/core";
+
+import { type CaptureOptions, captureText } from "./capture.ts";
+
+export type { CaptureOptions } from "./capture.ts";
 
 /** Structural io shape accepted by {@link captureExecute}. */
 export type CaptureIO = Partial<InvocationIO>;
 
 /** Minimal structural surface of `execute()` invoked by {@link captureExecute}. */
 export interface ExecutableApp {
-	execute(options?: { argv?: string[]; io?: CaptureIO }): Promise<number>;
+	execute(options?: {
+		argv?: string[];
+		io?: CaptureIO;
+		env?: ExecuteOptions["env"];
+	}): Promise<number>;
 }
 
 export interface CapturedExecute {
@@ -22,11 +30,13 @@ let exitCodeBeforeExecuteCaptures: typeof process.exitCode;
 /**
  * Drive the terminal `execute()` path in-process: exit-code protocol,
  * Extension `onError` rendering, and cancellation (130, or 143 after SIGTERM) are all observable
- * without spawning a subprocess.
+ * without spawning a subprocess. Flags' `env` fallbacks read only `options.env`, and captured
+ * text is plain unless `options.raw` is set.
  */
 export async function captureExecute(
 	app: ExecutableApp,
 	argv: readonly string[],
+	options?: CaptureOptions,
 ): Promise<CapturedExecute> {
 	const stdoutLines: string[] = [];
 	const stderrLines: string[] = [];
@@ -35,6 +45,7 @@ export async function captureExecute(
 	try {
 		const exitCode = await app.execute({
 			argv: [...argv],
+			env: options?.env ?? {},
 			io: {
 				stdout: (text) => {
 					stdoutLines.push(text);
@@ -45,8 +56,8 @@ export async function captureExecute(
 			},
 		});
 		return {
-			stdout: stdoutLines.join("\n"),
-			stderr: stderrLines.join("\n"),
+			stdout: captureText(stdoutLines, options),
+			stderr: captureText(stderrLines, options),
 			exitCode,
 		};
 	} finally {

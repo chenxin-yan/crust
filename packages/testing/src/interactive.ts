@@ -11,6 +11,8 @@ import type {
 import { withTerminalIO } from "@crustjs/prompts";
 import { createPromptIO, type Key } from "@crustjs/prompts/testing";
 
+import { type CaptureOptions, captureText } from "./capture.ts";
+
 /**
  * A running interactive invocation. `Outcome` is the `run()` outcome of the selected command;
  * `done` resolves with its `completed` or `handled` branch.
@@ -20,32 +22,45 @@ export interface InteractiveRun<Outcome = RunOutcome<unknown, readonly unknown[]
 	type(text: string): void;
 	keys(...namedKeys: Key[]): void;
 	screen(): string;
-	/** Text passed to the action's `stdout()` so far, joined with newlines like `RunOutcome.stdout`. */
+	/**
+	 * Text passed to the action's `stdout()` so far, joined with newlines like `RunOutcome.stdout`;
+	 * plain unless `raw` is set.
+	 */
 	stdout(): string;
 	/**
 	 * Settles after cleanup like `app.run()`: resolves with the typed `result` (or the handling
-	 * Extension) and the captured `stdout` and `stderr`, or rejects with a failed outcome's `error`.
+	 * Extension) and the captured `stdout` and `stderr` (plain unless `raw` is set), or rejects
+	 * with a failed outcome's `error`.
 	 */
 	readonly done: Promise<Exclude<Outcome, { readonly status: "failed" }>>;
 }
 
-/** Run an application with fake terminal streams for its prompts and stderr output. */
+/**
+ * Run an application with fake terminal streams for its prompts and stderr output. Flags' `env`
+ * fallbacks read only `options.env`, and captured text is plain unless `options.raw` is set.
+ */
 export function runInteractive<
 	App extends AnyCrust,
 	const Path extends CommandPath<App["_types"]["tree"]>,
 >(
 	app: App,
 	path: Path,
-	...args: RunInputArguments<CommandShapeAt<App["_types"]["shape"], Path>>
+	...args: readonly [
+		...RunInputArguments<CommandShapeAt<App["_types"]["shape"], Path>>,
+		options?: CaptureOptions,
+	]
 ): InteractiveRun<ShapeRunOutcome<CommandShapeAt<App["_types"]["shape"], Path>>> {
 	const harness = createPromptIO();
 	const output = harness.io.output;
-	const [input] = args;
+	const input = args[0];
+	// SAFETY: the rest tuple puts CaptureOptions second; its generic input element hides that here.
+	const options = args[1] as CaptureOptions | undefined;
 	const stdoutLines: string[] = [];
 	const done = withTerminalIO(harness.io, () =>
 		// SAFETY: Path + RunInputArguments constrain input to App; AnyCrust.run erases the link.
 		app
 			.run(path as never, input as never, {
+				env: options?.env ?? {},
 				stdout: (text) => {
 					stdoutLines.push(text);
 				},
@@ -56,8 +71,13 @@ export function runInteractive<
 			})
 			.then((outcome) => {
 				if (outcome.status === "failed") throw outcome.error;
+				const captured = {
+					...outcome,
+					stdout: captureText([outcome.stdout], options),
+					stderr: captureText([outcome.stderr], options),
+				};
 				// SAFETY: the same Path + input link that types `app.run()` selects this outcome.
-				return outcome as Exclude<
+				return captured as Exclude<
 					ShapeRunOutcome<CommandShapeAt<App["_types"]["shape"], Path>>,
 					{ readonly status: "failed" }
 				>;
@@ -105,7 +125,7 @@ export function runInteractive<
 		type: (text) => harness.type(text),
 		keys: (...namedKeys) => harness.keys(...namedKeys),
 		screen: () => harness.screen(),
-		stdout: () => stdoutLines.join("\n"),
+		stdout: () => captureText(stdoutLines, options),
 		done,
 	};
 }

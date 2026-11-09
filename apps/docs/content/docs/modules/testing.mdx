@@ -22,9 +22,11 @@ npm install -D @crustjs/testing
 
 <auto-type-table path="../../../../../packages/testing/src/index.ts" name="CapturedExecute" />
 
+An optional third argument takes [`CaptureOptions`](#captureoptions).
+
 ## `runInteractive(app, path, input?)`
 
-Import from `@crustjs/testing/interactive`; this entry point requires `@crustjs/prompts`. `path` and `input` are typed like `app.run()`, so a definition must be added to the application before it can be addressed.
+Import from `@crustjs/testing/interactive`; this entry point requires `@crustjs/prompts`. `path` and `input` are typed like `app.run()`, so a definition must be added to the application before it can be addressed. An optional argument after `input` takes [`CaptureOptions`](#captureoptions): `runInteractive(app, path, input, { raw: true })`.
 
 <include lang="ts">../../../examples/modules/testing.ts#interactive</include>
 
@@ -34,15 +36,22 @@ Import from `@crustjs/testing/interactive`; this entry point requires `@crustjs/
 
 The action's `stdout()` output stays off the screen; read it with the handle's `stdout()` method.
 
-The fake terminal counts as interactive even when `CI` is set, so a test that answers a [`confirm()`](/docs/modules/extensions/confirm) prompt passes on CI runners too. `runInteractive()` has no exit code, because it runs through `run()`; use `captureExecute()` to assert one. It does not inject stdin or environment variables: test `readStdin()`, `--input -`, and `env`-sourced flags in a subprocess, or pass the values as `run()` input.
+The fake terminal counts as interactive even when `CI` is set, so a test that answers a [`confirm()`](/docs/modules/extensions/confirm) prompt passes on CI runners too. `runInteractive()` has no exit code, because it runs through `run()`; use `captureExecute()` to assert one. It does not inject stdin: test `readStdin()` and `--input -` in a subprocess.
+
+<auto-type-table path="../../../../../packages/testing/src/interactive.ts" name="InteractiveRun" />
+
+## `CaptureOptions`
+
+Results from `captureExecute()` and `runInteractive()` don't depend on the shell or runner that runs the tests:
+
+- Flags' [`env` fallbacks](/docs/api/types#flagdef) read only `env`, which defaults to `{}`, not `process.env`. Pass the variables a test needs: `captureExecute(app, ["deploy"], { env: { API_TOKEN: "t" } })`.
+- Captured `stdout` and `stderr` are plain text: ANSI escape sequences are stripped, like `@oclif/test` and `@inquirer/testing` do. Set `raw: true` to keep them and assert on styling.
+
+<auto-type-table path="../../../../../packages/testing/src/capture.ts" name="CaptureOptions" />
 
 ## Styled output
 
-Captured `stdout` is plain text: [`@crustjs/style`](/docs/modules/style) emits no ANSI codes for text bound for `run()`, `captureExecute()`, or `runInteractive()`, whether or not the test runner's own stdout is a terminal. Set `FORCE_COLOR` in the test environment to assert on escape codes.
-
-Some runners set `FORCE_COLOR=1` for their workers when their own output is a color terminal, such as Jest's child-process workers and `bun test --parallel`, which brings the escape codes back. For plain output under those runners, delete `process.env.FORCE_COLOR` in a setup file.
-
-<auto-type-table path="../../../../../packages/testing/src/interactive.ts" name="InteractiveRun" />
+Captured `stdout` counts as non-TTY: [`@crustjs/style`](/docs/modules/style) emits no ANSI codes for text bound for `run()`, `captureExecute()`, or `runInteractive()`, whether or not the test runner's own stdout is a terminal, unless `FORCE_COLOR` is set. Some runners set `FORCE_COLOR=1` for their workers when their own output is a color terminal, such as Jest's child-process workers and `bun test --parallel`. `captureExecute()` and `runInteractive()` strip the codes either way; to assert on them, set `FORCE_COLOR` in the test and pass `raw: true`. `app.run()` does not strip them.
 
 ## Custom prompts
 
