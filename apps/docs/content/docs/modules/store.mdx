@@ -40,11 +40,12 @@ Field types and defaults determine the state type. `createStore()` resolves `<di
 - Each mutation also holds an advisory lock file, `<name>.json.lock`, created exclusively next to the store file, so parallel processes (`cli add & cli add`) never lose an update. Waiters retry with a short backoff. The holder keeps its lock however long the mutation takes (for example, a slow async validator), refreshing the lock file's modification time while it runs. A lock whose process has exited is taken over right away, and one whose holder stopped refreshing it for 10 seconds (another machine, or a frozen process) is taken over then, by exactly one waiter. A crashed process never blocks the store for longer.
 - Right before replacing or removing the file, a mutation checks that it still holds its lock and refreshed it within the last 5 seconds. A process that was frozen or suspended long enough for another to take over rejects with `IO` (`Lost the lock on store file`) instead of overwriting the newer data; retry the mutation if you want it applied.
 - The file itself is always replaced atomically: written to a temporary `.<name>-<uuid>.tmp` file, flushed to disk, then renamed. On Windows, a rename blocked by another program holding the file open (antivirus, indexers) is retried for up to 5 seconds.
+- A store file that is a symlink stays one: writes replace the link's target, and `reset()` deletes the target and keeps the link. On Unix, the replacement keeps the replaced file's owner and, unless `access` sets file bits, its mode.
 - The lock is a lock file, not an OS lock (`flock`), and is tested on local disks only; on a network filesystem, it relies on exclusive create and on clocks that agree.
 
 ### Unknown keys
 
-Keys in the file that `fields` does not declare are never returned by `read()`. By default (`pruneUnknown: false`), mutations keep them in the file, so an older version of your CLI, or another tool sharing the file, never deletes fields it does not know. Pass `pruneUnknown: true` to drop them on the next mutation.
+Keys in the file that `fields` does not declare are never returned by `read()`. By default (`pruneUnknown: false`), mutations keep them in the file, so an older version of your CLI, or another tool sharing the file, never deletes fields it does not know. Pass `pruneUnknown: true` to drop them on the next mutation. `reset()` removes the whole file either way.
 
 ## Storage paths
 
@@ -55,7 +56,7 @@ Keys in the file that `fields` does not declare are never returned by `read()`. 
 | `stateDir`  | `~/.local/state/<app>` | `%LOCALAPPDATA%\<app>\State` | `XDG_STATE_HOME`; `LOCALAPPDATA` on Windows |
 | `cacheDir`  | `~/.cache/<app>`       | `%LOCALAPPDATA%\<app>\Cache` | `XDG_CACHE_HOME`; `LOCALAPPDATA` on Windows |
 
-Choose by intent: user configuration, durable app data, runtime state, or regenerable cache. macOS uses the XDG paths. Relative `XDG_*` values are ignored, as the XDG spec requires. Each helper accepts a `PlatformEnv` second argument for deterministic tests.
+Choose by intent: user configuration, durable app data, runtime state, or regenerable cache. macOS uses the XDG paths. Relative `XDG_*`, `APPDATA`, and `LOCALAPPDATA` values are ignored, as the XDG spec requires for `XDG_*`. When the home directory (`HOME`, or `USERPROFILE` on Windows) is needed but not absolute, the helpers throw `PATH` instead of returning a relative path. Each helper accepts a `PlatformEnv` second argument for deterministic tests.
 
 ## Secret files
 
@@ -68,7 +69,7 @@ const auth = createStore({
 });
 ```
 
-On Unix, `access: "private"` writes the file with mode `0600` and a parent directory the store creates with `0700`; an existing directory keeps its permissions. Pass `{ file, directory }` for custom bits. Windows uses inherited ACLs, so the bits are not enforced there.
+On Unix, `access: "private"` writes the file with mode `0600` and a parent directory the store creates with `0700`; an existing directory keeps its permissions. Pass `{ file, directory }` for custom bits. With the default `access`, a new file gets the umask default and an existing file keeps its mode, so a user's `chmod 600` survives writes. Windows uses inherited ACLs, so the bits are not enforced there.
 
 ## Validation
 

@@ -4,10 +4,12 @@
 
 import {
 	chmod,
+	chown,
 	mkdir,
 	open,
 	readdir,
 	readFile,
+	readlink,
 	rename,
 	rm,
 	stat,
@@ -15,7 +17,7 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { hostname } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { isErrnoException } from "@crustjs/utils/error";
@@ -36,7 +38,8 @@ export interface WriteJsonOptions {
 	 * When set, the file is created with exactly these bits regardless of the
 	 * process `umask` — the temp file is `chmod`ed before the atomic rename, so
 	 * the final file is never momentarily more permissive. Effectively a no-op
-	 * on Windows. When omitted, the platform default applies.
+	 * on Windows. When omitted, a replaced file keeps its current mode, and a new
+	 * file gets the platform default.
 	 */
 	fileMode?: number;
 
@@ -119,6 +122,35 @@ export async function readJson(filePath: string): Promise<JsonValue | undefined>
 const isWindows = () => process.platform === "win32";
 
 /**
+ * Follows `filePath` through any chain of symlinks, even one whose end does not
+ * exist yet, so writes and deletes act on the link's target and keep the link.
+ *
+ * shortcut: the lock stays at `<filePath>.lock`, so stores opened through different
+ * links to one file do not exclude each other; lock the resolved path if that is needed.
+ */
+async function resolveTarget(filePath: string): Promise<string> {
+	let target = filePath;
+	// 40 matches Linux's limit on links followed in one path lookup (path_resolution(7)).
+	for (let hops = 0; hops < 40; hops++) {
+		try {
+			target = resolve(dirname(target), await readlink(target));
+		} catch {
+			// Not a link (EINVAL) or missing (ENOENT): this is the file. Other errors surface on use.
+			return target;
+		}
+	}
+	// A link loop: replace the link itself, as write-file-atomic does when realpath fails.
+	return filePath;
+}
+
+/** Whether a failed `chown` only means an unprivileged process cannot give a file away. */
+function isChownErrorOk(err: unknown): boolean {
+	if (!isErrnoException(err)) return false;
+	if (err.code === "ENOSYS") return true;
+	return process.getuid?.() !== 0 && (err.code === "EPERM" || err.code === "EINVAL");
+}
+
+/**
  * Creates the store file's parent directory if missing, enforcing `directoryMode`
  * exactly when this call created it.
  */
@@ -167,10 +199,12 @@ async function ensureDirectory(filePath: string, mode: number | undefined): Prom
  * Atomically writes a JSON value to disk using a temp-file-and-rename strategy.
  *
  * Steps:
- * 1. Creates the parent directory if it does not exist.
+ * 1. Follows `filePath` through symlinks to the file it names, and creates that
+ *    file's parent directory if it does not exist.
  * 2. Writes serialized JSON to a temporary file in the same directory and
  *    flushes it to disk (`fsync`), so a crash after the rename cannot leave an
- *    empty or partial file in place.
+ *    empty or partial file in place. On POSIX the temp file gets the replaced
+ *    file's owner and, unless `fileMode` is set, its mode.
  * 3. Runs `beforeCommit`, then renames the temp file to the target path (atomic
  *    on local filesystems). On Windows, a rename blocked by another program's
  *    open handle (`EPERM`, `EACCES`, `EBUSY`) is retried for a few seconds.
@@ -189,13 +223,20 @@ export async function writeJson(
 	data: Readonly<StoreDocument>,
 	options: WriteJsonOptions = {},
 ): Promise<void> {
-	const fileMode = isWindows() ? undefined : options.fileMode;
+	const target = await resolveTarget(filePath);
 	const tempPath = join(
-		dirname(filePath),
+		dirname(target),
 		`.${basename(filePath, ".json")}-${crypto.randomUUID()}.tmp`,
 	);
 
-	await ensureDirectory(filePath, options.directoryMode);
+	await ensureDirectory(target, options.directoryMode);
+
+	// Like write-file-atomic and atomically: the replacement keeps the replaced file's owner
+	// (e.g. under sudo) and mode (e.g. a user's `chmod 600`).
+	const existing = isWindows() ? undefined : await stat(target).catch(() => undefined);
+	const fileMode = isWindows()
+		? undefined
+		: (options.fileMode ?? (existing === undefined ? undefined : existing.mode & 0o7777));
 
 	try {
 		const json = JSON.stringify(data, null, "\t");
@@ -206,7 +247,13 @@ export async function writeJson(
 		} finally {
 			await handle.close();
 		}
-		// Enforce `fileMode` exactly regardless of `umask`. Done on the temp inode
+		// Before the chmod: chown clears setuid/setgid bits.
+		if (existing !== undefined) {
+			await chown(tempPath, existing.uid, existing.gid).catch((err: unknown) => {
+				if (!isChownErrorOk(err)) throw err;
+			});
+		}
+		// Enforce the mode exactly regardless of `umask`. Done on the temp inode
 		// before rename, which preserves the mode — so the final file is never
 		// momentarily world-readable.
 		if (fileMode !== undefined) await chmod(tempPath, fileMode);
@@ -225,7 +272,7 @@ export async function writeJson(
 	}
 
 	try {
-		await commit(tempPath, filePath, options.beforeCommit);
+		await commit(tempPath, target, options.beforeCommit);
 	} catch (err: unknown) {
 		await rm(tempPath, { force: true }).catch(() => {});
 		if (err instanceof CommitAborted) throw err.reason;
@@ -286,7 +333,8 @@ async function commit(
  * Deletes a persisted store file from disk.
  *
  * Silently succeeds when the file does not exist (ENOENT) — deleting an
- * already-absent file is not an error.
+ * already-absent file is not an error. A symlinked store file has its target
+ * deleted and the link kept, so the next write recreates the target.
  *
  * @param filePath - Absolute path to the JSON store file to delete.
  * @param beforeCommit - Runs first; a rejection is rethrown and nothing is deleted.
@@ -298,7 +346,7 @@ export async function deleteJson(
 ): Promise<void> {
 	await beforeCommit?.();
 	try {
-		await rm(filePath, { force: true });
+		await rm(await resolveTarget(filePath), { force: true });
 	} catch (err: unknown) {
 		throw new CrustStoreError(
 			"IO",

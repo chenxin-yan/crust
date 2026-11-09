@@ -120,25 +120,31 @@ function resolvePlatformDir(
 ): string {
 	validateSegment(appName, "appName");
 	const config = DIRECTORY_CONFIG[kind];
+	const windows = env.platform === "win32";
 
-	if (env.platform === "linux" || env.platform === "darwin") {
-		const configured = env.env[config.xdg];
-		// The XDG Base Directory spec says relative values are invalid and must be ignored.
-		const base =
-			configured && posix.isAbsolute(configured)
-				? configured
-				: join(env.homedir, ...config.unixFallback);
-		return join(base, appName);
-	}
-	if (env.platform === "win32") {
-		const configured = env.env[config.windowsEnv];
-		const base = configured?.trim() ? configured : join(env.homedir, ...config.windowsFallback);
-		return join(base, appName, ...config.windowsSuffix);
+	if (!windows && env.platform !== "linux" && env.platform !== "darwin") {
+		throw new CrustStoreError("PATH", `Unsupported platform: ${env.platform}`, {
+			path: env.platform,
+		});
 	}
 
-	throw new CrustStoreError("PATH", `Unsupported platform: ${env.platform}`, {
-		path: env.platform,
-	});
+	const { isAbsolute } = windows ? win32 : posix;
+	const variable = windows ? config.windowsEnv : config.xdg;
+	const suffix = windows ? config.windowsSuffix : [];
+	const configured = env.env[variable];
+	// The XDG Base Directory spec says relative values are invalid and must be ignored; APPDATA gets the same rule.
+	if (configured && isAbsolute(configured)) return join(configured, appName, ...suffix);
+
+	// `os.homedir()` returns HOME / USERPROFILE verbatim, so a relative one would resolve against the cwd.
+	if (!isAbsolute(env.homedir)) {
+		throw new CrustStoreError(
+			"PATH",
+			`Cannot resolve the ${kind} directory: home directory "${env.homedir}" is not absolute; set ${windows ? "USERPROFILE" : "HOME"} or ${variable} to an absolute path`,
+			{ path: env.homedir },
+		);
+	}
+	const fallback = windows ? config.windowsFallback : config.unixFallback;
+	return join(env.homedir, ...fallback, appName, ...suffix);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -158,7 +164,8 @@ function resolvePlatformDir(
  *   string without path separators.
  * @param env - Optional platform environment override for testing.
  * @returns Absolute path to the app's config directory.
- * @throws {CrustStoreError} `PATH` if `appName` is invalid or platform is unsupported.
+ * @throws {CrustStoreError} `PATH` if `appName` is invalid, the platform is unsupported,
+ *   or the default location needs a home directory that is not an absolute path.
  *
  * @example
  * ```ts
@@ -191,7 +198,8 @@ export function configDir(appName: string, env?: PlatformEnv): string {
  *   string without path separators.
  * @param env - Optional platform environment override for testing.
  * @returns Absolute path to the app's data directory.
- * @throws {CrustStoreError} `PATH` if `appName` is invalid or platform is unsupported.
+ * @throws {CrustStoreError} `PATH` if `appName` is invalid, the platform is unsupported,
+ *   or the default location needs a home directory that is not an absolute path.
  *
  * @example
  * ```ts
@@ -224,7 +232,8 @@ export function dataDir(appName: string, env?: PlatformEnv): string {
  *   string without path separators.
  * @param env - Optional platform environment override for testing.
  * @returns Absolute path to the app's state directory.
- * @throws {CrustStoreError} `PATH` if `appName` is invalid or platform is unsupported.
+ * @throws {CrustStoreError} `PATH` if `appName` is invalid, the platform is unsupported,
+ *   or the default location needs a home directory that is not an absolute path.
  *
  * @example
  * ```ts
@@ -257,7 +266,8 @@ export function stateDir(appName: string, env?: PlatformEnv): string {
  *   string without path separators.
  * @param env - Optional platform environment override for testing.
  * @returns Absolute path to the app's cache directory.
- * @throws {CrustStoreError} `PATH` if `appName` is invalid or platform is unsupported.
+ * @throws {CrustStoreError} `PATH` if `appName` is invalid, the platform is unsupported,
+ *   or the default location needs a home directory that is not an absolute path.
  *
  * @example
  * ```ts

@@ -1,6 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, open, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import {
+	chmod,
+	chown,
+	lstat,
+	mkdir,
+	open,
+	readdir,
+	readFile,
+	rename,
+	rm,
+	stat,
+	symlink,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -17,7 +30,9 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 		if (code !== undefined) throw Object.assign(new Error(code), { code });
 		return actual.rename(from, to);
 	});
-	return { ...actual, rename, default: { ...actual, rename } };
+	// Unprivileged tests cannot give a file another owner, so the owner copy is observed here.
+	const chown = vi.fn(actual.chown);
+	return { ...actual, rename, chown, default: { ...actual, rename, chown } };
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -154,6 +169,74 @@ describe("writeJson", () => {
 			const { mode } = await stat(tempDir);
 			expect(mode & 0o777).toBe(0o755);
 		});
+
+		it("keeps the mode of the file it replaces when no fileMode is set", async () => {
+			await writeJson(filePath, { data: 1 });
+			await chmod(filePath, 0o600);
+
+			await writeJson(filePath, { data: 2 });
+
+			expect((await stat(filePath)).mode & 0o7777).toBe(0o600);
+		});
+
+		it("gives the replacement the owner of the file it replaces", async () => {
+			await writeJson(filePath, { data: 1 });
+			const { uid, gid } = await stat(filePath);
+			vi.mocked(chown).mockClear();
+
+			await writeJson(filePath, { data: 2 });
+
+			expect(chown).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), uid, gid);
+		});
+
+		it("ignores a refused owner copy when not running as root", async () => {
+			await writeJson(filePath, { data: 1 });
+			vi.mocked(chown).mockRejectedValueOnce(Object.assign(new Error("EPERM"), { code: "EPERM" }));
+			const getuid = vi.spyOn(process, "getuid").mockReturnValue(1000);
+			try {
+				await writeJson(filePath, { data: 2 });
+			} finally {
+				getuid.mockRestore();
+			}
+
+			expect(JSON.parse(await readFile(filePath, "utf-8"))).toEqual({ data: 2 });
+		});
+	});
+
+	describe.skipIf(process.platform === "win32")("through a symlink", () => {
+		let targetDir: string;
+		beforeEach(async () => {
+			targetDir = createTempDir();
+			await mkdir(tempDir, { recursive: true });
+		});
+		afterEach(async () => {
+			await rm(targetDir, { recursive: true, force: true });
+		});
+
+		it("updates the link's target and keeps the link", async () => {
+			const target = join(targetDir, "dotfiles.json");
+			await mkdir(targetDir);
+			await writeFile(target, "{}");
+			await symlink(target, filePath);
+
+			await writeJson(filePath, { data: true });
+
+			expect((await lstat(filePath)).isSymbolicLink()).toBe(true);
+			expect(JSON.parse(await readFile(target, "utf-8"))).toEqual({ data: true });
+			expect(await readdir(targetDir)).toEqual(["dotfiles.json"]);
+		});
+
+		it("creates the target of a dangling link, following relative links", async () => {
+			await symlink("hop.json", filePath);
+			await symlink(join(targetDir, "dotfiles.json"), join(tempDir, "hop.json"));
+
+			await writeJson(filePath, { data: true });
+
+			expect((await lstat(filePath)).isSymbolicLink()).toBe(true);
+			expect(JSON.parse(await readFile(join(targetDir, "dotfiles.json"), "utf-8"))).toEqual({
+				data: true,
+			});
+		});
 	});
 
 	it("flushes the temp file to disk before renaming it into place", async () => {
@@ -267,6 +350,20 @@ describe("deleteJson", () => {
 		await expect(deleteJson(filePath, () => Promise.reject(lost))).rejects.toBe(lost);
 		expect(existsSync(filePath)).toBe(true);
 	});
+
+	it.skipIf(process.platform === "win32")(
+		"deletes a symlink's target and keeps the link",
+		async () => {
+			const target = join(tempDir, "target.json");
+			await writeFile(target, "{}");
+			await symlink(target, filePath);
+
+			await deleteJson(filePath);
+
+			expect(existsSync(target)).toBe(false);
+			expect((await lstat(filePath)).isSymbolicLink()).toBe(true);
+		},
+	);
 
 	it("should throw CrustStoreError IO on permission denied", async () => {
 		await writeFile(filePath, JSON.stringify({ data: true }));
