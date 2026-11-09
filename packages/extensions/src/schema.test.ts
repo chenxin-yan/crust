@@ -81,8 +81,11 @@ describe("schema", () => {
 						description: "Where to deploy",
 					},
 					force: { type: "boolean", description: "Skip checks", default: false },
-					tag: { type: "array", items: { type: "string" } },
-					help: { type: "boolean", description: "Show help" },
+					tag: {
+						type: "array",
+						items: { type: "string" },
+						description: "Falls back to $DEPLOY_TAG",
+					},
 					raw: {
 						type: "array",
 						items: { type: "string" },
@@ -103,7 +106,6 @@ describe("schema", () => {
 				type: "object",
 				properties: {
 					url: { type: "string", format: "uri" },
-					help: expect.any(Object),
 					raw: expect.any(Object),
 				},
 				required: ["url"],
@@ -115,7 +117,8 @@ describe("schema", () => {
 		const { stdout } = await captureExecute(buildCli(), ["schema"]);
 
 		expect(Object.keys(JSON.parse(stdout))).toEqual(["input"]);
-		expect(Object.keys(JSON.parse(stdout).input.properties)).toEqual(["help", "llms", "raw"]);
+		// Extension flags such as --help and --llms are no command input.
+		expect(Object.keys(JSON.parse(stdout).input.properties)).toEqual(["raw"]);
 	});
 
 	it("returns the schema as the run() result", async () => {

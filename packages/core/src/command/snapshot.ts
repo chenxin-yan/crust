@@ -1,3 +1,4 @@
+import type { ExtensionId } from "../identity.ts";
 import { standardJsonSchema } from "../parsing/schema.ts";
 import { isFlagNegatable } from "../parsing/spellings.ts";
 import type {
@@ -99,6 +100,12 @@ export interface FlagSnapshot {
 	 * cannot produce JSON Schema. Not frozen: treat it as immutable.
 	 */
 	readonly inputSchema?: Readonly<Record<string, unknown>>;
+	/**
+	 * The Extension that declares this flag with its `flags` (e.g. `--help`,
+	 * `--json`); absent for local and Context-owned flags. Command input
+	 * (`commandInputSchema()` in `@crustjs/core/tooling`) leaves these flags out.
+	 */
+	readonly extension?: ExtensionId;
 }
 
 /**
@@ -148,6 +155,11 @@ export interface CommandSnapshot {
 	 * {@link CommandSnapshot.outputSchema}; absent otherwise.
 	 */
 	readonly output?: true;
+	/**
+	 * The Extension that contributed this command, or the Extension command it
+	 * sits under (e.g. `completion`, `skills install`); absent for the application's own commands.
+	 */
+	readonly extension?: ExtensionId;
 	/**
 	 * Direct subcommand snapshots keyed by canonical name (includes hidden ones). In
 	 * invocation snapshots a pending child exposes `meta` (except `meta.sections`)
@@ -201,7 +213,7 @@ function snapshotArg(def: ArgDef): ArgSnapshot {
 	});
 }
 
-function snapshotFlag(def: FlagDef): FlagSnapshot {
+function snapshotFlag(def: FlagDef, extension: ExtensionId | undefined): FlagSnapshot {
 	return freezeCompact({
 		type: def.type,
 		description: def.description,
@@ -216,6 +228,7 @@ function snapshotFlag(def: FlagDef): FlagSnapshot {
 		env: def.env ? freezeCompact({ name: def.env.name, delimiter: def.env.delimiter }) : undefined,
 		delimiter: def.delimiter,
 		inputSchema: def.schema && standardJsonSchema(def.schema, "input"),
+		extension,
 	});
 }
 
@@ -366,6 +379,7 @@ export function createSnapshotProjector(
 				flags: { enumerable: true, get: () => body().flags },
 				outputSchema: { enumerable: true, get: () => body().outputSchema },
 				output: { enumerable: true, get: () => body().output },
+				extension: { enumerable: true, get: () => body().extension },
 				subCommands: { enumerable: true, get: () => body().subCommands },
 			}),
 		);
@@ -377,7 +391,7 @@ export function createSnapshotProjector(
 function snapshotFlags(node: CommandNode): Record<string, FlagSnapshot> {
 	const flags: Record<string, FlagSnapshot> = {};
 	for (const [name, def] of Object.entries(node.effectiveFlags)) {
-		flags[name] = snapshotFlag(def);
+		flags[name] = snapshotFlag(def, node.extensionFlags?.get(name));
 	}
 	return flags;
 }
@@ -417,6 +431,7 @@ function projectNode(
 		flags: Object.freeze(flags),
 		...(outputSchema ? { outputSchema } : {}),
 		...(node.outputSchema ? { output: true as const } : {}),
+		...(node.extension ? { extension: node.extension } : {}),
 		subCommands,
 	});
 }

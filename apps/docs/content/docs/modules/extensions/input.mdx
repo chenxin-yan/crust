@@ -29,9 +29,9 @@ The value of `--input` is one of:
 
 - inline JSON;
 - `@path`, which reads the file at `path`, relative to the working directory;
-- `-`, which reads all of stdin. Stdin that something else already read to the end reads as empty, which fails as invalid JSON.
+- `-`, which reads all of stdin. Stdin that something else already read to the end reads as empty, which fails as invalid JSON. Stdin that another reader is consuming, such as the [MCP](/docs/modules/mcp) transport, fails with `--input: cannot read stdin (stdin is in use by another reader)`.
 
-It must be a JSON object keyed by the routed command's argument and flag names, plus `raw` for passthrough values received as `rawArgs`, like tokens after `--`. This is the flat shape [`commandInputSchema()`](/docs/modules/core#tooling-subpath) describes and the [MCP](/docs/modules/mcp) server accepts. Variadic arguments and `multiple` flags take arrays, and `url` values take strings.
+It must be a JSON object keyed by the routed command's argument and flag names, plus `raw` for passthrough values received as `rawArgs`, like tokens after `--`. Flags an Extension declares, such as `--json` or `--help`, are not part of it; pass them on argv. This is the flat shape [`commandInputSchema()`](/docs/modules/core#tooling-subpath) describes and the [MCP](/docs/modules/mcp) server accepts. Variadic arguments and `multiple` flags take arrays, and `url` values take strings.
 
 The object is bound with [`ctx.bindInput()`](/docs/api/types#extensioncontext), so values are converted and validated exactly as typed `run()` input:
 
@@ -45,5 +45,5 @@ Under [`run()`](/docs/api/crust#runpath-input-options), pass the JSON text as th
 Each fails the command with a `PARSE` [`CrustError`](/docs/api/errors) before validation and the action run:
 
 - invalid JSON, a value that is not a JSON object, a file that cannot be read, or a command whose input cannot be one flat object because an argument and a flag share a name or one is named `raw`: a message starting with `--input:`. Invalid JSON names its source (`--input: invalid inline JSON.`, `--input: invalid JSON in "input.json".`, or `--input: invalid JSON from stdin.`) but not the parser's reason, which can quote the input;
-- an unknown key or a value of the wrong type: the same error typed `run()` input reports, such as `Unknown flag "--nope"` or `Expected a boolean for --force.`;
+- an unknown key, including an Extension flag such as `json`, or a value of the wrong type: the same error typed `run()` input reports, such as `Unknown flag "--nope"` or `Expected a boolean for --force.`;
 - an invalid value, such as a bad `url`: the same error argv reports, such as `Invalid URL for --origin.`, which never includes the value.

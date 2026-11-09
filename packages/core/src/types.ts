@@ -28,6 +28,12 @@ export interface InvocationOptions<Event = unknown> extends Partial<InvocationIO
 	 * after the selected Renderer's `event`. A throw fails the invocation.
 	 */
 	onEvent?: (event: Event) => void;
+	/**
+	 * Environment for the `env` fallback of flags the input omits. `run()` reads only this,
+	 * never `process.env`, so a result never depends on the caller's shell; pass
+	 * `{ env: process.env }` to resolve like the terminal. MCP tool calls pass the server's.
+	 */
+	env?: Readonly<Record<string, string | undefined>>;
 }
 
 /**
@@ -749,16 +755,19 @@ export type InputArgs<A extends ArgsDef> = number extends A["length"]
 			: never;
 
 // Distribute before inspecting keys: each alternative must permit omission.
+// An `env` binding may supply the value, so typed input can omit it like argv can.
 type RequiredFlagName<D, K> = D extends unknown
-	? "required" extends keyof D
-		? true extends D["required"]
-			? D extends { default: infer Default }
-				? undefined extends Default
-					? K
-					: never
-				: K
+	? D extends { readonly env: object }
+		? never
+		: "required" extends keyof D
+			? true extends D["required"]
+				? D extends { default: infer Default }
+					? undefined extends Default
+						? K
+						: never
+					: K
+				: never
 			: never
-		: never
 	: never;
 
 type RequiredFlagNames<F extends FlagsDef> = {

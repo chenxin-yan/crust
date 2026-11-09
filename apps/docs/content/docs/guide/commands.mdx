@@ -129,7 +129,7 @@ Exit codes:
 
 `run()` resolves to an outcome with captured `stdout` and `stderr`. Check `status` before reading `result`.
 
-Unlike `.execute()`, it never renders errors, sets `process.exitCode`, or reads flag `env` fallbacks. See the [`run()` reference](/docs/api/crust#runpath-input-options) for input rules and [Testing](/docs/guide/testing) for tests.
+Unlike `.execute()`, it never renders errors or sets `process.exitCode`. Flags the input omits fall back to their `env` variables only in the `env` option you pass, never the caller's `process.env`. See the [`run()` reference](/docs/api/crust#runpath-input-options) for input rules and [Testing](/docs/guide/testing) for tests.
 
 ## Stream events
 

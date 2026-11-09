@@ -239,20 +239,14 @@ describe("input", () => {
 		expect(seen).toEqual(["eu"]);
 	});
 
-	// The renderer is chosen after every setup, so json() sees the bound flag in either order.
-	it.each([
-		["input first", () => [input(), json()] as const],
-		["json first", () => [json(), input()] as const],
-	])("keeps stdout for the result when JSON input sets json() (%s)", async (_order, extensions) => {
-		const app = new Crust("app").extend(...extensions()).action(({ stdout }) => {
-			stdout("working");
-			return { ok: true };
-		});
+	// Extension flags configure the invocation, so command input leaves them out.
+	it.each(["json", "help"])("rejects the Extension flag %s as JSON input", async (flag) => {
+		const app = new Crust("app").extend(input(), json(), help()).action(() => ({ ok: true }));
 
-		expect(await captureExecute(app, ["--input", '{"json":true}'])).toEqual({
-			stdout: '{"ok":true}',
-			stderr: "working",
-			exitCode: 0,
+		expect(await captureExecute(app, ["--input", JSON.stringify({ [flag]: true })])).toEqual({
+			stdout: "",
+			stderr: `Error: Unknown flag "--${flag}"`,
+			exitCode: 1,
 		});
 	});
 
@@ -306,6 +300,28 @@ describe("input", () => {
 		expect(run.stderr).toBe("");
 		expect(run.stdout.trim()).toBe("eu");
 		expect(run.status).toBe(0);
+	});
+
+	it("refuses - while another reader consumes stdin", () => {
+		const script = `
+			import { Crust } from "@crustjs/core";
+			import { input } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "input.ts")).href)};
+			process.stdin.on("data", () => {});
+			const app = new Crust("app").extend(input()).action(() => {});
+			process.exitCode = await app.execute({ argv: ["--input", "-"] });
+			process.stdin.destroy();
+		`;
+		const run = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
+			cwd: join(import.meta.dirname, ".."),
+			input: "{}",
+			encoding: "utf8",
+			timeout: 10_000,
+		});
+
+		expect(run.stderr).toBe(
+			"Error: --input: cannot read stdin (stdin is in use by another reader)\n",
+		);
+		expect(run.status).toBe(1);
 	});
 
 	// An earlier consumer read stdin to EOF; its `end` event cannot fire again.

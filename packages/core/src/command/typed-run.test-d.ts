@@ -253,6 +253,16 @@ function _typecheckPreservesCommandAliasesAndPreParseInputTypes() {
 
 	// @ts-expect-error -- required positional argument is missing
 	const missingArg: DeployInput = { flags: { mode: "dev" } };
+	// A required flag with an `env` binding is optional: its variable may supply it.
+	const login = new Crust("login")
+		.flags({
+			token: { type: "string", env: { name: "TOKEN" }, required: true },
+			scope: { type: "string", required: true },
+		})
+		.action(() => {});
+	const envOptional: RunInput<(typeof login)["_types"]["shape"]> = { flags: { scope: "repo" } };
+	// @ts-expect-error -- a required flag without an `env` binding stays required
+	const missingScope: RunInput<(typeof login)["_types"]["shape"]> = { flags: { token: "t" } };
 	const unknownArg: DeployInput = {
 		// @ts-expect-error -- unknown argument name
 		args: { target: "prod", host: "localhost" },
@@ -274,7 +284,16 @@ function _typecheckPreservesCommandAliasesAndPreParseInputTypes() {
 			flags: { mode: "staging" },
 		});
 	}
-	void [valid, withoutDefault, missingArg, unknownArg, invalidChoice, invalidNegation];
+	void [
+		valid,
+		withoutDefault,
+		missingArg,
+		envOptional,
+		missingScope,
+		unknownArg,
+		invalidChoice,
+		invalidNegation,
+	];
 	void typecheckRunInput;
 }
 

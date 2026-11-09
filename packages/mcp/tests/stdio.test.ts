@@ -49,19 +49,44 @@ async function roundTrip(launch: McpLaunch) {
 	const transport = new StdioClientTransport({
 		command: launch.command,
 		args: [...launch.args],
+		// As a client config's `env` would set it.
+		env: { ...process.env, DEMO_TOKEN: "s3cret" },
 		stderr: "pipe",
 	});
 	await client.connect(transport);
 	try {
 		expect(client.getServerVersion()).toMatchObject({ name: "demo", version: "0.1.0" });
 		const { tools } = await client.listTools();
-		// `mcp` and `mcp config` never become tools.
-		expect(tools.map((tool) => tool.name)).toEqual(["greet"]);
-		const result = await client.callTool({
-			name: "greet",
-			arguments: { name: "world", shout: true },
+		// `mcp` and `mcp config` never become tools, and input()'s `--input` is no tool input.
+		expect(tools.map((tool) => tool.name)).toEqual(["greet", "whoami", "slurp"]);
+		expect(Object.keys(tools[0]!.inputSchema.properties ?? {})).toEqual(["name", "shout", "raw"]);
+		// The env-backed flag is optional: the server's environment supplies it.
+		expect(tools[1]!.inputSchema.required).toBeUndefined();
+		const greet = { name: "greet", arguments: { name: "world", shout: true } };
+		expect((await client.callTool(greet)).structuredContent).toEqual({
+			greeting: "HELLO WORLD",
 		});
-		expect(result.structuredContent).toEqual({ greeting: "HELLO WORLD" });
+		expect((await client.callTool({ name: "whoami" })).structuredContent).toEqual({
+			token: "s3cret",
+		});
+		// Neither path reads the protocol's stdin, so the session keeps serving.
+		const stdinRead = await client.callTool(
+			{ name: "greet", arguments: { name: "world", input: "-" } },
+			undefined,
+			{ timeout: 2_000 },
+		);
+		expect(stdinRead).toMatchObject({
+			isError: true,
+			content: [{ type: "text", text: 'PARSE: Unknown flag "--input"' }],
+		});
+		const slurp = await client.callTool({ name: "slurp" }, undefined, { timeout: 2_000 });
+		expect(slurp).toMatchObject({
+			isError: true,
+			content: [{ type: "text", text: "Error: stdin is in use by another reader" }],
+		});
+		expect((await client.callTool(greet, undefined, { timeout: 2_000 })).structuredContent).toEqual(
+			{ greeting: "HELLO WORLD" },
+		);
 	} finally {
 		await client.close();
 	}

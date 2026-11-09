@@ -103,13 +103,24 @@ function propertySchema(
 			// Advisory metadata must not break discovery; run() still owns the actual default.
 		}
 	}
+	const env = "env" in def ? def.env?.name : undefined;
+	const declared = "description" in schema ? schema.description : def.description;
+	const description =
+		env === undefined
+			? declared
+			: typeof declared === "string"
+				? `${declared} (falls back to $${env})`
+				: `Falls back to $${env}`;
 	return {
 		...schema,
-		...(def.description === undefined || "description" in schema
-			? {}
-			: { description: def.description }),
+		...(description === undefined ? {} : { description }),
 		...(defaultValue === undefined || "default" in schema ? {} : { default: defaultValue }),
 	};
+}
+
+/** Extension flags (`--help`, `--json`, `--input`, …) configure the invocation, not the command. */
+function commandInputFlags(command: CommandSnapshot): [string, FlagSnapshot][] {
+	return Object.entries(command.flags).filter(([, flag]) => flag.extension === undefined);
 }
 
 function formatPath(path: readonly string[]): string {
@@ -119,9 +130,13 @@ function formatPath(path: readonly string[]): string {
 /**
  * JSON Schema for a command's input as one flat object: each arg and flag by
  * name (variadic and `multiple` as arrays), plus {@link RAW_INPUT_PROPERTY}.
- * Mapped from the snapshot's declared types, so custom `parse` definitions
- * appear as their token type, and only declared `required` definitions are
- * required. A Standard Schema definition appears as its `inputSchema` (without
+ * Flags an Extension declares (`--help`, `--json`, `--input`, …; see
+ * {@link FlagSnapshot.extension}) are left out; Context-owned flags such as
+ * `--yes` stay. Mapped from the snapshot's
+ * declared types, so custom `parse` definitions appear as their token type, and
+ * only declared `required` definitions are required, except flags with an `env`
+ * binding: the variable may supply them, so they are optional and their
+ * description names it. A Standard Schema definition appears as its `inputSchema` (without
  * `$schema`, filling in a missing `description`) when that describes what
  * `run()` accepts for it: top-level `type` `"string"` (`"boolean"` for
  * `type: "boolean"` flags), or `"array"` with such `items` (and no `prefixItems`)
@@ -147,10 +162,10 @@ export function commandInputSchema(
 			);
 		}
 		properties[name] = propertySchema(def, list);
-		if (def.required === true) required.push(name);
+		if (def.required === true && !("env" in def && def.env)) required.push(name);
 	};
 	for (const arg of command.args) claim(arg.name, arg, arg.variadic === true);
-	for (const [name, flag] of Object.entries(command.flags)) {
+	for (const [name, flag] of commandInputFlags(command)) {
 		claim(name, flag, flag.multiple === true);
 	}
 	properties[RAW_INPUT_PROPERTY] = {
@@ -171,12 +186,20 @@ export interface CommandInputFields {
 	readonly argNames: readonly string[];
 }
 
+/** The `run()` error for a flag the command does not take. */
+function unknownFlag(name: string): CrustError {
+	return new CrustError("PARSE", `Unknown flag "--${name}"`, {
+		flag: name,
+		reason: "unknown-flag",
+	});
+}
+
 /** Arg names and `url` field names of a command's flat JSON input, in declaration order. */
 export function commandInputFields(command: CommandSnapshot): CommandInputFields {
 	return {
 		urlFields: [
 			...command.args.filter((arg) => arg.type === "url").map((arg) => arg.name),
-			...Object.entries(command.flags)
+			...commandInputFlags(command)
 				.filter(([, flag]) => flag.type === "url")
 				.map(([name]) => name),
 		],
@@ -192,10 +215,12 @@ function isString(value: JsonValue): value is string {
  * Split flat JSON command input (the shape {@link commandInputSchema}
  * describes) into structured `run()` input. Arg names fill `args`; any other
  * name goes to `flags`, where `run()` rejects unknown ones. Strings for `url`
- * definitions become `URL`s, and `undefined` entries are skipped.
+ * definitions become `URL`s, and `undefined` entries are skipped. A flag an
+ * Extension declares is rejected like an unknown flag, since command input
+ * leaves it out, so such a key never selects a flag handler or reaches its Extension.
  *
- * @throws {CrustError} `PARSE` when a value is not JSON data, a `url` value is not a valid
- *   URL, or `raw` is not an array of strings
+ * @throws {CrustError} `PARSE` when a key names an Extension flag, a value is not JSON data,
+ *   a `url` value is not a valid URL, or `raw` is not an array of strings
  */
 export function parseCommandInput(
 	command: CommandSnapshot,
@@ -208,6 +233,9 @@ export function parseCommandInput(
 	let raw: readonly string[] | undefined;
 	for (const [name, value] of Object.entries(values)) {
 		if (value === undefined) continue;
+		if (Object.hasOwn(command.flags, name) && command.flags[name]!.extension !== undefined) {
+			throw unknownFlag(name);
+		}
 		let given: JsonValue;
 		try {
 			given = parseJsonValue(value);

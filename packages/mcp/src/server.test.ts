@@ -15,14 +15,15 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { createMcpServer, toolResultFromOutcome } from "./server.ts";
+import type { McpToolsOptions } from "./tools.ts";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
 	for (const cleanup of cleanups.splice(0)) await cleanup();
 });
 
-async function connect(app: AnyCrust, exclude?: readonly (readonly string[])[]) {
-	const server = await createMcpServer(app, exclude ? { exclude } : {});
+async function connect(app: AnyCrust, options: McpToolsOptions = {}) {
+	const server = await createMcpServer(app, options);
 	const client = new Client({ name: "test-client", version: "0.0.0" });
 	const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 	await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -95,17 +96,10 @@ const fixture = new Crust("fixture", { description: "Fixture", version: "1.2.3" 
 
 describe("createMcpServer", () => {
 	it("advertises the root identity and the filtered tool manifest", async () => {
-		const client = await connect(fixture, [["date"]]);
+		const client = await connect(fixture, { exclude: [["date"]] });
 		expect(client.getServerVersion()).toMatchObject({ name: "fixture", version: "1.2.3" });
 		const { tools } = await client.listTools();
-		expect(tools.map((tool) => tool.name)).toEqual([
-			"echo",
-			"print",
-			"scalar",
-			"fail",
-			"slow",
-			"extra",
-		]);
+		expect(tools.map((tool) => tool.name)).toEqual(["echo", "print", "scalar", "fail", "slow"]);
 		expect(tools[0]).toMatchObject({
 			description: "Echo input",
 			inputSchema: {
@@ -113,6 +107,20 @@ describe("createMcpServer", () => {
 				required: ["word"],
 				properties: { origin: { type: "string", format: "uri" } },
 			},
+		});
+		// finisher's Extension flag is no command input.
+		expect(Object.keys(tools[0]!.inputSchema.properties ?? {})).toEqual([
+			"word",
+			"times",
+			"origin",
+			"tag",
+			"raw",
+		]);
+		// Extension commands are tools only when included.
+		const included = await connect(fixture, { include: [["extra"]] });
+		expect((await included.listTools()).tools.map((tool) => tool.name)).toContain("extra");
+		expect((await included.callTool({ name: "extra" })).structuredContent).toEqual({
+			from: "extension",
 		});
 	});
 
@@ -404,7 +412,7 @@ describe("createMcpServer", () => {
 		expect((await client.callTool({ name: "count" })).structuredContent).toEqual({ result: 2 });
 	});
 
-	it("returns only the result when a call passes json: true to a command with .output()", async () => {
+	it("rejects Extension flags as unknown tool input, so they never select a handler", async () => {
 		const app = new Crust("cli").extend(json()).add(
 			defineCommand("users", (c) =>
 				c.output(jsonSchemaOutput({ type: "object" })).action(({ stdout }) => {
@@ -418,34 +426,27 @@ describe("createMcpServer", () => {
 			content: [{ type: "text", text: JSON.stringify({ id: 1 }, null, 2) }],
 			structuredContent: { id: 1 },
 		};
+		const [tool] = (await client.listTools()).tools;
+		expect(Object.keys(tool!.inputSchema.properties ?? {})).toEqual(["raw"]);
 		expect(await client.callTool({ name: "users" })).toEqual(expected);
-		// json() holds the printed table under --json, so the result carries no stderr copy of it.
-		expect(await client.callTool({ name: "users", arguments: { json: true } })).toEqual(expected);
-		expect(await app.run(["users"], { flags: { json: true } })).toMatchObject({
-			stdout: '{"id":1}',
-			stderr: "",
+		expect(await client.callTool({ name: "users", arguments: { json: true } })).toEqual({
+			content: [{ type: "text", text: 'PARSE: Unknown flag "--json"' }],
+			isError: true,
 		});
 	});
 
 	it("reports text-only results of tools with an outputSchema as errors", async () => {
-		const app = new Crust("cli")
-			.add(
-				defineCommand("count", (c) =>
-					c.output(jsonSchemaOutput({ type: "number" })).action(() => -0),
-				),
-			)
-			.extend(finisher);
+		const app = new Crust("cli").add(
+			defineCommand("count", (c) =>
+				c.output(jsonSchemaOutput({ type: "number" })).action(() => -0),
+			),
+		);
 		const client = await connect(app);
 		await client.listTools();
-		// An Extension handling the call leaves only stdout, which cannot satisfy the outputSchema.
 		const unmet = {
 			type: "text",
 			text: "The command finished without a JSON result for this tool's outputSchema; its stdout follows",
 		};
-		expect(await client.callTool({ name: "count", arguments: { bail: true } })).toEqual({
-			content: [unmet, { type: "text", text: "bailed" }],
-			isError: true,
-		});
 		// -0 does not survive JSON, so the result falls back to stdout.
 		expect(await client.callTool({ name: "count" })).toEqual({
 			content: [unmet, { type: "text", text: "" }],

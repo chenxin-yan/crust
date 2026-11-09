@@ -39,6 +39,7 @@ Next steps:
 
 - The object is converted and validated exactly like argv.
 - Arguments and flags given on argv win over its keys.
+- It holds the command's own values: Extension flags such as `--json` and `--help` stay on argv.
 - It has the shape `schema` describes and the [MCP](#mcp) server accepts.
 
 ## JSON output
@@ -185,7 +186,9 @@ Crust doesn't detect agents or add a global `--no-input`: the TTY check is the r
 
 [`@crustjs/mcp`](/docs/modules/mcp) serves your commands as MCP tools with `<cli> mcp`.
 
-- Each tool's input schema is the flat object `--input` takes.
+- Each tool's input schema is the flat object `--input` takes, without Extension flags such as `help`, `json`, or `input`.
+- Only the application's own commands are tools; Extension commands such as `completion`, `schema`, and `skills` are left out unless `include` names them.
+- Flags with an `env` binding are optional tool inputs: a variable set in the client's `env` configuration reaches the server, as it would reach the CLI in a shell.
 - `.output()` schemas and generator events become the tool's output schema and progress notifications.
 - What a call writes to stderr, next steps included, follows its result in the tool result.
 
@@ -209,4 +212,4 @@ For a CLI backed by an HTTP API, [`@crustjs/openapi`](/docs/modules/openapi) add
 - Commands that change things call [`confirm()`](/docs/modules/extensions/confirm)'s `ctx.confirm` first, after any dry-run preview.
 - Error messages say what to do next; known failures have recovery steps from [`nextSteps()`](/docs/modules/extensions/next-steps).
 - Every prompt has a flag for `initial` or a `default`.
-- Optionally: an MCP server, a packaged skill, and an `api` command.
+- Optionally: an MCP server, a packaged skill, and an `api` command. `exclude` commands from the MCP server that an agent should not run unattended, and set secrets through `env` bindings rather than tool arguments.

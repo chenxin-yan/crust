@@ -23,6 +23,7 @@ import {
 	parseStructured,
 	validateParsed,
 	type ArgvParseResult,
+	type FlagEnvironment,
 } from "../parsing/parser.ts";
 import { applyOutputSchema, applySchemas } from "../parsing/schema.ts";
 import type { ExecuteOptions, InvocationIO, InvocationOptions, RunInputPayload } from "../types.ts";
@@ -339,9 +340,18 @@ export function buildExtensionTree(
 				name,
 				def,
 				recursive,
+				by: extension.id,
 			})),
 		)
 		.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+	const flagOwners = (isRoot: boolean): ReadonlyMap<string, ExtensionId> =>
+		new Map(
+			extensionFlags
+				.filter(({ recursive }) => isRoot || recursive)
+				.map(({ name, by }) => [name, by] as const),
+		);
+	const rootFlagOwners = flagOwners(true);
+	const childFlagOwners = flagOwners(false);
 	const handlers = new Map<string, BoundHandler>();
 	let noAction: PreparedInvocation["noAction"];
 	let renderer: PreparedInvocation["renderer"];
@@ -405,7 +415,12 @@ export function buildExtensionTree(
 		return child;
 	};
 
-	const prepare = (source: CommandNode, path: string, isRoot: boolean): CommandNode => {
+	const prepare = (
+		source: CommandNode,
+		path: string,
+		isRoot: boolean,
+		contributor?: ExtensionId,
+	): CommandNode => {
 		// Extension providers are application-wide, so an extended Extension's Contexts reach every command.
 		for (const id of source.usedExtensions) {
 			if (!extensions.some((extension) => extension.id === id)) {
@@ -429,6 +444,7 @@ export function buildExtensionTree(
 					])
 				: childEntriesOf(source).map((entry) => [entry.name, entry]),
 		);
+		const contributedBy = new Map<string, ExtensionId>();
 		if (isRoot) {
 			// FIX_COMMAND_COLLISION owns literal names; this owns dynamic ones, where a
 			// collision would silently replace or shadow a command. Recipes stay unevaluated.
@@ -449,6 +465,7 @@ export function buildExtensionTree(
 						);
 					}
 					for (const spelling of own) spellings.add(spelling);
+					contributedBy.set(definition.name, extension.id);
 					let child: CommandNode | undefined;
 					entries.set(definition.name, {
 						name: definition.name,
@@ -466,13 +483,20 @@ export function buildExtensionTree(
 			...cloneFlagRegistry(source),
 			args: [...source.args],
 			subCommands: lazyChildRecord(entries.values(), (entry) =>
-				prepare(entry.resolve(), `${path} ${entry.name}`, false),
+				prepare(
+					entry.resolve(),
+					`${path} ${entry.name}`,
+					false,
+					contributor ?? contributedBy.get(entry.name),
+				),
 			),
 			addedChildren: undefined,
 			contexts: source.contexts.map((context) => ({ ...context })),
 			providedContexts: [...source.providedContexts],
 			demands: [...source.demands],
 			extensions: [...source.extensions],
+			extensionFlags: isRoot ? rootFlagOwners : childFlagOwners,
+			extension: contributor,
 		};
 		for (const { name, def, recursive } of extensionFlags) {
 			if (isRoot || recursive) registerFlag(prepared, name, def, "owned");
@@ -525,6 +549,8 @@ type InvocationInput =
 	| {
 			readonly path: readonly string[];
 			readonly input: RunInputPayload;
+			/** Fallbacks for omitted flags' `env` bindings; `run()` passes only what its caller gave. */
+			readonly env?: FlagEnvironment | undefined;
 	  };
 
 interface ResolvedInput {
@@ -553,9 +579,10 @@ function resolveStructuredInput(
 	root: CommandNode,
 	path: readonly string[],
 	input: RunInputPayload,
+	env: FlagEnvironment,
 ): ResolvedInput {
 	const route = resolveTypedPath(root, path);
-	return { argv: path, route, parsed: parseStructured(route.command, input) };
+	return { argv: path, route, parsed: parseStructured(route.command, input, env) };
 }
 
 /**
@@ -657,7 +684,7 @@ async function dispatch(
 	const { argv, route, parsed } =
 		"argv" in input
 			? resolveArgvInput(rootNode, input.argv)
-			: resolveStructuredInput(rootNode, input.path, input.input);
+			: resolveStructuredInput(rootNode, input.path, input.input, input.env ?? {});
 	const resolvedNode = route.command;
 	// `bindInput` replaces this; hooks and `terminal()` read it live.
 	let bound = parsed;
@@ -996,7 +1023,7 @@ export async function runInvocation(
 	const stream: ActionEventStream = { onEvent: options?.onEvent };
 	try {
 		// Keep the same per-invocation callback snapshot semantics as execute.
-		const { signal = new AbortController().signal, ...sinks } = options ?? {};
+		const { signal = new AbortController().signal, env, ...sinks } = options ?? {};
 		const resolvedIO: InvocationIO = {
 			stdout(text) {
 				stdout.push(text);
@@ -1011,7 +1038,13 @@ export async function runInvocation(
 			resolvedIO,
 			async () => {
 				const prepared = prepareInvocation(node, materializeCommandDefinition);
-				return await dispatch(input, prepared, createInvocationOutput(resolvedIO), signal, stream);
+				return await dispatch(
+					"path" in input ? { ...input, env } : input,
+					prepared,
+					createInvocationOutput(resolvedIO),
+					signal,
+					stream,
+				);
 			},
 			signal,
 		);
