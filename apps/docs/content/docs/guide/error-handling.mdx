@@ -82,7 +82,7 @@ Keep side effects after prompts so cancelling leaves nothing to undo.
 - The first Ctrl+C during `execute()` aborts the action's `signal`. Pass it to cancellable APIs such as `fetch(url, { signal })`; work that ignores it keeps running.
 - Cleanup still runs. If it fails, its failure prints and the exit code stays 130.
 - `SIGTERM`, sent by `docker stop`, Kubernetes, `timeout`, and CI cancellation, cancels the same way and exits 143.
-- After a Ctrl+C or `SIGTERM`, the process ends by that signal once cleanup finishes, even when the action ignored the `signal` and completed. Shells see 130 or 143, and a Ctrl+C stops a shell loop.
+- After a Ctrl+C or `SIGTERM`, `execute()` resolves 130 or 143 once cleanup finishes, even when the action ignored the `signal` and completed. Code after it still runs; then the process ends by that signal, so shells see 130 or 143 and a Ctrl+C stops a shell loop. Call `process.exit(code)` after `execute()` to exit with a code instead.
 
 See [`execute()`](/docs/api/crust#executeoptions) for caller signals and repeated signals.
 

@@ -141,6 +141,24 @@ const CANCELLING_SIGNALS = {
 type CancellingSignal = keyof typeof CANCELLING_SIGNALS;
 const CANCELLING_SIGNAL_NAMES = Object.keys(CANCELLING_SIGNALS) as CancellingSignal[];
 
+/** The signal the latest signal-cancelled `execute()` re-raises once the event loop drains. */
+let pendingSignalExit: { name: CancellingSignal; exitCode: number } | undefined;
+
+// `beforeExit` fires only when the event loop drains, never after `process.exit()`, so the
+// caller's code after `execute()` runs first, and an explicit exit or a changed
+// `process.exitCode` keeps the caller's choice.
+function exitBySignal(): void {
+	const pending = pendingSignalExit;
+	pendingSignalExit = undefined;
+	if (
+		pending &&
+		process.exitCode === pending.exitCode &&
+		process.listenerCount(pending.name) === 0
+	) {
+		process.kill(process.pid, pending.name);
+	}
+}
+
 function isAbortError(error: CaughtError): boolean {
 	if (!(error instanceof Error)) return false;
 	return error.name === "AbortError";
@@ -1039,6 +1057,9 @@ export async function executeInvocation(
 	// Injected `io` marks an in-process host (tests, `@crustjs/testing`, possibly with fake
 	// timers): it must survive a cancelling signal, so it gets only the exit code.
 	const inProcess = hasInjectedIO(options?.io);
+	// The latest execute() decides how the process ends.
+	pendingSignalExit = undefined;
+	process.removeListener("beforeExit", exitBySignal);
 	const invoke = async (): Promise<number> => {
 		let prepared: PreparedInvocation;
 		try {
@@ -1139,14 +1160,17 @@ export async function executeInvocation(
 		}
 		if (cancelledBy === undefined) return exitCode;
 
-		// SIGINT/SIGTERM cancelled the run: it ends by that signal whether the action threw, failed,
-		// or ignored the abort and completed, so supervisors never read success and shells see
-		// WIFSIGNALED (bash stops a loop only for a child killed by SIGINT). The exit code stays as
-		// the fallback when the re-raise can't kill: another listener owns the signal, or Windows,
-		// where `process.kill` on self is a forced kill without the 128+n status.
+		// SIGINT/SIGTERM cancelled the run: the process ends by that signal whether the action threw,
+		// failed, or ignored the abort and completed, so supervisors never read success and shells
+		// see WIFSIGNALED (bash stops a loop only for a child killed by SIGINT). The re-raise waits
+		// for the event loop to drain, so `execute()` still resolves 130/143 to the caller. The exit
+		// code stays as the fallback when the re-raise can't kill: another listener owns the signal,
+		// or Windows, where `process.kill` on self is a forced kill without the 128+n status.
 		process.exitCode = cancelledExitCode;
-		if (!inProcess && process.platform !== "win32" && process.listenerCount(cancelledBy) === 0) {
-			process.kill(process.pid, cancelledBy);
+		if (!inProcess && process.platform !== "win32") {
+			pendingSignalExit = { name: cancelledBy, exitCode: cancelledExitCode };
+			process.removeListener("beforeExit", exitBySignal);
+			process.once("beforeExit", exitBySignal);
 		}
 		return cancelledExitCode;
 	};
