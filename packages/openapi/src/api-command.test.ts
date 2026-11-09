@@ -8,10 +8,11 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { Crust, CrustError, defineCommand } from "@crustjs/core";
+import { json } from "@crustjs/extensions";
 import { captureExecute } from "@crustjs/testing";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { type ApiCommandOptions, apiCommand } from "./api-command.ts";
+import { type ApiCommandOptions, ApiResponseError, apiCommand } from "./api-command.ts";
 import { apiClient, fetchNextPage } from "./client.ts";
 
 const spec = {
@@ -51,6 +52,9 @@ const spec = {
 		},
 	},
 };
+
+const getUserSpec =
+	'{"method":"GET","path":"/users/{id}","operationId":"getUser","parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"string"}}]}';
 
 interface FetchCall {
 	url: string;
@@ -122,27 +126,119 @@ describe("api --list and --spec", () => {
 		expect(calls).toEqual([]);
 	});
 
-	it("prints an operation by operationId with $refs resolved (URI-encoded too), cycles and non-pointer fragments kept", async () => {
+	it("prints an operation by operationId with $refs used once inlined (URI-encoded too), recursive ones under $refs, and non-pointer fragments kept", async () => {
 		const { stdout, exitCode } = await captureExecute(buildApp(), ["api", "--spec", "createUser"]);
 
 		expect(exitCode).toBe(0);
 		expect(JSON.parse(stdout)).toEqual({
+			method: "POST",
+			path: "/users",
 			operationId: "createUser",
 			requestBody: {
-				content: {
-					"application/json": {
-						schema: {
-							type: "object",
-							properties: {
-								name: { type: "string", minLength: 1, description: "Display name" },
-								friends: { type: "array", items: { $ref: "#/components/schemas/User" } },
-								nick: { type: "string", minLength: 1 },
-								tag: { $ref: "#Tag" },
-							},
-						},
+				content: { "application/json": { schema: { $ref: "#/components/schemas/User" } } },
+			},
+			$refs: {
+				"#/components/schemas/User": {
+					type: "object",
+					properties: {
+						name: { type: "string", minLength: 1, description: "Display name" },
+						friends: { type: "array", items: { $ref: "#/components/schemas/User" } },
+						nick: { type: "string", minLength: 1 },
+						tag: { $ref: "#Tag" },
 					},
 				},
 			},
+		});
+	});
+
+	it("writes each shared $ref target once, so a deep diamond-shaped schema graph stays small", async () => {
+		const depth = 40;
+		const schemas: Record<string, unknown> = { S0: { type: "string" } };
+		for (let i = 1; i <= depth; i++) {
+			const previous = { $ref: `#/components/schemas/S${i - 1}` };
+			schemas[`S${i}`] = {
+				type: "object",
+				properties: {
+					left: previous,
+					right: previous,
+					self: { $ref: `#/components/schemas/S${i}` },
+				},
+			};
+		}
+		const app = buildApp({
+			spec: {
+				paths: {
+					"/d": { get: { operationId: "d", schema: { $ref: `#/components/schemas/S${depth}` } } },
+				},
+				components: { schemas },
+			},
+		});
+		const { stdout, exitCode } = await captureExecute(app, ["api", "--spec", "d"]);
+
+		expect(exitCode).toBe(0);
+		// Inlining every use would print 2^40 copies of S0.
+		expect(stdout.length).toBeLessThan(20_000);
+		const { $refs, ...operation } = JSON.parse(stdout);
+		expect(operation).toEqual({
+			method: "GET",
+			path: "/d",
+			operationId: "d",
+			schema: { $ref: `#/components/schemas/S${depth}` },
+		});
+		expect(Object.keys($refs)).toHaveLength(depth + 1);
+		expect($refs["#/components/schemas/S1"]).toEqual(schemas.S1);
+		expect($refs["#/components/schemas/S0"]).toEqual(schemas.S0);
+	});
+
+	it("prints an operation's method, path, and the path item's parameters, which the operation's override by name and in", async () => {
+		const app = buildApp({
+			spec: {
+				paths: {
+					"/pets/{petId}": {
+						parameters: [
+							{ name: "petId", in: "path", required: true },
+							{ $ref: "#/components/parameters/RequestId" },
+							{ name: "limit", in: "header" },
+						],
+						get: {
+							operationId: "getPet",
+							parameters: [
+								{ name: "X-Request-Id", in: "header", description: "Overridden" },
+								{ name: "limit", in: "query" },
+							],
+						},
+					},
+				},
+				components: { parameters: { RequestId: { name: "X-Request-Id", in: "header" } } },
+			},
+		});
+		const { stdout } = await captureExecute(app, ["api", "--spec", "getPet"]);
+
+		expect(JSON.parse(stdout)).toEqual({
+			method: "GET",
+			path: "/pets/{petId}",
+			operationId: "getPet",
+			parameters: [
+				{ name: "petId", in: "path", required: true },
+				{ name: "limit", in: "header" },
+				{ name: "X-Request-Id", in: "header", description: "Overridden" },
+				{ name: "limit", in: "query" },
+			],
+		});
+	});
+
+	it("fails for an operationId several operations share, naming them", async () => {
+		const app = buildApp({
+			spec: {
+				paths: { "/a": { get: { operationId: "dup" }, post: { operationId: "dup" } } },
+			},
+		});
+
+		expect(await captureExecute(app, ["api", "--spec", "dup"])).toEqual({
+			stdout: "",
+			stderr:
+				'Error: The operationId "dup" is ambiguous in the OpenAPI spec (GET /a, POST /a): pass a path instead',
+			exitCode: 1,
 		});
 	});
 
@@ -165,7 +261,7 @@ describe("api --list and --spec", () => {
 
 		expect((await captureExecute(app, ["api", "--list"])).stdout).toBe("GET /users users");
 		expect((await captureExecute(app, ["api", "--spec", "users"])).stdout).toBe(
-			'{"operationId":"users"}',
+			'{"method":"GET","path":"/users","operationId":"users"}',
 		);
 		for (const target of ["fake", "x-meta"]) {
 			expect(await captureExecute(app, ["api", "--spec", target])).toMatchObject({
@@ -202,7 +298,7 @@ describe("spec loader", () => {
 			{ flags: { spec: "getUser" } },
 			{ signal: controller.signal },
 		);
-		expect(outcome).toMatchObject({ status: "completed", stdout: '{"operationId":"getUser"}' });
+		expect(outcome).toMatchObject({ status: "completed", stdout: getUserSpec });
 		expect(loader).toHaveBeenCalledTimes(2);
 		controller.abort();
 		expect(loader.mock.calls[1]?.[0].signal.aborted).toBe(true);
@@ -215,7 +311,7 @@ describe("spec loader", () => {
 			"getUser",
 		]);
 
-		expect(stdout).toBe('{"operationId":"getUser"}');
+		expect(stdout).toBe(getUserSpec);
 	});
 
 	it.each([
@@ -272,9 +368,7 @@ describe("spec loader", () => {
 	it("accepts a plain object without a prototype", async () => {
 		const app = buildApp({ spec: async () => Object.assign(Object.create(null), spec) });
 
-		expect((await captureExecute(app, ["api", "--spec", "getUser"])).stdout).toBe(
-			'{"operationId":"getUser"}',
-		);
+		expect((await captureExecute(app, ["api", "--spec", "getUser"])).stdout).toBe(getUserSpec);
 	});
 
 	it.each([
@@ -436,6 +530,135 @@ describe("api <path>", () => {
 		expect({ stdout, stderr, exitCode }).toEqual({
 			stdout: '{"message":"not found"}',
 			stderr: "Error: GET /users/9: HTTP 404 Not Found",
+			exitCode: 1,
+		});
+	});
+
+	it("keeps the query, -F query fields included, out of a non-2xx error", async () => {
+		stubFetch(() => new Response("", { status: 401, statusText: "Unauthorized" }));
+		const argv = ["/me?token=s3cr3t", "-X", "GET", "-F", "access_token=s3cr3t"];
+		const { stderr } = await captureExecute(buildApp(), ["api", ...argv]);
+		const outcome = await buildApp().run(["api"], {
+			args: { path: argv[0] },
+			flags: { method: "GET", field: ["access_token=s3cr3t"] },
+		});
+
+		expect(stderr).toBe("Error: GET /me: HTTP 401 Unauthorized");
+		const error = outcome.status === "failed" ? outcome.error : undefined;
+		expect(error).toBeInstanceOf(ApiResponseError);
+		expect(error).toMatchObject({
+			status: 401,
+			method: "GET",
+			url: "https://api.example.com/v1/me",
+			message: "GET /me: HTTP 401 Unauthorized",
+		});
+	});
+
+	it.each([
+		["patch", "PATCH"],
+		["PURGE", "PURGE"],
+		["purge", "purge"],
+		["M-SEARCH", "M-SEARCH"],
+	])("sends -X %s as %s", async (flag, method) => {
+		const calls = stubFetch();
+		const { exitCode } = await captureExecute(buildApp(), ["api", "/users", "-X", flag]);
+
+		expect(exitCode).toBe(0);
+		expect(calls[0]?.method).toBe(method);
+	});
+
+	it.each(["", "GE T", "DELETE ", " GET", "GET\t", "(GET)", "GÉT"])(
+		"rejects -X %j as a PARSE error before any request",
+		async (method) => {
+			const calls = stubFetch();
+			const outcome = await buildApp().run(["api"], {
+				args: { path: "/users" },
+				flags: { method },
+			});
+
+			expect(outcome.status === "failed" && outcome.error).toMatchObject({
+				code: "PARSE",
+				message: "Invalid -X value: expected an HTTP method such as GET or PATCH, without spaces.",
+				details: { flag: "method" },
+			});
+			expect(calls).toEqual([]);
+		},
+	);
+
+	it("rejects a method fetch() forbids before any request", async () => {
+		const calls = stubFetch();
+		const { stderr, exitCode } = await captureExecute(buildApp(), ["api", "/x", "-X", "connect"]);
+
+		expect({ stderr, exitCode }).toEqual({
+			stderr: "Error: -X CONNECT: this runtime's fetch() cannot send it.",
+			exitCode: 1,
+		});
+		expect(calls).toEqual([]);
+	});
+
+	// Bun's fetch() sends a method it does not know as GET.
+	it("rejects on Bun a method its fetch() would send as GET, and sends one it knows", () => {
+		const script = (method: string) => `
+			import { Crust } from "@crustjs/core";
+			import { apiCommand } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "api-command.ts")).href)};
+			globalThis.fetch = async (url, init) => new Response(init.method);
+			const app = new Crust("tool").extend(apiCommand({ spec: {}, baseUrl: "https://api.example.com" }));
+			process.exitCode = await app.execute({ argv: ["api", "/x", "-X", ${JSON.stringify(method)}] });
+		`;
+		const run = (method: string) =>
+			spawnSync("bun", ["-e", script(method)], {
+				cwd: join(import.meta.dirname, ".."),
+				encoding: "utf8",
+				timeout: 10_000,
+			});
+
+		expect(run("FOO")).toMatchObject({
+			stdout: "",
+			stderr: "Error: -X FOO: this runtime's fetch() cannot send it.\n",
+			status: 1,
+		});
+		expect(run("PURGE")).toMatchObject({ stdout: "PURGE\n", stderr: "", status: 0 });
+	});
+
+	// Tests run on Node; spawn each runtime so stdout is the process's own.
+	it.each([
+		["node", process.execPath, ["--input-type=module"]],
+		["bun", "bun", []],
+	])("writes a binary body's bytes to stdout unchanged on %s", (_runtime, command, options) => {
+		const script = `
+			import { Crust } from "@crustjs/core";
+			import { apiCommand } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "api-command.ts")).href)};
+			globalThis.fetch = async (url) => url.pathname === "/zip"
+				? new Response(new TextEncoder().encode("PK\\n"), { headers: { "content-type": "application/zip" } })
+				: new Response(new Uint8Array([0xff, 0xfe, 0x00, 0x01, 0x80, 0x0a]));
+			const app = new Crust("tool").extend(apiCommand({ spec: {}, baseUrl: "https://api.example.com" }));
+			process.exitCode = await app.execute({ argv: ["api", process.argv.at(-1)] });
+		`;
+		const run = (path: string) =>
+			spawnSync(command, [...options, "-e", script, "--", path], {
+				cwd: join(import.meta.dirname, ".."),
+				timeout: 10_000,
+			});
+
+		for (const [path, bytes] of [
+			["/bytes", [0xff, 0xfe, 0x00, 0x01, 0x80, 0x0a]],
+			["/zip", [0x50, 0x4b, 0x0a]],
+		] as const) {
+			const { stdout, stderr, status } = run(path);
+			expect({ stderr: stderr.toString(), status }).toEqual({ stderr: "", status: 0 });
+			expect([...stdout]).toEqual(bytes);
+		}
+	});
+
+	it("fails after the request when a binary body cannot be written to captured output", async () => {
+		stubFetch(
+			() => new Response("PK", { headers: { "content-type": "application/octet-stream" } }),
+		);
+
+		expect(await captureExecute(buildApp(), ["api", "/file.zip"])).toEqual({
+			stdout: "",
+			stderr:
+				"Error: api: the response body is binary (application/octet-stream); its bytes go only to the process's stdout, not to captured output",
 			exitCode: 1,
 		});
 	});
@@ -758,6 +981,115 @@ describe("api <path>", () => {
 			expect(run.status).toBe(0);
 		},
 	);
+});
+
+describe("api with json()", () => {
+	const jsonApp = (options: Partial<ApiCommandOptions> = {}) => buildApp(options).extend(json());
+
+	it("prints the response body as the JSON result on stdout", async () => {
+		stubFetch(({ url }) =>
+			url.endsWith("/text")
+				? new Response("plain\n")
+				: url.endsWith("/empty")
+					? new Response(null, { status: 204 })
+					: new Response('[\n  {"name": "ada", "lng": -0.0}\n]\n'),
+		);
+
+		for (const [path, stdout] of [
+			["/users", '[{"name":"ada","lng":0}]'],
+			["/text", '"plain\\n"'],
+			["/empty", ""],
+		]) {
+			expect(await captureExecute(jsonApp(), ["api", path as string, "--json"])).toEqual({
+				stdout,
+				stderr: "",
+				exitCode: 0,
+			});
+		}
+	});
+
+	it("prints --list and --spec as JSON data on stdout", async () => {
+		const list = await captureExecute(jsonApp(), ["api", "--list", "--json"]);
+		const operation = await captureExecute(jsonApp(), ["api", "--spec", "listUsers", "--json"]);
+
+		expect(list.stderr).toBe("");
+		expect(JSON.parse(list.stdout)).toEqual([
+			{ method: "GET", path: "/users", operationId: "listUsers", summary: "List users" },
+			{ method: "POST", path: "/users", operationId: "createUser" },
+			{ method: "GET", path: "/users/{id}", operationId: "getUser" },
+			{ method: "DELETE", path: "/users/{id}" },
+			{ method: "GET", path: "/teams", operationId: "listTeams", summary: "List teams" },
+		]);
+		expect(operation).toEqual({
+			stdout: '{"method":"GET","path":"/users","operationId":"listUsers","summary":"List users"}',
+			stderr: "",
+			exitCode: 0,
+		});
+	});
+
+	it("writes a non-2xx body to stderr, then the error with its status, method, and URL", async () => {
+		stubFetch(
+			() => new Response('{"message":"not found"}\n', { status: 404, statusText: "Not Found" }),
+		);
+
+		expect(await captureExecute(jsonApp(), ["api", "/users/9?key=s3cr3t", "--json"])).toEqual({
+			stdout: "",
+			stderr: [
+				'{"message":"not found"}',
+				'{"message":"GET /users/9: HTTP 404 Not Found","details":{"status":404,"method":"GET","url":"https://api.example.com/v1/users/9"}}',
+			].join("\n"),
+			exitCode: 1,
+		});
+	});
+
+	it("streams --paginate pages as NDJSON events, ending with an error line on a non-2xx page", async () => {
+		stubFetch(({ url }) =>
+			url.endsWith("page=3")
+				? new Response("gone", { status: 410, statusText: "Gone" })
+				: new Response(`{ "page": ${url.endsWith("page=2") ? 2 : 1} }`),
+		);
+		let pagesSeen = 0;
+		const app = jsonApp({ paginate: () => ({ path: `/users?page=${++pagesSeen + 1}` }) });
+		const { stdout, stderr, exitCode } = await captureExecute(app, [
+			"api",
+			"/users",
+			"--paginate",
+			"--json",
+		]);
+
+		expect(stdout.split("\n")).toEqual([
+			'{"type":"event","data":{"page":1}}',
+			'{"type":"event","data":{"page":2}}',
+			'{"type":"error","error":{"message":"GET /users: HTTP 410 Gone","details":{"status":410,"method":"GET","url":"https://api.example.com/v1/users"}}}',
+		]);
+		expect({ stderr, exitCode }).toEqual({ stderr: "gone", exitCode: 1 });
+	});
+
+	it("ends --paginate pages with a result line", async () => {
+		stubFetch(() => new Response("[1]"));
+		const { stdout, exitCode } = await captureExecute(jsonApp({ paginate: () => undefined }), [
+			"api",
+			"/users",
+			"--paginate",
+			"--json",
+		]);
+
+		expect({ stdout, exitCode }).toEqual({
+			stdout: '{"type":"event","data":[1]}\n{"type":"result"}',
+			exitCode: 0,
+		});
+	});
+
+	it("fails for a binary body, which has no JSON form", async () => {
+		stubFetch(() => new Response("GIF89a", { headers: { "content-type": "image/gif" } }));
+
+		expect(await captureExecute(jsonApp(), ["api", "/logo.gif", "--json"])).toEqual({
+			stdout: "",
+			stderr:
+				'{"message":"api: the response body is binary (image/gif); --json prints only text and JSON bodies, so run without it to write the bytes to stdout"}',
+			exitCode: 1,
+		});
+	});
 });
 
 describe("apiClient", () => {

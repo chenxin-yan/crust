@@ -200,6 +200,8 @@ Crust doesn't detect agents or add a global `--no-input`: the TTY check is the r
 
 For a CLI backed by an HTTP API, [`@crustjs/openapi`](/docs/modules/openapi) adds a `gh api`-style `api` command: an agent can list and read the bundled OpenAPI document offline and call endpoints your commands don't wrap yet, with your CLI's base URL and auth.
 
+With [`json()`](/docs/modules/extensions/json) registered, `api --list --json`, `api --spec <operationId> --json`, and `api <path> --json` print JSON data on stdout: the operations, the definition with its method, path, and parameters, or the parsed response body. A non-2xx response fails with the HTTP `status` in the error JSON's `details`; see [JSON output](/docs/modules/openapi#json-output).
+
 ## Checklist
 
 - Every command, argument, and flag has a `description`.

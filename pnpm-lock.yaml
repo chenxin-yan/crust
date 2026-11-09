@@ -582,6 +582,9 @@ importers:
       '@crustjs/core':
         specifier: workspace:*
         version: link:../core
+      '@crustjs/extensions':
+        specifier: workspace:*
+        version: link:../extensions
       '@crustjs/testing':
         specifier: workspace:*
         version: link:../testing
