@@ -398,6 +398,28 @@ describe("parseCommandInput", () => {
 		}
 	});
 
+	it("binds args and raw that share an Extension flag's name", async () => {
+		const app = new Crust("cli")
+			.extend(
+				defineExtension(presentation).flags({
+					input: { type: "string" },
+					[RAW_INPUT_PROPERTY]: { type: "boolean" },
+				}),
+			)
+			.add(
+				defineCommand("echo", (c) =>
+					c.args({ name: "input", type: "string", required: true }).action(noop),
+				),
+			);
+		const echo = (await app.snapshot()).subCommands.echo!;
+		expect(commandInputSchema(echo, ["echo"]).required).toEqual(["input"]);
+		expect(parseCommandInput(echo, { input: "hello", [RAW_INPUT_PROPERTY]: ["x"] })).toEqual({
+			args: { input: "hello" },
+			flags: {},
+			raw: ["x"],
+		});
+	});
+
 	it("binds prototype-named definitions as own properties", async () => {
 		const snapshot = await new Crust("cli")
 			.args({ name: "__proto__", type: "string" })

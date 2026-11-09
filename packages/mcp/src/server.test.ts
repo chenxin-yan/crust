@@ -435,6 +435,23 @@ describe("createMcpServer", () => {
 		});
 	});
 
+	it("binds an arg that shares an Extension flag's name", async () => {
+		const app = new Crust("cli").extend(json()).add(
+			defineCommand("echo", (c) =>
+				c
+					.args({ name: "json", type: "string", required: true })
+					.output(jsonSchemaOutput({ type: "object" }))
+					.action(({ args }) => ({ echoed: args.json })),
+			),
+		);
+		const client = await connect(app);
+		const [tool] = (await client.listTools()).tools;
+		expect(tool!.inputSchema.required).toEqual(["json"]);
+		expect(
+			(await client.callTool({ name: "echo", arguments: { json: "hello" } })).structuredContent,
+		).toEqual({ echoed: "hello" });
+	});
+
 	it("reports text-only results of tools with an outputSchema as errors", async () => {
 		const app = new Crust("cli").add(
 			defineCommand("count", (c) =>

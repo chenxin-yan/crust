@@ -215,9 +215,9 @@ function isString(value: JsonValue): value is string {
  * Split flat JSON command input (the shape {@link commandInputSchema}
  * describes) into structured `run()` input. Arg names fill `args`; any other
  * name goes to `flags`, where `run()` rejects unknown ones. Strings for `url`
- * definitions become `URL`s, and `undefined` entries are skipped. A flag an
- * Extension declares is rejected like an unknown flag, since command input
- * leaves it out, so such a key never selects a flag handler or reaches its Extension.
+ * definitions become `URL`s, and `undefined` entries are skipped. A key naming
+ * a flag an Extension declares, and no arg or `raw`, is rejected like an
+ * unknown flag, since command input leaves it out, so such a key never selects a flag handler or reaches its Extension.
  *
  * @throws {CrustError} `PARSE` when a key names an Extension flag, a value is not JSON data,
  *   a `url` value is not a valid URL, or `raw` is not an array of strings
@@ -233,7 +233,14 @@ export function parseCommandInput(
 	let raw: readonly string[] | undefined;
 	for (const [name, value] of Object.entries(values)) {
 		if (value === undefined) continue;
-		if (Object.hasOwn(command.flags, name) && command.flags[name]!.extension !== undefined) {
+		const isArg = argNames.includes(name);
+		// Args and `raw` win over a same-named Extension flag, matching commandInputSchema.
+		if (
+			!isArg &&
+			name !== RAW_INPUT_PROPERTY &&
+			Object.hasOwn(command.flags, name) &&
+			command.flags[name]!.extension !== undefined
+		) {
 			throw unknownFlag(name);
 		}
 		let given: JsonValue;
@@ -249,7 +256,6 @@ export function parseCommandInput(
 			raw = given;
 			continue;
 		}
-		const isArg = argNames.includes(name);
 		const label = isArg ? `<${name}>` : `--${name}`;
 		const toUrl = (item: JsonValue) => (isString(item) ? coerceUrl(item, label) : item);
 		(isArg ? args : flags)[name] = urlFields.includes(name)

@@ -139,7 +139,7 @@ Defaults are advertised as `JSON.stringify` copies: `URL`s become strings, and n
 
 `parseCommandInput(command, values)` turns such an object back into `run()` input; `run()` then validates it like any structured invocation.
 
-- Arg names fill `args`, `raw` fills `raw`, and every other name goes to `flags`, where `run()` rejects unknown ones. An Extension flag's name is rejected the same way, `Unknown flag "--json"`, here.
+- Arg names fill `args`, `raw` fills `raw`, and every other name goes to `flags`, where `run()` rejects unknown ones. Among those, an Extension flag's name is rejected the same way, `Unknown flag "--json"`, here; an arg sharing that name still binds as the arg.
 - Strings for `url` definitions become `URL`s. `commandInputFields(command)` returns the arg names and `url` field names it uses.
 - `undefined` entries are skipped.
 - It rejects with `PARSE` for an Extension flag, a value that is not JSON data, a `raw` that is not an array of strings, or an invalid URL (the same `Invalid URL for --name.` error argv gives, without the value).
