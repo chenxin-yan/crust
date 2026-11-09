@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/crust",
-	"version": "0.6.0",
+	"version": "0.5.6",
 	"description": "CLI to build and publish Crust apps as npm packages or standalone binaries",
 	"type": "module",
 	"license": "MIT",
@@ -59,7 +59,7 @@
 		"tsdown": "0.23.4"
 	},
 	"peerDependencies": {
-		"@crustjs/core": "^0.6.0"
+		"@crustjs/core": "^0.5.0"
 	},
 	"devDependencies": {
 		"@arethetypeswrong/core": "^0.18.5",

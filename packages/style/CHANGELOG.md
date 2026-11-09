@@ -1,31 +1,5 @@
 # @crustjs/style
 
-## 0.4.0
-
-### Minor Changes
-
-- [#589](https://github.com/chenxin-yan/crust/pull/589) [`db2f5b3`](https://github.com/chenxin-yan/crust/commit/db2f5b391ccbcc6750e98e9219511ecf0820baf6) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Add `createPlainStyle()`: plain style functions (`bold`, `red`, …) with fixed settings. It takes the same options as `createStyle()` and gives the same output, without chaining, `open`/`close`, or `fg`/`bg`, so importing it does not bundle the chain engine. Pass `overrides: { isTTY }` to decide color for a stream other than stdout. Its return type, `PlainStyle`, is exported.
-  
-  The default themes of `@crustjs/prompts` and `@crustjs/progress` use it to decide color from their own output stream, so apps that use prompts or spinners no longer bundle the chain engine. Output is unchanged.
-
-- [#584](https://github.com/chenxin-yan/crust/pull/584) [`bc85878`](https://github.com/chenxin-yan/crust/commit/bc858780958074fad17424509e5a4190e5e7d468) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - **Breaking:** bare color and modifier exports (`bold`, `red`, `bgYellow`, …) are now plain functions. `bold.red` on a bare export no longer chains; use `style.bold.red`, or nest calls (`bold(red(text))`). Bare exports also no longer carry `open`/`close`; read them from `style.bold`. Calling a bare export, directly or as a tagged template, works as before and follows the same `NO_COLOR`, `FORCE_COLOR`, and TTY rules. Their new `PlainStyleFn` type is exported.
-  
-  Importing a bare export no longer bundles the chain engine, color parsing, or CSS color names, so apps that use `help()` ship smaller bundles. Chaining on `style` and `createStyle()` instances is unchanged.
-
-### Patch Changes
-
-- [#539](https://github.com/chenxin-yan/crust/pull/539) [`ce12aed`](https://github.com/chenxin-yan/crust/commit/ce12aed7a34275c49b54340d1995378afedfa2a6) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Remove the `engines.deno` declaration; Deno is no longer supported.
-
-- [#592](https://github.com/chenxin-yan/crust/pull/592) [`4208178`](https://github.com/chenxin-yan/crust/commit/420817832f065c875e836b86deac832f84d86828) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Spinners and progress indicators without a `sink` or ambient terminal output now write standard error through the same writer as `@crustjs/core`'s default `stderr`, so inside a Command Action they stay in order with the action's `stderr()` lines and restore the cursor even when the process exits right away. Their default colors now follow only their own output, so creating a spinner no longer touches `process.stdout`, and `@crustjs/style` no longer reads `process.stdout` when `overrides.isTTY` is given.
-  
-  **Behavior change:** on macOS and Linux the default output is written synchronously to file descriptor 2, so replacing `process.stderr.write` no longer captures it. Pass a `sink` or use `withTerminalIO()` to capture spinner output.
-
-- [#513](https://github.com/chenxin-yan/crust/pull/513) [`6ef96cd`](https://github.com/chenxin-yan/crust/commit/6ef96cdc8349991ca77360e906f6ae56863cc38b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Create the `Intl.Segmenter` used by the Node `stringWidth()` fallback on first non-ASCII measurement instead of at import, and measure ANSI-styled ASCII without grapheme segmentation.
-
-- [#529](https://github.com/chenxin-yan/crust/pull/529) [`f49de57`](https://github.com/chenxin-yan/crust/commit/f49de57eb0d77220617792669fb185f1e20e656d) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Importing `@crustjs/style` is cheaper: chain methods and `fg`/`bg` now live on one shared prototype instead of being defined on every chain function. Chaining and `AnsiPair` behavior are unchanged; `open`/`close` remain own properties of each chain.
-
-- [#530](https://github.com/chenxin-yan/crust/pull/530) [`6ce95ed`](https://github.com/chenxin-yan/crust/commit/6ce95edb85095d8e8c3ab27fed8226d320fc3d82) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `@crustjs/style` now tree-shakes: the default instance, its named color helpers, and the code tables are side-effect-free to bundlers, so importing only `stringWidth`, `padEnd`, or `table` no longer bundles the color engine (`stringWidth` alone: ~12 KB → ~2 KB minified).
-
 ## 0.3.6
 
 ### Patch Changes

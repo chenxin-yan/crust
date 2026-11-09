@@ -1,21 +1,5 @@
 # @crustjs/store
 
-## 0.5.0
-
-### Minor Changes
-
-- [#510](https://github.com/chenxin-yan/crust/pull/510) [`6fdb8a6`](https://github.com/chenxin-yan/crust/commit/6fdb8a642b79a176d60d9a3d4be3431493201052) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `tryCoerceNumber` returns `undefined` for empty or whitespace-only input instead of `0`. Store `type: "number"` fields reject a persisted blank string with a `VALIDATION` error instead of reading it as `0`, and `@crustjs/env` reports `PORT=""` as invalid for `type: "number"`, as documented.
-
-### Patch Changes
-
-- [#523](https://github.com/chenxin-yan/crust/pull/523) [`d8f8062`](https://github.com/chenxin-yan/crust/commit/d8f8062ff67fb9ad31f8134b3ee59209325de75f) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - The `git-init` step no longer writes a fallback `Crust <crust@scaffolded.project>` identity into the new repository's config. When `user.name` or `user.email` is not configured, the missing field is passed to the initial commit only, so later commits use the user's own identity. `configDir()`, `dataDir()`, `stateDir()`, and `cacheDir()` now ignore relative `XDG_*_HOME` values, as the XDG Base Directory spec requires, and fall back to the home-relative default.
-
-- [#539](https://github.com/chenxin-yan/crust/pull/539) [`ce12aed`](https://github.com/chenxin-yan/crust/commit/ce12aed7a34275c49b54340d1995378afedfa2a6) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Remove the `engines.deno` declaration; Deno is no longer supported.
-
-- [#522](https://github.com/chenxin-yan/crust/pull/522) [`d64f307`](https://github.com/chenxin-yan/crust/commit/d64f30727fd3d28dcb26b7edeb6aed929a3efe19) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - A Standard Schema without the optional `types` member now infers its output from the successful `validate()` result (awaited) instead of `unknown` in store fields, env variables, and schema-backed flags and arguments; declared `types.output` still wins. `defineEnv()` now rejects a literal default outside literal `choices` and an async `parse` at compile time, as `defineFlag()` does. A store schema whose output is not JSON data now fails with a `FIX_JSON_OUTPUT` message instead of "not assignable to type 'never'". `@crustjs/effect` exports the `HandlerInput` type that `service()` requires, and `@crustjs/core/tooling` exports `LocalValueBrand`.
-- Updated dependencies [[`6fdb8a6`](https://github.com/chenxin-yan/crust/commit/6fdb8a642b79a176d60d9a3d4be3431493201052), [`a074f45`](https://github.com/chenxin-yan/crust/commit/a074f454a28611f0a0a1f3d0bab8df50b235960d), [`516bb0a`](https://github.com/chenxin-yan/crust/commit/516bb0a6bff1aa10c31080b799ef76c54ec12331), [`ce12aed`](https://github.com/chenxin-yan/crust/commit/ce12aed7a34275c49b54340d1995378afedfa2a6), [`643beb2`](https://github.com/chenxin-yan/crust/commit/643beb264f5b206177110dd947b258f47cc68073), [`708e181`](https://github.com/chenxin-yan/crust/commit/708e181f0de97b81b77d64261f754e2649af1761), [`4a4386d`](https://github.com/chenxin-yan/crust/commit/4a4386d64fdef5440e77cebd8b9ac85e7a1d7350), [`4208178`](https://github.com/chenxin-yan/crust/commit/420817832f065c875e836b86deac832f84d86828), [`d64f307`](https://github.com/chenxin-yan/crust/commit/d64f30727fd3d28dcb26b7edeb6aed929a3efe19), [`e802ec7`](https://github.com/chenxin-yan/crust/commit/e802ec7c09c6635d77716e3c1c545faa99fe7759), [`7811b12`](https://github.com/chenxin-yan/crust/commit/7811b12f73827e1d47a1574c4b88736eb82632b0), [`3a6dbb1`](https://github.com/chenxin-yan/crust/commit/3a6dbb1702cff684c17054cd476ddef0b5d56f99), [`a411ccb`](https://github.com/chenxin-yan/crust/commit/a411ccb1b09eb05dd372757549631f429587981f), [`0cdd29f`](https://github.com/chenxin-yan/crust/commit/0cdd29fb72ff71e67348f5d7e8cae75753cfaed5)]:
-  - @crustjs/utils@0.3.0
-
 ## 0.4.4
 
 ### Patch Changes

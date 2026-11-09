@@ -1,47 +1,5 @@
 # @crustjs/prompts
 
-## 0.3.0
-
-### Minor Changes
-
-- [#567](https://github.com/chenxin-yan/crust/pull/567) [`2821b47`](https://github.com/chenxin-yan/crust/commit/2821b479175e77e513330ac5100b50ac159573a7) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Breaking: prompts use the shared terminal IO names.
-  
-  - `PromptIO`, `PromptInput`, and `PromptOutput` are renamed to `TerminalIO`, `TerminalInput`, and `TerminalOutput`, the same types `@crustjs/progress` exports.
-  - The `withPromptIO()` alias is removed; use `withTerminalIO()`, which it pointed to.
-  - `resolvePromptIO()` is no longer exported; `runPrompt()` applies the same explicit, ambient, then process stream order.
-
-### Patch Changes
-
-- [#539](https://github.com/chenxin-yan/crust/pull/539) [`ce12aed`](https://github.com/chenxin-yan/crust/commit/ce12aed7a34275c49b54340d1995378afedfa2a6) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Remove the `engines.deno` declaration; Deno is no longer supported.
-
-- [#515](https://github.com/chenxin-yan/crust/pull/515) [`0e52e28`](https://github.com/chenxin-yan/crust/commit/0e52e28cef2b18dd7f9774e14be9083ad9167ba5) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `process.exit()` while a prompt is active restores raw mode and, for synchronous output sinks, the cursor.
-  
-  The fake terminal behind `createPromptIO()` and `renderPrompt()` (`@crustjs/prompts/testing`) now wraps text at its 80 columns by display width, so `screen()` matches a real terminal for long lines and wide characters.
-  
-  Text longer than 80 columns is now split across rows in `screen()` (and in `@crustjs/testing`'s `runInteractive()` screen), so assertions that match across the wrap point need to join the rows first.
-
-- [#513](https://github.com/chenxin-yan/crust/pull/513) [`6ef96cd`](https://github.com/chenxin-yan/crust/commit/6ef96cdc8349991ca77360e906f6ae56863cc38b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Decide default theme colors from the stream a prompt or spinner writes to instead of stdout. Prompts and spinners on a terminal stderr are now colored when stdout is piped, and redirected stderr no longer receives ANSI escapes when stdout is a terminal. `NO_COLOR` and `FORCE_COLOR` apply as before; theme functions you pass are unchanged.
-
-- [#514](https://github.com/chenxin-yan/crust/pull/514) [`1a688e6`](https://github.com/chenxin-yan/crust/commit/1a688e64357a522fbd9add9cd6054b102a517f11) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `input()` and `password()` now run `validate` on `initial` values; `input()` also validates non-interactive `default` values, throwing `initial value rejected: …` / `default value rejected: …` like the `schema` path already did.
-  
-  Prompts render only when both their input and their output are TTYs. With a redirected output (for example `mycli 2> log.txt`, or `app.run()` without injected terminal IO) they return `default` or reject with `NonInteractiveError` instead of drawing into the stream and waiting for keys. Custom outputs must set `isTTY: true` to render prompts.
-  
-  `select()`, `multiselect()`, `filter()`, and `multifilter()` reject a `default` or `initial` outside literal `choices` at compile time instead of widening the result type. Dynamic choice arrays and explicit type arguments are unchanged.
-  
-  Also fixes:
-  
-  - Multiselect `a` (toggle all) clears the selection when `max` is reached.
-  - Tab and other control characters are no longer inserted into text input, password, and filter queries. Ctrl+J submits like Enter: `runPrompt()` reports it as `return`.
-  - Fuzzy match highlighting lands on the right characters when lowercasing changes a label's length (for example `İ`).
-  - `input()` with a `schema` shows the submitted text instead of `String(output)` (such as `[object Object]`).
-
-- [#589](https://github.com/chenxin-yan/crust/pull/589) [`db2f5b3`](https://github.com/chenxin-yan/crust/commit/db2f5b391ccbcc6750e98e9219511ecf0820baf6) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Add `createPlainStyle()`: plain style functions (`bold`, `red`, …) with fixed settings. It takes the same options as `createStyle()` and gives the same output, without chaining, `open`/`close`, or `fg`/`bg`, so importing it does not bundle the chain engine. Pass `overrides: { isTTY }` to decide color for a stream other than stdout. Its return type, `PlainStyle`, is exported.
-  
-  The default themes of `@crustjs/prompts` and `@crustjs/progress` use it to decide color from their own output stream, so apps that use prompts or spinners no longer bundle the chain engine. Output is unchanged.
-- Updated dependencies [[`6fdb8a6`](https://github.com/chenxin-yan/crust/commit/6fdb8a642b79a176d60d9a3d4be3431493201052), [`a074f45`](https://github.com/chenxin-yan/crust/commit/a074f454a28611f0a0a1f3d0bab8df50b235960d), [`516bb0a`](https://github.com/chenxin-yan/crust/commit/516bb0a6bff1aa10c31080b799ef76c54ec12331), [`ce12aed`](https://github.com/chenxin-yan/crust/commit/ce12aed7a34275c49b54340d1995378afedfa2a6), [`ce12aed`](https://github.com/chenxin-yan/crust/commit/ce12aed7a34275c49b54340d1995378afedfa2a6), [`643beb2`](https://github.com/chenxin-yan/crust/commit/643beb264f5b206177110dd947b258f47cc68073), [`708e181`](https://github.com/chenxin-yan/crust/commit/708e181f0de97b81b77d64261f754e2649af1761), [`4a4386d`](https://github.com/chenxin-yan/crust/commit/4a4386d64fdef5440e77cebd8b9ac85e7a1d7350), [`4208178`](https://github.com/chenxin-yan/crust/commit/420817832f065c875e836b86deac832f84d86828), [`d64f307`](https://github.com/chenxin-yan/crust/commit/d64f30727fd3d28dcb26b7edeb6aed929a3efe19), [`e802ec7`](https://github.com/chenxin-yan/crust/commit/e802ec7c09c6635d77716e3c1c545faa99fe7759), [`db2f5b3`](https://github.com/chenxin-yan/crust/commit/db2f5b391ccbcc6750e98e9219511ecf0820baf6), [`6ef96cd`](https://github.com/chenxin-yan/crust/commit/6ef96cdc8349991ca77360e906f6ae56863cc38b), [`bc85878`](https://github.com/chenxin-yan/crust/commit/bc858780958074fad17424509e5a4190e5e7d468), [`f49de57`](https://github.com/chenxin-yan/crust/commit/f49de57eb0d77220617792669fb185f1e20e656d), [`6ce95ed`](https://github.com/chenxin-yan/crust/commit/6ce95edb85095d8e8c3ab27fed8226d320fc3d82), [`7811b12`](https://github.com/chenxin-yan/crust/commit/7811b12f73827e1d47a1574c4b88736eb82632b0), [`3a6dbb1`](https://github.com/chenxin-yan/crust/commit/3a6dbb1702cff684c17054cd476ddef0b5d56f99), [`a411ccb`](https://github.com/chenxin-yan/crust/commit/a411ccb1b09eb05dd372757549631f429587981f), [`0cdd29f`](https://github.com/chenxin-yan/crust/commit/0cdd29fb72ff71e67348f5d7e8cae75753cfaed5)]:
-  - @crustjs/utils@0.3.0
-  - @crustjs/style@0.4.0
-
 ## 0.2.6
 
 ### Patch Changes
