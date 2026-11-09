@@ -67,6 +67,16 @@ describe("runTui", () => {
 		expect(stdinDataListeners).toBe(0);
 	});
 
+	it("removes its keypress listener after teardown", () => {
+		const { outcome, keypressListenersBefore, keypressListenersAfter } = observe(
+			"keypress-listener-teardown",
+		);
+
+		expect(outcome).toEqual({ status: "resolved", valueType: "undefined" });
+		// OpenTUI's own exitOnCtrlC handler stays; only the adapter's listener is removed.
+		expect(keypressListenersAfter).toBe(keypressListenersBefore! - 1);
+	});
+
 	it("treats Ctrl+C with extra modifiers as a normal key, not cancellation", () => {
 		expect(observe("ctrl-shift-c").outcome).toEqual({
 			status: "resolved",
