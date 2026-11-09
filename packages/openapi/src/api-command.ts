@@ -615,15 +615,26 @@ export const apiCommand: ExtensionFactory<
 							}
 
 							if (flags.paginate) {
-								const decoder = new TextDecoder();
+								/** Each page's body as text; a binary page body fails, as it has no NDJSON line. */
+								async function* texts(): AsyncGenerator<{ response: Response; text: string }> {
+									for await (const { response, bytes } of pages()) {
+										const text = bodyText(response, bytes);
+										if (text !== undefined) yield { response, text };
+										else if (response.ok) {
+											const type = response.headers.get("content-type") ?? "no Content-Type";
+											throw new Error(
+												`api: a --paginate page body is binary (${type}); --paginate prints only text and JSON bodies`,
+											);
+										}
+									}
+								}
 								if (!json) {
-									for await (const { bytes } of pages()) stdout(compactJson(decoder.decode(bytes)));
+									for await (const { text } of texts()) stdout(compactJson(text));
 									return undefined;
 								}
 								// Each page body is an event of json()'s NDJSON stream.
 								return (async function* (): AsyncGenerator<JsonValue, undefined> {
-									for await (const { response, bytes } of pages()) {
-										const text = decoder.decode(bytes);
+									for await (const { response, text } of texts()) {
 										if (response.ok) yield bodyValue(text);
 										else if (text !== "") stderr(text.replace(/\r?\n$/, ""));
 									}
@@ -674,10 +685,12 @@ function withoutQuery(path: string): string {
 const TEXT_TYPE = /^text\/|[/+](?:json|xml|yaml|x-yaml|x-ndjson|javascript|x-www-form-urlencoded)$/;
 
 /**
- * The body as text, or `undefined` for a binary body: one whose Content-Type is not textual
- * (text/*, JSON, XML, YAML, NDJSON, JavaScript, form data), or that is not valid UTF-8.
+ * The body as text, or `undefined` for a binary body: a non-empty one whose Content-Type is not
+ * textual (text/*, JSON, XML, YAML, NDJSON, JavaScript, form data), or that is not valid UTF-8.
  */
 function bodyText(response: Response, bytes: Uint8Array): string | undefined {
+	// HEAD, 204, and empty downloads keep their Content-Type but have no bytes to misprint.
+	if (bytes.length === 0) return "";
 	const type = (response.headers.get("content-type") ?? "").split(";")[0]?.trim().toLowerCase();
 	if (type && !TEXT_TYPE.test(type)) return undefined;
 	try {

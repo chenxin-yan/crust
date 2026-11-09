@@ -836,6 +836,43 @@ describe("api <path>", () => {
 		expect(stdout.split("\n").map((line) => JSON.parse(line))).toEqual(["first\nsecond", ""]);
 	});
 
+	it("fails on a binary --paginate page instead of printing it decoded", async () => {
+		stubFetch(({ url }) =>
+			url.endsWith("page=2")
+				? new Response(new Uint8Array([255, 254, 128]), {
+						headers: { "content-type": "application/octet-stream" },
+					})
+				: new Response("[1]"),
+		);
+		let pagesSeen = 0;
+		const app = buildApp({
+			paginate: () => (pagesSeen++ === 0 ? { path: "/users?page=2" } : undefined),
+		});
+
+		expect(await captureExecute(app, ["api", "/users", "--paginate"])).toEqual({
+			stdout: "[1]",
+			stderr:
+				"Error: api: a --paginate page body is binary (application/octet-stream); --paginate prints only text and JSON bodies",
+			exitCode: 1,
+		});
+	});
+
+	it("prints an empty body under a binary Content-Type as nothing", async () => {
+		stubFetch(
+			() =>
+				new Response(null, {
+					status: 204,
+					headers: { "content-type": "application/octet-stream" },
+				}),
+		);
+
+		expect(await captureExecute(buildApp(), ["api", "/file", "-X", "HEAD"])).toEqual({
+			stdout: "",
+			stderr: "",
+			exitCode: 0,
+		});
+	});
+
 	it("rejects --paginate when the CLI configures no paginate()", async () => {
 		const calls = stubFetch();
 		const { stderr, exitCode } = await captureExecute(buildApp(), ["api", "/users", "--paginate"]);
@@ -1078,6 +1115,55 @@ describe("api with json()", () => {
 			stdout: '{"type":"event","data":[1]}\n{"type":"result"}',
 			exitCode: 0,
 		});
+	});
+
+	it("ends --paginate with an error line on a binary page or one that is not UTF-8", async () => {
+		for (const contentType of ["application/octet-stream", "application/json"]) {
+			stubFetch(({ url }) =>
+				url.endsWith("page=2")
+					? new Response(new Uint8Array([255, 254, 128]), {
+							headers: { "content-type": contentType },
+						})
+					: new Response("[1]"),
+			);
+			let pagesSeen = 0;
+			const app = jsonApp({
+				paginate: () => (pagesSeen++ === 0 ? { path: "/users?page=2" } : undefined),
+			});
+			const { stdout, exitCode } = await captureExecute(app, [
+				"api",
+				"/users",
+				"--paginate",
+				"--json",
+			]);
+
+			expect({ stdout: stdout.split("\n"), exitCode }).toEqual({
+				stdout: [
+					'{"type":"event","data":[1]}',
+					`{"type":"error","error":{"message":"api: a --paginate page body is binary (${contentType}); --paginate prints only text and JSON bodies"}}`,
+				],
+				exitCode: 1,
+			});
+		}
+	});
+
+	it("prints nothing for an empty body under a binary Content-Type", async () => {
+		stubFetch(({ method }) =>
+			method === "HEAD"
+				? new Response(null, { headers: { "content-type": "application/octet-stream" } })
+				: new Response(null, {
+						status: 204,
+						headers: { "content-type": "application/octet-stream" },
+					}),
+		);
+
+		for (const method of ["HEAD", "DELETE"]) {
+			expect(await captureExecute(jsonApp(), ["api", "/file", "-X", method, "--json"])).toEqual({
+				stdout: "",
+				stderr: "",
+				exitCode: 0,
+			});
+		}
 	});
 
 	it("fails for a binary body, which has no JSON form", async () => {

@@ -125,7 +125,7 @@ my-cli api /users --paginate                       # every page, one JSON line e
 After each successful page, `--paginate` calls `paginate(response)` with a copy of the response, so it may read headers or the body. It requests the page `paginate` returns, until it returns `undefined`.
 
 - A returned request without `init` reuses the previous request's method, headers, and body.
-- Each page body is printed as one JSON line (NDJSON). JSON is compacted by removing whitespace outside strings, so numbers keep their exact digits; any other body, including an empty one, is printed as a JSON string.
+- Each page body is printed as one JSON line (NDJSON). JSON is compacted by removing whitespace outside strings, so numbers keep their exact digits; any other text body, including an empty one, is printed as a JSON string. A binary page body (as defined under [Output and errors](#output-and-errors)) has no JSON line, so it fails the command with exit code 1; pages already printed stay printed.
 - If `paginate` returns the request just sent (same resolved URL and method, without a new `init`), it fails with exit code 1 instead of looping. Pages already printed stay printed.
 - Without a `paginate` option, `--paginate` fails before any request.
 
@@ -141,7 +141,7 @@ Like `gh api`, the request must stay on the base URL's origin (scheme, host, and
 
 The response body goes to stdout:
 
-- A text body is printed as text, ending with exactly one newline (an empty body prints nothing). A body is text when it is valid UTF-8 and its `Content-Type` is missing, `text/*`, or JSON, XML, YAML, NDJSON, JavaScript, or form data (such as `application/json` or `application/problem+json`).
+- A text body is printed as text, ending with exactly one newline (an empty body prints nothing, whatever its `Content-Type`, so `HEAD` and `204` responses succeed). A non-empty body is text when it is valid UTF-8 and its `Content-Type` is missing, `text/*`, or JSON, XML, YAML, NDJSON, JavaScript, or form data (such as `application/json` or `application/problem+json`).
 - Any other body is binary and is written as its raw bytes, unchanged, so `my-cli api /export.zip > export.zip` works. Raw bytes only go to the process's own stdout: when output is captured as text, such as by [`run()`](/docs/api/crust#runpath-input-options) or `captureExecute()`, a binary body fails the command with exit code 1 after the request.
 
 | Failure                                                                                                                              | Result                                                                                                                                                                                              |
