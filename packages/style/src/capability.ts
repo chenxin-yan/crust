@@ -34,6 +34,12 @@ function forceColorDisables(forceColor: string): boolean {
 	return forceColor === "0" || forceColor === "false";
 }
 
+// terminfo's `dumb` terminal has no color or attribute capabilities; Node's `getColorDepth` and
+// supports-color also let it override `COLORTERM`. Case-insensitive like the other `TERM` checks.
+function isDumbTerm(term: string | undefined): boolean {
+	return term?.toLowerCase() === "dumb";
+}
+
 function isTrueColorTerm(term: string): boolean {
 	const lower = term.toLowerCase();
 	return lower.includes("24bit") || lower.includes("truecolor") || lower.endsWith("-direct");
@@ -77,19 +83,20 @@ function detectDepth(
  * - `"never"` → `"none"`.
  * - `"always"` → `"truecolor"`.
  * - `"auto"`:
- *   1. `FORCE_COLOR` set → decides unconditionally (overrides TTY and
- *      `NO_COLOR`, chalk convention): `0` / `false` → `"none"`; `1` →
+ *   1. `FORCE_COLOR` set → decides unconditionally (overrides TTY,
+ *      `NO_COLOR`, and `TERM=dumb`, as in Node's `tty` color detection):
+ *      `0` / `false` → `"none"`; `1` →
  *      `"16"`; `2` → `"256"`; `3` → `"truecolor"`; any other value
  *      (including empty) → forced on at the `COLORTERM` / `TERM`
  *      detected depth.
- *   2. Not a TTY OR `NO_COLOR` set non-empty → `"none"`.
+ *   2. Not a TTY OR `NO_COLOR` set non-empty OR `TERM=dumb`
+ *      (case-insensitive) → `"none"`.
  *   3. `COLORTERM` is `"truecolor"` or `"24bit"` (case-insensitive) →
  *      `"truecolor"`.
  *   4. `TERM` ends with `-direct` OR contains `truecolor` / `24bit` →
  *      `"truecolor"`.
- *   5. `TERM === "dumb"` → `"none"`.
- *   6. `TERM` contains `256color` → `"256"`.
- *   7. Any other TTY value → `"16"`.
+ *   5. `TERM` contains `256color` → `"256"`.
+ *   6. Any other TTY value → `"16"`.
  *
  * Detection follows the ecosystem `FORCE_COLOR` / `NO_COLOR` / `COLORTERM`
  * / `TERM` conventions; no bespoke environment variables are introduced.
@@ -149,10 +156,7 @@ export function resolveColorDepth(mode: ColorMode, overrides?: CapabilityOverrid
 		return "none";
 	}
 
-	// Case-insensitive to match `isTrueColorTerm` and the `256color` check
-	// inside `detectDepth`: `TERM=DUMB` / `TERM=Dumb` should also disable
-	// color. Truecolor detection wins over `dumb` (matches prior behavior).
-	if (term !== undefined && term.toLowerCase() === "dumb" && !detectsTruecolor(colorTerm, term)) {
+	if (isDumbTerm(term)) {
 		return "none";
 	}
 
@@ -162,8 +166,9 @@ export function resolveColorDepth(mode: ColorMode, overrides?: CapabilityOverrid
 /**
  * Resolve whether non-color ANSI modifiers should be emitted.
  *
- * In `"auto"` mode, modifiers are enabled when stdout is a TTY, but are
- * **not** affected by `NO_COLOR` (which only controls color output).
+ * In `"auto"` mode, modifiers are enabled when stdout is a TTY and `TERM`
+ * is not `dumb`, but are **not** affected by `NO_COLOR` (which only
+ * controls color output).
  * `FORCE_COLOR`, when set, decides unconditionally — it is the all-ANSI
  * switch, while `NO_COLOR` is the colors-only switch.
  *
@@ -187,5 +192,5 @@ export function resolveModifierCapability(
 		return !forceColorDisables(forceColor);
 	}
 
-	return readTTY(overrides);
+	return readTTY(overrides) && !isDumbTerm(read(overrides, "term", process.env.TERM));
 }

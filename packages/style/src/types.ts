@@ -32,9 +32,9 @@ export type ColorInput = ColorString | readonly [r: number, g: number, b: number
  * Color emission mode for a style instance.
  *
  * - `"auto"` — Read the environment on resolution: colors are emitted
- *   when stdout is a TTY and `NO_COLOR` is not set (or is empty);
- *   non-color modifiers (bold, italic, etc.) follow TTY only and are
- *   **not** affected by `NO_COLOR`. `FORCE_COLOR`, when set, decides
+ *   when stdout is a TTY, `TERM` is not `dumb`, and `NO_COLOR` is not
+ *   set (or is empty); non-color modifiers (bold, italic, etc.) follow
+ *   TTY and `TERM=dumb` only and are **not** affected by `NO_COLOR`. `FORCE_COLOR`, when set, decides
  *   unconditionally for both (the all-ANSI switch).
  * - `"always"` — Always emit ANSI codes regardless of terminal detection.
  * - `"never"` — Suppress every form of ANSI (colors, modifiers,

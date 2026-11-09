@@ -55,6 +55,6 @@ See the [full `run()` contract](/docs/api/crust#runpath-input-options).
 - `await run.done` gives the same outcome as `run()`, with the typed `result`, `stdout`, and `stderr`.
 - Prompts show even when `CI` is set, so the test passes on CI runners as well.
 
-Captured output never depends on the test runner's terminal: styled text is plain in `run()`, `captureExecute()`, and `runInteractive()` unless `FORCE_COLOR` is set.
+Captured output does not depend on whether the test runner's stdout is a terminal: styled text is plain in `run()`, `captureExecute()`, and `runInteractive()` unless `FORCE_COLOR` is set, which some runners do for their workers (see [Styled output](/docs/modules/testing#styled-output)).
 
 See the [`runInteractive()` reference](/docs/modules/testing#runinteractiveapp-path-input).

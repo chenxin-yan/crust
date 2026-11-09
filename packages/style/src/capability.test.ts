@@ -130,15 +130,11 @@ describe("resolveColorDepth", () => {
 			).toBe("none");
 		});
 
-		it("COLORTERM truecolor wins over TERM=dumb (TERM=dumb only checked when no truecolor signal)", () => {
-			expect(
-				resolveColorDepth("auto", {
-					isTTY: true,
-					noColor: undefined,
-					colorTerm: "truecolor",
-					term: "dumb",
-				}),
-			).toBe("truecolor");
+		it("TERM=dumb wins over COLORTERM=truecolor and disables modifiers too", () => {
+			const dumb = { isTTY: true, colorTerm: "truecolor", term: "dumb" };
+			expect(resolveColorDepth("auto", dumb)).toBe("none");
+			expect(resolveModifierCapability("auto", dumb)).toBe(false);
+			expect(resolveModifierCapability("auto", { ...dumb, forceColor: "1" })).toBe(true);
 		});
 
 		it('TTY + TERM=xterm-24bit → "truecolor"', () => {

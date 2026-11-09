@@ -40,6 +40,8 @@ The fake terminal counts as interactive even when `CI` is set, so a test that an
 
 Captured `stdout` is plain text: [`@crustjs/style`](/docs/modules/style) emits no ANSI codes for text bound for `run()`, `captureExecute()`, or `runInteractive()`, whether or not the test runner's own stdout is a terminal. Set `FORCE_COLOR` in the test environment to assert on escape codes.
 
+Some runners set `FORCE_COLOR=1` for their workers when their own output is a color terminal, such as Jest's child-process workers and `bun test --parallel`, which brings the escape codes back. For plain output under those runners, delete `process.env.FORCE_COLOR` in a setup file.
+
 <auto-type-table path="../../../../../packages/testing/src/interactive.ts" name="InteractiveRun" />
 
 ## Custom prompts
