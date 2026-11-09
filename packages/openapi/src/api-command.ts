@@ -357,7 +357,8 @@ function parseField(field: string): [string, unknown] {
 	return [field.slice(0, at), number];
 }
 
-// Methods fetch() normalizes to upper case; other methods are case-sensitive and sent as given.
+// Matched case-insensitively and sent upper-cased, like fetch()'s own normalization (which skips PATCH,
+// so `patch` would get a 405); other methods are case-sensitive (RFC 9110 §9.1) and sent as given.
 const STANDARD_METHODS = new Set([
 	"CONNECT",
 	"DELETE",
@@ -383,15 +384,17 @@ function parseMethod(method: string): string {
 	}
 	const upper = method.toUpperCase();
 	const normalized = STANDARD_METHODS.has(upper) ? upper : method;
-	// Bun's fetch() sends a method it does not know as GET; Request shows what would be sent.
+	// Bun's fetch() sends a method it does not know as GET and upper-cases one it knows, such as
+	// `purge`; Request shows what would be sent.
 	let sent: string | undefined;
 	try {
 		sent = new Request("http://localhost/", { method: normalized }).method;
 	} catch {
-		// A method fetch() forbids, such as CONNECT.
+		// A method fetch() forbids, such as CONNECT on Node.
 	}
 	if (sent !== normalized) {
-		throw new CrustError("PARSE", `-X ${normalized}: this runtime's fetch() cannot send it.`, {
+		const problem = sent === undefined ? "cannot send it" : `would send it as ${sent}`;
+		throw new CrustError("PARSE", `-X ${normalized}: this runtime's fetch() ${problem}.`, {
 			flag: "method",
 		});
 	}
@@ -487,9 +490,9 @@ type ApiCommandDefinition = CommandDefinition<
 /**
  * Provides the {@link apiClient} Context and contributes `api`: `api --list` and
  * `api --spec <operationId|path>` read the spec (calling its loader, if any); `api <path>` sends
- * a request through the client, prints the response body to stdout (a binary body as raw bytes),
- * and fails with {@link ApiResponseError} on a non-2xx status. Under the `json()` Extension's
- * `--json`, `api` returns its data as the command result instead: the operations, the
+ * a request through the client, prints the response body to stdout (a binary body as raw bytes,
+ * failing instead when stdout is a terminal), and fails with {@link ApiResponseError} on a non-2xx
+ * status. Under the `json()` Extension's `--json`, `api` returns its data as the command result instead: the operations, the
  * definition, or the parsed response body; `--paginate` yields each page body as an event.
  */
 export const apiCommand: ExtensionFactory<
@@ -649,14 +652,20 @@ export const apiCommand: ExtensionFactory<
 									const { getAmbientTerminalIO, writeProcessOutput } =
 										await import("@crustjs/utils/terminal");
 									// Bytes go only to the process's own stdout; injected output (`run()`) takes text lines.
-									if (!json && getAmbientTerminalIO() === undefined) {
+									const captured = getAmbientTerminalIO() !== undefined;
+									// Like gh api and curl, never to a terminal, which raw bytes can garble.
+									const terminal =
+										!json && !captured && process.getBuiltinModule("node:tty").isatty(1);
+									if (!json && !captured && !terminal) {
 										writeProcessOutput(1, bytes);
 									} else if (response.ok) {
 										const type = response.headers.get("content-type") ?? "no Content-Type";
 										throw new Error(
 											json
 												? `api: the response body is binary (${type}); --json prints only text and JSON bodies, so run without it to write the bytes to stdout`
-												: `api: the response body is binary (${type}); its bytes go only to the process's stdout, not to captured output`,
+												: captured
+													? `api: the response body is binary (${type}); its bytes go only to the process's stdout, not to captured output`
+													: `api: the response body is binary (${type}); redirect or pipe stdout to save it instead of printing it to the terminal`,
 										);
 									}
 								} else if (text !== "") {

@@ -118,14 +118,14 @@ my-cli api /users --paginate                       # every page, one JSON line e
 
 - The standard methods (`GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `CONNECT`, `OPTIONS`, `TRACE`, `PATCH`) are sent in upper case whatever their case, so `-X patch` sends `PATCH`. Any other method, such as `PURGE`, is sent exactly as given.
 - An empty value or one with spaces or other characters, such as `-X "DELETE "`, fails with a `PARSE` error before any request.
-- So does a method the runtime's `fetch()` would not send as given: one it forbids, such as `CONNECT`, or, on Bun, one it does not know, which its `fetch()` would send as `GET`.
+- So does a method the runtime's `fetch()` would not send as given, naming what it would send instead: one Node's `fetch()` forbids, such as `CONNECT`, or, on Bun, one it does not know, which its `fetch()` would send as `GET`, and a lowercase one it knows, such as `purge`, which it would send as `PURGE`.
 
 #### `--paginate`
 
 After each successful page, `--paginate` calls `paginate(response)` with a copy of the response, so it may read headers or the body. It requests the page `paginate` returns, until it returns `undefined`.
 
 - A returned request without `init` reuses the previous request's method, headers, and body.
-- Each page body is printed as one JSON line (NDJSON). JSON is compacted by removing whitespace outside strings, so numbers keep their exact digits; any other text body, including an empty one, is printed as a JSON string. A binary page body (as defined under [Output and errors](#output-and-errors)) has no JSON line, so it fails the command with exit code 1; pages already printed stay printed.
+- Each page body is printed as one JSON line (NDJSON), so `my-cli api /users --paginate | jq -s` collects the pages into one array, like `gh api --paginate --slurp`. (Without `--slurp`, `gh api` instead joins array pages into one array.) JSON is compacted by removing whitespace outside strings, so numbers keep their exact digits; any other text body, including an empty one, is printed as a JSON string. A binary page body (as defined under [Output and errors](#output-and-errors)) has no JSON line, so it fails the command with exit code 1; pages already printed stay printed.
 - If `paginate` returns the request just sent (same resolved URL and method, without a new `init`), it fails with exit code 1 instead of looping. Pages already printed stay printed.
 - Without a `paginate` option, `--paginate` fails before any request.
 
@@ -142,7 +142,7 @@ Like `gh api`, the request must stay on the base URL's origin (scheme, host, and
 The response body goes to stdout:
 
 - A text body is printed as text, ending with exactly one newline (an empty body prints nothing, whatever its `Content-Type`, so `HEAD` and `204` responses succeed). A non-empty body is text when it is valid UTF-8 and its `Content-Type` is missing, `text/*`, or JSON, XML, YAML, NDJSON, JavaScript, or form data (such as `application/json` or `application/problem+json`).
-- Any other body is binary and is written as its raw bytes, unchanged, so `my-cli api /export.zip > export.zip` works. Raw bytes only go to the process's own stdout: when output is captured as text, such as by [`run()`](/docs/api/crust#runpath-input-options) or `captureExecute()`, a binary body fails the command with exit code 1 after the request.
+- Any other body is binary and is written as its raw bytes, unchanged, so `my-cli api /export.zip > export.zip` works. Raw bytes only go to the process's own stdout when it is a pipe or file. When stdout is a terminal, which the bytes could garble, a binary body fails the command with exit code 1 after the request, as `gh api` and `curl` refuse; so does one when output is captured as text, such as by [`run()`](/docs/api/crust#runpath-input-options) or `captureExecute()`. A non-2xx binary body is then left out, and the command fails with the `ApiResponseError`.
 
 | Failure                                                                                                                              | Result                                                                                                                                                                                              |
 | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -165,7 +165,6 @@ $ my-cli api /users/9 --json
 
 | Command                 | Result on stdout                                                                                                                                                                   |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ----------------------  | ----------------------------------------------------------------------------------------------------------------------------------------------------------------                   |
 | `api --list`            | An array of `{ method, path, operationId?, summary? }`                                                                                                                             |
 | `api --spec <target>`   | The definition `--spec` prints, as above                                                                                                                                           |
 | `api <path>`            | The response body: parsed when it is JSON, otherwise its text as a JSON string; nothing for an empty body. A binary body fails the command, since JSON can't hold it               |

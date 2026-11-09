@@ -614,7 +614,13 @@ describe("api <path>", () => {
 
 		expect(run("FOO")).toMatchObject({
 			stdout: "",
-			stderr: "Error: -X FOO: this runtime's fetch() cannot send it.\n",
+			stderr: "Error: -X FOO: this runtime's fetch() would send it as GET.\n",
+			status: 1,
+		});
+		// Bun upper-cases a method it knows, which would change a case-sensitive method.
+		expect(run("purge")).toMatchObject({
+			stdout: "",
+			stderr: "Error: -X purge: this runtime's fetch() would send it as PURGE.\n",
 			status: 1,
 		});
 		expect(run("PURGE")).toMatchObject({ stdout: "PURGE\n", stderr: "", status: 0 });
@@ -648,6 +654,33 @@ describe("api <path>", () => {
 			expect({ stderr: stderr.toString(), status }).toEqual({ stderr: "", status: 0 });
 			expect([...stdout]).toEqual(bytes);
 		}
+	});
+
+	// Like gh api and curl: raw bytes can garble a terminal, so only a pipe or file gets them.
+	it.each([
+		["node", process.execPath, ["--input-type=module"]],
+		["bun", "bun", []],
+	])("fails instead of writing a binary body to a terminal on %s", (_runtime, command, options) => {
+		const script = `
+			process.getBuiltinModule("node:tty").isatty = (fd) => fd === 1;
+			const { Crust } = await import("@crustjs/core");
+			const { apiCommand } = await import(${JSON.stringify(pathToFileURL(join(import.meta.dirname, "api-command.ts")).href)});
+			globalThis.fetch = async () => new Response("PK", { headers: { "content-type": "application/zip" } });
+			const app = new Crust("tool").extend(apiCommand({ spec: {}, baseUrl: "https://api.example.com" }));
+			process.exitCode = await app.execute({ argv: ["api", "/export.zip"] });
+		`;
+		const { stdout, stderr, status } = spawnSync(command, [...options, "-e", script], {
+			cwd: join(import.meta.dirname, ".."),
+			encoding: "utf8",
+			timeout: 10_000,
+		});
+
+		expect({ stdout, stderr, status }).toEqual({
+			stdout: "",
+			stderr:
+				"Error: api: the response body is binary (application/zip); redirect or pipe stdout to save it instead of printing it to the terminal\n",
+			status: 1,
+		});
 	});
 
 	it("fails after the request when a binary body cannot be written to captured output", async () => {
