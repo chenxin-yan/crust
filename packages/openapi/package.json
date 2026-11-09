@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/openapi",
-	"version": "0.0.0",
+	"version": "0.1.0",
 	"description": "Call a CLI's HTTP API and browse its OpenAPI spec from an api command",
 	"type": "module",
 	"sideEffects": false,
