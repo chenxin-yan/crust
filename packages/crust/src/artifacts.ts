@@ -91,6 +91,15 @@ function assertResolvesInsideProject(cwd: string, entry: string, dir: string): v
 	const realCwd = realpathSync(cwd);
 	const seen = new Set<string>();
 	const npmIgnored: string[] = [];
+	const isNpmIgnored = (path: string): boolean =>
+		NPM_IGNORED_NAME.test(basename(path)) || path.endsWith(`${sep}build${sep}config.gypi`);
+	// The include is staged at its project-relative path, and npm drops an ignored
+	// ancestor directory with everything beneath it.
+	const parts = relative(cwd, dir).split(sep);
+	for (let index = 1; index < parts.length; index++) {
+		const ancestor = join(cwd, ...parts.slice(0, index));
+		if (isNpmIgnored(ancestor)) npmIgnored.push(relative(cwd, ancestor));
+	}
 	const walk = (path: string): void => {
 		const real = realpathSync(path);
 		if (!isWithin(realCwd, real)) {
@@ -98,7 +107,7 @@ function assertResolvesInsideProject(cwd: string, entry: string, dir: string): v
 				`package.json crust.include entry ${JSON.stringify(entry)} resolves outside the project root: ${relative(cwd, path)} -> ${real}`,
 			);
 		}
-		if (NPM_IGNORED_NAME.test(basename(path)) || path.endsWith(`${sep}build${sep}config.gypi`)) {
+		if (isNpmIgnored(path)) {
 			npmIgnored.push(relative(cwd, path));
 			return;
 		}
@@ -114,7 +123,7 @@ function assertResolvesInsideProject(cwd: string, entry: string, dir: string): v
 			.map((path) => `\n  ${path}`)
 			.join("");
 		throw new Error(
-			`package.json crust.include entry ${JSON.stringify(entry)} contains files npm leaves out of published packages:${listed}\n  npm drops these names in every directory. Rename each (e.g. .gitignore -> _gitignore) and restore the name when your CLI copies it; scaffold() from @crustjs/create turns a leading _ on a file name into a dot.`,
+			`package.json crust.include entry ${JSON.stringify(entry)} contains or sits under paths npm leaves out of published packages:${listed}\n  npm drops these names in every directory. Rename each (e.g. .gitignore -> _gitignore) and restore the name when your CLI copies it; scaffold() from @crustjs/create turns a leading _ on a file name into a dot.`,
 		);
 	}
 }

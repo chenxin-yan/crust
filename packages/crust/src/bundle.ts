@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { chmod, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
+import { chmod, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { runProcess } from "@crustjs/utils/process";
@@ -56,6 +56,8 @@ export type BunPluginDriverOptions = {
 	plugins: Array<{ specifier: string; source: string }>;
 	build: BunPluginDriverBuild;
 	outfile: string;
+	/** RegExp source matching the module paths whose leading shebang line is blanked on load. */
+	stripShebang?: string;
 };
 
 /**
@@ -84,6 +86,12 @@ for (const { specifier, source } of options.plugins) {
 		process.exit(1);
 	}
 	plugins.push(plugin);
+}
+if (options.stripShebang) {
+	// Last, so a project plugin's onLoad for the entry still wins. The emptied line keeps line numbers.
+	plugins.push({ name: "crust-strip-shebang", setup(build) {
+		build.onLoad({ filter: new RegExp(options.stripShebang) }, async ({ path, loader }) => ({ contents: (await Bun.file(path).text()).replace(/^#![^\\n]*/, ""), loader }));
+	} });
 }
 const result = await Bun.build({ ...options.build, define: ${JSON.stringify(CRUST_BUILD_DEFINE)}, plugins, throw: false });
 if (!result.success) {
@@ -123,6 +131,7 @@ async function runBunPluginDriver(
 	outfilePath: string,
 	{ cwd, envFiles, bunPlugins }: BundleSettings,
 	runner: BuildRunner,
+	stripShebang?: string,
 ): Promise<void> {
 	const driverPath = join(cwd, `.crust-build-${randomBytes(6).toString("hex")}.ts`);
 	await writeFile(
@@ -134,6 +143,7 @@ async function runBunPluginDriver(
 			})),
 			build,
 			outfile: outfilePath,
+			stripShebang,
 		}),
 	);
 	try {
@@ -248,34 +258,8 @@ export async function runBuildProcess(
 	return output;
 }
 
-/**
- * Runs `build` on a copy of the entry without its shebang, written beside it so
- * module resolution is unchanged. Bun bundles an entry whose shebang names bun
- * as Bun code even for `--target node`: the output is marked `// @bun` and
- * `import.meta.main` lowers to a `__require` Node lacks.
- */
-async function withoutEntryShebang(
-	entryPath: string,
-	build: (entryPath: string) => Promise<void>,
-): Promise<void> {
-	const source = await readFile(entryPath, "utf8");
-	if (!source.startsWith("#!")) return build(entryPath);
-	const copyPath = join(
-		dirname(entryPath),
-		`.crust-entry-${randomBytes(6).toString("hex")}${extname(entryPath)}`,
-	);
-	// The emptied first line keeps line numbers in diagnostics.
-	await writeFile(copyPath, source.replace(/^#![^\n]*/, ""));
-	try {
-		await build(copyPath);
-	} catch (error) {
-		if (error instanceof Error) {
-			error.message = error.message.replaceAll(basename(copyPath), basename(entryPath));
-		}
-		throw error;
-	} finally {
-		await rm(copyPath, { force: true });
-	}
+function escapeRegExp(text: string): string {
+	return text.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
 }
 
 /**
@@ -290,46 +274,53 @@ export async function execScriptBuild(
 	runner: BuildRunner = resolveBunBuildRunner(),
 ): Promise<void> {
 	const { cwd, minify, envFiles, external } = settings;
-	const build = async (entry: string) => {
-		if (settings.bunPlugins.length > 0) {
-			await runBunPluginDriver(
-				{
-					entrypoints: [entry],
-					minify,
-					env: "PUBLIC_*",
-					target,
-					format: "esm",
-					external,
-				},
+	// Bun bundles an entry whose shebang names bun as Bun code even for `--target node`:
+	// the output is marked `// @bun` and `import.meta.main` lowers to a `__require` Node
+	// lacks. The driver blanks that line as the entry loads, keeping its path, so
+	// back-imports and a symlinked entry's relative imports resolve as before. Bun
+	// hands onLoad the real path.
+	const stripShebang =
+		target === "node" && /^#![^\n]*\bbun\b/.test(await readFile(entryPath, "utf8"))
+			? `^(?:${[...new Set([entryPath, await realpath(entryPath)])].map(escapeRegExp).join("|")})$`
+			: undefined;
+	if (settings.bunPlugins.length > 0 || stripShebang !== undefined) {
+		await runBunPluginDriver(
+			{
+				entrypoints: [entryPath],
+				minify,
+				env: "PUBLIC_*",
+				target,
+				format: "esm",
+				external,
+			},
+			outfilePath,
+			settings,
+			runner,
+			stripShebang,
+		);
+	} else {
+		await runBuildProcess(
+			runner,
+			[
+				"build",
+				...toBunEnvFileArgs(envFiles),
+				"--env=PUBLIC_*",
+				"--define",
+				CRUST_BUILD_DEFINE_ARG,
+				"--target",
+				target,
+				"--format",
+				"esm",
+				...external.flatMap((name) => ["--external", name]),
+				"--outfile",
 				outfilePath,
-				settings,
-				runner,
-			);
-		} else {
-			await runBuildProcess(
-				runner,
-				[
-					"build",
-					...toBunEnvFileArgs(envFiles),
-					"--env=PUBLIC_*",
-					"--define",
-					CRUST_BUILD_DEFINE_ARG,
-					"--target",
-					target,
-					"--format",
-					"esm",
-					...external.flatMap((name) => ["--external", name]),
-					"--outfile",
-					outfilePath,
-					...(minify ? ["--minify"] : []),
-					entry,
-				],
-				outfilePath,
-				cwd,
-			);
-		}
-	};
-	await (target === "node" ? withoutEntryShebang(entryPath, build) : build(entryPath));
+				...(minify ? ["--minify"] : []),
+				entryPath,
+			],
+			outfilePath,
+			cwd,
+		);
+	}
 
 	const output = (await readFile(outfilePath, "utf8")).replace(/^#![^\n]*(?:\n|$)/, "");
 	if (target === "node" && output.startsWith("// @bun")) {

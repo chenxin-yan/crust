@@ -231,7 +231,7 @@ Each `bin` key is an installed command name and each value is the TypeScript ent
 
 - Entries must be existing directories inside the project. Symlinks are copied dereferenced and must resolve inside the project.
 - An entry cannot be named `bin`, be inside `.crust`, or reuse an Extension artifact directory name. Names are compared ignoring letter case (`Bin`, `Assets` vs `assets`), because they alias on case-insensitive file systems.
-- Names that npm leaves out of every published package, in any directory, fail the build: `.gitignore`, `.npmignore`, `.npmrc`, `.git`, `.DS_Store`, `*.orig`, and the rest of npm's built-in ignore list. Rename them (`_gitignore`) and restore the name when your CLI copies them; [`scaffold()`](/docs/modules/create#template-conventions) restores a leading `_` as `.`.
+- Names that npm leaves out of every published package, in any directory, fail the build, including in the path to a nested entry (`templates/app.orig/src`): `.gitignore`, `.npmignore`, `.npmrc`, `.git`, `.DS_Store`, `*.orig`, and the rest of npm's built-in ignore list. Rename them (`_gitignore`) and restore the name when your CLI copies them; [`scaffold()`](/docs/modules/create#template-conventions) restores a leading `_` as `.`.
 
 `crust.external` rules, checked before `.crust/` is wiped:
 

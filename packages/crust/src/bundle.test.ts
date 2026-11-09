@@ -8,6 +8,7 @@ import {
 	realpath,
 	rm,
 	stat,
+	symlink,
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -265,41 +266,61 @@ describe("execScriptBuild for Node", () => {
 		await Promise.all(tempDirs.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 	});
 
-	// create-crust scaffolds this shebang for runtime bun; Bun honors it over --target node.
-	for (const bunPlugins of [[], ["./plugin.ts"]]) {
-		const path = bunPlugins.length > 0 ? "the Bun.build driver" : "bun build";
-		it(`bundles a bun-shebang entry as Node code with ${path}`, async () => {
-			const directory = await mkdtemp(join(tmpdir(), "crust-node-package-test-"));
-			tempDirs.push(directory);
-			await writeFile(
-				join(directory, "plugin.ts"),
-				'export default { name: "noop", setup() {} };\n',
-			);
-			await writeFile(join(directory, "lib.ts"), 'export const from = "lib";\n');
-			await writeFile(
-				join(directory, "cli.ts"),
-				'#!/usr/bin/env bun\nimport { from } from "./lib.ts";\nif (import.meta.main) console.log(`main ${from}`);\n',
-			);
-			const outfile = join(directory, "out", "cli.js");
-			await execScriptBuild("node", join(directory, "cli.ts"), outfile, {
-				cwd: directory,
-				minify: false,
-				envFiles: [],
-				bunPlugins,
-				external: [],
-			});
+	// create-crust scaffolds the bun shebang for runtime bun; Bun honors it over --target node.
+	// The entry is a symlink into src/ and cycle.ts imports back from it: stripping the
+	// shebang must keep the entry's module identity and real resolution directory.
+	for (const bunPlugins of [[], ["./plugin.ts"]])
+		for (const shebang of ["#!/usr/bin/env bun", "#!/usr/bin/env node"]) {
+			const path = bunPlugins.length > 0 ? "with crust.bunPlugins" : "without crust.bunPlugins";
+			it(`bundles a "${shebang}" entry as Node code ${path}`, async () => {
+				const directory = await mkdtemp(join(tmpdir(), "crust-node-package-test-"));
+				tempDirs.push(directory);
+				await mkdir(join(directory, "src"));
+				await writeFile(
+					join(directory, "plugin.ts"),
+					'export default { name: "noop", setup() {} };\n',
+				);
+				await writeFile(join(directory, "src", "lib.ts"), 'export const from = "lib";\n');
+				await writeFile(
+					join(directory, "src", "cycle.ts"),
+					'import { get } from "./cli.ts";\nconsole.log(get());\n',
+				);
+				await writeFile(
+					join(directory, "src", "cli.ts"),
+					`${shebang}\nimport "./cycle.ts";\nimport { from } from "./lib.ts";\nconsole.log("initialize");\nif (import.meta.main) console.log(\`main \${from}\`);\nexport function get() { return 1; }\n`,
+				);
+				// Windows symlinks need a privilege CI may lack; the identity check still applies.
+				const entry =
+					process.platform === "win32"
+						? join(directory, "src", "cli.ts")
+						: join(directory, "cli.ts");
+				if (process.platform !== "win32") await symlink(join("src", "cli.ts"), entry);
+				const outfile = join(directory, "out", "cli.js");
+				await execScriptBuild("node", entry, outfile, {
+					cwd: directory,
+					minify: false,
+					envFiles: [],
+					bunPlugins,
+					external: [],
+				});
 
-			const output = await readFile(outfile, "utf8");
-			expect(output.startsWith("#!/usr/bin/env node\n")).toBe(true);
-			expect(output).not.toContain("// @bun");
-			expect((await readdir(directory)).sort()).toEqual(["cli.ts", "lib.ts", "out", "plugin.ts"]);
-			const node = which("node");
-			if (node === null) return;
-			const run = spawnSync(node, [outfile], { encoding: "utf8", timeout: 10_000 });
-			expect(run.stderr).toBe("");
-			expect(run.stdout).toBe("main lib\n");
-		});
-	}
+				const output = await readFile(outfile, "utf8");
+				expect(output.startsWith("#!/usr/bin/env node\n")).toBe(true);
+				expect(output).not.toContain("// @bun");
+				const leftovers = (await readdir(directory)).filter((name) => name.startsWith("."));
+				expect(leftovers).toEqual([]);
+				expect((await readdir(join(directory, "src"))).sort()).toEqual([
+					"cli.ts",
+					"cycle.ts",
+					"lib.ts",
+				]);
+				const node = which("node");
+				if (node === null) return;
+				const run = spawnSync(node, [outfile], { encoding: "utf8", timeout: 10_000 });
+				expect(run.stderr).toBe("");
+				expect(run.stdout).toBe("1\ninitialize\nmain lib\n");
+			});
+		}
 });
 
 describe("execScriptBuild with crust.external", () => {
@@ -343,7 +364,7 @@ describe("execScriptBuild with crust.external", () => {
 
 	for (const target of ["node"] as const) {
 		for (const bunPlugins of [[], ["./plugin.ts"]]) {
-			const path = bunPlugins.length > 0 ? "the Bun.build driver" : "bun build";
+			const path = bunPlugins.length > 0 ? "with crust.bunPlugins" : "without crust.bunPlugins";
 			it(`keeps externals and their subpaths out of a ${target} bundle built by ${path}`, async () => {
 				const directory = await project();
 				const outfile = join(directory, "out", "cli.js");

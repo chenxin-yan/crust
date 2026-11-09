@@ -672,6 +672,38 @@ describe("runDistributeBuild", () => {
 		expect(compiled).toEqual([]);
 	});
 
+	// npm drops the whole staged tree under an ignored ancestor (`*.orig`, `.git`).
+	for (const [include, ignored] of [
+		["templates/app.orig/src", "templates/app.orig"],
+		[".git/templates", ".git"],
+	] as const) {
+		it(`rejects crust.include ${include} under an ancestor npm leaves out`, async () => {
+			mkdirSync(join(tmpDir, include), { recursive: true });
+			writeFileSync(join(tmpDir, include, "hello.txt"), "\n");
+			const compiled: string[] = [];
+			const execute = async (_entryPath: string, outfilePath: string) => {
+				compiled.push(outfilePath);
+			};
+			const plan = createPlan(
+				tmpDir,
+				{ name: "include-cli", version: "0.1.0" },
+				{ include: [include] },
+			);
+
+			const error = await runDistributeBuild(plan, bunDistribution(undefined, execute), io).then(
+				() => undefined,
+				(error: unknown) => error,
+			);
+			expect(error).toBeInstanceOf(Error);
+			const listed = (error as Error).message
+				.split("\n")
+				.filter((line) => line.startsWith("  ") && !line.includes(" npm drops"))
+				.map((line) => line.trim().replaceAll("\\", "/"));
+			expect(listed).toEqual([ignored]);
+			expect(compiled).toEqual([]);
+		});
+	}
+
 	// Directory pairs live under different parents (or are created with recursive
 	// mkdir) so the fixture is the same on case-sensitive and case-insensitive hosts.
 	it("rejects case-only crust.include collisions before compiling", async () => {
