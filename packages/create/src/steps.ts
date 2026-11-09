@@ -21,7 +21,8 @@ import type { PostScaffoldStep, RunStepsOptions } from "./types.ts";
  * @param steps - Array of {@link PostScaffoldStep} objects to execute.
  * @param cwd - The working directory for steps (typically the scaffold dest).
  * @param options - Where non-fatal warnings go and what cancels the steps; see {@link RunStepsOptions}.
- * @throws `signal.reason` when the signal aborts, after the running child exits.
+ * @throws `signal.reason` when the signal aborts, after the running child exits or, 5 seconds
+ *   later, is killed.
  *
  * @example
  * ```ts

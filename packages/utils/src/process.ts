@@ -23,11 +23,18 @@ export type RunProcessOptions = {
 	/**
 	 * Aborting it sends `SIGTERM` to the child and, on POSIX, to the descendants it has at that
 	 * moment, such as a shell's workers (timed calls: the whole process group, killed). It rejects
-	 * with `signal.reason` once the child and those descendants exit. Untimed children stay in this
-	 * process's group, so terminal Ctrl-C and `/dev/tty` keep reaching them. Windows terminates
-	 * only the direct child. An already-aborted signal rejects before spawning.
+	 * with `signal.reason` once the child and those descendants exit, or `forceKillAfterDelay`
+	 * later, after sending `SIGKILL` to the ones still running. Untimed children stay in this
+	 * process's group, so terminal Ctrl-C and `/dev/tty` keep reaching them. Windows has no
+	 * graceful signal: `taskkill /T /F` ends the child's tree at once. An already-aborted signal
+	 * rejects before spawning.
 	 */
 	signal?: AbortSignal;
+	/**
+	 * Milliseconds an aborted child and its descendants get to exit after `SIGTERM` before
+	 * `SIGKILL`, like execa's option of the same name. POSIX only. Defaults to `5000`.
+	 */
+	forceKillAfterDelay?: number;
 };
 
 export type RunProcessResult = {
@@ -233,7 +240,9 @@ export async function runProcess(
 
 	const commandLine = [command, ...args].join(" ");
 	let stop!: (message: string, reason: string) => void;
+	let rejectStopped!: (reason: unknown) => void;
 	const stopped = new Promise<never>((_, reject) => {
+		rejectStopped = reject;
 		stop = (message, reason) => {
 			let failure = new Error(message);
 			try {
@@ -270,17 +279,15 @@ export async function runProcess(
 	// An untimed child shares this process's group (see `detached`), so its descendants are
 	// reached through a snapshot instead of a group kill.
 	let abortedDescendants: number[] = [];
+	let forceKillTimer: NodeJS.Timeout | undefined;
 	const onAbort = () => {
 		try {
-			if (detached) killProcessTree(proc);
+			if (detached || process.platform === "win32") killProcessTree(proc);
 			else {
 				// shortcut: a process forked between the snapshot and the kill escapes; use a
 				// foreground process group if Node ever exposes tcsetpgrp.
 				const descendants =
-					process.platform !== "win32" &&
-					proc.pid !== undefined &&
-					proc.exitCode === null &&
-					proc.signalCode === null
+					proc.pid !== undefined && proc.exitCode === null && proc.signalCode === null
 						? listDescendants(proc.pid)
 						: [];
 				// The parent first, so a shell cannot start its next command once a worker dies.
@@ -294,6 +301,23 @@ export async function runProcess(
 						return false;
 					}
 				});
+				// A child that ignores or outlasts SIGTERM must not hold the call open forever.
+				// shortcut: a snapshot PID reused within the grace period gets SIGKILL; check each
+				// process's start time if a busy host with a small pid_max ever hits that.
+				forceKillTimer = setTimeout(() => {
+					proc.kill("SIGKILL");
+					for (const pid of abortedDescendants.filter(isRunning)) {
+						try {
+							process.kill(pid, "SIGKILL");
+						} catch {
+							// Exited between the check and the kill.
+						}
+					}
+					// A descendant outside the snapshot may still hold the collected pipes open.
+					proc.stdout?.destroy();
+					proc.stderr?.destroy();
+					rejectStopped(options.signal?.reason);
+				}, options.forceKillAfterDelay ?? 5_000);
 			}
 		} catch {
 			// The child already exited; its close settles the call.
@@ -322,6 +346,7 @@ export async function runProcess(
 		return { exitCode, stdout, stderr };
 	} finally {
 		clearTimeout(timer);
+		clearTimeout(forceKillTimer);
 		release();
 		options.signal?.removeEventListener("abort", onAbort);
 	}

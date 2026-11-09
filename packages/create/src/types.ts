@@ -107,7 +107,8 @@ export interface RunStepsOptions {
 	readonly stderr?: (text: string) => void;
 	/**
 	 * Cancels the steps: aborting it terminates the running child process and rejects with
-	 * `signal.reason` once it exits, skipping the remaining steps. Defaults to the ambient
+	 * `signal.reason` once it exits, or after 5 seconds and a `SIGKILL`, skipping the remaining
+	 * steps. Defaults to the ambient
 	 * terminal signal, which inside a Crust command is the invocation's `signal`, so Ctrl-C and
 	 * `SIGTERM` cancel `runSteps()` without passing it.
 	 */
