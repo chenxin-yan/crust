@@ -79,7 +79,7 @@ $ my-cli status prod --json
 {"type":"result","data":{"target":"prod","healthy":true}}
 ```
 
-A cancelled invocation (exit code 130), or a failure another Extension's `onError` hook claims, ends the stream without that line (see [`json()` limitations](/docs/modules/extensions/json#limitations)), so check the exit status rather than waiting for it.
+A cancelled invocation (exit code 130, or 143 after `SIGTERM`), or a failure another Extension's `onError` hook claims, ends the stream without that line (see [`json()` limitations](/docs/modules/extensions/json#limitations)), so check the exit status rather than waiting for it.
 
 The same events reach `run()`'s `onEvent` callback. Under MCP, each yield sends a [progress notification](/docs/modules/mcp#progress) when the client asks for progress; it carries a count, and a string event becomes its message.
 
@@ -181,6 +181,7 @@ For a CLI backed by an HTTP API, [`@crustjs/openapi`](/docs/modules/openapi) add
 - Every command that returns data declares `.output()`: typed, validated, discoverable, and no duplicate text under `--json`.
 - [`json()`](/docs/modules/extensions/json), [`input()`](/docs/modules/extensions/input), and [`schema()`](/docs/modules/extensions/schema) are registered.
 - Long-running commands yield events.
+- Long-running work passes `signal` to what it awaits: CI cancellation, agent harnesses, and `timeout` stop a command with `SIGTERM`, which aborts the `signal`, runs cleanup, and exits 143. Work that ignores it runs until it finishes or a second `SIGTERM` arrives.
 - Commands that can preview declare a `dry-run` flag.
 - Commands that change things call [`confirm()`](/docs/modules/extensions/confirm)'s `ctx.confirm` first, after any dry-run preview.
 - Error messages say what to do next; known failures have recovery steps from [`nextSteps()`](/docs/modules/extensions/next-steps).
