@@ -360,7 +360,37 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Pr
 				flushRender();
 				output.write("\n");
 				cleanup();
-				reject(new DOMException("Prompt was cancelled.", "AbortError"));
+				const cancelled = new DOMException("Prompt was cancelled.", "AbortError");
+				// Raw mode turns Ctrl+C into a keypress. When a SIGINT owner (Crust's execute()) is
+				// listening on the real terminal, deliver the signal too, so it cancels the run and the
+				// process ends by SIGINT like a Ctrl+C anywhere else (shell loops stop). Without an
+				// owner the signal would kill outright, so standalone prompts keep only the rejection;
+				// on Windows process.kill() always terminates.
+				if (
+					process.platform === "win32" ||
+					stdin !== process.stdin ||
+					process.listenerCount("SIGINT") === 0
+				) {
+					reject(cancelled);
+					return;
+				}
+				process.kill(process.pid, "SIGINT");
+				if (!signal || signal.aborted) {
+					reject(signal?.reason ?? cancelled);
+					return;
+				}
+				// Node delivers the signal on a later event-loop turn; rejecting first would let the
+				// run finish before the owner sees it. Settle when the owner aborts the signal, or
+				// shortly after if this signal isn't the one it aborts.
+				const fallback = setTimeout(() => {
+					signal.removeEventListener("abort", onOwnerAbort);
+					reject(cancelled);
+				}, 250);
+				function onOwnerAbort(): void {
+					clearTimeout(fallback);
+					reject(signal?.reason);
+				}
+				signal.addEventListener("abort", onOwnerAbort, { once: true });
 				return;
 			}
 
