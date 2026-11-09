@@ -635,9 +635,24 @@ describe("runDistributeBuild", () => {
 		mkdirSync(join(base, "node_modules", "x"), { recursive: true });
 		mkdirSync(join(base, ".git"), { recursive: true });
 		mkdirSync(join(base, "build"), { recursive: true });
-		for (const name of [".gitignore", ".npmrc", "_gitignore", ".env", "package-lock.json"]) {
+		mkdirSync(join(base, "nested", "Archived-Packages"), { recursive: true });
+		// npm matches its rules ignoring case on every OS and refuses names with `*`,
+		// which Windows cannot create; a file named archived-packages still ships.
+		const star = process.platform === "win32" ? [] : ["a*b.txt"];
+		for (const name of [
+			".gitignore",
+			".npmrc",
+			"_gitignore",
+			".env",
+			"package-lock.json",
+			".NPMIGNORE",
+			"notes.ORIG",
+			"archived-packages",
+			...star,
+		]) {
 			writeFileSync(join(base, name), "\n");
 		}
+		writeFileSync(join(base, "nested", "Archived-Packages", "x.tgz"), "\n");
 		writeFileSync(join(base, "node_modules", "x", "index.js"), "\n");
 		writeFileSync(join(base, ".git", "HEAD"), "\n");
 		writeFileSync(join(base, "build", "config.gypi"), "\n");
@@ -662,12 +677,18 @@ describe("runDistributeBuild", () => {
 			.map((line) => line.trim().replaceAll("\\", "/"))
 			.sort();
 		// Matches `npm pack --dry-run` (npm 11): node_modules, .env, and lockfiles in a subdirectory ship.
-		expect(listed).toEqual([
-			"templates/base/.git",
-			"templates/base/.gitignore",
-			"templates/base/.npmrc",
-			"templates/base/build/config.gypi",
-		]);
+		expect(listed).toEqual(
+			[
+				"templates/base/.git",
+				"templates/base/.gitignore",
+				"templates/base/.NPMIGNORE",
+				"templates/base/.npmrc",
+				"templates/base/build/config.gypi",
+				"templates/base/nested/Archived-Packages",
+				"templates/base/notes.ORIG",
+				...star.map((name) => `templates/base/${name}`),
+			].sort(),
+		);
 		expect((error as Error).message).toContain("_gitignore");
 		expect(compiled).toEqual([]);
 	});

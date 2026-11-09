@@ -77,10 +77,13 @@ export function collectIncludeDirs(
  * npm-packlist's default rules, which npm applies in every directory of a
  * package whatever its `files` says, so `npm pack`/`npm publish` drop these
  * names from staged include dirs. A dropped `.gitignore` or `.npmignore` also
- * acts as ignore rules for its own directory.
+ * acts as ignore rules for its own directory. npm matches them ignoring case
+ * on every OS (ignore-walk's `nocase`), and refuses any name containing `*`.
  */
 const NPM_IGNORED_NAME =
-	/^(?:\.npmignore|\.gitignore|\.npmrc|\.git|\.svn|\.hg|CVS|\.DS_Store|\.lock-wscript|npm-debug\.log|archived-packages|\.wafpickle-.*|\._.*|\..*\.swp|.*\.orig)$/;
+	/^(?:\.npmignore|\.gitignore|\.npmrc|\.git|\.svn|\.hg|CVS|\.DS_Store|\.lock-wscript|npm-debug\.log|\.wafpickle-.*|\._.*|\..*\.swp|.*\.orig|.*\*.*)$/i;
+/** npm drops the contents of these directories, so a file of the same name ships. */
+const NPM_IGNORED_DIR_NAME = /^archived-packages$/i;
 
 /**
  * Walks `dir` the way the dereferencing copy will (through symlinked
@@ -91,14 +94,16 @@ function assertResolvesInsideProject(cwd: string, entry: string, dir: string): v
 	const realCwd = realpathSync(cwd);
 	const seen = new Set<string>();
 	const npmIgnored: string[] = [];
-	const isNpmIgnored = (path: string): boolean =>
-		NPM_IGNORED_NAME.test(basename(path)) || path.endsWith(`${sep}build${sep}config.gypi`);
+	const isNpmIgnored = (path: string, isDirectory: boolean): boolean =>
+		NPM_IGNORED_NAME.test(basename(path)) ||
+		(isDirectory && NPM_IGNORED_DIR_NAME.test(basename(path))) ||
+		path.toLowerCase().endsWith(`${sep}build${sep}config.gypi`);
 	// The include is staged at its project-relative path, and npm drops an ignored
 	// ancestor directory with everything beneath it.
 	const parts = relative(cwd, dir).split(sep);
 	for (let index = 1; index < parts.length; index++) {
 		const ancestor = join(cwd, ...parts.slice(0, index));
-		if (isNpmIgnored(ancestor)) npmIgnored.push(relative(cwd, ancestor));
+		if (isNpmIgnored(ancestor, true)) npmIgnored.push(relative(cwd, ancestor));
 	}
 	const walk = (path: string): void => {
 		const real = realpathSync(path);
@@ -107,12 +112,13 @@ function assertResolvesInsideProject(cwd: string, entry: string, dir: string): v
 				`package.json crust.include entry ${JSON.stringify(entry)} resolves outside the project root: ${relative(cwd, path)} -> ${real}`,
 			);
 		}
-		if (isNpmIgnored(path)) {
+		const isDirectory = statSync(path).isDirectory();
+		if (isNpmIgnored(path, isDirectory)) {
 			npmIgnored.push(relative(cwd, path));
 			return;
 		}
 		// A symlink back to an ancestor would otherwise recurse forever.
-		if (seen.has(real) || !statSync(path).isDirectory()) return;
+		if (seen.has(real) || !isDirectory) return;
 		seen.add(real);
 		for (const child of readdirSync(path)) walk(join(path, child));
 	};

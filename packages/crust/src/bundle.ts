@@ -274,11 +274,12 @@ export async function execScriptBuild(
 	runner: BuildRunner = resolveBunBuildRunner(),
 ): Promise<void> {
 	const { cwd, minify, envFiles, external } = settings;
-	// Bun bundles an entry whose shebang names bun as Bun code even for `--target node`:
-	// the output is marked `// @bun` and `import.meta.main` lowers to a `__require` Node
-	// lacks. The driver blanks that line as the entry loads, keeping its path, so
-	// back-imports and a symlinked entry's relative imports resolve as before. Bun
-	// hands onLoad the real path.
+	// Bun bundles an entry starting `#!/usr/bin/env bun` as Bun code even for `--target node`
+	// (bundle_v2.rs target_from_hashbang, Bun 1.4.4); any other bun shebang is blanked too,
+	// harmlessly, since the output gets its own. The output is marked `// @bun` and
+	// `import.meta.main` lowers to a `__require` Node lacks. The driver blanks that line
+	// as the entry loads, keeping its path, so back-imports and a symlinked entry's
+	// relative imports resolve as before. Bun hands onLoad the real path.
 	const stripShebang =
 		target === "node" && /^#![^\n]*\bbun\b/.test(await readFile(entryPath, "utf8"))
 			? `^(?:${[...new Set([entryPath, await realpath(entryPath)])].map(escapeRegExp).join("|")})$`
