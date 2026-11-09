@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -1026,10 +1026,7 @@ describe("concurrent mutations", () => {
 		const lockPath = join(tempDir, "counter.json.lock");
 		const store = counter();
 
-		await writeFile(
-			lockPath,
-			JSON.stringify({ pid: process.pid, host: hostname(), time: Date.now() }),
-		);
+		await writeFile(lockPath, JSON.stringify({ pid: process.pid, host: hostname(), token: "t" }));
 		let settled = false;
 		const pending = store.patch({ n: 1 }).finally(() => {
 			settled = true;
@@ -1040,17 +1037,13 @@ describe("concurrent mutations", () => {
 		expect(await pending).toEqual({ n: 1 });
 
 		// A process that no longer exists left its lock behind.
-		await writeFile(
-			lockPath,
-			JSON.stringify({ pid: 2 ** 31 - 2, host: hostname(), time: Date.now() }),
-		);
+		await writeFile(lockPath, JSON.stringify({ pid: 2 ** 31 - 2, host: hostname(), token: "t" }));
 		expect(await store.patch({ n: 2 })).toEqual({ n: 2 });
 
-		// A lock older than the stale timeout is abandoned even when its pid is alive.
-		await writeFile(
-			lockPath,
-			JSON.stringify({ pid: process.pid, host: hostname(), time: Date.now() - 60_000 }),
-		);
+		// A lock whose heartbeat stopped is abandoned even when its pid is alive.
+		await writeFile(lockPath, JSON.stringify({ pid: process.pid, host: hostname(), token: "t" }));
+		const longAgo = new Date(Date.now() - 60_000);
+		await utimes(lockPath, longAgo, longAgo);
 		expect(await store.patch({ n: 3 })).toEqual({ n: 3 });
 		expect(await readdir(tempDir)).toEqual(["counter.json"]);
 	});

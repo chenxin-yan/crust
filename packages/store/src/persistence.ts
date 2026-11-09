@@ -2,7 +2,17 @@
 // @crustjs/store — JSON persistence primitives
 // ────────────────────────────────────────────────────────────────────────────
 
-import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import {
+	chmod,
+	mkdir,
+	open,
+	readFile,
+	rename,
+	rm,
+	stat,
+	utimes,
+	writeFile,
+} from "node:fs/promises";
 import { hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -245,14 +255,19 @@ export async function deleteJson(filePath: string): Promise<void> {
 // withFileLock — Cross-process advisory lock
 // ────────────────────────────────────────────────────────────────────────────
 
-/** A lock held this long is abandoned even when its process looks alive (pid reuse, a hung holder). */
+/**
+ * A lock whose heartbeat is older than this is abandoned even when its process
+ * looks alive (pid reuse, another host, a frozen holder). A live holder refreshes
+ * the lock's mtime every quarter of this, however long its mutation takes.
+ */
 const STALE_LOCK_MS = 10_000;
 const MAX_RETRY_DELAY_MS = 100;
 
 interface LockOwner {
 	readonly pid: number;
 	readonly host: string;
-	readonly time: number;
+	/** Unique per acquisition, so equal contents mean the same lock, never a successor. */
+	readonly token: string;
 }
 
 /** Options for {@link withFileLock}. */
@@ -261,6 +276,8 @@ export interface FileLockOptions {
 	readonly operation: "write" | "delete";
 	/** Applied when acquiring the lock creates the parent directory, as in {@link writeJson}. */
 	readonly directoryMode?: number;
+	/** Test seam: how long a lock may go without a heartbeat before it is abandoned. */
+	readonly staleMs?: number;
 }
 
 function isProcessAlive(pid: number): boolean {
@@ -273,7 +290,17 @@ function isProcessAlive(pid: number): boolean {
 	}
 }
 
-/** Lock file contents, or `undefined` once the lock is gone. */
+function parseOwner(contents: string): Partial<LockOwner> | undefined {
+	try {
+		const owner: unknown = JSON.parse(contents);
+		return typeof owner === "object" && owner !== null ? owner : undefined;
+	} catch {
+		// Created but not yet written, or cut short by a crash: judged by mtime alone.
+		return undefined;
+	}
+}
+
+/** File contents, or `undefined` once the file is gone. */
 async function readLock(lockPath: string): Promise<string | undefined> {
 	try {
 		return await readFile(lockPath, "utf-8");
@@ -283,22 +310,65 @@ async function readLock(lockPath: string): Promise<string | undefined> {
 	}
 }
 
-async function isStaleLock(lockPath: string, contents: string): Promise<boolean> {
-	let owner: Partial<LockOwner> | undefined;
-	try {
-		owner = JSON.parse(contents);
-	} catch {
-		// Created but not yet written, or cut short by a crash: judged by age below.
-	}
-	if (typeof owner?.pid === "number" && typeof owner.time === "number") {
-		if (Date.now() - owner.time > STALE_LOCK_MS) return true;
-		// A pid only identifies a process on the host that wrote it.
-		return owner.host === hostname() && !isProcessAlive(owner.pid);
+/** Whether the lock or reclaim marker at `path`, holding `contents`, was abandoned. */
+async function isStaleLock(path: string, contents: string, staleMs: number): Promise<boolean> {
+	const owner = parseOwner(contents);
+	// A pid only identifies a process on the host that wrote it.
+	if (typeof owner?.pid === "number" && owner.host === hostname() && !isProcessAlive(owner.pid)) {
+		return true;
 	}
 	try {
-		return Date.now() - (await stat(lockPath)).mtimeMs > STALE_LOCK_MS;
+		return Date.now() - (await stat(path)).mtimeMs > staleMs;
 	} catch {
 		return false;
+	}
+}
+
+/**
+ * Unlinks the lock if it still holds `contents` and `confirm()` agrees. Returns
+ * `false`, removing nothing, while another process is deciding this lock's fate.
+ *
+ * Why no one unlinks a successor's lock: removing a lock (release or stale
+ * reclaim) first requires creating `<lock>.<token>.<level>` with `wx`, and only
+ * that marker's holder unlinks the lock. Tokens are unique, so while the marker
+ * holder re-reads `contents` and unlinks, the path cannot change: nobody else may
+ * remove this lock, and nobody can create one while it exists. Markers are never
+ * deleted by anyone but their holder; a marker whose holder died is bypassed via
+ * the next level, which live processes again race for with `wx`.
+ *
+ * shortcut: a marker holder stalled for longer than `staleMs` between re-read and
+ * unlink can still be bypassed and then unlink a successor; a crash inside that
+ * window leaves the marker file behind. Both need a process frozen or killed
+ * within a few syscalls; upgrade to an OS-level lock if that is ever observed.
+ */
+async function removeLock(
+	lockPath: string,
+	contents: string,
+	staleMs: number,
+	confirm: () => Promise<boolean>,
+): Promise<boolean> {
+	const token = parseOwner(contents)?.token;
+	// Unparseable locks share one name; `confirm()` re-checks their age under the marker.
+	const id = typeof token === "string" && /^[\w-]+$/.test(token) ? token : "unknown";
+	const mine = JSON.stringify({ pid: process.pid, host: hostname() });
+	for (let level = 0; ; level++) {
+		const marker = `${lockPath}.${id}.${level}`;
+		try {
+			await writeFile(marker, mine, { flag: "wx" });
+		} catch (err: unknown) {
+			if (!isErrnoException(err) || err.code !== "EEXIST") throw err;
+			const held = await readLock(marker);
+			if (held === undefined || !(await isStaleLock(marker, held, staleMs))) return false;
+			continue;
+		}
+		try {
+			if ((await readLock(lockPath)) === contents && (await confirm())) {
+				await rm(lockPath, { force: true });
+			}
+		} finally {
+			await rm(marker, { force: true });
+		}
+		return true;
 	}
 }
 
@@ -307,10 +377,10 @@ async function isStaleLock(lockPath: string, contents: string): Promise<boolean>
  * process that uses this function on the same file.
  *
  * The lock file is created exclusively (`wx`) and holds the owner's pid, host,
- * and acquisition time. Waiters retry with a growing, jittered delay; a lock
- * whose owner process is gone, or that is older than 10 seconds, is taken over.
- * The lock is released after `fn` settles, unless another process already took
- * it over.
+ * and a unique token; the owner refreshes its mtime while `fn` runs. Waiters
+ * retry with a growing, jittered delay and take over a lock whose owner process
+ * is gone or whose heartbeat stopped for 10 seconds. The lock is released after
+ * `fn` settles, unless another process already took it over.
  *
  * @throws {CrustStoreError} `IO` when the lock file cannot be created or inspected.
  */
@@ -320,6 +390,7 @@ export async function withFileLock<T>(
 	options: FileLockOptions,
 ): Promise<T> {
 	const lockPath = `${filePath}.lock`;
+	const staleMs = options.staleMs ?? STALE_LOCK_MS;
 	const lockError = (err: unknown) =>
 		new CrustStoreError(
 			"IO",
@@ -327,11 +398,10 @@ export async function withFileLock<T>(
 			{ path: filePath, operation: options.operation },
 			err,
 		);
-	let contents: string;
+	const owner: LockOwner = { pid: process.pid, host: hostname(), token: crypto.randomUUID() };
+	const contents = JSON.stringify(owner);
 	let delay = 1;
 	for (;;) {
-		const owner: LockOwner = { pid: process.pid, host: hostname(), time: Date.now() };
-		contents = JSON.stringify(owner);
 		try {
 			const handle = await open(lockPath, "wx");
 			try {
@@ -355,29 +425,36 @@ export async function withFileLock<T>(
 			if (!isErrnoException(err) || err.code !== "EEXIST") throw lockError(err);
 		}
 
-		let held: string | undefined;
 		try {
-			held = await readLock(lockPath);
-			if (held !== undefined && (await isStaleLock(lockPath, held))) {
-				// shortcut: a waiter that read the stale lock just before another took it over can
-				// still remove the new lock in the gap between this re-read and rm; upgrade to a
-				// rename-based handoff if stale takeovers ever race in practice.
-				if ((await readLock(lockPath)) === held) await rm(lockPath, { force: true });
+			const held = await readLock(lockPath);
+			if (held === undefined) continue;
+			const heldIsStale = () => isStaleLock(lockPath, held, staleMs);
+			if ((await heldIsStale()) && (await removeLock(lockPath, held, staleMs, heldIsStale))) {
 				continue;
 			}
 		} catch (err: unknown) {
 			throw lockError(err);
 		}
-		if (held === undefined) continue;
 		await sleep(delay * (1 + Math.random()));
 		delay = Math.min(delay * 2, MAX_RETRY_DELAY_MS);
 	}
 
+	const heartbeat = setInterval(() => {
+		const now = new Date();
+		utimes(lockPath, now, now).catch(() => {});
+	}, staleMs / 4);
+	heartbeat.unref();
 	try {
 		return await fn();
 	} finally {
-		// A holder that outlived STALE_LOCK_MS may have been taken over; never delete another owner's lock.
-		const held = await readLock(lockPath).catch(() => undefined);
-		if (held === contents) await rm(lockPath, { force: true }).catch(() => {});
+		clearInterval(heartbeat);
+		// Waits out a waiter that is judging this lock stale (only after a stalled heartbeat).
+		for (delay = 1; ; delay = Math.min(delay * 2, MAX_RETRY_DELAY_MS)) {
+			const settled = await removeLock(lockPath, contents, staleMs, async () => true).catch(
+				() => true,
+			);
+			if (settled) break;
+			await sleep(delay * (1 + Math.random()));
+		}
 	}
 }
