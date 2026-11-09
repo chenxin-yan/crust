@@ -32,10 +32,11 @@ export type FlagEnvironment = Readonly<Record<string, string | undefined>>;
 /**
  * Values bound from argv tokens, tagged before definition/value correlation erases.
  * `invalid` is an environment value already rejected; coercion rethrows it so it defers like the rest.
+ * `env` names the variable a string value came from, so its errors name it too.
  */
 type ArgvFlagValue =
 	| { readonly kind: "boolean"; value: boolean | boolean[] }
-	| { readonly kind: "string"; value: string | string[] }
+	| { readonly kind: "string"; value: string | string[]; readonly env?: string }
 	| { readonly kind: "invalid"; readonly error: CrustError };
 
 /** Records a value error, keyed by its definition's label, instead of throwing it; see {@link parseArgs}. */
@@ -75,7 +76,7 @@ function coerceValue(value: string, type: ValueType, label: string) {
 	if (type === "number") {
 		const num = tryCoerceNumber(value);
 		if (num === undefined) {
-			throw new CrustError("PARSE", `Expected number for ${label}, got "${value}"`);
+			throw new CrustError("PARSE", `Expected a number for ${label}.`);
 		}
 		return num;
 	}
@@ -91,7 +92,8 @@ function coerceValue(value: string, type: ValueType, label: string) {
 
 /**
  * Validate a raw argv string against a flag/arg `choices` list. Throws
- * `CrustError("PARSE", …)` when the value is not in the allowed set.
+ * `CrustError("PARSE", …)` when the value is not in the allowed set; like
+ * every Core value error, the message names the definition, never the value.
  *
  * Runs *before* any `parse` transform so the user-facing comparison is on
  * the raw token, not the post-`parse` value.
@@ -100,7 +102,7 @@ function validateChoice(raw: string, choices: readonly string[], label: string):
 	if (!choices.includes(raw)) {
 		throw new CrustError(
 			"PARSE",
-			`Invalid value "${raw}" for ${label}. Expected one of: ${choices.join(", ")}`,
+			`Invalid value for ${label}. Expected one of: ${choices.join(", ")}`,
 		);
 	}
 }
@@ -206,7 +208,7 @@ function coerceOrDefer<T>(
 function coerceFlagValue(name: string, def: FlagDef, parsed: ArgvFlagValue): ParsedFlagValue {
 	if (parsed.kind === "invalid") throw parsed.error;
 	if (parsed.kind === "boolean") return parsed.value;
-	const label = `--${name}`;
+	const label = parsed.env === undefined ? `--${name}` : `--${name} (from $${parsed.env})`;
 	return Array.isArray(parsed.value)
 		? parsed.value.map((value, i) => coerceToken(def, value, label, i))
 		: coerceToken(def, parsed.value, label);
@@ -228,7 +230,7 @@ function envFlagValue(name: string, def: FlagDef, raw: string): ArgvFlagValue | 
 	const occurrences = def.multiple ? splitOccurrences([raw], def.env?.delimiter) : [raw];
 	if (def.multiple && occurrences.length === 0) return undefined;
 	if (def.type !== "boolean") {
-		return { kind: "string", value: def.multiple ? occurrences : raw };
+		return { kind: "string", value: def.multiple ? occurrences : raw, env: def.env?.name };
 	}
 	const values = occurrences.map(coerceBooleanString);
 	if ("noNegate" in def && def.noNegate && values.includes(false)) {
@@ -236,7 +238,7 @@ function envFlagValue(name: string, def: FlagDef, raw: string): ArgvFlagValue | 
 			kind: "invalid",
 			error: new CrustError(
 				"PARSE",
-				`Flag "--${name}" does not support negation (from ${def.env?.name})`,
+				`Flag "--${name}" does not support negation (from $${def.env?.name})`,
 			),
 		};
 	}
@@ -557,6 +559,16 @@ function isOccurrenceArray(value: RunInputValue | undefined): value is readonly 
 	return Array.isArray(value);
 }
 
+/** What a typed value of each type must be, worded like argv's `Expected a number for --port.` */
+const STRUCTURED_EXPECTATIONS: Readonly<Record<ValueType, string>> = {
+	string: "a string",
+	path: "a string",
+	number: "a number",
+	boolean: "a boolean",
+	url: "a URL",
+	json: "a JSON value",
+};
+
 function validateStructuredValue(def: ArgDef | FlagDef, value: RunInputValue, label: string): void {
 	const type = def.schema ? (def.type === "boolean" ? "boolean" : "string") : def.type;
 	let valid: boolean;
@@ -581,7 +593,8 @@ function validateStructuredValue(def: ArgDef | FlagDef, value: RunInputValue, la
 	} else {
 		valid = typeof value === (type === "path" ? "string" : type);
 	}
-	if (!valid) throw new CrustError("PARSE", `Expected ${type} for ${label}`);
+	if (!valid)
+		throw new CrustError("PARSE", `Expected ${STRUCTURED_EXPECTATIONS[type]} for ${label}.`);
 	if (value === false && "noNegate" in def && def.noNegate) {
 		throw new CrustError("PARSE", `Flag "${label}" does not support negation`);
 	}
@@ -727,8 +740,8 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
  * @param env - Raw variable text; only own properties are read
  * @throws {CrustError} `DEFINITION` for a definition `defineFlag` rejects (e.g. a
  *   `__proto__` key or a default outside `choices`); `PARSE` or `VALIDATION` on the first
- *   coercion or requiredness failure, or `VALIDATION` aggregating schema issues. Messages
- *   may quote raw values.
+ *   coercion or requiredness failure, or `VALIDATION` aggregating schema issues. Core's own
+ *   messages name the variable, never its value; schema issue messages are the validator's.
  */
 export async function parseFlagValues<const F extends FlagsDef>(
 	flags: F,

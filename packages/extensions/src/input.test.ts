@@ -146,7 +146,7 @@ describe("input", () => {
 	});
 
 	it.each([
-		["unparseable JSON", "{target", /^--input: invalid JSON \(/],
+		["unparseable JSON", '{"token":"s3cr3t', /^--input: invalid inline JSON\.$/],
 		[
 			"a JSON array",
 			'["prod"]',
@@ -154,13 +154,29 @@ describe("input", () => {
 		],
 		["JSON null", "null", /^--input: expected a JSON object keyed by argument and flag names/],
 		["an unreadable file", "@/nonexistent/crust-input.json", /^--input: cannot read/],
-		["an invalid URL", '{"target":"prod","origin":"not a url"}', /^--input: expected a URL \(/],
+		[
+			"an invalid URL",
+			'{"target":"prod","origin":"not a url"}',
+			/^Invalid URL for --origin \(missing protocol — e\.g\. https:\/\/example\.com\)\.$/,
+		],
 	])("fails with a PARSE error for %s", async (_label, payload, message) => {
 		const error = await failure(payload);
 
 		expect(error).toBeInstanceOf(CrustError);
 		expect(error).toMatchObject({ code: "PARSE" });
 		expect((error as CrustError).message).toMatch(message);
+	});
+
+	it("names a malformed @file without quoting its JSON or attaching the parse error", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "crust-input-"));
+		tempDirs.push(dir);
+		const file = join(dir, "input.json");
+		writeFileSync(file, '{"token":"s3cr3t');
+
+		const error = await failure(`@${file}`);
+
+		expect(error).toMatchObject({ code: "PARSE", message: `--input: invalid JSON in "${file}".` });
+		expect((error as Error).cause).toBeUndefined();
 	});
 
 	it("reports unknown keys and mistyped values as the structured binder does", async () => {
@@ -170,7 +186,7 @@ describe("input", () => {
 		});
 		expect(await failure('{"target":"prod","force":"yes"}')).toMatchObject({
 			code: "PARSE",
-			message: "Expected boolean for --force",
+			message: "Expected a boolean for --force.",
 		});
 	});
 
@@ -331,7 +347,7 @@ describe("input", () => {
 			timeout: 10_000,
 		});
 
-		expect(run.stderr).toContain("--input: invalid JSON");
+		expect(run.stderr).toContain("--input: invalid JSON from stdin.");
 		expect(run.status).toBe(1);
 	});
 

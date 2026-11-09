@@ -8,19 +8,20 @@ import { CrustError } from "../errors.ts";
  * ftp, …) is allowed.
  *
  * Throws `CrustError("PARSE", …)` when the input is not a valid URL.
- * The message names `label` and echoes the input. When the input clearly
+ * The message names `label`, never the input. When the input clearly
  * lacks a URL scheme, we append a hint reminding the user to include
  * one — a common foot-gun on the command line.
  */
 export function coerceUrl(raw: string, label: string): URL {
 	try {
 		return new URL(raw);
-	} catch (err) {
+	} catch {
+		// No cause: Bun's URL error quotes the input.
 		// WHATWG-style scheme: ASCII letter followed by letters/digits/+/-/.
 		// then a colon. Matches `http:`, `file:`, `git+ssh:`, etc.
 		const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(raw);
 		const hint = hasScheme ? "" : " (missing protocol — e.g. https://example.com)";
-		throw new CrustError("PARSE", `Invalid URL for ${label}: "${raw}"${hint}`).withCause(err);
+		throw new CrustError("PARSE", `Invalid URL for ${label}${hint}.`);
 	}
 }
 
@@ -50,19 +51,19 @@ export function coercePath(raw: string, label: string): string {
  * strings, numbers, booleans, null.
  *
  * Throws `CrustError("PARSE", …)` naming `label` when the input is not valid
- * JSON. The original `SyntaxError.message` is included plus a shell-quoting
- * hint, since unquoted JSON on the command line is a common foot-gun.
+ * JSON, with a shell-quoting hint, since unquoted JSON on the command line is
+ * a common foot-gun. The `SyntaxError` is dropped, message and cause: newer
+ * engines quote a snippet of the input in it.
  *
  * Note: `JSON.parse` loses precision on integers above `Number.MAX_SAFE_INTEGER`.
  */
 export function coerceJson(raw: string, label: string): JsonValue {
 	try {
 		return JSON.parse(raw);
-	} catch (err) {
-		const reason = err instanceof Error ? err.message : String(err);
+	} catch {
 		throw new CrustError(
 			"PARSE",
-			`Invalid JSON for ${label}: ${reason}. Tip: wrap JSON in single quotes on the command line, e.g. --flag '{"k":1}'`,
-		).withCause(err);
+			`Invalid JSON for ${label}. Tip: wrap JSON in single quotes on the command line, e.g. --flag '{"k":1}'`,
+		);
 	}
 }

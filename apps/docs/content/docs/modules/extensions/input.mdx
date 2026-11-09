@@ -40,5 +40,6 @@ Under [`run()`](/docs/api/crust#runpath-input-options), pass the JSON text as th
 
 Each fails the command with a `PARSE` [`CrustError`](/docs/api/errors) before validation and the action run:
 
-- invalid JSON, a value that is not a JSON object, a file that cannot be read, an invalid `url` value, or a command whose input cannot be one flat object because an argument and a flag share a name or one is named `raw`: a message starting with `--input:`;
-- an unknown key or a value of the wrong type: the same error typed `run()` input reports, such as `Unknown flag "--nope"` or `Expected boolean for --force`.
+- invalid JSON, a value that is not a JSON object, a file that cannot be read, or a command whose input cannot be one flat object because an argument and a flag share a name or one is named `raw`: a message starting with `--input:`. Invalid JSON names its source (`--input: invalid inline JSON.`, `--input: invalid JSON in "input.json".`, or `--input: invalid JSON from stdin.`) but not the parser's reason, which can quote the input;
+- an unknown key or a value of the wrong type: the same error typed `run()` input reports, such as `Unknown flag "--nope"` or `Expected a boolean for --force.`;
+- an invalid value, such as a bad `url`: the same error argv reports, such as `Invalid URL for --origin.`, which never includes the value.

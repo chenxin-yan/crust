@@ -212,9 +212,7 @@ const JSON_NUMBER = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
 function parseField(field: string): [string, unknown] {
 	const at = field.indexOf("=");
 	if (at <= 0) {
-		throw new CrustError("PARSE", `--field: expected key=value, got "${field}"`, {
-			flag: "field",
-		});
+		throw new CrustError("PARSE", "Invalid -F value: expected key=value.", { flag: "field" });
 	}
 	const value = field.slice(at + 1);
 	const literals: Record<string, unknown> = { true: true, false: false, null: null };
@@ -223,9 +221,11 @@ function parseField(field: string): [string, unknown] {
 	const number = Number(value);
 	// JSON.stringify would send Infinity as null.
 	if (!Number.isFinite(number)) {
-		throw new CrustError("PARSE", `--field: "${field}" is out of range for a number`, {
-			flag: "field",
-		});
+		throw new CrustError(
+			"PARSE",
+			`Invalid -F value for "${field.slice(0, at)}": the number is out of range.`,
+			{ flag: "field" },
+		);
 	}
 	return [field.slice(0, at), number];
 }
@@ -233,18 +233,18 @@ function parseField(field: string): [string, unknown] {
 function parseHeader(header: string): [string, string] {
 	const at = header.indexOf(":");
 	if (at <= 0) {
-		throw new CrustError("PARSE", `--header: expected "Key: Value", got "${header}"`, {
-			flag: "header",
-		});
+		throw new CrustError("PARSE", 'Invalid -H value: expected "Name: value".', { flag: "header" });
 	}
 	const entry: [string, string] = [header.slice(0, at).trim(), header.slice(at + 1).trim()];
 	try {
 		new Headers().append(...entry);
-	} catch (cause) {
-		const reason = cause instanceof Error ? ` (${cause.message})` : "";
-		throw new CrustError("PARSE", `--header: invalid header "${header}"${reason}`, {
-			flag: "header",
-		}).withCause(cause);
+	} catch {
+		// Neither the text nor the platform's error (which may quote it): a header can hold a token.
+		throw new CrustError(
+			"PARSE",
+			"Invalid -H value: the header name or value has characters HTTP does not allow.",
+			{ flag: "header" },
+		);
 	}
 	return entry;
 }

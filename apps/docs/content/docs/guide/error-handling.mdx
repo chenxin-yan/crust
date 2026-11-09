@@ -30,7 +30,7 @@ Declare required values and allowed choices instead of checking them in the Comm
 $ greet
 Error: Missing required flag "--name"
 $ greet --name Linus
-Error: Invalid value "Linus" for --name. Expected one of: Ada, Grace
+Error: Invalid value for --name. Expected one of: Ada, Grace
 ```
 
 Both exit with status 1 before the action runs. These declarations also drive help text and inferred types. See [Values and validation](/docs/guide/values-and-validation) for custom parsing and schemas.
@@ -99,5 +99,16 @@ Crust reports its own failures as [`CrustError`](/docs/api/errors): unknown comm
 - Branch on the code, not message text: after `error instanceof CrustError`, `error.is("VALIDATION")` also narrows `details`, such as the schema issues and their `flags.<name>` paths.
 - `toJSON()` returns `code`, `message`, and `details` when present. [`json()`](/docs/modules/extensions/json) prints it for `--json` failures, and MCP reports `<code>: <message>`.
 - Don't throw `CrustError` for your own failures: its codes describe Crust's. Throw an `Error` or [your own class](#define-error-classes).
+
+### Errors never echo values
+
+Crust's own errors about an argument or flag value never print the value, in the message, `details`, or `cause`. They name the argument or flag, plus the environment variable when the value came from one, so a secret read from the environment stays out of CI logs and agent transcripts:
+
+```sh
+$ PORT=abc serve
+Error: Expected a number for --port (from $PORT).
+```
+
+Tokens Crust cannot match to an argument or flag, such as an unknown command or an extra positional argument, are echoed so a typo is visible. Text you supply is printed as written: errors thrown by a custom `parse` and Standard Schema issue messages are yours to keep free of values.
 
 See the [errors reference](/docs/api/errors) for every code, its `details`, and where failures propagate.

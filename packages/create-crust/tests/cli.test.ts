@@ -252,9 +252,7 @@ describe("create-crust CLI", () => {
 		]);
 
 		expect(result.exitCode).not.toBe(0);
-		expect(result.stderr).toContain(
-			'Invalid value "deno" for --runtime. Expected one of: bun, node',
-		);
+		expect(result.stderr).toContain("Invalid value for --runtime. Expected one of: bun, node");
 		expect(existsSync(projectDir)).toBe(false);
 	}, 30_000);
 

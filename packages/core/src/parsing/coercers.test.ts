@@ -16,9 +16,9 @@ describe("coerceUrl", () => {
 		expect(() => coerceUrl("not-a-url", "--base")).toThrow(
 			expect.objectContaining({
 				code: "PARSE",
-				message:
-					'Invalid URL for --base: "not-a-url" (missing protocol — e.g. https://example.com)',
-				cause: expect.any(TypeError),
+				message: "Invalid URL for --base (missing protocol — e.g. https://example.com).",
+				// The native error can quote the input (Bun does), so it is not the cause.
+				cause: undefined,
 			}),
 		);
 	});
@@ -27,7 +27,7 @@ describe("coerceUrl", () => {
 		// `https://[bad` parses as a URL with a scheme but invalid syntax;
 		// telling the user they're missing a protocol would be misleading.
 		expect(() => coerceUrl("https://[bad", "--base")).toThrow(
-			expect.objectContaining({ code: "PARSE", message: 'Invalid URL for --base: "https://[bad"' }),
+			expect.objectContaining({ code: "PARSE", message: "Invalid URL for --base." }),
 		);
 	});
 });
@@ -70,8 +70,10 @@ describe("coerceJson", () => {
 		expect(() => coerceJson("not json", "--data")).toThrow(
 			expect.objectContaining({
 				code: "PARSE",
-				message: expect.stringMatching(/^Invalid JSON for --data: .+\. Tip: /),
-				cause: expect.any(SyntaxError),
+				message:
+					"Invalid JSON for --data. Tip: wrap JSON in single quotes on the command line, e.g. --flag '{\"k\":1}'",
+				// Newer engines quote a snippet of the input in the SyntaxError, so it is dropped.
+				cause: undefined,
 			}),
 		);
 	});

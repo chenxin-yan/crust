@@ -1,6 +1,7 @@
 import { type JsonValue, parseJsonValue } from "@crustjs/utils/json";
 
 import { CrustError } from "../errors.ts";
+import { coerceUrl } from "../parsing/coercers.ts";
 import type { RunInputPayload, RunInputValue, ValueType } from "../types.ts";
 import type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "./snapshot.ts";
 
@@ -193,8 +194,8 @@ function isString(value: JsonValue): value is string {
  * name goes to `flags`, where `run()` rejects unknown ones. Strings for `url`
  * definitions become `URL`s, and `undefined` entries are skipped.
  *
- * @throws {CrustError} `PARSE` when a value is not JSON data or `raw` is not an array of strings
- * @throws {TypeError} when a `url` value is not a valid URL
+ * @throws {CrustError} `PARSE` when a value is not JSON data, a `url` value is not a valid
+ *   URL, or `raw` is not an array of strings
  */
 export function parseCommandInput(
 	command: CommandSnapshot,
@@ -204,7 +205,6 @@ export function parseCommandInput(
 	const args: Record<string, RunInputValue> = Object.create(null);
 	const flags: Record<string, RunInputValue> = Object.create(null);
 	const { argNames, urlFields } = commandInputFields(command);
-	const toUrl = (value: JsonValue) => (isString(value) ? new URL(value) : value);
 	let raw: readonly string[] | undefined;
 	for (const [name, value] of Object.entries(values)) {
 		if (value === undefined) continue;
@@ -221,7 +221,10 @@ export function parseCommandInput(
 			raw = given;
 			continue;
 		}
-		(argNames.includes(name) ? args : flags)[name] = urlFields.includes(name)
+		const isArg = argNames.includes(name);
+		const label = isArg ? `<${name}>` : `--${name}`;
+		const toUrl = (item: JsonValue) => (isString(item) ? coerceUrl(item, label) : item);
+		(isArg ? args : flags)[name] = urlFields.includes(name)
 			? Array.isArray(given)
 				? given.map(toUrl)
 				: toUrl(given)

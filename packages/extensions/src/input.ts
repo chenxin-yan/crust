@@ -5,7 +5,6 @@ import {
 	defineExtension,
 	defineExtensionId,
 } from "@crustjs/core";
-import type { RunInputPayload } from "@crustjs/core/tooling";
 
 const JSON_INPUT: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:input");
 
@@ -56,13 +55,21 @@ export const input: ExtensionFactory<[], {}, [], typeof inputFlags> =
 			// Setup, not preRun: setups all run before the first preRun, so no check misses the values.
 			.setup(async (context) => {
 				if (typeof context.flags.input !== "string") return;
-				const text = await readInput(context.flags.input, context.signal);
+				const inputValue = context.flags.input;
+				const text = await readInput(inputValue, context.signal);
 				let values: unknown;
 				try {
 					values = JSON.parse(text);
-				} catch (cause) {
-					const reason = cause instanceof Error ? cause.message : String(cause);
-					throw new CrustError("PARSE", `--input: invalid JSON (${reason})`).withCause(cause);
+				} catch {
+					// No engine reason or cause: newer engines quote a snippet of the input.
+					throw new CrustError(
+						"PARSE",
+						inputValue === "-"
+							? "--input: invalid JSON from stdin."
+							: inputValue.startsWith("@")
+								? `--input: invalid JSON in "${inputValue.slice(1)}".`
+								: "--input: invalid inline JSON.",
+					);
 				}
 				if (typeof values !== "object" || values === null || Array.isArray(values)) {
 					throw new CrustError(
@@ -89,15 +96,6 @@ export const input: ExtensionFactory<[], {}, [], typeof inputFlags> =
 				const supplied = Object.fromEntries(
 					Object.entries(values).filter(([name]) => !given.has(name)),
 				);
-				let payload: RunInputPayload;
-				try {
-					payload = parseCommandInput(context.command, supplied);
-				} catch (cause) {
-					if (cause instanceof CrustError) throw cause;
-					// parseCommandInput throws a TypeError for an invalid `url` value.
-					const reason = cause instanceof Error ? cause.message : String(cause);
-					throw new CrustError("PARSE", `--input: expected a URL (${reason})`).withCause(cause);
-				}
-				context.bindInput(payload);
+				context.bindInput(parseCommandInput(context.command, supplied));
 			}),
 	);
