@@ -292,7 +292,7 @@ export type InlineCommandAliasesBrand<
 	C,
 	Existing extends string,
 > = CommandCollisionBrand<NarrowAliases<AliasesOf<C>>, Existing> &
-	(N & AliasMembers<AliasesOf<C>> extends infer Dup extends string
+	(ClosedMembers<N> & AliasMembers<AliasesOf<C>> extends infer Dup extends string
 		? [Dup] extends [never]
 			? {}
 			: {

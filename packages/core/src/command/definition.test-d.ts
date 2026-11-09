@@ -106,6 +106,9 @@ function _typecheckInlineCommandConfig() {
 	app.command("ls", { description: "Again" }, (c) => c);
 	// @ts-expect-error -- an alias repeats the name (FIX_ALIAS_SHAPE)
 	app.command("other", { aliases: ["other"] }, (c) => c);
+	// a runtime-owned name is no self-alias evidence, matching `.add(defineCommand(name, …))`
+	const runtimeName: string = "other";
+	app.command(runtimeName, { aliases: ["o"] }, (c) => c);
 	// @ts-expect-error -- an alias must not start with "-" (FIX_ALIAS_SHAPE)
 	app.command("other", { aliases: ["-o"] }, (c) => c);
 	// @ts-expect-error -- version belongs on the root constructor
