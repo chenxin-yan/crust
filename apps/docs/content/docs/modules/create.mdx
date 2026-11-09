@@ -105,7 +105,7 @@ await runSteps(
 
 Steps run in order and stop at the first error. Inside a Crust command, pass the action's `stderr` as `options.stderr` so non-fatal warnings go through the invocation's output.
 
-`options.signal` cancels the steps: on abort, the running child gets `SIGTERM`, and once it exits `runSteps()` rejects with `signal.reason` and skips the remaining steps. It defaults to the ambient terminal signal, which inside a Crust command is the invocation's `signal`, so Ctrl-C and `SIGTERM` end the command with exit 130 or 143.
+`options.signal` cancels the steps: on abort, the running child gets `SIGTERM`, and on macOS and Linux so do its descendants, such as the workers a `command` step's shell started. Once they exit, `runSteps()` rejects with `signal.reason` and skips the remaining steps. It defaults to the ambient terminal signal, which inside a Crust command is the invocation's `signal`, so Ctrl-C and `SIGTERM` end the command with exit 130 or 143.
 
 <auto-type-table path="../../../../../packages/create/src/types.ts" name="RunStepsOptions" />
 
