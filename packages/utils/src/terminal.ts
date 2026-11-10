@@ -203,14 +203,6 @@ export function getTerminalSignal(): AbortSignal | undefined {
 }
 
 /**
- * The signal {@link withProcessTerminalSignal} set, if any: present only while Core's terminal
- * `execute()` owns the process streams, so terminal components can tell they run inside it.
- */
-export function getProcessTerminalSignal(): AbortSignal | undefined {
-	return globals[PROCESS_SIGNAL_KEY];
-}
-
-/**
  * Make `signal` the process-wide fallback for {@link getTerminalSignal} until `fn` settles.
  * For Core's terminal `execute()`, which owns the process; in-process invocations use the
  * async scope instead.

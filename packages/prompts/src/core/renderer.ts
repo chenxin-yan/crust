@@ -6,7 +6,6 @@ import * as readline from "node:readline";
 
 import { stringWidth } from "@crustjs/style";
 import {
-	getProcessTerminalSignal,
 	getTerminalIO,
 	getTerminalSignal,
 	type TerminalIO,
@@ -361,23 +360,7 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Pr
 				flushRender();
 				output.write("\n");
 				cleanup();
-				// Raw mode turns Ctrl+C into a keypress. Inside Crust's terminal execute(), which owns
-				// SIGINT on the real terminal, run the process's SIGINT listeners too, so execute()
-				// cancels the run and the process ends by SIGINT like a Ctrl+C anywhere else. Elsewhere
-				// a SIGINT listener may be a library like signal-exit that re-raises and kills, so
-				// prompts outside execute() only reject, as other prompt libraries do. Not on Windows:
-				// execute() cannot end by the signal there.
-				if (
-					process.platform !== "win32" &&
-					stdin === process.stdin &&
-					signal !== undefined &&
-					signal === getProcessTerminalSignal()
-				) {
-					process.emit("SIGINT", "SIGINT");
-				}
-				reject(
-					signal?.aborted ? signal.reason : new DOMException("Prompt was cancelled.", "AbortError"),
-				);
+				reject(new DOMException("Prompt was cancelled.", "AbortError"));
 				return;
 			}
 
