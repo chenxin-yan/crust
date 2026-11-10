@@ -66,22 +66,22 @@ export class ApiResponseError extends Error {
 
 	/** The HTTP status code. */
 	readonly status: number;
-	/** The request method. */
-	readonly method: string;
+	/** The request method, when the error was constructed with its request. */
+	readonly method: string | undefined;
 	/** The request URL without its query, fragment, or user info, any of which may hold a credential. */
-	readonly url: string;
+	readonly url: string | undefined;
 
 	constructor(
 		status: number,
 		message: string,
-		request: { readonly method: string; readonly url: string },
+		request?: { readonly method: string; readonly url: string },
 	) {
 		super(message);
 		this.status = status;
-		this.method = request.method;
-		this.url = request.url;
+		this.method = request?.method;
+		this.url = request?.url;
 		Object.defineProperty(this, jsonErrorDetails, {
-			value: { status, method: request.method, url: request.url },
+			value: { status, method: this.method, url: this.url },
 		});
 	}
 }
@@ -357,23 +357,10 @@ function parseField(field: string): [string, unknown] {
 	return [field.slice(0, at), number];
 }
 
-// Matched case-insensitively and sent upper-cased, like fetch()'s own normalization (which skips PATCH,
-// so `patch` would get a 405); other methods are case-sensitive (RFC 9110 §9.1) and sent as given.
-const STANDARD_METHODS = new Set([
-	"CONNECT",
-	"DELETE",
-	"GET",
-	"HEAD",
-	"OPTIONS",
-	"PATCH",
-	"POST",
-	"PUT",
-	"TRACE",
-]);
 /** RFC 9110 `token`, the grammar of a method. */
 const METHOD_TOKEN = /^[!#$%&'*+.^_`|~\w-]+$/;
 
-/** The method to send for `-X`, failing before any request for one that would not be sent as given. */
+/** The method to send for `-X`, upper-cased, failing before any request for one fetch() would not send. */
 function parseMethod(method: string): string {
 	if (!METHOD_TOKEN.test(method)) {
 		throw new CrustError(
@@ -382,10 +369,9 @@ function parseMethod(method: string): string {
 			{ flag: "method" },
 		);
 	}
-	const upper = method.toUpperCase();
-	const normalized = STANDARD_METHODS.has(upper) ? upper : method;
-	// Bun's fetch() sends a method it does not know as GET and upper-cases one it knows, such as
-	// `purge`; Request shows what would be sent.
+	// Like `gh api`. fetch() upper-cases only some methods and skips PATCH, so `patch` would get a 405.
+	const normalized = method.toUpperCase();
+	// Bun's fetch() sends a method it does not know as GET; Request shows what would be sent.
 	let sent: string | undefined;
 	try {
 		sent = new Request("http://localhost/", { method: normalized }).method;

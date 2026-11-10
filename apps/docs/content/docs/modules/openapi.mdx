@@ -116,9 +116,9 @@ my-cli api /users --paginate                       # every page, one JSON line e
 
 `-X` takes an HTTP method token ([RFC 9110](https://www.rfc-editor.org/rfc/rfc9110#name-methods)): letters, digits, and ``!#$%&'*+-.^_`|~``.
 
-- The standard methods (`GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `CONNECT`, `OPTIONS`, `TRACE`, `PATCH`) are sent in upper case whatever their case, so `-X patch` sends `PATCH`. Any other method, such as `PURGE`, is sent exactly as given.
+- The method is sent in upper case whatever its case, so `-X patch` sends `PATCH`.
 - An empty value or one with spaces or other characters, such as `-X "DELETE "`, fails with a `PARSE` error before any request.
-- So does a method the runtime's `fetch()` would not send as given, naming what it would send instead: one Node's `fetch()` forbids, such as `CONNECT`, or, on Bun, one it does not know, which its `fetch()` would send as `GET`, and a lowercase one it knows, such as `purge`, which it would send as `PURGE`.
+- So does a method the runtime's `fetch()` would not send, naming what it would send instead: one Node's `fetch()` forbids, such as `CONNECT`, or, on Bun, one it does not know, which its `fetch()` would send as `GET`.
 
 #### `--paginate`
 
@@ -149,7 +149,7 @@ The response body goes to stdout:
 | Non-2xx response                                                                                                                     | The body still prints to stdout, then an `ApiResponseError` (exit 1) with the `status`, `method`, and `url` of the request; its message, such as `GET /users/9: HTTP 404 Not Found`, goes to stderr |
 | `-F` without `=` or out of number range, `-H` without `:` or with a name or value HTTP rejects, an invalid `-X`, unreadable `--body` | A `PARSE` [`CrustError`](/docs/api/errors) before any request                                                                                                                                       |
 
-The `-F` and `-H` errors name the flag and the expected shape, such as `Invalid -H value: expected "Name: value".`, never the text given, since a header can hold a token. For the same reason, an `ApiResponseError` leaves out the request's query and fragment, including query parameters `-F` added: its message shows the path as given up to its `?`, and its `url` is the request URL without query, fragment, or user info.
+The `-F` and `-H` errors name the flag and the expected shape, such as `Invalid -H value: expected "Name: value".`, never the text given, since a header can hold a token. For the same reason, an `ApiResponseError` leaves out the request's query and fragment, including query parameters `-F` added: its message shows the path as given up to its `?`, and its `url` is the request URL without query, fragment, or user info. `new ApiResponseError(status, message)` still works; the request's `{ method, url }` is an optional third argument, and without it `method` and `url` are `undefined`.
 
 ### JSON output
 

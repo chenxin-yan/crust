@@ -554,10 +554,19 @@ describe("api <path>", () => {
 		});
 	});
 
+	it("constructs an ApiResponseError from a status and message alone", () => {
+		expect(new ApiResponseError(404, "GET /x: HTTP 404")).toMatchObject({
+			status: 404,
+			message: "GET /x: HTTP 404",
+			method: undefined,
+			url: undefined,
+		});
+	});
+
 	it.each([
 		["patch", "PATCH"],
 		["PURGE", "PURGE"],
-		["purge", "purge"],
+		["purge", "PURGE"],
 		["M-SEARCH", "M-SEARCH"],
 	])("sends -X %s as %s", async (flag, method) => {
 		const calls = stubFetch();
@@ -617,13 +626,7 @@ describe("api <path>", () => {
 			stderr: "Error: -X FOO: this runtime's fetch() would send it as GET.\n",
 			status: 1,
 		});
-		// Bun upper-cases a method it knows, which would change a case-sensitive method.
-		expect(run("purge")).toMatchObject({
-			stdout: "",
-			stderr: "Error: -X purge: this runtime's fetch() would send it as PURGE.\n",
-			status: 1,
-		});
-		expect(run("PURGE")).toMatchObject({ stdout: "PURGE\n", stderr: "", status: 0 });
+		expect(run("purge")).toMatchObject({ stdout: "PURGE\n", stderr: "", status: 0 });
 	});
 
 	// Tests run on Node; spawn each runtime so stdout is the process's own.
