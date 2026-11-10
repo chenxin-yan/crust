@@ -250,6 +250,18 @@ describe("input", () => {
 		});
 	});
 
+	it("binds an argument that shares the --input flag's name", async () => {
+		const app = new Crust("app")
+			.extend(input())
+			.args({ name: "input", type: "string", required: true })
+			.action(({ args, stdout }) => stdout(args.input));
+
+		expect(await captureExecute(app, ["--input", '{"input":"a.txt"}'])).toMatchObject({
+			stdout: "a.txt",
+			exitCode: 0,
+		});
+	});
+
 	// A setup failure comes after flags are bound, so json() still renders it.
 	it.each([
 		["input first", () => [input(), json()] as const],

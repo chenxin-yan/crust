@@ -89,7 +89,12 @@ export const input: ExtensionFactory<[], {}, [], typeof inputFlags> =
 				// Drop keys argv gave before conversion, so an invalid overridden value never fails.
 				const { args, flags, raw } = context.sources;
 				const given = new Set(
-					[...Object.entries(args), ...Object.entries(flags), [RAW_INPUT_PROPERTY, raw]]
+					[
+						...Object.entries(args),
+						// Extension flags are not input keys: `--input` itself must not hide an `input` argument.
+						...Object.entries(flags).filter(([name]) => !context.command.flags[name]?.extension),
+						[RAW_INPUT_PROPERTY, raw],
+					]
 						.filter(([, source]) => source === "argv")
 						.map(([name]) => name),
 				);
