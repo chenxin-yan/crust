@@ -21,20 +21,13 @@ export type RunProcessOptions = {
 	 */
 	timeout?: number;
 	/**
-	 * Aborting it sends `SIGTERM` to the child and, on POSIX, to the descendants it has at that
-	 * moment, such as a shell's workers (timed calls: the whole process group, killed). It rejects
-	 * with `signal.reason` once the child and those descendants exit, or `forceKillAfterDelay`
-	 * later, after sending `SIGKILL` to the ones still running. Untimed children stay in this
-	 * process's group, so terminal Ctrl-C and `/dev/tty` keep reaching them. Windows has no
-	 * graceful signal: `taskkill /T /F` ends the child's tree at once. An already-aborted signal
-	 * rejects before spawning.
+	 * Aborting it sends `SIGTERM` to the child, then `SIGKILL` if it is still running 5 seconds
+	 * later (timed calls: the whole process group, killed; Windows: `taskkill /T /F` ends the
+	 * child's tree), and rejects with `signal.reason` once the child exits and its collected
+	 * output closes, which a surviving descendant holding the pipe delays. An already-aborted
+	 * signal rejects before spawning.
 	 */
 	signal?: AbortSignal;
-	/**
-	 * Milliseconds an aborted child and its descendants get to exit after `SIGTERM` before
-	 * `SIGKILL`, like execa's option of the same name. POSIX only. Defaults to `5000`.
-	 */
-	forceKillAfterDelay?: number;
 };
 
 export type RunProcessResult = {
@@ -172,42 +165,6 @@ export function killProcessTree(child: ChildProcess): void {
 	}
 }
 
-/** POSIX: the descendants of `pid` in one `ps` snapshot, or none when `ps` fails. */
-function listDescendants(pid: number): number[] {
-	const { spawnSync } = process.getBuiltinModule("node:child_process");
-	const result = spawnSync("ps", ["-A", "-o", "pid=", "-o", "ppid="], {
-		encoding: "utf8",
-		timeout: 10_000,
-	});
-	if (result.status !== 0) return [];
-	const children = new Map<number, number[]>();
-	for (const line of result.stdout.split("\n")) {
-		const [child, parent] = line.trim().split(/\s+/).map(Number);
-		if (child && parent) children.set(parent, [...(children.get(parent) ?? []), child]);
-	}
-	const descendants = [...(children.get(pid) ?? [])];
-	for (let i = 0; i < descendants.length; i++) {
-		descendants.push(...(children.get(descendants[i]!) ?? []));
-	}
-	return descendants;
-}
-
-function isRunning(pid: number): boolean {
-	try {
-		process.kill(pid, 0);
-	} catch {
-		return false;
-	}
-	// A zombie has exited; under a PID 1 that never reaps (a container without an init) it stays.
-	try {
-		const { readFileSync } = process.getBuiltinModule("node:fs");
-		return !/^\d+ \(.*\) Z/s.test(readFileSync(`/proc/${pid}/stat`, "utf8"));
-	} catch {
-		// No procfs (macOS): its PID 1 reaps, so a live PID is running.
-		return true;
-	}
-}
-
 /**
  * Spawn a process and wait for it to exit without imposing an error policy.
  *
@@ -240,9 +197,7 @@ export async function runProcess(
 
 	const commandLine = [command, ...args].join(" ");
 	let stop!: (message: string, reason: string) => void;
-	let rejectStopped!: (reason: unknown) => void;
 	const stopped = new Promise<never>((_, reject) => {
-		rejectStopped = reject;
 		stop = (message, reason) => {
 			let failure = new Error(message);
 			try {
@@ -276,48 +231,14 @@ export async function runProcess(
 				},
 			})
 		: () => {};
-	// An untimed child shares this process's group (see `detached`), so its descendants are
-	// reached through a snapshot instead of a group kill.
-	let abortedDescendants: number[] = [];
 	let forceKillTimer: NodeJS.Timeout | undefined;
 	const onAbort = () => {
 		try {
 			if (detached || process.platform === "win32") killProcessTree(proc);
 			else {
-				// shortcut: a process forked between the snapshot and the kill escapes; use a
-				// foreground process group if Node ever exposes tcsetpgrp.
-				const descendants =
-					proc.pid !== undefined && proc.exitCode === null && proc.signalCode === null
-						? listDescendants(proc.pid)
-						: [];
-				// The parent first, so a shell cannot start its next command once a worker dies.
 				proc.kill("SIGTERM");
-				abortedDescendants = descendants.filter((pid) => {
-					try {
-						process.kill(pid, "SIGTERM");
-						return true;
-					} catch {
-						// Gone already, or not ours to signal (such as a root child of `sudo`).
-						return false;
-					}
-				});
-				// A child that ignores or outlasts SIGTERM must not hold the call open forever.
-				// shortcut: a snapshot PID reused within the grace period gets SIGKILL; check each
-				// process's start time if a busy host with a small pid_max ever hits that.
-				forceKillTimer = setTimeout(() => {
-					proc.kill("SIGKILL");
-					for (const pid of abortedDescendants.filter(isRunning)) {
-						try {
-							process.kill(pid, "SIGKILL");
-						} catch {
-							// Exited between the check and the kill.
-						}
-					}
-					// A descendant outside the snapshot may still hold the collected pipes open.
-					proc.stdout?.destroy();
-					proc.stderr?.destroy();
-					rejectStopped(options.signal?.reason);
-				}, options.forceKillAfterDelay ?? 5_000);
+				// A child that ignores SIGTERM must not hold the call open forever.
+				forceKillTimer = setTimeout(() => proc.kill("SIGKILL"), 5_000);
 			}
 		} catch {
 			// The child already exited; its close settles the call.
@@ -336,12 +257,6 @@ export async function runProcess(
 			]),
 			stopped,
 		]);
-		if (options.signal?.aborted) {
-			const { setTimeout: sleep } = process.getBuiltinModule("node:timers/promises");
-			while ((abortedDescendants = abortedDescendants.filter(isRunning)).length > 0) {
-				await sleep(10);
-			}
-		}
 		options.signal?.throwIfAborted();
 		return { exitCode, stdout, stderr };
 	} finally {

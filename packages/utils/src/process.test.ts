@@ -16,13 +16,7 @@ import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { isErrnoException } from "./error.ts";
-import {
-	getWindowsShimCommand,
-	runProcess,
-	shellQuote,
-	which,
-	type RunProcessOptions,
-} from "./process.ts";
+import { getWindowsShimCommand, runProcess, shellQuote, which } from "./process.ts";
 
 describe("shellQuote", () => {
 	it("keeps safe words bare and single-quotes empty, apostrophe, and punctuation words", () => {
@@ -141,70 +135,30 @@ describe("runProcess", () => {
 		expect(Date.now() - started).toBeLessThan(10_000);
 	});
 
-	/** Pids the files list once their writers are ready; spawns `script` under a fresh signal. */
-	async function startTree(script: (dir: string) => string, options: RunProcessOptions = {}) {
-		const dir = mkdtempSync(join(tmpdir(), "run-process-abort-"));
-		const controller = new AbortController();
-		const run = runProcess(process.execPath, ["-e", script(dir)], {
-			...options,
-			signal: controller.signal,
-		});
-		const pids = await vi.waitFor(
-			() => {
-				const files = ["child", "descendant"].map((name) => join(dir, name));
-				if (!files.every(existsSync)) throw new Error("not ready");
-				return files.map((file) => Number(readFileSync(file, "utf8")));
-			},
-			{ timeout: 10_000 },
-		);
-		const cleanup = () => {
-			for (const pid of pids.filter(isRunning)) process.kill(pid, "SIGKILL");
-			rmSync(dir, { recursive: true, force: true });
-		};
-		return { controller, run, pids, cleanup };
-	}
-
-	/** A child that starts one descendant; both run `body` and then report their pid. */
-	const tree = (body: string) => (dir: string) => {
-		const ready = (name: string) =>
-			`${body}\nrequire("node:fs").writeFileSync(${JSON.stringify(join(dir, name))}, String(process.pid));`;
-		return `require("node:child_process").spawn(process.execPath, ["-e", ${JSON.stringify(ready("descendant"))}], { stdio: "inherit" });
-${ready("child")}`;
-	};
-
-	it("terminates the child's descendants before rejecting on abort", async () => {
-		const { controller, run, pids, cleanup } = await startTree(
-			tree("setInterval(() => {}, 1000);"),
-		);
-		try {
-			const reason = new Error("cancelled");
-			controller.abort(reason);
-			await expect(run).rejects.toBe(reason);
-			await vi.waitFor(() => expect(pids.filter(isRunning)).toEqual([]));
-		} finally {
-			cleanup();
-		}
-	}, 15_000);
-
 	it.skipIf(process.platform === "win32")(
-		"force-kills a tree that ignores SIGTERM once forceKillAfterDelay passes",
+		"kills a child that ignores SIGTERM 5 seconds after its signal aborts",
 		async () => {
-			const { controller, run, pids, cleanup } = await startTree(
-				tree('process.on("SIGTERM", () => {}); setInterval(() => {}, 1000);'),
-				{ forceKillAfterDelay: 300 },
+			const dir = mkdtempSync(join(tmpdir(), "run-process-abort-"));
+			const ready = join(dir, "ready");
+			const controller = new AbortController();
+			const run = runProcess(
+				process.execPath,
+				[
+					"-e",
+					`process.on("SIGTERM", () => {}); setTimeout(() => {}, 20000); require("node:fs").writeFileSync(${JSON.stringify(ready)}, "");`,
+				],
+				{ signal: controller.signal },
 			);
 			try {
+				await vi.waitFor(() => expect(existsSync(ready)).toBe(true), { timeout: 10_000 });
+				vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 				const reason = new Error("cancelled");
-				const abortedAt = Date.now();
 				controller.abort(reason);
-				await new Promise((resolve) => setTimeout(resolve, 150));
-				// Still inside the grace period: SIGTERM was sent but ignored.
-				expect(pids.filter(isRunning)).toEqual(pids);
+				vi.advanceTimersByTime(5_000);
 				await expect(run).rejects.toBe(reason);
-				expect(Date.now() - abortedAt).toBeGreaterThanOrEqual(300);
-				await vi.waitFor(() => expect(pids.filter(isRunning)).toEqual([]));
 			} finally {
-				cleanup();
+				vi.useRealTimers();
+				rmSync(dir, { recursive: true, force: true });
 			}
 		},
 		15_000,
