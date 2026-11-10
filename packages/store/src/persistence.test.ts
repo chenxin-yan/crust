@@ -226,7 +226,25 @@ describe("writeJson", () => {
 			expect(await readdir(targetDir)).toEqual(["dotfiles.json"]);
 		});
 
+		it("resolves a relative link under a symlinked directory the way reads do", async () => {
+			// The store is real/target.json; path.resolve() would name ./target.json instead.
+			await mkdir(join(targetDir, "real", "sub"), { recursive: true });
+			await symlink("real/sub", join(targetDir, "alias"));
+			await symlink("../target.json", join(targetDir, "real", "sub", "config.json"));
+			const unrelated = join(targetDir, "target.json");
+			await writeFile(unrelated, "unrelated");
+			const viaAlias = join(targetDir, "alias", "config.json");
+
+			await writeJson(viaAlias, { data: true });
+			expect(await readJson(viaAlias)).toEqual({ data: true });
+			await deleteJson(viaAlias);
+
+			expect(await readJson(viaAlias)).toBeUndefined();
+			expect(await readFile(unrelated, "utf-8")).toBe("unrelated");
+		});
+
 		it("creates the target of a dangling link, following relative links", async () => {
+			await mkdir(targetDir);
 			await symlink("hop.json", filePath);
 			await symlink(join(targetDir, "dotfiles.json"), join(tempDir, "hop.json"));
 

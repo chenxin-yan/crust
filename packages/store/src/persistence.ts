@@ -10,6 +10,7 @@ import {
 	readdir,
 	readFile,
 	readlink,
+	realpath,
 	rename,
 	rm,
 	stat,
@@ -17,7 +18,7 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { hostname } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, sep } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { isErrnoException } from "@crustjs/utils/error";
@@ -124,6 +125,7 @@ const isWindows = () => process.platform === "win32";
 /**
  * Follows `filePath` through any chain of symlinks, even one whose end does not
  * exist yet, so writes and deletes act on the link's target and keep the link.
+ * A link into a missing directory is not followed: the write replaces that link.
  *
  * shortcut: the lock stays at `<filePath>.lock`, so stores opened through different
  * links to one file do not exclude each other; lock the resolved path if that is needed.
@@ -133,9 +135,14 @@ async function resolveTarget(filePath: string): Promise<string> {
 	// 40 matches Linux's limit on links followed in one path lookup (path_resolution(7)).
 	for (let hops = 0; hops < 40; hops++) {
 		try {
-			target = resolve(dirname(target), await readlink(target));
+			const link = await readlink(target);
+			const next = isAbsolute(link) ? link : `${dirname(target)}${sep}${link}`;
+			// The filesystem resolves the directory part: `path.resolve()` would cancel a `..`
+			// against a symlinked directory's name and point at a different file than reads use.
+			target = join(await realpath(dirname(next)), basename(next));
 		} catch {
-			// Not a link (EINVAL) or missing (ENOENT): this is the file. Other errors surface on use.
+			// Not a link (EINVAL), missing (ENOENT), or a link into a missing directory: this is
+			// the file. Other errors surface on use.
 			return target;
 		}
 	}
