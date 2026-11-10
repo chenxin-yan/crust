@@ -22,7 +22,7 @@ import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";
 import { applySchemas } from "./schema.ts";
 import { normalizeFlag, type FlagSpelling } from "./spellings.ts";
 
-/** Environment variables consulted by `FlagDef.env`; `process.env` on the terminal path. */
+/** Environment variables consulted by `FlagDef.env`; `process.env` unless an invocation passes its own. */
 export type FlagEnvironment = Readonly<Record<string, string | undefined>>;
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -972,8 +972,6 @@ export function bindStructuredInput(
 			),
 		},
 		{ args: inputArgs, flags: inputFlags, raw },
-		// The parse result already resolved the environment for keys not supplied here.
-		{},
 	);
 	const pick = (bound: Record<string, ParsedArgValue>, names: Record<string, unknown>) =>
 		Object.fromEntries(Object.keys(names).map((name) => [name, bound[name]]));

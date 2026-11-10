@@ -328,9 +328,9 @@ interface FlagDefBase {
 	schema?: never;
 }
 
-/** Environment fallback for terminal parsing; structured `run()` never reads it. */
+/** Environment fallback for a flag that argv or structured `run()` input omits. */
 interface FlagEnvBinding {
-	/** Variable consulted only when argv omits the flag; help shows its name, never its value. */
+	/** Variable consulted only when the flag is omitted; help shows its name, never its value. */
 	name: string;
 	/** Split environment text into occurrences; independent of the argv delimiter, repeatable flags only. */
 	delimiter?: string;

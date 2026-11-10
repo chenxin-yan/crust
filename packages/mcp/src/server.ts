@@ -150,7 +150,6 @@ export async function createMcpServer(
 			await app.run(
 				tool.path as never,
 				input as never,
-				// Env-backed flags read the server's process.env, which the client configures (e.g. an MCP `env` block).
 				onEvent === undefined ? { signal } : { signal, onEvent },
 			),
 		);

@@ -187,7 +187,7 @@ Crust doesn't detect agents or add a global `--no-input`: the TTY check is the r
 [`@crustjs/mcp`](/docs/modules/mcp) serves your commands as MCP tools with `<cli> mcp`.
 
 - Each tool's input schema is the flat object `--input` takes, without Extension flags such as `help`, `json`, or `input`.
-- Only the application's own commands are tools; Extension commands such as `completion`, `schema`, and `skills` are left out unless `include` names them.
+- Only the application's own commands are tools; Extension commands such as `completion`, `schema`, `skills`, and [`api`](#the-api-command) are left out unless `include` names them.
 - Flags with an `env` binding are optional tool inputs: a variable set in the client's `env` configuration reaches the server, as it would reach the CLI in a shell.
 - `.output()` schemas and generator events become the tool's output schema and progress notifications.
 - What a call writes to stderr, next steps included, follows its result in the tool result.

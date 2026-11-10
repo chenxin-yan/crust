@@ -58,7 +58,7 @@ A command becomes a tool when it:
 - has a Command Action (so the root is a tool only when it has one)
 - is visible: not `hidden`, nor under a hidden command
 - is not the `mcp` command, an `exclude` path, or under one
-- is the application's own command, not one an Extension contributed (such as `completion`, `schema`, or `skills install`), unless an `include` path selects it or a command it is under
+- is the application's own command, not one an Extension contributed (such as `completion`, `schema`, `skills install`, or [`@crustjs/openapi`](/docs/modules/openapi)'s `api`), unless an `include` path selects it or a command it is under
 
 Every `exclude` and `include` path must be a canonical command path; hidden commands and paths under another excluded command count. A misspelled path or an alias throws, listing each unknown path, instead of leaving the command exposed or hidden. `exclude` wins over `include`, and `mcp` is never a tool.
 
