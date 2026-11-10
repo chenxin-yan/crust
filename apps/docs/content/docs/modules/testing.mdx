@@ -16,7 +16,7 @@ npm install -D @crustjs/testing
 
 <include lang="ts">../../../examples/modules/testing.ts#execute</include>
 
-`captureExecute()` drives raw argv through `execute()` in-process and returns `stdout`, `stderr`, and `exitCode`. It restores the previous process exit state after capture. Use it for parser errors, rendered failures, and Extension `onError` output. `app` is anything with Crust's `execute({ argv, io })` method (`ExecutableApp`).
+`captureExecute()` drives raw argv through `execute()` in-process and returns `stdout`, `stderr`, and `exitCode`. It restores the previous process exit state after capture. Use it for parser errors, rendered failures, and Extension `onError` output. `app` is anything with Crust's `execute({ argv, io, env })` method (`ExecutableApp`).
 
 `stdout` and `stderr` hold each `stdout()` or `stderr()` call's text joined with newlines, like `run()`'s outcome: the newline `execute()` appends to every line in a terminal is between lines, not after the last one, so a single line compares as `"Error: …"`, not `"Error: …\n"`.
 
