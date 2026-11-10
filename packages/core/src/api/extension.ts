@@ -346,7 +346,7 @@ export interface ExtensionHooks<
 	 * setup failure renders by default. A selector or renderer that throws there never replaces
 	 * the setup failure. Routing and argv syntax
 	 * failures, before any setup, always render by default.
-	 * At most one Extension in an application may set it; TypeScript rejects two in one `.extend()` call.
+	 * At most one Extension in an application may set it.
 	 */
 	readonly renderer?: (ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<Renderer | undefined>;
 	/**
@@ -506,10 +506,7 @@ export interface ExtensionData<
 	out MetaKeys extends RootMetaKey = never,
 	HookDeps extends ContextMap = Deps,
 	HookFlags extends FlagsDef = {},
-	Renders extends boolean = boolean,
 > {
-	/** @internal — phantom: `true` once `.renderer()` was called; `boolean` when not known */
-	readonly _renders?: Renders;
 	/** @internal Hook demands are distinct from command/provider attachment dependencies. */
 	readonly _hookDeps?: HookDeps;
 	/** @internal — phantom: flags of the Contexts hooks use, which every command parses */
@@ -549,42 +546,11 @@ export interface Extension<
 	out MetaKeys extends RootMetaKey = never,
 	HookDeps extends ContextMap = Deps,
 	HookFlags extends FlagsDef = {},
-	Renders extends boolean = boolean,
 > extends Defining<
-	ExtensionData<Deps, Provide, FlagDefs, Commands, MetaKeys, HookDeps, HookFlags, Renders>
+	ExtensionData<Deps, Provide, FlagDefs, Commands, MetaKeys, HookDeps, HookFlags>
 > {
 	readonly id: ExtensionId;
 }
-
-// Only a known `true` counts: widened handles and annotated factories may or may not render.
-type SetsRenderer<E> =
-	DefiningOf<E> extends { readonly _renders?: infer R }
-		? 0 extends 1 & R
-			? false
-			: [Exclude<R, undefined>] extends [never]
-				? false
-				: [Exclude<R, undefined>] extends [true]
-					? true
-					: false
-		: false;
-
-type RenderingPositions<Es extends readonly unknown[]> = {
-	[I in keyof Es]: SetsRenderer<Es[I]> extends true ? I : never;
-}[number];
-
-/**
- * @internal Brand an Extension that sets a renderer when another in the same `.extend()` call
- * does too. Registrations across calls stay runtime-checked: a later registration of the same
- * id replaces an earlier one, and ids are not known statically.
- */
-export type DuplicateRendererBrand<Es extends readonly unknown[], E> =
-	SetsRenderer<E> extends true
-		? IsUnion<RenderingPositions<Es>> extends true
-			? {
-					readonly FIX_DUPLICATE_RENDERER: "Only one Extension in an application can set a renderer";
-				}
-			: {}
-		: {};
 
 /** @internal Broad Extension constraint; contravariance requires the full metadata key set. */
 export type AnyExtension = Extension<any, any, any, any, RootMetaKey>;
@@ -670,11 +636,9 @@ export type ExtensionFactory<
 	MetaKeys extends RootMetaKey = never,
 	HookDeps extends ContextMap = Deps,
 	HookFlags extends FlagsDef = {},
-	// `true` for an Extension that sets a renderer; the default leaves it unknown.
-	Renders extends boolean = boolean,
 > = ((
 	...args: Args
-) => Extension<Deps, Provide, Flags, Commands, MetaKeys, HookDeps, HookFlags, Renders>) & {
+) => Extension<Deps, Provide, Flags, Commands, MetaKeys, HookDeps, HookFlags>) & {
 	readonly id: ExtensionId;
 };
 
@@ -687,11 +651,10 @@ type ExtensionFactoryOf<Args extends readonly unknown[], E> =
 			infer Commands,
 			infer MetaKeys,
 			infer HookDeps,
-			infer HookFlags,
-			infer Renders
+			infer HookFlags
 		>
 	>
-		? ExtensionFactory<Args, Deps, Provide, Flags, Commands, MetaKeys, HookDeps, HookFlags, Renders>
+		? ExtensionFactory<Args, Deps, Provide, Flags, Commands, MetaKeys, HookDeps, HookFlags>
 		: never;
 
 type ExtensionHook<
@@ -714,7 +677,6 @@ export interface ExtensionBuilder<
 	OF extends ExtensionFlagsDef = {},
 	Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
 	MetaKeys extends RootMetaKey = never,
-	Renders extends boolean = boolean,
 > extends Extension<
 	ExtensionDeps<Use, Provide, Commands>,
 	Provide,
@@ -722,8 +684,7 @@ export interface ExtensionBuilder<
 	Commands,
 	MetaKeys,
 	ContextDependencies<Use>,
-	ContextUseFlags<Use>,
-	Renders
+	ContextUseFlags<Use>
 > {
 	/**
 	 * Declare Contexts the hooks read from `ctx`. This consumes only: the
@@ -732,7 +693,7 @@ export interface ExtensionBuilder<
 	 */
 	use<const Fs extends readonly [AnyContextFactory, ...AnyContextFactory[]]>(
 		...factories: Fs
-	): ExtensionBuilder<readonly [...Use, ...Fs], Provide, OF, Commands, MetaKeys, Renders>;
+	): ExtensionBuilder<readonly [...Use, ...Fs], Provide, OF, Commands, MetaKeys>;
 	/**
 	 * Provide Contexts application-wide, regardless of chain position. Provided
 	 * Contexts are not exposed to this Extension's hooks unless also declared with `.use()`.
@@ -741,7 +702,7 @@ export interface ExtensionBuilder<
 	 */
 	provide<const Cs extends readonly AnyContextInstance[]>(
 		...instances: KnownContextInstances<Cs> & ProvideChecks<DeclaredSpellings<OF, Provide>, Cs>
-	): ExtensionBuilder<Use, readonly [...Provide, ...Cs], OF, Commands, MetaKeys, Renders>;
+	): ExtensionBuilder<Use, readonly [...Provide, ...Cs], OF, Commands, MetaKeys>;
 	/**
 	 * Own flags, one record keyed by flag name; repeated calls accumulate. `recursive`
 	 * (default `true`) contributes a flag to every command.
@@ -753,17 +714,16 @@ export interface ExtensionBuilder<
 		Provide,
 		AppendedFlags<OF, DefinedFlags<F, ExtensionFlagsDef>>,
 		Commands,
-		MetaKeys,
-		Renders
+		MetaKeys
 	>;
 	/** Contribute root commands; names and aliases must not collide with any other root command. */
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
 		...definitions: Ds & ValidateCommandDefinitions<Ds, KnownCommandSpellings<Commands>>
-	): ExtensionBuilder<Use, Provide, OF, readonly [...Commands, ...Ds], MetaKeys, Renders>;
+	): ExtensionBuilder<Use, Provide, OF, readonly [...Commands, ...Ds], MetaKeys>;
 	/** See {@link ExtensionHooks.setup}. */
 	setup(
 		hook: ExtensionHook<"setup", Use, OF, MetaKeys>,
-	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Renders>;
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
 	/**
 	 * Take over the invocation when the user supplies `flag` (argv, environment, or typed
 	 * `run()` input), unless it is a negated boolean: `run` replaces `preRun`, validation,
@@ -775,47 +735,44 @@ export interface ExtensionBuilder<
 		flag: keyof OF & string,
 		run: ExtensionHook<"noAction", Use, OF, MetaKeys>,
 		options?: ExtensionHandleOptions,
-	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Renders>;
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
 	/** See {@link ExtensionHooks.renderer}. */
 	renderer(
 		select: ExtensionHook<"renderer", Use, OF, MetaKeys>,
-	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, true>;
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
 	/** See {@link ExtensionHooks.preRun}. */
 	preRun(
 		hook: ExtensionHook<"preRun", Use, OF, MetaKeys>,
-	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Renders>;
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
 	/** See {@link ExtensionHooks.noAction}. */
 	noAction(
 		hook: ExtensionHook<"noAction", Use, OF, MetaKeys>,
-	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Renders>;
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
 	/** See {@link ExtensionHooks.postRun}. */
 	postRun(
 		hook: ExtensionHook<"postRun", Use, OF, MetaKeys>,
-	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Renders>;
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
 	/** See {@link ExtensionHooks.onError}. */
 	onError(
 		hook: ExtensionHook<"onError", Use, OF, MetaKeys>,
-	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Renders>;
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
 
 	/** Contribute documentation sections computed from the prepared root snapshot. */
 	sections(
 		contribute: (
 			snapshot: RootCommandSnapshot<MetaKeys>,
 		) => readonly ExtensionSectionContribution[],
-	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Renders>;
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
 	/** Generate build artifacts; build tooling writes the returned files. */
 	build(
 		generate: (ctx: ExtensionBuildContext<MetaKeys>) => Awaitable<BuildArtifacts>,
-	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Renders>;
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
 	/**
 	 * Make a configurable Extension: each call passes this handle and the call
 	 * arguments to `define`, which must return an Extension with this handle's id.
 	 */
 	factory<Args extends readonly unknown[], E extends AnyExtension>(
-		define: (
-			extension: ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Renders>,
-			...args: Args
-		) => E,
+		define: (extension: ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>, ...args: Args) => E,
 	): ExtensionFactoryOf<Args, E>;
 }
 

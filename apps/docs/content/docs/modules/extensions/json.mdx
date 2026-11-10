@@ -100,7 +100,7 @@ Pass `{ flags: { json: true } }` to [`run()`](/docs/api/crust#runpath-input-opti
 
 ## Limitations
 
-- `json()` sets the invocation's [renderer](/docs/guide/extensions#renderers). An application can have only one, so `json()` can't be combined with another Extension that sets `.renderer()`; TypeScript rejects both in one `.extend()` call.
+- `json()` sets the invocation's [renderer](/docs/guide/extensions#renderers). An application can have only one, so `json()` can't be combined with another Extension that sets `.renderer()`.
 - Failures before flags are bound print as plain text, because `--json` is not yet known: unknown commands under a parent without a Command Action, and argv syntax errors such as an unknown flag or a flag missing its value. `execute()` prints Core's default `Error:` line for them. A failure in an Extension's `setup`, such as an invalid [`--input`](/docs/modules/extensions/input), comes after binding and is JSON.
 - If another Extension's `onError` hook claims a failure, it keeps that Extension's format, and a generator action's stream ends without a final line.
 - A cancelled invocation (exit code 130, or 143 after `SIGTERM`) is not rendered, so its stream also ends without a final line.

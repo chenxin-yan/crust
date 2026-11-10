@@ -118,7 +118,7 @@ setup → handle → preRun → validation → action → postRun
 - **`preRun`:** never runs for `--help`, `--version`, or `noAction`. Throw to fail the invocation; `preRun` can't end it successfully.
 - **`postRun`:** a `completed` outcome carries `outcome.result`: the [`.output()`](/docs/api/crust#outputschema) schema's output if the command declares one, otherwise the action's awaited return value. After an [async generator action](/docs/guide/commands#stream-events), `completed` and `failed` outcomes also carry its yielded values as `outcome.events`.
 - **Early failures:** routing, argv-parse, and typed `run()` input failures happen before the other hooks. Under `execute()`, `onError` still sees routing and argv-parse failures; `run()` never calls `onError` and returns a `failed` outcome.
-- **One per app:** only one Extension may set `noAction`, and only one `.renderer()`. A second is a `DEFINITION` error when the app prepares. TypeScript also rejects two `.renderer()` Extensions in one `.extend()` call, such as `json()` and a custom renderer; across calls, a later registration of the same Extension replaces the earlier one, so only the runtime checks.
+- **One per app:** only one Extension may set `noAction`, and only one `.renderer()`. A second is a `DEFINITION` error when the app prepares.
 
 Only handlers and `noAction` can end an invocation early, and reordering `.extend()` changes neither choice. It only orders setups, `preRun` checks, and `onError` hooks (registration order) and `postRun` hooks and cleanups (reverse).
 

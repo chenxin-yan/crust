@@ -2076,7 +2076,6 @@ describe("Extension renderer", () => {
 	it("rejects two renderer Extensions", async () => {
 		const render = (name: string) =>
 			defineExtension(defineExtensionId(name)).renderer(() => undefined);
-		// @ts-expect-error -- TypeScript also rejects two renderers in one `.extend()` call
 		await expect(new Crust("cli").extend(render("a"), render("b")).snapshot()).rejects.toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",

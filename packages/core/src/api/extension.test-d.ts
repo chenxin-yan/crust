@@ -390,24 +390,3 @@ function _rendererSelector() {
 	owned.renderer(async () => ({ text() {} }));
 	const _renderer: Renderer = { text() {}, diag() {}, error(_error: unknown) {} };
 }
-
-function _oneRendererPerExtendCall() {
-	const render = (id: string) =>
-		defineExtension(defineExtensionId(id))
-			.renderer(() => undefined)
-			.preRun(() => {});
-	const configured = defineExtension(defineExtensionId("test:configured"))
-		.renderer(() => undefined)
-		.factory((extension, _pretty: boolean) => extension);
-	const plain = defineExtension(defineExtensionId("test:plain")).preRun(() => {});
-	const widened: Extension = render("test:widened");
-	const annotated: ExtensionFactory<[pretty: boolean]> = configured;
-
-	new Crust("cli").extend(render("a"), plain, widened, annotated(true));
-	// Across calls a later registration of the same id may replace an earlier one.
-	new Crust("cli").extend(render("a")).extend(render("b"));
-	// @ts-expect-error Only one Extension in an application can set a renderer.
-	new Crust("cli").extend(render("a"), plain, render("b"));
-	// @ts-expect-error A factory keeps its handle's renderer.
-	new Crust("cli").extend(configured(true), render("b"));
-}
