@@ -632,30 +632,20 @@ describe("runDistributeBuild", () => {
 
 	it("rejects crust.include files that npm leaves out of published packages", async () => {
 		const base = join(tmpDir, "templates", "base");
-		mkdirSync(join(base, "node_modules", "x"), { recursive: true });
-		mkdirSync(join(base, ".git"), { recursive: true });
-		mkdirSync(join(base, "build"), { recursive: true });
-		mkdirSync(join(base, "nested", "Archived-Packages"), { recursive: true });
-		// npm matches its rules ignoring case on every OS and refuses names with `*`,
-		// which Windows cannot create; a file named archived-packages still ships.
-		const star = process.platform === "win32" ? [] : ["a*b.txt"];
+		mkdirSync(base, { recursive: true });
+		// npm matches the three names ignoring case on every OS. The junk it also drops
+		// (.DS_Store, a swap file, *.orig) is not the author's to rename.
+		const dropped = [".gitignore", ".npmrc", ".NPMIGNORE"];
 		for (const name of [
-			".gitignore",
-			".npmrc",
+			...dropped,
 			"_gitignore",
 			".env",
-			"package-lock.json",
-			".NPMIGNORE",
-			"notes.ORIG",
-			"archived-packages",
-			...star,
+			".DS_Store",
+			".README.md.swp",
+			"merge.orig",
 		]) {
 			writeFileSync(join(base, name), "\n");
 		}
-		writeFileSync(join(base, "nested", "Archived-Packages", "x.tgz"), "\n");
-		writeFileSync(join(base, "node_modules", "x", "index.js"), "\n");
-		writeFileSync(join(base, ".git", "HEAD"), "\n");
-		writeFileSync(join(base, "build", "config.gypi"), "\n");
 		const compiled: string[] = [];
 		const execute = async (_entryPath: string, outfilePath: string) => {
 			compiled.push(outfilePath);
@@ -676,54 +666,14 @@ describe("runDistributeBuild", () => {
 			.filter((line) => line.startsWith("  templates"))
 			.map((line) => line.trim().replaceAll("\\", "/"))
 			.sort();
-		// Matches `npm pack --dry-run` (npm 11): node_modules, .env, and lockfiles in a subdirectory ship.
-		expect(listed).toEqual(
-			[
-				"templates/base/.git",
-				"templates/base/.gitignore",
-				"templates/base/.NPMIGNORE",
-				"templates/base/.npmrc",
-				"templates/base/build/config.gypi",
-				"templates/base/nested/Archived-Packages",
-				"templates/base/notes.ORIG",
-				...star.map((name) => `templates/base/${name}`),
-			].sort(),
-		);
+		expect(listed).toEqual(dropped.map((name) => `templates/base/${name}`).sort());
 		expect((error as Error).message).toContain("_gitignore");
 		expect(compiled).toEqual([]);
+
+		for (const name of dropped) rmSync(join(base, name));
+		await runDistributeBuild(plan, bunDistribution(), io);
+		expect(existsSync(join(plan.stageDir, "root", "templates", "base", "_gitignore"))).toBe(true);
 	});
-
-	// npm drops the whole staged tree under an ignored ancestor (`*.orig`, `.git`).
-	for (const [include, ignored] of [
-		["templates/app.orig/src", "templates/app.orig"],
-		[".git/templates", ".git"],
-	] as const) {
-		it(`rejects crust.include ${include} under an ancestor npm leaves out`, async () => {
-			mkdirSync(join(tmpDir, include), { recursive: true });
-			writeFileSync(join(tmpDir, include, "hello.txt"), "\n");
-			const compiled: string[] = [];
-			const execute = async (_entryPath: string, outfilePath: string) => {
-				compiled.push(outfilePath);
-			};
-			const plan = createPlan(
-				tmpDir,
-				{ name: "include-cli", version: "0.1.0" },
-				{ include: [include] },
-			);
-
-			const error = await runDistributeBuild(plan, bunDistribution(undefined, execute), io).then(
-				() => undefined,
-				(error: unknown) => error,
-			);
-			expect(error).toBeInstanceOf(Error);
-			const listed = (error as Error).message
-				.split("\n")
-				.filter((line) => line.startsWith("  ") && !line.includes(" npm drops"))
-				.map((line) => line.trim().replaceAll("\\", "/"));
-			expect(listed).toEqual([ignored]);
-			expect(compiled).toEqual([]);
-		});
-	}
 
 	// Directory pairs live under different parents (or are created with recursive
 	// mkdir) so the fixture is the same on case-sensitive and case-insensitive hosts.
