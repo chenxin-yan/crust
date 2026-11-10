@@ -1,0 +1,63 @@
+# Permanent redirects for docs pages that were renamed or removed.
+# Sources match exactly, so each old URL is listed with and without a trailing
+# slash; the destination is always the canonical no-slash URL. Checked by
+# tests/redirects.test.ts.
+
+/docs/api/define-command /docs/api/crust 301
+/docs/api/define-command/ /docs/api/crust 301
+/docs/api/run-command /docs/api/crust 301
+/docs/api/run-command/ /docs/api/crust 301
+/docs/api/run-main /docs/api/crust 301
+/docs/api/run-main/ /docs/api/crust 301
+/docs/guide/arguments /docs/guide/arguments-and-flags 301
+/docs/guide/arguments/ /docs/guide/arguments-and-flags 301
+/docs/guide/build /docs/guide/build-and-distribution 301
+/docs/guide/build/ /docs/guide/build-and-distribution 301
+/docs/guide/built-in-types /docs/guide/values-and-validation 301
+/docs/guide/built-in-types/ /docs/guide/values-and-validation 301
+/docs/guide/environment /docs/guide/build-and-distribution 301
+/docs/guide/environment/ /docs/guide/build-and-distribution 301
+/docs/guide/flags /docs/guide/arguments-and-flags 301
+/docs/guide/flags/ /docs/guide/arguments-and-flags 301
+/docs/guide/lifecycle /docs/api/crust 301
+/docs/guide/lifecycle/ /docs/api/crust 301
+/docs/guide/plugins /docs/guide/extensions 301
+/docs/guide/plugins/ /docs/guide/extensions 301
+/docs/guide/runtimes /docs/guide/runtime-support 301
+/docs/guide/runtimes/ /docs/guide/runtime-support 301
+/docs/guide/split-files /docs/guide/commands 301
+/docs/guide/split-files/ /docs/guide/commands 301
+/docs/guide/subcommands /docs/guide/commands 301
+/docs/guide/subcommands/ /docs/guide/commands 301
+/docs/guide/types /docs/guide/values-and-validation 301
+/docs/guide/types/ /docs/guide/values-and-validation 301
+/docs/installation /docs/quick-start 301
+/docs/installation/ /docs/quick-start 301
+/docs/modules/color /docs/modules/style 301
+/docs/modules/color/ /docs/modules/style 301
+/docs/modules/create-crust /docs/quick-start 301
+/docs/modules/create-crust/ /docs/quick-start 301
+/docs/modules/extensions/confirmation /docs/modules/extensions/confirm 301
+/docs/modules/extensions/confirmation/ /docs/modules/extensions/confirm 301
+/docs/modules/plugins /docs/modules/extensions 301
+/docs/modules/plugins/ /docs/modules/extensions 301
+/docs/modules/plugins/autocomplete /docs/modules/extensions/did-you-mean 301
+/docs/modules/plugins/autocomplete/ /docs/modules/extensions/did-you-mean 301
+/docs/modules/plugins/completion /docs/modules/extensions/completion 301
+/docs/modules/plugins/completion/ /docs/modules/extensions/completion 301
+/docs/modules/plugins/did-you-mean /docs/modules/extensions/did-you-mean 301
+/docs/modules/plugins/did-you-mean/ /docs/modules/extensions/did-you-mean 301
+/docs/modules/plugins/help /docs/modules/extensions/help 301
+/docs/modules/plugins/help/ /docs/modules/extensions/help 301
+/docs/modules/plugins/no-color /docs/modules/extensions/no-color 301
+/docs/modules/plugins/no-color/ /docs/modules/extensions/no-color 301
+/docs/modules/plugins/update-notifier /docs/modules/extensions/update-notifier 301
+/docs/modules/plugins/update-notifier/ /docs/modules/extensions/update-notifier 301
+/docs/modules/plugins/version /docs/modules/extensions/version 301
+/docs/modules/plugins/version/ /docs/modules/extensions/version 301
+/docs/modules/prompt /docs/modules/prompts 301
+/docs/modules/prompt/ /docs/modules/prompts 301
+/docs/modules/test /docs/modules/testing 301
+/docs/modules/test/ /docs/modules/testing 301
+/docs/modules/validate /docs/guide/values-and-validation 301
+/docs/modules/validate/ /docs/guide/values-and-validation 301

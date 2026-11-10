@@ -4,6 +4,11 @@
   "compatibility_date": "2026-02-17",
   "compatibility_flags": ["nodejs_compat"],
   "main": "@tanstack/react-start/server-entry",
+  // Prerender writes `docs/<slug>/index.html`; serve it at the no-slash URL that canonical
+  // tags, the sitemap and internal links use (the default redirects that URL to `<slug>/`).
+  "assets": {
+    "html_handling": "drop-trailing-slash",
+  },
   // Opt out of uploading dependency metadata (enabled by default since Wrangler ~4.110)
   "dependencies_instrumentation": {
     "enabled": false,

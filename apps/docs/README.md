@@ -14,6 +14,10 @@ pnpm run dev
 - A package's `package.json` `description` is its only description. Package pages (`modules/<slug>.mdx` or `modules/<slug>/index.mdx`) take it as their frontmatter `description`, and `<PackageTable group="…" />` on the modules overview renders it (`package-pages.ts`); package READMEs and the root README table repeat it verbatim, checked by `scripts/package-descriptions.test.ts`.
 - Keep complete, high-risk examples in `examples/` and embed them with `<include lang="ts">…</include>` so the docs TypeScript project checks them. Embed part of a file with `file.ts#name` and `//#region name` / `//#endregion` markers. Partial sketches can remain MDX fences.
 
+## Renaming or removing a page
+
+A renamed or removed page needs a redirect: add its old URL to `public/_redirects`, with and without a trailing slash, as a `301` to the current page that covers the same topic. Leave the old URL as a 404 when no page does. `tests/redirects.test.ts` checks the entries.
+
 ## Validation
 
 Run the existing docs gates from the repository root (also run by CI for docs and package changes):
