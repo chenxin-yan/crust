@@ -329,6 +329,9 @@ function _uncertainRequiredFlags(defaultValue: string | undefined, required: tru
 	const assigned = {};
 	// @ts-expect-error -- assigned values cannot omit a possible requirement
 	void maybeRequired.run([], assigned);
+	void new Crust("app")
+		.flags({ token: { type: "string", required: true, default: "safe" } })
+		.run([]);
 }
 
 function _localInputHolders() {

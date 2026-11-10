@@ -233,13 +233,6 @@ export function normalizeFlag<const D extends FlagDef>(name: string | undefined,
 			reason: "empty-env",
 		});
 	}
-	if (def.required === true && def.default !== undefined) {
-		throw new CrustError("DEFINITION", `${label} cannot be both required and defaulted`, {
-			subject: "flag",
-			...named,
-			reason: "required-default",
-		});
-	}
 	for (const [field, delimiter] of [
 		["delimiter", def.delimiter],
 		["env.delimiter", def.env?.delimiter],

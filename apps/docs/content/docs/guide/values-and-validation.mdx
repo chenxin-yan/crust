@@ -105,7 +105,7 @@ See [`ArgDef`](/docs/api/types#argdef) and [`FlagDef`](/docs/api/types#flagdef) 
 
 <include lang="ts">../../../examples/guide/types-schema.ts#compile-time</include>
 
-These lines continue `serve.ts` and only construct definitions. TypeScript rejects an asynchronous `parse`, a `type` on a schema argument, a schema that cannot accept the value the parser hands it, and a flag that is both `required` and defaulted, and accepts `type: "string"` on a schema flag; see the [`.args()`](/docs/api/crust#argsdefs) and [`.flags()`](/docs/api/crust#flagsflags) contracts.
+These lines continue `serve.ts` and only construct definitions. TypeScript rejects an asynchronous `parse`, a `type` on a schema argument, and a schema that cannot accept the value the parser hands it, and accepts `type: "string"` on a schema flag; see the [`.args()`](/docs/api/crust#argsdefs) and [`.flags()`](/docs/api/crust#flagsflags) contracts.
 
 TypeScript also infers the action value. For `type` or `parse`, it is the converted type, `T | undefined` unless `required` or `default` is set, and an array with `multiple` or `variadic`. For a schema, it is the schema's output type, which already reflects its defaults and optionality.
 

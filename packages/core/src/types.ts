@@ -294,7 +294,7 @@ interface FlagDefBase {
 	short?: string;
 	/** Additional aliases (e.g. `["out"]` → `--out`); one-character aliases also accept one dash. */
 	aliases?: readonly string[];
-	/** When `true`, the parser throws if the flag is not provided. A defaulted flag cannot also be required. */
+	/** When `true`, the parser throws if the flag is not provided */
 	required?: true;
 	/** Not supported with core value options — see {@link SchemaStringFlagDef} */
 	schema?: never;

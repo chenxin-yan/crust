@@ -60,7 +60,7 @@ describe("commandInputSchema", () => {
 						{ name: "files", type: "path", variadic: true },
 					)
 					.flags({
-						count: { type: "number", default: 1 },
+						count: { type: "number", required: true, default: 1 },
 						"dry-run": { type: "boolean" },
 						origin: { type: "url", multiple: true },
 						payload: { type: "json", description: "Any JSON" },
@@ -105,7 +105,7 @@ describe("commandInputSchema", () => {
 		const app = new Crust("cli")
 			.flags({
 				cycle: { type: "json", default: cycle },
-				bigint: { type: "json", default: 1n },
+				bigint: { type: "json", default: 1n, required: true },
 				throwing: { type: "json", default: throwing },
 				ordinary: { type: "json", default: ordinary },
 				url: { type: "url", default: new URL("https://example.com/") },

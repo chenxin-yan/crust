@@ -77,7 +77,6 @@ export type DefinitionErrorReason =
 	| "missing-context"
 	| "missing-extension"
 	| "nested-command-extension"
-	| "required-default"
 	| "reserved-name"
 	| "reserved-no-prefix"
 	| "reserved-spelling"

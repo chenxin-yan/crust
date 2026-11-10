@@ -153,14 +153,6 @@ type ShortLengthBrand<F> = F extends { short?: infer S extends string | undefine
 		: never
 	: {};
 
-// The parser fills an omitted flag from its default, so `required` could never fail. A default
-// that may be `undefined` keeps `required` meaningful.
-type RequiredDefaultBrand<F> = F extends { required: true; default: infer Default }
-	? undefined extends Default
-		? {}
-		: { readonly FIX_REQUIRED_DEFAULT: "A flag cannot be both required and defaulted" }
-	: {};
-
 // ────────────────────────────────────────────────────────────────────────────
 // Flag alias collision detection (compile-time, per-flag granularity)
 // ────────────────────────────────────────────────────────────────────────────
@@ -503,7 +495,6 @@ export type LocalFlagBrand<F> = UnionToIntersection<
 >;
 
 type LocalFlagBranchBrand<F> = LocalValueBrand<F> &
-	RequiredDefaultBrand<F> &
 	OwnAliasesBrand<F> &
 	ShortLengthBrand<F> &
 	ReservedSpellingBrand<F> &
@@ -629,15 +620,7 @@ type DefinedRecord<F> = false extends StrictNulls
 		: never;
 
 // Only these fields can make one flag invalid on its own; other flags need name checks only.
-type RiskyFlagField =
-	| "short"
-	| "aliases"
-	| "choices"
-	| "parse"
-	| "env"
-	| "delimiter"
-	| "schema"
-	| "required";
+type RiskyFlagField = "short" | "aliases" | "choices" | "parse" | "env" | "delimiter" | "schema";
 
 type RecordFlagBrand<
 	F,
