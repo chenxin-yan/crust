@@ -551,7 +551,10 @@ export async function withFileLock<T>(
 			{ path: filePath, operation: options.operation },
 			err,
 		);
-	const owner: LockOwner = { pid: process.pid, host: hostname(), token: crypto.randomUUID() };
+	// 12 random hex digits, not the whole UUID: the `<lock>.<token>.<level>` marker name must stay
+	// shorter than the temp file's, or a store name that writes accept could never be unlocked.
+	const token = crypto.randomUUID().slice(-12);
+	const owner: LockOwner = { pid: process.pid, host: hostname(), token };
 	const contents = JSON.stringify(owner);
 	let delay = 1;
 	for (;;) {

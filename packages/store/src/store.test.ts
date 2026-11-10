@@ -1098,6 +1098,19 @@ describe("concurrent mutations", () => {
 		]);
 	});
 
+	it.skipIf(process.platform === "win32")(
+		"releases the lock of the longest store name a write accepts",
+		async () => {
+			// `.<name>-<uuid>.tmp` is then exactly 255 bytes, the file name limit.
+			const name = "n".repeat(213);
+			const store = createStore({ dirPath: tempDir, name, fields: COUNTER_FIELDS });
+
+			await store.patch({ n: 1 });
+
+			expect(await readdir(tempDir)).toEqual([`${name}.json`]);
+		},
+	);
+
 	it("does not create a missing directory to reset", async () => {
 		const dirPath = join(tempDir, "missing");
 		await createStore({ dirPath, name: "counter", fields: COUNTER_FIELDS }).reset();
