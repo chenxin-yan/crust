@@ -33,24 +33,6 @@ The initializer prompts for every option you don't pass. Without an interactive 
 
 Scripts in the next steps and generated README use the package manager detected from the destination's lockfiles, then the one running `create-crust`, defaulting to npm. Node.js binaries have extra build requirements; see [Build and distribution](https://crustjs.com/docs/guide/build-and-distribution#nodejs-binaries).
 
-## Generated project
-
-```text
-my-cli/
-├── src/cli.ts      # entry point with a sample command
-├── package.json    # crust.runtime and crust.artifact, $schema for editor completion
-├── tsconfig.json   # strict TypeScript config
-├── README.md       # getting started
-└── .gitignore
-```
-
-| Runtime | `dev`                | Default `build` output (`crust.artifact`)                                                        |
-| ------- | -------------------- | ------------------------------------------------------------------------------------------------ |
-| `bun`   | `bun run src/cli.ts` | `binary`: a root package with a Node.js launcher plus one standalone binary package per platform |
-| `node`  | `node src/cli.ts`    | `package`: a root package with one JavaScript bundle that needs Node.js 24+                      |
-
-`build` (`crust build`) stages the npm packages in `.crust/`, `start` runs the built `.crust/root/bin/<name>.js`, and `release` (`crust publish`) publishes them.
-
 ## Documentation
 
 Full docs: [crustjs.com/docs/quick-start](https://crustjs.com/docs/quick-start)
