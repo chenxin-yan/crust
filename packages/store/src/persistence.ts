@@ -9,8 +9,6 @@ import {
 	open,
 	readdir,
 	readFile,
-	readlink,
-	realpath,
 	rename,
 	rm,
 	stat,
@@ -18,7 +16,7 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { hostname } from "node:os";
-import { basename, dirname, isAbsolute, join, sep } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { isErrnoException } from "@crustjs/utils/error";
@@ -122,34 +120,6 @@ export async function readJson(filePath: string): Promise<JsonValue | undefined>
 // the modes entirely so behavior is a true no-op, as documented.
 const isWindows = () => process.platform === "win32";
 
-/**
- * Follows `filePath` through any chain of symlinks, even one whose end does not
- * exist yet, so writes and deletes act on the link's target and keep the link.
- * A link into a missing directory is not followed: the write replaces that link.
- *
- * shortcut: the lock stays at `<filePath>.lock`, so stores opened through different
- * links to one file do not exclude each other; lock the resolved path if that is needed.
- */
-async function resolveTarget(filePath: string): Promise<string> {
-	let target = filePath;
-	// 40 matches Linux's limit on links followed in one path lookup (path_resolution(7)).
-	for (let hops = 0; hops < 40; hops++) {
-		try {
-			const link = await readlink(target);
-			const next = isAbsolute(link) ? link : `${dirname(target)}${sep}${link}`;
-			// The filesystem resolves the directory part: `path.resolve()` would cancel a `..`
-			// against a symlinked directory's name and point at a different file than reads use.
-			target = join(await realpath(dirname(next)), basename(next));
-		} catch {
-			// Not a link (EINVAL), missing (ENOENT), or a link into a missing directory: this is
-			// the file. Other errors surface on use.
-			return target;
-		}
-	}
-	// A link loop: replace the link itself, as write-file-atomic does when realpath fails.
-	return filePath;
-}
-
 /** Whether a failed `chown` only means an unprivileged process cannot give a file away. */
 function isChownErrorOk(err: unknown): boolean {
 	if (!isErrnoException(err)) return false;
@@ -206,8 +176,7 @@ async function ensureDirectory(filePath: string, mode: number | undefined): Prom
  * Atomically writes a JSON value to disk using a temp-file-and-rename strategy.
  *
  * Steps:
- * 1. Follows `filePath` through symlinks to the file it names, and creates that
- *    file's parent directory if it does not exist.
+ * 1. Creates the parent directory if it does not exist.
  * 2. Writes serialized JSON to a temporary file in the same directory and
  *    flushes it to disk (`fsync`), so a crash after the rename cannot leave an
  *    empty or partial file in place. On POSIX the temp file gets the replaced
@@ -230,17 +199,16 @@ export async function writeJson(
 	data: Readonly<StoreDocument>,
 	options: WriteJsonOptions = {},
 ): Promise<void> {
-	const target = await resolveTarget(filePath);
 	const tempPath = join(
-		dirname(target),
+		dirname(filePath),
 		`.${basename(filePath, ".json")}-${crypto.randomUUID()}.tmp`,
 	);
 
-	await ensureDirectory(target, options.directoryMode);
+	await ensureDirectory(filePath, options.directoryMode);
 
 	// Like write-file-atomic and atomically: the replacement keeps the replaced file's owner
 	// (e.g. under sudo) and mode (e.g. a user's `chmod 600`).
-	const existing = isWindows() ? undefined : await stat(target).catch(() => undefined);
+	const existing = isWindows() ? undefined : await stat(filePath).catch(() => undefined);
 	const fileMode = isWindows()
 		? undefined
 		: (options.fileMode ?? (existing === undefined ? undefined : existing.mode & 0o7777));
@@ -279,7 +247,7 @@ export async function writeJson(
 	}
 
 	try {
-		await commit(tempPath, target, options.beforeCommit);
+		await commit(tempPath, filePath, options.beforeCommit);
 	} catch (err: unknown) {
 		await rm(tempPath, { force: true }).catch(() => {});
 		if (err instanceof CrustStoreError) throw err;
@@ -334,8 +302,7 @@ async function commit(
  * Deletes a persisted store file from disk.
  *
  * Silently succeeds when the file does not exist (ENOENT) — deleting an
- * already-absent file is not an error. A symlinked store file has its target
- * deleted and the link kept, so the next write recreates the target.
+ * already-absent file is not an error.
  *
  * @param filePath - Absolute path to the JSON store file to delete.
  * @param beforeCommit - Runs first; a rejection is rethrown and nothing is deleted.
@@ -347,7 +314,7 @@ export async function deleteJson(
 ): Promise<void> {
 	await beforeCommit?.();
 	try {
-		await rm(await resolveTarget(filePath), { force: true });
+		await rm(filePath, { force: true });
 	} catch (err: unknown) {
 		throw new CrustStoreError(
 			"IO",

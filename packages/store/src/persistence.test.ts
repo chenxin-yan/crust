@@ -204,59 +204,20 @@ describe("writeJson", () => {
 		});
 	});
 
-	describe.skipIf(process.platform === "win32")("through a symlink", () => {
-		let targetDir: string;
-		beforeEach(async () => {
-			targetDir = createTempDir();
-			await mkdir(tempDir, { recursive: true });
-		});
-		afterEach(async () => {
-			await rm(targetDir, { recursive: true, force: true });
-		});
-
-		it("updates the link's target and keeps the link", async () => {
-			const target = join(targetDir, "dotfiles.json");
-			await mkdir(targetDir);
+	it.skipIf(process.platform === "win32")(
+		"replaces a symlinked store file and leaves the link's target alone",
+		async () => {
+			const target = join(tempDir, "target.json");
+			await mkdir(tempDir);
 			await writeFile(target, "{}");
 			await symlink(target, filePath);
 
 			await writeJson(filePath, { data: true });
 
-			expect((await lstat(filePath)).isSymbolicLink()).toBe(true);
-			expect(JSON.parse(await readFile(target, "utf-8"))).toEqual({ data: true });
-			expect(await readdir(targetDir)).toEqual(["dotfiles.json"]);
-		});
-
-		it("resolves a relative link under a symlinked directory the way reads do", async () => {
-			// The store is real/target.json; path.resolve() would name ./target.json instead.
-			await mkdir(join(targetDir, "real", "sub"), { recursive: true });
-			await symlink("real/sub", join(targetDir, "alias"));
-			await symlink("../target.json", join(targetDir, "real", "sub", "config.json"));
-			const unrelated = join(targetDir, "target.json");
-			await writeFile(unrelated, "unrelated");
-			const viaAlias = join(targetDir, "alias", "config.json");
-
-			await writeJson(viaAlias, { data: true });
-			expect(await readJson(viaAlias)).toEqual({ data: true });
-			await deleteJson(viaAlias);
-
-			expect(await readJson(viaAlias)).toBeUndefined();
-			expect(await readFile(unrelated, "utf-8")).toBe("unrelated");
-		});
-
-		it("creates the target of a dangling link, following relative links", async () => {
-			await mkdir(targetDir);
-			await symlink("hop.json", filePath);
-			await symlink(join(targetDir, "dotfiles.json"), join(tempDir, "hop.json"));
-
-			await writeJson(filePath, { data: true });
-
-			expect((await lstat(filePath)).isSymbolicLink()).toBe(true);
-			expect(JSON.parse(await readFile(join(targetDir, "dotfiles.json"), "utf-8"))).toEqual({
-				data: true,
-			});
-		});
-	});
+			expect((await lstat(filePath)).isFile()).toBe(true);
+			expect(await readFile(target, "utf-8")).toBe("{}");
+		},
+	);
 
 	it("flushes the temp file to disk before renaming it into place", async () => {
 		await mkdir(tempDir);
@@ -369,20 +330,6 @@ describe("deleteJson", () => {
 		await expect(deleteJson(filePath, () => Promise.reject(lost))).rejects.toBe(lost);
 		expect(existsSync(filePath)).toBe(true);
 	});
-
-	it.skipIf(process.platform === "win32")(
-		"deletes a symlink's target and keeps the link",
-		async () => {
-			const target = join(tempDir, "target.json");
-			await writeFile(target, "{}");
-			await symlink(target, filePath);
-
-			await deleteJson(filePath);
-
-			expect(existsSync(target)).toBe(false);
-			expect((await lstat(filePath)).isSymbolicLink()).toBe(true);
-		},
-	);
 
 	it("should throw CrustStoreError IO on permission denied", async () => {
 		await writeFile(filePath, JSON.stringify({ data: true }));
