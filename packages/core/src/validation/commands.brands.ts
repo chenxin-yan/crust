@@ -292,13 +292,7 @@ export type InlineCommandAliasesBrand<
 	C,
 	Existing extends string,
 > = CommandCollisionBrand<NarrowAliases<AliasesOf<C>>, Existing> &
-	(ClosedMembers<N> & AliasMembers<AliasesOf<C>> extends infer Dup extends string
-		? [Dup] extends [never]
-			? {}
-			: {
-					readonly FIX_ALIAS_SHAPE: `Command "${Dup}" must not list its own canonical name as an alias`;
-				}
-		: never);
+	SelfAliasBrand<{ readonly name: N; readonly _aliases?: AliasesOf<C> }>;
 
 // Fast path for the common `.add(def)`: one definition with a closed, non-union name. A
 // conditional definition keeps the slow path even when its variants share a name.
