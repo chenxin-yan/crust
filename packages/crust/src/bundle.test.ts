@@ -321,6 +321,30 @@ describe("execScriptBuild for Node", () => {
 				expect(run.stdout).toBe("1\ninitialize\nmain lib\n");
 			});
 		}
+
+	// A project onLoad that returns the entry runs instead of the one that blanks the shebang.
+	it("says how to fix an entry a crust.bunPlugins onLoad returns with its bun shebang", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "crust-node-package-test-"));
+		tempDirs.push(directory);
+		await writeFile(
+			join(directory, "plugin.ts"),
+			'export default { name: "load-ts", setup(build) { build.onLoad({ filter: /\\.ts$/ }, async ({ path, loader }) => ({ contents: await Bun.file(path).text(), loader })); } };\n',
+		);
+		const entry = join(directory, "cli.ts");
+		await writeFile(entry, "#!/usr/bin/env bun\nif (import.meta.main) console.log(1);\n");
+
+		await expect(
+			execScriptBuild("node", entry, join(directory, "out", "cli.js"), {
+				cwd: directory,
+				minify: false,
+				envFiles: [],
+				bunPlugins: ["./plugin.ts"],
+				external: [],
+			}),
+		).rejects.toThrow(
+			`Remove that line from ${entry}, or from what a crust.bunPlugins onLoad hook`,
+		);
+	});
 });
 
 describe("execScriptBuild with crust.external", () => {
@@ -364,7 +388,7 @@ describe("execScriptBuild with crust.external", () => {
 
 	for (const target of ["node"] as const) {
 		for (const bunPlugins of [[], ["./plugin.ts"]]) {
-			const path = bunPlugins.length > 0 ? "with crust.bunPlugins" : "without crust.bunPlugins";
+			const path = bunPlugins.length > 0 ? "the Bun.build driver" : "bun build";
 			it(`keeps externals and their subpaths out of a ${target} bundle built by ${path}`, async () => {
 				const directory = await project();
 				const outfile = join(directory, "out", "cli.js");

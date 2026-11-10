@@ -56,8 +56,8 @@ export type BunPluginDriverOptions = {
 	plugins: Array<{ specifier: string; source: string }>;
 	build: BunPluginDriverBuild;
 	outfile: string;
-	/** RegExp source matching the module paths whose leading shebang line is blanked on load. */
-	stripShebang?: string;
+	/** Module paths whose leading shebang line is blanked on load. */
+	stripShebang?: string[];
 };
 
 /**
@@ -90,7 +90,7 @@ for (const { specifier, source } of options.plugins) {
 if (options.stripShebang) {
 	// Last, so a project plugin's onLoad for the entry still wins. The emptied line keeps line numbers.
 	plugins.push({ name: "crust-strip-shebang", setup(build) {
-		build.onLoad({ filter: new RegExp(options.stripShebang) }, async ({ path, loader }) => ({ contents: (await Bun.file(path).text()).replace(/^#![^\\n]*/, ""), loader }));
+		build.onLoad({ filter: new RegExp(\`^(?:\${options.stripShebang.map(RegExp.escape).join("|")})$\`) }, async ({ path, loader }) => ({ contents: (await Bun.file(path).text()).replace(/^#![^\\n]*/, ""), loader }));
 	} });
 }
 const result = await Bun.build({ ...options.build, define: ${JSON.stringify(CRUST_BUILD_DEFINE)}, plugins, throw: false });
@@ -131,7 +131,7 @@ async function runBunPluginDriver(
 	outfilePath: string,
 	{ cwd, envFiles, bunPlugins }: BundleSettings,
 	runner: BuildRunner,
-	stripShebang?: string,
+	stripShebang?: string[],
 ): Promise<void> {
 	const driverPath = join(cwd, `.crust-build-${randomBytes(6).toString("hex")}.ts`);
 	await writeFile(
@@ -258,10 +258,6 @@ export async function runBuildProcess(
 	return output;
 }
 
-function escapeRegExp(text: string): string {
-	return text.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
-}
-
 /**
  * Bundle a runtime package entry as ESM behind `#!/usr/bin/env <target>`: for
  * Node, or Bun-targeted so the installed bin launches with Bun rather than Node.
@@ -280,9 +276,10 @@ export async function execScriptBuild(
 	// `import.meta.main` lowers to a `__require` Node lacks. The driver blanks that line
 	// as the entry loads, keeping its path, so back-imports and a symlinked entry's
 	// relative imports resolve as before. Bun hands onLoad the real path.
+	// Bun documents the shebang as replacing only the default target; drop this once an explicit one wins.
 	const stripShebang =
 		target === "node" && /^#![^\n]*\bbun\b/.test(await readFile(entryPath, "utf8"))
-			? `^(?:${[...new Set([entryPath, await realpath(entryPath)])].map(escapeRegExp).join("|")})$`
+			? [entryPath, await realpath(entryPath)]
 			: undefined;
 	if (settings.bunPlugins.length > 0 || stripShebang !== undefined) {
 		await runBunPluginDriver(
@@ -325,7 +322,10 @@ export async function execScriptBuild(
 
 	const output = (await readFile(outfilePath, "utf8")).replace(/^#![^\n]*(?:\n|$)/, "");
 	if (target === "node" && output.startsWith("// @bun")) {
-		throw new Error(`Build failed for ${outfilePath}: Bun emitted Bun-only code for a Node bundle`);
+		// Only a crust.bunPlugins onLoad that returns the entry itself gets here: it runs instead of the blanking one.
+		throw new Error(
+			`Build failed for ${outfilePath}: Bun emitted Bun-only code for a Node bundle because the entry reached it starting with "#!/usr/bin/env bun".\n  Remove that line from ${entryPath}, or from what a crust.bunPlugins onLoad hook returns for it.`,
+		);
 	}
 	await writeFile(outfilePath, `#!/usr/bin/env ${target}\n${output}`);
 	if (process.platform !== "win32") await chmod(outfilePath, 0o755);
