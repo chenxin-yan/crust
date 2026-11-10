@@ -687,13 +687,13 @@ function bind<A extends ArgsDef, F extends FlagsDef, V, W>(
  * {@link validateParsed} throws it after extensions have had a chance to
  * handle an invocation (e.g. `--help`, `--version`).
  *
- * @param command - The command whose arg/flag definitions drive the parsing
- * @param argv - The argv array to parse (typically `process.argv.slice(2)`)
- * @param env - Environment consulted for `FlagDef.env` fallbacks; pass `{}` to parse without one
  * Tokens after the first `--` are never flags. They fill the declared arguments left
  * empty, unless the last argument sets `afterDoubleDash`: then only that argument reads
  * them, and earlier arguments read only tokens before `--`.
  *
+ * @param command - The command whose arg/flag definitions drive the parsing
+ * @param argv - The argv array to parse (typically `process.argv.slice(2)`)
+ * @param env - Environment consulted for `FlagDef.env` fallbacks; pass `{}` to parse without one
  * @returns Parsed args, flags, excessArgs (positionals before `--` not consumed by a declared argument), rawArgs (tokens after `--` not consumed by a declared argument), each value's source, and any deferred valueErrors
  * @throws {CrustError} On malformed argv: unknown flags, a missing option value, or a negated `noNegate` flag
  */

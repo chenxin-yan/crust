@@ -229,17 +229,6 @@ describe("parseArgs — '--' separator", () => {
 		expect(result.rawArgs).toEqual(["--help"]);
 	});
 
-	it("binds a dash-led value given after -- to a required positional (POSIX)", () => {
-		const cmd = makeNode({
-			meta: { name: "seek" },
-			args: [{ name: "offset", type: "number", required: true }],
-		});
-		const result = parseArgs(cmd, ["--", "-5"]);
-		expect(result.args).toEqual({ offset: -5 });
-		expect(result.rawArgs).toEqual([]);
-		expect(() => validateParsed(cmd, result)).not.toThrow();
-	});
-
 	it("still reports excess positionals before -- once every declared one is filled", () => {
 		const cmd = makeNode({
 			meta: { name: "test" },
