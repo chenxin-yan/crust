@@ -354,7 +354,8 @@ describe("input", () => {
 			clearTimeout(watchdog);
 			child.stdin.end();
 
-			expect({ code, signal }).toEqual({ code: 130, signal: null });
+			// Core ends a signal-cancelled run by re-raising the signal.
+			expect({ code, signal }).toEqual({ code: null, signal: "SIGINT" });
 		},
 		10_000,
 	);
