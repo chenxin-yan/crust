@@ -103,9 +103,17 @@ jobs:
           pnpm --version
           bun --version
 
-      - name: Test Windows process cleanup and command-shim arguments
+      # The store's lock file and atomic write run on Windows only here; the build above covers
+      # @crustjs/utils, the one workspace package its tests import.
+      - name: Test Windows process cleanup, command-shim arguments, and store locking
         if: matrix.os == 'windows-latest'
-        run: pnpm exec vp test run packages/utils/src/process.test.ts packages/crust/tests/bounded-process.test.ts
+        run: >-
+          pnpm exec vp test run
+          packages/utils/src/process.test.ts
+          packages/crust/tests/bounded-process.test.ts
+          packages/store/src/persistence.test.ts
+          packages/store/src/store.test.ts
+          packages/store/tests/concurrency.test.ts
 
       - name: Test snapshot process-group lifetime (macOS)
         if: matrix.os == 'macos-latest'

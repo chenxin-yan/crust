@@ -68,22 +68,26 @@ describe("readJson", () => {
 		});
 	});
 
-	it("should throw CrustStoreError IO on permission denied", async () => {
-		await writeFile(filePath, JSON.stringify({ ok: true }));
-		await chmod(filePath, 0o000);
+	// POSIX-only: on Windows chmod cannot make a file unreadable.
+	it.skipIf(process.platform === "win32")(
+		"should throw CrustStoreError IO on permission denied",
+		async () => {
+			await writeFile(filePath, JSON.stringify({ ok: true }));
+			await chmod(filePath, 0o000);
 
-		try {
-			await expect(readJson(filePath)).rejects.toMatchObject({
-				name: "CrustStoreError",
-				code: "IO",
-				details: { path: filePath, operation: "read" },
-				cause: expect.anything(),
-			});
-		} finally {
-			// Restore permissions for cleanup
-			await chmod(filePath, 0o644);
-		}
-	});
+			try {
+				await expect(readJson(filePath)).rejects.toMatchObject({
+					name: "CrustStoreError",
+					code: "IO",
+					details: { path: filePath, operation: "read" },
+					cause: expect.anything(),
+				});
+			} finally {
+				// Restore permissions for cleanup
+				await chmod(filePath, 0o644);
+			}
+		},
+	);
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -262,21 +266,25 @@ describe("deleteJson", () => {
 		await rm(tempDir, { recursive: true, force: true });
 	});
 
-	it("should throw CrustStoreError IO on permission denied", async () => {
-		await writeFile(filePath, JSON.stringify({ data: true }));
-		// Remove write permission from the directory to prevent deletion
-		await chmod(tempDir, 0o444);
+	// POSIX-only: on Windows chmod does not stop deletion from a directory.
+	it.skipIf(process.platform === "win32")(
+		"should throw CrustStoreError IO on permission denied",
+		async () => {
+			await writeFile(filePath, JSON.stringify({ data: true }));
+			// Remove write permission from the directory to prevent deletion
+			await chmod(tempDir, 0o444);
 
-		try {
-			await expect(deleteJson(filePath)).rejects.toMatchObject({
-				name: "CrustStoreError",
-				code: "IO",
-				details: { path: filePath, operation: "delete" },
-				cause: expect.anything(),
-			});
-		} finally {
-			// Restore permissions for cleanup
-			await chmod(tempDir, 0o755);
-		}
-	});
+			try {
+				await expect(deleteJson(filePath)).rejects.toMatchObject({
+					name: "CrustStoreError",
+					code: "IO",
+					details: { path: filePath, operation: "delete" },
+					cause: expect.anything(),
+				});
+			} finally {
+				// Restore permissions for cleanup
+				await chmod(tempDir, 0o755);
+			}
+		},
+	);
 });
