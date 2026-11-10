@@ -97,6 +97,8 @@ For the scalar port argument above, omission passes `undefined` to the schema. `
 
 TypeScript checks the schema's input type against these shapes. `z.number()` on a string flag is a compile error, since every run would fail; write `z.coerce.number()`, whose input is `unknown`, or a pipeline that starts from a string such as `z.string().transform(...)`. A narrower input, such as `z.enum(["a", "b"])`, is fine: rejecting the other strings is validation. Whether the schema accepts `undefined` is up to it, since that decides requiredness.
 
+The check needs a known input type, so a helper that is generic over the schema itself, such as `<S extends StandardSchemaV1>(schema: S) => defineFlag({ type: "string", schema })`, does not compile. Type its parameter as `StandardSchemaV1<string | undefined, Out>` (from `@standard-schema/spec`) instead, or as `StandardSchemaV1<unknown, Out>` to also take schemas whose input is `unknown`, such as a stored `z.coerce.number()`.
+
 See [`ArgDef`](/docs/api/types#argdef) and [`FlagDef`](/docs/api/types#flagdef) for the full contracts.
 
 ## What gets checked, and when

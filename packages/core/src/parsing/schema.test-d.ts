@@ -102,3 +102,24 @@ function _typecheckSchemaInputAcceptsTheParserValue() {
 		Equal<Message, "schema input must accept string; coerce it, e.g. z.coerce.number()">
 	>;
 }
+
+// a helper generic over the whole schema leaves the input unknown to the check and cannot
+// compile; one that names the input and stays generic over the output does
+function _typecheckAHelperNamesTheSchemaInput() {
+	const stringFlag = <Out>(schema: StandardSchema<string | undefined, Out>) =>
+		defineFlag({ type: "string", schema });
+	const anyArg = <Out>(schema: StandardSchema<unknown, Out>) =>
+		new Crust("cli").args({ name: "port", schema });
+	const stored = z.coerce.number().int();
+
+	new Crust("cli")
+		.flags({ size: stringFlag(z.string().transform((value) => value.length)) })
+		.action((_ctx) => {
+			type _flagOutput = Expect<Equal<(typeof _ctx.flags)["size"], number>>;
+		});
+	anyArg(stored).action((_ctx) => {
+		type _argOutput = Expect<Equal<(typeof _ctx.args)["port"], number>>;
+	});
+	// @ts-expect-error -- an `unknown` input does not fit `string | undefined`
+	stringFlag(stored);
+}
