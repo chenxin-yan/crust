@@ -3,7 +3,6 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { bold, createPlainStyle, cyan, dim, green, type PlainStyle, red } from "@crustjs/style";
-import { isStdoutCaptured } from "@crustjs/utils/terminal";
 
 import type { PromptTheme } from "./types.ts";
 
@@ -41,9 +40,7 @@ export const defaultTheme: PromptTheme = themeFromStyle({ bold, cyan, dim, green
 /** {@link defaultTheme} with color support detected from `output` rather than stdout. */
 export function defaultThemeFor(output: { readonly isTTY?: boolean }): PromptTheme {
 	// Same TTY state as stdout: the late-bound default already decides, without building a style.
-	if ((output.isTTY ?? false) === (!isStdoutCaptured() && (process.stdout?.isTTY ?? false))) {
-		return defaultTheme;
-	}
+	if ((output.isTTY ?? false) === (process.stdout?.isTTY ?? false)) return defaultTheme;
 	// Env is snapshotted once per prompt/spinner here; changing it mid-render is not a real use case.
 	return themeFromStyle(createPlainStyle({ overrides: { isTTY: output.isTTY } }));
 }

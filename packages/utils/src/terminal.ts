@@ -160,13 +160,11 @@ const STORAGE_KEY: unique symbol = Symbol.for("crustjs.terminal.io");
 const AMBIENT_CALLBACKS_KEY: unique symbol = Symbol.for("crustjs.terminal.ambient-callbacks");
 const PROCESS_SIGNAL_KEY: unique symbol = Symbol.for("crustjs.terminal.process-signal");
 const LIVE_FRAME_KEY: unique symbol = Symbol.for("crustjs.terminal.live-frame");
-const CAPTURED_STDOUT_KEY: unique symbol = Symbol.for("crustjs.terminal.captured-stdout");
 type TerminalGlobals = {
 	[STORAGE_KEY]?: AsyncLocalStorage<TerminalIO>;
 	[AMBIENT_CALLBACKS_KEY]?: WeakMap<TerminalOutput, AmbientTerminalIO>;
 	[PROCESS_SIGNAL_KEY]?: AbortSignal;
 	[LIVE_FRAME_KEY]?: LiveFrame;
-	[CAPTURED_STDOUT_KEY]?: AsyncLocalStorage<true>;
 };
 // SAFETY: only declares the optional symbol slots read and initialized below.
 const globals = globalThis as TerminalGlobals;
@@ -270,22 +268,6 @@ export function withAmbientTerminalIO<T>(
 		},
 		fn,
 	);
-}
-
-/**
- * Run a function whose standard output goes to a capture sink (`run()`, injected `io.stdout`)
- * rather than the process stream, so color detection treats it as not a terminal.
- */
-export function withCapturedStdout<T>(fn: () => T): T {
-	return (globals[CAPTURED_STDOUT_KEY] ??= new (process.getBuiltinModule(
-		"node:async_hooks",
-	).AsyncLocalStorage)<true>()).run(true, fn);
-}
-
-/** Whether standard output in the current async scope goes to a capture sink. */
-export function isStdoutCaptured(): boolean {
-	// Never creates the storage: style asks on every styled call, including outside any invocation.
-	return globals[CAPTURED_STDOUT_KEY]?.getStore() === true;
 }
 
 /** Return Core's line-oriented terminal output in the current async scope, if any. */

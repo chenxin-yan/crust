@@ -2,8 +2,6 @@
 // Capability — Terminal color support detection
 // ────────────────────────────────────────────────────────────────────────────
 
-import { isStdoutCaptured } from "@crustjs/utils/terminal";
-
 import type { CapabilityOverrides, ColorDepth, ColorMode } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -20,9 +18,9 @@ function read<Key extends keyof CapabilityOverrides>(
 
 // An override answers without touching `process.stdout`, which creating costs startup time.
 function readTTY(overrides: CapabilityOverrides | undefined): boolean {
-	if (overrides !== undefined && "isTTY" in overrides) return overrides.isTTY ?? false;
-	// Text bound for a Core capture sink (`run()`, injected `io.stdout`) never reaches the terminal.
-	return !isStdoutCaptured() && (process.stdout?.isTTY ?? false);
+	const isTTY =
+		overrides !== undefined && "isTTY" in overrides ? overrides.isTTY : process.stdout?.isTTY;
+	return isTTY ?? false;
 }
 
 function readForceColor(overrides: CapabilityOverrides | undefined): string | undefined {

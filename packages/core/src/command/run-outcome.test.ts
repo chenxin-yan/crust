@@ -1,9 +1,4 @@
-import {
-	getAmbientTerminalIO,
-	getTerminalIO,
-	isStdoutCaptured,
-	withTerminalIO,
-} from "@crustjs/utils/terminal";
+import { getAmbientTerminalIO, getTerminalIO, withTerminalIO } from "@crustjs/utils/terminal";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import {
@@ -171,18 +166,6 @@ it("isolates nested and concurrent invocation terminal bridges", async () => {
 	});
 	expect(b).toEqual({ status: "completed", result: undefined, stdout: "", stderr: "inner" });
 	expect(getAmbientTerminalIO()).toBeUndefined();
-});
-
-it("marks stdout as captured for run() and injected execute() stdout only", async () => {
-	const seen: boolean[] = [];
-	const app = new Crust("app").action(() => {
-		seen.push(isStdoutCaptured());
-	});
-	await app.run([]);
-	await app.execute({ argv: [], io: { stdout: () => {} } });
-	await app.execute({ argv: [], io: { stderr: () => {} } });
-	expect(seen).toEqual([true, true, false]);
-	expect(isStdoutCaptured()).toBe(false);
 });
 
 it("preserves explicit terminal streams without claiming to capture their writes", async () => {

@@ -1,7 +1,6 @@
 import { isSignalIgnored } from "@crustjs/utils/signals";
 import {
 	withAmbientTerminalIO,
-	withCapturedStdout,
 	withProcessTerminalSignal,
 	writeProcessOutput,
 } from "@crustjs/utils/terminal";
@@ -1039,21 +1038,19 @@ export async function runInvocation(
 				sinks.stderr?.(text);
 			},
 		};
-		const outcome = await withCapturedStdout(() =>
-			withAmbientTerminalIO(
-				resolvedIO,
-				async () => {
-					const prepared = prepareInvocation(node, materializeCommandDefinition);
-					return await dispatch(
-						{ ...input, env },
-						prepared,
-						createInvocationOutput(resolvedIO),
-						signal,
-						stream,
-					);
-				},
-				signal,
-			),
+		const outcome = await withAmbientTerminalIO(
+			resolvedIO,
+			async () => {
+				const prepared = prepareInvocation(node, materializeCommandDefinition);
+				return await dispatch(
+					{ ...input, env },
+					prepared,
+					createInvocationOutput(resolvedIO),
+					signal,
+					stream,
+				);
+			},
+			signal,
 		);
 		return { ...outcome, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
 	} catch (error) {
@@ -1227,7 +1224,7 @@ export async function executeInvocation(
 	};
 
 	// Prompts, spinners and `runSteps()` cancel with the invocation unless given their own signal.
-	if (!inProcess) return await withProcessTerminalSignal(signal, invoke);
-	const ambient = () => withAmbientTerminalIO(io, invoke, signal);
-	return await (options?.io?.stdout ? withCapturedStdout(ambient) : ambient());
+	return await (inProcess
+		? withAmbientTerminalIO(io, invoke, signal)
+		: withProcessTerminalSignal(signal, invoke));
 }

@@ -1,4 +1,3 @@
-import { withCapturedStdout } from "@crustjs/utils/terminal";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { resolveColorDepth, resolveModifierCapability } from "./capability.ts";
@@ -26,25 +25,6 @@ describe("resolveColorDepth", () => {
 			expect(stdout).not.toHaveBeenCalled();
 		} finally {
 			stdout.mockRestore();
-		}
-	});
-
-	it("treats a captured stdout as not a terminal unless overridden or forced", () => {
-		const isTTY = process.stdout.isTTY;
-		Object.defineProperty(process.stdout, "isTTY", { configurable: true, value: true });
-		try {
-			expect(resolveColorDepth("auto")).toBe("16");
-			expect(resolveModifierCapability("auto")).toBe(true);
-			withCapturedStdout(() => {
-				expect(resolveColorDepth("auto")).toBe("none");
-				expect(resolveModifierCapability("auto")).toBe(false);
-				expect(resolveColorDepth("auto", { isTTY: true })).toBe("16");
-				vi.stubEnv("FORCE_COLOR", "1");
-				expect(resolveColorDepth("auto")).toBe("16");
-				expect(resolveModifierCapability("auto")).toBe(true);
-			});
-		} finally {
-			Object.defineProperty(process.stdout, "isTTY", { configurable: true, value: isTTY });
 		}
 	});
 

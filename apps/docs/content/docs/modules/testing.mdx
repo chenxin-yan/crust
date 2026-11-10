@@ -51,7 +51,7 @@ Results from `captureExecute()` and `runInteractive()` don't depend on the shell
 
 ## Styled output
 
-Captured `stdout` counts as non-TTY: [`@crustjs/style`](/docs/modules/style) emits no ANSI codes for text bound for `run()`, `captureExecute()`, or `runInteractive()`, whether or not the test runner's own stdout is a terminal, unless `FORCE_COLOR` is set. Some runners set `FORCE_COLOR=1` for their workers when their own output is a color terminal, such as Jest's child-process workers and `bun test --parallel`. `captureExecute()` and `runInteractive()` strip the codes either way; to assert on them, set `FORCE_COLOR` in the test and pass `raw: true`. `app.run()` does not strip them.
+`app.run()` returns what the app wrote, escape codes included: [`@crustjs/style`](/docs/modules/style#color-control) decides from the test process's stdout and environment. For plain text, set `process.env.FORCE_COLOR = "0"` in a test setup file (Bun's `preload`, Vitest's `setupFiles`), or use `captureExecute()` and `runInteractive()`, which strip escape codes. A setup file also works under `bun test --parallel`, which gives its workers `FORCE_COLOR=1` on a color terminal even when the command line sets `FORCE_COLOR=0`. To assert on escape codes, set `FORCE_COLOR=1` in the test and, with the helpers, pass `raw: true`.
 
 ## Custom prompts
 
