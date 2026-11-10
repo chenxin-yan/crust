@@ -1,5 +1,9 @@
 import { isSignalIgnored } from "@crustjs/utils/signals";
-import { withAmbientTerminalIO, writeProcessOutput } from "@crustjs/utils/terminal";
+import {
+	withAmbientTerminalIO,
+	withProcessTerminalSignal,
+	writeProcessOutput,
+} from "@crustjs/utils/terminal";
 
 import { validateContextAvailability } from "../api/context.ts";
 import type {
@@ -1003,10 +1007,14 @@ export async function runInvocation(
 				sinks.stderr?.(text);
 			},
 		};
-		const outcome = await withAmbientTerminalIO(resolvedIO, async () => {
-			const prepared = prepareInvocation(node, materializeCommandDefinition);
-			return await dispatch(input, prepared, createInvocationOutput(resolvedIO), signal, stream);
-		});
+		const outcome = await withAmbientTerminalIO(
+			resolvedIO,
+			async () => {
+				const prepared = prepareInvocation(node, materializeCommandDefinition);
+				return await dispatch(input, prepared, createInvocationOutput(resolvedIO), signal, stream);
+			},
+			signal,
+		);
 		return { ...outcome, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
 	} catch (error) {
 		return {
@@ -1178,5 +1186,8 @@ export async function executeInvocation(
 		return cancelledExitCode;
 	};
 
-	return await (inProcess ? withAmbientTerminalIO(io, invoke) : invoke());
+	// Prompts, spinners and `runSteps()` cancel with the invocation unless given their own signal.
+	return await (inProcess
+		? withAmbientTerminalIO(io, invoke, signal)
+		: withProcessTerminalSignal(signal, invoke));
 }

@@ -7,6 +7,7 @@ import * as readline from "node:readline";
 import { stringWidth } from "@crustjs/style";
 import {
 	getTerminalIO,
+	getTerminalSignal,
 	type TerminalIO,
 	type TerminalInput,
 	type TerminalOutput,
@@ -22,12 +23,19 @@ import type { PartialPromptTheme, PromptTheme } from "./types.ts";
 export type { TerminalInput, TerminalIO, TerminalOutput } from "@crustjs/utils/terminal";
 export { withTerminalIO } from "@crustjs/utils/terminal";
 
-/** Resolve explicit, ambient, then process-global streams. */
-export function resolvePromptIO(io?: TerminalIO): Required<TerminalIO> {
+/** Streams a prompt draws on, and the signal that cancels it. */
+export type PromptIO = Required<Pick<TerminalIO, "input" | "output">> & Pick<TerminalIO, "signal">;
+
+/**
+ * Resolve explicit, ambient, then process-global streams; the signal resolves from explicit IO,
+ * then the ambient scope or running Crust invocation.
+ */
+export function resolvePromptIO(io?: TerminalIO): PromptIO {
 	const ambient = getTerminalIO();
 	return {
 		input: io?.input ?? ambient?.input ?? process.stdin,
 		output: io?.output ?? ambient?.output ?? process.stderr,
+		signal: io?.signal ?? getTerminalSignal(),
 	};
 }
 
@@ -204,11 +212,15 @@ function isSubmit<S, T>(result: HandleKeyResult<S, T>): result is SubmitResult<T
  *
  * Input and output resolve from explicit IO, the ambient terminal scope,
  * then `process.stdin` / `process.stderr`, keeping stdout clean by default.
+ * The `signal` resolves from explicit IO, then the ambient scope, which inside a
+ * Crust command is the invocation's signal. When it aborts, the prompt restores
+ * the terminal and rejects with `signal.reason`.
  *
  * @param config - Prompt configuration (render, handleKey, initialState, theme)
- * @param io - Optional input/output streams, resolved per stream.
+ * @param io - Optional input/output streams and cancellation signal, resolved per field.
  * @returns Promise resolving to the user's submitted value
  * @throws {NonInteractiveError} when the resolved input or output is not a TTY
+ * @throws `signal.reason` when the signal is or becomes aborted
  *
  * @example
  * ```ts
@@ -224,12 +236,16 @@ function isSubmit<S, T>(result: HandleKeyResult<S, T>): result is SubmitResult<T
  */
 export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Promise<T> {
 	const { render, handleKey, initialState, renderSubmitted } = config;
-	const { input: stdin, output } = resolvePromptIO(io);
+	const { input: stdin, output, signal } = resolvePromptIO(io);
 	const theme = { ...defaultThemeFor(output), ...config.theme };
 	// SAFETY: readline's cursor helpers only call write(), which TerminalOutput provides.
 	const readlineOutput = output as NodeJS.WritableStream;
 
 	return new Promise<T>((resolve, reject) => {
+		if (signal?.aborted) {
+			reject(signal.reason);
+			return;
+		}
 		// Guard against concurrent prompts sharing an input or output stream.
 		if (activeInputs.has(stdin) || activeOutputs.has(output)) {
 			reject(
@@ -255,6 +271,7 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Pr
 			if (isCleanedUp) return;
 			isCleanedUp = true;
 			process.removeListener("exit", cleanup);
+			signal?.removeEventListener("abort", onAbort);
 			activeInputs.delete(stdin);
 			activeOutputs.delete(output);
 
@@ -319,6 +336,14 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Pr
 				clearTimeout(renderPending);
 				renderPending = null;
 			}
+		}
+
+		// The process may end by the signal right after, skipping "exit" listeners.
+		function onAbort(): void {
+			flushRender();
+			output.write("\n");
+			cleanup();
+			reject(signal?.reason);
 		}
 
 		function onKeypress(
@@ -397,6 +422,7 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Pr
 			renderFrame(render(state, theme));
 
 			stdin.on("keypress", onKeypress);
+			signal?.addEventListener("abort", onAbort, { once: true });
 		} catch (err) {
 			cleanup();
 			reject(err);

@@ -20,6 +20,14 @@ export type RunProcessOptions = {
 	 * SIGHUP under `nohup`) is left ignored: it neither kills the group nor rejects the call.
 	 */
 	timeout?: number;
+	/**
+	 * Aborting it sends `SIGTERM` to the child, then `SIGKILL` if it is still running 5 seconds
+	 * later (timed calls: the whole process group, killed; Windows: `taskkill /T /F` ends the
+	 * child's tree), and rejects with `signal.reason` once the child exits and its collected
+	 * output closes, which a surviving descendant holding the pipe delays. An already-aborted
+	 * signal rejects before spawning.
+	 */
+	signal?: AbortSignal;
 };
 
 export type RunProcessResult = {
@@ -170,6 +178,7 @@ export async function runProcess(
 	args: readonly string[] = [],
 	options: RunProcessOptions = {},
 ): Promise<RunProcessResult> {
+	options.signal?.throwIfAborted();
 	// Node's CVE-2024-27980 hardening rejects direct .cmd/.bat spawning.
 	const windowsShimCommand = getWindowsShimCommand(command, args, options.shell);
 	const collect = (options.stdio ?? "collect") === "collect";
@@ -222,6 +231,20 @@ export async function runProcess(
 				},
 			})
 		: () => {};
+	let forceKillTimer: NodeJS.Timeout | undefined;
+	const onAbort = () => {
+		try {
+			if (detached || process.platform === "win32") killProcessTree(proc);
+			else {
+				proc.kill("SIGTERM");
+				// A child that ignores SIGTERM must not hold the call open forever.
+				forceKillTimer = setTimeout(() => proc.kill("SIGKILL"), 5_000);
+			}
+		} catch {
+			// The child already exited; its close settles the call.
+		}
+	};
+	options.signal?.addEventListener("abort", onAbort, { once: true });
 
 	const { text } = process.getBuiltinModule("node:stream/consumers");
 	const { once } = process.getBuiltinModule("node:events");
@@ -234,10 +257,13 @@ export async function runProcess(
 			]),
 			stopped,
 		]);
+		options.signal?.throwIfAborted();
 		return { exitCode, stdout, stderr };
 	} finally {
 		clearTimeout(timer);
+		clearTimeout(forceKillTimer);
 		release();
+		options.signal?.removeEventListener("abort", onAbort);
 	}
 }
 

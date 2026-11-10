@@ -24,6 +24,8 @@ export interface UpdateCheck {
 	readonly updateDocsUrl: string | undefined;
 	readonly cache: UpdateNotifierOptions["cache"];
 	readonly stderr: (text: string) => void;
+	/** The invocation's signal: Ctrl+C or SIGTERM during the check ends it at once. */
+	readonly signal?: AbortSignal | undefined;
 }
 
 function compareSemver(left: string, right: string): -1 | 0 | 1 {
@@ -91,11 +93,13 @@ export async function fetchLatestVersion(
 	packageName: string,
 	registryUrl: string,
 	timeoutMs: number,
+	signal?: AbortSignal,
 ): Promise<string | null> {
 	try {
 		const url = `${registryUrl.replace(/\/+$/, "")}/${encodeURIComponent(packageName)}`;
+		const timeout = AbortSignal.timeout(timeoutMs);
 		const response = await fetch(url, {
-			signal: AbortSignal.timeout(timeoutMs),
+			signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
 			headers: { Accept: "application/vnd.npm.install-v1+json" },
 		});
 
@@ -246,6 +250,7 @@ export async function runUpdateCheck(check: UpdateCheck): Promise<void> {
 		updateDocsUrl,
 		cache,
 		stderr,
+		signal,
 	} = check;
 	try {
 		let cacheAdapter: UpdateNotifierCacheAdapter = NO_CACHE_ADAPTER;
@@ -296,7 +301,7 @@ export async function runUpdateCheck(check: UpdateCheck): Promise<void> {
 		}
 
 		// ── Network check: fetch latest version ──────────────────
-		const latestVersion = await fetchLatestVersion(packageName, registryUrl, timeoutMs);
+		const latestVersion = await fetchLatestVersion(packageName, registryUrl, timeoutMs, signal);
 
 		if (latestVersion === null) {
 			// Soft failure — update timestamp to avoid retrying too soon

@@ -1,4 +1,4 @@
-import type { TerminalIO } from "./renderer.ts";
+import type { PromptIO, TerminalIO } from "./renderer.ts";
 import { isTTY, resolvePromptIO } from "./renderer.ts";
 import type { SchemaOrValidate } from "./types.ts";
 import { validateSubmitValue } from "./validate.ts";
@@ -10,7 +10,7 @@ type ShortCircuitOptions<Input> = {
 
 type ShortCircuitResult<Answer> =
 	| { readonly shortCircuited: true; readonly value: Answer }
-	| { readonly shortCircuited: false; readonly promptIO: Required<TerminalIO> };
+	| { readonly shortCircuited: false; readonly promptIO: PromptIO };
 
 /** @internal Resolve values that let a prompt answer without rendering. */
 export function resolveShortCircuit<Input>(

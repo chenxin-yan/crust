@@ -16,7 +16,7 @@ export async function tick(): Promise<void> {
 	await new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
-export function nonTTYIO(): Required<TerminalIO> {
+export function nonTTYIO(): Required<Pick<TerminalIO, "input" | "output">> {
 	return createPromptIO({ isTTY: false }).io;
 }
 

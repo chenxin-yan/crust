@@ -1,3 +1,4 @@
+import { getTerminalSignal } from "@crustjs/utils/terminal";
 import { describe, expect, it, beforeEach, afterEach, onTestFinished, vi } from "vite-plus/test";
 
 import { Crust, defineContext, defineExtension, defineExtensionId } from "../index.ts";
@@ -397,6 +398,23 @@ describe("invocation cancellation signal", () => {
 			expect(process.exitCode).toBe(code);
 		},
 	);
+
+	it.each([
+		["execute() with injected io", (app: Crust) => app.execute({ argv: [], io: quiet })],
+		["execute() on the process streams", (app: Crust) => app.execute({ argv: [] })],
+		["run()", (app: Crust) => app.run([])],
+	] as const)("%s exposes the invocation signal to terminal libraries", async (_, invoke) => {
+		let seen: [AbortSignal | undefined, AbortSignal] | undefined;
+		const app = new Crust("cli").action(async ({ signal }) => {
+			await Promise.resolve();
+			seen = [getTerminalSignal(), signal];
+		});
+
+		await invoke(app);
+
+		expect(seen?.[0]).toBe(seen?.[1]);
+		expect(getTerminalSignal()).toBeUndefined();
+	});
 
 	it("a second SIGINT removes Core's listener and leaves termination to any remaining listener", async () => {
 		vi.useFakeTimers({ toFake: ["performance"] });

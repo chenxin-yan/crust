@@ -41,7 +41,7 @@ The TTY check reads `process.stderr` even when `run()` or `execute()` receives c
 
 - The current version comes from `currentVersion` or root metadata. Without a string `currentVersion`, `.extend()` is a type error unless the root declares `version`.
 - The notice appears when npm's `latest` dist-tag is newer by SemVer precedence.
-- `timeoutMs` bounds only the registry request, not cache operations or the whole hook.
+- `timeoutMs` bounds only the registry request, not cache operations or the whole hook. Ctrl-C or `SIGTERM` ends the request at once.
 - `updateDocsUrl` adds a `See <url> to update` line to the notice.
 
 ## Update command
