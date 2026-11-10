@@ -14,3 +14,5 @@ Store mutations no longer lose data to other versions, other store instances, or
 - Error messages and temporary files say "store file" and use the store's name (`.notes-<uuid>.tmp`) instead of "config" for every store.
 
 **Behavior change:** `pruneUnknown` now defaults to `false`. `read()` still returns only the declared fields, but `write()`, `update()`, and `patch()` keep keys the store does not declare in the file, so an older version of your CLI no longer deletes fields a newer version wrote. Pass `pruneUnknown: true` to drop unknown keys on the next mutation, as before. With either setting, `read()` no longer returns undeclared keys.
+
+**Behavior change:** a field `validate` or schema that awaits a mutation of the same store file now never settles, because it waits behind the mutation that called it.
