@@ -598,6 +598,9 @@ export function renderBash(
 		lines.push("\t\t\tpos_idx=$((pos_idx + 1))");
 		lines.push("\t\t\t((_pidx_j++))");
 		lines.push("\t\tdone");
+		// Core routes a subcommand only as the first positional before `--`; decide
+		// before the slot remap below, which hides slot 0 from an `afterDoubleDash` argument.
+		lines.push("\t\tlocal _pidx_first=$(( pos_idx == 0 && ! end_of_options ))");
 		// Tokens after `--` keep filling slots in order, except that an
 		// `afterDoubleDash` argument takes them all and nothing before `--`.
 		// Slot -1 matches no case.
@@ -681,7 +684,7 @@ export function renderBash(
 		// At slot 0, blend positional choices with subcommand candidates so
 		// commands that offer BOTH a positional choice list AND subcommands
 		// surface both. At slot >0 we never offer subcommands.
-		lines.push("\t\tif (( pos_idx == 0 && ! end_of_options )); then");
+		lines.push("\t\tif (( _pidx_first )); then");
 		lines.push('\t\t\tCOMPREPLY=( $(compgen -W "$pos_choices $subcmds" -- "$cur") )');
 		lines.push("\t\telse");
 		// compgen fails without a match, which `set -e` callers would exit on; after

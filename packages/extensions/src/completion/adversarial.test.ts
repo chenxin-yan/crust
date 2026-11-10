@@ -164,6 +164,21 @@ describe("renderBash · behavioural · -- and --name=value", () => {
 				],
 				subCommands: [],
 			},
+			{
+				name: "wrap",
+				flags: [],
+				args: [
+					{
+						name: "extra",
+						type: "string",
+						required: false,
+						variadic: false,
+						afterDoubleDash: true,
+						choices: ["fix"],
+					},
+				],
+				subCommands: [{ name: "child", flags: [], args: [], subCommands: [] }],
+			},
 		],
 	};
 
@@ -252,6 +267,11 @@ for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
 		expect(await complete(["mycli", "exec", "web", "--", ""])).toEqual(["ls"]);
 		// A single one takes one token; the rest reach rawArgs.
 		expect(await complete(["mycli", "exec", "web", "--", "ls", ""])).toEqual([]);
+	});
+
+	it("still offers subcommands before `--` when an afterDoubleDash argument is the only one", async () => {
+		expect(await complete(["mycli", "wrap", ""])).toEqual(["child"]);
+		expect(await complete(["mycli", "wrap", "--", ""])).toEqual(["fix"]);
 	});
 
 	it("after a free-form value flag, no subcommand candidates are offered", async () => {
