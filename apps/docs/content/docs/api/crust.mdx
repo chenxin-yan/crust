@@ -21,7 +21,8 @@ Exact overloads and generic constraints live in [`command/crust.ts`](https://git
 - Neither `defineCommand()` nor `.add()` runs the recipe. Each addition materializes independently on first use by an invocation, snapshot, or documentation pass.
 - Help and typo suggestions read only the config, never the recipe.
 - Successful materialization is cached; a recipe that throws may run again on a later attempt. Don't rely on recipe side effects.
-- `.use(logging)` declares demand for a Context factory; `.provide(logging())` supplies an instance. A reusable definition sees only the Contexts it declares with [`.use()`](#usefactories), checked when the recipe materializes against the providers where it was added.
+- `.use(logging)` declares demand for a Context factory; `.provide(logging())` supplies an instance. A reusable definition's `ctx` holds the Contexts it declares with [`.use()`](#usefactories) or provides, and the Contexts their setup uses, transitively.
+- A definition demands the Contexts it declares with `.use()`, plus those demanded by the commands it adds with `.add()` or `.command()` that it doesn't provide itself. TypeScript checks the demands where the definition is added; the root reports one that nothing provides. At runtime, they are checked when the recipe materializes against the providers where it was added.
 - `definition.as(name)` returns the same definition under another name, so one definition can be added twice. Its aliases travel with it and must stay unique among siblings.
 
 <auto-type-table path="../../../../../packages/core/src/command/crust.ts" name="CommandConfig" />
@@ -41,7 +42,7 @@ A child command name (from `defineCommand()`, `.command()`, or `.as()`) and each
 
 The last two columns are the runtime `DEFINITION` reason.
 
-- TypeScript rejects literal names and aliases that break these rules. A `.command()` name and `defineCommand()` aliases fail at that call. A `defineCommand()` or `.as()` name, and an alias equal to the command's own name, fail where the definition is passed to `.add()`, including when spread from an array.
+- TypeScript rejects literal names and aliases that break these rules. A `.command()` name and aliases, and `defineCommand()` aliases, fail at that call. A `defineCommand()` or `.as()` name, and an alias equal to the command's own name, fail where the definition is passed to `.add()`, including when spread from an array.
 - So a generic factory such as `<const N extends "staging" | "production">(name: N) => defineCommand(name, recipe)` compiles, and each name it is called with is checked when added.
 - At runtime, `defineCommand()`, `.command()`, and `.as()` validate every name, including ones the types can't see.
 - The root name given to `new Crust()` is never an argv token, so only the blank and `__proto__` rules apply to it.
@@ -259,7 +260,7 @@ Registers definitions under their carried names, deferring their recipes until f
 
 - Sibling names and aliases must not collide; `.add()` checks them immediately without running recipes.
 - Recipe validation, inherited-flag collisions, and Context-demand checks are deferred until materialization.
-- A definition can itself add definitions; nested ones access inherited Contexts by declaring them with `.use()`.
+- A definition can itself add definitions; nested ones access inherited Contexts by declaring them with `.use()`. A group without an action doesn't need to `.use()` them too: it forwards their demands to where it is added, without parsing those Contexts' flags.
 - An added command accepts the flags of the Contexts it declares with `.use()`, but neither other Context-owned flags on its parent path nor the parent's local flags.
 
 <Callout type="info">
@@ -267,9 +268,9 @@ Registers definitions under their carried names, deferring their recipes until f
   before `.add()`. Extension-provided Contexts are the exception.
 </Callout>
 
-## `.command(name, recipe)`
+## `.command(name, config?, recipe)`
 
-Defines a child like `.add(defineCommand(name, recipe))`, for short inline commands. It works on the root and inside another command's recipe, so subcommands can nest inline. Use `defineCommand()` for commands in separate files and reused commands.
+Defines a child like `.add(defineCommand(name, config?, recipe))`, for short inline commands. `config` takes the same [`CommandConfig`](#definecommandname-config-recipe) as `defineCommand()`: description, aliases, `hidden`, usage, and sections. It works on the root and inside another command's recipe, so subcommands can nest inline. Use `defineCommand()` for commands in separate files and reused commands.
 
 ```ts
 const app = new Crust("my-cli").provide(logging()).command("up", (command) =>
@@ -280,7 +281,7 @@ const app = new Crust("my-cli").provide(logging()).command("up", (command) =>
 );
 ```
 
-The recipe sees the Contexts and Context-owned flags available before the call, so its `ctx` is typed without `.use()` and the command parses those Contexts' flags. Inside a recipe, those are the Contexts the parent declared with `.use()` or `.provide()`. Contexts provided after `.command()` are not visible to it.
+The recipe sees the Contexts and Context-owned flags available before the call, so its `ctx` is typed without `.use()` and the command parses those Contexts' flags; its action's `flags` type includes them. Inside a recipe, those are the Contexts the parent declared with `.use()` or `.provide()`. Contexts provided after `.command()` are not visible to it.
 
 ## `.snapshot()`
 

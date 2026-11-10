@@ -99,7 +99,20 @@ type NameBrandOf<T> = Extract<keyof T, "FIX_DUPLICATE_CONTEXT">;
 	// brands sealed-unit dependencies and opts widened contracts out
 	type Missing = ValidateDeclaredDeps<{}, readonly [{ readonly _deps?: { db: string } }]>;
 	type _missing = Expect<
-		Equal<Missing[0]["FIX_MISSING_DEPENDENCY"], 'Uses Context "db" which is not provided'>
+		Equal<
+			Missing[0]["FIX_MISSING_DEPENDENCY"],
+			'Context "db" is not provided: .provide() it on an ancestor'
+		>
+	>;
+	type Named = ValidateDeclaredDeps<
+		{},
+		readonly [{ readonly name: "version"; readonly _deps?: { db: string } }]
+	>;
+	type _named = Expect<
+		Equal<
+			Named[0]["FIX_MISSING_DEPENDENCY"],
+			'Context "db" needed by "version" is not provided: .provide() it on an ancestor'
+		>
 	>;
 	type Broad = ValidateDeclaredDeps<
 		{},
