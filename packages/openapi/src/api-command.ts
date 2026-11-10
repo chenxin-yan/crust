@@ -620,13 +620,13 @@ export const apiCommand: ExtensionFactory<
 							/** Prints each page's body; under --json, yields a successful page's body as JSON data instead. */
 							async function* bodies(): AsyncGenerator<JsonValue, undefined> {
 								for await (const { response, bytes } of pages()) {
-									const text = bodyText(response, bytes);
-									if (text === undefined) {
+									const text = bodyText(bytes);
+									if (text === undefined || !hasTextType(response)) {
 										const { getAmbientTerminalIO, writeProcessOutput } =
 											await import("@crustjs/utils/terminal");
-										// Bytes go only to the process's own stdout: a page is one NDJSON line, JSON cannot
-										// hold them, injected output (`run()`) takes text lines, and a terminal, which raw
-										// bytes can garble, never gets them, like gh api and curl.
+										// Such a body is written as its bytes, but only to the process's own stdout: a page
+										// is one NDJSON line, JSON cannot hold bytes, injected output (`run()`) takes text
+										// lines, and a terminal, which raw bytes can garble, never gets them, like gh api and curl.
 										let refusal: string | undefined;
 										if (flags.paginate) refusal = "--paginate prints only text and JSON bodies";
 										else if (json) {
@@ -638,14 +638,22 @@ export const apiCommand: ExtensionFactory<
 											refusal =
 												"redirect or pipe stdout to save it instead of printing it to the terminal";
 										}
-										if (refusal === undefined) writeProcessOutput(1, bytes);
-										else if (response.ok) {
-											const type = response.headers.get("content-type") ?? "no Content-Type";
-											throw new Error(
-												`api: ${flags.paginate ? "a --paginate page" : "the response"} body is binary (${type}); ${refusal}`,
-											);
+										if (refusal === undefined) {
+											writeProcessOutput(1, bytes);
+											continue;
 										}
-									} else if (!json) {
+										// Text under another Content-Type, such as application/csv, still prints as text.
+										if (text === undefined) {
+											if (response.ok) {
+												const type = response.headers.get("content-type") ?? "no Content-Type";
+												throw new Error(
+													`api: ${flags.paginate ? "a --paginate page" : "the response"} body is binary (${type}); ${refusal}`,
+												);
+											}
+											continue;
+										}
+									}
+									if (!json) {
 										if (flags.paginate) stdout(compactJson(text));
 										else if (text !== "") stdout(text.replace(/\r?\n$/, ""));
 									} else if (!response.ok) {
@@ -679,15 +687,14 @@ function withoutQuery(path: string): string {
 
 const TEXT_TYPE = /^text\/|[/+](?:json|xml|yaml|x-yaml|x-ndjson|javascript|x-www-form-urlencoded)$/;
 
-/**
- * The body as text, or `undefined` for a binary body: a non-empty one whose Content-Type is not
- * textual (text/*, JSON, XML, YAML, NDJSON, JavaScript, form data), or that is not valid UTF-8.
- */
-function bodyText(response: Response, bytes: Uint8Array): string | undefined {
-	// HEAD, 204, and empty downloads keep their Content-Type but have no bytes to misprint.
-	if (bytes.length === 0) return "";
+/** Whether the Content-Type is textual (text/*, JSON, XML, YAML, NDJSON, JavaScript, form data) or missing. */
+function hasTextType(response: Response): boolean {
 	const type = (response.headers.get("content-type") ?? "").split(";")[0]?.trim().toLowerCase();
-	if (type && !TEXT_TYPE.test(type)) return undefined;
+	return !type || TEXT_TYPE.test(type);
+}
+
+/** The body as text, or `undefined` when it is not valid UTF-8. */
+function bodyText(bytes: Uint8Array): string | undefined {
 	try {
 		return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
 	} catch {

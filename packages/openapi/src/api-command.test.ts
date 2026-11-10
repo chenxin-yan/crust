@@ -665,7 +665,7 @@ describe("api <path>", () => {
 			process.getBuiltinModule("node:tty").isatty = (fd) => fd === 1;
 			const { Crust } = await import("@crustjs/core");
 			const { apiCommand } = await import(${JSON.stringify(pathToFileURL(join(import.meta.dirname, "api-command.ts")).href)});
-			globalThis.fetch = async () => new Response("PK", { headers: { "content-type": "application/zip" } });
+			globalThis.fetch = async () => new Response(new Uint8Array([0x50, 0x4b, 0xff]), { headers: { "content-type": "application/zip" } });
 			const app = new Crust("tool").extend(apiCommand({ spec: {}, baseUrl: "https://api.example.com" }));
 			process.exitCode = await app.execute({ argv: ["api", "/export.zip"] });
 		`;
@@ -685,7 +685,10 @@ describe("api <path>", () => {
 
 	it("fails after the request when a binary body cannot be written to captured output", async () => {
 		stubFetch(
-			() => new Response("PK", { headers: { "content-type": "application/octet-stream" } }),
+			() =>
+				new Response(new Uint8Array([0x50, 0x4b, 0xff]), {
+					headers: { "content-type": "application/octet-stream" },
+				}),
 		);
 
 		expect(await captureExecute(buildApp(), ["api", "/file.zip"])).toEqual({
@@ -694,6 +697,23 @@ describe("api <path>", () => {
 				"Error: api: the response body is binary (application/octet-stream); its bytes go only to the process's stdout, not to captured output",
 			exitCode: 1,
 		});
+	});
+
+	it("prints a text body under a Content-Type not known as text where raw bytes cannot go", async () => {
+		stubFetch(() => new Response("a,b\n1,2\n", { headers: { "content-type": "application/csv" } }));
+		const app = buildApp({ paginate: () => undefined }).extend(json());
+
+		for (const [flag, stdout] of [
+			[[], "a,b\n1,2"],
+			[["--paginate"], '"a,b\\n1,2\\n"'],
+			[["--json"], '"a,b\\n1,2\\n"'],
+		] as const) {
+			expect(await captureExecute(app, ["api", "/export.csv", ...flag])).toEqual({
+				stdout,
+				stderr: "",
+				exitCode: 0,
+			});
+		}
 	});
 
 	it("follows --paginate pages as NDJSON, reusing the request without a new init", async () => {
@@ -1200,7 +1220,12 @@ describe("api with json()", () => {
 	});
 
 	it("fails for a binary body, which has no JSON form", async () => {
-		stubFetch(() => new Response("GIF89a", { headers: { "content-type": "image/gif" } }));
+		stubFetch(
+			() =>
+				new Response(new Uint8Array([0x47, 0x49, 0x46, 0xff]), {
+					headers: { "content-type": "image/gif" },
+				}),
+		);
 
 		expect(await captureExecute(jsonApp(), ["api", "/logo.gif", "--json"])).toEqual({
 			stdout: "",
