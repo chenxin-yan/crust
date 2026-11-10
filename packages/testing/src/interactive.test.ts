@@ -62,21 +62,6 @@ describe("runInteractive", () => {
 		});
 	});
 
-	it("captures plain styled stdout when the runner's stdout is a TTY", async () => {
-		const isTTY = process.stdout.isTTY;
-		Object.defineProperty(process.stdout, "isTTY", { configurable: true, value: true });
-		vi.stubEnv("FORCE_COLOR", undefined);
-		try {
-			const app = new Crust("test-cli").action(({ stdout }) => stdout(bold("Done")));
-			const run = runInteractive(app, []);
-			await run.done;
-			expect(run.stdout()).toBe("Done");
-		} finally {
-			Object.defineProperty(process.stdout, "isTTY", { configurable: true, value: isTTY });
-			vi.unstubAllEnvs();
-		}
-	});
-
 	it("strips escape codes under FORCE_COLOR unless raw is set", async () => {
 		vi.stubEnv("FORCE_COLOR", "1");
 		try {

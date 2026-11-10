@@ -1,12 +1,8 @@
 import { Crust } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { version } from "./version.ts";
-
-afterEach(() => {
-	vi.unstubAllEnvs();
-});
 
 describe("version", () => {
 	it("version extension prints the version instead of an invalid flag value from argv or env", async () => {
