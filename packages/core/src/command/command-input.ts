@@ -119,8 +119,6 @@ function formatPath(path: readonly string[]): string {
 /**
  * JSON Schema for a command's input as one flat object: each arg and flag by
  * name (variadic and `multiple` as arrays), plus {@link RAW_INPUT_PROPERTY}.
- * An `afterDoubleDash` arg is an ordinary property whose description notes it is
- * given after `--` on the command line.
  * Mapped from the snapshot's declared types, so custom `parse` definitions
  * appear as their token type, and only declared `required` definitions are
  * required. A Standard Schema definition appears as its `inputSchema` (without
@@ -151,20 +149,7 @@ export function commandInputSchema(
 		properties[name] = propertySchema(def, list);
 		if (def.required === true) required.push(name);
 	};
-	for (const arg of command.args) {
-		claim(arg.name, arg, arg.variadic === true);
-		if (!arg.afterDoubleDash) continue;
-		// The flat object has no `--`; tell readers where the command line puts this value.
-		// SAFETY: `claim` just set this property.
-		const property = properties[arg.name]!;
-		properties[arg.name] = {
-			...property,
-			description:
-				property.description === undefined
-					? "Given after `--` on the command line"
-					: `${property.description} (given after \`--\` on the command line)`,
-		};
-	}
+	for (const arg of command.args) claim(arg.name, arg, arg.variadic === true);
 	for (const [name, flag] of Object.entries(command.flags)) {
 		claim(name, flag, flag.multiple === true);
 	}

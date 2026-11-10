@@ -243,7 +243,7 @@ describe("schema", () => {
 		expect(stdout).not.toContain("Secret");
 	});
 
-	it("--llms and schema place an afterDoubleDash argument after --", async () => {
+	it("--llms places an afterDoubleDash argument after --", async () => {
 		const app = new Crust("mono")
 			.extend(schema())
 			.add(
@@ -259,12 +259,6 @@ describe("schema", () => {
 		const { stdout } = await captureExecute(app, ["--llms"]);
 		expect(stdout).toContain("## `mono run <task> [-- <extra>...]`");
 		expect(stdout).toContain("- `[-- <extra>...]` (string)");
-		const { stdout: json } = await captureExecute(app, ["schema", "run"]);
-		expect(JSON.parse(json).input.properties.extra).toEqual({
-			type: "array",
-			items: { type: "string" },
-			description: "Given after `--` on the command line",
-		});
 	});
 
 	it("--llms is root-only", async () => {
