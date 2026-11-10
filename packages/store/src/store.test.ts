@@ -4,7 +4,7 @@ import { mkdir, readdir, readFile, rm, utimes, writeFile } from "node:fs/promise
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { z } from "zod";
 
 import { CrustStoreError } from "./errors.ts";
@@ -1096,6 +1096,16 @@ describe("concurrent mutations", () => {
 			"counter.json",
 			"counter.json.lock.busy.0",
 		]);
+	});
+
+	it("writes when the filesystem's clock is behind the process's", async () => {
+		// A new file's mtime comes from the filesystem (an NFS server, a VM's host), not from Date.
+		vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 60_000 });
+		try {
+			expect(await counter().patch({ n: 1 })).toEqual({ n: 1 });
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it.skipIf(process.platform === "win32")(

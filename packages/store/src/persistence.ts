@@ -562,6 +562,10 @@ export async function withFileLock<T>(
 			const handle = await open(lockPath, "wx");
 			try {
 				await handle.writeFile(contents);
+				// The lock's age is measured against this process's clock, which the clock of a
+				// network or VM-shared filesystem need not match.
+				const now = new Date();
+				await handle.utimes(now, now);
 				await handle.close();
 			} catch (err: unknown) {
 				// Closed before removal: Windows cannot delete an open file.
