@@ -162,9 +162,7 @@ async function ensureDirectory(filePath: string, mode: number | undefined): Prom
  *    flushes it to disk (`fsync`), so a crash after the rename cannot leave an
  *    empty or partial file in place. On POSIX the temp file gets the replaced
  *    file's owner and, unless `fileMode` is set, its mode.
- * 3. Renames the temp file to the target path (atomic on local filesystems).
- *    On Windows, a rename blocked by another program's open handle (`EPERM`,
- *    `EACCES`, `EBUSY`) is retried for a few seconds.
+ * 3. Renames the temp file to the target path (atomic on most filesystems).
  *
  * If any step fails, the function cleans up the temp file (best-effort) and
  * throws a `CrustStoreError` with `IO` code.
@@ -227,7 +225,7 @@ export async function writeJson(
 	}
 
 	try {
-		await commit(tempPath, filePath);
+		await rename(tempPath, filePath);
 	} catch (err: unknown) {
 		await rm(tempPath, { force: true }).catch(() => {});
 
@@ -240,31 +238,6 @@ export async function writeJson(
 			},
 			err,
 		);
-	}
-}
-
-/** How long a rename blocked by another program's open handle is retried on Windows. */
-const RENAME_RETRY_MS = 5_000;
-const MAX_RETRY_DELAY_MS = 100;
-const BUSY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
-
-/**
- * Renames `tempPath` over `filePath`.
- *
- * Windows refuses to replace a file that any process holds open, including another
- * process reading this store, an antivirus scanner, or an indexer; such handles are
- * usually brief.
- */
-async function commit(tempPath: string, filePath: string): Promise<void> {
-	const start = Date.now();
-	for (let delay = 1; ; delay = Math.min(delay * 2, MAX_RETRY_DELAY_MS)) {
-		try {
-			return await rename(tempPath, filePath);
-		} catch (err: unknown) {
-			const busy = isWindows() && isErrnoException(err) && BUSY_CODES.has(err.code ?? "");
-			if (!busy || Date.now() - start >= RENAME_RETRY_MS) throw err;
-		}
-		await sleep(delay);
 	}
 }
 
@@ -303,6 +276,7 @@ export async function deleteJson(filePath: string): Promise<void> {
 
 /** A lock older than this was left behind: a mutation takes milliseconds. */
 const STALE_LOCK_MS = 10_000;
+const MAX_RETRY_DELAY_MS = 100;
 
 /** Options for {@link withFileLock}. */
 export interface FileLockOptions {
