@@ -364,6 +364,13 @@ describe("invocation cancellation signal", () => {
 		},
 	);
 
+	it("execute() on the process streams settles while a test fakes the global timers", async () => {
+		vi.useFakeTimers();
+		onTestFinished(() => void vi.useRealTimers());
+
+		expect(await new Crust("cli").action(() => {}).execute({ argv: [] })).toBe(0);
+	});
+
 	it.each([
 		["SIGINT", 130, "completes"],
 		["SIGTERM", 143, "completes"],

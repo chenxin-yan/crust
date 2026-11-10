@@ -1054,8 +1054,8 @@ export async function executeInvocation(
 		return process.exit(0);
 	}
 
-	// Injected `io` marks an in-process host (tests, `@crustjs/testing`, possibly with fake
-	// timers): it must survive a cancelling signal, so it gets only the exit code.
+	// Injected `io` marks an in-process host (tests, `@crustjs/testing`): it must survive a
+	// cancelling signal, so it gets only the exit code.
 	const inProcess = hasInjectedIO(options?.io);
 	// The latest execute() decides how the process ends.
 	pendingSignalExit = undefined;
@@ -1155,7 +1155,11 @@ export async function executeInvocation(
 		} finally {
 			// A signal that arrived while synchronous work blocked the event loop is still pending,
 			// and Node and Bun drop it once no listener remains: one macrotask turn delivers it.
-			if (!inProcess) await new Promise((resolve) => setImmediate(resolve));
+			// The module's timer, not the global: a test's fake `setImmediate` never fires.
+			if (!inProcess) {
+				const { setImmediate } = process.getBuiltinModule("node:timers");
+				await new Promise((resolve) => setImmediate(resolve));
+			}
 			for (const name of CANCELLING_SIGNAL_NAMES) process.removeListener(name, onSignal);
 		}
 		if (cancelledBy === undefined) return exitCode;
@@ -1169,7 +1173,6 @@ export async function executeInvocation(
 		process.exitCode = cancelledExitCode;
 		if (!inProcess && process.platform !== "win32") {
 			pendingSignalExit = { name: cancelledBy, exitCode: cancelledExitCode };
-			process.removeListener("beforeExit", exitBySignal);
 			process.once("beforeExit", exitBySignal);
 		}
 		return cancelledExitCode;
