@@ -42,6 +42,7 @@ export type ParseErrorReason =
 
 /** `details.reason` values Core sets on `DEFINITION` errors. */
 export type DefinitionErrorReason =
+	| "after-double-dash-position"
 	| "alias-collision"
 	| "command-collision"
 	| "context-after-disposal"

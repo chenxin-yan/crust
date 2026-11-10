@@ -316,4 +316,17 @@ describe("renderManPageMdoc", () => {
 		expect(mdoc).toContain(".It Ar env");
 		expect(mdoc).toContain("Target environment [choices: dev, staging, prod]");
 	});
+
+	it("renders an afterDoubleDash argument after -- in SYNOPSIS and ARGUMENTS", async () => {
+		const root = await new Crust("run", { description: "Run." })
+			.args(
+				{ name: "task", type: "string", required: true },
+				{ name: "extra", type: "string", variadic: true, afterDoubleDash: true },
+			)
+			.snapshot();
+		const mdoc = renderManPageMdoc({ root, section: 1 });
+
+		expect(mdoc).toContain("run <task> [-- <extra>...]");
+		expect(mdoc).toContain(".It Fl \\- Ar extra ...");
+	});
 });

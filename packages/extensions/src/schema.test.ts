@@ -243,6 +243,24 @@ describe("schema", () => {
 		expect(stdout).not.toContain("Secret");
 	});
 
+	it("--llms places an afterDoubleDash argument after --", async () => {
+		const app = new Crust("mono")
+			.extend(schema())
+			.add(
+				defineCommand("run", (cmd) =>
+					cmd
+						.args(
+							{ name: "task", type: "string", required: true },
+							{ name: "extra", type: "string", variadic: true, afterDoubleDash: true },
+						)
+						.action(() => {}),
+				),
+			);
+		const { stdout } = await captureExecute(app, ["--llms"]);
+		expect(stdout).toContain("## `mono run <task> [-- <extra>...]`");
+		expect(stdout).toContain("- `[-- <extra>...]` (string)");
+	});
+
 	it("--llms is root-only", async () => {
 		const { exitCode, stderr } = await captureExecute(buildCli(), ["deploy", "staging", "--llms"]);
 

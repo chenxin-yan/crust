@@ -13,10 +13,10 @@ import type { CompletionCommand } from "../spec.ts";
  * **Subcommand routing.** We emit a single routing helper per script —
  * `__<ident>_path_at_arg` — that walks `commandline -opc` left-to-right,
  * skips flags (plus the separate value of a flag that takes one at the
- * current routing depth, decided by `__<ident>_takes_value`) and the
- * `--` end-of-options terminator, and verifies that
+ * current routing depth, decided by `__<ident>_takes_value`), and verifies that
  * each consumed positional matches the expected canonical-or-alias set
- * for its depth in order. This replaces the stock
+ * for its depth in order. After `--` nothing routes and every token is a
+ * positional, as in Core; fish itself stops offering options there. This replaces the stock
  * `__fish_seen_subcommand_from` chain (which is order-insensitive and
  * misroutes when the same name appears at different depths).
  */
@@ -96,7 +96,9 @@ function renderRule(binName: string, parts: RuleParts): string {
  * Calls `__<ident>_path_at_arg <spellings...> <pos_spec> <block>` where
  * `pos_spec` is either `<N>` (exact: completion fires when exactly N
  * positionals have been consumed past the path) or `*<N>` (fires when
- * N-or-more positionals have been consumed).
+ * N-or-more positionals have been consumed). A leading `<` counts only
+ * positionals before `--` and fails after it; a leading `>` counts only
+ * those after `--` and fails before it (an `afterDoubleDash` argument).
  */
 function posPredicate(
 	ident: string,
@@ -130,6 +132,9 @@ function emitRules(
 	out: string[],
 ): void {
 	const condition = posPredicate(ident, path, current, "*0");
+	// Core routes nothing after `--`.
+	const subcommandCondition = posPredicate(ident, path, current, "<*0");
+	const split = current.args.at(-1)?.afterDoubleDash === true;
 
 	// Subcommand rules: emit one rule per spelling so each can carry its
 	// own description in the menu. fishSingleQuote is applied via the
@@ -140,7 +145,7 @@ function emitRules(
 		for (const spelling of spellings) {
 			out.push(
 				renderRule(binName, {
-					condition,
+					condition: subcommandCondition,
 					arguments: fishSingleQuote(spelling),
 					description: desc,
 					noFiles: true,
@@ -227,7 +232,11 @@ function emitRules(
 	// `complete -c <bin> -f` already keeps file completion off, so the
 	// suppression is implicit.
 	current.args.forEach((arg, idx) => {
-		const posSpec = arg.variadic ? `*${idx}` : String(idx);
+		// With an `afterDoubleDash` argument, `--` splits the slots: it reads only
+		// tokens after `--`, the others only tokens before.
+		const posSpec = arg.afterDoubleDash
+			? `>${arg.variadic ? "*" : ""}0`
+			: `${split ? "<" : ""}${arg.variadic ? "*" : ""}${idx}`;
 		if (arg.choices !== undefined) {
 			const posCondition = posPredicate(ident, path, current, posSpec);
 			for (const choice of arg.choices) {
@@ -328,6 +337,9 @@ function emitFlagScopeHelpers(ident: string, spec: CompletionCommand): string[] 
  * been consumed past the path — the cursor is filling slot N) or
  * `*<N>` (variadic; fires when N-or-more positionals have been
  * consumed, used for variadic-with-choices args and path matching).
+ * Tokens after `--` count as positionals; a `<` prefix rejects the line
+ * once `--` was seen, and a `>` prefix requires `--` and counts only the
+ * tokens after it.
  */
 function emitPosHelper(ident: string): string[] {
 	const fn = `__${ident}_path_at_arg`;
@@ -337,6 +349,11 @@ function emitPosHelper(ident: string): string[] {
 	lines.push('\tset -l block (string split " " -- $argv[$total_argv])');
 	lines.push("\tset -l pos_spec $argv[(math $total_argv - 1)]");
 	lines.push("\tset -l n (math $total_argv - 2)");
+	lines.push("\tset -l mode");
+	lines.push("\tif string match -qr -- '^[<>]' $pos_spec");
+	lines.push("\t\tset mode (string sub --length 1 -- $pos_spec)");
+	lines.push("\t\tset pos_spec (string sub --start 2 -- $pos_spec)");
+	lines.push("\tend");
 	lines.push("\tset -l variadic 0");
 	lines.push("\tset -l target $pos_spec");
 	lines.push("\tif string match -q -- '\\**' $pos_spec");
@@ -347,6 +364,7 @@ function emitPosHelper(ident: string): string[] {
 	lines.push("\tset -l total (count $tokens)");
 	lines.push("\tset -l j 2");
 	lines.push("\tset -l consumed 0");
+	lines.push("\tset -l after 0");
 	lines.push("\tset -l end_of_options 0");
 	// Canonical names of the path consumed so far select the flag scope,
 	// mirroring Core routing, which consumes known flags per depth.
@@ -356,12 +374,19 @@ function emitPosHelper(ident: string): string[] {
 	lines.push("\tset -l forwarded");
 	lines.push("\twhile test $j -le $total");
 	lines.push("\t\tset -l t $tokens[$j]");
+	// After `--` nothing routes: a path still incomplete never matches.
+	lines.push("\t\tif test $end_of_options -eq 1");
+	lines.push("\t\t\ttest $consumed -lt $n; and return 1");
+	lines.push("\t\t\tset after (math $after + 1)");
+	lines.push("\t\t\tset j (math $j + 1)");
+	lines.push("\t\t\tcontinue");
+	lines.push("\t\tend");
 	lines.push('\t\tif test "$t" = "--"');
 	lines.push("\t\t\tset end_of_options 1");
 	lines.push("\t\t\tset j (math $j + 1)");
 	lines.push("\t\t\tcontinue");
 	lines.push("\t\tend");
-	lines.push("\t\tif test $end_of_options -eq 0; and string match -q -- '-*' $t");
+	lines.push("\t\tif string match -q -- '-*' $t");
 	lines.push("\t\t\tset -l skip 1");
 	lines.push(`\t\t\tif __${ident}_takes_value $t $route`);
 	lines.push("\t\t\t\tset skip 2");
@@ -388,7 +413,14 @@ function emitPosHelper(ident: string): string[] {
 	lines.push("\t\tend");
 	lines.push("\t\tset j (math $j + 1)");
 	lines.push("\tend");
-	lines.push("\tset -l beyond (math $consumed - $n)");
+	lines.push("\ttest $consumed -lt $n; and return 1");
+	lines.push("\tset -l beyond (math $consumed - $n + $after)");
+	lines.push('\tif test "$mode" = "<"');
+	lines.push("\t\ttest $end_of_options -eq 1; and return 1");
+	lines.push('\telse if test "$mode" = ">"');
+	lines.push("\t\ttest $end_of_options -eq 0; and return 1");
+	lines.push("\t\tset beyond $after");
+	lines.push("\tend");
 	lines.push("\tif test $variadic -eq 1");
 	lines.push("\t\ttest $beyond -ge $target");
 	lines.push("\telse");

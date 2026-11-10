@@ -121,3 +121,28 @@ function _requiredJsonVariadic() {
 	const input: InputArgs<(typeof app)["_types"]["args"]> = { items: [] };
 	void input;
 }
+
+function _afterDoubleDash() {
+	const app = new Crust("run").args(
+		{ name: "task", type: "string" },
+		{ name: "pkgs", type: "string", variadic: true },
+		{ name: "extra", type: "string", variadic: true, afterDoubleDash: true },
+	);
+	type Args = InputArgs<(typeof app)["_types"]["args"]>;
+	// argv gives it after `--`, so it does not need the arguments before it
+	const alone: Args = { extra: ["--watch"] };
+	const after: Args = { task: "build", extra: ["--watch"] };
+	const full: Args = { task: "build", pkgs: ["core"], extra: [] };
+	// @ts-expect-error -- the arguments before it still form a prefix
+	const gap: Args = { pkgs: ["core"], extra: [] };
+	type _value = Expect<Equal<InferArgValue<(typeof app)["_types"]["args"][2]>, string[]>>;
+	void [alone, after, full, gap];
+
+	const required = new Crust("exec").args(
+		{ name: "pod", type: "string" },
+		{ name: "command", type: "string", required: true, afterDoubleDash: true },
+	);
+	void required.run([], { args: { command: "ls" } });
+	// @ts-expect-error -- a required afterDoubleDash argument is still required
+	void required.run([], { args: { pod: "web" } });
+}

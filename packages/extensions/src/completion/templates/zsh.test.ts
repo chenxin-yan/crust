@@ -280,7 +280,7 @@ describeIfZsh("renderZsh · colliding command names dispatch to their own flags"
 		const driver = `
 compdef() { :; }
 _describe() { :; }
-_arguments() { print -rl -- "$@"; }
+_arguments() { [[ $1 == -S ]] && shift; print -rl -- "$@"; }
 source ${shQuoteForZsh(scriptPath)} || exit 1
 ${helper}
 `;
@@ -304,7 +304,7 @@ ${helper}
 		// compsys would after routing; leaf `_arguments` calls still print.
 		const routed = async (word: string) =>
 			specsFor(
-				`_arguments() { if [[ $1 == -C ]]; then state=args; line=(${shQuoteForZsh(word)}); else print -rl -- "$@"; fi; }; _clash`,
+				`_arguments() { if [[ $1 == -C ]]; then state=args; line=(${shQuoteForZsh(word)}); else [[ $1 == -S ]] && shift; print -rl -- "$@"; fi; }; _clash`,
 			);
 		expect(await routed("foo-bar")).toBe("--first[]\n");
 		expect(await routed("foo_bar")).toBe("--second[]\n");
@@ -348,7 +348,7 @@ describeIfZsh("renderZsh · descriptions reach _arguments unchanged", () => {
 		await writeFile(scriptPath, renderZsh(spec, "quote", "1.0.0"), "utf8");
 		const driver = `
 compdef() { :; }
-_arguments() { print -rl -- "$@"; }
+_arguments() { [[ $1 == -S ]] && shift; print -rl -- "$@"; }
 source ${shQuoteForZsh(scriptPath)} || exit 1
 _quote
 `;
@@ -372,14 +372,15 @@ _quote
  * Type `line` into an interactive zsh on a pty and press a widget bound to
  * compsys completion, collecting every match the completers add. The pty
  * echoes typed input, so the end marker is computed (`END$((1+1))`) and
- * never matches its own echo.
+ * never matches its own echo, and a newline first keeps the first match off
+ * the echoed line.
  */
 async function zshComplete(scriptPath: string, line: string): Promise<string[]> {
 	const driver = `
 zmodload zsh/zpty || exit 1
 zpty -b z zsh -f -i
 zpty -w z ${shQuoteForZsh(`PS1=''; autoload -Uz compinit; compinit -u -D; source ${shQuoteForZsh(scriptPath)}`)}
-zpty -w z 'complete_print() { compadd() { local -a m; builtin compadd -O m "$@"; (( $#m )) && print -rl -- \${(@)m/#/CAND:} >/dev/tty; builtin compadd "$@"; }; _main_complete; unfunction compadd; print -r -- END$((1+1)) >/dev/tty; }; zle -C complete-print complete-word complete_print; bindkey "^X" complete-print'
+zpty -w z 'complete_print() { print >/dev/tty; compadd() { local -a m; builtin compadd -O m "$@"; (( $#m )) && print -rl -- \${(@)m/#/CAND:} >/dev/tty; builtin compadd "$@"; }; _main_complete; unfunction compadd; print -r -- END$((1+1)) >/dev/tty; }; zle -C complete-print complete-word complete_print; bindkey "^X" complete-print'
 zpty -w -n z ${shQuoteForZsh(line)}$'\\x18'
 local all='' chunk
 for i in {1..150}; do
@@ -426,6 +427,94 @@ describeIfZsh("renderZsh · one-character alias spellings", () => {
 	it("routes past the value of `-P`", async () => {
 		expect(await zshComplete(scriptPath, "mycli -P 9090 serve ")).toEqual(["start"]);
 	});
+});
+
+/** Core never reads flags after `--`; later words fill argument slots, or only an `afterDoubleDash` argument. */
+describeIfZsh("renderZsh · after `--`", () => {
+	// Each pty completion takes ~0.7s; several per test outlast the 5s default.
+	const PTY_TIMEOUT = 15_000;
+	let tmpDir: string;
+	let scriptPath: string;
+
+	beforeAll(async () => {
+		const app = new Crust("mycli").add(
+			defineCommand("seek", (seek) =>
+				seek
+					.flags({ watch: { type: "boolean" } })
+					.args(
+						{ name: "task", type: "string", choices: ["lint"], required: true },
+						{ name: "pkgs", type: "string", choices: ["cli"], variadic: true },
+					)
+					.action(() => {}),
+			),
+			defineCommand("run", (run) =>
+				run
+					.flags({ watch: { type: "boolean" } })
+					.args(
+						{ name: "task", type: "string", choices: ["lint"], required: true },
+						{ name: "pkgs", type: "string", choices: ["cli"], variadic: true },
+						{
+							name: "extra",
+							type: "string",
+							choices: ["fix"],
+							variadic: true,
+							afterDoubleDash: true,
+						},
+					)
+					.action(() => {}),
+			),
+			defineCommand("exec", (exec) =>
+				exec
+					.args(
+						{ name: "pod", type: "string", choices: ["web"], required: true },
+						{ name: "cmd", type: "string", choices: ["ls"], afterDoubleDash: true },
+					)
+					.action(() => {}),
+			),
+		);
+		const spec = walkCommand(buildCommandDocumentation(await app.snapshot()));
+		tmpDir = await mkdtemp(join(tmpdir(), "zsh-double-dash-"));
+		scriptPath = join(tmpDir, "_mycli");
+		await writeFile(scriptPath, renderZsh(spec, "mycli", "1.0.0"), "utf8");
+	});
+
+	afterAll(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it(
+		"keeps filling argument slots and offers no flags",
+		async () => {
+			expect(await zshComplete(scriptPath, "mycli seek -- ")).toEqual(["lint"]);
+			expect(await zshComplete(scriptPath, "mycli seek lint -- ")).toEqual(["cli"]);
+			expect(await zshComplete(scriptPath, "mycli seek lint --w")).toContain("--watch");
+			expect(await zshComplete(scriptPath, "mycli seek lint -- --w")).toEqual([]);
+		},
+		PTY_TIMEOUT,
+	);
+
+	it(
+		"offers the arguments before an afterDoubleDash argument only before `--`",
+		async () => {
+			expect(await zshComplete(scriptPath, "mycli run ")).toEqual(["lint"]);
+			expect(await zshComplete(scriptPath, "mycli run lint ")).toEqual(["cli"]);
+			expect(await zshComplete(scriptPath, "mycli run lint cli ")).toEqual(["cli"]);
+			expect(await zshComplete(scriptPath, "mycli exec web ")).toEqual([]);
+		},
+		PTY_TIMEOUT,
+	);
+
+	it(
+		"offers an afterDoubleDash argument only after `--`",
+		async () => {
+			expect(await zshComplete(scriptPath, "mycli run lint -- ")).toEqual(["fix"]);
+			expect(await zshComplete(scriptPath, "mycli run -- x ")).toEqual(["fix"]);
+			expect(await zshComplete(scriptPath, "mycli run lint -- --w")).toEqual([]);
+			expect(await zshComplete(scriptPath, "mycli exec web -- ")).toEqual(["ls"]);
+			expect(await zshComplete(scriptPath, "mycli exec web -- ls ")).toEqual([]);
+		},
+		PTY_TIMEOUT,
+	);
 });
 
 async function isZshAvailable(): Promise<boolean> {

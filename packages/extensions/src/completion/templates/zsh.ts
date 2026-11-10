@@ -121,9 +121,11 @@ function flagSpecs(flag: CompletionFlag): string[] {
  * for every remaining word.
  */
 function renderArgSpecs(node: CompletionCommand): string[] {
-	return node.args.map((arg, idx) => {
+	return node.args.flatMap((arg, idx) => {
+		// Rendered on its own, after `--`; see renderHelper.
+		if (arg.afterDoubleDash) return [];
 		const idxToken = arg.variadic ? "*" : String(idx + 1);
-		return bashSingleQuote(`${idxToken}:${arg.name}:${valueAction(arg)}`);
+		return [bashSingleQuote(`${idxToken}:${arg.name}:${valueAction(arg)}`)];
 	});
 }
 
@@ -224,13 +226,28 @@ function renderHelper(
 		out.push("\t\t\t;;");
 		out.push("\tesac");
 	} else {
-		// Leaf — flat _arguments call.
+		// An `afterDoubleDash` argument reads only the words after `--`: complete
+		// it against those alone, keeping `--` so `-S` treats them as arguments.
+		const dd = node.args.at(-1);
+		if (dd?.afterDoubleDash) {
+			out.push("\tlocal -i dd=${words[(i)--]}");
+			out.push("\tif (( dd < CURRENT )); then");
+			out.push('\t\twords=("$words[1]" -- "${(@)words[dd+1,-1]}")');
+			out.push("\t\t(( CURRENT -= dd - 2 ))");
+			out.push(
+				`\t\t_arguments -S ${bashSingleQuote(`${dd.variadic ? "*" : "1"}:${dd.name}:${valueAction(dd)}`)}`,
+			);
+			out.push("\t\treturn");
+			out.push("\tfi");
+		}
+		// Leaf — flat _arguments call. `-S`: no options after `--`, and later
+		// words keep filling argument slots, as Core parses them.
 		if (flagSpecLines.length === 0 && argSpecLines.length === 0) {
 			// Pure noop helper — keep an empty body so the caller's `case`
 			// dispatch still has a target to jump to.
 			out.push("\t:");
 		} else {
-			out.push("\t_arguments \\");
+			out.push("\t_arguments -S \\");
 			const allSpecs: string[] = [...flagSpecLines, ...argSpecLines];
 			allSpecs.forEach((spec, idx) => {
 				const trailing = idx === allSpecs.length - 1 ? "" : " \\";

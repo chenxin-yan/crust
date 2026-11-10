@@ -349,6 +349,32 @@ describe("arguments", () => {
 		).toThrow(definitionError("variadic-position"));
 		expect(() =>
 			new Crust("cli").args(
+				// @ts-expect-error -- afterDoubleDash must be last
+				{ name: "a", type: "string", afterDoubleDash: true },
+				{ name: "b", type: "string" },
+			),
+		).toThrow(definitionError("after-double-dash-position"));
+		expect(() =>
+			new Crust("cli")
+				.args({ name: "a", type: "string", afterDoubleDash: true })
+				// @ts-expect-error -- nothing can follow an afterDoubleDash argument
+				.args({ name: "b", type: "string" }),
+		).toThrow(definitionError("after-double-dash-position"));
+		expect(() =>
+			new Crust("cli").args(
+				// @ts-expect-error -- a variadic may only precede a final afterDoubleDash argument
+				{ name: "a", type: "string", variadic: true },
+				{ name: "b", type: "string" },
+				{ name: "c", type: "string", afterDoubleDash: true },
+			),
+		).toThrow(definitionError("variadic-position"));
+		expect(() =>
+			new Crust("cli")
+				.args({ name: "a", type: "string", variadic: true })
+				.args({ name: "b", type: "string", variadic: true, afterDoubleDash: true }),
+		).not.toThrow();
+		expect(() =>
+			new Crust("cli").args(
 				// @ts-expect-error -- default outside choices
 				{ name: "a", type: "string", choices: ["x"], default: "z" },
 			),
