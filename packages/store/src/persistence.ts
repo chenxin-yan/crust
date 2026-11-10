@@ -217,8 +217,8 @@ async function ensureDirectory(filePath: string, mode: number | undefined): Prom
  *    open handle (`EPERM`, `EACCES`, `EBUSY`) is retried for a few seconds.
  *
  * If any step fails, the function cleans up the temp file (best-effort) and
- * throws a `CrustStoreError` with `IO` code; a `beforeCommit` rejection is
- * rethrown as is.
+ * throws a `CrustStoreError` with `IO` code; a `CrustStoreError` from
+ * `beforeCommit` is rethrown as is.
  *
  * @param filePath - Absolute path to the target JSON store file.
  * @param data - The value to serialize and persist.
@@ -282,7 +282,7 @@ export async function writeJson(
 		await commit(tempPath, target, options.beforeCommit);
 	} catch (err: unknown) {
 		await rm(tempPath, { force: true }).catch(() => {});
-		if (err instanceof CommitAborted) throw err.reason;
+		if (err instanceof CrustStoreError) throw err;
 
 		throw new CrustStoreError(
 			"IO",
@@ -301,11 +301,6 @@ const RENAME_RETRY_MS = 5_000;
 const MAX_RETRY_DELAY_MS = 100;
 const BUSY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
 
-/** Carries a `beforeCommit` rejection past the rename error wrapping. */
-class CommitAborted {
-	constructor(readonly reason: unknown) {}
-}
-
 /**
  * Renames `tempPath` over `filePath`, checking `beforeCommit` before every attempt.
  *
@@ -320,9 +315,7 @@ async function commit(
 ): Promise<void> {
 	const start = Date.now();
 	for (let delay = 1; ; delay = Math.min(delay * 2, MAX_RETRY_DELAY_MS)) {
-		await beforeCommit?.().catch((err: unknown) => {
-			throw new CommitAborted(err);
-		});
+		await beforeCommit?.();
 		try {
 			return await rename(tempPath, filePath);
 		} catch (err: unknown) {

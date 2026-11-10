@@ -19,6 +19,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
+import { CrustStoreError } from "./errors.ts";
 import { deleteJson, readJson, writeJson } from "./persistence.ts";
 
 // Error codes the next `rename` calls fail with, as when another program holds the target open.
@@ -276,7 +277,7 @@ describe("writeJson", () => {
 
 	it("aborts before the rename when beforeCommit throws", async () => {
 		await writeJson(filePath, { data: 1 });
-		const lost = new Error("lost the lock");
+		const lost = new CrustStoreError("IO", "lost the lock", { path: filePath, operation: "write" });
 
 		await expect(
 			writeJson(filePath, { data: 2 }, { beforeCommit: () => Promise.reject(lost) }),
