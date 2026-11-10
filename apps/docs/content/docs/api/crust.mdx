@@ -315,7 +315,7 @@ Editors complete command names, argument and flag names, and the action's result
 - `run()` never renders errors, calls `onError`, or changes `process.exitCode`. Eager authoring checks throw at the builder call; deferred definition errors encountered during `run()` produce a `failed` outcome.
 - Captured writes are joined with `"\n"`. `stdout` and `stderr` are captured separately, so their relative order is not preserved.
 - Default `@crustjs/prompts` and `@crustjs/progress` output is captured into `stderr`. Direct `console` or `process` writes, subprocesses, and files are not captured.
-- `options.stdout` / `options.stderr` also receive writes live. `options.onEvent` receives each event an async generator action yields, live. `options.signal` cancels the invocation. `run()` never installs a `SIGINT` or `SIGTERM` handler.
+- `options.stdout` / `options.stderr` also receive writes live. `options.onEvent` receives each event an async generator action yields, live, typed like the outcome's `events`. `options.signal` cancels the invocation. `run()` never installs a `SIGINT` or `SIGTERM` handler.
 - Preparation is cached per builder and shared by later `run()`, `execute()`, and `snapshot()` calls on it. Pending commands materialize as needed; `snapshot()` visits the full tree.
 
 For terminal interaction in tests, use `execute()` or [`runInteractive`](/docs/modules/testing#runinteractiveapp-path-input).

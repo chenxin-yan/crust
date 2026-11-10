@@ -24,17 +24,17 @@ import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
 
 interface PasswordBaseOptions {
 	/** The prompt message displayed to the user */
-	readonly message?: string;
+	readonly message?: string | undefined;
 	/**
 	 * Character used to mask the input.
 	 *
 	 * @default "*"
 	 */
-	readonly mask?: string;
+	readonly mask?: string | undefined;
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
-	readonly initial?: string;
+	readonly initial?: string | undefined;
 	/** Per-prompt theme overrides */
-	readonly theme?: PartialPromptTheme;
+	readonly theme?: PartialPromptTheme | undefined;
 }
 
 /**

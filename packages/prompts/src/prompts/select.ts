@@ -45,21 +45,21 @@ import { formatSubmitted, moveCursor, renderChoiceList } from "../core/utils.ts"
  */
 export interface SelectOptions<T> {
 	/** The prompt message displayed to the user */
-	readonly message?: string;
+	readonly message?: string | undefined;
 	/** List of choices — strings or `{ label, value, hint? }` objects */
 	readonly choices: readonly Choice<T>[];
 	/** Default value — sets the initial cursor position using reference equality for object values. */
-	readonly default?: T;
+	readonly default?: T | undefined;
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
-	readonly initial?: T;
+	readonly initial?: T | undefined;
 	/**
 	 * Maximum number of visible choices before scrolling.
 	 *
 	 * @default 10
 	 */
-	readonly maxVisible?: number;
+	readonly maxVisible?: number | undefined;
 	/** Per-prompt theme overrides */
-	readonly theme?: PartialPromptTheme;
+	readonly theme?: PartialPromptTheme | undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

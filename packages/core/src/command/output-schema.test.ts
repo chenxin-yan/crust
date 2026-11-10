@@ -1,3 +1,4 @@
+import { parseJsonValue } from "@crustjs/utils/json";
 import type { StandardSchema } from "@crustjs/utils/schema";
 import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
@@ -155,6 +156,14 @@ describe("CommandSnapshot.outputSchema", () => {
 		});
 		expect(snapshot.subCommands.count!.outputSchema).toMatchObject({ type: "number" });
 		expect(JSON.parse(JSON.stringify(snapshot)).outputSchema).toEqual(snapshot.outputSchema);
+	});
+
+	it("is plain JSON data, without the converter's non-enumerable keys", async () => {
+		// Zod attaches a non-enumerable `~standard` to the JSON Schema it generates.
+		const snapshot = await new Crust("cli").output(user).snapshot();
+
+		expect(Object.getOwnPropertyNames(snapshot.outputSchema)).not.toContain("~standard");
+		expect(() => parseJsonValue(snapshot.outputSchema)).not.toThrow();
 	});
 
 	it("reaches invocation snapshots, including pending subcommands", async () => {

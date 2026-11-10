@@ -35,7 +35,7 @@ const args = [
 
 A core variadic value is always an array. A required core variadic without a default resolves to a nonempty tuple; an omitted variadic with a scalar `default` resolves to `[default]`. `parse` runs once per element.
 
-A schema-backed argument has `name`, optional `description` and `variadic`, and a Standard Schema that receives `string | undefined` (or `string[]` when variadic). The schema owns coercion, defaults, requiredness, choices, and validation, so `type`, `required`, `default`, `choices`, and `parse` are unavailable. Its output type reaches the Command Action.
+A schema-backed argument has `name`, optional `description` and `variadic`, and a Standard Schema that receives `string | undefined` (or `string[]` when variadic). The schema owns coercion, defaults, requiredness, choices, and validation, so `type`, `required`, `default`, `choices`, and `parse` are unavailable. Its output type reaches the Command Action. TypeScript rejects a schema whose input type cannot accept a present value (`z.number()` instead of `z.coerce.number()`).
 
 ```ts
 const args = [{ name: "port", schema: z.coerce.number().int().min(1) }] as const satisfies ArgsDef;
@@ -65,7 +65,7 @@ const flags = {
 
 `delimiter` splits string argv occurrences; `env.delimiter` independently splits environment text. Both require `multiple: true` and drop empty segments. Boolean argv switches are never split.
 
-Schema-backed flags set `type: "string" | "boolean"` only to declare whether a value token follows, plus `schema` and the syntax fields `description`, `short`, `aliases`, `multiple`, `env`, `delimiter`, and (boolean only) `noNegate`. The schema receives the raw `string | undefined` or `boolean | undefined`; with `multiple: true` it receives an array when the flag appears and `undefined` when omitted.
+Schema-backed flags set `type: "string" | "boolean"` only to declare whether a value token follows, plus `schema` and the syntax fields `description`, `short`, `aliases`, `multiple`, `env`, `delimiter`, and (boolean only) `noNegate`. The schema receives the raw `string | undefined` or `boolean | undefined`; with `multiple: true` it receives an array when the flag appears and `undefined` when omitted. As for arguments, TypeScript rejects a schema whose input type cannot accept a present value.
 
 ```ts
 const flags = {

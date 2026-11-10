@@ -24,15 +24,15 @@ import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
 
 interface InputBaseOptions {
 	/** The prompt message displayed to the user */
-	readonly message?: string;
+	readonly message?: string | undefined;
 	/** Placeholder text shown when the input is empty. Overrides the default value as visual placeholder when both are set. */
-	readonly placeholder?: string;
+	readonly placeholder?: string | undefined;
 	/** Default value used when the user submits an empty input. Also shown as placeholder text when `placeholder` is not set. */
-	readonly default?: string;
+	readonly default?: string | undefined;
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
-	readonly initial?: string;
+	readonly initial?: string | undefined;
 	/** Per-prompt theme overrides */
-	readonly theme?: PartialPromptTheme;
+	readonly theme?: PartialPromptTheme | undefined;
 }
 
 /**

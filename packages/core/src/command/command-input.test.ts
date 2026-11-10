@@ -214,12 +214,14 @@ describe("commandInputSchema", () => {
 			$defs: { Name: { minLength: 1 } },
 		});
 		const app = new Crust("cli")
+			// @ts-expect-error -- a variadic hands its schema string[]; only the JSON Schema mapping is tested
 			.args({ name: "ids", schema: z.string(), variadic: true })
 			.flags({
 				port: { type: "string", schema: z.coerce.number(), description: "Port" },
 				any: { type: "string", schema: z.union([z.string(), z.number()]) },
 				when: { type: "string", schema: z.coerce.date() },
 				ref: { type: "string", schema: referencing },
+				// @ts-expect-error -- run() binds strings, never objects
 				tags: { type: "string", multiple: true, schema: z.array(node) },
 				// `items` covers only the rest; the numeric prefix would fail string binding.
 				pair: {
