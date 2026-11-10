@@ -617,63 +617,49 @@ export const apiCommand: ExtensionFactory<
 								}
 							}
 
-							if (flags.paginate) {
-								/** Each page's body as text; a binary page body fails, as it has no NDJSON line. */
-								async function* texts(): AsyncGenerator<{ response: Response; text: string }> {
-									for await (const { response, bytes } of pages()) {
-										const text = bodyText(response, bytes);
-										if (text !== undefined) yield { response, text };
+							/** Prints each page's body; under --json, yields a successful page's body as JSON data instead. */
+							async function* bodies(): AsyncGenerator<JsonValue, undefined> {
+								for await (const { response, bytes } of pages()) {
+									const text = bodyText(response, bytes);
+									if (text === undefined) {
+										const { getAmbientTerminalIO, writeProcessOutput } =
+											await import("@crustjs/utils/terminal");
+										// Bytes go only to the process's own stdout: a page is one NDJSON line, JSON cannot
+										// hold them, injected output (`run()`) takes text lines, and a terminal, which raw
+										// bytes can garble, never gets them, like gh api and curl.
+										let refusal: string | undefined;
+										if (flags.paginate) refusal = "--paginate prints only text and JSON bodies";
+										else if (json) {
+											refusal =
+												"--json prints only text and JSON bodies, so run without it to write the bytes to stdout";
+										} else if (getAmbientTerminalIO() !== undefined) {
+											refusal = "its bytes go only to the process's stdout, not to captured output";
+										} else if (process.getBuiltinModule("node:tty").isatty(1)) {
+											refusal =
+												"redirect or pipe stdout to save it instead of printing it to the terminal";
+										}
+										if (refusal === undefined) writeProcessOutput(1, bytes);
 										else if (response.ok) {
 											const type = response.headers.get("content-type") ?? "no Content-Type";
 											throw new Error(
-												`api: a --paginate page body is binary (${type}); --paginate prints only text and JSON bodies`,
+												`api: ${flags.paginate ? "a --paginate page" : "the response"} body is binary (${type}); ${refusal}`,
 											);
 										}
+									} else if (!json) {
+										if (flags.paginate) stdout(compactJson(text));
+										else if (text !== "") stdout(text.replace(/\r?\n$/, ""));
+									} else if (!response.ok) {
+										if (text !== "") stderr(text.replace(/\r?\n$/, ""));
+									} else if (flags.paginate || text !== "") {
+										yield bodyValue(text);
 									}
 								}
-								if (!json) {
-									for await (const { text } of texts()) stdout(compactJson(text));
-									return undefined;
-								}
-								// Each page body is an event of json()'s NDJSON stream.
-								return (async function* (): AsyncGenerator<JsonValue, undefined> {
-									for await (const { response, text } of texts()) {
-										if (response.ok) yield bodyValue(text);
-										else if (text !== "") stderr(text.replace(/\r?\n$/, ""));
-									}
-									return undefined;
-								})();
+								return undefined;
 							}
-
+							// Each page body is an event of json()'s NDJSON stream.
+							if (flags.paginate && json) return bodies();
 							let result: JsonValue | undefined;
-							for await (const { response, bytes } of pages()) {
-								const text = bodyText(response, bytes);
-								if (text === undefined) {
-									const { getAmbientTerminalIO, writeProcessOutput } =
-										await import("@crustjs/utils/terminal");
-									// Bytes go only to the process's own stdout; injected output (`run()`) takes text lines.
-									const captured = getAmbientTerminalIO() !== undefined;
-									// Like gh api and curl, never to a terminal, which raw bytes can garble.
-									const terminal =
-										!json && !captured && process.getBuiltinModule("node:tty").isatty(1);
-									if (!json && !captured && !terminal) {
-										writeProcessOutput(1, bytes);
-									} else if (response.ok) {
-										const type = response.headers.get("content-type") ?? "no Content-Type";
-										throw new Error(
-											json
-												? `api: the response body is binary (${type}); --json prints only text and JSON bodies, so run without it to write the bytes to stdout`
-												: captured
-													? `api: the response body is binary (${type}); its bytes go only to the process's stdout, not to captured output`
-													: `api: the response body is binary (${type}); redirect or pipe stdout to save it instead of printing it to the terminal`,
-										);
-									}
-								} else if (text !== "") {
-									if (!json) stdout(text.replace(/\r?\n$/, ""));
-									else if (response.ok) result = bodyValue(text);
-									else stderr(text.replace(/\r?\n$/, ""));
-								}
-							}
+							for await (const value of bodies()) result = value;
 							return result;
 						}),
 			),
