@@ -358,10 +358,7 @@ export function createStore<const F extends FieldsDef>(
 	}
 
 	/** Serialized within the process, then locked across processes. */
-	function mutate<T>(
-		operation: "write" | "delete",
-		task: (assertOwned: () => Promise<void>) => Promise<T>,
-	): Promise<T> {
+	function mutate<T>(operation: "write" | "delete", task: () => Promise<T>): Promise<T> {
 		return enqueue(filePath, () =>
 			withFileLock(filePath, task, { operation, directoryMode: writeOptions.directoryMode }),
 		);
@@ -378,19 +375,18 @@ export function createStore<const F extends FieldsDef>(
 		document: StoreDocument,
 		operation: Exclude<ValidationErrorDetails["operation"], "read">,
 		persisted: StoreDocument | undefined,
-		assertOwned: () => Promise<void>,
 	): Promise<Config> {
 		const normalized = normalizeStateTypes(document);
 		await runFieldValidators(normalized, operation);
 		const output =
 			pruneUnknown === true ? normalized : withUnknownKeys(normalized, persisted, fields);
-		await writeJson(filePath, output, { ...writeOptions, beforeCommit: assertOwned });
+		await writeJson(filePath, output, writeOptions);
 		// SAFETY: the normalized document was validated against every field definition.
 		return normalized as Config;
 	}
 
 	function write(config: Config): Promise<Config> {
-		return mutate("write", async (assertOwned) => {
+		return mutate("write", async () => {
 			// write() replaces a corrupt file, which leaves no unknown keys to keep.
 			const persisted =
 				pruneUnknown === true
@@ -400,31 +396,31 @@ export function createStore<const F extends FieldsDef>(
 							throw err;
 						});
 			// SAFETY: field definitions constrain config values and schema outputs to JSON-compatible values.
-			return persist({ ...config } as StoreDocument, "write", persisted, assertOwned);
+			return persist({ ...config } as StoreDocument, "write", persisted);
 		});
 	}
 
 	function update(updater: StoreUpdater<Config>): Promise<Config> {
-		return mutate("write", async (assertOwned) => {
+		return mutate("write", async () => {
 			const persisted = await readPersisted();
 			const current = toDocument(persisted);
 			await runFieldValidators(current, "read");
 			// SAFETY: the document was normalized and validated against every field definition.
 			const updated = updater(current as Config);
 			// SAFETY: field definitions constrain updater output to JSON-compatible values.
-			return persist({ ...updated } as StoreDocument, "update", persisted, assertOwned);
+			return persist({ ...updated } as StoreDocument, "update", persisted);
 		});
 	}
 
 	function patch(partial: Partial<Config>): Promise<Config> {
-		return mutate("write", async (assertOwned) => {
+		return mutate("write", async () => {
 			const persisted = await readPersisted();
-			return persist({ ...toDocument(persisted), ...partial }, "patch", persisted, assertOwned);
+			return persist({ ...toDocument(persisted), ...partial }, "patch", persisted);
 		});
 	}
 
 	function reset(): Promise<void> {
-		return mutate("delete", (assertOwned) => deleteJson(filePath, assertOwned));
+		return mutate("delete", () => deleteJson(filePath));
 	}
 
 	return { read, write, update, patch, reset };

@@ -19,7 +19,6 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { CrustStoreError } from "./errors.ts";
 import { deleteJson, readJson, writeJson } from "./persistence.ts";
 
 // Error codes the next `rename` calls fail with, as when another program holds the target open.
@@ -236,17 +235,6 @@ describe("writeJson", () => {
 		}
 	});
 
-	it("aborts before the rename when beforeCommit throws", async () => {
-		await writeJson(filePath, { data: 1 });
-		const lost = new CrustStoreError("IO", "lost the lock", { path: filePath, operation: "write" });
-
-		await expect(
-			writeJson(filePath, { data: 2 }, { beforeCommit: () => Promise.reject(lost) }),
-		).rejects.toBe(lost);
-		expect(JSON.parse(await readFile(filePath, "utf-8"))).toEqual({ data: 1 });
-		expect(await readdir(tempDir)).toEqual(["config.json"]);
-	});
-
 	it.skipIf(process.platform === "win32")(
 		"does not retry a failed rename outside Windows",
 		async () => {
@@ -321,14 +309,6 @@ describe("deleteJson", () => {
 
 	afterEach(async () => {
 		await rm(tempDir, { recursive: true, force: true });
-	});
-
-	it("keeps the file when beforeCommit throws", async () => {
-		await writeFile(filePath, "{}");
-		const lost = new Error("lost the lock");
-
-		await expect(deleteJson(filePath, () => Promise.reject(lost))).rejects.toBe(lost);
-		expect(existsSync(filePath)).toBe(true);
 	});
 
 	it("should throw CrustStoreError IO on permission denied", async () => {

@@ -352,9 +352,7 @@ export type StoreUpdater<TConfig> = (current: TConfig) => NoInfer<TConfig>;
  * single typed config object persisted as JSON on the local filesystem.
  * `write`, `update`, `patch`, and `reset` on the same file run one at a time in
  * call order, across store instances in one process, and hold an advisory lock
- * file (`<name>.json.lock`) across processes. A mutation that lost its lock
- * (its process was frozen until another took the lock over) rejects with `IO`
- * instead of writing.
+ * file (`<name>.json.lock`) across processes.
  *
  * @typeParam TConfig - The inferred config shape from field definitions.
  *
@@ -413,7 +411,7 @@ export interface Store<TConfig> {
 	 * rejects before the callback runs; use `write` or `patch` to initialize or repair.
 	 *
 	 * The read-modify-write runs after earlier mutations of the same file settle
-	 * and under its cross-process lock, so concurrent updates are never lost.
+	 * and under its cross-process lock, so concurrent updates keep each other's changes.
 	 * The final file replacement is atomic.
 	 *
 	 * @param updater - Function receiving current config and returning updated config.

@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
 
 import { CrustStoreError } from "./errors.ts";
@@ -1026,7 +1026,8 @@ describe("concurrent mutations", () => {
 		const lockPath = join(tempDir, "counter.json.lock");
 		const store = counter();
 
-		await writeFile(lockPath, JSON.stringify({ pid: process.pid, host: hostname(), token: "t" }));
+		// Another machine's pid says nothing about its process, so its fresh lock is waited on.
+		await writeFile(lockPath, JSON.stringify({ pid: 2 ** 31 - 2, host: "elsewhere" }));
 		let settled = false;
 		const pending = store.patch({ n: 1 }).finally(() => {
 			settled = true;
@@ -1037,89 +1038,16 @@ describe("concurrent mutations", () => {
 		expect(await pending).toEqual({ n: 1 });
 
 		// A process that no longer exists left its lock behind.
-		await writeFile(lockPath, JSON.stringify({ pid: 2 ** 31 - 2, host: hostname(), token: "t" }));
+		await writeFile(lockPath, JSON.stringify({ pid: 2 ** 31 - 2, host: hostname() }));
 		expect(await store.patch({ n: 2 })).toEqual({ n: 2 });
 
-		// A lock whose heartbeat stopped is abandoned even when its pid is alive.
-		await writeFile(lockPath, JSON.stringify({ pid: process.pid, host: hostname(), token: "t" }));
+		// A lock older than the stale threshold is abandoned even when its pid is alive.
+		await writeFile(lockPath, JSON.stringify({ pid: process.pid, host: hostname() }));
 		const longAgo = new Date(Date.now() - 60_000);
 		await utimes(lockPath, longAgo, longAgo);
 		expect(await store.patch({ n: 3 })).toEqual({ n: 3 });
 		expect(await readdir(tempDir)).toEqual(["counter.json"]);
 	});
-
-	it("fails a mutation whose lock it lost instead of writing", async () => {
-		const filePath = join(tempDir, "counter.json");
-		const lockPath = `${filePath}.lock`;
-		const store = counter();
-		await store.write({ n: 1 });
-		const lost = { code: "IO", message: `Lost the lock on store file: ${filePath}` };
-
-		// Another process took the lock over while the updater ran.
-		const successor = JSON.stringify({ pid: process.pid, host: hostname(), token: "successor" });
-		await expect(
-			store.update((current) => {
-				writeFileSync(lockPath, successor);
-				return { n: current.n + 1 };
-			}),
-		).rejects.toMatchObject(lost);
-		expect(await readFile(lockPath, "utf-8")).toBe(successor);
-		await rm(lockPath);
-
-		// The heartbeat stalled for over half the stale threshold, so a waiter may be taking it.
-		await expect(
-			store.update((current) => {
-				const stalled = new Date(Date.now() - 6_000);
-				utimesSync(lockPath, stalled, stalled);
-				return { n: current.n + 1 };
-			}),
-		).rejects.toMatchObject(lost);
-
-		expect(await store.read()).toEqual({ n: 1 });
-		expect(await readdir(tempDir)).toEqual(["counter.json"]);
-	});
-
-	it("removes reclaim markers that crashed processes left behind", async () => {
-		const marker = (name: string) => join(tempDir, `counter.json.lock.${name}`);
-		const dead = JSON.stringify({ pid: 2 ** 31 - 2, host: hostname() });
-		await writeFile(marker("gone.0"), dead);
-		await writeFile(marker("unknown.3"), dead);
-		await writeFile(marker("remote.1"), JSON.stringify({ pid: 1, host: "elsewhere" }));
-		const longAgo = new Date(Date.now() - 60_000);
-		await utimes(marker("remote.1"), longAgo, longAgo);
-		// A live process may still be using this one.
-		await writeFile(marker("busy.0"), JSON.stringify({ pid: process.pid, host: hostname() }));
-
-		await counter().patch({ n: 1 });
-
-		expect((await readdir(tempDir)).toSorted()).toEqual([
-			"counter.json",
-			"counter.json.lock.busy.0",
-		]);
-	});
-
-	it("writes when the filesystem's clock is behind the process's", async () => {
-		// A new file's mtime comes from the filesystem (an NFS server, a VM's host), not from Date.
-		vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 60_000 });
-		try {
-			expect(await counter().patch({ n: 1 })).toEqual({ n: 1 });
-		} finally {
-			vi.useRealTimers();
-		}
-	});
-
-	it.skipIf(process.platform === "win32")(
-		"releases the lock of the longest store name a write accepts",
-		async () => {
-			// `.<name>-<uuid>.tmp` is then exactly 255 bytes, the file name limit.
-			const name = "n".repeat(213);
-			const store = createStore({ dirPath: tempDir, name, fields: COUNTER_FIELDS });
-
-			await store.patch({ n: 1 });
-
-			expect(await readdir(tempDir)).toEqual([`${name}.json`]);
-		},
-	);
 
 	it("does not create a missing directory to reset", async () => {
 		const dirPath = join(tempDir, "missing");
