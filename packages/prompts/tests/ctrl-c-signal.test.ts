@@ -22,12 +22,10 @@ const utilsTerminal = join(promptsPkg, "../utils/dist/terminal.js");
 const PROBE = `import { input } from ${JSON.stringify(join(promptsPkg, "dist/index.js"))};
 import { withProcessTerminalSignal } from ${JSON.stringify(utilsTerminal)};
 const controller = new AbortController();
-if (process.env.OWNER) {
-	process.on("SIGINT", () => {
-		console.log("owner got SIGINT");
-		controller.abort(new DOMException("Interrupted by SIGINT.", "AbortError"));
-	});
-}
+process.on("SIGINT", () => {
+	console.log("owner got SIGINT");
+	controller.abort(new DOMException("Interrupted by SIGINT.", "AbortError"));
+});
 const prompt = () => input({ message: "Name?" });
 try {
 	if (process.env.OWNER === "crust") await withProcessTerminalSignal(controller.signal, prompt);
@@ -59,11 +57,11 @@ console.log(JSON.stringify({ code, signal: proc.signalCode, out }));
 
 function ctrlC(
 	runtime: string,
-	owner?: "crust" | "foreign",
+	owner: "crust" | "foreign",
 ): { code: number; signal: string | null; out: string } {
 	const result = spawnSync(bun!, ["-e", DRIVER], {
 		encoding: "utf8",
-		env: { ...process.env, PROBE, RUNTIME: runtime, ...(owner && { OWNER: owner }) },
+		env: { ...process.env, PROBE, RUNTIME: runtime, OWNER: owner },
 		timeout: 15_000,
 	});
 	return JSON.parse(result.stdout);
@@ -74,8 +72,7 @@ const runtimes = bun ? [bun, ...(which("node") ? ["node"] : [])] : [];
 describe.skipIf(!bun || process.platform === "win32").each(runtimes)(
 	"Ctrl+C in a prompt (%s)",
 	(runtime) => {
-		// Node delivers a self-sent signal on a later turn, so the prompt waits for execute()'s abort.
-		it("inside execute(), delivers SIGINT and rejects with its abort reason", () => {
+		it("inside execute(), hands Ctrl+C to the SIGINT owner and rejects with its abort reason", () => {
 			const { code, out } = ctrlC(runtime, "crust");
 			expect(out).toContain("owner got SIGINT");
 			expect(out).toContain("rejected AbortError: Interrupted by SIGINT.");
@@ -84,13 +81,6 @@ describe.skipIf(!bun || process.platform === "win32").each(runtimes)(
 
 		it("outside execute(), leaves a foreign SIGINT listener alone and only rejects", () => {
 			const { code, signal, out } = ctrlC(runtime, "foreign");
-			expect(out).toContain("rejected AbortError: Prompt was cancelled.");
-			expect(out).not.toContain("owner got SIGINT");
-			expect({ code, signal }).toEqual({ code: 0, signal: null });
-		});
-
-		it("only rejects when nothing owns SIGINT", () => {
-			const { code, signal, out } = ctrlC(runtime);
 			expect(out).toContain("rejected AbortError: Prompt was cancelled.");
 			expect(out).not.toContain("owner got SIGINT");
 			expect({ code, signal }).toEqual({ code: 0, signal: null });

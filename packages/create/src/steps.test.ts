@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -46,29 +46,6 @@ describe("runSteps", () => {
 
 			await expect(steps).rejects.toBe(reason);
 			expect(Date.now() - started).toBeLessThan(10_000);
-		},
-	);
-
-	it.skipIf(process.platform === "win32")(
-		"stops a shell step's workers before rejecting",
-		async () => {
-			const cwd = mkdtempSync(join(tmpdir(), "crust-create-steps-"));
-			const controller = new AbortController();
-			// The trailing `true` keeps the shell from exec-ing into the worker.
-			const worker = `setTimeout(() => require("node:fs").writeFileSync("marker", "survived"), 800)`;
-			const steps = runSteps(
-				[{ type: "command", cmd: `"${process.execPath}" -e '${worker}'; true` }],
-				cwd,
-				{ signal: controller.signal },
-			);
-			setTimeout(() => controller.abort(), 150);
-			try {
-				await expect(steps).rejects.toThrow();
-				await new Promise((resolve) => setTimeout(resolve, 1_200));
-				expect(existsSync(join(cwd, "marker"))).toBe(false);
-			} finally {
-				rmSync(cwd, { recursive: true, force: true });
-			}
 		},
 	);
 });

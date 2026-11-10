@@ -18,8 +18,4 @@ function _spinnerReturnTypeTests() {
 	const handleOptions = { message: "Working" };
 	const handle = spinner(handleOptions);
 	type _NoTaskIsHandle = Expect<Equal<typeof handle, SpinnerHandle>>;
-
-	spinner({ message: "Working", signal: AbortSignal.timeout(1000) });
-	// @ts-expect-error — `signal` takes an AbortSignal
-	void spinner({ message: "Working", signal: true });
 }

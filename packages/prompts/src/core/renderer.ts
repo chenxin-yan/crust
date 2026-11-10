@@ -361,37 +361,23 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Pr
 				flushRender();
 				output.write("\n");
 				cleanup();
-				const cancelled = new DOMException("Prompt was cancelled.", "AbortError");
 				// Raw mode turns Ctrl+C into a keypress. Inside Crust's terminal execute(), which owns
-				// SIGINT on the real terminal, deliver the signal too, so it cancels the run and the
-				// process ends by SIGINT like a Ctrl+C anywhere else (shell loops stop). Elsewhere a
-				// SIGINT listener may be a library like signal-exit that re-raises and kills, so
-				// prompts outside execute() keep only the rejection, as other prompt libraries do;
-				// on Windows process.kill() always terminates.
+				// SIGINT on the real terminal, run the process's SIGINT listeners too, so execute()
+				// cancels the run and the process ends by SIGINT like a Ctrl+C anywhere else. Elsewhere
+				// a SIGINT listener may be a library like signal-exit that re-raises and kills, so
+				// prompts outside execute() only reject, as other prompt libraries do. Not on Windows:
+				// execute() cannot end by the signal there.
 				if (
-					process.platform === "win32" ||
-					stdin !== process.stdin ||
-					signal === undefined ||
-					signal.aborted ||
-					signal !== getProcessTerminalSignal() ||
-					process.listenerCount("SIGINT") === 0
+					process.platform !== "win32" &&
+					stdin === process.stdin &&
+					signal !== undefined &&
+					signal === getProcessTerminalSignal()
 				) {
-					reject(signal?.aborted ? signal.reason : cancelled);
-					return;
+					process.emit("SIGINT", "SIGINT");
 				}
-				process.kill(process.pid, "SIGINT");
-				// Node delivers the signal on a later event-loop turn; rejecting first would let the
-				// run finish before execute() sees it. Settle when execute() aborts the signal, or
-				// shortly after if another listener took the signal first.
-				const fallback = setTimeout(() => {
-					signal.removeEventListener("abort", onOwnerAbort);
-					reject(cancelled);
-				}, 250);
-				function onOwnerAbort(): void {
-					clearTimeout(fallback);
-					reject(signal?.reason);
-				}
-				signal.addEventListener("abort", onOwnerAbort, { once: true });
+				reject(
+					signal?.aborted ? signal.reason : new DOMException("Prompt was cancelled.", "AbortError"),
+				);
 				return;
 			}
 
