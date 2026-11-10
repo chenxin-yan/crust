@@ -13,7 +13,8 @@ const llmMiddleware = createMiddleware().server(({ next, request }) => {
 	const path = llmRewriter.rewrite(url.pathname);
 
 	if (path) {
-		throw redirect(new URL(path, url));
+		// The router rewrites `href` on the options it is given, so pass a string, not the `URL`.
+		throw redirect({ href: new URL(path, url).href });
 	}
 
 	return next();
