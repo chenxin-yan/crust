@@ -37,7 +37,7 @@ export interface InteractiveRun<Outcome = RunOutcome<unknown, readonly unknown[]
 
 /**
  * Run an application with fake terminal streams for its prompts and stderr output. Flags' `env`
- * fallbacks read only `options.env`, and captured text is plain unless `options.raw` is set.
+ * fallbacks read `options.env` when given, and captured text is plain unless `options.raw` is set.
  */
 export function runInteractive<
 	App extends AnyCrust,
@@ -60,7 +60,7 @@ export function runInteractive<
 		// SAFETY: Path + RunInputArguments constrain input to App; AnyCrust.run erases the link.
 		app
 			.run(path as never, input as never, {
-				env: options?.env ?? {},
+				env: options?.env,
 				stdout: (text) => {
 					stdoutLines.push(text);
 				},

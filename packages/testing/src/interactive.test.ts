@@ -83,13 +83,14 @@ describe("runInteractive", () => {
 		}
 	});
 
-	it("reads flags' env fallbacks only from the env option", async () => {
+	it("reads flags' env fallbacks from process.env unless the env option is given", async () => {
 		vi.stubEnv("CRUST_TEST_TOKEN", "from-shell");
 		try {
 			const app = new Crust("test-cli")
 				.flags({ token: { type: "string", env: { name: "CRUST_TEST_TOKEN" }, default: "none" } })
 				.action(({ flags }) => flags.token);
-			expect(await runInteractive(app, []).done).toMatchObject({ result: "none" });
+			expect(await runInteractive(app, []).done).toMatchObject({ result: "from-shell" });
+			expect(await runInteractive(app, [], {}, { env: {} }).done).toMatchObject({ result: "none" });
 			const given = runInteractive(app, [], {}, { env: { CRUST_TEST_TOKEN: "given" } });
 			expect(await given.done).toMatchObject({ result: "given" });
 		} finally {

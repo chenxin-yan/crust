@@ -30,8 +30,8 @@ let exitCodeBeforeExecuteCaptures: typeof process.exitCode;
 /**
  * Drive the terminal `execute()` path in-process: exit-code protocol,
  * Extension `onError` rendering, and cancellation (130, or 143 after SIGTERM) are all observable
- * without spawning a subprocess. Flags' `env` fallbacks read only `options.env`, and captured
- * text is plain unless `options.raw` is set.
+ * without spawning a subprocess. Flags' `env` fallbacks read `options.env` when given, and
+ * captured text is plain unless `options.raw` is set.
  */
 export async function captureExecute(
 	app: ExecutableApp,
@@ -45,7 +45,7 @@ export async function captureExecute(
 	try {
 		const exitCode = await app.execute({
 			argv: [...argv],
-			env: options?.env ?? {},
+			env: options?.env,
 			io: {
 				stdout: (text) => {
 					stdoutLines.push(text);

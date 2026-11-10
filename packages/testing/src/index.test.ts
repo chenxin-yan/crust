@@ -42,13 +42,14 @@ describe("captureExecute", () => {
 		}
 	});
 
-	it("reads flags' env fallbacks only from the env option", async () => {
+	it("reads flags' env fallbacks from process.env unless the env option is given", async () => {
 		vi.stubEnv("CRUST_TEST_TOKEN", "from-shell");
 		try {
 			const app = new Crust("test-cli")
 				.flags({ token: { type: "string", env: { name: "CRUST_TEST_TOKEN" }, default: "none" } })
 				.action(({ flags, stdout }) => stdout(flags.token));
-			expect((await captureExecute(app, [])).stdout).toBe("none");
+			expect((await captureExecute(app, [])).stdout).toBe("from-shell");
+			expect((await captureExecute(app, [], { env: {} })).stdout).toBe("none");
 			expect((await captureExecute(app, [], { env: { CRUST_TEST_TOKEN: "given" } })).stdout).toBe(
 				"given",
 			);

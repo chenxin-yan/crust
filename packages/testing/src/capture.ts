@@ -5,8 +5,8 @@ import type { ExecuteOptions } from "@crustjs/core";
 /** Options shared by the helpers that invoke an application. */
 export interface CaptureOptions {
 	/**
-	 * Variables flags' `env` bindings read. Defaults to `{}`, so results never depend on the
-	 * shell running the tests.
+	 * Variables flags' `env` bindings read instead of `process.env`. Pass `{}` so results never
+	 * depend on the shell running the tests.
 	 */
 	env?: ExecuteOptions["env"];
 	/**

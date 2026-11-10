@@ -42,9 +42,9 @@ The fake terminal counts as interactive even when `CI` is set, so a test that an
 
 ## `CaptureOptions`
 
-Results from `captureExecute()` and `runInteractive()` don't depend on the shell or runner that runs the tests:
+Options for `captureExecute()` and `runInteractive()`:
 
-- Flags' [`env` fallbacks](/docs/api/types#flagdef) read only `env`, which defaults to `{}`, not `process.env`. Pass the variables a test needs: `captureExecute(app, ["deploy"], { env: { API_TOKEN: "t" } })`.
+- Flags' [`env` fallbacks](/docs/api/types#flagdef) read `process.env` unless `env` is given. Pass the variables a test needs, or `{}` for none, so the result doesn't depend on the shell that runs the tests: `captureExecute(app, ["deploy"], { env: { API_TOKEN: "t" } })`.
 - Captured `stdout` and `stderr` are plain text: ANSI escape sequences are stripped, like `@oclif/test` and `@inquirer/testing` do. Set `raw: true` to keep them and assert on styling.
 
 <auto-type-table path="../../../../../packages/testing/src/capture.ts" name="CaptureOptions" />
