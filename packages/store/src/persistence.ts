@@ -423,9 +423,17 @@ export async function withFileLock<T>(
 	try {
 		return await fn();
 	} finally {
-		// After a takeover the path may hold another process's lock: remove only our own.
-		if (!named || (await readLockPid(lockPath)) === process.pid) {
-			await rm(lockPath, { force: true }).catch(() => {});
+		// After a takeover the path may hold another process's lock: remove only our own. A refused
+		// delete is tried again, since a lock left behind stalls this process's next mutation
+		// for 10 seconds; each try checks the owner first.
+		for (let attempt = 0; attempt < 3; attempt++) {
+			if (named && (await readLockPid(lockPath)) !== process.pid) break;
+			const done = await rm(lockPath, { force: true }).then(
+				() => true,
+				() => !named,
+			);
+			if (done) break;
+			await sleep(10);
 		}
 	}
 }

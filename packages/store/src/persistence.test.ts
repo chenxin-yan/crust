@@ -19,10 +19,12 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { deleteJson, readJson, writeJson } from "./persistence.ts";
+import { deleteJson, readJson, withFileLock, writeJson } from "./persistence.ts";
 
 // Error codes the next `rename` calls fail with, as when another program holds the target open.
 const renameFailures = vi.hoisted((): string[] => []);
+// Error codes the next `rm` calls fail with, as when another program holds the lock file open.
+const rmFailures = vi.hoisted((): string[] => []);
 vi.mock("node:fs/promises", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("node:fs/promises")>();
 	const rename = vi.fn(async (from: string, to: string) => {
@@ -32,7 +34,12 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 	});
 	// Unprivileged tests cannot give a file another owner, so the owner copy is observed here.
 	const chown = vi.fn(actual.chown);
-	return { ...actual, rename, chown, default: { ...actual, rename, chown } };
+	const rm: typeof actual.rm = async (path, options) => {
+		const code = rmFailures.shift();
+		if (code !== undefined) throw Object.assign(new Error(code), { code });
+		return actual.rm(path, options);
+	};
+	return { ...actual, rename, chown, rm, default: { ...actual, rename, chown, rm } };
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -300,6 +307,30 @@ describe("writeJson", () => {
 // ────────────────────────────────────────────────────────────────────────────
 // deleteJson
 // ────────────────────────────────────────────────────────────────────────────
+
+describe("withFileLock", () => {
+	// A lock left behind would stall this process's next mutation until it looks stale.
+	it("removes its lock when the first delete is refused", async () => {
+		const tempDir = createTempDir();
+		await mkdir(tempDir, { recursive: true });
+		const filePath = join(tempDir, "config.json");
+		try {
+			await withFileLock(
+				filePath,
+				async () => {
+					rmFailures.push("EBUSY");
+				},
+				{ operation: "write" },
+			);
+
+			expect(rmFailures).toEqual([]);
+			expect(existsSync(`${filePath}.lock`)).toBe(false);
+		} finally {
+			rmFailures.length = 0;
+			await rm(tempDir, { recursive: true, force: true });
+		}
+	});
+});
 
 describe("deleteJson", () => {
 	let tempDir: string;
