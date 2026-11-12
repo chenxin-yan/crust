@@ -378,7 +378,7 @@ describe("parseCommandInput", () => {
 		});
 	});
 
-	it("rejects Extension flags as unknown flags", async () => {
+	it("rejects Extension flags, naming where they are set", async () => {
 		const go = await extendedSnapshot();
 		expect(parseCommandInput(go, { yes: true })).toEqual({ args: {}, flags: { yes: true } });
 		for (const name of ["input", "help"]) {
@@ -392,7 +392,7 @@ describe("parseCommandInput", () => {
 			expect(error).toBeInstanceOf(CrustError);
 			expect(error).toMatchObject({
 				code: "PARSE",
-				message: `Unknown flag "--${name}"`,
+				message: `Flag "--${name}" is not command input: set it on the command line`,
 				details: { flag: name, reason: "unknown-flag" },
 			});
 		}

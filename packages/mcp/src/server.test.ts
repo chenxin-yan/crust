@@ -430,7 +430,12 @@ describe("createMcpServer", () => {
 		expect(Object.keys(tool!.inputSchema.properties ?? {})).toEqual(["raw"]);
 		expect(await client.callTool({ name: "users" })).toEqual(expected);
 		expect(await client.callTool({ name: "users", arguments: { json: true } })).toEqual({
-			content: [{ type: "text", text: 'PARSE: Unknown flag "--json"' }],
+			content: [
+				{
+					type: "text",
+					text: 'PARSE: Flag "--json" is not command input: set it on the command line',
+				},
+			],
 			isError: true,
 		});
 	});

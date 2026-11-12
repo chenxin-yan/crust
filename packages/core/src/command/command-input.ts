@@ -186,12 +186,13 @@ export interface CommandInputFields {
 	readonly argNames: readonly string[];
 }
 
-/** The `run()` error for a flag the command does not take. */
-function unknownFlag(name: string): CrustError {
-	return new CrustError("PARSE", `Unknown flag "--${name}"`, {
-		flag: name,
-		reason: "unknown-flag",
-	});
+/** Not "Unknown flag": help lists the flag and argv takes it. */
+function notCommandInput(name: string): CrustError {
+	return new CrustError(
+		"PARSE",
+		`Flag "--${name}" is not command input: set it on the command line`,
+		{ flag: name, reason: "unknown-flag" },
+	);
 }
 
 /** Arg names and `url` field names of a command's flat JSON input, in declaration order. */
@@ -216,8 +217,8 @@ function isString(value: JsonValue): value is string {
  * describes) into structured `run()` input. Arg names fill `args`; any other
  * name goes to `flags`, where `run()` rejects unknown ones. Strings for `url`
  * definitions become `URL`s, and `undefined` entries are skipped. A key naming
- * a flag an Extension declares, and no arg or `raw`, is rejected like an
- * unknown flag, since command input leaves it out, so such a key never selects a flag handler or reaches its Extension.
+ * a flag an Extension declares, and no arg or `raw`, is rejected, since command
+ * input leaves it out, so such a key never selects a flag handler or reaches its Extension.
  *
  * @throws {CrustError} `PARSE` when a key names an Extension flag, a value is not JSON data,
  *   a `url` value is not a valid URL, or `raw` is not an array of strings
@@ -241,7 +242,7 @@ export function parseCommandInput(
 			Object.hasOwn(command.flags, name) &&
 			command.flags[name]!.extension !== undefined
 		) {
-			throw unknownFlag(name);
+			throw notCommandInput(name);
 		}
 		let given: JsonValue;
 		try {

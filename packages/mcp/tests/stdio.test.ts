@@ -77,7 +77,12 @@ async function roundTrip(launch: McpLaunch) {
 		);
 		expect(stdinRead).toMatchObject({
 			isError: true,
-			content: [{ type: "text", text: 'PARSE: Unknown flag "--input"' }],
+			content: [
+				{
+					type: "text",
+					text: 'PARSE: Flag "--input" is not command input: set it on the command line',
+				},
+			],
 		});
 		const slurp = await client.callTool({ name: "slurp" }, undefined, { timeout: 2_000 });
 		expect(slurp).toMatchObject({

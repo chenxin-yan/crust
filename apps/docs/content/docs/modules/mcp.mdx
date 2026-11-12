@@ -69,7 +69,7 @@ The tool name is the canonical command path joined with `_` (`deploy api` become
 
 Each tool's `inputSchema` comes from [`commandInputSchema()`](/docs/modules/core#command-input-as-json), and call arguments go back through `parseCommandInput()`:
 
-- Flags an Extension declares, such as `--help`, `--json`, or `--input`, are not tool inputs. A call that sends one fails with `PARSE: Unknown flag "--json"`, so it never selects a flag handler or reads stdin. Context-owned flags such as [`confirm()`](/docs/modules/extensions/confirm)'s `yes` stay.
+- Flags an Extension declares, such as `--help`, `--json`, or `--input`, are not tool inputs. A call that sends one fails with `PARSE: Flag "--json" is not command input: set it on the command line`, so it never selects a flag handler or reads stdin. Context-owned flags such as [`confirm()`](/docs/modules/extensions/confirm)'s `yes` stay.
 - A flag with an `env` binding is optional, and its description names the variable. An omitted value falls back to the variable in the server's environment, then to the default, as on the command line; a required flag still fails when neither supplies it.
 
 ## Results

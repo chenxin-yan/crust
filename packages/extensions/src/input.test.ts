@@ -245,7 +245,7 @@ describe("input", () => {
 
 		expect(await captureExecute(app, ["--input", JSON.stringify({ [flag]: true })])).toEqual({
 			stdout: "",
-			stderr: `Error: Unknown flag "--${flag}"`,
+			stderr: `Error: Flag "--${flag}" is not command input: set it on the command line`,
 			exitCode: 1,
 		});
 	});
