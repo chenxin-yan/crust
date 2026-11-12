@@ -6,6 +6,7 @@ import {
 	lstat,
 	mkdir,
 	open,
+	readdir,
 	readFile,
 	rename,
 	rm,
@@ -20,10 +21,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 
 import { deleteJson, readJson, writeJson } from "./persistence.ts";
 
+// Error codes the next `rename` calls fail with, as when another program holds the target open.
+const renameFailures = vi.hoisted((): string[] => []);
 vi.mock("node:fs/promises", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("node:fs/promises")>();
-	// Spied on to check that the flush to disk comes before the rename.
-	const rename = vi.fn(actual.rename);
+	const rename = vi.fn(async (from: string, to: string) => {
+		const code = renameFailures.shift();
+		if (code !== undefined) throw Object.assign(new Error(code), { code });
+		return actual.rename(from, to);
+	});
 	// Unprivileged tests cannot give a file another owner, so the owner copy is observed here.
 	const chown = vi.fn(actual.chown);
 	return { ...actual, rename, chown, default: { ...actual, rename, chown } };
@@ -231,6 +237,49 @@ describe("writeJson", () => {
 		} finally {
 			sync.mockRestore();
 		}
+	});
+
+	it.skipIf(process.platform === "win32")(
+		"does not retry a failed rename outside Windows",
+		async () => {
+			renameFailures.push("EPERM");
+
+			await expect(writeJson(filePath, { data: true })).rejects.toMatchObject({
+				code: "IO",
+				message: `Failed to finalize store file: ${filePath}`,
+				cause: { code: "EPERM" },
+			});
+			expect(await readdir(tempDir)).toEqual([]);
+		},
+	);
+
+	describe("on Windows", () => {
+		const platform = process.platform;
+		beforeEach(() => {
+			Object.defineProperty(process, "platform", { value: "win32" });
+		});
+		afterEach(() => {
+			Object.defineProperty(process, "platform", { value: platform });
+			renameFailures.length = 0;
+		});
+
+		it("retries a rename that another program's open handle blocks", async () => {
+			renameFailures.push("EPERM", "EBUSY", "EACCES");
+
+			await writeJson(filePath, { data: true });
+
+			expect(renameFailures).toEqual([]);
+			expect(JSON.parse(await readFile(filePath, "utf-8"))).toEqual({ data: true });
+			expect(await readdir(tempDir)).toEqual(["config.json"]);
+		});
+
+		it("does not retry other rename errors", async () => {
+			renameFailures.push("ENOENT", "EPERM");
+
+			await expect(writeJson(filePath, { data: true })).rejects.toMatchObject({
+				cause: { code: "ENOENT" },
+			});
+		});
 	});
 
 	it("should throw CrustStoreError IO when directory creation fails", async () => {
