@@ -51,7 +51,7 @@ export const MCP_COMMAND_NAME = "mcp";
 /** Passthrough values land here and reach the action as `rawArgs`. */
 export { RAW_INPUT_PROPERTY as RAW_PROPERTY } from "@crustjs/core/tooling";
 
-/** MCP specification 2025-11-25, "Tool Names". */
+/** MCP specification 2026-07-28, "Tool Names". */
 const TOOL_NAME_PATTERN = /^[A-Za-z0-9_.-]{1,128}$/;
 
 function formatPath(path: readonly string[]): string {

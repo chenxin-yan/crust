@@ -11,7 +11,7 @@ import {
 import { isCompiledExecutable } from "@crustjs/utils/artifacts";
 import { shellQuote } from "@crustjs/utils/process";
 
-import { createMcpServer, serveStdio } from "./server.ts";
+import { serveStdio } from "./server.ts";
 import { MCP_COMMAND_NAME, type McpToolsOptions } from "./tools.ts";
 
 export const MCP: ExtensionId = defineExtensionId("crust:mcp");
@@ -142,7 +142,7 @@ export const mcpExtension: ExtensionFactory<
 						),
 					)
 					.action(async () => {
-						await serveStdio(await createMcpServer(options.app(), options));
+						await serveStdio(options.app(), options);
 					}),
 		),
 	),

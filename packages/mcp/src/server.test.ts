@@ -9,12 +9,10 @@ import {
 	type RunOutcome,
 } from "@crustjs/core";
 import { json, nextSteps } from "@crustjs/extensions";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { createMcpServer, toolResultFromOutcome } from "./server.ts";
+import { createMcpServer, serveStdio, toolResultFromOutcome } from "./server.ts";
 import type { McpToolsOptions } from "./tools.ts";
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -278,9 +276,7 @@ describe("createMcpServer", () => {
 		const client = await connect(app);
 		const controller = new AbortController();
 		const first = Promise.allSettled([
-			client.callTool({ name: "wait", arguments: { id: 0 } }, undefined, {
-				signal: controller.signal,
-			}),
+			client.callTool({ name: "wait", arguments: { id: 0 } }, { signal: controller.signal }),
 		]);
 		const second = Promise.allSettled([client.callTool({ name: "wait", arguments: { id: 1 } })]);
 		const [firstSignal, secondSignal] = await Promise.all(
@@ -472,9 +468,10 @@ describe("createMcpServer", () => {
 		);
 		const client = await connect(app);
 		const progress: unknown[] = [];
-		const result = await client.callTool({ name: "sync" }, undefined, {
-			onprogress: (notification) => progress.push(notification),
-		});
+		const result = await client.callTool(
+			{ name: "sync" },
+			{ onprogress: (notification) => progress.push(notification) },
+		);
 		expect(result.structuredContent).toEqual({ synced: 2 });
 		expect(progress).toEqual([
 			{ progress: 1, message: "fetching" },
@@ -512,16 +509,32 @@ describe("createMcpServer", () => {
 			),
 		);
 		const client = await connect(app);
-		const notification = vi
-			.spyOn(Server.prototype, "notification")
-			.mockRejectedValue(new Error("transport gone"));
+		const { send } = InMemoryTransport.prototype;
+		let failed = 0;
+		const failing = vi
+			.spyOn(InMemoryTransport.prototype, "send")
+			.mockImplementation(async function (this: InMemoryTransport, message, options) {
+				if (!("method" in message) || message.method !== "notifications/progress") {
+					return send.call(this, message, options);
+				}
+				failed++;
+				throw new Error("transport gone");
+			});
 		try {
-			const result = await client.callTool({ name: "sync" }, undefined, { onprogress: () => {} });
-			expect(notification).toHaveBeenCalledOnce();
+			const result = await client.callTool({ name: "sync" }, { onprogress: () => {} });
+			expect(failed).toBe(1);
 			expect(result.structuredContent).toEqual({ synced: 1 });
 		} finally {
-			notification.mockRestore();
+			failing.mockRestore();
 		}
+	});
+});
+
+describe("serveStdio", () => {
+	it("rejects before serving when the tool manifest is invalid", async () => {
+		await expect(serveStdio(fixture, { exclude: [["nope"]] })).rejects.toThrow(
+			'Unknown MCP exclude paths "nope"',
+		);
 	});
 });
 
