@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { z } from "zod";
 
 import { CrustStoreError } from "./errors.ts";
@@ -1047,6 +1047,55 @@ describe("concurrent mutations", () => {
 		await utimes(lockPath, longAgo, longAgo);
 		expect(await store.patch({ n: 3 })).toEqual({ n: 3 });
 		expect(await readdir(tempDir)).toEqual(["counter.json"]);
+	});
+
+	// Every owner exits right after releasing, so a waiter can read one owner's pid, find that
+	// process gone, and by then be looking at the next owner's lock.
+	it("leaves a successor's lock alone when the owner it read has since exited", async () => {
+		const lockPath = join(tempDir, "counter.json.lock");
+		const gone = 2 ** 31 - 2;
+		const successor = JSON.stringify({ pid: process.ppid, host: hostname() });
+		await writeFile(lockPath, JSON.stringify({ pid: gone, host: hostname() }));
+		const kill = process.kill.bind(process);
+		const spy = vi.spyOn(process, "kill").mockImplementation((pid, signal) => {
+			// The owner released and exited, and a successor took the lock, before this check.
+			if (pid === gone) writeFileSync(lockPath, successor);
+			return kill(pid, signal);
+		});
+		let settled = false;
+		const pending = counter()
+			.patch({ n: 1 })
+			.finally(() => {
+				settled = true;
+			});
+
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		spy.mockRestore();
+		expect(settled).toBe(false);
+		expect(readFileSync(lockPath, "utf-8")).toBe(successor);
+		await rm(lockPath);
+		expect(await pending).toEqual({ n: 1 });
+	});
+
+	it("does not remove a lock that another process took over", async () => {
+		const lockPath = join(tempDir, "counter.json.lock");
+		const other = JSON.stringify({ pid: process.ppid, host: hostname() });
+		const store = createStore({
+			dirPath: tempDir,
+			name: "counter",
+			fields: {
+				n: {
+					type: "number",
+					default: 0,
+					// Runs inside the lock: another process replaces this mutation's lock.
+					validate: () => writeFileSync(lockPath, other),
+				},
+			},
+		});
+
+		await store.patch({ n: 1 });
+
+		expect(readFileSync(lockPath, "utf-8")).toBe(other);
 	});
 
 	it("does not create a missing directory to reset", async () => {

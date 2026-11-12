@@ -322,17 +322,26 @@ function isProcessAlive(pid: number): boolean {
 	}
 }
 
-/** Whether the lock was left behind: its process is gone, or it is older than {@link STALE_LOCK_MS}. */
-async function isStaleLock(lockPath: string): Promise<boolean> {
+/** The pid a lock file names, or `undefined` when it has none: missing, not yet written, or another host's. */
+async function readLockPid(lockPath: string): Promise<number | undefined> {
 	try {
 		const owner: { pid?: unknown; host?: unknown } | null = JSON.parse(
 			await readFile(lockPath, "utf-8"),
 		);
 		// A pid only identifies a process on the host that wrote it.
-		const pid = owner?.host === hostname() ? owner.pid : undefined;
-		if (typeof pid === "number" && !isProcessAlive(pid)) return true;
+		return owner?.host === hostname() && typeof owner.pid === "number" ? owner.pid : undefined;
 	} catch {
-		// Created but not yet written, or already released: judged by age alone.
+		return undefined;
+	}
+}
+
+/** Whether the lock was left behind: its process is gone, or it is older than {@link STALE_LOCK_MS}. */
+async function isStaleLock(lockPath: string): Promise<boolean> {
+	const pid = await readLockPid(lockPath);
+	// The owner may have released the lock and exited since that read, and the path may now hold
+	// a successor's lock: only a lock that still names the dead process was left behind.
+	if (pid !== undefined && !isProcessAlive(pid) && (await readLockPid(lockPath)) === pid) {
+		return true;
 	}
 	return stat(lockPath).then(
 		(lock) => Date.now() - lock.mtimeMs > STALE_LOCK_MS,
@@ -346,12 +355,13 @@ async function isStaleLock(lockPath: string): Promise<boolean> {
  *
  * The lock file is created exclusively (`wx`) and holds the owner's pid and host.
  * Waiters retry with a growing, jittered delay and remove a lock whose process
- * is gone or that is older than 10 seconds. The lock is removed after `fn` settles.
+ * is gone or that is older than 10 seconds. After `fn` settles the lock is removed,
+ * unless a takeover has put another process's lock at the path.
  *
- * shortcut: two waiters that find the same abandoned lock at the same instant can
- * both take it, and a mutation running past 10 seconds loses its lock; either costs
- * one lost update, never a corrupt file. Use an ownership-checked takeover and a
- * heartbeat if stores ever see sustained parallel writers or slow mutations.
+ * shortcut: checking a lock and removing it are two steps, so two waiters that find the
+ * same abandoned lock at the same instant can both take it, and a mutation running past
+ * 10 seconds loses its lock; either costs lost updates, never a corrupt file. Use an
+ * OS file lock or a heartbeat if stores ever need exclusion to survive a crashed writer.
  *
  * @throws {CrustStoreError} `IO` when the lock file cannot be created or an abandoned one removed.
  */
@@ -368,22 +378,25 @@ export async function withFileLock<T>(
 			{ path: filePath, operation: options.operation },
 			err,
 		);
-	// Windows refuses to create or delete a lock file another process has open or is
-	// deleting (EPERM, EBUSY, EACCES; EFAULT from Bun). There that is contention, until it
-	// outlasts a stale lock.
+	// On Windows a create or delete that races another process's delete of the same file
+	// fails with an access error (Bun reports the delete's as EFAULT). That is contention,
+	// until it outlasts a stale lock.
 	let refusedSince: number | undefined;
 	const isContention = (err: unknown): boolean => {
-		if (process.platform !== "win32" || !isErrnoException(err)) return false;
+		const code = isWindows() && isErrnoException(err) ? (err.code ?? "") : "";
+		if (code !== "EFAULT" && !BUSY_CODES.has(code)) return false;
 		refusedSince ??= Date.now();
 		return Date.now() - refusedSince < STALE_LOCK_MS;
 	};
+	// An unnamed lock of ours is only taken over by age, so it is still ours to remove.
+	let named = true;
 	for (let delay = 1; ; delay = Math.min(delay * 2, MAX_RETRY_DELAY_MS)) {
 		try {
 			const handle = await open(lockPath, "wx");
 			// Creating the file took the lock; one without an owner is only recovered by age.
-			await handle
-				.writeFile(JSON.stringify({ pid: process.pid, host: hostname() }))
-				.catch(() => {});
+			await handle.writeFile(JSON.stringify({ pid: process.pid, host: hostname() })).catch(() => {
+				named = false;
+			});
 			await handle.close();
 			break;
 		} catch (err: unknown) {
@@ -410,6 +423,9 @@ export async function withFileLock<T>(
 	try {
 		return await fn();
 	} finally {
-		await rm(lockPath, { force: true }).catch(() => {});
+		// After a takeover the path may hold another process's lock: remove only our own.
+		if (!named || (await readLockPid(lockPath)) === process.pid) {
+			await rm(lockPath, { force: true }).catch(() => {});
+		}
 	}
 }
