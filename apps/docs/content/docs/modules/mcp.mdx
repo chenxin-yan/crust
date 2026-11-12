@@ -35,7 +35,7 @@ The package has a peer dependency on `@crustjs/core` and depends on `@modelconte
 - A Node or Bun source entry, or a Node bundle, relaunches through `process.execPath`, with `process.execArgv` before the entry path.
 - Claude Code, Claude Desktop, and Cursor read `mcpServers`; VS Code's `.vscode/mcp.json` reads `servers`.
 
-Set `launch: { command, args }` to override it, for example to drop development-only flags such as inspectors or watch mode; `args` must include `mcp`. The working directory and environment, such as `NODE_OPTIONS`, are not preserved: use absolute paths and configure the client's environment separately.
+Set `launch: { command, args }` to override it, for example to drop development-only flags such as inspectors or watch mode; `args` must include `mcp`. The working directory and environment, such as `NODE_OPTIONS`, are not preserved: use absolute paths and configure the client's environment separately. Flag [`env` fallbacks](#tools) read the server's environment, so the client's `env` setting configures them.
 
 ```json
 {
@@ -58,15 +58,19 @@ A command becomes a tool when it:
 - has a Command Action (so the root is a tool only when it has one)
 - is visible: not `hidden`, nor under a hidden command
 - is not the `mcp` command, an `exclude` path, or under one
+- is the application's own command, not one an Extension contributed (such as `completion`, `schema`, `skills install`, or [`@crustjs/openapi`](/docs/modules/openapi)'s `api`), unless an `include` path selects it or a command it is under
 
-Every `exclude` path must be a canonical command path; hidden commands and paths under another excluded command count. A misspelled path or an alias throws, listing each unknown path, instead of leaving the command exposed.
+Every `exclude` and `include` path must be a canonical command path; hidden commands and paths under another excluded command count. A misspelled path or an alias throws, listing each unknown path, instead of leaving the command exposed or hidden. `exclude` wins over `include`, and `mcp` is never a tool.
 
 The tool name is the canonical command path joined with `_` (`deploy api` becomes `deploy_api`); the root uses its own name, and aliases never become tools. Building the tool list throws, naming the paths, when:
 
 - two commands map to one name, such as `a_b` and `a b`, or the root and a subcommand named after it
 - a name breaks the MCP tool-name rule: 1–128 characters of `A-Z a-z 0-9 _ - .`
 
-Each tool's `inputSchema` comes from [`commandInputSchema()`](/docs/modules/core#command-input-as-json), and call arguments go back through `parseCommandInput()`.
+Each tool's `inputSchema` comes from [`commandInputSchema()`](/docs/modules/core#command-input-as-json), and call arguments go back through `parseCommandInput()`:
+
+- Flags an Extension declares, such as `--help`, `--json`, or `--input`, are not tool inputs. A call that sends one fails with `PARSE: Flag "--json" is not command input: set it on the command line`, so it never selects a flag handler or reads stdin. Context-owned flags such as [`confirm()`](/docs/modules/extensions/confirm)'s `yes` stay.
+- A flag with an `env` binding is optional, and its description names the variable. An omitted value falls back to the variable in the server's environment, then to the default, as on the command line; a required flag still fails when neither supplies it.
 
 ## Results
 
@@ -120,13 +124,15 @@ Without a token, no notifications are sent. Either way, the tool result is the a
   corrupt the protocol stream. Keep them out of code that runs under `mcp`, or write to stderr.
 </Callout>
 
+Protocol frames also arrive on stdin. While the transport reads it, a `-` value that reads all of stdin, such as [`@crustjs/openapi`](/docs/modules/openapi)'s `--body -`, fails with `stdin is in use by another reader` instead of waiting for the client to disconnect.
+
 <auto-type-table path="../../../../../packages/mcp/src/tools.ts" name="McpToolsOptions" />
 
 ## `toolsFromSnapshot(snapshot, options?)`
 
 <include lang="ts">../../../examples/modules/mcp.ts#manifest</include>
 
-The pure manifest, for tests or tooling that ships tool definitions without a server. Pass `await app.snapshot()` so Extension-contributed commands are included. Each entry carries the tool `name`, `description`, `inputSchema`, `outputSchema` when it applies, and the canonical `path` for `app.run()`.
+The pure manifest, for tests or tooling that ships tool definitions without a server. Pass `await app.snapshot()`, which marks Extension commands and flags, so `include` can name Extension commands and tool inputs leave Extension flags out. Each entry carries the tool `name`, `description`, `inputSchema`, `outputSchema` when it applies, and the canonical `path` for `app.run()`.
 
 <auto-type-table path="../../../../../packages/mcp/src/tools.ts" name="McpTool" />
 

@@ -22,7 +22,7 @@ import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";
 import { applySchemas } from "./schema.ts";
 import { normalizeFlag, type FlagSpelling } from "./spellings.ts";
 
-/** Environment variables consulted by `FlagDef.env`; `process.env` on the terminal path. */
+/** Environment variables consulted by `FlagDef.env`; `process.env` unless an invocation passes its own. */
 export type FlagEnvironment = Readonly<Record<string, string | undefined>>;
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -251,8 +251,8 @@ function envFlagValue(name: string, def: FlagDef, raw: string): ArgvFlagValue | 
  * Source selection looks at explicit argv presence *before* delimiter
  * splitting, so `--tags ""` stays an argv value (zero occurrences, then
  * default/required rules) instead of letting a stale environment variable
- * override an explicit request. Environment lookup is argv-only; structured
- * `run()` input never reaches this function.
+ * override an explicit request. Structured `run()` input never reaches this
+ * function as `argvValues`; {@link parseStructured} passes only its omitted flags.
  */
 function applyEnvAndDelimiter(
 	flagsDef: FlagsDef,
@@ -799,10 +799,19 @@ function positionalGap(argument: string, omitted: string): CrustError {
 	);
 }
 
-/** Bind typed input without producing argv; the path alone selects the command. */
+/**
+ * Bind typed input without producing argv; the path alone selects the command.
+ * Sources follow argv's order: a supplied value, then the flag's `env` binding,
+ * then its default. Like {@link parseArgs}, an invalid environment value is
+ * deferred to `valueErrors`; invalid supplied values throw.
+ *
+ * @param env - Environment consulted for omitted flags' `FlagDef.env` fallbacks; none by default
+ *   (invocations pass the caller's `env` option or `process.env`)
+ */
 export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
 	command: CommandNode & { args: A; effectiveFlags: F },
 	input: RunInputPayload,
+	env: FlagEnvironment = {},
 ): ArgvParseResult<A, F> {
 	const { args: inputArgs, flags: inputFlags, raw } = input;
 	const positionals: RunInputValue[] = [];
@@ -858,17 +867,43 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 			});
 		}
 	}
+	// Each known value is read once here, so own getters run once.
+	const flagValues: Record<string, RunInputValue | ArgvFlagValue | undefined> = {};
+	const omitted: FlagsDef = {};
+	for (const [name, def] of Object.entries(command.effectiveFlags)) {
+		const value = inputFlags && Object.hasOwn(inputFlags, name) ? inputFlags[name] : undefined;
+		if (value === undefined) omitted[name] = def;
+		else flagValues[name] = value;
+	}
+	const fromEnv = new Set<string>();
+	for (const [name, value] of Object.entries(applyEnvAndDelimiter(omitted, {}, env))) {
+		if (value === undefined) continue;
+		flagValues[name] = value;
+		fromEnv.add(name);
+	}
+	const valueErrors = new Map<string, CrustError>();
 	const { args, flags, present } = bind(
 		command,
 		positionals,
-		inputFlags ?? {},
+		flagValues,
 		coerceStructuredValue,
-		coerceStructuredFlag,
-		undefined,
+		(name, def, value) =>
+			fromEnv.has(name)
+				? // SAFETY: applyEnvAndDelimiter produced every value in `fromEnv`.
+					coerceFlagValue(name, def, value as ArgvFlagValue)
+				: // SAFETY: every other value came from the caller's structured flags.
+					coerceStructuredFlag(name, def, value as RunInputValue),
+		(error, label) => {
+			if (!label.startsWith("--") || !fromEnv.has(label.slice(2))) throw error;
+			valueErrors.set(label, error);
+		},
 		afterDoubleDash,
 	);
-	// Key order stands in for command-line order; values are not re-read, so getters run once.
-	const flagOrder = Object.keys(inputFlags ?? {}).filter((name) => present.has(name));
+	// Key order stands in for command-line order; environment values follow, sorted, as on argv.
+	const flagOrder = [
+		...Object.keys(inputFlags ?? {}).filter((name) => present.has(name) && !fromEnv.has(name)),
+		...[...fromEnv].filter((name) => present.has(name)).sort(),
+	];
 	return {
 		args,
 		flags,
@@ -882,11 +917,12 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 				(name) => (suppliedArgs.has(name) ? "run" : undefined),
 			),
 			flags: valueSources(Object.entries(command.effectiveFlags), (name) =>
-				present.has(name) ? "run" : undefined,
+				present.has(name) ? (fromEnv.has(name) ? "env" : "run") : undefined,
 			),
 			// Like argv's leftover tokens, an empty `raw` is no passthrough.
 			raw: raw === undefined || raw.length === 0 ? undefined : ("run" as const),
 		}),
+		...(valueErrors.size > 0 && { valueErrors }),
 	};
 }
 

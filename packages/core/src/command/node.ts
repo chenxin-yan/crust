@@ -51,6 +51,10 @@ export interface CommandNode {
 	flagContexts: ReadonlyMap<string, readonly string[]>;
 	/** Context-owned and local flags merged for parsing */
 	effectiveFlags: FlagsDef;
+	/** Prepared nodes only: the Extension declaring each Extension flag in {@link effectiveFlags}. */
+	extensionFlags?: ReadonlyMap<string, ExtensionId>;
+	/** Prepared nodes only: the Extension that contributed this command or its top-level ancestor. */
+	extension?: ExtensionId;
 	/** Cached canonical/short/alias table for the effective flags. */
 	flagSpellings: Map<string, FlagSpelling>;
 	/** Positional argument definitions */

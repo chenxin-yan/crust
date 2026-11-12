@@ -38,6 +38,12 @@ export interface McpTool {
 export interface McpToolsOptions {
 	/** Canonical command paths to leave out, including everything under them; an unknown path or alias throws. */
 	readonly exclude?: readonly (readonly string[])[];
+	/**
+	 * Canonical paths of Extension commands (e.g. `["schema"]`) to serve as tools,
+	 * including everything under them; an unknown path or alias throws. `exclude`
+	 * wins over `include`, and `mcp` is never a tool.
+	 */
+	readonly include?: readonly (readonly string[])[];
 }
 
 /** Name of the command `mcpExtension` contributes; never exposed as a tool. */
@@ -90,13 +96,15 @@ function toolOutputSchema(
  * Enumerate the MCP tools a Command Snapshot exposes.
  *
  * Skips hidden commands and their subtrees, commands without a Command Action,
- * the `mcp` command, and `exclude` paths with their subtrees. The root is a tool
- * only when it has an action. Tool names join the canonical path with `_`
+ * the `mcp` command, and `exclude` paths with their subtrees. Commands an
+ * Extension contributed (`completion`, `schema`, `skills`, …; see
+ * `CommandSnapshot.extension`) are skipped too, unless an `include` path
+ * selects them or an ancestor. The root is a tool only when it has an action. Tool names join the canonical path with `_`
  * (the root uses its own name), which is not injective: `a b_c` and `a_b c`
  * collide, and this throws naming both paths rather than renaming either.
  * Also throws when a name violates the MCP tool-name character set, or when an
  * `exclude` path is not a canonical command path (a typo or alias would
- * otherwise leave the command exposed).
+ * otherwise leave the command exposed), or when an `include` path is not one.
  *
  * A command whose snapshot has an `outputSchema` (from `.output()`) gets an MCP
  * `outputSchema` describing its `structuredContent`: object schemas as
@@ -120,19 +128,24 @@ export function toolsFromSnapshot(
 		for (const [name, sub] of Object.entries(command.subCommands)) collect(sub, [...path, name]);
 	};
 	collect(snapshot, []);
-	const unknown = (options.exclude ?? []).filter((path) => !known.has(pathKey(path)));
-	if (unknown.length > 0) {
-		throw new Error(
-			`Unknown MCP exclude paths ${unknown.map((path) => `"${formatPath(path)}"`).join(", ")}; exclude takes canonical command paths`,
-		);
+	for (const option of ["exclude", "include"] as const) {
+		const unknown = (options[option] ?? []).filter((path) => !known.has(pathKey(path)));
+		if (unknown.length > 0) {
+			throw new Error(
+				`Unknown MCP ${option} paths ${unknown.map((path) => `"${formatPath(path)}"`).join(", ")}; ${option} takes canonical command paths`,
+			);
+		}
 	}
+	const included = new Set((options.include ?? []).map(pathKey));
 	excluded.add(pathKey([MCP_COMMAND_NAME]));
 	const tools: McpTool[] = [];
 	const owners = new Map<string, readonly string[]>();
 
-	const visit = (command: CommandSnapshot, path: readonly string[]) => {
+	const visit = (command: CommandSnapshot, path: readonly string[], opted: boolean) => {
 		if (!isListed(command) || excluded.has(pathKey(path))) return;
-		if (command.hasAction) {
+		opted ||= included.has(pathKey(path));
+		// Extension commands manage the CLI itself, not the application's work.
+		if (command.hasAction && (command.extension === undefined || opted)) {
 			const name = path.length === 0 ? command.meta.name : path.join("_");
 			if (!TOOL_NAME_PATTERN.test(name)) {
 				throw new Error(
@@ -158,8 +171,10 @@ export function toolsFromSnapshot(
 				path,
 			});
 		}
-		for (const [name, sub] of Object.entries(command.subCommands)) visit(sub, [...path, name]);
+		for (const [name, sub] of Object.entries(command.subCommands)) {
+			visit(sub, [...path, name], opted);
+		}
 	};
-	visit(snapshot, []);
+	visit(snapshot, [], false);
 	return tools;
 }

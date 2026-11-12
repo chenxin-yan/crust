@@ -121,6 +121,31 @@ describe("snapshotCommand", () => {
 		expect(JSON.stringify(snapshot)).not.toContain(JSON.stringify(process.env.HOME));
 	});
 
+	it("marks the commands and flags an Extension contributes with its id", async () => {
+		const tooling = defineExtensionId("tooling");
+		const app = new Crust("cli")
+			.flags({ verbose: { type: "boolean" } })
+			.extend(
+				defineExtension(tooling)
+					.flags({ trace: { type: "boolean" }, root: { type: "boolean", recursive: false } })
+					.add(
+						defineCommand("manage", (command) =>
+							command.command("sub", (sub) => sub.action(() => {})),
+						),
+					),
+			)
+			.add(defineCommand("build", (command) => command.action(() => {})));
+		const snapshot = await app.snapshot();
+		expect(snapshot.extension).toBeUndefined();
+		expect(snapshot.flags.verbose?.extension).toBeUndefined();
+		expect(snapshot.flags.root?.extension).toBe(tooling);
+		const { build, manage } = snapshot.subCommands;
+		expect(build?.extension).toBeUndefined();
+		expect(build?.flags.trace?.extension).toBe(tooling);
+		expect(manage?.extension).toBe(tooling);
+		expect(manage?.subCommands.sub?.extension).toBe(tooling);
+	});
+
 	it("is deeply frozen", () => {
 		const snapshot = snapshotCommand(buildTree());
 

@@ -28,6 +28,12 @@ export interface InvocationOptions<Event = unknown> extends Partial<InvocationIO
 	 * after the selected Renderer's `event`. A throw fails the invocation.
 	 */
 	onEvent?: (event: Event) => void;
+	/**
+	 * Environment for the `env` fallback of flags the input omits; defaults to `process.env`,
+	 * so `run()` resolves like the terminal. Pass `{}` (or chosen variables) to isolate a
+	 * result from the caller's shell, e.g. in tests.
+	 */
+	env?: Readonly<Record<string, string | undefined>>;
 }
 
 /**
@@ -65,6 +71,11 @@ export interface ExecuteOptions {
 	 * after the selected Renderer's `event`. Core never prints events. A throw fails the invocation.
 	 */
 	onEvent?: (event: unknown) => void;
+	/**
+	 * Environment for flags' `env` fallbacks; defaults to `process.env`. Pass `{}` (or chosen
+	 * variables) to isolate a result from the caller's shell, e.g. in tests.
+	 */
+	env?: Readonly<Record<string, string | undefined>>;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -317,9 +328,9 @@ interface FlagDefBase {
 	schema?: never;
 }
 
-/** Environment fallback for terminal parsing; structured `run()` never reads it. */
+/** Environment fallback for a flag that argv or structured `run()` input omits. */
 interface FlagEnvBinding {
-	/** Variable consulted only when argv omits the flag; help shows its name, never its value. */
+	/** Variable consulted only when the flag is omitted; help shows its name, never its value. */
 	name: string;
 	/** Split environment text into occurrences; independent of the argv delimiter, repeatable flags only. */
 	delimiter?: string;
@@ -749,16 +760,19 @@ export type InputArgs<A extends ArgsDef> = number extends A["length"]
 			: never;
 
 // Distribute before inspecting keys: each alternative must permit omission.
+// An `env` binding may supply the value, so typed input can omit it like argv can.
 type RequiredFlagName<D, K> = D extends unknown
-	? "required" extends keyof D
-		? true extends D["required"]
-			? D extends { default: infer Default }
-				? undefined extends Default
-					? K
-					: never
-				: K
+	? D extends { readonly env: object }
+		? never
+		: "required" extends keyof D
+			? true extends D["required"]
+				? D extends { default: infer Default }
+					? undefined extends Default
+						? K
+						: never
+					: K
+				: never
 			: never
-		: never
 	: never;
 
 type RequiredFlagNames<F extends FlagsDef> = {
