@@ -342,6 +342,15 @@ export async function withFileLock<T>(
 			{ path: filePath, operation: options.operation },
 			err,
 		);
+	// Windows refuses to create or delete a lock file another process has open or is
+	// deleting (EPERM, EBUSY, EACCES; EFAULT from Bun). There that is contention, until it
+	// outlasts a stale lock.
+	let refusedSince: number | undefined;
+	const isContention = (err: unknown): boolean => {
+		if (process.platform !== "win32" || !isErrnoException(err)) return false;
+		refusedSince ??= Date.now();
+		return Date.now() - refusedSince < STALE_LOCK_MS;
+	};
 	for (let delay = 1; ; delay = Math.min(delay * 2, MAX_RETRY_DELAY_MS)) {
 		try {
 			const handle = await open(lockPath, "wx");
@@ -358,15 +367,19 @@ export async function withFileLock<T>(
 				await ensureDirectory(filePath, options.directoryMode);
 				continue;
 			}
-			if (!isErrnoException(err) || err.code !== "EEXIST") throw lockError(err);
+			const held = isErrnoException(err) && err.code === "EEXIST";
+			if (!held && !isContention(err)) throw lockError(err);
 		}
-		if (await isStaleLock(lockPath)) {
-			await rm(lockPath, { force: true }).catch((err: unknown) => {
-				throw lockError(err);
-			});
-		} else {
-			await sleep(delay * (1 + Math.random()));
-		}
+		const removed =
+			(await isStaleLock(lockPath)) &&
+			(await rm(lockPath, { force: true }).then(
+				() => true,
+				(err: unknown) => {
+					if (!isContention(err)) throw lockError(err);
+					return false;
+				},
+			));
+		if (!removed) await sleep(delay * (1 + Math.random()));
 	}
 	try {
 		return await fn();
