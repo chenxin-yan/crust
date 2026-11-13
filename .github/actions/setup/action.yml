@@ -4,8 +4,9 @@ description: Install the Node.js and Bun that mise.toml pins, Vite+, and the wor
 runs:
   using: composite
   steps:
-    # mise.toml pins Node.js and Bun. setup-vp manages Node.js but not a Bun runtime, so mise owns both
-    # and setup-vp keeps the runner's Node.js (node-manager: false), as its README documents for mise.
+    # mise.toml pins Node.js and Bun (and package.json pnpm). setup-vp would put its own managed
+    # Node.js, pnpm, and bun (an npm launcher script, not the runtime) ahead of them on PATH, so both
+    # managers are off and mise's tools run, as setup-vp's README documents for mise.
     - name: Setup runtimes
       uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
 
@@ -13,6 +14,7 @@ runs:
       uses: voidzero-dev/setup-vp@cab1ab9eaff52d4857875f4f2c016e36af8f2c76 # v1.22.0
       with:
         node-manager: false
+        package-manager: false
         cache: true
         run-install: |
           args: ["--frozen-lockfile"]
