@@ -1,7 +1,8 @@
 import { defineConfig } from "vite-plus";
 
-import { toolingTasks } from "../vite.shared.ts";
+import { testTags, toolingTasks } from "../vite.shared.ts";
 
 export default defineConfig({
+	test: { tags: testTags },
 	run: { tasks: toolingTasks },
 });

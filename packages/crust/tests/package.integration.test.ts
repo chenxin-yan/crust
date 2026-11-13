@@ -23,7 +23,9 @@ afterEach(reapBoundedProcesses);
 // Public build -> npm pack -> install -> execute for a Bun runtime package: the
 // installed commands must run under the consumer's Bun, from an unrelated cwd,
 // after the source project is gone.
-describe.skipIf(!which("bun") || !which("npm"))("Bun runtime package", () => {
+// Also runs on the macOS and Windows CI jobs.
+const everyHost = { tags: ["windows", "macos"] };
+describe.skipIf(!which("bun") || !which("npm"))("Bun runtime package", everyHost, () => {
 	// Created by the test, not at collection: a -t filter that skips it also skips afterAll.
 	const root = join(tmpdir(), `crust-bun-package-${randomBytes(6).toString("hex")}`);
 	const project = join(root, "project");

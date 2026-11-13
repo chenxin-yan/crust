@@ -14,7 +14,8 @@ on:
       - "pnpm-workspace.yaml"
       - "vite.config.ts"
       - "vite.shared.ts"
-      - ".github/workflows/ci-packages.yml"
+      - ".github/actions/**"
+      - ".github/workflows/ci.yml"
       - ".github/workflows/release.yml"
 
 concurrency:
@@ -27,7 +28,7 @@ permissions: {}
 
 jobs:
   ci:
-    uses: ./.github/workflows/ci-packages.yml
+    uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
 

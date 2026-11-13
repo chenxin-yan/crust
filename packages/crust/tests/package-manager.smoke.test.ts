@@ -1,3 +1,6 @@
+/**
+ * @module-tag network
+ */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -11,11 +14,9 @@ import { buildCommand } from "../src/commands/build.ts";
 import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
 import { hostTarget } from "./helpers.ts";
 
-const packageManager = process.env.CRUST_SMOKE_PM;
-const testRoot = mkdtempSync(join(tmpdir(), `crust-smoke-${packageManager ?? "skip"}-`));
+const testRoot = mkdtempSync(join(tmpdir(), "crust-smoke-"));
 const sampleDir = join(testRoot, "sample");
 const stageDir = join(sampleDir, ".crust");
-const installDir = join(testRoot, `install-${packageManager ?? "skip"}`);
 const packDir = join(testRoot, "packs");
 
 function hasCommand(command: string): boolean {
@@ -87,9 +88,9 @@ afterAll(() => {
 	rmSync(testRoot, { recursive: true, force: true });
 });
 
-describe.skipIf(!packageManager)("package manager smoke", () => {
+describe.each(["bun", "npm", "pnpm"] as const)("package manager smoke (%s)", (packageManager) => {
 	it("installs and runs both the .bin command and root launcher", async () => {
-		if (!hasCommand(packageManager!)) {
+		if (!hasCommand(packageManager)) {
 			throw new Error(`${packageManager} is required for this smoke test.`);
 		}
 		if (!hasCommand("npm")) {
@@ -108,6 +109,7 @@ describe.skipIf(!packageManager)("package manager smoke", () => {
 		const rootTarball = await packStageDir(resolve(stageDir, "root"));
 		const platformTarball = await packStageDir(resolve(stageDir, platformPackage.dir));
 
+		const installDir = join(testRoot, `install-${packageManager}`);
 		mkdirSync(installDir, { recursive: true });
 		writeFileSync(
 			join(installDir, "package.json"),
@@ -137,7 +139,7 @@ describe.skipIf(!packageManager)("package manager smoke", () => {
 		// Audit/funding lookups hit registry endpoints the smoke test does not need;
 		// when they degrade, npm blocks on them and the test times out.
 		const auditFlags = packageManager === "npm" ? ["--no-audit", "--no-fund"] : [];
-		const install = await runBoundedProcess(packageManager!, ["install", ...auditFlags], {
+		const install = await runBoundedProcess(packageManager, ["install", ...auditFlags], {
 			cwd: installDir,
 			timeout: 25_000,
 		});

@@ -5,10 +5,11 @@ import react from "@vitejs/plugin-react";
 import mdx from "fumadocs-mdx/vite";
 import { defineConfig, lazyPlugins } from "vite-plus";
 
-import { toolingTasks, upstreamBuild } from "../../vite.shared.ts";
+import { testTags, toolingTasks, upstreamBuild } from "../../vite.shared.ts";
 import { landingTwoslash } from "./vite/landing-twoslash.ts";
 
 export default defineConfig(({ mode }) => ({
+	test: { tags: testTags },
 	server: {
 		port: 3000,
 	},
