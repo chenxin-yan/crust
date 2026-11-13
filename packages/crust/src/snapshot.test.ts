@@ -200,7 +200,7 @@ describe("buildEntrypoint", () => {
 		},
 	);
 
-	describe("entry lifetime", () => {
+	describe("entry lifetime", { tags: ["macos"] }, () => {
 		const pids: number[] = [];
 
 		// Runs before the outer afterEach removes the fixture directories.
