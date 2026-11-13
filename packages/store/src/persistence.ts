@@ -379,8 +379,9 @@ export async function withFileLock<T>(
 			err,
 		);
 	// On Windows a create or delete that races another process's delete of the same file
-	// fails with an access error (Bun reports the delete's as EFAULT). That is contention,
-	// until it outlasts a stale lock.
+	// fails with an access error. That is contention, until it outlasts a stale lock.
+	// TODO: Bun reports the delete's EPERM as EFAULT; drop EFAULT here once
+	// https://github.com/oven-sh/bun/issues/48811 is fixed.
 	let refusedSince: number | undefined;
 	const isContention = (err: unknown): boolean => {
 		const code = isWindows() && isErrnoException(err) ? (err.code ?? "") : "";
