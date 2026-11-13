@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { chmod, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -56,6 +56,8 @@ export type BunPluginDriverOptions = {
 	plugins: Array<{ specifier: string; source: string }>;
 	build: BunPluginDriverBuild;
 	outfile: string;
+	/** Module paths whose leading shebang line is blanked on load. */
+	stripShebang?: string[];
 };
 
 /**
@@ -84,6 +86,12 @@ for (const { specifier, source } of options.plugins) {
 		process.exit(1);
 	}
 	plugins.push(plugin);
+}
+if (options.stripShebang) {
+	// Last, so a project plugin's onLoad for the entry still wins. The emptied line keeps line numbers.
+	plugins.push({ name: "crust-strip-shebang", setup(build) {
+		build.onLoad({ filter: new RegExp(\`^(?:\${options.stripShebang.map(RegExp.escape).join("|")})$\`) }, async ({ path, loader }) => ({ contents: (await Bun.file(path).text()).replace(/^#![^\\n]*/, ""), loader }));
+	} });
 }
 const result = await Bun.build({ ...options.build, define: ${JSON.stringify(CRUST_BUILD_DEFINE)}, plugins, throw: false });
 if (!result.success) {
@@ -123,6 +131,7 @@ async function runBunPluginDriver(
 	outfilePath: string,
 	{ cwd, envFiles, bunPlugins }: BundleSettings,
 	runner: BuildRunner,
+	stripShebang?: string[],
 ): Promise<void> {
 	const driverPath = join(cwd, `.crust-build-${randomBytes(6).toString("hex")}.ts`);
 	await writeFile(
@@ -134,6 +143,7 @@ async function runBunPluginDriver(
 			})),
 			build,
 			outfile: outfilePath,
+			stripShebang,
 		}),
 	);
 	try {
@@ -260,7 +270,19 @@ export async function execScriptBuild(
 	runner: BuildRunner = resolveBunBuildRunner(),
 ): Promise<void> {
 	const { cwd, minify, envFiles, external } = settings;
-	if (settings.bunPlugins.length > 0) {
+	// Bun bundles an entry starting `#!/usr/bin/env bun` as Bun code even for `--target node`
+	// (bundle_v2.rs target_from_hashbang, Bun 1.4.4); any other bun shebang is blanked too,
+	// harmlessly, since the output gets its own. The output is marked `// @bun` and
+	// `import.meta.main` lowers to a `__require` Node lacks. The driver blanks that line
+	// as the entry loads, keeping its path, so back-imports and a symlinked entry's
+	// relative imports resolve as before. Bun hands onLoad the real path.
+	// TODO: Bun documents the shebang as replacing only the default target. Drop the blanking and
+	// the `// @bun` check below once https://github.com/oven-sh/bun/issues/48810 is fixed.
+	const stripShebang =
+		target === "node" && /^#![^\n]*\bbun\b/.test(await readFile(entryPath, "utf8"))
+			? [entryPath, await realpath(entryPath)]
+			: undefined;
+	if (settings.bunPlugins.length > 0 || stripShebang !== undefined) {
 		await runBunPluginDriver(
 			{
 				entrypoints: [entryPath],
@@ -273,6 +295,7 @@ export async function execScriptBuild(
 			outfilePath,
 			settings,
 			runner,
+			stripShebang,
 		);
 	} else {
 		await runBuildProcess(
@@ -298,8 +321,13 @@ export async function execScriptBuild(
 		);
 	}
 
-	const output = await readFile(outfilePath, "utf8");
-	const shebang = `#!/usr/bin/env ${target}\n`;
-	await writeFile(outfilePath, shebang + output.replace(/^#![^\n]*(?:\n|$)/, ""));
+	const output = (await readFile(outfilePath, "utf8")).replace(/^#![^\n]*(?:\n|$)/, "");
+	if (target === "node" && output.startsWith("// @bun")) {
+		// Only a crust.bunPlugins onLoad that returns the entry itself gets here: it runs instead of the blanking one.
+		throw new Error(
+			`Build failed for ${outfilePath}: Bun emitted Bun-only code for a Node bundle because the entry reached it starting with "#!/usr/bin/env bun".\n  Remove that line from ${entryPath}, or from what a crust.bunPlugins onLoad hook returns for it.`,
+		);
+	}
+	await writeFile(outfilePath, `#!/usr/bin/env ${target}\n${output}`);
 	if (process.platform !== "win32") await chmod(outfilePath, 0o755);
 }

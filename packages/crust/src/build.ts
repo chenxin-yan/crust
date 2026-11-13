@@ -13,7 +13,7 @@ import { isAbsolute, join, resolve } from "node:path";
 
 import type { BuildReport, InvocationIO } from "@crustjs/core";
 import { INSTALLED_COMMAND_NAME_RULE, isInstalledCommandName } from "@crustjs/core/tooling";
-import { dim } from "@crustjs/style";
+import { dim, yellow } from "@crustjs/style";
 import { isErrnoException } from "@crustjs/utils/error";
 import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
 import { isWithin } from "@crustjs/utils/path";
@@ -734,6 +734,15 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
 		const plan = planBuild(options, cwd);
 		io.stdout(`${dim("Runtime:")} ${plan.runtime} ${dim(`(${plan.runtimeSource})`)}`);
 		io.stdout(`${dim("Artifact:")} ${plan.artifact}`);
+		for (const { entryPath } of plan.entries) {
+			// The build writes its own shebang; the entry's still decides what a linked command starts.
+			const named = /^#![^\n]*\b(bun|node)\b/.exec(readFileSync(entryPath, "utf8"))?.[1];
+			if (named !== undefined && named !== plan.runtime) {
+				io.stderr(
+					`${yellow("Warning:")} ${entryPath} starts with a ${named} shebang but crust.runtime is "${plan.runtime}". The build targets ${plan.runtime}; a linked command (npm link) still starts ${named}.`,
+				);
+			}
+		}
 		const compilers = await selectCompilers(plan, io);
 		// Wipe once, before Extension hooks fill .crust/artifacts; staging only adds to the tree.
 		rmSync(plan.stageDir, { recursive: true, force: true });

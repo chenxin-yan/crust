@@ -630,6 +630,51 @@ describe("runDistributeBuild", () => {
 		await expect(stage(["skills/sub"], true)).rejects.toThrow('overlaps "skills"');
 	});
 
+	it("rejects crust.include files that npm leaves out of published packages", async () => {
+		const base = join(tmpDir, "templates", "base");
+		mkdirSync(base, { recursive: true });
+		// npm matches the three names ignoring case on every OS. The junk it also drops
+		// (.DS_Store, a swap file, *.orig) is not the author's to rename.
+		const dropped = [".gitignore", ".npmrc", ".NPMIGNORE"];
+		for (const name of [
+			...dropped,
+			"_gitignore",
+			".env",
+			".DS_Store",
+			".README.md.swp",
+			"merge.orig",
+		]) {
+			writeFileSync(join(base, name), "\n");
+		}
+		const compiled: string[] = [];
+		const execute = async (_entryPath: string, outfilePath: string) => {
+			compiled.push(outfilePath);
+		};
+		const plan = createPlan(
+			tmpDir,
+			{ name: "include-cli", version: "0.1.0" },
+			{ include: ["templates"] },
+		);
+
+		const error = await runDistributeBuild(plan, bunDistribution(undefined, execute), io).then(
+			() => undefined,
+			(error: unknown) => error,
+		);
+		expect(error).toBeInstanceOf(Error);
+		const listed = (error as Error).message
+			.split("\n")
+			.filter((line) => line.startsWith("  templates"))
+			.map((line) => line.trim().replaceAll("\\", "/"))
+			.sort();
+		expect(listed).toEqual(dropped.map((name) => `templates/base/${name}`).sort());
+		expect((error as Error).message).toContain("_gitignore");
+		expect(compiled).toEqual([]);
+
+		for (const name of dropped) rmSync(join(base, name));
+		await runDistributeBuild(plan, bunDistribution(), io);
+		expect(existsSync(join(plan.stageDir, "root", "templates", "base", "_gitignore"))).toBe(true);
+	});
+
 	// Directory pairs live under different parents (or are created with recursive
 	// mkdir) so the fixture is the same on case-sensitive and case-insensitive hosts.
 	it("rejects case-only crust.include collisions before compiling", async () => {
