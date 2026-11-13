@@ -18,10 +18,9 @@ export const app = new Crust("my-cli", { description: "Manage deployments", vers
 //#endregion
 
 //#region headless
-import { createMcpServer, serveStdio } from "@crustjs/mcp";
+import { serveStdio } from "@crustjs/mcp";
 
-const server = await createMcpServer(app, { exclude: [["wipe"]] });
-await serveStdio(server);
+await serveStdio(app, { exclude: [["wipe"]] });
 //#endregion
 
 //#region manifest

@@ -44,12 +44,13 @@
 	},
 	"dependencies": {
 		"@crustjs/utils": "workspace:^",
-		"@modelcontextprotocol/sdk": "^1.32.1"
+		"@modelcontextprotocol/server": "^2.4.0"
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
 		"@crustjs/core": "workspace:*",
 		"@crustjs/extensions": "workspace:*",
+		"@modelcontextprotocol/client": "^2.4.0",
 		"vite-plus": "catalog:"
 	},
 	"peerDependencies": {
