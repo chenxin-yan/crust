@@ -1,3 +1,9 @@
+/**
+ * @module-tag windows
+ * @module-tag macos
+ * @module-tag network
+ * @module-tag mise
+ */
 import {
 	existsSync,
 	mkdirSync,
@@ -15,6 +21,7 @@ import type { BuildOptions } from "@crustjs/crust";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 
 import { reapBoundedProcesses, runBoundedProcess } from "../../crust/tests/bounded-process.ts";
+import { floorRuntime, seaNodeBinDir } from "../../crust/tests/helpers.ts";
 import { type RunProcessResult, which } from "../../utils/src/process.ts";
 
 type Runtime = "bun" | "node";
@@ -24,7 +31,6 @@ const builtCliPath = resolve(import.meta.dirname, "..", ".crust", "root", "bin",
 const repoRoot = resolve(import.meta.dirname, "..", "..", "..");
 const smokeRoot = join(process.env.RUNNER_TEMP ?? tmpdir(), "create-crust-smoke");
 const localPackageDir = join(smokeRoot, "local-packages");
-const smokeEnabled = process.env.CREATE_CRUST_SMOKE === "1";
 
 const localDependencyPackages = [
 	{
@@ -60,6 +66,8 @@ const localDependencyPackages = [
 ] as const;
 
 let localSpecs: Record<string, string> = {};
+// Generated projects run on the oldest Node that core's engines allow, first on PATH.
+let floorNodeDir = "";
 // Every command is killed by this deadline, set below the running hook or case timeout.
 let commandDeadline = 0;
 // A failed case leaves the workspace behind for the CI failure artifact.
@@ -82,6 +90,7 @@ function run(
 		cwd,
 		env: {
 			...process.env,
+			PATH: `${floorNodeDir}${delimiter}${process.env.PATH}`,
 			...env,
 		},
 		timeout: Math.max(1, commandDeadline - Date.now()),
@@ -141,7 +150,7 @@ async function packLocalDependencyPackages(): Promise<Record<string, string>> {
 		const requiredBuildOutput = join(packageDir, pkg.requiredBuildOutput);
 		if (!existsSync(requiredBuildOutput)) {
 			throw new Error(
-				`Built package output not found at ${requiredBuildOutput}. Run the package build before test:smoke.`,
+				`Built package output not found at ${requiredBuildOutput}. Run the package build first.`,
 			);
 		}
 
@@ -328,11 +337,12 @@ async function smokeRuntime(runtime: Runtime, artifact: Artifact): Promise<void>
 				}
 			: undefined;
 
-	const nodeCompiler = process.env.CRUST_TEST_SEA_NODE;
+	// Node binaries compile with a Node the floor is too old for (tsdown needs >=26).
+	const seaNodeDir = runtime === "node" && artifact === "binary" ? seaNodeBinDir() : null;
 	const build = await run(buildCommand, sampleDir, {
 		...buildExtraEnv,
-		...(runtime === "node" && artifact === "binary" && nodeCompiler
-			? { PATH: `${dirname(nodeCompiler)}${delimiter}${process.env.PATH}` }
+		...(seaNodeDir
+			? { PATH: `${seaNodeDir}${delimiter}${floorNodeDir}${delimiter}${process.env.PATH}` }
 			: {}),
 	});
 	assertSuccess("generated project build", buildCommand, sampleDir, build);
@@ -397,27 +407,26 @@ afterEach(reapBoundedProcesses);
 
 afterAll(async () => {
 	await reapBoundedProcesses();
-	if (smokeEnabled && !keepSmokeRoot) {
+	if (!keepSmokeRoot) {
 		// Windows can briefly retain a lock on a just-exited executable.
 		rmSync(smokeRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 	}
 });
 
-describe.skipIf(!smokeEnabled)("create-crust smoke test", () => {
+describe("create-crust smoke test", () => {
+	// The hook's timeout covers mise downloading the floor Node on first use.
 	beforeAll(async () => {
+		floorNodeDir = dirname(floorRuntime("node"));
 		rmSync(smokeRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 		mkdirSync(smokeRoot, { recursive: true });
 
 		if (!existsSync(builtCliPath)) {
-			throw new Error(
-				`Built CLI not found at ${builtCliPath}. Run the package build before test:smoke.`,
-			);
+			throw new Error(`Built CLI not found at ${builtCliPath}. Run the package build first.`);
 		}
 
-		// Below the 10s default hook timeout.
 		commandDeadline = Date.now() + 9_000;
 		localSpecs = await packLocalDependencyPackages();
-	});
+	}, 300_000);
 
 	// Generous timeouts: each case installs from the registry and compiles a
 	// binary.
