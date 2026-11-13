@@ -45,3 +45,18 @@ function _typecheckStrictInteractiveChoices(mode: string) {
 	// @ts-expect-error -- unknown paths cannot infer a permissive AnyCrust fallback
 	void runInteractive(app, ["missing"], { flags: { mode: "safe" } });
 }
+
+async function _typecheckDoneResolvesWithTheTypedOutcome() {
+	const app = new Crust("cli").command("ask", (command) => command.action(() => ({ name: "Ada" })));
+	const outcome = await runInteractive(app, ["ask"]).done;
+	const stderr: string = outcome.stderr;
+	void stderr;
+	if (outcome.status === "completed") {
+		const name: string = outcome.result.name;
+		// @ts-expect-error -- the result keeps the action's return type
+		const age: number = outcome.result.age;
+		void [name, age];
+	}
+	// @ts-expect-error -- failures reject `done`, so it never resolves with a failed outcome
+	if (outcome.status === "failed") void outcome;
+}

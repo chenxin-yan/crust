@@ -1,6 +1,7 @@
 import { Crust } from "@crustjs/core";
 import { input } from "@crustjs/prompts";
-import { describe, expect, it } from "vite-plus/test";
+import { bold } from "@crustjs/style";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { runInteractive } from "./interactive.ts";
 
@@ -38,6 +39,63 @@ describe("runInteractive", () => {
 
 		expect(run.stdout()).toBe("Hello, Ada!\nBye");
 		expect(run.screen()).not.toContain("Hello, Ada!");
+	});
+
+	it("resolves done with the result and stderr captured like run()", async () => {
+		const app = new Crust("test-cli").action(async ({ stdout, stderr }) => {
+			const name = await input({ message: "Name?" });
+			stdout("saved");
+			stderr(`Hello, ${name}!`);
+			return { name };
+		});
+
+		const run = runInteractive(app, []);
+		await run.waitFor(/Name\?/);
+		run.type("Ada");
+		run.keys("return");
+
+		expect(await run.done).toEqual({
+			status: "completed",
+			result: { name: "Ada" },
+			stdout: "saved",
+			stderr: "Hello, Ada!",
+		});
+	});
+
+	it("strips escape codes under FORCE_COLOR unless raw is set", async () => {
+		vi.stubEnv("FORCE_COLOR", "1");
+		try {
+			const app = new Crust("test-cli").action(({ stdout, stderr }) => {
+				stdout(bold("Done"));
+				stderr(bold("Warn"));
+			});
+			const run = runInteractive(app, []);
+			expect(await run.done).toMatchObject({ stdout: "Done", stderr: "Warn" });
+			expect(run.stdout()).toBe("Done");
+			const raw = runInteractive(app, [], {}, { raw: true });
+			expect(await raw.done).toMatchObject({
+				stdout: "\x1b[1mDone\x1b[22m",
+				stderr: "\x1b[1mWarn\x1b[22m",
+			});
+			expect(raw.stdout()).toBe("\x1b[1mDone\x1b[22m");
+		} finally {
+			vi.unstubAllEnvs();
+		}
+	});
+
+	it("reads flags' env fallbacks from process.env unless the env option is given", async () => {
+		vi.stubEnv("CRUST_TEST_TOKEN", "from-shell");
+		try {
+			const app = new Crust("test-cli")
+				.flags({ token: { type: "string", env: { name: "CRUST_TEST_TOKEN" }, default: "none" } })
+				.action(({ flags }) => flags.token);
+			expect(await runInteractive(app, []).done).toMatchObject({ result: "from-shell" });
+			expect(await runInteractive(app, [], {}, { env: {} }).done).toMatchObject({ result: "none" });
+			const given = runInteractive(app, [], {}, { env: { CRUST_TEST_TOKEN: "given" } });
+			expect(await given.done).toMatchObject({ result: "given" });
+		} finally {
+			vi.unstubAllEnvs();
+		}
 	});
 
 	it("waitFor rethrows the application error instead of hanging", async () => {

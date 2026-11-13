@@ -248,9 +248,10 @@ function createStyleInstance(options: StyleOptions | undefined, runtime: boolean
  * The returned instance provides the full set of modifier, foreground color,
  * and background color functions. In `"never"` mode, all functions return
  * plain text without ANSI codes. In `"always"` mode, ANSI codes are always
- * emitted. In `"auto"` mode, color methods respect `stdout.isTTY` and
- * `NO_COLOR`, non-color modifiers (bold, italic, etc.) follow TTY only,
- * and `FORCE_COLOR`, when set, decides unconditionally for both.
+ * emitted. In `"auto"` mode, color methods respect `stdout.isTTY`,
+ * `TERM=dumb`, and `NO_COLOR`, non-color modifiers (bold, italic, etc.)
+ * follow TTY and `TERM=dumb` only, and `FORCE_COLOR`, when set, decides
+ * unconditionally for both.
  *
  * @param options - Configuration options. Defaults to `{ mode: "auto" }`.
  * @returns A frozen {@link StyleInstance} with all styling functions.
@@ -284,9 +285,10 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 /**
  * Default style instance using `"auto"` mode.
  *
- * Emits color ANSI codes when stdout is a TTY and `NO_COLOR` is not set.
- * Non-color modifiers (bold, italic, etc.) follow TTY only; `FORCE_COLOR`,
- * when set, decides unconditionally for both.
+ * Emits color ANSI codes when stdout is a TTY, `TERM` is not `dumb`, and
+ * `NO_COLOR` is not set. Non-color modifiers (bold, italic, etc.) follow TTY
+ * and `TERM=dumb` only; `FORCE_COLOR`, when set, decides unconditionally for
+ * both.
  * Import this for convenient access without explicit configuration.
  *
  * @example

@@ -311,15 +311,15 @@ describe("help", () => {
 			expect(exitCode).toBe(0);
 		}
 
-		vi.stubEnv("PORT", "abc");
+		const env = { PORT: "abc" };
 		for (const argv of [["--help"], ["serve", "--help"]]) {
-			const { stdout, stderr, exitCode } = await captureExecute(app, argv);
+			const { stdout, stderr, exitCode } = await captureExecute(app, argv, { env });
 			expect(stripAnsi(stdout), argv.join(" ")).toContain("Usage:");
 			expect(stderr).toBe("");
 			expect(exitCode).toBe(0);
 		}
 
-		const failed = await captureExecute(app, ["serve"]);
+		const failed = await captureExecute(app, ["serve"], { env });
 		expect(failed.stderr).toContain("Expected a number for --port (from $PORT).");
 		expect(failed.exitCode).toBe(1);
 		expect(actions).toEqual([]);

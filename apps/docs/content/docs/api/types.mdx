@@ -164,6 +164,7 @@ Declared in [`command/typed-run.ts`](https://github.com/chenxin-yan/crust/blob/m
 | `InputArgs` / `InputFlags`           | Pre-parse input value types used by `RunInput`                                                    |
 | `RunInputArguments` / `RunArguments` | Argument tuples that make `input` optional when nothing is required                               |
 | `CommandHandle<Shape>`               | Path-bound invoker returned by `at()`: a readonly `path` and `run()`                              |
+| `ShapeRunOutcome<Shape>`             | The `RunOutcome` of a command shape, with its result and event types                              |
 | `AnyCrust`                           | Any completed application; broad `run()` resolves to `RunOutcome<unknown>` plus optional `events` |
 
 ```ts

@@ -52,5 +52,9 @@ See the [full `run()` contract](/docs/api/crust#runpath-input-options).
 
 - `screen()` contains prompt, progress, and `stderr` output.
 - The action's `stdout` output is read with the handle's `stdout()` method.
+- `await run.done` gives the same outcome as `run()`, with the typed `result`, `stdout`, and `stderr`.
+- Prompts show even when `CI` is set, so the test passes on CI runners as well.
+
+`captureExecute()` and `runInteractive()` return plain text unless `raw: true` keeps escape codes, and their `env` option replaces `process.env` for flags' `env` fallbacks (see [`CaptureOptions`](/docs/modules/testing#captureoptions)). `run()` returns styled text with its escape codes (see [Styled output](/docs/modules/testing#styled-output)).
 
 See the [`runInteractive()` reference](/docs/modules/testing#runinteractiveapp-path-input).
