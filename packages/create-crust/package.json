@@ -42,8 +42,7 @@
 		"dev": "pnpm run build && bun src/cli.ts",
 		"release": "crust publish",
 		"check:types": "vp run check:types:task",
-		"test": "vp run test:task",
-		"test:smoke": "vp test tests/cli.smoke.test.ts"
+		"test": "vp run test:task"
 	},
 	"dependencies": {
 		"@crustjs/core": "workspace:^",
