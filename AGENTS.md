@@ -1,6 +1,6 @@
 ## Tests
 
-- Vitest via Vite+: `import { describe, expect, it, beforeEach, afterEach, vi } from "vite-plus/test"`; `pnpm run test` from the root, `pnpm exec vp test run [file]` in a package.
+- Vitest via Vite+: `import { describe, expect, it, beforeEach, afterEach, vi } from "vite-plus/test"`; `pnpm run test` from the root runs every project (CI runs the same command), `pnpm exec vp test run [file]` in a package. CI host selection and slow-test categories are Vitest tags declared in the root `vite.config.ts`; mark a file with a `@module-tag` comment, not a CI file list or an environment switch.
 - Tests run on Node. Exercise Bun-only behavior (`Bun.build`, compile, PTY) by spawning `bun` as a subprocess with an explicit timeout.
 - Unit tests: co-located (`src/foo.test.ts` beside `src/foo.ts`)
 - Compile-only type tests: co-located `src/foo.test-d.ts`; enforced by `pnpm run check:types` (tsc), not collected by `vp test`.
