@@ -1,3 +1,6 @@
+/**
+ * @module-tag windows
+ */
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";

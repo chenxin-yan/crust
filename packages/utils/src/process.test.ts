@@ -1,3 +1,6 @@
+/**
+ * @module-tag windows
+ */
 import { spawnSync } from "node:child_process";
 import {
 	chmodSync,
