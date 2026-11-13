@@ -45,7 +45,7 @@ pnpm --dir packages/core run test --run
 pnpm exec vp test run packages/store   # after a package build, from the root
 ```
 
-`pnpm run test` runs every project from the root [`vite.config.ts`](vite.config.ts) in one Vitest run, so arguments after it reach Vitest. CI runs the same command. Linux runs every test; the macOS and Windows jobs run the tests tagged for them. Tags are declared in the root config and set per file with a `@module-tag` comment, or per suite with the `tags` option:
+`pnpm run test` runs every project from the root [`vite.config.ts`](vite.config.ts) in one Vitest run, so arguments after it reach Vitest. CI runs the same command. Linux runs every test; the macOS and Windows jobs run the tests tagged for them. Every project declares the same tags from `testTags` in [`vite.shared.ts`](vite.shared.ts), so a tagged file also runs from its package. They are set per file with a `@module-tag` comment, or per suite with the `tags` option:
 
 | Tag       | Meaning                                                                                   |
 | --------- | ----------------------------------------------------------------------------------------- |
