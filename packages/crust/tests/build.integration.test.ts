@@ -350,8 +350,8 @@ describe.skipIf(getHostBunTarget() === null)(
 		// A cwd whose bunfig preload cannot resolve: Bun standalones that autoload
 		// bunfig.toml die here with `preload not found` before any user code runs.
 		const preloadCwd = join(tmpDir, "unresolvable-preload");
-		// Crust's own staged host binary; staging happens in the crust package's
-		// .crust/, which `bun run build` also owns.
+		// Crust's own staged host binary, in the crust package's .crust/, which its build
+		// task also owns and the installed-tool smoke packs.
 		const crustBinary = stagedBunBinary(crustPackageDir, "crust", getHostBunTarget()!);
 
 		beforeAll(async () => {
@@ -359,6 +359,9 @@ describe.skipIf(getHostBunTarget() === null)(
 			writeFileSync(join(preloadCwd, "bunfig.toml"), 'preload = ["@opentui/solid/preload"]\n');
 			writeFileSync(join(preloadCwd, ".env"), "PUBLIC_MESSAGE=from-cwd-env\n");
 
+			// The build task stages every target, host included. Restaging only the host here
+			// would replace that stage while other test files read it.
+			if (existsSync(crustBinary)) return;
 			process.cwd = () => crustPackageDir;
 			try {
 				const { exitCode, stderr } = await captureExecute(new Crust("test").add(buildCommand), [
