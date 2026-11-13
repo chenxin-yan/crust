@@ -200,7 +200,7 @@ Each `bin` key is an installed command name and each value is the TypeScript ent
 - Entries must be relative paths to existing files inside the project. Containment is checked lexically; symlinks may point elsewhere. Two commands cannot share one entry (compared by real path).
 - Command names follow the [installed command name rule](/docs/modules/core#tooling-subpath): letters, digits, `.`, `_`, and `-`, starting with a letter or digit. They cannot differ only by case.
 - A validated build requires each entry's root command to be named after its key, such as `new Crust("my-cli-admin")` for `"my-cli-admin": "src/admin.ts"`. `--no-validate` skips this check.
-- `npm link` runs the source entry directly, so it needs the runtime's shebang (`#!/usr/bin/env bun` or `#!/usr/bin/env node`). `create-crust` templates include it. Link `.crust/root` to exercise the built distribution instead.
+- `npm link` runs the source entry directly, so it needs the runtime's shebang (`#!/usr/bin/env bun` or `#!/usr/bin/env node`). `create-crust` templates include it. `crust build` follows `crust.runtime` whatever that line says, and warns when the two name different runtimes. Link `.crust/root` to exercise the built distribution instead.
 
 ## `package.json` configuration
 

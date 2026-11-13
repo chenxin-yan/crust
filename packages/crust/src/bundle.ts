@@ -276,7 +276,8 @@ export async function execScriptBuild(
 	// `import.meta.main` lowers to a `__require` Node lacks. The driver blanks that line
 	// as the entry loads, keeping its path, so back-imports and a symlinked entry's
 	// relative imports resolve as before. Bun hands onLoad the real path.
-	// Bun documents the shebang as replacing only the default target; drop this once an explicit one wins.
+	// TODO: Bun documents the shebang as replacing only the default target. Drop the blanking and
+	// the `// @bun` check below once https://github.com/oven-sh/bun/issues/48810 is fixed.
 	const stripShebang =
 		target === "node" && /^#![^\n]*\bbun\b/.test(await readFile(entryPath, "utf8"))
 			? [entryPath, await realpath(entryPath)]

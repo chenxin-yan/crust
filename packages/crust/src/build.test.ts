@@ -693,6 +693,31 @@ describe("build", () => {
 		expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
 	}, 30_000);
 
+	it("warns when an entry's shebang names another runtime than crust.runtime", async () => {
+		const build1 = async (shebang: string) => {
+			writeProject(
+				{ name: "mixed", crust: { runtime: "node", artifact: "package" } },
+				`${shebang}\nconsole.log("hi");\n`,
+			);
+			const warnings: string[] = [];
+			await build({
+				cwd: tmpDir,
+				validate: false,
+				onLog: (line, stream) => {
+					if (stream === "stderr") warnings.push(line);
+				},
+			});
+			return warnings;
+		};
+
+		expect(await build1("#!/usr/bin/env node")).toEqual([]);
+		const [warning, ...rest] = await build1("#!/usr/bin/env bun");
+		expect(rest).toEqual([]);
+		expect(warning).toContain(
+			'starts with a bun shebang but crust.runtime is "node". The build targets node; a linked command (npm link) still starts bun.',
+		);
+	}, 60_000);
+
 	it("stages a root-only Bun runtime package that runs under Bun", async () => {
 		writeProject(
 			{ name: "bun-pkg", crust: { artifact: "package" }, engines: { bun: ">=99" } },
