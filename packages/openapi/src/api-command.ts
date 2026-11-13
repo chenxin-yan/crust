@@ -59,30 +59,18 @@ export interface ApiCommandOptions extends ApiClientOptions {
 
 /**
  * A non-2xx response to `api <path>`; its body was already printed (to stderr under `--json`).
- * The `json()` Extension prints its `status`, `method`, and `url` as the error's `details`.
+ * The `json()` Extension prints its `status` as the error's `details`.
  */
 export class ApiResponseError extends Error {
 	override name = "ApiResponseError";
 
 	/** The HTTP status code. */
 	readonly status: number;
-	/** The request method, when the error was constructed with its request. */
-	readonly method: string | undefined;
-	/** The request URL without its query, fragment, or user info, any of which may hold a credential. */
-	readonly url: string | undefined;
 
-	constructor(
-		status: number,
-		message: string,
-		request?: { readonly method: string; readonly url: string },
-	) {
+	constructor(status: number, message: string) {
 		super(message);
 		this.status = status;
-		this.method = request?.method;
-		this.url = request?.url;
-		Object.defineProperty(this, jsonErrorDetails, {
-			value: { status, method: this.method, url: this.url },
-		});
+		Object.defineProperty(this, jsonErrorDetails, { value: { status } });
 	}
 }
 
@@ -372,6 +360,7 @@ function parseMethod(method: string): string {
 	// Like `gh api`. fetch() upper-cases only some methods and skips PATCH, so `patch` would get a 405.
 	const normalized = method.toUpperCase();
 	// Bun's fetch() sends a method it does not know as GET; Request shows what would be sent.
+	// TODO: only the catch is needed once https://github.com/oven-sh/bun/issues/42497 is fixed.
 	let sent: string | undefined;
 	try {
 		sent = new Request("http://localhost/", { method: normalized }).method;
@@ -476,8 +465,8 @@ type ApiCommandDefinition = CommandDefinition<
 /**
  * Provides the {@link apiClient} Context and contributes `api`: `api --list` and
  * `api --spec <operationId|path>` read the spec (calling its loader, if any); `api <path>` sends
- * a request through the client, prints the response body to stdout (a binary body as raw bytes,
- * failing instead when stdout is a terminal), and fails with {@link ApiResponseError} on a non-2xx
+ * a request through the client, prints the response body to stdout (its exact bytes to a pipe or
+ * file; as text to a terminal, failing instead for a binary body), and fails with {@link ApiResponseError} on a non-2xx
  * status. Under the `json()` Extension's `--json`, `api` returns its data as the command result instead: the operations, the
  * definition, or the parsed response body; `--paginate` yields each page body as an event.
  */
@@ -573,11 +562,9 @@ export const apiCommand: ExtensionFactory<
 									const page = flags.paginate ? (response.clone() as Response) : undefined;
 									yield { response, bytes: new Uint8Array(await response.arrayBuffer()) };
 									if (!response.ok) {
-										const failed = resolveUrl(client.baseUrl, request.path);
 										throw new ApiResponseError(
 											response.status,
 											`${sentMethod} ${withoutQuery(shown)}: HTTP ${response.status} ${response.statusText}`.trimEnd(),
-											{ method: sentMethod, url: failed.origin + failed.pathname },
 										);
 									}
 									const next: ApiRequest | undefined =
@@ -605,39 +592,37 @@ export const apiCommand: ExtensionFactory<
 
 							/** Prints each page's body; under --json, yields a successful page's body as JSON data instead. */
 							async function* bodies(): AsyncGenerator<JsonValue, undefined> {
+								const { getAmbientTerminalIO, writeProcessOutput } =
+									await import("@crustjs/utils/terminal");
+								// Why a body can only be printed as text; undefined when stdout is the process's own
+								// pipe or file, which gets every body's exact bytes, like gh api and curl. A page is
+								// one NDJSON line, JSON cannot hold bytes, injected output (`run()`) takes text lines,
+								// and raw bytes can garble a terminal.
+								let refusal: string | undefined;
+								if (flags.paginate) refusal = "--paginate prints only text and JSON bodies";
+								else if (json) {
+									refusal =
+										"--json prints only text and JSON bodies, so run without it to write the bytes to stdout";
+								} else if (getAmbientTerminalIO() !== undefined) {
+									refusal = "its bytes go only to the process's stdout, not to captured output";
+								} else if (process.getBuiltinModule("node:tty").isatty(1)) {
+									refusal =
+										"redirect or pipe stdout to save it instead of printing it to the terminal";
+								}
 								for await (const { response, bytes } of pages()) {
+									if (refusal === undefined) {
+										writeProcessOutput(1, bytes);
+										continue;
+									}
 									const text = bodyText(bytes);
-									if (text === undefined || !hasTextType(response)) {
-										const { getAmbientTerminalIO, writeProcessOutput } =
-											await import("@crustjs/utils/terminal");
-										// Such a body is written as its bytes, but only to the process's own stdout: a page
-										// is one NDJSON line, JSON cannot hold bytes, injected output (`run()`) takes text
-										// lines, and a terminal, which raw bytes can garble, never gets them, like gh api and curl.
-										let refusal: string | undefined;
-										if (flags.paginate) refusal = "--paginate prints only text and JSON bodies";
-										else if (json) {
-											refusal =
-												"--json prints only text and JSON bodies, so run without it to write the bytes to stdout";
-										} else if (getAmbientTerminalIO() !== undefined) {
-											refusal = "its bytes go only to the process's stdout, not to captured output";
-										} else if (process.getBuiltinModule("node:tty").isatty(1)) {
-											refusal =
-												"redirect or pipe stdout to save it instead of printing it to the terminal";
+									if (text === undefined) {
+										if (response.ok) {
+											const type = response.headers.get("content-type") ?? "no Content-Type";
+											throw new Error(
+												`api: ${flags.paginate ? "a --paginate page" : "the response"} body is binary (${type}); ${refusal}`,
+											);
 										}
-										if (refusal === undefined) {
-											writeProcessOutput(1, bytes);
-											continue;
-										}
-										// Text under another Content-Type, such as application/csv, still prints as text.
-										if (text === undefined) {
-											if (response.ok) {
-												const type = response.headers.get("content-type") ?? "no Content-Type";
-												throw new Error(
-													`api: ${flags.paginate ? "a --paginate page" : "the response"} body is binary (${type}); ${refusal}`,
-												);
-											}
-											continue;
-										}
+										continue;
 									}
 									if (!json) {
 										if (flags.paginate) stdout(compactJson(text));
@@ -669,14 +654,6 @@ interface Page {
 /** `path` up to its query or fragment, which may hold a credential such as an `-F` field. */
 function withoutQuery(path: string): string {
 	return path.replace(/[?#][\s\S]*$/, "");
-}
-
-const TEXT_TYPE = /^text\/|[/+](?:json|xml|yaml|x-yaml|x-ndjson|javascript|x-www-form-urlencoded)$/;
-
-/** Whether the Content-Type is textual (text/*, JSON, XML, YAML, NDJSON, JavaScript, form data) or missing. */
-function hasTextType(response: Response): boolean {
-	const type = (response.headers.get("content-type") ?? "").split(";")[0]?.trim().toLowerCase();
-	return !type || TEXT_TYPE.test(type);
 }
 
 /** The body as text, or `undefined` when it is not valid UTF-8. */

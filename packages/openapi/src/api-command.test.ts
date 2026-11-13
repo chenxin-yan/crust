@@ -546,21 +546,7 @@ describe("api <path>", () => {
 		expect(stderr).toBe("Error: GET /me: HTTP 401 Unauthorized");
 		const error = outcome.status === "failed" ? outcome.error : undefined;
 		expect(error).toBeInstanceOf(ApiResponseError);
-		expect(error).toMatchObject({
-			status: 401,
-			method: "GET",
-			url: "https://api.example.com/v1/me",
-			message: "GET /me: HTTP 401 Unauthorized",
-		});
-	});
-
-	it("constructs an ApiResponseError from a status and message alone", () => {
-		expect(new ApiResponseError(404, "GET /x: HTTP 404")).toMatchObject({
-			status: 404,
-			message: "GET /x: HTTP 404",
-			method: undefined,
-			url: undefined,
-		});
+		expect(error).toMatchObject({ status: 401, message: "GET /me: HTTP 401 Unauthorized" });
 	});
 
 	it.each([
@@ -626,38 +612,48 @@ describe("api <path>", () => {
 			stderr: "Error: -X FOO: this runtime's fetch() would send it as GET.\n",
 			status: 1,
 		});
-		expect(run("purge")).toMatchObject({ stdout: "PURGE\n", stderr: "", status: 0 });
+		expect(run("purge")).toMatchObject({ stdout: "PURGE", stderr: "", status: 0 });
 	});
 
 	// Tests run on Node; spawn each runtime so stdout is the process's own.
 	it.each([
 		["node", process.execPath, ["--input-type=module"]],
 		["bun", "bun", []],
-	])("writes a binary body's bytes to stdout unchanged on %s", (_runtime, command, options) => {
-		const script = `
+	])(
+		"writes a body's bytes to a pipe unchanged, whatever its type, on %s",
+		(_runtime, command, options) => {
+			const script = `
 			import { Crust } from "@crustjs/core";
 			import { apiCommand } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "api-command.ts")).href)};
 			globalThis.fetch = async (url) => url.pathname === "/zip"
 				? new Response(new TextEncoder().encode("PK\\n"), { headers: { "content-type": "application/zip" } })
-				: new Response(new Uint8Array([0xff, 0xfe, 0x00, 0x01, 0x80, 0x0a]));
+				: url.pathname === "/csv"
+					? new Response("a\\r\\n", { headers: { "content-type": "text/csv" } })
+					: url.pathname === "/json"
+						? new Response("{}", { headers: { "content-type": "application/json" } })
+						: new Response(new Uint8Array([0xff, 0xfe, 0x00, 0x01, 0x80, 0x0a]));
 			const app = new Crust("tool").extend(apiCommand({ spec: {}, baseUrl: "https://api.example.com" }));
 			process.exitCode = await app.execute({ argv: ["api", process.argv.at(-1)] });
 		`;
-		const run = (path: string) =>
-			spawnSync(command, [...options, "-e", script, "--", path], {
-				cwd: join(import.meta.dirname, ".."),
-				timeout: 10_000,
-			});
+			const run = (path: string) =>
+				spawnSync(command, [...options, "-e", script, "--", path], {
+					cwd: join(import.meta.dirname, ".."),
+					timeout: 10_000,
+				});
 
-		for (const [path, bytes] of [
-			["/bytes", [0xff, 0xfe, 0x00, 0x01, 0x80, 0x0a]],
-			["/zip", [0x50, 0x4b, 0x0a]],
-		] as const) {
-			const { stdout, stderr, status } = run(path);
-			expect({ stderr: stderr.toString(), status }).toEqual({ stderr: "", status: 0 });
-			expect([...stdout]).toEqual(bytes);
-		}
-	});
+			for (const [path, bytes] of [
+				["/bytes", [0xff, 0xfe, 0x00, 0x01, 0x80, 0x0a]],
+				["/zip", [0x50, 0x4b, 0x0a]],
+				// A text body keeps its line ending, and gains no newline it lacks.
+				["/csv", [0x61, 0x0d, 0x0a]],
+				["/json", [0x7b, 0x7d]],
+			] as const) {
+				const { stdout, stderr, status } = run(path);
+				expect({ stderr: stderr.toString(), status }).toEqual({ stderr: "", status: 0 });
+				expect([...stdout]).toEqual(bytes);
+			}
+		},
+	);
 
 	// Like gh api and curl: raw bytes can garble a terminal, so only a pipe or file gets them.
 	it.each([
@@ -1129,7 +1125,7 @@ describe("api with json()", () => {
 			stdout: "",
 			stderr: [
 				'{"message":"not found"}',
-				'{"message":"GET /users/9: HTTP 404 Not Found","details":{"status":404,"method":"GET","url":"https://api.example.com/v1/users/9"}}',
+				'{"message":"GET /users/9: HTTP 404 Not Found","details":{"status":404}}',
 			].join("\n"),
 			exitCode: 1,
 		});
@@ -1153,7 +1149,7 @@ describe("api with json()", () => {
 		expect(stdout.split("\n")).toEqual([
 			'{"type":"event","data":{"page":1}}',
 			'{"type":"event","data":{"page":2}}',
-			'{"type":"error","error":{"message":"GET /users: HTTP 410 Gone","details":{"status":410,"method":"GET","url":"https://api.example.com/v1/users"}}}',
+			'{"type":"error","error":{"message":"GET /users: HTTP 410 Gone","details":{"status":410}}}',
 		]);
 		expect({ stderr, exitCode }).toEqual({ stderr: "gone", exitCode: 1 });
 	});

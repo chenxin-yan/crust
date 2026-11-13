@@ -141,15 +141,15 @@ Like `gh api`, the request must stay on the base URL's origin (scheme, host, and
 
 The response body goes to stdout:
 
-- A text body is printed as text, ending with exactly one newline; an empty body prints nothing. A body is text when it is valid UTF-8 and its `Content-Type` is missing, `text/*`, or JSON, XML, YAML, NDJSON, JavaScript, or form data (such as `application/json` or `application/problem+json`).
-- Any other body is written as its raw bytes, unchanged, so `my-cli api /export.zip > export.zip` works. Raw bytes only go to the process's own stdout when it is a pipe or file. On a terminal, which the bytes could garble, and when output is captured as text, such as by [`run()`](/docs/api/crust#runpath-input-options) or `captureExecute()`, a body that is valid UTF-8, such as `application/csv`, is printed as text instead. One that is not fails the command with exit code 1 after the request, as `gh api` and `curl` refuse to print binary to a terminal; a non-2xx one is left out, and the command fails with the `ApiResponseError`.
+- To a pipe or file, the body is written as its exact bytes, whatever its `Content-Type`, so `my-cli api /export.zip > export.zip` works and a text body keeps its line endings.
+- To a terminal, and when output is captured as text, such as by [`run()`](/docs/api/crust#runpath-input-options) or `captureExecute()`, the body is printed as text, ending with exactly one newline; an empty body prints nothing. A body that is not valid UTF-8 can't be printed as text and fails the command with exit code 1 after the request, as `gh api` and `curl` refuse to print binary to a terminal; a non-2xx one is left out, and the command fails with the `ApiResponseError`.
 
-| Failure                                                                                                                              | Result                                                                                                                                                                                              |
-| ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Non-2xx response                                                                                                                     | The body still prints to stdout, then an `ApiResponseError` (exit 1) with the `status`, `method`, and `url` of the request; its message, such as `GET /users/9: HTTP 404 Not Found`, goes to stderr |
-| `-F` without `=` or out of number range, `-H` without `:` or with a name or value HTTP rejects, an invalid `-X`, unreadable `--body` | A `PARSE` [`CrustError`](/docs/api/errors) before any request                                                                                                                                       |
+| Failure                                                                                                                              | Result                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Non-2xx response                                                                                                                     | The body still prints to stdout, then an `ApiResponseError` (exit 1) whose `status` holds the code; its message, such as `GET /users/9: HTTP 404 Not Found`, goes to stderr |
+| `-F` without `=` or out of number range, `-H` without `:` or with a name or value HTTP rejects, an invalid `-X`, unreadable `--body` | A `PARSE` [`CrustError`](/docs/api/errors) before any request                                                                                                               |
 
-The `-F` and `-H` errors name the flag and the expected shape, such as `Invalid -H value: expected "Name: value".`, never the text given, since a header can hold a token. For the same reason, an `ApiResponseError` leaves out the request's query and fragment, including query parameters `-F` added: its message shows the path as given up to its `?`, and its `url` is the request URL without query, fragment, or user info. `new ApiResponseError(status, message)` still works; the request's `{ method, url }` is an optional third argument, and without it `method` and `url` are `undefined`.
+The `-F` and `-H` errors name the flag and the expected shape, such as `Invalid -H value: expected "Name: value".`, never the text given, since a header can hold a token. For the same reason, an `ApiResponseError` leaves out the request's query and fragment, including query parameters `-F` added: its message shows the path as given up to its `?`.
 
 ### JSON output
 
@@ -160,7 +160,7 @@ $ my-cli api /users/42 --json
 {"id":42,"name":"Ada"}                                     # stdout
 $ my-cli api /users/9 --json
 {"message":"not found"}                                    # stderr: the response body
-{"message":"GET /users/9: HTTP 404 Not Found","details":{"status":404,"method":"GET","url":"https://api.example.com/v1/users/9"}}   # stderr
+{"message":"GET /users/9: HTTP 404 Not Found","details":{"status":404}}   # stderr
 ```
 
 | Command                 | Result on stdout                                                                                                                                                                   |
@@ -170,7 +170,7 @@ $ my-cli api /users/9 --json
 | `api <path>`            | The response body: parsed when it is JSON, otherwise its text as a JSON string; nothing for an empty body. A body that is not UTF-8 fails the command, since JSON can't hold it    |
 | `api <path> --paginate` | NDJSON: one `{"type":"event","data":…}` line per page with its body as above (an empty body is `""`), then `{"type":"result"}`, or `{"type":"error","error":…}` for a failing page |
 
-- A non-2xx body is written to stderr, followed by the error JSON, whose `details` hold the `status`, `method`, and `url`.
+- A non-2xx body is written to stderr, followed by the error JSON, whose `details` hold the `status`.
 - JSON numbers are read as JavaScript numbers, so digits beyond double precision are lost and `-0` becomes `0`. Without `--json`, the body is printed exactly, and `--paginate` pages keep their exact digits.
 
 ## `apiClient`
