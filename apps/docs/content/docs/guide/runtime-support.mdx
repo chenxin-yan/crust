@@ -24,6 +24,8 @@ Both print:
 Hello, Ada!
 ```
 
+Type checking needs TypeScript 5.9 or later. Before TypeScript 7, a one-character `short` outside the Basic Multilingual Plane, such as an emoji, is rejected. On 5.9, a `@crustjs/store` field's `validate` callback needs an explicit parameter type.
+
 Node.js runs the TypeScript file directly by stripping its types. For that:
 
 - Set `"type": "module"` in `package.json`.
