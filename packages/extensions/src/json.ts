@@ -17,11 +17,15 @@ const jsonFlags = {
 	},
 } as const;
 
-/** `CrustError` serializes through its own `toJSON()`; any other failure exposes only its message. */
-function errorData(error: unknown): unknown {
-	return error instanceof CrustError
-		? error.toJSON()
-		: { message: error instanceof Error ? error.message : String(error) };
+/**
+ * `CrustError` serializes through its own `toJSON()`; any other failure exposes only its message,
+ * plus the details an error opts into with the `detailsKey` property (`jsonErrorDetails`).
+ */
+function errorData(error: unknown, detailsKey: symbol): unknown {
+	if (error instanceof CrustError) return error.toJSON();
+	if (!(error instanceof Error)) return { message: String(error) };
+	const details: unknown = (error as Error & Record<symbol, unknown>)[detailsKey];
+	return details === undefined ? { message: error.message } : { message: error.message, details };
 }
 
 /** Per invocation: writes the `stdout()` lines its renderer still holds to stderr. */
@@ -61,7 +65,7 @@ export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__
 		.renderer(async (ctx) => {
 			if (ctx.flags.json !== true) return undefined;
 			// Loaded only under --json, keeping it out of every CLI's startup.
-			const { parseJsonValue } = await import("@crustjs/utils/json");
+			const { parseJsonValue, jsonErrorDetails } = await import("@crustjs/utils/json");
 			/** JSON text for `value`, or a clear failure naming `what` when JSON cannot represent it exactly. */
 			const serialize = (value: unknown, what: string): string => {
 				try {
@@ -126,14 +130,18 @@ export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__
 				error(error) {
 					flush();
 					if (streaming && !ended) {
-						ctx.stdout(JSON.stringify({ type: "error", error: errorData(error) }));
+						ctx.stdout(
+							JSON.stringify({ type: "error", error: errorData(error, jsonErrorDetails) }),
+						);
 					} else {
-						ctx.stderr(JSON.stringify(errorData(error)));
+						ctx.stderr(JSON.stringify(errorData(error, jsonErrorDetails)));
 					}
 				},
 				// Always stderr, even while streaming, so stdout keeps exactly one final line.
 				cleanup: (error) =>
-					ctx.stderr(JSON.stringify({ type: "cleanup", error: errorData(error) })),
+					ctx.stderr(
+						JSON.stringify({ type: "cleanup", error: errorData(error, jsonErrorDetails) }),
+					),
 			};
 		})
 		.postRun((ctx) => flushHeld.get(ctx)?.()),

@@ -33,7 +33,7 @@ const ignoreStreamError = () => {};
  * not crash the CLI. Mirrors Node's Console (`ignoreErrors: true`): a noop listener absorbs
  * the event when nobody else listens.
  */
-function writeStream(stream: NodeJS.WriteStream, text: string): void {
+function writeStream(stream: NodeJS.WriteStream, text: string | Uint8Array): void {
 	const absorb = () => {
 		if (stream.listenerCount("error") === 0) stream.once("error", ignoreStreamError);
 	};
@@ -60,10 +60,10 @@ const closedFds = new Set<number>();
  * A closed reader or descriptor (`EPIPE` from `cli | head`, `EBADF`) closes the fd for later
  * writes silently, like `console.log`; other errors (`ENOSPC`) drop only the current write.
  */
-function writeFd(fd: 1 | 2, text: string): void {
+function writeFd(fd: 1 | 2, text: string | Uint8Array): void {
 	if (closedFds.has(fd)) return;
 	const { writeSync } = process.getBuiltinModule("node:fs");
-	const buffer = Buffer.from(text);
+	const buffer = typeof text === "string" ? Buffer.from(text) : text;
 	let offset = 0;
 	while (offset < buffer.length) {
 		try {
@@ -86,10 +86,10 @@ function writeFd(fd: 1 | 2, text: string): void {
  * load), and no async tail for a `process.exit()` to truncate. Writes queued on those streams
  * by other code are a separate queue and are not ordered with these. Windows keeps the stream
  * writer: its console handling transcodes text, while raw bytes to a legacy console can garble
- * non-ASCII output. A write to a terminal erases the live frame ({@link registerLiveFrame})
- * first and redraws it after a complete line.
+ * non-ASCII output. Bytes are written unchanged, such as a binary response body. A write to a
+ * terminal erases the live frame ({@link registerLiveFrame}) first and redraws it after a complete line.
  */
-export function writeProcessOutput(fd: 1 | 2, text: string): void {
+export function writeProcessOutput(fd: 1 | 2, text: string | Uint8Array): void {
 	const frame = globals[LIVE_FRAME_KEY];
 	if (frame === undefined || interrupting || !process.getBuiltinModule("node:tty").isatty(fd)) {
 		writeRaw(fd, text);
@@ -100,13 +100,14 @@ export function writeProcessOutput(fd: 1 | 2, text: string): void {
 		frame.clear();
 		writeRaw(fd, text);
 		// Mid-line text keeps the row; the frame's next draw replaces it.
-		if (text.endsWith("\n")) frame.redraw();
+		const endsLine = typeof text === "string" ? text.endsWith("\n") : text.at(-1) === 0x0a;
+		if (endsLine) frame.redraw();
 	} finally {
 		interrupting = false;
 	}
 }
 
-function writeRaw(fd: 1 | 2, text: string): void {
+function writeRaw(fd: 1 | 2, text: string | Uint8Array): void {
 	if (process.platform === "win32") writeStream(fd === 1 ? process.stdout : process.stderr, text);
 	else writeFd(fd, text);
 }

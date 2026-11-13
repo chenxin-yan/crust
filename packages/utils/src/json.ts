@@ -16,6 +16,13 @@ export type JsonCompatible<T> = T extends JsonValue
 				? { [K in keyof T]: JsonCompatible<T[K]> }
 				: never;
 
+/**
+ * A Crust error's own JSON details: the `json()` Extension prints an error that is not a
+ * `CrustError` as `{ message }`, plus `details` when the error has this property.
+ * Opt-in, so no field of another library's error, which may hold a credential, is printed.
+ */
+export const jsonErrorDetails: unique symbol = Symbol.for("crustjs.json.errorDetails");
+
 /** Narrow a JSON document root to an object (not array/scalar/null). */
 export function isJsonObject(value: JsonValue): value is JsonObject {
 	return typeof value === "object" && value !== null && !Array.isArray(value);

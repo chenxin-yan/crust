@@ -22,7 +22,7 @@ Deploying...                                  # stderr
 With `--json`, stdout carries only JSON: the command's result, or NDJSON for streaming commands. Pipes and files always get clean data.
 
 - The Command Action's return value is printed to stdout as one line of JSON. An action that returns `undefined` prints nothing.
-- A failure is written to stderr as one line of JSON instead of the `Error:` line. A [`CrustError`](/docs/api/errors) prints its `toJSON()` (`{ "code", "message", "details"? }`); any other error prints `{ "message": error.message }`, and a thrown non-`Error` value prints `{ "message": String(value) }`. No other field of an application error is read.
+- A failure is written to stderr as one line of JSON instead of the `Error:` line. A [`CrustError`](/docs/api/errors) prints its `toJSON()` (`{ "code", "message", "details"? }`); any other error prints `{ "message": error.message }`, and a thrown non-`Error` value prints `{ "message": String(value) }`. No other field of an application error is read, except that [`@crustjs/openapi`](/docs/modules/openapi#json-output)'s `ApiResponseError` adds `details` with the HTTP `status`.
 - The action's and Contexts' `stderr()` lines, spinners, and progress go to stderr as they're written.
 - Cleanup that fails after a failure was already written, such as a Context whose disposal throws, or while a cancellation unwinds, is written to stderr as one more line per failed cleanup, `{"type":"cleanup","error":…}`, with the same error JSON. It goes to stderr even for a [generator action](#generator-actions), so stdout keeps exactly one final line.
 - Exit codes are unchanged.
