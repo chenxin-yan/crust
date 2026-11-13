@@ -22,7 +22,7 @@ export function setDocumentValue(
 }
 
 /**
- * Applies field defaults to a persisted config object.
+ * Applies field defaults to a persisted store object.
  *
  * For each field defined in `fields`:
  * - If `persisted` has the key as an own property, the persisted value is used.
@@ -31,18 +31,16 @@ export function setDocumentValue(
  * - If the key is missing and no default exists, the field is omitted
  *   (typed as `T | undefined` in the output).
  *
- * When `pruneUnknown` is `true` (the default), keys in `persisted` that are
- * not defined in `fields` are dropped. Set to `false` to preserve them.
+ * Keys in `persisted` that are not defined in `fields` are left out; mutations
+ * carry them over with {@link withUnknownKeys}.
  *
- * @param persisted    - Parsed JSON from disk, or `undefined` if no file exists.
- * @param fields       - Store field definitions.
- * @param pruneUnknown - Whether to drop persisted keys not in `fields`. Defaults to `true`.
+ * @param persisted - Parsed JSON from disk, or `undefined` if no file exists.
+ * @param fields    - Store field definitions.
  * @returns A new object with field defaults applied.
  */
 export function applyFieldDefaults(
 	persisted: Readonly<StoreDocument> | undefined,
 	fields: FieldsDef,
-	pruneUnknown = true,
 ): StoreDocument {
 	const result: StoreDocument = {};
 
@@ -55,14 +53,25 @@ export function applyFieldDefaults(
 		// else: no persisted value and no default → key not set (field is T | undefined)
 	}
 
-	// Preserve unknown persisted keys when pruning is disabled
-	if (!pruneUnknown && persisted !== undefined) {
-		for (const [key, value] of Object.entries(persisted)) {
-			if (!Object.hasOwn(fields, key)) {
-				setDocumentValue(result, key, value);
-			}
+	return result;
+}
+
+/**
+ * Returns `document` plus the keys of `persisted` that `fields` does not define,
+ * so a store definition that lacks a field (an older app version, another tool)
+ * never deletes it. Keys already in `document` win.
+ */
+export function withUnknownKeys(
+	document: Readonly<StoreDocument>,
+	persisted: Readonly<StoreDocument> | undefined,
+	fields: FieldsDef,
+): StoreDocument {
+	const result: StoreDocument = { ...document };
+	if (persisted === undefined) return result;
+	for (const [key, value] of Object.entries(persisted)) {
+		if (!Object.hasOwn(fields, key) && !Object.hasOwn(result, key)) {
+			setDocumentValue(result, key, value);
 		}
 	}
-
 	return result;
 }
