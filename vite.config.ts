@@ -1,6 +1,6 @@
-import { spawnSync } from "node:child_process";
-
 import { defineConfig } from "vite-plus";
+
+import { testTags } from "./vite.shared.ts";
 
 const sharedIgnorePatterns = [
 	".changeset/",
@@ -134,20 +134,9 @@ export default defineConfig({
 			"check:task": "vp check",
 		},
 	},
-	// `pnpm test` runs every project from here, so the tags below reach them all. A test file
-	// opts into an extra CI host or a requirement with a `@module-tag` comment.
+	// `pnpm test` runs every project from here.
 	test: {
 		projects: ["packages/*", "scripts", "apps/docs"],
-		tags: [
-			{ name: "windows", description: "Also runs in the Windows CI job" },
-			{ name: "macos", description: "Also runs in the macOS CI job" },
-			{ name: "network", description: "Installs packages from a registry" },
-			{
-				name: "mise",
-				description:
-					"Runs the oldest supported Node.js or Bun through mise; skipped without mise outside CI",
-				skip: !process.env.CI && spawnSync("mise", ["--version"], { stdio: "ignore" }).status !== 0,
-			},
-		],
+		tags: testTags,
 	},
 });

@@ -1,3 +1,5 @@
+import { spawnSync } from "node:child_process";
+
 import type { UserConfig } from "vite-plus";
 
 // Settings every workspace package's vite.config.ts spreads. These tasks own
@@ -67,3 +69,19 @@ export const libraryTasks = {
 		dependsOn: ["build:task", upstreamBuild],
 	},
 } satisfies RunTasks;
+
+/**
+ * Test tags, declared by every project so a tagged file runs from the root (`pnpm test`) and
+ * from its package alike. A file opts in with a `@module-tag` comment, a suite with `tags`.
+ */
+export const testTags = [
+	{ name: "windows", description: "Also runs in the Windows CI job" },
+	{ name: "macos", description: "Also runs in the macOS CI job" },
+	{ name: "network", description: "Installs packages from a registry" },
+	{
+		name: "mise",
+		description:
+			"Runs the oldest supported Node.js or Bun through mise; skipped without mise outside CI",
+		skip: !process.env.CI && spawnSync("mise", ["--version"], { stdio: "ignore" }).status !== 0,
+	},
+];

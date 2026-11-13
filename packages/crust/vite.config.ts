@@ -1,12 +1,13 @@
 import { defineConfig } from "vite-plus";
 
-import { libraryTasks, pack, runtimeInput, upstreamBuild } from "../../vite.shared.ts";
+import { libraryTasks, pack, runtimeInput, testTags, upstreamBuild } from "../../vite.shared.ts";
 
 // The programmatic `build()` library. The `crust` executable itself is staged
 // by `crust build` (`build:task` below), which ships this `dist/` via
 // `crust.include` and carries `exports` into the generated root package;
 // scripts/stage-node-exe-dependencies.ts then adds the Node binary backend.
 export default defineConfig({
+	test: { tags: testTags },
 	pack: {
 		...pack,
 		entry: ["src/index.ts"],
