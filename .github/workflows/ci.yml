@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_call:
+
+# A literal prefix: called from release.yml, github.workflow would name the caller and share its group.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Format, lint, and type check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup
+
+      - name: Format and lint
+        run: pnpm run check
+
+      - name: Type check
+        run: pnpm run check:types
+
+  test:
+    name: Test (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux runs every test. The other hosts run the tests tagged for them
+          # (`@module-tag windows` / `macos`), so the test files decide, not this workflow.
+          - os: ubuntu-latest
+            label: Linux
+            tags: ""
+          - os: macos-latest
+            label: macOS
+            tags: --tags-filter macos
+          - os: windows-latest
+            label: Windows
+            tags: --tags-filter windows
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup
+
+      - name: Build and test
+        run: pnpm test ${{ matrix.tags }}
+
+      - name: Upload smoke-test workspaces on failure
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: smoke-workspaces-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/create-crust-smoke
+            ${{ runner.temp }}/create-crust-installed-*/diagnostics/**
+          if-no-files-found: ignore
+
+  docs:
+    name: Docs build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup
+
+      - name: Build docs
+        run: pnpm run build:docs
