@@ -85,3 +85,16 @@ jobs:
 
       - name: Build docs
         run: pnpm run build:docs
+
+  # The one check to require on main. A job skipped because one it needs failed counts as
+  # passing for a required check, so this one always runs and fails unless all of them succeeded.
+  passed:
+    name: CI passed
+    if: always()
+    needs: [check, test, docs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fail unless every job succeeded
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: exit 1
