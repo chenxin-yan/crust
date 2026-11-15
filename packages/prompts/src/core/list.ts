@@ -14,9 +14,9 @@ import {
 
 interface ListPromptOptions<T, Answer extends T | readonly T[]> {
 	readonly choices: readonly Choice<T>[];
-	readonly initial?: Answer;
-	readonly default?: Answer;
-	readonly maxVisible?: number;
+	readonly initial?: Answer | undefined;
+	readonly default?: Answer | undefined;
+	readonly maxVisible?: number | undefined;
 }
 
 type ListPromptSetup<T, Answer extends T | readonly T[]> =

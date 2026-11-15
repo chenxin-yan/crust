@@ -26,9 +26,9 @@ export interface NextStep {
 	/** The command's definition; the step names the command the application added from it. */
 	readonly command: AnyCommandDefinition;
 	/** Arguments, flags, and `raw` tokens in the shape `run()` takes, rendered as argv. */
-	readonly input?: RunInputPayload;
+	readonly input?: RunInputPayload | undefined;
 	/** What the step is for; printed above its command line. */
-	readonly description?: string;
+	readonly description?: string | undefined;
 }
 
 /** The `nextSteps` Context value: collects the steps to suggest after this invocation. */

@@ -33,6 +33,26 @@ function _generatorTypesEventsAndResult() {
 	>;
 }
 
+function _onEventReceivesTheYieldedValues() {
+	const sync = defineCommand("sync", (cmd) =>
+		cmd.flags({ dry: { type: "boolean" } }).action(async function* () {
+			yield { file: "a.txt" };
+			return 1;
+		}),
+	);
+	const app = new Crust("cli").add(sync);
+	const onEvent = (event: { file: string }) => void event.file;
+	void app.run(["sync"], {}, { onEvent });
+	void app.run(["sync"], { flags: { dry: true } }, { onEvent: (event) => void event.file });
+	void app.at(["sync"]).run({}, { onEvent });
+	// A callback written for any event still fits.
+	void app.run(["sync"], {}, { onEvent: (event: unknown) => void event });
+	// @ts-expect-error -- the event is `{ file: string }`
+	void app.run(["sync"], {}, { onEvent: (event) => void event.path });
+	// @ts-expect-error -- the event is `{ file: string }`
+	void app.at(["sync"]).run({}, { onEvent: (event: { path: string }) => void event });
+}
+
 function _zeroYieldsStillReportEvents() {
 	// oxlint-disable-next-line require-yield -- a generator that yields nothing still streams.
 	const app = new Crust("cli").action(async function* () {

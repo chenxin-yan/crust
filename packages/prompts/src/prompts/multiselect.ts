@@ -53,31 +53,31 @@ import { formatSubmitted, moveCursor, renderChoiceList, validateSelection } from
  */
 export interface MultiselectOptions<T> {
 	/** The prompt message displayed to the user */
-	readonly message?: string;
+	readonly message?: string | undefined;
 	/** List of choices — strings or `{ label, value, hint? }` objects */
 	readonly choices: readonly Choice<T>[];
 	/** Default selected values — matches choices using reference equality for object values. */
-	readonly default?: readonly T[];
+	readonly default?: readonly T[] | undefined;
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
-	readonly initial?: readonly T[];
+	readonly initial?: readonly T[] | undefined;
 	/**
 	 * Whether at least one item must be selected.
 	 *
 	 * @default false
 	 */
-	readonly required?: boolean;
+	readonly required?: boolean | undefined;
 	/** Minimum number of selections required */
-	readonly min?: number;
+	readonly min?: number | undefined;
 	/** Maximum number of selections allowed */
-	readonly max?: number;
+	readonly max?: number | undefined;
 	/**
 	 * Maximum number of visible choices before scrolling.
 	 *
 	 * @default 10
 	 */
-	readonly maxVisible?: number;
+	readonly maxVisible?: number | undefined;
 	/** Per-prompt theme overrides */
-	readonly theme?: PartialPromptTheme;
+	readonly theme?: PartialPromptTheme | undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

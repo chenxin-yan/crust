@@ -16,15 +16,18 @@ export interface InvocationIO {
 	stderr: (text: string) => void;
 }
 
-/** Caller options for one programmatic `run()` invocation: IO callbacks, action events, and cancellation. */
-export interface InvocationOptions extends Partial<InvocationIO> {
+/**
+ * Caller options for one programmatic `run()` invocation: IO callbacks, action events, and cancellation.
+ * Typed `run()` sets `Event` to the values the selected command's async generator action yields.
+ */
+export interface InvocationOptions<Event = unknown> extends Partial<InvocationIO> {
 	/** Aborting it aborts the invocation's `ctx.signal` with the same reason. */
 	signal?: AbortSignal;
 	/**
 	 * Receives each value an async generator Command Action yields, as it is yielded,
 	 * after the selected Renderer's `event`. A throw fails the invocation.
 	 */
-	onEvent?: (event: unknown) => void;
+	onEvent?: (event: Event) => void;
 }
 
 /**
@@ -231,7 +234,8 @@ interface JsonArgDef extends ArgDefBase {
  *
  * The schema receives the raw string token (`string | undefined` when the
  * argument is absent; `string[]` for variadic args) and exclusively owns
- * coercion, defaults, requiredness, choices, and validation. Its inferred
+ * coercion, defaults, requiredness, choices, and validation. TypeScript rejects
+ * a schema whose input type cannot accept a present token. Its inferred
  * output type reaches the Command Action. Core value options (`type`,
  * `default`, `required`, `choices`, `parse`) cannot be mixed in.
  */
@@ -398,7 +402,8 @@ interface SchemaFlagBase extends Omit<FlagDefBase, "schema" | "required"> {
  * A schema-backed flag that consumes a value token (`--flag value`).
  * The schema receives the raw string (`string | undefined`, or
  * `string[] | undefined` with `multiple: true`) and exclusively owns coercion,
- * defaults, requiredness, and validation. `type` declares token consumption only.
+ * defaults, requiredness, and validation; its input type must accept a present
+ * token. `type` declares token consumption only.
  */
 type SchemaStringFlagDef = SchemaFlagBase & {
 	type: "string";
@@ -608,9 +613,9 @@ export type RunInputValue = URL | JsonValue | readonly RunInputValue[];
 
 /** Runtime-erased structured `run()` input bound by `parseStructured`. */
 export interface RunInputPayload {
-	readonly args?: Readonly<Record<string, RunInputValue | undefined>>;
-	readonly flags?: Readonly<Record<string, RunInputValue | undefined>>;
-	readonly raw?: readonly string[];
+	readonly args?: Readonly<Record<string, RunInputValue | undefined>> | undefined;
+	readonly flags?: Readonly<Record<string, RunInputValue | undefined>> | undefined;
+	readonly raw?: readonly string[] | undefined;
 }
 
 // Conditional definitions cannot certify supplied values; inspect before distribution.
@@ -692,7 +697,7 @@ type InputArgsPrefixes<
 			Supplied & { [K in Head["name"]]: InputArgValue<Head> },
 			| Prefixes
 			| (RequiredArgNames<Remaining> extends never
-					? Simplify<Supplied & { [D in Remaining[number] as D["name"]]?: never }>
+					? Simplify<Supplied & { [D in Remaining[number] as D["name"]]?: undefined }>
 					: never)
 		>
 	: Prefixes | Simplify<Supplied>;
@@ -734,9 +739,9 @@ export type InputFlags<F extends FlagsDef> =
 				{
 					[K in RequiredFlagNames<KnownFlags<F>>]-?: InputFlagValue<KnownFlags<F>[K]>;
 				} & {
-					[K in Exclude<keyof KnownFlags<F>, RequiredFlagNames<KnownFlags<F>>>]?: InputFlagValue<
-						KnownFlags<F>[K]
-					>;
+					[K in Exclude<keyof KnownFlags<F>, RequiredFlagNames<KnownFlags<F>>>]?:
+						| InputFlagValue<KnownFlags<F>[K]>
+						| undefined;
 				}
 			> &
 				(string extends keyof F ? NonNullable<RunInputPayload["flags"]> : {});

@@ -4,8 +4,8 @@ import type { SchemaOrValidate } from "./types.ts";
 import { validateSubmitValue } from "./validate.ts";
 
 type ShortCircuitOptions<Input> = {
-	readonly initial?: Input;
-	readonly default?: Input;
+	readonly initial?: Input | undefined;
+	readonly default?: Input | undefined;
 };
 
 type ShortCircuitResult<Answer> =

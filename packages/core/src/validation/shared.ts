@@ -1,3 +1,5 @@
+import type { InferInput, StandardSchema } from "@crustjs/utils/schema";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Shared type helpers
 // ────────────────────────────────────────────────────────────────────────────
@@ -191,7 +193,52 @@ export type IsClosedName<N extends string> = false extends (
 	? false
 	: true;
 
+// The value a present argument or flag hands its schema, from argv, `env`, or typed `run()`.
+// Absence (`undefined`) is left out: a schema that rejects it owns requiredness. A present
+// repeatable flag has at least one occurrence; a variadic may be empty.
+type SchemaTokenName<T> = T extends { type: "boolean" } ? "boolean" : "string";
+type SchemaToken<T> = { boolean: boolean; string: string }[SchemaTokenName<T>];
+type SchemaTokens<T> = T extends { variadic: true }
+	? string[]
+	: T extends { multiple: true }
+		? [SchemaToken<T>, ...SchemaToken<T>[]]
+		: SchemaToken<T>;
+
+// An input narrower than the token (an enum, a literal) is validation, so overlap is enough.
+type AcceptsTokens<V, Input> = [V] extends [Input]
+	? true
+	: [V] extends [readonly (infer E)[]]
+		? true extends AcceptsTokenElements<E, Extract<Input, readonly unknown[]>>
+			? true
+			: false
+		: [Extract<Input, V>] extends [never]
+			? false
+			: true;
+
+// Per position: a fixed tuple (`[unknown, unknown]` from coercing members) neither extends
+// the token array nor contains it, yet overlaps it when every position accepts a token.
+type AcceptsTokenElements<E, A> = A extends readonly unknown[]
+	? false extends { [I in keyof A]: AcceptsTokens<E, A[I]> }[number]
+		? false
+		: true
+	: never;
+
+type SchemaInputMessage<T> = T extends { variadic: true } | { multiple: true }
+	? `schema input must accept ${SchemaTokenName<T>}[]; use an array schema`
+	: T extends { type: "boolean" }
+		? "schema input must accept boolean"
+		: "schema input must accept string; coerce it, e.g. z.coerce.number()";
+
+/** Brand a schema whose input type cannot accept any value the parser hands it. */
+type SchemaInputBrand<T> = T extends { schema: infer S extends StandardSchema }
+	? AcceptsTokens<SchemaTokens<T>, InferInput<S>> extends true
+		? {}
+		: { readonly FIX_SCHEMA_INPUT: SchemaInputMessage<T> }
+	: {};
+
 /** Reject independently provable invalid local values, including members of uncertain definitions. */
 export type LocalValueBrand<T> = UnionToIntersection<
-	T extends unknown ? AsyncParseBrand<T> & DefaultWithinChoicesBrand<T> : never
+	T extends unknown
+		? AsyncParseBrand<T> & DefaultWithinChoicesBrand<T> & SchemaInputBrand<T>
+		: never
 >;

@@ -40,29 +40,29 @@ import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
  */
 export interface ConfirmOptions {
 	/** The prompt message displayed to the user */
-	readonly message?: string;
+	readonly message?: string | undefined;
 	/**
 	 * Value used when the user presses Enter without toggling.
 	 *
 	 * @default true
 	 */
-	readonly default?: boolean;
+	readonly default?: boolean | undefined;
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
-	readonly initial?: boolean;
+	readonly initial?: boolean | undefined;
 	/**
 	 * Label for the affirmative option.
 	 *
 	 * @default "Yes"
 	 */
-	readonly active?: string;
+	readonly active?: string | undefined;
 	/**
 	 * Label for the negative option.
 	 *
 	 * @default "No"
 	 */
-	readonly inactive?: string;
+	readonly inactive?: string | undefined;
 	/** Per-prompt theme overrides */
-	readonly theme?: PartialPromptTheme;
+	readonly theme?: PartialPromptTheme | undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
