@@ -1,10 +1,12 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createInterface } from "node:readline";
 
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { Client } from "@modelcontextprotocol/client";
+import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 
 import type { McpLaunch } from "../src/index.ts";
@@ -44,8 +46,15 @@ async function configOf(command: string, args: string[]) {
 	return { launch: config.mcpServers.demo, stderr };
 }
 
-async function roundTrip(launch: McpLaunch) {
-	const client = new Client({ name: "test", version: "0.0.0" });
+const LEGACY = "2025-11-25";
+const MODERN = "2026-07-28";
+
+async function roundTrip(launch: McpLaunch, protocolVersion: typeof LEGACY | typeof MODERN) {
+	const client = new Client(
+		{ name: "test", version: "0.0.0" },
+		// Unpinned, the client opens with the `initialize` handshake, as one that predates 2026-07-28 does.
+		protocolVersion === MODERN ? { versionNegotiation: { mode: { pin: MODERN } } } : {},
+	);
 	const transport = new StdioClientTransport({
 		command: launch.command,
 		args: [...launch.args],
@@ -55,6 +64,7 @@ async function roundTrip(launch: McpLaunch) {
 	});
 	await client.connect(transport);
 	try {
+		expect(client.getNegotiatedProtocolVersion()).toBe(protocolVersion);
 		expect(client.getServerVersion()).toMatchObject({ name: "demo", version: "0.1.0" });
 		const { tools } = await client.listTools();
 		// `mcp` and `mcp config` never become tools, and input()'s `--input` is no tool input.
@@ -72,7 +82,6 @@ async function roundTrip(launch: McpLaunch) {
 		// Neither path reads the protocol's stdin, so the session keeps serving.
 		const stdinRead = await client.callTool(
 			{ name: "greet", arguments: { name: "world", input: "-" } },
-			undefined,
 			{ timeout: 2_000 },
 		);
 		expect(stdinRead).toMatchObject({
@@ -84,14 +93,14 @@ async function roundTrip(launch: McpLaunch) {
 				},
 			],
 		});
-		const slurp = await client.callTool({ name: "slurp" }, undefined, { timeout: 2_000 });
+		const slurp = await client.callTool({ name: "slurp" }, { timeout: 2_000 });
 		expect(slurp).toMatchObject({
 			isError: true,
 			content: [{ type: "text", text: "Error: stdin is in use by another reader" }],
 		});
-		expect((await client.callTool(greet, undefined, { timeout: 2_000 })).structuredContent).toEqual(
-			{ greeting: "HELLO WORLD" },
-		);
+		expect((await client.callTool(greet, { timeout: 2_000 })).structuredContent).toEqual({
+			greeting: "HELLO WORLD",
+		});
 	} finally {
 		await client.close();
 	}
@@ -102,18 +111,70 @@ describe("stdio serving through execute()", () => {
 		const { launch, stderr } = await configOf("bun", [fixture]);
 		expect(launch).toEqual({ type: "stdio", command: bunExecPath, args: [fixture, "mcp"] });
 		expect(stderr).toBe(`Or run: claude mcp add demo -- ${bunExecPath} ${fixture} mcp\n`);
-		await roundTrip(launch);
+		await roundTrip(launch, LEGACY);
+		await roundTrip(launch, MODERN);
 	});
 
 	it("compiled mode: config points at the executable itself, and the server round-trips", async () => {
 		const { launch } = await configOf(compiled, []);
 		expect(launch).toEqual({ type: "stdio", command: compiled, args: ["mcp"] });
-		await roundTrip(launch);
+		await roundTrip(launch, LEGACY);
+		await roundTrip(launch, MODERN);
+	});
+
+	it("serves a client that probes with server/discover, then falls back to initialize", async () => {
+		const child = spawn(compiled, ["mcp"], {
+			stdio: ["pipe", "pipe", "inherit"],
+			timeout: 5_000,
+			killSignal: "SIGKILL",
+		});
+		const replies = createInterface({ input: child.stdout });
+		const request = async (id: number, method: string, params: object) => {
+			child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
+			const [reply] = await once(replies, "line");
+			return JSON.parse(reply);
+		};
+		const clientInfo = { name: "test", version: "0.0.0" };
+		const discovered = await request(1, "server/discover", {
+			_meta: {
+				"io.modelcontextprotocol/protocolVersion": MODERN,
+				"io.modelcontextprotocol/clientCapabilities": {},
+				"io.modelcontextprotocol/clientInfo": clientInfo,
+			},
+		});
+		expect(discovered.result).toMatchObject({
+			supportedVersions: [MODERN],
+			resultType: "complete",
+		});
+		const initialized = await request(2, "initialize", {
+			protocolVersion: LEGACY,
+			capabilities: {},
+			clientInfo,
+		});
+		expect(initialized.result).toMatchObject({
+			protocolVersion: LEGACY,
+			serverInfo: { name: "demo", version: "0.1.0" },
+		});
+		child.stdin.write(
+			`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`,
+		);
+		const listed = await request(3, "tools/list", {});
+		expect(listed.result.tools).toHaveLength(3);
+		// The fields 2026-07-28 requires stay off a 2025-11-25 session.
+		expect(listed.result).not.toHaveProperty("resultType");
+		child.stdin.end();
+		expect(await once(child, "exit")).toEqual([0, null]);
 	});
 
 	it("exits cleanly when the client hangs up", async () => {
 		// An empty `input` closes stdin immediately, as a hanging-up client would.
-		const child = spawnSync(compiled, ["mcp"], { input: "", encoding: "utf8", timeout: 5_000 });
+		// SIGKILL: while it serves, the process outlives a first SIGTERM.
+		const child = spawnSync(compiled, ["mcp"], {
+			input: "",
+			encoding: "utf8",
+			timeout: 5_000,
+			killSignal: "SIGKILL",
+		});
 		expect(child.status).toBe(0);
 		expect(child.stdout).toBe("");
 	});

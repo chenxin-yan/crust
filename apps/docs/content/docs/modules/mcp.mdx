@@ -12,7 +12,9 @@ MCP serves clients that call tools instead of running a shell; [how agents use y
 npm install @crustjs/mcp
 ```
 
-The package has a peer dependency on `@crustjs/core` and depends on `@modelcontextprotocol/sdk`. Only the stdio transport is supported.
+The package has a peer dependency on `@crustjs/core` and depends on `@modelcontextprotocol/server`, the MCP TypeScript SDK. Only the stdio transport is supported.
+
+The server speaks MCP protocol revision 2026-07-28. A client that opens with the `initialize` handshake is served the revision it asks for, 2025-11-25 or earlier; the opening exchange decides, with nothing to configure.
 
 ## `mcpExtension(options)`
 
@@ -76,7 +78,7 @@ Each tool's `inputSchema` comes from [`commandInputSchema()`](/docs/modules/core
 
 The outcome of `app.run()` decides the tool result:
 
-- A `completed` result that is plain JSON (finite numbers, strings, booleans, `null`, arrays, and plain objects of those) is returned as `structuredContent` plus a text block with the same JSON. Arrays and primitives are wrapped as `{ "result": value }`.
+- A `completed` result that is plain JSON (finite numbers, strings, booleans, `null`, arrays, and plain objects of those) is returned as `structuredContent` plus a text block with the same JSON. Arrays and primitives are wrapped as `{ "result": value }` under every protocol revision: 2026-07-28 allows any JSON value, but earlier revisions require an object.
 - Any other `completed` result (`undefined`, `Date`, `Map`, class instances, `BigInt`, `NaN`, cycles) and every `handled` outcome return the captured stdout as text. The result is copied once before serialization, so getters run once and `toJSON` is not called.
 - A `failed` outcome sets `isError` with `<code>: <message>` for a `CrustError`, `<name>: <message>` for other errors. Arguments that cannot become `run()` input, such as an invalid URL or a `raw` that is not an array of strings, fail the same way with `PARSE`.
 
@@ -111,7 +113,7 @@ Without a token, no notifications are sent. Either way, the tool result is the a
 
 <include lang="ts">../../../examples/modules/mcp.ts#headless</include>
 
-`createMcpServer(app, options?)` returns the SDK's low-level `Server` with `tools/list` and `tools/call` handlers. `serveStdio(server)` connects the stdio transport and resolves when the client disconnects.
+`serveStdio(app, options?)` serves the application over the stdio transport and resolves when the client disconnects; it is what `<cli> mcp` runs. `createMcpServer(app, options?)` returns the SDK's low-level `Server` with the same `tools/list` and `tools/call` handlers, to connect to a transport yourself, as in a test; connected that way it speaks 2025-11-25 and earlier only. Both take `exclude` and `include`, and reject when the tool list cannot be built.
 
 - The server is named after the root command, with its `version` or `DEFAULT_SERVER_VERSION` (`0.0.0`).
 - Each call runs `app.run(path, input, { signal })` with its own captured output, plus an `onEvent` that sends [progress](#progress) when the request carries a progress token.
