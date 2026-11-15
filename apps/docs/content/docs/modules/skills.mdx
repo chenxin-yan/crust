@@ -77,7 +77,7 @@ global:  ~/.agents/skills/my-cli -> /usr/lib/node_modules/my-cli/skills/my-cli
 Project links are relative and global links are absolute. Before each Command Action, an installed CLI repairs Crust-owned links whose target no longer exists, unless `autoUpdate: false`:
 
 - It never creates links that were not installed.
-- It leaves a link to another live installed copy of the CLI (global versus project-local, `npx`) alone, so the copies do not take it from each other. `skills repair` re-points such a link to the running copy.
+- It leaves a link to another live installed copy of the CLI (global versus project-local, `npx`) alone, so the copies do not take it from each other, and prints one stderr line naming the link and the `skills repair --scope <scope>` command that re-points it to the running copy. The line is skipped under CI, when `NO_UPDATE_NOTIFIER` is set, and when stderr is not a terminal, the same rules as `updateNotifier()`.
 - Running from source (`bun run`, `node`) skips the repair, so trying a checkout never moves an installed CLI's links to its build. Run `skills repair` there to relink deliberately.
 
 A link is Crust-owned when its textual target ends in `skills/<name>`. Real directories and foreign links conflict unless `force: true` is passed to low-level installation.

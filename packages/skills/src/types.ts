@@ -95,8 +95,9 @@ export interface SkillOptions {
 	defaultScope?: Scope;
 	/**
 	 * Repair owned links whose target no longer exists before commands run. A link to another
-	 * live installed copy is left alone (`skills repair` re-points it). Never runs from source, so a
-	 * checkout does not take over an installed CLI's links. @default true
+	 * live installed copy is left alone, with a stderr notice naming `skills repair`, which re-points
+	 * it; the notice is skipped under CI, with `NO_UPDATE_NOTIFIER`, and when stderr is not a terminal.
+	 * Never runs from source, so a checkout does not take over an installed CLI's links. @default true
 	 */
 	autoUpdate?: boolean;
 	/**

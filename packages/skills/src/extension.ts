@@ -17,6 +17,7 @@ import {
 import { bold, dim, yellow } from "@crustjs/style";
 import { isSourceRun, resolveArtifactDir } from "@crustjs/utils/artifacts";
 import { isWithin } from "@crustjs/utils/path";
+import { isCI } from "@crustjs/utils/terminal";
 
 import {
 	AGENT_LABELS,
@@ -71,6 +72,17 @@ function conflictWarning(name: string, outputDir: string): string {
 	);
 }
 
+function otherCopyNotice(name: string, outputDir: string, repairCommand: string): string {
+	return yellow(
+		`Skill link [${name}]: "${outputDir}" points at another installed copy of this CLI. Run "${repairCommand}" to link this copy.`,
+	);
+}
+
+/** updateNotifier's skip rules: CI runs, redirected stderr, and the user's opt-out. */
+function isOtherCopyNoticeSuppressed(): boolean {
+	return !!process.env.NO_UPDATE_NOTIFIER || !process.stderr?.isTTY || isCI();
+}
+
 function formatAgentLabels(agents: readonly AgentTarget[]): string[] {
 	const universal = new Set(getUniversalAgents());
 	const labels = agents.some((agent) => universal.has(agent)) ? ["Universal"] : [];
@@ -83,13 +95,15 @@ function formatAgentLabels(agents: readonly AgentTarget[]): string[] {
 /**
  * `explicit` is the `repair` command: it reports and re-points every stale owned link.
  * Background repair fixes only links whose target is gone; a link to another live
- * installed copy is left alone so two copies of the CLI do not take it from each other.
+ * installed copy is left alone so two copies of the CLI do not take it from each other,
+ * and is named on stderr when the caller passes `repairCommand`.
  */
 async function repairInstalledSkill(
 	packagedSkill: PackagedSkill,
 	scope: Scope,
 	io: SkillIO,
 	explicit = false,
+	repairCommand?: string,
 ): Promise<void> {
 	const status = await getSkillStatus({
 		name: packagedSkill.name,
@@ -102,9 +116,20 @@ async function repairInstalledSkill(
 	)) {
 		io.stderr(conflictWarning(packagedSkill.name, outputDir));
 	}
-	const stale = status.agents.filter(
-		(entry) => entry.status === "dangling" && (explicit || !existsSync(entry.outputDir)),
-	);
+	const dangling = status.agents.filter((entry) => entry.status === "dangling");
+	const stale = explicit ? dangling : dangling.filter((entry) => !existsSync(entry.outputDir));
+	if (repairCommand) {
+		const otherCopies = dangling.filter((entry) => !stale.includes(entry));
+		for (const outputDir of new Set(otherCopies.map((entry) => entry.outputDir))) {
+			io.stderr(
+				otherCopyNotice(
+					packagedSkill.name,
+					outputDir,
+					`${repairCommand} --scope ${effectiveScope}`,
+				),
+			);
+		}
+	}
 	if (stale.length === 0) {
 		if (explicit) io.stdout(dim(`No repairs needed [${packagedSkill.name}] (${effectiveScope}).`));
 		return;
@@ -129,7 +154,11 @@ async function repairInstalledSkill(
 	}
 }
 
-async function autoRepairSkills(options: SkillOptions, io: SkillIO): Promise<void> {
+async function autoRepairSkills(
+	options: SkillOptions,
+	io: SkillIO,
+	repairCommand: string,
+): Promise<void> {
 	let skills: readonly PackagedSkill[];
 	try {
 		skills = loadArtifactSkills();
@@ -149,10 +178,11 @@ async function autoRepairSkills(options: SkillOptions, io: SkillIO): Promise<voi
 		? [options.defaultScope]
 		: ["project", "global"];
 	const scopes = [...new Set(configuredScopes.map(resolveEffectiveScope))];
+	const noticeCommand = isOtherCopyNoticeSuppressed() ? undefined : repairCommand;
 	for (const packagedSkill of skills) {
 		for (const scope of scopes) {
 			try {
-				await repairInstalledSkill(packagedSkill, scope, io);
+				await repairInstalledSkill(packagedSkill, scope, io, false, noticeCommand);
 			} catch (error) {
 				// Filesystem errors during background repair must not abort the user's
 				// unrelated command; the explicit skill command surfaces them loudly.
@@ -292,7 +322,7 @@ const skillFactory: ExtensionFactory<
 				// checkout's last build, and repairing would move every link away from the installed
 				// CLI, which then moves them back on its next run.
 				if (isSourceRun()) return;
-				await autoRepairSkills(options, context);
+				await autoRepairSkills(options, context, `${context.commandPath[0]} ${commandName} repair`);
 			})
 			// Skills are loaded when a snapshot is prepared, not at construction, so
 			// help and man pages reflect the packaged directory as it exists at render time.

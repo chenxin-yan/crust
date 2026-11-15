@@ -99,6 +99,21 @@ async function linkTarget(path: string): Promise<string> {
 	return resolve(dirname(path), await readlink(path));
 }
 
+const stderrIsTTY = Object.getOwnPropertyDescriptor(process.stderr, "isTTY");
+
+/** Runs with an interactive, non-CI stderr, where the other-copy link notice shows; the runner may be neither. */
+async function onTerminal<T>(run: () => Promise<T>): Promise<T> {
+	vi.stubEnv("CI", undefined);
+	vi.stubEnv("NO_UPDATE_NOTIFIER", undefined);
+	Object.defineProperty(process.stderr, "isTTY", { configurable: true, value: true });
+	try {
+		return await run();
+	} finally {
+		if (stderrIsTTY) Object.defineProperty(process.stderr, "isTTY", stderrIsTTY);
+		else Reflect.deleteProperty(process.stderr, "isTTY");
+	}
+}
+
 /** Runs `demo <argv>` on a fake terminal from `tempRoot`; empty PATH keeps agent detection deterministic. */
 function executeWithPrompts(argv: string[]) {
 	vi.stubEnv("PATH", "");
@@ -417,10 +432,14 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		const installed = join(tempRoot, ".claude", "skills", "demo");
 		await mkdir(dirname(installed), { recursive: true });
 		await symlink(join(tempRoot, "missing", "skills", "demo"), installed);
+		const run = () =>
+			onTerminal(() => asInstalled(() => withCwd(tempRoot, () => captureExecute(createApp(), []))));
 
-		await asInstalled(() => withCwd(tempRoot, () => createApp().execute({ argv: [] })));
+		expect((await run()).stderr).toBe("");
 		expect(await linkTarget(installed)).toBe(join(source, "demo"));
 		expect(await readFile(join(installed, "content.md"), "utf8")).toBe("current\n");
+		// The repaired link is healthy, so the next run stays quiet as well.
+		expect((await run()).stderr).toBe("");
 	});
 
 	// Two installed copies (global + project-local, npx) would otherwise take the link from each other on every run.
@@ -433,7 +452,36 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		await mkdir(dirname(installed), { recursive: true });
 		await symlink(other, installed);
 
-		await asInstalled(() => withCwd(tempRoot, () => createApp().execute({ argv: [] })));
+		const captured = await onTerminal(() =>
+			asInstalled(() => withCwd(tempRoot, () => captureExecute(createApp(), []))),
+		);
+		expect(captured.exitCode).toBe(0);
+		expect(captured.stderr).toBe(
+			`Skill link [demo]: "${installed}" points at another installed copy of this CLI. Run "demo skills repair --scope project" to link this copy.`,
+		);
+		expect(await readlink(installed)).toBe(other);
+	});
+
+	it.each([
+		["under CI", () => vi.stubEnv("CI", "true")],
+		["when NO_UPDATE_NOTIFIER is set", () => vi.stubEnv("NO_UPDATE_NOTIFIER", "1")],
+		[
+			"when stderr is not a terminal",
+			() => Object.defineProperty(process.stderr, "isTTY", { configurable: true, value: false }),
+		],
+	])("does not notice a link to another live copy %s", async (_case, suppress) => {
+		await writeSource("demo");
+		const other = join(tempRoot, "other", "skills", "demo");
+		await mkdir(other, { recursive: true });
+		const installed = join(tempRoot, ".claude", "skills", "demo");
+		await mkdir(dirname(installed), { recursive: true });
+		await symlink(other, installed);
+
+		const captured = await onTerminal(() => {
+			suppress();
+			return asInstalled(() => withCwd(tempRoot, () => captureExecute(createApp(), [])));
+		});
+		expect(captured.stderr).toBe("");
 		expect(await readlink(installed)).toBe(other);
 	});
 
