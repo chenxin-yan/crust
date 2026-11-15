@@ -21,7 +21,7 @@ import type { BuildOptions } from "@crustjs/crust";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 
 import { reapBoundedProcesses, runBoundedProcess } from "../../crust/tests/bounded-process.ts";
-import { floorRuntime, seaNodeBinDir } from "../../crust/tests/helpers.ts";
+import { floorRuntime, seaNodeBinDir, workspaceClosure } from "../../crust/tests/helpers.ts";
 import { type RunProcessResult, which } from "../../utils/src/process.ts";
 
 type Runtime = "bun" | "node";
@@ -32,38 +32,11 @@ const repoRoot = resolve(import.meta.dirname, "..", "..", "..");
 const smokeRoot = join(process.env.RUNNER_TEMP ?? tmpdir(), "create-crust-smoke");
 const localPackageDir = join(smokeRoot, "local-packages");
 
-const localDependencyPackages = [
-	{
-		// Runtime dependency of core; has no dist/index.js, any subpath output works.
-		name: "@crustjs/utils",
-		dir: "utils",
-		requiredBuildOutput: "dist/terminal.js",
-	},
-	{
-		name: "@crustjs/style",
-		dir: "style",
-		requiredBuildOutput: "dist/index.js",
-	},
-	{
-		name: "@crustjs/core",
-		dir: "core",
-		requiredBuildOutput: "dist/index.js",
-	},
-	{
-		name: "@crustjs/extensions",
-		dir: "extensions",
-		requiredBuildOutput: "dist/index.js",
-	},
-	{
-		// The 0.2.0 cohort is unpublished until release; link the workspace
-		// package so the scaffolded project's devDependency resolves. Linked
-		// (not packed): the published layout is the staged `.crust/root`, while
-		// the workspace package's bin is its source, which the smoke runs with
-		// Bun by path.
-		name: "@crustjs/crust",
-		dir: "crust",
-	},
-] as const;
+// The scaffolded project's runtime dependencies, packed from their local builds.
+const packedPackages = workspaceClosure(["@crustjs/core", "@crustjs/extensions"]);
+// Linked, not packed: the published layout is the staged `.crust/root`, while the workspace
+// package's bin is its source, which the smoke runs with Bun by path.
+const linkedCrustDir = join(repoRoot, "packages", "crust");
 
 let localSpecs: Record<string, string> = {};
 // Generated projects run on the oldest Node that core's engines allow, first on PATH.
@@ -138,20 +111,14 @@ function crustBuildArgv(projectDir: string, artifact: Artifact): string[] {
 
 async function packLocalDependencyPackages(): Promise<Record<string, string>> {
 	mkdirSync(localPackageDir, { recursive: true });
-	const specs: Record<string, string> = {};
+	const specs: Record<string, string> = {
+		"@crustjs/crust": `file:${linkedCrustDir.replaceAll("\\", "/")}`,
+	};
 
-	for (const pkg of localDependencyPackages) {
-		const packageDir = join(repoRoot, "packages", pkg.dir);
-		if (!("requiredBuildOutput" in pkg)) {
-			specs[pkg.name] = `file:${packageDir.replaceAll("\\", "/")}`;
-			continue;
-		}
-
-		const requiredBuildOutput = join(packageDir, pkg.requiredBuildOutput);
-		if (!existsSync(requiredBuildOutput)) {
-			throw new Error(
-				`Built package output not found at ${requiredBuildOutput}. Run the package build first.`,
-			);
+	for (const pkg of packedPackages) {
+		const packageDir = pkg.dir;
+		if (!existsSync(join(packageDir, "dist"))) {
+			throw new Error(`${pkg.name} has no dist. Run the package build first.`);
 		}
 
 		const before = new Set(readdirSync(localPackageDir));
