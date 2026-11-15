@@ -1,7 +1,8 @@
-import { Crust, defineCommand } from "@crustjs/core";
-import { confirm } from "@crustjs/extensions";
+import { type AnyCrust, Crust, defineCommand } from "@crustjs/core";
+import { completion, confirm, help, input, json, schema } from "@crustjs/extensions";
 import { describe, expect, it } from "vite-plus/test";
 
+import { mcpExtension } from "./extension.ts";
 import { toolsFromSnapshot } from "./tools.ts";
 
 const noop = () => {};
@@ -74,6 +75,25 @@ describe("toolsFromSnapshot", () => {
 				exclude: [["group"], ["group", "leaf"], ["secret"]],
 			}).map((tool) => tool.name),
 		).toEqual(["deploy"]);
+	});
+
+	it("serves Extension commands only when included, and never Extension flags", async () => {
+		const app: AnyCrust = new Crust("cli", { description: "CLI", version: "1.0.0" })
+			.extend(help(), input(), json(), completion(), schema())
+			.extend(mcpExtension({ app: () => app }))
+			.add(defineCommand("work", (c) => c.flags({ fast: { type: "boolean" } }).action(noop)));
+		const snapshot = await app.snapshot();
+		const tools = toolsFromSnapshot(snapshot);
+		expect(tools.map((tool) => tool.name)).toEqual(["work"]);
+		expect(Object.keys(tools[0]!.inputSchema.properties)).toEqual(["fast", "raw"]);
+		expect(
+			toolsFromSnapshot(snapshot, { include: [["schema"], ["mcp"], ["mcp", "config"]] }).map(
+				(tool) => tool.name,
+			),
+		).toEqual(["work", "schema"]);
+		expect(() => toolsFromSnapshot(snapshot, { include: [["skills"]] })).toThrow(
+			'Unknown MCP include paths "skills"; include takes canonical command paths',
+		);
 	});
 
 	it("exposes the root under its own name only when it has an action", async () => {

@@ -77,8 +77,8 @@ function resultFromOutcome(outcome: RunOutcome<unknown>): CallToolResult {
 /**
  * Build an MCP server whose tools are the application's commands.
  *
- * Tools come from `app.snapshot()` (Extension-contributed commands included)
- * via {@link toolsFromSnapshot}; each call runs `app.run(path, input)` with its
+ * Tools come from `app.snapshot()` via {@link toolsFromSnapshot} (Extension
+ * commands only when `include` names them); each call runs `app.run(path, input)` with its
  * own captured stdout/stderr, so concurrent calls never share state and never
  * write to the process's stdout. The server is named after the root command,
  * with its `version` or {@link DEFAULT_SERVER_VERSION}. When a call carries a

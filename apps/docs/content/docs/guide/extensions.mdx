@@ -73,6 +73,8 @@ Return a chain on the supplied Extension to keep its id. See [`ExtensionBuilder`
 
 The preview flag above is available on every command, so no command may declare its own `--preview`. Set `recursive: false` on a flag definition to make it root-only; then only the root's flags must avoid its spellings.
 
+Extension flags configure the invocation, not the command, so [`--input`](/docs/modules/extensions/input) JSON, `schema`, and [MCP](/docs/modules/mcp#tools) tool inputs leave them out. For a flag agents should set, own it through a [provided Context](#dependency-injection) instead.
+
 An Extension can also install top-level commands:
 
 <include lang="ts" meta='title="cli.ts"'>
@@ -89,6 +91,7 @@ Contributed commands work like commands added with `.add()`, including typed `ru
 - A name or alias that collides with an app command or another Extension's command is a compile error.
 - A collision TypeScript can't see, such as a name chosen by a factory option, is a `DEFINITION` error when the app prepares.
 - Such a runtime-only name makes `run()` results `unknown` for the Extension commands registered up to and in that `.extend()` call, since a same-id re-registration may replace them. Your own commands keep their result types.
+- They are [MCP tools](/docs/modules/mcp#tools) only when `include` names them.
 
 [`@crustjs/mcp`](/docs/modules/mcp) uses this pattern to install an `mcp` command that serves your commands as MCP tools.
 

@@ -109,7 +109,7 @@ An installed command name uses letters, digits, `.`, `_`, and `-`, and starts wi
 
 ### Command input as JSON
 
-`commandInputSchema(command, path)` describes a command's input as one flat JSON object: every arg and flag by name, plus `raw` for the passthrough values the action receives as `rawArgs`.
+`commandInputSchema(command, path)` describes a command's input as one flat JSON object: every arg and flag by name, plus `raw` for the passthrough values the action receives as `rawArgs`. Flags an Extension declares (`--help`, `--json`, `--input`, …, marked by `extension` in their [`FlagSnapshot`](/docs/api/types#flagsnapshot)) configure the invocation, not the command, so they are left out; Context-owned flags such as `confirm()`'s `--yes` stay.
 
 It throws, naming `path`, when an arg and a flag share a name or a definition is named `raw`.
 
@@ -121,7 +121,8 @@ It throws, naming `path`, when an arg and a flag share a name or a definition is
 | `type: "json"`                 | `{}` (any JSON)                                                                                                     |
 | `choices`                      | `{ type: "string", enum }`                                                                                          |
 | `variadic` / `multiple`        | `{ type: "array", items }`                                                                                          |
-| `required` without `default`   | listed in `required`                                                                                                |
+| `required` without `default`   | listed in `required`, unless the flag has an `env` binding                                                          |
+| flag `env`                     | The description ends with `(falls back to $NAME)`, or is `Falls back to $NAME`                                      |
 | Standard Schema                | Its input JSON Schema when `run()` accepts that shape; otherwise the declared token type (`string` for schema args) |
 | custom `parse`                 | The declared token type; the command validates and transforms when it runs                                          |
 | every command                  | `raw: { type: "array", items: { type: "string" } }`, delivered to the action as `rawArgs`                           |
@@ -138,10 +139,10 @@ Defaults are advertised as `JSON.stringify` copies: `URL`s become strings, and n
 
 `parseCommandInput(command, values)` turns such an object back into `run()` input; `run()` then validates it like any structured invocation.
 
-- Arg names fill `args`, `raw` fills `raw`, and every other name goes to `flags`.
+- Arg names fill `args`, `raw` fills `raw`, and every other name goes to `flags`, where `run()` rejects unknown ones. An Extension flag's name is rejected here, `Flag "--json" is not command input: set it on the command line`; an arg sharing that name still binds as the arg.
 - Strings for `url` definitions become `URL`s. `commandInputFields(command)` returns the arg names and `url` field names it uses.
 - `undefined` entries are skipped.
-- It rejects with `PARSE` for a value that is not JSON data, a `raw` that is not an array of strings, or an invalid URL (the same `Invalid URL for --name.` error argv gives, without the value).
+- It rejects with `PARSE` for an Extension flag, a value that is not JSON data, a `raw` that is not an array of strings, or an invalid URL (the same `Invalid URL for --name.` error argv gives, without the value).
 
 ### JSON Schema from a Standard Schema
 

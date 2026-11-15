@@ -271,12 +271,18 @@ export async function runProcess(
  * All of stdin as UTF-8 text. Read asynchronously: a synchronous read would block the
  * event loop, so Ctrl-C could not cancel a read waiting on an open pipe or terminal.
  * Rejects with `signal.reason` on abort. Stdin an earlier consumer already read to EOF
- * reads as `""`, since its `end` event cannot fire again.
+ * reads as `""`, since its `end` event cannot fire again. Throws while another
+ * reader consumes stdin (a flowing stream with a `data` listener), such as an
+ * MCP stdio transport whose protocol frames arrive there: reading would steal
+ * them, and the read would end only when that reader's peer hangs up.
  */
 export async function readStdin(signal: AbortSignal): Promise<string> {
 	signal.throwIfAborted();
 	const { stdin } = process;
 	if (stdin.readableEnded || stdin.destroyed) return "";
+	if (stdin.readableFlowing === true && stdin.listenerCount("data") > 0) {
+		throw new Error("stdin is in use by another reader");
+	}
 	const chunks: Buffer[] = [];
 	const done = Promise.withResolvers<string>();
 	// Strings arrive when something already called `stdin.setEncoding()`.

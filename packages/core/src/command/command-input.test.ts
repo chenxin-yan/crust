@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
 
+import { defineContext } from "../api/context.ts";
+import { defineExtension } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
+import { defineExtensionId } from "../identity.ts";
 import {
 	commandInputFields,
 	commandInputSchema,
@@ -47,6 +50,23 @@ const send = defineCommand("send", (c) =>
 
 async function sendSnapshot() {
 	return (await new Crust("cli").add(send).snapshot()).subCommands.send!;
+}
+
+const presentation = defineExtensionId("presentation");
+const yesContext = defineContext("yes")
+	.flags({ yes: { type: "boolean", description: "Confirm" } })
+	.setup(() => "yes");
+
+/** An app whose `go` command parses an Extension flag and a Context-owned flag. */
+async function extendedSnapshot() {
+	const app = new Crust("cli")
+		.extend(
+			defineExtension(presentation)
+				.flags({ input: { type: "string" }, help: { type: "boolean" } })
+				.provide(yesContext()),
+		)
+		.add(defineCommand("go", (c) => c.use(yesContext).action(noop)));
+	return (await app.snapshot()).subCommands.go!;
 }
 
 describe("commandInputSchema", () => {
@@ -261,6 +281,37 @@ describe("commandInputSchema", () => {
 		expect(properties["hasOwnProperty"]).toEqual({ type: "boolean" });
 	});
 
+	it("leaves out Extension flags and keeps Context-owned flags", async () => {
+		const go = await extendedSnapshot();
+		expect(go.flags.input?.extension).toBe(presentation);
+		expect(go.flags.yes?.extension).toBeUndefined();
+		expect(Object.keys(commandInputSchema(go, ["go"]).properties)).toEqual(["yes", "raw"]);
+	});
+
+	it("leaves env-backed flags optional and names the variable", async () => {
+		const app = new Crust("cli").add(
+			defineCommand("login", (c) =>
+				c
+					.flags({
+						token: { type: "string", env: { name: "TOKEN" }, required: true, description: "Token" },
+						user: { type: "string", env: { name: "USER_NAME" } },
+						scope: { type: "string", required: true },
+					})
+					.action(noop),
+			),
+		);
+		const schema = commandInputSchema((await app.snapshot()).subCommands.login!, ["login"]);
+		expect(schema.properties.token).toEqual({
+			type: "string",
+			description: "Token (falls back to $TOKEN)",
+		});
+		expect(schema.properties.user).toEqual({
+			type: "string",
+			description: "Falls back to $USER_NAME",
+		});
+		expect(schema.required).toEqual(["scope"]);
+	});
+
 	it("rejects an arg and flag sharing a name, or a definition named raw, naming the path", async () => {
 		const snapshot = await new Crust("cli")
 			.add(
@@ -324,6 +375,48 @@ describe("parseCommandInput", () => {
 		expect(parseCommandInput(await sendSnapshot(), { unknown: 1 })).toEqual({
 			args: {},
 			flags: { unknown: 1 },
+		});
+	});
+
+	it("rejects Extension flags, naming where they are set", async () => {
+		const go = await extendedSnapshot();
+		expect(parseCommandInput(go, { yes: true })).toEqual({ args: {}, flags: { yes: true } });
+		for (const name of ["input", "help"]) {
+			const error = (() => {
+				try {
+					parseCommandInput(go, { [name]: "-" });
+				} catch (caught) {
+					return caught;
+				}
+			})();
+			expect(error).toBeInstanceOf(CrustError);
+			expect(error).toMatchObject({
+				code: "PARSE",
+				message: `Flag "--${name}" is not command input: set it on the command line`,
+				details: { flag: name, reason: "unknown-flag" },
+			});
+		}
+	});
+
+	it("binds args and raw that share an Extension flag's name", async () => {
+		const app = new Crust("cli")
+			.extend(
+				defineExtension(presentation).flags({
+					input: { type: "string" },
+					[RAW_INPUT_PROPERTY]: { type: "boolean" },
+				}),
+			)
+			.add(
+				defineCommand("echo", (c) =>
+					c.args({ name: "input", type: "string", required: true }).action(noop),
+				),
+			);
+		const echo = (await app.snapshot()).subCommands.echo!;
+		expect(commandInputSchema(echo, ["echo"]).required).toEqual(["input"]);
+		expect(parseCommandInput(echo, { input: "hello", [RAW_INPUT_PROPERTY]: ["x"] })).toEqual({
+			args: { input: "hello" },
+			flags: {},
+			raw: ["x"],
 		});
 	});
 

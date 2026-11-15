@@ -305,7 +305,7 @@ Editors complete command names, argument and flag names, and the action's result
 
 - Values bind directly against definitions without producing argv, then flow through parsers, schemas, Contexts, and the action. Custom parsers and schemas still receive their raw input, usually strings.
 - Supplied positionals must form a prefix. `undefined` means omitted. An empty `multiple` array means zero occurrences.
-- Structured input binding never reads `process.env`, so a flag's `env` fallback does not apply. Only [`.execute()`](#executeoptions) uses flag environment fallbacks. Contexts can still read the environment when pulled.
+- A flag the input omits falls back to its `env` variable, then to its default; a supplied value always wins. Variables come from `options.env`, which defaults to `process.env`, so `run()` resolves like the terminal; pass `{ env: {} }` (or chosen variables) so results don't depend on the caller's shell. An invalid environment value fails like on argv, naming the variable but not the value. TypeScript lets the input omit a `required` flag that has an `env` binding.
 - TypeScript rejects unknown argument, flag, and top-level keys, including in inputs held in variables. Keys set to `undefined` count as omitted. At runtime, unknown argument or flag keys return a failed outcome before the action runs.
 - `raw` reaches the action as `rawArgs`, like tokens after `--` that no declared argument consumed. It never fills `args`.
 - The path alone selects the command. Unknown path segments return a `COMMAND_NOT_FOUND` failure, even when the nearest parent has an action.
@@ -344,6 +344,7 @@ Runs the terminal boundary: parses `process.argv.slice(2)` (or `options.argv`), 
 - On macOS and Linux, each default `stdout(text)` / `stderr(text)` line is written synchronously to file descriptor 1 or 2, so it arrives complete even when the action calls `process.exit()` right after, and patching `process.stdout.write` does not capture it. On Windows, default output goes through `process.stdout` / `process.stderr`.
 - `options.io` captures rendered output in tests, including default prompt and progress output. It does not provide prompt input. With `io` set, a cancelling signal only sets the exit code and never re-raises, so an in-process host keeps running.
 - `options.onEvent` receives each event an async generator action yields, live. Events are never printed.
+- `options.env` is the environment flags' `env` bindings read; it defaults to `process.env`. Pass `{}` (or chosen variables) to isolate a test from the caller's shell.
 
 Ctrl-C (`SIGINT`) and `SIGTERM` (sent by `docker stop`, Kubernetes, systemd, `timeout`, and CI cancellation):
 

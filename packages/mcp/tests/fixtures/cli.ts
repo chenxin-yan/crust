@@ -1,4 +1,6 @@
 import { type AnyCrust, Crust, defineCommand } from "@crustjs/core";
+import { input } from "@crustjs/extensions";
+import { readStdin } from "@crustjs/utils/process";
 
 import { mcpExtension } from "../../src/index.ts";
 
@@ -16,6 +18,19 @@ const app = new Crust("demo", { description: "MCP fixture", version: "0.1.0" })
 				}),
 		),
 	)
-	.extend(mcpExtension({ app: (): AnyCrust => app }));
+	.add(
+		defineCommand("whoami", { description: "Show the configured token" }, (command) =>
+			command
+				.flags({ token: { type: "string", env: { name: "DEMO_TOKEN" }, required: true } })
+				.action(({ flags }) => ({ token: flags.token })),
+		),
+	)
+	.add(
+		// Reads stdin like `--body -` would; under `mcp`, stdin carries protocol frames.
+		defineCommand("slurp", { description: "Read stdin" }, (command) =>
+			command.action(async ({ signal }) => ({ text: await readStdin(signal) })),
+		),
+	)
+	.extend(input(), mcpExtension({ app: (): AnyCrust => app }));
 
 process.exitCode = await app.execute();

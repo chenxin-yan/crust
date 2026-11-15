@@ -735,26 +735,36 @@ describe("parseArgs \u2014 env fallback", () => {
 		expect(parseArgs(cmd, ["--no-noisy"], env).flags.loud).toBe(false);
 	});
 
-	it("does not read env for structured input", () => {
+	it("falls back to env for flags structured input omits", () => {
 		const cmd = makeNode({
 			meta: "test",
 			flags: {
-				token: { type: "string", env: { name: "PATH" } },
+				token: { type: "string", env: { name: "TOKEN" }, required: true },
+				port: { type: "number", env: { name: "PORT" }, default: 1 },
 				tags: {
 					type: "string",
 					multiple: true,
-					env: { name: "HOME", delimiter: ":" },
+					env: { name: "TAGS", delimiter: ":" },
 					delimiter: ",",
 				},
 			},
 		});
-		// PATH/HOME are set in every test environment; structured binding ignores them.
-		expect(parseStructured(cmd, {}).flags.token).toBeUndefined();
-		expect(parseStructured(cmd, {}).flags.tags).toBeUndefined();
-		expect(parseStructured(cmd, { flags: { tags: ["a,b", "c"] } }).flags.tags).toEqual([
-			"a,b",
-			"c",
-		]);
+		const env = { TOKEN: "s3cret", TAGS: "a:b" };
+		const fromEnv = parseStructured(cmd, { flags: { token: undefined } }, env);
+		expect(fromEnv.flags).toEqual({ token: "s3cret", port: 1, tags: ["a", "b"] });
+		expect(fromEnv.sources.flags).toEqual({ token: "env", port: "default", tags: "env" });
+		expect(fromEnv.flagOrder).toEqual(["tags", "token"]);
+		// A supplied value wins, and its delimiters are not split.
+		const supplied = parseStructured(cmd, { flags: { tags: ["a,b", "c"], token: "t" } }, env);
+		expect(supplied.flags.tags).toEqual(["a,b", "c"]);
+		expect(supplied.flags.token).toBe("t");
+		expect(supplied.sources.flags.token).toBe("run");
+		// An invalid environment value is deferred and names its variable, not its value.
+		const invalid = parseStructured(cmd, {}, { PORT: "many" });
+		expect(() => validateParsed(cmd, invalid)).toThrow(
+			"Expected a number for --port (from $PORT).",
+		);
+		expect(parseStructured(cmd, {}, {}).flags.token).toBeUndefined();
 	});
 
 	it("reads process.env by default on the argv path", () => {

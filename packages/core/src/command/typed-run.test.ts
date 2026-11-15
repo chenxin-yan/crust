@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { unwrap } from "../../tests/helpers.ts";
@@ -217,6 +217,64 @@ describe("typed programmatic invocation", () => {
 		await expect(unwrap(required.run([], { flags: { tag: [] } }))).rejects.toThrow(
 			'Missing required flag "--tag"',
 		);
+	});
+
+	describe("flag env bindings", () => {
+		afterEach(() => vi.unstubAllEnvs());
+
+		const app = new Crust("cli")
+			.flags({
+				token: { type: "string", env: { name: "CRUST_TEST_TOKEN" }, required: true },
+				port: { type: "number", env: { name: "CRUST_TEST_PORT" }, default: 1 },
+			})
+			.action(({ flags }) => flags);
+
+		it("fill omitted flags from the env option, after supplied values and before defaults", async () => {
+			// `token` is optional in typed input: its variable may supply it.
+			expect(await app.run([], {}, { env: { CRUST_TEST_TOKEN: "s3cret" } })).toMatchObject({
+				status: "completed",
+				result: { token: "s3cret", port: 1 },
+			});
+			expect(
+				await app.run([], { flags: { token: "given" } }, { env: { CRUST_TEST_TOKEN: "s3cret" } }),
+			).toMatchObject({ result: { token: "given" } });
+			await expect(
+				unwrap(app.run([], {}, { env: { CRUST_TEST_TOKEN: "t", CRUST_TEST_PORT: "many" } })),
+			).rejects.toThrow("Expected a number for --port (from $CRUST_TEST_PORT).");
+		});
+
+		it("read process.env unless given env, which isolates the run", async () => {
+			vi.stubEnv("CRUST_TEST_TOKEN", "from-shell");
+			expect(await app.run([], { flags: { port: 2 } })).toMatchObject({
+				result: { token: "from-shell", port: 2 },
+			});
+			await expect(unwrap(app.run([], { flags: { port: 2 } }, { env: {} }))).rejects.toThrow(
+				'Missing required flag "--token"',
+			);
+		});
+
+		it("let execute() read process.env unless given env", async () => {
+			vi.stubEnv("CRUST_TEST_TOKEN", "from-shell");
+			const echo = new Crust("cli")
+				.flags({ token: { type: "string", env: { name: "CRUST_TEST_TOKEN" }, required: true } })
+				.action(({ flags, stdout }) => stdout(flags.token));
+			const output: string[] = [];
+			const io = {
+				stdout: (text: string) => output.push(text),
+				stderr: (text: string) => output.push(text),
+			};
+			const exitCode = process.exitCode;
+			try {
+				expect(await echo.execute({ argv: [], io })).toBe(0);
+				expect(await echo.execute({ argv: [], io, env: { CRUST_TEST_TOKEN: "given" } })).toBe(0);
+				expect(await echo.execute({ argv: [], io, env: {} })).toBe(1);
+			} finally {
+				process.exitCode = exitCode;
+			}
+			expect(output[0]).toBe("from-shell");
+			expect(output[1]).toBe("given");
+			expect(output.join("\n")).toContain('Missing required flag "--token"');
+		});
 	});
 
 	it("rejects unknown structured arguments and flags", async () => {
