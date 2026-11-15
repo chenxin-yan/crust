@@ -33,15 +33,35 @@ Field types and defaults determine the state type. `createStore()` resolves `<di
 - `update()` rejects without calling `fn` when current state is invalid or a required value is missing. Use `write()` to initialize or `patch()` to repair.
 - `read()` coerces core number and boolean strings; only `"true"` and `"1"` become `true`. Persisted falsy values are kept.
 - Malformed JSON and non-object roots reject with `PARSE`. They never fall back to defaults; `write()` replaces such a file.
+- `write()`, `update()`, `patch()`, and `reset()` take an optional `{ signal }` last argument. Aborting it while the mutation still waits, behind earlier mutations of the same file or for its lock, rejects with `signal.reason` and changes nothing; once the mutation holds the lock, it runs to the end.
 
 ### Concurrency
 
 - `write()`, `update()`, `patch()`, and `reset()` on one file run one at a time, in call order, even across store instances in the same process. A failed mutation does not block the next one. `read()` is not queued; it always sees a complete file. A field `validate` or schema that awaits a mutation of the same file never settles: it waits behind the mutation that called it.
-- Each mutation also holds an advisory lock file, `<name>.json.lock`, created exclusively next to the store file, so parallel processes (`cli add & cli add`) keep every update. Waiters retry with a short backoff. A lock whose process has exited is taken over right away, and any lock older than 10 seconds is taken over then, so a crashed or hung process never blocks the store for longer.
+- Each mutation also holds an advisory lock file, `<name>.json.lock`, created exclusively next to the store file, so parallel processes (`cli add & cli add`) keep every update. Waiters retry with a short backoff. Unless the store is [strict](#strict-stores), a lock whose process has exited is taken over right away, and any lock older than 10 seconds is taken over then, so a crashed or hung process never blocks the store for longer.
 - The lock has two limits. After a crash leaves a lock behind, two processes that start writing at the same instant can both take it, and one of their updates can be lost; the file is never corrupt. A mutation that runs longer than 10 seconds (a slow async `validate`, a suspended process) can lose its lock the same way.
-- The file itself is always replaced atomically: written to a temporary `.<name>-<uuid>.tmp` file, flushed to disk, then renamed. On Windows, a rename blocked by any process holding the file open (another process reading the store, antivirus, indexers) is retried for up to 2 seconds.
+- The file itself is always replaced atomically: written to a temporary `.<name>-<uuid>.tmp` file created exclusively, flushed to disk, then renamed. On Unix, the directory is then flushed too, after a rename and after `reset()` deletes the file, so a write or reset that resolved survives a power loss; a failed directory flush rejects with `IO`. Windows has no directory flush. On Windows, a rename blocked by any process holding the file open (another process reading the store, antivirus, indexers) is retried for up to 2 seconds.
 - On Unix, a write keeps the replaced file's owner and, unless `access` sets file bits, its mode.
 - The lock is a lock file, not an OS lock (`flock`), and is tested on local disks only; on a network filesystem, it relies on exclusive create and on clocks that agree.
+
+### Strict stores
+
+`strict: true` is for a file that must not lose an update and must stay private, such as credentials.
+
+<include lang="ts">../../../examples/modules/store.ts#strict</include>
+
+- **The lock is never taken from a process that may still run**, however long it holds it. A suspended or slow writer keeps its lock. A waiter takes over only an owner that is provably gone:
+  - Linux: the lock was written on the same machine, boot, and PID namespace (`/etc/machine-id`, the boot id, `/proc/self/ns/pid`), and its process is gone or its pid now belongs to a process with another start time.
+  - macOS and Windows: the lock was written on the same platform and hostname, and its process is gone. A process with that pid is always treated as the owner. This assumes no two machines with the same hostname share the directory; if they do, two processes can hold the lock at once.
+  - Anything else, such as a lock written inside a container or on another machine, or an empty lock file, is never taken over.
+- Takeovers are serialized through `<name>.json.lock.recover`, so two waiters never both take a dead owner's lock and a newer owner's lock is never removed.
+- Otherwise a waiter retries until `lockTimeout` (40 seconds by default), then rejects with `LOCK`. Its details name the file that blocked (the lock, or a `.recover` file left by a recovery that crashed), what is known about its owner (`alive`, `unknown`, or `dead`), and the manual step: stop every process that uses the directory and keep new ones from starting, including on other machines or containers that share it; only then delete the named file. If you cannot be sure, leave it in place.
+- A store file that is a symbolic link is refused with `PATH` (`details.reason: "symlink"`) by every operation on every platform, and nothing is read or written through it. Remove the link yourself.
+- On Unix, an existing directory must be a real directory owned by the current user with no group or other permissions. Otherwise mutations reject with `PATH` (`details.reason: "directory"`) before creating any file in it, so a strict store cannot share a directory with a store whose directory is group- or world-accessible. A missing directory is created with mode `0700`.
+- `strict` implies `access: "private"`; combining it with any other `access` throws `DEFINITION`.
+- Every process that opens the file must use `strict`: a default store still takes the lock over after 10 seconds.
+
+`withLock(path, fn, { signal, timeout })` runs `fn` under the same strict lock on `<path>.lock`, for work on a path that has no store document. It has the same rules, directory checks, and `LOCK` error, and does not reenter: calling it for a path whose lock the same process holds waits until its deadline.
 
 ### Unknown keys
 
@@ -69,7 +89,9 @@ const auth = createStore({
 });
 ```
 
-On Unix, `access: "private"` writes the file with mode `0600` and a parent directory the store creates with `0700`; an existing directory keeps its permissions. Pass `{ file, directory }` for custom bits. With the default `access`, a new file gets the umask default and an existing file keeps its mode, so a user's `chmod 600` survives writes. Windows uses inherited ACLs, so the bits are not enforced there.
+On Unix, `access: "private"` writes the file with mode `0600` and a parent directory the store creates with `0700`; an existing directory keeps its permissions. Pass `{ file, directory }` for custom bits. With the default `access`, a new file gets the umask default and an existing file keeps its mode, so a user's `chmod 600` survives writes. For credentials, use a [strict store](#strict-stores), which also checks an existing directory.
+
+Windows uses inherited ACLs, so the bits are not enforced there, and a strict store checks no directory owner or permissions. On Windows, a secret file is only as private as the ACLs of the per-user directory it is in, such as `%LOCALAPPDATA%`; do not rely on it like a `0600` file on Unix, and encrypt secrets that need more.
 
 ## Validation
 
@@ -92,6 +114,6 @@ try {
 }
 ```
 
-`CrustStoreError.code` is `PATH`, `PARSE`, `IO`, `VALIDATION`, or `DEFINITION`; `.is(code)` narrows `details`.
+`CrustStoreError.code` is `PATH`, `PARSE`, `IO`, `VALIDATION`, `DEFINITION`, or `LOCK`; `.is(code)` narrows `details`. A strict store's refusals are `PATH` with `details.reason` set to `"symlink"` or `"directory"`; `LOCK` means a strict lock was not acquired before its deadline.
 
 Store has no encryption, migrations, other formats, or synchronous methods. The [package entry point](https://github.com/chenxin-yan/crust/blob/main/packages/store/src/index.ts) lists every export.

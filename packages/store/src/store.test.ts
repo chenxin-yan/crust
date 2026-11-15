@@ -3,7 +3,18 @@
  */
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { mkdir, readdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
+import {
+	chmod,
+	lstat,
+	mkdir,
+	readdir,
+	readFile,
+	rm,
+	stat,
+	symlink,
+	utimes,
+	writeFile,
+} from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -933,5 +944,191 @@ describe("concurrent mutations", () => {
 		const dirPath = join(tempDir, "missing");
 		await createStore({ dirPath, name: "counter", fields: COUNTER_FIELDS }).reset();
 		expect(existsSync(dirPath)).toBe(false);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Aborting a mutation that waits
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("mutation signal", () => {
+	const COUNTER_FIELDS = { n: { type: "number", default: 0 } } as const satisfies FieldsDef;
+
+	it.each([false, true])(
+		"rejects a mutation queued behind another with the signal's reason (strict: %s)",
+		async (strict) => {
+			const dirPath = join(tempDir, "private");
+			let release!: () => void;
+			let entered!: () => void;
+			const inside = new Promise<void>((resolve) => {
+				entered = resolve;
+			});
+			const store = createStore({ dirPath, name: "counter", fields: COUNTER_FIELDS, strict });
+			const blocker = createStore({
+				dirPath,
+				name: "counter",
+				strict,
+				fields: {
+					n: {
+						type: "number",
+						default: 0,
+						validate: () =>
+							new Promise<void>((resolve) => {
+								release = resolve;
+								entered();
+							}),
+					},
+				},
+			});
+			const holding = blocker.patch({ n: 1 });
+			await inside;
+			const controller = new AbortController();
+			const queued = store.patch({ n: 2 }, { signal: controller.signal });
+			const reason = new Error("stop");
+
+			controller.abort(reason);
+
+			await expect(queued).rejects.toBe(reason);
+			await expect(store.reset({ signal: AbortSignal.abort(reason) })).rejects.toBe(reason);
+			release();
+			expect(await holding).toEqual({ n: 1 });
+			expect(await store.read()).toEqual({ n: 1 });
+			expect(await readdir(dirPath)).toEqual(["counter.json"]);
+		},
+	);
+
+	it("rejects a mutation waiting for another process's lock, leaving it", async () => {
+		const lockPath = join(tempDir, "counter.json.lock");
+		const foreign = JSON.stringify({ pid: 2 ** 31 - 2, host: "elsewhere" });
+		await writeFile(lockPath, foreign);
+		const controller = new AbortController();
+		const reason = new Error("stop");
+		setTimeout(() => controller.abort(reason), 50);
+
+		await expect(
+			createStore({ dirPath: tempDir, name: "counter", fields: COUNTER_FIELDS }).reset({
+				signal: controller.signal,
+			}),
+		).rejects.toBe(reason);
+		expect(readFileSync(lockPath, "utf-8")).toBe(foreign);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// strict
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("strict", () => {
+	let dirPath: string;
+	beforeEach(() => {
+		// A strict store creates its directory owner-only; the test's tempDir is not.
+		dirPath = join(tempDir, "private");
+	});
+	const strictStore = () =>
+		createStore({ dirPath, name: "auth", fields: BASIC_FIELDS, strict: true });
+
+	it("cannot be combined with a non-private access", () => {
+		expect(() =>
+			createStore({
+				dirPath,
+				name: "auth",
+				fields: BASIC_FIELDS,
+				strict: true,
+				access: { file: 0o640 },
+			}),
+		).toThrow(expect.objectContaining({ code: "DEFINITION" }));
+		expect(() =>
+			createStore({ dirPath, name: "auth", fields: BASIC_FIELDS, strict: true, access: "private" }),
+		).not.toThrow();
+	});
+
+	it.skipIf(process.platform === "win32")(
+		"writes the file owner-only in a directory it creates owner-only",
+		async () => {
+			const previous = process.umask(0o000);
+			try {
+				await strictStore().write({ theme: "dark", verbose: true });
+			} finally {
+				process.umask(previous);
+			}
+
+			expect((await stat(dirPath)).mode & 0o777).toBe(0o700);
+			expect((await stat(join(dirPath, "auth.json"))).mode & 0o777).toBe(0o600);
+		},
+	);
+
+	it.skipIf(process.platform === "win32")(
+		"refuses an existing directory others can read, and creates nothing in it",
+		async () => {
+			await chmod(tempDir, 0o755);
+			const store = createStore({
+				dirPath: tempDir,
+				name: "auth",
+				fields: BASIC_FIELDS,
+				strict: true,
+			});
+
+			await expect(store.write({ theme: "dark", verbose: true })).rejects.toMatchObject({
+				code: "PATH",
+				details: { path: tempDir, reason: "directory" },
+			});
+			expect(await readdir(tempDir)).toEqual([]);
+		},
+	);
+
+	it("does not create a missing directory to reset", async () => {
+		await strictStore().reset();
+		expect(existsSync(dirPath)).toBe(false);
+	});
+
+	describe("a symbolic link at the store file", () => {
+		let target: string;
+		beforeEach(async () => {
+			await strictStore().write({ theme: "dark", verbose: true });
+			target = join(tempDir, "target.json");
+			await writeFile(target, JSON.stringify({ theme: "light" }));
+			await rm(join(dirPath, "auth.json"));
+			await symlink(target, join(dirPath, "auth.json"), "file");
+		});
+
+		it.each([
+			["read", (store: ReturnType<typeof strictStore>) => store.read()],
+			["write", (store) => store.write({ theme: "dark", verbose: false })],
+			["update", (store) => store.update((current) => current)],
+			["patch", (store) => store.patch({ verbose: true })],
+			["reset", (store) => store.reset()],
+		] satisfies [string, (store: ReturnType<typeof strictStore>) => Promise<unknown>][])(
+			"is refused by %s, which leaves the link and its target alone",
+			async (_operation, run) => {
+				await expect(run(strictStore())).rejects.toMatchObject({
+					code: "PATH",
+					details: { path: join(dirPath, "auth.json"), reason: "symlink" },
+				});
+				expect((await lstat(join(dirPath, "auth.json"))).isSymbolicLink()).toBe(true);
+				expect(await readFile(target, "utf-8")).toBe(JSON.stringify({ theme: "light" }));
+				expect((await readdir(dirPath)).toSorted()).toEqual(["auth.json"]);
+			},
+		);
+	});
+
+	// A junction can only point at a directory; whether lstat reports one as a link is what
+	// decides that Windows refuses it rather than failing to read a directory.
+	it.runIf(process.platform === "win32")("refuses a junction at the store file", async () => {
+		await strictStore().write({ theme: "dark", verbose: true });
+		await rm(join(dirPath, "auth.json"));
+		const target = join(tempDir, "junction-target");
+		await mkdir(target);
+		await symlink(target, join(dirPath, "auth.json"), "junction");
+
+		expect((await lstat(join(dirPath, "auth.json"))).isSymbolicLink()).toBe(true);
+		await expect(strictStore().read()).rejects.toMatchObject({
+			code: "PATH",
+			details: { reason: "symlink" },
+		});
+		await expect(strictStore().write({ theme: "dark", verbose: true })).rejects.toMatchObject({
+			code: "PATH",
+			details: { reason: "symlink" },
+		});
+		expect(await readdir(target)).toEqual([]);
 	});
 });
