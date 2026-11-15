@@ -347,7 +347,7 @@ importers:
         specifier: workspace:^
         version: link:../utils
       typescript:
-        specifier: ^7.0.0
+        specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
       '@crustjs/config':
@@ -366,7 +366,7 @@ importers:
         specifier: workspace:^
         version: link:../utils
       typescript:
-        specifier: ^7.0.0
+        specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
       '@crustjs/config':
@@ -454,7 +454,7 @@ importers:
   packages/effect:
     dependencies:
       typescript:
-        specifier: ^7.0.0
+        specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
       '@crustjs/config':
@@ -479,7 +479,7 @@ importers:
   packages/env:
     dependencies:
       typescript:
-        specifier: ^7.0.0
+        specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
       '@crustjs/config':
@@ -507,7 +507,7 @@ importers:
         specifier: workspace:^
         version: link:../utils
       typescript:
-        specifier: ^7.0.0
+        specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
       '@crustjs/config':
@@ -526,7 +526,7 @@ importers:
   packages/man:
     dependencies:
       typescript:
-        specifier: ^7.0.0
+        specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
       '@crustjs/config':
@@ -551,7 +551,7 @@ importers:
         specifier: ^1.32.1
         version: 1.32.2(supports-color@10.2.2)(zod@4.6.7)
       typescript:
-        specifier: ^7.0.0
+        specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
       '@crustjs/config':
@@ -573,7 +573,7 @@ importers:
         specifier: workspace:^
         version: link:../utils
       typescript:
-        specifier: ^7.0.0
+        specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
       '@crustjs/config':
@@ -601,7 +601,7 @@ importers:
         specifier: workspace:^
         version: link:../utils
       typescript:
-        specifier: ^7.0.0
+        specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
       '@crustjs/config':
@@ -623,7 +623,7 @@ importers:
         specifier: workspace:^
         version: link:../utils
       typescript:
-        specifier: ^7.0.0
+        specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
       '@crustjs/config':
@@ -651,7 +651,7 @@ importers:
         specifier: workspace:^
         version: link:../utils
       typescript:
-        specifier: ^7.0.0
+        specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
       '@crustjs/config':
@@ -676,7 +676,7 @@ importers:
         specifier: workspace:^
         version: link:../utils
       typescript:
-        specifier: ^7.0.0
+        specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
       '@crustjs/config':
@@ -692,7 +692,7 @@ importers:
   packages/style:
     dependencies:
       typescript:
-        specifier: ^7.0.0
+        specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
       '@crustjs/config':
@@ -705,7 +705,7 @@ importers:
   packages/testing:
     dependencies:
       typescript:
-        specifier: ^7.0.0
+        specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
       '@crustjs/config':
@@ -724,7 +724,7 @@ importers:
   packages/tui:
     dependencies:
       typescript:
-        specifier: ^7.0.0
+        specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
       '@crustjs/config':
