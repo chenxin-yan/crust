@@ -1,5 +1,33 @@
 # @crustjs/mcp
 
+## 0.2.1
+
+### Patch Changes
+
+- [#659](https://github.com/chenxin-yan/crust/pull/659) [`23f140f`](https://github.com/chenxin-yan/crust/commit/23f140fd1aa0898eff6389d9e2e77f142e77d876) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - MCP tools and command input now match what a command actually receives.
+  
+  - Tool input schemas and `schema <cmd>` no longer list flags an Extension declares, such as `help`, `json`, `input`, `llms`, or `color`; Context-owned flags such as `confirm()`'s `yes` stay. `CommandSnapshot` and `FlagSnapshot` gain an `extension` field naming the Extension that contributed a command or flag. Sending such a key in a tool call or in `--input` JSON fails with `Flag "--json" is not command input: set it on the command line`, so `{"input": "-"}` can no longer read the MCP server's stdin and stall the session. An argument that shares an Extension flag's name, such as `<input>` next to `input()`, is now valid command input instead of an error.
+  - MCP tool calls now apply flag `env` fallbacks: a flag the input omits reads its variable from the server's `process.env`, then its default, as on the command line, so an MCP client's `env` configuration reaches tool calls. Env-backed flags are optional in tool input schemas, with the variable named in their description.
+  - `run()` now applies flag `env` fallbacks from `process.env`, like the command line, and gains an `env` option that replaces it: `app.run(path, input, { env: {} })` keeps results independent of the caller's shell, e.g. in tests. `execute()` gains the same `env` option. Env-backed flags are optional in typed `run()` input.
+  - `mcpExtension()`, `createMcpServer()`, and `toolsFromSnapshot()` serve only the application's own commands. Extension commands such as `completion`, `schema`, `skills uninstall`, and `@crustjs/openapi`'s `api` become tools only when the new `include` option names them.
+  - `readStdin()` from `@crustjs/utils/process` rejects with `stdin is in use by another reader` while another reader, such as the MCP stdio transport, consumes stdin.
+  
+  **Behavior change:** `run()` results now depend on `process.env` for flags with an `env` binding that the input omits, and an invalid value there fails the run; pass `{ env: {} }` to keep the 0.6.0 behavior. `--input` JSON that set `json` or `help` now fails; pass those flags on argv. MCP clients lose the Extension commands from their tool list unless `include` names them.
+
+- [#668](https://github.com/chenxin-yan/crust/pull/668) [`2175a31`](https://github.com/chenxin-yan/crust/commit/2175a31cf2317445f912b4196f60540b3756c583) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `<cli> mcp` now speaks MCP protocol revision 2026-07-28, on version 2 of the MCP TypeScript SDK (`@modelcontextprotocol/server`, which replaces `@modelcontextprotocol/sdk`).
+  
+  - A client that supports 2026-07-28 is served that revision: `server/discover` instead of the `initialize` handshake, `resultType` on every result, and `ttlMs` and `cacheScope` on `tools/list`.
+  - A client that opens with `initialize` is served the revision it asks for, 2025-11-25 or earlier, as before. The opening exchange decides; there is nothing to configure.
+  - Tools, schemas, results, and progress notifications are the same under every revision. Arrays and primitives stay wrapped as `{ "result": value }` in `structuredContent`, which revisions before 2026-07-28 require.
+  
+  **Behavior change:** `serveStdio()` takes the application instead of a server, because the SDK builds the server for the revision the client opens with: write `serveStdio(app, options)` where you wrote `serveStdio(await createMcpServer(app, options))`. `createMcpServer()` returns the `Server` class of `@modelcontextprotocol/server`, which speaks 2025-11-25 and earlier only when you connect it to a transport yourself. Applications that only use `mcpExtension()` need no change.
+  
+  **Behavior change:** the error for an unknown tool reads `Tool <name> not found` where it read `MCP error -32602: Tool <name> not found`; its code is still `-32602`. A protocol message larger than 10 MB now closes the connection. The SDK dependency is licensed Apache-2.0 where version 1 was MIT.
+
+- [#662](https://github.com/chenxin-yan/crust/pull/662) [`08ede40`](https://github.com/chenxin-yan/crust/commit/08ede40377c4749f73e5c4dd8130321b17b8890a) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - The optional `typescript` peer dependency now accepts TypeScript 5.9 and later (`>=5.9.0`) instead of only 7.x, so `npm install` no longer fails with `ERESOLVE` in projects on TypeScript 5.9 or 6. Before TypeScript 7, a one-character emoji `short` flag is rejected, and on 5.9 a `@crustjs/store` field's `validate` callback needs an explicit parameter type.
+- Updated dependencies [[`23f140f`](https://github.com/chenxin-yan/crust/commit/23f140fd1aa0898eff6389d9e2e77f142e77d876), [`efdf932`](https://github.com/chenxin-yan/crust/commit/efdf932eac278054e173dd1b433923b11e25345c), [`bebf191`](https://github.com/chenxin-yan/crust/commit/bebf1913993f866b0a583580bf4f28b0622c64f9), [`63f7e76`](https://github.com/chenxin-yan/crust/commit/63f7e76a25741c42224e3268b90962bde6d8a529)]:
+  - @crustjs/utils@0.3.1
+
 ## 0.2.0
 
 ### Minor Changes

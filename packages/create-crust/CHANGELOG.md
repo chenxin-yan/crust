@@ -1,5 +1,15 @@
 # create-crust
 
+## 0.6.1
+
+### Patch Changes
+
+- Updated dependencies [[`ea0d1a7`](https://github.com/chenxin-yan/crust/commit/ea0d1a725e0cd2164fb22213d53d0875aef028f3), [`86ed2ed`](https://github.com/chenxin-yan/crust/commit/86ed2edda03df62240c02e6851991d12a0789b9c), [`caacfa5`](https://github.com/chenxin-yan/crust/commit/caacfa535459131445a3101f1eefb837f17759dd), [`23f140f`](https://github.com/chenxin-yan/crust/commit/23f140fd1aa0898eff6389d9e2e77f142e77d876), [`63f7e76`](https://github.com/chenxin-yan/crust/commit/63f7e76a25741c42224e3268b90962bde6d8a529), [`c1b50a9`](https://github.com/chenxin-yan/crust/commit/c1b50a9d39086fc76820c290df0fb3a6c6f65e2d), [`1ff29f9`](https://github.com/chenxin-yan/crust/commit/1ff29f998aea1b7b6ded21d97b9afc5ccd0f2f3b), [`08ede40`](https://github.com/chenxin-yan/crust/commit/08ede40377c4749f73e5c4dd8130321b17b8890a)]:
+  - @crustjs/core@0.6.1
+  - @crustjs/prompts@0.3.1
+  - @crustjs/progress@0.2.1
+  - @crustjs/create@0.3.1
+
 ## 0.6.0
 
 ### Minor Changes

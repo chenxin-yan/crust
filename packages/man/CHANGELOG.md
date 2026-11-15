@@ -1,5 +1,17 @@
 # @crustjs/man
 
+## 0.6.1
+
+### Patch Changes
+
+- [#658](https://github.com/chenxin-yan/crust/pull/658) [`ea0d1a7`](https://github.com/chenxin-yan/crust/commit/ea0d1a725e0cd2164fb22213d53d0875aef028f3) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Arguments can take only the tokens after `--`. Set `afterDoubleDash: true` on the last argument (like clap's `Arg::last`) to write a task runner such as `run <task> [packages...] -- <extra...>`: `run build core -- --watch` sets `packages` to `["core"]` and `extra` to `["--watch"]`. The other arguments fill only from tokens before `--`, tokens after it that the argument doesn't take reach `rawArgs`, and a missing required one reports `Missing required argument "<extra>" (pass it after "--")`. Help, man pages, skills, and `--llms` show it as `[-- <extra>...]`. Typed `run()`, `--input`, and MCP take it by name. `nextSteps()` prints it after `--`. Only the last argument can set it, and the argument before it may be variadic; anything else is a TypeScript error and a `DEFINITION` error (`after-double-dash-position`).
+  
+  Without the option, `--` works as in 0.6.0 and as POSIX specifies: later tokens are never flags, still fill empty arguments in order (`seek -- -5` binds `-5`), and the rest reach `rawArgs`.
+  
+  Shell completion now follows the same rules: after `--` it offers no flags or subcommands, keeps completing argument slots, and offers an `afterDoubleDash` argument's values only there. As before, zsh completes arguments only for commands without subcommands.
+
+- [#662](https://github.com/chenxin-yan/crust/pull/662) [`08ede40`](https://github.com/chenxin-yan/crust/commit/08ede40377c4749f73e5c4dd8130321b17b8890a) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - The optional `typescript` peer dependency now accepts TypeScript 5.9 and later (`>=5.9.0`) instead of only 7.x, so `npm install` no longer fails with `ERESOLVE` in projects on TypeScript 5.9 or 6. Before TypeScript 7, a one-character emoji `short` flag is rejected, and on 5.9 a `@crustjs/store` field's `validate` callback needs an explicit parameter type.
+
 ## 0.6.0
 
 ### Patch Changes

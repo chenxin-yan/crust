@@ -1,5 +1,11 @@
 # @crustjs/tui
 
+## 0.0.8
+
+### Patch Changes
+
+- [#662](https://github.com/chenxin-yan/crust/pull/662) [`08ede40`](https://github.com/chenxin-yan/crust/commit/08ede40377c4749f73e5c4dd8130321b17b8890a) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - The optional `typescript` peer dependency now accepts TypeScript 5.9 and later (`>=5.9.0`) instead of only 7.x, so `npm install` no longer fails with `ERESOLVE` in projects on TypeScript 5.9 or 6. Before TypeScript 7, a one-character emoji `short` flag is rejected, and on 5.9 a `@crustjs/store` field's `validate` callback needs an explicit parameter type.
+
 ## 0.0.7
 
 ### Patch Changes

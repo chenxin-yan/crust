@@ -1,5 +1,20 @@
 # @crustjs/testing
 
+## 0.1.8
+
+### Patch Changes
+
+- [#663](https://github.com/chenxin-yan/crust/pull/663) [`c1b50a9`](https://github.com/chenxin-yan/crust/commit/c1b50a9d39086fc76820c290df0fb3a6c6f65e2d) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `captureExecute()` and `runInteractive()` return plain text on a developer's terminal and on CI alike, and `runInteractive()` can answer `confirm()` under `CI`.
+  
+  - `captureExecute()` and `runInteractive()` return plain `stdout` and `stderr` even when the test runner's stdout is a terminal or `FORCE_COLOR` is set, as runners such as Jest and `bun test --parallel` do for their workers on a color terminal: they strip ANSI escape sequences, like `@oclif/test` and `@inquirer/testing`. Pass `{ raw: true }` to keep them: `captureExecute(app, argv, { raw: true })`, `runInteractive(app, path, input, { raw: true })`.
+  - `captureExecute()` and `runInteractive()` take an `env` option that replaces `process.env` for flags' `env` fallbacks, so a result need not depend on the developer's shell: `captureExecute(app, argv, { env: { API_TOKEN: "t" } })`, or `{ env: {} }` for none.
+  - `confirm()` prompts on a terminal injected with `withTerminalIO()`, such as `runInteractive()`'s fake terminal, even when `CI` is set, so interactive confirm tests pass on GitHub Actions. A real terminal under `CI` still fails with `ConfirmationRequiredError`.
+  - `runInteractive().done` resolves with the command's typed `run()` outcome: `result`, `stdout`, and `stderr` (without prompt frames). It still rejects with a failed outcome's error. `ShapeRunOutcome` is now exported from `@crustjs/core`.
+  
+  **Behavior change:** `captureExecute()` and `runInteractive()` strip escape codes unless `raw` is set.
+
+- [#662](https://github.com/chenxin-yan/crust/pull/662) [`08ede40`](https://github.com/chenxin-yan/crust/commit/08ede40377c4749f73e5c4dd8130321b17b8890a) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - The optional `typescript` peer dependency now accepts TypeScript 5.9 and later (`>=5.9.0`) instead of only 7.x, so `npm install` no longer fails with `ERESOLVE` in projects on TypeScript 5.9 or 6. Before TypeScript 7, a one-character emoji `short` flag is rejected, and on 5.9 a `@crustjs/store` field's `validate` callback needs an explicit parameter type.
+
 ## 0.1.7
 
 ### Patch Changes

@@ -1,5 +1,15 @@
 # @crustjs/style
 
+## 0.4.1
+
+### Patch Changes
+
+- [#663](https://github.com/chenxin-yan/crust/pull/663) [`c1b50a9`](https://github.com/chenxin-yan/crust/commit/c1b50a9d39086fc76820c290df0fb3a6c6f65e2d) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `@crustjs/style` treats `TERM=dumb` as no ANSI support, like Node's `tty` color detection.
+  
+  **Behavior change:** on a terminal with `TERM=dumb`, modifiers (`bold`, links) are no longer emitted, and `COLORTERM=truecolor` no longer turns colors on. `FORCE_COLOR` still forces escape codes.
+
+- [#662](https://github.com/chenxin-yan/crust/pull/662) [`08ede40`](https://github.com/chenxin-yan/crust/commit/08ede40377c4749f73e5c4dd8130321b17b8890a) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - The optional `typescript` peer dependency now accepts TypeScript 5.9 and later (`>=5.9.0`) instead of only 7.x, so `npm install` no longer fails with `ERESOLVE` in projects on TypeScript 5.9 or 6. Before TypeScript 7, a one-character emoji `short` flag is rejected, and on 5.9 a `@crustjs/store` field's `validate` callback needs an explicit parameter type.
+
 ## 0.4.0
 
 ### Minor Changes

@@ -1,5 +1,17 @@
 # @crustjs/crust
 
+## 0.6.1
+
+### Patch Changes
+
+- [#661](https://github.com/chenxin-yan/crust/pull/661) [`33262bd`](https://github.com/chenxin-yan/crust/commit/33262bd1858dee186044af5ec17c76f23944d615) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Node builds (runtime packages and Node binaries) of an entry that starts with `#!/usr/bin/env bun`, the shebang `create-crust` scaffolds for Bun, now produce Node code. Bun used to treat the entry as Bun code despite the Node target, so the built CLI crashed at startup with `ReferenceError: __require is not defined` when it checked `import.meta.main`. `crust build` also warns when an entry's shebang names a different runtime than `crust.runtime`, since a linked command (`npm link`) still starts the runtime the shebang names.
+  
+  **Behavior change:** `crust build` now fails when a `crust.include` directory contains a `.gitignore`, `.npmignore`, or `.npmrc` (in any letter case, as npm matches them), which npm never publishes. They used to be staged and work locally, then silently disappear from the published package. The error lists each file; rename it (for example `_gitignore`) and restore the name when your CLI copies it, as `scaffold()` from `@crustjs/create` does.
+- Updated dependencies [[`ea0d1a7`](https://github.com/chenxin-yan/crust/commit/ea0d1a725e0cd2164fb22213d53d0875aef028f3), [`86ed2ed`](https://github.com/chenxin-yan/crust/commit/86ed2edda03df62240c02e6851991d12a0789b9c), [`caacfa5`](https://github.com/chenxin-yan/crust/commit/caacfa535459131445a3101f1eefb837f17759dd), [`23f140f`](https://github.com/chenxin-yan/crust/commit/23f140fd1aa0898eff6389d9e2e77f142e77d876), [`efdf932`](https://github.com/chenxin-yan/crust/commit/efdf932eac278054e173dd1b433923b11e25345c), [`c1b50a9`](https://github.com/chenxin-yan/crust/commit/c1b50a9d39086fc76820c290df0fb3a6c6f65e2d), [`63f7e76`](https://github.com/chenxin-yan/crust/commit/63f7e76a25741c42224e3268b90962bde6d8a529), [`c1b50a9`](https://github.com/chenxin-yan/crust/commit/c1b50a9d39086fc76820c290df0fb3a6c6f65e2d), [`1ff29f9`](https://github.com/chenxin-yan/crust/commit/1ff29f998aea1b7b6ded21d97b9afc5ccd0f2f3b), [`08ede40`](https://github.com/chenxin-yan/crust/commit/08ede40377c4749f73e5c4dd8130321b17b8890a)]:
+  - @crustjs/core@0.6.1
+  - @crustjs/extensions@0.6.1
+  - @crustjs/style@0.4.1
+
 ## 0.6.0
 
 ### Minor Changes
