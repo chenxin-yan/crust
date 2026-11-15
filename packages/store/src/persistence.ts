@@ -165,6 +165,10 @@ async function ensureDirectory(filePath: string, mode: number | undefined): Prom
  * 3. Renames the temp file to the target path (atomic on local filesystems).
  *    On Windows, a rename blocked by another program's open handle (`EPERM`,
  *    `EACCES`, `EBUSY`) is retried for up to 2 seconds.
+ * 4. On POSIX, flushes the directory (`fsync`), so the rename survives a power loss.
+ *    Windows has no directory flush.
+ *
+ * The temp file is created exclusively (`wx`).
  *
  * If any step fails, the function cleans up the temp file (best-effort) and
  * throws a `CrustStoreError` with `IO` code.
@@ -195,7 +199,7 @@ export async function writeJson(
 
 	try {
 		const json = JSON.stringify(data, null, "\t");
-		const handle = await open(tempPath, "w", fileMode);
+		const handle = await open(tempPath, "wx", fileMode);
 		try {
 			await handle.writeFile(json, "utf-8");
 			await handle.sync();
@@ -241,6 +245,33 @@ export async function writeJson(
 			err,
 		);
 	}
+
+	await syncDirectory(filePath, "write");
+}
+
+/**
+ * Flushes the store file's directory so a completed rename or delete survives a power loss.
+ * POSIX only: Windows cannot open a directory for flushing. A missing directory has nothing to flush.
+ */
+async function syncDirectory(filePath: string, operation: "write" | "delete"): Promise<void> {
+	if (isWindows()) return;
+	const dir = dirname(filePath);
+	try {
+		const handle = await open(dir, "r");
+		try {
+			await handle.sync();
+		} finally {
+			await handle.close();
+		}
+	} catch (err: unknown) {
+		if (isErrnoException(err) && err.code === "ENOENT") return;
+		throw new CrustStoreError(
+			"IO",
+			`Failed to flush store directory: ${dir}`,
+			{ path: filePath, operation },
+			err,
+		);
+	}
 }
 
 /** How long a rename blocked by another program's open handle is retried on Windows. */
@@ -276,7 +307,8 @@ async function commit(tempPath: string, filePath: string): Promise<void> {
  * Deletes a persisted store file from disk.
  *
  * Silently succeeds when the file does not exist (ENOENT) — deleting an
- * already-absent file is not an error.
+ * already-absent file is not an error. On POSIX the directory is then flushed,
+ * so a completed delete survives a power loss.
  *
  * @param filePath - Absolute path to the JSON store file to delete.
  * @throws {CrustStoreError} `IO` on filesystem deletion failures other than ENOENT.
@@ -295,6 +327,7 @@ export async function deleteJson(filePath: string): Promise<void> {
 			err,
 		);
 	}
+	await syncDirectory(filePath, "delete");
 }
 
 // ────────────────────────────────────────────────────────────────────────────
