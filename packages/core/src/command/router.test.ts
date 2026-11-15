@@ -99,8 +99,7 @@ describe("resolveCommand — aliases", () => {
 			} catch (err) {
 				caught = err;
 			}
-			// Untrusted argv: an inherited prototype member must not resolve as a
-			// subcommand node (previously a TypeError crash mid-routing).
+			// Untrusted argv: an inherited prototype member must not resolve as a subcommand node.
 			expect(caught).toBeInstanceOf(CrustError);
 			expect((caught as CrustError).is("COMMAND_NOT_FOUND")).toBe(true);
 		}

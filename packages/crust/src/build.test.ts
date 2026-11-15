@@ -241,12 +241,9 @@ describe("planBuild", () => {
 		]);
 	});
 
-	it("uses one parse-error policy for runtime and output-name resolution", () => {
+	it("rejects a missing, unparsable, or non-object package.json before reading any field", () => {
 		writeFileSync(join(tmpDir, "package.json"), "not json");
 		expect(() => planBuild(baseFlags, tmpDir)).toThrow(`Failed to parse package.json in ${tmpDir}`);
-	});
-
-	it("rejects a missing or non-object package.json before reading any field", () => {
 		rmSync(join(tmpDir, "package.json"));
 		expect(() => planBuild(binary, tmpDir)).toThrow(
 			`package.json not found in ${tmpDir}\n  crust build requires a package.json with name and version fields.`,
@@ -581,10 +578,6 @@ describe("readCrustConfig", () => {
 	});
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// Error handling tests
-// ────────────────────────────────────────────────────────────────────────────
-
 describe("build", () => {
 	const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-api-"));
 	const stageDir = join(tmpDir, ".crust");
@@ -724,25 +717,9 @@ describe("build", () => {
 			"console.log(JSON.stringify({ bun: process.versions.bun ?? null, marker: process.env.CRUST_INTERNAL_BUILD ?? null }));\n",
 		);
 		const logged: string[] = [];
-		const result = await build({
-			cwd: tmpDir,
-			validate: false,
-			onLog: (line) => logged.push(line),
-		});
+		await build({ cwd: tmpDir, validate: false, onLog: (line) => logged.push(line) });
 		const bundlePath = join(stageDir, "root", "bin", "bun-pkg.js");
-		expect(result.artifacts).toEqual([
-			{ kind: "package-json", path: join(stageDir, "root", "package.json") },
-			{ kind: "bundle", path: bundlePath, command: "bun-pkg" },
-		]);
 		expect(readFileSync(bundlePath, "utf8")).toMatch(/^#!\/usr\/bin\/env bun\n/);
-		const manifest = readManifest(join(stageDir, "manifest.json"));
-		expect(manifest).toMatchObject({
-			runtime: "bun",
-			artifact: "package",
-			packages: [],
-			publishOrder: ["root"],
-		});
-		expect(manifest).not.toHaveProperty("embeddedRuntimeVersion");
 		// engines describes the consumer's Bun for a runtime package; the bundler is not checked against it.
 		expect(JSON.parse(readFileSync(join(stageDir, "root", "package.json"), "utf8"))).toMatchObject({
 			engines: { bun: ">=99" },
@@ -909,7 +886,7 @@ describe("build", () => {
 	);
 });
 
-describe("buildCommand error handling", () => {
+describe("buildCommand", () => {
 	it("rejects invalid identity before wiping the previous stage, even with --no-validate", async () => {
 		const tmpDir = mkdtempSync(join(tmpdir(), "crust-identity-guard-"));
 		mkdirSync(join(tmpDir, ".crust"));

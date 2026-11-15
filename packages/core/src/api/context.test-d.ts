@@ -6,6 +6,7 @@ import { defineExtension } from "./extension.ts";
 import { defineFlag } from "./flags.ts";
 
 const apiKey = defineFlag({ type: "string", short: "k", aliases: ["token"] });
+const config = defineContext("config").setup(() => ({ url: "memory://" }));
 
 // Compile-time regression checks; intentionally never invoked.
 // merges owned flag types from multiple Contexts in one provide call
@@ -26,7 +27,6 @@ function _typecheckMergesOwnedFlagTypesFromMultipleContextsInOneProvideCall() {
 
 // checks dependency graphs at every composition boundary
 function _typecheckChecksDependencyGraphsAtEveryCompositionBoundary() {
-	const config = defineContext("config").setup(() => ({ url: "memory://" }));
 	const db = defineContext("db")
 		.use(config)
 		.setup(async ({ ctx }) => {
@@ -74,7 +74,6 @@ function _typecheckChecksDependencyGraphsAtEveryCompositionBoundary() {
 
 // brands inline .use() demands that the call site does not provide
 function _typecheckBrandsInlineUseDemandsThatTheCallSiteDoesNotProvide() {
-	const config = defineContext("config").setup(() => ({ url: "memory://" }));
 	const db = defineContext("db")
 		.use(config)
 		.setup(async ({ ctx }) => await ctx.config);
@@ -99,7 +98,6 @@ function _typecheckBrandsInlineUseDemandsThatTheCallSiteDoesNotProvide() {
 
 // .use() takes an Extension or its factory for the Contexts it provides
 function _typecheckUseTakesAnExtensionForTheContextsItProvides() {
-	const config = defineContext("config").setup(() => ({ url: "memory://" }));
 	const greeter = defineContext("greeter").setup(() => (name: string) => `hi ${name}`);
 	const greeting = defineExtension(defineExtensionId("greeting"))
 		.provide(greeter())
@@ -136,7 +134,6 @@ function _typecheckUseTakesAnExtensionForTheContextsItProvides() {
 
 // keeps .use() brand parity for defineCommand at .add() and .extend()
 function _typecheckKeepsUseBrandParityForDefineCommandAtAddAndExtend() {
-	const config = defineContext("config").setup(() => ({ url: "memory://" }));
 	const db = defineContext("db")
 		.use(config)
 		.setup(async ({ ctx }) => await ctx.config);
@@ -186,7 +183,6 @@ function _typecheckBrandsInlineFlagsThatCollideWithRegisteredExtensionFlagsMatch
 
 // infers options, ctx, flags, and the value together from one fluent chain
 function _typecheckInfersOptionsCtxFlagsAndValueTogether() {
-	const config = defineContext("config").setup(() => ({ url: "memory://" }));
 	const logger = defineContext("logger").setup(() => ({ level: 1 }));
 	const db = defineContext("db")
 		.use(config)
@@ -330,7 +326,6 @@ function _typecheckChecksLiteralContextSections() {
 	type _Value = Expect<Equal<Awaited<ReturnType<ReturnType<typeof env>["setup"]>>, string>>;
 }
 
-// types Context-owned flags only on commands that parse them
 // .use(extension) types the flags of the provided Contexts' setup dependencies, value or factory
 function _typecheckTypesTransitiveFlagsOfExtensionUseSources() {
 	const config = defineContext("config")
@@ -356,6 +351,7 @@ function _typecheckTypesTransitiveFlagsOfExtensionUseSources() {
 	void app.run(["factory"], { flags: { region: "eu" } });
 }
 
+// types Context-owned flags only on commands that parse them
 function _typecheckTypesContextFlagsAtUseSites() {
 	const region = defineFlag({ type: "string" });
 	const config = defineContext("config")

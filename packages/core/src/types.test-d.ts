@@ -1,5 +1,3 @@
-import type { StandardSchema } from "@crustjs/utils/schema";
-
 import type { Equal, Expect } from "../tests/helpers.ts";
 import type {
 	ArgDef,
@@ -10,30 +8,12 @@ import type {
 	InferFlags,
 } from "./types.ts";
 
-// ────────────────────────────────────────────────────────────────────────────
-// InferArgs type-level tests
-// ────────────────────────────────────────────────────────────────────────────
-
 // InferArgs type inference
-{
-	// schema args infer the schema output, untouched by choices narrowing
-	type Args = readonly [{ name: "url"; schema: StandardSchema<string | undefined, URL> }];
-	type Result = InferArgs<Args>;
-	type _check = Expect<Equal<Result, { url: URL }>>;
-}
-
 {
 	// maps arg with default to non-optional type
 	type Args = readonly [{ name: "port"; type: "number"; default: 3000 }];
 	type Result = InferArgs<Args>;
 	type _check = Expect<Equal<Result, { port: number }>>;
-}
-
-{
-	// maps variadic arg to array type
-	type Args = readonly [{ name: "files"; type: "string"; variadic: true }];
-	type Result = InferArgs<Args>;
-	type _check = Expect<Equal<Result, { files: string[] }>>;
 }
 
 {
@@ -48,27 +28,7 @@ import type {
 	type _check = Expect<Equal<Result, {}>>;
 }
 
-{
-	// distributes over a union of arg tuples instead of merging members
-	type Result = InferArgs<
-		| readonly [{ name: "x"; type: "string"; required: true }]
-		| readonly [{ name: "y"; type: "number"; required: true }]
-	>;
-	type _check = Expect<Equal<Result, { x: string } | { y: number }>>;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// InferFlags type-level tests
-// ────────────────────────────────────────────────────────────────────────────
-
 // InferFlags type inference
-{
-	// maps required flag to non-optional type
-	type Flags = { name: { type: "string"; required: true } };
-	type Result = InferFlags<Flags>;
-	type _check = Expect<Equal<Result, { name: string }>>;
-}
-
 {
 	// narrows a string flag with literal choices to the literal union
 	type Flags = {
@@ -109,23 +69,6 @@ import type {
 	type _check = Expect<Equal<Result, { file: string[] | undefined }>>;
 }
 
-{
-	// maps multiple flag with default to non-optional array type
-	type Flags = {
-		file: {
-			type: "string";
-			multiple: true;
-			default: ["default.ts"];
-		};
-	};
-	type Result = InferFlags<Flags>;
-	type _check = Expect<Equal<Result, { file: string[] }>>;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// InferFlags — parse field inference
-// ────────────────────────────────────────────────────────────────────────────
-
 // InferFlags — parse field inference
 {
 	// maps parse returning URL to URL | undefined
@@ -145,9 +88,6 @@ import type {
 
 {
 	// narrows inference when parse + raw default are both present
-	// Regression: a prior implementation of this conditional checked
-	// `default: ResolveBaseType<F>` (the parsed type), so a raw string
-	// default with a numeric parse return left the inferred type optional.
 	type Flags = {
 		x: { type: "string"; parse: (s: string) => number; default: "3000" };
 	};

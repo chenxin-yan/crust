@@ -14,6 +14,7 @@ import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { scaffold } from "../src/scaffold.ts";
+import type { ScaffoldOptions } from "../src/types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test Helpers
@@ -53,6 +54,13 @@ function createTemplateBinaryFile(relativePath: string, data: Buffer): void {
 }
 
 /**
+ * Scaffold the test template into the output directory with an empty context.
+ */
+function scaffoldTemplate(options: Partial<ScaffoldOptions> = {}) {
+	return scaffold({ template: templateDir, dest: destDir, context: {}, ...options });
+}
+
+/**
  * Read a file from the output directory.
  */
 function readOutputFile(relativePath: string): string {
@@ -68,10 +76,7 @@ describe("scaffold", () => {
 		createTemplateFile("package.json", '{ "name": "{{name}}", "description": "{{description}}" }');
 		createTemplateFile("src/index.ts", "// {{name}} - {{description}}");
 
-		const result = await scaffold({
-			template: templateDir,
-			dest: destDir,
-
+		const result = await scaffoldTemplate({
 			context: { name: "my-app", description: "A cool CLI" },
 		});
 
@@ -85,36 +90,17 @@ describe("scaffold", () => {
 		expect(readOutputFile(join("src", "index.ts"))).toBe("// my-app - A cool CLI");
 	});
 
-	it("renames dotfiles: _gitignore becomes .gitignore", async () => {
+	it("renames dotfiles at the root and in subdirectories: _gitignore becomes .gitignore", async () => {
 		createTemplateFile("_gitignore", "node_modules\ndist\n");
-
-		const result = await scaffold({
-			template: templateDir,
-			dest: destDir,
-
-			context: {},
-		});
-
-		expect(result.files).toContain(".gitignore");
-		expect(result.files).not.toContain("_gitignore");
-		expect(existsSync(join(destDir, ".gitignore"))).toBe(true);
-		expect(existsSync(join(destDir, "_gitignore"))).toBe(false);
-		expect(readOutputFile(".gitignore")).toBe("node_modules\ndist\n");
-	});
-
-	it("renames dotfiles in subdirectories", async () => {
 		createTemplateFile("config/_eslintrc.json", '{ "root": true }');
 
-		const result = await scaffold({
-			template: templateDir,
-			dest: destDir,
+		const result = await scaffoldTemplate();
 
-			context: {},
-		});
-
-		const expected = join("config", ".eslintrc.json");
-		expect(result.files).toContain(expected);
-		expect(readOutputFile(expected)).toBe('{ "root": true }');
+		const nested = join("config", ".eslintrc.json");
+		expect([...result.files].sort()).toEqual([".gitignore", nested]);
+		expect(existsSync(join(destDir, "_gitignore"))).toBe(false);
+		expect(readOutputFile(".gitignore")).toBe("node_modules\ndist\n");
+		expect(readOutputFile(nested)).toBe('{ "root": true }');
 	});
 
 	it("does not rename files starting with double underscore", async () => {
@@ -122,12 +108,7 @@ describe("scaffold", () => {
 		createTemplateFile("__tests__/foo.test.ts", "test('foo', () => {})");
 		createTemplateFile("__mocks__/bar.ts", "export default {}");
 
-		const result = await scaffold({
-			template: templateDir,
-			dest: destDir,
-
-			context: {},
-		});
+		const result = await scaffoldTemplate();
 
 		expect(result.files).toContain("__file.ts");
 		expect(readOutputFile("__file.ts")).toBe("export const preserved = true;");
@@ -144,14 +125,7 @@ describe("scaffold", () => {
 
 		createTemplateFile("file.txt", "hello");
 
-		await expect(
-			scaffold({
-				template: templateDir,
-				dest: destDir,
-
-				context: {},
-			}),
-		).rejects.toThrow("already exists and is non-empty");
+		await expect(scaffoldTemplate()).rejects.toThrow("already exists and is non-empty");
 	});
 
 	it("overwrites files when conflict is 'overwrite'", async () => {
@@ -161,13 +135,7 @@ describe("scaffold", () => {
 
 		createTemplateFile("file.txt", "new content from {{author}}");
 
-		const result = await scaffold({
-			template: templateDir,
-			dest: destDir,
-
-			context: { author: "crust" },
-			conflict: "overwrite",
-		});
+		const result = await scaffoldTemplate({ context: { author: "crust" }, conflict: "overwrite" });
 
 		expect(result.files).toContain("file.txt");
 		expect(readOutputFile("file.txt")).toBe("new content from crust");
@@ -181,9 +149,7 @@ describe("scaffold", () => {
 			const context = { name: "world" };
 			const calls: [string, Record<string, string>][] = [];
 
-			const result = await scaffold({
-				template: templateDir,
-				dest: destDir,
+			const result = await scaffoldTemplate({
 				context,
 				// Output keeps a placeholder: no second interpolation pass may fill it.
 				render: (source, ctx) => {
@@ -210,11 +176,7 @@ describe("scaffold", () => {
 			writeFileSync(outsideFile, "outside", "utf-8");
 			symlinkSync(outsideFile, join(templateDir, "linked.txt"));
 
-			const result = await scaffold({
-				template: templateDir,
-				dest: destDir,
-				context: { name: "my-app" },
-			});
+			const result = await scaffoldTemplate({ context: { name: "my-app" } });
 
 			expect(result.files).toEqual([join("src", "index.ts")]);
 			expect(existsSync(join(destDir, "linked.txt"))).toBe(false);
@@ -242,12 +204,7 @@ describe("scaffold", () => {
 			symlinkSync(sentinel, join(destDir, "config.txt"));
 
 			await expect(
-				scaffold({
-					template: templateDir,
-					dest: destDir,
-					context: { name: "my-app" },
-					conflict: "overwrite",
-				}),
+				scaffoldTemplate({ context: { name: "my-app" }, conflict: "overwrite" }),
 			).rejects.toThrow(/config\.txt.*outside the destination/);
 			expect(readFileSync(sentinel, "utf-8")).toBe("original");
 		});
@@ -257,12 +214,7 @@ describe("scaffold", () => {
 			symlinkSync(outsideDir, join(destDir, "src"));
 
 			await expect(
-				scaffold({
-					template: templateDir,
-					dest: destDir,
-					context: { name: "my-app" },
-					conflict: "overwrite",
-				}),
+				scaffoldTemplate({ context: { name: "my-app" }, conflict: "overwrite" }),
 			).rejects.toThrow(/src.*outside the destination/);
 			expect(existsSync(join(outsideDir, "deep"))).toBe(false);
 		});
@@ -273,12 +225,7 @@ describe("scaffold", () => {
 			symlinkSync(missingTarget, join(destDir, "notes.txt"));
 
 			await expect(
-				scaffold({
-					template: templateDir,
-					dest: destDir,
-					context: { name: "my-app" },
-					conflict: "overwrite",
-				}),
+				scaffoldTemplate({ context: { name: "my-app" }, conflict: "overwrite" }),
 			).rejects.toThrow(/notes\.txt.*outside the destination/);
 			expect(existsSync(missingTarget)).toBe(false);
 		});
@@ -290,10 +237,7 @@ describe("scaffold", () => {
 			const rendered: string[] = [];
 
 			await expect(
-				scaffold({
-					template: templateDir,
-					dest: destDir,
-					context: {},
+				scaffoldTemplate({
 					conflict: "overwrite",
 					render: (source) => {
 						rendered.push(source);
@@ -318,10 +262,7 @@ describe("scaffold", () => {
 							: destDir;
 
 				await expect(
-					scaffold({
-						template: templateDir,
-						dest: destDir,
-						context: {},
+					scaffoldTemplate({
 						render: async (source) => {
 							await Promise.resolve();
 							rmSync(swappedPath, { recursive: true, force: true });
@@ -339,10 +280,7 @@ describe("scaffold", () => {
 			createTemplateBinaryFile("z.bin", Buffer.from([0, 1]));
 
 			await expect(
-				scaffold({
-					template: templateDir,
-					dest: destDir,
-					context: {},
+				scaffoldTemplate({
 					render: async (source) => {
 						await Promise.resolve();
 						symlinkSync(sentinel, join(destDir, "z.bin"));
@@ -359,12 +297,7 @@ describe("scaffold", () => {
 			writeFileSync(join(destDir, "real.txt"), "old", "utf-8");
 			symlinkSync(join(destDir, "real.txt"), join(destDir, "alias.txt"));
 
-			const result = await scaffold({
-				template: templateDir,
-				dest: destDir,
-				context: { name: "my-app" },
-				conflict: "overwrite",
-			});
+			const result = await scaffoldTemplate({ context: { name: "my-app" }, conflict: "overwrite" });
 
 			expect(result.files).toEqual(["alias.txt"]);
 			expect(readOutputFile("real.txt")).toBe("my-app");
@@ -375,11 +308,7 @@ describe("scaffold", () => {
 			const linkedRoot = join(tempDir, "linked-root");
 			symlinkSync(destDir, linkedRoot);
 
-			const result = await scaffold({
-				template: templateDir,
-				dest: linkedRoot,
-				context: { name: "my-app" },
-			});
+			const result = await scaffoldTemplate({ dest: linkedRoot, context: { name: "my-app" } });
 
 			expect(result.files).toEqual([join("src", "index.ts")]);
 			expect(readOutputFile(join("src", "index.ts"))).toBe("my-app");
@@ -392,13 +321,7 @@ describe("scaffold", () => {
 
 		createTemplateFile("file.txt", "content");
 
-		const result = await scaffold({
-			template: templateDir,
-			dest: destDir,
-
-			context: {},
-			conflict: "abort",
-		});
+		const result = await scaffoldTemplate({ conflict: "abort" });
 
 		expect(result.files).toContain("file.txt");
 		expect(readOutputFile("file.txt")).toBe("content");
@@ -407,9 +330,8 @@ describe("scaffold", () => {
 	it("resolves template from a file: URL", async () => {
 		createTemplateFile("hello.txt", "hi {{who}}");
 
-		const result = await scaffold({
+		const result = await scaffoldTemplate({
 			template: pathToFileURL(templateDir),
-			dest: destDir,
 			context: { who: "URL" },
 		});
 
@@ -418,25 +340,15 @@ describe("scaffold", () => {
 	});
 
 	it("throws when template directory does not exist", async () => {
-		await expect(
-			scaffold({
-				template: "/nonexistent/path/to/template",
-				dest: destDir,
-				context: {},
-			}),
-		).rejects.toThrow("does not exist");
+		await expect(scaffoldTemplate({ template: "/nonexistent/path/to/template" })).rejects.toThrow(
+			"does not exist",
+		);
 	});
 
 	it("throws when template path is a file, not a directory", async () => {
 		const filePath = join(tempDir, "not-a-dir.txt");
 		writeFileSync(filePath, "I am a file");
 
-		await expect(
-			scaffold({
-				template: filePath,
-				dest: destDir,
-				context: {},
-			}),
-		).rejects.toThrow("is not a directory");
+		await expect(scaffoldTemplate({ template: filePath })).rejects.toThrow("is not a directory");
 	});
 });

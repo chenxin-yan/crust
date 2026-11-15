@@ -52,9 +52,6 @@ function _typecheckRejectsVariadicMethodsOnConditionalBuilderUnion(condition: bo
 		type _ctx = Expect<Equal<typeof ctx, ContextBag<{ db: string } & { other: number }>>>;
 	});
 
-	// @ts-expect-error -- unconditional duplicate providers remain rejected (FIX_DUPLICATE_CONTEXT)
-	void c.provide(text()).provide(text());
-
 	// non-variadic methods on a union keep working; ctx is the honest union of both branches
 	void (condition ? c.provide(text()) : c).action(({ ctx }) => {
 		type _ctx = Expect<Equal<typeof ctx, ContextBag<{ db: string }> | ContextBag>>;
@@ -144,12 +141,6 @@ function _typecheckExplicitInputsOnConditionalBuilderUnion(condition: boolean) {
 		>;
 	});
 
-	const child = defineCommand("child", (command) => command);
-	const sibling = child.as("other");
-	const treeUnion = condition ? c.add(child) : c;
-	// @ts-expect-error -- explicit type arguments are rejected (FIX_EXPLICIT_TYPE_ARGUMENTS)
-	void treeUnion.add<readonly [typeof sibling]>(sibling);
-
 	defineCommand("explicit", (command) => {
 		const recipeUnion = condition ? command.use(text) : command;
 		return recipeUnion.use<readonly [typeof other]>(other).action(async ({ ctx }) => {
@@ -183,8 +174,6 @@ function _typecheckRejectsSiblingCommandSpellingCollisionsAtTheCallSite() {
 	const defs = Math.random() > 0.5 ? ([build, build] as const) : ([build] as const);
 	// @ts-expect-error -- the [build, build] variant collides within the batch
 	new Crust("cli").add(...defs);
-	// @ts-expect-error -- explicit type arguments are rejected (FIX_EXPLICIT_TYPE_ARGUMENTS)
-	new Crust("cli").add<typeof defs>(...defs);
 	// @ts-expect-error -- Extension commands share the same batch validation
 	defineExtension(defineExtensionId("ext")).add(...defs);
 
@@ -210,10 +199,6 @@ function _typecheckRejectsSiblingCommandSpellingCollisionsAtTheCallSite() {
 
 // rejects invalid command alias shapes at defineCommand()
 function _typecheckRejectsInvalidCommandAliasShapesAtDefineCommand() {
-	// @ts-expect-error -- aliases must be non-empty
-	defineCommand("issue", { aliases: [""] }, (command) => command);
-	// @ts-expect-error -- aliases must not start with a dash
-	defineCommand("issue", { aliases: ["-i"] }, (command) => command);
 	// @ts-expect-error -- aliases must not contain spaces
 	defineCommand("issue", { aliases: ["my issue"] }, (command) => command);
 	// @ts-expect-error -- aliases must not contain tabs

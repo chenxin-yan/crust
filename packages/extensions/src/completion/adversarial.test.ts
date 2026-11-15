@@ -1,16 +1,14 @@
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
 import { buildCommandDocumentation } from "@crustjs/core/tooling";
 import { captureExecute } from "@crustjs/testing";
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
-import { reapBoundedProcesses, runBoundedProcess } from "../../../crust/tests/bounded-process.ts";
 import { completion } from "./index.ts";
 import type { CompletionCommand } from "./spec.ts";
-import { renderBash } from "./templates/bash.ts";
 import { renderFish } from "./templates/fish.ts";
 import { renderZsh } from "./templates/zsh.ts";
 import { walkCommand } from "./walker.ts";
@@ -18,11 +16,9 @@ import { walkCommand } from "./walker.ts";
 /**
  * Adversarial test suite. These tests exercise the validation/escape
  * boundary that protects the generated shell scripts from injection,
- * the documented behaviour for `--`/`--name=value`/`--no-` in bash, the
- * order-sensitive fish path predicate, and `--output-dir` traversal.
- *
- * They are intentionally separate from the per-shell `*.test.ts` files
- * so the per-shell suites stay focused on the renderer's happy path.
+ * zsh `--no-` spellings, the order-sensitive fish path predicate, and
+ * `--output-dir` traversal. Bash `--`/`--name=value` behaviour lives in
+ * `templates/bash.test.ts`, beside the bash completion driver.
  */
 
 // ── Walker validation ────────────────────────────────────────────────────
@@ -66,11 +62,9 @@ describe("walker · validation", () => {
 			description: "first line\nsecond line\rstill same line",
 		}).action(() => {});
 		const spec = walkCommand(buildCommandDocumentation(await cli.snapshot()));
-		// Newlines and CR collapse to spaces during normalisation.
-		expect(spec.description).toBe("first line second line still same line");
-		// And the value never contains a raw newline that could break
+		// Newlines and CR collapse to spaces, so no raw newline can break
 		// out of an emitted comment line.
-		expect(spec.description).not.toMatch(/[\r\n]/);
+		expect(spec.description).toBe("first line second line still same line");
 	});
 });
 
@@ -96,190 +90,6 @@ describe("--no- negation", () => {
 		const out = renderZsh(spec, "mycli", "1");
 		expect(out).toContain("--no-force");
 		expect(out).not.toContain("--no-color");
-	});
-});
-
-// ── bash behaviour: -- terminator + --name=value + value-flag context ────
-
-describe("renderBash · behavioural · -- and --name=value", () => {
-	const spec: CompletionCommand = {
-		name: "mycli",
-		flags: [],
-		args: [],
-		subCommands: [
-			{
-				name: "build",
-				flags: [
-					{
-						name: "target",
-						spellings: ["--target"],
-						type: "string",
-						takesValue: true,
-						choices: ["browser", "node"],
-					},
-					{ name: "out", spellings: ["--out"], type: "string", takesValue: true },
-				],
-				args: [],
-				subCommands: [{ name: "deploy", flags: [], args: [], subCommands: [] }],
-			},
-			{
-				name: "seek",
-				flags: [{ name: "watch", spellings: ["--watch"], type: "boolean", takesValue: false }],
-				args: [
-					{ name: "task", type: "string", required: true, variadic: false, choices: ["lint"] },
-					{ name: "pkgs", type: "string", required: false, variadic: true, choices: ["cli"] },
-				],
-				subCommands: [],
-			},
-			{
-				name: "run",
-				flags: [{ name: "watch", spellings: ["--watch"], type: "boolean", takesValue: false }],
-				args: [
-					{ name: "task", type: "string", required: true, variadic: false, choices: ["lint"] },
-					{ name: "pkgs", type: "string", required: false, variadic: true, choices: ["cli"] },
-					{
-						name: "extra",
-						type: "string",
-						required: false,
-						variadic: true,
-						afterDoubleDash: true,
-						choices: ["fix"],
-					},
-				],
-				subCommands: [],
-			},
-			{
-				name: "exec",
-				flags: [],
-				args: [
-					{ name: "pod", type: "string", required: true, variadic: false, choices: ["web"] },
-					{
-						name: "cmd",
-						type: "string",
-						required: true,
-						variadic: false,
-						afterDoubleDash: true,
-						choices: ["ls"],
-					},
-				],
-				subCommands: [],
-			},
-			{
-				name: "wrap",
-				flags: [],
-				args: [
-					{
-						name: "extra",
-						type: "string",
-						required: false,
-						variadic: false,
-						afterDoubleDash: true,
-						choices: ["fix"],
-					},
-				],
-				subCommands: [{ name: "child", flags: [], args: [], subCommands: [] }],
-			},
-		],
-	};
-
-	let scriptPath: string;
-	let tmpDir: string;
-
-	beforeEach(async () => {
-		tmpDir = await mkdtemp(join(tmpdir(), "tp010-bash-adv-"));
-		scriptPath = join(tmpDir, "mycli-completion.bash");
-		await writeFile(scriptPath, renderBash(spec, "mycli", "1"));
-	});
-
-	afterEach(async () => {
-		await reapBoundedProcesses();
-		await rm(tmpDir, { recursive: true, force: true });
-	});
-
-	async function complete(words: string[]): Promise<string[]> {
-		const compWords = words.map((w, i) => `COMP_WORDS[${i}]=${shq(w)}`).join("\n");
-		const cword = words.length - 1;
-		const driver = `
-set -e
-source ${shq(scriptPath)}
-${compWords}
-COMP_CWORD=${cword}
-COMP_LINE=${shq(words.join(" "))}
-COMP_POINT=${words.join(" ").length}
-_mycli
-for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
-`;
-		const {
-			exitCode: code,
-			stdout: out,
-			stderr: err,
-		} = await runBoundedProcess("bash", ["-c", driver], { timeout: 4_000 });
-		if (code !== 0) {
-			throw new Error(`bash exit ${code}\n${err}\n${out}`);
-		}
-		return out
-			.split("\n")
-			.map((l) => l.trim())
-			.filter((l) => l.length > 0)
-			.sort();
-	}
-	function shq(value: string): string {
-		return `'${value.replace(/'/g, `'\\''`)}'`;
-	}
-
-	it("`--name=value` form completes the value's choice list", async () => {
-		const candidates = await complete(["mycli", "build", "--target=br"]);
-		// Bash sees one current token `--target=br`; the script splits on
-		// `=` and offers the choices that match prefix `br`.
-		expect(candidates).toContain("--target=browser");
-		expect(candidates).not.toContain("--target=node");
-	});
-
-	it("after `--`, no subcommand or flag candidates are offered", async () => {
-		expect(await complete(["mycli", "build", ""])).toEqual(["deploy"]);
-		expect(await complete(["mycli", "build", "--"])).toEqual(["--out", "--target"]);
-		expect(await complete(["mycli", "build", "--", "--"])).toEqual([]);
-		const candidates = await complete(["mycli", "build", "--", ""]);
-		// Past the `--` terminator we return without setting COMPREPLY,
-		// so the candidate set is empty (filename completion happens via
-		// `complete -o default` at the bash level).
-		expect(candidates).toEqual([]);
-	});
-
-	it("after `--`, positionals keep filling argument slots but flags are never offered", async () => {
-		expect(await complete(["mycli", "seek", "--", ""])).toEqual(["lint"]);
-		expect(await complete(["mycli", "seek", "lint", "--", ""])).toEqual(["cli"]);
-		expect(await complete(["mycli", "seek", "--", "-x", ""])).toEqual(["cli"]);
-		expect(await complete(["mycli", "seek", "lint", "--", "--"])).toEqual([]);
-		expect(await complete(["mycli", "seek", "lint", "--w"])).toEqual(["--watch"]);
-		// Core routes nothing after `--`.
-		expect(await complete(["mycli", "--", ""])).toEqual([]);
-	});
-
-	it("offers an afterDoubleDash argument only after `--`, and the others only before", async () => {
-		expect(await complete(["mycli", "run", ""])).toEqual(["lint"]);
-		expect(await complete(["mycli", "run", "lint", ""])).toEqual(["cli"]);
-		expect(await complete(["mycli", "run", "lint", "cli", "cli", ""])).toEqual(["cli"]);
-		expect(await complete(["mycli", "run", "lint", "--", ""])).toEqual(["fix"]);
-		expect(await complete(["mycli", "run", "--", "x", ""])).toEqual(["fix"]);
-		expect(await complete(["mycli", "run", "--", "--w"])).toEqual([]);
-		expect(await complete(["mycli", "exec", "web", ""])).toEqual([]);
-		expect(await complete(["mycli", "exec", "web", "--", ""])).toEqual(["ls"]);
-		// A single one takes one token; the rest reach rawArgs.
-		expect(await complete(["mycli", "exec", "web", "--", "ls", ""])).toEqual([]);
-	});
-
-	it("still offers subcommands before `--` when an afterDoubleDash argument is the only one", async () => {
-		expect(await complete(["mycli", "wrap", ""])).toEqual(["child"]);
-		expect(await complete(["mycli", "wrap", "--", ""])).toEqual(["fix"]);
-	});
-
-	it("after a free-form value flag, no subcommand candidates are offered", async () => {
-		// `--out` is a value-taking flag with no choices; the next word
-		// is a free-form value, not a subcommand.
-		expect(await complete(["mycli", "build", ""])).toEqual(["deploy"]);
-		const candidates = await complete(["mycli", "build", "--out", ""]);
-		expect(candidates).toEqual([]);
 	});
 });
 

@@ -16,47 +16,18 @@ function pathError(message: string) {
 	});
 }
 
-function linuxEnv(
-	overrides?: Partial<PlatformEnv> & Record<string, string | undefined>,
-): PlatformEnv {
-	return {
-		platform: "linux",
-		env: {
-			XDG_CONFIG_HOME: overrides?.XDG_CONFIG_HOME,
-			XDG_DATA_HOME: overrides?.XDG_DATA_HOME,
-			XDG_STATE_HOME: overrides?.XDG_STATE_HOME,
-			XDG_CACHE_HOME: overrides?.XDG_CACHE_HOME,
-		},
-		homedir: overrides?.homedir ?? "/home/testuser",
-	};
+type EnvOverrides = { homedir?: string } & Record<string, string | undefined>;
+
+function linuxEnv({ homedir = "/home/testuser", ...env }: EnvOverrides = {}): PlatformEnv {
+	return { platform: "linux", env, homedir };
 }
 
-function darwinEnv(
-	overrides?: Partial<PlatformEnv> & Record<string, string | undefined>,
-): PlatformEnv {
-	return {
-		platform: "darwin",
-		env: {
-			XDG_CONFIG_HOME: overrides?.XDG_CONFIG_HOME,
-			XDG_DATA_HOME: overrides?.XDG_DATA_HOME,
-			XDG_STATE_HOME: overrides?.XDG_STATE_HOME,
-			XDG_CACHE_HOME: overrides?.XDG_CACHE_HOME,
-		},
-		homedir: overrides?.homedir ?? "/Users/testuser",
-	};
+function darwinEnv({ homedir = "/Users/testuser", ...env }: EnvOverrides = {}): PlatformEnv {
+	return { platform: "darwin", env, homedir };
 }
 
-function win32Env(
-	overrides?: Partial<PlatformEnv> & Record<string, string | undefined>,
-): PlatformEnv {
-	return {
-		platform: "win32",
-		env: {
-			APPDATA: overrides?.APPDATA,
-			LOCALAPPDATA: overrides?.LOCALAPPDATA,
-		},
-		homedir: overrides?.homedir ?? "C:\\Users\\testuser",
-	};
+function win32Env({ homedir = "C:\\Users\\testuser", ...env }: EnvOverrides = {}): PlatformEnv {
+	return { platform: "win32", env, homedir };
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -68,12 +39,8 @@ describe("appName validation", () => {
 		expect(() => configDir("   ", linuxEnv())).toThrow(pathError("non-empty"));
 	});
 
-	it("should reject appName with forward slashes", () => {
-		expect(() => configDir("my/app", linuxEnv())).toThrow(pathError("path separators"));
-	});
-
-	it("should reject appName with backslashes", () => {
-		expect(() => configDir("my\\app", linuxEnv())).toThrow(pathError("path separators"));
+	it.each(["my/app", "my\\app"])("should reject appName %j with path separators", (appName) => {
+		expect(() => configDir(appName, linuxEnv())).toThrow(pathError("path separators"));
 	});
 });
 

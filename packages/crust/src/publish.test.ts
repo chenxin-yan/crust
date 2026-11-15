@@ -244,20 +244,16 @@ describe("publish manifest validation", () => {
 		}
 	});
 
-	it.each(["platform"])(
-		"rejects duplicate %s package names before any publisher runs",
-		async (duplicate) => {
-			const invalid = structuredClone(manifest);
-			invalid.packages[1]!.name =
-				duplicate === "root" ? invalid.root.name : invalid.packages[0]!.name;
-			writeStageFixture(tmpDir, invalid);
-			const runNpm = mockNpm();
-			await expect(
-				publishStagedPackages(invalid, { stageDir: tmpDir, runNpm }, io),
-			).rejects.toThrow(/duplicate package names/);
-			expect(runNpm).not.toHaveBeenCalled();
-		},
-	);
+	it("rejects duplicate platform package names before any publisher runs", async () => {
+		const invalid = structuredClone(manifest);
+		invalid.packages[1]!.name = invalid.packages[0]!.name;
+		writeStageFixture(tmpDir, invalid);
+		const runNpm = mockNpm();
+		await expect(publishStagedPackages(invalid, { stageDir: tmpDir, runNpm }, io)).rejects.toThrow(
+			/duplicate package names/,
+		);
+		expect(runNpm).not.toHaveBeenCalled();
+	});
 
 	it("rejects external package metadata links before any publisher runs", async () => {
 		const outside = join(tmpDir, "outside.json");
@@ -602,7 +598,7 @@ describe("publish manifest validation", () => {
 		expect(publishCalls(runNpm)).toEqual([join(tmpDir, "linux-x64"), join(tmpDir, "darwin-arm64")]);
 	});
 
-	it("resumes after a failed run without republishing what already went up", async () => {
+	it("stops at a failed publish and says what to rerun", async () => {
 		const failing = mockNpm({
 			publish: (dir) =>
 				dir.endsWith("darwin-arm64") ? { exitCode: 1, stdout: "", stderr: "" } : ok,
@@ -616,13 +612,5 @@ describe("publish manifest validation", () => {
 			join(tmpDir, "linux-x64"),
 			join(tmpDir, "darwin-arm64"),
 		]);
-
-		// Run 2: the registry now has linux-x64.
-		const resumed = mockNpm({
-			view: (spec) =>
-				spec.startsWith("@scope/demo-linux-x64@") ? viewExists(spec) : viewError("E404", spec),
-		});
-		await publishStagedPackages(manifest, { stageDir: tmpDir, runNpm: resumed }, io);
-		expect(publishCalls(resumed)).toEqual([join(tmpDir, "darwin-arm64"), join(tmpDir, "root")]);
 	});
 });

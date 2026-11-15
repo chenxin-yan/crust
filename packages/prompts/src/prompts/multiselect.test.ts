@@ -18,9 +18,7 @@ describe("multiselect — default value", () => {
 		});
 
 		await tick();
-		prompt.keys("space");
-		await tick();
-		prompt.keys("return");
+		prompt.keys("space", "return");
 
 		expect(await prompt.answer).toEqual([]);
 	});
@@ -45,40 +43,19 @@ describe("multiselect — default value", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multiselect — navigation", () => {
-	it("j moves cursor down (vim)", async () => {
+	it.each([
+		["j moves cursor down (vim)", ["j"], ["b"]],
+		["k moves cursor up (vim)", ["down", "k"], ["a"]],
+	])("%s", async (_title, keys, expected) => {
 		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices: ["a", "b", "c"],
 		});
 
 		await tick();
-		prompt.type("j");
-		await tick();
-		prompt.type(" ");
-		await tick();
-		prompt.keys("return");
+		prompt.keys(...keys, "space", "return");
 
-		const result = await prompt.answer;
-		expect(result).toEqual(["b"]);
-	});
-
-	it("k moves cursor up (vim)", async () => {
-		const prompt = renderPrompt(multiselect, {
-			message: "Select",
-			choices: ["a", "b", "c"],
-		});
-
-		await tick();
-		prompt.keys("down");
-		await tick();
-		prompt.type("k");
-		await tick();
-		prompt.type(" ");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toEqual(["a"]);
+		expect(await prompt.answer).toEqual(expected);
 	});
 });
 
@@ -87,69 +64,27 @@ describe("multiselect — navigation", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multiselect — toggle all / invert", () => {
-	it("'a' selects all items when none are selected", async () => {
+	it.each([
+		["'a' selects all items when none are selected", {}, ["a"], ["a", "b", "c"]],
+		["'a' deselects all items when all are selected", { default: ["a", "b", "c"] }, ["a"], []],
+		[
+			"'a' deselects all items when max is reached",
+			{ choices: ["a", "b", "c", "d"], max: 2 },
+			["a", "a"],
+			[],
+		],
+		["'i' inverts selection", { default: ["a"] }, ["i"], ["b", "c"]],
+	])("%s", async (_title, options: Partial<MultiselectOptions<string>>, keys, expected) => {
 		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices: ["a", "b", "c"],
+			...options,
 		});
 
 		await tick();
-		prompt.type("a");
-		await tick();
-		prompt.keys("return");
+		prompt.keys(...keys, "return");
 
-		const result = await prompt.answer;
-		expect(result).toEqual(["a", "b", "c"]);
-	});
-
-	it("'a' deselects all items when all are selected", async () => {
-		const prompt = renderPrompt(multiselect, {
-			message: "Select",
-			choices: ["a", "b", "c"],
-			default: ["a", "b", "c"],
-		});
-
-		await tick();
-		prompt.type("a");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toEqual([]);
-	});
-
-	it("'a' deselects all items when max is reached", async () => {
-		const prompt = renderPrompt(multiselect, {
-			message: "Select",
-			choices: ["a", "b", "c", "d"],
-			max: 2,
-		});
-
-		await tick();
-		prompt.type("a");
-		await tick();
-		prompt.type("a");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toEqual([]);
-	});
-
-	it("'i' inverts selection", async () => {
-		const prompt = renderPrompt(multiselect, {
-			message: "Select",
-			choices: ["a", "b", "c"],
-			default: ["a"],
-		});
-
-		await tick();
-		prompt.type("i");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toEqual(["b", "c"]);
+		expect(await prompt.answer).toEqual(expected);
 	});
 });
 
@@ -194,21 +129,12 @@ describe("multiselect — validation", () => {
 		});
 
 		await tick();
-		// Select only 1 item
-		prompt.type(" ");
-		await tick();
-		prompt.keys("return");
+		prompt.keys("space", "return");
 		await tick();
 
-		// Error should be shown
 		expect(prompt.screen()).toContain("Select at least 2 items");
 
-		// Select another item and submit
-		prompt.keys("down");
-		await tick();
-		prompt.type(" ");
-		await tick();
-		prompt.keys("return");
+		prompt.keys("down", "space", "return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["a", "b"]);
@@ -226,13 +152,9 @@ describe("multiselect — validation", () => {
 		prompt.keys("return");
 		await tick();
 
-		// Error should be shown
 		expect(prompt.screen()).toContain("Select at most 1 item");
 
-		// Deselect one and submit
-		prompt.type(" ");
-		await tick();
-		prompt.keys("return");
+		prompt.keys("space", "return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["b"]);
@@ -246,23 +168,15 @@ describe("multiselect — validation", () => {
 		});
 
 		await tick();
-		// Submit with nothing — triggers error
 		prompt.keys("return");
 		await tick();
 		expect(prompt.screen()).toContain("At least one item must be selected");
 
-		// Navigate — error should clear
-
 		prompt.keys("down");
 		await tick();
-
-		// The error should no longer appear in new output
 		expect(prompt.screen()).not.toContain("At least one item must be selected");
 
-		// Select and submit
-		prompt.type(" ");
-		await tick();
-		prompt.keys("return");
+		prompt.keys("space", "return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["b"]);
@@ -285,7 +199,6 @@ describe("multiselect — rendering", () => {
 		prompt.keys("return");
 
 		await prompt.answer;
-		// After submit, should show comma-separated labels
 		expect(prompt.screen()).toContain("cheese, mushrooms");
 	});
 
@@ -321,10 +234,7 @@ describe("multiselect — no message", () => {
 		expect(prompt.screen()).not.toContain("undefined");
 		expect(prompt.screen()).toContain("a");
 
-		// Select first item and submit
-		prompt.keys("space");
-		await tick();
-		prompt.keys("return");
+		prompt.keys("space", "return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["a"]);

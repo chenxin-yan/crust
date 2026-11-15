@@ -5,6 +5,21 @@ import { defineFlag } from "../api/flags.ts";
 import type { CaughtError } from "../errors.ts";
 import { createContextResolver } from "./context-resolver.ts";
 
+/** A resolver with silent IO and a signal that never aborts. */
+function resolverFor(
+	contexts: Parameters<typeof createContextResolver>[0],
+	disposal: AsyncDisposableStack,
+	flagContexts: Parameters<typeof createContextResolver>[1] = new Map(),
+) {
+	return createContextResolver(
+		contexts,
+		flagContexts,
+		{ stdout: () => {}, stderr: () => {} },
+		disposal,
+		new AbortController().signal,
+	);
+}
+
 describe("createContextResolver", () => {
 	it("pre-handles early bag rejections so enumeration cannot crash the process", async () => {
 		const token = defineFlag({ type: "string" });
@@ -18,13 +33,7 @@ describe("createContextResolver", () => {
 		process.on("unhandledRejection", onUnhandled);
 		try {
 			await using disposal = new AsyncDisposableStack();
-			const resolver = createContextResolver(
-				[gate()],
-				new Map([["gate", ["token"]]]),
-				{ stdout: () => {}, stderr: () => {} },
-				disposal,
-				new AbortController().signal,
-			);
+			const resolver = resolverFor([gate()], disposal, new Map([["gate", ["token"]]]));
 			const bag = resolver.bag<{ gate: string }>([gate]);
 			// Spread invokes every getter without awaiting; before flag validation the
 			// getter returns a rejected promise that must arrive pre-handled.
@@ -42,25 +51,13 @@ describe("createContextResolver", () => {
 	it("keeps missing and disposed guards on lazy bag getters", async () => {
 		const service = defineContext("service").setup(() => "service");
 		await using missingDisposal = new AsyncDisposableStack();
-		const missing = createContextResolver(
-			[],
-			new Map(),
-			{ stdout: () => {}, stderr: () => {} },
-			missingDisposal,
-			new AbortController().signal,
-		).bag<{ service: string }>([service]);
+		const missing = resolverFor([], missingDisposal).bag<{ service: string }>([service]);
 		await expect(missing.service).rejects.toMatchObject({ details: { reason: "missing-context" } });
 
 		let disposed: ContextBag<{ service: string }>;
 		{
 			await using disposal = new AsyncDisposableStack();
-			disposed = createContextResolver(
-				[service()],
-				new Map(),
-				{ stdout: () => {}, stderr: () => {} },
-				disposal,
-				new AbortController().signal,
-			).bag<{ service: string }>([service]);
+			disposed = resolverFor([service()], disposal).bag<{ service: string }>([service]);
 		}
 		await expect(disposed.service).rejects.toMatchObject({
 			details: { reason: "context-after-disposal" },
@@ -75,13 +72,7 @@ describe("createContextResolver", () => {
 		});
 		const instance = db();
 		await using disposal = new AsyncDisposableStack();
-		const bag = createContextResolver(
-			[instance],
-			new Map(),
-			{ stdout: () => {}, stderr: () => {} },
-			disposal,
-			new AbortController().signal,
-		).bag<{ db: string }>([instance]);
+		const bag = resolverFor([instance], disposal).bag<{ db: string }>([instance]);
 
 		expect(instance.factory).toBe(db);
 		expect(bag[contextSources]).toEqual([instance]);
@@ -121,13 +112,7 @@ describe("createContextResolver", () => {
 
 		{
 			await using disposal = new AsyncDisposableStack();
-			const resolver = createContextResolver(
-				[late(), slow(), fresh()],
-				new Map(),
-				{ stdout: () => {}, stderr: () => {} },
-				disposal,
-				new AbortController().signal,
-			);
+			const resolver = resolverFor([late(), slow(), fresh()], disposal);
 			const bag = resolver.bag<{ slow: unknown; late: unknown; fresh: string }>([slow, fresh]);
 			const pulled = bag.slow;
 			let settled = false;

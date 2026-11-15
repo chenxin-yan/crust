@@ -14,12 +14,9 @@ describe("man Extension", () => {
 		expect(files.get("man/demo.5")).toContain(".Dt DEMO 5");
 	});
 
-	it.each(["foo/bar"])(
-		"rejects root names that are not installed command names: %s",
-		async (name) => {
-			const { error } = await runBuildHooks(new Crust(name).extend(man()));
+	it("rejects root names that are not installed command names", async () => {
+		const { error } = await runBuildHooks(new Crust("foo/bar").extend(man()));
 
-			expect(error).toContain(`Manual name "${name}" is not a valid command name`);
-		},
-	);
+		expect(error).toContain('Manual name "foo/bar" is not a valid command name');
+	});
 });

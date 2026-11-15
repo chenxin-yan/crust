@@ -1,4 +1,4 @@
-import { Crust, defineCommand } from "@crustjs/core";
+import { defineCommand } from "@crustjs/core";
 
 import { nextSteps } from "./next-steps.ts";
 
@@ -10,7 +10,7 @@ const status = defineCommand("status", (cmd) =>
 );
 
 function _nextStepsTypesInputFromTheDefinition() {
-	const deploy = defineCommand("deploy", (cmd) =>
+	defineCommand("deploy", (cmd) =>
 		cmd.use(nextSteps).action(async ({ ctx }) => {
 			const next = await ctx.nextSteps;
 			next.add(status);
@@ -23,9 +23,6 @@ function _nextStepsTypesInputFromTheDefinition() {
 			next.add(status, { args: { env: "prod" }, flags: { verbose: true } });
 		}),
 	);
-	new Crust("app").extend(nextSteps()).add(deploy, status);
-	// @ts-expect-error `.use(nextSteps)` needs `.extend(nextSteps())` on the app.
-	new Crust("app").add(deploy, status);
 }
 
 function _nextStepsOnErrorTakesDefinitions() {

@@ -22,10 +22,6 @@ import { BUN_TARGETS, type BunTarget } from "../src/targets.ts";
 import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
 import { hostTarget } from "./helpers.ts";
 
-function getHostBunTarget() {
-	return hostTarget();
-}
-
 function readJson<T>(path: string): T {
 	return JSON.parse(readFileSync(path, "utf8")) as T;
 }
@@ -109,10 +105,10 @@ console.log("hello from crust build test");
 		expect(stdout).toContain("Staged");
 	});
 
-	it.skipIf(getHostBunTarget() === null || which("node") === null)(
+	it.skipIf(hostTarget() === null || which("node") === null)(
 		"builds two bin entries into their own launchers and binaries with merged artifacts",
 		async () => {
-			const host = getHostBunTarget()!;
+			const host = hostTarget()!;
 			const projectDir = join(tmpDir, "two-entries");
 			mkdirSync(join(projectDir, "src"), { recursive: true });
 			// Names differ from the package name and the source filenames. Each entry's
@@ -197,10 +193,10 @@ await new Crust("${name}").extend(hook).action(({ stdout }) => stdout("running $
 		60_000,
 	);
 
-	it.skipIf(getHostBunTarget() === null)(
+	it.skipIf(hostTarget() === null)(
 		"applies --env-file to validation and embeds PUBLIC_ constants only",
 		async () => {
-			const host = getHostBunTarget()!;
+			const host = hostTarget()!;
 			process.cwd = () => tmpDir;
 			writeFileSync(
 				join(tmpDir, "src", "env-cli.ts"),
@@ -252,7 +248,7 @@ await app.execute();
 // Integration test: crust.bunPlugins runs project Bun bundler plugins
 // ────────────────────────────────────────────────────────────────────────────
 
-describe.skipIf(getHostBunTarget() === null)("crust build integration — crust.bunPlugins", () => {
+describe.skipIf(hostTarget() === null)("crust build integration — crust.bunPlugins", () => {
 	const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-plugin-"));
 	const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 	const originalCwd = process.cwd;
@@ -319,7 +315,7 @@ await new Crust("marker-cli").action(() => console.log(JSON.stringify({
 		expect(existsSync(join(tmpDir, ".env.build"))).toBe(true);
 		expect(readdirSync(tmpDir).filter((name) => name.startsWith(".crust-build-"))).toEqual([]);
 
-		const outPath = stagedBunBinary(tmpDir, "marker-cli", getHostBunTarget()!);
+		const outPath = stagedBunBinary(tmpDir, "marker-cli", hostTarget()!);
 		const run = await runBoundedProcess(outPath, [], {
 			cwd: join(tmpDir, ".crust"),
 			env: {},
@@ -340,7 +336,7 @@ await new Crust("marker-cli").action(() => console.log(JSON.stringify({
 // Integration test: compiled executables ignore the cwd bunfig.toml but keep .env
 // ────────────────────────────────────────────────────────────────────────────
 
-describe.skipIf(getHostBunTarget() === null)(
+describe.skipIf(hostTarget() === null)(
 	"crust build integration — compiled executables and cwd autoloading",
 	() => {
 		const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-autoload-"));
@@ -352,7 +348,7 @@ describe.skipIf(getHostBunTarget() === null)(
 		const preloadCwd = join(tmpDir, "unresolvable-preload");
 		// Crust's own staged host binary, in the crust package's .crust/, which its build
 		// task also owns and the installed-tool smoke packs.
-		const crustBinary = stagedBunBinary(crustPackageDir, "crust", getHostBunTarget()!);
+		const crustBinary = stagedBunBinary(crustPackageDir, "crust", hostTarget()!);
 
 		beforeAll(async () => {
 			mkdirSync(preloadCwd, { recursive: true });
@@ -403,7 +399,7 @@ describe.skipIf(getHostBunTarget() === null)(
 			process.cwd = originalCwd;
 			if (exitCode !== 0) throw new Error(stderr);
 
-			const outPath = stagedBunBinary(projectDir, "env-cli", getHostBunTarget()!);
+			const outPath = stagedBunBinary(projectDir, "env-cli", hostTarget()!);
 			const run = await runBoundedProcess(outPath, [], {
 				cwd: preloadCwd,
 				env: {},
@@ -442,9 +438,7 @@ await new Crust("preload-cli").action(() => {}).execute();
 			);
 			expect(stderr).toBe("");
 			expect(exitCode).toBe(0);
-			expect(existsSync(stagedBunBinary(projectDir, "preload-cli", getHostBunTarget()!))).toBe(
-				true,
-			);
+			expect(existsSync(stagedBunBinary(projectDir, "preload-cli", hostTarget()!))).toBe(true);
 		});
 	},
 );

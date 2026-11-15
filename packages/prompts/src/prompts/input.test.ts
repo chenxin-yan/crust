@@ -78,7 +78,6 @@ describe("input — interactive", () => {
 
 		await tick();
 		prompt.type("X");
-		await tick();
 		prompt.keys("return");
 
 		const result = await prompt.answer;
@@ -89,10 +88,7 @@ describe("input — interactive", () => {
 		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		prompt.type("O");
-		await tick();
-		prompt.type("K");
-		await tick();
+		prompt.type("OK");
 		prompt.keys("return");
 
 		await prompt.answer;
@@ -105,119 +101,20 @@ describe("input — interactive", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("input — keypress editing", () => {
-	it("backspace deletes character before cursor", async () => {
+	it.each([
+		["backspace deletes character before cursor", ["A", "B", "backspace"], "A"],
+		["backspace at position 0 does nothing", ["backspace", "A"], "A"],
+		["delete removes character at cursor", ["A", "B", "C", "left", "left", "delete"], "AC"],
+		["right arrow moves cursor right", ["A", "B", "left", "left", "right", "C"], "ACB"],
+		["home key jumps to start", ["A", "B", "home", "C"], "CAB"],
+		["end key jumps to end", ["A", "B", "home", "end", "C"], "ABC"],
+	])("%s", async (_title, keys, expected) => {
 		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		prompt.type("A");
-		await tick();
-		prompt.type("B");
-		await tick();
-		prompt.keys("backspace");
-		await tick();
-		prompt.keys("return");
+		prompt.keys(...keys, "return");
 
-		const result = await prompt.answer;
-		expect(result).toBe("A");
-	});
-
-	it("backspace at position 0 does nothing", async () => {
-		const prompt = renderPrompt(input, { message: "Name?" });
-
-		await tick();
-		prompt.keys("backspace");
-		await tick();
-		prompt.type("A");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe("A");
-	});
-
-	it("delete removes character at cursor", async () => {
-		const prompt = renderPrompt(input, { message: "Name?" });
-
-		await tick();
-		prompt.type("A");
-		await tick();
-		prompt.type("B");
-		await tick();
-		prompt.type("C");
-		await tick();
-		// Move cursor left to position before C
-		prompt.keys("left");
-		await tick();
-		prompt.keys("left");
-		await tick();
-		// Delete the character at cursor (B)
-		prompt.keys("delete");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe("AC");
-	});
-
-	it("right arrow moves cursor right", async () => {
-		const prompt = renderPrompt(input, { message: "Name?" });
-
-		await tick();
-		prompt.type("A");
-		await tick();
-		prompt.type("B");
-		await tick();
-		// Move left twice, then right once — cursor is between A and B
-		prompt.keys("left");
-		await tick();
-		prompt.keys("left");
-		await tick();
-		prompt.keys("right");
-		await tick();
-		prompt.type("C");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe("ACB");
-	});
-
-	it("home key jumps to start", async () => {
-		const prompt = renderPrompt(input, { message: "Name?" });
-
-		await tick();
-		prompt.type("A");
-		await tick();
-		prompt.type("B");
-		await tick();
-		prompt.keys("home");
-		await tick();
-		prompt.type("C");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe("CAB");
-	});
-
-	it("end key jumps to end", async () => {
-		const prompt = renderPrompt(input, { message: "Name?" });
-
-		await tick();
-		prompt.type("A");
-		await tick();
-		prompt.type("B");
-		await tick();
-		prompt.keys("home");
-		await tick();
-		prompt.keys("end");
-		await tick();
-		prompt.type("C");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe("ABC");
+		expect(await prompt.answer).toBe(expected);
 	});
 });
 
@@ -237,20 +134,13 @@ describe("input — validation", () => {
 		});
 
 		await tick();
-		prompt.type("a");
-		await tick();
-		prompt.type("b");
-		await tick();
-		// Try to submit invalid value
+		prompt.type("ab");
 		prompt.keys("return");
 		await tick();
 
-		// Error should be displayed
 		expect(prompt.screen()).toContain("Must contain @");
 
-		// Now type valid input and resubmit
 		prompt.type("@");
-		await tick();
 		prompt.keys("return");
 
 		const result = await prompt.answer;
@@ -274,9 +164,7 @@ describe("input — validation", () => {
 
 		expect(prompt.screen()).toContain("Required");
 
-		// Type something and submit
 		prompt.type("X");
-		await tick();
 		prompt.keys("return");
 
 		const result = await prompt.answer;
@@ -297,7 +185,6 @@ describe("input — no message", () => {
 		expect(prompt.screen()).not.toContain("undefined");
 
 		prompt.type("A");
-		await tick();
 		prompt.keys("return");
 
 		const result = await prompt.answer;
@@ -326,10 +213,7 @@ describe("input — schema validation", () => {
 		});
 
 		await tick();
-		prompt.type("4");
-		await tick();
-		prompt.type("2");
-		await tick();
+		prompt.type("42");
 		prompt.keys("return");
 
 		const result = await prompt.answer;
@@ -344,18 +228,12 @@ describe("input — schema validation", () => {
 
 		await tick();
 		prompt.type("A");
-		await tick();
-		// Submit too-short value
 		prompt.keys("return");
 		await tick();
 
 		expect(prompt.screen()).toContain("Too short");
 
-		// Add more characters and retry
-		prompt.type("l");
-		await tick();
-		prompt.type("i");
-		await tick();
+		prompt.type("li");
 		prompt.keys("return");
 
 		const result = await prompt.answer;
@@ -382,19 +260,13 @@ describe("input — schema validation", () => {
 
 		await tick();
 		prompt.type("x");
-		await tick();
 		prompt.keys("return");
 		await tick();
 
 		expect(prompt.screen()).toContain("Validation failed");
 
-		// Clear field, type valid value, submit
 		prompt.keys("backspace");
-		await tick();
-		prompt.type("o");
-		await tick();
-		prompt.type("k");
-		await tick();
+		prompt.type("ok");
 		prompt.keys("return");
 
 		const result = await prompt.answer;
@@ -419,10 +291,7 @@ describe("input — schema validation", () => {
 		const prompt = renderPrompt(input<string>, { message: "Word?", schema: emptyIssuesSchema });
 
 		await tick();
-		prompt.type("o");
-		await tick();
-		prompt.type("k");
-		await tick();
+		prompt.type("ok");
 		prompt.keys("return");
 
 		const result = await prompt.answer;
@@ -539,7 +408,6 @@ describe("input — schema submitted line", () => {
 
 		await tick();
 		prompt.type("crust");
-		await tick();
 		prompt.keys("return");
 
 		expect(await prompt.answer).toEqual({ name: "crust" });

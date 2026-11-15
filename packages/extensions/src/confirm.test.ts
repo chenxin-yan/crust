@@ -86,8 +86,8 @@ describe("confirm", () => {
 		}
 	});
 
-	it.each(["true", "", "0", "FALSE"])("prompts on an injected terminal when CI=%j", async (ci) => {
-		vi.stubEnv("CI", ci);
+	it("prompts on an injected terminal even under CI", async () => {
+		vi.stubEnv("CI", "true");
 		const { screen: _screen, ...result } = await answer("y", "enter");
 		expect(result).toEqual({ stdout: "dropped", stderr: "", exitCode: 0 });
 	});

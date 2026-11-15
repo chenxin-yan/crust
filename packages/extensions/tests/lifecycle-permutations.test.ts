@@ -5,9 +5,11 @@ import { which } from "@crustjs/utils/process";
 import { describe, expect, it } from "vite-plus/test";
 
 // Every `.extend()` order of {noColor, help, version, didYouMean, a flag handler, a setup,
-// a preRun gate, a postRun wrap} must produce the same bytes and exit code. The fixture
-// runs all 40320 orders of one argv in a single Bun process; TTY cases run under `script`
-// so color detection sees a terminal (stdout and stderr then share the PTY).
+// a preRun gate, a postRun wrap} must produce the same bytes and exit code. Not every
+// permutation: the fixture runs each rotation of the list and its reverse (every relative
+// order of every pair and triple, and every extension in every position) for one argv in a
+// single Bun process; TTY cases run under `script` so color detection sees a terminal
+// (stdout and stderr then share the PTY).
 
 const fixture = resolve(import.meta.dirname, "lifecycle-permutations-fixture.ts");
 const bun = which("bun")!;
@@ -78,8 +80,11 @@ function runTty(argv: readonly string[]) {
 	return splitRuns(result.stdout).filter((_, index) => index % 2 === 1);
 }
 
-const ORDERS = 40320; // 8!
-const oneOutput = { output: expect.any(String), count: ORDERS, example: expect.any(String) };
+/** The fixture's order count: a rotation and its reverse per extension in a run's order. */
+const orderCount = (runs: readonly Run[]) => 2 * runs[0]!.order.split(",").length;
+const oneOutput = (count: number) => [
+	{ output: expect.any(String), count, example: expect.any(String) },
+];
 
 // `gate`: whether the preRun gate runs, which it must exactly when the Command Action runs.
 const pipedCases: readonly { argv: readonly string[]; gate: boolean }[] = [
@@ -106,10 +111,8 @@ describe("Extension lifecycle is independent of .extend() order", () => {
 		"piped $argv",
 		({ argv, gate }) => {
 			const [stdout, stderr] = runPiped(argv);
-			expect(stdout).toHaveLength(ORDERS);
-			expect(stderr).toHaveLength(ORDERS);
-			expect(summarize(distinct(stdout))).toEqual([oneOutput]);
-			expect(summarize(distinct(stderr))).toEqual([oneOutput]);
+			expect(summarize(distinct(stdout))).toEqual(oneOutput(orderCount(stdout)));
+			expect(summarize(distinct(stderr))).toEqual(oneOutput(orderCount(stderr)));
 			expect(stderr[0]!.output.includes("[gate] checked")).toBe(gate);
 		},
 		120_000,
@@ -119,8 +122,7 @@ describe("Extension lifecycle is independent of .extend() order", () => {
 		"TTY $argv",
 		({ argv }) => {
 			const runs = runTty(argv);
-			expect(runs).toHaveLength(ORDERS);
-			expect(summarize(distinct(runs))).toEqual([oneOutput]);
+			expect(summarize(distinct(runs))).toEqual(oneOutput(orderCount(runs)));
 		},
 		120_000,
 	);

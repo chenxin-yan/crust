@@ -3,7 +3,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { mkdir, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -18,10 +18,16 @@ import type { FieldsDef } from "./types.ts";
 // Test helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Creates a unique temp directory for each test to avoid cross-test pollution. */
-function createTempDir(): string {
-	return join(tmpdir(), `crust-store-test-${randomUUID()}`);
-}
+let tempDir: string;
+
+beforeEach(async () => {
+	tempDir = join(tmpdir(), `crust-store-test-${randomUUID()}`);
+	await mkdir(tempDir, { recursive: true });
+});
+
+afterEach(async () => {
+	await rm(tempDir, { recursive: true, force: true });
+});
 
 const BASIC_FIELDS = {
 	theme: { type: "string", default: "light" },
@@ -44,17 +50,6 @@ const VALIDATED_FIELDS = {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("createStore", () => {
-	let tempDir: string;
-
-	beforeEach(async () => {
-		tempDir = createTempDir();
-		await mkdir(tempDir, { recursive: true });
-	});
-
-	afterEach(async () => {
-		await rm(tempDir, { recursive: true, force: true });
-	});
-
 	// POSIX-only: Windows ignores Unix permission bits (it uses ACLs).
 	it.skipIf(process.platform === "win32")(
 		"should persist a private store as owner-only",
@@ -74,7 +69,6 @@ describe("createStore", () => {
 				process.umask(previous);
 			}
 
-			const { stat } = await import("node:fs/promises");
 			const { mode } = await stat(join(tempDir, "auth.json"));
 			expect(mode & 0o777).toBe(0o600);
 		},
@@ -86,17 +80,6 @@ describe("createStore", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("store.read", () => {
-	let tempDir: string;
-
-	beforeEach(async () => {
-		tempDir = createTempDir();
-		await mkdir(tempDir, { recursive: true });
-	});
-
-	afterEach(async () => {
-		await rm(tempDir, { recursive: true, force: true });
-	});
-
 	it.each([
 		["string", JSON.stringify("invalid root")],
 		["number", "42"],
@@ -153,42 +136,24 @@ describe("store.read", () => {
 		expect(result.token).toBeUndefined();
 	});
 
-	it("should coerce persisted number and boolean strings on read", async () => {
+	it("should coerce persisted number, boolean and array element strings on read", async () => {
 		const filePath = join(tempDir, "config.json");
-		await writeFile(filePath, JSON.stringify({ retries: "42", enabled: "true" }));
-
-		const fields = {
-			retries: { type: "number", default: 0 },
-			enabled: { type: "boolean", default: false },
-		} as const satisfies FieldsDef;
+		await writeFile(
+			filePath,
+			JSON.stringify({ retries: "42", enabled: "true", ports: ["3000", "8080"] }),
+		);
 
 		const store = createStore({
 			dirPath: tempDir,
 			name: "config",
-			fields,
+			fields: {
+				retries: { type: "number", default: 0 },
+				enabled: { type: "boolean", default: false },
+				ports: { type: "number", array: true, default: [] },
+			},
 		});
 
-		const result = await store.read();
-		expect(result.retries).toBe(42);
-		expect(result.enabled).toBe(true);
-	});
-
-	it("should coerce persisted array element strings on read", async () => {
-		const filePath = join(tempDir, "config.json");
-		await writeFile(filePath, JSON.stringify({ ports: ["3000", "8080"] }));
-
-		const fields = {
-			ports: { type: "number", array: true, default: [] },
-		} as const satisfies FieldsDef;
-
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields,
-		});
-
-		const result = await store.read();
-		expect(result.ports).toEqual([3000, 8080]);
+		expect(await store.read()).toEqual({ retries: 42, enabled: true, ports: [3000, 8080] });
 	});
 
 	it.each(["abc", "", "  "])("should reject persisted %j for a number field", async (port) => {
@@ -238,17 +203,6 @@ describe("store.read", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("store.write", () => {
-	let tempDir: string;
-
-	beforeEach(async () => {
-		tempDir = createTempDir();
-		await mkdir(tempDir, { recursive: true });
-	});
-
-	afterEach(async () => {
-		await rm(tempDir, { recursive: true, force: true });
-	});
-
 	it("should run field validators on write", async () => {
 		const store = createStore({
 			dirPath: tempDir,
@@ -298,17 +252,6 @@ describe("store.write", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("store.update", () => {
-	let tempDir: string;
-
-	beforeEach(async () => {
-		tempDir = createTempDir();
-		await mkdir(tempDir, { recursive: true });
-	});
-
-	afterEach(async () => {
-		await rm(tempDir, { recursive: true, force: true });
-	});
-
 	it("resolves schema coercion and nested defaults before the updater", async () => {
 		const filePath = join(tempDir, "config.json");
 		const raw = JSON.stringify({ count: "42", payload: {} });
@@ -360,17 +303,6 @@ describe("store.update", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("store.patch", () => {
-	let tempDir: string;
-
-	beforeEach(async () => {
-		tempDir = createTempDir();
-		await mkdir(tempDir, { recursive: true });
-	});
-
-	afterEach(async () => {
-		await rm(tempDir, { recursive: true, force: true });
-	});
-
 	it("rejects undefined defaulted core fields but preserves genuinely optional fields", async () => {
 		const store = createStore({
 			dirPath: tempDir,
@@ -429,17 +361,6 @@ describe("store.patch", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("store lifecycle", () => {
-	let tempDir: string;
-
-	beforeEach(async () => {
-		tempDir = createTempDir();
-		await mkdir(tempDir, { recursive: true });
-	});
-
-	afterEach(async () => {
-		await rm(tempDir, { recursive: true, force: true });
-	});
-
 	it("should support full read → write → update → patch → reset cycle", async () => {
 		const store = createStore({
 			dirPath: tempDir,
@@ -447,36 +368,20 @@ describe("store lifecycle", () => {
 			fields: BASIC_FIELDS,
 		});
 
-		// 1. Read returns defaults
-		const step1 = await store.read();
-		expect(step1.theme).toBe("light");
-		expect(step1.verbose).toBe(false);
+		expect(await store.read()).toEqual({ theme: "light", verbose: false });
 
-		// 2. Write persists new config
 		await store.write({ theme: "dark", verbose: true });
-		const step2 = await store.read();
-		expect(step2.theme).toBe("dark");
-		expect(step2.verbose).toBe(true);
+		expect(await store.read()).toEqual({ theme: "dark", verbose: true });
 
-		// 3. Update modifies persisted config
 		await store.update((c) => ({ ...c, verbose: false }));
-		const step3 = await store.read();
-		expect(step3.theme).toBe("dark");
-		expect(step3.verbose).toBe(false);
+		expect(await store.read()).toEqual({ theme: "dark", verbose: false });
 
-		// 4. Patch modifies a single field
 		await store.patch({ theme: "solarized" });
-		const step4 = await store.read();
-		expect(step4.theme).toBe("solarized");
-		expect(step4.verbose).toBe(false);
+		expect(await store.read()).toEqual({ theme: "solarized", verbose: false });
 
-		// 5. Reset returns to defaults
 		await store.reset();
-		const step5 = await store.read();
-		expect(step5.theme).toBe("light");
-		expect(step5.verbose).toBe(false);
-		const filePath = join(tempDir, "config.json");
-		expect(existsSync(filePath)).toBe(false);
+		expect(await store.read()).toEqual({ theme: "light", verbose: false });
+		expect(existsSync(join(tempDir, "config.json"))).toBe(false);
 	});
 });
 
@@ -485,17 +390,6 @@ describe("store lifecycle", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("field validation", () => {
-	let tempDir: string;
-
-	beforeEach(async () => {
-		tempDir = createTempDir();
-		await mkdir(tempDir, { recursive: true });
-	});
-
-	afterEach(async () => {
-		await rm(tempDir, { recursive: true, force: true });
-	});
-
 	it("should collect multiple validation issues", async () => {
 		const fields = {
 			port: {
@@ -563,17 +457,6 @@ describe("field validation", () => {
 // read.
 
 describe("schema transform persistence", () => {
-	let tempDir: string;
-
-	beforeEach(async () => {
-		tempDir = createTempDir();
-		await mkdir(tempDir, { recursive: true });
-	});
-
-	afterEach(async () => {
-		await rm(tempDir, { recursive: true, force: true });
-	});
-
 	it("materializes transformed schema defaults from missing persisted values", async () => {
 		const store = createStore({
 			dirPath: tempDir,
@@ -681,17 +564,6 @@ describe("schema transform persistence", () => {
 });
 
 describe("JSON serialization stability", () => {
-	let tempDir: string;
-
-	beforeEach(async () => {
-		tempDir = createTempDir();
-		await mkdir(tempDir, { recursive: true });
-	});
-
-	afterEach(async () => {
-		await rm(tempDir, { recursive: true, force: true });
-	});
-
 	it("rejects schema values that JSON serialization would corrupt", async () => {
 		// z.custom accepts NaN, which the built-in number check never sees.
 		const store = createStore({
@@ -735,17 +607,6 @@ describe("JSON serialization stability", () => {
 });
 
 describe("core validator transform type enforcement", () => {
-	let tempDir: string;
-
-	beforeEach(async () => {
-		tempDir = createTempDir();
-		await mkdir(tempDir, { recursive: true });
-	});
-
-	afterEach(async () => {
-		await rm(tempDir, { recursive: true, force: true });
-	});
-
 	it("rejects core transforms that leave the declared type", async () => {
 		const store = createStore({
 			dirPath: tempDir,
@@ -784,17 +645,6 @@ describe("core validator transform type enforcement", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("Object.prototype key names", () => {
-	let tempDir: string;
-
-	beforeEach(async () => {
-		tempDir = createTempDir();
-		await mkdir(tempDir, { recursive: true });
-	});
-
-	afterEach(async () => {
-		await rm(tempDir, { recursive: true, force: true });
-	});
-
 	const PROTO_KEYS_JSON = '{"constructor":"kept","toString":"t","__proto__":{"a":1}}';
 
 	it("patch preserves unknown prototype-named keys on disk by default", async () => {
@@ -894,17 +744,6 @@ describe("Object.prototype key names", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("unknown persisted keys", () => {
-	let tempDir: string;
-
-	beforeEach(async () => {
-		tempDir = createTempDir();
-		await mkdir(tempDir, { recursive: true });
-	});
-
-	afterEach(async () => {
-		await rm(tempDir, { recursive: true, force: true });
-	});
-
 	const NEWER_FIELDS = {
 		name: { type: "string" },
 		theme: { type: "string" },
@@ -969,17 +808,6 @@ describe("unknown persisted keys", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("concurrent mutations", () => {
-	let tempDir: string;
-
-	beforeEach(async () => {
-		tempDir = createTempDir();
-		await mkdir(tempDir, { recursive: true });
-	});
-
-	afterEach(async () => {
-		await rm(tempDir, { recursive: true, force: true });
-	});
-
 	const COUNTER_FIELDS = { n: { type: "number", default: 0 } } as const satisfies FieldsDef;
 	const counter = () => createStore({ dirPath: tempDir, name: "counter", fields: COUNTER_FIELDS });
 

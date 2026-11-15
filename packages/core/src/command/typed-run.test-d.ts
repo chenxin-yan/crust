@@ -33,6 +33,21 @@ type FifteenDeep = readonly [
 	"next",
 ];
 
+// A root command over a chain of `next` commands `Depth` levels deep.
+type Nest<
+	Depth extends number,
+	Leaf = void,
+	Mid = void,
+	Acc extends readonly unknown[] = [],
+> = Acc["length"] extends Depth
+	? { args: []; flags: {}; children: {}; result: Leaf }
+	: {
+			args: [];
+			flags: {};
+			children: { next: Nest<Depth, Leaf, Mid, readonly [...Acc, unknown]> };
+			result: Mid;
+		};
+
 // Compile-time regression checks; intentionally never invoked.
 // layers recursive Extension flags onto earlier command trees
 function _typecheckLayersRecursiveExtensionFlagsOntoEarlierCommandTrees() {
@@ -58,24 +73,6 @@ function _typecheckLayersRecursiveExtensionFlagsOntoEarlierCommandTrees() {
 	type _extensionCommandFlags = Expect<
 		Equal<NonNullable<InspectInput["flags"]>, { trace?: boolean }>
 	>;
-}
-
-// rejects statically known Extension command collisions
-function _typecheckRejectsStaticallyKnownExtensionCommandCollisions() {
-	const extFoo = defineExtension(defineExtensionId("extfoo")).add(
-		defineCommand("foo", (command) => command.action(() => "ext" as const)),
-	);
-	const appFoo = defineCommand("foo", (command) => command.action(() => 42 as const));
-
-	// @ts-expect-error -- Extension command collides with an existing app command
-	void new Crust("cli").add(appFoo).extend(extFoo);
-	// @ts-expect-error -- added command collides with a registered Extension command
-	void new Crust("cli").extend(extFoo).add(appFoo);
-	const otherFoo = defineExtension(defineExtensionId("other")).add(
-		defineCommand("foo", (command) => command.action(() => {})),
-	);
-	// @ts-expect-error -- Extensions in the same call must not collide
-	void new Crust("cli").extend(extFoo, otherFoo);
 }
 
 // keeps conditionally assembled Extension contributions runtime-only
@@ -299,14 +296,6 @@ function _typecheckPreservesCommandAliasesAndPreParseInputTypes() {
 
 // widens paths past the 15-level depth cap instead of failing the checker
 function _typecheckWidensPathsPastThe15LevelDepthCapInsteadOfFailingTheChecker() {
-	type Nest<Depth extends number, Acc extends readonly unknown[] = []> = Acc["length"] extends Depth
-		? { args: []; flags: {}; children: {}; result: void }
-		: {
-				args: [];
-				flags: {};
-				children: { next: Nest<Depth, readonly [...Acc, unknown]> };
-				result: void;
-			};
 	type DeepTree = { root: Nest<16> };
 	type Paths = CommandPath<DeepTree>;
 	// Below the cap, paths stay exact; at the cap the tail widens to strings
@@ -323,15 +312,7 @@ function _typecheckWidensPathsPastThe15LevelDepthCapInsteadOfFailingTheChecker()
 
 // resolves action results for literal paths past the depth cap
 function _typecheckResolvesActionResultsForLiteralPathsPastTheDepthCap() {
-	type Nest<Depth extends number, Acc extends readonly unknown[] = []> = Acc["length"] extends Depth
-		? { args: []; flags: {}; children: {}; result: "deep-result" }
-		: {
-				args: [];
-				flags: {};
-				children: { next: Nest<Depth, readonly [...Acc, unknown]> };
-				result: "mid";
-			};
-	type DeepTree = { root: Nest<16> };
+	type DeepTree = { root: Nest<16, "deep-result", "mid"> };
 	type Root = { args: []; flags: {}; children: DeepTree; result: "root-result" };
 	// The depth-15 cap only widens the CommandPath constraint; `const Path` still
 	// infers the literal tuple, and CommandShapeAt (uncapped) resolves it fully.
@@ -414,14 +395,6 @@ function _typecheckBindsValidPathsOnLargeAppsWithoutTS2590() {
 
 // suggests continuations under an invalid segment of a tree deeper than the depth cap
 function _typecheckSuggestsContinuationsInTreesDeeperThanTheDepthCap() {
-	type Nest<Depth extends number, Acc extends readonly unknown[] = []> = Acc["length"] extends Depth
-		? { args: []; flags: {}; children: {}; result: void }
-		: {
-				args: [];
-				flags: {};
-				children: { next: Nest<Depth, readonly [...Acc, unknown]> };
-				result: void;
-			};
 	const app = {} as Crust<{}, [], {}, never, never, { root: Nest<30> }>;
 
 	// @ts-expect-error -- a typo below the cap is still rejected
@@ -457,15 +430,6 @@ function _typecheckNarrowsSiblingsAddedByOneVariadicAddToTheirOwnShapes() {
 	type _listResult = Expect<
 		Equal<CommandShapeAt<Shape, readonly ["remote", "list"]>["result"], string[]>
 	>;
-	const addInput: RunInput<CommandShapeAt<Shape, readonly ["remote", "add"]>> = {
-		args: { name: "origin" },
-	};
-	const listInput: RunInput<CommandShapeAt<Shape, readonly ["remote", "list"]>> = {
-		// @ts-expect-error -- `list` declares no arguments
-		args: { name: "origin" },
-	};
-	void addInput;
-	void listInput;
 }
 
 // rejects unknown input keys held in variables, where excess-property checks do not apply

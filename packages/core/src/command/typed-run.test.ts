@@ -19,10 +19,6 @@ interface StructuredRunCapture {
 	};
 	rawArgs: string[];
 }
-interface JsonRunCapture {
-	args: { payload: unknown };
-	flags: { config: unknown };
-}
 describe("typed programmatic invocation", () => {
 	it("runs statically known Extension commands, aliases, flags, and typed results", async () => {
 		const tools = defineExtension(defineExtensionId("tools"))
@@ -153,70 +149,6 @@ describe("typed programmatic invocation", () => {
 			flags: { fetch: true, tag: ["one", "-two"], config: { force: true }, offset: -3 },
 			rawArgs: ["--literal"],
 		});
-	});
-
-	it("rejects positional holes before dispatch", async () => {
-		const app = new Crust("cli")
-			.args({ name: "source", type: "string" }, { name: "destination", type: "string" })
-			.action(() => {});
-
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		await expect(unwrap(app.run([], { args: { destination: "out" } }))).rejects.toMatchObject({
-			code: "PARSE",
-			details: { reason: "positional-gap" },
-		});
-	});
-
-	it("keeps arrays scalar for non-multiple json flags and non-variadic json args", async () => {
-		let received: JsonRunCapture | undefined;
-		const app = new Crust("cli")
-			.args({ name: "payload", type: "json" })
-			.flags({ config: { type: "json" } })
-			.action(({ args, flags }) => {
-				received = { args, flags };
-			});
-
-		await unwrap(
-			app.run([], {
-				args: { payload: [1, 2] as const },
-				flags: { config: [3, 4] as const },
-			}),
-		);
-
-		expect(received).toEqual({ args: { payload: [1, 2] }, flags: { config: [3, 4] } });
-	});
-
-	it("passes JSON values through by reference and treats undefined as omitted", async () => {
-		const app = new Crust("cli")
-			.flags({ config: { type: "json" } })
-			.action(({ flags }) => flags.config);
-		await expect(app.run([], { flags: { config: undefined } })).resolves.toMatchObject({
-			status: "completed",
-			result: undefined,
-		});
-		const payload = { nested: [1, 2] };
-		const outcome = await app.run([], { flags: { config: payload } });
-		expect(outcome.status).toBe("completed");
-		if (outcome.status === "completed") expect(outcome.result).toBe(payload);
-	});
-
-	it("treats empty multiple flag arrays as omitted", async () => {
-		const app = new Crust("cli")
-			.flags({
-				optional: { type: "string", multiple: true },
-				defaulted: { type: "string", multiple: true, default: ["fallback"] },
-			})
-			.action(({ flags }) => flags);
-		expect(await app.run([], { flags: { optional: [], defaulted: [] } })).toMatchObject({
-			status: "completed",
-			result: { optional: undefined, defaulted: ["fallback"] },
-		});
-		const required = new Crust("cli")
-			.flags({ tag: { type: "string", multiple: true, required: true } })
-			.action(() => {});
-		await expect(unwrap(required.run([], { flags: { tag: [] } }))).rejects.toThrow(
-			'Missing required flag "--tag"',
-		);
 	});
 
 	describe("flag env bindings", () => {

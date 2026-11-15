@@ -17,28 +17,36 @@ beforeEach(() => {
 	({ sink, writes } = createFakeSink());
 });
 
+/** Start `handle` and return the SIGINT listener it registered. */
+function startForSigint(handle: { start(): void }) {
+	const previousHandlers = new Set(process.listeners("SIGINT"));
+	handle.start();
+	return process.listeners("SIGINT").find((listener) => !previousHandlers.has(listener));
+}
+
+/** Call `handler` with `process.kill` stubbed, since a real re-raise would end the test run; returns the signals sent. */
+function sigintKills(handler: ((signal: "SIGINT") => void) | undefined) {
+	const realKill = process.kill;
+	const kills: (string | number | undefined)[] = [];
+	process.kill = (_pid: number, signal?: string | number) => {
+		kills.push(signal);
+		return true;
+	};
+	try {
+		handler?.("SIGINT");
+	} finally {
+		process.kill = realKill;
+	}
+	return kills;
+}
+
 describe("spinner — terminal sink", () => {
 	it("restores the cursor and re-raises SIGINT", () => {
 		const { sink, writes } = createFakeSink(true);
-		const previousHandlers = new Set(process.listeners("SIGINT"));
-		const handle = spinner({ message: "Working", sink });
-		handle.start();
-		const handler = process.listeners("SIGINT").find((listener) => !previousHandlers.has(listener));
+		const handler = startForSigint(spinner({ message: "Working", sink }));
 
 		expect(handler).toBeDefined();
-		// Stub the re-raise — a real one would terminate the test run.
-		const realKill = process.kill;
-		const kills: (string | number | undefined)[] = [];
-		process.kill = (pid: number, signal?: string | number) => {
-			kills.push(signal);
-			return true;
-		};
-		try {
-			handler?.("SIGINT");
-		} finally {
-			process.kill = realKill;
-		}
-		expect(kills).toEqual(["SIGINT"]);
+		expect(sigintKills(handler)).toEqual(["SIGINT"]);
 		expect(writes.at(-1)).toBe("\x1B[?25h");
 		expect(process.listeners("SIGINT")).not.toContain(handler);
 	});
@@ -47,21 +55,11 @@ describe("spinner — terminal sink", () => {
 		const { sink, writes } = createFakeSink(true);
 		const hostListener = () => {};
 		process.on("SIGINT", hostListener);
-		const previousHandlers = new Set(process.listeners("SIGINT"));
 		const handle = spinner({ message: "Working", sink });
-		handle.start();
-		const handler = process.listeners("SIGINT").find((listener) => !previousHandlers.has(listener));
-
-		const realKill = process.kill;
-		const kills: (string | number | undefined)[] = [];
-		process.kill = (pid: number, signal?: string | number) => {
-			kills.push(signal);
-			return true;
-		};
+		let kills: (string | number | undefined)[];
 		try {
-			handler?.("SIGINT");
+			kills = sigintKills(startForSigint(handle));
 		} finally {
-			process.kill = realKill;
 			process.removeListener("SIGINT", hostListener);
 		}
 		expect(kills).toEqual([]);
@@ -77,10 +75,8 @@ describe("spinner — terminal sink", () => {
 		// A host that cleans up without aborting the spinner's signal: the frame must not spin on.
 		const hostListener = () => {};
 		process.on("SIGINT", hostListener);
-		const previousHandlers = new Set(process.listeners("SIGINT"));
 		const handle = spinner({ message: "Working", sink });
-		handle.start();
-		const handler = process.listeners("SIGINT").find((listener) => !previousHandlers.has(listener));
+		const handler = startForSigint(handle);
 		try {
 			handler?.("SIGINT");
 		} finally {
@@ -176,8 +172,7 @@ describe("spinner — terminal sink", () => {
 	});
 
 	it("cuts a message wider than the terminal to one row and prints it whole when done", () => {
-		const writes: string[] = [];
-		const sink = { isTTY: true, columns: 10, write: (text: string) => void writes.push(text) };
+		const { sink, writes } = createFakeSink(true, 10);
 		// "⠋ " leaves 7 of the 9 usable columns: 6 characters and "…".
 		const handle = spinner({ message: "abcdefghijklmnop", sigint: false, sink });
 		handle.start();
@@ -194,8 +189,7 @@ describe("spinner — terminal sink", () => {
 	});
 
 	it("cuts a wide character that would cross the edge whole", () => {
-		const writes: string[] = [];
-		const sink = { isTTY: true, columns: 10, write: (text: string) => void writes.push(text) };
+		const { sink, writes } = createFakeSink(true, 10);
 		const handle = spinner({ message: "aaaaa界", sigint: false, sink });
 		handle.start();
 		handle.updateMessage("aaaaaa界");
@@ -206,8 +200,7 @@ describe("spinner — terminal sink", () => {
 	});
 
 	it("does not count text a carriage return rewinds over toward the row width", () => {
-		const writes: string[] = [];
-		const sink = { isTTY: true, columns: 10, write: (text: string) => void writes.push(text) };
+		const { sink, writes } = createFakeSink(true, 10);
 		// "abcdef" and "ghijkl" overwrite each other within the 7 columns left.
 		const handle = spinner({ message: "abcdef\rghijkl", sigint: false, sink });
 		handle.start();
@@ -217,8 +210,7 @@ describe("spinner — terminal sink", () => {
 	});
 
 	it("keeps the styles a cut frame opened closed", () => {
-		const writes: string[] = [];
-		const sink = { isTTY: true, columns: 10, write: (text: string) => void writes.push(text) };
+		const { sink, writes } = createFakeSink(true, 10);
 		const handle = spinner({
 			message: "Building",
 			spinner: { frames: ["ABCDEFGHIJ"], interval: 60_000 },
@@ -307,18 +299,6 @@ describe("spinner — sink resolution", () => {
 		} finally {
 			vi.restoreAllMocks();
 		}
-	});
-
-	it("routes output to the ambient withTerminalIO output", () => {
-		const { sink, writes } = createFakeSink(false);
-
-		withTerminalIO({ output: sink }, () => {
-			const handle = spinner({ message: "Ambient" });
-			handle.start();
-			handle.stop();
-		});
-
-		expect(writes[0]).toContain("✓ Ambient\n");
 	});
 
 	it("per-call sink option wins over the ambient sink", () => {

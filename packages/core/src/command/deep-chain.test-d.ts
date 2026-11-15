@@ -175,9 +175,9 @@ const p56 = defineContext("p56").setup(() => 56);
 const p57 = defineContext("p57").setup(() => 57);
 const p58 = defineContext("p58").setup(() => 58);
 const p59 = defineContext("p59").setup(() => 59);
-function _typecheckProvidesSixtyContextsInOneCall() {
+function _typecheckProvidesUsesAndExtendsSixtyContextsInOneCall() {
 	// Extension first: an earlier app-call TS2589 would mask this call's own failure.
-	defineExtension(defineExtensionId("wide-provide")).provide(
+	const wideExtension = defineExtension(defineExtensionId("wide-provide")).provide(
 		p0(),
 		p1(),
 		p2(),
@@ -306,144 +306,8 @@ function _typecheckProvidesSixtyContextsInOneCall() {
 			type _last = Expect<Equal<Awaited<typeof ctx.p59>, number>>;
 			// @ts-expect-error -- only the sixty provided Contexts are on `ctx`
 			void ctx.p60;
-		});
-}
-
-// 46+ Contexts reaching `.extend()` or a command `.use()` in one call must not hit TS2589
-function _typecheckExtendsSixtyContextExtension() {
-	const wideExtension = defineExtension(defineExtensionId("wide-extend")).provide(
-		p0(),
-		p1(),
-		p2(),
-		p3(),
-		p4(),
-		p5(),
-		p6(),
-		p7(),
-		p8(),
-		p9(),
-		p10(),
-		p11(),
-		p12(),
-		p13(),
-		p14(),
-		p15(),
-		p16(),
-		p17(),
-		p18(),
-		p19(),
-		p20(),
-		p21(),
-		p22(),
-		p23(),
-		p24(),
-		p25(),
-		p26(),
-		p27(),
-		p28(),
-		p29(),
-		p30(),
-		p31(),
-		p32(),
-		p33(),
-		p34(),
-		p35(),
-		p36(),
-		p37(),
-		p38(),
-		p39(),
-		p40(),
-		p41(),
-		p42(),
-		p43(),
-		p44(),
-		p45(),
-		p46(),
-		p47(),
-		p48(),
-		p49(),
-		p50(),
-		p51(),
-		p52(),
-		p53(),
-		p54(),
-		p55(),
-		p56(),
-		p57(),
-		p58(),
-		p59(),
-	);
-	new Crust("wide").extend(wideExtension).action(async ({ ctx }) => {
-		type _last = Expect<Equal<Awaited<typeof ctx.p59>, number>>;
-		// @ts-expect-error -- only the sixty Extension-provided Contexts are on `ctx`
-		void ctx.p60;
-	});
-}
-
-function _typecheckUsesSixtyContextsInOneCall() {
-	new Crust("wide")
-		.provide(
-			p0(),
-			p1(),
-			p2(),
-			p3(),
-			p4(),
-			p5(),
-			p6(),
-			p7(),
-			p8(),
-			p9(),
-			p10(),
-			p11(),
-			p12(),
-			p13(),
-			p14(),
-			p15(),
-			p16(),
-			p17(),
-			p18(),
-			p19(),
-			p20(),
-			p21(),
-			p22(),
-			p23(),
-			p24(),
-			p25(),
-			p26(),
-			p27(),
-			p28(),
-			p29(),
-			p30(),
-			p31(),
-			p32(),
-			p33(),
-			p34(),
-			p35(),
-			p36(),
-			p37(),
-			p38(),
-			p39(),
-			p40(),
-			p41(),
-			p42(),
-			p43(),
-			p44(),
-			p45(),
-			p46(),
-			p47(),
-			p48(),
-			p49(),
-			p50(),
-			p51(),
-			p52(),
-			p53(),
-			p54(),
-			p55(),
-			p56(),
-			p57(),
-			p58(),
-			p59(),
-		)
+		})
+		// 46+ Contexts reaching a command `.use()` in one call must not hit TS2589
 		.add(
 			defineCommand("wide-use", (command) =>
 				command
@@ -516,6 +380,12 @@ function _typecheckUsesSixtyContextsInOneCall() {
 					}),
 			),
 		);
+	// 46+ Contexts reaching `.extend()` in one call must not hit TS2589
+	new Crust("wide").extend(wideExtension).action(async ({ ctx }) => {
+		type _last = Expect<Equal<Awaited<typeof ctx.p59>, number>>;
+		// @ts-expect-error -- only the sixty Extension-provided Contexts are on `ctx`
+		void ctx.p60;
+	});
 }
 
 // 45+ Extensions in one `.extend()` call must not hit TS2589 (excessively deep instantiation)

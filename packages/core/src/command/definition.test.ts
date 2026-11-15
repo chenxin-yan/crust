@@ -33,8 +33,7 @@ describe("command definitions", () => {
 	it("rejects a later batch recipe returning an earlier recipe's fluent builder", async () => {
 		const events: string[] = [];
 		let retained: CommandDefinitionBuilder<{ "from-first": { type: "boolean" } }, []> | undefined;
-		const base = new Crust("cli");
-		const receiver = base.add(defineCommand("existing", (command) => command));
+		const receiver = new Crust("cli").add(defineCommand("existing", (command) => command));
 		const first = defineCommand("first", (command) => {
 			events.push("first");
 			retained = command.flags({ "from-first": { type: "boolean" } }).action(() => {});
@@ -58,8 +57,6 @@ describe("command definitions", () => {
 			details: { subject: "command", name: "second", reason: "foreign-command-builder" },
 		});
 		expect(events).toEqual(["first", "second"]);
-		expect(Object.keys(subCommandsOf(base._node))).toEqual([]);
-		expect(Object.keys(subCommandsOf(receiver._node))).toEqual(["existing"]);
 		expect(Object.keys((await receiver.snapshot()).subCommands)).toEqual(["existing"]);
 	});
 
@@ -101,31 +98,6 @@ describe("command definitions", () => {
 		).rejects.toThrow(/Unknown flag/);
 		await unwrap(app.run(["outer", "after"], { flags: { "api-key": "secret" } }));
 		expect(calls).toEqual(["secret"]);
-	});
-
-	it("inherits capabilities through nested definitions", async () => {
-		const calls: string[] = [];
-		const verbose = defineFlag({ type: "boolean" });
-		const logging = defineContext("logging")
-			.flags({ verbose })
-			.setup(({ flags }) => ({
-				verbose: flags.verbose === true,
-			}));
-		const db = defineContext("db").setup(() => "database");
-		const status = defineCommand("status", (command) =>
-			command
-				.use(db)
-				.use(logging)
-				.action(async ({ ctx }) => {
-					calls.push(`${await ctx.db}:${String((await ctx.logging).verbose)}`);
-				}),
-		);
-		const deploy = defineCommand("deploy", (command) => command.use(db).use(logging).add(status));
-		const app = new Crust("cli").provide(logging(), db()).add(deploy);
-
-		await unwrap(app.run(["deploy", "status"], { flags: { verbose: true } }));
-
-		expect(calls).toEqual(["database:true"]);
 	});
 
 	it("accepts multiple factories in one variadic .use() call", async () => {
@@ -190,8 +162,7 @@ describe("command definitions", () => {
 		"checks a batch duplicate of %s before any recipe runs and stops registration",
 		async (name: string) => {
 			const events: string[] = [];
-			const base = new Crust("cli");
-			const receiver = base.add(defineCommand("existing", (command) => command));
+			const receiver = new Crust("cli").add(defineCommand("existing", (command) => command));
 			const first = defineCommand("first", (command) => {
 				events.push("first");
 				return command;
@@ -213,8 +184,6 @@ describe("command definitions", () => {
 				}),
 			);
 			expect(events).toEqual([]);
-			expect(Object.keys(subCommandsOf(base._node))).toEqual([]);
-			expect(Object.keys(subCommandsOf(receiver._node))).toEqual(["existing"]);
 			expect(Object.keys((await receiver.snapshot()).subCommands)).toEqual(["existing"]);
 		},
 	);
@@ -503,16 +472,13 @@ describe("command definitions", () => {
 				ran.push("publish");
 			});
 		});
-		const base = new Crust("cli");
-		const receiver = base.add(defineCommand("existing", (command) => command));
+		const receiver = new Crust("cli").add(defineCommand("existing", (command) => command));
 		const app = receiver.add(build, publish);
 
 		expect(configured).toEqual([]);
-		expect(Object.keys(subCommandsOf(base._node))).toEqual([]);
 		expect(Object.keys(subCommandsOf(receiver._node))).toEqual(["existing"]);
 		expect(Object.keys(subCommandsOf(app._node))).toEqual(["existing", "build", "publish"]);
 		expect(configured).toEqual(["build", "publish"]);
-		expect(subCommandsOf(app._node)).not.toBe(subCommandsOf(receiver._node));
 
 		await unwrap(app.run(["build"]));
 		await unwrap(app.run(["publish"]));

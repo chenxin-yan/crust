@@ -84,11 +84,10 @@ afterEach(() => {
 	tmpDir = undefined;
 });
 
-/** Stages `root/bin/app.js` beside the host platform package, as `crust build` lays out `.crust/`. */
-function stageLauncher(
-	dir: string,
-	binarySource = `#!${process.execPath}\n${CHILD_SOURCE}`,
-): string {
+/** Stages `root/bin/app.js` beside the host platform package in a fresh tmpDir, as `crust build` lays out `.crust/`. */
+function stageLauncher(binarySource = `#!${process.execPath}\n${CHILD_SOURCE}`): string {
+	const dir = mkdtempSync(join(tmpdir(), "crust-launcher-test-"));
+	tmpDir = dir;
 	const bunTarget = hostTarget();
 	if (!bunTarget) throw new Error("No Bun target matches this machine.");
 	const info: TargetInfo = BUN_TARGETS.info[bunTarget];
@@ -126,9 +125,8 @@ async function runSignaled(
 	deliver: (launcher: ChildProcess) => void,
 	terminal = false,
 ) {
-	tmpDir = mkdtempSync(join(tmpdir(), "crust-launcher-test-"));
-	const logPath = join(tmpDir, "child.log");
-	const launcherArgs = [stageLauncher(tmpDir), mode];
+	const launcherArgs = [stageLauncher(), mode];
+	const logPath = join(tmpDir!, "child.log");
 	const [command, args] = terminal
 		? ["python3", ["-c", PTY_HOST, process.execPath, ...launcherArgs]]
 		: [process.execPath, launcherArgs];
@@ -189,7 +187,7 @@ describe.skipIf(process.platform === "win32")("generated npm launcher signals", 
 	);
 
 	it(
-		"replaces itself with the platform binary",
+		"replaces itself with the platform binary and ends by its terminating signal",
 		async () => {
 			let samePid = false;
 			const result = await runSignaled("plain", (launcher) => {
@@ -197,7 +195,7 @@ describe.skipIf(process.platform === "win32")("generated npm launcher signals", 
 				process.kill(launcher.pid!, "SIGTERM");
 			});
 			expect(samePid).toBe(true);
-			expect(result.signal).toBe("SIGTERM");
+			expect(result).toEqual({ exitCode: null, signal: "SIGTERM", log: [] });
 		},
 		TIMEOUT * 2,
 	);
@@ -231,17 +229,15 @@ describe.skipIf(process.platform === "win32")("generated npm launcher signals", 
 	);
 
 	it.skipIf(!hasPty)("hands the binary blocking stdio", () => {
-		tmpDir = mkdtempSync(join(tmpdir(), "crust-launcher-test-"));
-		const logPath = join(tmpDir, "child.log");
 		// Importing node:process in the launcher would leave these O_NONBLOCK after execve.
 		const launcher = stageLauncher(
-			tmpDir,
 			`#!/usr/bin/env python3
 import fcntl, os
 flags = [fcntl.fcntl(fd, fcntl.F_GETFL) & os.O_NONBLOCK for fd in (0, 1, 2)]
 open(os.environ["LAUNCHER_TEST_LOG"], "a").write("nonblocking " + ",".join("1" if f else "0" for f in flags) + "\\n")
 `,
 		);
+		const logPath = join(tmpDir!, "child.log");
 		const result = spawnSync(process.execPath, [launcher], {
 			env: { ...process.env, LAUNCHER_TEST_LOG: logPath },
 			stdio: "pipe",
@@ -252,9 +248,7 @@ open(os.environ["LAUNCHER_TEST_LOG"], "a").write("nonblocking " + ",".join("1" i
 	});
 
 	it("preserves the environment when execve defaults to an empty environment", () => {
-		tmpDir = mkdtempSync(join(tmpdir(), "crust-launcher-test-"));
 		const launcher = stageLauncher(
-			tmpDir,
 			`#!${process.execPath}\nconsole.log(JSON.stringify(process.env));`,
 		);
 		const env = {
@@ -282,8 +276,7 @@ open(os.environ["LAUNCHER_TEST_LOG"], "a").write("nonblocking " + ",".join("1" i
 	it.skipIf(process.platform !== "linux" || !hostInterpreterNamesLibc())(
 		"picks the Linux binary without building a diagnostic report",
 		() => {
-			tmpDir = mkdtempSync(join(tmpdir(), "crust-launcher-test-"));
-			const launcher = stageLauncher(tmpDir, `#!${process.execPath}\nconsole.log("ran");`);
+			const launcher = stageLauncher(`#!${process.execPath}\nconsole.log("ran");`);
 			const result = spawnSync(
 				process.execPath,
 				[
@@ -302,23 +295,13 @@ open(os.environ["LAUNCHER_TEST_LOG"], "a").write("nonblocking " + ",".join("1" i
 	it.each(["getBuiltinModule", "execve"])(
 		"tells users of a Node.js without %s which version it needs",
 		(api) => {
-			tmpDir = mkdtempSync(join(tmpdir(), "crust-launcher-test-"));
 			const result = spawnSync(
 				process.execPath,
-				["--import", `data:text/javascript,delete process.${api}`, stageLauncher(tmpDir)],
+				["--import", `data:text/javascript,delete process.${api}`, stageLauncher()],
 				{ encoding: "utf8", timeout: TIMEOUT },
 			);
 			expect(result.status).toBe(1);
 			expect(result.stderr).toContain("[app] Requires Node.js >=24");
 		},
-	);
-
-	it(
-		"re-raises the signal that terminated the child",
-		async () => {
-			const result = await runSignaled("plain", ({ pid }) => process.kill(pid!, "SIGTERM"));
-			expect(result).toEqual({ exitCode: null, signal: "SIGTERM", log: [] });
-		},
-		TIMEOUT * 2,
 	);
 });

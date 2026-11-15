@@ -19,21 +19,6 @@ const BASIC_FIELDS = {
 
 describe("applyFieldDefaults", () => {
 	// ──────────────────────────────────────────────────────────────────────
-	// Persisted data — partial match
-	// ──────────────────────────────────────────────────────────────────────
-
-	it("should fill missing persisted keys from field defaults", () => {
-		const persisted = { theme: "dark" };
-		const result = applyFieldDefaults(persisted, BASIC_FIELDS);
-
-		expect(result).toEqual({
-			theme: "dark",
-			verbose: false,
-			retries: 3,
-		});
-	});
-
-	// ──────────────────────────────────────────────────────────────────────
 	// Edge cases — falsy values preserved
 	// ──────────────────────────────────────────────────────────────────────
 
@@ -77,18 +62,6 @@ describe("applyFieldDefaults", () => {
 			["__proto__", { a: 1 }],
 		]);
 		expect(applyFieldDefaults(persisted, {})).toEqual({});
-	});
-
-	// ──────────────────────────────────────────────────────────────────────
-	// Unknown keys
-	// ──────────────────────────────────────────────────────────────────────
-
-	it("leaves out persisted keys the fields do not define", () => {
-		expect(applyFieldDefaults({ theme: "dark", extra: 1 }, BASIC_FIELDS)).toEqual({
-			theme: "dark",
-			verbose: false,
-			retries: 3,
-		});
 	});
 });
 

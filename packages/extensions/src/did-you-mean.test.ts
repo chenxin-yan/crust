@@ -27,13 +27,13 @@ describe("didYouMean", () => {
 		expect(built).toEqual([]);
 	});
 
-	it.each(["car"])("breaks tied scores by canonical name for %s", async (input) => {
+	it("breaks tied scores by canonical name", async () => {
 		const app = new Crust("app")
 			.extend(didYouMean())
 			.add(defineCommand("zebra", { aliases: ["cap"] }, (cmd) => cmd.action(() => {})))
 			.add(defineCommand("cat", (cmd) => cmd.action(() => {})));
 
-		const { stderr } = await captureExecute(app, [input]);
+		const { stderr } = await captureExecute(app, ["car"]);
 
 		expect(stderr).toContain('Did you mean "cat"?');
 	});

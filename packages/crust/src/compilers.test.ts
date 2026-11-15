@@ -57,16 +57,13 @@ describe("assertCompilerSatisfiesEngines", () => {
 		expect(check(userPackageJson)).not.toThrow();
 	});
 
-	it.each([["an unsatisfied range", ">=1.5.0"]])(
-		"rejects %s without substituting another compiler",
-		(_label, constraint) => {
-			expect(check({ engines: { bun: constraint } })).toThrow(
-				`Bun 1.4.2 (/opt/bun/bin/bun) does not satisfy package.json engines.bun "${constraint}".\n` +
-					"  Binaries embed the selected compiler's Bun version; crust does not install or upgrade it.\n" +
-					"  Put a matching bun first on PATH (e.g. with your version manager), or update package.json engines.bun.",
-			);
-		},
-	);
+	it("rejects an unsatisfied range without substituting another compiler", () => {
+		expect(check({ engines: { bun: ">=1.5.0" } })).toThrow(
+			'Bun 1.4.2 (/opt/bun/bin/bun) does not satisfy package.json engines.bun ">=1.5.0".\n' +
+				"  Binaries embed the selected compiler's Bun version; crust does not install or upgrade it.\n" +
+				"  Put a matching bun first on PATH (e.g. with your version manager), or update package.json engines.bun.",
+		);
+	});
 
 	it.each(["latest", 1.4])("rejects the malformed constraint %j", (constraint) => {
 		expect(check({ engines: { bun: constraint } })).toThrow(
@@ -85,7 +82,7 @@ const fallbackRunner = { command: process.execPath, env: { BUN_BE_BUN: "1" } };
 const realBunRunner = { command: "/usr/local/bin/bun", env: {} };
 
 describe("bunCompileTarget", () => {
-	it("substitutes the -baseline alias only for the self-copy target under the fallback runner", () => {
+	it("substitutes the -baseline alias only for the self-copy target under the fallback runner, never for a real bun", () => {
 		expect(bunCompileTarget("bun-linux-x64", fallbackRunner, "bun-linux-x64")).toBe(
 			"bun-linux-x64-baseline",
 		);
@@ -96,9 +93,6 @@ describe("bunCompileTarget", () => {
 			"bun-darwin-arm64",
 		);
 		expect(bunCompileTarget("bun-linux-x64", fallbackRunner, null)).toBe("bun-linux-x64");
-	});
-
-	it("passes the canonical target to a real bun", () => {
 		expect(bunCompileTarget("bun-linux-x64", realBunRunner, "bun-linux-x64")).toBe("bun-linux-x64");
 	});
 });

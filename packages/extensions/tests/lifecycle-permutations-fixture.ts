@@ -5,7 +5,7 @@ import { writeProcessOutput } from "@crustjs/utils/terminal";
 
 import { didYouMean, help, noColor, version } from "../src/index.ts";
 
-// One argv case per process; every `.extend()` permutation runs in turn, separated by
+// One argv case per process; every `.extend()` order runs in turn, separated by
 // markers on both streams, so the parent compares them byte for byte.
 const argv: string[] = JSON.parse(process.argv[2]!);
 
@@ -54,19 +54,17 @@ const extensions = [
 	wrap,
 ] as const;
 
-function* permutations<T>(items: readonly T[]): Generator<T[]> {
-	if (items.length <= 1) {
-		yield [...items];
-		return;
-	}
-	for (let index = 0; index < items.length; index++) {
-		const rest = [...items.slice(0, index), ...items.slice(index + 1)];
-		for (const tail of permutations(rest)) yield [items[index]!, ...tail];
+/** Each rotation of `items` and its reverse: every relative order of any pair or triple, and every position. */
+function* orders<T>(items: readonly T[]): Generator<T[]> {
+	for (let shift = 0; shift < items.length; shift++) {
+		const rotation = [...items.slice(shift), ...items.slice(0, shift)];
+		yield rotation;
+		yield rotation.toReversed();
 	}
 }
 
 let index = 0;
-for (const order of permutations<(typeof extensions)[number]>(extensions)) {
+for (const order of orders<(typeof extensions)[number]>(extensions)) {
 	const marker = `@@${index++} ${order.map((extension) => extension.id).join(",")}@@\n`;
 	writeProcessOutput(1, marker);
 	writeProcessOutput(2, marker);

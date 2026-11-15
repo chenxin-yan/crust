@@ -33,9 +33,7 @@ describe("confirm — toggle", () => {
 
 		await tick();
 		// Default is true, left should toggle to false
-		prompt.keys("left");
-		await tick();
-		prompt.keys("return");
+		prompt.keys("left", "return");
 
 		const result = await prompt.answer;
 		expect(result).toBe(false);
@@ -56,10 +54,7 @@ describe("confirm — custom labels", () => {
 		});
 
 		await tick();
-		// Toggle to true (Accept)
-		prompt.type("y");
-		await tick();
-		prompt.keys("return");
+		prompt.keys("y", "return");
 
 		await prompt.answer;
 		expect(prompt.screen()).toBe("✓ Proceed? Accept");
@@ -75,12 +70,9 @@ describe("confirm — rendering", () => {
 		const prompt = renderPrompt(confirm, { message: "Continue?" });
 
 		await tick();
-		prompt.type("n");
-		await tick();
-		prompt.keys("return");
+		prompt.keys("n", "return");
 
 		await prompt.answer;
-		// After submission, the selected answer should appear
 		expect(prompt.screen()).toBe("✓ Continue? No");
 	});
 });

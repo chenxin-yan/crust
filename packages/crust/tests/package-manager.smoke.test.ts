@@ -19,10 +19,6 @@ const sampleDir = join(testRoot, "sample");
 const stageDir = join(sampleDir, ".crust");
 const packDir = join(testRoot, "packs");
 
-function hasCommand(command: string): boolean {
-	return which(command) !== null;
-}
-
 async function stageSampleCli() {
 	const target = hostTarget();
 	if (!target) throw new Error(`Unsupported smoke-test host: ${process.platform}-${process.arch}`);
@@ -36,17 +32,11 @@ console.log(args.join(" ") || "resolver-ok");
 	);
 	writeFileSync(
 		join(sampleDir, "package.json"),
-		JSON.stringify(
-			{
-				name: "@scope/resolver-smoke",
-				version: "0.0.1",
-				bin: {
-					"resolver-smoke": "src/cli.ts",
-				},
-			},
-			null,
-			2,
-		),
+		JSON.stringify({
+			name: "@scope/resolver-smoke",
+			version: "0.0.1",
+			bin: { "resolver-smoke": "src/cli.ts" },
+		}),
 	);
 
 	const app = new Crust("test").add(buildCommand);
@@ -70,16 +60,8 @@ console.log(args.join(" ") || "resolver-ok");
 async function packStageDir(dir: string): Promise<string> {
 	mkdirSync(packDir, { recursive: true });
 	const packed = await runBoundedProcess("npm", ["pack", dir], { cwd: packDir, timeout: 25_000 });
-	if (packed.exitCode !== 0) {
-		throw new Error(`npm pack failed for ${dir}\n${packed.stderr}`);
-	}
-
-	const filename = packed.stdout.trim().split("\n").at(-1);
-	if (!filename) {
-		throw new Error(`npm pack did not return a tarball name for ${dir}`);
-	}
-
-	return join(packDir, filename);
+	expect(packed.exitCode, packed.stderr).toBe(0);
+	return join(packDir, packed.stdout.trim().split("\n").at(-1)!);
 }
 
 afterEach(reapBoundedProcesses);
@@ -90,11 +72,8 @@ afterAll(() => {
 
 describe.each(["bun", "npm", "pnpm"] as const)("package manager smoke (%s)", (packageManager) => {
 	it("installs and runs both the .bin command and root launcher", async () => {
-		if (!hasCommand(packageManager)) {
-			throw new Error(`${packageManager} is required for this smoke test.`);
-		}
-		if (!hasCommand("npm")) {
-			throw new Error("npm is required to pack staged directories for smoke tests.");
+		for (const command of [packageManager, "npm"]) {
+			if (!which(command)) throw new Error(`${command} is required for this smoke test.`);
 		}
 
 		await stageSampleCli();
@@ -102,10 +81,7 @@ describe.each(["bun", "npm", "pnpm"] as const)("package manager smoke (%s)", (pa
 			root: { name: string };
 			packages: Array<{ name: string; dir: string }>;
 		};
-		const platformPackage = manifest.packages[0];
-		if (!platformPackage) {
-			throw new Error("Expected exactly one staged platform package.");
-		}
+		const platformPackage = manifest.packages[0]!;
 		const rootTarball = await packStageDir(resolve(stageDir, "root"));
 		const platformTarball = await packStageDir(resolve(stageDir, platformPackage.dir));
 
@@ -113,18 +89,14 @@ describe.each(["bun", "npm", "pnpm"] as const)("package manager smoke (%s)", (pa
 		mkdirSync(installDir, { recursive: true });
 		writeFileSync(
 			join(installDir, "package.json"),
-			JSON.stringify(
-				{
-					name: `install-${packageManager}`,
-					private: true,
-					dependencies: {
-						[manifest.root.name]: `file:${rootTarball}`,
-						[platformPackage.name]: `file:${platformTarball}`,
-					},
+			JSON.stringify({
+				name: `install-${packageManager}`,
+				private: true,
+				dependencies: {
+					[manifest.root.name]: `file:${rootTarball}`,
+					[platformPackage.name]: `file:${platformTarball}`,
 				},
-				null,
-				2,
-			),
+			}),
 		);
 
 		if (packageManager === "pnpm") {

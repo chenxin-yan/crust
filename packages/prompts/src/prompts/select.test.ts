@@ -61,51 +61,21 @@ describe("select — default value", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("select — navigation", () => {
-	it("j moves cursor down (vim)", async () => {
+	it.each([
+		["j moves cursor down (vim)", undefined, "j", "b"],
+		["k moves cursor up (vim)", "c", "k", "b"],
+		["wraps to last item when moving up from first", undefined, "up", "c"],
+	] as const)("%s", async (_title, defaultValue, key, expected) => {
 		const prompt = renderPrompt(select, {
 			message: "Pick",
 			choices: ["a", "b", "c"],
+			default: defaultValue,
 		});
 
 		await tick();
-		prompt.type("j");
-		await tick();
-		prompt.keys("return");
+		prompt.keys(key, "return");
 
-		const result = await prompt.answer;
-		expect(result).toBe("b");
-	});
-
-	it("k moves cursor up (vim)", async () => {
-		const prompt = renderPrompt(select, {
-			message: "Pick",
-			choices: ["a", "b", "c"],
-			default: "c",
-		});
-
-		await tick();
-		prompt.type("k");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe("b");
-	});
-
-	it("wraps to last item when moving up from first", async () => {
-		const prompt = renderPrompt(select, {
-			message: "Pick",
-			choices: ["a", "b", "c"],
-		});
-
-		await tick();
-		// Cursor at 0, up should wrap to index 2
-		prompt.keys("up");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe("c");
+		expect(await prompt.answer).toBe(expected);
 	});
 });
 
@@ -144,9 +114,7 @@ describe("select — rendering", () => {
 		});
 
 		await tick();
-		prompt.keys("down");
-		await tick();
-		prompt.keys("return");
+		prompt.keys("down", "return");
 
 		await prompt.answer;
 		expect(prompt.screen()).toBe("✓ Pick a fruit banana");
@@ -158,7 +126,7 @@ describe("select — rendering", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("select — viewport scrolling", () => {
-	it("limits visible choices to maxVisible", async () => {
+	it("limits visible choices to maxVisible and shows a scroll-down indicator", async () => {
 		const choices = Array.from({ length: 20 }, (_, i) => `item-${i}`);
 		const prompt = renderPrompt(select, {
 			message: "Pick",
@@ -167,24 +135,9 @@ describe("select — viewport scrolling", () => {
 		});
 
 		await tick();
-		// Only first 5 items should be visible
 		expect(prompt.screen()).toContain("item-0");
 		expect(prompt.screen()).toContain("item-4");
 		expect(prompt.screen()).not.toContain("item-5");
-
-		prompt.keys("return");
-		await prompt.answer;
-	});
-
-	it("shows scroll-down indicator when more items below", async () => {
-		const choices = Array.from({ length: 20 }, (_, i) => `item-${i}`);
-		const prompt = renderPrompt(select, {
-			message: "Pick",
-			choices,
-			maxVisible: 5,
-		});
-
-		await tick();
 		expect(prompt.screen()).toContain("...");
 
 		prompt.keys("return");
@@ -200,15 +153,9 @@ describe("select — viewport scrolling", () => {
 		});
 
 		await tick();
-		// Move down 3 times to scroll past the initial viewport
-		prompt.keys("down");
-		await tick();
-		prompt.keys("down");
-		await tick();
-		prompt.keys("down");
+		prompt.keys("down", "down", "down");
 		await tick();
 
-		// item-3 should now be visible
 		expect(prompt.screen()).toContain("item-3");
 
 		prompt.keys("return");

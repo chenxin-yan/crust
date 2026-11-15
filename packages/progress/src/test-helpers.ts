@@ -5,9 +5,9 @@ export interface FakeSink {
 	writes: string[];
 }
 
-export function createFakeSink(isTTY = true): FakeSink {
+export function createFakeSink(isTTY = true, columns?: number): FakeSink {
 	const writes: string[] = [];
-	return { sink: { isTTY, write: (text) => writes.push(text) }, writes };
+	return { sink: { isTTY, columns, write: (text) => writes.push(text) }, writes };
 }
 
 export type Equal<A, B> =

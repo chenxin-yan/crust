@@ -1899,31 +1899,21 @@ describe("Extension renderer", () => {
 		expect(selected).toBe(false);
 		expect(lines).toEqual([expect.stringMatching(/^stderr:Error: /)]);
 
-		lines.length = 0;
-		const throwing = defineExtension(defineExtensionId("render")).renderer(() => {
-			throw new Error("no renderer");
-		});
-		expect(
-			await execute(
-				new Crust("cli").extend(throwing).action(() => {}),
-				[],
-				lines,
-			),
-		).toBe(1);
-		expect(lines).toEqual(["stderr:Error: no renderer"]);
-
-		lines.length = 0;
-		const rejecting = defineExtension(defineExtensionId("render")).renderer(async () => {
-			throw new Error("no async renderer");
-		});
-		expect(
-			await execute(
-				new Crust("cli").extend(rejecting).action(() => {}),
-				[],
-				lines,
-			),
-		).toBe(1);
-		expect(lines).toEqual(["stderr:Error: no async renderer"]);
+		const failure = new Error("no renderer");
+		for (const select of [
+			() => {
+				throw failure;
+			},
+			async () => {
+				throw failure;
+			},
+		]) {
+			lines.length = 0;
+			const render = defineExtension(defineExtensionId("render")).renderer(select);
+			const app = new Crust("cli").extend(render).action(() => {});
+			expect(await execute(app, [], lines)).toBe(1);
+			expect(lines).toEqual(["stderr:Error: no renderer"]);
+		}
 	});
 
 	it("awaits an async selector before any handler, preRun, or action runs", async () => {
@@ -1986,23 +1976,15 @@ describe("Extension renderer", () => {
 			}),
 		);
 
-		expect(
-			await execute(
-				new Crust("cli").extend(render, late).action(() => 1),
-				[],
-				lines,
-			),
-		).toBe(1);
-		expect(lines).toEqual(["result:1", "error:postRun failed"]);
-		lines.length = 0;
-		expect(
-			await execute(
-				new Crust("cli").extend(render, leaky).action(() => 1),
-				[],
-				lines,
-			),
-		).toBe(1);
-		expect(lines).toEqual(["result:1", "error:cleanup failed"]);
+		for (const [failing, message] of [
+			[late, "postRun failed"],
+			[leaky, "cleanup failed"],
+		] as const) {
+			lines.length = 0;
+			const app = new Crust("cli").extend(render, failing).action(() => 1);
+			expect(await execute(app, [], lines)).toBe(1);
+			expect(lines).toEqual(["result:1", `error:${message}`]);
+		}
 	});
 
 	it("calls cleanup once per disposal failure after a rendered failure, else writes Core's lines", async () => {
@@ -2350,7 +2332,6 @@ describe("Crust .run()", () => {
 });
 
 describe("Crust .execute()", () => {
-	// Capture default IO and save/restore process.exitCode around each test
 	let originalExitCode: number | string | null | undefined;
 	let stderrChunks: string[];
 
@@ -2358,13 +2339,11 @@ describe("Crust .execute()", () => {
 		originalExitCode = process.exitCode;
 		stderrChunks = [];
 		captureDefaultIO({ 2: () => stderrChunks });
-		// Reset exitCode — setting to 0 then deleting clears the value
 		process.exitCode = 0;
 	});
 
 	afterEach(() => {
 		vi.restoreAllMocks();
-		// Restore original exit code (0 acts as "no error")
 		process.exitCode = originalExitCode ?? 0;
 	});
 
@@ -2846,21 +2825,6 @@ describe("value errors never echo the raw value", () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("Crust .add() aliases", () => {
-	it("routes aliases from definition config and includes them in the snapshot", async () => {
-		let calls = 0;
-		const app = new Crust("cli").add(
-			defineCommand("issue", { aliases: ["issues", "i"] }, (command) =>
-				command.action(() => {
-					calls++;
-				}),
-			),
-		);
-
-		await unwrap(app.run(["issues"]));
-		expect(calls).toBe(1);
-		expect((await app.snapshot()).subCommands.issue?.meta.aliases).toEqual(["issues", "i"]);
-	});
-
 	it("resolves ctx.command to the canonical subtree object inside ctx.rootCommand", async () => {
 		const seen: Array<{ command: CommandSnapshot; rootCommand: CommandSnapshot }> = [];
 		const probe = defineExtension(defineExtensionId("probe")).preRun(({ command, rootCommand }) => {

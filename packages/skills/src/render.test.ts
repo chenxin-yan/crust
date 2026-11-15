@@ -36,6 +36,10 @@ function expectTextContent(file: RenderedFile | undefined): string {
 	return file.content;
 }
 
+async function render(fixture: Parameters<typeof snapshotFixture>[0]): Promise<RenderedFile[]> {
+	return renderSkill(await snapshotFixture(fixture), baseMeta);
+}
+
 /**
  * Builds a simple command snapshot from a makeCommand call for testing.
  */
@@ -91,13 +95,7 @@ describe("renderSkill", () => {
 				subCommands: { child },
 			});
 
-			const snapshot = await snapshotFixture(root);
-			const meta: SkillMeta = {
-				name: "app",
-				description: "App",
-				version: "1.0.0",
-			};
-			const files = renderSkill(snapshot, meta);
+			const files = await render(root);
 			const skill = findFile(files, "SKILL.md");
 
 			// Should not contain the runnable usage section
@@ -132,7 +130,7 @@ describe("renderSkill", () => {
 				meta: { name: "app", description: "Build | deploy" },
 				subCommands: { child },
 			});
-			const files = renderSkill(await snapshotFixture(root), baseMeta);
+			const files = await render(root);
 			const skill = findFile(files, "SKILL.md");
 
 			expect(skill).toBeDefined();
@@ -161,13 +159,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const snapshot = await snapshotFixture(hybrid);
-			const meta: SkillMeta = {
-				name: "hybrid",
-				description: "Test",
-				version: "1.0.0",
-			};
-			const files = renderSkill(snapshot, meta);
+			const files = await render(hybrid);
 			const skill = findFile(files, "SKILL.md");
 
 			// hybrid is both runnable and has children
@@ -209,13 +201,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const snapshot = await snapshotFixture(cmd);
-			const meta: SkillMeta = {
-				name: "copy",
-				description: "Copy",
-				version: "1.0.0",
-			};
-			const files = renderSkill(snapshot, meta);
+			const files = await render(cmd);
 			const copy = findFile(files, "commands/copy.md");
 
 			expect(copy?.content).toContain("## Arguments");
@@ -233,11 +219,7 @@ describe("renderSkill", () => {
 				] as ArgDef[],
 				run() {},
 			});
-			const files = renderSkill(await snapshotFixture(cmd), {
-				name: "run",
-				description: "Run",
-				version: "1.0.0",
-			});
+			const files = await render(cmd);
 			expect(findFile(files, "commands/run.md")?.content).toContain(
 				"| `-- extra...` | string | No | - |",
 			);
@@ -249,13 +231,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const snapshot = await snapshotFixture(cmd);
-			const meta: SkillMeta = {
-				name: "serve",
-				description: "Serve",
-				version: "1.0.0",
-			};
-			const files = renderSkill(snapshot, meta);
+			const files = await render(cmd);
 			const serve = findFile(files, "commands/serve.md");
 
 			expect(serve?.content).not.toContain("## Arguments");
@@ -286,13 +262,7 @@ describe("renderSkill", () => {
 				subCommands: { remote },
 			});
 
-			const snapshot = await snapshotFixture(root);
-			const meta: SkillMeta = {
-				name: "git",
-				description: "Git",
-				version: "1.0.0",
-			};
-			const files = renderSkill(snapshot, meta);
+			const files = await render(root);
 			const remoteFile = findFile(files, "commands/remote.md");
 
 			expect(remoteFile?.content).toContain("## Subcommands");
@@ -319,13 +289,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const snapshot = await snapshotFixture(parent);
-			const meta: SkillMeta = {
-				name: "parent",
-				description: "Parent",
-				version: "1.0.0",
-			};
-			const files = renderSkill(snapshot, meta);
+			const files = await render(parent);
 			const parentFile = findFile(files, "commands/parent.md");
 
 			expect(parentFile?.content).toContain("## Usage");
@@ -344,13 +308,7 @@ describe("renderSkill", () => {
 				subCommands: { sub },
 			});
 
-			const snapshot = await snapshotFixture(parent);
-			const meta: SkillMeta = {
-				name: "parent",
-				description: "Parent",
-				version: "1.0.0",
-			};
-			const files = renderSkill(snapshot, meta);
+			const files = await render(parent);
 			const parentFile = findFile(files, "commands/parent.md");
 
 			expect(parentFile?.content).not.toContain("## Usage");
@@ -379,13 +337,7 @@ describe("renderSkill", () => {
 				subCommands: { remote },
 			});
 
-			const snapshot = await snapshotFixture(root);
-			const meta: SkillMeta = {
-				name: "git",
-				description: "Git",
-				version: "1.0.0",
-			};
-			const files = renderSkill(snapshot, meta);
+			const files = await render(root);
 			const skillContent = expectTextContent(findFile(files, "SKILL.md"));
 			const commandFiles = files.filter((f) => f.path.startsWith("commands/")).map((f) => f.path);
 			expect(commandFiles.sort()).toEqual([
@@ -423,13 +375,7 @@ describe("renderSkill", () => {
 				subCommands: { level2 },
 			});
 
-			const snapshot = await snapshotFixture(root);
-			const meta: SkillMeta = {
-				name: "root",
-				description: "Root",
-				version: "1.0.0",
-			};
-			const files = renderSkill(snapshot, meta);
+			const files = await render(root);
 
 			const deepFile = findFile(files, "commands/level2/level3/deep.md");
 			expect(deepFile).toBeDefined();
@@ -450,13 +396,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const snapshot = await snapshotFixture(cmd);
-			const meta: SkillMeta = {
-				name: "test",
-				description: "Test tool",
-				version: "1.0.0",
-			};
-			const files = renderSkill(snapshot, meta);
+			const files = await render(cmd);
 			const testContent = expectTextContent(findFile(files, "commands/test.md"));
 
 			// Pipe should be escaped inside table cells
@@ -484,8 +424,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const snapshot = await snapshotFixture(cmd);
-			const files = renderSkill(snapshot, { name: "test", description: "Test tool" });
+			const files = await render(cmd);
 			const testContent = expectTextContent(findFile(files, "commands/test.md"));
 
 			expect(testContent).toContain("| Output format. One of json or text |");
@@ -500,13 +439,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const snapshot = await snapshotFixture(cmd);
-			const meta: SkillMeta = {
-				name: "test",
-				description: "Test tool",
-				version: "1.0.0",
-			};
-			const files = renderSkill(snapshot, meta);
+			const files = await render(cmd);
 			const test = findFile(files, "commands/test.md");
 
 			// Outside tables, the raw description is preserved as-is
@@ -519,13 +452,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const snapshot = await snapshotFixture(cmd);
-			const meta: SkillMeta = {
-				name: "app",
-				description: "App",
-				version: "1.0.0",
-			};
-			const files = renderSkill(snapshot, meta);
+			const files = await render(cmd);
 			const app = findFile(files, "commands/app.md");
 
 			expect(app?.content).not.toContain("Parent:");
@@ -578,10 +505,6 @@ describe("renderSkill", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("command documentation projection", () => {
-		async function render(fixture: Parameters<typeof snapshotFixture>[0]): Promise<RenderedFile[]> {
-			return renderSkill(await snapshotFixture(fixture), baseMeta);
-		}
-
 		it("rejects a direct subcommand that would overwrite the root command file", async () => {
 			const child = makeCommand({ meta: { name: "demo" }, run: () => {} });
 			const root = makeCommand({ meta: { name: "demo" }, subCommands: { demo: child } });

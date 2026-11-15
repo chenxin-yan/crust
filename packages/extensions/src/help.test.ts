@@ -89,8 +89,8 @@ describe("help", () => {
 		expect(plain).toContain("[default: 3000]");
 		expect(plain).toContain('[default: "."]');
 
-		// Convention audit H3 keeps per-part usage coloring: path green,
-		// placeholders cyan, args yellow (dim when optional) — not one span.
+		// Usage is colored per part: path green, placeholders cyan, args yellow
+		// (dim when optional) — not one span.
 		const usageLine = output.split("\n").find((line) => stripAnsi(line).startsWith("  app"));
 		expect(usageLine).toContain("\x1b[32mapp\x1b["); // green path
 		expect(usageLine).toContain("\x1b[36m<command>\x1b["); // cyan placeholder

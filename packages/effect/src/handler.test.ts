@@ -35,6 +35,16 @@ function resource<Self, Shape>(
 	);
 }
 
+/** A "db" layer whose finalizer records the Exit it is handed. */
+function exitRecordingDb() {
+	const exits: Exit.Exit<unknown, unknown>[] = [];
+	const db = layer(
+		"db",
+		resource([], Db, "db", { query: (sql) => sql }, (exit) => exits.push(exit)),
+	);
+	return { exits, db };
+}
+
 describe("handler with layer", () => {
 	it("builds every layer on the path at handler start and releases them in reverse order after success", async () => {
 		const log: string[] = [];
@@ -63,11 +73,7 @@ describe("handler with layer", () => {
 	});
 
 	it("hands the program's Exit to finalizers", async () => {
-		const exits: Exit.Exit<unknown, unknown>[] = [];
-		const db = layer(
-			"db",
-			resource([], Db, "db", { query: (sql) => sql }, (exit) => exits.push(exit)),
-		);
+		const { exits, db } = exitRecordingDb();
 		const run = (program: Effect.Effect<unknown, unknown, Db>) =>
 			new Crust("cli")
 				.provide(db())
@@ -91,11 +97,7 @@ describe("handler with layer", () => {
 	});
 
 	it("closes already-built layers with a failure Exit when a sibling layer fails to build", async () => {
-		const exits: Exit.Exit<unknown, unknown>[] = [];
-		const db = layer(
-			"db",
-			resource([], Db, "db", { query: (sql) => sql }, (exit) => exits.push(exit)),
-		);
+		const { exits, db } = exitRecordingDb();
 		const broken = new Error("cache is down");
 		const cache = layer("cache", Layer.effect(Cache, Effect.die(broken)));
 		const app = new Crust("cli")
@@ -111,11 +113,7 @@ describe("handler with layer", () => {
 	});
 
 	it("treats a synchronous throw from the program factory as the program's failure", async () => {
-		const exits: Exit.Exit<unknown, unknown>[] = [];
-		const db = layer(
-			"db",
-			resource([], Db, "db", { query: (sql) => sql }, (exit) => exits.push(exit)),
-		);
+		const { exits, db } = exitRecordingDb();
 		const boom = new Error("boom before any Effect");
 		const app = new Crust("cli").provide(db()).action(
 			handler((): Effect.Effect<never, never, Db> => {
@@ -370,11 +368,7 @@ describe("handler under execute()", () => {
 	it.each([new DOMException("Caller cancelled.", "AbortError"), new Error("deadline exceeded")])(
 		"interrupts the program and finalizers regardless of the caller's abort reason: %s",
 		async (reason) => {
-			const exits: Exit.Exit<unknown, unknown>[] = [];
-			const db = layer(
-				"db",
-				resource([], Db, "db", { query: (sql) => sql }, (exit) => exits.push(exit)),
-			);
+			const { exits, db } = exitRecordingDb();
 			const controller = new AbortController();
 			const started = Promise.withResolvers<void>();
 			const app = new Crust("cli").provide(db()).action(

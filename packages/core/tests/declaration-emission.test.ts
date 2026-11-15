@@ -251,38 +251,16 @@ export function viaExtension(contexts: Contexts) {
 `;
 
 describe("declaration emission for consumers", () => {
-	it("emits declarations for exported inferred builder types without TS2742/TS4058", () => {
-		const result = spawnSync(tscBin, ["-p", "."], { cwd: fixtureDir, timeout: 60_000 });
-		const output = result.stdout.toString() + result.stderr.toString();
-		expect(output).toBe("");
-		expect(result.status).toBe(0);
-	});
-
-	it("type-checks shipped declarations under exactOptionalPropertyTypes", () => {
-		const result = spawnSync(tscBin, ["-p", "tsconfig.exact.json"], {
-			cwd: fixtureDir,
-			timeout: 60_000,
-		});
-		const output = result.stdout.toString() + result.stderr.toString();
-		expect(output).toBe("");
-		expect(result.status).toBe(0);
-	});
-
-	it("keeps required Contexts before an optional provider tuple tail", () => {
-		const result = spawnSync(tscBin, ["-p", "tsconfig.loose.json"], {
-			cwd: fixtureDir,
-			timeout: 60_000,
-		});
-		const output = result.stdout.toString() + result.stderr.toString();
-		expect(output).toBe("");
-		expect(result.status).toBe(0);
-	});
-
-	it("rejects unmet Context and Extension demands against shipped declarations", () => {
-		const result = spawnSync(tscBin, ["-p", "tsconfig.demands.json"], {
-			cwd: fixtureDir,
-			timeout: 60_000,
-		});
+	it.each([
+		["emits declarations for exported inferred builder types without TS2742/TS4058", "."],
+		["type-checks shipped declarations under exactOptionalPropertyTypes", "tsconfig.exact.json"],
+		["keeps required Contexts before an optional provider tuple tail", "tsconfig.loose.json"],
+		[
+			"rejects unmet Context and Extension demands against shipped declarations",
+			"tsconfig.demands.json",
+		],
+	])("%s", (_title, project) => {
+		const result = spawnSync(tscBin, ["-p", project], { cwd: fixtureDir, timeout: 60_000 });
 		const output = result.stdout.toString() + result.stderr.toString();
 		expect(output).toBe("");
 		expect(result.status).toBe(0);

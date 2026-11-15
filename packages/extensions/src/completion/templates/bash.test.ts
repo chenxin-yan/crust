@@ -13,6 +13,7 @@ import {
 import type { CompletionCommand } from "../spec.ts";
 import { walkCommand } from "../walker.ts";
 import { renderBash } from "./bash.ts";
+import { fixture, posFixture, valueTypeFixture } from "./test-fixtures.ts";
 
 // Single-quote a value for bash, escaping embedded single quotes.
 const shQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
@@ -57,63 +58,6 @@ for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
 		.sort();
 }
 
-/**
- * Fixture spec used across snapshot + behavioural tests. Mirrors a small
- * but representative tree: a flat subcommand (`build`), a nested
- * subcommand (`deploy prod`), and a flag with choices on `build --target`.
- */
-const fixture: CompletionCommand = {
-	name: "mycli",
-	description: "Test CLI",
-	flags: [
-		{ name: "help", spellings: ["-h", "--help"], type: "boolean", takesValue: false },
-		{ name: "version", spellings: ["-v", "--version"], type: "boolean", takesValue: false },
-	],
-	args: [],
-	subCommands: [
-		{
-			name: "build",
-			description: "Build artifact",
-			flags: [
-				{ name: "release", spellings: ["--release"], type: "boolean", takesValue: false },
-				{
-					name: "target",
-					spellings: ["--target"],
-					type: "string",
-					takesValue: true,
-					choices: ["browser", "bun", "node"],
-				},
-			],
-			args: [],
-			subCommands: [],
-		},
-		{
-			name: "deploy",
-			aliases: ["dep"],
-			description: "Deploy",
-			flags: [],
-			args: [],
-			subCommands: [
-				{
-					name: "prod",
-					description: "Production deploy",
-					flags: [
-						{
-							name: "env",
-							spellings: ["--env"],
-							type: "string",
-							takesValue: true,
-							choices: ["dev", "staging", "prod"],
-						},
-					],
-					args: [],
-					subCommands: [],
-				},
-			],
-		},
-	],
-};
-
 afterEach(reapBoundedProcesses);
 
 describe("renderBash", () => {
@@ -148,34 +92,28 @@ describe("renderBash · behavioural subprocess tests", () => {
 		await rm(tmpDir, { recursive: true, force: true });
 	});
 
-	const runCompletion = (words: string[]) => runBashCompletion(scriptPath, "_mycli", words);
-
 	it("scenario 1 — top-level subcommand: `mycli <TAB>` lists build and deploy", async () => {
-		const completions = await runCompletion(["mycli", ""]);
+		const completions = await runBashCompletion(scriptPath, "_mycli", ["mycli", ""]);
 		expect(completions).toContain("build");
 		expect(completions).toContain("deploy");
 		// Alias for deploy is also offered.
 		expect(completions).toContain("dep");
 	});
 
-	it("scenario 2 — nested subcommand: `mycli deploy <TAB>` lists prod", async () => {
-		const completions = await runCompletion(["mycli", "deploy", ""]);
-		expect(completions).toContain("prod");
-		// Should not bleed top-level subcommands here.
-		expect(completions).not.toContain("build");
-	});
-
 	it("scenario 3 — flag with choices: `mycli build --target <TAB>` lists target values", async () => {
-		const completions = await runCompletion(["mycli", "build", "--target", ""]);
+		const completions = await runBashCompletion(scriptPath, "_mycli", [
+			"mycli",
+			"build",
+			"--target",
+			"",
+		]);
 		expect(completions.sort()).toEqual(["browser", "bun", "node"]);
 	});
 });
 
 /**
- * Behavioural tests for per-slot positional-argument choices. Verifies
- * that bash offers slot N's `choices` for the N-th positional, not just
- * the first — the historical limitation called out in the consistency
- * audit.
+ * Behavioural tests for per-slot positional-argument choices: bash offers
+ * slot N's `choices` for the N-th positional, not just the first.
  */
 describe("renderBash · multi-positional choices", () => {
 	const multiPosFixture: CompletionCommand = {
@@ -244,77 +182,30 @@ describe("renderBash · multi-positional choices", () => {
 		await rm(tmpDir, { recursive: true, force: true });
 	});
 
-	const runCompletion = (words: string[]) => runBashCompletion(scriptPath, "_mp", words);
-
-	it("slot 1 of `mp two` offers the second arg's choices (not the first's)", async () => {
-		const completions = await runCompletion(["mp", "two", "alpha", ""]);
-		expect(completions).toContain("gamma");
-		expect(completions).toContain("delta");
-		expect(completions).not.toContain("alpha");
-		expect(completions).not.toContain("beta");
-	});
-
-	it("variadic-with-choices offers the variadic list at every slot >= variadicFrom", async () => {
-		// Slot 0 still gets the `mode` arg's choices.
-		const slot0 = await runCompletion(["mp", "vary", ""]);
-		expect(slot0).toContain("start");
-		expect(slot0).toContain("stop");
-		expect(slot0).not.toContain("a");
-
-		// Slot 1: enters the variadic.
-		const slot1 = await runCompletion(["mp", "vary", "start", ""]);
-		expect(slot1).toEqual(["a", "b", "c"]);
-
-		// Slot 2 and beyond: still the variadic list.
-		const slot2 = await runCompletion(["mp", "vary", "start", "a", ""]);
-		expect(slot2).toEqual(["a", "b", "c"]);
-	});
-
-	it("intervening flags do not count toward the positional slot index", async () => {
-		// `--unknown=x` between positionals should be
-		// skipped; slot 1 should still offer the second arg's choices.
-		const completions = await runCompletion(["mp", "two", "alpha", "--unknown=x", ""]);
-		expect(completions).toContain("gamma");
-		expect(completions).toContain("delta");
+	it.each<[string, string[], string[]]>([
+		[
+			"slot 1 of `mp two` offers the second arg's choices",
+			["two", "alpha", ""],
+			["delta", "gamma"],
+		],
+		[
+			"intervening flags do not count toward the slot index",
+			["two", "alpha", "--unknown=x", ""],
+			["delta", "gamma"],
+		],
+		["slot 0 before a variadic", ["vary", ""], ["start", "stop"]],
+		["slot 1 enters the variadic", ["vary", "start", ""], ["a", "b", "c"]],
+		["slot 2 stays in the variadic", ["vary", "start", "a", ""], ["a", "b", "c"]],
+	])("%s", async (_label, words, expected) => {
+		expect(await runBashCompletion(scriptPath, "_mp", ["mp", ...words])).toEqual(expected);
 	});
 });
 
 describe("renderBash — url/path/json value-flag handling", () => {
-	const valueTypeFixture: CompletionCommand = {
-		name: "mycli",
-		flags: [
-			{
-				name: "out",
-				spellings: ["--out"],
-				type: "string",
-				takesValue: true,
-				valueCompletion: "files",
-			},
-			{
-				name: "endpoint",
-				spellings: ["--endpoint"],
-				type: "string",
-				takesValue: true,
-				valueCompletion: "none",
-			},
-			{
-				name: "config",
-				spellings: ["--config"],
-				type: "string",
-				takesValue: true,
-				valueCompletion: "none",
-			},
-			// Plain string flag — must not regress to a typed branch.
-			{ name: "name", spellings: ["--name"], type: "string", takesValue: true },
-		],
-		args: [],
-		subCommands: [],
-	};
-
 	/**
-	 * INT-02 regression: `COMPREPLY=( $(compgen -f …) )` word-split and
-	 * glob-expanded filenames, so `hello world.txt` became two candidates
-	 * and `star*.txt` matched other files. Each filesystem name must survive
+	 * `COMPREPLY=( $(compgen -f …) )` would word-split and glob-expand
+	 * filenames, so `hello world.txt` would become two candidates and
+	 * `star*.txt` would match other files. Each filesystem name must survive
 	 * as exactly one candidate in both the separate and `--flag=` forms.
 	 */
 	describe("path candidates preserve whitespace and glob metacharacters", () => {
@@ -363,34 +254,6 @@ describe("renderBash — url/path/json value-flag handling", () => {
 	});
 
 	it("suppresses `complete -o default` for url/json positional slots; path positionals rely on the fallback", () => {
-		const posFixture: CompletionCommand = {
-			name: "mycli",
-			flags: [],
-			args: [
-				{
-					name: "src",
-					type: "string",
-					required: true,
-					variadic: false,
-					valueCompletion: "files",
-				},
-				{
-					name: "endpoint",
-					type: "string",
-					required: true,
-					variadic: false,
-					valueCompletion: "none",
-				},
-				{
-					name: "payload",
-					type: "string",
-					required: true,
-					variadic: false,
-					valueCompletion: "none",
-				},
-			],
-			subCommands: [],
-		};
 		const script = renderBash(posFixture, "mycli", "1.0.0");
 		// Suppression case is emitted for the two non-path slots (1, 2).
 		expect(script).toContain("compopt +o default 2>/dev/null");
@@ -514,5 +377,157 @@ describe("renderBash · one-character alias spellings", () => {
 		expect(
 			await runBashCompletion(scriptPath, "_mycli", ["mycli", "-P", "9090", "serve", ""]),
 		).toEqual(["start"]);
+	});
+});
+
+describe("renderBash · behavioural · -- and --name=value", () => {
+	const spec: CompletionCommand = {
+		name: "mycli",
+		flags: [],
+		args: [],
+		subCommands: [
+			{
+				name: "build",
+				flags: [
+					{
+						name: "target",
+						spellings: ["--target"],
+						type: "string",
+						takesValue: true,
+						choices: ["browser", "node"],
+					},
+					{ name: "out", spellings: ["--out"], type: "string", takesValue: true },
+				],
+				args: [],
+				subCommands: [{ name: "deploy", flags: [], args: [], subCommands: [] }],
+			},
+			{
+				name: "seek",
+				flags: [{ name: "watch", spellings: ["--watch"], type: "boolean", takesValue: false }],
+				args: [
+					{ name: "task", type: "string", required: true, variadic: false, choices: ["lint"] },
+					{ name: "pkgs", type: "string", required: false, variadic: true, choices: ["cli"] },
+				],
+				subCommands: [],
+			},
+			{
+				name: "run",
+				flags: [{ name: "watch", spellings: ["--watch"], type: "boolean", takesValue: false }],
+				args: [
+					{ name: "task", type: "string", required: true, variadic: false, choices: ["lint"] },
+					{ name: "pkgs", type: "string", required: false, variadic: true, choices: ["cli"] },
+					{
+						name: "extra",
+						type: "string",
+						required: false,
+						variadic: true,
+						afterDoubleDash: true,
+						choices: ["fix"],
+					},
+				],
+				subCommands: [],
+			},
+			{
+				name: "exec",
+				flags: [],
+				args: [
+					{ name: "pod", type: "string", required: true, variadic: false, choices: ["web"] },
+					{
+						name: "cmd",
+						type: "string",
+						required: true,
+						variadic: false,
+						afterDoubleDash: true,
+						choices: ["ls"],
+					},
+				],
+				subCommands: [],
+			},
+			{
+				name: "wrap",
+				flags: [],
+				args: [
+					{
+						name: "extra",
+						type: "string",
+						required: false,
+						variadic: false,
+						afterDoubleDash: true,
+						choices: ["fix"],
+					},
+				],
+				subCommands: [{ name: "child", flags: [], args: [], subCommands: [] }],
+			},
+		],
+	};
+
+	let scriptPath: string;
+	let tmpDir: string;
+
+	beforeAll(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "tp010-bash-adv-"));
+		scriptPath = join(tmpDir, "mycli-completion.bash");
+		await writeFile(scriptPath, renderBash(spec, "mycli", "1"));
+	});
+
+	afterAll(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	const complete = (words: string[]) => runBashCompletion(scriptPath, "_mycli", words);
+
+	it("`--name=value` form completes the value's choice list", async () => {
+		const candidates = await complete(["mycli", "build", "--target=br"]);
+		// Bash sees one current token `--target=br`; the script splits on
+		// `=` and offers the choices that match prefix `br`.
+		expect(candidates).toContain("--target=browser");
+		expect(candidates).not.toContain("--target=node");
+	});
+
+	it("after `--`, no subcommand or flag candidates are offered", async () => {
+		expect(await complete(["mycli", "build", ""])).toEqual(["deploy"]);
+		expect(await complete(["mycli", "build", "--"])).toEqual(["--out", "--target"]);
+		expect(await complete(["mycli", "build", "--", "--"])).toEqual([]);
+		const candidates = await complete(["mycli", "build", "--", ""]);
+		// Past the `--` terminator we return without setting COMPREPLY,
+		// so the candidate set is empty (filename completion happens via
+		// `complete -o default` at the bash level).
+		expect(candidates).toEqual([]);
+	});
+
+	it("after `--`, positionals keep filling argument slots but flags are never offered", async () => {
+		expect(await complete(["mycli", "seek", "--", ""])).toEqual(["lint"]);
+		expect(await complete(["mycli", "seek", "lint", "--", ""])).toEqual(["cli"]);
+		expect(await complete(["mycli", "seek", "--", "-x", ""])).toEqual(["cli"]);
+		expect(await complete(["mycli", "seek", "lint", "--", "--"])).toEqual([]);
+		expect(await complete(["mycli", "seek", "lint", "--w"])).toEqual(["--watch"]);
+		// Core routes nothing after `--`.
+		expect(await complete(["mycli", "--", ""])).toEqual([]);
+	});
+
+	it("offers an afterDoubleDash argument only after `--`, and the others only before", async () => {
+		expect(await complete(["mycli", "run", ""])).toEqual(["lint"]);
+		expect(await complete(["mycli", "run", "lint", ""])).toEqual(["cli"]);
+		expect(await complete(["mycli", "run", "lint", "cli", "cli", ""])).toEqual(["cli"]);
+		expect(await complete(["mycli", "run", "lint", "--", ""])).toEqual(["fix"]);
+		expect(await complete(["mycli", "run", "--", "x", ""])).toEqual(["fix"]);
+		expect(await complete(["mycli", "run", "--", "--w"])).toEqual([]);
+		expect(await complete(["mycli", "exec", "web", ""])).toEqual([]);
+		expect(await complete(["mycli", "exec", "web", "--", ""])).toEqual(["ls"]);
+		// A single one takes one token; the rest reach rawArgs.
+		expect(await complete(["mycli", "exec", "web", "--", "ls", ""])).toEqual([]);
+	});
+
+	it("still offers subcommands before `--` when an afterDoubleDash argument is the only one", async () => {
+		expect(await complete(["mycli", "wrap", ""])).toEqual(["child"]);
+		expect(await complete(["mycli", "wrap", "--", ""])).toEqual(["fix"]);
+	});
+
+	it("after a free-form value flag, no subcommand candidates are offered", async () => {
+		// `--out` is a value-taking flag with no choices; the next word
+		// is a free-form value, not a subcommand.
+		expect(await complete(["mycli", "build", ""])).toEqual(["deploy"]);
+		const candidates = await complete(["mycli", "build", "--out", ""]);
+		expect(candidates).toEqual([]);
 	});
 });

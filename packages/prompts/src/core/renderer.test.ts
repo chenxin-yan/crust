@@ -15,7 +15,30 @@ import {
 	submit,
 	withTerminalIO,
 } from "./renderer.ts";
-import { defaultTheme, defaultThemeFor } from "./theme.ts";
+import { defaultThemeFor } from "./theme.ts";
+
+/** An output stream that records every byte a prompt writes. */
+function recordingOutput(isTTY = true) {
+	const recorded = {
+		raw: "",
+		output: Object.assign(
+			new Writable({
+				write(chunk, _encoding, callback) {
+					recorded.raw += chunk.toString();
+					callback();
+				},
+			}),
+			{ isTTY },
+		),
+	};
+	return recorded;
+}
+
+const submitOnKey: PromptConfig<undefined, string> = {
+	render: () => "prompt",
+	handleKey: () => submit("done"),
+	initialState: undefined,
+};
 
 describe("resolvePromptIO", () => {
 	it("prefers explicit and prompt-scoped output over ambient terminal output", () => {
@@ -36,31 +59,19 @@ describe("resolvePromptIO", () => {
 
 describe("assertTTY", () => {
 	const originalIsTTY = process.stdin.isTTY;
+	const setStdinIsTTY = (value: boolean | undefined) =>
+		Object.defineProperty(process.stdin, "isTTY", { value, writable: true, configurable: true });
 
-	afterEach(() => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: originalIsTTY,
-			writable: true,
-			configurable: true,
-		});
-	});
+	afterEach(() => setStdinIsTTY(originalIsTTY));
 
 	it("throws NonInteractiveError when stdin is not a TTY", () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
+		setStdinIsTTY(false);
 
 		expect(() => assertTTY()).toThrow(NonInteractiveError);
 	});
 
 	it("uses the ambient prompt input by default", () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: true,
-			writable: true,
-			configurable: true,
-		});
+		setStdinIsTTY(true);
 		const harness = createPromptIO({ isTTY: false });
 		withTerminalIO(harness.io, () => {
 			expect(isTTY()).toBe(false);
@@ -89,34 +100,17 @@ describe("runPrompt — default theme color", () => {
 		Object.defineProperty(process.stdout, "isTTY", { value: stdoutIsTTY, configurable: true });
 	}
 
-	async function renderDefaultTheme(outputIsTTY: boolean, stdoutIsTTY: boolean): Promise<string> {
-		stubColorEnvironment(stdoutIsTTY);
+	it("colors the default theme on a TTY output when stdout is piped", async () => {
+		stubColorEnvironment(false);
 		const harness = createPromptIO();
-		let written = "";
-		const output = Object.assign(
-			new Writable({
-				write(chunk, _encoding, callback) {
-					written += chunk.toString();
-					callback();
-				},
-			}),
-			{ isTTY: outputIsTTY },
-		);
-		const answer = runPrompt<undefined, string>(
-			{
-				render: (_state, theme) => theme.prefix("?"),
-				handleKey: () => submit("done"),
-				initialState: undefined,
-			},
-			{ input: harness.io.input, output },
+		const recorded = recordingOutput();
+		const answer = runPrompt(
+			{ ...submitOnKey, render: (_state, theme) => theme.prefix("?") },
+			{ input: harness.io.input, output: recorded.output },
 		);
 		harness.type("x");
 		await answer;
-		return written;
-	}
-
-	it("colors the default theme on a TTY output when stdout is piped", async () => {
-		expect(await renderDefaultTheme(true, false)).toContain("\x1b[36m?\x1b[39m");
+		expect(recorded.raw).toContain("\x1b[36m?\x1b[39m");
 	});
 
 	// runPrompt refuses a non-TTY output, so check the theme it would resolve directly.
@@ -136,22 +130,8 @@ describe("runPrompt", () => {
 				return input;
 			},
 		});
-		const output = Object.assign(
-			new Writable({
-				write(_chunk, _encoding, callback) {
-					callback();
-				},
-			}),
-			{ isTTY: true },
-		);
-		const config: PromptConfig<undefined, string> = {
-			render: () => "prompt",
-			handleKey: () => submit("done"),
-			initialState: undefined,
-			theme: defaultTheme,
-		};
 
-		const answer = runPrompt(config, { input, output });
+		const answer = runPrompt(submitOnKey, { input, output: recordingOutput().output });
 		input.write("x");
 
 		await answer;
@@ -164,7 +144,6 @@ describe("runPrompt", () => {
 			render: (state) => state.value,
 			handleKey: () => submit("done"),
 			initialState: { value: "prompt" },
-			theme: defaultTheme,
 		};
 
 		const answer = withTerminalIO(harness.io, () => runPrompt(config));
@@ -176,15 +155,9 @@ describe("runPrompt", () => {
 
 	it("rejects concurrent prompts on the same input stream", async () => {
 		const harness = createPromptIO();
-		const config: PromptConfig<undefined, string> = {
-			render: () => "prompt",
-			handleKey: () => submit("done"),
-			initialState: undefined,
-			theme: defaultTheme,
-		};
 
-		const answer = runPrompt(config, harness.io);
-		await expect(runPrompt(config, harness.io)).rejects.toThrow("same input or output stream");
+		const answer = runPrompt(submitOnKey, harness.io);
+		await expect(runPrompt(submitOnKey, harness.io)).rejects.toThrow("same input or output stream");
 		harness.type("x");
 		await answer;
 	});
@@ -192,47 +165,19 @@ describe("runPrompt", () => {
 	it("rejects concurrent prompts sharing an output stream", async () => {
 		const first = createPromptIO();
 		const second = createPromptIO();
-		const config: PromptConfig<undefined, string> = {
-			render: () => "prompt",
-			handleKey: () => submit("done"),
-			initialState: undefined,
-			theme: defaultTheme,
-		};
 
-		const answer = runPrompt(config, first.io);
+		const answer = runPrompt(submitOnKey, first.io);
 		await expect(
-			runPrompt(config, { input: second.io.input, output: first.io.output }),
+			runPrompt(submitOnKey, { input: second.io.input, output: first.io.output }),
 		).rejects.toThrow("same input or output stream");
 		first.type("x");
 		await answer;
 	});
 
-	it("rejects with NonInteractiveError when stdin is not a TTY", async () => {
-		const config: PromptConfig<{ value: string }, string> = {
-			render: (state) => state.value,
-			handleKey: (_key, state) => state,
-			initialState: { value: "" },
-			theme: defaultTheme,
-		};
-
-		await expect(runPrompt(config, createPromptIO({ isTTY: false }).io)).rejects.toThrow(
-			NonInteractiveError,
-		);
-	});
-
 	it("rejects with NonInteractiveError when the output is not a TTY", async () => {
-		const config: PromptConfig<undefined, string> = {
-			render: () => "prompt",
-			handleKey: () => submit("done"),
-			initialState: undefined,
-			theme: defaultTheme,
-		};
-		const io = {
-			input: createPromptIO().io.input,
-			output: createPromptIO({ isTTY: false }).io.output,
-		};
+		const io = { input: createPromptIO().io.input, output: recordingOutput(false).output };
 
-		await expect(runPrompt(config, io)).rejects.toThrow(NonInteractiveError);
+		await expect(runPrompt(submitOnKey, io)).rejects.toThrow(NonInteractiveError);
 	});
 
 	it("defaults output to stderr, not stdout", () => {
@@ -240,69 +185,37 @@ describe("runPrompt", () => {
 	});
 
 	it("hides cursor on start and shows cursor on cleanup", async () => {
-		const config: PromptConfig<{ value: string }, string> = {
-			render: () => "test",
-			handleKey: () => submit("done"),
-			initialState: { value: "" },
-			theme: defaultTheme,
-		};
-
 		const harness = createPromptIO();
-		let raw = "";
-		const output = Object.assign(
-			new Writable({
-				write(chunk, _encoding, callback) {
-					raw += chunk.toString();
-					callback();
-				},
-			}),
-			{ isTTY: true },
-		);
-		const promise = runPrompt(config, { input: harness.io.input, output });
+		const recorded = recordingOutput();
+		const promise = runPrompt(submitOnKey, { input: harness.io.input, output: recorded.output });
 
 		await new Promise((r) => setTimeout(r, 10));
 		harness.keys("return");
 
 		await promise;
 
-		// Hide cursor (ESC[?25l) at start
-		expect(raw.startsWith("\x1B[?25l")).toBe(true);
-		// Show cursor (ESC[?25h) at cleanup
-		expect(raw.endsWith("\x1B[?25h")).toBe(true);
+		expect(recorded.raw.startsWith("\x1B[?25l")).toBe(true);
+		expect(recorded.raw.endsWith("\x1B[?25h")).toBe(true);
 	});
 
 	it("restores the cursor and raw mode on process exit and removes the exit listener", async () => {
-		const config: PromptConfig<{ value: string }, string> = {
-			render: () => "test",
-			handleKey: () => submit("done"),
-			initialState: { value: "" },
-			theme: defaultTheme,
-		};
 		const harness = createPromptIO();
-		let raw = "";
-		const output = Object.assign(
-			new Writable({
-				write(chunk, _encoding, callback) {
-					raw += chunk.toString();
-					callback();
-				},
-			}),
-			{ isTTY: true },
-		);
+		const recorded = recordingOutput();
+		const io = { input: harness.io.input, output: recorded.output };
 		const previousHandlers = new Set(process.listeners("exit"));
-		void runPrompt(config, { input: harness.io.input, output });
+		void runPrompt(submitOnKey, io);
 		const added = process.listeners("exit").filter((listener) => !previousHandlers.has(listener));
 
 		expect(added).toHaveLength(1);
 		// Invoke directly — emitting a real "exit" would run the test runner's listeners.
 		added[0]?.(0);
 		await new Promise((r) => setTimeout(r, 0));
-		expect(raw.endsWith("\x1B[?25h")).toBe(true);
+		expect(recorded.raw.endsWith("\x1B[?25h")).toBe(true);
 		expect(harness.io.input.isRaw).toBe(false);
 		expect(new Set(process.listeners("exit"))).toEqual(previousHandlers);
 
 		// The streams were released, so a later prompt can reuse them.
-		const next = runPrompt(config, { input: harness.io.input, output });
+		const next = runPrompt(submitOnKey, io);
 		harness.keys("return");
 		await next;
 	});
@@ -314,7 +227,6 @@ describe("runPrompt", () => {
 				throw new Error("handler error");
 			},
 			initialState: { value: "" },
-			theme: defaultTheme,
 		};
 
 		const harness = createPromptIO();
@@ -332,7 +244,6 @@ describe("runPrompt", () => {
 			},
 			handleKey: (_key, state) => state + 1,
 			initialState: 0,
-			theme: defaultTheme,
 		};
 
 		const harness = createPromptIO();
@@ -356,17 +267,8 @@ describe("runPrompt", () => {
 		const entered = Promise.withResolvers<void>();
 		let submitted = false;
 		const harness = createPromptIO();
-		let raw = "";
-		const output = Object.assign(
-			new Writable({
-				write(chunk, _encoding, callback) {
-					raw += chunk.toString();
-					callback();
-				},
-			}),
-			{ isTTY: true },
-		);
-		const io = { input: harness.io.input, output };
+		const recorded = recordingOutput();
+		const io = { input: harness.io.input, output: recorded.output };
 		const promise = runPrompt<number, string>(
 			{
 				initialState: 0,
@@ -393,10 +295,10 @@ describe("runPrompt", () => {
 			{ initialState: 0, render: () => "replacement", handleKey: () => submit("done") },
 			io,
 		);
-		const before = raw;
+		const before = recorded.raw;
 		pending.resolve(submit("old"));
 		await tick();
-		const after = raw;
+		const after = recorded.raw;
 		harness.keys("return");
 		expect(await replacement).toBe("done");
 		expect(submitted).toBe(false);
@@ -408,7 +310,6 @@ describe("runPrompt", () => {
 			render: (state) => state.value,
 			handleKey: (_key, state) => state,
 			initialState: { value: "" },
-			theme: defaultTheme,
 		};
 
 		const harness = createPromptIO();
@@ -423,36 +324,21 @@ describe("runPrompt", () => {
 
 	it("restores the terminal and rejects with the reason when the scope's signal aborts", async () => {
 		const harness = createPromptIO();
-		let raw = "";
-		const output = Object.assign(
-			new Writable({
-				write(chunk, _encoding, callback) {
-					raw += chunk.toString();
-					callback();
-				},
-			}),
-			{ isTTY: true },
-		);
+		const recorded = recordingOutput();
+		const io = { input: harness.io.input, output: recorded.output };
 		const controller = new AbortController();
 		const exitListeners = process.listenerCount("exit");
-		const config: PromptConfig<number, string> = {
-			initialState: 0,
-			render: () => "waiting",
-			handleKey: () => submit("done"),
-		};
-		const promise = withTerminalIO({ signal: controller.signal }, () =>
-			runPrompt(config, { input: harness.io.input, output }),
-		);
+		const promise = withTerminalIO({ signal: controller.signal }, () => runPrompt(submitOnKey, io));
 		const reason = new DOMException("Terminated by SIGTERM.", "AbortError");
 		controller.abort(reason);
 
 		await expect(promise).rejects.toBe(reason);
-		expect(raw.endsWith("\n\x1B[?25h")).toBe(true);
+		expect(recorded.raw.endsWith("\n\x1B[?25h")).toBe(true);
 		expect(harness.io.input.isRaw).toBe(false);
 		expect(harness.io.input.listenerCount("keypress")).toBe(0);
 		expect(process.listenerCount("exit")).toBe(exitListeners);
 		// The streams were released, so a later prompt can reuse them.
-		const next = runPrompt(config, { input: harness.io.input, output });
+		const next = runPrompt(submitOnKey, io);
 		harness.keys("return");
 		expect(await next).toBe("done");
 	});
@@ -460,10 +346,7 @@ describe("runPrompt", () => {
 	it("rejects without drawing when an explicit signal already aborted", async () => {
 		const harness = createPromptIO();
 		const reason = new Error("deadline");
-		const promise = runPrompt(
-			{ initialState: 0, render: () => "never", handleKey: () => submit("done") },
-			{ ...harness.io, signal: AbortSignal.abort(reason) },
-		);
+		const promise = runPrompt(submitOnKey, { ...harness.io, signal: AbortSignal.abort(reason) });
 
 		await expect(promise).rejects.toBe(reason);
 		expect(harness.screen()).toBe("");
@@ -474,7 +357,6 @@ describe("runPrompt", () => {
 			render: (state) => (state.long ? `? ${"x".repeat(100)}` : "? short"),
 			handleKey: (key, state) => (key.name === "return" ? submit("done") : { long: !state.long }),
 			initialState: { long: true },
-			theme: defaultTheme,
 		};
 
 		const harness = createPromptIO();

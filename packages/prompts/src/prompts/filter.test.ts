@@ -37,10 +37,7 @@ describe("filter — typing filters the list", () => {
 		});
 
 		await tick();
-		// Type "py" to filter
-		prompt.type("p");
-		await tick();
-		prompt.type("y");
+		prompt.type("py");
 		await tick();
 
 		// "Python" should be visible, "Go" should not
@@ -59,24 +56,13 @@ describe("filter — typing filters the list", () => {
 		});
 
 		await tick();
-		// Type something that won't match anything
-		prompt.type("z");
-		await tick();
-		prompt.type("z");
-		await tick();
-		prompt.type("z");
+		prompt.type("zzz");
 		await tick();
 
 		expect(prompt.screen()).toContain("No matches");
 
-		// Backspace to clear and get matches again, then submit
-		prompt.keys("backspace");
-		await tick();
-		prompt.keys("backspace");
-		await tick();
-		prompt.keys("backspace");
-		await tick();
-		prompt.keys("return");
+		// Clear the query so Enter has a match to submit.
+		prompt.keys("backspace", "backspace", "backspace", "return");
 		await prompt.answer;
 	});
 });
@@ -107,29 +93,16 @@ describe("filter — navigation", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("filter — query editing", () => {
-	it("left/right arrow moves cursor in query", async () => {
+	it("inserts typed text at the query cursor after moving left", async () => {
 		const prompt = renderPrompt(filter, {
 			message: "Search",
 			choices: ["abc", "xyz"],
 		});
 
 		await tick();
-		// Type "ac"
-		prompt.type("a");
-		await tick();
-		prompt.type("c");
-		await tick();
+		prompt.keys("a", "c", "left", "b", "return");
 
-		// Move cursor left and insert "b" to make "abc"
-		prompt.keys("left");
-		await tick();
-		prompt.type("b");
-		await tick();
-
-		// "abc" should now match
-		prompt.keys("return");
-		const result = await prompt.answer;
-		expect(result).toBe("abc");
+		expect(await prompt.answer).toBe("abc");
 	});
 });
 
@@ -159,9 +132,7 @@ describe("filter — rendering", () => {
 		});
 
 		await tick();
-		prompt.keys("down");
-		await tick();
-		prompt.keys("return");
+		prompt.keys("down", "return");
 
 		await prompt.answer;
 		expect(prompt.screen()).toBe("✓ Pick a fruit banana");
@@ -195,15 +166,9 @@ describe("filter — viewport scrolling", () => {
 		});
 
 		await tick();
-		// Move down 3 times to scroll past the initial viewport
-		prompt.keys("down");
-		await tick();
-		prompt.keys("down");
-		await tick();
-		prompt.keys("down");
+		prompt.keys("down", "down", "down");
 		await tick();
 
-		// item-3 should now be visible
 		expect(prompt.screen()).toContain("item-3");
 
 		prompt.keys("return");

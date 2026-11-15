@@ -13,62 +13,8 @@ import {
 } from "../../../../crust/tests/bounded-process.ts";
 import type { CompletionCommand } from "../spec.ts";
 import { walkCommand } from "../walker.ts";
+import { fixture, posFixture, valueTypeFixture } from "./test-fixtures.ts";
 import { renderZsh } from "./zsh.ts";
-
-/**
- * Same fixture shape as the bash tests so the snapshots line up.
- */
-const fixture: CompletionCommand = {
-	name: "mycli",
-	description: "Test CLI",
-	flags: [
-		{ name: "help", spellings: ["-h", "--help"], type: "boolean", takesValue: false },
-		{ name: "version", spellings: ["-v", "--version"], type: "boolean", takesValue: false },
-	],
-	args: [],
-	subCommands: [
-		{
-			name: "build",
-			description: "Build artifact",
-			flags: [
-				{ name: "release", spellings: ["--release"], type: "boolean", takesValue: false },
-				{
-					name: "target",
-					spellings: ["--target"],
-					type: "string",
-					takesValue: true,
-					choices: ["browser", "bun", "node"],
-				},
-			],
-			args: [],
-			subCommands: [],
-		},
-		{
-			name: "deploy",
-			aliases: ["dep"],
-			description: "Deploy",
-			flags: [],
-			args: [],
-			subCommands: [
-				{
-					name: "prod",
-					description: "Production deploy",
-					flags: [
-						{
-							name: "env",
-							spellings: ["--env"],
-							type: "string",
-							takesValue: true,
-							choices: ["dev", "staging", "prod"],
-						},
-					],
-					args: [],
-					subCommands: [],
-				},
-			],
-		},
-	],
-};
 
 afterEach(reapBoundedProcesses);
 
@@ -189,10 +135,10 @@ echo OK
 });
 
 /**
- * INT-03 regression: `foo-bar` and `foo_bar` (and nested `a b` vs flat
- * `a_b`) are all valid command paths but previously flattened to the same
- * `_<bin>_foo_bar` helper, so the later definition silently replaced the
- * earlier one. Helper names must be injective over command paths.
+ * `foo-bar` and `foo_bar` (and nested `a b` vs flat `a_b`) are all valid
+ * command paths. Flattened to the same `_<bin>_foo_bar` helper, the later
+ * definition would silently replace the earlier one, so helper names must
+ * be injective over command paths.
  */
 const collisionFixture: CompletionCommand = {
 	name: "clash",
@@ -431,8 +377,6 @@ describeIfZsh("renderZsh · one-character alias spellings", () => {
 
 /** Core never reads flags after `--`; later words fill argument slots, or only an `afterDoubleDash` argument. */
 describeIfZsh("renderZsh · after `--`", () => {
-	// Each pty completion takes ~0.7s; several per test outlast the 5s default.
-	const PTY_TIMEOUT = 15_000;
 	let tmpDir: string;
 	let scriptPath: string;
 
@@ -482,39 +426,27 @@ describeIfZsh("renderZsh · after `--`", () => {
 		await rm(tmpDir, { recursive: true, force: true });
 	});
 
-	it(
-		"keeps filling argument slots and offers no flags",
-		async () => {
-			expect(await zshComplete(scriptPath, "mycli seek -- ")).toEqual(["lint"]);
-			expect(await zshComplete(scriptPath, "mycli seek lint -- ")).toEqual(["cli"]);
-			expect(await zshComplete(scriptPath, "mycli seek lint --w")).toContain("--watch");
-			expect(await zshComplete(scriptPath, "mycli seek lint -- --w")).toEqual([]);
-		},
-		PTY_TIMEOUT,
-	);
-
-	it(
-		"offers the arguments before an afterDoubleDash argument only before `--`",
-		async () => {
-			expect(await zshComplete(scriptPath, "mycli run ")).toEqual(["lint"]);
-			expect(await zshComplete(scriptPath, "mycli run lint ")).toEqual(["cli"]);
-			expect(await zshComplete(scriptPath, "mycli run lint cli ")).toEqual(["cli"]);
-			expect(await zshComplete(scriptPath, "mycli exec web ")).toEqual([]);
-		},
-		PTY_TIMEOUT,
-	);
-
-	it(
-		"offers an afterDoubleDash argument only after `--`",
-		async () => {
-			expect(await zshComplete(scriptPath, "mycli run lint -- ")).toEqual(["fix"]);
-			expect(await zshComplete(scriptPath, "mycli run -- x ")).toEqual(["fix"]);
-			expect(await zshComplete(scriptPath, "mycli run lint -- --w")).toEqual([]);
-			expect(await zshComplete(scriptPath, "mycli exec web -- ")).toEqual(["ls"]);
-			expect(await zshComplete(scriptPath, "mycli exec web -- ls ")).toEqual([]);
-		},
-		PTY_TIMEOUT,
-	);
+	// Each pty completion takes ~0.7s, so each row is its own test.
+	it.each<[string, string[]]>([
+		// Keeps filling argument slots and offers no flags.
+		["mycli seek -- ", ["lint"]],
+		["mycli seek lint -- ", ["cli"]],
+		["mycli seek lint --w", ["--watch"]],
+		["mycli seek lint -- --w", []],
+		// Offers the arguments before an afterDoubleDash argument only before `--`.
+		["mycli run ", ["lint"]],
+		["mycli run lint ", ["cli"]],
+		["mycli run lint cli ", ["cli"]],
+		["mycli exec web ", []],
+		// Offers an afterDoubleDash argument only after `--`.
+		["mycli run lint -- ", ["fix"]],
+		["mycli run -- x ", ["fix"]],
+		["mycli run lint -- --w", []],
+		["mycli exec web -- ", ["ls"]],
+		["mycli exec web -- ls ", []],
+	])("completes %j", async (line, expected) => {
+		expect(await zshComplete(scriptPath, line)).toEqual(expected);
+	});
 });
 
 async function isZshAvailable(): Promise<boolean> {
@@ -528,86 +460,19 @@ function shQuoteForZsh(value: string): string {
 }
 
 describe("renderZsh — url/path/json value-flag handling", () => {
-	const valueTypeFixture: CompletionCommand = {
-		name: "mycli",
-		flags: [
-			{
-				name: "out",
-				spellings: ["--out"],
-				type: "string",
-				takesValue: true,
-				valueCompletion: "files",
-			},
-			{
-				name: "endpoint",
-				spellings: ["--endpoint"],
-				type: "string",
-				takesValue: true,
-				valueCompletion: "none",
-			},
-			{
-				name: "config",
-				spellings: ["--config"],
-				type: "string",
-				takesValue: true,
-				valueCompletion: "none",
-			},
-			{ name: "name", spellings: ["--name"], type: "string", takesValue: true },
-		],
-		args: [],
-		subCommands: [],
-	};
-
-	it("emits _files action for path flags", () => {
+	it("emits _files for path and plain string flags, and an empty action for url and json flags", () => {
 		const script = renderZsh(valueTypeFixture, "mycli", "1.0.0");
 		// `:out:_files` — single-flag spec, value label is the flag name.
 		expect(script).toContain(":out:_files");
-	});
-
-	it("emits empty action (no completion) for url and json flags", () => {
-		const script = renderZsh(valueTypeFixture, "mycli", "1.0.0");
+		expect(script).toContain(":name:_files");
 		// `:endpoint: ` and `:config: ` — trailing space marks "no action".
 		expect(script).toContain(":endpoint: ");
 		expect(script).toContain(":config: ");
-		// And critically NOT `_files` for these.
 		expect(script).not.toContain(":endpoint:_files");
 		expect(script).not.toContain(":config:_files");
 	});
 
-	it("keeps _files action for plain string flags (no regression)", () => {
-		const script = renderZsh(valueTypeFixture, "mycli", "1.0.0");
-		expect(script).toContain(":name:_files");
-	});
-
 	it("applies the same path/url/json branches to positional args", () => {
-		const posFixture: CompletionCommand = {
-			name: "mycli",
-			flags: [],
-			args: [
-				{
-					name: "src",
-					type: "string",
-					required: true,
-					variadic: false,
-					valueCompletion: "files",
-				},
-				{
-					name: "endpoint",
-					type: "string",
-					required: true,
-					variadic: false,
-					valueCompletion: "none",
-				},
-				{
-					name: "payload",
-					type: "string",
-					required: true,
-					variadic: false,
-					valueCompletion: "none",
-				},
-			],
-			subCommands: [],
-		};
 		const script = renderZsh(posFixture, "mycli", "1.0.0");
 		expect(script).toContain(":src:_files");
 		expect(script).toContain(":endpoint: ");
