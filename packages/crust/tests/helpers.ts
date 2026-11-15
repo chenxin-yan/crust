@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
 
 import { which } from "@crustjs/utils/process";
@@ -45,6 +45,33 @@ export function floorRuntime(runtime: "node" | "bun"): string {
 		throw new Error(`mise could not provide ${runtime} ${version}: ${found.stderr || found.error}`);
 	}
 	return found.stdout.trim();
+}
+
+/**
+ * `names` and every workspace package npm installs with them: their `dependencies` and
+ * required `peerDependencies`, transitively. A test that installs a local build takes all of
+ * these from the workspace, because the versions a release PR bumps are not on npm yet.
+ */
+export function workspaceClosure(names: readonly string[]): Array<{ name: string; dir: string }> {
+	const packagesDir = join(import.meta.dirname, "..", "..");
+	const workspace = new Map<string, { dir: string; needs: string[] }>();
+	for (const entry of readdirSync(packagesDir)) {
+		const dir = join(packagesDir, entry);
+		const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+		const peers = Object.keys(pkg.peerDependencies ?? {}).filter(
+			(peer) => !pkg.peerDependenciesMeta?.[peer]?.optional,
+		);
+		workspace.set(pkg.name, { dir, needs: [...Object.keys(pkg.dependencies ?? {}), ...peers] });
+	}
+	const closure = new Map<string, string>();
+	const pending = [...names];
+	for (let name = pending.pop(); name !== undefined; name = pending.pop()) {
+		const pkg = workspace.get(name);
+		if (!pkg || closure.has(name)) continue;
+		closure.set(name, pkg.dir);
+		pending.push(...pkg.needs);
+	}
+	return [...closure].map(([name, dir]) => ({ name, dir }));
 }
 
 /** Runs `run` with `dir` first on PATH, where crust looks up compilers. */

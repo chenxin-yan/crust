@@ -22,7 +22,12 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { describe, expect, it } from "vite-plus/test";
 
-import { floorRuntime, hostTarget, seaNodeBinDir } from "../../crust/tests/helpers.ts";
+import {
+	floorRuntime,
+	hostTarget,
+	seaNodeBinDir,
+	workspaceClosure,
+} from "../../crust/tests/helpers.ts";
 import { isWithin } from "../../utils/src/path.ts";
 import { which } from "../../utils/src/process.ts";
 
@@ -176,16 +181,10 @@ describe("installed create-crust and crust (Linux/npm)", () => {
 				specs[pkg.name] = pathToFileURL(join(packs, packed.filename)).href;
 				versions[pkg.name] = pkg.version;
 			}
-			// utils has no root entry; any subpath output proves it is built.
-			for (const [name, builtOutput] of [
-				["core", "dist/index.js"],
-				["extensions", "dist/index.js"],
-				["style", "dist/index.js"],
-				["store", "dist/index.js"],
-				["utils", "dist/terminal.js"],
-			] as const) {
-				const dir = join(repoRoot, "packages", name);
-				if (!existsSync(join(dir, builtOutput))) throw new Error(`Build ${name} first.`);
+			// The scaffolded project's runtime dependencies, packed from their local builds.
+			const runtimePackages = workspaceClosure(["@crustjs/core", "@crustjs/extensions"]);
+			for (const { name, dir } of runtimePackages) {
+				if (!existsSync(join(dir, "dist"))) throw new Error(`Build ${name} first.`);
 				const pkg = readJson(join(dir, "package.json"));
 				// pnpm rewrites workspace ranges; disabling lifecycle scripts avoids source-tree writes.
 				const result = await run(
@@ -263,21 +262,16 @@ describe("installed create-crust and crust (Linux/npm)", () => {
 				expect(pkg.dependencies[`@crustjs/${name}`]).toBe(`^${versions[`@crustjs/${name}`]}`);
 			}
 			expect(pkg.devDependencies["@crustjs/crust"]).toBe(`^${versions["@crustjs/crust"]}`);
-			for (const name of ["core", "extensions"])
-				pkg.dependencies[`@crustjs/${name}`] = specs[`@crustjs/${name}`];
-			for (const name of ["crust", "style", "store", "utils"])
-				pkg.devDependencies[`@crustjs/${name}`] = specs[`@crustjs/${name}`];
+			pkg.devDependencies["@crustjs/crust"] = specs["@crustjs/crust"];
+			for (const { name } of runtimePackages)
+				(name in pkg.dependencies ? pkg.dependencies : pkg.devDependencies)[name] = specs[name];
 			// Explicit unpublished host provision, not a test of registry optional-dependency selection.
 			// Keep it optional/transitive so a direct platform bin cannot shadow the root shim.
 			pkg.overrides = { [host.name]: specs[host.name] };
 			writeFileSync(join(project, "package.json"), `${JSON.stringify(pkg, null, "\t")}\n`);
 			await install(project);
 			assertInstalled(project, [
-				"@crustjs/core",
-				"@crustjs/extensions",
-				"@crustjs/style",
-				"@crustjs/store",
-				"@crustjs/utils",
+				...runtimePackages.map(({ name }) => name),
 				"@crustjs/crust",
 				host.name,
 			]);
