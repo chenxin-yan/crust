@@ -272,6 +272,8 @@ Runtime packages can be archived too, but must keep the layout of `.crust/root/`
 
 Create `templates/` in your project, then build. Read the shipped copy with [`resolveArtifactDir("templates")`](/docs/api/crust#resolveartifactdirname) from `@crustjs/core`, not a path relative to the working directory. It works from the staged tree, an npm install, or a standalone executable.
 
+npm never publishes a `.gitignore`, `.npmignore`, or `.npmrc`, so `crust build` rejects them inside included directories. Store them as `_gitignore` and similar, then restore the name when your CLI copies the file; [`scaffold()`](/docs/modules/create#template-conventions) does this for you.
+
 Extensions can generate their own directories during build preparation. Preparation runs your entry module's top-level code, but not Command Actions. `--no-validate` skips preparation **and those directories**; see [Extension artifacts](/docs/modules/crust#extension-artifacts).
 
 ### Keep dependencies external

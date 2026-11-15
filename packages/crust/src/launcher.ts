@@ -101,6 +101,7 @@ if (process.platform === "win32") {
 \t}
 \t// Become the binary: one process, so signals and exit status reach it with no relay.
 \t// Node ignores SIGPIPE and SIGXFSZ, and ignored signals survive execve; handled ones reset.
+\t// Ignores Node inherited (nohup's SIGHUP) were reset at its startup, so none pass on.
 \tprocess.on("SIGPIPE", () => {});
 \tprocess.on("SIGXFSZ", () => {});
 \t// Early execve versions (e.g. Node 24.0.0) default to an empty environment.

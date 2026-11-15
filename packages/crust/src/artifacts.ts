@@ -7,7 +7,7 @@ import {
 	realpathSync,
 	statSync,
 } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { isWithin } from "@crustjs/utils/path";
 
@@ -74,12 +74,23 @@ export function collectIncludeDirs(
 }
 
 /**
+ * Names a template ships on purpose that `npm pack`/`npm publish` drop from
+ * every directory of a package whatever its `files` says, in any letter case.
+ * A dropped `.gitignore` or `.npmignore` also acts as ignore rules for its own
+ * directory. The rest of npm's ignore list (`.DS_Store`, `*.orig`, …) is junk
+ * nobody means to publish, so it stays silently dropped.
+ */
+const NPM_DROPPED_NAME = /^\.(?:gitignore|npmignore|npmrc)$/i;
+
+/**
  * Walks `dir` the way the dereferencing copy will (through symlinked
- * directories) and rejects any path whose real location leaves the project.
+ * directories) and rejects any path whose real location leaves the project,
+ * and any {@link NPM_DROPPED_NAME} name.
  */
 function assertResolvesInsideProject(cwd: string, entry: string, dir: string): void {
 	const realCwd = realpathSync(cwd);
 	const seen = new Set<string>();
+	const npmDropped: string[] = [];
 	const walk = (path: string): void => {
 		const real = realpathSync(path);
 		if (!isWithin(realCwd, real)) {
@@ -87,12 +98,22 @@ function assertResolvesInsideProject(cwd: string, entry: string, dir: string): v
 				`package.json crust.include entry ${JSON.stringify(entry)} resolves outside the project root: ${relative(cwd, path)} -> ${real}`,
 			);
 		}
+		if (NPM_DROPPED_NAME.test(basename(path))) npmDropped.push(relative(cwd, path));
 		// A symlink back to an ancestor would otherwise recurse forever.
 		if (seen.has(real) || !statSync(path).isDirectory()) return;
 		seen.add(real);
 		for (const child of readdirSync(path)) walk(join(path, child));
 	};
 	walk(dir);
+	if (npmDropped.length > 0) {
+		const listed = npmDropped
+			.sort()
+			.map((path) => `\n  ${path}`)
+			.join("");
+		throw new Error(
+			`package.json crust.include entry ${JSON.stringify(entry)} contains files npm leaves out of published packages:${listed}\n  Rename each (e.g. .gitignore -> _gitignore) and restore the name when your CLI copies it; scaffold() from @crustjs/create turns a leading _ on a file name into a dot.`,
+		);
+	}
 }
 
 export type ArtifactOwner = { command: string; directory: boolean; path: string };
