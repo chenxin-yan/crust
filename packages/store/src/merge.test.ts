@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { applyFieldDefaults } from "./merge.ts";
+import { applyFieldDefaults, withUnknownKeys } from "./merge.ts";
 import type { FieldsDef } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -68,7 +68,7 @@ describe("applyFieldDefaults", () => {
 
 	it("treats Object.prototype names as ordinary keys", () => {
 		const persisted = JSON.parse('{"constructor":"kept","toString":"t","__proto__":{"a":1}}');
-		const result = applyFieldDefaults(persisted, {}, false);
+		const result = withUnknownKeys({}, persisted, {});
 
 		expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
 		expect(Object.entries(result)).toEqual([
@@ -77,5 +77,30 @@ describe("applyFieldDefaults", () => {
 			["__proto__", { a: 1 }],
 		]);
 		expect(applyFieldDefaults(persisted, {})).toEqual({});
+	});
+
+	// ──────────────────────────────────────────────────────────────────────
+	// Unknown keys
+	// ──────────────────────────────────────────────────────────────────────
+
+	it("leaves out persisted keys the fields do not define", () => {
+		expect(applyFieldDefaults({ theme: "dark", extra: 1 }, BASIC_FIELDS)).toEqual({
+			theme: "dark",
+			verbose: false,
+			retries: 3,
+		});
+	});
+});
+
+describe("withUnknownKeys", () => {
+	it("adds persisted keys the fields do not define, without overriding the document", () => {
+		const persisted = { theme: "dark", extra: 1, verbose: true };
+		expect(withUnknownKeys({ theme: "light", verbose: false }, persisted, BASIC_FIELDS)).toEqual({
+			theme: "light",
+			verbose: false,
+			extra: 1,
+		});
+		expect(withUnknownKeys({ extra: 2 }, persisted, BASIC_FIELDS)).toEqual({ extra: 2 });
+		expect(withUnknownKeys({ theme: "x" }, undefined, BASIC_FIELDS)).toEqual({ theme: "x" });
 	});
 });

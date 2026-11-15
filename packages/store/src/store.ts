@@ -9,9 +9,15 @@ import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
 import { normalizeStandardIssues, type StandardSchema } from "@crustjs/utils/schema";
 
 import { CrustStoreError, type ValidationErrorDetails } from "./errors.ts";
-import { applyFieldDefaults, setDocumentValue } from "./merge.ts";
+import { applyFieldDefaults, setDocumentValue, withUnknownKeys } from "./merge.ts";
 import { resolveStorePath } from "./path.ts";
-import { deleteJson, readJson, type WriteJsonOptions, writeJson } from "./persistence.ts";
+import {
+	deleteJson,
+	readJson,
+	withFileLock,
+	type WriteJsonOptions,
+	writeJson,
+} from "./persistence.ts";
 import type {
 	CreateStoreOptions,
 	FieldsDef,
@@ -136,6 +142,20 @@ function jsonInstabilityIssues(document: StoreDocument): StoreValidatorIssue[] {
 		});
 	}
 	return issues;
+}
+
+/** Tail of each store file's mutation queue, shared by every store instance in the process. */
+const mutationQueues = new Map<string, Promise<unknown>>();
+
+/** Runs `task` after every mutation already queued for `filePath` settles, in call order. */
+function enqueue<T>(filePath: string, task: () => Promise<T>): Promise<T> {
+	const run = (mutationQueues.get(filePath) ?? Promise.resolve()).then(task);
+	const tail = run.catch(() => {});
+	mutationQueues.set(filePath, tail);
+	void tail.then(() => {
+		if (mutationQueues.get(filePath) === tail) mutationQueues.delete(filePath);
+	});
+	return run;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -323,22 +343,29 @@ export function createStore<const F extends FieldsDef>(
 		}
 	}
 
-	async function readRaw(): Promise<StoreDocument> {
+	async function readPersisted(): Promise<StoreDocument | undefined> {
 		const persisted = await readJson(filePath);
-		const persistedObject =
-			persisted !== undefined && isJsonObject(persisted) ? persisted : undefined;
-		if (persisted !== undefined && persistedObject === undefined) {
-			// A syntactically valid non-object root is still corrupt store data; do not silently reset it.
-			throw new CrustStoreError("PARSE", `Expected a JSON object in config file: ${filePath}`, {
-				path: filePath,
-			});
-		}
-		const merged = applyFieldDefaults(persistedObject, fields, pruneUnknown);
-		return normalizeStateTypes(merged);
+		if (persisted === undefined || isJsonObject(persisted)) return persisted;
+		// A syntactically valid non-object root is still corrupt store data; do not silently reset it.
+		throw new CrustStoreError("PARSE", `Expected a JSON object in store file: ${filePath}`, {
+			path: filePath,
+		});
+	}
+
+	/** The declared fields of a persisted object, with defaults and core coercion applied. */
+	function toDocument(persisted: StoreDocument | undefined): StoreDocument {
+		return normalizeStateTypes(applyFieldDefaults(persisted, fields));
+	}
+
+	/** Serialized within the process, then locked across processes. */
+	function mutate<T>(operation: "write" | "delete", task: () => Promise<T>): Promise<T> {
+		return enqueue(filePath, () =>
+			withFileLock(filePath, task, { operation, directoryMode: writeOptions.directoryMode }),
+		);
 	}
 
 	async function read(): Promise<Config> {
-		const document = await readRaw();
+		const document = toDocument(await readPersisted());
 		await runFieldValidators(document, "read");
 		// SAFETY: the document was normalized and validated against every field definition.
 		return document as Config;
@@ -347,33 +374,53 @@ export function createStore<const F extends FieldsDef>(
 	async function persist(
 		document: StoreDocument,
 		operation: Exclude<ValidationErrorDetails["operation"], "read">,
+		persisted: StoreDocument | undefined,
 	): Promise<Config> {
 		const normalized = normalizeStateTypes(document);
 		await runFieldValidators(normalized, operation);
-		await writeJson(filePath, normalized, writeOptions);
+		const output =
+			pruneUnknown === true ? normalized : withUnknownKeys(normalized, persisted, fields);
+		await writeJson(filePath, output, writeOptions);
 		// SAFETY: the normalized document was validated against every field definition.
 		return normalized as Config;
 	}
 
-	async function write(config: Config): Promise<Config> {
-		// SAFETY: field definitions constrain config values and schema outputs to JSON-compatible values.
-		return persist({ ...config } as StoreDocument, "write");
+	function write(config: Config): Promise<Config> {
+		return mutate("write", async () => {
+			// write() replaces a corrupt file, which leaves no unknown keys to keep.
+			const persisted =
+				pruneUnknown === true
+					? undefined
+					: await readPersisted().catch((err: unknown) => {
+							if (err instanceof CrustStoreError && err.is("PARSE")) return undefined;
+							throw err;
+						});
+			// SAFETY: field definitions constrain config values and schema outputs to JSON-compatible values.
+			return persist({ ...config } as StoreDocument, "write", persisted);
+		});
 	}
 
-	async function update(updater: StoreUpdater<Config>): Promise<Config> {
-		const current = await read();
-		const updated = updater(current);
-		// SAFETY: field definitions constrain updater output to JSON-compatible values.
-		return persist({ ...updated } as StoreDocument, "update");
+	function update(updater: StoreUpdater<Config>): Promise<Config> {
+		return mutate("write", async () => {
+			const persisted = await readPersisted();
+			const current = toDocument(persisted);
+			await runFieldValidators(current, "read");
+			// SAFETY: the document was normalized and validated against every field definition.
+			const updated = updater(current as Config);
+			// SAFETY: field definitions constrain updater output to JSON-compatible values.
+			return persist({ ...updated } as StoreDocument, "update", persisted);
+		});
 	}
 
-	async function patch(partial: Partial<Config>): Promise<Config> {
-		const current = await readRaw();
-		return persist({ ...current, ...partial }, "patch");
+	function patch(partial: Partial<Config>): Promise<Config> {
+		return mutate("write", async () => {
+			const persisted = await readPersisted();
+			return persist({ ...toDocument(persisted), ...partial }, "patch", persisted);
+		});
 	}
 
-	async function reset(): Promise<void> {
-		await deleteJson(filePath);
+	function reset(): Promise<void> {
+		return mutate("delete", () => deleteJson(filePath));
 	}
 
 	return { read, write, update, patch, reset };

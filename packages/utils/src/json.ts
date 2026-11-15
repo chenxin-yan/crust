@@ -5,7 +5,10 @@ export interface JsonObject {
 	[key: string]: JsonValue;
 }
 
-/** Preserve a type when all of its properties are recursively JSON-compatible. */
+/**
+ * Preserve a type when all of its properties are recursively JSON-compatible.
+ * An optional property may hold `undefined`, which serializes as an absent key.
+ */
 export type JsonCompatible<T> = T extends JsonValue
 	? T
 	: T extends (...arguments_: never[]) => void
@@ -13,7 +16,9 @@ export type JsonCompatible<T> = T extends JsonValue
 		: T extends readonly unknown[]
 			? { [K in keyof T]: JsonCompatible<T[K]> }
 			: T extends object
-				? { [K in keyof T]: JsonCompatible<T[K]> }
+				? {
+						[K in keyof T]: JsonCompatible<T[K]> | ({} extends Pick<T, K> ? undefined : never);
+					}
 				: never;
 
 /**

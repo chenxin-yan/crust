@@ -97,6 +97,19 @@ describe("configDir", () => {
 			const env = linuxEnv({ XDG_CONFIG_HOME: "relative/config" });
 			expect(configDir("my-cli", env)).toBe(join("/home/testuser", ".config", "my-cli"));
 		});
+
+		it("should reject a relative or empty home directory instead of returning a relative path", () => {
+			for (const homedir of ["relative", ""]) {
+				expect(() => configDir("my-cli", linuxEnv({ homedir }))).toThrow(
+					pathError("set HOME or XDG_CONFIG_HOME to an absolute path"),
+				);
+			}
+		});
+
+		it("should not need the home directory when XDG_CONFIG_HOME is set", () => {
+			const env = linuxEnv({ XDG_CONFIG_HOME: "/custom/config", homedir: "relative" });
+			expect(configDir("my-cli", env)).toBe(join("/custom/config", "my-cli"));
+		});
 	});
 
 	describe("macOS (XDG convention)", () => {
@@ -123,10 +136,17 @@ describe("configDir", () => {
 			);
 		});
 
-		it("should fall back to ~/AppData/Roaming when APPDATA is empty", () => {
-			const env = win32Env({ APPDATA: "" });
-			expect(configDir("my-cli", env)).toBe(
-				join("C:\\Users\\testuser", "AppData", "Roaming", "my-cli"),
+		it("should fall back to ~/AppData/Roaming when APPDATA is empty or relative", () => {
+			for (const APPDATA of ["", "AppData\\Roaming"]) {
+				expect(configDir("my-cli", win32Env({ APPDATA }))).toBe(
+					join("C:\\Users\\testuser", "AppData", "Roaming", "my-cli"),
+				);
+			}
+		});
+
+		it("should reject a relative home directory", () => {
+			expect(() => configDir("my-cli", win32Env({ homedir: "Users\\testuser" }))).toThrow(
+				pathError("set USERPROFILE or APPDATA to an absolute path"),
 			);
 		});
 	});

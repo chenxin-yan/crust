@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdir, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { z } from "zod";
 
 import { CrustStoreError } from "./errors.ts";
@@ -794,20 +794,18 @@ describe("Object.prototype key names", () => {
 
 	const PROTO_KEYS_JSON = '{"constructor":"kept","toString":"t","__proto__":{"a":1}}';
 
-	it("patch preserves unknown prototype-named keys on disk when pruneUnknown is false", async () => {
+	it("patch preserves unknown prototype-named keys on disk by default", async () => {
 		const filePath = join(tempDir, "config.json");
 		await writeFile(filePath, PROTO_KEYS_JSON);
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: BASIC_FIELDS,
-			pruneUnknown: false,
-		});
+		const store = createStore({ dirPath: tempDir, name: "config", fields: BASIC_FIELDS });
 
 		const patched = await store.patch({ theme: "dark" });
 
 		expect(Object.getPrototypeOf(patched)).toBe(Object.prototype);
-		expect(Object.hasOwn(patched, "__proto__")).toBe(true);
+		expect(Object.entries(patched)).toEqual([
+			["theme", "dark"],
+			["verbose", false],
+		]);
 		expect(JSON.parse(await readFile(filePath, "utf-8"))).toEqual(
 			JSON.parse(
 				'{"constructor":"kept","toString":"t","__proto__":{"a":1},"theme":"dark","verbose":false}',
@@ -886,4 +884,223 @@ describe("Object.prototype key names", () => {
 			}
 		}
 	}
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Unknown keys
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("unknown persisted keys", () => {
+	let tempDir: string;
+
+	beforeEach(async () => {
+		tempDir = createTempDir();
+		await mkdir(tempDir, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
+
+	const NEWER_FIELDS = {
+		name: { type: "string" },
+		theme: { type: "string" },
+	} as const satisfies FieldsDef;
+	const OLDER_FIELDS = { name: { type: "string" } } as const satisfies FieldsDef;
+
+	it("survive every mutation by default while read() returns only declared fields", async () => {
+		const filePath = join(tempDir, "config.json");
+		const newer = createStore({ dirPath: tempDir, name: "config", fields: NEWER_FIELDS });
+		const older = createStore({ dirPath: tempDir, name: "config", fields: OLDER_FIELDS });
+		await newer.write({ name: "Ada", theme: "solarized" });
+
+		expect(await older.read()).toEqual({ name: "Ada" });
+		expect(await older.patch({ name: "Ada L." })).toEqual({ name: "Ada L." });
+		expect(await older.update((current) => ({ ...current, name: "Ada K." }))).toEqual({
+			name: "Ada K.",
+		});
+		expect(await older.write({ name: "Grace" })).toEqual({ name: "Grace" });
+
+		expect(JSON.parse(await readFile(filePath, "utf-8"))).toEqual({
+			name: "Grace",
+			theme: "solarized",
+		});
+		expect(await newer.read()).toEqual({ name: "Grace", theme: "solarized" });
+	});
+
+	it("are dropped by the next mutation with pruneUnknown: true", async () => {
+		const filePath = join(tempDir, "config.json");
+		await writeFile(filePath, JSON.stringify({ name: "Ada", theme: "solarized" }));
+		const older = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: OLDER_FIELDS,
+			pruneUnknown: true,
+		});
+
+		expect(await older.read()).toEqual({ name: "Ada" });
+		expect(JSON.parse(await readFile(filePath, "utf-8"))).toEqual({
+			name: "Ada",
+			theme: "solarized",
+		});
+		await older.patch({ name: "Ada L." });
+		expect(JSON.parse(await readFile(filePath, "utf-8"))).toEqual({ name: "Ada L." });
+	});
+
+	it("do not stop write() from replacing a corrupt file", async () => {
+		const filePath = join(tempDir, "config.json");
+		await writeFile(filePath, "{oops");
+		const store = createStore({ dirPath: tempDir, name: "config", fields: OLDER_FIELDS });
+
+		await expect(store.patch({ name: "x" })).rejects.toMatchObject({
+			code: "PARSE",
+			message: `Malformed JSON in store file: ${filePath}`,
+		});
+		await store.write({ name: "Ada" });
+		expect(JSON.parse(await readFile(filePath, "utf-8"))).toEqual({ name: "Ada" });
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Serialized mutations and the cross-process lock
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("concurrent mutations", () => {
+	let tempDir: string;
+
+	beforeEach(async () => {
+		tempDir = createTempDir();
+		await mkdir(tempDir, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
+
+	const COUNTER_FIELDS = { n: { type: "number", default: 0 } } as const satisfies FieldsDef;
+	const counter = () => createStore({ dirPath: tempDir, name: "counter", fields: COUNTER_FIELDS });
+
+	it("keeps every overlapping update and patch, across store instances", async () => {
+		const a = counter();
+		const b = counter();
+		await Promise.all(
+			Array.from({ length: 10 }, (_, index) =>
+				index % 2 === 0
+					? a.update((current) => ({ n: current.n + 1 }))
+					: b.update((current) => ({ n: current.n + 1 })),
+			),
+		);
+		expect(await a.read()).toEqual({ n: 10 });
+		expect(await readdir(tempDir)).toEqual(["counter.json"]);
+	});
+
+	it("runs mutations in call order and keeps going after a failure", async () => {
+		const store = counter();
+		const results = await Promise.allSettled([
+			store.write({ n: 1 }),
+			store.update((current) => ({ n: current.n * 10 })),
+			store.update(() => {
+				throw new Error("boom");
+			}),
+			store.patch({ n: Number.NaN }),
+			store.update((current) => ({ n: current.n + 1 })),
+			store.reset(),
+			store.patch({ n: 7 }),
+		]);
+
+		expect(results.map((result) => result.status)).toEqual([
+			"fulfilled",
+			"fulfilled",
+			"rejected",
+			"rejected",
+			"fulfilled",
+			"fulfilled",
+			"fulfilled",
+		]);
+		expect(results[4]).toEqual({ status: "fulfilled", value: { n: 11 } });
+		expect(await store.read()).toEqual({ n: 7 });
+		expect(await readdir(tempDir)).toEqual(["counter.json"]);
+	});
+
+	it("waits for a live lock and takes over a stale one", async () => {
+		const lockPath = join(tempDir, "counter.json.lock");
+		const store = counter();
+
+		// Another machine's pid says nothing about its process, so its fresh lock is waited on.
+		await writeFile(lockPath, JSON.stringify({ pid: 2 ** 31 - 2, host: "elsewhere" }));
+		let settled = false;
+		const pending = store.patch({ n: 1 }).finally(() => {
+			settled = true;
+		});
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		expect(settled).toBe(false);
+		await rm(lockPath);
+		expect(await pending).toEqual({ n: 1 });
+
+		// A process that no longer exists left its lock behind.
+		await writeFile(lockPath, JSON.stringify({ pid: 2 ** 31 - 2, host: hostname() }));
+		expect(await store.patch({ n: 2 })).toEqual({ n: 2 });
+
+		// A lock older than the stale threshold is abandoned even when its pid is alive.
+		await writeFile(lockPath, JSON.stringify({ pid: process.pid, host: hostname() }));
+		const longAgo = new Date(Date.now() - 60_000);
+		await utimes(lockPath, longAgo, longAgo);
+		expect(await store.patch({ n: 3 })).toEqual({ n: 3 });
+		expect(await readdir(tempDir)).toEqual(["counter.json"]);
+	});
+
+	// Every owner exits right after releasing, so a waiter can read one owner's pid, find that
+	// process gone, and by then be looking at the next owner's lock.
+	it("leaves a successor's lock alone when the owner it read has since exited", async () => {
+		const lockPath = join(tempDir, "counter.json.lock");
+		const gone = 2 ** 31 - 2;
+		const successor = JSON.stringify({ pid: process.ppid, host: hostname() });
+		await writeFile(lockPath, JSON.stringify({ pid: gone, host: hostname() }));
+		const kill = process.kill.bind(process);
+		const spy = vi.spyOn(process, "kill").mockImplementation((pid, signal) => {
+			// The owner released and exited, and a successor took the lock, before this check.
+			if (pid === gone) writeFileSync(lockPath, successor);
+			return kill(pid, signal);
+		});
+		let settled = false;
+		const pending = counter()
+			.patch({ n: 1 })
+			.finally(() => {
+				settled = true;
+			});
+
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		spy.mockRestore();
+		expect(settled).toBe(false);
+		expect(readFileSync(lockPath, "utf-8")).toBe(successor);
+		await rm(lockPath);
+		expect(await pending).toEqual({ n: 1 });
+	});
+
+	it("does not remove a lock that another process took over", async () => {
+		const lockPath = join(tempDir, "counter.json.lock");
+		const other = JSON.stringify({ pid: process.ppid, host: hostname() });
+		const store = createStore({
+			dirPath: tempDir,
+			name: "counter",
+			fields: {
+				n: {
+					type: "number",
+					default: 0,
+					// Runs inside the lock: another process replaces this mutation's lock.
+					validate: () => writeFileSync(lockPath, other),
+				},
+			},
+		});
+
+		await store.patch({ n: 1 });
+
+		expect(readFileSync(lockPath, "utf-8")).toBe(other);
+	});
+
+	it("does not create a missing directory to reset", async () => {
+		const dirPath = join(tempDir, "missing");
+		await createStore({ dirPath, name: "counter", fields: COUNTER_FIELDS }).reset();
+		expect(existsSync(dirPath)).toBe(false);
+	});
 });
