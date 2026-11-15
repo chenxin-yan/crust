@@ -238,11 +238,7 @@ type AcceptsJsonMember<M> = M extends string | number | boolean | null
 	: M extends (...args: never[]) => unknown
 		? false
 		: M extends readonly unknown[]
-			? number extends M["length"]
-				? true
-				: false extends { [I in keyof M]: AcceptsJson<M[I]> }[number]
-					? false
-					: true
+			? AcceptsJsonElements<M>
 			: M extends object
 				? false extends {
 						[K in keyof M]-?: {} extends Pick<M, K> ? true : AcceptsJson<M[K]>;
@@ -250,6 +246,18 @@ type AcceptsJsonMember<M> = M extends string | number | boolean | null
 					? false
 					: true
 				: false;
+
+// Only required tuple elements, leading or trailing a rest, must accept JSON; an open array
+// accepts `[]`.
+type AcceptsJsonElements<M extends readonly unknown[]> = M extends readonly [infer H, ...infer R]
+	? AcceptsJson<H> extends true
+		? AcceptsJsonElements<R>
+		: false
+	: M extends readonly [...infer R, infer L]
+		? AcceptsJson<L> extends true
+			? AcceptsJsonElements<R>
+			: false
+		: true;
 
 type SchemaInputMessage<T> = T extends { type: "json" }
 	? "schema input must accept JSON data"

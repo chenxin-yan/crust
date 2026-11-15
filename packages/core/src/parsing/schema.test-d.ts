@@ -118,6 +118,7 @@ function _typecheckJsonFlagSchemaInputAcceptsJsonData() {
 			list: { type: "json", schema: z.array(z.number()), env: { name: "LIST" } },
 			either: { type: "json", schema: z.union([z.string(), z.date()]) },
 			record: { type: "json", schema: z.record(z.string(), z.unknown()) },
+			rest: { type: "json", schema: z.tuple([z.string()], z.date()) },
 		})
 		.action((_ctx) => {
 			type _flagOutput = Expect<Equal<(typeof _ctx.flags)["body"], z.output<typeof user>>>;
@@ -137,6 +138,10 @@ function _typecheckJsonFlagSchemaInputAcceptsJsonData() {
 	new Crust("cli").flags({
 		// @ts-expect-error -- a required Date property accepts no JSON object
 		body: { type: "json", schema: z.object({ at: z.date() }) },
+	});
+	new Crust("cli").flags({
+		// @ts-expect-error -- every tuple, whatever its rest, starts with a Date
+		rest: { type: "json", schema: z.tuple([z.date()], z.string()) },
 	});
 	new Crust("cli").flags({
 		// @ts-expect-error -- a string flag hands its schema a string, never an object

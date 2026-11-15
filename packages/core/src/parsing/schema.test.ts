@@ -199,6 +199,30 @@ describe("Standard Schema on json flags", () => {
 		});
 	});
 
+	it("rejects a run() value that is not JSON data, even when the schema input allows it", async () => {
+		let reached = false;
+		const app = new Crust("cli")
+			.flags({ data: { type: "json", schema: z.unknown() } })
+			.action(() => {
+				reached = true;
+			});
+		const notJson = [
+			new Date(0),
+			1n,
+			() => {},
+			new Map(),
+			{ site: new URL("https://a.test") },
+			[undefined],
+		];
+		for (const data of notJson) {
+			await expect(unwrap(app.run([], { flags: { data } }))).rejects.toMatchObject({
+				code: "PARSE",
+				message: "Expected a JSON value for --data.",
+			});
+		}
+		expect(reached).toBe(false);
+	});
+
 	it("reports invalid JSON text without echoing it", async () => {
 		const { app } = bodyApp();
 		const result = await executeCrust(app, ["--body", "{secret"]);

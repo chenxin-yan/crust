@@ -77,7 +77,7 @@ const flags = {
 
 Schema-backed flags set `type: "string" | "boolean"` only to declare whether a value token follows, plus `schema` and the syntax fields `description`, `short`, `aliases`, `multiple`, `env`, `delimiter`, and (boolean only) `noNegate`. The schema receives the raw `string | undefined` or `boolean | undefined`; with `multiple: true` it receives an array when the flag appears and `undefined` when omitted. As for arguments, TypeScript rejects a schema whose input type cannot accept a present value.
 
-A schema-backed flag with `type: "json"` takes one value token (no `multiple` or `delimiter`) and parses it as JSON. The schema receives the parsed `JsonValue | undefined`, and structured input (`run()`, `--input`, MCP) passes the JSON value itself. Its input type must accept JSON data, typed `run()` input takes that input type, and the schema's input JSON Schema is the flag's command input property.
+A schema-backed flag with `type: "json"` takes one value token (no `multiple` or `delimiter`) and parses it as JSON. The schema receives the parsed `JsonValue | undefined`, and structured input (`run()`, `--input`, MCP) passes the JSON value itself; a value that is not JSON data is a `PARSE` error. Its input type must accept JSON data, typed `run()` input takes that input type, and the schema's input JSON Schema is the flag's command input property.
 
 ```ts
 const flags = {

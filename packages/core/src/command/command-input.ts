@@ -5,15 +5,18 @@ import { coerceUrl } from "../parsing/coercers.ts";
 import type { RunInputPayload, RunInputValue, ValueType } from "../types.ts";
 import type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "./snapshot.ts";
 
+/** A JSON Schema `type` name. */
+type JsonSchemaTypeName = "string" | "number" | "integer" | "boolean" | "array" | "object" | "null";
+
 /**
  * JSON Schema fragment for one property of a command's JSON input. Schema-backed
  * definitions may carry any further keywords their JSON Schema declares.
  */
 export interface CommandInputPropertySchema {
-	readonly type?: "string" | "number" | "boolean" | "array";
+	readonly type?: JsonSchemaTypeName | readonly JsonSchemaTypeName[];
 	readonly description?: string;
 	readonly format?: string;
-	readonly enum?: readonly (string | boolean)[];
+	readonly enum?: readonly JsonValue[];
 	readonly items?: CommandInputPropertySchema;
 	readonly default?: unknown;
 	readonly [keyword: string]: unknown;
