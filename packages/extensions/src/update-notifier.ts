@@ -11,8 +11,6 @@ import {
 } from "@crustjs/core";
 import type { PackageManager } from "@crustjs/utils/package-manager";
 
-import { isCI } from "./is-ci.ts";
-
 const UPDATE_NOTIFIER: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:update-notifier");
 
 export type UpdateNotifierPackageManager = PackageManager;
@@ -152,8 +150,10 @@ const DEFAULT_REGISTRY_URL = "https://registry.npmjs.org";
 // ────────────────────────────────────────────────────────────────────────────
 
 /** CI runs, redirected stderr, and the user's opt-out skip the check entirely. */
-function isUpdateCheckSuppressed(): boolean {
-	return isCI() || !!process.env.NO_UPDATE_NOTIFIER || !process.stderr?.isTTY;
+async function isUpdateCheckSuppressed(): Promise<boolean> {
+	if (process.env.NO_UPDATE_NOTIFIER || !process.stderr?.isTTY) return true;
+	// Loaded lazily so importing the package does not load `@crustjs/utils`.
+	return (await import("@crustjs/utils/terminal")).isCI();
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -226,9 +226,9 @@ export const updateNotifier: UpdateNotifierExtension = /* @__PURE__ */ defineExt
 
 		// SAFETY: the `UpdateNotifierExtension` overloads require root `version` metadata without `currentVersion`.
 		const resolvedCurrentVersion = currentVersion ?? context.rootCommand.meta.version!;
-		if (isUpdateCheckSuppressed()) return;
 
 		try {
+			if (await isUpdateCheckSuppressed()) return;
 			// The registry check, cache, and notice (with @crustjs/style) load only when a check runs.
 			const { runUpdateCheck } = await import("./update-notifier-check.ts");
 			await runUpdateCheck({

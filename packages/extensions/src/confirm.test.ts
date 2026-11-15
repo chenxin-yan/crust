@@ -8,6 +8,7 @@ import { captureExecute } from "@crustjs/testing";
 import { runInteractive } from "@crustjs/testing/interactive";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
+import { promptConfirmation } from "./confirm-prompt.ts";
 import { ConfirmationRequiredError, confirm } from "./confirm.ts";
 import { help } from "./help.ts";
 import { input } from "./input.ts";
@@ -83,6 +84,23 @@ describe("confirm", () => {
 			for (const [stream, isTTY] of ttys) {
 				Object.defineProperty(stream, "isTTY", { configurable: true, value: isTTY });
 			}
+		}
+	});
+
+	it.each(["", "0", "FALSE"])("prompts on the process terminal when CI=%j", async (ci) => {
+		vi.stubEnv("CI", ci);
+		const harness = createPromptIO();
+		vi.spyOn(process, "stdin", "get").mockReturnValue(harness.io.input as typeof process.stdin);
+		vi.spyOn(process, "stderr", "get").mockReturnValue(
+			harness.io.output as unknown as typeof process.stderr,
+		);
+		try {
+			const confirmed = promptConfirmation("Drop the database?");
+			while (!harness.screen().includes("Drop the database?")) await setTimeout(5);
+			harness.keys("y", "enter");
+			expect(await confirmed).toBe(true);
+		} finally {
+			vi.restoreAllMocks();
 		}
 	});
 
