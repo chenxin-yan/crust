@@ -1606,7 +1606,18 @@ export class Crust<
 				);
 			}
 			seen.add(definition.name);
-			if (definition.variadic === true && index !== combined.length - 1) {
+			const last = index === combined.length - 1;
+			if (definition.afterDoubleDash === true && !last) {
+				throw new CrustError(
+					"DEFINITION",
+					`Only the last positional argument can take the tokens after "--"; "${definition.name}" is not last`,
+					{ subject: "argument", name: definition.name, reason: "after-double-dash-position" },
+				);
+			}
+			// A variadic may precede the final `afterDoubleDash` argument: `--` ends the variadic's tokens.
+			const beforeAfterDoubleDash =
+				index === combined.length - 2 && combined.at(-1)?.afterDoubleDash === true;
+			if (definition.variadic === true && !last && !beforeAfterDoubleDash) {
 				throw new CrustError(
 					"DEFINITION",
 					`Only the last positional argument can be variadic; "${definition.name}" is not last`,

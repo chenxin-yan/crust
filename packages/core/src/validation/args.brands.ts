@@ -35,11 +35,32 @@ type ArgChecks<A, Existing extends string> = A &
 	LocalValueBrand<A> &
 	EmptyArgDefinitionNameBrand<A>;
 
+type VariadicPositionError = {
+	readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic";
+};
+
+type AfterDoubleDashPositionError = {
+	readonly FIX_AFTER_DOUBLE_DASH_POSITION: 'Only the last positional argument can take the tokens after "--"';
+};
+
+/** A variadic may precede only a final `afterDoubleDash` argument, whose tokens follow `--`. */
+type HeadPositionBrand<Head, Tail extends readonly unknown[]> = (Head extends {
+	afterDoubleDash: true;
+}
+	? AfterDoubleDashPositionError
+	: unknown) &
+	(Head extends { variadic: true }
+		? Tail extends readonly [{ afterDoubleDash: true }]
+			? unknown
+			: VariadicPositionError
+		: unknown);
+
 /**
  * Per-arg validation tuple type. Resolves to `A` when the constraints are
- * satisfied: only the last arg is variadic, names are non-empty and unique,
- * custom parsers are synchronous, and literal defaults are within `choices`.
- * Invalid definitions receive a branded property.
+ * satisfied: only the last arg is variadic (or the one before a final
+ * `afterDoubleDash` arg), only the last arg sets `afterDoubleDash`, names are
+ * non-empty and unique, custom parsers are synchronous, and literal defaults
+ * are within `choices`. Invalid definitions receive a branded property.
  *
  * Generalized to work with any ordered tuple of object-typed definitions.
  * Uses `readonly object[]` to avoid TypeScript's weak type detection
@@ -56,30 +77,28 @@ export type ValidateArgs<
 	Existing extends string = never,
 > = A extends readonly [infer Head, ...infer Tail extends readonly object[]]
 	? Tail extends readonly [unknown, ...unknown[]]
-		? Head extends { variadic: true }
-			? readonly [
-					ArgChecks<Head, Existing> & {
-						readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic";
-					},
-					...ValidateArgs<Tail, Existing | DefName<Head>>,
-				]
-			: readonly [ArgChecks<Head, Existing>, ...ValidateArgs<Tail, Existing | DefName<Head>>]
+		? readonly [
+				ArgChecks<Head, Existing> & HeadPositionBrand<Head, Tail>,
+				...ValidateArgs<Tail, Existing | DefName<Head>>,
+			]
 		: readonly [ArgChecks<Head, Existing>]
 	: { [I in keyof A]: ArgChecks<A[I], Existing> };
 
-type BrandVariadicPosition<A extends readonly object[]> = {
-	[I in keyof A]: A[I] & {
-		readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic";
-	};
+type BrandPosition<A extends readonly object[], Error> = {
+	[I in keyof A]: A[I] & Error;
 };
 
 export type AppendArgsChecks<A extends ArgsDef, NewA extends ArgsDef> = A extends readonly [
 	...unknown[],
 	infer Last,
 ]
-	? Last extends { variadic: true }
-		? BrandVariadicPosition<ValidateArgs<NewA, ArgNames<A>>>
-		: ValidateArgs<NewA, ArgNames<A>>
+	? Last extends { afterDoubleDash: true }
+		? BrandPosition<ValidateArgs<NewA, ArgNames<A>>, AfterDoubleDashPositionError>
+		: Last extends { variadic: true }
+			? NewA extends readonly [{ afterDoubleDash: true }]
+				? ValidateArgs<NewA, ArgNames<A>>
+				: BrandPosition<ValidateArgs<NewA, ArgNames<A>>, VariadicPositionError>
+			: ValidateArgs<NewA, ArgNames<A>>
 	: ValidateArgs<NewA>;
 
 /** Errors-only view of {@link AppendArgsChecks}: `unknown` when no element carries a `FIX_*` brand. */

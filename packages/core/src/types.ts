@@ -140,12 +140,27 @@ interface ArgDefBase {
 	schema?: never;
 	/**
 	 * When `true`, collects all remaining positional values into an array.
+	 * Only the last argument may be variadic, or the one before a final
+	 * `afterDoubleDash` argument.
 	 *
 	 * The validated output is always an array, never `undefined`.
 	 * Required core variadics without defaults infer `[T, ...T[]]` after
 	 * required validation; other core variadics infer `T[]`.
 	 */
 	variadic?: true;
+	/**
+	 * When `true`, the argument takes only the tokens after `--` on the command
+	 * line (like clap's `Arg::last`): `run <task> [pkgs...] -- <extra...>`.
+	 * Only the last declared argument may set it; it may be variadic, and the
+	 * argument before it may be variadic too. Earlier arguments then fill only
+	 * from tokens before `--`, and tokens after `--` that this argument does not
+	 * take reach `rawArgs`. Typed `run()` and command input supply it by name
+	 * like any argument.
+	 *
+	 * Without it, tokens after `--` are never read as flags but still fill the
+	 * declared arguments left empty, in order.
+	 */
+	afterDoubleDash?: true;
 }
 
 /** A positional argument whose value is a string */
@@ -246,6 +261,8 @@ interface SchemaArgDef {
 	description?: string;
 	/** When `true`, collects all remaining raw tokens into a `string[]` for the schema */
 	variadic?: true;
+	/** When `true`, takes only the tokens after `--`; see `ArgDef`'s `afterDoubleDash` */
+	afterDoubleDash?: true;
 	/** Standard Schema that owns coercion, defaults, requiredness, and validation */
 	schema: StandardSchema;
 	type?: never;
@@ -259,7 +276,7 @@ interface SchemaArgDef {
  * Defines a single positional argument for a CLI command.
  *
  * Discriminated by `type` for type-safe `default` values. Boolean toggle
- * fields (`required`, `variadic`) only accept `true`.
+ * fields (`required`, `variadic`, `afterDoubleDash`) only accept `true`.
  *
  * @example
  * ```ts
@@ -702,13 +719,33 @@ type InputArgsPrefixes<
 		>
 	: Prefixes | Simplify<Supplied>;
 
-/** Supplied positional values form a prefix; defaults do not fill input gaps. */
+// An `afterDoubleDash` argument is given after `--` on argv, so it never follows the others' prefix.
+type InputArgsSplit<A extends ArgsDef> = A extends readonly [
+	...infer Init extends ArgsDef,
+	infer Last extends ArgDef & { afterDoubleDash: true },
+]
+	? InputArgsPrefixes<Init> extends infer Prefix
+		? Prefix extends unknown
+			? Simplify<
+					Prefix &
+						(RequiredArgNames<[Last]> extends never
+							? { [K in Last["name"]]?: InputArgValue<Last> | undefined }
+							: { [K in Last["name"]]: InputArgValue<Last> })
+				>
+			: never
+		: never
+	: InputArgsPrefixes<A>;
+
+/**
+ * Supplied positional values form a prefix; defaults do not fill input gaps. A final
+ * `afterDoubleDash` argument is independent of that prefix.
+ */
 export type InputArgs<A extends ArgsDef> = number extends A["length"]
 	? never
 	: IsUnion<A> extends true
 		? never
 		: IsClosedName<A[number]["name"]> extends true
-			? InputArgsPrefixes<A>
+			? InputArgsSplit<A>
 			: never;
 
 // Distribute before inspecting keys: each alternative must permit omission.

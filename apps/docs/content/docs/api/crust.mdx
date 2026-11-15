@@ -127,7 +127,7 @@ const copy = new Crust("copy").args(
 );
 ```
 
-Names must be unique, custom `parse` functions must be synchronous, and only the last argument across all calls may be variadic. A schema-backed argument receives the raw string (`string[]` when variadic, `undefined` when absent); its schema owns coercion, defaults, requiredness, and validation, so it cannot also set `type`, `default`, `required`, `choices`, or `parse`.
+Names must be unique, custom `parse` functions must be synchronous, and only the last argument across all calls may be variadic, or the one right before a final [`afterDoubleDash`](/docs/api/types#argdef) argument. Only the last argument may set `afterDoubleDash`. A schema-backed argument receives the raw string (`string[]` when variadic, `undefined` when absent); its schema owns coercion, defaults, requiredness, and validation, so it cannot also set `type`, `default`, `required`, `choices`, or `parse`.
 
 ## `.flags(flags)`
 

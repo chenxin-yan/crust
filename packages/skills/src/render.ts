@@ -443,7 +443,7 @@ function renderArgsTable(args: readonly DocumentationArg[]): string[] {
 	lines.push("| -------- | ---- | -------- | ----------- |");
 
 	for (const arg of args) {
-		const name = arg.variadic ? `${arg.name}...` : arg.name;
+		const name = `${arg.afterDoubleDash ? "-- " : ""}${arg.name}${arg.variadic ? "..." : ""}`;
 		const required = arg.required ? "Yes" : "No";
 		const desc = escapeTableCell(formatFieldDescription(arg));
 		lines.push(`| \`${name}\` | ${displayType(arg.type)} | ${required} | ${desc} |`);

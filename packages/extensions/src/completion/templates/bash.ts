@@ -16,7 +16,7 @@ import type { CompletionCommand } from "../spec.ts";
  *    Alpine, NixOS without the package).
  * 2. Walks `COMP_WORDS` left-to-right, advancing a `cmd_path` through
  *    the static command tree. Stops walking at the `--` end-of-options
- *    terminator and skips value-taking flag pairs so we don't mistake a
+ *    terminator (Core routes nothing after it) and skips value-taking flag pairs so we don't mistake a
  *    flag value for a subcommand. Only exact value-flag spellings are
  *    skipped: a short bundle ending in a value short (`-qo out`) is not
  *    recognised, so its value token stops routing. Fish's
@@ -31,6 +31,8 @@ import type { CompletionCommand } from "../spec.ts";
  *    - else if the current token starts with `-`, offers the flag set,
  *    - else offers the subcommand list and the resolved command's
  *      positional choices (or files for free-form positionals).
+ *    After `--` only positional choices are offered: tokens there fill the
+ *    remaining argument slots, or only an `afterDoubleDash` argument.
  * 4. Registers via `complete -F _<bin> <bin>` with the bin name passed
  *    through {@link bashSingleQuote}.
  */
@@ -200,6 +202,8 @@ interface ArgChoiceEntry {
 	variadicFrom?: number;
 	/** Space-joined value list for the variadic tail (validated, unquoted). */
 	variadicValues?: string;
+	/** Slot of an `afterDoubleDash` argument; always a fixed slot, even when variadic. */
+	ddSlot?: number;
 }
 
 /**
@@ -214,6 +218,8 @@ interface ArgSuppressEntry {
 	slots: ReadonlyArray<number>;
 	/** Slot index from which variadic suppression applies, or `undefined`. */
 	variadicFrom?: number;
+	/** Slot of an `afterDoubleDash` argument, as in {@link ArgChoiceEntry}. */
+	ddSlot?: number;
 }
 
 /**
@@ -228,16 +234,17 @@ function collectArgSuppressCases(
 ): void {
 	const slots: number[] = [];
 	let variadicFrom: number | undefined;
+	const ddSlot = ddSlotOf(node);
 	node.args.forEach((arg, idx) => {
 		if (arg.valueCompletion !== "none") return;
-		if (arg.variadic) {
+		if (arg.variadic && !arg.afterDoubleDash) {
 			variadicFrom = idx;
 		} else {
 			slots.push(idx);
 		}
 	});
 	if (slots.length > 0 || variadicFrom !== undefined) {
-		out.push({ cmdPath, slots, variadicFrom });
+		out.push({ cmdPath, slots, variadicFrom, ddSlot });
 	}
 	for (const sub of node.subCommands) {
 		const subPath = childPath(cmdPath, sub.name);
@@ -261,8 +268,9 @@ function collectArgChoiceCases(
 	let variadicFrom: number | undefined;
 	let variadicValues: string | undefined;
 	let hasAny = false;
+	const ddSlot = ddSlotOf(node);
 	node.args.forEach((arg, idx) => {
-		if (arg.variadic) {
+		if (arg.variadic && !arg.afterDoubleDash) {
 			if (arg.choices !== undefined) {
 				variadicFrom = idx;
 				// Validated bare values — see comment in `collectFlagValueCases`.
@@ -279,12 +287,41 @@ function collectArgChoiceCases(
 		}
 	});
 	if (hasAny) {
-		out.push({ cmdPath, bySlot, variadicFrom, variadicValues });
+		out.push({ cmdPath, bySlot, variadicFrom, variadicValues, ddSlot });
 	}
 	for (const sub of node.subCommands) {
 		const subPath = childPath(cmdPath, sub.name);
 		collectArgChoiceCases(subPath, sub, out);
 	}
+}
+
+/** Slot index of the command's `afterDoubleDash` argument (always the last), if any. */
+function ddSlotOf(node: CompletionCommand): number | undefined {
+	return node.args.at(-1)?.afterDoubleDash ? node.args.length - 1 : undefined;
+}
+
+/** A command whose last argument sets `afterDoubleDash`. */
+interface DdCommand {
+	cmdPath: string;
+	/** The argument's slot index. */
+	slot: number;
+	variadic: boolean;
+	/** `true` when the argument before it is variadic, so it takes every slot before `--`. */
+	beforeVariadic: boolean;
+}
+
+/** Every command with an `afterDoubleDash` argument. */
+function collectDdCommands(cmdPath: string, node: CompletionCommand, out: DdCommand[]): void {
+	const slot = ddSlotOf(node);
+	if (slot !== undefined) {
+		out.push({
+			cmdPath,
+			slot,
+			variadic: node.args[slot]?.variadic === true,
+			beforeVariadic: node.args[slot - 1]?.variadic === true,
+		});
+	}
+	for (const sub of node.subCommands) collectDdCommands(childPath(cmdPath, sub.name), sub, out);
 }
 
 /**
@@ -336,6 +373,9 @@ export function renderBash(
 
 	const argSuppressEntries: ArgSuppressEntry[] = [];
 	collectArgSuppressCases("", spec, argSuppressEntries);
+
+	const ddCommands: DdCommand[] = [];
+	collectDdCommands("", spec, ddCommands);
 
 	const lines: string[] = [];
 
@@ -431,10 +471,9 @@ export function renderBash(
 	lines.push("");
 	lines.push("\twhile (( i < cword )); do");
 	lines.push('\t\tlocal w="${words[$i]}"');
-	// `--` terminator: stop subcommand routing for the rest of the line.
+	// `--` terminator: stop subcommand routing; the scan below sees it.
 	lines.push('\t\tif [[ "$w" == "--" ]]; then');
-	lines.push("\t\t\tend_of_options=1");
-	lines.push("\t\t\t((i++)); break");
+	lines.push("\t\t\tbreak");
 	lines.push("\t\tfi");
 	// `--name=value` form: the equals sign is part of one token, so we
 	// don't need to skip a following value token.
@@ -466,19 +505,22 @@ export function renderBash(
 	lines.push("\tdone");
 	lines.push("");
 
-	// After `--`: stop offering subcommands/flags entirely; bash falls
-	// through to file completion via `complete -o default`.
-	lines.push("\tif (( end_of_options )); then");
-	lines.push("\t\treturn");
-	lines.push("\tfi");
+	// Routing stops at the first positional, so look for `--` up to the
+	// cursor. Core reads `--` right after a value flag as a missing value,
+	// so any `--` here ends options.
+	lines.push("\tlocal _dd");
+	lines.push("\tfor (( _dd = i; _dd < cword; _dd++ )); do");
+	lines.push('\t\tif [[ "${words[_dd]}" == "--" ]]; then end_of_options=1; break; fi');
+	lines.push("\tdone");
 	lines.push("");
+	// After `--` nothing is a flag or a flag value: skip to positional slots.
 
 	// `--name=value` partial: split, look up, then offer choice values or
 	// path candidates, or suppress the file fallback. `compgen -P` / the
 	// file helper prefix each candidate with `${_flag}=` so bash's
 	// command-line replacement substitutes the full token (otherwise
 	// readline would replace `--target=br` with bare `browser`).
-	lines.push('\tif [[ "$cur" == --*=* ]]; then');
+	lines.push('\tif (( ! end_of_options )) && [[ "$cur" == --*=* ]]; then');
 	lines.push('\t\tlocal _flag="${cur%%=*}"');
 	lines.push('\t\tlocal _value="${cur#*=}"');
 	pushFlagValueCase("\t\t", "$_flag", "$_value", "${_flag}=");
@@ -491,41 +533,50 @@ export function renderBash(
 	// Choices → offer the value list; path → explicit file candidates;
 	// url/json → suppress the `complete -o default` filename fallback.
 	if (flagValueCases.length > 0) {
-		pushFlagValueCase("\t", "$prev", "$cur");
+		lines.push("\tif (( ! end_of_options )); then");
+		pushFlagValueCase("\t\t", "$prev", "$cur");
+		lines.push("\tfi");
 		lines.push("");
 	}
 
 	// Free-form value flag context: previous token is a known
 	// value-taking flag with no choices and no typed override → fall
 	// through to file completion via `complete -o default`.
-	lines.push(`\tif __${ident}_prev_is_value_flag; then`);
+	lines.push(`\tif (( ! end_of_options )) && __${ident}_prev_is_value_flag; then`);
 	lines.push("\t\treturn");
 	lines.push("\tfi");
 	lines.push("");
 
 	// Default branch: flags vs subcmds vs positional choices.
-	lines.push('\tif [[ "$cur" == -* ]]; then');
+	lines.push('\tif (( ! end_of_options )) && [[ "$cur" == -* ]]; then');
 	lines.push('\t\tCOMPREPLY=( $(compgen -W "$flags" -- "$cur") )');
 	lines.push("\telse");
 	const needsPosWalk = argChoiceEntries.length > 0 || argSuppressEntries.length > 0;
 	if (needsPosWalk) {
 		// Count completed positional tokens between the resolved command
-		// path and the cursor. Token classes we *skip*:
-		//  - `--`                  (end-of-options terminator)
+		// path and the cursor. Before `--`, token classes we *skip*:
 		//  - `--name=value`        (single token, value is inlined)
 		//  - bare flags `-*`       (and the next token if the flag takes a value)
-		// What remains is positional values. `pos_idx` is the slot the
-		// cursor is currently filling (0 for the first positional slot).
+		// What remains is positional values. Every token after `--` is one
+		// (`pos_after`). `pos_idx` is the slot the cursor is currently
+		// filling (0 for the first positional slot).
 		lines.push("\t\tlocal pos_idx=0");
+		lines.push("\t\tlocal pos_after=0");
+		lines.push("\t\tlocal _pidx_dd=0");
 		lines.push("\t\tlocal _pidx_j=$i");
 		lines.push("\t\tlocal _pidx_skip_next=0");
 		lines.push("\t\twhile (( _pidx_j < cword )); do");
 		lines.push('\t\t\tlocal _pidx_w="${words[$_pidx_j]}"');
+		lines.push("\t\t\tif (( _pidx_dd )); then");
+		lines.push("\t\t\t\tpos_after=$((pos_after + 1))");
+		lines.push("\t\t\t\t((_pidx_j++)); continue");
+		lines.push("\t\t\tfi");
 		lines.push("\t\t\tif (( _pidx_skip_next )); then");
 		lines.push("\t\t\t\t_pidx_skip_next=0");
 		lines.push("\t\t\t\t((_pidx_j++)); continue");
 		lines.push("\t\t\tfi");
 		lines.push('\t\t\tif [[ "$_pidx_w" == "--" ]]; then');
+		lines.push("\t\t\t\t_pidx_dd=1");
 		lines.push("\t\t\t\t((_pidx_j++)); continue");
 		lines.push("\t\t\tfi");
 		lines.push('\t\t\tif [[ "$_pidx_w" == --*=* ]]; then');
@@ -547,6 +598,32 @@ export function renderBash(
 		lines.push("\t\t\tpos_idx=$((pos_idx + 1))");
 		lines.push("\t\t\t((_pidx_j++))");
 		lines.push("\t\tdone");
+		// Core routes a subcommand only as the first positional before `--`; decide
+		// before the slot remap below, which hides slot 0 from an `afterDoubleDash` argument.
+		lines.push("\t\tlocal _pidx_first=$(( pos_idx == 0 && ! end_of_options ))");
+		// Tokens after `--` keep filling slots in order, except that an
+		// `afterDoubleDash` argument takes them all and nothing before `--`.
+		// Slot -1 matches no case.
+		if (ddCommands.length === 0) {
+			lines.push("\t\tpos_idx=$((pos_idx + pos_after))");
+		} else {
+			lines.push('\t\tcase "$cmd_path" in');
+			for (const dd of ddCommands) {
+				lines.push(`\t\t\t"${bashDoubleQuoteInner(dd.cmdPath)}")`);
+				lines.push("\t\t\t\tif (( end_of_options )); then");
+				lines.push(
+					dd.variadic
+						? `\t\t\t\t\tpos_idx=${dd.slot}`
+						: `\t\t\t\t\tif (( pos_after == 0 )); then pos_idx=${dd.slot}; else pos_idx=-1; fi`,
+				);
+				lines.push(`\t\t\t\telif (( pos_idx >= ${dd.slot} )); then`);
+				lines.push(`\t\t\t\t\tpos_idx=${dd.beforeVariadic ? dd.slot - 1 : -1}`);
+				lines.push("\t\t\t\tfi");
+				lines.push("\t\t\t\t;;");
+			}
+			lines.push("\t\t\t*) pos_idx=$((pos_idx + pos_after)) ;;");
+			lines.push("\t\tesac");
+		}
 		lines.push('\t\tlocal pos_choices=""');
 		// Per-command, nested per-slot case. The slot ladder includes a
 		// `*)` fallback for variadic-with-choices commands so every slot
@@ -556,9 +633,11 @@ export function renderBash(
 			lines.push(`\t\t\t"${bashDoubleQuoteInner(entry.cmdPath)}")`);
 			lines.push('\t\t\t\tcase "$pos_idx" in');
 			entry.bySlot.forEach((values, idx) => {
-				if (values === undefined) return;
+				// The `afterDoubleDash` slot keeps an empty case so the variadic `*)` before it can't claim it.
+				if (values === undefined && idx !== entry.ddSlot) return;
 				lines.push(`\t\t\t\t\t${idx})`);
-				lines.push(`\t\t\t\t\t\tpos_choices="${bashDoubleQuoteInner(values)}"`);
+				if (values !== undefined)
+					lines.push(`\t\t\t\t\t\tpos_choices="${bashDoubleQuoteInner(values)}"`);
 				lines.push("\t\t\t\t\t\t;;");
 			});
 			if (entry.variadicFrom !== undefined && entry.variadicValues !== undefined) {
@@ -586,6 +665,9 @@ export function renderBash(
 					lines.push("\t\t\t\t\t\tcompopt +o default 2>/dev/null");
 					lines.push("\t\t\t\t\t\t;;");
 				}
+				if (entry.ddSlot !== undefined && !entry.slots.includes(entry.ddSlot)) {
+					lines.push(`\t\t\t\t\t${entry.ddSlot}) ;;`);
+				}
 				if (entry.variadicFrom !== undefined) {
 					lines.push("\t\t\t\t\t*)");
 					lines.push(
@@ -602,13 +684,17 @@ export function renderBash(
 		// At slot 0, blend positional choices with subcommand candidates so
 		// commands that offer BOTH a positional choice list AND subcommands
 		// surface both. At slot >0 we never offer subcommands.
-		lines.push("\t\tif (( pos_idx == 0 )); then");
+		lines.push("\t\tif (( _pidx_first )); then");
 		lines.push('\t\t\tCOMPREPLY=( $(compgen -W "$pos_choices $subcmds" -- "$cur") )');
 		lines.push("\t\telse");
-		lines.push('\t\t\tCOMPREPLY=( $(compgen -W "$pos_choices" -- "$cur") )');
+		// compgen fails without a match, which `set -e` callers would exit on; after
+		// `--` a dash-led word lands here and usually matches nothing.
+		lines.push('\t\t\tCOMPREPLY=( $(compgen -W "$pos_choices" -- "$cur") ) || :');
 		lines.push("\t\tfi");
 	} else {
-		lines.push('\t\tCOMPREPLY=( $(compgen -W "$subcmds" -- "$cur") )');
+		lines.push("\t\tif (( ! end_of_options )); then");
+		lines.push('\t\t\tCOMPREPLY=( $(compgen -W "$subcmds" -- "$cur") )');
+		lines.push("\t\tfi");
 	}
 	lines.push("\tfi");
 	lines.push("}");

@@ -250,3 +250,57 @@ describe("typed programmatic invocation", () => {
 		});
 	});
 });
+
+describe("afterDoubleDash arguments", () => {
+	function taskRunner() {
+		const received: unknown[] = [];
+		const binder = defineExtension(defineExtensionId("dd-binder"))
+			.flags({ bind: { type: "boolean" } })
+			.preRun((ctx) => {
+				if (ctx.flags.bind) ctx.bindInput({ args: { extra: ["--bound"] } });
+			});
+		const app = new Crust("mono").extend(binder).add(
+			defineCommand("run", (command) =>
+				command
+					.args(
+						{ name: "task", type: "string", required: true },
+						{ name: "pkgs", type: "string", variadic: true },
+						{ name: "extra", type: "string", variadic: true, afterDoubleDash: true },
+					)
+					.action(({ args, rawArgs }) => {
+						type _extra = Expect<Equal<typeof args.extra, string[]>>;
+						received.push({ args, rawArgs });
+					}),
+			),
+		);
+		return { app, received };
+	}
+
+	it("splits `run <task> [pkgs...] -- <extra...>` on argv", async () => {
+		const { app, received } = taskRunner();
+		const stderr: string[] = [];
+		const io = { stdout: () => {}, stderr: (line: string) => void stderr.push(line) };
+		expect(await app.execute({ argv: ["run", "build", "core", "--", "--watch", "src"], io })).toBe(
+			0,
+		);
+		expect(await app.execute({ argv: ["run", "--", "build"], io })).toBe(1);
+		expect(stderr.join("\n")).toContain('Missing required argument "<task>"');
+		expect(received).toEqual([
+			{ args: { task: "build", pkgs: ["core"], extra: ["--watch", "src"] }, rawArgs: [] },
+		]);
+	});
+
+	it("takes it by name from run() and bindInput, with earlier arguments omitted", async () => {
+		const { app, received } = taskRunner();
+		expect(
+			await app.run(["run"], { args: { task: "build", extra: ["--watch"] }, raw: ["x"] }),
+		).toMatchObject({ status: "completed" });
+		expect(await app.execute({ argv: ["run", "build", "--bind"], io: { stdout: () => {} } })).toBe(
+			0,
+		);
+		expect(received).toEqual([
+			{ args: { task: "build", pkgs: [], extra: ["--watch"] }, rawArgs: ["x"] },
+			{ args: { task: "build", pkgs: [], extra: ["--bound"] }, rawArgs: [] },
+		]);
+	});
+});

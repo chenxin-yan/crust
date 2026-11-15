@@ -35,7 +35,17 @@ const args = [
 
 A core variadic value is always an array. A required core variadic without a default resolves to a nonempty tuple; an omitted variadic with a scalar `default` resolves to `[default]`. `parse` runs once per element.
 
-A schema-backed argument has `name`, optional `description` and `variadic`, and a Standard Schema that receives `string | undefined` (or `string[]` when variadic). The schema owns coercion, defaults, requiredness, choices, and validation, so `type`, `required`, `default`, `choices`, and `parse` are unavailable. Its output type reaches the Command Action. TypeScript rejects a schema whose input type cannot accept a present value (`z.number()` instead of `z.coerce.number()`).
+`afterDoubleDash: true` makes the last argument take only the tokens after `--` on the command line, like clap's `Arg::last`; the other arguments then fill only from tokens before `--`, and leftover tokens after it reach `rawArgs`. It may be variadic, and so may the argument before it. Its value type is unchanged, and typed `run()` input supplies it by name. Setting it on any other argument is a TypeScript error (`FIX_AFTER_DOUBLE_DASH_POSITION`) and a `DEFINITION` error with reason `after-double-dash-position`. See [Only after `--`](/docs/guide/arguments-and-flags#only-after---).
+
+```ts
+const args = [
+  { name: "task", type: "string", required: true },
+  { name: "packages", type: "string", variadic: true },
+  { name: "extra", type: "string", variadic: true, afterDoubleDash: true },
+] as const satisfies ArgsDef;
+```
+
+A schema-backed argument has `name`, optional `description`, `variadic`, and `afterDoubleDash`, and a Standard Schema that receives `string | undefined` (or `string[]` when variadic). The schema owns coercion, defaults, requiredness, choices, and validation, so `type`, `required`, `default`, `choices`, and `parse` are unavailable. Its output type reaches the Command Action. TypeScript rejects a schema whose input type cannot accept a present value (`z.number()` instead of `z.coerce.number()`).
 
 ```ts
 const args = [{ name: "port", schema: z.coerce.number().int().min(1) }] as const satisfies ArgsDef;

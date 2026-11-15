@@ -43,6 +43,8 @@ export interface ArgSnapshot {
 	readonly required?: boolean;
 	/** `true` when the argument collects all remaining positionals into an array. */
 	readonly variadic?: boolean;
+	/** `true` when the argument takes only the tokens after `--` on the command line. */
+	readonly afterDoubleDash?: boolean;
 	/** Static enum of accepted values, e.g. `["json", "text"]`. */
 	readonly choices?: readonly string[];
 	/** Declared default value; `URL` defaults are serialized to their `href` string. */
@@ -192,6 +194,7 @@ function snapshotArg(def: ArgDef): ArgSnapshot {
 		description: def.description,
 		required: effectiveRequired(def),
 		variadic: def.variadic,
+		afterDoubleDash: def.afterDoubleDash,
 		choices: def.choices ? Object.freeze([...def.choices]) : undefined,
 		default: serializableDefault(def.default),
 		inputSchema: def.schema && standardJsonSchema(def.schema, "input"),

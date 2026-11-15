@@ -375,6 +375,69 @@ describe("nextSteps", () => {
 		]);
 	});
 
+	it("prints an afterDoubleDash argument after -- and replays it", async () => {
+		const seen: unknown[] = [];
+		const run = defineCommand("run", (cmd) =>
+			cmd
+				.args(
+					{ name: "task", type: "string" },
+					{ name: "pkgs", type: "string", variadic: true },
+					{ name: "extra", type: "string", variadic: true, afterDoubleDash: true },
+				)
+				.action(({ args, rawArgs }) => void seen.push([args, rawArgs])),
+		);
+		const exec = defineCommand("exec", (cmd) =>
+			cmd
+				.args(
+					{ name: "pod", type: "string" },
+					{ name: "command", type: "string", afterDoubleDash: true },
+				)
+				.action(({ args, rawArgs }) => void seen.push([args, rawArgs])),
+		);
+		const app = new Crust("app")
+			.extend(nextSteps())
+			.add(run, exec)
+			.command("suggest", (cmd) =>
+				cmd.use(nextSteps).action(async ({ ctx }) => {
+					const next = await ctx.nextSteps;
+					next.add(run, { args: { task: "build", pkgs: ["core"], extra: ["--watch", "-5"] } });
+					next.add(run, { args: { extra: ["--watch"] } });
+					next.add(run, { args: { task: "build" } });
+					next.add(exec, { args: { pod: "web", command: "ls" }, raw: ["-la"] });
+					// Skipped: tokens before `--` have no escape, and raw would fill `extra`.
+					next.add(run, { args: { task: "-x" } });
+					next.add(run, { args: { task: "build" }, raw: ["x"] });
+					next.add(exec, { args: { pod: "web" }, raw: ["x"] });
+				}),
+			);
+
+		const { stderr } = await captureExecute(app, ["suggest"]);
+		const all = stderr.split("\n");
+		expect(all.slice(0, 3)).toEqual([
+			'nextSteps(): skipped "app run": argument value "-x" starts with "-" before "--"',
+			'nextSteps(): skipped "app run": raw tokens would fill argument "extra"',
+			'nextSteps(): skipped "app exec": raw tokens would fill argument "command"',
+		]);
+		const lines = all.slice(4);
+		expect(lines).toEqual([
+			"  app run build core -- --watch -5",
+			"  app run -- --watch",
+			"  app run build",
+			"  app exec web -- ls -la",
+		]);
+		for (const line of lines) {
+			expect(await captureExecute(app, shellWords(line.trim()).slice(1))).toMatchObject({
+				exitCode: 0,
+			});
+		}
+		expect(seen).toEqual([
+			[{ task: "build", pkgs: ["core"], extra: ["--watch", "-5"] }, []],
+			[{ task: undefined, pkgs: [], extra: ["--watch"] }, []],
+			[{ task: "build", pkgs: [], extra: [] }, []],
+			[{ pod: "web", command: "ls" }, ["-la"]],
+		]);
+	});
+
 	it("replays infinite numbers and negative zero and skips NaN, which argv cannot spell", async () => {
 		const seen: unknown[] = [];
 		const wait = defineCommand("wait", (cmd) =>
