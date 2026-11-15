@@ -32,12 +32,9 @@ describe("password — masked rendering", () => {
 		const prompt = renderPrompt(password, { message: "Password?", mask: "●" });
 
 		await tick();
-		prompt.type("x");
-		await tick();
-		prompt.type("y");
+		prompt.type("xy");
 		await tick();
 
-		// Custom mask character should appear in output
 		expect(prompt.screen()).toContain("●");
 
 		prompt.keys("return");
@@ -58,12 +55,7 @@ describe("password — no message", () => {
 		expect(prompt.screen()).toContain("Enter a password");
 		expect(prompt.screen()).not.toContain("undefined");
 
-		prompt.type("s");
-		await tick();
-		prompt.type("e");
-		await tick();
-		prompt.type("c");
-		await tick();
+		prompt.type("sec");
 		prompt.keys("return");
 
 		const result = await prompt.answer;

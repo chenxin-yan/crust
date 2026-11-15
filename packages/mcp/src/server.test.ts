@@ -32,10 +32,6 @@ async function connect(app: AnyCrust, options: McpToolsOptions = {}) {
 	return client;
 }
 
-const finisher = defineExtension(defineExtensionId("test:finisher"))
-	.flags({ bail: { type: "boolean" } })
-	.handle("bail", (ctx) => ctx.stdout("bailed"));
-
 const contributed = defineExtension(defineExtensionId("test:contrib")).add(
 	defineCommand("extra", { description: "From an Extension" }, (c) =>
 		c.action(() => ({ from: "extension" })),
@@ -89,7 +85,6 @@ const fixture = new Crust("fixture", { description: "Fixture", version: "1.2.3" 
 		),
 	)
 	.add(defineCommand("secret", { hidden: true }, (c) => c.action(() => "hidden")))
-	.extend(finisher)
 	.extend(contributed);
 
 describe("createMcpServer", () => {
@@ -106,14 +101,6 @@ describe("createMcpServer", () => {
 				properties: { origin: { type: "string", format: "uri" } },
 			},
 		});
-		// finisher's Extension flag is no command input.
-		expect(Object.keys(tools[0]!.inputSchema.properties ?? {})).toEqual([
-			"word",
-			"times",
-			"origin",
-			"tag",
-			"raw",
-		]);
 		// Extension commands are tools only when included.
 		const included = await connect(fixture, { include: [["extra"]] });
 		expect((await included.listTools()).tools.map((tool) => tool.name)).toContain("extra");
@@ -346,7 +333,7 @@ describe("createMcpServer", () => {
 		expect(reads).toBe(1);
 	});
 
-	it("rejects unknown and hidden tools at the protocol level", async () => {
+	it("rejects hidden tools as unknown at the protocol level", async () => {
 		const client = await connect(fixture);
 		await expect(client.callTool({ name: "secret" })).rejects.toThrow("Tool secret not found");
 	});

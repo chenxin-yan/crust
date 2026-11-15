@@ -18,7 +18,7 @@ import type { AppendArgsChecks, AppendArgsErrors, ValidateArgs } from "./args.br
 	type _empty = Expect<Equal<Result[0]["FIX_EMPTY_NAME"], "Argument names must be non-empty">>;
 	type Widened = ValidateArgs<readonly [{ name: string; type: "string" }]>;
 	type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_EMPTY_NAME">, never>>;
-	// an open template member does not hide an empty literal member (#357)
+	// an open template member does not hide an empty literal member
 	type Mixed = ValidateArgs<readonly [{ name: "" | `p-${string}`; type: "string" }]>;
 	type _mixed = Expect<Equal<Mixed[0]["FIX_EMPTY_NAME"], "Argument names must be non-empty">>;
 	type MixedValid = ValidateArgs<readonly [{ name: "pos" | `p-${string}`; type: "string" }]>;

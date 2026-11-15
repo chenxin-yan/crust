@@ -149,7 +149,6 @@ describe("writeJson", () => {
 			try {
 				await writeJson(filePath, { secret: true }, { fileMode: 0o600 });
 
-				const { stat } = await import("node:fs/promises");
 				const { mode } = await stat(filePath);
 				// Mask off the file-type bits, keep permission bits only.
 				expect(mode & 0o777).toBe(0o600);
@@ -165,7 +164,6 @@ describe("writeJson", () => {
 			try {
 				await writeJson(nested, { data: true }, { directoryMode: 0o700 });
 
-				const { stat } = await import("node:fs/promises");
 				const { mode } = await stat(join(tempDir, "secret-dir"));
 				expect(mode & 0o777).toBe(0o700);
 			} finally {
@@ -179,7 +177,6 @@ describe("writeJson", () => {
 
 			await writeJson(filePath, { data: true }, { directoryMode: 0o700 });
 
-			const { stat } = await import("node:fs/promises");
 			const { mode } = await stat(tempDir);
 			expect(mode & 0o777).toBe(0o755);
 		});

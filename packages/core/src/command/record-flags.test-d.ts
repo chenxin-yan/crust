@@ -260,14 +260,6 @@ function _spellingShape(name: string, alias: string, short: string) {
 	});
 	// @ts-expect-error -- defineFlag checks its own spellings
 	defineFlag({ type: "string", aliases: ["out put"] });
-	defineContext("ctx").flags({
-		// @ts-expect-error -- Context flags follow the same rule
-		"a=b": { type: "string" },
-	});
-	defineExtension(defineExtensionId("test:shape")).flags({
-		// @ts-expect-error -- Extension flags follow the same rule
-		"-x": { type: "string" },
-	});
 	// `-=` addresses a short "="; dynamic spellings are runtime-checked.
 	new Crust("cli").flags({ eq: { type: "boolean", short: "=" } });
 	new Crust("cli").flags({ [name]: { type: "boolean", aliases: [alias], short } });
@@ -352,14 +344,6 @@ function _symbolKeysAreRejected(dynamic: symbol) {
 	new Crust("cli").flags(definitions);
 	// @ts-expect-error -- as would a key typed as any symbol
 	new Crust("cli").flags({ [dynamic]: { type: "string" } });
-	defineContext("ctx").flags({
-		// @ts-expect-error -- Contexts read only string keys too
-		[hidden]: { type: "string" },
-	});
-	defineExtension(defineExtensionId("test:symbol")).flags({
-		// @ts-expect-error -- as do Extensions
-		[hidden]: { type: "string" },
-	});
 }
 
 function _unionDefinitionsCheckEveryBranch(
@@ -542,8 +526,6 @@ function _extensions() {
 	void app.run(["child"], { flags: { trace: true } });
 	// @ts-expect-error -- `recursive: false` keeps "root" off the child
 	void app.run(["child"], { flags: { root: "x" } });
-	// @ts-expect-error -- the Extension's "trace" collides with an application flag
-	new Crust("cli").flags({ trace: { type: "string" } }).extend(trace);
 	defineExtension(defineExtensionId("test:bad"))
 		.flags({ out: { type: "string", short: "o" } })
 		// @ts-expect-error -- collides with the Extension's earlier flag

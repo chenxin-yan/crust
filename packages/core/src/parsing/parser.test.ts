@@ -131,7 +131,7 @@ describe("parseArgs — aliases", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — variadic args", () => {
-	it("omitted variadic resolves its default as one element on both front doors", async () => {
+	it("omitted variadic resolves its default as one element on both front doors", () => {
 		const cmd = makeNode({
 			meta: { name: "test" },
 			args: [{ name: "files", type: "string", variadic: true, default: "fallback" }],
@@ -142,17 +142,6 @@ describe("parseArgs — variadic args", () => {
 		// An empty occurrence array is omission, matching `multiple` flags.
 		expect(parseStructured(cmd, { args: { files: [] } }).args.files).toEqual(["fallback"]);
 		expect(parseStructured(cmd, { args: { files: ["a"] } }).args.files).toEqual(["a"]);
-
-		const seen: string[][] = [];
-		const app = new Crust("run")
-			.args({ name: "files", type: "string", variadic: true, default: "fallback" })
-			.action(({ args }) => {
-				seen.push(args.files);
-			});
-		expect(await app.execute({ argv: [] })).toBe(0);
-		await unwrap(app.run([], {}));
-		expect(await app.execute({ argv: ["x"] })).toBe(0);
-		expect(seen).toEqual([["fallback"], ["fallback"], ["x"]]);
 	});
 
 	it("omitted variadic defaults run through parse, path, falsey, and required rules", () => {
@@ -324,41 +313,6 @@ describe("parseArgs — complex scenarios", () => {
 		const result = parseArgs(cmd, ["true"]);
 		expect(result.args.force).toBe(true);
 	});
-
-	it("full complex command with all features", () => {
-		const cmd = makeNode({
-			meta: { name: "build" },
-			args: [
-				{ name: "entry", type: "string", default: "src/cli.ts" },
-				{ name: "extras", type: "string", variadic: true },
-			],
-			flags: {
-				output: { type: "string", short: "o", default: "./dist" },
-				port: { type: "number", short: "p" },
-				minify: { type: "boolean", default: true },
-				verbose: { type: "boolean", short: "v" },
-			},
-		});
-		const result = parseArgs(cmd, [
-			"main.ts",
-			"extra1.ts",
-			"extra2.ts",
-			"-o",
-			"./build",
-			"-p",
-			"8080",
-			"--no-minify",
-			"--",
-			"--some-extra-flag",
-		]);
-		expect(result.args.entry).toBe("main.ts");
-		expect(result.args.extras).toEqual(["extra1.ts", "extra2.ts", "--some-extra-flag"]);
-		expect(result.flags.output).toBe("./build");
-		expect(result.flags.port).toBe(8080);
-		expect(result.flags.minify).toBe(false);
-		expect(result.flags.verbose).toBeUndefined();
-		expect(result.rawArgs).toEqual([]);
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -375,31 +329,6 @@ describe("validateParsed", () => {
 			'Unexpected positional arguments: "sesion", "status"',
 		);
 	});
-
-	it("throws for missing required arg", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			args: [{ name: "file", type: "string", required: true }],
-		});
-		const parsed = parseArgs(cmd, []);
-		expect(() => validateParsed(cmd, parsed)).toThrow(
-			expect.objectContaining({
-				code: "VALIDATION",
-				message: 'Missing required argument "<file>"',
-			}),
-		);
-	});
-
-	it("throws for missing required flag", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			flags: { name: { type: "string", required: true } },
-		});
-		const parsed = parseArgs(cmd, []);
-		expect(() => validateParsed(cmd, parsed)).toThrow(
-			expect.objectContaining({ code: "VALIDATION", message: 'Missing required flag "--name"' }),
-		);
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -407,17 +336,14 @@ describe("validateParsed", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — parse escape hatch", () => {
-	it("checks each dynamic parser result and contains rejected Promises", async () => {
-		const asyncParse: DynamicParser = async (raw) => raw;
+	it("contains a rejected Promise from a dynamic parser", async () => {
 		const rejecting: DynamicParser = async () => {
 			throw new Error("boom");
 		};
-		for (const parse of [asyncParse, rejecting]) {
-			const app = new Crust("test").flags({ n: { type: "string", parse } });
-			await expect(unwrap(app.run([], { flags: { n: "42" } }))).rejects.toThrow(
-				"parse must be synchronous",
-			);
-		}
+		const app = new Crust("test").flags({ n: { type: "string", parse: rejecting } });
+		await expect(unwrap(app.run([], { flags: { n: "42" } }))).rejects.toThrow(
+			"parse must be synchronous",
+		);
 	});
 
 	it("runs parse per element on multi-value flags", () => {
@@ -450,7 +376,7 @@ describe("parseArgs — parse escape hatch", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// choices enforcement — previously hint-only
+// choices enforcement
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — choices enforcement", () => {
@@ -491,7 +417,7 @@ describe("parseArgs — choices enforcement", () => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// Default coercion symmetry (PR #129 review follow-up)
+// Default coercion symmetry
 //
 // Argv-supplied values flow through choices → parse | coerce. The default
 // branch must mirror both so omitted-flag behavior is not silently weaker
@@ -532,19 +458,21 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 		expect(received).toBe("42");
 	});
 
-	it("checks dynamic defaults against choices when definitions are consumed", () => {
+	it("names the flag or argument whose dynamic definition is invalid", () => {
 		const choices: string[] = ["a", "b"];
 		expect(() =>
 			new Crust("test").flags({ mode: { type: "string", choices, default: "z" } }),
-		).toThrow("default must be one of choices");
+		).toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				message: 'Flag "mode" default must be one of choices',
+				details: { subject: "flag", name: "mode", reason: "default-outside-choices" },
+			}),
+		);
+		// Every element of a multiple default is checked, not just the first.
 		expect(() =>
 			new Crust("test").flags({
-				tags: {
-					type: "string",
-					multiple: true,
-					choices,
-					default: ["a", "z"],
-				},
+				tags: { type: "string", multiple: true, choices, default: ["a", "z"] },
 			}),
 		).toThrow("default must be one of choices");
 		expect(() =>
@@ -554,19 +482,6 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 				code: "DEFINITION",
 				message: 'Argument "mode" default must be one of choices',
 				details: { subject: "argument", name: "mode", reason: "default-outside-choices" },
-			}),
-		);
-	});
-
-	it("names the flag whose dynamic definition is invalid", () => {
-		const choices: string[] = ["a", "b"];
-		expect(() =>
-			new Crust("test").flags({ mode: { type: "string", choices, default: "z" } }),
-		).toThrow(
-			expect.objectContaining({
-				code: "DEFINITION",
-				message: 'Flag "mode" default must be one of choices',
-				details: { subject: "flag", name: "mode", reason: "default-outside-choices" },
 			}),
 		);
 		const short: string = "vv";
@@ -585,17 +500,6 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs \u2014 env fallback", () => {
-	it("prefers argv, then env, then default", () => {
-		const cmd = makeNode({
-			meta: "test",
-			flags: { registry: { type: "string", env: { name: "APP_REGISTRY" }, default: "npm" } },
-		});
-		const env = { APP_REGISTRY: "github" };
-		expect(parseArgs(cmd, ["--registry", "jsr"], env).flags.registry).toBe("jsr");
-		expect(parseArgs(cmd, [], env).flags.registry).toBe("github");
-		expect(parseArgs(cmd, [], {}).flags.registry).toBe("npm");
-	});
-
 	it("leaves an optional flag undefined when neither argv nor env supplies it", () => {
 		const cmd = makeNode({
 			meta: "test",

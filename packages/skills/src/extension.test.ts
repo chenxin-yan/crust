@@ -94,6 +94,21 @@ function target(name = "demo") {
 	return join(tempRoot, ".agents", "skills", name);
 }
 
+/** Absolute directory the symlink at `path` points to. */
+async function linkTarget(path: string): Promise<string> {
+	return resolve(dirname(path), await readlink(path));
+}
+
+/** Runs `demo <argv>` on a fake terminal from `tempRoot`; empty PATH keeps agent detection deterministic. */
+function executeWithPrompts(argv: string[]) {
+	vi.stubEnv("PATH", "");
+	const harness = createPromptIO();
+	const run = withCwd(tempRoot, () =>
+		withTerminalIO(harness.io, () => createApp().execute({ argv })),
+	);
+	return { harness, run };
+}
+
 describe("skill extension packaged directory", () => {
 	it("registers skills as the canonical command with skill as an alias", async () => {
 		const snapshot = await createApp().snapshot();
@@ -235,12 +250,8 @@ describe("skill extension packaged directory", () => {
 		await writeSource("demo");
 		await writeSource("guide");
 
-		// Empty PATH keeps agent detection deterministic: Universal is the only agent choice.
-		vi.stubEnv("PATH", "");
-		const harness = createPromptIO();
-		const run = withCwd(tempRoot, () =>
-			withTerminalIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
-		);
+		// Universal is the only agent choice.
+		const { harness, run } = executeWithPrompts(["skill"]);
 		await waitForPrompt(harness, "Select skills to install");
 		// Nothing is installed, so both skills start selected; drop "guide".
 		harness.keys("down", "space", "enter");
@@ -260,12 +271,8 @@ describe("skill extension packaged directory", () => {
 			installSkill({ sourceDir: join(source, "guide"), agents: ["amp"], scope: "project" }),
 		);
 
-		// Empty PATH keeps agent detection deterministic: Universal is the only agent choice.
-		vi.stubEnv("PATH", "");
-		const harness = createPromptIO();
-		const run = withCwd(tempRoot, () =>
-			withTerminalIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
-		);
+		// Universal is the only agent choice.
+		const { harness, run } = executeWithPrompts(["skill"]);
 		await waitForPrompt(harness, "Select skills to install");
 		// Only the installed "guide" starts selected; swap it for "demo".
 		harness.keys("space", "down", "space", "enter");
@@ -274,43 +281,27 @@ describe("skill extension packaged directory", () => {
 		await run;
 		expect(harness.screen().split("Select agents to install for")).toHaveLength(2);
 
-		expect(resolve(dirname(target("demo")), await readlink(target("demo")))).toBe(
-			join(source, "demo"),
-		);
-		expect(resolve(dirname(target("guide")), await readlink(target("guide")))).toBe(
-			join(source, "guide"),
-		);
+		expect(await linkTarget(target("demo"))).toBe(join(source, "demo"));
+		expect(await linkTarget(target("guide"))).toBe(join(source, "guide"));
 	});
 
-	it.each(["skills install"])(
-		"%s installs newly selected agents without removing a deselected agent's link",
-		async (command) => {
-			const source = await writeSource("demo");
-			const cortexTarget = join(tempRoot, ".cortex", "skills", "demo");
-			await withCwd(tempRoot, () =>
-				installSkill({ sourceDir: join(source, "demo"), agents: ["cortex"], scope: "project" }),
-			);
+	it("skills install installs newly selected agents without removing a deselected agent's link", async () => {
+		const source = await writeSource("demo");
+		const cortexTarget = join(tempRoot, ".cortex", "skills", "demo");
+		await withCwd(tempRoot, () =>
+			installSkill({ sourceDir: join(source, "demo"), agents: ["cortex"], scope: "project" }),
+		);
 
-			// Empty PATH keeps agent detection deterministic: Universal plus the
-			// already-installed Cortex Code are the only agent choices.
-			vi.stubEnv("PATH", "");
-			const harness = createPromptIO();
-			const run = withCwd(tempRoot, () =>
-				withTerminalIO(harness.io, () => createApp().execute({ argv: command.split(" ") })),
-			);
-			await waitForPrompt(harness, "Select agents to install for");
-			// Only the installed Cortex Code starts selected; swap it for Universal.
-			harness.keys("space", "down", "space", "enter");
-			await run;
+		// Universal plus the already-installed Cortex Code are the only agent choices.
+		const { harness, run } = executeWithPrompts(["skills", "install"]);
+		await waitForPrompt(harness, "Select agents to install for");
+		// Only the installed Cortex Code starts selected; swap it for Universal.
+		harness.keys("space", "down", "space", "enter");
+		await run;
 
-			expect(resolve(dirname(target("demo")), await readlink(target("demo")))).toBe(
-				join(source, "demo"),
-			);
-			expect(resolve(dirname(cortexTarget), await readlink(cortexTarget))).toBe(
-				join(source, "demo"),
-			);
-		},
-	);
+		expect(await linkTarget(target("demo"))).toBe(join(source, "demo"));
+		expect(await linkTarget(cortexTarget)).toBe(join(source, "demo"));
+	});
 
 	it("uninstalls selected skills and leaves the rest linked", async () => {
 		const source = await writeSource("demo");
@@ -334,9 +325,7 @@ describe("skill extension packaged directory", () => {
 			.flatMap((line) => (line.includes(" → ") ? [line.split(" → ")[1]] : []));
 		expect(new Set(reportedDirs).size).toBe(reportedDirs.length);
 		await expect(lstat(target("demo"))).rejects.toThrow();
-		expect(resolve(dirname(target("guide")), await readlink(target("guide")))).toBe(
-			join(source, "guide"),
-		);
+		expect(await linkTarget(target("guide"))).toBe(join(source, "guide"));
 	});
 
 	it("reports when nothing is installed to uninstall", async () => {
@@ -430,7 +419,7 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		await symlink(join(tempRoot, "missing", "skills", "demo"), installed);
 
 		await asInstalled(() => withCwd(tempRoot, () => createApp().execute({ argv: [] })));
-		expect(resolve(dirname(installed), await readlink(installed))).toBe(join(source, "demo"));
+		expect(await linkTarget(installed)).toBe(join(source, "demo"));
 		expect(await readFile(join(installed, "content.md"), "utf8")).toBe("current\n");
 	});
 
@@ -459,7 +448,7 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		await withCwd(tempRoot, () =>
 			createApp().execute({ argv: ["skills", "repair", "--scope", "project"] }),
 		);
-		expect(resolve(dirname(installed), await readlink(installed))).toBe(join(source, "demo"));
+		expect(await linkTarget(installed)).toBe(join(source, "demo"));
 	});
 
 	it("leaves an installed CLI's links alone when running from source", async () => {
@@ -535,13 +524,8 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 			installSkill({ sourceDir: join(source, "demo"), agents: ["amp"], scope: "project" }),
 		);
 
-		// Empty PATH keeps agent detection deterministic: Antigravity is the only
-		// additional choice (installed), listed right after Universal.
-		vi.stubEnv("PATH", "");
-		const harness = createPromptIO();
-		const run = withCwd(tempRoot, () =>
-			withTerminalIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
-		);
+		// Antigravity is the only additional choice (installed), listed right after Universal.
+		const { harness, run } = executeWithPrompts(["skill"]);
 		harness.keys("down", "space", "enter");
 		await run;
 
@@ -553,13 +537,8 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		await mkdir(target(), { recursive: true });
 		await writeFile(join(target(), "manual.md"), "unowned\n");
 
-		// Empty PATH keeps agent detection deterministic: Universal is the only
-		// choice, so the queued keys select it and then accept the overwrite.
-		vi.stubEnv("PATH", "");
-		const harness = createPromptIO();
-		const run = withCwd(tempRoot, () =>
-			withTerminalIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
-		);
+		// Universal is the only choice, so the queued keys select it and then accept the overwrite.
+		const { harness, run } = executeWithPrompts(["skill"]);
 		harness.keys("space", "enter");
 		// The multiselect drains buffered input, so the confirm answer must
 		// wait until the confirm prompt is attached and rendering. The message
@@ -583,6 +562,6 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		await mkdir(target(), { recursive: true });
 		const captured = await withCwd(tempRoot, () => captureExecute(createApp(), ["skill", "--all"]));
 		expect(captured.stderr).toContain("Skipped Universal [demo]");
-		expect(resolve(dirname(claude), await readlink(claude))).toBe(join(source, "demo"));
+		expect(await linkTarget(claude)).toBe(join(source, "demo"));
 	});
 });

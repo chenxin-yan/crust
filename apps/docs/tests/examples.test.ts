@@ -13,6 +13,17 @@ import { audited, list } from "../examples/guide/extensions-provider-flags";
 import { app as extensionsExample } from "../examples/modules/extensions/index";
 
 const read = (path: string) => readFile(new URL(path, import.meta.url), "utf8");
+const runGuideExample = (file: string, args: string[], cwd?: string) =>
+	spawnSync(
+		"bun",
+		[fileURLToPath(new URL(`../examples/guide/${file}`, import.meta.url)), ...args],
+		{
+			cwd,
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "pipe"],
+			timeout: 10_000,
+		},
+	);
 
 it("the disposable Context example cleans up after success and failure", async () => {
 	for (const fail of [false, true]) {
@@ -61,11 +72,7 @@ it.each([
 ])(
 	"error-handling example %s prints only its own diagnostics",
 	(scenario, exitCode, stdout, stderr) => {
-		const result = spawnSync(
-			"bun",
-			[fileURLToPath(new URL("../examples/guide/error-handling.ts", import.meta.url)), scenario],
-			{ encoding: "utf8", timeout: 10_000 },
-		);
+		const result = runGuideExample("error-handling.ts", [scenario]);
 		expect(result.error).toBeUndefined();
 		expect(result.status).toBe(exitCode);
 		expect(result.stdout).toBe(stdout);
@@ -108,11 +115,7 @@ it.each([
 	[["init"], 1, "", "Error: Prompts require an interactive terminal (TTY).\n"],
 	[["init", "--name", "demo"], 0, "Created demo in us-east-1\n", ""],
 ])("agents guide example %j prints what the guide shows", (argv, exitCode, stdout, stderr) => {
-	const result = spawnSync(
-		"bun",
-		[fileURLToPath(new URL("../examples/guide/agents.ts", import.meta.url)), ...argv],
-		{ encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 10_000 },
-	);
+	const result = runGuideExample("agents.ts", argv);
 	expect(result.error).toBeUndefined();
 	expect(result.status).toBe(exitCode);
 	expect(result.stdout).toBe(stdout);
@@ -120,15 +123,7 @@ it.each([
 });
 
 it("commands guide sections example prints what the guide shows", async () => {
-	const result = spawnSync(
-		"bun",
-		[
-			fileURLToPath(new URL("../examples/guide/commands-sections.ts", import.meta.url)),
-			"deploy",
-			"--help",
-		],
-		{ encoding: "utf8", timeout: 10_000 },
-	);
+	const result = runGuideExample("commands-sections.ts", ["deploy", "--help"]);
 	const guide = await read("../content/docs/guide/commands.mdx");
 	expect(result.status).toBe(0);
 	expect(guide).toContain(`$ my-cli deploy --help\n${result.stdout}\`\`\``);
@@ -138,11 +133,7 @@ it("error-handling example reports an unreadable config as is, not as missing", 
 	const cwd = await mkdtemp(join(tmpdir(), "crust-docs-"));
 	try {
 		await mkdir(join(cwd, "app.config.json"));
-		const result = spawnSync(
-			"bun",
-			[fileURLToPath(new URL("../examples/guide/error-handling.ts", import.meta.url)), "config"],
-			{ cwd, encoding: "utf8", timeout: 10_000 },
-		);
+		const result = runGuideExample("error-handling.ts", ["config"], cwd);
 		expect(result.status).toBe(1);
 		expect(result.stderr).toMatch(/^Error: EISDIR/);
 	} finally {

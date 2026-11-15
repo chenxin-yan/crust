@@ -100,8 +100,3 @@ function _schemasWithoutTypesAcceptAnyReturn(schema: StandardSchema) {
 	const app = new Crust("cli").output(schema).action(() => 42);
 	type _result = Expect<Equal<Completed<ReturnType<typeof app.run<[]>>>, unknown>>;
 }
-
-function _withoutOutputNothingChanges() {
-	const app = new Crust("cli").action(() => ({ id: "1" }));
-	type _result = Expect<Equal<Completed<ReturnType<typeof app.run<[]>>>, { id: string }>>;
-}

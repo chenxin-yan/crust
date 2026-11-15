@@ -62,44 +62,52 @@ describe("create-crust CLI", () => {
 		}
 	});
 
-	it("scaffolds a project non-interactively when flags are provided", async () => {
-		const tempRoot = makeTempRoot("create-crust-cli");
-		const projectDir = join(tempRoot, "my-cli");
+	it.each([
+		["bun", "binary"],
+		["node", "package"],
+	])(
+		"scaffolds a %s project with the default %s artifact non-interactively",
+		async (runtime, artifact) => {
+			const projectDir = join(makeTempRoot("create-crust-cli"), "my-cli");
 
-		const result = await runCreateCrust([
-			projectDir,
-			"--runtime",
-			"bun",
-			"--no-install",
-			"--no-git",
-		]);
+			const result = await runCreateCrust([
+				projectDir,
+				"--runtime",
+				runtime,
+				"--no-install",
+				"--no-git",
+			]);
 
-		expect(result.exitCode).toBe(0);
-		expect(result.stderr).not.toContain("Error:");
-		expect(result.stdout).toContain("Created my-cli!");
-		expectManifest(readFileSync(join(projectDir, "package.json"), "utf-8"), "bun", "binary");
-		const tsconfig = JSON.parse(readFileSync(join(projectDir, "tsconfig.json"), "utf-8"));
-		expect(tsconfig.compilerOptions.lib).toEqual(["ESNext"]);
-		expect(tsconfig.compilerOptions.types).toEqual(["bun"]);
-		const cli = readFileSync(join(projectDir, "src", "cli.ts"), "utf-8");
-		// `bin` points at the source, so the linked command needs the runtime's shebang.
-		expect(cli.startsWith("#!/usr/bin/env bun\n")).toBe(true);
-		expect(cli).toContain('new Crust("my-cli"');
-		expect(cli).toContain(".execute()");
-		expect(cli).toContain("help()");
-		expect(cli).toContain("version: pkg.version");
-		expect(cli).toContain("version()");
-		expect(cli).toContain('import pkg from "../package.json" with { type: "json" };');
-		const gitignore = readFileSync(join(projectDir, ".gitignore"), "utf-8");
-		expect(gitignore).toContain("node_modules");
-		expect(gitignore).toContain(".crust");
-		const readme = readFileSync(join(projectDir, "README.md"), "utf-8");
-		expect(readme).toContain("# my-cli");
-		expect(readme).toContain("npm run dev");
-		expect(readme).toContain("npm run release");
-		expect(existsSync(join(projectDir, "node_modules"))).toBe(false);
-		expect(existsSync(join(projectDir, ".git"))).toBe(false);
-	}, 30_000);
+			expect(result.exitCode).toBe(0);
+			expect(result.stderr).not.toContain("Error:");
+			expect(result.stdout).toContain("Created my-cli!");
+			expect(result.stdout).toContain("npm run dev");
+			expectManifest(readFileSync(join(projectDir, "package.json"), "utf-8"), runtime, artifact);
+			const tsconfig = JSON.parse(readFileSync(join(projectDir, "tsconfig.json"), "utf-8"));
+			expect(tsconfig.compilerOptions.lib).toEqual(["ESNext"]);
+			expect(tsconfig.compilerOptions.types).toEqual([runtime]);
+			const cli = readFileSync(join(projectDir, "src", "cli.ts"), "utf-8");
+			// `bin` points at the source, so the linked command needs the runtime's shebang.
+			expect(cli.startsWith(`#!/usr/bin/env ${runtime}\n`)).toBe(true);
+			expect(cli).toContain('new Crust("my-cli"');
+			expect(cli).toContain(".execute()");
+			expect(cli).toContain("help()");
+			expect(cli).toContain("version: pkg.version");
+			expect(cli).toContain("version()");
+			expect(cli).toContain('import pkg from "../package.json" with { type: "json" };');
+			const gitignore = readFileSync(join(projectDir, ".gitignore"), "utf-8");
+			expect(gitignore).toContain("node_modules");
+			expect(gitignore).toContain(".crust");
+			const readme = readFileSync(join(projectDir, "README.md"), "utf-8");
+			expect(readme).toContain("# my-cli");
+			expect(readme).toContain("npm run dev");
+			expect(readme).toContain("npm run release");
+			if (runtime === "node") expect(readme).not.toContain("bun run");
+			expect(existsSync(join(projectDir, "node_modules"))).toBe(false);
+			expect(existsSync(join(projectDir, ".git"))).toBe(false);
+		},
+		30_000,
+	);
 
 	it("uses the destination lockfile for instructions before installation", async () => {
 		const projectDir = join(makeTempRoot("create-crust-lockfile"), "my-cli");
@@ -152,39 +160,9 @@ describe("create-crust CLI", () => {
 		30_000,
 	);
 
-	it("scaffolds a Node runtime project through the real CLI", async () => {
-		const tempRoot = makeTempRoot("create-crust-node");
-		const projectDir = join(tempRoot, "node-cli");
-
-		const result = await runCreateCrust([
-			projectDir,
-			"--runtime",
-			"node",
-			"--no-install",
-			"--no-git",
-		]);
-
-		expect(result.exitCode).toBe(0);
-		expect(result.stdout).toContain("npm run dev");
-		expectManifest(
-			readFileSync(join(projectDir, "package.json"), "utf-8"),
-			"node",
-			"package",
-			"node-cli",
-		);
-		const tsconfig = JSON.parse(readFileSync(join(projectDir, "tsconfig.json"), "utf-8"));
-		expect(tsconfig.compilerOptions.lib).toEqual(["ESNext"]);
-		expect(tsconfig.compilerOptions.types).toEqual(["node"]);
-		expect(
-			readFileSync(join(projectDir, "src", "cli.ts"), "utf-8").startsWith("#!/usr/bin/env node\n"),
-		).toBe(true);
-		const readme = readFileSync(join(projectDir, "README.md"), "utf-8");
-		expect(readme).toContain("npm run dev");
-		expect(readme).not.toContain("bun run");
-	}, 30_000);
-
 	// Checks what the scaffolder interpolates, not the template's static content.
-	const expectManifest = (text: string, runtime: string, artifact: string, name = "my-cli") => {
+	const expectManifest = (text: string, runtime: string, artifact: string) => {
+		const name = "my-cli";
 		const pkg = JSON.parse(text);
 		// The template is hand-written JSON; it must render as canonical tab-indented JSON.
 		expect(text).toBe(`${JSON.stringify(pkg, null, "\t")}\n`);
@@ -275,28 +253,25 @@ describe("create-crust CLI", () => {
 
 	// The basename becomes the package name, bin key, and a quoted TS string, so
 	// positional input must meet the same command-name contract as the prompt.
-	it.each(['bad"name'])(
-		"rejects the project directory basename %j before writing anything",
-		async (dirName) => {
-			const tempRoot = makeTempRoot("create-crust-bad-name");
-			const projectDir = join(tempRoot, dirName);
+	it("rejects an unsafe project directory basename before writing anything", async () => {
+		const dirName = 'bad"name';
+		const tempRoot = makeTempRoot("create-crust-bad-name");
+		const projectDir = join(tempRoot, dirName);
 
-			const result = await runCreateCrust([
-				projectDir,
-				"--runtime",
-				"node",
-				"--no-install",
-				"--no-git",
-			]);
+		const result = await runCreateCrust([
+			projectDir,
+			"--runtime",
+			"node",
+			"--no-install",
+			"--no-git",
+		]);
 
-			expect(result.exitCode).toBe(1);
-			expect(result.stderr).toContain(
-				`Error: Project name ${JSON.stringify(dirName)} is not safe for the generated project.`,
-			);
-			expect(existsSync(projectDir)).toBe(false);
-		},
-		30_000,
-	);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain(
+			`Error: Project name ${JSON.stringify(dirName)} is not safe for the generated project.`,
+		);
+		expect(existsSync(projectDir)).toBe(false);
+	}, 30_000);
 
 	it("aborts cleanly when the destination exists and --no-overwrite is passed", async () => {
 		const tempRoot = makeTempRoot("create-crust-no-overwrite");
@@ -350,23 +325,18 @@ describe("create-crust CLI", () => {
 		expect(pkg.name).toBe(basename(tempRoot));
 	}, 30_000);
 
-	it.each(["."])(
-		"scaffolds into an empty current directory given %j without prompting",
-		async (directory) => {
-			const tempRoot = makeTempRoot("create-crust-dot-empty");
+	it('scaffolds into an empty current directory given "." without prompting', async () => {
+		const tempRoot = makeTempRoot("create-crust-dot-empty");
 
-			const result = await runCreateCrust(
-				[directory, "--runtime", "bun", "--no-install", "--no-git"],
-				{ cwd: tempRoot },
-			);
+		const result = await runCreateCrust([".", "--runtime", "bun", "--no-install", "--no-git"], {
+			cwd: tempRoot,
+		});
 
-			expect(result.exitCode).toBe(0);
-			expect(result.stderr).not.toContain("Error:");
-			expect(existsSync(join(tempRoot, "package.json"))).toBe(true);
-			expect(result.stdout).not.toContain("  cd ");
-		},
-		30_000,
-	);
+		expect(result.exitCode).toBe(0);
+		expect(result.stderr).not.toContain("Error:");
+		expect(existsSync(join(tempRoot, "package.json"))).toBe(true);
+		expect(result.stdout).not.toContain("  cd ");
+	}, 30_000);
 
 	it.each([
 		["nested-cli", "./nested-cli"],
@@ -388,31 +358,21 @@ describe("create-crust CLI", () => {
 	);
 
 	// Missing intermediate directories must not hide the enclosing repository.
-	it.each(["missing-parent/inside-repo-cli"])(
-		"skips git initialization for repo/%s even when --git is passed",
-		async (relativeDir) => {
-			const tempRoot = makeTempRoot("create-crust-git-repo");
-			const repoRoot = join(tempRoot, "repo");
-			const projectDir = join(repoRoot, relativeDir);
-			mkdirSync(repoRoot, { recursive: true });
+	it("skips git initialization for a destination with missing parents inside a repository, even when --git is passed", async () => {
+		const tempRoot = makeTempRoot("create-crust-git-repo");
+		const repoRoot = join(tempRoot, "repo");
+		const projectDir = join(repoRoot, "missing-parent", "inside-repo-cli");
+		mkdirSync(repoRoot, { recursive: true });
 
-			const gitInit = await runBoundedProcess("git", ["init"], { cwd: repoRoot, timeout: 10_000 });
-			expect(gitInit.exitCode).toBe(0);
+		const gitInit = await runBoundedProcess("git", ["init"], { cwd: repoRoot, timeout: 10_000 });
+		expect(gitInit.exitCode).toBe(0);
 
-			const result = await runCreateCrust([
-				projectDir,
-				"--runtime",
-				"bun",
-				"--no-install",
-				"--git",
-			]);
+		const result = await runCreateCrust([projectDir, "--runtime", "bun", "--no-install", "--git"]);
 
-			expect(result.exitCode, result.stderr).toBe(0);
-			expect(existsSync(join(projectDir, "package.json"))).toBe(true);
-			expect(existsSync(join(projectDir, ".git"))).toBe(false);
-		},
-		30_000,
-	);
+		expect(result.exitCode, result.stderr).toBe(0);
+		expect(existsSync(join(projectDir, "package.json"))).toBe(true);
+		expect(existsSync(join(projectDir, ".git"))).toBe(false);
+	}, 30_000);
 
 	it("initializes git for a destination with missing parents outside any repository", async () => {
 		const tempRoot = makeTempRoot("create-crust-git-outside");

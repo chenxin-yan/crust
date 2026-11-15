@@ -76,16 +76,10 @@ describe("mergeEntryArtifacts", () => {
 		);
 	});
 
-	it.each(["directory"])("rejects unexpected %s links without copying outside contents", (kind) => {
+	it("rejects unexpected directory links without copying outside contents", () => {
 		write("outside/sentinel", "outside bytes");
 		mkdirSync(join(tmpDir, "entry", "assets"), { recursive: true });
-		const target =
-			kind === "file" ? "outside/sentinel" : kind === "directory" ? "outside" : "missing";
-		symlinkSync(
-			join(tmpDir, target),
-			join(tmpDir, "entry", "assets", "link"),
-			kind === "directory" ? "dir" : "file",
-		);
+		symlinkSync(join(tmpDir, "outside"), join(tmpDir, "entry", "assets", "link"), "dir");
 		expect(() =>
 			mergeEntryArtifacts(join(tmpDir, "entry"), artifactDir, "legacy", new Map()),
 		).toThrow(/regular files|symlink/);

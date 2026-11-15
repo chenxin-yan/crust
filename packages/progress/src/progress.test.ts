@@ -23,8 +23,7 @@ describe("progress — determinate", () => {
 	});
 
 	it("keeps the count when a message wider than the terminal is cut", () => {
-		const writes: string[] = [];
-		const sink = { isTTY: true, columns: 20, write: (text: string) => void writes.push(text) };
+		const { sink, writes } = createFakeSink(true, 20);
 		const progress = createProgressBar({
 			total: 2,
 			message: "Uploading a long file name",

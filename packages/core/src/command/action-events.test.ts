@@ -153,31 +153,6 @@ describe("async generator actions", () => {
 		expect(log).toEqual(["stream", "error Error: early", "error Error: plain"]);
 	});
 
-	it("closes the generator and fails with the abort reason when the caller cancels", async () => {
-		const controller = new AbortController();
-		let finalized = false;
-		const app = new Crust("cli").action(async function* () {
-			try {
-				yield 1;
-				yield 2;
-			} finally {
-				finalized = true;
-			}
-		});
-
-		const outcome = await app.run(
-			[],
-			{},
-			{
-				signal: controller.signal,
-				onEvent: () => controller.abort(new DOMException("Caller cancelled.", "AbortError")),
-			},
-		);
-
-		expect(outcome).toMatchObject({ status: "failed", error: { name: "AbortError" }, events: [1] });
-		expect(finalized).toBe(true);
-	});
-
 	it("fails when the signal aborts during the generator's final step", async () => {
 		const controller = new AbortController();
 		const app = new Crust("cli").action(async function* () {
@@ -191,7 +166,7 @@ describe("async generator actions", () => {
 		expect(outcome).toMatchObject({ status: "failed", error: { name: "AbortError" }, events: [1] });
 	});
 
-	it("finishes a finally block that yields before postRun when the invocation is cancelled", async () => {
+	it("closes the generator, finishing a finally block that yields, before postRun when the caller cancels", async () => {
 		const controller = new AbortController();
 		const log: string[] = [];
 		const observe = loggingRenderer(log).postRun(() => void log.push("postRun"));
@@ -211,7 +186,7 @@ describe("async generator actions", () => {
 			{ signal: controller.signal, onEvent: () => controller.abort() },
 		);
 
-		expect(outcome).toMatchObject({ status: "failed", events: [1] });
+		expect(outcome).toMatchObject({ status: "failed", error: { name: "AbortError" }, events: [1] });
 		// Values yielded while closing are not events.
 		expect(log).toEqual(["stream", "renderer 1", "released", "postRun"]);
 	});

@@ -446,14 +446,12 @@ it("keeps surviving and reintroduced keys and nonrecursive replacement scope", a
 	);
 	expect(await removed.run(["child"])).toMatchObject({ status: "completed", result: "child" });
 	const widened: Extension = old;
-	expect(await removed.extend(widened).run([], { flags: { local: "value" } })).toMatchObject({
-		status: "completed",
-		result: undefined,
-	});
-	expect(await original.extend(widened).run([], { flags: { local: "value" } })).toMatchObject({
-		status: "completed",
-		result: undefined,
-	});
+	for (const app of [removed.extend(widened), original.extend(widened)]) {
+		expect(await app.run([], { flags: { local: "value" } })).toMatchObject({
+			status: "completed",
+			result: undefined,
+		});
+	}
 
 	const recursive = defineExtension(id).flags({ local: { type: "string", required: true } });
 	const narrowed = new Crust("app")

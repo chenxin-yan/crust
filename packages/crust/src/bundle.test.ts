@@ -19,6 +19,7 @@ import { which } from "@crustjs/utils/process";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import {
+	type BundleSettings,
 	createBunCompileArgs,
 	execBuild,
 	execScriptBuild,
@@ -30,6 +31,16 @@ const bunVersion = spawnSync(which("bun")!, ["--version"], {
 	encoding: "utf8",
 	timeout: 10_000,
 }).stdout.trim();
+
+/** Settings for building in `cwd`: unminified, without env files, plugins, or externals unless overridden. */
+const settings = (cwd: string, overrides: Partial<BundleSettings> = {}): BundleSettings => ({
+	cwd,
+	minify: false,
+	envFiles: [],
+	bunPlugins: [],
+	external: [],
+	...overrides,
+});
 
 describe("resolveBunPluginSource", () => {
 	it("imports bare specifiers from the project and paths as file URLs", () => {
@@ -73,7 +84,7 @@ describe.skipIf(hostTarget(BUN_TARGETS) === null)("execBuild with crust.bunPlugi
 			join(directory, "cli.ts"),
 			join(directory, "out"),
 			hostTarget(BUN_TARGETS)!,
-			{ cwd: directory, minify: false, envFiles: [], bunPlugins: ["./missing.ts"], external: [] },
+			settings(directory, { bunPlugins: ["./missing.ts"] }),
 		).catch((cause: unknown) => cause);
 		expect(error).toBeInstanceOf(Error);
 		expect((error as Error).message).toContain(
@@ -92,13 +103,12 @@ describe.skipIf(hostTarget(BUN_TARGETS) === null)("execBuild with crust.bunPlugi
 		);
 		const outfile = join(directory, "out.js");
 		await expect(
-			execScriptBuild("node", join(directory, "cli.ts"), outfile, {
-				cwd: directory,
-				minify: false,
-				envFiles: [],
-				bunPlugins: ["./plugin.ts"],
-				external: [],
-			}),
+			execScriptBuild(
+				"node",
+				join(directory, "cli.ts"),
+				outfile,
+				settings(directory, { bunPlugins: ["./plugin.ts"] }),
+			),
 		).rejects.toThrow(
 			/Build failed for .*out\.js:\nerror: cannot write multiple output files without an output directory/,
 		);
@@ -111,13 +121,12 @@ describe.skipIf(hostTarget(BUN_TARGETS) === null)("execBuild with crust.bunPlugi
 			"export default function createPlugin() { return { name: 'factory', setup() {} }; }\n",
 		);
 		await expect(
-			execBuild(join(directory, "cli.ts"), join(directory, "out"), hostTarget(BUN_TARGETS)!, {
-				cwd: directory,
-				minify: false,
-				envFiles: [],
-				bunPlugins: ["./plugin.ts"],
-				external: [],
-			}),
+			execBuild(
+				join(directory, "cli.ts"),
+				join(directory, "out"),
+				hostTarget(BUN_TARGETS)!,
+				settings(directory, { bunPlugins: ["./plugin.ts"] }),
+			),
 		).rejects.toThrow(
 			"crust.bunPlugins entry ./plugin.ts must default-export a Bun bundler plugin ({ name, setup }). Wrap a plugin factory in a module that default-exports the created plugin.",
 		);
@@ -130,13 +139,12 @@ describe.skipIf(hostTarget(BUN_TARGETS) === null)("execBuild with crust.bunPlugi
 		);
 		const outfile = join(directory, "out");
 		await expect(
-			execBuild(join(directory, "cli.ts"), outfile, hostTarget(BUN_TARGETS)!, {
-				cwd: directory,
-				minify: false,
-				envFiles: [],
-				bunPlugins: ["./plugin.ts"],
-				external: [],
-			}),
+			execBuild(
+				join(directory, "cli.ts"),
+				outfile,
+				hostTarget(BUN_TARGETS)!,
+				settings(directory, { bunPlugins: ["./plugin.ts"] }),
+			),
 		).rejects.toThrow(/Build failed for .*out[\s\S]*plugin exploded/);
 		expect(await leftoverDrivers(directory)).toEqual([]);
 		await expect(access(outfile)).rejects.toThrow();
@@ -197,13 +205,7 @@ describe("execScriptBuild for Bun", () => {
 			"bun",
 			join(directory, "cli.ts"),
 			outfile,
-			{
-				cwd: directory,
-				minify: false,
-				envFiles: [join(directory, ".env.build")],
-				bunPlugins: [],
-				external: [],
-			},
+			settings(directory, { envFiles: [join(directory, ".env.build")] }),
 			pinnedRunner(),
 		);
 
@@ -232,13 +234,11 @@ describe("execScriptBuild for Bun", () => {
 			"bun",
 			join(directory, "cli.ts"),
 			outfile,
-			{
-				cwd: directory,
+			settings(directory, {
 				minify: true,
 				envFiles: [join(directory, ".env.build")],
 				bunPlugins: ["./plugin.ts"],
-				external: [],
-			},
+			}),
 			pinnedRunner(),
 		);
 
@@ -296,13 +296,7 @@ describe("execScriptBuild for Node", () => {
 						: join(directory, "cli.ts");
 				if (process.platform !== "win32") await symlink(join("src", "cli.ts"), entry);
 				const outfile = join(directory, "out", "cli.js");
-				await execScriptBuild("node", entry, outfile, {
-					cwd: directory,
-					minify: false,
-					envFiles: [],
-					bunPlugins,
-					external: [],
-				});
+				await execScriptBuild("node", entry, outfile, settings(directory, { bunPlugins }));
 
 				const output = await readFile(outfile, "utf8");
 				expect(output.startsWith("#!/usr/bin/env node\n")).toBe(true);
@@ -334,13 +328,12 @@ describe("execScriptBuild for Node", () => {
 		await writeFile(entry, "#!/usr/bin/env bun\nif (import.meta.main) console.log(1);\n");
 
 		await expect(
-			execScriptBuild("node", entry, join(directory, "out", "cli.js"), {
-				cwd: directory,
-				minify: false,
-				envFiles: [],
-				bunPlugins: ["./plugin.ts"],
-				external: [],
-			}),
+			execScriptBuild(
+				"node",
+				entry,
+				join(directory, "out", "cli.js"),
+				settings(directory, { bunPlugins: ["./plugin.ts"] }),
+			),
 		).rejects.toThrow(
 			`Remove that line from ${entry}, or from what a crust.bunPlugins onLoad hook`,
 		);
@@ -386,44 +379,41 @@ describe("execScriptBuild with crust.external", () => {
 		return directory;
 	}
 
-	for (const target of ["node"] as const) {
-		for (const bunPlugins of [[], ["./plugin.ts"]]) {
-			const path = bunPlugins.length > 0 ? "the Bun.build driver" : "bun build";
-			it(`keeps externals and their subpaths out of a ${target} bundle built by ${path}`, async () => {
-				const directory = await project();
-				const outfile = join(directory, "out", "cli.js");
-				await execScriptBuild(target, join(directory, "cli.ts"), outfile, {
-					cwd: directory,
-					minify: false,
-					envFiles: [],
-					bunPlugins,
-					// fake-unused is never imported: an external need not be.
-					external: ["fake-esm", "fake-cjs", "fake-unused"],
-				});
+	for (const bunPlugins of [[], ["./plugin.ts"]]) {
+		const path = bunPlugins.length > 0 ? "the Bun.build driver" : "bun build";
+		it(`keeps externals and their subpaths out of a node bundle built by ${path}`, async () => {
+			const directory = await project();
+			const outfile = join(directory, "out", "cli.js");
+			await execScriptBuild(
+				"node",
+				join(directory, "cli.ts"),
+				outfile,
+				// fake-unused is never imported: an external need not be.
+				settings(directory, { bunPlugins, external: ["fake-esm", "fake-cjs", "fake-unused"] }),
+			);
 
-				const output = await readFile(outfile, "utf8");
-				expect(output).toContain('from "fake-esm"');
-				expect(output).toContain('from "fake-esm/sub"');
-				expect(output).toContain('require("fake-cjs")');
-				for (const marker of ["esm-marker", "sub-marker", "cjs-marker"]) {
-					expect(output).not.toContain(marker);
-				}
-				const runtime = which(target);
-				if (runtime === null) return;
-				const run = spawnSync(runtime, [outfile], {
-					cwd: directory,
-					env: { PATH: process.env.PATH },
-					encoding: "utf8",
-					timeout: 10_000,
-				});
-				expect(run.stderr).toBe("");
-				expect(JSON.parse(run.stdout)).toEqual({
-					greeting: "esm-marker",
-					sub: "sub-marker",
-					cjs: "cjs-marker",
-				});
+			const output = await readFile(outfile, "utf8");
+			expect(output).toContain('from "fake-esm"');
+			expect(output).toContain('from "fake-esm/sub"');
+			expect(output).toContain('require("fake-cjs")');
+			for (const marker of ["esm-marker", "sub-marker", "cjs-marker"]) {
+				expect(output).not.toContain(marker);
+			}
+			const node = which("node");
+			if (node === null) return;
+			const run = spawnSync(node, [outfile], {
+				cwd: directory,
+				env: { PATH: process.env.PATH },
+				encoding: "utf8",
+				timeout: 10_000,
 			});
-		}
+			expect(run.stderr).toBe("");
+			expect(JSON.parse(run.stdout)).toEqual({
+				greeting: "esm-marker",
+				sub: "sub-marker",
+				cjs: "cjs-marker",
+			});
+		});
 	}
 });
 

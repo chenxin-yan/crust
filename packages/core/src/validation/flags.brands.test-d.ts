@@ -155,7 +155,7 @@ import type {
 }
 
 {
-	// brands invalid literal spellings beside an open template member (#357)
+	// brands invalid literal spellings beside an open template member
 	type Mixed = `y-${string}`;
 	type Reserved = LocalFlagBrand<{ name: "__proto__" | Mixed; type: "boolean" }>;
 	type Empty = LocalFlagBrand<{ name: "" | Mixed; type: "boolean" }>;

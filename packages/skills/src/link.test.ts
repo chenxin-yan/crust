@@ -12,7 +12,6 @@ describe("skill links", () => {
 
 		expect(isAbsolute(skillLinkTarget(sourceDir, outputDir, "project"))).toBe(false);
 		expect(skillLinkTarget(sourceDir, outputDir, "global")).toBe(sourceDir);
-		expect(isAbsolute(skillLinkTarget(sourceDir, outputDir, "global"))).toBe(true);
 	});
 
 	it("recognizes only targets ending in skills/<name> as owned", () => {

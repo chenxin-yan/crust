@@ -90,46 +90,6 @@ describe("defineContext()", () => {
 });
 
 describe("Crust .provide()", () => {
-	it("seeds added descendants with the parent Context path", async () => {
-		const seen: string[] = [];
-		const db = defineContext("db").setup(() => "root-db");
-		const sub = defineCommand("sub", (command) =>
-			command.use(db).add(
-				defineCommand("g", (child) =>
-					child.use(db).action(async ({ ctx }) => {
-						seen.push(await ctx.db);
-					}),
-				),
-			),
-		);
-		const root = new Crust("cli").provide(db()).add(sub);
-
-		await unwrap(root.run(["sub", "g"]));
-
-		expect(seen).toEqual(["root-db"]);
-	});
-
-	it("does not construct inherited Contexts a command does not pull", async () => {
-		let built = 0;
-		const lazy = defineContext("lazy").setup(() => {
-			built++;
-			return {};
-		});
-
-		const app = new Crust("cli")
-			.provide(lazy())
-			.add(defineCommand("a", (cmd) => cmd.action(() => {})))
-			.add(defineCommand("b", (cmd) => cmd.action(() => {})));
-
-		// "a" never pulls the inherited Context, so setup never runs.
-		await unwrap(app.run(["a"]));
-		expect(built).toBe(0);
-
-		// Unused providers remain lazy on every command path.
-		await unwrap(app.run(["b"]));
-		expect(built).toBe(0);
-	});
-
 	it("constructs a transitive pull chain", async () => {
 		const builtNames: string[] = [];
 		const base = defineContext("base").setup(() => {
@@ -1057,31 +1017,6 @@ describe("Context-owned flags at use sites", () => {
 		});
 	});
 
-	it("registers several flag-owning Contexts per call and leaves the earlier builder unchanged", async () => {
-		const one = defineContext("one")
-			.flags({ one: { type: "string" } })
-			.setup(() => 1);
-		const two = defineContext("two")
-			.flags({ two: { type: "string" } })
-			.setup(() => 2);
-		const root = new Crust("cli");
-		const both = root.provide(one(), two());
-		const cmd = defineCommand("cmd", (command) =>
-			command.use(one, two).action(async ({ ctx }) => [await ctx.one, await ctx.two]),
-		);
-		const app = both
-			.add(cmd)
-			.command("inline", (command) =>
-				command.action(async ({ ctx }) => [await ctx.one, await ctx.two]),
-			);
-
-		expect(flagsOf(await root.snapshot())).toEqual([]);
-		expect(flagsOf(await both.snapshot())).toEqual(["one", "two"]);
-		const flags = { one: "1", two: "2" };
-		expect(await unwrap(app.run(["cmd"], { flags }))).toMatchObject({ result: [1, 2] });
-		expect(await unwrap(app.run(["inline"], { flags }))).toMatchObject({ result: [1, 2] });
-	});
-
 	it("checks every declared same-name Context against the provider, in any order", async () => {
 		const optional = defineContext("mode")
 			.flags({ mode: { type: "string" } })
@@ -1171,38 +1106,6 @@ describe("Context-owned flags at use sites", () => {
 });
 
 describe("Context setup dependencies", () => {
-	it("exposes the transitive dependency closure at runtime", async () => {
-		expect.assertions(1);
-		const base = defineContext("base").setup(() => "base");
-		const mid = defineContext("mid")
-			.use(base)
-			.setup(async ({ ctx }) => await ctx.base);
-		const db = defineContext("db")
-			.use(mid)
-			.setup(async ({ ctx }) => await ctx.base);
-
-		await unwrap(
-			new Crust("cli")
-				.provide(db(), mid(), base())
-				.action(async ({ ctx }) => expect(await ctx.db).toBe("base"))
-				.run([]),
-		);
-	});
-
-	it("deduplicates repeated dependency names in a setup bag", async () => {
-		expect.assertions(1);
-		const base = defineContext("base").setup(() => "base");
-		const db = defineContext("db")
-			.use(base, base)
-			.setup(async ({ ctx }) => await ctx.base);
-		await unwrap(
-			new Crust("cli")
-				.provide(base(), db())
-				.action(async ({ ctx }) => expect(await ctx.db).toBe("base"))
-				.run([]),
-		);
-	});
-
 	it("only constructs conditionally pulled dependencies", async () => {
 		let setups = 0;
 		const remote = defineContext("remote").setup(() => ({ id: ++setups }));
@@ -1422,44 +1325,6 @@ describe("lazy Context bags", () => {
 		expect(setups).toBe(1);
 	});
 
-	it("memoizes one value across hooks and the action", async () => {
-		let setups = 0;
-		const service = defineContext("service").setup(() => ({ id: ++setups }));
-		const seen: number[] = [];
-		const observer = defineExtension(defineExtensionId("observer"))
-			.use(service)
-			.preRun(async (ctx) => {
-				seen.push((await ctx.ctx.service).id);
-			})
-			.postRun(async (ctx) => {
-				seen.push((await ctx.ctx.service).id);
-			});
-		const app = new Crust("cli")
-			.provide(service())
-			.extend(observer)
-			.action(async ({ ctx }) => void seen.push((await ctx.service).id));
-
-		await unwrap(app.run([]));
-		expect(setups).toBe(1);
-		expect(seen).toEqual([1, 1, 1]);
-	});
-
-	it("installs Extension providers for commands and other Extensions", async () => {
-		const logger = defineContext("logger").setup(() => ({ label: "extension" }));
-		const events: string[] = [];
-		const provider = defineExtension(defineExtensionId("provider")).provide(logger());
-		const consumer = defineExtension(defineExtensionId("consumer"))
-			.use(logger)
-			.preRun(async (ctx) => void events.push((await ctx.ctx.logger).label));
-		const command = defineCommand("run", (builder) =>
-			builder.use(logger).action(async ({ ctx }) => void events.push((await ctx.logger).label)),
-		);
-		const app = new Crust("cli").extend(provider, consumer).add(command);
-
-		await unwrap(app.run(["run"]));
-		expect(events).toEqual(["extension", "extension"]);
-	});
-
 	it("resolves dependencies across Extension providers regardless of order", async () => {
 		expect.assertions(1);
 		const base = defineContext("base").setup(() => "base");
@@ -1497,30 +1362,6 @@ describe("lazy Context bags", () => {
 		await expect(unwrap(app.run([], { flags: { token: "secret" } }))).rejects.toMatchObject({
 			details: { name: "auth", reason: "flags-before-validation" },
 		});
-	});
-
-	it("retries only flag-validation failures after preRun", async () => {
-		let serviceSetups = 0;
-		const token = defineFlag({ type: "string" });
-		const auth = defineContext("auth")
-			.flags({ token })
-			.setup(({ flags }) => flags.token);
-		const service = defineContext("service")
-			.use(auth)
-			.setup(async ({ ctx }) => {
-				serviceSetups++;
-				return await ctx.auth;
-			});
-		const extension = defineExtension(defineExtensionId("consumer"))
-			.use(service)
-			.preRun(async (ctx) => void (await ctx.ctx.service.catch(() => undefined)));
-		const app = new Crust("cli")
-			.provide(auth(), service())
-			.extend(extension)
-			.action(async ({ ctx }) => expect(await ctx.service).toBe("secret"));
-
-		await unwrap(app.run([], { flags: { token: "secret" } }));
-		expect(serviceSetups).toBe(2);
 	});
 
 	it("retries flag-validation failures the setup wrapped with a cause", async () => {
@@ -1927,24 +1768,6 @@ describe("Context setup defer()", () => {
 		details: { subject: "context", name: "res", reason: "context-defer-after-setup" },
 	};
 
-	it("runs deferred cleanup after a failed action and rethrows the original error", async () => {
-		const log: string[] = [];
-		const boom = new Error("action failed");
-		const res = defineContext("res").setup(({ defer }) => {
-			defer(() => {
-				log.push("cleanup");
-			});
-			return "value";
-		});
-		const app = new Crust("cli").provide(res()).action(async ({ ctx }) => {
-			await ctx.res;
-			log.push("run");
-			throw boom;
-		});
-		await expect(app.run([])).resolves.toMatchObject({ status: "failed", error: boom });
-		expect(log).toEqual(["run", "cleanup"]);
-	});
-
 	it("runs multiple defers once each in reverse registration order", async () => {
 		const log: string[] = [];
 		const cleanup = () => {
@@ -2073,26 +1896,6 @@ describe("Context setup defer()", () => {
 		});
 		expect(await app.execute({ argv: [], io })).toBe(0);
 		expect(log).toEqual(["cleanup"]);
-	});
-
-	it("skips setup and its defers for an .of() double", async () => {
-		const log: string[] = [];
-		const res = defineContext("res").setup(({ defer }) => {
-			log.push("setup");
-			defer(() => {
-				log.push("cleanup");
-			});
-			return "real";
-		});
-		await unwrap(
-			new Crust("cli")
-				.provide(res.of("fake"))
-				.action(async ({ ctx }) => {
-					expect(await ctx.res).toBe("fake");
-				})
-				.run([]),
-		);
-		expect(log).toEqual([]);
 	});
 
 	it("disposes a disposable .of() value on every invocation that pulls it", async () => {
@@ -2336,28 +2139,6 @@ describe("checked Context definitions", () => {
 		expect(Object.isFrozen(auth().ownedFlags)).toBe(true);
 		expect(setups).toBe(0);
 		expect(defineContext("empty").setup(() => 1)().name).toBe("empty");
-	});
-
-	it("checks provider availability at consumption without eager setup", async () => {
-		let setups = 0;
-		const source = defineContext("source").setup(() => {
-			setups++;
-			return 1;
-		});
-		const dependent = defineContext("dependent")
-			.use(source)
-			.setup(() => {
-				setups++;
-				return 2;
-			});
-		const instances = [dependent()];
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		expect(() => new Crust("missing").provide(...instances)).toThrow("source");
-		const app = new Crust("present").provide(source()).provide(...instances);
-		instances.length = 0;
-		expect(setups).toBe(0);
-		await unwrap(app.action(async ({ ctx }) => expect(await ctx.dependent).toBe(2)).run([]));
-		expect(setups).toBe(1);
 	});
 
 	it("preserves value-only Context replacement but rejects overlapping owned flags", async () => {

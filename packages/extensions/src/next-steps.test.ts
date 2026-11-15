@@ -1,4 +1,4 @@
-import { Crust, CrustError, defineCommand, defineContext } from "@crustjs/core";
+import { type AnyCrust, Crust, CrustError, defineCommand, defineContext } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -28,6 +28,15 @@ function shellWords(line: string): string[] {
 	}
 	if (word !== undefined) words.push(word);
 	return words;
+}
+
+/** Runs each printed step line, `  app …`, and expects it to succeed. */
+async function replay(app: AnyCrust, lines: readonly string[]) {
+	for (const line of lines) {
+		expect(await captureExecute(app, shellWords(line.trim()).slice(1)), line).toMatchObject({
+			exitCode: 0,
+		});
+	}
 }
 
 const status = defineCommand("status", (cmd) =>
@@ -363,11 +372,7 @@ describe("nextSteps", () => {
 			"  app group -- rm",
 			`  app show --meta '"hello"' --metas '"1"' --metas '"x"' --tags a --tags b '"123"'`,
 		]);
-		for (const line of lines) {
-			expect(await captureExecute(app, shellWords(line.trim()).slice(1))).toMatchObject({
-				exitCode: 0,
-			});
-		}
+		await replay(app, lines);
 		expect(seen).toEqual([
 			["group", { target: "delete" }],
 			["group", { target: "rm" }],
@@ -425,11 +430,7 @@ describe("nextSteps", () => {
 			"  app run build",
 			"  app exec web -- ls -la",
 		]);
-		for (const line of lines) {
-			expect(await captureExecute(app, shellWords(line.trim()).slice(1))).toMatchObject({
-				exitCode: 0,
-			});
-		}
+		await replay(app, lines);
 		expect(seen).toEqual([
 			[{ task: "build", pkgs: ["core"], extra: ["--watch", "-5"] }, []],
 			[{ task: undefined, pkgs: [], extra: ["--watch"] }, []],
@@ -466,11 +467,7 @@ describe("nextSteps", () => {
 			"  app wait --timeout Infinity -- -Infinity",
 			"  app wait --timeout=-0 -- -0",
 		]);
-		for (const line of lines.slice(2)) {
-			expect(await captureExecute(app, shellWords(line.trim()).slice(1))).toMatchObject({
-				exitCode: 0,
-			});
-		}
+		await replay(app, lines.slice(2));
 		expect(seen).toEqual([
 			[{ at: -Infinity }, { timeout: Infinity }],
 			[{ at: -0 }, { timeout: -0 }],
@@ -504,9 +501,7 @@ describe("nextSteps", () => {
 			"Next steps:",
 			`  app show --meta '{"limit":5,"tags":["a"]}'`,
 		]);
-		expect(await captureExecute(app, shellWords(lines.at(-1)!.trim()).slice(1))).toMatchObject({
-			exitCode: 0,
-		});
+		await replay(app, lines.slice(-1));
 		expect(seen).toEqual([{ limit: 5, tags: ["a"] }]);
 	});
 
@@ -554,11 +549,7 @@ describe("nextSteps", () => {
 		const { stderr } = await captureExecute(app, ["suggest"]);
 		const lines = stderr.split("\n").slice(1);
 		expect(lines).toEqual(["  app target", "  app target x"]);
-		for (const line of lines) {
-			expect(await captureExecute(app, shellWords(line.trim()).slice(1))).toMatchObject({
-				exitCode: 0,
-			});
-		}
+		await replay(app, lines);
 		const omitted: unknown = {};
 		expect(seen).toEqual([omitted, { constructor: "x" }]);
 	});

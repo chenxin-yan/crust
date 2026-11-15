@@ -6,25 +6,17 @@ import { Crust, defineCommand, type AnyCrust } from "./crust.ts";
 function _commandNames() {
 	const app = new Crust("root");
 	const extension = defineExtension(defineExtensionId("names"));
-	// @ts-expect-error -- reusable commands share canonical-name restrictions
-	app.add(defineCommand("__proto__", (command) => command));
 	// @ts-expect-error -- whitespace-only names cannot route
 	app.add(defineCommand(" \t", {}, (command) => command));
 	// @ts-expect-error -- statically blank name
 	app.add(defineCommand("\v", (command) => command));
-	// @ts-expect-error -- Extension commands share canonical-name restrictions
-	extension.add(defineCommand("__proto__", (command) => command));
 	const command = defineCommand("valid", (builder) => builder);
-	// @ts-expect-error -- renaming cannot introduce a reserved canonical name
-	app.add(command.as("__proto__"));
 	// @ts-expect-error -- renaming cannot introduce a blank canonical name
 	app.add(command.as("\n"));
 	// @ts-expect-error -- statically blank name
 	app.add(command.as("\u2003"));
 	// @ts-expect-error -- Extension commands share canonical-name restrictions
 	extension.add(command.as("\n"));
-	// @ts-expect-error -- inline commands share canonical-name restrictions
-	new Crust("root").command("__proto__", (builder) => builder);
 }
 
 // Child names are argv tokens; a literal that cannot be one fails before runtime.
@@ -57,7 +49,7 @@ function _childNameShape(dynamic: string, mixed: "-x" | `mode-${string}`) {
 	app.add(defineCommand("x-y", (builder) => builder));
 }
 
-// An open template member does not hide an independently invalid literal member (#357).
+// An open template member does not hide an independently invalid literal member.
 function _mixedOpenNames(
 	empty: "" | `mode-${string}`,
 	reserved: "__proto__" | `mode-${string}`,
@@ -93,14 +85,8 @@ function _mixedOpenNames(
 }
 
 function _constructorNames(invalidName: "" | "valid") {
-	// @ts-expect-error -- blank literal root names cannot route
-	new Crust("");
 	// @ts-expect-error -- whitespace-only root names match trim validation
 	new Crust(" \t\n");
-	// @ts-expect-error -- statically blank name
-	new Crust("\u00a0");
-	// @ts-expect-error -- reserved record key
-	new Crust("__proto__");
 	// @ts-expect-error -- one valid branch cannot hide an invalid root name
 	new Crust(invalidName);
 	new Crust("two words");

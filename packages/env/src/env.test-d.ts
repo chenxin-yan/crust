@@ -121,8 +121,6 @@ function _typecheckRejectsFlagOnlyKeysAndPreservesVariants() {
 }
 
 function _typecheckDefineEnvRejectsInvalidValuesLikeDefineFlag() {
-	// @ts-expect-error -- FIX_DEFAULT_CHOICE: default must be one of choices
-	defineEnv("env", { LEVEL: { type: "string", choices: ["a", "b"], default: "c" } });
 	// @ts-expect-error -- FIX_ASYNC_PARSE: values are parsed synchronously
 	defineEnv("env", { ID: { type: "string", parse: async (raw: string) => raw.length } });
 

@@ -37,7 +37,7 @@ const send = defineCommand("send", (c) =>
 			{ name: "files", type: "path", variadic: true },
 		)
 		.flags({
-			count: { type: "number", default: 1 },
+			count: { type: "number", required: true, default: 1 },
 			"dry-run": { type: "boolean" },
 			origin: { type: "url", multiple: true },
 			home: { type: "url" },
@@ -71,27 +71,7 @@ async function extendedSnapshot() {
 
 describe("commandInputSchema", () => {
 	it("maps snapshot definitions onto JSON Schema", async () => {
-		const app = new Crust("cli").add(
-			defineCommand("send", (c) =>
-				c
-					.args(
-						{ name: "target", type: "string", required: true, description: "Where" },
-						{ name: "level", type: "string", choices: ["low", "high"], default: "low" },
-						{ name: "files", type: "path", variadic: true },
-					)
-					.flags({
-						count: { type: "number", required: true, default: 1 },
-						"dry-run": { type: "boolean" },
-						origin: { type: "url", multiple: true },
-						payload: { type: "json", description: "Any JSON" },
-						port: { type: "string", parse: Number },
-						mode: { type: "string", schema: passthrough },
-					})
-					.action(noop),
-			),
-		);
-		const snapshot = await app.snapshot();
-		expect(commandInputSchema(snapshot.subCommands.send!, ["send"])).toEqual({
+		expect(commandInputSchema(await sendSnapshot(), ["send"])).toEqual({
 			type: "object",
 			properties: {
 				target: { type: "string", description: "Where" },
@@ -100,6 +80,7 @@ describe("commandInputSchema", () => {
 				count: { type: "number", default: 1 },
 				"dry-run": { type: "boolean" },
 				origin: { type: "array", items: { type: "string", format: "uri" } },
+				home: { type: "string", format: "uri" },
 				payload: { description: "Any JSON" },
 				port: { type: "string" },
 				mode: { type: "string" },

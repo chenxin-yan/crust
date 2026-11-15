@@ -144,7 +144,7 @@ type Def<Name extends string, Aliases extends readonly string[] = readonly []> =
 }
 
 {
-	// brands invalid literal members beside an open template member (#357)
+	// brands invalid literal members beside an open template member
 	type Mixed = `mode-${string}`;
 	type Empty = ValidateCommandDefinitions<readonly [Def<"" | Mixed>]>;
 	type Reserved = ValidateCommandDefinitions<readonly [Def<"__proto__" | Mixed>]>;

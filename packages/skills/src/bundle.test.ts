@@ -20,6 +20,14 @@ afterEach(async () => {
 	await rm(tmpDir, { recursive: true, force: true });
 });
 
+/** Writes a bundle directory holding only `SKILL.md`. */
+async function writeBundle(skillMd: string): Promise<string> {
+	const dir = join(tmpDir, "skill");
+	await mkdir(dir, { recursive: true });
+	await writeFile(join(dir, "SKILL.md"), skillMd);
+	return dir;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // loadBundleFiles
 // ────────────────────────────────────────────────────────────────────────────
@@ -59,10 +67,7 @@ describe("loadBundleFiles", () => {
 		// `loop -> .` is a directory symlink that resolves inside the bundle
 		// root, so the path-traversal guard accepts it. Without cycle detection
 		// the walker would recurse into loop/loop/... until ELOOP/path-length.
-		const dir = join(tmpDir, "with-cycle");
-		await mkdir(dir, { recursive: true });
-		await writeFile(
-			join(dir, "SKILL.md"),
+		const dir = await writeBundle(
 			"---\nname: funnel-builder\ndescription: Build a sales funnel\n---\n",
 		);
 		await symlink(".", join(dir, "loop"));
@@ -79,108 +84,69 @@ describe("loadBundleFiles", () => {
 		await expect(loadBundleFiles(dir)).rejects.toThrow(/SKILL\.md/);
 	});
 
-	it("rejects SKILL.md with no frontmatter at all", async () => {
-		const dir = join(tmpDir, "no-frontmatter");
-		await mkdir(dir, { recursive: true });
-		await writeFile(join(dir, "SKILL.md"), "# Bundle\nNo frontmatter\n");
-		await expect(loadBundleFiles(dir)).rejects.toThrow(/`name:`/);
-	});
-
-	it("rejects empty frontmatter values", async () => {
-		const dir = join(tmpDir, "empty-values");
-		await mkdir(dir, { recursive: true });
-		await writeFile(join(dir, "SKILL.md"), '---\nname: ""\ndescription: ""\n---\n');
-		await expect(loadBundleFiles(dir)).rejects.toThrow(/`name:`/);
-	});
-
-	it("rejects whitespace-only frontmatter values", async () => {
-		const dir = join(tmpDir, "whitespace-values");
-		await mkdir(dir, { recursive: true });
-		await writeFile(join(dir, "SKILL.md"), '---\nname: skill\ndescription: "   "\n---\n');
-		await expect(loadBundleFiles(dir)).rejects.toThrow(/`description:`/);
-	});
-
-	it("strips a leading UTF-8 BOM before locating the opening fence", async () => {
-		const dir = join(tmpDir, "bom");
-		await mkdir(dir, { recursive: true });
-		await writeFile(
-			join(dir, "SKILL.md"),
-			"\uFEFF---\nname: funnel-builder\ndescription: Build a sales funnel\n---\n",
-		);
-		const { frontmatter } = await loadBundleFiles(dir);
-		expect(frontmatter.name).toBe("funnel-builder");
-	});
-
-	it("strips a trailing `# comment` after a quoted frontmatter value", async () => {
-		const dir = join(tmpDir, "name-quoted-with-comment");
-		await mkdir(dir, { recursive: true });
-		await writeFile(
-			join(dir, "SKILL.md"),
-			'---\nname: "funnel-builder" # canonical name\ndescription: "Build a sales funnel" # one-liner\n---\n',
-		);
-		const { frontmatter } = await loadBundleFiles(dir);
-		expect(frontmatter).toEqual({
-			name: "funnel-builder",
-			description: "Build a sales funnel",
-		});
-	});
-
-	it("keeps `#` verbatim when it appears inside a quoted scalar", async () => {
-		const dir = join(tmpDir, "desc-with-hash");
-		await mkdir(dir, { recursive: true });
-		await writeFile(
-			join(dir, "SKILL.md"),
-			'---\nname: funnel-builder\ndescription: "Tag #1 funnel builder"\n---\n',
-		);
-		const { frontmatter } = await loadBundleFiles(dir);
-		expect(frontmatter.description).toBe("Tag #1 funnel builder");
-	});
-
-	it("strips a trailing `# comment` from an unquoted frontmatter value", async () => {
-		const dir = join(tmpDir, "name-with-comment");
-		await mkdir(dir, { recursive: true });
-		await writeFile(
-			join(dir, "SKILL.md"),
-			"---\nname: funnel-builder # canonical name\ndescription: Build a sales funnel # one-liner\n---\n",
-		);
-		const { frontmatter } = await loadBundleFiles(dir);
-		expect(frontmatter).toEqual({
-			name: "funnel-builder",
-			description: "Build a sales funnel",
-		});
-	});
-
-	it("ignores nested `name:` keys (only top-level / unindented matches)", async () => {
-		// A nested key under `metadata:` must not be mistaken for the top-level
-		// name — without a real top-level `name`, the load must fail rather
-		// than silently picking up the indented value.
-		const dir = join(tmpDir, "nested-name");
-		await mkdir(dir, { recursive: true });
-		await writeFile(
-			join(dir, "SKILL.md"),
+	it.each([
+		["no frontmatter at all", "# Bundle\nNo frontmatter\n", /`name:`/],
+		["empty frontmatter values", '---\nname: ""\ndescription: ""\n---\n', /`name:`/],
+		[
+			"whitespace-only frontmatter values",
+			'---\nname: skill\ndescription: "   "\n---\n',
+			/`description:`/,
+		],
+		// A nested key under `metadata:` must not be mistaken for the top-level name.
+		[
+			"only a nested `name:` key",
 			"---\ndescription: Build a sales funnel\nmetadata:\n  name: other-name\n---\n",
-		);
-		await expect(loadBundleFiles(dir)).rejects.toThrow(/`name:`/);
+			/`name:`/,
+		],
+	])("rejects SKILL.md with %s", async (_case, skillMd, error) => {
+		await expect(loadBundleFiles(await writeBundle(skillMd))).rejects.toThrow(error);
 	});
 
-	it("tolerates a closing fence with trailing whitespace", async () => {
-		const dir = join(tmpDir, "fence-trailing-ws");
-		await mkdir(dir, { recursive: true });
-		await writeFile(
-			join(dir, "SKILL.md"),
+	it.each([
+		[
+			"strips a leading UTF-8 BOM before locating the opening fence",
+			"\uFEFF---\nname: funnel-builder\ndescription: Build a sales funnel\n---\n",
+			{ name: "funnel-builder", description: "Build a sales funnel" },
+		],
+		[
+			"strips a trailing `# comment` after a quoted frontmatter value",
+			'---\nname: "funnel-builder" # canonical name\ndescription: "Build a sales funnel" # one-liner\n---\n',
+			{ name: "funnel-builder", description: "Build a sales funnel" },
+		],
+		[
+			"keeps `#` verbatim when it appears inside a quoted scalar",
+			'---\nname: funnel-builder\ndescription: "Tag #1 funnel builder"\n---\n',
+			{ name: "funnel-builder", description: "Tag #1 funnel builder" },
+		],
+		[
+			"strips a trailing `# comment` from an unquoted frontmatter value",
+			"---\nname: funnel-builder # canonical name\ndescription: Build a sales funnel # one-liner\n---\n",
+			{ name: "funnel-builder", description: "Build a sales funnel" },
+		],
+		[
+			"tolerates a closing fence with trailing whitespace",
 			"---\nname: funnel-builder\ndescription: Build a sales funnel\n--- \n# Bundle\n",
-		);
-		const { frontmatter } = await loadBundleFiles(dir);
-		expect(frontmatter.name).toBe("funnel-builder");
+			{ name: "funnel-builder", description: "Build a sales funnel" },
+		],
+		[
+			"keeps a quoted value that starts with a block scalar indicator",
+			'---\nname: funnel-builder\ndescription: ">-"\n---\n',
+			{ name: "funnel-builder", description: ">-" },
+		],
+		[
+			"handles CRLF line endings",
+			"---\r\nname: funnel-builder\r\ndescription: Build a sales funnel\r\n---\r\n",
+			{ name: "funnel-builder", description: "Build a sales funnel" },
+		],
+	])("%s", async (_title, skillMd, expected) => {
+		const { frontmatter } = await loadBundleFiles(await writeBundle(skillMd));
+		expect(frontmatter).toEqual(expected);
 	});
 
 	it.each([">-", "|", ">", "|+", "!!str |-", "&desc >", "!!str &desc |"])(
 		"rejects a `%s` YAML block scalar instead of reading the indicator as the value",
 		async (indicator) => {
-			const dir = join(tmpDir, "block-scalar");
-			await mkdir(dir, { recursive: true });
-			await writeFile(
-				join(dir, "SKILL.md"),
+			const dir = await writeBundle(
 				`---\nname: funnel-builder\ndescription: ${indicator}\n  Build a sales\n  funnel\n---\n`,
 			);
 			await expect(loadBundleFiles(dir)).rejects.toThrow(
@@ -189,38 +155,13 @@ describe("loadBundleFiles", () => {
 		},
 	);
 
-	it("keeps a quoted value that starts with a block scalar indicator", async () => {
-		const dir = join(tmpDir, "quoted-indicator");
-		await mkdir(dir, { recursive: true });
-		await writeFile(join(dir, "SKILL.md"), '---\nname: funnel-builder\ndescription: ">-"\n---\n');
-		const { frontmatter } = await loadBundleFiles(dir);
-		expect(frontmatter.description).toBe(">-");
-	});
-
-	it("handles CRLF line endings", async () => {
-		const dir = join(tmpDir, "crlf");
-		await mkdir(dir, { recursive: true });
-		await writeFile(
-			join(dir, "SKILL.md"),
-			"---\r\nname: funnel-builder\r\ndescription: Build a sales funnel\r\n---\r\n",
-		);
-		const { frontmatter } = await loadBundleFiles(dir);
-		expect(frontmatter).toEqual({
-			name: "funnel-builder",
-			description: "Build a sales funnel",
-		});
-	});
-
 	it("rejects a path-traversal symlink that escapes the bundle root", async () => {
-		const dir = join(tmpDir, "with-escape");
-		const outside = join(tmpDir, "outside-target");
-		await mkdir(dir, { recursive: true });
-		await mkdir(outside, { recursive: true });
-		await writeFile(join(outside, "secret.txt"), "should not be readable");
-		await writeFile(
-			join(dir, "SKILL.md"),
+		const dir = await writeBundle(
 			"---\nname: funnel-builder\ndescription: Build a sales funnel\n---\n",
 		);
+		const outside = join(tmpDir, "outside-target");
+		await mkdir(outside, { recursive: true });
+		await writeFile(join(outside, "secret.txt"), "should not be readable");
 		await symlink(outside, join(dir, "escape"));
 
 		await expect(loadBundleFiles(dir)).rejects.toThrow(/path traversal/i);

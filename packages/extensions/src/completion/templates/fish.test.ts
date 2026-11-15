@@ -14,6 +14,7 @@ import {
 import type { CompletionCommand } from "../spec.ts";
 import { walkCommand } from "../walker.ts";
 import { renderFish } from "./fish.ts";
+import { posFixture, valueTypeFixture } from "./test-fixtures.ts";
 
 const fixture: CompletionCommand = {
 	name: "mycli",
@@ -282,20 +283,7 @@ describeIfFish("renderFish · subprocess completion", () => {
 			["mycli deploy ", ["prod"]],
 			["mycli build --target ", ["browser", "bun", "node"]],
 		] as const) {
-			const driver = `source ${shQuoteForFish(scriptPath)}; complete -C ${shQuoteForFish(line)}`;
-			const {
-				exitCode,
-				stdout: out,
-				stderr: err,
-			} = await runBoundedProcess("fish", ["-c", driver], { timeout: 4_000 });
-			expect(exitCode).toBe(0);
-			expect(err).toBe("");
-			expect(
-				out
-					.trim()
-					.split("\n")
-					.map((candidate) => candidate.split("\t")[0]),
-			).toEqual([...expected]);
+			expect(await fishComplete(scriptPath, line)).toEqual([...expected]);
 		}
 	});
 
@@ -370,18 +358,6 @@ describeIfFish("renderFish · subprocess completion", () => {
 				},
 			],
 		});
-		const complete = async (path: string, line: string): Promise<string[]> => {
-			const driver = `source ${shQuoteForFish(path)}; complete -C ${shQuoteForFish(line)}`;
-			const { exitCode, stdout, stderr } = await runBoundedProcess("fish", ["-c", driver], {
-				timeout: 4_000,
-			});
-			expect(exitCode).toBe(0);
-			expect(stderr).toBe("");
-			return stdout
-				.split("\n")
-				.filter((candidate) => candidate !== "")
-				.map((candidate) => candidate.split("\t")[0]!);
-		};
 		const path = join(tmpDir, "vcli.fish");
 		await writeFile(path, renderFish(specWith(quiet), "vcli", "1.0.0"), "utf8");
 
@@ -412,7 +388,7 @@ describeIfFish("renderFish · subprocess completion", () => {
 			["vcli -- deploy ", []],
 			["vcli -- ", []],
 		] as const) {
-			const candidates = await complete(path, line);
+			const candidates = await fishComplete(path, line);
 			expect({ line, candidates }).toEqual({ line, candidates: [...expected] });
 		}
 
@@ -438,7 +414,7 @@ describeIfFish("renderFish · subprocess completion", () => {
 				["vcli deploy prod -qpdev alpha ", ["delta", "gamma"]],
 				["vcli -xp dev deploy ", []],
 			] as const) {
-				const candidates = await complete(variantPath, line);
+				const candidates = await fishComplete(variantPath, line);
 				expect.soft({ variant, line, candidates }).toEqual({
 					variant,
 					line,
@@ -508,15 +484,7 @@ describeIfFish("renderFish · afterDoubleDash", () => {
 				["mycli exec web -- ", ["ls"]],
 				["mycli exec web -- ls ", []],
 			] as const) {
-				const driver = `source ${shQuoteForFish(path)}; complete -C ${shQuoteForFish(line)}`;
-				const { exitCode, stdout, stderr } = await runBoundedProcess("fish", ["-c", driver], {
-					timeout: 4_000,
-				});
-				expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
-				const candidates = stdout
-					.split("\n")
-					.filter((candidate) => candidate !== "")
-					.map((candidate) => candidate.split("\t")[0]!);
+				const candidates = await fishComplete(path, line);
 				expect({ line, candidates }).toEqual({ line, candidates: [...expected] });
 			}
 		} finally {
@@ -531,41 +499,24 @@ async function isFishAvailable(): Promise<boolean> {
 	return (await runBoundedProcess("fish", ["--version"], { timeout: 5_000 })).exitCode === 0;
 }
 
+/** Source the script and list the candidate words fish completes for `line`. */
+async function fishComplete(scriptPath: string, line: string): Promise<string[]> {
+	const driver = `source ${shQuoteForFish(scriptPath)}; complete -C ${shQuoteForFish(line)}`;
+	const { exitCode, stdout, stderr } = await runBoundedProcess("fish", ["-c", driver], {
+		timeout: 4_000,
+	});
+	expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
+	return stdout
+		.split("\n")
+		.filter((candidate) => candidate !== "")
+		.map((candidate) => candidate.split("\t")[0]!);
+}
+
 function shQuoteForFish(value: string): string {
 	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 describe("renderFish — url/path/json value-flag handling", () => {
-	const valueTypeFixture: CompletionCommand = {
-		name: "mycli",
-		flags: [
-			{
-				name: "out",
-				spellings: ["--out"],
-				type: "string",
-				takesValue: true,
-				valueCompletion: "files",
-			},
-			{
-				name: "endpoint",
-				spellings: ["--endpoint"],
-				type: "string",
-				takesValue: true,
-				valueCompletion: "none",
-			},
-			{
-				name: "config",
-				spellings: ["--config"],
-				type: "string",
-				takesValue: true,
-				valueCompletion: "none",
-			},
-			{ name: "name", spellings: ["--name"], type: "string", takesValue: true },
-		],
-		args: [],
-		subCommands: [],
-	};
-
 	it("emits __fish_complete_path for path flags", () => {
 		const script = renderFish(valueTypeFixture, "mycli", "1.0.0");
 		const line = script.split("\n").find((l) => l.includes("-l 'out'"));
@@ -585,34 +536,6 @@ describe("renderFish — url/path/json value-flag handling", () => {
 	});
 
 	it("emits a positional rule for path args; url/json positionals rely on the global -f suppression", () => {
-		const posFixture: CompletionCommand = {
-			name: "mycli",
-			flags: [],
-			args: [
-				{
-					name: "src",
-					type: "string",
-					required: true,
-					variadic: false,
-					valueCompletion: "files",
-				},
-				{
-					name: "endpoint",
-					type: "string",
-					required: true,
-					variadic: false,
-					valueCompletion: "none",
-				},
-				{
-					name: "payload",
-					type: "string",
-					required: true,
-					variadic: false,
-					valueCompletion: "none",
-				},
-			],
-			subCommands: [],
-		};
 		const script = renderFish(posFixture, "mycli", "1.0.0");
 		// Path positional gets an explicit `(__fish_complete_path)` rule.
 		expect(script).toContain("-a '(__fish_complete_path)'");

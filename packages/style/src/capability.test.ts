@@ -57,57 +57,23 @@ describe("resolveColorDepth", () => {
 			expect(resolveColorDepth("auto", { isTTY: true })).toBe("truecolor");
 		});
 
-		it('TTY + NO_COLOR set → "none"', () => {
-			expect(
-				resolveColorDepth("auto", {
-					isTTY: true,
-					noColor: "1",
-					colorTerm: "truecolor",
-				}),
-			).toBe("none");
-		});
-
-		it('TTY + COLORTERM=24bit (case-insensitive) → "truecolor"', () => {
-			expect(
-				resolveColorDepth("auto", {
-					isTTY: true,
-					noColor: undefined,
-					colorTerm: "24BIT",
-				}),
-			).toBe("truecolor");
-		});
-
-		it('TTY + TERM=screen-256color (uppercase) → "256" (case-insensitive)', () => {
-			expect(
-				resolveColorDepth("auto", {
-					isTTY: true,
-					noColor: undefined,
-					colorTerm: undefined,
-					term: "SCREEN-256COLOR",
-				}),
-			).toBe("256");
-		});
-
-		it('TTY + TERM=xterm → "16"', () => {
-			expect(
-				resolveColorDepth("auto", {
-					isTTY: true,
-					noColor: undefined,
-					colorTerm: undefined,
-					term: "xterm",
-				}),
-			).toBe("16");
-		});
-
-		it.each(["DUMB", "Dumb", "dUmB"])('TTY + TERM=%s (case-insensitive) → "none"', (term) => {
-			expect(
-				resolveColorDepth("auto", {
-					isTTY: true,
-					noColor: undefined,
-					colorTerm: undefined,
-					term,
-				}),
-			).toBe("none");
+		it.each([
+			["NO_COLOR set", "none", { noColor: "1", colorTerm: "truecolor" }],
+			["COLORTERM=24bit (case-insensitive)", "truecolor", { colorTerm: "24BIT" }],
+			["TERM=screen-256color (uppercase, case-insensitive)", "256", { term: "SCREEN-256COLOR" }],
+			["TERM=xterm", "16", { term: "xterm" }],
+			["TERM=DUMB (case-insensitive)", "none", { term: "DUMB" }],
+			["TERM=Dumb (case-insensitive)", "none", { term: "Dumb" }],
+			["TERM=dUmB (case-insensitive)", "none", { term: "dUmB" }],
+			["TERM=xterm-24bit", "truecolor", { term: "xterm-24bit" }],
+			[
+				"TERM=xterm-256color-direct (`-direct` suffix wins over `256color`)",
+				"truecolor",
+				{ term: "xterm-256color-direct" },
+			],
+			["TERM=xterm-TRUECOLOR (case-insensitive)", "truecolor", { term: "xterm-TRUECOLOR" }],
+		])("TTY + %s → %j", (_label, depth, overrides) => {
+			expect(resolveColorDepth("auto", { isTTY: true, ...overrides })).toBe(depth);
 		});
 
 		it("TERM=dumb wins over COLORTERM=truecolor and disables modifiers too", () => {
@@ -115,39 +81,6 @@ describe("resolveColorDepth", () => {
 			expect(resolveColorDepth("auto", dumb)).toBe("none");
 			expect(resolveModifierCapability("auto", dumb)).toBe(false);
 			expect(resolveModifierCapability("auto", { ...dumb, forceColor: "1" })).toBe(true);
-		});
-
-		it('TTY + TERM=xterm-24bit → "truecolor"', () => {
-			expect(
-				resolveColorDepth("auto", {
-					isTTY: true,
-					noColor: undefined,
-					colorTerm: undefined,
-					term: "xterm-24bit",
-				}),
-			).toBe("truecolor");
-		});
-
-		it('TTY + TERM=xterm-256color-direct → "truecolor" (`-direct` suffix wins over `256color`)', () => {
-			expect(
-				resolveColorDepth("auto", {
-					isTTY: true,
-					noColor: undefined,
-					colorTerm: undefined,
-					term: "xterm-256color-direct",
-				}),
-			).toBe("truecolor");
-		});
-
-		it('TTY + TERM=xterm-TRUECOLOR → "truecolor" (case-insensitive)', () => {
-			expect(
-				resolveColorDepth("auto", {
-					isTTY: true,
-					noColor: undefined,
-					colorTerm: undefined,
-					term: "xterm-TRUECOLOR",
-				}),
-			).toBe("truecolor");
 		});
 	});
 

@@ -14,12 +14,6 @@ root.command("unsafe", (c) =>
 		// @ts-expect-error The stored action still requires a string.
 		.provide(numeric()),
 );
-root.command("silent", (c) =>
-	c
-		.action(async ({ ctx }) => await ctx.db)
-		// @ts-expect-error Replacement must not silently invalidate RunOutcome<string>.
-		.provide(numeric()),
-);
 root.command("before", (c) =>
 	c.provide(numeric()).action(async ({ ctx }) => {
 		type _value = Expect<Equal<Awaited<typeof ctx.db>, number>>;

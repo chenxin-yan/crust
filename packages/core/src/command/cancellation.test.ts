@@ -19,6 +19,13 @@ function awaitingSignal() {
 	return { ready, action };
 }
 
+/** An `await using` resource whose disposal throws "connection close failed". */
+const failingConnection = () => ({
+	async [Symbol.asyncDispose]() {
+		throw new Error("connection close failed");
+	},
+});
+
 describe("invocation cancellation signal", () => {
 	let originalExitCode: number | string | null | undefined;
 
@@ -39,9 +46,7 @@ describe("invocation cancellation signal", () => {
 		await ready;
 		controller.abort(new DOMException("Caller cancelled.", "AbortError"));
 
-		expect(await outcome).toMatchObject({ status: "failed" });
-		const failed = await outcome;
-		expect(failed.status === "failed" && (failed.error as Error).name).toBe("AbortError");
+		expect(await outcome).toMatchObject({ status: "failed", error: { name: "AbortError" } });
 		expect(process.exitCode).toBe(0);
 	});
 
@@ -222,11 +227,7 @@ describe("invocation cancellation signal", () => {
 				}),
 			)
 			.action(async (ctx) => {
-				await using _connection = {
-					async [Symbol.asyncDispose]() {
-						throw new Error("connection close failed");
-					},
-				};
+				await using _connection = failingConnection();
 				return await action(ctx);
 			})
 			.execute({
@@ -266,11 +267,7 @@ describe("invocation cancellation signal", () => {
 					})),
 				)
 				.action(async (ctx) => {
-					await using _connection = {
-						async [Symbol.asyncDispose]() {
-							throw new Error("connection close failed");
-						},
-					};
+					await using _connection = failingConnection();
 					return await action(ctx);
 				})
 				.execute({
@@ -315,11 +312,7 @@ describe("invocation cancellation signal", () => {
 		const stderr: string[] = [];
 		const exitCode = await new Crust("cli")
 			.action(async () => {
-				await using _connection = {
-					async [Symbol.asyncDispose]() {
-						throw new Error("connection close failed");
-					},
-				};
+				await using _connection = failingConnection();
 				throw new Error("query failed");
 			})
 			.execute({ argv: [], io: { stdout() {}, stderr: (text) => stderr.push(text) } });

@@ -32,6 +32,19 @@ function deployApp() {
 		});
 }
 
+const packageDir = join(import.meta.dirname, "..");
+const inputModule = JSON.stringify(pathToFileURL(join(import.meta.dirname, "input.ts")).href);
+
+/** Runs `script` as a module on `command` with `stdin` piped in. */
+function runScript(command: string, options: readonly string[], script: string, stdin: string) {
+	return spawnSync(command, [...options, "-e", script], {
+		cwd: packageDir,
+		input: stdin,
+		encoding: "utf8",
+		timeout: 10_000,
+	});
+}
+
 async function failure(payload: string) {
 	const outcome = await deployApp().run([], {
 		args: { target: "typed" },
@@ -295,19 +308,14 @@ describe("input", () => {
 		const script = `
 			${prelude}
 			import { Crust } from "@crustjs/core";
-			import { input } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "input.ts")).href)};
+			import { input } from ${inputModule};
 			const app = new Crust("app")
 				.extend(input())
 				.flags({ region: { type: "string", default: "us" } })
 				.action(({ flags, stdout }) => stdout(flags.region));
 			process.exitCode = await app.execute({ argv: ["--input", "-"] });
 		`;
-		const run = spawnSync(command, [...options, "-e", script], {
-			cwd: join(import.meta.dirname, ".."),
-			input: '{"region":"eu"}',
-			encoding: "utf8",
-			timeout: 10_000,
-		});
+		const run = runScript(command, options, script, '{"region":"eu"}');
 
 		expect(run.stderr).toBe("");
 		expect(run.stdout.trim()).toBe("eu");
@@ -317,18 +325,13 @@ describe("input", () => {
 	it("refuses - while another reader consumes stdin", () => {
 		const script = `
 			import { Crust } from "@crustjs/core";
-			import { input } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "input.ts")).href)};
+			import { input } from ${inputModule};
 			process.stdin.on("data", () => {});
 			const app = new Crust("app").extend(input()).action(() => {});
 			process.exitCode = await app.execute({ argv: ["--input", "-"] });
 			process.stdin.destroy();
 		`;
-		const run = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
-			cwd: join(import.meta.dirname, ".."),
-			input: "{}",
-			encoding: "utf8",
-			timeout: 10_000,
-		});
+		const run = runScript(process.execPath, ["--input-type=module"], script, "{}");
 
 		expect(run.stderr).toBe(
 			"Error: --input: cannot read stdin (stdin is in use by another reader)\n",
@@ -343,17 +346,12 @@ describe("input", () => {
 	])("reads stdin that already ended as empty input on %s", (_runtime, command, options) => {
 		const script = `
 			import { Crust } from "@crustjs/core";
-			import { input } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "input.ts")).href)};
+			import { input } from ${inputModule};
 			for await (const _ of process.stdin);
 			const app = new Crust("app").extend(input()).action(() => {});
 			process.exitCode = await app.execute({ argv: ["--input", "-"] });
 		`;
-		const run = spawnSync(command, [...options, "-e", script], {
-			cwd: join(import.meta.dirname, ".."),
-			input: '{"region":"eu"}',
-			encoding: "utf8",
-			timeout: 10_000,
-		});
+		const run = runScript(command, options, script, '{"region":"eu"}');
 
 		expect(run.stderr).toContain("--input: invalid JSON from stdin.");
 		expect(run.status).toBe(1);
@@ -367,15 +365,13 @@ describe("input", () => {
 		async (_runtime, command, options) => {
 			const script = `
 			import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
-			import { input } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "input.ts")).href)};
+			import { input } from ${inputModule};
 			const ready = defineExtension(defineExtensionId("ready")).setup(({ stderr }) => stderr("ready"));
 			const app = new Crust("app").extend(ready, input()).action(() => {});
 			process.exitCode = await app.execute({ argv: ["--input", "-"] });
 		`;
 			// stdin stays open, so only cancellation can end the read.
-			const child = spawn(command, [...options, "-e", script], {
-				cwd: join(import.meta.dirname, ".."),
-			});
+			const child = spawn(command, [...options, "-e", script], { cwd: packageDir });
 			const watchdog = setTimeout(() => child.kill("SIGKILL"), 3_000);
 			child.stderr.once("data", () => child.kill("SIGINT"));
 			const [code, signal] = await once(child, "exit");

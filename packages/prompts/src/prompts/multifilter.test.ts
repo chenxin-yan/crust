@@ -51,15 +51,7 @@ describe("multifilter — interactive", () => {
 		});
 
 		await tick();
-		prompt.keys("down");
-		await tick();
-		prompt.keys("space");
-		await tick();
-		prompt.keys("up");
-		await tick();
-		prompt.keys("space");
-		await tick();
-		prompt.keys("return");
+		prompt.keys("down", "space", "up", "space", "return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["alpha", "beta"]);
@@ -76,9 +68,7 @@ describe("multifilter — interactive", () => {
 		});
 
 		await tick();
-		prompt.keys("down");
-		await tick();
-		prompt.keys("space");
+		prompt.keys("down", "space");
 		await tick();
 
 		const duplicateLines = prompt
@@ -117,9 +107,7 @@ describe("multifilter — interactive", () => {
 		});
 
 		await tick();
-		prompt.keys("space");
-		await tick();
-		prompt.keys("return");
+		prompt.keys("space", "return");
 
 		expect(await prompt.answer).toEqual([]);
 	});
@@ -137,9 +125,7 @@ describe("multifilter — interactive", () => {
 
 		expect(prompt.screen()).toContain("At least one");
 
-		prompt.keys("space");
-		await tick();
-		prompt.keys("return");
+		prompt.keys("space", "return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["x"]);
@@ -152,17 +138,8 @@ describe("multifilter — interactive", () => {
 		});
 
 		await tick();
-		prompt.keys("down");
-		await tick();
-		prompt.keys("down");
-		await tick();
-		prompt.keys("space");
-		await tick();
-		prompt.type("a");
-		await tick();
-		prompt.type("l");
-		await tick();
-		prompt.type("p");
+		prompt.keys("down", "down", "space");
+		prompt.type("alp");
 		await tick();
 
 		expect(prompt.screen()).toContain("alpha");

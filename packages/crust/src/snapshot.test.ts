@@ -27,47 +27,40 @@ describe("buildEntrypoint", () => {
 		await Promise.all(tempDirs.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 	});
 
-	it("returns the entry snapshot and exits before trailing code", async () => {
-		const directory = await mkdtemp(join(tmpdir(), "crust-entry-snapshot-test-"));
+	/** Prepares `source` (given the project directory) as cli.ts of a fresh project that builds into dist/. */
+	async function prepare(source: string | ((directory: string) => string)) {
+		const directory = await mkdtemp(join(tmpdir(), "crust-entry-test-"));
 		tempDirs.push(directory);
 		const entry = join(directory, "cli.ts");
-		const trailingMarker = join(directory, "trailing-code-ran");
-		await writeFile(
-			entry,
-			`import { Crust } from ${JSON.stringify(coreUrl)};\n` +
+		await writeFile(entry, typeof source === "string" ? source : source(directory));
+		const result = await buildEntrypoint(entry, join(directory, "dist"), [], io, directory);
+		return { directory, ...result };
+	}
+
+	it("returns the entry snapshot and exits before trailing code", async () => {
+		const trailingMarker = (directory: string) => join(directory, "trailing-code-ran");
+		const { directory, snapshot, build } = await prepare(
+			(directory) =>
+				`import { Crust } from ${JSON.stringify(coreUrl)};\n` +
 				`const app = new Crust("fixture", { description: "Fixture CLI" }).action(() => {});\n` +
 				`await app.execute();\n` +
-				`await Bun.write(${JSON.stringify(trailingMarker)}, "ran");\n`,
-		);
-
-		const { snapshot, build } = await buildEntrypoint(
-			entry,
-			join(directory, "dist"),
-			[],
-			io,
-			directory,
+				`await Bun.write(${JSON.stringify(trailingMarker(directory))}, "ran");\n`,
 		);
 
 		expect(snapshot.meta).toMatchObject({ name: "fixture", description: "Fixture CLI" });
 		expect(snapshot.hasAction).toBe(true);
 		expect(build).toEqual({ extensions: [] });
-		await expect(access(trailingMarker)).rejects.toThrow();
+		await expect(access(trailingMarker(directory))).rejects.toThrow();
 	});
 
 	it("runs Extension build hooks and returns their artifact report", async () => {
-		const directory = await mkdtemp(join(tmpdir(), "crust-entry-build-test-"));
-		tempDirs.push(directory);
-		const entry = join(directory, "cli.ts");
-		const outDir = join(directory, "dist");
-		await writeFile(
-			entry,
+		const result = await prepare(
 			`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(coreUrl)};\n` +
 				`const artifact = defineExtension(defineExtensionId("artifact")).build(() => [{ path: "artifact.txt", content: "built" }, { path: "assets/bytes.bin", content: new Uint8Array([0, 255, 128, 10]) }]);\n` +
 				`const app = new Crust("fixture").extend(artifact).action(() => {});\n` +
 				`await app.execute();\n`,
 		);
-
-		const result = await buildEntrypoint(entry, outDir, [], io, directory);
+		const outDir = join(result.directory, "dist");
 
 		expect(result.snapshot.meta.name).toBe("fixture");
 		expect(result.build.extensions).toHaveLength(1);
@@ -80,27 +73,16 @@ describe("buildEntrypoint", () => {
 	});
 
 	it("explains when an entry exits without producing a snapshot", async () => {
-		const directory = await mkdtemp(join(tmpdir(), "crust-entry-snapshot-test-"));
-		tempDirs.push(directory);
-		const entry = join(directory, "cli.ts");
-		await writeFile(entry, "export {};\n");
-
-		await expect(
-			buildEntrypoint(entry, join(directory, "dist"), [], io, directory),
-		).rejects.toThrow("Entry exited without producing a Command Snapshot");
+		await expect(prepare("export {};\n")).rejects.toThrow(
+			"Entry exited without producing a Command Snapshot",
+		);
 	});
 
 	it("explains when core produces a snapshot without a build report", async () => {
-		const directory = await mkdtemp(join(tmpdir(), "crust-entry-report-test-"));
-		tempDirs.push(directory);
-		const entry = join(directory, "cli.ts");
-		await writeFile(
-			entry,
-			`await Bun.write(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!, JSON.stringify({ meta: { name: "old-core" } }));\n`,
-		);
-
 		await expect(
-			buildEntrypoint(entry, join(directory, "dist"), [], io, directory),
+			prepare(
+				`await Bun.write(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!, JSON.stringify({ meta: { name: "old-core" } }));\n`,
+			),
 		).rejects.toThrow("Command Snapshot without a Build Report");
 	});
 
@@ -110,17 +92,12 @@ describe("buildEntrypoint", () => {
 		{ extensions: [{ id: " padded ", files: [] }] },
 		{ extensions: [{ id: "missing", files: ["missing.txt"] }] },
 	])("rejects malformed or synthetic legacy reports: %j", async (report) => {
-		const directory = await mkdtemp(join(tmpdir(), "crust-entry-report-test-"));
-		tempDirs.push(directory);
-		const entry = join(directory, "cli.ts");
-		await writeFile(
-			entry,
-			`import { dirname, join } from "node:path";
+		await expect(
+			prepare(
+				`import { dirname, join } from "node:path";
 			await Bun.write(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!, JSON.stringify({ meta: { name: "fixture" } }));
 			await Bun.write(join(dirname(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!), "build-report.json"), ${JSON.stringify(JSON.stringify(report))});`,
-		);
-		await expect(
-			buildEntrypoint(entry, join(directory, "dist"), [], io, directory),
+			),
 		).rejects.toThrow(/invalid Build Report[\s\S]*compatible @crustjs\/core/);
 	});
 
@@ -135,12 +112,9 @@ describe("buildEntrypoint", () => {
 		"linked.txt",
 		"linked-dir/outside.txt",
 	])("rejects unsafe or nonregular reported paths: %s", async (file) => {
-		const directory = await mkdtemp(join(tmpdir(), "crust-entry-report-path-test-"));
-		tempDirs.push(directory);
-		const entry = join(directory, "cli.ts");
-		await writeFile(
-			entry,
-			`import { mkdirSync, symlinkSync } from "node:fs";
+		await expect(
+			prepare(
+				`import { mkdirSync, symlinkSync } from "node:fs";
 			import { dirname, join } from "node:path";
 			const outDir = process.env.CRUST_INTERNAL_BUILD_OUT_DIR!;
 			mkdirSync(join(outDir, "directory"), { recursive: true });
@@ -150,55 +124,31 @@ describe("buildEntrypoint", () => {
 			symlinkSync(dirname(outDir), join(outDir, "linked-dir"), "dir");
 			await Bun.write(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!, JSON.stringify({ meta: { name: "fixture" } }));
 			await Bun.write(join(dirname(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!), "build-report.json"), ${JSON.stringify(JSON.stringify({ extensions: [{ id: "fixture", files: [file] }] }))});`,
-		);
-		await expect(
-			buildEntrypoint(entry, join(directory, "dist"), [], io, directory),
+			),
 		).rejects.toThrow(/invalid Build Report[\s\S]*compatible @crustjs\/core/);
 	});
 
 	it("rethrows the entry's error when the subprocess exits non-zero", async () => {
-		const directory = await mkdtemp(join(tmpdir(), "crust-entry-snapshot-test-"));
-		tempDirs.push(directory);
-		const entry = join(directory, "cli.ts");
-		await writeFile(entry, `throw new Error("entry blew up before execute");\n`);
-
-		await expect(
-			buildEntrypoint(entry, join(directory, "dist"), [], io, directory),
-		).rejects.toThrow("entry blew up before execute");
+		await expect(prepare(`throw new Error("entry blew up before execute");\n`)).rejects.toThrow(
+			"entry blew up before execute",
+		);
 	});
 
 	it("explains when the snapshot file contains invalid JSON", async () => {
-		const directory = await mkdtemp(join(tmpdir(), "crust-entry-snapshot-test-"));
-		tempDirs.push(directory);
-		const entry = join(directory, "cli.ts");
-		await writeFile(
-			entry,
-			`await Bun.write(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!, "not json");\n`,
-		);
-
 		await expect(
-			buildEntrypoint(entry, join(directory, "dist"), [], io, directory),
+			prepare(`await Bun.write(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!, "not json");\n`),
 		).rejects.toThrow("Entry produced an invalid Command Snapshot");
 	});
 
-	it.each([{ meta: { name: 42 } }])(
-		"rejects a snapshot without a root command name: %j",
-		async (snapshot) => {
-			const directory = await mkdtemp(join(tmpdir(), "crust-entry-snapshot-test-"));
-			tempDirs.push(directory);
-			const entry = join(directory, "cli.ts");
-			await writeFile(
-				entry,
+	it('rejects a snapshot without a root command name: {"meta":{"name":42}}', async () => {
+		await expect(
+			prepare(
 				`import { dirname, join } from "node:path";
-			await Bun.write(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!, ${JSON.stringify(JSON.stringify(snapshot))});
+			await Bun.write(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!, ${JSON.stringify(JSON.stringify({ meta: { name: 42 } }))});
 			await Bun.write(join(dirname(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!), "build-report.json"), '{"extensions":[]}');`,
-			);
-
-			await expect(
-				buildEntrypoint(entry, join(directory, "dist"), [], io, directory),
-			).rejects.toThrow(/invalid Command Snapshot[\s\S]*compatible @crustjs\/core/);
-		},
-	);
+			),
+		).rejects.toThrow(/invalid Command Snapshot[\s\S]*compatible @crustjs\/core/);
+	});
 
 	describe("entry lifetime", { tags: ["macos"] }, () => {
 		const pids: number[] = [];
@@ -244,16 +194,8 @@ describe("buildEntrypoint", () => {
 		it.skipIf(process.platform === "win32")(
 			"reports an external signal with stderr rather than a timeout",
 			async () => {
-				const directory = await mkdtemp(join(tmpdir(), "crust-entry-signal-test-"));
-				tempDirs.push(directory);
-				const entry = join(directory, "cli.ts");
-				await writeFile(
-					entry,
-					`console.error("before signal");\nprocess.kill(process.pid, "SIGKILL");\n`,
-				);
-
 				await expect(
-					buildEntrypoint(entry, join(directory, "dist"), [], io, directory),
+					prepare(`console.error("before signal");\nprocess.kill(process.pid, "SIGKILL");\n`),
 				).rejects.toThrow("Command Snapshot preparation was killed by SIGKILL.\nbefore signal");
 			},
 		);
@@ -332,18 +274,13 @@ describe("buildEntrypoint", () => {
 
 		/**
 		 * Runs a host that prepares hung entries (each with a stderr-holding descendant),
-		 * then interrupts itself as `mode` describes once all are alive. `concurrent`
-		 * prepares two projects at once and sends SIGINT.
+		 * then interrupts itself as `mode` describes once all are alive. `listener` sends
+		 * SIGINT to a host with its own SIGINT listener; `concurrent` prepares two projects
+		 * at once and sends SIGINT.
 		 */
 		async function runInterruptedHost(
-			mode: "SIGINT" | "SIGTERM" | "SIGHUP" | "SIGQUIT" | "exit" | "listener" | "concurrent",
-			{
-				runtime = "bun",
-				listenerSignal = "SIGINT",
-			}: {
-				runtime?: "bun" | "node";
-				listenerSignal?: "SIGINT" | "SIGQUIT";
-			} = {},
+			mode: "SIGINT" | "SIGQUIT" | "exit" | "listener" | "concurrent",
+			runtime: "bun" | "node" = "bun",
 		) {
 			const directory = await mkdtemp(join(tmpdir(), "crust-entry-interrupt-test-"));
 			tempDirs.push(directory);
@@ -371,15 +308,14 @@ describe("buildEntrypoint", () => {
 					`import { join } from "node:path";\n` +
 					`import { buildEntrypoint } from ${JSON.stringify(helpersUrl)};\n` +
 					`const mode = ${JSON.stringify(mode)};\n` +
-					`const listenerSignal = ${JSON.stringify(listenerSignal)};\n` +
-					`if (mode === "listener") process.on(listenerSignal, () => console.log("host listener"));\n` +
+					`if (mode === "listener") process.on("SIGINT", () => console.log("host listener"));\n` +
 					`const io = { stdout: () => {}, stderr: () => {} };\n` +
 					`const prepared = ${JSON.stringify(projects)}.map((project) => buildEntrypoint(join(project, "cli.ts"), join(project, "dist"), [], io, project, undefined, 60_000));\n` +
 					`const poll = setInterval(() => {\n` +
 					`  if (!${JSON.stringify(pidFiles)}.every((pidFile) => existsSync(pidFile))) return;\n` +
 					`  clearInterval(poll);\n` +
 					`  if (mode === "exit") process.exit(3);\n` +
-					`  process.kill(process.pid, mode === "listener" ? listenerSignal : mode === "concurrent" ? "SIGINT" : mode);\n` +
+					`  process.kill(process.pid, mode === "listener" || mode === "concurrent" ? "SIGINT" : mode);\n` +
 					`}, 20);\n` +
 					`for (const preparation of prepared) {\n` +
 					`  await preparation.catch((error) => console.log(error.message, ${JSON.stringify(lifetimeEvents)}.map((event) => process.listenerCount(event)).join()));\n` +
@@ -424,7 +360,7 @@ describe("buildEntrypoint", () => {
 		] as const)(
 			"kills the entry group and keeps default termination when the %s host gets %s",
 			async (runtime, signal) => {
-				const result = await runInterruptedHost(signal, { runtime });
+				const result = await runInterruptedHost(signal, runtime);
 
 				expect(result).toMatchObject({ exitCode: null, signal, stdout: "" });
 			},
@@ -439,15 +375,15 @@ describe("buildEntrypoint", () => {
 			20_000,
 		);
 
-		it.skipIf(process.platform === "win32").each(["SIGINT"] as const)(
-			"kills the entry group and leaves an existing Bun host %s listener in charge",
-			async (signal) => {
-				const result = await runInterruptedHost("listener", { listenerSignal: signal });
+		it.skipIf(process.platform === "win32")(
+			"kills the entry group and leaves an existing Bun host SIGINT listener in charge",
+			async () => {
+				const result = await runInterruptedHost("listener");
 
 				expect(result).toMatchObject({ exitCode: 0, signal: null });
 				// The host listener still ran and remains the only lifetime listener.
 				expect(result.stdout).toBe(
-					`host listener\nCommand Snapshot preparation was interrupted by ${signal}. ${signal === "SIGINT" ? "1,0,0,0,0" : "0,0,0,1,0"}\n`,
+					"host listener\nCommand Snapshot preparation was interrupted by SIGINT. 1,0,0,0,0\n",
 				);
 			},
 			20_000,

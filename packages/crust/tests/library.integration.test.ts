@@ -109,8 +109,8 @@ afterAll(async () => {
 });
 
 describe("carried CommonJS exports", () => {
-	it.each([undefined])("rejects an unscoped .js export with source type %s", async (type) => {
-		const project = join(root, `commonjs-${type ?? "omitted"}`);
+	it("rejects an unscoped .js export without a source type", async () => {
+		const project = join(root, "commonjs");
 		mkdirSync(join(project, "dist", "nested"), { recursive: true });
 		mkdirSync(join(project, "src"));
 		writeFileSync(join(project, "src", "cli.ts"), 'console.log("cli works");\n');
@@ -118,7 +118,6 @@ describe("carried CommonJS exports", () => {
 		const pkg = {
 			name: "commonjs-cli",
 			version: "0.1.0",
-			type,
 			bin: { "commonjs-cli": "src/cli.ts" },
 			crust: { runtime: "node", artifact: "package", include: ["dist"] },
 			exports: "./dist/nested/index.js",

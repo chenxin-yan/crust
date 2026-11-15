@@ -37,15 +37,20 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		await Promise.all(tempDirs.map((path) => rm(path, { recursive: true, force: true })));
 	});
 
-	async function snapshotPath(): Promise<string> {
+	async function stubBuildEnv() {
 		const directory = await mkdtemp(join(tmpdir(), "crust-core-snapshot-test-"));
 		tempDirs.push(directory);
-		return join(directory, "command.json");
+		const path = join(directory, "command.json");
+		const outDir = join(directory, "output");
+		vi.stubEnv(SNAPSHOT_PATH_ENV, path);
+		vi.stubEnv(BUILD_OUT_DIR_ENV, outDir);
+		return { path, outDir };
 	}
 
 	it("writes a snapshot, exits zero, and skips dispatch", async () => {
-		const path = await snapshotPath();
-		vi.stubEnv(SNAPSHOT_PATH_ENV, path);
+		const { path } = await stubBuildEnv();
+		// No build output directory: the protocol still writes the snapshot.
+		vi.stubEnv(BUILD_OUT_DIR_ENV, undefined);
 		let actionRan = false;
 		let preRunRan = false;
 		const spy = defineExtension(defineExtensionId("spy")).preRun(() => {
@@ -69,10 +74,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 	});
 
 	it("runs build hooks in registration order", async () => {
-		const path = await snapshotPath();
-		const outDir = join(dirname(path), "output");
-		vi.stubEnv(SNAPSHOT_PATH_ENV, path);
-		vi.stubEnv(BUILD_OUT_DIR_ENV, outDir);
+		const { path, outDir } = await stubBuildEnv();
 		const calls: string[] = [];
 		const app = new Crust("build-subprocess")
 			.extend(
@@ -112,10 +114,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 	});
 
 	it("rejects paths that differ only by case, naming both Extensions and both spellings", async () => {
-		const path = await snapshotPath();
-		const outDir = join(dirname(path), "output");
-		vi.stubEnv(SNAPSHOT_PATH_ENV, path);
-		vi.stubEnv(BUILD_OUT_DIR_ENV, outDir);
+		const { outDir } = await stubBuildEnv();
 		const app = new Crust("build-subprocess").extend(
 			defineExtension(defineExtensionId("first")).build(() => [
 				{ path: "shared/Config.json", content: "first" },
@@ -137,10 +136,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 	});
 
 	it("rejects a path nested under a file an earlier hook produced, before writing", async () => {
-		const path = await snapshotPath();
-		const outDir = join(dirname(path), "output");
-		vi.stubEnv(SNAPSHOT_PATH_ENV, path);
-		vi.stubEnv(BUILD_OUT_DIR_ENV, outDir);
+		const { outDir } = await stubBuildEnv();
 		const app = new Crust("build-subprocess").extend(
 			defineExtension(defineExtensionId("first")).build(() => [{ path: "Foo", content: "first" }]),
 			defineExtension(defineExtensionId("second")).build(() => [
@@ -161,10 +157,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 	});
 
 	it("rejects a hook whose own files nest under each other, before writing", async () => {
-		const path = await snapshotPath();
-		const outDir = join(dirname(path), "output");
-		vi.stubEnv(SNAPSHOT_PATH_ENV, path);
-		vi.stubEnv(BUILD_OUT_DIR_ENV, outDir);
+		const { outDir } = await stubBuildEnv();
 		const app = new Crust("build-subprocess").extend(
 			defineExtension(defineExtensionId("only")).build(() => [
 				{ path: "foo/bar", content: "nested" },
@@ -183,11 +176,8 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 	});
 
 	it("refreshes sections between build hooks", async () => {
-		const path = await snapshotPath();
-		const outDir = join(dirname(path), "output");
+		const { path, outDir } = await stubBuildEnv();
 		const marker = join(outDir, "generated-source", "marker.txt");
-		vi.stubEnv(SNAPSHOT_PATH_ENV, path);
-		vi.stubEnv(BUILD_OUT_DIR_ENV, outDir);
 		const calls: string[] = [];
 		const app = new Crust("build-subprocess").extend(
 			defineExtension(defineExtensionId("producer")).build(async () => {
@@ -224,9 +214,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 	});
 
 	it("runs Extension command recipes once across build hook refreshes", async () => {
-		const path = await snapshotPath();
-		vi.stubEnv(SNAPSHOT_PATH_ENV, path);
-		vi.stubEnv(BUILD_OUT_DIR_ENV, join(dirname(path), "output"));
+		await stubBuildEnv();
 		let recipeRuns = 0;
 		const app = new Crust("build-subprocess").extend(
 			defineExtension(defineExtensionId("contributor"))
@@ -246,9 +234,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 	});
 
 	it("attributes build hook failures to the extension", async () => {
-		const path = await snapshotPath();
-		vi.stubEnv(SNAPSHOT_PATH_ENV, path);
-		vi.stubEnv(BUILD_OUT_DIR_ENV, join(dirname(path), "output"));
+		await stubBuildEnv();
 		const app = new Crust("build-subprocess").extend(
 			defineExtension(defineExtensionId("broken")).build(() => {
 				throw new Error("disk full");
@@ -268,10 +254,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		["an outDir-relative dot", () => "./", "must name a file"],
 		["a collapsed dot", () => "nested/..", "must name a file"],
 	])("rejects %s returned artifact path", async (_label, artifactPath, message) => {
-		const path = await snapshotPath();
-		const outDir = join(dirname(path), "output");
-		vi.stubEnv(SNAPSHOT_PATH_ENV, path);
-		vi.stubEnv(BUILD_OUT_DIR_ENV, outDir);
+		const { outDir } = await stubBuildEnv();
 		const app = new Crust("build-subprocess").extend(
 			defineExtension(defineExtensionId("unsafe"))
 				// A valid sibling first: every path is checked before any file is written.

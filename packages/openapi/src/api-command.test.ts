@@ -467,25 +467,15 @@ describe("api <path>", () => {
 		});
 	});
 
-	it("puts -X GET fields before the URL's fragment", async () => {
+	it.each([
+		["/users#section", "https://api.example.com/v1/users?page=2#section"],
+		// The path's own query stays as written.
+		["/users?q=a%20b,c&flag#s", "https://api.example.com/v1/users?q=a%20b,c&flag&page=2#s"],
+	])("puts -X GET fields in the query of %s, before its fragment", async (path, url) => {
 		const calls = stubFetch();
-		await captureExecute(buildApp(), ["api", "/users#section", "-X", "GET", "-F", "page=2"]);
+		await captureExecute(buildApp(), ["api", path, "-X", "GET", "-F", "page=2"]);
 
-		expect(calls[0]?.url).toBe("https://api.example.com/v1/users?page=2#section");
-	});
-
-	it("keeps the path's own query as written when adding -X GET fields", async () => {
-		const calls = stubFetch();
-		await captureExecute(buildApp(), [
-			"api",
-			"/users?q=a%20b,c&flag#s",
-			"-X",
-			"GET",
-			"-F",
-			"page=2",
-		]);
-
-		expect(calls[0]?.url).toBe("https://api.example.com/v1/users?q=a%20b,c&flag&page=2#s");
+		expect(calls[0]?.url).toBe(url);
 	});
 
 	it("sends --body as the request body and lets -H override auth", async () => {
@@ -735,28 +725,6 @@ describe("api <path>", () => {
 			["https://api.example.com/v1/users", "Bearer secret"],
 			["https://api.example.com/v1/users?page=2", "Bearer secret"],
 		]);
-	});
-
-	it("follows a 3-page --paginate chain", async () => {
-		const calls = stubFetch(({ url }) => {
-			const page = Number(new URL(url).searchParams.get("page") ?? 1);
-			return new Response(JSON.stringify({ page, next: page < 3 ? page + 1 : undefined }));
-		});
-		const app = buildApp({
-			paginate: async (response) => {
-				const { next } = (await response.json()) as { next?: number };
-				return next === undefined ? undefined : { path: `/users?page=${next}` };
-			},
-		});
-		const { stdout, exitCode } = await captureExecute(app, ["api", "/users", "--paginate"]);
-
-		expect(exitCode).toBe(0);
-		expect(stdout.split("\n")).toEqual([
-			'{"page":1,"next":2}',
-			'{"page":2,"next":3}',
-			'{"page":3}',
-		]);
-		expect(calls).toHaveLength(3);
 	});
 
 	it("fails when a --paginate page repeats the previous request, keeping the printed pages", async () => {

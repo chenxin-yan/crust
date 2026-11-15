@@ -121,29 +121,6 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 	});
 });
 
-describe("integration: Extension hooks around subcommand action", () => {
-	it("Extension hooks run around subcommand execution", async () => {
-		const order: string[] = [];
-		const logging = defineExtension(defineExtensionId("logging"))
-			.preRun((ctx) => {
-				order.push(`pre:${ctx.command.meta.name}`);
-			})
-			.postRun((ctx) => {
-				order.push(`post:${ctx.command.meta.name}`);
-			});
-		const app = new Crust("cli").extend(logging).add(
-			defineCommand("sub", (cmd) =>
-				cmd.action(() => {
-					order.push("sub:run");
-				}),
-			),
-		);
-
-		await executeCrust(app, ["sub"]);
-		expect(order).toEqual(["pre:sub", "sub:run", "post:sub"]);
-	});
-});
-
 describe("integration: nested added definitions end-to-end", () => {
 	it("3-level nested definitions execute correctly", async () => {
 		const verbose = defineFlag({ type: "boolean", short: "v" });

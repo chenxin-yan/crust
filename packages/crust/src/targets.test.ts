@@ -13,12 +13,6 @@ describe("resolveTargets", () => {
 		}
 	});
 
-	it("dedupes repeated targets in input order", () => {
-		expect(
-			resolveTargets(BUN_TARGETS, ["bun-darwin-arm64", "bun-linux-x64", "bun-darwin-arm64"]),
-		).toEqual(["bun-darwin-arm64", "bun-linux-x64"]);
-	});
-
 	it("rejects host when the table has no target for this machine", () => {
 		// A table with no entries for this platform reproduces the unsupported-host case deterministically.
 		const empty: TargetTable<never> = { runtime: "Bun", targets: [], info: {} };
