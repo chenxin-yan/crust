@@ -157,7 +157,7 @@ Argv syntax failures are unknown flags, missing option values, and negating a `n
 
 Any `Error` whose `name` is `"AbortError"`, including a `DOMException`, is cancellation.
 
-Every invocation carries a `signal`, shared by Context setups, Extension hooks, and the Command Action. It aborts when the caller aborts `execute({ signal })` or `run(path, input, { signal })`, or on the first Ctrl-C or `SIGTERM` during `execute()`. Cancellation is cooperative: once the work settles, `postRun` hooks and Context disposal still run, and work that ignores the signal delays cleanup.
+Every invocation carries a `signal`, shared by Context setups, Extension hooks, and the Command Action. It aborts when the caller aborts `execute({ signal })` or `run(path, input, { signal })`, or on the first Ctrl-C or `SIGTERM` during `execute()`. Cancellation is cooperative: once the work settles, `postRun` hooks and Context disposal still run, and work that ignores the signal delays cleanup. After Ctrl-C or `SIGTERM`, `execute()` then resolves `130` / `143` whatever the work did, and the process ends by that signal once the event loop drains (see [`execute()`](/docs/api/crust#executeoptions)).
 
 When work throws the signal's reason, as `signal.throwIfAborted()` does, that error decides the exit path. Ctrl-C and a bare `controller.abort()` supply an `AbortError`, which exits `130` silently (`SIGTERM` exits `143`); a custom reason such as a `TimeoutError` renders and exits `1`. [`@crustjs/effect`](/docs/modules/effect) turns interruption into an `AbortError` regardless of the reason.
 

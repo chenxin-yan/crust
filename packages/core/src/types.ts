@@ -30,10 +30,15 @@ export interface InvocationOptions extends Partial<InvocationIO> {
 /**
  * Caller options for the terminal `execute()` boundary. While an invocation
  * runs, the first `SIGINT` (Ctrl-C) or `SIGTERM` aborts its `ctx.signal` with an
- * `AbortError`, and the invocation exits `130` after `SIGINT` or `143` after
- * `SIGTERM`. A second signal terminates unless another listener owns it. A signal
- * within 50 ms of the first is treated as the same one, relayed by a parent process
- * such as `npm run` or `npx`, or sent again by a process-group kill.
+ * `AbortError`. Once the action, `postRun` hooks and Context cleanup finish, whatever the
+ * action did, `execute()` resolves to `130` after `SIGINT` or `143` after `SIGTERM`, and
+ * the process dies by that signal once its event loop drains, after the caller's code
+ * (shells see `130` / `143`). Calling `process.exit()` or changing `process.exitCode`
+ * first keeps that exit instead; `process.exitCode` holds `130` / `143` when another
+ * listener owns the signal, on Windows, or with injected `io`, which never re-raises. A second signal terminates
+ * unless another listener owns it. A signal within 50 ms of the first is treated as the
+ * same one, relayed by a parent process such as `npm run` or `npx`, or sent again by a
+ * process-group kill.
  */
 export interface ExecuteOptions {
 	/** Arguments to parse; defaults to `process.argv.slice(2)`. */

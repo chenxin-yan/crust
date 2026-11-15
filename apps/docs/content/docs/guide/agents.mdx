@@ -204,7 +204,7 @@ For a CLI backed by an HTTP API, [`@crustjs/openapi`](/docs/modules/openapi) add
 - Every command that returns data declares `.output()`: typed, validated, discoverable, and no duplicate text under `--json`.
 - [`json()`](/docs/modules/extensions/json), [`input()`](/docs/modules/extensions/input), and [`schema()`](/docs/modules/extensions/schema) are registered.
 - Long-running commands yield events.
-- Long-running work passes `signal` to what it awaits: CI cancellation, agent harnesses, and `timeout` stop a command with `SIGTERM`, which aborts the `signal`, runs cleanup, and exits 143. Work that ignores it runs until it finishes or a second `SIGTERM` arrives.
+- Long-running work passes `signal` to what it awaits: CI cancellation, agent harnesses, and `timeout` stop a command with `SIGTERM`, which aborts the `signal` and runs cleanup; the process then ends by `SIGTERM` (shells report 143). Work that ignores it runs until it finishes or a second `SIGTERM` arrives, and still ends by `SIGTERM`.
 - Commands that can preview declare a `dry-run` flag.
 - Commands that change things call [`confirm()`](/docs/modules/extensions/confirm)'s `ctx.confirm` first, after any dry-run preview.
 - Error messages say what to do next; known failures have recovery steps from [`nextSteps()`](/docs/modules/extensions/next-steps).
