@@ -1,3 +1,6 @@
+/**
+ * @module-tag windows
+ */
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";

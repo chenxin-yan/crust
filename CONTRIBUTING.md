@@ -29,26 +29,34 @@ Run these commands from the repository root:
 pnpm run build         # Build all packages and the docs site
 pnpm run check         # Build packages, lint, and check formatting
 pnpm run check:types   # Type-check workspaces, scripts, and build configuration
-pnpm run test          # Build and test packages and scripts
+pnpm run test          # Build packages, then run every test (packages, scripts, docs)
 pnpm run dev:docs      # Start the docs site
 ```
 
-Tasks run through Vite Task (`vp run`), which builds upstream packages first. Package builds, type checks, and the combined `vp check` lint/format task are cached; tests always rerun so environment-controlled smoke tests are not replayed from cache. The docs build and dev server are uncached.
+Tasks run through Vite Task (`vp run`), which builds upstream packages first. Package builds, type checks, and the combined `vp check` lint/format task are cached. The docs build and dev server are uncached.
 
 Use `pnpm run check` for the package prebuild followed by `vp check`; bare `vp check` runs the built-in command without that prerequisite. `pnpm run check:fix` applies formatting and lint fixes without caching the fix step. Keep `pnpm run check:types` separate: type-aware lint rules do not replace workspace compiler checks or docs source generation.
 
-The build, test, and type-check commands are defined once as `build:task`, `test:task`, and `check:types:task` in [`vite.shared.ts`](vite.shared.ts); a package with a different command overrides it in its own `vite.config.ts`. Each workspace's `build`, `test`, and `check:types` scripts run `vp run <name>:task`, so running a script inside a package also builds its upstream packages. Arguments after the script name reach the underlying command. Run one workspace's tasks with a filter or from its directory. Docs tests remain separate:
+The build, test, and type-check commands are defined once as `build:task`, `test:task`, and `check:types:task` in [`vite.shared.ts`](vite.shared.ts); a package with a different command overrides it in its own `vite.config.ts`. Each workspace's `build`, `test`, and `check:types` scripts run `vp run <name>:task`, so running a script inside a package also builds its upstream packages. Arguments after the script name reach the underlying command. Run one workspace's tasks with a filter or from its directory:
 
 ```sh
 pnpm exec vp run --filter ./scripts check:types:task
-pnpm exec vp run --filter ./scripts test:task
 pnpm --dir packages/core run test --run
-pnpm --dir apps/docs exec vp test run
+pnpm exec vp test run packages/store   # after a package build, from the root
 ```
+
+`pnpm run test` runs every project from the root [`vite.config.ts`](vite.config.ts) in one Vitest run, so arguments after it reach Vitest. CI runs the same command. Linux runs every test; the macOS and Windows jobs run the tests tagged for them. Every project declares the same tags from `testTags` in [`vite.shared.ts`](vite.shared.ts), so a tagged file also runs from its package. They are set per file with a `@module-tag` comment, or per suite with the `tags` option:
+
+| Tag       | Meaning                                                                                   |
+| --------- | ----------------------------------------------------------------------------------------- |
+| `windows` | Also runs in the Windows CI job                                                           |
+| `macos`   | Also runs in the macOS CI job                                                             |
+| `network` | Installs packages from a registry; `pnpm run test --tags-filter '!network'` skips them    |
+| `mise`    | Runs the oldest supported Node.js or Bun through mise; skipped without mise, except on CI |
 
 For documentation changes, run the docs gates in [`apps/docs/README.md`](apps/docs/README.md#validation).
 
-For specialized smoke-test setup and commands, see the [package](.github/workflows/ci-packages.yml) and [create-crust](.github/workflows/ci-create-crust.yml) CI workflows. Run opt-in suites directly with `vp test run <file>` in the owning package.
+A test that needs a tool which may be missing locally skips itself (`skipIf`, or `context.skip(condition, reason)`). On CI every tool is installed, so a missing one fails instead of passing by skipping.
 
 ## Pull Requests
 

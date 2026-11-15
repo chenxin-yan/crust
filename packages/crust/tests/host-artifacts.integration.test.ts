@@ -1,3 +1,7 @@
+/**
+ * @module-tag windows
+ * @module-tag macos
+ */
 // Host artifact acceptance: public build -> npm pack -> npm install -> execute
 // for the Node package and Bun binary modes, on this host only
 // (no cross-target builds), so it runs natively on Linux, macOS, and Windows.

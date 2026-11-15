@@ -1,3 +1,6 @@
+/**
+ * @module-tag network
+ */
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
@@ -18,18 +21,16 @@ import { hostTarget, seaNodeBinDir } from "./helpers.ts";
 // Proves the Node binary backend travels with Crust's own distribution, not
 // the monorepo: a Bun-compiled carrier of the backend code is staged exactly
 // like crust (crust build + scripts/stage-node-exe-dependencies.ts), installed
-// with CRUST_SMOKE_PM from tarballs, and run from its platform package, where
+// with each package manager from tarballs, and run from its platform package, where
 // the compiled crust runs, to build an application with the selected Node.
-const packageManager = process.env.CRUST_SMOKE_PM;
 const seaNodeDir = seaNodeBinDir();
 const bunHost = hostTarget();
 const nodeHost = resolveHostTarget(NODE_TARGETS);
 const src = resolve(import.meta.dirname, "..", "src");
 
-const root = mkdtempSync(join(tmpdir(), `crust-node-exe-delivery-${packageManager ?? "skip"}-`));
+const root = mkdtempSync(join(tmpdir(), "crust-node-exe-delivery-"));
 const carrier = join(root, "carrier");
 const app = join(root, "app");
-const installDir = join(root, "install");
 const packDir = join(root, "packs");
 const emptyBin = join(root, "empty-bin");
 
@@ -51,13 +52,14 @@ afterAll(async () => {
 	rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 });
 
-describe.skipIf(!packageManager || seaNodeDir === null || nodeHost === null)(
-	"Node binary backend delivery",
-	() => {
-		it("builds a Node standalone binary from an installed crust-like distribution", async () => {
+describe.skipIf(seaNodeDir === null || nodeHost === null)("Node binary backend delivery", () => {
+	it.each(["bun", "npm", "pnpm"] as const)(
+		"builds a Node standalone binary from a crust-like distribution installed with %s",
+		async (packageManager) => {
+			const installDir = join(root, `install-${packageManager}`);
 			if (!bunHost)
 				throw new Error(`No Bun target for this host: ${process.platform}-${process.arch}`);
-			for (const command of [packageManager!, "npm", "tar"]) {
+			for (const command of [packageManager, "npm", "tar"]) {
 				if (!which(command)) throw new Error(`${command} is required for this smoke test.`);
 			}
 			for (const dir of [packDir, emptyBin]) mkdirSync(dir, { recursive: true });
@@ -136,7 +138,7 @@ console.log(JSON.stringify({ tsdown: compiler.backend.packageJsonPath, node: com
 				);
 			}
 			const auditFlags = packageManager === "npm" ? ["--no-audit", "--no-fund"] : [];
-			const install = await runBoundedProcess(packageManager!, ["install", ...auditFlags], {
+			const install = await runBoundedProcess(packageManager, ["install", ...auditFlags], {
 				cwd: installDir,
 				timeout: 120_000,
 			});
@@ -200,6 +202,7 @@ console.log(JSON.stringify({ tsdown: compiler.backend.packageJsonPath, node: com
 			});
 			expect(run.exitCode, run.stderr).toBe(0);
 			expect(run.stdout.trim()).toBe(`bundled v${result.node}`);
-		}, 420_000);
-	},
-);
+		},
+		420_000,
+	);
+});

@@ -1,5 +1,7 @@
 import { defineConfig } from "vite-plus";
 
+import { testTags } from "./vite.shared.ts";
+
 const sharedIgnorePatterns = [
 	".changeset/",
 	"**/CHANGELOG.md",
@@ -132,7 +134,9 @@ export default defineConfig({
 			"check:task": "vp check",
 		},
 	},
+	// `pnpm test` runs every project from here.
 	test: {
-		projects: ["packages/*", "scripts"],
+		projects: ["packages/*", "scripts", "apps/docs"],
+		tags: testTags,
 	},
 });

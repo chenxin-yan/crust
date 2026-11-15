@@ -1,0 +1,12 @@
+name: Setup
+description: Install the Node.js, Bun, and pnpm that mise.toml and package.json pin, then the workspace dependencies.
+
+runs:
+  using: composite
+  steps:
+    - name: Setup runtimes
+      uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile

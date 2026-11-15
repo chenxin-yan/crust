@@ -1,3 +1,6 @@
+/**
+ * @module-tag windows
+ */
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import {
