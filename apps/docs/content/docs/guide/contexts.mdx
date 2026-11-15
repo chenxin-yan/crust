@@ -41,6 +41,16 @@ https://api.example.com/health
 
 `.use(api)` says “I need this Context”; `.provide(api())` supplies it. Add the command after providing its dependencies—reversing the order is a type error.
 
+`ctx` also exposes the Contexts that a used Context's setup [uses](#contexts-that-use-other-contexts), and the command demands them too.
+
+A group that only adds commands doesn't `.use()` their Contexts. Its demands include its children's, checked where the group is added:
+
+<include lang="ts" meta='title="app.ts"'>
+  ../../../examples/guide/contexts-use.ts#group
+</include>
+
+The group doesn't parse the Contexts' flags: they stay on the commands that `.use()` them.
+
 To use the Contexts an [Extension](/docs/guide/extensions#use-an-extensions-contexts-from-a-command) provides, pass the Extension to `.use()` instead of each factory.
 
 ## Setup and cleanup
@@ -114,11 +124,11 @@ Error: Unknown flag "--api-url"
 
 Setup receives the validated values. A flag appears only on commands whose `ctx` exposes its Context:
 
-| Command                                                                                                                           | Parses the flag?                                                                                  |
-| --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| The one that calls `.provide()`, and inline [`.command()`](/docs/api/crust#commandname-recipe) children added after it (`deploy`) | Yes, without `.use()`                                                                             |
-| A reusable command that declares the Context with `.use()` (`status`)                                                             | Yes, plus the flags of Contexts its setup [uses](#contexts-that-use-other-contexts), transitively |
-| Any other command (`version`)                                                                                                     | No: rejected as unknown, and left out of its documentation                                        |
+| Command                                                                                                                                  | Parses the flag?                                                                                  |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| The one that calls `.provide()`, and inline [`.command()`](/docs/api/crust#commandname-config-recipe) children added after it (`deploy`) | Yes, without `.use()`                                                                             |
+| A reusable command that declares the Context with `.use()` (`status`)                                                                    | Yes, plus the flags of Contexts its setup [uses](#contexts-that-use-other-contexts), transitively |
+| Any other command (`version`)                                                                                                            | No: rejected as unknown, and left out of its documentation                                        |
 
 For a Context an Extension provides, see [Dependency injection](/docs/guide/extensions#dependency-injection).
 

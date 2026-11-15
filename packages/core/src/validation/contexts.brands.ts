@@ -178,7 +178,10 @@ export type DeclaredDepsOf<T> = (
 	? Deps
 	: {};
 
-/** Missing-dependency brand shared by `ValidateDeclaredDeps` and inline `.command()`. */
+/**
+ * Missing-dependency brand shared by `ValidateDeclaredDeps` and inline `.command()`. "Needed",
+ * not "used": the named command may be a group forwarding a descendant's demand.
+ */
 export type MissingDeclaredDependencyBrand<
 	T,
 	Known extends string,
@@ -187,13 +190,24 @@ export type MissingDeclaredDependencyBrand<
 	: Exclude<keyof DeclaredDepsOf<T> & string, Known> extends infer Missing extends string
 		? [Missing] extends [never]
 			? {}
-			: { readonly FIX_MISSING_DEPENDENCY: `Uses Context "${Missing}" which is not provided` }
+			: {
+					readonly FIX_MISSING_DEPENDENCY: `Context "${Missing}"${[DefName<T>] extends [never]
+						? ""
+						: ` needed by "${DefName<T>}"`} is not provided: .provide() it on an ancestor`;
+				}
 		: never;
 
-/** Brand sealed units whose declared dependencies are absent at a composition site. */
-export type ValidateDeclaredDeps<Ctx extends ContextMap, Items extends readonly unknown[]> = {
+/**
+ * Brand sealed units whose declared dependencies are absent at a composition site. A recipe
+ * passes `Known = string`: it forwards what it lacks to its own definition's demands.
+ */
+export type ValidateDeclaredDeps<
+	Ctx extends ContextMap,
+	Items extends readonly unknown[],
+	Known extends string = keyof Ctx & string,
+> = {
 	[I in keyof Items]: Items[I] &
-		MissingDeclaredDependencyBrand<Items[I], keyof Ctx & string> &
+		MissingDeclaredDependencyBrand<Items[I], Known> &
 		DeclaredDependencyValuesBrand<DeclaredDepsOf<Items[I]>, Ctx>;
 };
 

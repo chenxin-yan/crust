@@ -286,6 +286,26 @@ describe("command metadata", () => {
 			usage: "cli sub [options]",
 		});
 	});
+
+	it("applies inline command metadata from config and routes its aliases", async () => {
+		const app = new Crust("cli").command(
+			"list",
+			{ description: "List items", aliases: ["ls"], hidden: true },
+			(command) => command.action(() => "listed"),
+		);
+
+		expect((await app.snapshot()).subCommands.list?.meta).toEqual({
+			name: "list",
+			description: "List items",
+			aliases: ["ls"],
+			hidden: true,
+		});
+		expect(await app.run(["ls"])).toMatchObject({ status: "completed", result: "listed" });
+		const alias: readonly string[] = ["list"];
+		expect(() => app.command("other", { aliases: alias }, (command) => command)).toThrow(
+			'Command name "other" is already registered on this command',
+		);
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -296,14 +316,30 @@ describe("Crust .add() with inline definitions", () => {
 	it("rejects a nested definition with a missing Context demand", async () => {
 		const db = defineContext("db").setup(() => "db");
 		const nested = defineCommand("grandchild", (command) => command.use(db));
-		const definition = defineCommand("child", (command) =>
-			// @ts-expect-error -- runtime regression deliberately exercises the consuming check.
-			command.add(nested),
-		);
+		const definition = defineCommand("child", (command) => command.add(nested));
 
+		// @ts-expect-error -- runtime regression deliberately exercises the consuming check.
 		await expect(new Crust("cli").add(definition).snapshot()).rejects.toThrow(
 			'No provider for Context "db"',
 		);
+	});
+
+	it("lets a group forward its children's Contexts without parsing their flags", async () => {
+		const config = defineContext("config")
+			.flags({ cwd: { type: "string", default: "." } })
+			.setup(({ flags }) => flags.cwd);
+		const bump = defineCommand("bump", (command) =>
+			command.use(config).action(async ({ ctx }) => await ctx.config),
+		);
+		const app = new Crust("cli")
+			.provide(config())
+			.add(defineCommand("version", (command) => command.add(bump)));
+
+		expect(await app.run(["version", "bump"], { flags: { cwd: "x" } })).toMatchObject({
+			status: "completed",
+			result: "x",
+		});
+		expect((await app.snapshot()).subCommands.version?.flags).toEqual({});
 	});
 
 	it("gives a command the Contexts of an Extension it uses", async () => {

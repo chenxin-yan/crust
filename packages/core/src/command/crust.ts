@@ -54,12 +54,14 @@ import type {
 	ExtensionsCommandSpellings,
 	KnownCommandSpellings,
 	KnownExtensionsCommandSpellings,
+	InlineCommandAliasesBrand,
 	LocalCommandConfigBrand,
 	LocalSectionsBrand,
 	ValidateCommandDefinitions,
 	ValidateExtensionCommands,
 } from "../validation/commands.brands.ts";
 import type {
+	DeclaredDepsOf,
 	KnownContextInstances,
 	MissingDeclaredDependencyBrand,
 	DeclaredDependencyValuesBrand,
@@ -1206,7 +1208,7 @@ type AfterAdd<
 		State["collision"]["extension"],
 		State["collision"]["tree"] | KnownSpellings<DefinitionTreeSpellings<Ds>>,
 		State["collision"]["demands"],
-		RecipeDepsOf<State["collision"]>,
+		AddedRecipeDeps<State, Ds>,
 		ProvidersOf<State["collision"]>,
 		ActionDepsOf<State["collision"]>,
 		State["collision"]["extensionCommands"],
@@ -1219,6 +1221,25 @@ type AfterAdd<
 	string,
 	State["caps"]
 >;
+
+// A definition demands its recipe's `.use()` Contexts and its children's demands that its own
+// Contexts don't cover; the command that adds it checks them all (only the root reports them
+// missing). Forwarding parses no flags: those stay on the commands that `.use()` the Context.
+type AddedRecipeDeps<
+	State extends BuilderState,
+	Ds extends readonly unknown[],
+> = State["caps"] extends "recipe"
+	? [Ds[number]] extends [never]
+		? RecipeDepsOf<State["collision"]>
+		: DeclaredDepsOf<Ds[number]> extends infer D extends ContextMap
+			? keyof D extends never
+				? RecipeDepsOf<State["collision"]>
+				: MergeContext<
+						RecipeDepsOf<State["collision"]>,
+						keyof D & keyof State["ctx"] extends never ? D : Omit<D, keyof State["ctx"]>
+					>
+			: never
+	: RecipeDepsOf<State["collision"]>;
 
 type ExtensionHookDemand<E> = E extends AnyExtension
 	? (deps: NonNullable<DefiningOf<E>["_hookDeps"]>) => void
@@ -1252,11 +1273,42 @@ type DefinitionDescendantValuesBrand<
 
 // Inline recipes validate demands after return-type inference, like sealed definitions.
 // Descendant checks constrain the recipe itself: a return intersection can lose conditional branches.
-type ValidateInlineCommandDeps<Ctx extends ContextMap, B> = MissingDeclaredDependencyBrand<
-	{ readonly _deps?: DepsOfBuilder<B> },
-	keyof Ctx & string
+type ValidateInlineCommandDeps<
+	State extends BuilderState,
+	N extends string,
+	B,
+> = MissingDeclaredDependencyBrand<
+	{ readonly name: N; readonly _deps?: DepsOfBuilder<B> },
+	KnownDepsAt<State>
 > &
-	DeclaredDependencyValuesBrand<DepsOfBuilder<B>, Ctx>;
+	DeclaredDependencyValuesBrand<DepsOfBuilder<B>, State["ctx"]>;
+
+/** A recipe forwards the demands it can't meet (see `AddedRecipeDeps`); the root reports them. */
+type KnownDepsAt<State extends BuilderState> = State["caps"] extends "recipe"
+	? string
+	: keyof State["ctx"] & string;
+
+// An inline child's builder: it parses the Context-owned flags its parent has at the call site.
+// Recursive Extension flags seed only the spellings: as inherited flags they would join nested
+// children's shapes, where `ShapeFlagCollisionBrand` counts them as the child's own. Readers
+// apply them to every command (see `AppShape`).
+type InlineCommandBuilder<State extends BuilderState> = CommandDefinitionBuilder<
+	State["ctxFlags"],
+	[],
+	State["ctx"],
+	never,
+	KnownSpellings<LocalSpellingsOf<State["ctxFlags"]>> | State["collision"]["extension"],
+	{},
+	State["ctxFlags"]
+>;
+
+type InlineCommandRecipe<State extends BuilderState, N extends string, B> = ((
+	command: InlineCommandBuilder<State>,
+) => B &
+	// Include nested children, whose flags are not in the seeded spelling set.
+	ShapeFlagCollisionBrand<ShapeOfBuilder<B>, State["collision"]["extension"]> &
+	ValidateInlineCommandDeps<State, N, NoInfer<B>>) &
+	NoInfer<DescendantValuesBrand<{ child: ShapeOfBuilder<B> }, State["collision"]["demands"]>>;
 
 // A generic method that names any class parameter is instantiated through a composite
 // class+method mapper, which re-instantiates every object-valued argument on each call
@@ -1857,7 +1909,7 @@ export class Crust<
 		this: StateReceiver<State>,
 		...definitions: Ds &
 			ValidateCommandDefinitions<Ds, State["sibs"]> &
-			ValidateDeclaredDeps<State["ctx"], Ds> &
+			ValidateDeclaredDeps<State["ctx"], Ds, KnownDepsAt<State>> &
 			DefinitionDescendantValuesBrand<Ds, State["collision"]["demands"]> &
 			ValidateDefinitionFlags<Ds, State["collision"]["extension"]>
 	): AfterAdd<State, Ds>;
@@ -1876,7 +1928,11 @@ export class Crust<
 	 * its `.use()` and `.provide()` Contexts. Contexts provided after `.command()`
 	 * are not visible to it, matching the positional runtime semantics of
 	 * `.provide()`. Unlike `.add(defineCommand(name, recipe))`, the command parses
-	 * those Contexts' flags without `.use()`, because its `ctx` exposes them.
+	 * those Contexts' flags without `.use()`, because its `ctx` exposes them, and its
+	 * action's `flags` type includes them.
+	 *
+	 * Static metadata (description, aliases, hidden, usage, sections) belongs in
+	 * `config`, as with `defineCommand(name, config, recipe)`.
 	 * Extract to `defineCommand` when a command needs its own file or reuse.
 	 */
 	command<
@@ -1886,63 +1942,46 @@ export class Crust<
 	>(
 		this: StateReceiver<State>,
 		name: N & ChildCommandNameBrand<N> & CommandCollisionBrand<N, State["sibs"]>,
-		recipe: ((
-			// Recursive Extension flags seed only the spellings: as inherited flags they would join
-			// nested children's shapes, where the brand below counts them as the child's own. Readers
-			// apply them to every command (see `AppShape`).
-			command: CommandDefinitionBuilder<
-				{},
-				[],
-				State["ctx"],
-				never,
-				KnownSpellings<LocalSpellingsOf<State["ctxFlags"]>> | State["collision"]["extension"],
-				{},
-				State["ctxFlags"]
-			>,
-		) => B &
-			// Include nested children, whose flags are not in the seeded spelling set.
-			ShapeFlagCollisionBrand<ShapeOfBuilder<B>, State["collision"]["extension"]> &
-			ValidateInlineCommandDeps<State["ctx"], NoInfer<B>>) &
-			NoInfer<DescendantValuesBrand<{ child: ShapeOfBuilder<B> }, State["collision"]["demands"]>>,
+		recipe: InlineCommandRecipe<State, N, B>,
 	): AfterAdd<
 		State,
 		readonly [CommandDefinition<N, readonly [], ShapeOfBuilder<B>, DepsOfBuilder<B>>],
 		State["ctxFlags"]
 	>;
+	command<
+		const N extends string,
+		const C extends CommandConfig,
+		B extends AnyCommandDefinitionBuilder,
+		State extends BuilderState = ExplicitTypeArgumentsError,
+	>(
+		this: StateReceiver<State>,
+		name: N & ChildCommandNameBrand<N> & CommandCollisionBrand<N, State["sibs"]>,
+		config: C & LocalCommandConfigBrand<N, C> & InlineCommandAliasesBrand<N, C, State["sibs"]>,
+		recipe: InlineCommandRecipe<State, N, B>,
+	): AfterAdd<
+		State,
+		readonly [CommandDefinition<N, AliasesOf<C>, ShapeOfBuilder<B>, DepsOfBuilder<B>>],
+		State["ctxFlags"]
+	>;
 
-	command<const N extends string, B extends AnyCommandDefinitionBuilder>(
-		name: N,
-		recipe: (
-			command: CommandDefinitionBuilder<
-				{},
-				[],
-				Ctx,
-				never,
-				LocalSpellingsOf<CtxFlags>,
-				{},
-				CtxFlags
-			>,
-		) => B,
+	command(
+		name: string,
+		configOrRecipe: CommandConfig | CommandRecipe,
+		maybeRecipe?: CommandRecipe,
 	): unknown {
 		// SAFETY: the seeded recipe generics restate runtime facts — materialization
 		// seeds the child node from this node's contexts and owned flags.
 		const define = defineCommand as unknown as (
 			name: string,
-			recipe: CommandRecipe,
+			configOrRecipe: CommandConfig | CommandRecipe,
+			recipe?: CommandRecipe,
 		) => CommandDefinition;
-		// SAFETY: the erased recipe still returns the builder it receives; materialization re-validates that at runtime.
-		const definition = define(name, recipe as unknown as CommandRecipe);
+		const definition = define(name, configOrRecipe, maybeRecipe);
 		const internal = Object.freeze({
 			...definition[commandDefinitionInternal],
 			inline: true as const,
 		});
-		return this._addDefinitions<
-			AfterAdd<
-				this["_state"],
-				readonly [CommandDefinition<N, readonly [], ShapeOfBuilder<B>, DepsOfBuilder<B>>],
-				CtxFlags
-			>
-		>([{ ...definition, [commandDefinitionInternal]: internal }]);
+		return this._addDefinitions([{ ...definition, [commandDefinitionInternal]: internal }]);
 	}
 
 	private _addDefinitions<Out>(definitions: readonly CommandDefinition[]): Out {
