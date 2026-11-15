@@ -1,5 +1,51 @@
 # @crustjs/utils
 
+## 0.3.1
+
+### Patch Changes
+
+- [#659](https://github.com/chenxin-yan/crust/pull/659) [`23f140f`](https://github.com/chenxin-yan/crust/commit/23f140fd1aa0898eff6389d9e2e77f142e77d876) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - MCP tools and command input now match what a command actually receives.
+  
+  - Tool input schemas and `schema <cmd>` no longer list flags an Extension declares, such as `help`, `json`, `input`, `llms`, or `color`; Context-owned flags such as `confirm()`'s `yes` stay. `CommandSnapshot` and `FlagSnapshot` gain an `extension` field naming the Extension that contributed a command or flag. Sending such a key in a tool call or in `--input` JSON fails with `Flag "--json" is not command input: set it on the command line`, so `{"input": "-"}` can no longer read the MCP server's stdin and stall the session. An argument that shares an Extension flag's name, such as `<input>` next to `input()`, is now valid command input instead of an error.
+  - MCP tool calls now apply flag `env` fallbacks: a flag the input omits reads its variable from the server's `process.env`, then its default, as on the command line, so an MCP client's `env` configuration reaches tool calls. Env-backed flags are optional in tool input schemas, with the variable named in their description.
+  - `run()` now applies flag `env` fallbacks from `process.env`, like the command line, and gains an `env` option that replaces it: `app.run(path, input, { env: {} })` keeps results independent of the caller's shell, e.g. in tests. `execute()` gains the same `env` option. Env-backed flags are optional in typed `run()` input.
+  - `mcpExtension()`, `createMcpServer()`, and `toolsFromSnapshot()` serve only the application's own commands. Extension commands such as `completion`, `schema`, `skills uninstall`, and `@crustjs/openapi`'s `api` become tools only when the new `include` option names them.
+  - `readStdin()` from `@crustjs/utils/process` rejects with `stdin is in use by another reader` while another reader, such as the MCP stdio transport, consumes stdin.
+  
+  **Behavior change:** `run()` results now depend on `process.env` for flags with an `env` binding that the input omits, and an invalid value there fails the run; pass `{ env: {} }` to keep the 0.6.0 behavior. `--input` JSON that set `json` or `help` now fails; pass those flags on argv. MCP clients lose the Extension commands from their tool list unless `include` names them.
+
+- [#660](https://github.com/chenxin-yan/crust/pull/660) [`efdf932`](https://github.com/chenxin-yan/crust/commit/efdf932eac278054e173dd1b433923b11e25345c) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `api` works with the `json()` Extension, binary bodies, and large OpenAPI documents.
+  
+  - **Behavior change:** under `--json`, `api` returns its data, so stdout carries JSON instead of the output moving to stderr. `api <path>` prints the parsed response body (text as a JSON string, nothing for an empty body), `api --list` an array of `{ method, path, operationId?, summary? }`, and `api --spec` the definition. `--paginate` streams one `{"type":"event","data":…}` line per page, then `{"type":"result"}`. A non-2xx response writes its body to stderr and its error JSON has `details` with the HTTP `status`; `json()` prints it for `@crustjs/openapi`'s `ApiResponseError`, and still prints only `message` for other non-Crust errors.
+  - **Behavior change:** when stdout is a pipe or file, `api <path>` writes the response body as its exact bytes, like `gh api` and `curl`, so `api /export.zip > export.zip` works. It used to decode every body as UTF-8, which corrupted binary ones, and to end the output with exactly one newline; a text body now keeps its own ending, so one without a final newline no longer gains one. When stdout is a terminal, when output is captured as text (`run()`, `captureExecute()`), under `--json`, or on a `--paginate` page, a body prints as text as before, and one that is not valid UTF-8 fails the command instead of printing corrupted (`gh api` and `curl` also refuse to print binary to a terminal).
+  - `api --spec` writes each `$ref` target once: one used once is inlined as before, and one used several times or recursively stays a `$ref` and is written once under a top-level `$refs` object. It used to inline every use, so output grew exponentially and `--spec` hung on large public specs such as Stripe's.
+  - `api --spec <operationId>` includes the operation's `method` and `path`, and merges the path item's shared `parameters` into its own, so a path parameter declared on the path item, such as `{petId}`, is no longer missing. An `operationId` several operations share fails, naming them, instead of silently picking the first.
+  - `-X` must be an HTTP method token. An empty value or one with spaces, such as `"DELETE "`, fails with a `PARSE` error before any request, and so does a method the runtime's `fetch()` would not send, naming what it would send: Bun's `fetch()` sends a method it does not know as `GET`. Methods are upper-cased as before.
+  - `ApiResponseError` messages no longer include the request's query, where `-F` fields of a `GET` (such as a token) end up.
+
+- [#664](https://github.com/chenxin-yan/crust/pull/664) [`bebf191`](https://github.com/chenxin-yan/crust/commit/bebf1913993f866b0a583580bf4f28b0622c64f9) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Store mutations no longer lose data to other versions, other store instances, or other processes.
+  
+  - `write()`, `update()`, `patch()`, and `reset()` on the same file now run one at a time in call order, even across store instances in one process, so overlapping `update()` calls no longer drop each other's changes.
+  - Each mutation holds an advisory `<name>.json.lock` file, so parallel invocations of your CLI (`cli add & cli add`) keep every update. A lock left by a process that exited is taken over right away, and any lock older than 10 seconds is taken over then. After a crash leaves a lock behind, two processes that start writing at the same instant can both take it, and one of their updates can be lost; the file is never corrupt. A mutation that runs longer than 10 seconds can lose its lock the same way.
+  - Writes flush the temporary file to disk before renaming it into place, and on Windows retry a rename that another program's open handle briefly blocks.
+  - On Unix, a write keeps the replaced file's owner and, unless `access` sets file bits, its mode, so a user's `chmod 600` no longer resets to the umask default on the next write.
+  - `configDir()`, `dataDir()`, `stateDir()`, and `cacheDir()` throw `PATH` instead of returning a relative path when `HOME` (`USERPROFILE` on Windows) is relative or empty, and ignore a relative `APPDATA` or `LOCALAPPDATA` the way they already ignore a relative `XDG_*` value.
+  - A schema field with an optional property, such as `z.object({ due: z.string().optional() })`, is accepted under `exactOptionalPropertyTypes` instead of failing with `FIX_JSON_OUTPUT`, and that error now describes what JSON data is.
+  - Error messages and temporary files say "store file" and use the store's name (`.notes-<uuid>.tmp`) instead of "config" for every store.
+  
+  **Behavior change:** `pruneUnknown` now defaults to `false`. `read()` still returns only the declared fields, but `write()`, `update()`, and `patch()` keep keys the store does not declare in the file, so an older version of your CLI no longer deletes fields a newer version wrote. Pass `pruneUnknown: true` to drop unknown keys on the next mutation, as before. With either setting, `read()` no longer returns undeclared keys.
+  
+  **Behavior change:** a field `validate` or schema that awaits a mutation of the same store file now never settles, because it waits behind the mutation that called it.
+
+- [#655](https://github.com/chenxin-yan/crust/pull/655) [`63f7e76`](https://github.com/chenxin-yan/crust/commit/63f7e76a25741c42224e3268b90962bde6d8a529) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Prompts, spinners, progress indicators, and `runSteps()` now honor cancellation, and spinner frames no longer stick to log lines.
+  
+  - Inside a Crust command they follow the invocation's `signal` without passing it. `TerminalIO` (and `withTerminalIO()`) gains a `signal`, so `input({ message }, { signal })` also works. Spinners and progress indicators take a `signal` option, and so does `runSteps()`.
+  - **Behavior change:** a `SIGTERM`, a Ctrl-C delivered as a signal, or an aborted `execute({ signal })` cancels a waiting prompt. The prompt shows the cursor again, turns raw mode off, and rejects with `signal.reason`. It no longer hangs, and the terminal is no longer left raw with the cursor hidden.
+  - **Behavior change:** `runSteps()` sends `SIGTERM` to the running step's child on abort. Once it exits, it rejects with `signal.reason` and skips the remaining steps. A child still running 5 seconds later gets `SIGKILL`, so a step that ignores `SIGTERM` cannot hang the command. On Windows the child's whole process tree ends at once. Ctrl-C and `SIGTERM` no longer finish the step and exit `0`, and no longer print `exited with code null`.
+  - **Behavior change:** inside a Crust command, a spinner or progress indicator's default `sigint: "exit"` handler leaves Ctrl-C to Crust. When the signal aborts, the indicator stops with `✗` and its current message, unless your own `stop()` in the same turn renders its final line, such as `bar.stop("error", "Cancelled")` in a `finally`. The frame no longer freezes, and your final line is no longer dropped. Under any other `SIGINT` listener the indicator stops the same way a turn after the signal and leaves ending the process to that listener. A `SIGINT` the process inherited as ignored stays ignored.
+  - An action's default `stdout()`/`stderr()` line now erases a live spinner or progress frame first and redraws it below the line. Lines like `⠙ Running build (0/5)pkg-a: built` no longer appear.
+  - `updateNotifier()` stops its registry check as soon as Ctrl-C or `SIGTERM` cancels the run, instead of waiting up to `timeoutMs`.
+
 ## 0.3.0
 
 ### Minor Changes

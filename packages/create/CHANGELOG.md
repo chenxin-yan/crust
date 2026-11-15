@@ -1,5 +1,22 @@
 # @crustjs/create
 
+## 0.3.1
+
+### Patch Changes
+
+- [#655](https://github.com/chenxin-yan/crust/pull/655) [`63f7e76`](https://github.com/chenxin-yan/crust/commit/63f7e76a25741c42224e3268b90962bde6d8a529) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Prompts, spinners, progress indicators, and `runSteps()` now honor cancellation, and spinner frames no longer stick to log lines.
+  
+  - Inside a Crust command they follow the invocation's `signal` without passing it. `TerminalIO` (and `withTerminalIO()`) gains a `signal`, so `input({ message }, { signal })` also works. Spinners and progress indicators take a `signal` option, and so does `runSteps()`.
+  - **Behavior change:** a `SIGTERM`, a Ctrl-C delivered as a signal, or an aborted `execute({ signal })` cancels a waiting prompt. The prompt shows the cursor again, turns raw mode off, and rejects with `signal.reason`. It no longer hangs, and the terminal is no longer left raw with the cursor hidden.
+  - **Behavior change:** `runSteps()` sends `SIGTERM` to the running step's child on abort. Once it exits, it rejects with `signal.reason` and skips the remaining steps. A child still running 5 seconds later gets `SIGKILL`, so a step that ignores `SIGTERM` cannot hang the command. On Windows the child's whole process tree ends at once. Ctrl-C and `SIGTERM` no longer finish the step and exit `0`, and no longer print `exited with code null`.
+  - **Behavior change:** inside a Crust command, a spinner or progress indicator's default `sigint: "exit"` handler leaves Ctrl-C to Crust. When the signal aborts, the indicator stops with `✗` and its current message, unless your own `stop()` in the same turn renders its final line, such as `bar.stop("error", "Cancelled")` in a `finally`. The frame no longer freezes, and your final line is no longer dropped. Under any other `SIGINT` listener the indicator stops the same way a turn after the signal and leaves ending the process to that listener. A `SIGINT` the process inherited as ignored stays ignored.
+  - An action's default `stdout()`/`stderr()` line now erases a live spinner or progress frame first and redraws it below the line. Lines like `⠙ Running build (0/5)pkg-a: built` no longer appear.
+  - `updateNotifier()` stops its registry check as soon as Ctrl-C or `SIGTERM` cancels the run, instead of waiting up to `timeoutMs`.
+
+- [#662](https://github.com/chenxin-yan/crust/pull/662) [`08ede40`](https://github.com/chenxin-yan/crust/commit/08ede40377c4749f73e5c4dd8130321b17b8890a) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - The optional `typescript` peer dependency now accepts TypeScript 5.9 and later (`>=5.9.0`) instead of only 7.x, so `npm install` no longer fails with `ERESOLVE` in projects on TypeScript 5.9 or 6. Before TypeScript 7, a one-character emoji `short` flag is rejected, and on 5.9 a `@crustjs/store` field's `validate` callback needs an explicit parameter type.
+- Updated dependencies [[`23f140f`](https://github.com/chenxin-yan/crust/commit/23f140fd1aa0898eff6389d9e2e77f142e77d876), [`efdf932`](https://github.com/chenxin-yan/crust/commit/efdf932eac278054e173dd1b433923b11e25345c), [`bebf191`](https://github.com/chenxin-yan/crust/commit/bebf1913993f866b0a583580bf4f28b0622c64f9), [`63f7e76`](https://github.com/chenxin-yan/crust/commit/63f7e76a25741c42224e3268b90962bde6d8a529)]:
+  - @crustjs/utils@0.3.1
+
 ## 0.3.0
 
 ### Minor Changes
