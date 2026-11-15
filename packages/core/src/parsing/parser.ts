@@ -171,7 +171,8 @@ function resolveDefault(def: ArgDef | FlagDef, label: string) {
 /**
  * Coerce one raw text token for an argument or flag:
  *   raw token → choices validation → parse transform (if set) → built-in coercion.
- * Schema-backed definitions receive the raw token unchanged.
+ * Schema-backed definitions receive the raw token unchanged, except that a
+ * json flag's token is parsed as JSON first.
  */
 function coerceToken(
 	def: ArgDef | FlagDef,
@@ -179,7 +180,7 @@ function coerceToken(
 	label: string,
 	index?: number,
 ): ParsedArgValue {
-	if (def.schema) return raw;
+	if (def.schema && def.type !== "json") return raw;
 	if (def.choices) validateChoice(raw, def.choices, label);
 	if (def.parse) return invokeParse(def.parse, raw, label, index);
 	return coerceValue(raw, def.type, label);
@@ -578,7 +579,8 @@ const STRUCTURED_EXPECTATIONS: Readonly<Record<ValueType, string>> = {
 };
 
 function validateStructuredValue(def: ArgDef | FlagDef, value: RunInputValue, label: string): void {
-	const type = def.schema ? (def.type === "boolean" ? "boolean" : "string") : def.type;
+	const type =
+		def.schema && def.type !== "json" ? (def.type === "boolean" ? "boolean" : "string") : def.type;
 	let valid: boolean;
 	if (type === "url") {
 		valid = value instanceof URL;

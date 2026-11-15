@@ -121,6 +121,30 @@ describe("input", () => {
 		expect(JSON.parse(raw.stdout)).toMatchObject({ target: "prod", rawArgs: ["a"] });
 	});
 
+	it("passes an object to a json flag's schema, which validates it", async () => {
+		const named = {
+			"~standard": {
+				version: 1 as const,
+				vendor: "test",
+				validate: (value: unknown) =>
+					typeof value === "object" && value !== null && "name" in value
+						? { value }
+						: { issues: [{ message: "name is required" }] },
+			},
+		};
+		const app = new Crust("app")
+			.extend(input())
+			.flags({ body: { type: "json", schema: named } })
+			.action(({ flags, stdout }) => stdout(JSON.stringify(flags.body)));
+
+		const valid = await captureExecute(app, ["--input", '{"body":{"name":"a"}}']);
+		expect(valid.exitCode, valid.stderr).toBe(0);
+		expect(JSON.parse(valid.stdout)).toEqual({ name: "a" });
+		const invalid = await captureExecute(app, ["--input", '{"body":{}}']);
+		expect(invalid.exitCode).toBe(1);
+		expect(invalid.stderr).toContain("flags.body: name is required");
+	});
+
 	it("reads JSON from a file named with @", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "crust-input-"));
 		tempDirs.push(dir);

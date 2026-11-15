@@ -77,10 +77,13 @@ const flags = {
 
 Schema-backed flags set `type: "string" | "boolean"` only to declare whether a value token follows, plus `schema` and the syntax fields `description`, `short`, `aliases`, `multiple`, `env`, `delimiter`, and (boolean only) `noNegate`. The schema receives the raw `string | undefined` or `boolean | undefined`; with `multiple: true` it receives an array when the flag appears and `undefined` when omitted. As for arguments, TypeScript rejects a schema whose input type cannot accept a present value.
 
+A schema-backed flag with `type: "json"` takes one value token (no `multiple` or `delimiter`) and parses it as JSON. The schema receives the parsed `JsonValue | undefined`, and structured input (`run()`, `--input`, MCP) passes the JSON value itself. Its input type must accept JSON data, typed `run()` input takes that input type, and the schema's input JSON Schema is the flag's command input property.
+
 ```ts
 const flags = {
   port: { type: "string", schema: z.coerce.number().int().min(1) },
   enabled: { type: "boolean", schema: z.boolean().default(false) },
+  body: { type: "json", schema: z.object({ name: z.string() }) },
 } satisfies FlagsDef;
 ```
 
@@ -324,7 +327,7 @@ A `FlagDef` plus `recursive?: boolean`. `recursive` defaults to `true`; `false` 
 
 ### `InferExtensionFlags<F>`
 
-The flag values an Extension's hooks see. They are pre-validation values, not schema outputs: a required flag can still be absent, a defaulted value flag is absent when its argv or environment value is invalid, and a non-recursive flag can be absent on descendants.
+The flag values an Extension's hooks see. They are pre-validation values, not schema outputs (a schema-backed `json` flag's value is already parsed JSON): a required flag can still be absent, a defaulted value flag is absent when its argv or environment value is invalid, and a non-recursive flag can be absent on descendants.
 
 Dynamic or conditional records do not claim typed ownership of hook values. An optional definition likewise exposes `ParsedFlagValue`: when it is absent, another Extension may own the same name with a different value type.
 

@@ -93,9 +93,10 @@ For the scalar port argument above, omission passes `undefined` to the schema. `
 
 - An argument omits `type`. The schema receives `string | undefined`, or `string[]` with `variadic`.
 - A flag keeps `type: "string"` or `type: "boolean"` so the parser knows whether a value token follows. The schema receives `string | undefined` or `boolean | undefined`, or arrays with `multiple`.
-- Values from a flag's `env` variable and from typed `run()` input arrive in the same shapes.
+- A flag with `type: "json"` takes one value token, parses it as JSON, and hands the schema the parsed value, or `undefined` when omitted. It cannot set `multiple`.
+- Values from a flag's `env` variable and from typed `run()` input arrive in the same shapes. A json flag's `run()`, `--input`, or MCP value is the JSON value itself, so a JSON string stays a string and is not parsed.
 
-TypeScript checks the schema's input type against these shapes. `z.number()` on a string flag is a compile error, since every run would fail; write `z.coerce.number()`, whose input is `unknown`, or a pipeline that starts from a string such as `z.string().transform(...)`. A narrower input, such as `z.enum(["a", "b"])`, is fine: rejecting the other strings is validation. Whether the schema accepts `undefined` is up to it, since that decides requiredness.
+TypeScript checks the schema's input type against these shapes. A json flag's schema must accept some JSON value: `z.object(...)`, `z.array(...)`, and `z.unknown()` are fine, while `z.date()`, `z.bigint()`, or an object with a required `Date` property is a compile error. Typed `run()` input for a json flag takes the schema's input type. `z.number()` on a string flag is a compile error, since every run would fail; write `z.coerce.number()`, whose input is `unknown`, or a pipeline that starts from a string such as `z.string().transform(...)`. A narrower input, such as `z.enum(["a", "b"])`, is fine: rejecting the other strings is validation. Whether the schema accepts `undefined` is up to it, since that decides requiredness.
 
 The check needs a known input type, so a helper that is generic over the schema itself, such as `<S extends StandardSchemaV1>(schema: S) => defineFlag({ type: "string", schema })`, does not compile. Type its parameter as `StandardSchemaV1<string | undefined, Out>` (from `@standard-schema/spec`) instead, or as `StandardSchemaV1<unknown, Out>` to also take schemas whose input is `unknown`, such as a stored `z.coerce.number()`.
 
@@ -107,7 +108,7 @@ See [`ArgDef`](/docs/api/types#argdef) and [`FlagDef`](/docs/api/types#flagdef) 
 
 <include lang="ts">../../../examples/guide/types-schema.ts#compile-time</include>
 
-These lines continue `serve.ts` and only construct definitions. TypeScript rejects an asynchronous `parse`, a `type` on a schema argument, and a schema that cannot accept the value the parser hands it, and accepts `type: "string"` on a schema flag; see the [`.args()`](/docs/api/crust#argsdefs) and [`.flags()`](/docs/api/crust#flagsflags) contracts.
+These lines continue `serve.ts` and only construct definitions. TypeScript rejects an asynchronous `parse`, a `type` on a schema argument, and a schema that cannot accept the value the parser hands it, and accepts `type: "string"` or `type: "json"` on a schema flag; see the [`.args()`](/docs/api/crust#argsdefs) and [`.flags()`](/docs/api/crust#flagsflags) contracts.
 
 TypeScript also infers the action value. For `type` or `parse`, it is the converted type, `T | undefined` unless `required` or `default` is set, and an array with `multiple` or `variadic`. For a schema, it is the schema's output type, which already reflects its defaults and optionality.
 

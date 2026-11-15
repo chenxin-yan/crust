@@ -1,3 +1,4 @@
+import type { JsonValue } from "@crustjs/utils/json";
 import type { InferInput, StandardSchema } from "@crustjs/utils/schema";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -223,15 +224,48 @@ type AcceptsTokenElements<E, A> = A extends readonly unknown[]
 		: true
 	: never;
 
-type SchemaInputMessage<T> = T extends { variadic: true } | { multiple: true }
-	? `schema input must accept ${SchemaTokenName<T>}[]; use an array schema`
-	: T extends { type: "boolean" }
-		? "schema input must accept boolean"
-		: "schema input must accept string; coerce it, e.g. z.coerce.number()";
+// A json flag hands its schema the parsed JSON value. Overlap again: some JSON value must fit
+// the input. An object fits when every required property does (optional keys may be absent);
+// a Date (its methods), bigint, or function never does.
+type AcceptsJson<Input> = [JsonValue] extends [Input]
+	? true
+	: true extends (Input extends unknown ? AcceptsJsonMember<Input> : never)
+		? true
+		: false;
+
+type AcceptsJsonMember<M> = M extends string | number | boolean | null
+	? true
+	: M extends (...args: never[]) => unknown
+		? false
+		: M extends readonly unknown[]
+			? number extends M["length"]
+				? true
+				: false extends { [I in keyof M]: AcceptsJson<M[I]> }[number]
+					? false
+					: true
+			: M extends object
+				? false extends {
+						[K in keyof M]-?: {} extends Pick<M, K> ? true : AcceptsJson<M[K]>;
+					}[keyof M]
+					? false
+					: true
+				: false;
+
+type SchemaInputMessage<T> = T extends { type: "json" }
+	? "schema input must accept JSON data"
+	: T extends { variadic: true } | { multiple: true }
+		? `schema input must accept ${SchemaTokenName<T>}[]; use an array schema`
+		: T extends { type: "boolean" }
+			? "schema input must accept boolean"
+			: "schema input must accept string; coerce it, e.g. z.coerce.number()";
 
 /** Brand a schema whose input type cannot accept any value the parser hands it. */
 type SchemaInputBrand<T> = T extends { schema: infer S extends StandardSchema }
-	? AcceptsTokens<SchemaTokens<T>, InferInput<S>> extends true
+	? (
+			T extends { type: "json" }
+				? AcceptsJson<InferInput<S>>
+				: AcceptsTokens<SchemaTokens<T>, InferInput<S>>
+		) extends true
 		? {}
 		: { readonly FIX_SCHEMA_INPUT: SchemaInputMessage<T> }
 	: {};

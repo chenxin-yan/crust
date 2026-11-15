@@ -1,5 +1,6 @@
 import type { StandardSchema } from "@crustjs/utils/schema";
 import { describe, expect, it } from "vite-plus/test";
+import { z } from "zod";
 
 import { executeCrust, unwrap } from "../../tests/helpers.ts";
 
@@ -156,6 +157,54 @@ describe("Standard Schema on flag definitions", () => {
 
 		await unwrap(app.run([], { flags: { tag: ["a", "b"] } }));
 		expect(received).toBe("a,b");
+	});
+});
+
+describe("Standard Schema on json flags", () => {
+	const user = z.object({ name: z.string(), role: z.enum(["admin", "member"]).optional() });
+	function bodyApp() {
+		const received: { body?: z.output<typeof user> } = {};
+		const app = new Crust("cli")
+			.flags({ body: { type: "json", schema: user.optional() } })
+			.action(({ flags }) => {
+				received.body = flags.body;
+			});
+		return { app, received };
+	}
+
+	it("parses the argv token as JSON and passes the parsed value to the schema", async () => {
+		const { app, received } = bodyApp();
+		const result = await executeCrust(app, ["--body", '{"name":"a","role":"admin"}']);
+		expect(result.exitCode, result.stderr).toBe(0);
+		expect(received.body).toEqual({ name: "a", role: "admin" });
+	});
+
+	it("takes a JSON value from run() and rejects one the schema refuses, naming the flag", async () => {
+		const { app, received } = bodyApp();
+		await unwrap(app.run([], { flags: { body: { name: "a" } } }));
+		expect(received.body).toEqual({ name: "a" });
+
+		await expect(
+			unwrap(app.run([], { flags: { body: JSON.parse('{"role":"owner"}') } })),
+		).rejects.toMatchObject({
+			code: "VALIDATION",
+			message: expect.stringContaining("flags.body.role:"),
+		});
+		await expect(
+			// @ts-expect-error -- a URL is no JSON value
+			unwrap(app.run([], { flags: { body: [new URL("https://a.test")] } })),
+		).rejects.toMatchObject({
+			code: "PARSE",
+			message: "Expected a JSON value for --body.",
+		});
+	});
+
+	it("reports invalid JSON text without echoing it", async () => {
+		const { app } = bodyApp();
+		const result = await executeCrust(app, ["--body", "{secret"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("Invalid JSON for --body");
+		expect(result.stderr).not.toContain("secret");
 	});
 });
 

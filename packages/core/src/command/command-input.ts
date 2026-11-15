@@ -63,7 +63,8 @@ function hasRootKeyword(value: unknown): boolean {
 /**
  * A schema-backed definition's `inputSchema` without `$schema`, when `run()`
  * accepts what it describes: schema-backed values bind as their token, a string
- * (a boolean for `type: "boolean"`), in an array for variadic and `multiple`.
+ * (a boolean for `type: "boolean"`), in an array for variadic and `multiple`;
+ * a json flag binds the JSON value itself, so any JSON Schema describes it.
  */
 function schemaPropertySchema(
 	def: ArgSnapshot | FlagSnapshot,
@@ -71,6 +72,7 @@ function schemaPropertySchema(
 ): CommandInputPropertySchema | undefined {
 	if (def.inputSchema === undefined) return undefined;
 	const { $schema: _dialect, ...schema } = def.inputSchema;
+	if (def.type === "json") return hasRootKeyword(schema) ? undefined : schema;
 	const token = def.type === "boolean" ? "boolean" : "string";
 	const value = list ? schema.items : schema;
 	// `prefixItems` constrains leading elements that `items` does not cover.

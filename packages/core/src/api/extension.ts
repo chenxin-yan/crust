@@ -1,3 +1,5 @@
+import type { JsonValue } from "@crustjs/utils/json";
+
 import type { CommandDefinition, RootCommandMeta } from "../command/crust.ts";
 import type { CommandSnapshot } from "../command/snapshot.ts";
 import { CrustError, type CaughtError } from "../errors.ts";
@@ -397,7 +399,11 @@ export type ExtensionFlagDef = FlagDef & { readonly recursive?: boolean };
 /** Record mapping an Extension's flag names to their definitions. */
 export type ExtensionFlagsDef = Record<string, ExtensionFlagDef>;
 
-type SchemaToken<F> = F extends { type: "boolean" } ? boolean : string;
+type SchemaToken<F> = F extends { type: "boolean" }
+	? boolean
+	: F extends { type: "json" }
+		? JsonValue
+		: string;
 
 type InferPreSchemaExtensionFlag<F extends ExtensionFlagDef> = F extends {
 	schema: unknown;

@@ -103,6 +103,56 @@ function _typecheckSchemaInputAcceptsTheParserValue() {
 	>;
 }
 
+// a json flag hands its schema the parsed JSON value: its input must accept JSON data, and
+// run() input takes the schema input while the action sees the schema output
+function _typecheckJsonFlagSchemaInputAcceptsJsonData() {
+	const user = z.object({
+		name: z.string(),
+		role: z.enum(["admin", "member"]).optional(),
+		meta: z.object({ tags: z.array(z.string()), extra: z.unknown() }).optional(),
+	});
+	const app = new Crust("cli")
+		.flags({
+			body: { type: "json", schema: user },
+			any: { type: "json", schema: z.unknown() },
+			list: { type: "json", schema: z.array(z.number()), env: { name: "LIST" } },
+			either: { type: "json", schema: z.union([z.string(), z.date()]) },
+			record: { type: "json", schema: z.record(z.string(), z.unknown()) },
+		})
+		.action((_ctx) => {
+			type _flagOutput = Expect<Equal<(typeof _ctx.flags)["body"], z.output<typeof user>>>;
+		});
+	void app.run([], { flags: { body: { name: "a", role: "admin" }, list: [1, 2] } });
+	// @ts-expect-error -- run() takes the schema input
+	void app.run([], { flags: { body: { role: "owner" } } });
+
+	new Crust("cli").flags({
+		// @ts-expect-error -- a Date is not JSON data
+		when: { type: "json", schema: z.date() },
+	});
+	new Crust("cli").flags({
+		// @ts-expect-error -- a bigint is not JSON data
+		big: { type: "json", schema: z.bigint() },
+	});
+	new Crust("cli").flags({
+		// @ts-expect-error -- a required Date property accepts no JSON object
+		body: { type: "json", schema: z.object({ at: z.date() }) },
+	});
+	new Crust("cli").flags({
+		// @ts-expect-error -- a string flag hands its schema a string, never an object
+		body: { type: "string", schema: user },
+	});
+	new Crust("cli").flags({
+		// @ts-expect-error -- a json schema flag takes one occurrence
+		bodies: { type: "json", multiple: true, schema: z.array(user) },
+	});
+	// @ts-expect-error -- reusable definitions are checked too
+	defineFlag({ type: "json", schema: z.date() });
+
+	type Message = LocalValueBrand<{ type: "json"; schema: z.ZodDate }>["FIX_SCHEMA_INPUT"];
+	type _message = Expect<Equal<Message, "schema input must accept JSON data">>;
+}
+
 // a helper generic over the whole schema leaves the input unknown to the check and cannot
 // compile; one that names the input and stays generic over the output does
 function _typecheckAHelperNamesTheSchemaInput() {

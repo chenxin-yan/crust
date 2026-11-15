@@ -246,6 +246,31 @@ describe("commandInputSchema", () => {
 		expect(properties.pair).toEqual({ type: "array", items: { type: "string" } });
 	});
 
+	it("advertises a json flag's schema input JSON Schema, whatever its type", async () => {
+		const user = z.object({ name: z.string(), role: z.enum(["admin", "member"]).optional() });
+		const app = new Crust("cli")
+			.flags({
+				body: { type: "json", schema: user, description: "User" },
+				any: { type: "json", schema: z.union([z.string(), z.number()]) },
+				ref: {
+					type: "json",
+					schema: withInputJsonSchema({ $ref: "#/$defs/User", $defs: { User: {} } }),
+				},
+			})
+			.action(noop);
+		const { properties } = commandInputSchema(await app.snapshot(), []);
+		expect(properties.body).toMatchObject({
+			type: "object",
+			properties: { name: { type: "string" }, role: { enum: ["admin", "member"] } },
+			required: ["name"],
+			description: "User",
+		});
+		expect(properties.body).not.toHaveProperty("$schema");
+		expect(properties.any).toEqual({ type: ["string", "number"] });
+		// A root-relative `$ref` would resolve against the command input schema; any JSON value.
+		expect(properties.ref).toEqual({});
+	});
+
 	it("accepts prototype-named definitions as own properties", async () => {
 		const app = new Crust("cli").add(
 			defineCommand("probe", (c) =>
