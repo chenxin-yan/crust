@@ -115,6 +115,26 @@ describe("fetchLatestVersion", () => {
 		expect(capturedUrl).toBe("https://registry.npmjs.org/my-cli");
 	});
 
+	it("stops waiting as soon as the invocation signal aborts", async () => {
+		mockFetch(
+			(_input, init) =>
+				new Promise((_resolve, reject) => {
+					init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+				}),
+		);
+		const controller = new AbortController();
+
+		const result = fetchLatestVersion(
+			"my-cli",
+			"https://registry.npmjs.org",
+			60_000,
+			controller.signal,
+		);
+		controller.abort(new DOMException("Interrupted by SIGINT.", "AbortError"));
+
+		expect(await result).toBeNull();
+	});
+
 	it("returns null on non-OK response", async () => {
 		mockFetch(() => Promise.resolve(new Response("Not Found", { status: 404 })));
 

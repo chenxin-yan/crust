@@ -122,6 +122,55 @@ describe("runProcess", () => {
 		expect(result).toEqual({ exitCode: 0, stdout: "", stderr: "collected" });
 	});
 
+	it("terminates the child and rejects with the reason when its signal aborts", async () => {
+		const controller = new AbortController();
+		const reason = new DOMException("Terminated by SIGTERM.", "AbortError");
+		const started = Date.now();
+		const run = runProcess(process.execPath, ["-e", "setTimeout(() => {}, 20000)"], {
+			signal: controller.signal,
+		});
+		setTimeout(() => controller.abort(reason), 100);
+
+		await expect(run).rejects.toBe(reason);
+		expect(Date.now() - started).toBeLessThan(10_000);
+	});
+
+	it.skipIf(process.platform === "win32")(
+		"kills a child that ignores SIGTERM 5 seconds after its signal aborts",
+		async () => {
+			const dir = mkdtempSync(join(tmpdir(), "run-process-abort-"));
+			const ready = join(dir, "ready");
+			const controller = new AbortController();
+			const run = runProcess(
+				process.execPath,
+				[
+					"-e",
+					`process.on("SIGTERM", () => {}); setTimeout(() => {}, 20000); require("node:fs").writeFileSync(${JSON.stringify(ready)}, "");`,
+				],
+				{ signal: controller.signal },
+			);
+			try {
+				await vi.waitFor(() => expect(existsSync(ready)).toBe(true), { timeout: 10_000 });
+				vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+				const reason = new Error("cancelled");
+				controller.abort(reason);
+				vi.advanceTimersByTime(5_000);
+				await expect(run).rejects.toBe(reason);
+			} finally {
+				vi.useRealTimers();
+				rmSync(dir, { recursive: true, force: true });
+			}
+		},
+		15_000,
+	);
+
+	it("rejects an aborted signal without spawning", async () => {
+		const reason = new Error("cancelled");
+		await expect(
+			runProcess("crust-no-such-command", [], { signal: AbortSignal.abort(reason) }),
+		).rejects.toBe(reason);
+	});
+
 	for (const exitParent of [false, true]) {
 		it.skipIf(exitParent && process.platform === "win32")(
 			`kills timed-out descendants when their parent ${exitParent ? "has exited" : "is alive"}`,

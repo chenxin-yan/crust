@@ -26,7 +26,7 @@ Built-in prompts return the submitted value. `input()` and `password()` also acc
 
 <include lang="ts">../../../examples/modules/prompts.ts#io</include>
 
-Each prompt accepts an optional second `TerminalIO` argument with optional `input` and `output`. Resolution is explicit IO, ambient `withTerminalIO()` IO, then `process.stdin` and `process.stderr`.
+Each prompt accepts an optional second `TerminalIO` argument with optional `input`, `output`, and `signal`. Resolution is explicit IO, ambient `withTerminalIO()` IO, then `process.stdin` and `process.stderr`. Inside a Crust command the ambient `signal` is the invocation's, so a `SIGTERM`, a Ctrl-C delivered as a signal, or an aborted `execute({ signal })` cancels a waiting prompt without passing it.
 
 The ambient `withTerminalIO()` scope is shared with `@crustjs/progress`.
 
@@ -158,6 +158,7 @@ NonInteractiveError: Prompts require an interactive terminal (TTY).
 - A prompt renders only when both its input and its output are TTYs.
 - Otherwise, such as when stdin is piped or stderr is redirected, a prompt returns an explicitly supplied `default` (`password()` has none) or rejects with `NonInteractiveError`. `confirm()` defaults to yes interactively, but without a TTY only an explicit `default` counts.
 - Ctrl+C rejects with a `DOMException` whose name is `AbortError`.
+- When the resolved `signal` aborts, the prompt restores the terminal (cursor shown, raw mode off) and rejects with `signal.reason`. An already-aborted signal rejects before rendering.
 
 To check before prompting, `isTTY(input?)` reports whether the resolved input stream is a TTY, and `assertTTY(input?)` throws `NonInteractiveError` when it is not. Neither checks the output stream.
 
@@ -165,7 +166,7 @@ To check before prompting, `isTTY(input?)` reports whether the resolved input st
 
 <include lang="ts">../../../examples/modules/prompts.ts#custom</include>
 
-`runPrompt()` owns rendering, input, submission, cancellation, and theme merging. Accept `(options, io?)` and forward the IO argument to `runPrompt()`, like the built-ins, so callers and tests can inject streams.
+`runPrompt()` owns rendering, input, submission, cancellation (Ctrl+C and the resolved `signal`), and theme merging. Accept `(options, io?)` and forward the IO argument to `runPrompt()`, like the built-ins, so callers and tests can inject streams.
 
 - Only one prompt may use a given input or output stream at a time.
 - An error thrown by `render`, `handleKey`, or `renderSubmitted` rejects the promise after the terminal is restored.

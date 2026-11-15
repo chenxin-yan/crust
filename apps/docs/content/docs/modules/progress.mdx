@@ -41,8 +41,8 @@ await spinner({ message: "Building", task: async () => build() });
 Interactive spinners and progress indicators draw the animated frame on one row:
 
 - The frame is cut with `…` at its first line break or before the terminal's last column. The message is cut first, so `progress()` keeps its count; the final `✓`/`✗` line prints the message in full.
-- Each redraw erases only the spinner's row, so complete lines the task prints meanwhile, such as `stdout()` lines, stay on screen.
-- A write without a trailing newline starts on the spinner's row and is erased by the next frame; if it wraps, only its last row is erased.
+- A line printed through Crust's process writer while the frame is live, such as an action's default `stdout()` or `stderr()` line on the terminal, erases the frame first and redraws it below the line.
+- Other writes, such as `console.log` or `process.stdout.write`, start on the spinner's row: a complete line stays on screen after the frame text it interrupted, and a write without a trailing newline is erased by the next frame (if it wraps, only its last row is erased).
 - Narrowing a terminal that reflows the cursor's row can leave the start of the previous frame above the spinner.
 
 <auto-type-table path="../../../../../packages/progress/src/spinner.ts" name="SpinnerOptions" />
@@ -57,6 +57,10 @@ handle.stop("success", "Deployed"); // ✓ Deployed
 ```
 
 `stop()` defaults to `"success"` and the last message shown; later calls do nothing. Without `start()`, nothing renders until `stop()` prints the final line.
+
+### Cancellation
+
+A spinner or progress indicator follows the `signal` option, else the ambient `withTerminalIO()` signal, which inside a Crust command is the invocation's `signal`. When it aborts while the indicator runs, the indicator stops with `✗` and its current message, unless a `stop()` in the same turn renders its own final line (a `finally` that the cancellation reaches, or the failed `task` of `spinner({ task })`). An indicator started after the abort, for example to show cleanup, ignores it.
 
 <auto-type-table path="../../../../../packages/progress/src/spinner.ts" name="SpinnerHandle" />
 
@@ -82,12 +86,12 @@ Calling `advance()` before `start()` changes the count without repainting. The u
 const handle = spinner({ message: "Working", sigint: false });
 ```
 
-| `sigint`           | On `SIGINT` while an interactive indicator runs                                      |
-| ------------------ | ------------------------------------------------------------------------------------ |
-| `"exit"` (default) | Restores the cursor and re-raises `SIGINT` when no other listener remains (exit 130) |
-| `false`            | Installs no handler; call `stop()` from your own cleanup                             |
+| `sigint`           | On `SIGINT` while an interactive indicator runs                                                                                                                                                                                     |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"exit"` (default) | Restores the cursor and re-raises `SIGINT` when no other listener remains (exit 130). When another listener owns `SIGINT`, as Crust's `execute()` does, leaves ending the process to that owner and stops with `✗` on the next turn |
+| `false`            | Installs no handler; call `stop()` from your own cleanup                                                                                                                                                                            |
 
-The handler is a real process listener even with an injected `sink`, so prefer `false` in tests. Calling `process.exit()` while an interactive indicator runs restores the cursor under either policy when the sink writes synchronously.
+Inside a Crust command the default works: Ctrl-C aborts the invocation's `signal`, which stops the indicator with its final line (see [Cancellation](#cancellation)). A `SIGINT` the process inherited as ignored stays ignored. The handler is a real process listener even with an injected `sink`, so prefer `false` in tests. Calling `process.exit()` while an interactive indicator runs restores the cursor under either policy when the sink writes synchronously.
 
 ### Custom spinner frames
 
@@ -118,7 +122,7 @@ Output goes to the first of:
 2. the ambient `withTerminalIO()` output;
 3. standard error.
 
-`withTerminalIO(io, fn)` takes the same optional `{ input, output }` streams as [`@crustjs/prompts`](/docs/modules/prompts#injecting-io) and shares its ambient scope.
+`withTerminalIO(io, fn)` takes the same optional `{ input, output, signal }` as [`@crustjs/prompts`](/docs/modules/prompts#injecting-io) and shares its ambient scope.
 
 Standard error uses the same writer as Core's default `stderr`, so a spinner inside a Command Action stays in order with the action's `stderr()` lines. Outside Windows it writes synchronously to file descriptor 2, so patching `process.stderr.write` does not capture it; inject a `sink` instead.
 

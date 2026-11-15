@@ -241,6 +241,7 @@ export const updateNotifier: UpdateNotifierExtension = /* @__PURE__ */ defineExt
 				updateDocsUrl,
 				cache,
 				stderr: context.stderr,
+				signal: context.signal,
 			});
 		} catch {
 			// A check chunk that fails to load (e.g. replaced by an upgrade mid-run) must not fail the completed command.

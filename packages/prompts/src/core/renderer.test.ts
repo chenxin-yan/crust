@@ -421,6 +421,54 @@ describe("runPrompt", () => {
 		});
 	});
 
+	it("restores the terminal and rejects with the reason when the scope's signal aborts", async () => {
+		const harness = createPromptIO();
+		let raw = "";
+		const output = Object.assign(
+			new Writable({
+				write(chunk, _encoding, callback) {
+					raw += chunk.toString();
+					callback();
+				},
+			}),
+			{ isTTY: true },
+		);
+		const controller = new AbortController();
+		const exitListeners = process.listenerCount("exit");
+		const config: PromptConfig<number, string> = {
+			initialState: 0,
+			render: () => "waiting",
+			handleKey: () => submit("done"),
+		};
+		const promise = withTerminalIO({ signal: controller.signal }, () =>
+			runPrompt(config, { input: harness.io.input, output }),
+		);
+		const reason = new DOMException("Terminated by SIGTERM.", "AbortError");
+		controller.abort(reason);
+
+		await expect(promise).rejects.toBe(reason);
+		expect(raw.endsWith("\n\x1B[?25h")).toBe(true);
+		expect(harness.io.input.isRaw).toBe(false);
+		expect(harness.io.input.listenerCount("keypress")).toBe(0);
+		expect(process.listenerCount("exit")).toBe(exitListeners);
+		// The streams were released, so a later prompt can reuse them.
+		const next = runPrompt(config, { input: harness.io.input, output });
+		harness.keys("return");
+		expect(await next).toBe("done");
+	});
+
+	it("rejects without drawing when an explicit signal already aborted", async () => {
+		const harness = createPromptIO();
+		const reason = new Error("deadline");
+		const promise = runPrompt(
+			{ initialState: 0, render: () => "never", handleKey: () => submit("done") },
+			{ ...harness.io, signal: AbortSignal.abort(reason) },
+		);
+
+		await expect(promise).rejects.toBe(reason);
+		expect(harness.screen()).toBe("");
+	});
+
 	it("erases every wrapped row of a frame wider than the terminal", async () => {
 		const config: PromptConfig<{ long: boolean }, string> = {
 			render: (state) => (state.long ? `? ${"x".repeat(100)}` : "? short"),

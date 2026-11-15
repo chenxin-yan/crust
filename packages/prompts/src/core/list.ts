@@ -1,6 +1,6 @@
 import type { FuzzyFilterResult } from "./fuzzy.ts";
 import { fuzzyFilter } from "./fuzzy.ts";
-import type { KeypressEvent, TerminalIO } from "./renderer.ts";
+import type { KeypressEvent, PromptIO, TerminalIO } from "./renderer.ts";
 import { resolveShortCircuit } from "./short-circuit.ts";
 import { handleTextEdit } from "./text-edit.ts";
 import type { Choice } from "./types.ts";
@@ -28,7 +28,7 @@ type ListPromptSetup<T, Answer extends T | readonly T[]> =
 			readonly cursor: number;
 			readonly scrollOffset: number;
 			readonly selected: ReadonlySet<number>;
-			readonly promptIO: Required<TerminalIO>;
+			readonly promptIO: PromptIO;
 	  };
 
 /** @internal Resolve the shared lifecycle and initial viewport for list prompts. */

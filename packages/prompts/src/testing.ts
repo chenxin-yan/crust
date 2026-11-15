@@ -167,7 +167,7 @@ class FakeTerminal {
 }
 
 export interface PromptTestIO {
-	readonly io: Required<TerminalIO>;
+	readonly io: Required<Pick<TerminalIO, "input" | "output">>;
 	type(text: string): void;
 	keys(...namedKeys: Key[]): void;
 	screen(): string;
