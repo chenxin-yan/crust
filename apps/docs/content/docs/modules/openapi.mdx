@@ -47,18 +47,46 @@ apiCommand({
 $ my-cli api --list
 GET /users listUsers List users
 $ my-cli api --spec listUsers
-{"operationId":"listUsers","summary":"List users"}
+{"method":"GET","path":"/users","operationId":"listUsers","summary":"List users"}
 ```
 
-`--list` prints one line per operation: `METHOD path operationId summary`, leaving out an `operationId` or `summary` the spec lacks.
+`--list` prints one line per operation: `METHOD path operationId summary`, leaving out an `operationId` or `summary` the spec lacks. Under [`--json`](#json-output) it prints a JSON array of `{ method, path, operationId?, summary? }` objects instead, which an agent can read without guessing where a summary starts.
 
-`--spec <operationId|path>` prints one line of JSON: the path item for a path such as `/users/{id}` (including its shared `parameters`), or the operation with that `operationId`. An unknown target fails with exit code 1.
+`--spec <operationId|path>` prints one line of JSON:
+
+- For a path such as `/users/{id}`, the path item, including its shared `parameters`.
+- For an `operationId`, the operation with its `method` and `path` added, and with the path item's shared `parameters` merged into its own: an operation parameter with the same `name` and `in` replaces the shared one.
+- An unknown target fails with exit code 1, and so does an `operationId` several operations share, naming their `METHOD path`s; pass the path instead.
 
 Both read the spec this way:
 
 - A path item that is itself a local `$ref` (such as to `components.pathItems`) is followed.
 - Keys of `paths` that do not start with `/`, such as `x-*` extensions, are skipped.
-- `--spec` replaces local JSON Pointer `$ref`s (`#/...`, URI-encoded or not) by their targets, keeping sibling keys such as `description`. Other `$ref`s, such as external files or `#anchor`, stay as is, and so does a `$ref` back into its own chain, so recursive schemas stay finite.
+
+`--spec` resolves local JSON Pointer `$ref`s (`#/...`, URI-encoded or not), writing each target once, so the output stays as small as the spec, even for large public specs with schemas shared across thousands of places:
+
+- A target used once in the output replaces its `$ref`, keeping sibling keys such as `description`.
+- A target used more than once, or recursively, keeps its `$ref`s and is written once under a top-level `$refs` object, keyed by the `$ref` text:
+
+  ```json
+  {
+    "method": "POST",
+    "path": "/users",
+    "requestBody": {
+      "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } }
+    },
+    "$refs": {
+      "#/components/schemas/User": {
+        "type": "object",
+        "properties": {
+          "friends": { "type": "array", "items": { "$ref": "#/components/schemas/User" } }
+        }
+      }
+    }
+  }
+  ```
+
+- Other `$ref`s, such as external files, `#anchor`, or a pointer to nothing, stay as is.
 
 ### Send requests
 
@@ -75,7 +103,7 @@ my-cli api /users --paginate                       # every page, one JSON line e
 
 | Flag                        | Behavior                                                                                                                                                                                         |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `-X, --method`              | HTTP method. Default: `GET`, or `POST` when fields or a body are given                                                                                                                           |
+| `-X, --method`              | HTTP method. Default: `GET`, or `POST` when fields or a body are given. See [methods](#methods)                                                                                                  |
 | `-F, --field key=value`     | Repeatable. `true`, `false`, `null`, and JSON numbers become JSON values; anything else, such as `007`, stays a string. A number too large for a double, such as `1e309`, is rejected            |
 | `--body <value>`            | Request body: inline, `@path` (relative to the working directory), or `-` for all of stdin. Stdin already read to the end, such as by `--input -` from the `input()` Extension, is an empty body |
 | `-H, --header 'Key: Value'` | Repeatable request header. Overrides the `auth` header of the same name                                                                                                                          |
@@ -84,12 +112,20 @@ my-cli api /users --paginate                       # every page, one JSON line e
 - Fields form a JSON object body. For `GET` and `HEAD`, or when `--body` is given, they become query parameters instead.
 - A body is sent with `Content-Type: application/json` unless a header sets it.
 
+#### Methods
+
+`-X` takes an HTTP method token ([RFC 9110](https://www.rfc-editor.org/rfc/rfc9110#name-methods)): letters, digits, and ``!#$%&'*+-.^_`|~``.
+
+- The method is sent in upper case whatever its case, so `-X patch` sends `PATCH`.
+- An empty value or one with spaces or other characters, such as `-X "DELETE "`, fails with a `PARSE` error before any request.
+- So does a method the runtime's `fetch()` would not send, naming what it would send instead: one Node's `fetch()` forbids, such as `CONNECT`, or, on Bun, one it does not know, which its `fetch()` would send as `GET`.
+
 #### `--paginate`
 
 After each successful page, `--paginate` calls `paginate(response)` with a copy of the response, so it may read headers or the body. It requests the page `paginate` returns, until it returns `undefined`.
 
 - A returned request without `init` reuses the previous request's method, headers, and body.
-- Each page body is printed as one JSON line (NDJSON). JSON is compacted by removing whitespace outside strings, so numbers keep their exact digits; any other body, including an empty one, is printed as a JSON string.
+- Each page body is printed as one JSON line (NDJSON), so `my-cli api /users --paginate | jq -s` collects the pages into one array, like `gh api --paginate --slurp`. (Without `--slurp`, `gh api` instead joins array pages into one array.) JSON is compacted by removing whitespace outside strings, so numbers keep their exact digits; any other text body, including an empty one, is printed as a JSON string. A page body that is not valid UTF-8 has no JSON line, so it fails the command with exit code 1; pages already printed stay printed.
 - If `paginate` returns the request just sent (same resolved URL and method, without a new `init`), it fails with exit code 1 instead of looping. Pages already printed stay printed.
 - Without a `paginate` option, `--paginate` fails before any request.
 
@@ -103,14 +139,39 @@ Like `gh api`, the request must stay on the base URL's origin (scheme, host, and
 
 ### Output and errors
 
-The response body is printed to stdout as is.
+The response body goes to stdout:
 
-| Failure                                                                                                             | Result                                                                                                                                                                      |
-| ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Non-2xx response                                                                                                    | The body still prints to stdout, then an `ApiResponseError` (exit 1) whose `status` holds the code; its message, such as `GET /users/9: HTTP 404 Not Found`, goes to stderr |
-| `-F` without `=` or out of number range, `-H` without `:` or with a name or value HTTP rejects, unreadable `--body` | A `PARSE` [`CrustError`](/docs/api/errors) before any request                                                                                                               |
+- To a pipe or file, the body is written as its exact bytes, whatever its `Content-Type`, so `my-cli api /export.zip > export.zip` works and a text body keeps its line endings.
+- To a terminal, and when output is captured as text, such as by [`run()`](/docs/api/crust#runpath-input-options) or `captureExecute()`, the body is printed as text, ending with exactly one newline; an empty body prints nothing. A body that is not valid UTF-8 can't be printed as text and fails the command with exit code 1 after the request, as `gh api` and `curl` refuse to print binary to a terminal; a non-2xx one is left out, and the command fails with the `ApiResponseError`.
 
-The `-F` and `-H` errors name the flag and the expected shape, such as `Invalid -H value: expected "Name: value".`, never the text given, since a header can hold a token.
+| Failure                                                                                                                              | Result                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Non-2xx response                                                                                                                     | The body still prints to stdout, then an `ApiResponseError` (exit 1) whose `status` holds the code; its message, such as `GET /users/9: HTTP 404 Not Found`, goes to stderr |
+| `-F` without `=` or out of number range, `-H` without `:` or with a name or value HTTP rejects, an invalid `-X`, unreadable `--body` | A `PARSE` [`CrustError`](/docs/api/errors) before any request                                                                                                               |
+
+The `-F` and `-H` errors name the flag and the expected shape, such as `Invalid -H value: expected "Name: value".`, never the text given, since a header can hold a token. For the same reason, an `ApiResponseError` leaves out the request's query and fragment, including query parameters `-F` added: its message shows the path as given up to its `?`.
+
+### JSON output
+
+With the [`json()`](/docs/modules/extensions/json) Extension registered, `--json` makes `api` return its data as the command result, so stdout carries only JSON:
+
+```sh
+$ my-cli api /users/42 --json
+{"id":42,"name":"Ada"}                                     # stdout
+$ my-cli api /users/9 --json
+{"message":"not found"}                                    # stderr: the response body
+{"message":"GET /users/9: HTTP 404 Not Found","details":{"status":404}}   # stderr
+```
+
+| Command                 | Result on stdout                                                                                                                                                                   |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `api --list`            | An array of `{ method, path, operationId?, summary? }`                                                                                                                             |
+| `api --spec <target>`   | The definition `--spec` prints, as above                                                                                                                                           |
+| `api <path>`            | The response body: parsed when it is JSON, otherwise its text as a JSON string; nothing for an empty body. A body that is not UTF-8 fails the command, since JSON can't hold it    |
+| `api <path> --paginate` | NDJSON: one `{"type":"event","data":…}` line per page with its body as above (an empty body is `""`), then `{"type":"result"}`, or `{"type":"error","error":…}` for a failing page |
+
+- A non-2xx body is written to stderr, followed by the error JSON, whose `details` hold the `status`.
+- JSON numbers are read as JavaScript numbers, so digits beyond double precision are lost and `-0` becomes `0`. Without `--json`, the body is printed exactly, and `--paginate` pages keep their exact digits.
 
 ## `apiClient`
 
