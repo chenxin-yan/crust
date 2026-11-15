@@ -222,6 +222,7 @@ publishing to jsr tags=undefined
 - **Docs:** generated documentation lists the variable as `[env: PUBLISH_TOKEN]`, never its value.
 - **Programmatic calls:** [`run()`](/docs/api/crust#runpath-input-options) reads `process.env` too, for flags its input omits. Pass `{ env: {} }` (or chosen variables) to isolate a call from the caller's shell.
 - **Arguments:** positional arguments have no `env`; use a flag.
+- **Secrets:** take tokens from `env`, stdin, or a prompt, not argv, which lands in shell history and process listings. Keep them out of [`nextSteps`](/docs/modules/extensions/next-steps) input too: steps print as command lines.
 
 #### Delimiters
 
