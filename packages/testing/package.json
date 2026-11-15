@@ -50,6 +50,7 @@
 		"@crustjs/config": "workspace:*",
 		"@crustjs/core": "workspace:*",
 		"@crustjs/prompts": "workspace:*",
+		"@crustjs/style": "workspace:*",
 		"vite-plus": "catalog:"
 	},
 	"peerDependencies": {

@@ -1,7 +1,8 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { bold } from "@crustjs/style";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { captureExecute } from "./index.ts";
 
@@ -22,6 +23,39 @@ describe("captureExecute", () => {
 
 		const result = await captureExecute(app, []);
 		expect(result).toEqual({ stdout: "hello", stderr: "", exitCode: 0 });
+	});
+
+	it("strips escape codes under FORCE_COLOR unless raw is set", async () => {
+		vi.stubEnv("FORCE_COLOR", "1");
+		try {
+			const app = new Crust("test-cli").action(({ stdout, stderr }) => {
+				stdout(bold("Done"));
+				stderr(bold("Warn"));
+			});
+			expect(await captureExecute(app, [])).toMatchObject({ stdout: "Done", stderr: "Warn" });
+			expect(await captureExecute(app, [], { raw: true })).toMatchObject({
+				stdout: "\x1b[1mDone\x1b[22m",
+				stderr: "\x1b[1mWarn\x1b[22m",
+			});
+		} finally {
+			vi.unstubAllEnvs();
+		}
+	});
+
+	it("reads flags' env fallbacks from process.env unless the env option is given", async () => {
+		vi.stubEnv("CRUST_TEST_TOKEN", "from-shell");
+		try {
+			const app = new Crust("test-cli")
+				.flags({ token: { type: "string", env: { name: "CRUST_TEST_TOKEN" }, default: "none" } })
+				.action(({ flags, stdout }) => stdout(flags.token));
+			expect((await captureExecute(app, [])).stdout).toBe("from-shell");
+			expect((await captureExecute(app, [], { env: {} })).stdout).toBe("none");
+			expect((await captureExecute(app, [], { env: { CRUST_TEST_TOKEN: "given" } })).stdout).toBe(
+				"given",
+			);
+		} finally {
+			vi.unstubAllEnvs();
+		}
 	});
 
 	it("captures exit code 1 without leaking it to the process", async () => {

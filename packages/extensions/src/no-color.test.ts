@@ -91,7 +91,7 @@ describe("noColor", () => {
 
 		const app = new Crust("app").extend(noColor()).extend(help());
 
-		const { stdout } = await captureExecute(app, ["--help", "--no-color"]);
+		const { stdout } = await captureExecute(app, ["--help", "--no-color"], { raw: true });
 
 		expect(process.env.FORCE_COLOR).toBe("3");
 		expect(process.env.NO_COLOR).toBeUndefined();

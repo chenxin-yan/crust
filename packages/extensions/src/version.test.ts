@@ -1,12 +1,8 @@
 import { Crust } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { version } from "./version.ts";
-
-afterEach(() => {
-	vi.unstubAllEnvs();
-});
 
 describe("version", () => {
 	it("version extension prints the version instead of an invalid flag value from argv or env", async () => {
@@ -29,13 +25,13 @@ describe("version", () => {
 			});
 		}
 
-		vi.stubEnv("PORT", "abc");
-		expect(await captureExecute(app, ["--version"])).toMatchObject({
+		const env = { PORT: "abc" };
+		expect(await captureExecute(app, ["--version"], { env })).toMatchObject({
 			stdout: "app v1.2.3",
 			stderr: "",
 			exitCode: 0,
 		});
-		const failed = await captureExecute(app, []);
+		const failed = await captureExecute(app, [], { env });
 		expect(failed.stderr).toContain("Expected a number for --port (from $PORT).");
 		expect(failed.exitCode).toBe(1);
 		expect(ran).toBe(false);

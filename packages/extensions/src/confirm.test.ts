@@ -5,6 +5,7 @@ import { commandInputSchema } from "@crustjs/core/tooling";
 import { withTerminalIO } from "@crustjs/prompts";
 import { createPromptIO, type Key } from "@crustjs/prompts/testing";
 import { captureExecute } from "@crustjs/testing";
+import { runInteractive } from "@crustjs/testing/interactive";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { ConfirmationRequiredError, confirm } from "./confirm.ts";
@@ -66,21 +67,38 @@ describe("confirm", () => {
 		expect(outcome.status === "failed" && outcome.error).toBeInstanceOf(ConfirmationRequiredError);
 	});
 
-	it("fails with ConfirmationRequiredError on a terminal under CI", async () => {
+	it("fails with ConfirmationRequiredError on the process terminal under CI", async () => {
 		vi.stubEnv("CI", "true");
-		const harness = createPromptIO();
-		expect(await withTerminalIO(harness.io, () => captureExecute(app, ["drop"]))).toEqual({
-			stdout: "",
-			stderr: "Error: Confirmation required: Drop the database? Pass --yes to confirm.",
-			exitCode: 1,
-		});
-		expect(harness.screen()).toBe("");
+		const ttys = [process.stdin, process.stderr].map((stream) => [stream, stream.isTTY] as const);
+		for (const [stream] of ttys) {
+			Object.defineProperty(stream, "isTTY", { configurable: true, value: true });
+		}
+		try {
+			expect(await captureExecute(app, ["drop"])).toEqual({
+				stdout: "",
+				stderr: "Error: Confirmation required: Drop the database? Pass --yes to confirm.",
+				exitCode: 1,
+			});
+		} finally {
+			for (const [stream, isTTY] of ttys) {
+				Object.defineProperty(stream, "isTTY", { configurable: true, value: isTTY });
+			}
+		}
 	});
 
-	it.each(["", "0", "FALSE"])("prompts on a terminal when CI=%j", async (ci) => {
+	it.each(["true", "", "0", "FALSE"])("prompts on an injected terminal when CI=%j", async (ci) => {
 		vi.stubEnv("CI", ci);
 		const { screen: _screen, ...result } = await answer("y", "enter");
 		expect(result).toEqual({ stdout: "dropped", stderr: "", exitCode: 0 });
+	});
+
+	it("is driven by runInteractive() under CI", async () => {
+		vi.stubEnv("CI", "true");
+		const run = runInteractive(app, ["drop"]);
+		await run.waitFor(/Drop the database\?/);
+		run.type("y");
+		run.keys("return");
+		expect((await run.done).stdout).toBe("dropped");
 	});
 
 	it("defaults to No and fails without changing anything when declined", async () => {

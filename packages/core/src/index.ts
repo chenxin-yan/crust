@@ -60,6 +60,7 @@ export type {
 	RunInput,
 	RunInputArguments,
 	RunOutcome,
+	ShapeRunOutcome,
 } from "./command/typed-run.ts";
 // Errors
 export type {
