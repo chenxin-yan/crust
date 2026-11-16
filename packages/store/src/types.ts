@@ -327,7 +327,8 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 	 * - A store file that is a symbolic link is refused with `PATH` by every operation, on every
 	 *   platform.
 	 * - On POSIX, an existing directory must be owned by the current user and not writable by
-	 *   group or other users; otherwise mutations fail with `PATH` before creating any file.
+	 *   group or other users; otherwise reads and mutations fail with `PATH`, before any file is
+	 *   read or created.
 	 * - Implies `access: "private"`; any other `access` is a `DEFINITION` error.
 	 *
 	 * Every process that opens the file must set it: a default store still takes a lock over

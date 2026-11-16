@@ -297,25 +297,21 @@ async function recoverOrBlock(
 }
 
 /**
- * POSIX: creates a missing directory with mode `0700`, then refuses a directory that is a symbolic
- * link, belongs to another user, or is writable by group or other users, before any file is created
- * in it. Others may read it (mode `0755`, the default of a directory another store created): they
- * could list its files, not replace them.
+ * POSIX: refuses a directory that is a symbolic link, belongs to another user, or is writable by
+ * group or other users. Others may read it (mode `0755`, the default of a directory another store
+ * created): they could list its files, not replace them.
+ *
+ * @returns `false` when the directory does not exist.
+ * @throws {CrustStoreError} `PATH` when the directory is unsafe.
  */
-async function validateDirectory(path: string, signal: AbortSignal | undefined): Promise<void> {
-	if (process.platform === "win32") return;
+export async function checkDirectory(path: string): Promise<boolean> {
+	if (process.platform === "win32") return true;
 	const dir = dirname(path);
 	let stats;
 	try {
 		stats = await lstat(dir);
 	} catch (err: unknown) {
-		if (isErrnoException(err) && err.code === "ENOENT") {
-			// A cancelled call creates nothing.
-			signal?.throwIfAborted();
-			// Checked again once created: another process may have created it first, with its own mode.
-			await ensureDirectory(path, 0o700);
-			return validateDirectory(path, signal);
-		}
+		if (isErrnoException(err) && err.code === "ENOENT") return false;
 		throw new CrustStoreError(
 			"IO",
 			`Failed to inspect store directory: ${dir}`,
@@ -324,13 +320,23 @@ async function validateDirectory(path: string, signal: AbortSignal | undefined):
 		);
 	}
 	if (stats.isDirectory() && stats.uid === process.getuid?.() && (stats.mode & 0o022) === 0) {
-		return;
+		return true;
 	}
 	throw new CrustStoreError(
 		"PATH",
 		`Refusing unsafe store directory: ${dir}. A strict store needs a real directory (not a symbolic link) owned by the current user that group and other users cannot write to (remove their write permission, for example with chmod go-w).`,
 		{ path: dir, reason: "directory" },
 	);
+}
+
+/** POSIX: creates a missing directory with mode `0700`, then checks it, before any file is created in it. */
+async function validateDirectory(path: string, signal: AbortSignal | undefined): Promise<void> {
+	if (await checkDirectory(path)) return;
+	// A cancelled call creates nothing.
+	signal?.throwIfAborted();
+	// Checked again once created: another process may have created it first, with its own mode.
+	await ensureDirectory(path, 0o700);
+	await checkDirectory(path);
 }
 
 function timeoutError(blocker: Blocker): CrustStoreError<"LOCK"> {

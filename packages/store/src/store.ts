@@ -12,7 +12,7 @@ import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
 import { normalizeStandardIssues, type StandardSchema } from "@crustjs/utils/schema";
 
 import { CrustStoreError, type ValidationErrorDetails } from "./errors.ts";
-import { checkLockTimeout, withLock } from "./lock.ts";
+import { checkDirectory, checkLockTimeout, withLock } from "./lock.ts";
 import { applyFieldDefaults, setDocumentValue, withUnknownKeys } from "./merge.ts";
 import { resolveStorePath } from "./path.ts";
 import {
@@ -429,7 +429,11 @@ export function createStore<const F extends FieldsDef>(
 	}
 
 	async function read(): Promise<Config> {
-		if (strict === true) await refuseSymlink(filePath, "read");
+		if (strict === true) {
+			// A file in a directory others can write to may have been planted by them.
+			await checkDirectory(filePath);
+			await refuseSymlink(filePath, "read");
+		}
 		const document = toDocument(await readPersisted());
 		await runFieldValidators(document, "read");
 		// SAFETY: the document was normalized and validated against every field definition.

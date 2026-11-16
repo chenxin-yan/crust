@@ -1086,6 +1086,31 @@ describe("strict", () => {
 		},
 	);
 
+	// Another user who can write to the directory could plant the file a read would trust.
+	it.skipIf(process.platform === "win32")(
+		"refuses to read from a directory others can write to",
+		async () => {
+			await writeFile(join(tempDir, "auth.json"), JSON.stringify({ theme: "planted" }));
+			await chmod(tempDir, 0o777);
+			const store = createStore({
+				dirPath: tempDir,
+				name: "auth",
+				fields: BASIC_FIELDS,
+				strict: true,
+			});
+
+			await expect(store.read()).rejects.toMatchObject({
+				code: "PATH",
+				details: { path: tempDir, reason: "directory" },
+			});
+		},
+	);
+
+	it("reads defaults when there is no directory, and creates none", async () => {
+		expect(await strictStore().read()).toEqual({ theme: "light", verbose: false });
+		expect(existsSync(dirPath)).toBe(false);
+	});
+
 	it("does not create a missing directory to reset", async () => {
 		await strictStore().reset();
 		expect(existsSync(dirPath)).toBe(false);
