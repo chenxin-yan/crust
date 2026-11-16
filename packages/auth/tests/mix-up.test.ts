@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { defineAuth } from "../src/config.ts";
 import { discover } from "../src/discovery.ts";
-import { OAuthConfigError } from "../src/errors.ts";
+import { AbortError, OAuthConfigError } from "../src/errors.ts";
 import { createAuthorizationSession } from "../src/session.ts";
 import { createTokenClient } from "../src/token-client.ts";
 import type { AuthorizationSession, AuthServerOptions } from "../src/types.ts";
@@ -113,9 +113,13 @@ describe("mix-up defense", () => {
 		w.register("/honest/callback");
 		const client = createTokenClient(server, { fetch: w.fake.fetch });
 		const onCallback = vi.fn(({ code }: { code: string }) => client.exchangeCode(session, code));
-		const result = session.wait(onCallback, { timeoutMs: 300 }).catch((caught: unknown) => caught);
+		const controller = new AbortController();
+		const result = session
+			.wait(onCallback, { signal: controller.signal })
+			.catch((caught: unknown) => caught);
 		expect((await w.browse(session)).status).toBe(404);
-		expect(await result).toMatchObject({ code: "timeout" });
+		controller.abort();
+		expect(await result).toBeInstanceOf(AbortError);
 		expect(onCallback).not.toHaveBeenCalled();
 		expect(w.attackerTokenRequests).toHaveLength(0);
 	});

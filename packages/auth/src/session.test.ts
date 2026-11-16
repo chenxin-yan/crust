@@ -1,6 +1,6 @@
 import { once } from "node:events";
 import { Server } from "node:http";
-import { connect } from "node:net";
+import { connect, type Socket } from "node:net";
 
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -726,6 +726,7 @@ describe("createAuthorizationSession", () => {
 				(value) => ({ value }),
 				(error: unknown) => ({ error }),
 			);
+			const accepted = once(loopback.last!.server, "connection");
 			const browser = connect(Number(new URL(session.redirectUri).port), "127.0.0.1");
 			browser.on("error", () => {});
 			await once(browser, "connect");
@@ -734,8 +735,10 @@ describe("createAuthorizationSession", () => {
 			);
 			await vi.waitFor(() => expect(onCallback).toHaveBeenCalled());
 			// The user closes the tab: the server sees the connection end before the page is ready.
+			const [socket] = (await accepted) as [Socket];
+			const serverClosed = once(socket, "close");
 			browser.destroy();
-			await new Promise((resolve) => setTimeout(resolve, 100));
+			await serverClosed;
 			finish();
 			expect(await waiting).toEqual(
 				result === "success" ? { value: "tokens" } : { error: failure },
@@ -750,6 +753,7 @@ describe("createAuthorizationSession", () => {
 		const waiting = session
 			.wait(onCallback, { timeoutMs: 60_000 })
 			.catch((error: unknown) => error);
+		const accepted = once(loopback.last!.server, "connection");
 		const browser = connect(Number(new URL(session.redirectUri).port), "127.0.0.1");
 		browser.on("error", () => {});
 		await once(browser, "connect");
@@ -757,8 +761,10 @@ describe("createAuthorizationSession", () => {
 			`GET ${good(session)} HTTP/1.1\r\nHost: ${new URL(session.redirectUri).host}\r\n\r\n`,
 		);
 		await vi.waitFor(() => expect(onCallback).toHaveBeenCalled());
+		const [socket] = (await accepted) as [Socket];
+		const serverClosed = once(socket, "close");
 		browser.destroy();
-		await new Promise((resolve) => setTimeout(resolve, 100));
+		await serverClosed;
 		session.close();
 		expect(await waiting).toBeInstanceOf(AbortError);
 		expect(await isClosed(session.redirectUri)).toBe(true);
@@ -768,11 +774,12 @@ describe("createAuthorizationSession", () => {
 		"SEC-C14 SEC-P1 never runs onCallback for a queued callback after %s",
 		async (stop) => {
 			const session = await open();
+			// The listener's own handler runs first, so the callback is queued once this fires.
+			const queued = once(loopback.last!.server, "request");
 			const browser = rawRequest(session.redirectUri, good(session)).catch(
 				(error: unknown) => error,
 			);
-			// Let the listener receive and queue the callback before wait() is called.
-			await new Promise((resolve) => setTimeout(resolve, 100));
+			await queued;
 			if (stop === "close()") session.close();
 			const onCallback = vi.fn(async () => "tokens");
 			const result = await session
@@ -793,11 +800,10 @@ describe("createAuthorizationSession", () => {
 			const controller = new AbortController();
 			let finish!: (value: string) => void;
 			const onCallback = vi.fn(() => new Promise<string>((resolve) => (finish = resolve)));
+			// The deadline runs on fake time, advanced only once onCallback has started.
+			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 			const result = session
-				.wait(onCallback, {
-					timeoutMs: stop === "timeout" ? 200 : 60_000,
-					signal: controller.signal,
-				})
+				.wait(onCallback, { timeoutMs: 60_000, signal: controller.signal })
 				.then(
 					(value) => ({ value }),
 					(error: unknown) => ({ error }),
@@ -806,11 +812,13 @@ describe("createAuthorizationSession", () => {
 				(error: unknown) => error,
 			);
 			await vi.waitFor(() => expect(onCallback).toHaveBeenCalled());
+			if (stop === "timeout") await vi.advanceTimersByTimeAsync(60_000);
 			if (stop === "abort") controller.abort();
 			if (stop === "close") session.close();
 			expect(await result).toEqual({
 				error: expect.any(stop === "timeout" ? TimeoutError : AbortError),
 			});
+			vi.useRealTimers();
 			expect(await isClosed(session.redirectUri)).toBe(true);
 			expect(await browser).toBeInstanceOf(Error);
 			// The callback finishing late changes nothing.
