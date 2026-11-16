@@ -345,6 +345,106 @@ describe("operations", () => {
 		});
 	});
 
+	it("applies a 3.1 schema's $ref siblings with its target, and ignores them in 3.0", () => {
+		const base = {
+			type: "object",
+			description: "Base",
+			properties: { id: { type: "string" } },
+			required: ["id"],
+		};
+		const name = { type: "string", minLength: 1, description: "A name" };
+		const spec = (version: string) => ({
+			openapi: version,
+			paths: {
+				"/things": {
+					post: {
+						operationId: "addThing",
+						requestBody: {
+							content: {
+								"application/json": {
+									schema: {
+										$ref: "#/components/schemas/Base",
+										description: "A thing",
+										properties: {
+											extra: { type: "string" },
+											short: { $ref: "#/components/schemas/Name", maxLength: 5 },
+											long: { $ref: "#/components/schemas/Name", minLength: 3 },
+										},
+										required: ["extra"],
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			components: { schemas: { Base: base, Name: name } },
+		});
+		const siblings =
+			spec("3.1.0").paths["/things"].post.requestBody.content["application/json"].schema;
+		const [thing] = operations(spec("3.1.0")).operations;
+		// `properties` is in both, so the siblings join as an `allOf` member; `description` is an
+		// annotation, so the sibling's wins.
+		expect(thing?.body?.schema).toEqual({
+			...base,
+			description: "A thing",
+			allOf: [{ properties: siblings.properties, required: ["extra"] }],
+			properties: {
+				id: { type: "string" },
+				extra: { type: "string" },
+				short: { ...name, maxLength: 5 },
+				long: { ...name, allOf: [{ minLength: 3 }] },
+			},
+			required: ["id", "extra"],
+		});
+
+		const [thing30] = operations(spec("3.0.3")).operations;
+		expect(thing30?.body?.schema).toEqual(base);
+	});
+
+	it("keeps boolean schemas, also behind a $ref", () => {
+		const spec = {
+			openapi: "3.1.0",
+			paths: {
+				"/never": {
+					post: {
+						operationId: "never",
+						parameters: [{ name: "q", in: "query", schema: false }],
+						requestBody: { content: { "application/json": { schema: false } } },
+						responses: {
+							"200": {
+								content: { "application/json": { schema: { $ref: "#/components/schemas/Never" } } },
+							},
+							"201": { content: { "application/json": { schema: true } } },
+						},
+					},
+				},
+			},
+			components: { schemas: { Never: false } },
+		};
+		const [never] = operations(spec).operations;
+		expect(never?.params[0]?.schema).toBe(false);
+		expect(never?.body?.schema).toBe(false);
+		expect(never?.responses.map(({ schema }) => schema)).toEqual([false, true]);
+	});
+
+	it("lists a body property named __proto__ as an own property", () => {
+		const spec = JSON.parse(`{
+			"openapi": "3.1.0",
+			"paths": { "/p": { "post": { "operationId": "p", "requestBody": { "content": {
+				"application/json": { "schema": { "type": "object", "properties": {
+					"__proto__": { "type": "string" }, "name": { "type": "string" }
+				} } }
+			} } } } }
+		}`);
+		const [p] = operations(spec).operations;
+		const { properties } = p!.body!.schema as { properties: object };
+		expect(Object.keys(properties)).toEqual(["__proto__", "name"]);
+		expect(Object.getOwnPropertyDescriptor(properties, "__proto__")?.value).toEqual({
+			type: "string",
+		});
+	});
+
 	it("keeps every operation sharing an operationId and flags each", () => {
 		const spec = {
 			openapi: "3.0.0",
