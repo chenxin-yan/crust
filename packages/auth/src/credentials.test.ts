@@ -70,11 +70,11 @@ describe("credentials file", () => {
 	);
 
 	it.skipIf(!posix)(
-		"SEC-M1 refuses a directory open to others, or a symbolic link, before creating any file",
+		"SEC-M1 refuses a directory others can write to, or a symbolic link, before creating any file",
 		async () => {
 			const w = world();
 			mkdirSync(w.dir, { recursive: true });
-			chmodSync(w.dir, 0o755);
+			chmodSync(w.dir, 0o775);
 			await expect(login(w.source())).rejects.toBeInstanceOf(UnsafeStorageError);
 			expect(readdirSync(w.dir)).toEqual([]);
 
@@ -84,6 +84,20 @@ describe("credentials file", () => {
 			symlinkSync(target, linked.dir);
 			await expect(login(linked.source())).rejects.toBeInstanceOf(UnsafeStorageError);
 			expect(readdirSync(target)).toEqual([]);
+		},
+	);
+
+	// updateNotifier() keeps its file in the same state directory and creates it with mode 0755.
+	it.skipIf(!posix)(
+		"SEC-M1 logs in when another store of the app created the state directory first",
+		async () => {
+			const w = world();
+			mkdirSync(w.dir, { recursive: true });
+			chmodSync(w.dir, 0o755);
+			writeFileSync(join(w.dir, "update-notifier.json"), "{}", { mode: 0o644 });
+			await login(w.source());
+			expect(mode(w.file)).toBe(0o600);
+			expect((await w.source().get()).value).toBeTypeOf("string");
 		},
 	);
 

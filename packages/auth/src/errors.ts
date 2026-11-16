@@ -285,7 +285,7 @@ export class RefreshOutcomeUnknownError extends AuthError {
 	}
 }
 
-/** The credentials directory or file is not private: a symbolic link, or open to other users. */
+/** The credentials directory or file is unsafe: a symbolic link, another user's, or a directory others can write to. */
 export class UnsafeStorageError extends AuthError {
 	declare readonly code: "unsafe-storage";
 	readonly path: string;
@@ -293,7 +293,7 @@ export class UnsafeStorageError extends AuthError {
 	constructor(path: string) {
 		super(
 			"unsafe-storage",
-			`Refusing to use ${path}: it must be a private directory and file owned by you, not a symbolic link`,
+			`Refusing to use ${path}: the directory must be yours and not writable by other users, and neither it nor the file may be a symbolic link`,
 		);
 		this.name = "UnsafeStorageError";
 		this.path = path;
