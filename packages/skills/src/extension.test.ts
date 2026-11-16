@@ -462,6 +462,26 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		expect(await readlink(installed)).toBe(other);
 	});
 
+	it("notices a link to another live copy once when both scopes resolve to it", async () => {
+		vi.stubEnv("CLAUDE_CONFIG_DIR", join(tempRoot, ".claude"));
+		await writeSource("demo");
+		const other = join(tempRoot, "other", "skills", "demo");
+		await mkdir(other, { recursive: true });
+		const installed = join(tempRoot, ".claude", "skills", "demo");
+		await mkdir(dirname(installed), { recursive: true });
+		await symlink(other, installed);
+
+		// Without a defaultScope, ordinary commands check both scopes.
+		const app = new Crust("demo", { description: "Demo" }).extend(skill({})).action(() => {});
+
+		const captured = await onTerminal(() =>
+			asInstalled(() => withCwd(tempRoot, () => captureExecute(app, []))),
+		);
+		expect(captured.stderr).toBe(
+			`Skill link [demo]: "${installed}" points at another installed copy of this CLI. Run "demo skills repair --scope project" to link this copy.`,
+		);
+	});
+
 	it.each([
 		["under CI", () => vi.stubEnv("CI", "true")],
 		["when NO_UPDATE_NOTIFIER is set", () => vi.stubEnv("NO_UPDATE_NOTIFIER", "1")],

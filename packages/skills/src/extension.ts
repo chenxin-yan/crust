@@ -104,6 +104,7 @@ async function repairInstalledSkill(
 	io: SkillIO,
 	explicit = false,
 	repairCommand?: string,
+	noticedOutputDirs = new Set<string>(),
 ): Promise<void> {
 	const status = await getSkillStatus({
 		name: packagedSkill.name,
@@ -120,7 +121,9 @@ async function repairInstalledSkill(
 	const stale = explicit ? dangling : dangling.filter((entry) => !existsSync(entry.outputDir));
 	if (repairCommand) {
 		const otherCopies = dangling.filter((entry) => !stale.includes(entry));
-		for (const outputDir of new Set(otherCopies.map((entry) => entry.outputDir))) {
+		for (const { outputDir } of otherCopies) {
+			if (noticedOutputDirs.has(outputDir)) continue;
+			noticedOutputDirs.add(outputDir);
 			io.stderr(
 				otherCopyNotice(
 					packagedSkill.name,
@@ -179,10 +182,19 @@ async function autoRepairSkills(
 		: ["project", "global"];
 	const scopes = [...new Set(configuredScopes.map(resolveEffectiveScope))];
 	const noticeCommand = isOtherCopyNoticeSuppressed() ? undefined : repairCommand;
+	// Project and global scopes can resolve to the same link (CLAUDE_CONFIG_DIR inside the project).
+	const noticedOutputDirs = new Set<string>();
 	for (const packagedSkill of skills) {
 		for (const scope of scopes) {
 			try {
-				await repairInstalledSkill(packagedSkill, scope, io, false, noticeCommand);
+				await repairInstalledSkill(
+					packagedSkill,
+					scope,
+					io,
+					false,
+					noticeCommand,
+					noticedOutputDirs,
+				);
 			} catch (error) {
 				// Filesystem errors during background repair must not abort the user's
 				// unrelated command; the explicit skill command surfaces them loudly.
