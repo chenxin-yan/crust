@@ -202,6 +202,8 @@ For a CLI backed by an HTTP API, [`@crustjs/openapi`](/docs/modules/openapi) add
 
 With [`json()`](/docs/modules/extensions/json) registered, `api --list --json`, `api --spec <operationId> --json`, and `api <path> --json` print JSON data on stdout: the operations, the definition with its method, path, and parameters, or the parsed response body. A non-2xx response fails with the HTTP `status` in the error JSON's `details`; see [JSON output](/docs/modules/openapi#json-output).
 
+Agents and CI jobs can't complete a browser login. With [`@crustjs/auth`](/docs/modules/auth#choosing-a-credential), resolve the token with `resolveCredential()` so an environment variable such as `ACME_TOKEN` works without one, and pass it to `bearerAuth()`. A `whoami` command that returns the resolved `source` and `shadowed` tells an agent which credential is in use, and that an environment token hides a stored login.
+
 ## Checklist
 
 - Every command, argument, and flag has a `description`.

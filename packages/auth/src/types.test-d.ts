@@ -1,8 +1,11 @@
 // Compile-time contracts, enforced by check:types (not vp test).
 
+import { type ApiClientOptions, bearerAuth } from "@crustjs/openapi";
+
 import type { AuthError, AuthErrorCode, OAuthError } from "./errors.ts";
 import type * as oauth from "./oauth.ts";
 import type { Pkce } from "./pkce.ts";
+import { fromEnv, fromStore, resolveCredential } from "./resolve.ts";
 import type {
 	AuthClient,
 	AuthorizationSession,
@@ -11,6 +14,7 @@ import type {
 	DeviceFlowOptions,
 	TokenClient,
 	TokenSet,
+	TokenSource,
 } from "./types.ts";
 
 type Equal<A, B> =
@@ -70,18 +74,18 @@ server.tokenEndpoint = "https://evil.example/token";
 // @ts-expect-error -- the verifier is not on the session
 void session.verifier;
 
-declare const auth: AuthClient;
+declare const client: AuthClient;
 declare const onUrl: Parameters<AuthClient["login"]>[0]["onUrl"];
 declare const onCode: Parameters<AuthClient["login"]>[0]["onCode"];
 
 // login() has no default output: both callbacks are required.
-void auth.login({ onUrl, onCode });
+void client.login({ onUrl, onCode });
 // @ts-expect-error -- onUrl is required
-void auth.login({ onCode });
+void client.login({ onCode });
 // @ts-expect-error -- onCode is required
-void auth.login({ onUrl });
+void client.login({ onUrl });
 // @ts-expect-error -- the options are required
-void auth.login();
+void client.login();
 
 // The prompt never carries the device code.
 export type NoDeviceCodeInPrompt = Expect<
@@ -101,3 +105,10 @@ void narrowed;
 export type ProtocolCodesAreAuthErrorCodes = Expect<
 	Equal<Extract<AuthErrorCode, OAuthError["code"]>, OAuthError["code"]>
 >;
+
+// The @crustjs/openapi bridge needs no dependency either way: a resolved credential fits
+// bearerAuth()'s resolver structurally, and only a stored login carries a refresh.
+declare const tokens: TokenSource;
+export const auth: NonNullable<ApiClientOptions["auth"]> = bearerAuth((options) =>
+	resolveCredential([fromEnv("ACME_TOKEN"), fromStore(tokens)], options),
+);

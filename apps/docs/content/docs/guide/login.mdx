@@ -27,6 +27,10 @@ The client prints nothing itself: it does not know your command's output stream.
 
 `auth.login()` resolves to the tokens and does not store them yet; storing the login (and `auth.token()`, `auth.status()`, `auth.logout()`) comes with the next change to `@crustjs/auth`.
 
+## Using the token
+
+Other commands get the token from `acmeLogin.get()`, which refreshes it when it is about to expire, or let `@crustjs/openapi` attach it with [`bearerAuth()`](/docs/modules/openapi#authentication). Use [`resolveCredential()`](/docs/modules/auth#choosing-a-credential) so that `ACME_TOKEN` works on CI without a login. A `logout` command calls `acmeLogin.logout()`, which deletes the login locally and revokes it at the server.
+
 ## More than one server
 
 `createAuth()` signs in with one server. To sign in with several, compose the [building blocks](/docs/modules/auth#building-blocks) of `@crustjs/auth/oauth` yourself: each server must send the `iss` response parameter or have its own `redirectPath`, or the browser login refuses to start. [Several servers and mix-up](/docs/modules/auth#several-servers-and-mix-up) explains why and how to declare them.

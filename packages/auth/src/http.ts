@@ -86,11 +86,34 @@ export async function requestJson(
 		return { status: response.status, body };
 	} catch (error) {
 		if (link.signal.aborted) throw link.signal.reason;
+		if (error instanceof AuthError) throw error;
 		// Transport and stream failures carry no message, property or cause of their own.
-		throw error instanceof AuthError ? error : new NetworkError();
+		const networkError = new NetworkError();
+		if (fetchImpl === globalThis.fetch && isConnectFailure(error)) unsentRequests.add(networkError);
+		throw networkError;
 	} finally {
 		link.clear();
 	}
+}
+
+/**
+ * Network errors of requests that provably never reached the server: the runtime's own `fetch`
+ * failed to resolve or connect on its single attempt (SEC-F5). Kept off the error object.
+ */
+export const unsentRequests: WeakSet<NetworkError> = new WeakSet();
+
+const CONNECT_FAILURES = new Set(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED"]);
+
+/**
+ * A DNS or connect failure of the built-in `fetch`, before any request byte was written: Node
+ * (undici) reports it as the `cause` of a `TypeError`, Bun on the error itself. Other errors,
+ * such as a reset after the request was written, a timeout or TLS, may follow a sent request.
+ */
+function isConnectFailure(error: unknown): boolean {
+	if (!(error instanceof TypeError)) return false;
+	const { code } = error as { code?: unknown };
+	const cause = error.cause as { code?: unknown } | undefined;
+	return CONNECT_FAILURES.has(String(code ?? cause?.code));
 }
 
 async function readCapped(response: Response): Promise<string> {

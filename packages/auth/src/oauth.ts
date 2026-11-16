@@ -1,27 +1,54 @@
 export type { OpenBrowserOptions } from "./browser.ts";
 export { openBrowser } from "./browser.ts";
 export { defineServers } from "./config.ts";
+export { credentialStore } from "./credentials.ts";
 export { startDeviceFlow } from "./device.ts";
 export { discover } from "./discovery.ts";
 export type { DeviceCodeMessageOptions } from "./display.ts";
 export { deviceCodeMessage } from "./display.ts";
-export type { OAuthConfigErrorReason, OAuthErrorCode } from "./errors.ts";
+export type {
+	CredentialMismatchReason,
+	LockOwner,
+	LoginRequiredReason,
+	OAuthConfigErrorReason,
+	OAuthErrorCode,
+} from "./errors.ts";
 export {
 	AbortError,
 	AuthError,
+	CredentialMismatchError,
+	CredentialStoreCorruptError,
 	HttpError,
 	IssuerMismatchError,
+	LockRecoveryRequiredError,
+	LockTimeoutError,
+	LoginInProgressError,
+	LoginRequiredError,
 	LoginRequiresInteractionError,
 	NetworkError,
 	OAuthConfigError,
 	OAuthError,
+	RefreshFailedError,
+	RefreshOutcomeUnknownError,
 	ResponseTooLargeError,
+	StaleCommitError,
 	TimeoutError,
+	UnsafeStorageError,
 } from "./errors.ts";
 export { detectLoginMode } from "./login-mode.ts";
+export {
+	fromEnv,
+	fromEnvFile,
+	fromFlag,
+	fromStdin,
+	fromStore,
+	resolveCredential,
+} from "./resolve.ts";
 export { createAuthorizationSession } from "./session.ts";
 export { createTokenClient } from "./token-client.ts";
+export { createTokenSource } from "./token-source.ts";
 export type {
+	AccessToken,
 	AuthConfig,
 	AuthorizationSession,
 	AuthorizationSessionOptions,
@@ -29,6 +56,11 @@ export type {
 	AuthServerEntry,
 	AuthServerOptions,
 	CallbackPageView,
+	Credential,
+	CredentialIdentity,
+	CredentialSource,
+	CredentialStore,
+	CredentialStoreOptions,
 	DefineServersOptions,
 	DeviceFlow,
 	DeviceFlowOptions,
@@ -37,7 +69,14 @@ export type {
 	IssPolicy,
 	LoginMode,
 	LoginModeOptions,
+	LoginTicket,
+	LogoutResult,
+	ResolvedCredential,
+	ResolveOptions,
+	SourceValue,
 	TokenClient,
 	TokenSet,
+	TokenSource,
+	TokenSourceOptions,
 	WaitOptions,
 } from "./types.ts";

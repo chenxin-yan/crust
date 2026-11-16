@@ -4,25 +4,32 @@
  */
 // Run both logins with sentinel secrets, including a hostile server that echoes
 // them back, and check every diagnostic sink. Network bodies sent on purpose are not sinks.
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { inspect } from "node:util";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { createAuth } from "../src/client.ts";
 import { defineServers } from "../src/config.ts";
+import { credentialStore, credentialStoreInternals } from "../src/credentials.ts";
 import { startDeviceFlow } from "../src/device.ts";
 import { discover } from "../src/discovery.ts";
+import { LockRecoveryRequiredError } from "../src/errors.ts";
+import { fromEnv, fromStore, resolveCredential } from "../src/resolve.ts";
 import { createAuthorizationSession } from "../src/session.ts";
 import { createTokenClient } from "../src/token-client.ts";
 import {
 	callbackPath,
 	fakeFetch,
 	json,
+	login,
 	metadataFor,
 	rawRequest,
 	type RecordedRequest,
 	restoreTerminal,
 	terminal,
+	tokenWorld,
 	uniqueIssuer,
 	wellKnown,
 } from "./helpers.ts";
@@ -32,6 +39,9 @@ const STATIC = {
 	accessToken: "SENTINEL_AT_1",
 	refreshToken: "SENTINEL_RT_1",
 	idToken: "SENTINEL_IDT",
+	refreshedAccessToken: "SENTINEL_AT_2",
+	refreshedRefreshToken: "SENTINEL_RT_2",
+	envToken: "SENTINEL_ENV",
 	deviceCode: "SENTINEL_DEVICE",
 	secret: "SENTINEL_SECRET",
 };
@@ -60,8 +70,10 @@ function record(value: unknown, seen = new Set<unknown>()): void {
 }
 
 function captureSecretsFrom(request: RecordedRequest): void {
-	const verifier = request.body.get("code_verifier");
-	if (verifier) secrets.add(verifier);
+	for (const name of ["code_verifier", "refresh_token", "token"]) {
+		const value = request.body.get(name);
+		if (value) secrets.add(value);
+	}
 	const authorization = request.headers.get("authorization");
 	if (authorization) {
 		secrets.add(authorization);
@@ -84,10 +96,14 @@ beforeEach(() => {
 	}
 });
 
+const roots: string[] = [];
+
 afterEach(() => {
 	restoreTerminal();
 	vi.restoreAllMocks();
 	vi.useRealTimers();
+	vi.unstubAllEnvs();
+	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
 const echoAll = () => [...secrets].join(" ");
@@ -297,6 +313,95 @@ describe("secret sentinel gate", () => {
 			error_uri: `https://x.example/${echoAll()}`,
 			state,
 		}));
+		expectNoSecretInSinks();
+	});
+});
+
+/** A stored login of the sentinel tokens, refreshed and revoked by `respond`. */
+async function storedLogin(respond: () => Response) {
+	const w = tokenWorld({
+		token: (request) => {
+			captureSecretsFrom(request);
+			return respond();
+		},
+	});
+	roots.push(w.root);
+	const revoking = fakeFetch({
+		[wellKnown(w.issuer)]: () => json(metadataFor(w.issuer)),
+		[`${w.issuer}/token`]: (request) => {
+			captureSecretsFrom(request);
+			return respond();
+		},
+		[`${w.issuer}/revoke`]: (request) => {
+			captureSecretsFrom(request);
+			return respond();
+		},
+	});
+	const source = w.source({ fetch: revoking.fetch });
+	record(
+		await login(source, { accessToken: STATIC.accessToken, refreshToken: STATIC.refreshToken }),
+	);
+	return { w, source };
+}
+
+const refreshed = () =>
+	json({
+		access_token: STATIC.refreshedAccessToken,
+		refresh_token: STATIC.refreshedRefreshToken,
+		token_type: "Bearer",
+		expires_in: 3600,
+	});
+
+describe("secret sentinel gate: stored credentials", () => {
+	it("SEC-K1 SEC-E8 SEC-DEC-17 a refresh, a resolution and a logout leak nothing", async () => {
+		const { source } = await storedLogin(refreshed);
+		record(await source.get());
+		const resolved = await resolveCredential([fromEnv("ACME_TOKEN", {}), fromStore(source)]);
+		record(resolved);
+		record(await resolveCredential([fromEnv("ACME_TOKEN", { ACME_TOKEN: STATIC.envToken })]));
+		record(await source.logout());
+		expectNoSecretInSinks();
+	});
+
+	it.each(Object.keys(hostile))(
+		"SEC-K1 SEC-K2 a server echoing secrets through %s leaks nothing from a refresh or logout",
+		async (name) => {
+			const { source } = await storedLogin(hostile[name]!);
+			await source.get().then(record, record);
+			await source.logout().then(record, record);
+			expectNoSecretInSinks();
+		},
+	);
+
+	it("SEC-K1 SEC-K2 SEC-M3 a corrupt file and a lock error leak nothing", async () => {
+		const { w, source } = await storedLogin(refreshed);
+		let lockPath = "";
+		// A lock left by a process on another platform: never taken over, reported with its owner.
+		await credentialStoreInternals(w.store).lockIdentity(source.key, async () => {
+			const lockFile = readdirSync(w.dir).find((file) => file.endsWith(".lock"))!;
+			lockPath = join(w.dir, lockFile);
+		});
+		writeFileSync(
+			lockPath,
+			JSON.stringify({
+				ownerId: "foreign",
+				pid: 1,
+				host: "other",
+				platform: "other",
+				createdAt: new Date().toISOString(),
+			}),
+		);
+		const locked = await w
+			.source({ store: credentialStore({ app: w.app, lockTimeout: 50 }) })
+			.get()
+			.catch((error: unknown) => error);
+		expect(locked).toBeInstanceOf(LockRecoveryRequiredError);
+		record(locked);
+		rmSync(lockPath);
+		mkdirSync(w.dir, { recursive: true });
+		writeFileSync(w.file, `{"version":1,"records":{"x":"${STATIC.refreshToken}`);
+		await source.get().then(record, record);
+		await source.logout().then(record, record);
 		expectNoSecretInSinks();
 	});
 });

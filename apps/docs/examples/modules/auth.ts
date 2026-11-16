@@ -2,12 +2,19 @@ import { AuthError, createAuth } from "@crustjs/auth";
 import {
 	createAuthorizationSession,
 	createTokenClient,
+	createTokenSource,
+	credentialStore,
 	defineServers,
 	deviceCodeMessage,
 	discover,
+	fromEnv,
+	fromStdin,
+	fromStore,
 	openBrowser,
+	resolveCredential,
 	startDeviceFlow,
 } from "@crustjs/auth/oauth";
+import { apiCommand, bearerAuth } from "@crustjs/openapi";
 
 //#region client
 const auth = createAuth({
@@ -74,6 +81,54 @@ if (server.userinfoEndpoint) {
 }
 //#endregion
 
+//#region credentials
+const acme = createTokenSource({
+	config,
+	identity: {
+		issuer: "https://login.acme.example",
+		clientId: "acme-cli",
+		// The only API origins this login's token is sent to.
+		apiOrigins: ["https://api.acme.example"],
+	},
+	store: credentialStore({ app: "acme" }),
+});
+
+// In `acme login`, around the browser or device login:
+const ticket = await acme.beginLogin();
+try {
+	await ticket.commit(deviceTokens);
+} finally {
+	ticket.cancel();
+}
+
+const { value } = await acme.get(); // refreshed first when it is about to expire
+
+// In `acme logout`:
+const { local, remote } = await acme.logout();
+//#endregion
+
+//#region resolve
+const credential = await resolveCredential([
+	fromStdin({ enabled: process.argv.includes("--token-stdin") }),
+	fromEnv("ACME_TOKEN"),
+	fromStore(acme),
+]);
+if (credential.shadowed.includes("store")) {
+	console.error(`Using the token from ${credential.source}, not your login`);
+}
+//#endregion
+
+//#region openapi
+const api = apiCommand({
+	spec: { openapi: "3.1.0", info: { title: "Acme", version: "1" }, paths: {} },
+	baseUrl: "https://api.acme.example",
+	// Resolved on the first authenticated request; a 401 refreshes a stored login once.
+	auth: bearerAuth((options) =>
+		resolveCredential([fromEnv("ACME_TOKEN"), fromStore(acme)], options),
+	),
+});
+//#endregion
+
 //#region servers
 const multi = defineServers({
 	servers: [
@@ -95,4 +150,4 @@ const dev = defineServers({
 });
 //#endregion
 
-console.log(deviceTokens.tokenType, multi, dev);
+console.log(multi, dev, value, local, remote, api);
