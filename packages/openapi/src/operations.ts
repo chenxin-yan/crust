@@ -28,9 +28,9 @@ export interface Param {
 
 /**
  * One operation of an OpenAPI 3.0 or 3.1 document, as plain data. Each top-level schema (of a
- * parameter, the body, a body property, a response) is dereferenced, in a 3.1 document with the
- * keywords beside its `$ref` kept, and in a 3.0 document its `nullable: true` becomes a `type`
- * union with `"null"`. An object schema's `properties` and
+ * parameter, the body, a body property, a response) is dereferenced (in 3.1, a `$ref` with sibling
+ * keywords keeps them and its target becomes their first `allOf` member), and in a 3.0 document its
+ * `nullable: true` becomes a `type` union with `"null"`. An object schema's `properties` and
  * `required` include those of its `allOf` members. Deeper `$ref`s stay as they are, so a recursive
  * schema stays finite.
  */
@@ -269,76 +269,27 @@ function withNullable(
 	return rest;
 }
 
-// Keywords that only describe; beside a 3.1 `$ref` they replace the target's.
-const ANNOTATIONS = new Set([
-	"title",
-	"description",
-	"default",
-	"examples",
-	"example",
-	"deprecated",
-	"readOnly",
-	"writeOnly",
-	"$comment",
-]);
-// Keywords whose meaning depends on other keywords of the same schema object.
-const ADJACENT_DEPENDENT = new Set([
-	"additionalProperties",
-	"unevaluatedProperties",
-	"unevaluatedItems",
-	"items",
-	"prefixItems",
-	"contains",
-	"minContains",
-	"maxContains",
-	"if",
-	"then",
-	"else",
-]);
-
 /**
- * `value` with its local `$ref` chain followed, stopping at a cycle or a dangling `$ref`. In 3.1 the
- * keywords beside a Schema Object's `$ref` apply with its target, so they are kept: annotations
- * replace the target's, the others are added to it, except that a keyword the target also has, or
- * any keyword when either side has one whose meaning depends on its neighbors, joins the target's
- * `allOf` instead, which keeps the schema's meaning; a sibling `allOf` adds its members. In 3.0 they are ignored, as OpenAPI says.
+ * `value` with its local `$ref` chain followed, stopping at a dangling `$ref` or one already on
+ * `path`. In 3.1 a `$ref` with sibling keywords applies in place like a one-member `allOf`, so the
+ * siblings stay as written and the resolved target becomes the first member of their `allOf`; a
+ * `$ref` alone, and every 3.0 `$ref` (whose siblings OpenAPI ignores), is replaced by its target.
  */
 function resolveSchema(
 	spec: OpenApiSpec,
 	value: unknown,
 	v30: boolean,
-	seen: Set<string> = new Set(),
+	path: ReadonlySet<string> = new Set(),
 ): unknown {
 	const node = record(value);
 	const ref = node?.$ref;
-	if (node === undefined || !isLocalRef(ref) || seen.has(ref)) return value;
+	if (node === undefined || !isLocalRef(ref) || path.has(ref)) return value;
 	const found = refTarget(spec, ref);
 	if (found === undefined) return value;
-	seen.add(ref);
-	const target = resolveSchema(spec, found, v30, seen);
+	const target = resolveSchema(spec, found, v30, new Set([...path, ref]));
 	if (v30 || Object.keys(node).length === 1) return target;
-	const { $ref: _ref, allOf: siblingAllOf, ...siblings } = node;
-	// Every `allOf` member must hold, so a sibling `allOf` is appended to the target's, never replaced.
-	const members = Array.isArray(siblingAllOf) ? siblingAllOf : [];
-	const base = record(target);
-	if (base === undefined) return { ...siblings, allOf: [...members, target] };
-	const dependent = [...Object.keys(base), ...Object.keys(siblings)].some((key) =>
-		ADJACENT_DEPENDENT.has(key),
-	);
-	const added: [string, unknown][] = [];
-	const joined: [string, unknown][] = [];
-	for (const [key, item] of Object.entries(siblings)) {
-		(ANNOTATIONS.has(key) || (!dependent && !Object.hasOwn(base, key)) ? added : joined).push([
-			key,
-			item,
-		]);
-	}
-	const allOf = [
-		...(Array.isArray(base.allOf) ? base.allOf : []),
-		...members,
-		...(joined.length > 0 ? [Object.fromEntries(joined)] : []),
-	];
-	return { ...base, ...Object.fromEntries(added), ...(allOf.length > 0 && { allOf }) };
+	const { $ref: _ref, ...siblings } = node;
+	return { ...siblings, allOf: [target, ...(Array.isArray(siblings.allOf) ? siblings.allOf : [])] };
 }
 
 /**
@@ -361,21 +312,12 @@ function normalizeSchema(spec: OpenApiSpec, value: unknown, v30: boolean): JsonS
 	const required = new Set<string>();
 	const seen = new Set<unknown>();
 	// `path` holds the `$ref`s being expanded: a schema referred to twice is collected twice (its
-	// siblings may differ), and a recursive `$ref` contributes only its siblings.
+	// siblings may differ), and a recursive `$ref` stays a reference that adds only its siblings.
 	const collect = (part: unknown, path: ReadonlySet<string>): void => {
-		const raw = record(part);
-		const ref = raw?.$ref;
-		let node: Readonly<Record<string, unknown>> | undefined;
-		let inner = path;
-		if (isLocalRef(ref) && path.has(ref)) {
-			const { $ref: _ref, ...siblings } = raw!;
-			node = v30 ? undefined : siblings;
-		} else {
-			if (isLocalRef(ref)) inner = new Set([...path, ref]);
-			node = record(resolveSchema(spec, part, v30));
-		}
+		const ref = record(part)?.$ref;
+		const node = record(resolveSchema(spec, part, v30, path));
 		// Identity catches a plain `$ref` to a schema already collected.
-		if (node === undefined || seen.has(node)) return;
+		if (node === undefined || seen.has(node) || (v30 && isLocalRef(node.$ref))) return;
 		seen.add(node);
 		for (const [name, property] of Object.entries(record(node.properties) ?? {})) {
 			if (properties.has(name)) continue;
@@ -385,6 +327,7 @@ function normalizeSchema(spec: OpenApiSpec, value: unknown, v30: boolean): JsonS
 		for (const name of Array.isArray(node.required) ? node.required : []) {
 			if (typeof name === "string") required.add(name);
 		}
+		const inner = isLocalRef(ref) ? new Set([...path, ref]) : path;
 		for (const member of Array.isArray(node.allOf) ? node.allOf : []) collect(member, inner);
 	};
 	collect(value, new Set());

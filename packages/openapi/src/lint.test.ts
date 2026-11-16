@@ -496,6 +496,23 @@ describe("lint", () => {
 		).toEqual(["body-field-shadowed second"]);
 	});
 
+	it("reads a body field's type through the $ref beside its own keywords", () => {
+		const sibling = spec(
+			{
+				"/a": {
+					post: op("a", {
+						parameters: [{ name: "short", in: "query", schema: { type: "string" } }],
+						requestBody: json(
+							object({ short: { $ref: "#/components/schemas/Name", maxLength: 5 } }),
+						),
+					}),
+				},
+			},
+			{ schemas: { Name: { type: "string" } } },
+		);
+		expect(lint({ spec: sibling }).map(({ code }) => code)).toEqual(["body-field-shadowed"]);
+	});
+
 	it("offers a body field named __proto__ an input like any other", () => {
 		const proto = JSON.parse(`{ "openapi": "3.1.0", "paths": { "/p": { "post": {
 			"operationId": "p", "summary": "p", "responses": { "200": { "description": "ok" } },

@@ -351,22 +351,39 @@ function valueKind(
 	value: unknown,
 	untyped: "scalar" | "other",
 ): "scalar" | "array" | "other" {
-	const kind = shapeOf(value, untyped);
+	const kind = shapeOf(spec, value, untyped);
 	if (kind !== "array") return kind;
 	const items = deref(spec, (value as Readonly<Record<string, unknown>>).items);
-	return shapeOf(items, untyped) === "scalar" ? "array" : "other";
+	return shapeOf(spec, items, untyped) === "scalar" ? "array" : "other";
 }
 
-/** {@link valueKind} for the schema itself, without reading its `items`. */
-function shapeOf(value: unknown, untyped: "scalar" | "other"): "scalar" | "array" | "other" {
+/**
+ * {@link valueKind} for the schema itself, without reading its `items`. A schema without `type` or
+ * `enum` takes the kind of its first `allOf` member that has one, as a `$ref` with sibling keywords
+ * becomes; only that one level is read.
+ */
+function shapeOf(
+	spec: OpenApiSpec,
+	value: unknown,
+	untyped: "scalar" | "other",
+): "scalar" | "array" | "other" {
+	const own = typeShape(value);
+	if (own !== undefined || record(value) === undefined) return own ?? untyped;
+	const { allOf } = value as Readonly<Record<string, unknown>>;
+	const members = Array.isArray(allOf) ? allOf : [];
+	return members.map((member) => typeShape(deref(spec, member))).find(Boolean) ?? untyped;
+}
+
+/** The kind a schema's own `type` or `enum` gives, or `undefined` without either. */
+function typeShape(value: unknown): "scalar" | "array" | "other" | undefined {
 	if (value === false) return "other";
 	const schema = record(value);
-	if (schema === undefined) return untyped;
+	if (schema === undefined) return undefined;
 	const types = (
 		Array.isArray(schema.type) ? schema.type : schema.type === undefined ? [] : [schema.type]
 	).filter((type) => type !== "null");
 	if (types.length === 0) {
-		if (!Array.isArray(schema.enum)) return untyped;
+		if (!Array.isArray(schema.enum)) return undefined;
 		return schema.enum.every(
 			(item) => item === null || ["string", "number", "boolean"].includes(typeof item),
 		)

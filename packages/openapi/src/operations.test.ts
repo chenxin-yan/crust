@@ -380,22 +380,21 @@ describe("operations", () => {
 			},
 			components: { schemas: { Base: base, Name: name } },
 		});
-		const siblings =
+		const { $ref: _ref, ...siblings } =
 			spec("3.1.0").paths["/things"].post.requestBody.content["application/json"].schema;
 		const [thing] = operations(spec("3.1.0")).operations;
-		// `properties` is in both, so the siblings join as an `allOf` member; `description` is an
-		// annotation, so the sibling's wins.
+		// The siblings stay as written and the target becomes the first `allOf` member; the listing
+		// adds the target's properties and `required`.
 		expect(thing?.body?.schema).toEqual({
-			...base,
-			description: "A thing",
-			allOf: [{ properties: siblings.properties, required: ["extra"] }],
+			...siblings,
+			allOf: [base],
 			properties: {
-				id: { type: "string" },
 				extra: { type: "string" },
-				short: { ...name, maxLength: 5 },
-				long: { ...name, allOf: [{ minLength: 3 }] },
+				short: { maxLength: 5, allOf: [name] },
+				long: { minLength: 3, allOf: [name] },
+				id: { type: "string" },
 			},
-			required: ["id", "extra"],
+			required: ["extra", "id"],
 		});
 
 		const [thing30] = operations(spec("3.0.3")).operations;
@@ -428,15 +427,51 @@ describe("operations", () => {
 		const member = { properties: { name: { type: "string" } }, required: ["name"] };
 		expect(operations(body({ type: "object" })).operations[0]?.body?.schema).toEqual({
 			type: "object",
-			allOf: [member, { type: "object" }],
+			allOf: [{ type: "object" }, member],
 			properties: { name: { type: "string" } },
 			required: ["name"],
 		});
 		expect(operations(body(true)).operations[0]?.body?.schema).toEqual({
 			type: "object",
-			allOf: [member, true],
+			allOf: [true, member],
 			properties: { name: { type: "string" } },
 			required: ["name"],
+		});
+		expect(operations(body(false)).operations[0]?.body?.schema).toEqual({
+			type: "object",
+			allOf: [false, member],
+			properties: { name: { type: "string" } },
+			required: ["name"],
+		});
+	});
+
+	it("keeps a keyword that depends on its neighbors beside the $ref target and the sibling allOf", () => {
+		const spec = {
+			openapi: "3.1.0",
+			paths: {
+				"/t": {
+					post: {
+						operationId: "t",
+						requestBody: {
+							content: {
+								"application/json": {
+									schema: {
+										$ref: "#/components/schemas/Base",
+										allOf: [{ properties: { name: { type: "string" } } }],
+										unevaluatedProperties: false,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			components: { schemas: { Base: { type: "object" } } },
+		};
+		expect(operations(spec).operations[0]?.body?.schema).toEqual({
+			allOf: [{ type: "object" }, { properties: { name: { type: "string" } } }],
+			unevaluatedProperties: false,
+			properties: { name: { type: "string" } },
 		});
 	});
 
@@ -486,7 +521,7 @@ describe("operations", () => {
 			properties: object;
 			required: string[];
 		};
-		expect(Object.keys(schema.properties)).toEqual(["id", "loop", "first", "second"]);
+		expect(Object.keys(schema.properties)).toEqual(["first", "id", "loop", "second"]);
 		expect(schema.required).toEqual(["first", "second"]);
 	});
 
