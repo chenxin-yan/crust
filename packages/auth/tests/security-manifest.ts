@@ -123,8 +123,8 @@ export const GATED_OWNERS: readonly string[] = ["AU1"];
  * manual checks.
  */
 export const PLATFORM_NOTES: Readonly<Record<string, string>> = {
-	C14: "Also runs on spawned Node and Bun with real timers (tests/runtimes.test.ts, Linux CI)",
-	C15: "Also runs on spawned Node and Bun (tests/runtimes.test.ts, Linux CI)",
+	C14: "Also runs on spawned Node and Bun with real timers (tests/runtimes.test.ts, Linux, macOS and Windows CI)",
+	C15: "Also runs on spawned Node and Bun (tests/runtimes.test.ts, Linux, macOS and Windows CI)",
 	E6: "Also runs on spawned Node and Bun against a second listener (tests/runtimes.test.ts)",
 	C5: "Node and Bun expose no SO_EXCLUSIVEADDRUSE; the default bind (no reusePort) refuses a second listener",
 	L2: "The argv test runs in the Windows CI job; a real browser launch through rundll32 is a manual check on a Windows host",

@@ -1,3 +1,7 @@
+/**
+ * @module-tag windows
+ * @module-tag macos
+ */
 // SEC-K1 gate: run both logins with sentinel secrets, including a hostile server that echoes
 // them back, and check every diagnostic sink. Network bodies sent on purpose are not sinks.
 import { inspect } from "node:util";

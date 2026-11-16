@@ -1,3 +1,7 @@
+/**
+ * @module-tag windows
+ * @module-tag macos
+ */
 import { spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";

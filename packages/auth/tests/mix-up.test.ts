@@ -1,3 +1,7 @@
+/**
+ * @module-tag windows
+ * @module-tag macos
+ */
 // Mix-up attack (RFC 9700 §4.4): an attacker's metadata names the honest authorization
 // endpoint and the attacker's own token endpoint, and the honest server sends no `iss`.
 // The loopback listener is real; both servers sit behind an injected fetch.

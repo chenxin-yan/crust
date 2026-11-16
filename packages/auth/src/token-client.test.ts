@@ -1,3 +1,7 @@
+/**
+ * @module-tag windows
+ * @module-tag macos
+ */
 import { inspect } from "node:util";
 
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";

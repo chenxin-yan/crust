@@ -1,3 +1,7 @@
+/**
+ * @module-tag windows
+ * @module-tag macos
+ */
 import { once } from "node:events";
 import { Server } from "node:http";
 import { connect, type Socket } from "node:net";
