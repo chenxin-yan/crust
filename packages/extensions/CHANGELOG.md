@@ -1,5 +1,15 @@
 # @crustjs/plugins
 
+## 0.6.2
+
+### Patch Changes
+
+- [#676](https://github.com/chenxin-yan/crust/pull/676) [`edb6671`](https://github.com/chenxin-yan/crust/commit/edb66715c2462bdc11a6032054dc759eb48ceb5b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `@crustjs/utils/terminal` exports `isCI(env = process.env)`, the rule `confirm()` and `updateNotifier()` use: `CI` counts as set unless it is unset, empty, `0`, or `false` in any letter case. `@crustjs/extensions` now imports it instead of keeping its own copy; behavior is unchanged.
+- Updated dependencies [[`edb6671`](https://github.com/chenxin-yan/crust/commit/edb66715c2462bdc11a6032054dc759eb48ceb5b)]:
+  - @crustjs/utils@0.4.0
+  - @crustjs/prompts@0.3.2
+  - @crustjs/store@0.5.2
+
 ## 0.6.1
 
 ### Patch Changes
