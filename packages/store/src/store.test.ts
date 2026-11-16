@@ -1068,9 +1068,9 @@ describe("strict", () => {
 	);
 
 	it.skipIf(process.platform === "win32")(
-		"refuses an existing directory others can read, and creates nothing in it",
+		"refuses an existing directory others can write to, and creates nothing in it",
 		async () => {
-			await chmod(tempDir, 0o755);
+			await chmod(tempDir, 0o775);
 			const store = createStore({
 				dirPath: tempDir,
 				name: "auth",

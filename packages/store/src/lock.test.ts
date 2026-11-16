@@ -581,14 +581,24 @@ describe("withLock", () => {
 	});
 
 	describe.skipIf(process.platform === "win32")("directory validation", () => {
-		it("refuses a directory with group or other permissions and creates nothing in it", async () => {
+		it.each([0o775, 0o757, 0o722])(
+			"refuses a directory group or other users can write to (%o) and creates nothing in it",
+			async (mode) => {
+				await chmod(dir, mode);
+
+				expect(await lockError()).toMatchObject({
+					code: "PATH",
+					details: { path: dir, reason: "directory" },
+				});
+				expect(await readdir(dir)).toEqual([]);
+			},
+		);
+
+		// A default store, such as updateNotifier()'s, creates the app's directory with mode 0755.
+		it("accepts a directory others can read but not write to", async () => {
 			await chmod(dir, 0o755);
 
-			expect(await lockError()).toMatchObject({
-				code: "PATH",
-				details: { path: dir, reason: "directory" },
-			});
-			expect(await readdir(dir)).toEqual([]);
+			await expect(withLock(path, async () => "done")).resolves.toBe("done");
 		});
 
 		it("refuses a directory owned by another user", async () => {
@@ -618,7 +628,7 @@ describe("withLock", () => {
 			duringLstat.set(nested, () => {
 				duringLstat.delete(nested);
 				mkdirSync(nested);
-				chmodSync(nested, 0o755);
+				chmodSync(nested, 0o775);
 			});
 
 			expect(await lockError()).toMatchObject({

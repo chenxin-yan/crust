@@ -298,8 +298,9 @@ async function recoverOrBlock(
 
 /**
  * POSIX: creates a missing directory with mode `0700`, then refuses a directory that is a symbolic
- * link, belongs to another user, or grants group or other permissions, before any file is created
- * in it.
+ * link, belongs to another user, or is writable by group or other users, before any file is created
+ * in it. Others may read it (mode `0755`, the default of a directory another store created): they
+ * could list its files, not replace them.
  */
 async function validateDirectory(path: string, signal: AbortSignal | undefined): Promise<void> {
 	if (process.platform === "win32") return;
@@ -322,12 +323,12 @@ async function validateDirectory(path: string, signal: AbortSignal | undefined):
 			err,
 		);
 	}
-	if (stats.isDirectory() && stats.uid === process.getuid?.() && (stats.mode & 0o077) === 0) {
+	if (stats.isDirectory() && stats.uid === process.getuid?.() && (stats.mode & 0o022) === 0) {
 		return;
 	}
 	throw new CrustStoreError(
 		"PATH",
-		`Refusing unsafe store directory: ${dir}. A strict store needs a real directory (not a symbolic link) owned by the current user, with no group or other permissions (mode 0700), so it cannot share a directory with a store whose directory is group- or world-accessible.`,
+		`Refusing unsafe store directory: ${dir}. A strict store needs a real directory (not a symbolic link) owned by the current user that group and other users cannot write to (remove their write permission, for example with chmod go-w).`,
 		{ path: dir, reason: "directory" },
 	);
 }
@@ -378,8 +379,8 @@ const isWindowsContention = (err: unknown): boolean =>
  *
  * Any other owner is waited on until `timeout`, then the call fails with `LOCK`, whose
  * details name the file, its owner, and the manual step. On POSIX, the directory must be a real
- * directory owned by the current user with no group or other permissions; a missing one is
- * created with mode `0700`.
+ * directory owned by the current user that group and other users cannot write to; a missing one
+ * is created with mode `0700`.
  *
  * @throws {CrustStoreError} `LOCK` when the lock is not acquired before `timeout`.
  * @throws {CrustStoreError} `DEFINITION` when `timeout` is not a finite number of at least 0.
