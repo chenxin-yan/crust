@@ -1,7 +1,9 @@
 // Compile-time contracts, enforced by check:types (not vp test).
 
+import type { AuthError, AuthErrorCode, OAuthError } from "./errors.ts";
 import type { Pkce } from "./pkce.ts";
 import type {
+	AuthClient,
 	AuthorizationSession,
 	AuthorizationSessionOptions,
 	AuthServer,
@@ -54,3 +56,35 @@ session.state = "x";
 server.tokenEndpoint = "https://evil.example/token";
 // @ts-expect-error -- the verifier is not on the session
 void session.verifier;
+
+declare const auth: AuthClient;
+declare const onUrl: Parameters<AuthClient["login"]>[0]["onUrl"];
+declare const onCode: Parameters<AuthClient["login"]>[0]["onCode"];
+
+// login() has no default output: both callbacks are required.
+void auth.login({ onUrl, onCode });
+// @ts-expect-error -- onUrl is required
+void auth.login({ onCode });
+// @ts-expect-error -- onCode is required
+void auth.login({ onUrl });
+// @ts-expect-error -- the options are required
+void auth.login();
+
+// The prompt never carries the device code.
+export type NoDeviceCodeInPrompt = Expect<
+	Equal<
+		keyof Parameters<typeof onCode>[0],
+		"userCode" | "verificationUri" | "verificationUriComplete" | "expiresAt" | "message"
+	>
+>;
+
+declare const error: AuthError;
+// A misspelled code does not compile; a real one narrows.
+// @ts-expect-error -- not an AuthErrorCode
+void (error.code === "login-requird");
+const narrowed = (caught: AuthError): "login-requires-interaction" | undefined =>
+	caught.code === "login-requires-interaction" ? caught.code : undefined;
+void narrowed;
+export type ProtocolCodesAreAuthErrorCodes = Expect<
+	Equal<Extract<AuthErrorCode, OAuthError["code"]>, OAuthError["code"]>
+>;

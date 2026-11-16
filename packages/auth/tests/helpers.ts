@@ -3,9 +3,9 @@
 // process-wide metadata cache never leaks between tests.
 import { request } from "node:http";
 
-import { expect } from "vite-plus/test";
+import { expect, vi } from "vite-plus/test";
 
-import { defineAuth } from "../src/config.ts";
+import { defineServers } from "../src/config.ts";
 import { discover } from "../src/discovery.ts";
 import { OAuthConfigError } from "../src/errors.ts";
 import type { Fetch } from "../src/http.ts";
@@ -111,7 +111,7 @@ export async function setupServer(
 		[wellKnown(issuer)]: () => json(metadataFor(issuer, options.metadata)),
 		...options.routes,
 	});
-	const config = defineAuth({
+	const config = defineServers({
 		servers: [{ issuer, clientId: "cli", ...options.server }, ...(options.others ?? [])],
 		allowCustomIssuers: options.allowCustomIssuers,
 	});
@@ -184,4 +184,32 @@ export async function configReason(promise: Promise<unknown>): Promise<string> {
 	);
 	expect(error).toBeInstanceOf(OAuthConfigError);
 	return (error as OAuthConfigError).reason;
+}
+
+// detectLoginMode() reads the environment and the standard streams; tests set both.
+const streams = [process.stdin, process.stdout, process.stderr];
+const ttyDescriptors = streams.map((stream) => Object.getOwnPropertyDescriptor(stream, "isTTY"));
+
+/** Makes the process look like a desktop terminal (`tty`), or not, and on CI or not. */
+export function terminal(options: { tty: boolean; ci?: boolean }): void {
+	vi.stubEnv("CI", options.ci ? "true" : undefined);
+	vi.stubEnv("DISPLAY", ":0");
+	for (const name of ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"]) vi.stubEnv(name, undefined);
+	for (const stream of streams) {
+		Object.defineProperty(stream, "isTTY", {
+			value: options.tty,
+			configurable: true,
+			writable: true,
+		});
+	}
+}
+
+/** Undoes {@link terminal}. */
+export function restoreTerminal(): void {
+	vi.unstubAllEnvs();
+	streams.forEach((stream, index) => {
+		const descriptor = ttyDescriptors[index];
+		if (descriptor) Object.defineProperty(stream, "isTTY", descriptor);
+		else delete (stream as { isTTY?: boolean }).isTTY;
+	});
 }

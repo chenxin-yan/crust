@@ -2,7 +2,7 @@ import type { Fetch } from "./http.ts";
 
 export type { Fetch } from "./http.ts";
 
-/** One authorization server your CLI signs in with, as passed to `defineAuth()`. */
+/** One authorization server your CLI signs in with, as passed to `defineServers()`. */
 export interface AuthServerOptions {
 	/** Issuer identifier: an `https` URL with no query, fragment or user info. */
 	issuer: string;
@@ -29,8 +29,8 @@ export interface AuthServerOptions {
 	allowInsecureLoopback?: boolean;
 }
 
-/** Options of `defineAuth()`. */
-export interface DefineAuthOptions {
+/** Options of `defineServers()`. */
+export interface DefineServersOptions {
 	/** Every authorization server the CLI may use. Declare them in code, never from env. */
 	servers: readonly AuthServerOptions[];
 	/**
@@ -49,7 +49,7 @@ export interface AuthServerEntry {
 	readonly allowInsecureLoopback: boolean;
 }
 
-/** The validated, frozen result of `defineAuth()`. */
+/** The validated, frozen result of `defineServers()`. */
 export interface AuthConfig {
 	readonly servers: readonly AuthServerEntry[];
 	readonly allowCustomIssuers: boolean;
@@ -222,3 +222,63 @@ export interface LoginModeOptions {
 
 /** Which login to run: a loopback browser login, a device-code login, or none. */
 export type LoginMode = "browser" | "device" | "refuse";
+
+/** Options of `defineAuth()`: the one authorization server your CLI signs in with. */
+export interface DefineAuthOptions extends AuthServerOptions {
+	/** Your CLI's name, such as `acme`: a non-empty name without path separators. */
+	app: string;
+	/** Space-separated scopes every login asks for. Omitted from the request when unset. */
+	scope?: string;
+	/** The name the device-login message shows. @default app */
+	name?: string;
+	/** Loopback addresses the browser login tries in order. @default ["127.0.0.1"] */
+	hosts?: AuthorizationSessionOptions["hosts"];
+	/** Loopback ports the browser login tries in order; `0` picks a free one. @default [0] */
+	ports?: AuthorizationSessionOptions["ports"];
+	/** The `fetch` used for every request to the server. @default globalThis.fetch */
+	fetch?: Fetch;
+}
+
+/** What `onUrl` receives in a browser login. */
+export interface BrowserLoginPrompt {
+	/** The authorization URL to show. It carries `state` and the PKCE challenge, which are not secrets. */
+	readonly url: string;
+	/** Opens `url` in the system browser, best effort; show `url` as well. */
+	readonly open: () => Promise<void>;
+}
+
+/** What `onCode` receives in a device login. The device code itself is never included. */
+export interface DeviceLoginPrompt {
+	/** Sanitized for display. Always show it, even with `verificationUriComplete`. */
+	readonly userCode: string;
+	readonly verificationUri: string;
+	readonly verificationUriComplete: string | undefined;
+	/** Epoch milliseconds after which the code is no longer valid. */
+	readonly expiresAt: number;
+	/** The default instructions: the URL and its host, the code and the anti-phishing warning. */
+	readonly message: string;
+}
+
+/** Options of `login()`. */
+export interface LoginOptions {
+	/** Use the device login even where a browser login is possible, such as for a `--device` flag. */
+	device?: boolean;
+	signal?: AbortSignal;
+	/** Replaces the configured `scope` for this login. */
+	scope?: string;
+	/** Shows the authorization URL of a browser login, and may open it. */
+	onUrl: (prompt: BrowserLoginPrompt) => void | Promise<void>;
+	/** Shows the code of a device login. */
+	onCode: (prompt: DeviceLoginPrompt) => void | Promise<void>;
+	/** Renders the browser result page; a throw serves the default page. */
+	page?: (view: CallbackPageView) => string;
+}
+
+/** The client `defineAuth()` returns. Its methods work detached from it. */
+export interface AuthClient {
+	/**
+	 * Signs in: a browser login on a desktop, a device login elsewhere or with `device`, and
+	 * `LoginRequiresInteractionError` on CI or without a terminal.
+	 */
+	readonly login: (options: LoginOptions) => Promise<TokenSet>;
+}

@@ -1,6 +1,6 @@
 # @crustjs/auth
 
-OAuth sign-in building blocks for CLIs: PKCE, loopback and device-code login
+OAuth sign-in for CLIs: browser and device-code login, plus the OAuth building blocks
 
 ## Install
 

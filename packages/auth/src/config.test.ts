@@ -2,7 +2,7 @@ import { inspect } from "node:util";
 
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { defineAuth } from "./config.ts";
+import { defineServers } from "./config.ts";
 import { OAuthConfigError } from "./errors.ts";
 
 afterEach(() => {
@@ -25,7 +25,7 @@ const server = (issuer: string, more: Record<string, unknown> = {}) => ({
 	...more,
 });
 
-describe("defineAuth", () => {
+describe("defineServers", () => {
 	it.each([
 		["https://as.example/?t=1", "a query"],
 		["https://as.example/?", "an empty query"],
@@ -36,38 +36,44 @@ describe("defineAuth", () => {
 		["as.example", "no scheme"],
 		["ftp://as.example", "another scheme"],
 	])("refuses the issuer %s (%s)", (issuer) => {
-		expect(reason(() => defineAuth({ servers: [server(issuer)] }))).toBe("invalid-url");
+		expect(reason(() => defineServers({ servers: [server(issuer)] }))).toBe("invalid-url");
 	});
 
 	it("accepts loopback http issuers only with allowInsecureLoopback", () => {
-		expect(reason(() => defineAuth({ servers: [server("http://127.0.0.1:9000")] }))).toBe(
+		expect(reason(() => defineServers({ servers: [server("http://127.0.0.1:9000")] }))).toBe(
 			"invalid-url",
 		);
 		expect(
 			reason(() =>
-				defineAuth({ servers: [server("http://127.0.0.1:9000", { allowInsecureLoopback: true })] }),
+				defineServers({
+					servers: [server("http://127.0.0.1:9000", { allowInsecureLoopback: true })],
+				}),
 			),
 		).toBeUndefined();
 		expect(
 			reason(() =>
-				defineAuth({
+				defineServers({
 					servers: [server("http://[::1]:9000/tenant", { allowInsecureLoopback: true })],
 				}),
 			),
 		).toBeUndefined();
 		expect(
 			reason(() =>
-				defineAuth({ servers: [server("http://localhost:9000", { allowInsecureLoopback: true })] }),
+				defineServers({
+					servers: [server("http://localhost:9000", { allowInsecureLoopback: true })],
+				}),
 			),
 		).toBe("invalid-url");
 		expect(
 			reason(() =>
-				defineAuth({ servers: [server("http://10.0.0.1:9000", { allowInsecureLoopback: true })] }),
+				defineServers({
+					servers: [server("http://10.0.0.1:9000", { allowInsecureLoopback: true })],
+				}),
 			),
 		).toBe("invalid-url");
 		expect(
 			reason(() =>
-				defineAuth({ servers: [server("https://as.example", { allowInsecureLoopback: true })] }),
+				defineServers({ servers: [server("https://as.example", { allowInsecureLoopback: true })] }),
 			),
 		).toBeUndefined();
 	});
@@ -82,18 +88,18 @@ describe("defineAuth", () => {
 			vi.stubEnv(name, "1");
 		}
 		vi.stubEnv("NODE_TLS_REJECT_UNAUTHORIZED", "0");
-		expect(reason(() => defineAuth({ servers: [server("http://127.0.0.1:9000")] }))).toBe(
+		expect(reason(() => defineServers({ servers: [server("http://127.0.0.1:9000")] }))).toBe(
 			"invalid-url",
 		);
 		expect(
-			defineAuth({ servers: [server("https://as.example")] }).servers[0]!.allowInsecureLoopback,
+			defineServers({ servers: [server("https://as.example")] }).servers[0]!.allowInsecureLoopback,
 		).toBe(false);
 	});
 
 	it("refuses a second entry for the same issuer", () => {
 		expect(
 			reason(() =>
-				defineAuth({
+				defineServers({
 					servers: [
 						server("https://as.example"),
 						server("https://as.example", { clientId: "other" }),
@@ -103,7 +109,7 @@ describe("defineAuth", () => {
 		).toBe("duplicate-issuer");
 		expect(
 			reason(() =>
-				defineAuth({ servers: [server("https://as.example"), server("https://as.example/")] }),
+				defineServers({ servers: [server("https://as.example"), server("https://as.example/")] }),
 			),
 		).toBeUndefined();
 	});
@@ -123,7 +129,7 @@ describe("defineAuth", () => {
 		42,
 	])("refuses the redirectPath %s", (redirectPath) => {
 		expect(
-			reason(() => defineAuth({ servers: [server("https://as.example", { redirectPath })] })),
+			reason(() => defineServers({ servers: [server("https://as.example", { redirectPath })] })),
 		).toBe("invalid-option");
 	});
 
@@ -131,7 +137,7 @@ describe("defineAuth", () => {
 		"refuses the redirectPath %j, which a browser would send encoded",
 		(redirectPath) => {
 			expect(
-				reason(() => defineAuth({ servers: [server("https://as.example", { redirectPath })] })),
+				reason(() => defineServers({ servers: [server("https://as.example", { redirectPath })] })),
 			).toBe("invalid-option");
 		},
 	);
@@ -139,7 +145,7 @@ describe("defineAuth", () => {
 	it("refuses a redirectPath another server also listens on", () => {
 		expect(
 			reason(() =>
-				defineAuth({
+				defineServers({
 					servers: [
 						server("https://a.example", { redirectPath: "/cb" }),
 						server("https://b.example", { redirectPath: "/cb" }),
@@ -149,7 +155,7 @@ describe("defineAuth", () => {
 		).toBe("duplicate-redirect-path");
 		expect(
 			reason(() =>
-				defineAuth({
+				defineServers({
 					servers: [
 						server("https://a.example", { redirectPath: "/callback" }),
 						server("https://b.example"),
@@ -159,12 +165,12 @@ describe("defineAuth", () => {
 		).toBe("duplicate-redirect-path");
 		expect(
 			reason(() =>
-				defineAuth({ servers: [server("https://a.example"), server("https://b.example")] }),
+				defineServers({ servers: [server("https://a.example"), server("https://b.example")] }),
 			),
 		).toBeUndefined();
 		expect(
 			reason(() =>
-				defineAuth({
+				defineServers({
 					servers: [
 						server("https://a.example", { redirectPath: "/a/callback" }),
 						server("https://b.example"),
@@ -183,11 +189,11 @@ describe("defineAuth", () => {
 		[undefined],
 	])("validates untyped options at runtime: %j", (options) => {
 		// SAFETY: untyped input on purpose; the runtime checks are under test.
-		expect(reason(() => defineAuth(options as never))).toBe("invalid-option");
+		expect(reason(() => defineServers(options as never))).toBe("invalid-option");
 	});
 
 	it("keeps the client secret out of the printed config", () => {
-		const config = defineAuth({
+		const config = defineServers({
 			servers: [server("https://as.example", { clientSecret: "SENTINEL_SECRET" })],
 		});
 		expect(JSON.stringify(config)).not.toContain("SENTINEL_SECRET");

@@ -9,7 +9,7 @@ import { Server } from "node:http";
 
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { defineAuth } from "../src/config.ts";
+import { defineServers } from "../src/config.ts";
 import { discover } from "../src/discovery.ts";
 import { AbortError, OAuthConfigError } from "../src/errors.ts";
 import { createAuthorizationSession } from "../src/session.ts";
@@ -81,7 +81,7 @@ function world(options: { attackerAdvertisesIss?: boolean } = {}) {
 			servers: Partial<Record<"honest" | "attacker", Partial<AuthServerOptions>>>,
 			allowCustomIssuers = false,
 		) {
-			return defineAuth({
+			return defineServers({
 				servers: Object.entries(servers).map(([name, server]) => ({
 					issuer: name === "honest" ? honest : attacker,
 					clientId: "cli",

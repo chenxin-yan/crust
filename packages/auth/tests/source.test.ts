@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vite-plus/test";
 
-import * as api from "../src/index.ts";
+import * as api from "../src/oauth.ts";
 
 const srcDir = join(import.meta.dirname, "..", "src");
 const sources = readdirSync(srcDir)
@@ -67,6 +67,35 @@ describe("library source", () => {
 		// The redaction list is the only mention outside comments.
 		expect(code.filter(({ lines }) => lines.length > 0)).toEqual([
 			{ file: "display.ts", lines: ['\t"id_token",'] },
+		]);
+	});
+});
+
+describe("entry points", () => {
+	it("the root exports the client surface only", async () => {
+		const index = readFileSync(join(srcDir, "index.ts"), "utf8");
+		const names = [...index.matchAll(/export (?:type )?\{([^}]*)\}/g)].flatMap(([, list]) =>
+			list!
+				.split(",")
+				.map((name) => name.replace(/^\s*type\s+/, "").trim())
+				.filter(Boolean),
+		);
+		expect(names.sort()).toEqual([
+			"AuthClient",
+			"AuthError",
+			"AuthErrorCode",
+			"BrowserLoginPrompt",
+			"CallbackPageView",
+			"DefineAuthOptions",
+			"DeviceLoginPrompt",
+			"LoginOptions",
+			"TokenSet",
+			"defineAuth",
+		]);
+		expect(index).not.toMatch(/export \*/);
+		expect(Object.keys(await import("../src/index.ts")).sort()).toEqual([
+			"AuthError",
+			"defineAuth",
 		]);
 	});
 });

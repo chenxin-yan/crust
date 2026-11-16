@@ -1,7 +1,7 @@
 {
 	"name": "@crustjs/auth",
 	"version": "0.0.0",
-	"description": "OAuth sign-in building blocks for CLIs: PKCE, loopback and device-code login",
+	"description": "OAuth sign-in for CLIs: browser and device-code login, plus the OAuth building blocks",
 	"type": "module",
 	"sideEffects": false,
 	"license": "MIT",
@@ -31,6 +31,10 @@
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
+		},
+		"./oauth": {
+			"types": "./dist/oauth.d.ts",
+			"import": "./dist/oauth.js"
 		}
 	},
 	"publishConfig": {

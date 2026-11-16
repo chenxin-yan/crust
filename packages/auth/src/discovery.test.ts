@@ -21,7 +21,7 @@ import {
 	uniqueIssuer,
 	wellKnown,
 } from "../tests/helpers.ts";
-import { defineAuth } from "./config.ts";
+import { defineServers } from "./config.ts";
 import { discover } from "./discovery.ts";
 import {
 	AbortError,
@@ -42,7 +42,7 @@ async function discoverWith(metadata: Record<string, unknown>, issuer = uniqueIs
 	const fake = fakeFetch({
 		[wellKnown(issuer)]: () => json({ ...metadataFor(issuer), ...metadata }),
 	});
-	const config = defineAuth({ servers: [{ issuer, clientId: "cli" }] });
+	const config = defineServers({ servers: [{ issuer, clientId: "cli" }] });
 	return discover(config, issuer, { fetch: fake.fetch });
 }
 
@@ -74,7 +74,7 @@ describe("discover", () => {
 		await once(tls, "listening");
 		try {
 			const issuer = `https://127.0.0.1:${(tls.address() as AddressInfo).port}`;
-			const config = defineAuth({ servers: [{ issuer, clientId: "cli" }] });
+			const config = defineServers({ servers: [{ issuer, clientId: "cli" }] });
 			const error = await discover(config, issuer).catch((caught: unknown) => caught);
 			// The TLS handshake fails, so no request reaches the server.
 			expect(error).toBeInstanceOf(NetworkError);
@@ -86,7 +86,7 @@ describe("discover", () => {
 	});
 
 	it("refuses a plain-http issuer", async () => {
-		const config = defineAuth({
+		const config = defineServers({
 			servers: [{ issuer: "https://as.example", clientId: "cli" }],
 			allowCustomIssuers: true,
 		});
@@ -118,7 +118,7 @@ describe("discover", () => {
 		const fake = fakeFetch({
 			[`${origin}/x/.well-known/openid-configuration`]: () => json(metadataFor(issuer)),
 		});
-		const config = defineAuth({ servers: [{ issuer, clientId: "cli" }] });
+		const config = defineServers({ servers: [{ issuer, clientId: "cli" }] });
 		const server = await discover(config, issuer, { fetch: fake.fetch });
 		expect(fake.requests.map((request) => request.url)).toEqual([
 			`${origin}/.well-known/oauth-authorization-server/x`,
@@ -133,7 +133,7 @@ describe("discover", () => {
 		const failing = fakeFetch({
 			[`${origin}/.well-known/oauth-authorization-server/t`]: () => json({}, 500),
 		});
-		const config = defineAuth({ servers: [{ issuer, clientId: "cli" }] });
+		const config = defineServers({ servers: [{ issuer, clientId: "cli" }] });
 		await expect(discover(config, issuer, { fetch: failing.fetch })).rejects.toBeInstanceOf(
 			HttpError,
 		);
@@ -150,7 +150,7 @@ describe("discover", () => {
 		vi.useFakeTimers();
 		const issuer = uniqueIssuer();
 		const fake = fakeFetch({ [wellKnown(issuer)]: () => new Promise<Response>(() => {}) });
-		const config = defineAuth({ servers: [{ issuer, clientId: "cli" }] });
+		const config = defineServers({ servers: [{ issuer, clientId: "cli" }] });
 		const pending = discover(config, issuer, { fetch: fake.fetch }).catch(
 			(caught: unknown) => caught,
 		);
@@ -215,7 +215,7 @@ describe("discover", () => {
 				[`${issuer}/.well-known/oauth-authorization-server`]: () =>
 					json(metadataFor(issuer, metadata)),
 			});
-		const config = defineAuth({
+		const config = defineServers({
 			servers: [{ issuer, clientId: "cli", allowInsecureLoopback: true }],
 		});
 		expect(
@@ -249,7 +249,7 @@ describe("discover", () => {
 			[wellKnown(issuer)]: () =>
 				new Response(null, { status: 307, headers: { location: "https://evil.example/m" } }),
 		});
-		const config = defineAuth({ servers: [{ issuer, clientId: "cli" }] });
+		const config = defineServers({ servers: [{ issuer, clientId: "cli" }] });
 		const error = await discover(config, issuer, { fetch: fake.fetch }).catch(
 			(caught: unknown) => caught,
 		);
@@ -263,7 +263,7 @@ describe("discover", () => {
 		const fake = fakeFetch({
 			[wellKnown(issuer)]: () => json({ ...metadataFor(issuer), padding: "x".repeat(1024 * 1024) }),
 		});
-		const config = defineAuth({ servers: [{ issuer, clientId: "cli" }] });
+		const config = defineServers({ servers: [{ issuer, clientId: "cli" }] });
 		await expect(discover(config, issuer, { fetch: fake.fetch })).rejects.toBeInstanceOf(
 			ResponseTooLargeError,
 		);
@@ -272,7 +272,7 @@ describe("discover", () => {
 	it("caches metadata in memory for the process", async () => {
 		const issuer = uniqueIssuer();
 		const fake = fakeFetch({ [wellKnown(issuer)]: () => json(metadataFor(issuer)) });
-		const config = defineAuth({ servers: [{ issuer, clientId: "cli" }] });
+		const config = defineServers({ servers: [{ issuer, clientId: "cli" }] });
 		await discover(config, issuer, { fetch: fake.fetch });
 		await discover(config, issuer, { fetch: fake.fetch });
 		expect(fake.requests).toHaveLength(1);
@@ -323,11 +323,11 @@ describe("discover", () => {
 		const declared = uniqueIssuer();
 		const custom = uniqueIssuer();
 		const fake = fakeFetch({ [wellKnown(custom)]: () => json(metadataFor(custom)) });
-		const pinned = defineAuth({ servers: [{ issuer: declared, clientId: "cli" }] });
+		const pinned = defineServers({ servers: [{ issuer: declared, clientId: "cli" }] });
 		expect(await configReason(discover(pinned, custom, { clientId: "x", fetch: fake.fetch }))).toBe(
 			"unknown-issuer",
 		);
-		const open = defineAuth({
+		const open = defineServers({
 			servers: [{ issuer: declared, clientId: "cli" }],
 			allowCustomIssuers: true,
 		});
@@ -343,7 +343,7 @@ describe("discover", () => {
 	it("allows two client ids at the same issuer", async () => {
 		const issuer = uniqueIssuer();
 		const fake = fakeFetch({ [wellKnown(issuer)]: () => json(metadataFor(issuer)) });
-		const config = defineAuth({ servers: [{ issuer, clientId: "cli" }] });
+		const config = defineServers({ servers: [{ issuer, clientId: "cli" }] });
 		const first = await discover(config, issuer, { fetch: fake.fetch });
 		const second = await discover(config, issuer, { fetch: fake.fetch, clientId: "other" });
 		expect([first.clientId, second.clientId]).toEqual(["cli", "other"]);
@@ -353,7 +353,7 @@ describe("discover", () => {
 	it("rejects a pre-aborted signal without any request", async () => {
 		const issuer = uniqueIssuer();
 		const fake = fakeFetch({ [wellKnown(issuer)]: () => json(metadataFor(issuer)) });
-		const config = defineAuth({ servers: [{ issuer, clientId: "cli" }] });
+		const config = defineServers({ servers: [{ issuer, clientId: "cli" }] });
 		await expect(
 			discover(config, issuer, { fetch: fake.fetch, signal: AbortSignal.abort() }),
 		).rejects.toBeInstanceOf(AbortError);
@@ -363,14 +363,14 @@ describe("discover", () => {
 	it("aborts a metadata request in flight", async () => {
 		const issuer = uniqueIssuer();
 		const fake = fakeFetch({ [wellKnown(issuer)]: () => new Promise<Response>(() => {}) });
-		const config = defineAuth({ servers: [{ issuer, clientId: "cli" }] });
+		const config = defineServers({ servers: [{ issuer, clientId: "cli" }] });
 		const controller = new AbortController();
 		const pending = discover(config, issuer, { fetch: fake.fetch, signal: controller.signal });
 		controller.abort();
 		await expect(pending).rejects.toBeInstanceOf(AbortError);
 	});
 
-	it("returns a frozen server and refuses a config not from defineAuth", async () => {
+	it("returns a frozen server and refuses a config not from defineServers", async () => {
 		const { server } = await setupServer();
 		expect(Object.isFrozen(server)).toBe(true);
 		const forged = {

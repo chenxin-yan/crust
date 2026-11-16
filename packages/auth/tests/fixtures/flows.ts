@@ -9,10 +9,10 @@ import { type AddressInfo, connect } from "node:net";
 import {
 	createAuthorizationSession,
 	createTokenClient,
-	defineAuth,
+	defineServers,
 	discover,
 	startDeviceFlow,
-} from "../../src/index.ts";
+} from "../../src/oauth.ts";
 import { listenLoopback } from "../../src/loopback.ts";
 
 function listen(handler: (request: IncomingMessage, response: ServerResponse) => void) {
@@ -101,7 +101,7 @@ const as = await listen((request, response) => {
 });
 issuer = `http://127.0.0.1:${(as.address() as AddressInfo).port}`;
 
-const config = defineAuth({
+const config = defineServers({
 	servers: [
 		{ issuer, clientId: "cli", allowInsecureLoopback: true },
 		{ issuer: `${issuer}/redirecting`, clientId: "cli", allowInsecureLoopback: true, redirectPath: "/r/callback" },

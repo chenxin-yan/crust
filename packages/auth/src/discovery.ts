@@ -67,7 +67,7 @@ export async function discover(
 ): Promise<AuthServer> {
 	throwIfAborted(options.signal);
 	if (!isAuthConfig(config)) {
-		throw new OAuthConfigError("invalid-option", "Pass a config returned by defineAuth()");
+		throw new OAuthConfigError("invalid-option", "Pass a config returned by defineServers()");
 	}
 	const entry = config.servers.find((server) => server.issuer === issuer);
 	if (!entry && !config.allowCustomIssuers) {

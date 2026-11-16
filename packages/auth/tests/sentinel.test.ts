@@ -8,7 +8,8 @@ import { inspect } from "node:util";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { defineAuth } from "../src/config.ts";
+import { defineAuth } from "../src/client.ts";
+import { defineServers } from "../src/config.ts";
 import { startDeviceFlow } from "../src/device.ts";
 import { discover } from "../src/discovery.ts";
 import { createAuthorizationSession } from "../src/session.ts";
@@ -20,6 +21,8 @@ import {
 	metadataFor,
 	rawRequest,
 	type RecordedRequest,
+	restoreTerminal,
+	terminal,
 	uniqueIssuer,
 	wellKnown,
 } from "./helpers.ts";
@@ -82,6 +85,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+	restoreTerminal();
 	vi.restoreAllMocks();
 	vi.useRealTimers();
 });
@@ -142,7 +146,7 @@ function world(token: () => Response) {
 			});
 		},
 	});
-	const config = defineAuth({
+	const config = defineServers({
 		servers: [{ issuer, clientId: "cli", clientSecret: STATIC.secret }],
 	});
 	return { issuer, fake, config };
@@ -202,6 +206,53 @@ async function deviceLogin(token: () => Response) {
 	vi.useRealTimers();
 }
 
+/** The same logins through `defineAuth()`; what its callbacks receive is a sink too. */
+async function clientLogins(token: () => Response) {
+	terminal({ tty: true });
+	const w = world(token);
+	const auth = defineAuth({
+		app: "acme",
+		issuer: w.issuer,
+		clientId: "cli",
+		clientSecret: STATIC.secret,
+		fetch: w.fake.fetch,
+	});
+	record(auth);
+	let page: Promise<{ body: string; headers: unknown }> | undefined;
+	await auth
+		.login({
+			onUrl: (prompt) => {
+				record(prompt);
+				const url = new URL(prompt.url);
+				const redirectUri = url.searchParams.get("redirect_uri")!;
+				page = rawRequest(
+					redirectUri,
+					callbackPath(redirectUri, { code: STATIC.code, state: url.searchParams.get("state")! }),
+				);
+			},
+			onCode: () => {
+				throw new Error("unexpected device login");
+			},
+		})
+		.then(record, record);
+	const response = await page!;
+	sinks.push(response.body, JSON.stringify(response.headers));
+
+	vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+	const device = auth
+		.login({
+			device: true,
+			onUrl: () => {
+				throw new Error("unexpected browser login");
+			},
+			onCode: (prompt) => record(prompt),
+		})
+		.then(record, record);
+	await vi.advanceTimersByTimeAsync(700_000);
+	await device;
+	vi.useRealTimers();
+}
+
 function expectNoSecretInSinks() {
 	expect(sinks.length).toBeGreaterThan(0);
 	for (const secret of secrets) {
@@ -224,11 +275,17 @@ describe("secret sentinel gate", () => {
 		expectNoSecretInSinks();
 	});
 
+	it("successful logins through the client leak nothing", async () => {
+		await clientLogins(success);
+		expectNoSecretInSinks();
+	});
+
 	it.each(Object.keys(hostile))(
 		"a server echoing secrets through %s leaks nothing",
 		async (name) => {
 			await browserLogin(hostile[name]!);
 			await deviceLogin(hostile[name]!);
+			await clientLogins(hostile[name]!);
 			expectNoSecretInSinks();
 		},
 	);

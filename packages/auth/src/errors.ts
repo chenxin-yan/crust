@@ -46,11 +46,24 @@ export type OAuthConfigErrorReason =
 	| "loopback-unavailable"
 	| "already-used";
 
+/** Every `code` an {@link AuthError} can carry, taken from the error classes. */
+export type AuthErrorCode = (
+	| OAuthError
+	| OAuthConfigError
+	| HttpError
+	| IssuerMismatchError
+	| NetworkError
+	| TimeoutError
+	| AbortError
+	| ResponseTooLargeError
+	| LoginRequiresInteractionError
+)["code"];
+
 /** Base class of every error `@crustjs/auth` throws. Match on `code`, never on `message`. */
 export class AuthError extends Error {
-	readonly code: string;
+	readonly code: AuthErrorCode;
 
-	constructor(code: string, message: string) {
+	constructor(code: AuthErrorCode, message: string) {
 		super(message);
 		this.name = "AuthError";
 		this.code = code;

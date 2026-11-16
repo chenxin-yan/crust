@@ -1,11 +1,11 @@
 import { checkIssuer } from "./endpoint.ts";
 import { OAuthConfigError } from "./errors.ts";
-import type { AuthConfig, AuthServerEntry, DefineAuthOptions } from "./types.ts";
+import type { AuthConfig, AuthServerEntry, DefineServersOptions } from "./types.ts";
 
 /** The callback path of a server that declares no `redirectPath`. */
 export const DEFAULT_REDIRECT_PATH = "/callback";
 
-// Configs from defineAuth() and the client secrets of their entries. Kept off the frozen
+// Configs from defineServers() and the client secrets of their entries. Kept off the frozen
 // objects so printing a config never shows a secret.
 const configs = new WeakSet<AuthConfig>();
 const clientSecrets = new WeakMap<AuthServerEntry, string>();
@@ -44,7 +44,7 @@ export function checkRedirectPath(path: unknown): string {
  * Validates the authorization servers your CLI uses and
  * returns a frozen config. Each issuer and each `redirectPath` may appear once.
  */
-export function defineAuth(options: DefineAuthOptions): AuthConfig {
+export function defineServers(options: DefineServersOptions): AuthConfig {
 	if (!Array.isArray(options?.servers) || options.servers.length === 0) {
 		throw option("servers must list at least one authorization server");
 	}
@@ -100,7 +100,7 @@ export function defineAuth(options: DefineAuthOptions): AuthConfig {
 	return config;
 }
 
-/** Whether `config` came from `defineAuth()`. */
+/** Whether `config` came from `defineServers()`. */
 export function isAuthConfig(config: unknown): config is AuthConfig {
 	return typeof config === "object" && config !== null && configs.has(config as AuthConfig);
 }

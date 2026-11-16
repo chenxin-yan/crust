@@ -97,7 +97,9 @@ function renderPage(view: CallbackPageView, page: WaitOptions["page"]): string {
 	return defaultPage(view);
 }
 
-function checkLoopbackOptions(options: AuthorizationSessionOptions) {
+export function checkLoopbackOptions(
+	options: Pick<AuthorizationSessionOptions, "hosts" | "ports">,
+): Required<Pick<AuthorizationSessionOptions, "hosts" | "ports">> {
 	const hosts = options.hosts ?? ["127.0.0.1"];
 	const ports = options.ports ?? [0];
 	if (
