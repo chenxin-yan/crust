@@ -12,9 +12,9 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { withCwd } from "../tests/fixtures.ts";
+import { withCwd, withHome } from "../tests/fixtures.ts";
 import { SkillConflictError } from "./errors.ts";
 import { getSkillStatus, installSkill, uninstallSkill } from "./install.ts";
 
@@ -22,9 +22,11 @@ let tempRoot: string;
 
 beforeEach(async () => {
 	tempRoot = await mkdtemp(join(tmpdir(), "crust-link-skill-"));
+	vi.stubEnv("CLAUDE_CONFIG_DIR", undefined);
 });
 
 afterEach(async () => {
+	vi.unstubAllEnvs();
 	await rm(tempRoot, { recursive: true, force: true });
 });
 
@@ -41,6 +43,10 @@ async function createSource(name = "demo"): Promise<string> {
 
 function outputDir(name = "demo"): string {
 	return join(tempRoot, ".claude", "skills", name);
+}
+
+function sharedDir(name = "demo"): string {
+	return join(tempRoot, ".agents", "skills", name);
 }
 
 async function projectInstall(sourceDir: string, force?: boolean) {
@@ -63,17 +69,90 @@ describe("symlink-only skill installation", () => {
 		});
 	});
 
-	it("installs a relative project link", async () => {
+	it("links the shared folder to the source and the agent folder to the shared link", async () => {
 		const sourceDir = await createSource();
 		const installed = await projectInstall(sourceDir);
 
+		expect(installed.shared).toEqual({
+			outputDir: sharedDir(),
+			scope: "project",
+			status: "installed",
+		});
 		expect(installed.agents[0]).toMatchObject({
 			outputDir: outputDir(),
 			scope: "project",
 			status: "installed",
 		});
-		expect(resolve(dirname(outputDir()), await readlink(outputDir()))).toBe(sourceDir);
+		expect(await readlink(sharedDir())).toBe(join("..", "..", "package", "skills", "demo"));
+		expect(await readlink(outputDir())).toBe(join("..", "..", ".agents", "skills", "demo"));
 		expect(await readFile(join(outputDir(), "commands", "run.md"), "utf8")).toBe("run\n");
+	});
+
+	it("uses absolute links at global scope", async () => {
+		const sourceDir = await createSource();
+		const home = join(tempRoot, "home");
+		await mkdir(home);
+		const installed = await withHome(home, () =>
+			installSkill({ sourceDir, agents: ["claude-code"], scope: "global" }),
+		);
+
+		const shared = join(home, ".agents", "skills", "demo");
+		expect(installed.shared.outputDir).toBe(shared);
+		expect(await readlink(shared)).toBe(sourceDir);
+		expect(await readlink(join(home, ".claude", "skills", "demo"))).toBe(shared);
+	});
+
+	it("links an agent that reads the shared folder only in the project at global scope", async () => {
+		const sourceDir = await createSource();
+		const home = join(tempRoot, "home");
+		await mkdir(home);
+		await withHome(home, async () => {
+			const project = await withCwd(tempRoot, () =>
+				installSkill({ sourceDir, agents: ["cursor"], scope: "project" }),
+			);
+			expect(project.agents).toEqual([
+				{ agent: "cursor", outputDir: sharedDir(), scope: "project", status: "installed" },
+			]);
+			const global = await installSkill({ sourceDir, agents: ["cursor"], scope: "global" });
+			expect(global.agents[0]?.outputDir).toBe(join(home, ".cursor", "skills", "demo"));
+			expect(await readlink(join(home, ".cursor", "skills", "demo"))).toBe(
+				join(home, ".agents", "skills", "demo"),
+			);
+		});
+	});
+
+	it("links the shared folder once from the home directory", async () => {
+		const sourceDir = await createSource();
+		const result = await withHome(tempRoot, () =>
+			withCwd(tempRoot, () =>
+				installSkill({ sourceDir, agents: ["codex", "claude-code"], scope: "project" }),
+			),
+		);
+		expect(result.shared).toMatchObject({ outputDir: sharedDir(), scope: "global" });
+		expect(result.agents.map((entry) => entry.outputDir)).toEqual([sharedDir(), outputDir()]);
+		expect(await readlink(sharedDir())).toBe(sourceDir);
+		expect(await readlink(outputDir())).toBe(sharedDir());
+	});
+
+	it("makes no agent link when the shared folder is a conflict", async () => {
+		const sourceDir = await createSource();
+		await mkdir(sharedDir(), { recursive: true });
+
+		const error = await projectInstall(sourceDir).catch((caught: unknown) => caught);
+		expect(error).toBeInstanceOf(SkillConflictError);
+		expect((error as SkillConflictError).details).toEqual({ outputDir: sharedDir() });
+		await expect(lstat(outputDir())).rejects.toThrow();
+	});
+
+	it("keeps an older agent link that points straight at the source", async () => {
+		const sourceDir = await createSource();
+		await mkdir(dirname(outputDir()), { recursive: true });
+		await symlink(join("..", "..", "package", "skills", "demo"), outputDir());
+
+		const result = await projectInstall(sourceDir);
+		expect(result.shared.status).toBe("installed");
+		expect(result.agents[0]?.status).toBe("up-to-date");
+		expect(await readlink(outputDir())).toBe(join("..", "..", "package", "skills", "demo"));
 	});
 
 	it("leaves a healthy correct link up to date", async () => {
@@ -90,7 +169,7 @@ describe("symlink-only skill installation", () => {
 
 		let result = await projectInstall(sourceDir);
 		expect(result.agents[0]?.status).toBe("repaired");
-		expect(resolve(dirname(outputDir()), await readlink(outputDir()))).toBe(sourceDir);
+		expect(resolve(dirname(outputDir()), await readlink(outputDir()))).toBe(sharedDir());
 
 		await rm(outputDir());
 		const staleSource = join(tempRoot, "old-package", "skills", "demo");
@@ -175,6 +254,25 @@ describe("symlink-only skill installation", () => {
 			expect(missing.agents[0]?.status).toBe("not-found");
 		},
 	);
+
+	it("unlinks the shared and agent links but leaves conflicts", async () => {
+		const sourceDir = await createSource();
+		await projectInstall(sourceDir);
+		const kiro = join(tempRoot, ".kiro", "skills", "demo");
+		await mkdir(kiro, { recursive: true });
+
+		const result = await withCwd(tempRoot, () =>
+			uninstallSkill({ name: "demo", scope: "project" }),
+		);
+
+		const statuses = new Map(result.agents.map((entry) => [entry.outputDir, entry.status]));
+		expect(statuses.get(sharedDir())).toBe("removed");
+		expect(statuses.get(outputDir())).toBe("removed");
+		expect(statuses.get(kiro)).toBe("not-found");
+		await expect(lstat(sharedDir())).rejects.toThrow();
+		await expect(lstat(outputDir())).rejects.toThrow();
+		expect((await lstat(kiro)).isDirectory()).toBe(true);
+	});
 
 	it("unlinks owned healthy and dangling links but skips conflicts", async () => {
 		const sourceDir = await createSource();

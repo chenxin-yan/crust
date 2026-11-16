@@ -24,25 +24,30 @@ import {
 	AGENT_LABELS,
 	ALL_AGENTS,
 	detectInstalledAgents,
-	getAdditionalAgents,
-	getUniversalAgents,
+	getScopeAgents,
 	isAgentAvailable,
-	resolveEffectiveScope,
+	readsSharedFolder,
 } from "./agents.ts";
 import type { AgentTarget, Scope } from "./agents.ts";
 import { renderSkills } from "./build.ts";
 import { SkillConflictError } from "./errors.ts";
 import { SKILLS } from "./id.ts";
-import { getSkillStatus, groupAgentsByOutputDir, installSkill, uninstallSkill } from "./install.ts";
+import {
+	getSharedSkillStatus,
+	getSkillStatus,
+	groupAgentsByOutputDir,
+	installSkill,
+	uninstallSkill,
+} from "./install.ts";
+import { resolveEffectiveScope, sharedSkillsDir } from "./link.ts";
 import { SkillSourceUnavailableError, loadPackagedSkills, type PackagedSkill } from "./source.ts";
-import type { InstallSkillResult, SkillOptions, SkillStatusResult } from "./types.ts";
+import type { SkillOptions, SkillStatusResult } from "./types.ts";
 
 const DEFAULT_SKILL_COMMAND_NAME = "skills";
 const SKILLS_SECTION_TITLE = "Agent skills";
 const DEFAULT_SKILL_SCOPE = "global";
 const SKILLS_ARTIFACT = "skills";
-const UNIVERSAL_GROUP = "__universal__";
-const UNIVERSAL_AGENT_FLAG_VALUE = "universal";
+const SHARED_LABEL = "Shared";
 
 type SkillIO = Pick<InvocationIO, "stdout" | "stderr">;
 
@@ -70,23 +75,16 @@ function loadArtifactSkills(): readonly PackagedSkill[] {
 	return loadPackagedSkills(resolveArtifactDir(SKILLS_ARTIFACT));
 }
 
-/** `--agent` values as agents; `universal` names the Universal group. */
 function parseAgentFlag(values: readonly string[]): AgentTarget[] {
-	const agents = new Set<AgentTarget>();
-	for (const value of values) {
+	return [...new Set(values)].map((value) => {
 		const agent = ALL_AGENTS.find((id) => id === value);
-		if (agent) agents.add(agent);
-		else if (value === UNIVERSAL_AGENT_FLAG_VALUE) {
-			for (const universal of getUniversalAgents()) agents.add(universal);
-		} else {
-			throw new CrustError(
-				"PARSE",
-				`Unknown agent "${value}" for --agent. Use "${UNIVERSAL_AGENT_FLAG_VALUE}" for the Universal group or an agent id from https://crustjs.com/docs/modules/skills#supported-agents.`,
-				{ flag: "agent" },
-			);
-		}
-	}
-	return [...agents];
+		if (agent) return agent;
+		throw new CrustError(
+			"PARSE",
+			`Unknown agent "${value}" for --agent. Agent ids are listed at https://crustjs.com/docs/modules/skills#supported-agents.`,
+			{ flag: "agent" },
+		);
+	});
 }
 
 /** Checks `--skill` values against the packaged skills. */
@@ -120,73 +118,97 @@ function isOtherCopyNoticeSuppressed(): boolean {
 	return !!process.env.NO_UPDATE_NOTIFIER || !process.stderr?.isTTY || isCI();
 }
 
-function formatAgentLabels(agents: readonly AgentTarget[]): string[] {
-	const universal = new Set(getUniversalAgents());
-	const labels = agents.some((agent) => universal.has(agent)) ? ["Universal"] : [];
-	for (const agent of agents) {
-		if (!universal.has(agent)) labels.push(AGENT_LABELS[agent]);
-	}
-	return labels;
+/** One label per link folder: the shared folder reads "Shared", others name their agents. */
+function linkLabels(entries: readonly { agent?: AgentTarget; outputDir: string }[], scope: Scope) {
+	return [...Map.groupBy(entries, (entry) => entry.outputDir)].map(([outputDir, group]) => ({
+		outputDir,
+		label:
+			dirname(outputDir) === sharedSkillsDir(scope)
+				? SHARED_LABEL
+				: group.flatMap((entry) => (entry.agent ? [AGENT_LABELS[entry.agent]] : [])).join(", "),
+	}));
 }
 
-/**
- * `explicit` is the `repair` command: it reports and re-points every stale owned link.
- * Background repair fixes only links whose target is gone; a link to another live
- * installed copy is left alone so two copies of the CLI do not take it from each other,
- * and is named on stderr when the caller passes `repairCommand`.
- */
+/** The `repair` command: re-points the shared link and every owned agent link that is not linked. */
 async function repairInstalledSkill(
 	packagedSkill: PackagedSkill,
 	scope: Scope,
 	io: SkillIO,
-	explicit = false,
-	repairCommand?: string,
-	noticedOutputDirs = new Set<string>(),
 ): Promise<void> {
+	const effectiveScope = resolveEffectiveScope(scope);
 	const status = await getSkillStatus({
 		name: packagedSkill.name,
 		sourceDir: packagedSkill.sourceDir,
 		scope,
 	});
-	const effectiveScope = status.agents[0]?.scope ?? scope;
-	for (const outputDir of new Set(
+	const conflicts = new Set(
 		status.agents.filter((entry) => entry.status === "conflict").map((entry) => entry.outputDir),
-	)) {
-		io.stderr(conflictWarning(packagedSkill.name, outputDir));
-	}
+	);
+	for (const outputDir of conflicts) io.stderr(conflictWarning(packagedSkill.name, outputDir));
 	const dangling = status.agents.filter((entry) => entry.status === "dangling");
-	const stale = explicit ? dangling : dangling.filter((entry) => !existsSync(entry.outputDir));
-	if (repairCommand) {
-		const otherCopies = dangling.filter((entry) => !stale.includes(entry));
-		for (const { outputDir } of otherCopies) {
-			if (noticedOutputDirs.has(outputDir)) continue;
-			noticedOutputDirs.add(outputDir);
-			io.stderr(
-				otherCopyNotice(
-					packagedSkill.name,
-					outputDir,
-					`${repairCommand} --scope ${effectiveScope}`,
-				),
-			);
-		}
-	}
-	if (stale.length === 0) {
-		if (explicit) io.stdout(dim(`No repairs needed [${packagedSkill.name}] (${effectiveScope}).`));
+	if (dangling.length === 0) {
+		io.stdout(dim(`No repairs needed [${packagedSkill.name}] (${effectiveScope}).`));
 		return;
 	}
+	// Agent links point at the shared link, so they cannot be repaired past a conflict there.
+	if (conflicts.has(join(sharedSkillsDir(effectiveScope), packagedSkill.name))) return;
 
 	try {
 		const result = await installSkill({
 			sourceDir: packagedSkill.sourceDir,
-			agents: stale.map((entry) => entry.agent),
+			agents: dangling.map((entry) => entry.agent),
 			scope,
 		});
-		const labels = formatAgentLabels(result.agents.map((entry) => entry.agent));
-		if (explicit && labels.length > 0) {
+		const changed = [result.shared, ...result.agents].filter(
+			(entry) => entry.status !== "up-to-date",
+		);
+		const labels = linkLabels(changed, effectiveScope).map((entry) => entry.label);
+		if (labels.length > 0) {
 			io.stdout(
 				`\n${bold(`Repaired "${packagedSkill.name}" for ${labels.join(", ")} (${effectiveScope})`)}`,
 			);
 		}
+	} catch (error) {
+		// The entry may change hands between the status check and install (TOCTOU).
+		if (!(error instanceof SkillConflictError)) throw error;
+		io.stderr(conflictWarning(packagedSkill.name, error.details.outputDir));
+	}
+}
+
+/**
+ * Before ordinary commands: re-links the shared link when its target is gone. A link to another
+ * live installed copy is left alone so two copies of the CLI do not take it from each other, and
+ * is named on stderr when the caller passes `repairCommand`. Agent links point at the shared
+ * link, which does not move, so they are not inspected.
+ */
+async function checkSharedLink(
+	packagedSkill: PackagedSkill,
+	scope: Scope,
+	io: SkillIO,
+	repairCommand: string | undefined,
+): Promise<void> {
+	const shared = await getSharedSkillStatus({
+		name: packagedSkill.name,
+		sourceDir: packagedSkill.sourceDir,
+		scope,
+	});
+	if (shared.status === "conflict")
+		io.stderr(conflictWarning(packagedSkill.name, shared.outputDir));
+	if (shared.status !== "dangling") return;
+	if (existsSync(shared.outputDir)) {
+		if (repairCommand) {
+			io.stderr(
+				otherCopyNotice(
+					packagedSkill.name,
+					shared.outputDir,
+					`${repairCommand} --scope ${shared.scope}`,
+				),
+			);
+		}
+		return;
+	}
+	try {
+		await installSkill({ sourceDir: packagedSkill.sourceDir, agents: [], scope });
 	} catch (error) {
 		// The entry may change hands between the status check and install (TOCTOU).
 		if (!(error instanceof SkillConflictError)) throw error;
@@ -219,19 +241,10 @@ async function autoRepairSkills(
 		: ["project", "global"];
 	const scopes = [...new Set(configuredScopes.map(resolveEffectiveScope))];
 	const noticeCommand = isOtherCopyNoticeSuppressed() ? undefined : repairCommand;
-	// Project and global scopes can resolve to the same link (CLAUDE_CONFIG_DIR inside the project).
-	const noticedOutputDirs = new Set<string>();
 	for (const packagedSkill of skills) {
 		for (const scope of scopes) {
 			try {
-				await repairInstalledSkill(
-					packagedSkill,
-					scope,
-					io,
-					false,
-					noticeCommand,
-					noticedOutputDirs,
-				);
+				await checkSharedLink(packagedSkill, scope, io, noticeCommand);
 			} catch (error) {
 				// Filesystem errors during background repair must not abort the user's
 				// unrelated command; the explicit skill command surfaces them loudly.
@@ -445,12 +458,12 @@ async function selectSkills(
 
 function reportAgentDirs(
 	io: SkillIO,
-	entries: readonly { agent: AgentTarget; outputDir: string }[],
+	entries: readonly { agent?: AgentTarget; outputDir: string }[],
+	scope: Scope,
 ): void {
-	// Agents sharing one directory (e.g. Universal + Antigravity) report as one line.
-	for (const [outputDir, group] of Map.groupBy(entries, (entry) => entry.outputDir)) {
-		const labels = formatAgentLabels(group.map((entry) => entry.agent));
-		io.stdout(dim(`  ${labels.join(", ")} → ${outputDir}`));
+	// Agents sharing one directory report as one line.
+	for (const { outputDir, label } of linkLabels(entries, scope)) {
+		io.stdout(dim(`  ${label} → ${outputDir}`));
 	}
 }
 
@@ -495,48 +508,35 @@ async function installSkills(opts: {
 		}
 	}
 
-	const detected = new Set(await detectInstalledAgents());
-	const universal = getUniversalAgents();
-	const installed = new Set(statuses.flatMap(([, statusMap]) => installedAgents(statusMap)));
-	const additional = getAdditionalAgents().filter(
-		(agent) => detected.has(agent) || installed.has(agent),
-	);
-	// Every skill links into the same per-agent skills root; hint the shared root.
-	const rootHint = (agent: AgentTarget) => {
-		const outputDir = statuses[0]?.[1].get(agent)?.outputDir;
-		return outputDir ? dirname(outputDir) : "path unavailable";
-	};
-	const choices: Array<{
-		label: string;
-		value: AgentTarget | typeof UNIVERSAL_GROUP;
-		hint: string;
-	}> = [];
-	if (universal.length > 0) {
-		choices.push({ label: "Universal", value: UNIVERSAL_GROUP, hint: rootHint(universal[0]!) });
-	}
-	for (const agent of additional) {
-		choices.push({ label: AGENT_LABELS[agent], value: agent, hint: rootHint(agent) });
-	}
-
 	let selected: AgentTarget[];
 	if (opts.agents) selected = [...opts.agents];
-	else if (installAll) selected = [...universal, ...additional];
 	else {
-		const defaults: Array<AgentTarget | typeof UNIVERSAL_GROUP> = additional.filter((agent) =>
-			installed.has(agent),
+		const detected = new Set(await detectInstalledAgents());
+		const installed = new Set(statuses.flatMap(([, statusMap]) => installedAgents(statusMap)));
+		// Agents reading the shared folder need no link of their own.
+		const candidates = getScopeAgents(effectiveScope).filter(
+			(agent) =>
+				!readsSharedFolder(agent, effectiveScope) && (detected.has(agent) || installed.has(agent)),
 		);
-		if (universal.length > 0 && universal.every((agent) => installed.has(agent))) {
-			defaults.unshift(UNIVERSAL_GROUP);
+		if (installAll || candidates.length === 0) selected = candidates;
+		else {
+			// Every skill links into the same per-agent skills root; hint that root.
+			const rootHint = (agent: AgentTarget) => {
+				const outputDir = statuses[0]?.[1].get(agent)?.outputDir;
+				return outputDir ? dirname(outputDir) : "path unavailable";
+			};
+			const { multiselect } = await import("@crustjs/prompts");
+			selected = await multiselect({
+				message: "Select agents to link (the shared .agents/skills folder is always linked)",
+				choices: candidates.map((agent) => ({
+					label: AGENT_LABELS[agent],
+					value: agent,
+					hint: rootHint(agent),
+				})),
+				default: candidates.filter((agent) => installed.has(agent)),
+				required: false,
+			});
 		}
-		const { multiselect } = await import("@crustjs/prompts");
-		const values = await multiselect({
-			message: "Select agents to install for",
-			choices,
-			default: defaults,
-			required: false,
-		});
-		selected = values.filter((value): value is AgentTarget => value !== UNIVERSAL_GROUP);
-		if (values.includes(UNIVERSAL_GROUP)) selected.push(...universal);
 	}
 
 	for (const [packagedSkill, statusMap] of statuses) {
@@ -551,7 +551,10 @@ async function installSkills(opts: {
 	}
 }
 
-/** Additive only: links or repairs selected agents; unselected links are left untouched. */
+/**
+ * Additive only: links the shared folder, then the selected agents' own folders to it;
+ * unselected links are left untouched. Without the shared link no agent link is made.
+ */
 async function installSelectedAgents(opts: {
 	packagedSkill: PackagedSkill;
 	statusMap: SkillStatusMap;
@@ -562,8 +565,15 @@ async function installSelectedAgents(opts: {
 	io: SkillIO;
 }): Promise<void> {
 	const { packagedSkill, statusMap, selected, scope, nonInteractive, io } = opts;
-	const toInstall = selected.filter((agent) => statusMap.get(agent)?.status !== "linked");
-	if (toInstall.length === 0) {
+	const toInstall = selected.filter(
+		(agent) => !readsSharedFolder(agent, scope) && statusMap.get(agent)?.status !== "linked",
+	);
+	const shared = await getSharedSkillStatus({
+		name: packagedSkill.name,
+		sourceDir: packagedSkill.sourceDir,
+		scope,
+	});
+	if (shared.status === "linked" && toInstall.length === 0) {
 		io.stdout(dim(`No changes [${packagedSkill.name}].`));
 		return;
 	}
@@ -572,29 +582,20 @@ async function installSelectedAgents(opts: {
 		import("@crustjs/progress"),
 		import("@crustjs/prompts"),
 	]);
-	const groups = groupAgentsByOutputDir(toInstall, scope, packagedSkill.name);
-	const linked: InstallSkillResult["agents"] = [];
-	for (const agents of groups.values()) {
+	const install = async (agents: AgentTarget[], label: string) => {
 		const runInstall = (force?: boolean) =>
-			installSkill({
-				sourceDir: packagedSkill.sourceDir,
-				agents,
-				scope,
-				force,
-			});
+			installSkill({ sourceDir: packagedSkill.sourceDir, agents, scope, force });
 		try {
-			const result = await spinner({
+			return await spinner({
 				message: `Installing skill [${packagedSkill.name}]...`,
 				task: () => runInstall(),
 			});
-			linked.push(...result.agents);
 		} catch (error) {
 			if (!(error instanceof SkillConflictError)) throw error;
-			const label = formatAgentLabels(agents).join(", ");
 			const skipped = `Skipped ${label} [${packagedSkill.name}]: directory is not owned by this skill.`;
 			if (nonInteractive) {
 				io.stderr(yellow(skipped));
-				continue;
+				return undefined;
 			}
 			const overwrite = await confirm({
 				message: `"${error.details.outputDir}" is not owned by "${packagedSkill.name}". Overwrite?`,
@@ -602,15 +603,23 @@ async function installSelectedAgents(opts: {
 			});
 			if (!overwrite) {
 				io.stdout(dim(skipped));
-				continue;
+				return undefined;
 			}
-			const result = await runInstall(true);
-			linked.push(...result.agents);
+			return runInstall(true);
 		}
+	};
+
+	const sharedResult = await install([], SHARED_LABEL);
+	if (!sharedResult) return;
+	const linked: Array<{ agent?: AgentTarget; outputDir: string }> =
+		sharedResult.shared.status === "up-to-date" ? [] : [sharedResult.shared];
+	for (const agents of groupAgentsByOutputDir(toInstall, scope, packagedSkill.name).values()) {
+		const result = await install(agents, agents.map((agent) => AGENT_LABELS[agent]).join(", "));
+		if (result) linked.push(...result.agents);
 	}
 	if (linked.length > 0) {
 		io.stdout(`\n${bold(`Installed "${packagedSkill.name}"`)}`);
-		reportAgentDirs(io, linked);
+		reportAgentDirs(io, linked, scope);
 	}
 }
 
@@ -653,7 +662,7 @@ async function uninstallSkills(opts: {
 		const removed = result.agents.filter((entry) => entry.status === "removed");
 		if (removed.length === 0) continue;
 		io.stdout(`\n${bold(`Removed "${packagedSkill.name}"`)}`);
-		reportAgentDirs(io, removed);
+		reportAgentDirs(io, removed, effectiveScope);
 	}
 }
 
@@ -662,7 +671,7 @@ const INSTALL_ALL_DESCRIPTION =
 	"Install for every detected agent and every agent already holding a packaged skill, non-interactively";
 const UNINSTALL_ALL_DESCRIPTION = "Uninstall every installed skill non-interactively";
 const AGENT_FLAG_DESCRIPTION =
-	'Agent to install for, repeatable: "universal" for the Universal group, or an agent id listed at https://crustjs.com/docs/modules/skills#supported-agents';
+	"Agent to link besides the shared .agents/skills folder, repeatable; ids are listed at https://crustjs.com/docs/modules/skills#supported-agents";
 const SKILL_FLAG_DESCRIPTION = "Packaged skill name, repeatable";
 
 const SCOPE_FLAG = {
@@ -757,7 +766,7 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 						sub.flags(SCOPE_FLAG).action(async (context) => {
 							const scope = await resolveScope(context.flags.scope, options);
 							for (const packagedSkill of loadArtifactSkills()) {
-								await repairInstalledSkill(packagedSkill, scope, context, true);
+								await repairInstalledSkill(packagedSkill, scope, context);
 							}
 						}),
 					),

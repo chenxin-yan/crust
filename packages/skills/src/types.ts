@@ -12,11 +12,11 @@ export interface RenderedFile {
 	content: string | Uint8Array;
 }
 
-/** Options for linking one packaged skill source into agent directories. */
+/** Options for linking one packaged skill source into the shared folder and agent directories. */
 export interface InstallSkillOptions {
 	/** Package directory `skills/<name>` containing the skill's SKILL.md. */
 	sourceDir: string | URL;
-	/** Agent targets. Omit to use universal plus detected agents. */
+	/** Agents to link besides the shared `.agents/skills` folder, which is always linked. Omit to use detected agents. */
 	agents?: readonly AgentTarget[];
 	/** Agent-directory scope. @default "global" */
 	scope?: Scope;
@@ -35,7 +35,17 @@ export interface AgentResult {
 	status: InstallStatus;
 }
 
+/** The shared `.agents/skills/<name>` link, the only one that points at the packaged skill. */
+export interface SharedLinkResult {
+	outputDir: string;
+	/** Effective scope after remapping project scope at the home directory. */
+	scope: Scope;
+	status: InstallStatus;
+}
+
 export interface InstallSkillResult {
+	shared: SharedLinkResult;
+	/** Agents reading the shared folder report the shared link's directory and status. */
 	agents: AgentResult[];
 }
 
@@ -94,9 +104,10 @@ export interface SkillOptions {
 	 */
 	defaultScope?: Scope;
 	/**
-	 * Repair owned links whose target no longer exists before commands run. A link to another
-	 * live installed copy is left alone, with a stderr notice naming `skills repair`, which re-points
-	 * it; the notice is skipped under CI, with `NO_UPDATE_NOTIFIER`, and when stderr is not a terminal.
+	 * Before commands run, re-link the shared `.agents/skills` link when its target no longer exists;
+	 * agent links point at it and are not inspected. A shared link to another live installed copy is
+	 * left alone, with a stderr notice naming `skills repair`, which re-points it; the notice is
+	 * skipped under CI, with `NO_UPDATE_NOTIFIER`, and when stderr is not a terminal.
 	 * Never runs from source, so a checkout does not take over an installed CLI's links. @default true
 	 */
 	autoUpdate?: boolean;

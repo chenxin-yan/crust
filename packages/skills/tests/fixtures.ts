@@ -19,6 +19,21 @@ export async function withCwd<T>(dir: string, run: () => Promise<T>): Promise<T>
 	}
 }
 
+/** Runs with `dir` as the home directory (`HOME`, and `USERPROFILE` on Windows). */
+export async function withHome<T>(dir: string, run: () => Promise<T>): Promise<T> {
+	const saved = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+	process.env.HOME = dir;
+	process.env.USERPROFILE = dir;
+	try {
+		return await run();
+	} finally {
+		for (const [name, value] of Object.entries(saved)) {
+			if (value === undefined) delete process.env[name];
+			else process.env[name] = value;
+		}
+	}
+}
+
 export interface CommandFixture {
 	meta: {
 		name: string;

@@ -2,7 +2,7 @@
 "@crustjs/skills": minor
 ---
 
-Before a command runs, an installed CLI now prints one stderr line when an agent's skill link points at another installed copy of the CLI, naming the `skills repair` command that re-points it. The link is still left alone. The line follows `updateNotifier()`'s skip rules: nothing under CI, when `NO_UPDATE_NOTIFIER` is set, or when stderr is not a terminal.
+Before a command runs, an installed CLI now prints one stderr line when the shared skill link points at another installed copy of the CLI, naming the `skills repair` command that re-points it. The link is still left alone. The line follows `updateNotifier()`'s skip rules: nothing under CI, when `NO_UPDATE_NOTIFIER` is set, or when stderr is not a terminal.
 
 A link now counts as linked when it leads to this copy's skill directory through another link, as in the `.claude/skills/<name>` → `.agents/skills/<name>` layout that `npx skills` writes: real paths are compared, so such a link gets no notice and `skills repair` and `skills install` leave it as it is.
 
@@ -12,4 +12,8 @@ Agents are no longer detected through a `PATH` lookup. An additional agent count
 
 The Extension no longer registers its build hook inside a bundle that `crust build` produces, so a CLI built with Crust no longer ships the skill renderer: a one-command CLI with `skill({})` bundles about 11 KB smaller.
 
-`skills install` (and bare `skills`) accepts `--agent <id>` and `--skill <name>`, both repeatable, and `skills uninstall` accepts `--skill <name>`. Each flag answers its prompt; whatever is left is still asked. With `--agent`, a directory the skill does not own is skipped with a warning instead of a confirmation. An unknown agent or skill, or `--all` together with `--agent` or `--skill`, is a usage error.
+`skills install` (and bare `skills`) accepts `--agent <id>` and `--skill <name>`, both repeatable, and `skills uninstall` accepts `--skill <name>`. There is no Universal choice: the shared folder is always linked. Each flag answers its prompt; whatever is left is still asked. With `--agent`, a directory the skill does not own is skipped with a warning instead of a confirmation. An unknown agent or skill, or `--all` together with `--agent` or `--skill`, is a usage error.
+
+Skills now use one shared link per scope, the layout `npx skills` writes. Only `.agents/skills/<name>` (or `~/.agents/skills/<name>`) points at the packaged skill; an agent with its own skills folder gets a link to that shared link, and an agent that reads `.agents/skills` needs nothing else. `skills install` always links the shared folder, its agent prompt lists only agents that need their own link (and is skipped when there are none), and a shared path the skill does not own means no agent link for that skill. The check before each command inspects only the shared links; agent links point at the shared link, which does not move. `skills repair` also re-points owned agent links to the shared link; an existing agent link that points straight at the packaged skill still works and is left as it is until then. `skills uninstall` removes the shared link and the agent links.
+
+Type changes: `InstallSkillResult` has a `shared` entry (the new `SharedLinkResult`); `SkillConflictDetails.agent` is optional and absent for a conflict at the shared link; `InstallSkillOptions.agents` defaults to the detected agents, since the shared folder is always linked.

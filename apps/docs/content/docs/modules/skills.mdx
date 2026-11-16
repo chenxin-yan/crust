@@ -54,7 +54,7 @@ The section's source paths are resolved when help or man output is generated. Bu
 ```sh
 my-cli skills install
 my-cli skills install --all --scope project
-my-cli skills install --agent claude-code --agent universal --skill my-cli --scope project
+my-cli skills install --agent claude-code --skill my-cli --scope project
 my-cli skills            # shorthand for `skills install`
 my-cli skills uninstall
 my-cli skills uninstall --skill my-cli --scope global
@@ -63,28 +63,35 @@ my-cli skills repair
 
 `--scope` accepts `project` or `global`. With `--all`, scope comes from `--scope`, then `defaultScope`, then `global`; otherwise an interactive run prompts when neither setting is supplied.
 
-Each flag answers its prompt, and whatever is left is asked: `--skill <name>` (repeatable) skips the skill prompt, `--agent <id>` (repeatable, `install` only) skips the agent prompt, and `--scope` skips the scope prompt. `--agent universal` selects the Universal group; other ids are listed under [supported agents](#supported-agents). With `--agent`, a directory the skill does not own is skipped with a warning instead of a confirmation. An unknown agent or skill, or `--all` together with `--agent` or `--skill`, is a usage error. `install --all` links every packaged skill for the Universal group, every [detected agent](#supported-agents), and every agent that already holds one of the packaged skills.
+Each flag answers its prompt, and whatever is left is asked: `--skill <name>` (repeatable) skips the skill prompt, `--agent <id>` (repeatable, `install` only) skips the agent prompt, and `--scope` skips the scope prompt. Agent ids are listed under [supported agents](#supported-agents); an agent that reads the shared folder at that scope is accepted and needs no link of its own. With `--agent`, a directory the skill does not own is skipped with a warning instead of a confirmation. An unknown agent or skill, or `--all` together with `--agent` or `--skill`, is a usage error.
 
-- **Install is additive.** It links or repairs the selected skills for the selected agents and never removes links. Interactively, it asks which skills (when more than one is packaged) and which agents, and confirms before overwriting each directory it does not own.
-- **Uninstall removes selected links.** It lists the skills linked at the chosen scope, with nothing preselected, and removes the selected ones from every agent directory. `--all` or `--skill` skips the prompt.
-- **Repair** relinks stale or dangling links without prompting.
+- **Install is additive.** It always links the shared folder, then the selected agents, and never removes links. Interactively, it asks which skills (when more than one is packaged) and which agents, and confirms before overwriting each directory it does not own. The agent prompt lists only agents that need their own link at that scope, those [detected](#supported-agents) and those already holding one of the skills, and is skipped when there are none. `--all` links the shared folder and all of them.
+- **Uninstall removes selected links.** It lists the skills linked at the chosen scope, with nothing preselected, and removes the shared link and every owned agent link of the selected ones. `--all` or `--skill` skips the prompt.
+- **Repair** re-points the shared link to this copy, then every owned agent link that does not lead to it, without prompting.
 
 <auto-type-table path="../../../../../packages/skills/src/types.ts" name="SkillOptions" />
 
 ## Link lifecycle and ownership
 
 ```text
-project: .agents/skills/my-cli -> ../../node_modules/my-cli/skills/my-cli
+project: .agents/skills/my-cli   -> ../../node_modules/my-cli/skills/my-cli   (shared link)
+         .claude/skills/my-cli   -> ../../.agents/skills/my-cli               (agent link)
 global:  ~/.agents/skills/my-cli -> /usr/lib/node_modules/my-cli/skills/my-cli
+         ~/.claude/skills/my-cli -> /home/me/.agents/skills/my-cli
 ```
 
-Project links are relative and global links are absolute. Before each Command Action, an installed CLI repairs Crust-owned links whose target no longer exists, unless `autoUpdate: false`:
+Only the shared link in `.agents/skills` points at the packaged skill. An agent with its own skills folder at that scope gets a link to the shared link; an agent that reads `.agents/skills` needs nothing else. This is the layout `npx skills` writes. If the shared link cannot be made (a directory the skill does not own, left in place), no agent link is made for that skill at that scope. Project links are relative and global links are absolute.
 
-- It never creates links that were not installed.
-- It leaves a link to another live installed copy of the CLI (global versus project-local, `npx`) alone, so the copies do not take it from each other, and prints one stderr line naming the link and the `skills repair --scope <scope>` command that re-points it to the running copy. The line is skipped under CI, when `NO_UPDATE_NOTIFIER` is set, and when stderr is not a terminal, the same rules as `updateNotifier()`.
-- Running from source (`bun run`, `node`) skips the repair, so trying a checkout never moves an installed CLI's links to its build. Run `skills repair` there to relink deliberately.
+Before each Command Action, an installed CLI checks only the shared link of each scope, unless `autoUpdate: false`. Agent links point at the shared link, which does not move, so they are not inspected:
 
-A link is Crust-owned when its textual target ends in `skills/<name>`. Real directories and foreign links conflict unless `force: true` is passed to low-level installation.
+- It re-links a Crust-owned shared link whose target no longer exists, and never creates one that was not installed.
+- It leaves a shared link to another live installed copy of the CLI (global versus project-local, `npx`) alone, so the copies do not take it from each other, and prints one stderr line naming the link and the `skills repair --scope <scope>` command that re-points it to the running copy. The line is skipped under CI, when `NO_UPDATE_NOTIFIER` is set, and when stderr is not a terminal, the same rules as `updateNotifier()`.
+- A directory at the shared path that the skill does not own gets a conflict warning.
+- Running from source (`bun run`, `node`) skips the check, so trying a checkout never moves an installed CLI's links to its build. Run `skills repair` there to relink deliberately.
+
+`skills repair` re-points the shared link even when it leads to another live copy, then every owned agent link that does not lead to this copy, so that it targets the shared link. An agent link from an older version that points straight at the packaged skill still leads to this copy and is left as it is.
+
+A link is Crust-owned when its textual target ends in `skills/<name>`; shared and agent links both do. Real directories and foreign links conflict unless `force: true` is passed to low-level installation.
 
 ## Supported agents
 
@@ -93,7 +100,7 @@ project: .agents/skills/<name>
 global:  ~/.agents/skills/<name>
 ```
 
-Universal targets, such as codex, cline, and pi, share those directories. Additional targets, such as claude-code, use an agent-specific location in at least one scope (cursor, for example, shares `.agents/skills` only at project scope). An agent without a global directory, such as eve, is available only at project scope; naming it at global scope is an error.
+Universal targets, such as codex, cline, and pi, read the shared folders at both scopes and never need a link of their own. Additional targets, such as claude-code, use an agent-specific location in at least one scope (cursor, for example, shares `.agents/skills` only at project scope). An agent without a global directory, such as eve, is available only at project scope; naming it at global scope is an error.
 
 An additional agent is detected when the folder containing its global skills directory exists, such as `~/.claude` for `~/.claude/skills`. Project folders, the home directory itself, and the shared `~/.agents` do not count.
 
@@ -109,9 +116,11 @@ const status = await getSkillStatus({ name: "my-cli", sourceDir });
 await uninstallSkill({ name: "my-cli" });
 ```
 
-`getSkillStatus()` reports `linked`, `dangling`, `conflict`, or `absent` per agent directory. A link is `linked` when it leads to the given `sourceDir`, directly or through another link, such as an agent directory that links to `.agents/skills/<name>`; real paths are compared. `uninstallSkill()` removes only owned links, including dangling ones. Only missing paths (`ENOENT`) count as absent; permission and other filesystem failures reject. Each result lists one entry per agent with its effective `scope` and status.
+`installSkill()` links the shared `.agents/skills/<name>` first and reports it as `shared`, then links each requested agent's own folder to it; omitted `agents` means the detected agents. A shared link it may not overwrite throws `SkillConflictError` without `details.agent`, and no agent link is made. `getSkillStatus()` reports `linked`, `dangling`, `conflict`, or `absent` per agent directory. A link is `linked` when it leads to the given `sourceDir`, directly or through another link, such as an agent directory that links to `.agents/skills/<name>`; real paths are compared. `uninstallSkill()` removes only owned links, including dangling ones. Only missing paths (`ENOENT`) count as absent; permission and other filesystem failures reject. Each result lists one entry per agent with its effective `scope` and status.
 
 <auto-type-table path="../../../../../packages/skills/src/types.ts" name="InstallSkillOptions" />
+
+<auto-type-table path="../../../../../packages/skills/src/types.ts" name="SharedLinkResult" />
 
 <auto-type-table path="../../../../../packages/skills/src/types.ts" name="SkillStatusOptions" />
 

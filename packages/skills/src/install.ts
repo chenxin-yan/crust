@@ -1,5 +1,5 @@
 import { lstat, mkdir, readlink, realpath, rm, stat, symlink, unlink } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { isErrnoException } from "@crustjs/utils/error";
 import { resolveSourceDir } from "@crustjs/utils/source";
@@ -8,19 +8,24 @@ import {
 	type AgentTarget,
 	detectInstalledAgents,
 	getScopeAgents,
-	getUniversalAgents,
 	resolveAgentPath,
-	resolveEffectiveScope,
 	type Scope,
 } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
-import { isOwnedSkillLink, skillLinkTarget } from "./link.ts";
+import {
+	isOwnedSkillLink,
+	resolveEffectiveScope,
+	sharedSkillsDir,
+	skillLinkTarget,
+} from "./link.ts";
 import { isValidSkillName } from "./skill-name.ts";
 import { readSkillFrontmatter } from "./source.ts";
 import type {
 	AgentResult,
+	InstallStatus,
 	InstallSkillOptions,
 	InstallSkillResult,
+	SkillLinkStatus,
 	SkillStatusOptions,
 	SkillStatusResult,
 	UninstallSkillOptions,
@@ -102,7 +107,34 @@ async function createSkillLink(target: string, outputDir: string): Promise<void>
 	}
 }
 
-/** Links one packaged skill source into the requested agent directories. */
+/** Links `outputDir` to `target` unless it already leads to `sourceDir`; a conflict throws unless forced. */
+async function linkEntry(opts: {
+	outputDir: string;
+	target: string;
+	sourceDir: string;
+	name: string;
+	scope: Scope;
+	force: boolean;
+	/** Absent for the shared link. */
+	agent?: AgentTarget;
+}): Promise<InstallStatus> {
+	const { outputDir, sourceDir, name, scope, agent } = opts;
+	const inspection = await inspectLink(outputDir, name, sourceDir);
+	if (inspection.status === "conflict" && !opts.force) {
+		throw new SkillConflictError(agent ? { agent, outputDir } : { outputDir });
+	}
+	if (inspection.status === "owned" && inspection.resolves && inspection.correct) {
+		return "up-to-date";
+	}
+	if (inspection.status !== "absent") await rm(outputDir, { recursive: true, force: true });
+	await createSkillLink(skillLinkTarget(opts.target, outputDir, scope), outputDir);
+	return inspection.status === "absent" ? "installed" : "repaired";
+}
+
+/**
+ * Links one packaged skill source into the shared `.agents/skills` folder, then links the
+ * requested agents' own folders to that shared link.
+ */
 export async function installSkill(options: InstallSkillOptions): Promise<InstallSkillResult> {
 	const sourceDir = resolveSourceDir(options.sourceDir);
 	const source = readSkillFrontmatter(sourceDir);
@@ -115,38 +147,29 @@ export async function installSkill(options: InstallSkillOptions): Promise<Instal
 		);
 	}
 
-	const agents = options.agents ?? [...getUniversalAgents(), ...(await detectInstalledAgents())];
 	const scope = resolveEffectiveScope(options.scope ?? "global");
+	const force = options.force === true;
+	const link = { sourceDir, name: source.name, scope, force };
+	const sharedDir = join(sharedSkillsDir(scope), source.name);
+	const shared = {
+		outputDir: sharedDir,
+		scope,
+		status: await linkEntry({ ...link, outputDir: sharedDir, target: sourceDir }),
+	};
+	const agents = options.agents ?? (await detectInstalledAgents());
 	const results: AgentResult[] = [];
 
 	for (const [outputDir, groupedAgents] of groupAgentsByOutputDir(agents, scope, source.name)) {
-		const inspection = await inspectLink(outputDir, source.name, sourceDir);
-		if (inspection.status === "conflict" && options.force !== true) {
-			throw new SkillConflictError({ agent: groupedAgents[0]!, outputDir });
-		}
-
-		const upToDate =
-			inspection.status === "owned" &&
-			inspection.resolves &&
-			inspection.correct &&
-			options.force !== true;
-		const status = upToDate
-			? "up-to-date"
-			: inspection.status === "absent"
-				? "installed"
-				: "repaired";
-
-		if (!upToDate) {
-			if (inspection.status !== "absent") await rm(outputDir, { recursive: true, force: true });
-			await createSkillLink(skillLinkTarget(sourceDir, outputDir, scope), outputDir);
-		}
-
+		const status =
+			outputDir === sharedDir
+				? shared.status
+				: await linkEntry({ ...link, outputDir, target: sharedDir, agent: groupedAgents[0]! });
 		for (const agent of groupedAgents) {
 			results.push({ agent, outputDir, scope, status });
 		}
 	}
 
-	return { agents: results };
+	return { shared, agents: results };
 }
 
 /** Unlinks only agent-directory entries carrying the requested skill's ownership signature. */
@@ -168,6 +191,11 @@ export async function uninstallSkill(
 	return { agents: results };
 }
 
+function linkStatus(inspection: LinkInspection): SkillLinkStatus {
+	if (inspection.status !== "owned") return inspection.status;
+	return inspection.resolves && inspection.correct ? "linked" : "dangling";
+}
+
 /** Reports ownership and health. Only ENOENT is missing; other filesystem errors reject. */
 export async function getSkillStatus(options: SkillStatusOptions): Promise<SkillStatusResult> {
 	const scope = resolveEffectiveScope(options.scope ?? "global");
@@ -176,14 +204,26 @@ export async function getSkillStatus(options: SkillStatusOptions): Promise<Skill
 	const results: SkillStatusResult["agents"] = [];
 
 	for (const [outputDir, groupedAgents] of groupAgentsByOutputDir(agents, scope, options.name)) {
-		const inspection = await inspectLink(outputDir, options.name, expectedSourceDir);
-		const status =
-			inspection.status === "owned"
-				? inspection.resolves && inspection.correct
-					? "linked"
-					: "dangling"
-				: inspection.status;
+		const status = linkStatus(await inspectLink(outputDir, options.name, expectedSourceDir));
 		for (const agent of groupedAgents) results.push({ agent, outputDir, scope, status });
 	}
 	return { agents: results };
+}
+
+/**
+ * Status of the shared `.agents/skills/<name>` link alone; reads no agent folders.
+ *
+ * @internal
+ */
+export async function getSharedSkillStatus(
+	options: Omit<SkillStatusOptions, "agents">,
+): Promise<{ outputDir: string; scope: Scope; status: SkillLinkStatus }> {
+	const scope = resolveEffectiveScope(options.scope ?? "global");
+	const outputDir = join(sharedSkillsDir(scope), options.name);
+	const inspection = await inspectLink(
+		outputDir,
+		options.name,
+		resolveSourceDir(options.sourceDir),
+	);
+	return { outputDir, scope, status: linkStatus(inspection) };
 }

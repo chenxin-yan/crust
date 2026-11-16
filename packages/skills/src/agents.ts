@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { AGENTS } from "./agents.generated.ts";
+import { sharedSkillsDir } from "./link.ts";
 
 export type AgentClass = "universal" | "additional";
 export type Scope = "global" | "project";
@@ -15,11 +16,6 @@ export type Scope = "global" | "project";
 export type AgentTarget = keyof typeof AGENTS;
 
 const UNIVERSAL_SKILLS_DIR = ".agents/skills";
-
-/** @internal */
-export function resolveEffectiveScope(scope: Scope): Scope {
-	return scope === "project" && process.cwd() === homedir() ? "global" : scope;
-}
 
 /**
  * All agent targets supported by `@crustjs/skills`.
@@ -89,6 +85,18 @@ export function isAgentAvailable(agent: AgentTarget, scope: Scope): boolean {
  */
 export function getScopeAgents(scope: Scope): AgentTarget[] {
 	return ALL_AGENTS.filter((agent) => isAgentAvailable(agent, scope));
+}
+
+/**
+ * Whether the agent reads the shared `.agents/skills` folder at `scope`, so it needs no link of its own.
+ *
+ * @internal
+ */
+export function readsSharedFolder(agent: AgentTarget, scope: Scope): boolean {
+	return (
+		isAgentAvailable(agent, scope) &&
+		dirname(resolveAgentPath(agent, scope, "_")) === sharedSkillsDir(scope)
+	);
 }
 
 /**

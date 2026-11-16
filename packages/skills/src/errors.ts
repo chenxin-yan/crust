@@ -11,18 +11,19 @@ export class SkillSourceConflictError extends Error {
 }
 
 export interface SkillConflictDetails {
-	agent: AgentTarget;
+	/** Absent when the entry is the shared `.agents/skills/<name>` link. */
+	agent?: AgentTarget;
 	outputDir: string;
 }
 
-/** Refuses to overwrite an agent entry that is not owned by the requested skill. */
+/** Refuses to overwrite an entry that is not owned by the requested skill. */
 export class SkillConflictError extends Error {
 	override readonly name = "SkillConflictError";
 	readonly details: SkillConflictDetails;
 
 	constructor(details: SkillConflictDetails) {
 		super(
-			`Skill conflict for agent "${details.agent}": entry "${details.outputDir}" is not owned by the requested skill.`,
+			`Skill conflict for ${details.agent ? `agent "${details.agent}"` : "the shared folder"}: entry "${details.outputDir}" is not owned by the requested skill.`,
 		);
 		this.details = details;
 	}
