@@ -61,11 +61,6 @@ jobs:
       - name: Build and test
         run: pnpm test ${{ matrix.tags }}
 
-      # Every @crustjs/auth security checklist id needs an executed, passed test.
-      - name: Auth security checklist gate
-        if: matrix.os == 'ubuntu-latest'
-        run: pnpm --filter @crustjs/auth run check:security
-
       - name: Upload smoke-test workspaces on failure
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

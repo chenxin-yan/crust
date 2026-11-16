@@ -71,7 +71,7 @@ The issuer must then be `http://127.0.0.1:<port>` or `http://[::1]:<port>`, neve
   name="AuthorizationSessionOptions"
 />
 
-- The listener binds `127.0.0.1` on a free port: `http://127.0.0.1:<port>/callback`. Register that redirect URI; servers must accept any port for loopback IP redirects. With `hosts: ["127.0.0.1", "::1"]` it falls back to `http://[::1]:<port>/…`, which you must register as well. Fixed `ports` are tried in order, for servers that need pre-registered ports.
+- The listener binds `127.0.0.1` on a free port: `http://127.0.0.1:<port>/callback`. Register that redirect URI; servers must accept any port for loopback IP redirects. With `hosts: ["127.0.0.1", "::1"]` it falls back to `http://[::1]:<port>/…`, which you must register as well. Fixed `ports` are tried in order, for servers that need pre-registered ports. The listener uses the default bind, without `reusePort`, which refuses a second listener on its port; Node and Bun offer no Windows `SO_EXCLUSIVEADDRUSE`.
 - `extra` adds parameters such as `audience`, and must not repeat a parameter the library sends or the endpoint's query sets. There is no `nonce`, `response_mode`, `request`, or `request_uri`: the session asks only for an authorization code, always with PKCE `S256` and `state`.
 
 `session.wait(onCallback, { timeoutMs?, signal?, page? })` waits for the browser, runs `onCallback({ code })` once, then answers the browser and closes the listener. Pass `client.exchangeCode(session, code)` as `onCallback`; the result page shows its outcome.
@@ -112,7 +112,7 @@ On `"refuse"`, nobody is there to read a code, or nobody asked for one that some
 `openBrowser(url, { allowInsecureLoopbackOrigin? })` resolves `true` when a launcher started and `false` otherwise; it never throws. Always print the URL too.
 
 - Only `https` URLs without user info or control characters open, and plain `http` only on the development origin you pass.
-- The URL is one argument to `open` (macOS), `xdg-open`, or on Windows `rundll32 url.dll,FileProtocolHandler`, never through a shell, so `&` in a URL stays part of it. Windows launching is covered by an argument test, not by a real browser in CI.
+- The URL is one argument to `open` (macOS), `xdg-open`, or on Windows `rundll32 url.dll,FileProtocolHandler`, never through a shell, so `&` in a URL stays part of it. On Windows, CI checks only the launcher arguments; a real browser launch is a manual check on a Windows host.
 
 ## Token client
 

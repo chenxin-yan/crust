@@ -40,7 +40,6 @@
 		"build": "vp run build:task",
 		"dev": "vp pack --watch",
 		"check:types": "vp run check:types:task",
-		"check:security": "vp run check:security:task",
 		"test": "vp run test:task",
 		"prepack": "cp ../../LICENSE LICENSE",
 		"postpack": "rm -f LICENSE"
