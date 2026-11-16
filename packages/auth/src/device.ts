@@ -122,6 +122,7 @@ export async function startDeviceFlow(
 					grant_type: DEVICE_GRANT,
 					device_code: deviceCode as string,
 				});
+				for (const value of resource) pollBody.append("resource", value);
 				const pollStart = Date.now();
 				let result;
 				try {

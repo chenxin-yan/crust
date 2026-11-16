@@ -273,6 +273,19 @@ describe("startDeviceFlow", () => {
 		expect(Object.fromEntries(start_.body)).toEqual({ client_id: "cli" });
 	});
 
+	it("SEC-B5 sends each resource on the device request and on every poll", async () => {
+		const { server, fetch, requests } = await deviceSetup(DEVICE, [pending, success]);
+		const resource = ["urn:example:api", "https://a.example/v1/x"];
+		const flow = await startDeviceFlow(server, { fetch, resource });
+		await settle(flow.poll(), 11_000);
+		const sent = requests.filter(
+			(request) =>
+				request.url === server.deviceAuthorizationEndpoint || request.url === server.tokenEndpoint,
+		);
+		expect(sent).toHaveLength(3);
+		for (const request of sent) expect(request.body.getAll("resource")).toEqual(resource);
+	});
+
 	it("SEC-H7 refuses a server that does not offer the device grant", async () => {
 		const listed = await deviceSetup(DEVICE, [], {
 			metadata: { grant_types_supported: ["authorization_code"] },
