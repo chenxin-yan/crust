@@ -2,7 +2,7 @@
 title: "Auth"
 ---
 
-`@crustjs/auth` gives a CLI the pieces of an OAuth sign-in: authorization-server discovery, a browser login over a loopback redirect with PKCE, a device-code login, and a token client. You compose them into your own `login` command; [Add login to your CLI](/docs/guide/login) walks through one. It is standalone: no Crust Context, and no dependency beyond the runtime's `fetch`, Web Crypto, and `node:http`.
+`@crustjs/auth` gives a CLI the pieces of an OAuth sign-in: authorization-server discovery, a browser login over a loopback redirect with PKCE, a device-code login, and a token client. You compose them into your own `login` command; [Add login to your CLI](/docs/guide/login) walks through one. It is standalone: no Crust Context, and no external OAuth library; it builds on the runtime's `fetch`, Web Crypto, and `node:http`.
 
 ## Install
 
@@ -146,6 +146,15 @@ Every error extends `AuthError` and has a stable `code`. Match on `code` or the 
 
 Errors carry local text, the `status`, and the allowlisted code only. A server's `error_description` and `error_uri`, response bodies, and URLs never appear in a message, property, or `cause`, since a hostile server could echo a secret into them.
 
+## PKCE and state
+
+`createAuthorizationSession()` makes both for you; use these only to build an authorization request of your own.
+
+- `createPkce()` resolves to a frozen `Pkce`: a fresh 256-bit `verifier` from the platform's random generator, its `challenge`, and `method` `"S256"`. The verifier is a secret: send it only in the token request, and never print, log, or store it. The challenge goes in the authorization URL.
+- `randomState()` returns a fresh `state` of 256 random bits in base64url. It is a secret of that one login: it may appear in the authorization URL, but never log it otherwise. Compare it with the callback's `state` before using the code, use it once, and never put your own data in it.
+
+<auto-type-table path="../../../../../packages/auth/src/pkce.ts" name="Pkce" />
+
 ## Redaction
 
 - `redactUrl(url)` replaces the values of `code`, `state`, `access_token`, `refresh_token`, `id_token`, `client_secret`, `code_verifier`, `device_code`, `token`, and `assertion`, a password, and any fragment with `[REDACTED]`. Use it before a URL reaches a log.
@@ -155,4 +164,4 @@ The authorization URL (`session.url`) is safe to print: its `state` and PKCE cha
 
 ## Cancellation
 
-Every async function takes a `signal`. An aborted signal rejects with `AbortError` before any request or listener; aborting mid-way stops the request, sleep, or wait and closes the listener. Handle Ctrl-C in your command (a Crust command's `ctx.signal` already does) and pass its signal down.
+`discover()`, `createAuthorizationSession()`, `session.wait()`, `startDeviceFlow()`, `flow.poll()`, and the token client's `exchangeCode()`, `refresh()`, and `revoke()` take a `signal`. An aborted signal rejects with `AbortError` before any request or listener; aborting mid-way stops the request, sleep, or wait and closes the listener. Handle Ctrl-C in your command (a Crust command's `ctx.signal` already does) and pass its signal down.
