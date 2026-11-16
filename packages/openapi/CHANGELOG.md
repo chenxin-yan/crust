@@ -1,5 +1,12 @@
 # @crustjs/openapi
 
+## 0.1.2
+
+### Patch Changes
+
+- Updated dependencies [[`edb6671`](https://github.com/chenxin-yan/crust/commit/edb66715c2462bdc11a6032054dc759eb48ceb5b)]:
+  - @crustjs/utils@0.4.0
+
 ## 0.1.1
 
 ### Patch Changes

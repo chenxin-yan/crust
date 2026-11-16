@@ -1,5 +1,13 @@
 # @crustjs/crust
 
+## 0.6.2
+
+### Patch Changes
+
+- Updated dependencies [[`edb6671`](https://github.com/chenxin-yan/crust/commit/edb66715c2462bdc11a6032054dc759eb48ceb5b)]:
+  - @crustjs/extensions@0.6.2
+  - @crustjs/core@0.6.2
+
 ## 0.6.1
 
 ### Patch Changes

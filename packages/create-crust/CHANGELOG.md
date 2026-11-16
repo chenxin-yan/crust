@@ -1,5 +1,15 @@
 # create-crust
 
+## 0.6.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @crustjs/core@0.6.2
+  - @crustjs/create@0.3.2
+  - @crustjs/progress@0.2.2
+  - @crustjs/prompts@0.3.2
+
 ## 0.6.1
 
 ### Patch Changes
