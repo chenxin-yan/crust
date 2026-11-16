@@ -225,8 +225,8 @@ type AcceptsTokenElements<E, A> = A extends readonly unknown[]
 	: never;
 
 // A json flag hands its schema the parsed JSON value. Overlap again: some JSON value must fit
-// the input. An object fits when every required property does (optional keys may be absent);
-// a Date (its methods), bigint, or function never does.
+// the input. An object fits when every required property does (optional keys may be absent,
+// and JSON has no symbol keys); a Date (its methods), bigint, or function never does.
 type AcceptsJson<Input, Seen extends readonly unknown[] = []> = [JsonValue] extends [Input]
 	? true
 	: true extends (Input extends unknown ? AcceptsJsonMember<Input, Seen> : never)
@@ -261,7 +261,11 @@ type AcceptsJsonMember<M, Seen extends readonly unknown[]> = M extends
 					? AcceptsJsonElements<M, [...Seen, M]>
 					: M extends object
 						? false extends {
-								[K in keyof M]-?: {} extends Pick<M, K> ? true : AcceptsJson<M[K], [...Seen, M]>;
+								[K in keyof M]-?: {} extends Pick<M, K>
+									? true
+									: K extends symbol
+										? false
+										: AcceptsJson<M[K], [...Seen, M]>;
 							}[keyof M]
 							? false
 							: true

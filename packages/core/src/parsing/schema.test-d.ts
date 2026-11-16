@@ -139,6 +139,11 @@ function _typecheckJsonFlagSchemaInputAcceptsJsonData() {
 		// @ts-expect-error -- a required Date property accepts no JSON object
 		body: { type: "json", schema: z.object({ at: z.date() }) },
 	});
+	const key: unique symbol = Symbol("key");
+	new Crust("cli").flags({
+		// @ts-expect-error -- JSON has no symbol keys, so no JSON object has this required one
+		keyed: { type: "json", schema: {} as StandardSchema<{ [key]: string }> },
+	});
 	new Crust("cli").flags({
 		// @ts-expect-error -- every tuple, whatever its rest, starts with a Date
 		rest: { type: "json", schema: z.tuple([z.date()], z.string()) },
