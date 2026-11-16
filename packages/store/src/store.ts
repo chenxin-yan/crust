@@ -2,10 +2,11 @@
 // @crustjs/store — createStore factory and async object-store API
 // ────────────────────────────────────────────────────────────────────────────
 
-import { existsSync } from "node:fs";
+import { lstat } from "node:fs/promises";
 import { dirname } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
+import { isErrnoException } from "@crustjs/utils/error";
 import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
 import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
 import { normalizeStandardIssues, type StandardSchema } from "@crustjs/utils/schema";
@@ -404,7 +405,14 @@ export function createStore<const F extends FieldsDef>(
 					return withFileLock(filePath, task, { operation, directoryMode, signal });
 				}
 				// As in the default lock: no directory means no store file to delete, so none is created.
-				if (operation === "delete" && !existsSync(dirname(filePath))) return task();
+				// lstat, so a dangling link at the directory path still meets the directory checks.
+				if (operation === "delete") {
+					const missing = await lstat(dirname(filePath)).then(
+						() => false,
+						(err: unknown) => isErrnoException(err) && err.code === "ENOENT",
+					);
+					if (missing) return task();
+				}
 				const checkedTask = async () => {
 					await refuseSymlink(filePath, operation);
 					return task();

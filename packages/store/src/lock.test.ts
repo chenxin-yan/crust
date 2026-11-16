@@ -19,6 +19,12 @@ const fsTrace = vi.hoisted((): string[] => []);
 const syncFailures = vi.hoisted(() => new Map<string, string>());
 // Runs while `lstat` of the keyed path is in flight.
 const duringLstat = vi.hoisted(() => new Map<string, () => void>());
+// Error codes the next `close` of a handle opened on the keyed path fails with, after closing.
+const closeFailures = vi.hoisted(() => new Map<string, string>());
+// How many of the next `rm` calls on the keyed path fail with `EBUSY`.
+const rmFailures = vi.hoisted(() => new Map<string, number>());
+// Paths whose `readFile` fails with `EACCES`.
+const unreadable = vi.hoisted(() => new Set<string>());
 vi.mock("node:fs/promises", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("node:fs/promises")>();
 	const lstat: typeof actual.lstat = (async (path: string, options?: never) => {
@@ -37,13 +43,30 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 	};
 	const rm: typeof actual.rm = async (path, options) => {
 		fsTrace.push(`rm ${String(path)}`);
+		const failures = rmFailures.get(String(path)) ?? 0;
+		if (failures > 0) {
+			rmFailures.set(String(path), failures - 1);
+			throw Object.assign(new Error("EBUSY"), { code: "EBUSY" });
+		}
 		return actual.rm(path, options);
 	};
+	const readFile = (async (path: string, options?: never) => {
+		if (unreadable.has(path)) {
+			throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+		}
+		return actual.readFile(path, options);
+	}) as typeof actual.readFile;
 	const open = async (...args: Parameters<typeof actual.open>) => {
 		const path = String(args[0]);
 		const handle = await actual.open(...args);
 		fsTrace.push(`open ${path} ${String(args[1] ?? "r")}`);
-		const { sync, writeFile } = handle;
+		const { close, sync, writeFile } = handle;
+		handle.close = async () => {
+			await close.apply(handle);
+			const code = closeFailures.get(path);
+			closeFailures.delete(path);
+			if (code !== undefined) throw Object.assign(new Error(code), { code });
+		};
 		handle.writeFile = (...writeArgs) => {
 			fsTrace.push(`write ${path}`);
 			return writeFile.apply(handle, writeArgs);
@@ -57,7 +80,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 		};
 		return handle;
 	};
-	const mocked = { lstat, chmod, rename, rm, open };
+	const mocked = { lstat, chmod, rename, rm, readFile, open };
 	return { ...actual, ...mocked, default: { ...actual, ...mocked } };
 });
 
@@ -79,6 +102,9 @@ beforeEach(async () => {
 
 afterEach(async () => {
 	vi.restoreAllMocks();
+	closeFailures.clear();
+	rmFailures.clear();
+	unreadable.clear();
 	await rm(dir, { recursive: true, force: true });
 });
 
@@ -242,6 +268,13 @@ describe("withLock", () => {
 	});
 
 	describe.runIf(process.platform === "linux")("on Linux", () => {
+		it("judges a live pid whose start time cannot be read as unknown", async () => {
+			await writeRecord(lockPath, {});
+			unreadable.add(`/proc/${process.pid}/stat`);
+
+			expect(await lockError()).toMatchObject({ code: "LOCK", details: { verdict: "unknown" } });
+		});
+
 		it("takes over a lock whose pid now belongs to another process", async () => {
 			await writeRecord(lockPath, { pid: process.pid, startTime: "1" });
 
@@ -330,6 +363,101 @@ describe("withLock", () => {
 		});
 	});
 
+	describe("past its deadline", () => {
+		const jumpPastDeadline = () => {
+			const now = Date.now() + 3_600_000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+		};
+
+		it("starts no recovery once the deadline passed while judging a dead owner", async () => {
+			const lock = await writeRecord(lockPath, { pid: MISSING_PID });
+			const kill = process.kill.bind(process);
+			vi.spyOn(process, "kill").mockImplementation((pid, signal) => {
+				if (pid === MISSING_PID) jumpPastDeadline();
+				return kill(pid, signal);
+			});
+
+			expect(await lockError({ timeout: 1_000 })).toMatchObject({
+				code: "LOCK",
+				details: { path: lockPath, verdict: "dead" },
+			});
+			expect(readFileSync(lockPath, "utf-8")).toBe(lock);
+			expect(existsSync(`${lockPath}.recover`)).toBe(false);
+		});
+
+		it("makes no new attempt once the deadline passed during a recovery", async () => {
+			await writeRecord(lockPath, { pid: MISSING_PID });
+			const kill = process.kill.bind(process);
+			vi.spyOn(process, "kill").mockImplementation((pid, signal) => {
+				// The second check of the dead owner runs while `.recover` is held.
+				if (pid === MISSING_PID && existsSync(`${lockPath}.recover`)) jumpPastDeadline();
+				return kill(pid, signal);
+			});
+
+			expect(await lockError({ timeout: 1_000 })).toMatchObject({
+				code: "LOCK",
+				details: { path: lockPath, verdict: "unknown" },
+			});
+			expect(await readdir(dir)).toEqual([]);
+		});
+	});
+
+	describe("a failed close of a record this call created", () => {
+		it("removes the lock and fails with IO", async () => {
+			closeFailures.set(lockPath, "EIO");
+
+			expect(await lockError()).toMatchObject({ code: "IO", cause: { code: "EIO" } });
+			expect(await readdir(dir)).toEqual([]);
+		});
+
+		it("removes `.recover` and fails with IO, leaving the dead lock", async () => {
+			const lock = await writeRecord(lockPath, { pid: MISSING_PID });
+			closeFailures.set(`${lockPath}.recover`, "EIO");
+
+			expect(await lockError()).toMatchObject({ code: "IO", cause: { code: "EIO" } });
+			expect(readFileSync(lockPath, "utf-8")).toBe(lock);
+			expect(existsSync(`${lockPath}.recover`)).toBe(false);
+		});
+	});
+
+	describe("a lock it cannot remove", () => {
+		it("fails with IO after `fn` succeeded", async () => {
+			rmFailures.set(lockPath, 3);
+
+			await expect(withLock(path, async () => "done")).rejects.toMatchObject({
+				code: "IO",
+				details: { path: lockPath, operation: "delete" },
+				cause: { code: "EBUSY" },
+			});
+		});
+
+		it("rethrows the error of `fn` instead", async () => {
+			rmFailures.set(lockPath, 3);
+			const failure = new Error("fn failed");
+
+			await expect(withLock(path, () => Promise.reject(failure))).rejects.toBe(failure);
+		});
+
+		it("fails with IO when `.recover` cannot be removed", async () => {
+			await writeRecord(lockPath, { pid: MISSING_PID });
+			rmFailures.set(`${lockPath}.recover`, 3);
+
+			expect(await lockError()).toMatchObject({
+				code: "IO",
+				details: { path: `${lockPath}.recover`, operation: "delete" },
+			});
+		});
+	});
+
+	it("judges an owner whose process cannot be probed as unknown", async () => {
+		await writeRecord(lockPath, { pid: MISSING_PID });
+		vi.spyOn(process, "kill").mockImplementation(() => {
+			throw Object.assign(new Error("EINVAL"), { code: "EINVAL" });
+		});
+
+		expect(await lockError()).toMatchObject({ code: "LOCK", details: { verdict: "unknown" } });
+	});
+
 	describe("abort", () => {
 		it("rejects with the signal's reason while waiting for a live owner", async () => {
 			const release = await holdLock();
@@ -371,6 +499,21 @@ describe("withLock", () => {
 				expect(await readdir(dir)).toEqual([]);
 			},
 		);
+
+		it("rejects with the signal's reason when aborted while judging a dead owner", async () => {
+			const lock = await writeRecord(lockPath, { pid: MISSING_PID });
+			const reason = new Error("stop");
+			const controller = new AbortController();
+			const kill = process.kill.bind(process);
+			vi.spyOn(process, "kill").mockImplementation((pid, signal) => {
+				if (pid === MISSING_PID) controller.abort(reason);
+				return kill(pid, signal);
+			});
+
+			expect(await lockError({ signal: controller.signal, timeout: 10_000 })).toBe(reason);
+			expect(readFileSync(lockPath, "utf-8")).toBe(lock);
+			expect(existsSync(`${lockPath}.recover`)).toBe(false);
+		});
 
 		it("creates nothing when the signal is already aborted", async () => {
 			const reason = new Error("stop");
@@ -486,6 +629,8 @@ describe("a strict store", () => {
 			fsTrace.push(`resolved ${dir}`);
 
 			expect(trace()).toEqual([
+				// Whether the directory exists: a reset never creates it.
+				"lstat .",
 				"lstat .",
 				"open doc.json.lock wx",
 				"write doc.json.lock",
@@ -541,6 +686,7 @@ describe("a strict store", () => {
 				`sync ${temp}`,
 				"rename doc.json",
 				"rm doc.json.lock",
+				"lstat .",
 				"open doc.json.lock wx",
 				"write doc.json.lock",
 				"lstat doc.json",

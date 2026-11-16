@@ -119,13 +119,16 @@ async function readRecord(path: string): Promise<LockRecord | "unreadable" | und
 	return "unreadable";
 }
 
-function isProcessGone(pid: number): boolean {
+/** Whether a process with `pid` exists; `unknown` when the probe fails for another reason. */
+function probeProcess(pid: number): "exists" | "gone" | "unknown" {
 	try {
 		process.kill(pid, 0);
-		return false;
+		return "exists";
 	} catch (err: unknown) {
+		if (!isErrnoException(err)) return "unknown";
+		if (err.code === "ESRCH") return "gone";
 		// EPERM: the process exists but belongs to another user.
-		return isErrnoException(err) && err.code === "ESRCH";
+		return err.code === "EPERM" ? "exists" : "unknown";
 	}
 }
 
@@ -151,13 +154,16 @@ async function judge(
 		) {
 			return "unknown";
 		}
-		if (isProcessGone(record.pid)) return "dead";
+		const probe = probeProcess(record.pid);
+		if (probe !== "exists") return probe === "gone" ? "dead" : "unknown";
 		const current = await readStartTime(record.pid);
-		return current !== null && current !== startTime ? "dead" : "alive";
+		if (current === null) return "unknown";
+		return current === startTime ? "alive" : "dead";
 	}
 	// Assumes no two machines with the same hostname share the directory.
 	if (!PID_RULE_PLATFORMS.has(self.platform) || record.host !== self.host) return "unknown";
-	return isProcessGone(record.pid) ? "dead" : "alive";
+	const probe = probeProcess(record.pid);
+	return probe === "gone" ? "dead" : probe === "exists" ? "alive" : "unknown";
 }
 
 /** Creates `path` exclusively, holding `record`; `false` when it already exists. */
@@ -171,29 +177,55 @@ async function createRecord(path: string, record: LockRecord): Promise<boolean> 
 	}
 	try {
 		await handle.writeFile(JSON.stringify(record));
+		await handle.close();
 	} catch (err: unknown) {
 		await handle.close().catch(() => {});
-		// An empty lock reads as `unknown` and would block every waiter until deleted by hand.
+		// This call created the file: a record left behind would block every waiter, and an empty
+		// one reads as `unknown` until deleted by hand.
 		await rm(path, { force: true }).catch(() => {});
 		throw err;
 	}
-	await handle.close();
 	return true;
 }
 
-/** Removes `path` if it still holds `ownerId`'s record. */
+/**
+ * Removes `path` if it still holds `ownerId`'s record.
+ *
+ * @throws {CrustStoreError} `IO` when the record cannot be removed.
+ */
 async function release(path: string, ownerId: string): Promise<void> {
+	let error: unknown;
 	// A refused delete is tried again: a lock left behind blocks every waiter while this process lives.
 	for (let attempt = 0; attempt < 3; attempt++) {
 		const record = await readRecord(path);
 		if (record === undefined || record === "unreadable" || record.ownerId !== ownerId) return;
-		const removed = await rm(path, { force: true }).then(
-			() => true,
-			() => false,
-		);
-		if (removed) return;
+		try {
+			await rm(path, { force: true });
+			return;
+		} catch (err: unknown) {
+			error = err;
+		}
 		await sleep(10);
 	}
+	throw new CrustStoreError(
+		"IO",
+		`Failed to release lock: ${path}`,
+		{ path, operation: "delete" },
+		error,
+	);
+}
+
+/** Runs `fn`, then releases `path`; an error of `fn` wins over a failed release. */
+async function releasing<T>(path: string, ownerId: string, fn: () => Promise<T>): Promise<T> {
+	let result: T;
+	try {
+		result = await fn();
+	} catch (err: unknown) {
+		await release(path, ownerId).catch(() => {});
+		throw err;
+	}
+	await release(path, ownerId);
+	return result;
 }
 
 /**
@@ -204,6 +236,8 @@ async function release(path: string, ownerId: string): Promise<void> {
 async function recoverOrBlock(
 	lockPath: string,
 	self: Omit<LockRecord, "ownerId" | "createdAt">,
+	deadline: number,
+	signal: AbortSignal | undefined,
 ): Promise<Blocker | undefined> {
 	const owner = await readRecord(lockPath);
 	if (owner === undefined) return undefined;
@@ -211,6 +245,9 @@ async function recoverOrBlock(
 	if (owner === "unreadable" || verdict !== "dead") {
 		return { path: lockPath, verdict, owner: owner === "unreadable" ? undefined : owner };
 	}
+	signal?.throwIfAborted();
+	// No recovery starts past the deadline: the waiter fails, naming the dead owner's lock.
+	if (Date.now() >= deadline) return { path: lockPath, verdict, owner };
 
 	const recoverPath = `${lockPath}.recover`;
 	const recoverer = { ...self, ownerId: crypto.randomUUID(), createdAt: new Date().toISOString() };
@@ -225,7 +262,7 @@ async function recoverOrBlock(
 			owner: current === "unreadable" ? undefined : current,
 		};
 	}
-	try {
+	await releasing(recoverPath, recoverer.ownerId, async () => {
 		// Since the verdict, another waiter may have recovered this lock and a successor taken
 		// the path: only the record that was judged dead is removed.
 		const current = await readRecord(lockPath);
@@ -237,9 +274,7 @@ async function recoverOrBlock(
 		) {
 			await rm(lockPath, { force: true });
 		}
-	} finally {
-		await release(recoverPath, recoverer.ownerId);
-	}
+	});
 	return undefined;
 }
 
@@ -323,7 +358,8 @@ const isWindowsContention = (err: unknown): boolean =>
  *
  * @throws {CrustStoreError} `LOCK` when the lock is not acquired before `timeout`.
  * @throws {CrustStoreError} `PATH` when the directory is unsafe (POSIX).
- * @throws {CrustStoreError} `IO` when a lock file cannot be created or removed.
+ * @throws {CrustStoreError} `IO` when a lock or `.recover` file cannot be created or removed. An
+ *   error of `fn` wins over a failed removal of the lock.
  */
 export async function withLock<T>(
 	path: string,
@@ -335,19 +371,24 @@ export async function withLock<T>(
 	const deadline = Date.now() + (options.timeout ?? DEFAULT_LOCK_TIMEOUT_MS);
 	const self = await ownRecord();
 	let ownerId: string;
-	for (let delay = 1; ; delay = Math.min(delay * 2, MAX_RETRY_DELAY_MS)) {
+	let blocker: Blocker = { path: lockPath, verdict: "unknown", owner: undefined };
+	for (let delay = 1, first = true; ; delay = Math.min(delay * 2, MAX_RETRY_DELAY_MS)) {
 		await validateDirectory(path);
 		signal?.throwIfAborted();
+		// The first attempt always runs; no later one starts past the deadline.
+		if (!first && Date.now() >= deadline) throw timeoutError(blocker);
+		first = false;
 		const record = { ...self, ownerId: crypto.randomUUID(), createdAt: new Date().toISOString() };
-		let blocker: Blocker | undefined;
 		try {
 			if (await createRecord(lockPath, record)) {
 				ownerId = record.ownerId;
 				break;
 			}
-			blocker = await recoverOrBlock(lockPath, self);
-			if (blocker === undefined) continue;
+			const found = await recoverOrBlock(lockPath, self, deadline, signal);
+			if (found === undefined) continue;
+			blocker = found;
 		} catch (err: unknown) {
+			if (err instanceof CrustStoreError || (signal?.aborted && err === signal.reason)) throw err;
 			if (isErrnoException(err) && err.code === "ENOENT") {
 				await ensureDirectory(path, 0o700);
 				continue;
@@ -366,9 +407,5 @@ export async function withLock<T>(
 		if (remaining <= 0) throw timeoutError(blocker);
 		await abortableSleep(Math.min(delay * (1 + Math.random()), remaining), signal);
 	}
-	try {
-		return await fn();
-	} finally {
-		await release(lockPath, ownerId);
-	}
+	return releasing(lockPath, ownerId, fn);
 }

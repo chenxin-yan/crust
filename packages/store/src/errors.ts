@@ -53,7 +53,8 @@ export interface LockErrorDetails {
 	path: string;
 	/**
 	 * Whether the owner of `path` runs (`alive`), cannot be judged from this process (`unknown`), or
-	 * provably no longer runs (`dead`, only for a `.recover` file, which is never removed automatically).
+	 * provably no longer runs (`dead`): a `.recover` file, which is never removed automatically, or a
+	 * lock whose dead owner was found only when the deadline had passed.
 	 */
 	verdict: "alive" | "unknown" | "dead";
 	/** The owner `path` names, or `undefined` when its record is empty or unreadable. */

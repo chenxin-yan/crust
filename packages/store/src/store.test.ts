@@ -1082,6 +1082,20 @@ describe("strict", () => {
 		expect(existsSync(dirPath)).toBe(false);
 	});
 
+	it.skipIf(process.platform === "win32")(
+		"refuses to reset through a dangling directory link, and creates nothing",
+		async () => {
+			const target = join(tempDir, "missing-target");
+			await symlink(target, dirPath);
+
+			await expect(strictStore().reset()).rejects.toMatchObject({
+				code: "PATH",
+				details: { path: dirPath, reason: "directory" },
+			});
+			expect(existsSync(target)).toBe(false);
+		},
+	);
+
 	describe("a symbolic link at the store file", () => {
 		let target: string;
 		beforeEach(async () => {
