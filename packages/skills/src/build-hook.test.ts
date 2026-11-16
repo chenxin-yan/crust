@@ -36,7 +36,7 @@ await new Crust("demo").extend(skill({})).action(() => {}).execute();
 		expect(result.status, result.stderr || result.error?.message).toBe(0);
 
 		const bundle = readFileSync(outfile, "utf8");
-		expect(bundle).toContain("points at another installed copy of this CLI");
+		expect(bundle).toContain("Skipping skill link repair");
 		expect(bundle).not.toContain("How to Use This Skill");
 	} finally {
 		rmSync(dir, { recursive: true, force: true });

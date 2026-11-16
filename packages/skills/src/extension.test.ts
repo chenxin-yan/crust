@@ -106,10 +106,9 @@ async function linkTarget(path: string): Promise<string> {
 
 const stderrIsTTY = Object.getOwnPropertyDescriptor(process.stderr, "isTTY");
 
-/** Runs with an interactive, non-CI stderr, where the other-copy link notice shows; the runner may be neither. */
+/** Runs with an interactive, non-CI stderr, where a CLI may print most; the runner may be neither. */
 async function onTerminal<T>(run: () => Promise<T>): Promise<T> {
 	vi.stubEnv("CI", undefined);
-	vi.stubEnv("NO_UPDATE_NOTIFIER", undefined);
 	Object.defineProperty(process.stderr, "isTTY", { configurable: true, value: true });
 	try {
 		return await run();
@@ -355,14 +354,13 @@ describe("skill extension packaged directory", () => {
 	});
 
 	it("normalizes home-directory scopes before repair and install grouping", async () => {
-		await writeSource("demo");
-		for (const conflict of [
-			join(tempRoot, ".agents", "skills", "demo"),
-			join(tempRoot, ".trae", "skills", "demo"),
-		]) {
-			await mkdir(conflict, { recursive: true });
-			await writeFile(join(conflict, "manual.md"), "keep\n");
-		}
+		const source = await writeSource("demo");
+		const shared = join(tempRoot, ".agents", "skills", "demo");
+		await mkdir(dirname(shared), { recursive: true });
+		await symlink(join(tempRoot, "missing", "skills", "demo"), shared);
+		const traeConflict = join(tempRoot, ".trae", "skills", "demo");
+		await mkdir(traeConflict, { recursive: true });
+		await writeFile(join(traeConflict, "manual.md"), "keep\n");
 		// Trae and Trae CN are detected by `~/.trae` and `~/.trae-cn`; `~/.trae` holds a conflict.
 		await mkdir(join(tempRoot, ".trae-cn"));
 
@@ -370,7 +368,7 @@ describe("skill extension packaged directory", () => {
 		const script = join(packageRoot, "home-scope.ts");
 		await writeFile(
 			script,
-			`import { lstat, readlink, rm } from "node:fs/promises";
+			`import { readlink } from "node:fs/promises";
 import { join } from "node:path";
 import { Crust } from ${JSON.stringify(import.meta.resolve("@crustjs/core"))};
 import { skill } from ${JSON.stringify(new URL("./extension.ts", import.meta.url).href)};
@@ -389,8 +387,6 @@ await new Crust("demo")
   .action(() => {})
   .execute({ argv: [], io: { stderr: (text) => repairErrors.push(text) } });
 
-// The check inspects only the shared link; drop its conflict so install can link agents to it.
-await rm(join(process.cwd(), ".agents", "skills", "demo"), { recursive: true });
 const installErrors: string[] = [];
 await new Crust("demo")
   .extend(skill({ autoUpdate: false }))
@@ -401,8 +397,8 @@ await new Crust("demo")
   });
 
 const traeCnTarget = await readlink(join(process.cwd(), ".trae-cn", "skills", "demo"));
-const sharedIsLink = (await lstat(join(process.cwd(), ".agents", "skills", "demo"))).isSymbolicLink();
-console.log("RESULT " + JSON.stringify({ repairErrors, installErrors, traeCnTarget, sharedIsLink }));
+const sharedTarget = await readlink(join(process.cwd(), ".agents", "skills", "demo"));
+console.log("RESULT " + JSON.stringify({ repairErrors, installErrors, traeCnTarget, sharedTarget }));
 `,
 		);
 		const { stdout, stderr, exitCode } = await runBoundedProcess(process.execPath, [script], {
@@ -421,17 +417,15 @@ console.log("RESULT " + JSON.stringify({ repairErrors, installErrors, traeCnTarg
 			repairErrors: string[];
 			installErrors: string[];
 			traeCnTarget: string;
-			sharedIsLink: boolean;
+			sharedTarget: string;
 		};
-		// Project and global scope are one scope at home: one warning, for the shared link only.
-		expect(result.repairErrors).toEqual([
-			expect.stringContaining(`"${join(tempRoot, ".agents", "skills", "demo")}" is not owned`),
-		]);
+		// Project and global scope are one scope at home: the broken shared link is repaired once, as a global link.
+		expect(result.repairErrors).toEqual([]);
+		expect(result.sharedTarget).toBe(join(source, "demo"));
 		expect(result.installErrors.filter((text) => text.includes("Skipped"))).toEqual([
 			expect.stringContaining("Skipped Trae [demo]"),
 		]);
-		expect(result.sharedIsLink).toBe(true);
-		expect(result.traeCnTarget).toBe(join(tempRoot, ".agents", "skills", "demo"));
+		expect(result.traeCnTarget).toBe(shared);
 	});
 
 	it("repairs only the shared link before ordinary commands when the packaged folder moves", async () => {
@@ -453,9 +447,9 @@ console.log("RESULT " + JSON.stringify({ repairErrors, installErrors, traeCnTarg
 		expect((await run()).stderr).toBe("");
 	});
 
-	// Two installed copies (global + project-local, npx) would otherwise take the link from each other on every run.
-	it("leaves an owned link to another live copy alone before ordinary commands", async () => {
-		await writeSource("demo", "current");
+	// Which installed copy should own a link cannot be told reliably, so only `skills repair` moves it.
+	it("leaves a shared link to another live copy alone and silent until skills repair", async () => {
+		const source = await writeSource("demo", "current");
 		const other = join(tempRoot, "other", "skills", "demo");
 		await mkdir(other, { recursive: true });
 		await writeFile(join(other, "content.md"), "other\n");
@@ -467,10 +461,13 @@ console.log("RESULT " + JSON.stringify({ repairErrors, installErrors, traeCnTarg
 			asInstalled(() => withCwd(tempRoot, () => captureExecute(createApp(), []))),
 		);
 		expect(captured.exitCode).toBe(0);
-		expect(captured.stderr).toBe(
-			`Skill link [demo]: "${installed}" points at another installed copy of this CLI. Run "demo skills repair --scope project" to link this copy.`,
-		);
+		expect(captured.stderr).toBe("");
 		expect(await readlink(installed)).toBe(other);
+
+		await withCwd(tempRoot, () =>
+			captureExecute(createApp(), ["skills", "repair", "--scope", "project"]),
+		);
+		expect(await linkTarget(installed)).toBe(join(source, "demo"));
 	});
 
 	// The layout `npx skills` writes: the agent's link reaches this copy through `.agents/skills`.
@@ -512,29 +509,6 @@ console.log("RESULT " + JSON.stringify({ repairErrors, installErrors, traeCnTarg
 		);
 		expect(captured.stderr).toBe("");
 		expect(await readlink(join(tempRoot, ".kiro", "skills", "demo"))).toBe(other);
-	});
-
-	it.each([
-		["under CI", () => vi.stubEnv("CI", "true")],
-		["when NO_UPDATE_NOTIFIER is set", () => vi.stubEnv("NO_UPDATE_NOTIFIER", "1")],
-		[
-			"when stderr is not a terminal",
-			() => Object.defineProperty(process.stderr, "isTTY", { configurable: true, value: false }),
-		],
-	])("does not notice a link to another live copy %s", async (_case, suppress) => {
-		await writeSource("demo");
-		const other = join(tempRoot, "other", "skills", "demo");
-		await mkdir(other, { recursive: true });
-		const installed = target();
-		await mkdir(dirname(installed), { recursive: true });
-		await symlink(other, installed);
-
-		const captured = await onTerminal(() => {
-			suppress();
-			return asInstalled(() => withCwd(tempRoot, () => captureExecute(createApp(), [])));
-		});
-		expect(captured.stderr).toBe("");
-		expect(await readlink(installed)).toBe(other);
 	});
 
 	it("re-points the shared link and stale agent links via skills repair", async () => {
@@ -579,7 +553,7 @@ console.log("RESULT " + JSON.stringify({ repairErrors, installErrors, traeCnTarg
 		expect(await readlink(installed)).toBe(stale);
 	});
 
-	it("reports preRun conflicts through injected stderr", async () => {
+	it("says nothing about a conflict at the shared path until skills repair", async () => {
 		await writeSource("demo");
 		const installed = target();
 		await mkdir(installed, { recursive: true });
@@ -591,12 +565,15 @@ console.log("RESULT " + JSON.stringify({ repairErrors, installErrors, traeCnTarg
 			const captured = await asInstalled(() =>
 				withCwd(tempRoot, () => captureExecute(createApp(), [])),
 			);
-			expect(captured.exitCode).toBe(0);
-			expect(captured.stderr).toContain("Skill conflict [demo]");
+			expect(captured).toEqual({ stdout: "", stderr: "", exitCode: 0 });
 			expect(ambientWarnings).toEqual([]);
 		} finally {
 			console.warn = originalWarn;
 		}
+		const repaired = await withCwd(tempRoot, () =>
+			captureExecute(createApp(), ["skills", "repair", "--scope", "project"]),
+		);
+		expect(repaired.stderr).toContain(`Skill conflict [demo]: "${installed}" is not owned`);
 		expect(await readFile(join(installed, "manual.md"), "utf8")).toBe("keep\n");
 	});
 

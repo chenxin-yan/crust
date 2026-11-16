@@ -84,10 +84,11 @@ Only the shared link in `.agents/skills` points at the packaged skill. An agent 
 
 Before each Command Action, an installed CLI checks only the shared link of each scope, unless `autoUpdate: false`. Agent links point at the shared link, which does not move, so they are not inspected:
 
-- It re-links a Crust-owned shared link whose target no longer exists, and never creates one that was not installed.
-- It leaves a shared link to another live installed copy of the CLI (global versus project-local, `npx`) alone, so the copies do not take it from each other, and prints one stderr line naming the link and the `skills repair --scope <scope>` command that re-points it to the running copy. The line is skipped under CI, when `NO_UPDATE_NOTIFIER` is set, and when stderr is not a terminal, the same rules as `updateNotifier()`.
-- A directory at the shared path that the skill does not own gets a conflict warning.
+- It re-links a Crust-owned shared link whose target no longer exists, silently, and never creates one that was not installed. A repair that fails prints one line and does not stop the command.
+- Anything else is left alone and nothing is printed: a working link, even one that leads to another installed copy of the CLI, and a directory or foreign link at the shared path. Which copy should own a link cannot be told reliably across npm, version managers, and other installs, so links move only when broken or when you run `skills repair` or `skills install`.
 - Running from source (`bun run`, `node`) skips the check, so trying a checkout never moves an installed CLI's links to its build. Run `skills repair` there to relink deliberately.
+
+When another installed copy of the CLI holds the link, for example after an upgrade that keeps the old version installed, run `skills repair` from the copy you want.
 
 `skills repair` re-points the shared link even when it leads to another live copy, then every owned agent link that does not lead to this copy, so that it targets the shared link. An agent link from an older version that points straight at the packaged skill still leads to this copy and is left as it is.
 

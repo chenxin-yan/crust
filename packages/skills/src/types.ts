@@ -109,10 +109,9 @@ export interface SkillOptions {
 	 */
 	defaultScope?: Scope;
 	/**
-	 * Before commands run, re-link the shared `.agents/skills` link when its target no longer exists;
-	 * agent links point at it and are not inspected. A shared link to another live installed copy is
-	 * left alone, with a stderr notice naming `skills repair`, which re-points it; the notice is
-	 * skipped under CI, with `NO_UPDATE_NOTIFIER`, and when stderr is not a terminal.
+	 * Before commands run, silently re-link the shared `.agents/skills` link when its target no
+	 * longer exists; agent links point at it and are not inspected. A working link, even to another
+	 * installed copy, and a conflict at the shared path are left to `skills repair`.
 	 * Never runs from source, so a checkout does not take over an installed CLI's links. @default true
 	 */
 	autoUpdate?: boolean;

@@ -18,7 +18,6 @@ import {
 import { bold, dim, yellow } from "@crustjs/style";
 import { isSourceRun, resolveArtifactDir } from "@crustjs/utils/artifacts";
 import { isWithin } from "@crustjs/utils/path";
-import { isCI } from "@crustjs/utils/terminal";
 
 import {
 	AGENT_LABELS,
@@ -107,17 +106,6 @@ function conflictWarning(name: string, outputDir: string): string {
 	);
 }
 
-function otherCopyNotice(name: string, outputDir: string, repairCommand: string): string {
-	return yellow(
-		`Skill link [${name}]: "${outputDir}" points at another installed copy of this CLI. Run "${repairCommand}" to link this copy.`,
-	);
-}
-
-/** updateNotifier's skip rules: CI runs, redirected stderr, and the user's opt-out. */
-function isOtherCopyNoticeSuppressed(): boolean {
-	return !!process.env.NO_UPDATE_NOTIFIER || !process.stderr?.isTTY || isCI();
-}
-
 /** One label per link folder: the shared folder reads "Shared", others name their agents. */
 function linkLabels(entries: readonly { agent?: AgentTarget; outputDir: string }[], scope: Scope) {
 	return [...Map.groupBy(entries, (entry) => entry.outputDir)].map(([outputDir, group]) => ({
@@ -176,51 +164,22 @@ async function repairInstalledSkill(
 }
 
 /**
- * Before ordinary commands: re-links the shared link when its target is gone. A link to another
- * live installed copy is left alone so two copies of the CLI do not take it from each other, and
- * is named on stderr when the caller passes `repairCommand`. Agent links point at the shared
- * link, which does not move, so they are not inspected.
+ * Before ordinary commands: re-links our shared link only when its target is gone, silently.
+ * Which installed copy should own a working link cannot be told reliably, so a link to another
+ * live copy, like a conflict at the shared path, is left to `skills repair`. Agent links point at
+ * the shared link, which does not move, so they are not inspected.
  */
-async function checkSharedLink(
-	packagedSkill: PackagedSkill,
-	scope: Scope,
-	io: SkillIO,
-	repairCommand: string | undefined,
-): Promise<void> {
+async function repairBrokenSharedLink(packagedSkill: PackagedSkill, scope: Scope): Promise<void> {
 	const shared = await getSharedSkillStatus({
 		name: packagedSkill.name,
 		sourceDir: packagedSkill.sourceDir,
 		scope,
 	});
-	if (shared.status === "conflict")
-		io.stderr(conflictWarning(packagedSkill.name, shared.outputDir));
-	if (shared.status !== "dangling") return;
-	if (existsSync(shared.outputDir)) {
-		if (repairCommand) {
-			io.stderr(
-				otherCopyNotice(
-					packagedSkill.name,
-					shared.outputDir,
-					`${repairCommand} --scope ${shared.scope}`,
-				),
-			);
-		}
-		return;
-	}
-	try {
-		await installSkill({ sourceDir: packagedSkill.sourceDir, agents: [], scope });
-	} catch (error) {
-		// The entry may change hands between the status check and install (TOCTOU).
-		if (!(error instanceof SkillConflictError)) throw error;
-		io.stderr(conflictWarning(packagedSkill.name, error.details.outputDir));
-	}
+	if (shared.status !== "dangling" || existsSync(shared.outputDir)) return;
+	await installSkill({ sourceDir: packagedSkill.sourceDir, agents: [], scope });
 }
 
-async function autoRepairSkills(
-	options: SkillOptions,
-	io: SkillIO,
-	repairCommand: string,
-): Promise<void> {
+async function autoRepairSkills(options: SkillOptions, io: SkillIO): Promise<void> {
 	let skills: readonly PackagedSkill[];
 	try {
 		skills = loadArtifactSkills();
@@ -240,13 +199,12 @@ async function autoRepairSkills(
 		? [options.defaultScope]
 		: ["project", "global"];
 	const scopes = [...new Set(configuredScopes.map(resolveEffectiveScope))];
-	const noticeCommand = isOtherCopyNoticeSuppressed() ? undefined : repairCommand;
 	for (const packagedSkill of skills) {
 		for (const scope of scopes) {
 			try {
-				await checkSharedLink(packagedSkill, scope, io, noticeCommand);
+				await repairBrokenSharedLink(packagedSkill, scope);
 			} catch (error) {
-				// Filesystem errors during background repair must not abort the user's
+				// A failed repair (including a conflict that appeared since the check) must not abort the user's
 				// unrelated command; the explicit skill command surfaces them loudly.
 				io.stderr(
 					yellow(
@@ -392,7 +350,7 @@ const skillFactory: ExtensionFactory<
 			// checkout's last build, and repairing would move every link away from the installed
 			// CLI, which then moves them back on its next run.
 			if (isSourceRun()) return;
-			await autoRepairSkills(options, context, `${context.commandPath[0]} ${commandName} repair`);
+			await autoRepairSkills(options, context);
 		})
 		// Skills are loaded when a snapshot is prepared, not at construction, so
 		// help and man pages reflect the packaged directory as it exists at render time.
