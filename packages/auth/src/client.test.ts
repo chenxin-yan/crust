@@ -13,6 +13,7 @@ import {
 	callbackPath,
 	configReason,
 	fakeFetch,
+	fakeTimersFrom,
 	holdLock,
 	isClosed,
 	json,
@@ -20,6 +21,7 @@ import {
 	rawRequest,
 	type RawResponse,
 	restoreTerminal,
+	settle,
 	tempApp,
 	terminal,
 	uniqueIssuer,
@@ -428,35 +430,6 @@ describe("login() in a browser", () => {
 		expect(await auth.status()).toEqual({ source: "none" });
 	});
 });
-
-/** An `onCode` that switches to fake timers first, so the device poll's waits can be skipped. */
-function fakeTimersFrom(onCode: LoginOptions["onCode"] = () => {}): LoginOptions["onCode"] {
-	return (prompt) => {
-		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-		return onCode(prompt);
-	};
-}
-
-/**
- * Settles a device login: once {@link fakeTimersFrom} switched timers, a second of fake time
- * per event loop turn; the login file's I/O runs on real time meanwhile.
- */
-async function settle<T>(promise: Promise<T>): Promise<unknown> {
-	const state = { done: false };
-	const result = promise.then(
-		(value) => value,
-		(error: unknown) => error,
-	);
-	void result.finally(() => {
-		state.done = true;
-	});
-	const deadline = Date.now() + 4_000;
-	while (!state.done && Date.now() < deadline) {
-		if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(1_000);
-		await new Promise((resolve) => setImmediate(resolve));
-	}
-	return result;
-}
 
 describe("login() with a device code", () => {
 	it("shows the code through onCode, never the device code, and writes nothing", async () => {

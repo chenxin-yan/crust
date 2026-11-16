@@ -24,12 +24,14 @@ import { createTokenClient } from "../src/token-client.ts";
 import {
 	callbackPath,
 	fakeFetch,
+	fakeTimersFrom,
 	json,
 	login,
 	metadataFor,
 	rawRequest,
 	type RecordedRequest,
 	restoreTerminal,
+	settle,
 	tempApp,
 	terminal,
 	tokenWorld,
@@ -261,26 +263,17 @@ async function clientLogins(token: () => Response) {
 	const response = await page!;
 	sinks.push(response.body, JSON.stringify(response.headers));
 
-	vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-	// Fake time for the polls, real event loop turns for the login file's I/O.
-	const state = { done: false };
-	const device = auth
-		.login({
-			device: true,
-			onUrl: () => {
-				throw new Error("unexpected browser login");
-			},
-			onCode: (prompt) => record(prompt),
-		})
-		.then(record, record)
-		.finally(() => {
-			state.done = true;
-		});
-	for (let turn = 0; turn < 800 && !state.done; turn += 1) {
-		await vi.advanceTimersByTimeAsync(1_000);
-		await new Promise((resolve) => setImmediate(resolve));
-	}
-	await device;
+	await settle(
+		auth
+			.login({
+				device: true,
+				onUrl: () => {
+					throw new Error("unexpected browser login");
+				},
+				onCode: fakeTimersFrom((prompt) => record(prompt)),
+			})
+			.then(record, record),
+	);
 	vi.useRealTimers();
 	await auth.token().then(record, record);
 	await auth.status().then(record, record);
