@@ -8,5 +8,5 @@ Stores can now hold credentials: a `strict` mode whose lock is never taken from 
 - New `withLock(path, fn, { signal, timeout })` export: the same strict lock for work on a path that has no store document.
 - `write()`, `update()`, `patch()`, and `reset()` take an optional `{ signal }` (new `StoreMutationOptions` type). Aborting while the mutation still waits, behind earlier mutations of the same file or for its lock, rejects with `signal.reason` and changes nothing. Without a signal, the default lock behaves as before.
 - New `LOCK` error code, and an optional `reason` on `PATH` error details.
-- On Unix, every store now flushes the directory after renaming a write into place and after `reset()` deletes the file, and the parent of each directory it creates, so a write or reset that resolved survives a power loss; a failed flush rejects with `IO`. Windows has no directory flush.
+- On Unix, every store now flushes the directory after renaming a write into place and after `reset()` deletes the file, and the parent of each directory it creates, so a write or reset that resolved survives a power loss, except while another process is creating the same new directories: only the creator of a directory flushes its entry. A failed flush rejects with `IO`. Windows has no directory flush.
 - The temporary file of a write is created exclusively.
