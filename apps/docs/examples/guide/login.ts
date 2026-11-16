@@ -21,7 +21,7 @@ const credentials = createStore({
 	dirPath: configDir("acme"),
 	name: "credentials",
 	fields: { accessToken: { type: "string" }, refreshToken: { type: "string" } },
-	access: "private",
+	strict: true,
 });
 
 export const login = defineCommand("login", { description: "Sign in to Acme" }, (command) =>
@@ -68,10 +68,10 @@ export const login = defineCommand("login", { description: "Sign in to Acme" }, 
 					session.close();
 				}
 			}
-			await credentials.patch({
-				accessToken: tokens.accessToken,
-				refreshToken: tokens.refreshToken,
-			});
+			await credentials.patch(
+				{ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken },
+				{ signal },
+			);
 			stderr("Signed in to Acme");
 		}),
 );

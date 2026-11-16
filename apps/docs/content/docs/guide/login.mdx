@@ -22,7 +22,7 @@ What it does:
 3. **Device code:** `startDeviceFlow()` returns the code to show. `deviceCodeMessage()` prints it with the URL and an anti-phishing line, and `flow.poll()` waits for approval at the pace the server asks for.
 4. **Browser:** `createAuthorizationSession()` listens on `127.0.0.1` and returns the URL to open. The command prints it, offers to open it with a [`confirm()`](/docs/modules/prompts) prompt, and `session.wait()` exchanges the code when the browser comes back. `session.close()` in `finally` frees the port on every path.
 5. The [spinner](/docs/modules/progress) shows while either login waits, and the command's `ctx.signal` cancels the wait on Ctrl-C.
-6. The tokens go to a [private store](/docs/modules/store#secret-files) (`0600` on Unix).
+6. The tokens go to a [strict store](/docs/modules/store#strict-stores) (`0600` on Unix). The save gets the command's signal too, so Ctrl-C while it waits for the store's lock saves nothing.
 
 Print instructions to stderr, as above, so `--json` output and pipes stay clean.
 
