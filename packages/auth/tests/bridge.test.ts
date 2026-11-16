@@ -81,26 +81,23 @@ describe("bearer tokens for the API", () => {
 		["http://api.example.com/v1", false],
 		["https://api.example.com:8443/v1", false],
 		["https://api.example.com./v1", false],
-	])(
-		"SEC-J1 SEC-J7 sends the token to %s only when its origin is the login's (%s)",
-		async (baseUrl, allowed) => {
-			const w = world();
-			const tokens = w.source();
-			await login(tokens, { expiresAt: undefined });
-			const calls = stubApi(() => new Response("{}"));
-			const result = withApi(tokens, (api) => api.fetch("/me").then(() => {}), { baseUrl });
-			if (allowed) {
-				await result;
-				expect(calls.map((call) => call.authorization)).toEqual(["Bearer AT1"]);
-			} else {
-				await expect(result).rejects.toBeInstanceOf(CredentialMismatchError);
-				expect(calls).toEqual([]);
-			}
-			expect(w.requests).toEqual([]);
-		},
-	);
+	])("sends the token to %s only when its origin is the login's (%s)", async (baseUrl, allowed) => {
+		const w = world();
+		const tokens = w.source();
+		await login(tokens, { expiresAt: undefined });
+		const calls = stubApi(() => new Response("{}"));
+		const result = withApi(tokens, (api) => api.fetch("/me").then(() => {}), { baseUrl });
+		if (allowed) {
+			await result;
+			expect(calls.map((call) => call.authorization)).toEqual(["Bearer AT1"]);
+		} else {
+			await expect(result).rejects.toBeInstanceOf(CredentialMismatchError);
+			expect(calls).toEqual([]);
+		}
+		expect(w.requests).toEqual([]);
+	});
 
-	it("SEC-J2 SEC-J3 sends no token after a redirect to another origin, and never one in a URL", async () => {
+	it("sends no token after a redirect to another origin, and never one in a URL", async () => {
 		const w = world();
 		const tokens = w.source();
 		await login(tokens, { accessToken: "SENTINEL_AT_1", expiresAt: undefined });
@@ -120,7 +117,7 @@ describe("bearer tokens for the API", () => {
 		}
 	});
 
-	it("SEC-J4 refreshes once on a 401 and replays the request; a second 401 is returned", async () => {
+	it("refreshes once on a 401 and replays the request; a second 401 is returned", async () => {
 		const w = world();
 		const tokens = w.source();
 		await login(tokens, { expiresAt: undefined });
@@ -138,7 +135,7 @@ describe("bearer tokens for the API", () => {
 		expect(w.tokenRequests()).toHaveLength(1);
 	});
 
-	it("SEC-J4 SEC-J6 pages after a refresh use the new token; parallel 401s share one refresh", async () => {
+	it("pages after a refresh use the new token; parallel 401s share one refresh", async () => {
 		const w = world();
 		const tokens = w.source();
 		await login(tokens, { expiresAt: undefined });
@@ -158,7 +155,7 @@ describe("bearer tokens for the API", () => {
 		expect(cancel).toHaveBeenCalledTimes(10);
 	});
 
-	it("SEC-J4 never refreshes an environment token, a caller's Authorization, or a 401 from another origin", async () => {
+	it("never refreshes an environment token, a caller's Authorization, or a 401 from another origin", async () => {
 		const w = world();
 		const tokens = w.source();
 		await login(tokens, { expiresAt: undefined });
@@ -187,7 +184,7 @@ describe("bearer tokens for the API", () => {
 		expect(w.tokenRequests()).toHaveLength(0);
 	});
 
-	it("SEC-J4 an abort during the refresh rejects without a retry", async () => {
+	it("an abort during the refresh rejects without a retry", async () => {
 		const controller = new AbortController();
 		const w = world({
 			token: () => {
@@ -205,7 +202,7 @@ describe("bearer tokens for the API", () => {
 		expect(calls).toHaveLength(1);
 	});
 
-	it("SEC-J5 never refreshes on a 403 or a 5xx", async () => {
+	it("never refreshes on a 403 or a 5xx", async () => {
 		const w = world();
 		const tokens = w.source();
 		await login(tokens, { expiresAt: undefined });
@@ -220,7 +217,7 @@ describe("bearer tokens for the API", () => {
 		expect(w.tokenRequests()).toHaveLength(0);
 	});
 
-	it("SEC-J8 SEC-N1 reading the Context and a public request resolve no credential", async () => {
+	it("reading the Context and a public request resolve no credential", async () => {
 		const w = world();
 		const tokens = w.source();
 		await login(tokens);

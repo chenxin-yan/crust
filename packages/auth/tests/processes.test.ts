@@ -151,7 +151,7 @@ async function output(process_: ChildProcess): Promise<string> {
 }
 
 describe.each(["node", "bun"])("on %s", (runtime) => {
-	it("SEC-Q4 SEC-F3 SEC-DEC-13 two processes refreshing one credential send one request", async () => {
+	it("two processes refreshing one credential send one request", async () => {
 		const as = await authorizationServer(300);
 		const { root } = await loggedIn(as.issuer);
 		const [a, b] = [
@@ -162,7 +162,7 @@ describe.each(["node", "bun"])("on %s", (runtime) => {
 		expect(as.posts()).toBe(1);
 	}, 90_000);
 
-	it("SEC-Q4 SEC-F3 SEC-F4 a process that starts after another's mark waits on the lock and gets its token", async () => {
+	it("a process that starts after another's mark waits on the lock and gets its token", async () => {
 		const as = await authorizationServer(0);
 		const release = as.holdTokens();
 		const { root } = await loggedIn(as.issuer);
@@ -177,7 +177,7 @@ describe.each(["node", "bun"])("on %s", (runtime) => {
 		expect(as.posts()).toBe(1);
 	}, 90_000);
 
-	it("SEC-F5 SEC-F3 a process waiting behind a refused refresh is told to log in, and its request proves nothing rotated", async () => {
+	it("a process waiting behind a refused refresh is told to log in, and its request proves nothing rotated", async () => {
 		const as = await authorizationServer(0, () => ({ error: "invalid_grant" }));
 		const release = as.holdTokens();
 		const { root } = await loggedIn(as.issuer);
@@ -188,12 +188,12 @@ describe.each(["node", "bun"])("on %s", (runtime) => {
 		const outputB = output(b);
 		await expectWaiting(b, outputB, 1_000);
 		release();
-		// A cleared its mark on proof of no rotation, so B's turn is "the next call", which retries (SEC-F3).
+		// A cleared its mark on proof of no rotation, so B's turn is "the next call", which retries.
 		expect(await Promise.all([outputA, outputB])).toEqual(["login-required", "login-required"]);
 		expect(as.refreshTokens).toEqual(["RT1", "RT1"]);
 	}, 90_000);
 
-	it("SEC-F9 SEC-Q4 a process killed after its mark leaves the refresh uncertain for the next one", async () => {
+	it("a process killed after its mark leaves the refresh uncertain for the next one", async () => {
 		const as = await authorizationServer(0);
 		as.holdTokens();
 		const { root } = await loggedIn(as.issuer);
@@ -206,7 +206,7 @@ describe.each(["node", "bun"])("on %s", (runtime) => {
 		expect(as.posts()).toBe(1);
 	}, 90_000);
 
-	it("SEC-J4 SEC-J6 a 401 retry racing another process's refresh waits and retries with its token", async () => {
+	it("a 401 retry racing another process's refresh waits and retries with its token", async () => {
 		const as = await authorizationServer(0);
 		const { root } = await loggedIn(as.issuer, Date.now() + 3_600_000);
 		const releaseApi = as.holdApi();
@@ -226,7 +226,7 @@ describe.each(["node", "bun"])("on %s", (runtime) => {
 		expect(as.posts()).toBe(1);
 	}, 90_000);
 
-	it("SEC-Q4 recovers the lock of a killed owner", async () => {
+	it("recovers the lock of a killed owner", async () => {
 		const as = await authorizationServer(0);
 		const { root, source } = await loggedIn(as.issuer);
 		const holder = child(runtime, ["hold", as.issuer], root);
@@ -237,7 +237,7 @@ describe.each(["node", "bun"])("on %s", (runtime) => {
 		expect(as.posts()).toBe(1);
 	}, 90_000);
 
-	it("SEC-F5 SEC-J2 SEC-J4 retries a 401 over real sockets and proves a refused connection sent nothing", () => {
+	it("retries a 401 over real sockets and proves a refused connection sent nothing", () => {
 		const root = mkdtempSync(join(tmpdir(), "crust-auth-"));
 		cleanup.push(() => rmSync(root, { recursive: true, force: true }));
 		const run = spawnSync(runtime, [script, "runtime"], {

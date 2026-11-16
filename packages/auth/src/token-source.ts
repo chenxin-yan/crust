@@ -39,11 +39,11 @@ import type {
 	TokenSourceOptions,
 } from "./types.ts";
 
-// Token sources (SEC-F1–F9, G1–G5, J6, J7, P2, P4, Q1, Q2, Q5). Every lifecycle change holds
+// Token sources. Every lifecycle change holds
 // the credential's identity lock, then makes one synchronous `store.update()` that rechecks
 // the lifecycle (storeId, epoch, generation) and throws to write nothing.
 
-/** RFC 6749 §5.2 token-endpoint error codes: proof the request was refused, not processed (SEC-F5). */
+/** RFC 6749 §5.2 token-endpoint error codes: proof the request was refused, not processed. */
 const TOKEN_ERROR_CODES: ReadonlySet<string> = new Set([
 	"invalid_request",
 	"invalid_client",
@@ -59,14 +59,14 @@ interface Flight {
 	waiters: number;
 }
 
-/** In-process single-flight refreshes, by credentials file and key (SEC-F3, Q1). */
+/** In-process single-flight refreshes, by credentials file and key. */
 export const refreshFlights: Map<string, Flight> = new Map();
-/** Open login tickets, by credentials file and key (SEC-Q2). */
+/** Open login tickets, by credentials file and key. */
 const openLogins = new Set<string>();
 
 /** What `fromStore()` needs of a token source; kept off the public object. */
 interface TokenSourceInternals {
-	/** Whether a live (not logged-out) record exists: no lock, no refresh (SEC-N6). */
+	/** Whether a live (not logged-out) record exists: no lock, no refresh. */
 	hasCredential(): Promise<boolean>;
 }
 
@@ -84,7 +84,7 @@ const accessToken = (record: StoredRecord): AccessToken =>
 		"value",
 	]);
 
-/** Rejects with {@link AbortError} on `signal` without stopping `promise`, which others share (SEC-P4). */
+/** Rejects with {@link AbortError} on `signal` without stopping `promise`, which others share. */
 function detach<T>(promise: Promise<T>, signal: AbortSignal | undefined, onAbort: () => void) {
 	if (!signal) return promise;
 	return new Promise<T>((resolve, reject) => {
@@ -103,7 +103,7 @@ function detach<T>(promise: Promise<T>, signal: AbortSignal | undefined, onAbort
 
 const optionsError = (message: string) => new OAuthConfigError("invalid-option", message);
 
-/** The configured identity, validated without I/O (SEC-J7, N5, DEC-09). */
+/** The configured identity, validated without I/O. */
 function checkIdentity(options: TokenSourceOptions): StoredIdentity {
 	const { config, identity } = options;
 	if (!isAuthConfig(config)) throw optionsError("Pass a config returned by defineServers()");
@@ -129,7 +129,7 @@ function checkIdentity(options: TokenSourceOptions): StoredIdentity {
 	return { issuer, clientId, profile, apiOrigins: [...new Set(origins)].sort() };
 }
 
-/** Why `stored` is not `configured`, or `undefined` when they are the same identity (SEC-J7). */
+/** Why `stored` is not `configured`, or `undefined` when they are the same identity. */
 function mismatch(stored: StoredIdentity, configured: StoredIdentity) {
 	if (stored.issuer !== configured.issuer) return "issuer";
 	if (stored.clientId !== configured.clientId) return "client";
@@ -157,7 +157,7 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 	function liveRecord(document: CredentialsDocument | undefined, baseUrl?: string): StoredRecord {
 		const raw = document?.records[key];
 		if (raw === undefined) {
-			// Logged in to the same profile at another issuer or client id (SEC-F8).
+			// Logged in to the same profile at another issuer or client id.
 			for (const [otherKey, value] of Object.entries(document?.records ?? {})) {
 				const other = otherKey === key ? undefined : parseRecord(value);
 				if (other && !other.tombstone && other.identity?.profile === identity.profile) {
@@ -177,7 +177,7 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 		return record;
 	}
 
-	/** The document still holds the record this refresh observed (SEC-F9, B2). */
+	/** The document still holds the record this refresh observed. */
 	function unchanged(
 		document: CredentialsDocument | undefined,
 		storeId: string,
@@ -199,8 +199,8 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 	});
 
 	/**
-	 * Refreshes the credential observed at `generation` under the identity lock (SEC-F2, F4,
-	 * F5, F9). `signal` (all waiters gone) is observed only until the mark is written (SEC-P2).
+	 * Refreshes the credential observed at `generation` under the identity lock.
+	 * `signal` (all waiters gone) is observed only until the mark is written.
 	 */
 	async function refresh(generation: string, signal: AbortSignal): Promise<AccessToken> {
 		return store.lockIdentity(
@@ -208,9 +208,9 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 			async () => {
 				const document = await store.read();
 				const record = liveRecord(document);
-				// With the lock held, a mark's refresh is no longer running: its outcome is unknown (SEC-F9).
+				// With the lock held, a mark's refresh is no longer running: its outcome is unknown.
 				if (record.refreshInProgress) throw new RefreshOutcomeUnknownError();
-				// Another process or source refreshed or logged in meanwhile: use its token (SEC-F4).
+				// Another process or source refreshed or logged in meanwhile: use its token.
 				if (record.generation !== generation) return accessToken(record);
 				if (record.refreshToken === undefined) throw new LoginRequiredError("expired");
 				const server = await discoverServer(signal);
@@ -231,7 +231,7 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 						throw error;
 					throw new RefreshFailedError();
 				}
-				// From here on nothing cancels the refresh: the server may rotate the token (SEC-P4).
+				// From here on nothing cancels the refresh: the server may rotate the token.
 				let tokens: TokenSet;
 				try {
 					tokens = await createTokenClient(server, { fetch: fetchImpl }).refresh(
@@ -250,10 +250,10 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 							generation: newId(),
 							refreshInProgress: undefined,
 							accessToken: tokens.accessToken,
-							// The old refresh token stays when the server sent none (SEC-F1).
+							// The old refresh token stays when the server sent none.
 							refreshToken: tokens.refreshToken ?? found.refreshToken,
 							expiresAt: tokens.expiresAt,
-							// A response without scope keeps the granted scope (SEC-F7).
+							// A response without scope keeps the granted scope.
 							scope: tokens.scope ?? found.scope,
 						});
 					});
@@ -269,7 +269,7 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 
 	/**
 	 * The error of a refresh that failed after its mark was written. Only a failure that proves
-	 * the server did not rotate the token clears the mark (SEC-F5); any other is uncertain.
+	 * the server did not rotate the token clears the mark; any other is uncertain.
 	 */
 	async function failedRefresh(error: unknown, storeId: string, record: StoredRecord) {
 		const refused =
@@ -298,7 +298,7 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 		return error instanceof OAuthError ? error : new RefreshFailedError();
 	}
 
-	/** Joins this credential's refresh in this process, or starts it (SEC-F3, P4). */
+	/** Joins this credential's refresh in this process, or starts it. */
 	function sharedRefresh(generation: string, signal: AbortSignal | undefined) {
 		let flight = refreshFlights.get(id);
 		if (!flight) {
@@ -314,7 +314,7 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 		joined.waiters += 1;
 		return detach(joined.promise, signal, () => {
 			joined.waiters -= 1;
-			// Until the mark is written, the refresh stops when its last waiter leaves (SEC-P2).
+			// Until the mark is written, the refresh stops when its last waiter leaves.
 			if (joined.waiters === 0) joined.controller.abort(new AbortError());
 		});
 	}
@@ -337,7 +337,7 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 				return "revoked";
 			}
 			await client.revoke(tokens.refreshToken, { tokenTypeHint: "refresh_token", signal });
-			// The access token too, where the server can revoke one (SEC-G1, G3).
+			// The access token too, where the server can revoke one.
 			await client
 				.revoke(tokens.accessToken, { tokenTypeHint: "access_token", signal })
 				.catch((error: unknown) => {
@@ -372,7 +372,7 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 			baseUrl,
 		}: { signal?: AbortSignal; ifGeneration?: string; baseUrl?: string } = {}) {
 			const record = await readRecord(signal, baseUrl);
-			// A newer credential than the one that failed is used as is (SEC-J6).
+			// A newer credential than the one that failed is used as is.
 			if (
 				ifGeneration !== undefined &&
 				record.generation !== ifGeneration &&
@@ -401,7 +401,7 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 				observed = await store.lockIdentity(
 					key,
 					async () => {
-						// An absent file gets its document now, so the ticket observes a storeId (SEC-Q2).
+						// An absent file gets its document now, so the ticket observes a storeId.
 						const document =
 							(await store.read()) ??
 							(await store.update((current) => current ?? emptyDocument(), signal));
@@ -463,7 +463,7 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 							key,
 							async () => {
 								throwIfAborted(stop);
-								// The boundary: once the write starts, it completes (SEC-P2).
+								// The boundary: once the write starts, it completes.
 								await store.update((current) => {
 									const raw = current?.records[key];
 									const epoch =
@@ -508,7 +508,7 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 				async (): Promise<LogoutResult["local"]> => {
 					const document = await store.read();
 					const record = parseRecord(document?.records[key]);
-					// Revoke only this identity's readable tokens; logout still happens (SEC-G1).
+					// Revoke only this identity's readable tokens; logout still happens.
 					if (
 						record &&
 						!record.tombstone &&

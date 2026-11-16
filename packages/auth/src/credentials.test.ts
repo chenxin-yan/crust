@@ -51,7 +51,7 @@ const mode = (path: string) => statSync(path).mode & 0o777;
 
 describe("credentials file", () => {
 	it.skipIf(!posix)(
-		"SEC-M1 writes a 0600 file in a 0700 directory, also over a 0644 file and with umask 000",
+		"writes a 0600 file in a 0700 directory, also over a 0644 file and with umask 000",
 		async () => {
 			const w = world();
 			mkdirSync(w.dir, { recursive: true, mode: 0o700 });
@@ -70,7 +70,7 @@ describe("credentials file", () => {
 	);
 
 	it.skipIf(!posix)(
-		"SEC-M1 refuses a directory others can write to, or a symbolic link, before creating any file",
+		"refuses a directory others can write to, or a symbolic link, before creating any file",
 		async () => {
 			const w = world();
 			mkdirSync(w.dir, { recursive: true });
@@ -89,7 +89,7 @@ describe("credentials file", () => {
 
 	// updateNotifier() keeps its file in the same state directory and creates it with mode 0755.
 	it.skipIf(!posix)(
-		"SEC-M1 logs in when another store of the app created the state directory first",
+		"logs in when another store of the app created the state directory first",
 		async () => {
 			const w = world();
 			mkdirSync(w.dir, { recursive: true });
@@ -101,7 +101,7 @@ describe("credentials file", () => {
 		},
 	);
 
-	it("SEC-M2 SEC-M5 lives in the state directory and refuses a symbolic link as the file, on every platform", async () => {
+	it("lives in the state directory and refuses a symbolic link as the file, on every platform", async () => {
 		const w = world();
 		expect(w.store.path).toBe(w.file);
 		await login(w.source());
@@ -121,14 +121,14 @@ describe("credentials file", () => {
 		expect(readFileSync(target, "utf8")).toBe(before);
 	});
 
-	it.skipIf(!posix)("SEC-M2 ignores a relative XDG_STATE_HOME", () => {
+	it.skipIf(!posix)("ignores a relative XDG_STATE_HOME", () => {
 		vi.stubEnv("XDG_STATE_HOME", "relative/state");
 		expect(credentialStore({ app: "acme" }).path).toBe(
 			join(homedir(), ".local", "state", "acme", "credentials.json"),
 		);
 	});
 
-	it("SEC-M3 SEC-K2 a corrupt file fails every read and change, stays byte for byte, and keeps no cause", async () => {
+	it("a corrupt file fails every read and change, stays byte for byte, and keeps no cause", async () => {
 		const w = world();
 		mkdirSync(w.dir, { recursive: true, mode: 0o700 });
 		writeFileSync(w.file, "{not json SENTINEL_RT_9", { mode: 0o600 });
@@ -154,7 +154,7 @@ describe("credentials file", () => {
 		expect(w.document().storeId).toEqual(expect.any(String));
 	});
 
-	it("SEC-M3 says a file of a newer version needs an update, and never resets it", async () => {
+	it("says a file of a newer version needs an update, and never resets it", async () => {
 		const w = world();
 		mkdirSync(w.dir, { recursive: true, mode: 0o700 });
 		writeFileSync(w.file, JSON.stringify({ version: 99, records: {} }), { mode: 0o600 });
@@ -168,7 +168,7 @@ describe("credentials file", () => {
 		expect(JSON.parse(readFileSync(w.file, "utf8")).version).toBe(99);
 	});
 
-	it("SEC-M3 SEC-P2 a reset waiting for the lock is cancellable and leaves the file", async () => {
+	it("a reset waiting for the lock is cancellable and leaves the file", async () => {
 		const w = world();
 		await login(w.source());
 		const lock = await holdLock((fn) => withLock(w.file, fn));
@@ -181,7 +181,7 @@ describe("credentials file", () => {
 		expect(existsSync(w.file)).toBe(true);
 	});
 
-	it("SEC-M4 an invalid record fails only its own key, and a key reset makes its open login stale", async () => {
+	it("an invalid record fails only its own key, and a key reset makes its open login stale", async () => {
 		const w = world();
 		const source = w.source();
 		const work = w.source({ identity: { ...w.identity, profile: "work" } });
@@ -207,7 +207,7 @@ describe("credentials file", () => {
 		await expect(login(work)).resolves.toMatchObject({ accessToken: "AT1" });
 	});
 
-	it("SEC-M4 SEC-P2 a key reset waiting for the file's lock is cancellable and writes nothing", async () => {
+	it("a key reset waiting for the file's lock is cancellable and writes nothing", async () => {
 		const w = world();
 		const source = w.source();
 		await login(source, { expiresAt: undefined });
@@ -221,7 +221,7 @@ describe("credentials file", () => {
 		await expect(source.get()).resolves.toMatchObject({ value: "AT1" });
 	});
 
-	it("SEC-M3 treats a file with none of the credentials fields as empty, and keeps its other keys", async () => {
+	it("treats a file with none of the credentials fields as empty, and keeps its other keys", async () => {
 		const w = world();
 		mkdirSync(w.dir, { recursive: true, mode: 0o700 });
 		writeFileSync(w.file, JSON.stringify({ foreign: "keep" }), { mode: 0o600 });
@@ -255,7 +255,7 @@ describe("credentials file", () => {
 			"an unknown encryption",
 			{ version: 1, storeId: "s", encryption: { kind: "rot13" }, records: {} },
 		],
-	])("SEC-M3 fails closed on a file with %s", async (_name, document) => {
+	])("fails closed on a file with %s", async (_name, document) => {
 		const w = world();
 		mkdirSync(w.dir, { recursive: true, mode: 0o700 });
 		const text = JSON.stringify(document);
@@ -272,7 +272,7 @@ describe("credentials file", () => {
 		expect(readFileSync(w.file, "utf8")).toBe(text);
 	});
 
-	it("SEC-M5 skips POSIX modes only on Windows, and the docs say what protects the file there", async () => {
+	it("skips POSIX modes only on Windows, and the docs say what protects the file there", async () => {
 		const docs = readFileSync(
 			join(import.meta.dirname, "../../../apps/docs/content/docs/modules/auth.mdx"),
 			"utf8",
@@ -284,7 +284,7 @@ describe("credentials file", () => {
 		expect(mode(w.file)).toBe(posix ? 0o600 : 0o666);
 	});
 
-	it("SEC-Q3 keeps every credential when 50 logins write the file at once", async () => {
+	it("keeps every credential when 50 logins write the file at once", async () => {
 		const w = world({ lockTimeout: 30_000 });
 		const sources = Array.from({ length: 50 }, (_, index) =>
 			w.source({ identity: { ...w.identity, profile: `p${index}` } }),
@@ -294,7 +294,7 @@ describe("credentials file", () => {
 		expect(sources.every((source) => records[source.key]?.secret.accessToken === "AT1")).toBe(true);
 	});
 
-	it("SEC-K3 SEC-E8 prints a committed credential and its access token as redacted", async () => {
+	it("prints a committed credential and its access token as redacted", async () => {
 		const w = world();
 		const source = w.source();
 		const credential = await login(source, { accessToken: "SENTINEL_AT_9", expiresAt: undefined });
@@ -309,7 +309,7 @@ describe("credentials file", () => {
 });
 
 describe("identity lock", () => {
-	it("SEC-Q4 SEC-DEC-13 SEC-DEC-07 fails at its deadline while a live process holds the lock, naming the file and the manual step", async () => {
+	it("fails at its deadline while a live process holds the lock, naming the file and the manual step", async () => {
 		const w = world({ lockTimeout: 200 });
 		const source = w.source();
 		await login(source);
@@ -326,7 +326,7 @@ describe("identity lock", () => {
 		expect(w.tokenRequests()).toHaveLength(0);
 	});
 
-	it("SEC-Q4 a leftover .recover file needs the manual step even when its owner runs", async () => {
+	it("a leftover .recover file needs the manual step even when its owner runs", async () => {
 		const w = world({ lockTimeout: 300 });
 		const source = w.source();
 		await login(source);
@@ -349,7 +349,7 @@ describe("identity lock", () => {
 		expect(error).toMatchObject({ path: `${path}.recover`, owner: { ownerId: "recoverer" } });
 	});
 
-	it("SEC-Q4 never takes over a lock from another platform, and an abort leaves it in place", async () => {
+	it("never takes over a lock from another platform, and an abort leaves it in place", async () => {
 		const w = world({ lockTimeout: 200 });
 		const source = w.source();
 		await login(source);

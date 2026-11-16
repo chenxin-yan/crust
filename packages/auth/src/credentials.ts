@@ -16,14 +16,14 @@ import {
 import { throwIfAborted } from "./http.ts";
 import type { CredentialStore, CredentialStoreOptions } from "./types.ts";
 
-// The credentials file (SEC-M1–M5, Q3, Q5): one strict `@crustjs/store` document, changed only
+// The credentials file: one strict `@crustjs/store` document, changed only
 // through synchronous `store.update()` updaters and deleted only by `store.reset()`. Records are
-// validated here, one key at a time (M4), and written by an explicit serializer (K3).
+// validated here, one key at a time, and written by an explicit serializer.
 
 /** The document format this version reads and writes. A higher version fails closed. */
 const VERSION = 1;
 
-/** The persisted identity a credential is bound to (SEC-J7). */
+/** The persisted identity a credential is bound to. */
 export interface StoredIdentity {
 	issuer: string;
 	clientId: string;
@@ -31,13 +31,13 @@ export interface StoredIdentity {
 	apiOrigins: string[];
 }
 
-/** One credential's lifecycle record (SEC-Q5). A tombstone keeps only its epoch (and identity). */
+/** One credential's lifecycle record. A tombstone keeps only its epoch (and identity). */
 export interface StoredRecord {
 	identity: StoredIdentity | undefined;
 	epoch: string;
 	tombstone: boolean;
 	generation: string | undefined;
-	/** Written before a refresh is sent; only a login, logout or proven failure clears it (SEC-F9). */
+	/** Written before a refresh is sent; only a login, logout or proven failure clears it. */
 	refreshInProgress: { generation: string; since: string } | undefined;
 	expiresAt: number | undefined;
 	scope: string | undefined;
@@ -88,7 +88,7 @@ export interface CredentialStoreInternals {
 		change: (document: CredentialsDocument | undefined) => CredentialsDocument,
 		signal?: AbortSignal,
 	): Promise<CredentialsDocument>;
-	/** Runs `fn` holding the identity lock of `key` (SEC-Q4). */
+	/** Runs `fn` holding the identity lock of `key`. */
 	lockIdentity<T>(key: string, fn: () => Promise<T>, signal?: AbortSignal): Promise<T>;
 }
 
@@ -104,11 +104,11 @@ export function credentialStoreInternals(store: CredentialStore): CredentialStor
 /** A random lifecycle value: `storeId`, `epoch` or `generation`. */
 export const newId = (): string => crypto.randomUUID();
 
-/** base64url SHA-256, for record keys and lock file names: never a secret (SEC-M11). */
+/** base64url SHA-256, for record keys and lock file names: never a secret. */
 export const hashOf = (value: string): string =>
 	createHash("sha256").update(value).digest("base64url");
 
-/** The record key of an identity: `<profile>#<hash(issuer, clientId)>` (SEC-M11). */
+/** The record key of an identity: `<profile>#<hash(issuer, clientId)>`. */
 export function recordKey(
 	identity: Pick<StoredIdentity, "issuer" | "clientId" | "profile">,
 ): string {
@@ -133,7 +133,7 @@ function parseIdentity(value: unknown): StoredIdentity | undefined {
 	return { issuer, clientId, profile, apiOrigins: [...apiOrigins] };
 }
 
-/** A record, or `undefined` when it is invalid (SEC-M4). */
+/** A record, or `undefined` when it is invalid. */
 export function parseRecord(value: JsonValue | undefined): StoredRecord | undefined {
 	if (!isObject(value) || !isString(value.epoch)) return undefined;
 	const identity = value.identity === undefined ? undefined : parseIdentity(value.identity);
@@ -182,7 +182,7 @@ export function parseRecord(value: JsonValue | undefined): StoredRecord | undefi
 	};
 }
 
-/** The explicit serializer of a record (SEC-K3): only known fields, never a live object. */
+/** The explicit serializer of a record: only known fields, never a live object. */
 export function serializeRecord(record: StoredRecord): JsonObject {
 	const { identity, epoch } = record;
 	const persisted: Record<string, JsonValue> = { epoch };
@@ -201,7 +201,7 @@ export function serializeRecord(record: StoredRecord): JsonObject {
 	return persisted;
 }
 
-/** A tombstone with a fresh epoch: the secret, generation and refresh mark are dropped (SEC-Q5). */
+/** A tombstone with a fresh epoch: the secret, generation and refresh mark are dropped. */
 export function tombstone(identity: StoredIdentity | undefined): StoredRecord {
 	return {
 		identity,
@@ -256,7 +256,7 @@ export const emptyDocument = (): CredentialsDocument => ({ storeId: newId(), rec
 
 /**
  * Maps a store or lock error to the auth error it means. A store error is never forwarded with
- * its cause: a parse error can quote the file (SEC-K2).
+ * its cause: a parse error can quote the file.
  */
 function storageError(error: unknown, path: string, signal: AbortSignal | undefined): unknown {
 	if (error instanceof AuthError) return error;
@@ -284,7 +284,7 @@ function storageError(error: unknown, path: string, signal: AbortSignal | undefi
 }
 
 /**
- * The private credentials file of an app (SEC-M1, M2): `credentials.json` in the app's state
+ * The private credentials file of an app: `credentials.json` in the app's state
  * directory, `0600` in a `0700` directory on POSIX, never a symbolic link. Creating it does no
  * I/O; the file is read when a token source first needs it.
  */
@@ -339,7 +339,7 @@ export function credentialStore(options: CredentialStoreOptions): CredentialStor
 				}
 				return;
 			}
-			// One key: a tombstone with a fresh epoch, so that key's open logins become stale (SEC-M4).
+			// One key: a tombstone with a fresh epoch, so that key's open logins become stale.
 			await lockIdentity(
 				key,
 				async () => {

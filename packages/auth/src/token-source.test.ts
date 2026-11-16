@@ -56,7 +56,7 @@ function gate() {
 const record = (w: ReturnType<typeof world>, key: string) => w.document().records[key];
 
 describe("refresh", () => {
-	it("SEC-F1 SEC-F2 SEC-DEC-10 persists the rotated refresh token before returning, and keeps the old one when none comes", async () => {
+	it("persists the rotated refresh token before returning, and keeps the old one when none comes", async () => {
 		let next = 2;
 		const w = world({
 			token: () => tokenResponse(`AT${next}`, next === 2 ? "RT2" : undefined, 60),
@@ -77,7 +77,7 @@ describe("refresh", () => {
 		]);
 	});
 
-	it("SEC-F2 SEC-F9 returns no access token when the commit fails after a 200, and keeps the mark", async () => {
+	it("returns no access token when the commit fails after a 200, and keeps the mark", async () => {
 		const w = world();
 		const source = w.source();
 		await login(source);
@@ -93,7 +93,7 @@ describe("refresh", () => {
 		expect(w.tokenRequests()).toHaveLength(1);
 	});
 
-	it("SEC-F3 SEC-Q1 shares one refresh among concurrent gets of two sources, and clears its slot", async () => {
+	it("shares one refresh among concurrent gets of two sources, and clears its slot", async () => {
 		const held = gate();
 		const w = world({
 			token: async () => {
@@ -119,7 +119,7 @@ describe("refresh", () => {
 		["joining this process's refresh", false],
 		["waiting for another process's refresh on the lock", true],
 	])(
-		"SEC-F3 SEC-F4 SEC-Q4 a get that starts after the mark is written waits, %s, and gets its token",
+		"a get that starts after the mark is written waits, %s, and gets its token",
 		async (_name, otherProcess) => {
 			const held = gate();
 			const w = world({
@@ -151,7 +151,7 @@ describe("refresh", () => {
 		},
 	);
 
-	it("SEC-J6 SEC-F4 a 401 retry that starts while another process refreshes waits and adopts its token", async () => {
+	it("a 401 retry that starts while another process refreshes waits and adopts its token", async () => {
 		const held = gate();
 		const w = world({
 			token: async () => {
@@ -174,7 +174,7 @@ describe("refresh", () => {
 		expect(w.tokenRequests()).toHaveLength(1);
 	});
 
-	it("SEC-F3 SEC-Q1 clears the slot after a failure; another credential refreshes on its own", async () => {
+	it("clears the slot after a failure; another credential refreshes on its own", async () => {
 		let status = 400;
 		const w = world({
 			token: () => (status === 400 ? json({ error: "invalid_scope" }, 400) : tokenResponse("AT2")),
@@ -188,7 +188,7 @@ describe("refresh", () => {
 		expect(w.tokenRequests()).toHaveLength(2);
 	});
 
-	it("SEC-F4 adopts a credential committed while it waited for the lock, without a request", async () => {
+	it("adopts a credential committed while it waited for the lock, without a request", async () => {
 		const w = world();
 		const source = w.source();
 		await login(source);
@@ -217,7 +217,7 @@ describe("refresh", () => {
 		expect(w.tokenRequests()).toHaveLength(0);
 	});
 
-	it("SEC-F5 SEC-DEC-10 an invalid_grant asks for a login, clears the mark and keeps the credential", async () => {
+	it("an invalid_grant asks for a login, clears the mark and keeps the credential", async () => {
 		const w = world({ token: () => json({ error: "invalid_grant" }, 400) });
 		const source = w.source();
 		await login(source);
@@ -247,7 +247,7 @@ describe("refresh", () => {
 			},
 		],
 	])(
-		"SEC-F5 SEC-F9 treats %s as an uncertain outcome: the mark stays and nothing is sent again",
+		"treats %s as an uncertain outcome: the mark stays and nothing is sent again",
 		async (_name, respond) => {
 			const w = world({ token: respond });
 			const source = w.source();
@@ -263,7 +263,7 @@ describe("refresh", () => {
 		},
 	);
 
-	it("SEC-F5 a refused scope is an OAuthError that clears the mark, so the next get retries", async () => {
+	it("a refused scope is an OAuthError that clears the mark, so the next get retries", async () => {
 		const w = world({ token: () => json({ error: "invalid_scope" }, 400) });
 		const source = w.source();
 		await login(source);
@@ -273,7 +273,7 @@ describe("refresh", () => {
 		expect(w.tokenRequests()).toHaveLength(2);
 	});
 
-	it("SEC-F5 a timeout after dispatch is uncertain", async () => {
+	it("a timeout after dispatch is uncertain", async () => {
 		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 		const w = world({ token: () => new Promise<Response>(() => {}) });
 		const source = w.source();
@@ -285,7 +285,7 @@ describe("refresh", () => {
 		expect(record(w, source.key).refreshInProgress).toBeDefined();
 	});
 
-	it("SEC-F5 a DNS failure of the runtime's own fetch proves nothing was sent: the mark is cleared", async () => {
+	it("a DNS failure of the runtime's own fetch proves nothing was sent: the mark is cleared", async () => {
 		// Metadata is cached per issuer, so discovery here uses the fake and the refresh the real fetch.
 		const issuer = uniqueIssuer();
 		const fake = fakeFetch({
@@ -305,7 +305,7 @@ describe("refresh", () => {
 		expect(record(w, source.key).refreshInProgress).toBeUndefined();
 	});
 
-	it("SEC-F6 refreshes within the skew, and dates the new expiry from the request start", async () => {
+	it("refreshes within the skew, and dates the new expiry from the request start", async () => {
 		vi.useFakeTimers({ toFake: ["Date"] });
 		vi.setSystemTime(1_000_000);
 		const w = world({
@@ -323,7 +323,7 @@ describe("refresh", () => {
 		expect(record(w, source.key).expiresAt).toBe(started + 60_000);
 	});
 
-	it("SEC-F7 SEC-DEC-19 sends no scope, resends the resource, and keeps the granted scope", async () => {
+	it("sends no scope, resends the resource, and keeps the granted scope", async () => {
 		const w = world({ token: () => tokenResponse("AT2") });
 		const source = w.source();
 		const ticket = await source.beginLogin();
@@ -344,7 +344,7 @@ describe("refresh", () => {
 		});
 	});
 
-	it("SEC-F8 SEC-J7 a credential of another issuer is never sent to the configured one", async () => {
+	it("a credential of another issuer is never sent to the configured one", async () => {
 		const w = world();
 		await login(w.source());
 		const other = uniqueIssuer();
@@ -373,7 +373,7 @@ describe("refresh", () => {
 		expect(w.requests).toHaveLength(0);
 	});
 
-	it("SEC-F9 writes the mark before the request is sent", async () => {
+	it("writes the mark before the request is sent", async () => {
 		const marks: unknown[] = [];
 		const w = world({
 			token: () => {
@@ -390,7 +390,7 @@ describe("refresh", () => {
 		expect(record(w, key).refreshInProgress).toBeUndefined();
 	});
 
-	it("SEC-F9 sends nothing when the mark write fails", async () => {
+	it("sends nothing when the mark write fails", async () => {
 		const w = world();
 		const source = w.source();
 		await login(source);
@@ -400,7 +400,7 @@ describe("refresh", () => {
 		expect(record(w, source.key).refreshInProgress).toBeUndefined();
 	});
 
-	it("SEC-F9 SEC-Q5 a reset during the refresh discards its tokens, even after another login", async () => {
+	it("a reset during the refresh discards its tokens, even after another login", async () => {
 		let afterReset: (() => Promise<unknown>) | undefined;
 		const w = world({
 			token: async () => {
@@ -421,7 +421,7 @@ describe("refresh", () => {
 		expect(record(w, source.key)).toBeUndefined();
 	});
 
-	it("SEC-F9 a new login or a logout clears the mark", async () => {
+	it("a new login or a logout clears the mark", async () => {
 		const w = world({ token: () => new Response("", { status: 503 }) });
 		const source = w.source();
 		await login(source);
@@ -442,7 +442,7 @@ describe("refresh", () => {
 });
 
 describe("generation-conditional refresh", () => {
-	it("SEC-J6 ten 401s on one stale token refresh once; a late 401 of the old token refreshes nothing", async () => {
+	it("ten 401s on one stale token refresh once; a late 401 of the old token refreshes nothing", async () => {
 		const w = world();
 		const source = w.source();
 		await login(source, { expiresAt: Date.now() + 3_600_000 });
@@ -460,7 +460,7 @@ describe("generation-conditional refresh", () => {
 });
 
 describe("logout", () => {
-	it("SEC-G1 SEC-G5 tombstones the record, then revokes the refresh token with a POST to the endpoint as configured", async () => {
+	it("tombstones the record, then revokes the refresh token with a POST to the endpoint as configured", async () => {
 		const order: string[] = [];
 		const w = world({
 			metadata: { revocation_endpoint: "https://revoke.example/revoke?tenant=a" },
@@ -490,14 +490,14 @@ describe("logout", () => {
 		await expect(source.get()).rejects.toMatchObject({ reason: "missing" });
 	});
 
-	it("SEC-G1 reports a server without revocation as unsupported", async () => {
+	it("reports a server without revocation as unsupported", async () => {
 		const w = world({ metadata: { revocation_endpoint: undefined } });
 		const source = w.source();
 		await login(source);
 		await expect(source.logout()).resolves.toEqual({ local: "deleted", remote: "unsupported" });
 	});
 
-	it("SEC-G1 SEC-G2 sends no revocation when the tombstone can't be written, and the login keeps working", async () => {
+	it("sends no revocation when the tombstone can't be written, and the login keeps working", async () => {
 		const w = world();
 		const source = w.source();
 		await login(source, { expiresAt: undefined });
@@ -507,7 +507,7 @@ describe("logout", () => {
 		await expect(source.get()).resolves.toMatchObject({ value: "AT1" });
 	});
 
-	it("SEC-G1 SEC-J7 tombstones a credential of another identity without revoking it", async () => {
+	it("tombstones a credential of another identity without revoking it", async () => {
 		const w = world();
 		await login(w.source());
 		const moved = w.source({
@@ -519,7 +519,7 @@ describe("logout", () => {
 		expect(record(w, moved.key).tombstone).toBe(true);
 	});
 
-	it("SEC-G2 reports a failed revocation apart from the local logout", async () => {
+	it("reports a failed revocation apart from the local logout", async () => {
 		const w = world();
 		await login(w.source());
 		const unavailable = fakeFetch({
@@ -532,7 +532,7 @@ describe("logout", () => {
 		});
 	});
 
-	it("SEC-G2 SEC-P2 an abort after the tombstone leaves the revocation unknown; before it, nothing changes", async () => {
+	it("an abort after the tombstone leaves the revocation unknown; before it, nothing changes", async () => {
 		const controller = new AbortController();
 		const w = world();
 		const source = w.source();
@@ -551,7 +551,7 @@ describe("logout", () => {
 		).resolves.toEqual({ local: "deleted", remote: "unknown" });
 	});
 
-	it("SEC-G3 a 200 is success whatever its body; unsupported_token_type for the access token is not fatal", async () => {
+	it("a 200 is success whatever its body; unsupported_token_type for the access token is not fatal", async () => {
 		const w = world();
 		await login(w.source());
 		const answers = fakeFetch({
@@ -571,7 +571,7 @@ describe("logout", () => {
 		["a 503", "failed"],
 		["an abort", "unknown"],
 	])(
-		"SEC-G2 reports %s of the access-token revocation after the refresh token was revoked",
+		"reports %s of the access-token revocation after the refresh token was revoked",
 		async (failure, remote) => {
 			const w = world();
 			await login(w.source());
@@ -591,7 +591,7 @@ describe("logout", () => {
 		},
 	);
 
-	it("SEC-G2 SEC-P2 a logout waiting for the credentials file's lock is cancellable and writes nothing", async () => {
+	it("a logout waiting for the credentials file's lock is cancellable and writes nothing", async () => {
 		const w = world();
 		const source = w.source();
 		await login(source, { expiresAt: undefined });
@@ -606,7 +606,7 @@ describe("logout", () => {
 		expect(w.requests.filter((request) => request.url.endsWith("/revoke"))).toEqual([]);
 	});
 
-	it("SEC-G4 SEC-DEC-07 a server that never answers ends the logout at the revocation timeout", async () => {
+	it("a server that never answers ends the logout at the revocation timeout", async () => {
 		const w = world();
 		const source = w.source();
 		await login(source);
@@ -628,7 +628,7 @@ describe("logout", () => {
 });
 
 describe("login tickets", () => {
-	it("SEC-Q2 allows one open login per credential in a process, released by every terminal path", async () => {
+	it("allows one open login per credential in a process, released by every terminal path", async () => {
 		const w = world();
 		const source = w.source();
 		const ticket = await source.beginLogin();
@@ -648,7 +648,7 @@ describe("login tickets", () => {
 		await expect(login(source)).resolves.toMatchObject({ accessToken: "AT1" });
 	});
 
-	it("SEC-Q2 SEC-P2 a beginLogin waiting for the file's lock to create the document is cancellable", async () => {
+	it("a beginLogin waiting for the file's lock to create the document is cancellable", async () => {
 		const w = world();
 		const lock = await holdLock((fn) => withLock(w.file, fn));
 		const controller = new AbortController();
@@ -662,7 +662,7 @@ describe("login tickets", () => {
 		(await w.source().beginLogin()).cancel();
 	});
 
-	it("SEC-Q2 creates the document when the file is absent, so the ticket observes a storeId", async () => {
+	it("creates the document when the file is absent, so the ticket observes a storeId", async () => {
 		const w = world();
 		const ticket = await w.source().beginLogin();
 		expect(w.document()).toEqual({
@@ -674,7 +674,7 @@ describe("login tickets", () => {
 		ticket.cancel();
 	});
 
-	it("SEC-Q2 SEC-Q5 a commit fails when another login or a logout committed since it began (deletion ABA)", async () => {
+	it("a commit fails when another login or a logout committed since it began (deletion ABA)", async () => {
 		const w = world();
 		const source = w.source();
 		const internals = credentialStoreInternals(w.store);
@@ -688,7 +688,7 @@ describe("login tickets", () => {
 		await expect(source.get()).rejects.toMatchObject({ reason: "missing" });
 	});
 
-	it("SEC-Q2 SEC-M3 a ticket begun before a reset is stale, also when the file was absent and another login came between", async () => {
+	it("a ticket begun before a reset is stale, also when the file was absent and another login came between", async () => {
 		const w = world();
 		const source = w.source();
 		const ticket = await source.beginLogin();
@@ -703,7 +703,7 @@ describe("login tickets", () => {
 		expect(record(w, source.key)).toBeUndefined();
 	});
 
-	it("SEC-Q2 SEC-P2 a commit waiting for the lock writes nothing when cancelled or aborted", async () => {
+	it("a commit waiting for the lock writes nothing when cancelled or aborted", async () => {
 		const w = world();
 		const source = w.source();
 		const internals = credentialStoreInternals(w.store);
@@ -723,7 +723,7 @@ describe("login tickets", () => {
 });
 
 describe("lock-ordered lifecycle", () => {
-	it("SEC-Q5 a logout during a refresh waits: the refresh's callers get the new token, then the session is logged out", async () => {
+	it("a logout during a refresh waits: the refresh's callers get the new token, then the session is logged out", async () => {
 		const held = gate();
 		const w = world({
 			token: async () => {
@@ -743,7 +743,7 @@ describe("lock-ordered lifecycle", () => {
 		expect(w.tokenRequests()).toHaveLength(1);
 	});
 
-	it("SEC-Q5 a login during a refresh commits after it; a refresh behind a logout sends nothing", async () => {
+	it("a login during a refresh commits after it; a refresh behind a logout sends nothing", async () => {
 		const held = gate();
 		const w = world({
 			token: async () => {
@@ -774,7 +774,7 @@ describe("lock-ordered lifecycle", () => {
 		expect(w.tokenRequests()).toHaveLength(1);
 	});
 
-	it("SEC-Q5 a tombstone survives a restart", async () => {
+	it("a tombstone survives a restart", async () => {
 		const w = world();
 		await login(w.source());
 		await w.source().logout();
@@ -789,7 +789,7 @@ describe("lock-ordered lifecycle", () => {
 });
 
 describe("cancellation", () => {
-	it("SEC-P2 a refresh aborted before its mark sends nothing and leaves no mark", async () => {
+	it("a refresh aborted before its mark sends nothing and leaves no mark", async () => {
 		const w = world();
 		const source = w.source();
 		await login(source);
@@ -806,7 +806,7 @@ describe("cancellation", () => {
 		expect(record(w, source.key).refreshInProgress).toBeUndefined();
 	});
 
-	it("SEC-P4 SEC-P2 one waiter's abort detaches only that waiter; once sent, the refresh commits even if every waiter left", async () => {
+	it("one waiter's abort detaches only that waiter; once sent, the refresh commits even if every waiter left", async () => {
 		const held = gate();
 		const w = world({
 			token: async () => {
@@ -844,7 +844,7 @@ describe("cancellation", () => {
 		expect(record(all, lone.key).refreshInProgress).toBeUndefined();
 	});
 
-	it("SEC-P1 rejects a pre-aborted signal before any I/O", async () => {
+	it("rejects a pre-aborted signal before any I/O", async () => {
 		const w = world();
 		const source = w.source();
 		const aborted = { signal: AbortSignal.abort() };

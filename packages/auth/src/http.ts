@@ -98,7 +98,7 @@ export async function requestJson(
 
 /**
  * Network errors of requests that provably never reached the server: the runtime's own `fetch`
- * failed to resolve or connect on its single attempt (SEC-F5). Kept off the error object.
+ * failed to resolve or connect on its single attempt. Kept off the error object.
  */
 export const unsentRequests: WeakSet<NetworkError> = new WeakSet();
 

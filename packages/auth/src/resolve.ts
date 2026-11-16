@@ -9,8 +9,8 @@ import type {
 	TokenSource,
 } from "./types.ts";
 
-// Credential resolution (SEC-N1–N6). Only a stored login refreshes; flag, stdin and env values
-// are used as given and never stored, refreshed or revoked (N2).
+// Credential resolution. Only a stored login refreshes; flag, stdin and env values
+// are used as given and never stored, refreshed or revoked.
 
 /** Default `maxBytes` of {@link fromStdin}: far above any token, far below a stray file. */
 const STDIN_MAX_BYTES = 16 * 1024;
@@ -46,7 +46,7 @@ export function fromEnv(
 	return fromValue("env", () => env[name]);
 }
 
-/** A variable from a dotenv file you parsed; list it after {@link fromEnv} so the shell wins (SEC-N4). */
+/** A variable from a dotenv file you parsed; list it after {@link fromEnv} so the shell wins. */
 export function fromEnvFile(
 	values: Readonly<Record<string, string | undefined>>,
 	name: string,

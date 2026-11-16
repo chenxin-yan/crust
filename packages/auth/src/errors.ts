@@ -189,7 +189,7 @@ export class ResponseTooLargeError extends AuthError {
 	}
 }
 
-/** Which part of a stored credential's identity differs from the configured one (SEC-J7). */
+/** Which part of a stored credential's identity differs from the configured one. */
 export type CredentialMismatchReason = "issuer" | "client" | "profile" | "origin";
 
 /**
@@ -244,8 +244,8 @@ export class LoginInProgressError extends AuthError {
 }
 
 /**
- * A login, logout or reset committed after this login began, so its tokens were not stored
- * (SEC-Q2). Start the login again.
+ * A login, logout or reset committed after this login began, so its tokens were not stored.
+ * Start the login again.
  */
 export class StaleCommitError extends AuthError {
 	declare readonly code: "stale-commit";
@@ -271,7 +271,7 @@ export class RefreshFailedError extends AuthError {
 
 /**
  * A refresh was sent and its outcome is unknown: the server may have rotated the refresh
- * token. It is never retried automatically (SEC-F9); only a new login (or a logout) clears it.
+ * token. It is never retried automatically; only a new login (or a logout) clears it.
  */
 export class RefreshOutcomeUnknownError extends AuthError {
 	declare readonly code: "refresh-outcome-unknown";

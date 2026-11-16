@@ -356,7 +356,7 @@ const refreshed = () =>
 	});
 
 describe("secret sentinel gate: stored credentials", () => {
-	it("SEC-K1 SEC-E8 SEC-DEC-17 a refresh, a resolution and a logout leak nothing", async () => {
+	it("a refresh, a resolution and a logout leak nothing", async () => {
 		const { source } = await storedLogin(refreshed);
 		record(await source.get());
 		const resolved = await resolveCredential([fromEnv("ACME_TOKEN", {}), fromStore(source)]);
@@ -367,7 +367,7 @@ describe("secret sentinel gate: stored credentials", () => {
 	});
 
 	it.each(Object.keys(hostile))(
-		"SEC-K1 SEC-K2 a server echoing secrets through %s leaks nothing from a refresh or logout",
+		"a server echoing secrets through %s leaks nothing from a refresh or logout",
 		async (name) => {
 			const { source } = await storedLogin(hostile[name]!);
 			await source.get().then(record, record);
@@ -380,7 +380,7 @@ describe("secret sentinel gate: stored credentials", () => {
 		["stored", `${STATIC.accessToken}\nx`, STATIC.refreshedAccessToken],
 		["refreshed", STATIC.accessToken, `${STATIC.refreshedAccessToken}\nx`],
 	])(
-		"SEC-K1 SEC-J3 a %s token that is not a valid header value leaks nothing through bearerAuth",
+		"a %s token that is not a valid header value leaks nothing through bearerAuth",
 		async (_name, stored, refreshedValue) => {
 			secrets.add(stored).add(refreshedValue);
 			const { source } = await storedLogin(() =>
@@ -419,7 +419,7 @@ describe("secret sentinel gate: stored credentials", () => {
 		},
 	);
 
-	it("SEC-K1 SEC-K2 SEC-M3 a corrupt file and a lock error leak nothing", async () => {
+	it("a corrupt file and a lock error leak nothing", async () => {
 		const { w, source } = await storedLogin(refreshed);
 		let lockPath = "";
 		// A lock left by a process on another platform: never taken over, reported with its owner.

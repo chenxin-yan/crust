@@ -48,7 +48,7 @@ const docs = () =>
 	);
 
 describe("resolveCredential", () => {
-	it("SEC-N1 SEC-N6 picks the first source in order and lists the later ones that have a value", async () => {
+	it("picks the first source in order and lists the later ones that have a value", async () => {
 		const w = world();
 		const tokens = w.source();
 		await login(tokens, { expiresAt: undefined });
@@ -76,7 +76,7 @@ describe("resolveCredential", () => {
 		}
 	});
 
-	it("SEC-N1 SEC-J8 reads nothing until called, and asks for a login when no source has a value", async () => {
+	it("reads nothing until called, and asks for a login when no source has a value", async () => {
 		const w = world();
 		const internals = credentialStoreInternals(w.store);
 		const read = vi.spyOn(internals, "read");
@@ -89,7 +89,7 @@ describe("resolveCredential", () => {
 		expect(existsSync(w.dir)).toBe(false);
 	});
 
-	it("SEC-N2 never stores, refreshes or revokes an environment token", async () => {
+	it("never stores, refreshes or revokes an environment token", async () => {
 		const w = world();
 		const tokens = w.source();
 		const resolved = await resolveCredential([
@@ -103,7 +103,7 @@ describe("resolveCredential", () => {
 		expect(w.requests).toHaveLength(0);
 	});
 
-	it("SEC-N3 reads a token from piped stdin without its newline, and refuses an endless pipe at maxBytes", async () => {
+	it("reads a token from piped stdin without its newline, and refuses an endless pipe at maxBytes", async () => {
 		pipeStdin().end("SENTINEL_STDIN\r\n");
 		await expect(resolveCredential([fromStdin({ enabled: true })])).resolves.toMatchObject({
 			source: "stdin",
@@ -125,7 +125,7 @@ describe("resolveCredential", () => {
 		);
 	});
 
-	it("SEC-N3 documents env and stdin before the flag, and that a flag shows on the command line", () => {
+	it("documents env and stdin before the flag, and that a flag shows on the command line", () => {
 		const text = docs();
 		const section = text.slice(text.indexOf("## Choosing a credential"));
 		expect(section.indexOf("fromEnv")).toBeLessThan(section.indexOf("fromFlag"));
@@ -133,7 +133,7 @@ describe("resolveCredential", () => {
 		expect(section).toContain("visible to other users");
 	});
 
-	it("SEC-N1 reads an environment variable when it resolves, not when the source is built", async () => {
+	it("reads an environment variable when it resolves, not when the source is built", async () => {
 		const env: Record<string, string | undefined> = {};
 		const file: Record<string, string | undefined> = {};
 		const sources = [fromEnv("ACME_TOKEN", env), fromEnvFile(file, "ACME_TOKEN")];
@@ -147,7 +147,7 @@ describe("resolveCredential", () => {
 		});
 	});
 
-	it("SEC-N4 an exported variable wins over the same variable from an env file", async () => {
+	it("an exported variable wins over the same variable from an env file", async () => {
 		const file = { ACME_TOKEN: "FROM_FILE" };
 		await expect(
 			resolveCredential([
@@ -160,7 +160,7 @@ describe("resolveCredential", () => {
 		).resolves.toMatchObject({ source: "env-file", value: "FROM_FILE" });
 	});
 
-	it("SEC-N5 an API or issuer override from env meets the same checks as code, before any request", async () => {
+	it("an API or issuer override from env meets the same checks as code, before any request", async () => {
 		const w = world();
 		const tokens = w.source();
 		await login(tokens, { expiresAt: undefined });
@@ -194,7 +194,7 @@ describe("resolveCredential", () => {
 		expect(w.requests).toHaveLength(0);
 	});
 
-	it("SEC-N6 probes the store without waiting for its locks", async () => {
+	it("probes the store without waiting for its locks", async () => {
 		const w = world({ lockTimeout: 60_000 });
 		const tokens = w.source();
 		await login(tokens, { expiresAt: undefined });
@@ -215,7 +215,7 @@ describe("resolveCredential", () => {
 		).resolves.toMatchObject({ shadowed: [] });
 	});
 
-	it("SEC-K3 prints a resolved credential without its value", async () => {
+	it("prints a resolved credential without its value", async () => {
 		const resolved = await resolveCredential([fromFlag("SENTINEL_FLAG")]);
 		expect(JSON.stringify(resolved)).not.toContain("SENTINEL");
 		expect(inspect(resolved)).not.toContain("SENTINEL");
