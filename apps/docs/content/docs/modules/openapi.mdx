@@ -204,7 +204,7 @@ Unless `init.redirect` is `"manual"` or `"error"`, `fetch()` follows redirects i
 
 ## Authentication
 
-`bearerAuth(resolve)` builds the `auth` option for a bearer token. `resolve({ signal, baseUrl })` returns `{ value, refresh? }`, which [`resolveCredential()`](/docs/modules/auth#choosing-a-credential) from `@crustjs/auth` does: a token from the environment, or a stored login that checks `baseUrl` against the origins it was issued for.
+`bearerAuth(resolve)` builds the `auth` option for a bearer token. `resolve({ signal, baseUrl })` returns `{ value, refresh? }`, which the [`auth.token`](/docs/modules/auth#the-token-status-and-logout) of an `@crustjs/auth` client does: a token from the environment, or a stored login that checks `baseUrl` against the origins it was issued for.
 
 <include lang="ts">../../../examples/modules/auth.ts#openapi</include>
 

@@ -2,7 +2,7 @@
 title: "Auth"
 ---
 
-`@crustjs/auth` signs a CLI in with OAuth. `createAuth()` returns one client whose `login()` runs a browser login over a loopback redirect with PKCE, or a device-code login; [Add login to your CLI](/docs/guide/login) builds a `login` command with it. The pieces it is made of (discovery, the browser and device logins, the token client) are exported from `@crustjs/auth/oauth` for flows the client does not cover. It is standalone: no Crust Context, and no external OAuth library; it builds on the runtime's `fetch`, Web Crypto, and `node:http`.
+`@crustjs/auth` signs a CLI in with OAuth. `createAuth()` returns one client: `login()` runs a browser login over a loopback redirect with PKCE, or a device-code login, and stores the login in a private file; `token()` returns the token for your API, refreshed when it expires, or one from an environment variable; `status()` and `logout()` complete the set. [Add login to your CLI](/docs/guide/login) builds the commands with it. The pieces it is made of (discovery, the browser and device logins, the token client, the credentials file) are exported from `@crustjs/auth/oauth` for flows the client does not cover. It is standalone: no Crust Context, and no external OAuth library; it builds on the runtime's `fetch`, Web Crypto, and `node:http`, with [`@crustjs/store`](/docs/modules/store) for the credentials file.
 
 ## Install
 
@@ -16,17 +16,19 @@ npm install @crustjs/auth
 
 ## The client
 
-`createAuth(options)` validates the server settings with the same rules as the building blocks, does no I/O, and returns a frozen client. Its methods work detached, so you can pass `auth.login` around.
+`createAuth(options)` validates the settings with the same rules as the building blocks, does no I/O, and returns a frozen client. Its methods work detached, so you can pass `auth.token` around.
 
 <auto-type-table path="../../../../../packages/auth/src/types.ts" name="CreateAuthOptions" />
 
-- `app` is your CLI's name: non-empty, without `/` or `\`. The device-login message shows `name`, which defaults to `app`.
+- `app` is your CLI's name: non-empty, without `/` or `\`. The login is stored in `credentials.json` in its state directory, as [Storing tokens](#storing-tokens) describes. The device-login message shows `name`, which defaults to `app`.
+- `apiOrigins` are the only origins the stored login's token is sent to. Declare them in code, never from the environment.
+- `env` names a variable, such as `ACME_TOKEN`, whose non-blank value `token()` returns instead of the stored login, so CI and agents need no login. It is never stored, refreshed, or revoked.
 - `issuer`, `clientId`, `clientSecret`, `redirectPath`, and `allowInsecureLoopback` follow the rules of [Servers](#servers); `hosts` and `ports` those of [Browser login](#browser-login).
 - `resource` names the API every login asks tokens for (RFC 8707 resource indicators, absolute URIs without a fragment), for a server that issues tokens per API; both logins and the code exchange send it.
 
 ### Signing in
 
-`auth.login(options)` runs the whole sign-in and resolves to the [`TokenSet`](#token-client). It does not store the tokens yet; keep them in a private file, such as a [strict store](/docs/modules/store#strict-stores) (`strict: true`).
+`auth.login(options)` runs the whole sign-in and resolves once the login is stored.
 
 <auto-type-table path="../../../../../packages/auth/src/types.ts" name="LoginOptions" />
 
@@ -34,6 +36,7 @@ npm install @crustjs/auth
 2. It discovers the server, once per process.
 3. **Browser:** it listens on the loopback address, calls `onUrl`, waits for the browser, and exchanges the code once. The listener closes on every path.
 4. **Device code:** it starts the device login, calls `onCode`, and polls until the user approves.
+5. It stores the tokens. A login opens its place in the file before the browser or device step, so a logout (or another login) that commits while it waits is not undone: this login then fails with `StaleCommitError` and stores nothing.
 
 The client prints nothing and opens no browser by itself: it does not know your command's output stream. Show the prompts yourself, usually in two lines:
 
@@ -50,7 +53,24 @@ onCode: ({ message }) => stderr(message),
 
 `message` is the [`deviceCodeMessage()`](#device-login) text for this login: the URL and its host, the code, and the anti-phishing warning. The prompt never carries the device code.
 
-If `onUrl` or `onCode` throws or rejects, the login fails with that error and closes the listener. `signal` cancels any wait with `AbortError`, including a pending `onUrl` or `onCode`: the login rejects at once, closes the listener, and ignores the callback's later result; `page` renders the browser's result page as in [Browser login](#browser-login).
+If `onUrl` or `onCode` throws or rejects, the login fails with that error, closes the listener, and stores nothing. `signal` cancels any wait with `AbortError`, including a pending `onUrl` or `onCode`: the login rejects at once, closes the listener, and ignores the callback's later result; `page` renders the browser's result page as in [Browser login](#browser-login).
+
+### The token, status, and logout
+
+<include lang="ts">../../../examples/modules/auth.ts#token</include>
+
+- `auth.token({ signal?, baseUrl? })` returns the `env` variable's value when it is set and not blank, with `source` `"env"` and no `refresh`. Otherwise it returns the stored login's token, refreshed first when it expires within 30 seconds; with `baseUrl`, its origin must be one of `apiOrigins`, or it throws `CredentialMismatchError` before anything is sent. No login → `LoginRequiredError`.
+- `refresh()` on a stored login's token refreshes it unless another process already did, for a 401 retry.
+- `auth.status()` reads where the token would come from and the stored login's `expiresAt` and `scope`, without a request, a refresh, or waiting for a lock. A corrupt file or an unsafe directory still throws its error.
+- `auth.logout({ signal? })` deletes the login, then revokes it at the server, and reports both outcomes as in [Login and logout](#login-and-logout).
+
+<auto-type-table path="../../../../../packages/auth/src/types.ts" name="AuthToken" />
+
+<auto-type-table path="../../../../../packages/auth/src/types.ts" name="AuthStatus" />
+
+With [`@crustjs/openapi`](/docs/modules/openapi#authentication), pass `auth.token` to `bearerAuth()`. A 401 refreshes a stored login once and retries; a token from `env` is never refreshed.
+
+<include lang="ts">../../../examples/modules/auth.ts#openapi</include>
 
 ### Errors by code
 
@@ -192,6 +212,8 @@ On `"refuse"`, nobody is there to read a code, or nobody asked for one that some
 
 `credentialStore({ app, name?, lockTimeout? })` names the credentials file, and `createTokenSource({ config, identity, store, skewMs?, fetch? })` one login in it. Neither touches the disk or the network until you call a method.
 
+The client keeps its login this way too: `createAuth()` opens `credentialStore({ app })` and a token source for `{ issuer, clientId, apiOrigins }`, so everything below about the file, refreshes, and locks applies to it.
+
 <include lang="ts">../../../examples/modules/auth.ts#credentials</include>
 
 <auto-type-table path="../../../../../packages/auth/src/types.ts" name="TokenSource" />
@@ -251,7 +273,7 @@ Nothing is read until you call `resolveCredential()`. `shadowed` lists the later
 
 With [`@crustjs/openapi`](/docs/modules/openapi#authentication), pass the resolver to `bearerAuth()`:
 
-<include lang="ts">../../../examples/modules/auth.ts#openapi</include>
+<include lang="ts">../../../examples/modules/auth.ts#blocks-openapi</include>
 
 ## Errors
 
@@ -283,7 +305,7 @@ Errors carry local text, the `status`, and the allowlisted code only. A server's
 
 ## Cancellation
 
-`auth.login()`, `discover()`, `createAuthorizationSession()`, `session.wait()`, `startDeviceFlow()`, `flow.poll()`, the token client's `exchangeCode()`, `refresh()`, and `revoke()`, a token source's `get()`, `forceRefresh()`, `beginLogin()`, `ticket.commit()`, and `logout()`, `resolveCredential()`, and `resetCredentials()` take a `signal`. An aborted signal rejects with `AbortError` before any request or listener; aborting mid-way stops the request, sleep, or wait and closes the listener. Handle Ctrl-C in your command (a Crust command's `ctx.signal` already does) and pass its signal down.
+`auth.login()`, `auth.token()`, `auth.logout()`, `discover()`, `createAuthorizationSession()`, `session.wait()`, `startDeviceFlow()`, `flow.poll()`, the token client's `exchangeCode()`, `refresh()`, and `revoke()`, a token source's `get()`, `forceRefresh()`, `beginLogin()`, `ticket.commit()`, and `logout()`, `resolveCredential()`, and `resetCredentials()` take a `signal`. An aborted signal rejects with `AbortError` before any request or listener; aborting mid-way stops the request, sleep, or wait and closes the listener. Handle Ctrl-C in your command (a Crust command's `ctx.signal` already does) and pass its signal down.
 
 A change to the credentials file can be cancelled until its first write, including while it waits for a lock; from then on it completes and reports its real outcome:
 
