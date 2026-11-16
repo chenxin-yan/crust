@@ -301,7 +301,7 @@ async function recoverOrBlock(
  * link, belongs to another user, or grants group or other permissions, before any file is created
  * in it.
  */
-async function validateDirectory(path: string): Promise<void> {
+async function validateDirectory(path: string, signal: AbortSignal | undefined): Promise<void> {
 	if (process.platform === "win32") return;
 	const dir = dirname(path);
 	let stats;
@@ -309,9 +309,11 @@ async function validateDirectory(path: string): Promise<void> {
 		stats = await lstat(dir);
 	} catch (err: unknown) {
 		if (isErrnoException(err) && err.code === "ENOENT") {
+			// A cancelled call creates nothing.
+			signal?.throwIfAborted();
 			// Checked again once created: another process may have created it first, with its own mode.
 			await ensureDirectory(path, 0o700);
-			return validateDirectory(path);
+			return validateDirectory(path, signal);
 		}
 		throw new CrustStoreError(
 			"IO",
@@ -399,7 +401,7 @@ export async function withLock<T>(
 	let ownerId: string;
 	let blocker: Blocker = { path: lockPath, verdict: "unknown", owner: undefined };
 	for (let delay = 1, first = true; ; delay = Math.min(delay * 2, MAX_RETRY_DELAY_MS)) {
-		await validateDirectory(path);
+		await validateDirectory(path, signal);
 		signal?.throwIfAborted();
 		// The first attempt always runs; no later one starts past the deadline.
 		if (!first && performance.now() >= deadline) throw timeoutError(blocker);

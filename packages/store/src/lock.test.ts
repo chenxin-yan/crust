@@ -567,6 +567,17 @@ describe("withLock", () => {
 			expect(await lockError({ signal: AbortSignal.abort(reason) })).toBe(reason);
 			expect(await readdir(dir)).toEqual([]);
 		});
+
+		it("creates no missing directory when the signal is already aborted", async () => {
+			const reason = new Error("stop");
+			const fn = vi.fn(async () => {});
+
+			await expect(
+				withLock(join(dir, "new", "nested", "doc.json"), fn, { signal: AbortSignal.abort(reason) }),
+			).rejects.toBe(reason);
+			expect(fn).not.toHaveBeenCalled();
+			expect(await readdir(dir)).toEqual([]);
+		});
 	});
 
 	describe.skipIf(process.platform === "win32")("directory validation", () => {
