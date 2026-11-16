@@ -513,6 +513,59 @@ describe("lint", () => {
 		expect(lint({ spec: sibling }).map(({ code }) => code)).toEqual(["body-field-shadowed"]);
 	});
 
+	it("classifies a schema behind annotated $refs and $ref chains like its inline equivalent", () => {
+		const schemas = {
+			Objects: { type: "array", items: { type: "object" } },
+			Strings: { type: "array", items: { type: "string" } },
+			Alias: { $ref: "#/components/schemas/Object", description: "Inner" },
+			Object: { type: "object" },
+			StringsAlias: { $ref: "#/components/schemas/Strings", description: "Inner" },
+		};
+		const param = (schema: unknown) =>
+			lint({
+				spec: spec(
+					{
+						"/a": {
+							get: op("a", { parameters: [{ name: "q", in: "query", required: true, schema }] }),
+						},
+					},
+					{ schemas },
+				),
+			}).map(({ level, code }) => `${level} ${code}`);
+		const ref = (name: string) => ({ $ref: `#/components/schemas/${name}`, description: "Outer" });
+		const unsupported = ["error unsupported-param-style"];
+		expect(param(schemas.Objects)).toEqual(unsupported);
+		expect(param(ref("Objects"))).toEqual(unsupported);
+		expect(param(schemas.Object)).toEqual(unsupported);
+		expect(param(ref("Alias"))).toEqual(unsupported);
+		expect(param(schemas.Strings)).toEqual([]);
+		expect(param(ref("Strings"))).toEqual([]);
+		expect(param(ref("StringsAlias"))).toEqual([]);
+
+		const field = (names: unknown) =>
+			lint({
+				spec: spec(
+					{
+						"/a": {
+							post: op("a", {
+								parameters: [{ name: "names", in: "query", schema: { type: "string" } }],
+								requestBody: json(object({ names })),
+							}),
+						},
+					},
+					{ schemas },
+				),
+			}).map(({ level, code }) => `${level} ${code}`);
+		expect(field(schemas.Strings)).toEqual(["warning body-field-shadowed"]);
+		expect(field(ref("Strings"))).toEqual(["warning body-field-shadowed"]);
+		expect(field(ref("StringsAlias"))).toEqual(["warning body-field-shadowed"]);
+
+		// A cycle through `allOf` ends at the search's depth bound, as an untyped (string) parameter.
+		const cyclic = { Loop: { allOf: [{ $ref: "#/components/schemas/Loop", description: "x" }] } };
+		Object.assign(schemas, cyclic);
+		expect(param(ref("Loop"))).toEqual([]);
+	});
+
 	it("offers a body field named __proto__ an input like any other", () => {
 		const proto = JSON.parse(`{ "openapi": "3.1.0", "paths": { "/p": { "post": {
 			"operationId": "p", "summary": "p", "responses": { "200": { "description": "ok" } },

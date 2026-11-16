@@ -166,35 +166,39 @@ export function schemaFields(spec: OpenApiSpec, schema: unknown): SchemaField[] 
 /**
  * Whether a schema's values fit a typed flag: a scalar (a scalar type, or an enum of scalars), an
  * array of scalars, or neither. `untyped` is the kind of a schema with no `type` and no `enum`
- * (also `true`); `false` accepts no value, so it is neither. Only one item level is read, so a
- * recursive array schema ends.
+ * (also `true`); `false` accepts no value, so it is neither. `type`, `enum` and `items` are read
+ * from one {@link typedView}, and only one item level is read, so a recursive array schema ends.
  */
 export function valueKind(
 	spec: OpenApiSpec,
 	value: unknown,
 	untyped: "scalar" | "other",
 ): "scalar" | "array" | "other" {
-	const kind = shapeOf(spec, value, untyped);
+	const view = typedView(spec, value, 0);
+	const kind = view === undefined ? untyped : typeShape(view)!;
 	if (kind !== "array") return kind;
-	const items = publishedSchema(spec, (value as Readonly<Record<string, unknown>>).items);
-	return shapeOf(spec, items, untyped) === "scalar" ? "array" : "other";
+	const items = typedView(spec, publishedSchema(spec, record(view)?.items), 0);
+	return (items === undefined ? untyped : typeShape(items)) === "scalar" ? "array" : "other";
 }
 
+/** How many nested `allOf` levels {@link typedView} searches, so a cycle or a deep chain ends. */
+const TYPED_VIEW_DEPTH = 8;
+
 /**
- * {@link valueKind} for the schema itself, without reading its `items`. A schema without `type` or
- * `enum` takes the kind of its first `allOf` member that has one, as a `$ref` with sibling keywords
- * becomes; only that one level is read.
+ * The node that classifies a schema: the schema itself when it has a `type` or an `enum` (or is
+ * `false`), else the first such node among its `allOf` members, each resolved like a published
+ * schema and searched in order through nested `allOf`s, as a `$ref` with sibling keywords and a
+ * chain of them wrap their target; `undefined` when there is none within {@link TYPED_VIEW_DEPTH}.
  */
-function shapeOf(
-	spec: OpenApiSpec,
-	value: unknown,
-	untyped: "scalar" | "other",
-): "scalar" | "array" | "other" {
-	const own = typeShape(value);
-	if (own !== undefined || record(value) === undefined) return own ?? untyped;
-	const { allOf } = value as Readonly<Record<string, unknown>>;
-	const members = Array.isArray(allOf) ? allOf : [];
-	return members.map((member) => typeShape(publishedSchema(spec, member))).find(Boolean) ?? untyped;
+function typedView(spec: OpenApiSpec, value: unknown, depth: number): unknown {
+	if (typeShape(value) !== undefined) return value;
+	const allOf = record(value)?.allOf;
+	if (depth >= TYPED_VIEW_DEPTH || !Array.isArray(allOf)) return undefined;
+	for (const member of allOf) {
+		const view = typedView(spec, publishedSchema(spec, member), depth + 1);
+		if (view !== undefined) return view;
+	}
+	return undefined;
 }
 
 const SCALAR_TYPES: readonly unknown[] = ["string", "number", "integer", "boolean"];
