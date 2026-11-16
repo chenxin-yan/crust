@@ -158,6 +158,46 @@ function _typecheckJsonFlagSchemaInputAcceptsJsonData() {
 	type _message = Expect<Equal<Message, "schema input must accept JSON data">>;
 }
 
+// a recursive input type accepts JSON when its finite values do
+function _typecheckJsonFlagRecursiveSchemaInput() {
+	interface Link {
+		value: string;
+		next: Link | null;
+	}
+	const link: z.ZodType<Link, Link> = z.object({
+		value: z.string(),
+		next: z.lazy(() => link).nullable(),
+	});
+	interface Even {
+		odd: Odd | null;
+	}
+	interface Odd {
+		even: Even;
+	}
+	const even: z.ZodType<Even, Even> = z.object({ odd: z.lazy(() => odd).nullable() });
+	const odd: z.ZodType<Odd, Odd> = z.object({ even: z.lazy(() => even) });
+	interface Tree {
+		children: Tree[];
+	}
+	const tree: z.ZodType<Tree, Tree> = z.object({ children: z.array(z.lazy(() => tree)) });
+
+	new Crust("cli").flags({
+		link: { type: "json", schema: link },
+		even: { type: "json", schema: even },
+		odd: { type: "json", schema: odd },
+		tree: { type: "json", schema: tree },
+	});
+
+	interface Loop {
+		next: Loop;
+	}
+	const loop: z.ZodType<Loop, Loop> = z.object({ next: z.lazy(() => loop) });
+	new Crust("cli").flags({
+		// @ts-expect-error -- every Loop holds another, so no finite value exists
+		loop: { type: "json", schema: loop },
+	});
+}
+
 // a helper generic over the whole schema leaves the input unknown to the check and cannot
 // compile; one that names the input and stays generic over the output does
 function _typecheckAHelperNamesTheSchemaInput() {
