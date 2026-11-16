@@ -131,6 +131,7 @@ Standard Schema definitions:
 
 - Their input JSON Schema comes from the schema's converter (Zod 4.2+, ArkType 2.1.28+, Valibot through `toStandardJsonSchema()`); see [`standardJsonSchema()`](#json-schema-from-a-standard-schema).
 - Schema-backed values reach `run()` as their token: a string, or a boolean for `type: "boolean"` flags. So the JSON Schema is used, without `$schema`, only when its top-level `type` is that token type (or `array` of it, without `prefixItems`, for `variadic` and `multiple`) and it has no `$ref`, `$defs`, or other `$` keyword.
+- A `type: "json"` flag's value reaches `run()` as the JSON value itself, so its JSON Schema is used whatever its `type`, as long as it has no `$` keyword; otherwise the flag is advertised as `{}`. A recursive schema whose converter emits `$defs` therefore loses its shape.
 - `z.enum([...])`, `z.string().min(3)`, and `z.url()` keep their `enum`, `minLength`, and `format`. `z.coerce.number()` (JSON Schema `number`) falls back to `{ type: "string" }`, since a JSON number would fail the string binding.
 - The definition's `description` fills in when the JSON Schema has none.
 - Schema-owned requiredness is invisible: schema-backed definitions are advertised as optional. A custom `parse` definition keeps its declared `required`.

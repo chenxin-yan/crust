@@ -276,3 +276,5 @@ inspect as json
 ## Validation
 
 Built-in types cover common values, such as the `number` flag above. For custom parsers and Standard Schemas, see [Values and validation](/docs/guide/values-and-validation).
+
+A `json` flag with a schema takes a structured value. `body: { type: "json", schema: User }` parses `--body '{"name":"ada"}'` as JSON and validates the result with `User`. The schema's JSON Schema becomes the flag's shape for `--input`, the `schema` command, and MCP tools, so an agent sends an object. See [what the schema receives](/docs/guide/values-and-validation#what-the-schema-receives).

@@ -121,6 +121,24 @@ describe("schema", () => {
 		expect(Object.keys(JSON.parse(stdout).input.properties)).toEqual(["raw"]);
 	});
 
+	it("prints a json flag's schema input JSON Schema as its property", async () => {
+		const body = {
+			"~standard": {
+				version: 1,
+				vendor: "test",
+				validate: (value: unknown) => ({ value }),
+				jsonSchema: { input: () => deployResult, output: () => deployResult },
+			},
+		} as const;
+		const app = new Crust("mycli")
+			.extend(schema())
+			.flags({ body: { type: "json", schema: body } })
+			.action(() => {});
+		const { stdout } = await captureExecute(app, ["schema"]);
+
+		expect(JSON.parse(stdout).input.properties.body).toEqual(deployResult);
+	});
+
 	it("returns the schema as the run() result", async () => {
 		const outcome = await buildCli().run(["schema"], { args: { path: ["remote", "add"] } });
 

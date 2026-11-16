@@ -132,6 +132,30 @@ describe("createMcpServer", () => {
 		expect(result.content).toEqual([{ type: "text", text: JSON.stringify(expected, null, 2) }]);
 	});
 
+	it("lists a json flag's schema shape and passes an object body to the schema", async () => {
+		const user = {
+			type: "object",
+			properties: { name: { type: "string" } },
+			required: ["name"],
+		};
+		const app = new Crust("app").add(
+			defineCommand("create", (c) =>
+				c
+					.flags({ body: { type: "json", schema: jsonSchemaOutput(user) } })
+					.action(({ flags }) => ({ body: flags.body })),
+			),
+		);
+		const client = await connect(app);
+		const [tool] = (await client.listTools()).tools;
+		expect(tool?.inputSchema.properties?.body).toEqual(user);
+		const result = await client.callTool({
+			name: "create",
+			arguments: { body: { name: "a", tags: ["x"] } },
+		});
+		expect(result.isError).toBeUndefined();
+		expect(result.structuredContent).toEqual({ body: { name: "a", tags: ["x"] } });
+	});
+
 	it("accepts -0 input, which JSON.parse can produce", async () => {
 		const client = await connect(fixture);
 		const result = await client.callTool({

@@ -1,3 +1,4 @@
+import type { JsonValue } from "@crustjs/utils/json";
 import type { StandardSchema } from "@crustjs/utils/schema";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
@@ -56,6 +57,15 @@ type _strictBoolean = Expect<
 type Toggle = { type: "boolean"; schema: StandardSchema<unknown, number> };
 type _scalar = Expect<
 	Equal<InferExtensionFlags<{ toggle: Toggle }>["toggle"], boolean | undefined>
+>;
+// A json flag's token is parsed before hooks run; its schema has not.
+type _json = Expect<
+	Equal<
+		InferExtensionFlags<{
+			body: { type: "json"; schema: StandardSchema<unknown, number> };
+		}>["body"],
+		JsonValue | undefined
+	>
 >;
 type _multiple = Expect<
 	Equal<

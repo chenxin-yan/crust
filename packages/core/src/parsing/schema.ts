@@ -29,8 +29,8 @@ async function runSchema(
  *
  * Runs after syntax parsing and structural validation: each schema receives
  * the raw parsed value (`string | undefined` for args, the raw token value
- * for flags, arrays for variadic/multiple) and exclusively owns coercion,
- * defaults, requiredness, and validation. Returns transformed copies of
+ * for flags, parsed JSON for `json` flags, arrays for variadic/multiple) and
+ * exclusively owns coercion, defaults, requiredness, and validation. Returns transformed copies of
  * `args`/`flags`; definitions without a schema pass through unchanged.
  *
  * @throws {CrustError} `VALIDATION` aggregating every schema issue

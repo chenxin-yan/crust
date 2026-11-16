@@ -103,6 +103,113 @@ function _typecheckSchemaInputAcceptsTheParserValue() {
 	>;
 }
 
+// a json flag hands its schema the parsed JSON value: its input must accept JSON data, and
+// run() input takes the schema input while the action sees the schema output
+function _typecheckJsonFlagSchemaInputAcceptsJsonData() {
+	const user = z.object({
+		name: z.string(),
+		role: z.enum(["admin", "member"]).optional(),
+		meta: z.object({ tags: z.array(z.string()), extra: z.unknown() }).optional(),
+	});
+	const app = new Crust("cli")
+		.flags({
+			body: { type: "json", schema: user },
+			any: { type: "json", schema: z.unknown() },
+			list: { type: "json", schema: z.array(z.number()), env: { name: "LIST" } },
+			either: { type: "json", schema: z.union([z.string(), z.date()]) },
+			record: { type: "json", schema: z.record(z.string(), z.unknown()) },
+			rest: { type: "json", schema: z.tuple([z.string()], z.date()) },
+		})
+		.action((_ctx) => {
+			type _flagOutput = Expect<Equal<(typeof _ctx.flags)["body"], z.output<typeof user>>>;
+		});
+	void app.run([], { flags: { body: { name: "a", role: "admin" }, list: [1, 2] } });
+	// @ts-expect-error -- run() takes the schema input
+	void app.run([], { flags: { body: { role: "owner" } } });
+
+	new Crust("cli").flags({
+		// @ts-expect-error -- a Date is not JSON data
+		when: { type: "json", schema: z.date() },
+	});
+	new Crust("cli").flags({
+		// @ts-expect-error -- a bigint is not JSON data
+		big: { type: "json", schema: z.bigint() },
+	});
+	new Crust("cli").flags({
+		// @ts-expect-error -- a required Date property accepts no JSON object
+		body: { type: "json", schema: z.object({ at: z.date() }) },
+	});
+	const key: unique symbol = Symbol("key");
+	new Crust("cli").flags({
+		// @ts-expect-error -- JSON has no symbol keys, so no JSON object has this required one
+		keyed: { type: "json", schema: {} as StandardSchema<{ [key]: string }> },
+	});
+	new Crust("cli").flags({
+		// @ts-expect-error -- every tuple, whatever its rest, starts with a Date
+		rest: { type: "json", schema: z.tuple([z.date()], z.string()) },
+	});
+	new Crust("cli").flags({
+		// @ts-expect-error -- a string flag hands its schema a string, never an object
+		body: { type: "string", schema: user },
+	});
+	new Crust("cli").flags({
+		// @ts-expect-error -- a json schema flag takes one occurrence
+		bodies: { type: "json", multiple: true, schema: z.array(user) },
+	});
+	// @ts-expect-error -- reusable definitions are checked too
+	defineFlag({ type: "json", schema: z.date() });
+
+	type Message = LocalValueBrand<{ type: "json"; schema: z.ZodDate }>["FIX_SCHEMA_INPUT"];
+	type _message = Expect<Equal<Message, "schema input must accept JSON data">>;
+}
+
+// a recursive input type accepts JSON when its finite values do
+function _typecheckJsonFlagRecursiveSchemaInput() {
+	interface Link {
+		value: string;
+		next: Link | null;
+	}
+	const link: z.ZodType<Link, Link> = z.object({
+		value: z.string(),
+		next: z.lazy(() => link).nullable(),
+	});
+	interface Even {
+		odd: Odd | null;
+	}
+	interface Odd {
+		even: Even;
+	}
+	const even: z.ZodType<Even, Even> = z.object({ odd: z.lazy(() => odd).nullable() });
+	const odd: z.ZodType<Odd, Odd> = z.object({ even: z.lazy(() => even) });
+	interface Tree {
+		children: Tree[];
+	}
+	const tree: z.ZodType<Tree, Tree> = z.object({ children: z.array(z.lazy(() => tree)) });
+
+	new Crust("cli").flags({
+		link: { type: "json", schema: link },
+		even: { type: "json", schema: even },
+		odd: { type: "json", schema: odd },
+		tree: { type: "json", schema: tree },
+	});
+
+	interface Loop {
+		next: Loop;
+	}
+	const loop: z.ZodType<Loop, Loop> = z.object({ next: z.lazy(() => loop) });
+	new Crust("cli").flags({
+		// @ts-expect-error -- every Loop holds another, so no finite value exists
+		loop: { type: "json", schema: loop },
+	});
+
+	// Each level is a new type, so the check gives up at its depth bound and leaves it to runtime.
+	interface Nest<T> {
+		value: T;
+		next: Nest<T[]> | null;
+	}
+	defineFlag({ type: "json", schema: {} as StandardSchema<Nest<string>, Nest<string>> });
+}
+
 // a helper generic over the whole schema leaves the input unknown to the check and cannot
 // compile; one that names the input and stays generic over the output does
 function _typecheckAHelperNamesTheSchemaInput() {
