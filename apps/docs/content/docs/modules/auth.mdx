@@ -26,10 +26,10 @@ npm install @crustjs/auth
 
 <auto-type-table path="../../../../../packages/auth/src/types.ts" name="AuthServerOptions" />
 
-- An issuer is an `https` URL with no query, fragment, or user info. Each issuer, and each `redirectPath`, may appear once in `servers`.
+- An issuer is an `https` URL with no query, fragment, or user info. Each issuer, and each `redirectPath`, may appear once in `servers`. A `redirectPath` is plain ASCII that a browser sends unchanged: no `%`, query, fragment, dot or empty segments, spaces, or characters such as `<` or `é`.
 - `clientId` on `discover()` replaces the declared client id; two client ids at one issuer are the same server.
 - Discovery reads `/.well-known/oauth-authorization-server` (inserted before the issuer's path, as RFC 8414 says) and, only on a 404, `<issuer>/.well-known/openid-configuration`. The document's `issuer` must equal yours exactly, trailing slash included.
-- Every endpoint must be an `https` URL without user info or a fragment. A query is kept as given, but it must not set a parameter the library sends (`client_id`, `scope`, `redirect_uri`, …) or repeat a name. An endpoint on another host than the issuer is fine.
+- Every endpoint must be an `https` URL without user info or a fragment. A query is kept byte for byte, but it must not set a parameter the library sends (`client_id`, `scope`, `redirect_uri`, …) or repeat a name. An endpoint on another host than the issuer is fine.
 - A server that lists `code_challenge_methods_supported` without `S256` is refused.
 - Metadata is cached in memory for the process, never on disk.
 
@@ -79,7 +79,7 @@ The issuer must then be `http://127.0.0.1:<port>` or `http://[::1]:<port>`, neve
 - It serves only `GET` on the exact redirect path, compared byte for byte before any decoding, with a `Host` header of exactly `127.0.0.1:<port>` (or `[::1]:<port>`). Anything else gets a 404 or 421.
 - A request whose `state` is wrong or missing, or that repeats `code`, `state`, `error`, or `iss`, gets a 400 and the session keeps waiting: a stray or forged request cannot end the login.
 - The `iss` check runs before `error` or `code` is used. An `error` response rejects with an `OAuthError` and is never exchanged.
-- It rejects with `TimeoutError` after `timeoutMs` (5 minutes) and with `AbortError` on `signal` or `session.close()`. The listener and every open connection close on every outcome; a connection idle for 10 seconds is dropped.
+- It rejects with `TimeoutError` after `timeoutMs` (5 minutes) and with `AbortError` on `signal` or `session.close()`, also while `onCallback` is still running (its late result is ignored). The listener and every open connection close on every outcome; a connection idle for 10 seconds is dropped.
 - `page` renders the result page from `{ outcome, errorCode? }` only, never server text or the code. The library sets `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, and `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'` on every page. If `page` throws, the default page is served.
 
 Call `session.close()` in a `finally`, as above, so an early error never leaves the port open.
@@ -97,14 +97,15 @@ Call `session.close()` in a `finally`, as above, so an early error never leaves 
 
 `detectLoginMode({ device?, noBrowser?, env?, platform?, stdin?, stdout?, stderr? })` returns `"browser"`, `"device"`, or `"refuse"`. The first matching row wins:
 
-| Condition                                                                                  | Mode        |
-| ------------------------------------------------------------------------------------------ | ----------- |
-| `device` or `noBrowser` (the user passed `--device` or `--no-browser`)                     | `"device"`  |
-| `CI` is set (`isCI()` from `@crustjs/utils/terminal`)                                      | `"refuse"`  |
-| stdin is not a TTY, or neither stdout nor stderr is; an SSH session; Linux with no display | `"device"`  |
-| Otherwise                                                                                  | `"browser"` |
+| Condition                                                                          | Mode        |
+| ---------------------------------------------------------------------------------- | ----------- |
+| `device` or `noBrowser` (the user passed `--device` or `--no-browser`), even on CI | `"device"`  |
+| `CI` is set (`isCI()` from `@crustjs/utils/terminal`)                              | `"refuse"`  |
+| No terminal: stdin is not a TTY, or neither stdout nor stderr is                   | `"refuse"`  |
+| A terminal, but an SSH session or Linux with no display                            | `"device"`  |
+| Otherwise                                                                          | `"browser"` |
 
-On `"refuse"`, throw `LoginRequiresInteractionError`: nobody asked for a code that someone else might approve. It does not check that the server offers a device login; `startDeviceFlow()` does.
+On `"refuse"`, nobody is there to read a code, or nobody asked for one that someone else might approve. Throw `LoginRequiresInteractionError` with a message naming your device-login flag and your token environment variable, as the [login guide](/docs/guide/login) does. With `"device"`, show `deviceCodeMessage()` on the terminal the user is at. It does not check that the server offers a device login; `startDeviceFlow()` does.
 
 ## Opening the browser
 
@@ -140,6 +141,7 @@ Every error extends `AuthError` and has a stable `code`. Match on `code` or the 
 | `TimeoutError`                  | `timeout`                    | A request or the browser wait ran out of time                                                                                                      |
 | `AbortError`                    | `abort`                      | Your `signal` was aborted                                                                                                                          |
 | `ResponseTooLargeError`         | `response-too-large`         | A response body was over 1 MiB                                                                                                                     |
+| `NetworkError`                  | `network`                    | The request could not be sent or its response not read (DNS, connection, TLS, a broken stream); the underlying error is dropped                    |
 | `LoginRequiresInteractionError` | `login-requires-interaction` | Thrown by your code when `detectLoginMode()` returns `"refuse"`                                                                                    |
 
 Errors carry local text, the `status`, and the allowlisted code only. A server's `error_description` and `error_uri`, response bodies, and URLs never appear in a message, property, or `cause`, since a hostile server could echo a secret into them.

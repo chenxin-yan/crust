@@ -17,7 +17,7 @@ Register your CLI with your authorization server as a **public client**, with re
 
 What it does:
 
-1. `detectLoginMode()` picks the login: `--device` or `--no-browser` always mean a device code; on CI, without an explicit flag, it refuses; with no TTY, over SSH, or on Linux without a display it uses a device code; otherwise the browser. See [Choosing a login](/docs/modules/auth#choosing-a-login).
+1. `detectLoginMode()` picks the login: `--device` or `--no-browser` always mean a device code; on CI or with no terminal, without one of those flags, it refuses, and the error says how to proceed; at a terminal over SSH or on Linux without a display it uses a device code; otherwise the browser. See [Choosing a login](/docs/modules/auth#choosing-a-login).
 2. `discover()` reads the server's metadata once per process.
 3. **Device code:** `startDeviceFlow()` returns the code to show. `deviceCodeMessage()` prints it with the URL and an anti-phishing line, and `flow.poll()` waits for approval at the pace the server asks for.
 4. **Browser:** `createAuthorizationSession()` listens on `127.0.0.1` and returns the URL to open. The command prints it, offers to open it with a [`confirm()`](/docs/modules/prompts) prompt, and `session.wait()` exchanges the code when the browser comes back. `session.close()` in `finally` frees the port on every path.

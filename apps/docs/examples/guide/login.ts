@@ -36,7 +36,11 @@ export const login = defineCommand("login", { description: "Sign in to Acme" }, 
 		})
 		.action(async ({ flags, signal, stderr }) => {
 			const mode = detectLoginMode({ device: flags.device, noBrowser: !flags.browser });
-			if (mode === "refuse") throw new LoginRequiresInteractionError();
+			if (mode === "refuse") {
+				throw new LoginRequiresInteractionError(
+					"acme login needs a terminal. Pass --device to sign in with a code, or set ACME_TOKEN.",
+				);
+			}
 			const server = await discover(auth, ISSUER, { signal });
 			const client = createTokenClient(server);
 			let tokens: TokenSet;
