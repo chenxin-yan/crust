@@ -2,7 +2,7 @@
 title: "Auth"
 ---
 
-`@crustjs/auth` signs a CLI in with OAuth. `defineAuth()` returns one client whose `login()` runs a browser login over a loopback redirect with PKCE, or a device-code login; [Add login to your CLI](/docs/guide/login) builds a `login` command with it. The pieces it is made of (discovery, the browser and device logins, the token client) are exported from `@crustjs/auth/oauth` for flows the client does not cover. It is standalone: no Crust Context, and no external OAuth library; it builds on the runtime's `fetch`, Web Crypto, and `node:http`.
+`@crustjs/auth` signs a CLI in with OAuth. `createAuth()` returns one client whose `login()` runs a browser login over a loopback redirect with PKCE, or a device-code login; [Add login to your CLI](/docs/guide/login) builds a `login` command with it. The pieces it is made of (discovery, the browser and device logins, the token client) are exported from `@crustjs/auth/oauth` for flows the client does not cover. It is standalone: no Crust Context, and no external OAuth library; it builds on the runtime's `fetch`, Web Crypto, and `node:http`.
 
 ## Install
 
@@ -16,9 +16,9 @@ npm install @crustjs/auth
 
 ## The client
 
-`defineAuth(options)` validates the server settings with the same rules as the building blocks, does no I/O, and returns a frozen client. Its methods work detached, so you can pass `auth.login` around.
+`createAuth(options)` validates the server settings with the same rules as the building blocks, does no I/O, and returns a frozen client. Its methods work detached, so you can pass `auth.login` around.
 
-<auto-type-table path="../../../../../packages/auth/src/types.ts" name="DefineAuthOptions" />
+<auto-type-table path="../../../../../packages/auth/src/types.ts" name="CreateAuthOptions" />
 
 - `app` is your CLI's name: non-empty, without `/` or `\`. The device-login message shows `name`, which defaults to `app`.
 - `issuer`, `clientId`, `clientSecret`, `redirectPath`, and `allowInsecureLoopback` follow the rules of [Servers](#servers); `hosts` and `ports` those of [Browser login](#browser-login).

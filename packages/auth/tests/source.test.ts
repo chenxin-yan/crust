@@ -86,16 +86,16 @@ describe("entry points", () => {
 			"AuthErrorCode",
 			"BrowserLoginPrompt",
 			"CallbackPageView",
-			"DefineAuthOptions",
+			"CreateAuthOptions",
 			"DeviceLoginPrompt",
 			"LoginOptions",
 			"TokenSet",
-			"defineAuth",
+			"createAuth",
 		]);
 		expect(index).not.toMatch(/export \*/);
 		expect(Object.keys(await import("../src/index.ts")).sort()).toEqual([
 			"AuthError",
-			"defineAuth",
+			"createAuth",
 		]);
 	});
 });

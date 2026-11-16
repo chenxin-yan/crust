@@ -18,7 +18,7 @@ import {
 	uniqueIssuer,
 	wellKnown,
 } from "../tests/helpers.ts";
-import { defineAuth } from "./client.ts";
+import { createAuth } from "./client.ts";
 import { deviceCodeMessage } from "./display.ts";
 import { AbortError, LoginRequiresInteractionError, OAuthConfigError } from "./errors.ts";
 import type { BrowserLoginPrompt, DeviceLoginPrompt, LoginOptions } from "./types.ts";
@@ -71,7 +71,7 @@ function setup(
 		[`${issuer}/device`]: () => json(DEVICE),
 		...routes(issuer),
 	});
-	const auth = defineAuth({
+	const auth = createAuth({
 		app: "acme",
 		issuer,
 		clientId: "cli",
@@ -124,15 +124,15 @@ async function rejection(promise: Promise<unknown>): Promise<unknown> {
 	);
 }
 
-describe("defineAuth", () => {
+describe("createAuth", () => {
 	it("validates its options with the building blocks' rules and does no I/O", async () => {
 		const fetch = vi.fn();
 		const base = { app: "acme", issuer: "https://as.example", clientId: "cli", fetch };
-		const auth = defineAuth(base);
+		const auth = createAuth(base);
 		expect(Object.isFrozen(auth)).toBe(true);
 		expect(fetch).not.toHaveBeenCalled();
 		const reason = (options: object) =>
-			configReason(Promise.resolve().then(() => defineAuth({ ...base, ...options })));
+			configReason(Promise.resolve().then(() => createAuth({ ...base, ...options })));
 		expect(await reason({ app: "" })).toBe("invalid-option");
 		expect(await reason({ app: "  " })).toBe("invalid-option");
 		expect(await reason({ app: "a/b" })).toBe("invalid-option");
@@ -146,7 +146,7 @@ describe("defineAuth", () => {
 		expect(await reason({ ports: [70_000] })).toBe("invalid-option");
 		expect(await reason({ hosts: ["localhost"] })).toBe("invalid-option");
 		expect(() =>
-			defineAuth({ ...base, issuer: "http://127.0.0.1:9000", allowInsecureLoopback: true }),
+			createAuth({ ...base, issuer: "http://127.0.0.1:9000", allowInsecureLoopback: true }),
 		).not.toThrow();
 	});
 });
@@ -374,7 +374,7 @@ it("an OAuthConfigError from a building block reaches the caller", async () => {
 	const fake = fakeFetch({
 		[wellKnown(issuer)]: () => json(metadataFor(issuer, { authorization_endpoint: undefined })),
 	});
-	const auth = defineAuth({ app: "acme", issuer, clientId: "cli", fetch: fake.fetch });
+	const auth = createAuth({ app: "acme", issuer, clientId: "cli", fetch: fake.fetch });
 	const error = await rejection(auth.login({ onUrl: noUrl, onCode: noCode }));
 	expect(error).toBeInstanceOf(OAuthConfigError);
 	expect((error as OAuthConfigError).reason).toBe("unsupported");

@@ -8,7 +8,7 @@ import { inspect } from "node:util";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { defineAuth } from "../src/client.ts";
+import { createAuth } from "../src/client.ts";
 import { defineServers } from "../src/config.ts";
 import { startDeviceFlow } from "../src/device.ts";
 import { discover } from "../src/discovery.ts";
@@ -206,11 +206,11 @@ async function deviceLogin(token: () => Response) {
 	vi.useRealTimers();
 }
 
-/** The same logins through `defineAuth()`; what its callbacks receive is a sink too. */
+/** The same logins through `createAuth()`; what its callbacks receive is a sink too. */
 async function clientLogins(token: () => Response) {
 	terminal({ tty: true });
 	const w = world(token);
-	const auth = defineAuth({
+	const auth = createAuth({
 		app: "acme",
 		issuer: w.issuer,
 		clientId: "cli",

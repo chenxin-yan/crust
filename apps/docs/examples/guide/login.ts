@@ -1,7 +1,7 @@
-import { defineAuth } from "@crustjs/auth";
+import { createAuth } from "@crustjs/auth";
 import { defineCommand } from "@crustjs/core";
 
-export const auth = defineAuth({
+export const auth = createAuth({
 	app: "acme",
 	issuer: "https://login.acme.example",
 	clientId: "acme-cli",

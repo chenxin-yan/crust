@@ -1,4 +1,4 @@
-import { AuthError, defineAuth } from "@crustjs/auth";
+import { AuthError, createAuth } from "@crustjs/auth";
 import {
 	createAuthorizationSession,
 	createTokenClient,
@@ -10,7 +10,7 @@ import {
 } from "@crustjs/auth/oauth";
 
 //#region client
-const auth = defineAuth({
+const auth = createAuth({
 	app: "acme",
 	issuer: "https://login.acme.example",
 	clientId: "acme-cli",

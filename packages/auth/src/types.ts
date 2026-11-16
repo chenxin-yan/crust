@@ -223,8 +223,8 @@ export interface LoginModeOptions {
 /** Which login to run: a loopback browser login, a device-code login, or none. */
 export type LoginMode = "browser" | "device" | "refuse";
 
-/** Options of `defineAuth()`: the one authorization server your CLI signs in with. */
-export interface DefineAuthOptions extends AuthServerOptions {
+/** Options of `createAuth()`: the one authorization server your CLI signs in with. */
+export interface CreateAuthOptions extends AuthServerOptions {
 	/** Your CLI's name, such as `acme`: a non-empty name without path separators. */
 	app: string;
 	/** Space-separated scopes every login asks for. Omitted from the request when unset. */
@@ -274,7 +274,7 @@ export interface LoginOptions {
 	page?: (view: CallbackPageView) => string;
 }
 
-/** The client `defineAuth()` returns. Its methods work detached from it. */
+/** The client `createAuth()` returns. Its methods work detached from it. */
 export interface AuthClient {
 	/**
 	 * Signs in: a browser login on a desktop, a device login elsewhere or with `device`, and

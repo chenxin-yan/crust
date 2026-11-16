@@ -8,7 +8,7 @@ import { detectLoginMode } from "./login-mode.ts";
 import { checkScope } from "./params.ts";
 import { checkLoopbackOptions, createAuthorizationSession } from "./session.ts";
 import { createTokenClient } from "./token-client.ts";
-import type { AuthClient, DefineAuthOptions, LoginOptions, TokenSet } from "./types.ts";
+import type { AuthClient, CreateAuthOptions, LoginOptions, TokenSet } from "./types.ts";
 
 function checkName(value: unknown, field: "app" | "name"): string {
 	// `app` names a directory later, so it follows the store's rule for an app name.
@@ -31,7 +31,7 @@ function checkName(value: unknown, field: "app" | "name"): string {
  * Validates the server your CLI signs in with and returns a frozen client. Does no I/O:
  * the server is discovered on the first login.
  */
-export function defineAuth(options: DefineAuthOptions): AuthClient {
+export function createAuth(options: CreateAuthOptions): AuthClient {
 	const app = checkName(options?.app, "app");
 	const name = checkName(options.name ?? app, "name");
 	const { issuer, scope, hosts, ports, fetch } = options;
