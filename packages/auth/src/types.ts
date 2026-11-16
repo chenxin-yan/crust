@@ -14,7 +14,8 @@ export interface AuthServerOptions {
 	 */
 	clientSecret?: string;
 	/**
-	 * Loopback callback path registered with this server only, such as `/acme/callback`.
+	 * Loopback callback path registered with this server only, such as `/acme/callback`: plain
+	 * ASCII a browser sends unchanged (no `%`, query, fragment, dot or empty segments).
 	 * Unique among `servers`; with several servers it protects a server that sends no `iss`.
 	 * Defaults to `/callback`.
 	 */

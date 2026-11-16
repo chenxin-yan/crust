@@ -16,7 +16,9 @@ function option(message: string): OAuthConfigError {
 
 /**
  * An absolute path with no query, fragment, percent-encoding, dot segments, empty segments
- * or backslashes (SEC-C1). It is compared byte for byte with the raw request target (SEC-C6).
+ * or backslashes (SEC-C1). It is compared byte for byte with the raw request target (SEC-C6),
+ * so it must also be what a browser sends: a path URL serialization leaves unchanged
+ * (no non-ASCII or characters a browser percent-encodes).
  */
 export function checkRedirectPath(path: unknown): string {
 	if (
@@ -28,10 +30,11 @@ export function checkRedirectPath(path: unknown): string {
 			.some(
 				(segment, index) => index > 0 && (segment === "" || segment === "." || segment === ".."),
 			) ||
-		path === "/"
+		path === "/" ||
+		new URL(path, "http://127.0.0.1").pathname !== path
 	) {
 		throw option(
-			"redirectPath must be an absolute path such as /callback, without a query, fragment, %, '.', '..' or empty segments",
+			"redirectPath must be an absolute path such as /callback, without a query, fragment, %, '.', '..', empty segments or characters a URL would encode",
 		);
 	}
 	return path;

@@ -127,6 +127,15 @@ describe("defineAuth", () => {
 		).toBe("invalid-option");
 	});
 
+	it.each(["/café", "/a<b", "/a{b}", '/a"b', "/a`b", "/a\x01b"])(
+		"SEC-C1 SEC-C6 refuses the redirectPath %j, which a browser would send encoded",
+		(redirectPath) => {
+			expect(
+				reason(() => defineAuth({ servers: [server("https://as.example", { redirectPath })] })),
+			).toBe("invalid-option");
+		},
+	);
+
 	it("SEC-I7 refuses a redirectPath another server also listens on", () => {
 		expect(
 			reason(() =>
