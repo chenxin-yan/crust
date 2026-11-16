@@ -17,11 +17,15 @@ import { createStore } from "./store.ts";
 const fsTrace = vi.hoisted((): string[] => []);
 // Error codes the next `sync` of a handle opened on the keyed path fails with.
 const syncFailures = vi.hoisted(() => new Map<string, string>());
+// Runs while `lstat` of the keyed path is in flight.
+const duringLstat = vi.hoisted(() => new Map<string, () => void>());
 vi.mock("node:fs/promises", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("node:fs/promises")>();
 	const lstat: typeof actual.lstat = (async (path: string, options?: never) => {
 		fsTrace.push(`lstat ${path}`);
-		return actual.lstat(path, options);
+		const stats = await actual.lstat(path, options);
+		duringLstat.get(path)?.();
+		return stats;
 	}) as typeof actual.lstat;
 	const chmod: typeof actual.chmod = async (path, mode) => {
 		fsTrace.push(`chmod ${String(path)}`);
@@ -352,6 +356,21 @@ describe("withLock", () => {
 			expect(readFileSync(lockPath, "utf-8")).toBe(lock);
 			expect(readFileSync(`${lockPath}.recover`, "utf-8")).toBe(recover);
 		});
+
+		it.skipIf(process.platform === "win32")(
+			"rejects with the signal's reason when aborted while the directory is checked",
+			async () => {
+				const reason = new Error("stop");
+				const controller = new AbortController();
+				duringLstat.set(dir, () => controller.abort(reason));
+				try {
+					expect(await lockError({ signal: controller.signal })).toBe(reason);
+				} finally {
+					duringLstat.clear();
+				}
+				expect(await readdir(dir)).toEqual([]);
+			},
+		);
 
 		it("creates nothing when the signal is already aborted", async () => {
 			const reason = new Error("stop");

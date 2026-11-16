@@ -336,8 +336,8 @@ export async function withLock<T>(
 	const self = await ownRecord();
 	let ownerId: string;
 	for (let delay = 1; ; delay = Math.min(delay * 2, MAX_RETRY_DELAY_MS)) {
-		signal?.throwIfAborted();
 		await validateDirectory(path);
+		signal?.throwIfAborted();
 		const record = { ...self, ownerId: crypto.randomUUID(), createdAt: new Date().toISOString() };
 		let blocker: Blocker | undefined;
 		try {

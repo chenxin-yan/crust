@@ -274,6 +274,31 @@ describe("writeJson", () => {
 		},
 	);
 
+	// A new directory's entry lives in its parent, so each parent it was created in is flushed too.
+	it.skipIf(process.platform === "win32")(
+		"flushes the parent of every directory it creates before the first write",
+		async () => {
+			await mkdir(tempDir);
+			const nested = join(tempDir, "a", "b", "config.json");
+			fsTrace.length = 0;
+
+			await writeJson(nested, { data: true });
+
+			const tempPath = fsTrace.find((entry) => entry.endsWith(" wx"))?.split(" ")[1] ?? "";
+			expect(fsTrace).toEqual([
+				`open ${join(tempDir, "a")} r`,
+				`sync ${join(tempDir, "a")}`,
+				`open ${tempDir} r`,
+				`sync ${tempDir}`,
+				`open ${tempPath} wx`,
+				`sync ${tempPath}`,
+				`rename ${nested}`,
+				`open ${join(tempDir, "a", "b")} r`,
+				`sync ${join(tempDir, "a", "b")}`,
+			]);
+		},
+	);
+
 	it.skipIf(process.platform === "win32")(
 		"rejects with IO when the directory flush after the rename fails",
 		async () => {

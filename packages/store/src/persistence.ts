@@ -110,7 +110,8 @@ function isChownErrorOk(err: unknown): boolean {
 
 /**
  * Creates the store file's parent directory if missing, enforcing `directoryMode`
- * exactly when this call created it.
+ * exactly when this call created it. On POSIX, every directory it creates is flushed into
+ * its parent, so the store file's directory survives a power loss.
  */
 export async function ensureDirectory(filePath: string, mode: number | undefined): Promise<void> {
 	const directoryMode = isWindows() ? undefined : mode;
@@ -146,6 +147,12 @@ export async function ensureDirectory(filePath: string, mode: number | undefined
 				err,
 			);
 		}
+	}
+	// A new directory's entry lives in its parent: flush the parent of each directory created.
+	if (createdDir === undefined) return;
+	for (let created = dir; ; created = dirname(created)) {
+		await syncDirectory(created, "write");
+		if (created === createdDir || dirname(created) === created) break;
 	}
 }
 
@@ -281,8 +288,9 @@ export async function writeJson(
 }
 
 /**
- * Flushes the store file's directory so a completed rename or delete survives a power loss.
- * POSIX only: Windows cannot open a directory for flushing. A missing directory has nothing to flush.
+ * Flushes the directory that holds `filePath`, so a completed rename, delete, or `mkdir` of
+ * `filePath` survives a power loss. POSIX only: Windows cannot open a directory for flushing.
+ * A missing directory has nothing to flush.
  */
 async function syncDirectory(filePath: string, operation: "write" | "delete"): Promise<void> {
 	if (isWindows()) return;
