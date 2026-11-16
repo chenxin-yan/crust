@@ -4,12 +4,34 @@ import {
 	getAmbientTerminalIO,
 	getTerminalIO,
 	getTerminalSignal,
+	isCI,
 	registerLiveFrame,
 	withAmbientTerminalIO,
 	withProcessTerminalSignal,
 	withTerminalIO,
 	writeProcessOutput,
 } from "./terminal.ts";
+
+describe("isCI", () => {
+	afterEach(() => vi.unstubAllEnvs());
+
+	it.each([undefined, "", "0", "false", "FALSE"])("is false when CI=%j", (ci) => {
+		vi.stubEnv("CI", ci);
+		expect(isCI()).toBe(false);
+	});
+
+	it.each(["true", "1", "github-actions"])("is true when CI=%j", (ci) => {
+		vi.stubEnv("CI", ci);
+		expect(isCI()).toBe(true);
+	});
+
+	it("reads an explicit env instead of process.env", () => {
+		vi.stubEnv("CI", "true");
+		expect(isCI({})).toBe(false);
+		vi.stubEnv("CI", undefined);
+		expect(isCI({ CI: "1" })).toBe(true);
+	});
+});
 
 describe("ambient terminal IO", () => {
 	it("is absent outside a scope and available across async boundaries", async () => {

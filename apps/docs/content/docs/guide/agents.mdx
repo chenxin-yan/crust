@@ -132,7 +132,7 @@ Ask before a change that is hard to undo, without stalling an agent. With [`conf
 | A person on a terminal                 | Yes/no prompt; "no" fails              |
 | No TTY, or `CI` set                    | Fails with `ConfirmationRequiredError` |
 
-On reusable commands, only those that `.use(confirm)` accept `--yes`; see [where `--yes` is accepted](/docs/modules/extensions/confirm#behavior). `CI` counts as set unless it is empty, `0`, or `false` in any letter case, because a CI job can run on a pseudo-terminal nobody answers.
+On reusable commands, only those that `.use(confirm)` accept `--yes`; see [where `--yes` is accepted](/docs/modules/extensions/confirm#behavior). `CI` counts as set unless it is empty, `0`, or `false` in any letter case, because a CI job can run on a pseudo-terminal nobody answers. A terminal injected with [`withTerminalIO`](/docs/modules/prompts#injecting-io), such as [`runInteractive()`](/docs/modules/testing#runinteractiveapp-path-input)'s, still prompts under `CI`, because the test that injected it answers it.
 
 ```sh
 $ my-cli deploy prod < /dev/null

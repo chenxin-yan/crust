@@ -25,6 +25,12 @@ export interface TerminalIO {
 	readonly signal?: AbortSignal;
 }
 
+/** `CI` counts as set unless it is unset, empty, `0`, or `false` in any letter case. */
+export function isCI(env: Readonly<Record<string, string | undefined>> = process.env): boolean {
+	const ci = env.CI;
+	return !!ci && ci !== "0" && ci.toLowerCase() !== "false";
+}
+
 const ignoreStreamError = () => {};
 
 /**

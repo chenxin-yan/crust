@@ -36,7 +36,3 @@ Scripts in the next steps and generated README use the package manager detected 
 ## Documentation
 
 Full docs: [crustjs.com/docs/quick-start](https://crustjs.com/docs/quick-start)
-
-## License
-
-MIT

@@ -7,8 +7,6 @@ import {
 	defineExtensionId,
 } from "@crustjs/core";
 
-import { isCI } from "./is-ci.ts";
-
 const CONFIRM: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:confirm");
 
 const yesFlags = {
@@ -35,10 +33,7 @@ const confirmContext = /* @__PURE__ */ defineContext("confirm")
 	.flags(yesFlags)
 	.setup(({ flags }): Confirm => async (message) => {
 		if (flags.yes === true) return;
-		// Read here, not in the lazy prompt module, so that module never imports a startup module.
-		const confirmed = await (
-			await import("./confirm-prompt.ts")
-		).promptConfirmation(message, isCI());
+		const confirmed = await (await import("./confirm-prompt.ts")).promptConfirmation(message);
 		if (confirmed === undefined) throw new ConfirmationRequiredError(message);
 		if (!confirmed) throw new Error(`Not confirmed: ${message} Nothing was changed.`);
 	});
