@@ -2,8 +2,6 @@
 
 Spinners and determinate progress indicators for terminal tasks
 
-Use `withTerminalIO()` to share ambient input/output with `@crustjs/prompts`.
-
 ## Install
 
 ```sh

@@ -20,6 +20,8 @@ Doc surfaces:
 - `apps/docs/content/docs/modules/*.mdx` — per-package reference
 - `apps/docs/content/docs/api/*.mdx` — public API reference
 
+Package READMEs are npm landing pages that point at the hosted docs, the source of truth: the `package.json` description, the command that installs or runs the package, and a `## Documentation` link to its page. Behavior, API, options, and examples go in `apps/docs`; edit a README only when its description, command, or docs link changes. Exception: `create-crust`'s README owns the initializer's options, and the docs link to it.
+
 Before submitting:
 
 - Examples in changed docs compile against the new API
