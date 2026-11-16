@@ -91,7 +91,7 @@ Before each Command Action, an installed CLI checks only the shared link of each
 
 `skills repair` re-points the shared link even when it leads to another live copy, then every owned agent link that does not lead to this copy, so that it targets the shared link. An agent link from an older version that points straight at the packaged skill still leads to this copy and is left as it is.
 
-A link is Crust-owned when its textual target ends in `skills/<name>`; shared and agent links both do. Real directories and foreign links conflict unless `force: true` is passed to low-level installation.
+A link is Crust-owned when its textual target ends in `skills/<name>`; shared and agent links both do. Real directories and foreign links conflict unless low-level installation gets `force: true`, or `force` listing their exact paths; `skills install` asks about each such path separately.
 
 ## Supported agents
 
@@ -116,7 +116,7 @@ const status = await getSkillStatus({ name: "my-cli", sourceDir });
 await uninstallSkill({ name: "my-cli" });
 ```
 
-`installSkill()` links the shared `.agents/skills/<name>` first and reports it as `shared`, then links each requested agent's own folder to it; omitted `agents` means the detected agents. A shared link it may not overwrite throws `SkillConflictError` without `details.agent`, and no agent link is made. `getSkillStatus()` reports `linked`, `dangling`, `conflict`, or `absent` per agent directory. A link is `linked` when it leads to the given `sourceDir`, directly or through another link, such as an agent directory that links to `.agents/skills/<name>`; real paths are compared. `uninstallSkill()` removes only owned links, including dangling ones. Only missing paths (`ENOENT`) count as absent; permission and other filesystem failures reject. Each result lists one entry per agent with its effective `scope` and status.
+`installSkill()` links the shared `.agents/skills/<name>` first and reports it as `shared`, then links each requested agent's own folder to it; omitted `agents` means the detected agents. A shared link it may not overwrite throws `SkillConflictError` without `details.agent`, and no agent link is made. `getSkillStatus()` reports `linked`, `dangling`, `conflict`, or `absent` per agent directory. A link is `linked` when it leads to the given `sourceDir`, directly or through another link, such as an agent directory that links to `.agents/skills/<name>`; real paths are compared. `uninstallSkill()` removes only owned links, including dangling ones; with `agents` it removes only those agents' own links and keeps the shared link, which other agents read. Only missing paths (`ENOENT`) count as absent; permission and other filesystem failures reject. Each result lists one entry per agent with its effective `scope` and status.
 
 <auto-type-table path="../../../../../packages/skills/src/types.ts" name="InstallSkillOptions" />
 

@@ -637,6 +637,36 @@ console.log("RESULT " + JSON.stringify({ repairErrors, installErrors, traeCnTarg
 		expect(await readFile(join(target(), "content.md"), "utf8")).toBe("demo\n");
 	});
 
+	it("asks again before overwriting a second path an approval did not name", async () => {
+		await writeSource("demo");
+		await mkdir(join(tempRoot, "home", ".kiro"));
+		const kiro = join(tempRoot, ".kiro", "skills", "demo");
+		await mkdir(kiro, { recursive: true });
+
+		const { harness, run } = executeWithPrompts(["skills"]);
+		await waitForPrompt(harness, "Select agents to link");
+		harness.keys("space", "enter");
+		// The message holds a temp path, so join the rows the fake terminal wrapped it onto.
+		const screen = () => harness.screen().replaceAll("\n", "");
+		while (!screen().includes("Overwrite?")) {
+			await new Promise((resolve) => setTimeout(resolve, 10));
+		}
+		expect(screen()).toContain(`"${kiro}" is not owned`);
+		// Another tool replaces the shared link with a directory before the answer.
+		await rm(target());
+		await mkdir(target());
+		await writeFile(join(target(), "user-data.txt"), "keep\n");
+		harness.keys("y", "enter");
+		while (!screen().includes(`"${target()}" is not owned`)) {
+			await new Promise((resolve) => setTimeout(resolve, 10));
+		}
+		harness.keys("n", "enter");
+		await run;
+
+		expect(await readFile(join(target(), "user-data.txt"), "utf8")).toBe("keep\n");
+		expect((await lstat(kiro)).isDirectory()).toBe(true);
+	});
+
 	it("makes no agent link when the shared folder is a conflict", async () => {
 		await writeSource("demo");
 		const claude = join(tempRoot, ".claude", "skills", "demo");

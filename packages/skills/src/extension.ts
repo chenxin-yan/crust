@@ -582,30 +582,33 @@ async function installSelectedAgents(opts: {
 		import("@crustjs/progress"),
 		import("@crustjs/prompts"),
 	]);
+	// Each approval covers only the path it named; a conflict at another path is asked about separately.
 	const install = async (agents: AgentTarget[], label: string) => {
-		const runInstall = (force?: boolean) =>
-			installSkill({ sourceDir: packagedSkill.sourceDir, agents, scope, force });
-		try {
-			return await spinner({
-				message: `Installing skill [${packagedSkill.name}]...`,
-				task: () => runInstall(),
-			});
-		} catch (error) {
-			if (!(error instanceof SkillConflictError)) throw error;
-			const skipped = `Skipped ${label} [${packagedSkill.name}]: directory is not owned by this skill.`;
-			if (nonInteractive) {
-				io.stderr(yellow(skipped));
-				return undefined;
+		const approved: string[] = [];
+		for (;;) {
+			try {
+				return await spinner({
+					message: `Installing skill [${packagedSkill.name}]...`,
+					task: () =>
+						installSkill({ sourceDir: packagedSkill.sourceDir, agents, scope, force: approved }),
+				});
+			} catch (error) {
+				if (!(error instanceof SkillConflictError)) throw error;
+				const skipped = `Skipped ${error.details.agent ? label : SHARED_LABEL} [${packagedSkill.name}]: directory is not owned by this skill.`;
+				if (nonInteractive) {
+					io.stderr(yellow(skipped));
+					return undefined;
+				}
+				const overwrite = await confirm({
+					message: `"${error.details.outputDir}" is not owned by "${packagedSkill.name}". Overwrite?`,
+					default: false,
+				});
+				if (!overwrite) {
+					io.stdout(dim(skipped));
+					return undefined;
+				}
+				approved.push(error.details.outputDir);
 			}
-			const overwrite = await confirm({
-				message: `"${error.details.outputDir}" is not owned by "${packagedSkill.name}". Overwrite?`,
-				default: false,
-			});
-			if (!overwrite) {
-				io.stdout(dim(skipped));
-				return undefined;
-			}
-			return runInstall(true);
 		}
 	};
 

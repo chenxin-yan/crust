@@ -88,6 +88,40 @@ describe("symlink-only skill installation", () => {
 		expect(await readFile(join(outputDir(), "commands", "run.md"), "utf8")).toBe("run\n");
 	});
 
+	it("overwrites only the conflicts at the paths force lists", async () => {
+		const sourceDir = await createSource();
+		for (const dir of [sharedDir(), outputDir()]) {
+			await mkdir(dir, { recursive: true });
+			await writeFile(join(dir, "manual.md"), "keep");
+		}
+
+		const error = await withCwd(tempRoot, () =>
+			installSkill({ sourceDir, agents: ["claude-code"], scope: "project", force: [sharedDir()] }),
+		).catch((caught: unknown) => caught);
+		expect(error).toBeInstanceOf(SkillConflictError);
+		expect((error as SkillConflictError).details).toEqual({
+			agent: "claude-code",
+			outputDir: outputDir(),
+		});
+		expect((await lstat(sharedDir())).isSymbolicLink()).toBe(true);
+		expect(await readFile(join(outputDir(), "manual.md"), "utf8")).toBe("keep");
+
+		const forced = await projectInstall(sourceDir, true);
+		expect(forced.agents[0]?.status).toBe("repaired");
+		expect((await lstat(outputDir())).isSymbolicLink()).toBe(true);
+	});
+
+	it("writes nothing when an agent has no directory at the requested scope", async () => {
+		const sourceDir = await createSource();
+		const home = join(tempRoot, "home");
+		await mkdir(home);
+
+		await expect(
+			withHome(home, () => installSkill({ sourceDir, agents: ["eve"], scope: "global" })),
+		).rejects.toThrow('Agent "eve" (Eve) has no global skills directory');
+		await expect(lstat(join(home, ".agents"))).rejects.toThrow();
+	});
+
 	it("uses absolute links at global scope", async () => {
 		const sourceDir = await createSource();
 		const home = join(tempRoot, "home");
@@ -272,6 +306,28 @@ describe("symlink-only skill installation", () => {
 		await expect(lstat(sharedDir())).rejects.toThrow();
 		await expect(lstat(outputDir())).rejects.toThrow();
 		expect((await lstat(kiro)).isDirectory()).toBe(true);
+	});
+
+	it("keeps the shared link when uninstalling for some agents", async () => {
+		const sourceDir = await createSource();
+		await withCwd(tempRoot, () =>
+			installSkill({ sourceDir, agents: ["codex", "kiro-cli"], scope: "project" }),
+		);
+
+		const result = await withCwd(tempRoot, () =>
+			uninstallSkill({ name: "demo", agents: ["codex"], scope: "project" }),
+		);
+		expect(result.agents).toEqual([
+			{ agent: "codex", outputDir: sharedDir(), scope: "project", status: "not-found" },
+		]);
+		const kiro = join(tempRoot, ".kiro", "skills", "demo");
+		expect(await readFile(join(kiro, "SKILL.md"), "utf8")).toContain("name: demo");
+
+		await withCwd(tempRoot, () =>
+			uninstallSkill({ name: "demo", agents: ["kiro-cli"], scope: "project" }),
+		);
+		await expect(lstat(kiro)).rejects.toThrow();
+		expect((await lstat(sharedDir())).isSymbolicLink()).toBe(true);
 	});
 
 	it("unlinks owned healthy and dangling links but skips conflicts", async () => {

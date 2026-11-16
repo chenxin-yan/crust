@@ -114,13 +114,16 @@ async function linkEntry(opts: {
 	sourceDir: string;
 	name: string;
 	scope: Scope;
-	force: boolean;
+	force: InstallSkillOptions["force"];
 	/** Absent for the shared link. */
 	agent?: AgentTarget;
 }): Promise<InstallStatus> {
 	const { outputDir, sourceDir, name, scope, agent } = opts;
 	const inspection = await inspectLink(outputDir, name, sourceDir);
-	if (inspection.status === "conflict" && !opts.force) {
+	const forced =
+		opts.force === true ||
+		(Array.isArray(opts.force) && opts.force.some((path) => resolve(path) === outputDir));
+	if (inspection.status === "conflict" && !forced) {
 		throw new SkillConflictError(agent ? { agent, outputDir } : { outputDir });
 	}
 	if (inspection.status === "owned" && inspection.resolves && inspection.correct) {
@@ -148,18 +151,22 @@ export async function installSkill(options: InstallSkillOptions): Promise<Instal
 	}
 
 	const scope = resolveEffectiveScope(options.scope ?? "global");
-	const force = options.force === true;
-	const link = { sourceDir, name: source.name, scope, force };
+	const link = { sourceDir, name: source.name, scope, force: options.force };
+	// Resolving every agent path first rejects an unavailable agent before anything is written.
+	const groups = groupAgentsByOutputDir(
+		options.agents ?? (await detectInstalledAgents()),
+		scope,
+		source.name,
+	);
 	const sharedDir = join(sharedSkillsDir(scope), source.name);
 	const shared = {
 		outputDir: sharedDir,
 		scope,
 		status: await linkEntry({ ...link, outputDir: sharedDir, target: sourceDir }),
 	};
-	const agents = options.agents ?? (await detectInstalledAgents());
 	const results: AgentResult[] = [];
 
-	for (const [outputDir, groupedAgents] of groupAgentsByOutputDir(agents, scope, source.name)) {
+	for (const [outputDir, groupedAgents] of groups) {
 		const status =
 			outputDir === sharedDir
 				? shared.status
@@ -172,17 +179,21 @@ export async function installSkill(options: InstallSkillOptions): Promise<Instal
 	return { shared, agents: results };
 }
 
-/** Unlinks only agent-directory entries carrying the requested skill's ownership signature. */
+/**
+ * Unlinks only entries carrying the requested skill's ownership signature. Without `agents` it
+ * also removes the shared link; with `agents` the shared link stays, since other agents read it.
+ */
 export async function uninstallSkill(
 	options: UninstallSkillOptions,
 ): Promise<UninstallSkillResult> {
 	const scope = resolveEffectiveScope(options.scope ?? "global");
 	const agents = options.agents ?? getScopeAgents(scope);
+	const keptDir = options.agents && join(sharedSkillsDir(scope), options.name);
 	const results: UninstallSkillResult["agents"] = [];
 
 	for (const [outputDir, groupedAgents] of groupAgentsByOutputDir(agents, scope, options.name)) {
-		const inspection = await inspectLink(outputDir, options.name);
-		const removed = inspection.status === "owned";
+		const removed =
+			outputDir !== keptDir && (await inspectLink(outputDir, options.name)).status === "owned";
 		if (removed) await unlink(outputDir);
 		for (const agent of groupedAgents) {
 			results.push({ agent, outputDir, scope, status: removed ? "removed" : "not-found" });

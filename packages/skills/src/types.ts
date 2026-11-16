@@ -20,8 +20,12 @@ export interface InstallSkillOptions {
 	agents?: readonly AgentTarget[];
 	/** Agent-directory scope. @default "global" */
 	scope?: Scope;
-	/** Allow replacing a directory that is not owned by this skill. @default false */
-	force?: boolean;
+	/**
+	 * Replace entries this skill does not own: `true` for any, or a list of exact paths to replace
+	 * only those; a conflict elsewhere still throws. Re-pointing an owned link needs no `force`.
+	 * @default false
+	 */
+	force?: boolean | readonly string[];
 }
 
 export type InstallStatus = "installed" | "repaired" | "up-to-date";
@@ -51,6 +55,7 @@ export interface InstallSkillResult {
 
 export interface UninstallSkillOptions {
 	name: string;
+	/** Agents whose own links to remove; the shared link stays. Omit to remove every link, shared included. */
 	agents?: readonly AgentTarget[];
 	scope?: Scope;
 }
