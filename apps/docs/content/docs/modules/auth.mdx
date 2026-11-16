@@ -226,7 +226,7 @@ A failed refresh never deletes the login; call `logout()` when you want that.
 
 ### A corrupt file
 
-A file that is not valid JSON, has an unknown structure, or comes from a newer version of your CLI makes every call fail with `CredentialStoreCorruptError`. It is never repaired or replaced automatically. `store.resetCredentials()` deletes it; copy it first if you want to keep it. A single invalid login fails only for its own key (`error.key`), and `resetCredentials({ key })` replaces just that one with a logged-out record.
+A file that is not valid JSON, has an unknown structure, or comes from a newer version of your CLI makes every call fail with `CredentialStoreCorruptError`. A JSON object with none of the credentials fields (`version`, `storeId`, `encryption`, `records`), such as `{}`, counts as an empty file, and its other keys are kept; one with any of them must have all of them, valid. It is never repaired or replaced automatically. `store.resetCredentials()` deletes it; copy it first if you want to keep it. A single invalid login fails only for its own key (`error.key`), and `resetCredentials({ key })` replaces just that one with a logged-out record.
 
 ### Locks
 

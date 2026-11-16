@@ -101,7 +101,9 @@ try {
 	ticket.cancel();
 }
 
-const { value } = await acme.get(); // refreshed first when it is about to expire
+// Refreshed first when it is about to expire. Send it; never print or log it.
+const { value } = await acme.get();
+await fetch("https://api.acme.example/me", { headers: { authorization: `Bearer ${value}` } });
 
 // In `acme logout`:
 const { local, remote } = await acme.logout();
@@ -150,4 +152,4 @@ const dev = defineServers({
 });
 //#endregion
 
-console.log(multi, dev, value, local, remote, api);
+console.log(multi, dev, local, remote, api);
