@@ -1,4 +1,7 @@
-/** @module-tag macos */
+/**
+ * @module-tag windows
+ * @module-tag macos
+ */
 // Token sources in separate Node and Bun processes over one credentials file, with real
 // lock files and a real authorization server on the loopback.
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
@@ -110,7 +113,9 @@ async function expectWaiting(process_: ChildProcess, printed: Promise<string>, m
 async function loggedIn(issuer: string, expiresAt?: number) {
 	const root = mkdtempSync(join(tmpdir(), "crust-auth-"));
 	cleanup.push(() => rmSync(root, { recursive: true, force: true }));
+	// The state directory on POSIX and on Windows, for this process and its children.
 	vi.stubEnv("XDG_STATE_HOME", root);
+	vi.stubEnv("LOCALAPPDATA", root);
 	const config = defineServers({
 		servers: [{ issuer, clientId: "cli", allowInsecureLoopback: true }],
 	});
@@ -127,7 +132,7 @@ async function loggedIn(issuer: string, expiresAt?: number) {
 
 function child(runtime: string, args: string[], root: string): ChildProcess {
 	const process_ = spawn(runtime, [script, ...args], {
-		env: { ...process.env, XDG_STATE_HOME: root },
+		env: { ...process.env, XDG_STATE_HOME: root, LOCALAPPDATA: root },
 		stdio: ["ignore", "pipe", "pipe"],
 	});
 	const timer = setTimeout(() => process_.kill("SIGKILL"), 60_000);
@@ -238,7 +243,7 @@ describe.each(["node", "bun"])("on %s", (runtime) => {
 		const run = spawnSync(runtime, [script, "runtime"], {
 			encoding: "utf8",
 			timeout: 60_000,
-			env: { ...process.env, XDG_STATE_HOME: root },
+			env: { ...process.env, XDG_STATE_HOME: root, LOCALAPPDATA: root },
 		});
 		expect(run.error).toBeUndefined();
 		expect(run.stderr).toBe("");
