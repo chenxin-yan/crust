@@ -8,6 +8,8 @@ import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { inspect } from "node:util";
 
+import { Crust, defineCommand } from "@crustjs/core";
+import { apiClient, apiCommand, bearerAuth } from "@crustjs/openapi";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { createAuth } from "../src/client.ts";
@@ -103,6 +105,7 @@ afterEach(() => {
 	vi.restoreAllMocks();
 	vi.useRealTimers();
 	vi.unstubAllEnvs();
+	vi.unstubAllGlobals();
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
@@ -369,6 +372,49 @@ describe("secret sentinel gate: stored credentials", () => {
 			const { source } = await storedLogin(hostile[name]!);
 			await source.get().then(record, record);
 			await source.logout().then(record, record);
+			expectNoSecretInSinks();
+		},
+	);
+
+	it.each([
+		["stored", `${STATIC.accessToken}\nx`, STATIC.refreshedAccessToken],
+		["refreshed", STATIC.accessToken, `${STATIC.refreshedAccessToken}\nx`],
+	])(
+		"SEC-K1 SEC-J3 a %s token that is not a valid header value leaks nothing through bearerAuth",
+		async (_name, stored, refreshedValue) => {
+			secrets.add(stored).add(refreshedValue);
+			const { source } = await storedLogin(() =>
+				json({ access_token: refreshedValue, token_type: "Bearer", expires_in: 3600 }),
+			);
+			await (
+				await source.beginLogin()
+			).commit({
+				accessToken: stored,
+				refreshToken: STATIC.refreshToken,
+				tokenType: "Bearer",
+				expiresAt: undefined,
+				scope: undefined,
+			});
+			const api = vi.fn(async () => new Response("expired", { status: 401 }));
+			vi.stubGlobal("fetch", api);
+			const app = new Crust("acme")
+				.extend(
+					apiCommand({
+						spec: { openapi: "3.1.0", paths: {} },
+						baseUrl: "https://api.example.com",
+						auth: bearerAuth((options) => resolveCredential([fromStore(source)], options)),
+					}),
+				)
+				.add(
+					defineCommand("call", {}, (command) =>
+						command.use(apiClient).action(async ({ ctx }) => (await ctx.api).fetch("/me")),
+					),
+				);
+			const outcome = await app.run(["call"]);
+			expect(outcome.status).toBe("failed");
+			record(outcome);
+			sinks.push(outcome.stdout, outcome.stderr);
+			expect(api.mock.calls.length).toBe(stored === STATIC.accessToken ? 1 : 0);
 			expectNoSecretInSinks();
 		},
 	);
