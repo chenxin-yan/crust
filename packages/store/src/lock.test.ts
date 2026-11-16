@@ -262,7 +262,9 @@ describe("withLock", () => {
 	});
 
 	// The macOS and Windows rule, exercised on any host; the CI jobs on those hosts run it natively.
-	describe.each(["darwin", "win32"] as const)("with the %s rule", (platform) => {
+	// Not macOS on a Windows host: POSIX directory checks cannot pass on a Windows directory.
+	const pidRulePlatforms = process.platform === "win32" ? ["win32"] : ["darwin", "win32"];
+	describe.each(pidRulePlatforms)("with the %s rule", (platform) => {
 		const actualPlatform = process.platform;
 		beforeEach(() => {
 			Object.defineProperty(process, "platform", { value: platform });
