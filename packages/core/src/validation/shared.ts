@@ -227,7 +227,7 @@ type AcceptsTokenElements<E, A> = A extends readonly unknown[]
 // A json flag hands its schema the parsed JSON value. Overlap again: some JSON value must fit
 // the input. An object fits when every required property does (optional keys may be absent);
 // a Date (its methods), bigint, or function never does.
-type AcceptsJson<Input, Seen = never> = [JsonValue] extends [Input]
+type AcceptsJson<Input, Seen extends readonly unknown[] = []> = [JsonValue] extends [Input]
 	? true
 	: true extends (Input extends unknown ? AcceptsJsonMember<Input, Seen> : never)
 		? true
@@ -241,28 +241,38 @@ type IsSeen<M, Seen> = true extends (
 	? true
 	: false;
 
-type AcceptsJsonMember<M, Seen> = M extends string | number | boolean | null
+// A recursive input that never repeats (`Nest<T> { next: Nest<T[]> | null }`) would recurse until
+// TS2589, so past this depth the check accepts and leaves the rest to runtime validation.
+type AcceptsJsonDepth = 8;
+
+type AcceptsJsonMember<M, Seen extends readonly unknown[]> = M extends
+	| string
+	| number
+	| boolean
+	| null
 	? true
-	: IsSeen<M, Seen> extends true
+	: IsSeen<M, Seen[number]> extends true
 		? false
 		: M extends (...args: never[]) => unknown
 			? false
-			: M extends readonly unknown[]
-				? AcceptsJsonElements<M, Seen | M>
-				: M extends object
-					? false extends {
-							[K in keyof M]-?: {} extends Pick<M, K> ? true : AcceptsJson<M[K], Seen | M>;
-						}[keyof M]
-						? false
-						: true
-					: false;
+			: Seen["length"] extends AcceptsJsonDepth
+				? true
+				: M extends readonly unknown[]
+					? AcceptsJsonElements<M, [...Seen, M]>
+					: M extends object
+						? false extends {
+								[K in keyof M]-?: {} extends Pick<M, K> ? true : AcceptsJson<M[K], [...Seen, M]>;
+							}[keyof M]
+							? false
+							: true
+						: false;
 
 // Only required tuple elements, leading or trailing a rest, must accept JSON; an open array
 // accepts `[]`.
-type AcceptsJsonElements<M extends readonly unknown[], Seen> = M extends readonly [
-	infer H,
-	...infer R,
-]
+type AcceptsJsonElements<
+	M extends readonly unknown[],
+	Seen extends readonly unknown[],
+> = M extends readonly [infer H, ...infer R]
 	? AcceptsJson<H, Seen> extends true
 		? AcceptsJsonElements<R, Seen>
 		: false

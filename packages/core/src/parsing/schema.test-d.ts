@@ -196,6 +196,13 @@ function _typecheckJsonFlagRecursiveSchemaInput() {
 		// @ts-expect-error -- every Loop holds another, so no finite value exists
 		loop: { type: "json", schema: loop },
 	});
+
+	// Each level is a new type, so the check gives up at its depth bound and leaves it to runtime.
+	interface Nest<T> {
+		value: T;
+		next: Nest<T[]> | null;
+	}
+	defineFlag({ type: "json", schema: {} as StandardSchema<Nest<string>, Nest<string>> });
 }
 
 // a helper generic over the whole schema leaves the input unknown to the check and cannot
