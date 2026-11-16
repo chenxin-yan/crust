@@ -1,5 +1,8 @@
 // A child process for tests/processes.test.ts, run under Node and Bun with XDG_STATE_HOME set:
 // - `refresh <issuer> <app>`: prints the access token `get()` returns, or the error code;
+// - `force <issuer> <app>`: the same for `forceRefresh()`;
+// - `api <issuer> <app>`: GET <issuer>/api/me through bearerAuth() and a stored login; prints
+//   the status, or the error code;
 // - `hold <issuer> <app>`: takes the credential's identity lock, prints "locked" and waits;
 // - `runtime`: real sockets: a refused token request on the runtime's own fetch, and a 401
 //   retry and a cross-origin redirect through @crustjs/openapi. Prints one JSON report.
@@ -53,6 +56,38 @@ if (mode === "refresh") {
 	} catch (error) {
 		console.log((error as { code?: string }).code ?? String(error));
 	}
+} else if (mode === "force") {
+	const { source } = sourceFor(issuerArg!);
+	try {
+		console.log((await source.forceRefresh()).value);
+	} catch (error) {
+		console.log((error as { code?: string }).code ?? String(error));
+	}
+} else if (mode === "api") {
+	const { source } = sourceFor(issuerArg!);
+	const cli = new Crust("acme")
+		.extend(
+			apiCommand({
+				spec: { openapi: "3.1.0", paths: {} },
+				baseUrl: `${issuerArg}/api`,
+				auth: bearerAuth((options) => resolveCredential([fromStore(source)], options)),
+			}),
+		)
+		.add(
+			defineCommand("call", {}, (command) =>
+				command
+					.use(apiClient)
+					.action(async ({ ctx }) => (await (await ctx.api).fetch("/me")).status),
+			),
+		);
+	const outcome = await cli.run(["call"]);
+	console.log(
+		outcome.status === "completed"
+			? outcome.result
+			: outcome.status === "failed"
+				? ((outcome.error as { code?: string }).code ?? String(outcome.error))
+				: outcome.status,
+	);
 } else if (mode === "hold") {
 	const { store, source } = sourceFor(issuerArg!);
 	await credentialStoreInternals(store).lockIdentity(source.key, async () => {

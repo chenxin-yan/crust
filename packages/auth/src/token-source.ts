@@ -208,9 +208,10 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 			async () => {
 				const document = await store.read();
 				const record = liveRecord(document);
+				// With the lock held, a mark's refresh is no longer running: its outcome is unknown (SEC-F9).
+				if (record.refreshInProgress) throw new RefreshOutcomeUnknownError();
 				// Another process or source refreshed or logged in meanwhile: use its token (SEC-F4).
 				if (record.generation !== generation) return accessToken(record);
-				if (record.refreshInProgress) throw new RefreshOutcomeUnknownError();
 				if (record.refreshToken === undefined) throw new LoginRequiredError("expired");
 				const server = await discoverServer(signal);
 				throwIfAborted(signal);
@@ -320,9 +321,7 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 
 	async function readRecord(signal: AbortSignal | undefined, baseUrl: string | undefined) {
 		throwIfAborted(signal);
-		const record = liveRecord(await store.read(), baseUrl);
-		if (record.refreshInProgress) throw new RefreshOutcomeUnknownError();
-		return record;
+		return liveRecord(await store.read(), baseUrl);
 	}
 
 	async function revoke(
@@ -357,7 +356,10 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 
 		async get({ signal, baseUrl }: { signal?: AbortSignal; baseUrl?: string } = {}) {
 			const record = await readRecord(signal, baseUrl);
-			const fresh = record.expiresAt === undefined || Date.now() < record.expiresAt - skewMs;
+			// A mark read without the lock may be a refresh still running elsewhere: wait for the lock.
+			const fresh =
+				!record.refreshInProgress &&
+				(record.expiresAt === undefined || Date.now() < record.expiresAt - skewMs);
 			return fresh ? accessToken(record) : sharedRefresh(record.generation as string, signal);
 		},
 
@@ -368,7 +370,11 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 		}: { signal?: AbortSignal; ifGeneration?: string; baseUrl?: string } = {}) {
 			const record = await readRecord(signal, baseUrl);
 			// A newer credential than the one that failed is used as is (SEC-J6).
-			if (ifGeneration !== undefined && record.generation !== ifGeneration) {
+			if (
+				ifGeneration !== undefined &&
+				record.generation !== ifGeneration &&
+				!record.refreshInProgress
+			) {
 				return accessToken(record);
 			}
 			return sharedRefresh(record.generation as string, signal);

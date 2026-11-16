@@ -114,6 +114,65 @@ describe("refresh", () => {
 		expect(refreshFlights.size).toBe(0);
 	});
 
+	it.each([
+		["joining this process's refresh", false],
+		["waiting for another process's refresh on the lock", true],
+	])(
+		"SEC-F3 SEC-F4 SEC-Q4 a get that starts after the mark is written waits, %s, and gets its token",
+		async (_name, otherProcess) => {
+			const held = gate();
+			const w = world({
+				token: async () => {
+					await held.wait;
+					return tokenResponse("AT2", "RT2");
+				},
+			});
+			const a = w.source();
+			await login(a);
+			const first = a.get();
+			await vi.waitFor(() => expect(w.tokenRequests()).toHaveLength(1));
+			expect(record(w, a.key).refreshInProgress).toBeDefined();
+			// Another process has no share in this process's single-flight slot.
+			if (otherProcess) refreshFlights.clear();
+			let settled = false;
+			const second = w
+				.source({ store: credentialStore({ app: w.app }) })
+				.get()
+				.finally(() => {
+					settled = true;
+				});
+			await new Promise((resolve) => setTimeout(resolve, 100));
+			expect(settled).toBe(false);
+			held.open();
+			const tokens = await Promise.all([first, second]);
+			expect(tokens.map((token) => token.value)).toEqual(["AT2", "AT2"]);
+			expect(w.tokenRequests()).toHaveLength(1);
+		},
+	);
+
+	it("SEC-J6 SEC-F4 a 401 retry that starts while another process refreshes waits and adopts its token", async () => {
+		const held = gate();
+		const w = world({
+			token: async () => {
+				await held.wait;
+				return tokenResponse("AT2", "RT2");
+			},
+		});
+		const a = w.source();
+		await login(a, { expiresAt: undefined });
+		const stale = await a.get();
+		const first = a.forceRefresh();
+		await vi.waitFor(() => expect(w.tokenRequests()).toHaveLength(1));
+		refreshFlights.clear();
+		const retry = w.source().forceRefresh({ ifGeneration: stale.generation });
+		held.open();
+		await expect(Promise.all([first, retry])).resolves.toMatchObject([
+			{ value: "AT2" },
+			{ value: "AT2" },
+		]);
+		expect(w.tokenRequests()).toHaveLength(1);
+	});
+
 	it("SEC-F3 SEC-Q1 clears the slot after a failure; another credential refreshes on its own", async () => {
 		let status = 400;
 		const w = world({
