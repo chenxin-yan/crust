@@ -325,29 +325,31 @@ const skillFactory: ExtensionFactory<
 	readonly [SkillCommandDefinition<string, readonly string[]>]
 > = defineExtension(SKILLS).factory((extension, options) => {
 	const commandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
-	return (
-		extension
-			.add(buildSkillCommand(commandName, options))
-			.preRun(async (context) => {
-				if (context.commandPath[1] === commandName || options.autoUpdate === false) return;
-				// Only an installed CLI repairs its links. From source, the packaged directory is a
-				// checkout's last build, and repairing would move every link away from the installed
-				// CLI, which then moves them back on its next run.
-				if (isSourceRun()) return;
-				await autoRepairSkills(options, context, `${context.commandPath[0]} ${commandName} repair`);
-			})
-			// Skills are loaded when a snapshot is prepared, not at construction, so
-			// help and man pages reflect the packaged directory as it exists at render time.
-			.sections((snapshot) => [
-				{
-					command: [],
-					title: SKILLS_SECTION_TITLE,
-					body: formatSkillDocumentation(commandName, snapshot.meta.name),
-					except: [SKILLS],
-				},
-			])
-			.build((context) => buildSkills(options, context))
-	);
+	const runtime = extension
+		.add(buildSkillCommand(commandName, options))
+		.preRun(async (context) => {
+			if (context.commandPath[1] === commandName || options.autoUpdate === false) return;
+			// Only an installed CLI repairs its links. From source, the packaged directory is a
+			// checkout's last build, and repairing would move every link away from the installed
+			// CLI, which then moves them back on its next run.
+			if (isSourceRun()) return;
+			await autoRepairSkills(options, context, `${context.commandPath[0]} ${commandName} repair`);
+		})
+		// Skills are loaded when a snapshot is prepared, not at construction, so
+		// help and man pages reflect the packaged directory as it exists at render time.
+		.sections((snapshot) => [
+			{
+				command: [],
+				title: SKILLS_SECTION_TITLE,
+				body: formatSkillDocumentation(commandName, snapshot.meta.name),
+				except: [SKILLS],
+			},
+		]);
+	// `crust build` runs build hooks from source; literal property access lets a Crust-built
+	// bundle fold this and drop the skill renderer.
+	return process.env.CRUST_INTERNAL_BUILD === "1"
+		? runtime
+		: runtime.build((context) => buildSkills(options, context));
 });
 
 // SAFETY: the runtime command name is `options.command ?? "skills"`, which each overload's name restates,
