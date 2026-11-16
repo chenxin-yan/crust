@@ -23,8 +23,23 @@ describe("detectLoginMode", () => {
 			{ env: { WAYLAND_DISPLAY: "wayland-0" }, platform: "linux", stdin: tty, stdout: tty },
 		],
 		["Linux without a display", "device", { env: {}, platform: "linux", stdin: tty, stdout: tty }],
-		["stdin not a TTY", "device", { env: desktop, stdin: pipe, stdout: tty }],
-		["no TTY output", "device", { env: desktop, stdin: tty, stdout: pipe, stderr: pipe }],
+		["stdin not a TTY", "refuse", { env: desktop, stdin: pipe, stdout: tty }],
+		["no TTY output", "refuse", { env: desktop, stdin: tty, stdout: pipe, stderr: pipe }],
+		[
+			"no TTY over SSH",
+			"refuse",
+			{ env: { ...desktop, SSH_CONNECTION: "1 2 3 4" }, stdin: pipe, stdout: pipe, stderr: pipe },
+		],
+		[
+			"no TTY on Linux without a display",
+			"refuse",
+			{ env: {}, platform: "linux", stdin: pipe, stdout: pipe, stderr: pipe },
+		],
+		[
+			"no TTY with --device",
+			"device",
+			{ device: true, env: desktop, stdin: pipe, stdout: pipe, stderr: pipe },
+		],
 		[
 			"SSH_CONNECTION",
 			"device",
