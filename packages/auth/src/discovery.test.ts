@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
+	configReason,
 	fakeFetch,
 	json,
 	metadataFor,
@@ -27,7 +28,6 @@ import {
 	HttpError,
 	IssuerMismatchError,
 	NetworkError,
-	OAuthConfigError,
 	ResponseTooLargeError,
 	TimeoutError,
 } from "./errors.ts";
@@ -44,15 +44,6 @@ async function discoverWith(metadata: Record<string, unknown>, issuer = uniqueIs
 	});
 	const config = defineAuth({ servers: [{ issuer, clientId: "cli" }] });
 	return discover(config, issuer, { fetch: fake.fetch });
-}
-
-async function configReason(promise: Promise<unknown>): Promise<string> {
-	const error = await promise.then(
-		() => undefined,
-		(caught: unknown) => caught,
-	);
-	expect(error).toBeInstanceOf(OAuthConfigError);
-	return (error as OAuthConfigError).reason;
 }
 
 describe("discover", () => {

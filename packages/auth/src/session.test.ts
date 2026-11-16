@@ -8,14 +8,8 @@ import { connect, type Socket } from "node:net";
 
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { callbackPath, isClosed, rawRequest, setupServer } from "../tests/helpers.ts";
-import {
-	AbortError,
-	IssuerMismatchError,
-	OAuthConfigError,
-	OAuthError,
-	TimeoutError,
-} from "./errors.ts";
+import { callbackPath, configReason, isClosed, rawRequest, setupServer } from "../tests/helpers.ts";
+import { AbortError, IssuerMismatchError, OAuthError, TimeoutError } from "./errors.ts";
 import type { LoopbackListener } from "./loopback.ts";
 import { pkceChallenge } from "./pkce.ts";
 import type {
@@ -84,15 +78,6 @@ function waitFor(
 		(error: unknown) => ({ error }),
 	);
 	return { onCallback, result };
-}
-
-async function configReason(promise: Promise<unknown>): Promise<string> {
-	const error = await promise.then(
-		() => undefined,
-		(caught: unknown) => caught,
-	);
-	expect(error).toBeInstanceOf(OAuthConfigError);
-	return (error as OAuthConfigError).reason;
 }
 
 describe("createAuthorizationSession", () => {

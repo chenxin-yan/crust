@@ -3,8 +3,11 @@
 // process-wide metadata cache never leaks between tests.
 import { request } from "node:http";
 
+import { expect } from "vite-plus/test";
+
 import { defineAuth } from "../src/config.ts";
 import { discover } from "../src/discovery.ts";
+import { OAuthConfigError } from "../src/errors.ts";
 import type { Fetch } from "../src/http.ts";
 import type { AuthServer, AuthServerOptions } from "../src/types.ts";
 
@@ -171,4 +174,14 @@ export async function isClosed(redirectUri: string): Promise<boolean> {
 		await new Promise((resolve) => setTimeout(resolve, 20));
 	}
 	return false;
+}
+
+/** The reason of the {@link OAuthConfigError} `promise` rejects with. */
+export async function configReason(promise: Promise<unknown>): Promise<string> {
+	const error = await promise.then(
+		() => undefined,
+		(caught: unknown) => caught,
+	);
+	expect(error).toBeInstanceOf(OAuthConfigError);
+	return (error as OAuthConfigError).reason;
 }
