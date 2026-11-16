@@ -3,7 +3,7 @@
  * @module-tag macos
  */
 import { once } from "node:events";
-import { readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { type AddressInfo, createServer } from "node:net";
 import { join } from "node:path";
 
@@ -723,6 +723,17 @@ describe("the stored login", () => {
 		}
 		expect(await rejection(auth.status())).toBeInstanceOf(UnsafeStorageError);
 	});
+
+	// Another user who can write to the directory could have planted the file.
+	it.skipIf(process.platform === "win32")(
+		"status() and token() refuse a login in a directory others can write to",
+		async () => {
+			const { auth, dir } = await signedIn();
+			chmodSync(dir, 0o777);
+			expect(await rejection(auth.status())).toBeInstanceOf(UnsafeStorageError);
+			expect(await rejection(auth.token())).toBeInstanceOf(UnsafeStorageError);
+		},
+	);
 
 	it("status() reports the three sources without a request or waiting for a lock", async () => {
 		const { auth, app, issuer, fetch, requests } = setup();
