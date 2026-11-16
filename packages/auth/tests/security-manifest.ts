@@ -1,5 +1,7 @@
-// The applicability manifest: every checklist item and decision of the auth security checklist
-// (auth-security.md revision 7, §5), its owning stage and its v1 state. check-security.ts
+// The applicability manifest: every checklist item and decision of the auth security checklist,
+// its owning stage and its v1 state. It is the single source for the gate: derived from the
+// design checklist (auth-security.md revision 7, §5), and a change to it is reviewed like code.
+// `pnpm run check:security` in packages/auth runs the tests and, through check-security.ts,
 // requires an executed, passed test naming each id (`SEC-<id>`) that a gated stage owns, and
 // each deferred id's v1-invariant test. Later stages add themselves to GATED_OWNERS.
 
