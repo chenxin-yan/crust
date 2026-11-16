@@ -59,7 +59,7 @@ my-cli skills uninstall
 my-cli skills repair
 ```
 
-`--scope` accepts `project` or `global`. With `--all`, scope comes from `--scope`, then `defaultScope`, then `global`; without `--all`, an interactive run prompts when neither setting is supplied. `install --all` links every packaged skill for the Universal group, every agent detected on `PATH`, and every agent that already holds one of the packaged skills.
+`--scope` accepts `project` or `global`. With `--all`, scope comes from `--scope`, then `defaultScope`, then `global`; without `--all`, an interactive run prompts when neither setting is supplied. `install --all` links every packaged skill for the Universal group, every [detected agent](#supported-agents), and every agent that already holds one of the packaged skills.
 
 - **Install is additive.** It links or repairs the selected skills for the selected agents and never removes links. Interactively, it asks which skills (when more than one is packaged) and which agents, and confirms before overwriting each directory it does not own.
 - **Uninstall removes selected links.** It lists the skills linked at the chosen scope, with nothing preselected, and removes the selected ones from every agent directory. `--all` is the only non-interactive form.
@@ -89,7 +89,11 @@ project: .agents/skills/<name>
 global:  ~/.agents/skills/<name>
 ```
 
-Universal targets, such as codex, cursor, and opencode, share those directories. Additional targets, such as claude-code, use an agent-specific location in at least one scope (antigravity, for example, shares `.agents/skills` only at project scope) and are found through a non-executing `PATH` lookup. The [agent registry](https://github.com/chenxin-yan/crust/blob/main/packages/skills/src/agents.ts) lists every target and its directories.
+Universal targets, such as codex, cline, and pi, share those directories. Additional targets, such as claude-code, use an agent-specific location in at least one scope (cursor, for example, shares `.agents/skills` only at project scope). An agent without a global directory, such as eve, is available only at project scope; naming it at global scope is an error.
+
+An additional agent is detected when the folder containing its global skills directory exists, such as `~/.claude` for `~/.claude/skills`. Project folders, the home directory itself, and the shared `~/.agents` do not count.
+
+The agent list is generated from the registry of the [`skills`](https://www.npmjs.com/package/skills) package; [`agents.generated.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/skills/src/agents.generated.ts) lists every target and its directories. `CLAUDE_CONFIG_DIR` replaces `~/.claude` for Claude Code's global directory. The snapshot does not carry upstream's other environment overrides or per-platform paths: every other agent uses the directories in that file.
 
 When the working directory is the home directory, project scope becomes global scope. Result objects include the effective scope.
 

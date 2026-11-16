@@ -2,183 +2,24 @@
 // Agent path resolution and detection
 // ────────────────────────────────────────────────────────────────────────────
 
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
-import { which } from "@crustjs/utils/process";
+import { AGENTS } from "./agents.generated.ts";
 
 export type AgentClass = "universal" | "additional";
 export type Scope = "global" | "project";
 
-export type AgentTarget =
-	| "adal"
-	| "amp"
-	| "antigravity"
-	| "augment"
-	| "claude-code"
-	| "cline"
-	| "codebuddy"
-	| "codex"
-	| "command-code"
-	| "cortex"
-	| "crush"
-	| "cursor"
-	| "devin"
-	| "droid"
-	| "gemini-cli"
-	| "github-copilot"
-	| "goose"
-	| "junie"
-	| "kilo"
-	| "kimi-code-cli"
-	| "kiro-cli"
-	| "kode"
-	| "mistral-vibe"
-	| "opencode"
-	| "openclaw"
-	| "openhands"
-	| "pi"
-	| "pochi"
-	| "qoder"
-	| "qwen-code"
-	| "replit"
-	| "trae"
-	| "trae-cn"
-	| "warp"
-	| "xum"
-	| "zed"
-	| "zencoder";
+/** An agent id from the `skills` package's registry, snapshotted in `agents.generated.ts`. */
+export type AgentTarget = keyof typeof AGENTS;
 
-type AgentRegistry = { readonly [Agent in AgentTarget]: AgentConfig };
-
-interface AgentConfig {
-	readonly label: string;
-	readonly class: AgentClass;
-	readonly projectSkillsDir: string;
-	readonly globalSkillsDir: (home: string) => string;
-	readonly detectCommands?: readonly string[];
-}
-
-const PROJECT_UNIVERSAL_SKILLS_DIR = join(".agents", "skills");
-
-function universalGlobalSkillsDir(home: string): string {
-	return join(home, ".agents", "skills");
-}
-
-const universal = (label: string): AgentConfig => ({
-	label,
-	class: "universal",
-	projectSkillsDir: PROJECT_UNIVERSAL_SKILLS_DIR,
-	globalSkillsDir: universalGlobalSkillsDir,
-});
+const UNIVERSAL_SKILLS_DIR = ".agents/skills";
 
 /** @internal */
 export function resolveEffectiveScope(scope: Scope): Scope {
 	return scope === "project" && process.cwd() === homedir() ? "global" : scope;
 }
-
-const AGENTS: AgentRegistry = {
-	adal: {
-		label: "AdaL",
-		class: "additional",
-		projectSkillsDir: join(".adal", "skills"),
-		globalSkillsDir: (home) => join(home, ".adal", "skills"),
-		detectCommands: ["adal"],
-	},
-	amp: universal("Amp"),
-	antigravity: {
-		label: "Antigravity",
-		class: "additional",
-		projectSkillsDir: PROJECT_UNIVERSAL_SKILLS_DIR,
-		globalSkillsDir: (home) => join(home, ".gemini", "config", "skills"),
-		detectCommands: ["agy", "antigravity"],
-	},
-	augment: universal("Augment"),
-	"claude-code": {
-		label: "Claude Code",
-		class: "additional",
-		projectSkillsDir: join(".claude", "skills"),
-		globalSkillsDir: (home) =>
-			join(process.env.CLAUDE_CONFIG_DIR?.trim() || join(home, ".claude"), "skills"),
-		detectCommands: ["claude"],
-	},
-	cline: universal("Cline"),
-	codebuddy: {
-		label: "CodeBuddy",
-		class: "additional",
-		projectSkillsDir: join(".codebuddy", "skills"),
-		globalSkillsDir: (home) => join(home, ".codebuddy", "skills"),
-		detectCommands: ["codebuddy"],
-	},
-	codex: universal("Codex"),
-	"command-code": universal("Command Code"),
-	cortex: {
-		label: "Cortex Code",
-		class: "additional",
-		projectSkillsDir: join(".cortex", "skills"),
-		globalSkillsDir: (home) => join(home, ".snowflake", "cortex", "skills"),
-		detectCommands: ["cortex"],
-	},
-	crush: universal("Crush"),
-	cursor: universal("Cursor"),
-	devin: universal("Devin"),
-	droid: universal("Droid"),
-	"gemini-cli": universal("Gemini CLI"),
-	"github-copilot": universal("GitHub Copilot"),
-	goose: universal("Goose"),
-	junie: universal("Junie"),
-	kilo: universal("Kilo Code"),
-	"kimi-code-cli": universal("Kimi Code CLI"),
-	"kiro-cli": {
-		label: "Kiro CLI",
-		class: "additional",
-		projectSkillsDir: join(".kiro", "skills"),
-		globalSkillsDir: (home) => join(home, ".kiro", "skills"),
-		detectCommands: ["kiro-cli", "kiro"],
-	},
-	kode: {
-		label: "Kode",
-		class: "additional",
-		projectSkillsDir: join(".kode", "skills"),
-		globalSkillsDir: (home) => join(home, ".kode", "skills"),
-		detectCommands: ["kode"],
-	},
-	"mistral-vibe": universal("Mistral Vibe"),
-	opencode: universal("OpenCode"),
-	openclaw: universal("OpenClaw"),
-	openhands: universal("OpenHands"),
-	pi: universal("Pi"),
-	pochi: universal("Pochi"),
-	qoder: {
-		label: "Qoder",
-		class: "additional",
-		projectSkillsDir: join(".qoder", "skills"),
-		globalSkillsDir: (home) => join(home, ".qoder", "skills"),
-		detectCommands: ["qoder", "qodercli"],
-	},
-	"qwen-code": universal("Qwen Code"),
-	replit: universal("Replit"),
-	trae: {
-		label: "Trae",
-		class: "additional",
-		projectSkillsDir: join(".trae", "skills"),
-		globalSkillsDir: (home) => join(home, ".trae", "skills"),
-		detectCommands: ["trae"],
-	},
-	"trae-cn": {
-		label: "Trae CN",
-		class: "additional",
-		projectSkillsDir: join(".trae", "skills"),
-		globalSkillsDir: (home) => join(home, ".trae-cn", "skills"),
-		detectCommands: ["trae-cn"],
-	},
-	warp: universal("Warp"),
-	xum: universal("Xum"),
-	zed: universal("Zed"),
-	zencoder: universal("Zencoder"),
-};
-
-const agentKeys = Object.keys(AGENTS);
 
 /**
  * All agent targets supported by `@crustjs/skills`.
@@ -187,7 +28,7 @@ const agentKeys = Object.keys(AGENTS);
  */
 export const ALL_AGENTS =
 	// SAFETY: Object.keys returns exactly the enumerable string keys of AGENTS.
-	agentKeys as AgentTarget[];
+	Object.keys(AGENTS) as AgentTarget[];
 
 /**
  * Human-readable labels for each agent target.
@@ -196,14 +37,31 @@ export const ALL_AGENTS =
  */
 export const AGENT_LABELS =
 	// SAFETY: ALL_AGENTS supplies every AgentTarget key to the mapped entries.
-	Object.fromEntries(ALL_AGENTS.map((agent) => [agent, AGENTS[agent].label])) as Record<
+	Object.fromEntries(ALL_AGENTS.map((agent) => [agent, AGENTS[agent][0]])) as Record<
 		AgentTarget,
 		string
 	>;
 
+function agentClass(agent: AgentTarget): AgentClass {
+	const [, projectDir, globalDir] = AGENTS[agent];
+	return projectDir === UNIVERSAL_SKILLS_DIR && globalDir === UNIVERSAL_SKILLS_DIR
+		? "universal"
+		: "additional";
+}
+
+/** Absolute global skills directory, or `undefined` when the agent has none. */
+function globalSkillsDir(agent: AgentTarget): string | undefined {
+	// The one upstream override carried here; the snapshot has none of upstream's other
+	// environment overrides or per-platform paths.
+	const claudeConfigDir = agent === "claude-code" ? process.env.CLAUDE_CONFIG_DIR?.trim() : "";
+	if (claudeConfigDir) return join(claudeConfigDir, "skills");
+	const dir = AGENTS[agent][2];
+	return dir === null ? undefined : join(homedir(), dir);
+}
+
 /** Returns agents that use the canonical `.agents/skills` layout. */
 export function getUniversalAgents(): AgentTarget[] {
-	return ALL_AGENTS.filter((agent) => AGENTS[agent].class === "universal");
+	return ALL_AGENTS.filter((agent) => agentClass(agent) === "universal");
 }
 
 /**
@@ -212,19 +70,53 @@ export function getUniversalAgents(): AgentTarget[] {
  * @internal
  */
 export function getAdditionalAgents(): AgentTarget[] {
-	return ALL_AGENTS.filter((agent) => AGENTS[agent].class === "additional");
+	return ALL_AGENTS.filter((agent) => agentClass(agent) === "additional");
 }
 
 /**
- * Detects installed non-universal agents by checking PATH for their CLI binaries.
+ * Whether the agent has a skills directory at `scope`; some have none at global scope.
+ *
+ * @internal
+ */
+export function isAgentAvailable(agent: AgentTarget, scope: Scope): boolean {
+	return scope === "project" || AGENTS[agent][2] !== null;
+}
+
+/**
+ * Agents with a skills directory at `scope`.
+ *
+ * @internal
+ */
+export function getScopeAgents(scope: Scope): AgentTarget[] {
+	return ALL_AGENTS.filter((agent) => isAgentAvailable(agent, scope));
+}
+
+/**
+ * The folder whose presence shows an agent is installed: the one containing its global
+ * skills directory, unless that is the home directory or the shared `~/.agents`, which
+ * exist for unrelated reasons.
+ *
+ * @internal
+ */
+export function agentDetectionFolder(skillsDir: string, home: string): string | undefined {
+	const folder = dirname(skillsDir);
+	return folder === home || folder === join(home, ".agents") ? undefined : folder;
+}
+
+/**
+ * Detects installed non-universal agents by the folder containing their global skills
+ * directory, such as `~/.claude` for `~/.claude/skills`. Project folders are not consulted.
  *
  * Universal agents are intentionally not detected here so callers can always
  * present them as a single optional "Universal" install target.
  */
 export async function detectInstalledAgents(): Promise<AgentTarget[]> {
-	return getAdditionalAgents().filter((agent) =>
-		(AGENTS[agent].detectCommands ?? []).some((command) => which(command) !== null),
-	);
+	const home = homedir();
+	return getAdditionalAgents().filter((agent) => {
+		const skillsDir = globalSkillsDir(agent);
+		const folder = skillsDir === undefined ? undefined : agentDetectionFolder(skillsDir, home);
+		return folder !== undefined && existsSync(folder);
+	});
 }
 
 /**
@@ -233,9 +125,12 @@ export async function detectInstalledAgents(): Promise<AgentTarget[]> {
  * @internal
  */
 export function resolveAgentPath(agent: AgentTarget, scope: Scope, name: string): string {
-	const cfg = AGENTS[agent];
-	if (scope === "project") {
-		return join(process.cwd(), cfg.projectSkillsDir, name);
+	if (scope === "project") return join(process.cwd(), AGENTS[agent][1], name);
+	const skillsDir = globalSkillsDir(agent);
+	if (skillsDir === undefined) {
+		throw new Error(
+			`Agent "${agent}" (${AGENT_LABELS[agent]}) has no global skills directory; use project scope.`,
+		);
 	}
-	return join(cfg.globalSkillsDir(homedir()), name);
+	return join(skillsDir, name);
 }

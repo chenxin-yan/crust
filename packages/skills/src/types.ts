@@ -16,7 +16,7 @@ export interface RenderedFile {
 export interface InstallSkillOptions {
 	/** Package directory `skills/<name>` containing the skill's SKILL.md. */
 	sourceDir: string | URL;
-	/** Agent targets. Omit to use universal plus PATH-detected agents. */
+	/** Agent targets. Omit to use universal plus detected agents. */
 	agents?: readonly AgentTarget[];
 	/** Agent-directory scope. @default "global" */
 	scope?: Scope;

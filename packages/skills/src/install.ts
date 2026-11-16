@@ -5,9 +5,9 @@ import { isErrnoException } from "@crustjs/utils/error";
 import { resolveSourceDir } from "@crustjs/utils/source";
 
 import {
-	ALL_AGENTS,
 	type AgentTarget,
 	detectInstalledAgents,
+	getScopeAgents,
 	getUniversalAgents,
 	resolveAgentPath,
 	resolveEffectiveScope,
@@ -153,8 +153,8 @@ export async function installSkill(options: InstallSkillOptions): Promise<Instal
 export async function uninstallSkill(
 	options: UninstallSkillOptions,
 ): Promise<UninstallSkillResult> {
-	const agents = options.agents ?? [...ALL_AGENTS];
 	const scope = resolveEffectiveScope(options.scope ?? "global");
+	const agents = options.agents ?? getScopeAgents(scope);
 	const results: UninstallSkillResult["agents"] = [];
 
 	for (const [outputDir, groupedAgents] of groupAgentsByOutputDir(agents, scope, options.name)) {
@@ -170,8 +170,8 @@ export async function uninstallSkill(
 
 /** Reports ownership and health. Only ENOENT is missing; other filesystem errors reject. */
 export async function getSkillStatus(options: SkillStatusOptions): Promise<SkillStatusResult> {
-	const agents = options.agents ?? [...ALL_AGENTS];
 	const scope = resolveEffectiveScope(options.scope ?? "global");
+	const agents = options.agents ?? getScopeAgents(scope);
 	const expectedSourceDir = resolveSourceDir(options.sourceDir);
 	const results: SkillStatusResult["agents"] = [];
 

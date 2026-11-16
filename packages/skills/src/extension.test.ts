@@ -1,5 +1,4 @@
 import {
-	chmod,
 	lstat,
 	mkdir,
 	mkdtemp,
@@ -42,6 +41,11 @@ beforeEach(async () => {
 	originalArgv1 = process.argv[1];
 	process.argv[1] = join(packageRoot, "src", "cli.ts");
 	await writeFile(process.argv[1], "");
+	// Agents are detected by folders in the home directory; an empty one keeps detection deterministic.
+	const home = join(tempRoot, "home");
+	await mkdir(home);
+	vi.stubEnv("HOME", home);
+	vi.stubEnv("USERPROFILE", home);
 });
 
 afterEach(async () => {
@@ -114,9 +118,8 @@ async function onTerminal<T>(run: () => Promise<T>): Promise<T> {
 	}
 }
 
-/** Runs `demo <argv>` on a fake terminal from `tempRoot`; empty PATH keeps agent detection deterministic. */
+/** Runs `demo <argv>` on a fake terminal from `tempRoot`. */
 function executeWithPrompts(argv: string[]) {
-	vi.stubEnv("PATH", "");
 	const harness = createPromptIO();
 	const run = withCwd(tempRoot, () =>
 		withTerminalIO(harness.io, () => createApp().execute({ argv })),
@@ -286,7 +289,7 @@ describe("skill extension packaged directory", () => {
 			installSkill({ sourceDir: join(source, "guide"), agents: ["amp"], scope: "project" }),
 		);
 
-		// Universal is the only agent choice.
+		// The `.agents/skills` link preselects Universal and the additional agents sharing it at project scope.
 		const { harness, run } = executeWithPrompts(["skill"]);
 		await waitForPrompt(harness, "Select skills to install");
 		// Only the installed "guide" starts selected; swap it for "demo".
@@ -334,7 +337,10 @@ describe("skill extension packaged directory", () => {
 
 		expect(captured.stdout).toContain('Removed "demo"');
 		// Antigravity shares `.agents/skills` with Universal at project scope; one line per directory.
-		expect(captured.stdout).toContain(`Universal, Antigravity → ${target("demo")}`);
+		const sharedLine = captured.stdout
+			.split("\n")
+			.find((line) => line.endsWith(` → ${target("demo")}`));
+		expect(sharedLine).toMatch(/^ {2}Universal, .*Antigravity/);
 		const reportedDirs = captured.stdout
 			.split("\n")
 			.flatMap((line) => (line.includes(" → ") ? [line.split(" → ")[1]] : []));
@@ -360,12 +366,8 @@ describe("skill extension packaged directory", () => {
 			await mkdir(conflict, { recursive: true });
 			await writeFile(join(conflict, "manual.md"), "keep\n");
 		}
-		const binDir = join(tempRoot, "bin");
-		await mkdir(binDir);
-		for (const name of ["trae", "trae-cn"]) {
-			await writeFile(join(binDir, name), "#!/bin/sh\nexit 0\n");
-			await chmod(join(binDir, name), 0o755);
-		}
+		// Trae and Trae CN are detected by `~/.trae` and `~/.trae-cn`; `~/.trae` holds the conflict.
+		await mkdir(join(tempRoot, ".trae-cn"));
 
 		// Inside the fake package so the subprocess resolves the same staged skills.
 		const script = join(packageRoot, "home-scope.ts");
@@ -410,7 +412,6 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 			env: {
 				...process.env,
 				HOME: tempRoot,
-				PATH: binDir,
 				CLAUDE_CONFIG_DIR: join(tempRoot, ".claude"),
 			},
 			timeout: 4_000,
@@ -607,13 +608,13 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 
 	it("keeps a shared output directory when deselecting one of its agents", async () => {
 		const source = await writeSource("demo");
-		// Antigravity shares `.agents/skills` with the universal group at project
-		// scope; the pre-existing link marks both choices installed.
+		// Amp, Antigravity, and other additional agents share `.agents/skills` with the
+		// universal group at project scope; the pre-existing link marks them all installed.
 		await withCwd(tempRoot, () =>
 			installSkill({ sourceDir: join(source, "demo"), agents: ["amp"], scope: "project" }),
 		);
 
-		// Antigravity is the only additional choice (installed), listed right after Universal.
+		// Amp is the first additional choice (installed), listed right after Universal.
 		const { harness, run } = executeWithPrompts(["skill"]);
 		harness.keys("down", "space", "enter");
 		await run;
