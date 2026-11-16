@@ -2,6 +2,7 @@
 // source.config.ts with esbuild and when Node imports it directly (twoslash.test.ts).
 // ponytail: the shared client entry ships these whole manifests (~2 kB gzip); pass names and
 // descriptions through the landing loader if that weight matters.
+import auth from "../../../../packages/auth/package.json" with { type: "json" };
 import core from "../../../../packages/core/package.json" with { type: "json" };
 import create from "../../../../packages/create/package.json" with { type: "json" };
 import crust from "../../../../packages/crust/package.json" with { type: "json" };
@@ -27,6 +28,7 @@ export interface PackageManifest {
 
 /** Packages with a module page, keyed by its slug (`modules/<slug>`), which is also the `packages/<slug>` directory. */
 export const PACKAGES = {
+	auth,
 	core,
 	create,
 	crust,

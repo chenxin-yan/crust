@@ -75,6 +75,7 @@ export const MODULES: readonly LandingModule[] = [
 	moduleEntry("testing"),
 	moduleEntry("mcp"),
 	moduleEntry("openapi"),
+	moduleEntry("auth"),
 	{
 		pkg: "@crustjs/render",
 		desc: "Terminal content rendering",

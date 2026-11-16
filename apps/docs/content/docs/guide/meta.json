@@ -9,6 +9,7 @@
     "extensions",
     "error-handling",
     "agents",
+    "login",
     "testing",
     "runtime-support",
     "build-and-distribution"
