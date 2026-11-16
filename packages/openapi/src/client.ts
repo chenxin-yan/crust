@@ -1,21 +1,42 @@
 import { type ContextFactory, type ContextSetup, defineContext } from "@crustjs/core";
 
+/**
+ * What `auth` may return to have a 401 retried: its headers, and how to get new ones.
+ * `bearerAuth()` builds one.
+ */
+export interface AuthAttempt {
+	readonly headers: Readonly<Record<string, string>>;
+	/**
+	 * Called at most once per request, when a request that carried these headers gets a 401:
+	 * the attempt to replay the request with, which later requests and pages also use, or
+	 * `undefined` to keep the 401. Leave it out for a credential that can't be refreshed.
+	 */
+	readonly retry?: (
+		response: Response,
+		options: { readonly signal: AbortSignal },
+	) => Promise<AuthAttempt | undefined>;
+}
+
 export interface ApiClientOptions {
 	/** URL request paths resolve against, e.g. `https://api.example.com/v1`. */
 	readonly baseUrl: string;
 	/**
 	 * Headers added to requests to the base URL's origin, e.g. an `Authorization` header, or any
-	 * default header such as `User-Agent` or an API-version header. All of them are treated as
-	 * credentials: they are never sent off the base URL's origin.
+	 * default header such as `User-Agent` or an API-version header, or an {@link AuthAttempt}
+	 * with such headers. All of them are treated as credentials: they are never sent off the
+	 * base URL's origin.
 	 * Called at most once per invocation, on the first request that sends credentials: never
-	 * for a command that only reads the Context, nor for requests with `auth: false`.
+	 * for a command that only reads the Context, nor for requests with `auth: false`. Its
+	 * second argument holds the `baseUrl` as configured.
 	 */
 	readonly auth?: (
 		input: ContextSetup,
+		client: { readonly baseUrl: string },
 	) =>
 		| Readonly<Record<string, string>>
+		| AuthAttempt
 		| undefined
-		| Promise<Readonly<Record<string, string>> | undefined>;
+		| Promise<Readonly<Record<string, string>> | AuthAttempt | undefined>;
 }
 
 /** The `api` Context value: `fetch()` bound to the API's base URL and auth. */
@@ -65,6 +86,22 @@ interface Hop {
 	readonly redirects: number;
 }
 
+/** The `auth` headers a request attaches, and the retry of the attempt they came from. */
+interface AuthState {
+	readonly headers: Headers;
+	readonly retry: AuthAttempt["retry"];
+}
+
+/** A body `fetch()` can send again: never a stream, which the first request consumed. */
+const isReplayable = (body: RequestInit["body"]): boolean =>
+	body == null ||
+	typeof body === "string" ||
+	body instanceof URLSearchParams ||
+	body instanceof ArrayBuffer ||
+	ArrayBuffer.isView(body) ||
+	body instanceof Blob ||
+	body instanceof FormData;
+
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const MAX_REDIRECTS = 20;
 // Request-body headers the Fetch standard drops when a redirect turns the request into a GET.
@@ -106,12 +143,19 @@ export const apiClient: ContextFactory<"api", ApiClientOptions, ApiClient> =
 		const origin = new URL(options.baseUrl).origin;
 		// The headers the Fetch standard strips on a cross-origin redirect, plus every auth header name once `auth` ran.
 		const credentialHeaders = ["authorization", "cookie", "proxy-authorization"];
-		let authHeaders: Promise<Headers> | undefined;
-		async function loadAuthHeaders(): Promise<Headers> {
-			const headers = new Headers(await options.auth?.(input));
+		let authState: Promise<AuthState> | undefined;
+		function toAuthState(result: Awaited<ReturnType<NonNullable<ApiClientOptions["auth"]>>>) {
+			// A header value is a string, so an object `headers` marks an AuthAttempt.
+			const attempt =
+				typeof result?.headers === "object" && result.headers !== null
+					? (result as AuthAttempt)
+					: undefined;
+			const headers = new Headers(attempt ? attempt.headers : (result as Record<string, string>));
 			credentialHeaders.push(...headers.keys());
-			return headers;
+			return { headers, retry: attempt?.retry };
 		}
+		const loadAuthState = async () =>
+			toAuthState(await options.auth?.(input, { baseUrl: options.baseUrl }));
 
 		const firstHop = (
 			url: URL,
@@ -156,13 +200,20 @@ export const apiClient: ContextFactory<"api", ApiClientOptions, ApiClient> =
 
 		// Redirects are followed here, not by `fetch()`, which would forward headers other than
 		// Authorization to any origin and restart its redirect count on every call.
-		async function send(hop: Hop): Promise<Response> {
-			const redirect = hop.init.redirect ?? "follow";
-			for (;;) {
+		// A 401 to a request that carried the `auth` headers is replayed once from `first` with the
+		// attempt `retry` returns, which becomes the invocation's auth state.
+		async function send(first: Hop, retried = false): Promise<Response> {
+			const redirect = first.init.redirect ?? "follow";
+			const replayable = !retried && isReplayable(first.init.body);
+			for (let hop = first; ;) {
 				const headers = new Headers(hop.init.headers);
+				let attached: AuthState | undefined;
 				if (hop.auth && hop.url.origin === origin) {
-					for (const [name, value] of await (authHeaders ??= loadAuthHeaders())) {
-						if (!headers.has(name)) headers.set(name, value);
+					const state = await (authState ??= loadAuthState());
+					for (const [name, value] of state.headers) {
+						if (headers.has(name)) continue;
+						headers.set(name, value);
+						attached = state;
 					}
 				}
 				const response = await fetch(hop.url, {
@@ -170,6 +221,18 @@ export const apiClient: ContextFactory<"api", ApiClientOptions, ApiClient> =
 					headers,
 					redirect: redirect === "follow" ? "manual" : redirect,
 				});
+				const signal = hop.init.signal ?? input.signal;
+				if (response.status === 401 && attached?.retry && replayable && !signal.aborted) {
+					const next = await attached.retry(response, { signal }).catch(async (error: unknown) => {
+						await response.body?.cancel();
+						throw error;
+					});
+					if (next !== undefined) {
+						await response.body?.cancel();
+						authState = Promise.resolve(toAuthState(next));
+						return send(first, true);
+					}
+				}
 				const location = response.headers.get("location");
 				if (redirect !== "follow" || !REDIRECT_STATUSES.has(response.status) || location === null) {
 					return hop.redirects > 0 ? markRedirected(response) : response;
