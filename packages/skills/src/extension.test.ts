@@ -654,4 +654,125 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		expect(captured.stderr).toContain("Skipped Universal [demo]");
 		expect(await linkTarget(claude)).toBe(join(source, "demo"));
 	});
+
+	/** Runs `demo <argv>` from `tempRoot` without a terminal, so any prompt fails the run. */
+	function executeWithoutPrompts(argv: string[]) {
+		return withCwd(tempRoot, () => captureExecute(createApp(), argv));
+	}
+
+	it("installs the --skill and --agent selection without prompting", async () => {
+		const source = await writeSource("demo");
+		await writeSource("guide");
+		const claude = join(tempRoot, ".claude", "skills");
+
+		const captured = await executeWithoutPrompts([
+			"skills",
+			"install",
+			"--agent",
+			"claude-code",
+			"--agent",
+			"universal",
+			"--skill",
+			"demo",
+		]);
+
+		// Without a terminal, any prompt would fail the run.
+		expect(captured.exitCode, captured.stderr).toBe(0);
+		expect(await linkTarget(join(claude, "demo"))).toBe(join(source, "demo"));
+		expect(await linkTarget(target("demo"))).toBe(join(source, "demo"));
+		await expect(lstat(join(claude, "guide"))).rejects.toThrow();
+		await expect(lstat(target("guide"))).rejects.toThrow();
+	});
+
+	it("prompts only for agents when --skill is given", async () => {
+		await writeSource("demo");
+		await writeSource("guide");
+
+		const { harness, run } = executeWithPrompts(["skills", "--skill", "guide"]);
+		await waitForPrompt(harness, "Select agents to install for");
+		harness.keys("space", "enter");
+		await run;
+
+		expect(harness.screen()).not.toContain("Select skills to install");
+		expect((await lstat(target("guide"))).isSymbolicLink()).toBe(true);
+		await expect(lstat(target("demo"))).rejects.toThrow();
+	});
+
+	it("prompts only for skills when --agent is given", async () => {
+		await writeSource("demo");
+		await writeSource("guide");
+
+		const { harness, run } = executeWithPrompts(["skills", "--agent", "universal"]);
+		await waitForPrompt(harness, "Select skills to install");
+		// Both start selected; drop "guide".
+		harness.keys("down", "space", "enter");
+		await run;
+
+		expect(harness.screen()).not.toContain("Select agents to install for");
+		expect((await lstat(target("demo"))).isSymbolicLink()).toBe(true);
+		await expect(lstat(target("guide"))).rejects.toThrow();
+	});
+
+	it("skips a conflict without prompting when agents come from --agent", async () => {
+		await writeSource("demo");
+		await mkdir(target(), { recursive: true });
+
+		const captured = await executeWithoutPrompts(["skills", "--agent", "universal"]);
+
+		expect(captured.exitCode).toBe(0);
+		expect(captured.stderr).toContain(
+			"Skipped Universal [demo]: directory is not owned by this skill.",
+		);
+		expect((await lstat(target())).isDirectory()).toBe(true);
+	});
+
+	it.each([
+		[
+			["skills", "--all", "--agent", "universal"],
+			"--all cannot be combined with --agent or --skill.",
+		],
+		[
+			["skills", "install", "--all", "--skill", "demo"],
+			"--all cannot be combined with --agent or --skill.",
+		],
+		[["skills", "uninstall", "--all", "--skill", "demo"], "--all cannot be combined with --skill."],
+		[
+			["skills", "--agent", "nope"],
+			'Unknown agent "nope" for --agent. Use "universal" for the Universal group or an agent id from https://crustjs.com/docs/modules/skills#supported-agents.',
+		],
+		[
+			["skills", "--skill", "nope"],
+			'Unknown skill "nope" for --skill. Packaged skills: demo, guide.',
+		],
+		[
+			["skills", "uninstall", "--skill", "nope"],
+			'Unknown skill "nope" for --skill. Packaged skills: demo, guide.',
+		],
+		[
+			["skills", "--agent", "eve", "--scope", "global"],
+			'Agent "eve" (Eve) has no global skills directory; use --scope project.',
+		],
+	])("rejects %j as a usage error", async (argv, message) => {
+		await writeSource("demo");
+		await writeSource("guide");
+
+		const captured = await executeWithoutPrompts(argv);
+
+		expect(captured.exitCode).not.toBe(0);
+		expect(captured.stderr).toContain(message);
+		await expect(lstat(target("demo"))).rejects.toThrow();
+	});
+
+	it("uninstalls the --skill selection without prompting", async () => {
+		const source = await writeSource("demo");
+		await writeSource("guide");
+		await executeWithoutPrompts(["skills", "--all"]);
+
+		const captured = await executeWithoutPrompts(["skills", "uninstall", "--skill", "demo"]);
+
+		expect(captured.exitCode).toBe(0);
+		expect(captured.stdout).toContain('Removed "demo"');
+		await expect(lstat(target("demo"))).rejects.toThrow();
+		expect(await linkTarget(target("guide"))).toBe(join(source, "guide"));
+	});
 });

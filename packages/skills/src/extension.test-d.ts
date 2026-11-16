@@ -18,6 +18,10 @@ function _typecheckDefaultNameKeepsHostTreeClosed() {
 	void app.run(["deploy"], { flags: { force: true } });
 	void app.run(["skills"], { flags: { scope: "project", all: true } });
 	void app.run(["skill", "uninstall"], { flags: { all: true } });
+	void app.run(["skills", "install"], { flags: { agent: ["claude-code"], skill: ["demo"] } });
+	void app.run(["skills", "uninstall"], { flags: { skill: ["demo"] } });
+	// @ts-expect-error -- `uninstall` declares no `--agent`
+	void app.run(["skills", "uninstall"], { flags: { agent: ["claude-code"] } });
 	void app.run(["skills", "repair"], { flags: { scope: "global" } });
 	void runInteractive(app, ["deploy"]);
 	// @ts-expect-error -- unknown command paths stay rejected after extend()

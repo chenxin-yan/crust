@@ -11,3 +11,5 @@ The agent list is now generated from the registry of the `skills` package (1.8.1
 Agents are no longer detected through a `PATH` lookup. An additional agent counts as installed when the folder containing its global skills directory exists, such as `~/.claude` for `~/.claude/skills`; project folders, the home directory itself, and the shared `~/.agents` do not count.
 
 The Extension no longer registers its build hook inside a bundle that `crust build` produces, so a CLI built with Crust no longer ships the skill renderer: a one-command CLI with `skill({})` bundles about 11 KB smaller.
+
+`skills install` (and bare `skills`) accepts `--agent <id>` and `--skill <name>`, both repeatable, and `skills uninstall` accepts `--skill <name>`. Each flag answers its prompt; whatever is left is still asked. With `--agent`, a directory the skill does not own is skipped with a warning instead of a confirmation. An unknown agent or skill, or `--all` together with `--agent` or `--skill`, is a usage error.

@@ -54,15 +54,19 @@ The section's source paths are resolved when help or man output is generated. Bu
 ```sh
 my-cli skills install
 my-cli skills install --all --scope project
+my-cli skills install --agent claude-code --agent universal --skill my-cli --scope project
 my-cli skills            # shorthand for `skills install`
 my-cli skills uninstall
+my-cli skills uninstall --skill my-cli --scope global
 my-cli skills repair
 ```
 
-`--scope` accepts `project` or `global`. With `--all`, scope comes from `--scope`, then `defaultScope`, then `global`; without `--all`, an interactive run prompts when neither setting is supplied. `install --all` links every packaged skill for the Universal group, every [detected agent](#supported-agents), and every agent that already holds one of the packaged skills.
+`--scope` accepts `project` or `global`. With `--all`, scope comes from `--scope`, then `defaultScope`, then `global`; otherwise an interactive run prompts when neither setting is supplied.
+
+Each flag answers its prompt, and whatever is left is asked: `--skill <name>` (repeatable) skips the skill prompt, `--agent <id>` (repeatable, `install` only) skips the agent prompt, and `--scope` skips the scope prompt. `--agent universal` selects the Universal group; other ids are listed under [supported agents](#supported-agents). With `--agent`, a directory the skill does not own is skipped with a warning instead of a confirmation. An unknown agent or skill, or `--all` together with `--agent` or `--skill`, is a usage error. `install --all` links every packaged skill for the Universal group, every [detected agent](#supported-agents), and every agent that already holds one of the packaged skills.
 
 - **Install is additive.** It links or repairs the selected skills for the selected agents and never removes links. Interactively, it asks which skills (when more than one is packaged) and which agents, and confirms before overwriting each directory it does not own.
-- **Uninstall removes selected links.** It lists the skills linked at the chosen scope, with nothing preselected, and removes the selected ones from every agent directory. `--all` is the only non-interactive form.
+- **Uninstall removes selected links.** It lists the skills linked at the chosen scope, with nothing preselected, and removes the selected ones from every agent directory. `--all` or `--skill` skips the prompt.
 - **Repair** relinks stale or dangling links without prompting.
 
 <auto-type-table path="../../../../../packages/skills/src/types.ts" name="SkillOptions" />

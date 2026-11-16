@@ -10,6 +10,7 @@ import {
 	type ExtensionFactory,
 	type ExtensionId,
 	type InvocationIO,
+	CrustError,
 	defineCommand,
 	defineExtension,
 } from "@crustjs/core";
@@ -21,9 +22,11 @@ import { isCI } from "@crustjs/utils/terminal";
 
 import {
 	AGENT_LABELS,
+	ALL_AGENTS,
 	detectInstalledAgents,
 	getAdditionalAgents,
 	getUniversalAgents,
+	isAgentAvailable,
 	resolveEffectiveScope,
 } from "./agents.ts";
 import type { AgentTarget, Scope } from "./agents.ts";
@@ -39,6 +42,7 @@ const SKILLS_SECTION_TITLE = "Agent skills";
 const DEFAULT_SKILL_SCOPE = "global";
 const SKILLS_ARTIFACT = "skills";
 const UNIVERSAL_GROUP = "__universal__";
+const UNIVERSAL_AGENT_FLAG_VALUE = "universal";
 
 type SkillIO = Pick<InvocationIO, "stdout" | "stderr">;
 
@@ -64,6 +68,39 @@ async function resolveScope(
 
 function loadArtifactSkills(): readonly PackagedSkill[] {
 	return loadPackagedSkills(resolveArtifactDir(SKILLS_ARTIFACT));
+}
+
+/** `--agent` values as agents; `universal` names the Universal group. */
+function parseAgentFlag(values: readonly string[]): AgentTarget[] {
+	const agents = new Set<AgentTarget>();
+	for (const value of values) {
+		const agent = ALL_AGENTS.find((id) => id === value);
+		if (agent) agents.add(agent);
+		else if (value === UNIVERSAL_AGENT_FLAG_VALUE) {
+			for (const universal of getUniversalAgents()) agents.add(universal);
+		} else {
+			throw new CrustError(
+				"PARSE",
+				`Unknown agent "${value}" for --agent. Use "${UNIVERSAL_AGENT_FLAG_VALUE}" for the Universal group or an agent id from https://crustjs.com/docs/modules/skills#supported-agents.`,
+				{ flag: "agent" },
+			);
+		}
+	}
+	return [...agents];
+}
+
+/** Checks `--skill` values against the packaged skills. */
+function checkSkillFlag(names: readonly string[]): readonly string[] {
+	const skills = loadArtifactSkills().map((packagedSkill) => packagedSkill.name);
+	const unknown = names.find((name) => !skills.includes(name));
+	if (unknown !== undefined) {
+		throw new CrustError(
+			"PARSE",
+			`Unknown skill "${unknown}" for --skill. Packaged skills: ${skills.join(", ")}.`,
+			{ flag: "skill" },
+		);
+	}
+	return names;
 }
 
 function conflictWarning(name: string, outputDir: string): string {
@@ -254,9 +291,17 @@ type SkillAllFlag<Description extends string> = {
 	readonly type: "boolean";
 	readonly description: Description;
 };
+type SkillRepeatableFlag<Description extends string> = {
+	readonly type: "string";
+	readonly multiple: true;
+	readonly description: Description;
+};
+type SkillNameFlag = SkillRepeatableFlag<typeof SKILL_FLAG_DESCRIPTION>;
 type SkillInstallFlags = {
 	readonly scope: SkillScopeFlag;
 	readonly all: SkillAllFlag<typeof INSTALL_ALL_DESCRIPTION>;
+	readonly agent: SkillRepeatableFlag<typeof AGENT_FLAG_DESCRIPTION>;
+	readonly skill: SkillNameFlag;
 };
 
 /**
@@ -280,6 +325,7 @@ export type SkillCommandDefinition<
 				{
 					readonly scope: SkillScopeFlag;
 					readonly all: SkillAllFlag<typeof UNINSTALL_ALL_DESCRIPTION>;
+					readonly skill: SkillNameFlag;
 				},
 				{},
 				void,
@@ -411,13 +457,28 @@ function reportAgentDirs(
 async function installSkills(opts: {
 	scope: Scope;
 	installAll: boolean;
+	/** From `--agent`: skips the agent prompt and conflict confirmations. */
+	agents?: readonly AgentTarget[];
+	/** From `--skill`: skips the skill prompt. */
+	skills?: readonly string[];
 	io: SkillIO;
 }): Promise<void> {
 	const { installAll, io } = opts;
 	const effectiveScope = resolveEffectiveScope(opts.scope);
+	const unavailable = opts.agents?.find((agent) => !isAgentAvailable(agent, effectiveScope));
+	if (unavailable) {
+		throw new CrustError(
+			"PARSE",
+			`Agent "${unavailable}" (${AGENT_LABELS[unavailable]}) has no global skills directory; use --scope project.`,
+			{ flag: "agent" },
+		);
+	}
 	let statuses = [...(await loadStatuses(effectiveScope))];
 	if (statuses.length === 0) return;
-	if (!installAll && statuses.length > 1) {
+	const namedSkills = opts.skills;
+	if (namedSkills) {
+		statuses = statuses.filter(([packagedSkill]) => namedSkills.includes(packagedSkill.name));
+	} else if (!installAll && statuses.length > 1) {
 		const skills = statuses.map(([packagedSkill]) => packagedSkill);
 		const installedSkills = statuses.flatMap(([packagedSkill, statusMap]) =>
 			installedAgents(statusMap).length > 0 ? [packagedSkill] : [],
@@ -458,7 +519,8 @@ async function installSkills(opts: {
 	}
 
 	let selected: AgentTarget[];
-	if (installAll) selected = [...universal, ...additional];
+	if (opts.agents) selected = [...opts.agents];
+	else if (installAll) selected = [...universal, ...additional];
 	else {
 		const defaults: Array<AgentTarget | typeof UNIVERSAL_GROUP> = additional.filter((agent) =>
 			installed.has(agent),
@@ -483,7 +545,7 @@ async function installSkills(opts: {
 			statusMap,
 			selected,
 			scope: effectiveScope,
-			installAll,
+			nonInteractive: installAll || opts.agents !== undefined,
 			io,
 		});
 	}
@@ -495,10 +557,11 @@ async function installSelectedAgents(opts: {
 	statusMap: SkillStatusMap;
 	selected: readonly AgentTarget[];
 	scope: Scope;
-	installAll: boolean;
+	/** Skip conflicts with a warning instead of asking to overwrite. */
+	nonInteractive: boolean;
 	io: SkillIO;
 }): Promise<void> {
-	const { packagedSkill, statusMap, selected, scope, installAll, io } = opts;
+	const { packagedSkill, statusMap, selected, scope, nonInteractive, io } = opts;
 	const toInstall = selected.filter((agent) => statusMap.get(agent)?.status !== "linked");
 	if (toInstall.length === 0) {
 		io.stdout(dim(`No changes [${packagedSkill.name}].`));
@@ -529,7 +592,7 @@ async function installSelectedAgents(opts: {
 			if (!(error instanceof SkillConflictError)) throw error;
 			const label = formatAgentLabels(agents).join(", ");
 			const skipped = `Skipped ${label} [${packagedSkill.name}]: directory is not owned by this skill.`;
-			if (installAll) {
+			if (nonInteractive) {
 				io.stderr(yellow(skipped));
 				continue;
 			}
@@ -554,13 +617,18 @@ async function installSelectedAgents(opts: {
 async function uninstallSkills(opts: {
 	scope: Scope;
 	removeAll: boolean;
+	/** From `--skill`: skips the skill prompt. */
+	skills?: readonly string[];
 	io: SkillIO;
 }): Promise<void> {
-	const { removeAll, io } = opts;
+	const { removeAll, skills: namedSkills, io } = opts;
 	const effectiveScope = resolveEffectiveScope(opts.scope);
 	const statuses = await loadStatuses(effectiveScope);
 	const installedSkills = [...statuses].flatMap(([packagedSkill, statusMap]) =>
-		installedAgents(statusMap).length > 0 ? [packagedSkill] : [],
+		installedAgents(statusMap).length > 0 &&
+		(namedSkills === undefined || namedSkills.includes(packagedSkill.name))
+			? [packagedSkill]
+			: [],
 	);
 	if (installedSkills.length === 0) {
 		io.stdout(dim(`No installed skills (${effectiveScope}).`));
@@ -568,9 +636,10 @@ async function uninstallSkills(opts: {
 	}
 	// No default: a preselected list would let a non-TTY run (which answers with
 	// the default) remove every skill without --all.
-	const skills = removeAll
-		? installedSkills
-		: await selectSkills("Select skills to uninstall", installedSkills);
+	const skills =
+		removeAll || namedSkills
+			? installedSkills
+			: await selectSkills("Select skills to uninstall", installedSkills);
 	if (skills.length === 0) {
 		io.stdout(dim("No skills selected."));
 		return;
@@ -592,6 +661,9 @@ const SCOPE_FLAG_DESCRIPTION = "Skill scope (project or global)";
 const INSTALL_ALL_DESCRIPTION =
 	"Install for every detected agent and every agent already holding a packaged skill, non-interactively";
 const UNINSTALL_ALL_DESCRIPTION = "Uninstall every installed skill non-interactively";
+const AGENT_FLAG_DESCRIPTION =
+	'Agent to install for, repeatable: "universal" for the Universal group, or an agent id listed at https://crustjs.com/docs/modules/skills#supported-agents';
+const SKILL_FLAG_DESCRIPTION = "Packaged skill name, repeatable";
 
 const SCOPE_FLAG = {
 	scope: {
@@ -601,21 +673,44 @@ const SCOPE_FLAG = {
 	},
 } as const;
 
+const SKILL_FLAG = {
+	skill: {
+		type: "string",
+		multiple: true,
+		description: SKILL_FLAG_DESCRIPTION,
+	},
+} as const;
+
 const INSTALL_FLAGS = {
 	...SCOPE_FLAG,
 	all: {
 		type: "boolean",
 		description: INSTALL_ALL_DESCRIPTION,
 	},
+	agent: {
+		type: "string",
+		multiple: true,
+		description: AGENT_FLAG_DESCRIPTION,
+	},
+	...SKILL_FLAG,
 } as const;
 
-type SkillActionContext = SkillIO & { flags: { scope?: Scope; all?: boolean } };
+type SkillActionContext = SkillIO & {
+	flags: { scope?: Scope; all?: boolean; agent?: readonly string[]; skill?: readonly string[] };
+};
 
 function buildSkillCommand(commandName: string, options: SkillOptions) {
 	const install = async (context: SkillActionContext) => {
-		const installAll = context.flags.all === true;
+		const { all: installAll = false, agent, skill } = context.flags;
+		if (installAll && (agent || skill)) {
+			throw new CrustError("PARSE", "--all cannot be combined with --agent or --skill.", {
+				flag: "all",
+			});
+		}
+		const agents = agent && parseAgentFlag(agent);
+		const skills = skill && checkSkillFlag(skill);
 		const scope = await resolveScope(context.flags.scope, options, installAll);
-		await installSkills({ scope, installAll, io: context });
+		await installSkills({ scope, installAll, agents, skills, io: context });
 	};
 	return defineCommand(
 		commandName,
@@ -642,11 +737,18 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 							.flags({
 								...SCOPE_FLAG,
 								all: { type: "boolean", description: UNINSTALL_ALL_DESCRIPTION },
+								...SKILL_FLAG,
 							})
 							.action(async (context) => {
-								const removeAll = context.flags.all === true;
+								const { all: removeAll = false, skill } = context.flags;
+								if (removeAll && skill) {
+									throw new CrustError("PARSE", "--all cannot be combined with --skill.", {
+										flag: "all",
+									});
+								}
+								const skills = skill && checkSkillFlag(skill);
 								const scope = await resolveScope(context.flags.scope, options, removeAll);
-								await uninstallSkills({ scope, removeAll, io: context });
+								await uninstallSkills({ scope, removeAll, skills, io: context });
 							}),
 					),
 				)
