@@ -2,13 +2,18 @@
 // (a devDependency, never shipped). `--check` exits 1 instead when the file differs.
 //   node scripts/generate-agents.ts [--check]
 import { readFileSync, writeFileSync } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
+import os from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REGENERATE_COMMAND = "pnpm --filter @crustjs/skills run generate:agents";
 const OUTPUT = fileURLToPath(new URL("../src/agents.generated.ts", import.meta.url));
 const SENTINEL_HOME = resolve("/crust-generate-agents-home");
-// `skills` reads these at import time; any of them would leak this machine's paths into the snapshot.
+// `skills` computes paths at import time from `os.homedir()` (HOME, USERPROFILE on Windows), from
+// `os.platform()` (Reasonix's Windows folder) and from these variables; the snapshot is the POSIX
+// layout of a sentinel home, the same on every host. `process.platform` is pinned too, though only
+// its prompts and git code read it.
 const PATH_OVERRIDES = [
 	"XDG_CONFIG_HOME",
 	"CLAUDE_CONFIG_DIR",
@@ -26,6 +31,10 @@ const PATH_OVERRIDES = [
 process.env.HOME = SENTINEL_HOME;
 process.env.USERPROFILE = SENTINEL_HOME;
 for (const name of PATH_OVERRIDES) delete process.env[name];
+Object.defineProperty(process, "platform", { value: "linux" });
+os.platform = () => "linux";
+// Named `node:os` imports (`import { platform } from "os"`) see the replacement only after this.
+syncBuiltinESMExports();
 const { getSupportedAgents, version } = await import("skills");
 
 const license = readFileSync(
@@ -77,7 +86,8 @@ ${entries
 `;
 
 if (process.argv.includes("--check")) {
-	if (readFileSync(OUTPUT, "utf8") !== source) {
+	// A Windows checkout may have CRLF line endings.
+	if (readFileSync(OUTPUT, "utf8").replaceAll("\r\n", "\n") !== source) {
 		console.error(
 			`src/agents.generated.ts does not match skills@${version}. Run \`${REGENERATE_COMMAND}\`.`,
 		);
