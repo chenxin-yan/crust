@@ -143,11 +143,7 @@ const expected: Operation[] = [
 		body: {
 			required: true,
 			contentType: "application/json",
-			schema: {
-				...conformance.components.schemas.NewUser,
-				properties: { name: { type: "string", minLength: 1 }, email: { type: "string" } },
-				required: ["name", "email"],
-			},
+			schema: conformance.components.schemas.NewUser,
 		},
 		responses: [{ status: "201", contentType: "application/json", schema: userSchema }],
 		security: [],
@@ -339,13 +335,10 @@ describe("operations", () => {
 			},
 		};
 		const [node] = operations(recursive).operations;
-		expect(node?.body?.schema).toEqual({
-			...recursive.components.schemas.Node,
-			properties: { child: recursive.components.schemas.Node, x: { $ref: "#/x" } },
-		});
+		expect(node?.body?.schema).toEqual(recursive.components.schemas.Node);
 	});
 
-	it("applies a 3.1 schema's $ref siblings with its target, and ignores them in 3.0", () => {
+	it("publishes a 3.1 $ref with siblings as the siblings plus its target as the first allOf member, and ignores them in 3.0", () => {
 		const base = {
 			type: "object",
 			description: "Base",
@@ -383,19 +376,8 @@ describe("operations", () => {
 		const { $ref: _ref, ...siblings } =
 			spec("3.1.0").paths["/things"].post.requestBody.content["application/json"].schema;
 		const [thing] = operations(spec("3.1.0")).operations;
-		// The siblings stay as written and the target becomes the first `allOf` member; the listing
-		// adds the target's properties and `required`.
-		expect(thing?.body?.schema).toEqual({
-			...siblings,
-			allOf: [base],
-			properties: {
-				extra: { type: "string" },
-				short: { maxLength: 5, allOf: [name] },
-				long: { minLength: 3, allOf: [name] },
-				id: { type: "string" },
-			},
-			required: ["extra", "id"],
-		});
+		// The siblings stay as written and the target becomes the first `allOf` member.
+		expect(thing?.body?.schema).toEqual({ ...siblings, allOf: [base] });
 
 		const [thing30] = operations(spec("3.0.3")).operations;
 		expect(thing30?.body?.schema).toEqual(base);
@@ -428,20 +410,14 @@ describe("operations", () => {
 		expect(operations(body({ type: "object" })).operations[0]?.body?.schema).toEqual({
 			type: "object",
 			allOf: [{ type: "object" }, member],
-			properties: { name: { type: "string" } },
-			required: ["name"],
 		});
 		expect(operations(body(true)).operations[0]?.body?.schema).toEqual({
 			type: "object",
 			allOf: [true, member],
-			properties: { name: { type: "string" } },
-			required: ["name"],
 		});
 		expect(operations(body(false)).operations[0]?.body?.schema).toEqual({
 			type: "object",
 			allOf: [false, member],
-			properties: { name: { type: "string" } },
-			required: ["name"],
 		});
 	});
 
@@ -471,58 +447,7 @@ describe("operations", () => {
 		expect(operations(spec).operations[0]?.body?.schema).toEqual({
 			allOf: [{ type: "object" }, { properties: { name: { type: "string" } } }],
 			unevaluatedProperties: false,
-			properties: { name: { type: "string" } },
 		});
-	});
-
-	it("collects every allOf member that refers to the same schema, and ends on a recursive one", () => {
-		const spec = {
-			openapi: "3.1.0",
-			paths: {
-				"/t": {
-					post: {
-						operationId: "t",
-						requestBody: {
-							content: {
-								"application/json": {
-									schema: {
-										allOf: [
-											{
-												$ref: "#/components/schemas/Base",
-												properties: { first: { type: "string" } },
-												required: ["first"],
-											},
-											{
-												$ref: "#/components/schemas/Base",
-												properties: { second: { type: "string" } },
-												required: ["second"],
-											},
-										],
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			components: {
-				schemas: {
-					Base: {
-						type: "object",
-						properties: { id: { type: "string" } },
-						allOf: [
-							{ $ref: "#/components/schemas/Base", properties: { loop: { type: "string" } } },
-						],
-					},
-				},
-			},
-		};
-		const schema = operations(spec).operations[0]?.body?.schema as {
-			properties: object;
-			required: string[];
-		};
-		expect(Object.keys(schema.properties)).toEqual(["first", "id", "loop", "second"]);
-		expect(schema.required).toEqual(["first", "second"]);
 	});
 
 	it("keeps boolean schemas, also behind a $ref", () => {
@@ -566,6 +491,87 @@ describe("operations", () => {
 		expect(Object.getOwnPropertyDescriptor(properties, "__proto__")?.value).toEqual({
 			type: "string",
 		});
+	});
+
+	it("publishes an allOf body as written, without hoisting its members' fields", () => {
+		const schema = {
+			allOf: [{ properties: { a: { type: "string" } }, required: ["a"] }],
+			additionalProperties: false,
+		};
+		const spec = {
+			openapi: "3.1.0",
+			paths: {
+				"/a": {
+					post: { operationId: "a", requestBody: { content: { "application/json": { schema } } } },
+					put: {
+						operationId: "b",
+						requestBody: {
+							content: {
+								"application/json": {
+									schema: { $ref: "#/components/schemas/A", additionalProperties: false },
+								},
+							},
+						},
+					},
+				},
+			},
+			components: { schemas: { A: { properties: { a: { type: "string" } }, required: ["a"] } } },
+		};
+		const [a, b] = operations(spec).operations;
+		expect(a?.body?.schema).toEqual(schema);
+		expect(b?.body?.schema).toEqual({
+			additionalProperties: false,
+			allOf: [spec.components.schemas.A],
+		});
+	});
+
+	it("translates a 3.0 schema into JSON Schema at every inline level, and leaves 3.1 as written", () => {
+		const schema = {
+			type: "object",
+			properties: {
+				name: { type: "string", nullable: true },
+				tags: { type: "array", items: { type: "string", nullable: true } },
+				owner: {
+					$ref: "#/components/schemas/Owner",
+					nullable: true,
+					description: "ignored in 3.0",
+				},
+				count: {
+					type: "integer",
+					minimum: 0,
+					exclusiveMinimum: true,
+					maximum: 9,
+					exclusiveMaximum: false,
+				},
+				size: { type: "number", exclusiveMaximum: true },
+			},
+			allOf: [{ properties: { note: { type: "string", nullable: true } } }],
+			additionalProperties: { type: "boolean", nullable: true },
+		};
+		const spec = (openapi: string) => ({
+			openapi,
+			paths: {
+				"/a": {
+					post: { operationId: "a", requestBody: { content: { "application/json": { schema } } } },
+				},
+			},
+			components: { schemas: { Owner: { type: "string", nullable: true } } },
+		});
+		const [a30] = operations(spec("3.0.3")).operations;
+		expect(a30?.body?.schema).toEqual({
+			type: "object",
+			properties: {
+				name: { type: ["string", "null"] },
+				tags: { type: "array", items: { type: ["string", "null"] } },
+				owner: { $ref: "#/components/schemas/Owner" },
+				count: { type: "integer", exclusiveMinimum: 0, maximum: 9 },
+				size: { type: "number" },
+			},
+			allOf: [{ properties: { note: { type: ["string", "null"] } } }],
+			additionalProperties: { type: ["boolean", "null"] },
+		});
+		const [a31] = operations(spec("3.1.0")).operations;
+		expect(a31?.body?.schema).toEqual(schema);
 	});
 
 	it("keeps every operation sharing an operationId and flags each", () => {

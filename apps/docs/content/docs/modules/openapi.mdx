@@ -242,10 +242,10 @@ for (const op of list) {
 It walks `paths` the way [`api --list`](#browse-the-spec) does, in the same order, and normalizes each operation once:
 
 - Local `$ref`s are followed for path items, parameters, request bodies, responses, and each top-level schema. Deeper `$ref`s inside schemas stay as they are, so a recursive schema stays finite.
-- In a 3.1 document, a schema `$ref` with keywords beside it applies in place like a one-member `allOf`: the keywords stay as written, and the resolved target becomes the first member of their `allOf`. A `$ref` alone, and every 3.0 `$ref` (whose siblings OpenAPI ignores), is replaced by its target; boolean schemas (`true`, `false`) stay booleans.
+- Each schema is published as a JSON Schema 2020-12 schema that means what the API's schema means. Only these changes are made; everything else, such as `allOf`, stays as written:
+  - In a 3.1 document, a schema `$ref` with keywords beside it applies in place like a one-member `allOf`: the keywords stay as written, and the resolved target becomes the first member of their `allOf`. A `$ref` alone is replaced by its target. Boolean schemas (`true`, `false`) stay booleans.
+  - In a 3.0 document, the dialect differences are translated at every inline level: `nullable: true` adds `"null"` to `type` (`{ type: ["string", "null"] }`), the boolean `exclusiveMinimum` / `exclusiveMaximum` become the numeric form, and a `$ref` keeps no sibling keywords, which 3.0 ignores. A schema reached through a nested `$ref` is still in the document's own 3.0 form.
 - The path item's `parameters` are merged in: an operation parameter with the same `name` and `in` replaces the shared one. `Accept`, `Content-Type`, and `Authorization` header parameters are left out, as OpenAPI says to ignore them.
-- In a 3.0 document, `nullable: true` becomes a `type` union with `"null"` (`{ type: ["string", "null"] }`).
-- An object schema's `properties` and `required` include those of its `allOf` members, also of each member that refers to the same schema; a recursive reference adds only the keywords beside it.
 - A request body or response with several media types is read through its JSON one (`application/json` or `application/*+json`), else its first.
 - `security` is the operation's, else the document's; `[]` marks a public operation.
 - The input is never modified.

@@ -9,9 +9,8 @@ import {
 	isJsonMediaType,
 	operationLabel,
 	operations,
-	record,
 } from "./operations.ts";
-import { deref } from "./spec-traversal.ts";
+import { schemaFields, valueKind } from "./schema.ts";
 
 /** The fields of an operation override that lint reads. */
 export interface OperationOverride {
@@ -47,7 +46,6 @@ export interface LintInput {
 
 /** More untagged root commands than this get a `many-root-commands` warning. */
 const MANY_ROOT_COMMANDS = 20;
-const SCALAR_TYPES: readonly unknown[] = ["string", "number", "integer", "boolean"];
 // The canonical flag spellings core rejects (`assertUsableSpelling`): integer-like names, `no-`
 // (boolean negation), `__proto__`, whitespace, `=` or a leading `-`.
 const UNFLAGGABLE = /^$|^(?:0|[1-9]\d*)$|^no-|^__proto__$|^-|[\s=]/;
@@ -97,7 +95,8 @@ export function lint(input: LintInput): Diagnostic[] {
 			});
 		const entry = Object.hasOwn(override, op.id) ? override[op.id] : undefined;
 		const fields = mergeOverride(input.each?.(op), entry);
-		const bodyFields = Object.keys(record(record(op.body?.schema)?.properties) ?? {});
+		const bodySchemaFields = op.body === undefined ? [] : schemaFields(spec, op.body.schema);
+		const bodyFields = bodySchemaFields.map(({ name }) => name);
 
 		if (entry?.expect !== undefined) {
 			const { method, path } = entry.expect;
@@ -190,9 +189,8 @@ export function lint(input: LintInput): Diagnostic[] {
 			const { body } = op;
 			if (isJsonMediaType(body.contentType)) {
 				inputs.push({ kind: "flag", name: "body", source: "the request body" });
-				const properties = record(record(body.schema)?.properties) ?? {};
-				for (const field of bodyFields) {
-					if (bound.has(field) || valueKind(spec, properties[field], "other") === "other") continue;
+				for (const { name: field, kind } of bodySchemaFields) {
+					if (bound.has(field) || kind === "other") continue;
 					const repeated = sent.find((param) => kebab(param.name) === kebab(field));
 					if (repeated !== undefined) {
 						report(
@@ -212,7 +210,7 @@ export function lint(input: LintInput): Diagnostic[] {
 					`${label}: the request body is ${body.contentType}; only JSON bodies are generated`,
 					`Call the operation with \`api ${op.path} --body\`, or set \`exclude: true\` in its override`,
 				);
-			} else if (Object.keys(record(record(body.schema)?.properties) ?? {}).length > 0) {
+			} else if (bodySchemaFields.length > 0) {
 				report(
 					"warning",
 					"unsupported-body-type",
@@ -338,61 +336,6 @@ function addGroup(groups: Set<string>, group: string): void {
 	if (group === "") return;
 	const words = group.split(" ");
 	for (let end = 1; end <= words.length; end++) groups.add(words.slice(0, end).join(" "));
-}
-
-/**
- * Whether a schema's values fit a typed flag: a scalar (a scalar type, or an enum of scalars), an
- * array of scalars, or neither. `untyped` is the kind of a schema with no `type` and no `enum`
- * (also `true`); `false` accepts no value, so it is neither. Only one item level is read, so a
- * recursive array schema ends.
- */
-function valueKind(
-	spec: OpenApiSpec,
-	value: unknown,
-	untyped: "scalar" | "other",
-): "scalar" | "array" | "other" {
-	const kind = shapeOf(spec, value, untyped);
-	if (kind !== "array") return kind;
-	const items = deref(spec, (value as Readonly<Record<string, unknown>>).items);
-	return shapeOf(spec, items, untyped) === "scalar" ? "array" : "other";
-}
-
-/**
- * {@link valueKind} for the schema itself, without reading its `items`. A schema without `type` or
- * `enum` takes the kind of its first `allOf` member that has one, as a `$ref` with sibling keywords
- * becomes; only that one level is read.
- */
-function shapeOf(
-	spec: OpenApiSpec,
-	value: unknown,
-	untyped: "scalar" | "other",
-): "scalar" | "array" | "other" {
-	const own = typeShape(value);
-	if (own !== undefined || record(value) === undefined) return own ?? untyped;
-	const { allOf } = value as Readonly<Record<string, unknown>>;
-	const members = Array.isArray(allOf) ? allOf : [];
-	return members.map((member) => typeShape(deref(spec, member))).find(Boolean) ?? untyped;
-}
-
-/** The kind a schema's own `type` or `enum` gives, or `undefined` without either. */
-function typeShape(value: unknown): "scalar" | "array" | "other" | undefined {
-	if (value === false) return "other";
-	const schema = record(value);
-	if (schema === undefined) return undefined;
-	const types = (
-		Array.isArray(schema.type) ? schema.type : schema.type === undefined ? [] : [schema.type]
-	).filter((type) => type !== "null");
-	if (types.length === 0) {
-		if (!Array.isArray(schema.enum)) return undefined;
-		return schema.enum.every(
-			(item) => item === null || ["string", "number", "boolean"].includes(typeof item),
-		)
-			? "scalar"
-			: "other";
-	}
-	if (types.length > 1) return "other";
-	if (SCALAR_TYPES.includes(types[0])) return "scalar";
-	return types[0] === "array" ? "array" : "other";
 }
 
 /**

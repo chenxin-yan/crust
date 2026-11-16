@@ -1,15 +1,6 @@
 import type { OpenApiSpec } from "./api-command.ts";
-import {
-	type METHODS,
-	deref,
-	isLocalRef,
-	mergeParameters,
-	rawOperations,
-	refTarget,
-} from "./spec-traversal.ts";
-
-/** A JSON Schema as the spec has it, an object or a boolean; nested `$ref`s stay as they are. */
-type JsonSchema = Readonly<Record<string, unknown>> | boolean;
+import { type JsonSchema, publishedSchema, record } from "./schema.ts";
+import { type METHODS, deref, mergeParameters, rawOperations } from "./spec-traversal.ts";
 
 /** A parameter of an {@link Operation}, after its `$ref` and the path item's parameters are resolved. */
 export interface Param {
@@ -27,12 +18,12 @@ export interface Param {
 }
 
 /**
- * One operation of an OpenAPI 3.0 or 3.1 document, as plain data. Each top-level schema (of a
- * parameter, the body, a body property, a response) is dereferenced (in 3.1, a `$ref` with sibling
- * keywords keeps them and its target becomes their first `allOf` member), and in a 3.0 document its
- * `nullable: true` becomes a `type` union with `"null"`. An object schema's `properties` and
- * `required` include those of its `allOf` members. Deeper `$ref`s stay as they are, so a recursive
- * schema stays finite.
+ * One operation of an OpenAPI 3.0 or 3.1 document, as plain data. Each schema (of a parameter, the
+ * body, a response) is a JSON Schema 2020-12 schema that means what the API's schema means: its
+ * top-level `$ref` is resolved (in 3.1, a `$ref` with sibling keywords keeps them and its target
+ * becomes their first `allOf` member), and a 3.0 document's `nullable`, boolean exclusive bounds and
+ * ignored `$ref` siblings are translated at every inline level. Nothing else is rewritten: `allOf`
+ * stays as written, and nested `$ref`s stay as they are, so a recursive schema stays finite.
  */
 export interface Operation {
 	readonly id: string;
@@ -144,8 +135,10 @@ export function operations(spec: OpenApiSpec): {
 			],
 		};
 	}
-	const v30 = openapi.startsWith("3.0");
-	const schemaOf = (value: unknown): JsonSchema | undefined => normalizeSchema(spec, value, v30);
+	const schemaOf = (value: unknown): JsonSchema | undefined => {
+		const schema = publishedSchema(spec, value);
+		return typeof schema === "boolean" ? schema : record(schema);
+	};
 	const mediaOf = (content: unknown): { contentType: string; schema?: JsonSchema } | undefined => {
 		const entries = Object.entries(record(content) ?? {});
 		const [contentType, media] =
@@ -247,93 +240,4 @@ export function operations(spec: OpenApiSpec): {
 
 function text(value: unknown): string | undefined {
 	return typeof value === "string" && value !== "" ? value : undefined;
-}
-
-export function record(value: unknown): Readonly<Record<string, unknown>> | undefined {
-	return typeof value === "object" && value !== null && !Array.isArray(value)
-		? (value as Readonly<Record<string, unknown>>)
-		: undefined;
-}
-
-/** `schema` with a 3.0 `nullable` turned into a `type` union with `"null"`. */
-function withNullable(
-	schema: Readonly<Record<string, unknown>> | undefined,
-	v30: boolean,
-): Readonly<Record<string, unknown>> | undefined {
-	if (!v30 || schema === undefined || !Object.hasOwn(schema, "nullable")) return schema;
-	const { nullable, ...rest } = schema;
-	if (nullable !== true) return rest;
-	const { type } = rest;
-	if (typeof type === "string") return { ...rest, type: [type, "null"] };
-	if (Array.isArray(type) && !type.includes("null")) return { ...rest, type: [...type, "null"] };
-	return rest;
-}
-
-/**
- * `value` with its local `$ref` chain followed, stopping at a dangling `$ref` or one already on
- * `path`. In 3.1 a `$ref` with sibling keywords applies in place like a one-member `allOf`, so the
- * siblings stay as written and the resolved target becomes the first member of their `allOf`; a
- * `$ref` alone, and every 3.0 `$ref` (whose siblings OpenAPI ignores), is replaced by its target.
- */
-function resolveSchema(
-	spec: OpenApiSpec,
-	value: unknown,
-	v30: boolean,
-	path: ReadonlySet<string> = new Set(),
-): unknown {
-	const node = record(value);
-	const ref = node?.$ref;
-	if (node === undefined || !isLocalRef(ref) || path.has(ref)) return value;
-	const found = refTarget(spec, ref);
-	if (found === undefined) return value;
-	const target = resolveSchema(spec, found, v30, new Set([...path, ref]));
-	if (v30 || Object.keys(node).length === 1) return target;
-	const { $ref: _ref, ...siblings } = node;
-	return { ...siblings, allOf: [target, ...(Array.isArray(siblings.allOf) ? siblings.allOf : [])] };
-}
-
-/**
- * `value` resolved by {@link resolveSchema} and with {@link withNullable}; an object schema also gets
- * the `properties` (each resolved, the first definition of a name kept) and `required` of its
- * `allOf` members.
- */
-function normalizeSchema(spec: OpenApiSpec, value: unknown, v30: boolean): JsonSchema | undefined {
-	const resolved = resolveSchema(spec, value, v30);
-	if (typeof resolved === "boolean") return resolved;
-	const schema = withNullable(record(resolved), v30);
-	if (
-		schema === undefined ||
-		(record(schema.properties) === undefined && !Array.isArray(schema.allOf))
-	) {
-		return schema;
-	}
-	// A Map, since assigning a `__proto__` key to a plain object sets its prototype instead.
-	const properties = new Map<string, unknown>();
-	const required = new Set<string>();
-	const seen = new Set<unknown>();
-	// `path` holds the `$ref`s being expanded: a schema referred to twice is collected twice (its
-	// siblings may differ), and a recursive `$ref` stays a reference that adds only its siblings.
-	const collect = (part: unknown, path: ReadonlySet<string>): void => {
-		const ref = record(part)?.$ref;
-		const node = record(resolveSchema(spec, part, v30, path));
-		// Identity catches a plain `$ref` to a schema already collected.
-		if (node === undefined || seen.has(node) || (v30 && isLocalRef(node.$ref))) return;
-		seen.add(node);
-		for (const [name, property] of Object.entries(record(node.properties) ?? {})) {
-			if (properties.has(name)) continue;
-			const item = resolveSchema(spec, property, v30);
-			properties.set(name, withNullable(record(item), v30) ?? item);
-		}
-		for (const name of Array.isArray(node.required) ? node.required : []) {
-			if (typeof name === "string") required.add(name);
-		}
-		const inner = isLocalRef(ref) ? new Set([...path, ref]) : path;
-		for (const member of Array.isArray(node.allOf) ? node.allOf : []) collect(member, inner);
-	};
-	collect(value, new Set());
-	return {
-		...schema,
-		properties: Object.fromEntries(properties),
-		...(required.size > 0 && { required: [...required] }),
-	};
 }
