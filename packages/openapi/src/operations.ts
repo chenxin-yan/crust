@@ -301,7 +301,7 @@ const ADJACENT_DEPENDENT = new Set([
  * keywords beside a Schema Object's `$ref` apply with its target, so they are kept: annotations
  * replace the target's, the others are added to it, except that a keyword the target also has, or
  * any keyword when either side has one whose meaning depends on its neighbors, joins the target's
- * `allOf` instead, which keeps the schema's meaning. In 3.0 they are ignored, as OpenAPI says.
+ * `allOf` instead, which keeps the schema's meaning; a sibling `allOf` adds its members. In 3.0 they are ignored, as OpenAPI says.
  */
 function resolveSchema(
 	spec: OpenApiSpec,
@@ -317,9 +317,11 @@ function resolveSchema(
 	seen.add(ref);
 	const target = resolveSchema(spec, found, v30, seen);
 	if (v30 || Object.keys(node).length === 1) return target;
-	const { $ref: _ref, ...siblings } = node;
+	const { $ref: _ref, allOf: siblingAllOf, ...siblings } = node;
+	// Every `allOf` member must hold, so a sibling `allOf` is appended to the target's, never replaced.
+	const members = Array.isArray(siblingAllOf) ? siblingAllOf : [];
 	const base = record(target);
-	if (base === undefined) return { ...siblings, allOf: [target] };
+	if (base === undefined) return { ...siblings, allOf: [...members, target] };
 	const dependent = [...Object.keys(base), ...Object.keys(siblings)].some((key) =>
 		ADJACENT_DEPENDENT.has(key),
 	);
@@ -331,13 +333,12 @@ function resolveSchema(
 			item,
 		]);
 	}
-	return {
-		...base,
-		...Object.fromEntries(added),
-		...(joined.length > 0 && {
-			allOf: [...(Array.isArray(base.allOf) ? base.allOf : []), Object.fromEntries(joined)],
-		}),
-	};
+	const allOf = [
+		...(Array.isArray(base.allOf) ? base.allOf : []),
+		...members,
+		...(joined.length > 0 ? [Object.fromEntries(joined)] : []),
+	];
+	return { ...base, ...Object.fromEntries(added), ...(allOf.length > 0 && { allOf }) };
 }
 
 /**
@@ -358,15 +359,22 @@ function normalizeSchema(spec: OpenApiSpec, value: unknown, v30: boolean): JsonS
 	// A Map, since assigning a `__proto__` key to a plain object sets its prototype instead.
 	const properties = new Map<string, unknown>();
 	const required = new Set<string>();
-	const seenRefs = new Set<string>();
 	const seen = new Set<unknown>();
-	const collect = (part: unknown): void => {
-		const ref = record(part)?.$ref;
-		if (isLocalRef(ref)) {
-			if (seenRefs.has(ref)) return;
-			seenRefs.add(ref);
+	// `path` holds the `$ref`s being expanded: a schema referred to twice is collected twice (its
+	// siblings may differ), and a recursive `$ref` contributes only its siblings.
+	const collect = (part: unknown, path: ReadonlySet<string>): void => {
+		const raw = record(part);
+		const ref = raw?.$ref;
+		let node: Readonly<Record<string, unknown>> | undefined;
+		let inner = path;
+		if (isLocalRef(ref) && path.has(ref)) {
+			const { $ref: _ref, ...siblings } = raw!;
+			node = v30 ? undefined : siblings;
+		} else {
+			if (isLocalRef(ref)) inner = new Set([...path, ref]);
+			node = record(resolveSchema(spec, part, v30));
 		}
-		const node = record(resolveSchema(spec, part, v30));
+		// Identity catches a plain `$ref` to a schema already collected.
 		if (node === undefined || seen.has(node)) return;
 		seen.add(node);
 		for (const [name, property] of Object.entries(record(node.properties) ?? {})) {
@@ -377,9 +385,9 @@ function normalizeSchema(spec: OpenApiSpec, value: unknown, v30: boolean): JsonS
 		for (const name of Array.isArray(node.required) ? node.required : []) {
 			if (typeof name === "string") required.add(name);
 		}
-		for (const member of Array.isArray(node.allOf) ? node.allOf : []) collect(member);
+		for (const member of Array.isArray(node.allOf) ? node.allOf : []) collect(member, inner);
 	};
-	collect(value);
+	collect(value, new Set());
 	return {
 		...schema,
 		properties: Object.fromEntries(properties),

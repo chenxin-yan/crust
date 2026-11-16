@@ -402,6 +402,94 @@ describe("operations", () => {
 		expect(thing30?.body?.schema).toEqual(base);
 	});
 
+	it("keeps a 3.1 sibling allOf beside a $ref, whatever the target", () => {
+		const body = (base: unknown) => ({
+			openapi: "3.1.0",
+			paths: {
+				"/t": {
+					post: {
+						operationId: "t",
+						requestBody: {
+							content: {
+								"application/json": {
+									schema: {
+										$ref: "#/components/schemas/Base",
+										type: "object",
+										allOf: [{ properties: { name: { type: "string" } }, required: ["name"] }],
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			components: { schemas: { Base: base } },
+		});
+		const member = { properties: { name: { type: "string" } }, required: ["name"] };
+		expect(operations(body({ type: "object" })).operations[0]?.body?.schema).toEqual({
+			type: "object",
+			allOf: [member, { type: "object" }],
+			properties: { name: { type: "string" } },
+			required: ["name"],
+		});
+		expect(operations(body(true)).operations[0]?.body?.schema).toEqual({
+			type: "object",
+			allOf: [member, true],
+			properties: { name: { type: "string" } },
+			required: ["name"],
+		});
+	});
+
+	it("collects every allOf member that refers to the same schema, and ends on a recursive one", () => {
+		const spec = {
+			openapi: "3.1.0",
+			paths: {
+				"/t": {
+					post: {
+						operationId: "t",
+						requestBody: {
+							content: {
+								"application/json": {
+									schema: {
+										allOf: [
+											{
+												$ref: "#/components/schemas/Base",
+												properties: { first: { type: "string" } },
+												required: ["first"],
+											},
+											{
+												$ref: "#/components/schemas/Base",
+												properties: { second: { type: "string" } },
+												required: ["second"],
+											},
+										],
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			components: {
+				schemas: {
+					Base: {
+						type: "object",
+						properties: { id: { type: "string" } },
+						allOf: [
+							{ $ref: "#/components/schemas/Base", properties: { loop: { type: "string" } } },
+						],
+					},
+				},
+			},
+		};
+		const schema = operations(spec).operations[0]?.body?.schema as {
+			properties: object;
+			required: string[];
+		};
+		expect(Object.keys(schema.properties)).toEqual(["id", "loop", "first", "second"]);
+		expect(schema.required).toEqual(["first", "second"]);
+	});
+
 	it("keeps boolean schemas, also behind a $ref", () => {
 		const spec = {
 			openapi: "3.1.0",

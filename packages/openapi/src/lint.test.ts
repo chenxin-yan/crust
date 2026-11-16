@@ -474,6 +474,28 @@ describe("lint", () => {
 		).toEqual(["warning unsupported-param-style deep", "warning unsupported-param-style never"]);
 	});
 
+	it("checks body fields from every allOf member that refers to the same schema", () => {
+		const twice = spec(
+			{
+				"/a": {
+					post: op("a", {
+						parameters: [{ name: "second", in: "query", schema: { type: "string" } }],
+						requestBody: json({
+							allOf: [
+								{ $ref: "#/components/schemas/Base", properties: { first: { type: "string" } } },
+								{ $ref: "#/components/schemas/Base", properties: { second: { type: "string" } } },
+							],
+						}),
+					}),
+				},
+			},
+			{ schemas: { Base: object({ id: { type: "string" } }) } },
+		);
+		expect(
+			lint({ spec: twice }).map(({ code, message }) => `${code} ${message.split('"')[1]}`),
+		).toEqual(["body-field-shadowed second"]);
+	});
+
 	it("offers a body field named __proto__ an input like any other", () => {
 		const proto = JSON.parse(`{ "openapi": "3.1.0", "paths": { "/p": { "post": {
 			"operationId": "p", "summary": "p", "responses": { "200": { "description": "ok" } },

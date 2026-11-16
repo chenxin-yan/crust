@@ -242,10 +242,10 @@ for (const op of list) {
 It walks `paths` the way [`api --list`](#browse-the-spec) does, in the same order, and normalizes each operation once:
 
 - Local `$ref`s are followed for path items, parameters, request bodies, responses, and each top-level schema. Deeper `$ref`s inside schemas stay as they are, so a recursive schema stays finite.
-- In a 3.1 document, the keywords beside a schema's `$ref` apply with its target, so they are kept: an annotation such as `description` replaces the target's, another keyword is added to the target, or joins its `allOf` when the target has it too. A 3.0 document ignores them, as OpenAPI says. Boolean schemas (`true`, `false`) stay booleans.
+- In a 3.1 document, the keywords beside a schema's `$ref` apply with its target, so they are kept: an annotation such as `description` replaces the target's, another keyword is added to the target, or joins its `allOf` when the target has it too; a sibling `allOf` adds its members to the target's. A 3.0 document ignores them, as OpenAPI says. Boolean schemas (`true`, `false`) stay booleans.
 - The path item's `parameters` are merged in: an operation parameter with the same `name` and `in` replaces the shared one. `Accept`, `Content-Type`, and `Authorization` header parameters are left out, as OpenAPI says to ignore them.
 - In a 3.0 document, `nullable: true` becomes a `type` union with `"null"` (`{ type: ["string", "null"] }`).
-- An object schema's `properties` and `required` include those of its `allOf` members.
+- An object schema's `properties` and `required` include those of its `allOf` members, also of each member that refers to the same schema; a recursive reference adds only the keywords beside it.
 - A request body or response with several media types is read through its JSON one (`application/json` or `application/*+json`), else its first.
 - `security` is the operation's, else the document's; `[]` marks a public operation.
 - The input is never modified.
