@@ -1,18 +1,49 @@
+import { AuthError, defineAuth } from "@crustjs/auth";
 import {
 	createAuthorizationSession,
 	createTokenClient,
-	defineAuth,
+	defineServers,
 	deviceCodeMessage,
 	discover,
 	openBrowser,
 	startDeviceFlow,
-} from "@crustjs/auth";
+} from "@crustjs/auth/oauth";
+
+//#region client
+const auth = defineAuth({
+	app: "acme",
+	issuer: "https://login.acme.example",
+	clientId: "acme-cli",
+	scope: "read",
+});
+
+await auth.login({
+	onUrl: async ({ url, open }) => {
+		console.error(`Sign in at: ${url}`);
+		await open();
+	},
+	onCode: ({ message }) => console.error(message),
+});
+//#endregion
+
+//#region errors
+try {
+	await auth.login({
+		onUrl: ({ url }) => console.error(url),
+		onCode: ({ message }) => console.error(message),
+	});
+} catch (error) {
+	if (error instanceof AuthError && error.code === "login-requires-interaction") {
+		console.error("Run `acme login --device` to sign in with a code.");
+	} else throw error;
+}
+//#endregion
 
 //#region config
-const auth = defineAuth({
+const config = defineServers({
 	servers: [{ issuer: "https://login.acme.example", clientId: "acme-cli" }],
 });
-const server = await discover(auth, "https://login.acme.example");
+const server = await discover(config, "https://login.acme.example");
 const client = createTokenClient(server);
 //#endregion
 
@@ -31,11 +62,11 @@ try {
 //#region device
 const flow = await startDeviceFlow(server, { scope: "read" });
 console.error(deviceCodeMessage({ app: "Acme", ...flow }));
-const tokens = await flow.poll();
+const deviceTokens = await flow.poll();
 //#endregion
 
 //#region servers
-const multi = defineAuth({
+const multi = defineServers({
 	servers: [
 		// Sends `iss` in authorization responses (its metadata says so): no path needed.
 		{ issuer: "https://login.acme.example", clientId: "acme-cli" },
@@ -50,9 +81,9 @@ const multi = defineAuth({
 //#endregion
 
 //#region dev
-const dev = defineAuth({
+const dev = defineServers({
 	servers: [{ issuer: "http://127.0.0.1:9000", clientId: "acme-cli", allowInsecureLoopback: true }],
 });
 //#endregion
 
-console.log(tokens.tokenType, multi, dev);
+console.log(deviceTokens.tokenType, multi, dev);

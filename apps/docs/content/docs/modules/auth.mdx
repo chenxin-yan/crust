@@ -2,7 +2,7 @@
 title: "Auth"
 ---
 
-`@crustjs/auth` gives a CLI the pieces of an OAuth sign-in: authorization-server discovery, a browser login over a loopback redirect with PKCE, a device-code login, and a token client. You compose them into your own `login` command; [Add login to your CLI](/docs/guide/login) walks through one. It is standalone: no Crust Context, and no external OAuth library; it builds on the runtime's `fetch`, Web Crypto, and `node:http`.
+`@crustjs/auth` signs a CLI in with OAuth. `defineAuth()` returns one client whose `login()` runs a browser login over a loopback redirect with PKCE, or a device-code login; [Add login to your CLI](/docs/guide/login) builds a `login` command with it. The pieces it is made of (discovery, the browser and device logins, the token client) are exported from `@crustjs/auth/oauth` for flows the client does not cover. It is standalone: no Crust Context, and no external OAuth library; it builds on the runtime's `fetch`, Web Crypto, and `node:http`.
 
 ## Install
 
@@ -12,17 +12,66 @@ npm install @crustjs/auth
 
 ## Quick example
 
+<include lang="ts">../../../examples/modules/auth.ts#client</include>
+
+## The client
+
+`defineAuth(options)` validates the server settings with the same rules as the building blocks, does no I/O, and returns a frozen client. Its methods work detached, so you can pass `auth.login` around.
+
+<auto-type-table path="../../../../../packages/auth/src/types.ts" name="DefineAuthOptions" />
+
+- `app` is your CLI's name: non-empty, without `/` or `\`. The device-login message shows `name`, which defaults to `app`.
+- `issuer`, `clientId`, `clientSecret`, `redirectPath`, and `allowInsecureLoopback` follow the rules of [Servers](#servers); `hosts` and `ports` those of [Browser login](#browser-login).
+
+### Signing in
+
+`auth.login(options)` runs the whole sign-in and resolves to the [`TokenSet`](#token-client). It does not store the tokens yet; keep them in a private file, such as a [strict store](/docs/modules/store#strict-stores) (`strict: true`).
+
+<auto-type-table path="../../../../../packages/auth/src/types.ts" name="LoginOptions" />
+
+1. It picks the login as [Choosing a login](#choosing-a-login) describes, with `device` as the user's `--device` flag. On `"refuse"` it throws `LoginRequiresInteractionError`, whose message says to use the device login, before any request.
+2. It discovers the server, once per process.
+3. **Browser:** it listens on the loopback address, calls `onUrl`, waits for the browser, and exchanges the code once. The listener closes on every path.
+4. **Device code:** it starts the device login, calls `onCode`, and polls until the user approves.
+
+The client prints nothing and opens no browser by itself: it does not know your command's output stream. Show the prompts yourself, usually in two lines:
+
+```ts
+onUrl: async ({ url, open }) => { stderr(`Sign in at: ${url}`); await open(); },
+onCode: ({ message }) => stderr(message),
+```
+
+<auto-type-table path="../../../../../packages/auth/src/types.ts" name="BrowserLoginPrompt" />
+
+`open()` calls [`openBrowser()`](#opening-the-browser) with the URL; it never throws, so always show the URL as well. You may skip it, or ask first.
+
+<auto-type-table path="../../../../../packages/auth/src/types.ts" name="DeviceLoginPrompt" />
+
+`message` is the [`deviceCodeMessage()`](#device-login) text for this login: the URL and its host, the code, and the anti-phishing warning. The prompt never carries the device code.
+
+If `onUrl` or `onCode` throws or rejects, the login fails with that error and closes the listener. `signal` cancels any wait with `AbortError`; `page` renders the browser's result page as in [Browser login](#browser-login).
+
+### Errors by code
+
+Every error is an `AuthError`; match on its `code`, typed as the `AuthErrorCode` union, never on `message`:
+
+<include lang="ts">../../../examples/modules/auth.ts#errors</include>
+
+The codes and their classes are listed in [Errors](#errors).
+
+## Building blocks
+
+`@crustjs/auth/oauth` exports the functions the client is built from, every error class, and their types. Use them to sign in with several servers, keep a session open across steps, or render the prompts differently. A login composed from them:
+
 <include lang="ts">../../../examples/modules/auth.ts#config</include>
 
 <include lang="ts">../../../examples/modules/auth.ts#browser</include>
 
 <include lang="ts">../../../examples/modules/auth.ts#device</include>
 
-`@crustjs/auth` does not store tokens. Keep them in a private file, such as a [strict store](/docs/modules/store#strict-stores) (`strict: true`).
-
 ## Servers
 
-`defineAuth({ servers, allowCustomIssuers? })` validates every authorization server your CLI signs in with and returns a frozen config. `discover(config, issuer, { signal?, clientId?, fetch? })` then fetches the server's metadata and returns a frozen `AuthServer` that every other function takes.
+`defineServers({ servers, allowCustomIssuers? })` validates every authorization server your CLI signs in with and returns a frozen config. `discover(config, issuer, { signal?, clientId?, fetch? })` then fetches the server's metadata and returns a frozen `AuthServer` that every other function takes.
 
 <auto-type-table path="../../../../../packages/auth/src/types.ts" name="AuthServerOptions" />
 
@@ -105,7 +154,7 @@ Call `session.close()` in a `finally`, as above, so an early error never leaves 
 | A terminal, but an SSH session or Linux with no display                            | `"device"`  |
 | Otherwise                                                                          | `"browser"` |
 
-On `"refuse"`, nobody is there to read a code, or nobody asked for one that someone else might approve. Throw `LoginRequiresInteractionError` with a message naming your device-login flag and your token environment variable, as the [login guide](/docs/guide/login) does. With `"device"`, show `deviceCodeMessage()` on the terminal the user is at. It does not check that the server offers a device login; `startDeviceFlow()` does.
+On `"refuse"`, nobody is there to read a code, or nobody asked for one that someone else might approve. `auth.login()` throws `LoginRequiresInteractionError` then; with the building blocks, throw it yourself with a message naming your device-login flag and your token environment variable. With `"device"`, show `deviceCodeMessage()` on the terminal the user is at. It does not check that the server offers a device login; `startDeviceFlow()` does.
 
 ## Opening the browser
 
@@ -130,7 +179,7 @@ On `"refuse"`, nobody is there to read a code, or nobody asked for one that some
 
 ## Errors
 
-Every error extends `AuthError` and has a stable `code`. Match on `code` or the class, never on `message`.
+Every error extends `AuthError` and has a stable `code`. Match on `code` or the class, never on `message`. The classes are exported from `@crustjs/auth/oauth`; the root exports `AuthError` and `AuthErrorCode`.
 
 | Error                           | `code`                       | When                                                                                                                                               |
 | ------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -142,7 +191,7 @@ Every error extends `AuthError` and has a stable `code`. Match on `code` or the 
 | `AbortError`                    | `abort`                      | Your `signal` was aborted                                                                                                                          |
 | `ResponseTooLargeError`         | `response-too-large`         | A response body was over 1 MiB                                                                                                                     |
 | `NetworkError`                  | `network`                    | The request could not be sent or its response not read (DNS, connection, TLS, a broken stream); the underlying error is dropped                    |
-| `LoginRequiresInteractionError` | `login-requires-interaction` | Thrown by your code when `detectLoginMode()` returns `"refuse"`                                                                                    |
+| `LoginRequiresInteractionError` | `login-requires-interaction` | `auth.login()` (or your code) found no person at a terminal: `detectLoginMode()` returned `"refuse"`                                               |
 
 Errors carry local text, the `status`, and the allowlisted code only. A server's `error_description` and `error_uri`, response bodies, and URLs never appear in a message, property, or `cause`, since a hostile server could echo a secret into them.
 
@@ -164,4 +213,4 @@ The authorization URL (`session.url`) is safe to print: its `state` and PKCE cha
 
 ## Cancellation
 
-`discover()`, `createAuthorizationSession()`, `session.wait()`, `startDeviceFlow()`, `flow.poll()`, and the token client's `exchangeCode()`, `refresh()`, and `revoke()` take a `signal`. An aborted signal rejects with `AbortError` before any request or listener; aborting mid-way stops the request, sleep, or wait and closes the listener. Handle Ctrl-C in your command (a Crust command's `ctx.signal` already does) and pass its signal down.
+`auth.login()`, `discover()`, `createAuthorizationSession()`, `session.wait()`, `startDeviceFlow()`, `flow.poll()`, and the token client's `exchangeCode()`, `refresh()`, and `revoke()` take a `signal`. An aborted signal rejects with `AbortError` before any request or listener; aborting mid-way stops the request, sleep, or wait and closes the listener. Handle Ctrl-C in your command (a Crust command's `ctx.signal` already does) and pass its signal down.
