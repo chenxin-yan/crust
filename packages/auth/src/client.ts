@@ -35,14 +35,15 @@ function unlessAborted<T>(result: T | Promise<T>, signal: AbortSignal | undefine
 	if (!signal) return Promise.resolve(result);
 	return new Promise<T>((resolve, reject) => {
 		const abort = () => reject(new AbortError());
+		// Observed on every path: a callback that aborts the login and rejects later must not
+		// leave an unhandled rejection.
+		const settled = Promise.resolve(result).then(resolve, reject);
 		if (signal.aborted) {
 			abort();
 			return;
 		}
 		signal.addEventListener("abort", abort, { once: true });
-		Promise.resolve(result)
-			.then(resolve, reject)
-			.finally(() => signal.removeEventListener("abort", abort));
+		void settled.finally(() => signal.removeEventListener("abort", abort));
 	});
 }
 

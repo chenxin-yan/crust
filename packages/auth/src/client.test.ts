@@ -276,6 +276,34 @@ describe("login() in a browser", () => {
 		expect(unhandled).not.toHaveBeenCalled();
 	});
 
+	it.each(["onUrl", "onCode"] as const)(
+		"%s that aborts the login itself and rejects later leaves no unhandled rejection",
+		async (callback) => {
+			const { auth } = setup();
+			const controller = new AbortController();
+			const unhandled = vi.fn();
+			process.on("unhandledRejection", unhandled);
+			let fail!: (error: Error) => void;
+			const prompt = () => {
+				controller.abort();
+				return new Promise<void>((_resolve, reject) => {
+					fail = reject;
+				});
+			};
+			const login = auth.login({
+				device: callback === "onCode",
+				signal: controller.signal,
+				onUrl: callback === "onUrl" ? prompt : browser().onUrl,
+				onCode: callback === "onCode" ? prompt : noCode,
+			});
+			expect(await rejection(login)).toBeInstanceOf(AbortError);
+			fail(new Error("the prompt failed late"));
+			await new Promise((resolve) => setImmediate(resolve));
+			process.off("unhandledRejection", unhandled);
+			expect(unhandled).not.toHaveBeenCalled();
+		},
+	);
+
 	it("a second login after a failed one succeeds", async () => {
 		const { auth } = setup();
 		const thrown = new Error("onUrl failed");
