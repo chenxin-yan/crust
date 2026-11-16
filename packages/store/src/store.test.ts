@@ -1106,6 +1106,29 @@ describe("strict", () => {
 		},
 	);
 
+	it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+		"reports a read, not a write, when the directory cannot be inspected",
+		async () => {
+			const locked = join(tempDir, "locked");
+			await mkdir(join(locked, "store"), { recursive: true });
+			await chmod(locked, 0o000);
+			const store = createStore({
+				dirPath: join(locked, "store"),
+				name: "auth",
+				fields: BASIC_FIELDS,
+				strict: true,
+			});
+			try {
+				await expect(store.read()).rejects.toMatchObject({
+					code: "IO",
+					details: { operation: "read" },
+				});
+			} finally {
+				await chmod(locked, 0o700);
+			}
+		},
+	);
+
 	it("reads defaults when there is no directory, and creates none", async () => {
 		expect(await strictStore().read()).toEqual({ theme: "light", verbose: false });
 		expect(existsSync(dirPath)).toBe(false);

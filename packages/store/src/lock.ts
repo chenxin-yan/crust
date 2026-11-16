@@ -9,7 +9,12 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import { isErrnoException } from "@crustjs/utils/error";
 
-import { CrustStoreError, type LockErrorDetails, type LockOwner } from "./errors.ts";
+import {
+	CrustStoreError,
+	type IOErrorDetails,
+	type LockErrorDetails,
+	type LockOwner,
+} from "./errors.ts";
 import { abortableSleep, BUSY_CODES, ensureDirectory, MAX_RETRY_DELAY_MS } from "./persistence.ts";
 
 /** How long {@link withLock} waits for a lock by default. */
@@ -304,7 +309,10 @@ async function recoverOrBlock(
  * @returns `false` when the directory does not exist.
  * @throws {CrustStoreError} `PATH` when the directory is unsafe.
  */
-export async function checkDirectory(path: string): Promise<boolean> {
+export async function checkDirectory(
+	path: string,
+	operation: IOErrorDetails["operation"],
+): Promise<boolean> {
 	if (process.platform === "win32") return true;
 	const dir = dirname(path);
 	let stats;
@@ -315,7 +323,7 @@ export async function checkDirectory(path: string): Promise<boolean> {
 		throw new CrustStoreError(
 			"IO",
 			`Failed to inspect store directory: ${dir}`,
-			{ path, operation: "write" },
+			{ path, operation },
 			err,
 		);
 	}
@@ -331,12 +339,12 @@ export async function checkDirectory(path: string): Promise<boolean> {
 
 /** POSIX: creates a missing directory with mode `0700`, then checks it, before any file is created in it. */
 async function validateDirectory(path: string, signal: AbortSignal | undefined): Promise<void> {
-	if (await checkDirectory(path)) return;
+	if (await checkDirectory(path, "write")) return;
 	// A cancelled call creates nothing.
 	signal?.throwIfAborted();
 	// Checked again once created: another process may have created it first, with its own mode.
 	await ensureDirectory(path, 0o700);
-	await checkDirectory(path);
+	await checkDirectory(path, "write");
 }
 
 function timeoutError(blocker: Blocker): CrustStoreError<"LOCK"> {

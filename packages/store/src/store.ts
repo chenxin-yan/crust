@@ -431,7 +431,7 @@ export function createStore<const F extends FieldsDef>(
 	async function read(): Promise<Config> {
 		if (strict === true) {
 			// A file in a directory others can write to may have been planted by them.
-			await checkDirectory(filePath);
+			await checkDirectory(filePath, "read");
 			await refuseSymlink(filePath, "read");
 		}
 		const document = toDocument(await readPersisted());
