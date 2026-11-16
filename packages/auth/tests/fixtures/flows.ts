@@ -188,16 +188,22 @@ const failure = (error: unknown) => ({ code: (error as { code?: string }).code, 
 	report.redirect = { moved, refresh, offsiteRequests: offsiteRequests.length };
 }
 
-// Device login: authorization_pending, then slow_down, then success. Timers run 1000x faster.
+// Device login: authorization_pending, then slow_down, then success. Only the polling waits
+// (5 s, and 10 s after slow_down) run 1000x faster and are recorded; the request and expiry
+// timers, and the runtime's own, keep their length.
 {
 	const realSetTimeout = globalThis.setTimeout;
-	globalThis.setTimeout = ((handler: () => void, ms?: number, ...args: unknown[]) =>
-		realSetTimeout(handler, (ms ?? 0) / 1000, ...args)) as typeof setTimeout;
+	const pollWaits: number[] = [];
+	globalThis.setTimeout = ((handler: () => void, ms?: number, ...args: unknown[]) => {
+		if (ms !== 5_000 && ms !== 10_000) return realSetTimeout(handler, ms, ...args);
+		pollWaits.push(ms);
+		return realSetTimeout(handler, ms / 1000, ...args);
+	}) as typeof setTimeout;
 	try {
 		const server = await discover(config, issuer);
 		const flow = await startDeviceFlow(server);
 		const tokens = await flow.poll();
-		report.device = { userCode: flow.userCode, accessToken: tokens.accessToken, polls: devicePolls.length };
+		report.device = { userCode: flow.userCode, accessToken: tokens.accessToken, polls: devicePolls.length, pollWaits };
 	} finally {
 		globalThis.setTimeout = realSetTimeout;
 	}

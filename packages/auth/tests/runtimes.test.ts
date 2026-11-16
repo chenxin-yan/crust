@@ -34,6 +34,11 @@ describe.each(["node", "bun"])("on %s", (runtime) => {
 			refresh: { code: "http", status: 307 },
 			offsiteRequests: 0,
 		});
-		expect(report.device).toEqual({ userCode: "ABCD-EFGH", accessToken: "DEVICE_AT", polls: 3 });
+		expect(report.device).toEqual({
+			userCode: "ABCD-EFGH",
+			accessToken: "DEVICE_AT",
+			polls: 3,
+			pollWaits: [5_000, 5_000, 10_000],
+		});
 	}, 90_000);
 });
