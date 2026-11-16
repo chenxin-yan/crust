@@ -127,21 +127,25 @@ describe("createAuthorizationSession", () => {
 		expect(listenLoopback).not.toHaveBeenCalled();
 	});
 
-	it("SEC-B1 keeps the endpoint query byte for byte", async () => {
-		const endpoint = "https://login.example/authorize?tenant=a%20b&sig=~&x=a+b";
+	it.each([
+		[
+			"https://login.example/authorize?tenant=a%20b&sig=~&x=a+b",
+			"https://login.example/authorize?tenant=a%20b&sig=~&x=a+b&",
+		],
+		["https://login.example/authorize?", "https://login.example/authorize?"],
+		["https://login.example/authorize?tenant=t&", "https://login.example/authorize?tenant=t&"],
+		["https://login.example/authorize", "https://login.example/authorize?"],
+		["https://login.example/authorize&", "https://login.example/authorize&?"],
+	])("SEC-B1 keeps the endpoint %s byte for byte", async (endpoint, prefix) => {
 		const session = await open(
 			{ extra: { "a&b": "c d" } },
 			{ metadata: { authorization_endpoint: endpoint } },
 		);
-		expect(session.url.startsWith(`${endpoint}&response_type=code&`)).toBe(true);
-		const params = new URL(session.url).searchParams;
-		expect(params.get("tenant")).toBe("a b");
-		expect(params.get("a&b")).toBe("c d");
-		const bare = await open(
-			{},
-			{ metadata: { authorization_endpoint: "https://login.example/authorize?" } },
-		);
-		expect(bare.url.startsWith("https://login.example/authorize?response_type=code&")).toBe(true);
+		expect(session.url.startsWith(`${prefix}response_type=code&`)).toBe(true);
+		const url = new URL(session.url);
+		expect(url.pathname).toBe(new URL(endpoint).pathname);
+		expect(url.searchParams.get("response_type")).toBe("code");
+		expect(url.searchParams.get("a&b")).toBe("c d");
 	});
 
 	it("SEC-B1 keeps the endpoint query once and refuses names that repeat it", async () => {

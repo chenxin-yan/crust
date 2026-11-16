@@ -247,7 +247,8 @@ export async function createAuthorizationSession(
 	for (const value of resource) authorizationParams.append("resource", value);
 	for (const [name, value] of extra) authorizationParams.append(name, value);
 	const base = server.authorizationEndpoint;
-	const separator = /[?&]$/.test(base) ? "" : base.includes("?") ? "&" : "?";
+	// A trailing `?` or `&` is reused only inside an existing query.
+	const separator = !base.includes("?") ? "?" : /[?&]$/.test(base) ? "" : "&";
 	const url = `${base}${separator}${authorizationParams.toString()}`;
 
 	const closer = new AbortController();
