@@ -3,10 +3,11 @@
  * @module-tag macos
  */
 import { once } from "node:events";
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { type AddressInfo, createServer } from "node:net";
 import { join } from "node:path";
 
+import { CrustStoreError } from "@crustjs/store";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
@@ -15,6 +16,7 @@ import {
 	fakeFetch,
 	fakeTimersFrom,
 	holdLock,
+	login as storeLogin,
 	isClosed,
 	json,
 	metadataFor,
@@ -39,6 +41,7 @@ import {
 	LoginRequiresInteractionError,
 	OAuthConfigError,
 	StaleCommitError,
+	UnsafeStorageError,
 } from "./errors.ts";
 import { createTokenSource } from "./token-source.ts";
 import type { BrowserLoginPrompt, DeviceLoginPrompt, LoginOptions } from "./types.ts";
@@ -222,6 +225,22 @@ describe("createAuth", () => {
 		).not.toThrow();
 	});
 });
+
+it.skipIf(process.platform === "win32")(
+	"createAuth() throws the store's PATH error when the state directory has no absolute base",
+	() => {
+		vi.stubEnv("XDG_STATE_HOME", "relative/state");
+		vi.stubEnv("HOME", "relative-home");
+		let error: unknown;
+		try {
+			createAuth({ app: "acme", issuer: "https://as.example", clientId: "cli", apiOrigins: [API] });
+		} catch (caught) {
+			error = caught;
+		}
+		expect(error).toBeInstanceOf(CrustStoreError);
+		expect((error as CrustStoreError).is("PATH")).toBe(true);
+	},
+);
 
 describe("login() in a browser", () => {
 	it("signs in end to end with a detached login and closes the listener", async () => {
@@ -630,6 +649,79 @@ describe("the stored login", () => {
 		expect(tokenRequests()).toHaveLength(1);
 		vi.stubEnv("ACME_TOKEN", "  ");
 		expect(await auth.token()).toMatchObject({ value: "AT", source: "login" });
+	});
+
+	it("an env token is trimmed and honors an aborted signal", async () => {
+		const { auth } = setup(undefined, { env: "ACME_TOKEN" });
+		vi.stubEnv("ACME_TOKEN", "  ENV_TOKEN\n");
+		expect((await auth.token()).value).toBe("ENV_TOKEN");
+		expect(await rejection(auth.token({ signal: AbortSignal.abort() }))).toBeInstanceOf(AbortError);
+	});
+
+	it("an abort while the commit waits for the file's lock stores nothing", async () => {
+		const controller = new AbortController();
+		const world = setup((issuer) => ({
+			[`${issuer}/token`]: () => {
+				// The commit is waiting for the held lock by the time this fires.
+				setTimeout(() => controller.abort(), 50);
+				return json(TOKEN);
+			},
+		}));
+		const store = credentialStore({ app: world.app });
+		const other = createTokenSource({
+			config: defineServers({ servers: [{ issuer: world.issuer, clientId: "cli" }] }),
+			identity: { issuer: world.issuer, clientId: "cli", apiOrigins: [API] },
+			store,
+		});
+		const play = browser();
+		let lock: { release(): Promise<void> } | undefined;
+		const error = await rejection(
+			world.auth.login({
+				signal: controller.signal,
+				onUrl: async (prompt) => {
+					lock = await holdLock((fn) =>
+						credentialStoreInternals(store).lockIdentity(other.key, fn),
+					);
+					play.onUrl(prompt);
+				},
+				onCode: noCode,
+			}),
+		);
+		await lock!.release();
+		expect(error).toBeInstanceOf(AbortError);
+		expect(world.tokenRequests()).toHaveLength(1);
+		expect(await world.auth.status()).toEqual({ source: "none" });
+	});
+
+	it("status() throws for a login stored for another issuer", async () => {
+		const { auth, app } = setup();
+		const otherIssuer = uniqueIssuer();
+		await storeLogin(
+			createTokenSource({
+				config: defineServers({ servers: [{ issuer: otherIssuer, clientId: "cli" }] }),
+				identity: { issuer: otherIssuer, clientId: "cli", apiOrigins: [API] },
+				store: credentialStore({ app }),
+			}),
+		);
+		const error = await rejection(auth.status());
+		expect(error).toBeInstanceOf(CredentialMismatchError);
+		expect((error as CredentialMismatchError).reason).toBe("issuer");
+	});
+
+	it("status() throws for a credentials file that is a symbolic link", async () => {
+		const { auth, dir, root } = await signedIn();
+		const file = join(dir, "credentials.json");
+		const target = join(root, "target.json");
+		writeFileSync(target, readFileSync(file));
+		rmSync(file);
+		try {
+			symlinkSync(target, file, "file");
+		} catch (error) {
+			// Windows without the symlink privilege: nothing to refuse.
+			if ((error as NodeJS.ErrnoException).code === "EPERM") return;
+			throw error;
+		}
+		expect(await rejection(auth.status())).toBeInstanceOf(UnsafeStorageError);
 	});
 
 	it("status() reports the three sources without a request or waiting for a lock", async () => {

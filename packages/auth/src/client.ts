@@ -10,6 +10,7 @@ import {
 	LoginRequiresInteractionError,
 	OAuthConfigError,
 } from "./errors.ts";
+import { throwIfAborted } from "./http.ts";
 import { detectLoginMode } from "./login-mode.ts";
 import { checkResources, checkScope } from "./params.ts";
 import { fromEnv, fromStore } from "./resolve.ts";
@@ -97,10 +98,9 @@ export function createAuth(options: CreateAuthOptions): AuthClient {
 	});
 	const stored = fromStore(source);
 
-	/** The `env` variable's value, when it is set and not blank. */
+	/** The `env` variable's trimmed value, when it is set and not blank. */
 	async function envValue(): Promise<string | undefined> {
-		const found = env === undefined ? undefined : await fromEnv(env).resolve({});
-		return found?.value.trim() ? found.value : undefined;
+		return env === undefined ? undefined : (await fromEnv(env).resolve({}))?.value;
 	}
 
 	async function login(loginOptions: LoginOptions): Promise<void> {
@@ -180,6 +180,7 @@ export function createAuth(options: CreateAuthOptions): AuthClient {
 		signal,
 		baseUrl,
 	}: { signal?: AbortSignal; baseUrl?: string } = {}): Promise<AuthToken> {
+		throwIfAborted(signal);
 		const value = await envValue();
 		if (value !== undefined) return redacted({ value, source: "env" as const }, ["value"]);
 		const found = await stored.resolve({ signal, baseUrl });

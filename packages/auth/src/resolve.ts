@@ -38,12 +38,13 @@ export function fromFlag(value: string | undefined): CredentialSource {
 	return fromValue("flag", () => value);
 }
 
-/** An environment variable, such as `ACME_TOKEN`. */
+/** An environment variable, such as `ACME_TOKEN`, trimmed; a blank one counts as unset. */
 export function fromEnv(
 	name: string,
 	env: Readonly<Record<string, string | undefined>> = process.env,
 ): CredentialSource {
-	return fromValue("env", () => env[name]);
+	// A bearer token never contains whitespace; padding comes from how the variable was set.
+	return fromValue("env", () => env[name]?.trim());
 }
 
 /** A variable from a dotenv file you parsed; list it after {@link fromEnv} so the shell wins. */

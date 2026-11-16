@@ -147,6 +147,14 @@ describe("resolveCredential", () => {
 		});
 	});
 
+	it("trims an environment variable, and treats a blank one as unset", async () => {
+		const padded = fromEnv("ACME_TOKEN", { ACME_TOKEN: "  ENV_TOKEN\n" });
+		await expect(padded.resolve({})).resolves.toEqual({ value: "ENV_TOKEN" });
+		const blank = fromEnv("ACME_TOKEN", { ACME_TOKEN: " \t" });
+		expect(await blank.probe()).toBe(false);
+		await expect(blank.resolve({})).resolves.toBeUndefined();
+	});
+
 	it("an exported variable wins over the same variable from an env file", async () => {
 		const file = { ACME_TOKEN: "FROM_FILE" };
 		await expect(
