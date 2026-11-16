@@ -55,12 +55,28 @@ function valueSchema(
 	}
 }
 
+/** Keywords whose keys are names; only their values are schemas. */
+const NAMED_SCHEMA_KEYWORDS = new Set([
+	"properties",
+	"patternProperties",
+	"definitions",
+	"dependentSchemas",
+]);
+/** Keywords whose values are data, not schemas. */
+const DATA_KEYWORDS = new Set(["const", "enum", "default", "examples"]);
+
 /** `$ref`, `$defs`, `$id`, … resolve against the schema's own root, which nesting would move. */
-function hasRootKeyword(value: unknown): boolean {
-	if (typeof value !== "object" || value === null) return false;
-	return Object.entries(value).some(
-		([key, entry]) => (key.startsWith("$") && key !== "$comment") || hasRootKeyword(entry),
-	);
+function hasRootKeyword(schema: unknown): boolean {
+	if (typeof schema !== "object" || schema === null) return false;
+	if (Array.isArray(schema)) return schema.some(hasRootKeyword);
+	return Object.entries(schema).some(([key, entry]) => {
+		if (key.startsWith("$")) return key !== "$comment";
+		if (DATA_KEYWORDS.has(key)) return false;
+		if (NAMED_SCHEMA_KEYWORDS.has(key) && typeof entry === "object" && entry !== null) {
+			return Object.values(entry).some(hasRootKeyword);
+		}
+		return hasRootKeyword(entry);
+	});
 }
 
 /**
