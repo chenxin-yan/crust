@@ -404,14 +404,16 @@ export function createStore<const F extends FieldsDef>(
 					const { directoryMode } = writeOptions;
 					return withFileLock(filePath, task, { operation, directoryMode, signal });
 				}
-				// As in the default lock: no directory means no store file to delete, so none is created.
+				// No directory means no store file: the reset is complete, and none is created. It does
+				// not run the delete, which would be unlocked once another process creates the store.
 				// lstat, so a dangling link at the directory path still meets the directory checks.
 				if (operation === "delete") {
 					const missing = await lstat(dirname(filePath)).then(
 						() => false,
 						(err: unknown) => isErrnoException(err) && err.code === "ENOENT",
 					);
-					if (missing) return task();
+					// SAFETY: only reset() deletes, and it resolves to undefined.
+					if (missing) return undefined as T;
 				}
 				const checkedTask = async () => {
 					await refuseSymlink(filePath, operation);

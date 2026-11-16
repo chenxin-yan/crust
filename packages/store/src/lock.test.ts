@@ -3,7 +3,7 @@
  * @module-tag macos
  */
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { chmod, mkdir, readdir, rm, stat, symlink } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join, sep } from "node:path";
@@ -17,7 +17,7 @@ import { createStore } from "./store.ts";
 const fsTrace = vi.hoisted((): string[] => []);
 // Error codes the next `sync` of a handle opened on the keyed path fails with.
 const syncFailures = vi.hoisted(() => new Map<string, string>());
-// Runs while `lstat` of the keyed path is in flight.
+// Runs while `lstat` of the keyed path is in flight, whether it succeeds or fails.
 const duringLstat = vi.hoisted(() => new Map<string, () => void>());
 // Error codes the next `close` of a handle opened on the keyed path fails with, after closing.
 const closeFailures = vi.hoisted(() => new Map<string, string>());
@@ -29,9 +29,11 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("node:fs/promises")>();
 	const lstat: typeof actual.lstat = (async (path: string, options?: never) => {
 		fsTrace.push(`lstat ${path}`);
-		const stats = await actual.lstat(path, options);
-		duringLstat.get(path)?.();
-		return stats;
+		try {
+			return await actual.lstat(path, options);
+		} finally {
+			duringLstat.get(path)?.();
+		}
 	}) as typeof actual.lstat;
 	const chmod: typeof actual.chmod = async (path, mode) => {
 		fsTrace.push(`chmod ${String(path)}`);
@@ -102,6 +104,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
 	vi.restoreAllMocks();
+	duringLstat.clear();
 	closeFailures.clear();
 	rmFailures.clear();
 	unreadable.clear();
@@ -643,6 +646,27 @@ describe("a strict store", () => {
 			]);
 		},
 	);
+
+	it("completes a reset that found no directory, leaving a store created after the check", async () => {
+		const nested = join(dir, "nested");
+		const file = join(nested, "doc.json");
+		duringLstat.set(nested, () => {
+			duringLstat.delete(nested);
+			// Another process creates the store while the reset is paused after its check.
+			mkdirSync(nested, { mode: 0o700 });
+			writeFileSync(file, JSON.stringify({ n: 1 }));
+		});
+
+		await createStore({
+			dirPath: nested,
+			name: "doc",
+			fields: { n: { type: "number", default: 0 } },
+			strict: true,
+		}).reset();
+
+		expect(readFileSync(file, "utf-8")).toBe(JSON.stringify({ n: 1 }));
+		expect(trace()).toEqual(["lstat nested"]);
+	});
 
 	it.skipIf(process.platform === "win32")(
 		"rejects a reset with IO when the directory flush fails, and releases the lock",
