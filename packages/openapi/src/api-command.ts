@@ -19,12 +19,13 @@ import {
 	fetchNextPage,
 	resolveUrl,
 } from "./client.ts";
+import { isLocalRef, mergeParameters, rawOperations, refTarget } from "./spec-traversal.ts";
 
 const API: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:openapi");
 
 /**
- * An OpenAPI document; only `paths` and local `$ref` targets are read. Keys of `paths`
- * not starting with `/`, such as `x-*` extensions, are skipped.
+ * An OpenAPI document; `api --list` and `--spec` read only `paths` and local `$ref` targets.
+ * Keys of `paths` not starting with `/`, such as `x-*` extensions, are skipped.
  */
 export interface OpenApiSpec {
 	readonly paths?: Readonly<Record<string, unknown>>;
@@ -74,73 +75,6 @@ export class ApiResponseError extends Error {
 	}
 }
 
-const METHODS = ["get", "put", "post", "delete", "options", "head", "patch", "trace"] as const;
-
-/**
- * The value a local `$ref`'s JSON Pointer fragment (`#/...`, URI-encoded or not) points to
- * in `spec`, or `undefined`, also for other fragments such as `#anchor`.
- */
-function refTarget(spec: OpenApiSpec, ref: string): unknown {
-	let pointer: string;
-	try {
-		pointer = decodeURIComponent(ref.slice(1));
-	} catch {
-		return undefined;
-	}
-	if (pointer !== "" && !pointer.startsWith("/")) return undefined;
-	let target: unknown = spec;
-	for (const token of pointer.split("/").slice(1)) {
-		const key = token.replaceAll("~1", "/").replaceAll("~0", "~");
-		target =
-			typeof target === "object" && target !== null && Object.hasOwn(target, key)
-				? (target as Record<string, unknown>)[key]
-				: undefined;
-	}
-	return target;
-}
-
-/** A Path Item with its own local `$ref`s (e.g. to `components.pathItems`) followed; sibling keys win. */
-function pathItem(
-	spec: OpenApiSpec,
-	item: Readonly<Record<string, unknown>>,
-): Record<string, unknown> {
-	let current: Record<string, unknown> = item;
-	const seen = new Set<string>();
-	for (
-		let ref = current.$ref;
-		typeof ref === "string" && ref.startsWith("#") && !seen.has(ref);
-		ref = current.$ref
-	) {
-		seen.add(ref);
-		const target = refTarget(spec, ref);
-		if (typeof target !== "object" || target === null || Array.isArray(target)) break;
-		const { $ref: _ref, ...siblings } = current;
-		current = { ...target, ...siblings };
-	}
-	return current;
-}
-
-interface Operation {
-	readonly method: string;
-	readonly path: string;
-	readonly operation: object;
-	/** The path item's shared `parameters`. */
-	readonly shared: unknown;
-}
-
-function operations(spec: OpenApiSpec): Operation[] {
-	return Object.entries(spec.paths ?? {}).flatMap(([path, item]) => {
-		if (!path.startsWith("/") || typeof item !== "object" || item === null) return [];
-		const resolved = pathItem(spec, item as Readonly<Record<string, unknown>>);
-		return METHODS.flatMap((method) => {
-			const operation = resolved[method];
-			return typeof operation === "object" && operation !== null
-				? [{ method, path, operation, shared: resolved.parameters }]
-				: [];
-		});
-	});
-}
-
 /** `spec`, or what its loader returns; a failure other than cancellation becomes a plain `Error`. */
 async function loadSpec(
 	spec: ApiCommandOptions["spec"],
@@ -181,7 +115,7 @@ type ListedOperation = {
 
 /** Each operation's method, path, and the `operationId` and `summary` the spec has. */
 function listOperations(spec: OpenApiSpec): ListedOperation[] {
-	return operations(spec).map(({ method, path, operation }) => {
+	return rawOperations(spec).map(({ method, path, operation }) => {
 		const { operationId, summary } = operation as { operationId?: unknown; summary?: unknown };
 		return {
 			method: method.toUpperCase(),
@@ -190,46 +124,6 @@ function listOperations(spec: OpenApiSpec): ListedOperation[] {
 			...(typeof summary === "string" && summary !== "" ? { summary } : {}),
 		};
 	});
-}
-
-function isLocalRef(ref: unknown): ref is string {
-	return typeof ref === "string" && ref.startsWith("#");
-}
-
-/** `value` with its local `$ref` chain followed, stopping at a cycle or a dangling `$ref`. */
-function deref(spec: OpenApiSpec, value: unknown): unknown {
-	const seen = new Set<string>();
-	for (;;) {
-		const ref =
-			typeof value === "object" && value !== null ? (value as { $ref?: unknown }).$ref : undefined;
-		if (!isLocalRef(ref) || seen.has(ref)) return value;
-		seen.add(ref);
-		const target = refTarget(spec, ref);
-		if (target === undefined) return value;
-		value = target;
-	}
-}
-
-/** The path item's `parameters`, minus those the operation redefines (same `name` and `in`), then the operation's. */
-function mergeParameters(spec: OpenApiSpec, shared: unknown, own: unknown): unknown[] {
-	const list = (parameters: unknown): unknown[] => (Array.isArray(parameters) ? parameters : []);
-	const key = (parameter: unknown): string | undefined => {
-		const { name, in: location } = (deref(spec, parameter) ?? {}) as {
-			name?: unknown;
-			in?: unknown;
-		};
-		return typeof name === "string" && typeof location === "string"
-			? JSON.stringify([location, name])
-			: undefined;
-	};
-	const redefined = new Set(list(own).map(key));
-	return [
-		...list(shared).filter((parameter) => {
-			const id = key(parameter);
-			return id === undefined || !redefined.has(id);
-		}),
-		...list(own),
-	];
 }
 
 /**
@@ -291,7 +185,7 @@ function specFor(spec: OpenApiSpec, target: string): unknown {
 	if (target.startsWith("/") && Object.hasOwn(paths, target)) {
 		return resolveRefs(paths[target], spec);
 	}
-	const matches = operations(spec).filter(
+	const matches = rawOperations(spec).filter(
 		({ operation }) => (operation as { operationId?: unknown }).operationId === target,
 	);
 	const [match] = matches;
