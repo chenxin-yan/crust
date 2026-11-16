@@ -280,8 +280,12 @@ export async function createAuthorizationSession(
 			if (link.signal.aborted) reject(link.signal.reason);
 			link.signal.addEventListener("abort", () => reject(link.signal.reason), { once: true });
 		});
+		// Observed by the race below, or unused when the wait was cancelled before it began.
+		stopped.catch(() => {});
 		const handle = async (): Promise<T> => {
 			const { params, response } = await arrival;
+			// A callback queued before wait() never starts once the wait is cancelled or closed.
+			if (link.signal.aborted) throw link.signal.reason;
 			let outcome: { ok: true; value: T } | { ok: false; error: unknown };
 			try {
 				// The issuer is checked before error or code is acted on (SEC-C10, I2–I4, I7).
@@ -308,6 +312,7 @@ export async function createAuthorizationSession(
 			return outcome.value;
 		};
 		try {
+			if (link.signal.aborted) throw link.signal.reason;
 			return await Promise.race([handle(), stopped]);
 		} finally {
 			link.clear();

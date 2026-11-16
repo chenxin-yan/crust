@@ -741,6 +741,28 @@ describe("createAuthorizationSession", () => {
 		expect(await isClosed(session.redirectUri)).toBe(true);
 	});
 
+	it.each(["an aborted signal", "close()"])(
+		"SEC-C14 SEC-P1 never runs onCallback for a queued callback after %s",
+		async (stop) => {
+			const session = await open();
+			const browser = rawRequest(session.redirectUri, good(session)).catch(
+				(error: unknown) => error,
+			);
+			// Let the listener receive and queue the callback before wait() is called.
+			await new Promise((resolve) => setTimeout(resolve, 100));
+			if (stop === "close()") session.close();
+			const onCallback = vi.fn(async () => "tokens");
+			const result = await session
+				.wait(onCallback, stop === "close()" ? {} : { signal: AbortSignal.abort() })
+				.catch((error: unknown) => error);
+			expect(result).toBeInstanceOf(AbortError);
+			await new Promise((resolve) => setTimeout(resolve, 50));
+			expect(onCallback).not.toHaveBeenCalled();
+			expect(await isClosed(session.redirectUri)).toBe(true);
+			await browser;
+		},
+	);
+
 	it.each(["timeout", "abort", "close"])(
 		"SEC-C14 SEC-P1 settles wait() and closes the listener on %s while onCallback runs",
 		async (stop) => {
