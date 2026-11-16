@@ -259,14 +259,11 @@ async function recoverOrBlock(
 		return { path: lockPath, verdict, owner: owner === "unreadable" ? undefined : owner };
 	}
 	signal?.throwIfAborted();
-	// No recovery starts past the deadline: the waiter fails, naming the dead owner's lock.
-	if (performance.now() >= deadline) return { path: lockPath, verdict, owner };
 
 	const recoverPath = `${lockPath}.recover`;
-	const recoverer = { ...self, ownerId: crypto.randomUUID(), createdAt: new Date().toISOString() };
-	if (!(await createRecord(recoverPath, recoverer))) {
-		// Another waiter is recovering, or one crashed doing so: `.recover` is never removed
-		// automatically, so a leftover one blocks recovery until it is deleted by hand.
+	// `.recover` is never removed automatically: another waiter is recovering, or one crashed doing
+	// so and its leftover blocks recovery until it is deleted by hand.
+	const recoverBlocker = async (): Promise<Blocker | undefined> => {
 		const current = await readRecord(recoverPath);
 		if (current === undefined) return undefined;
 		return {
@@ -274,7 +271,15 @@ async function recoverOrBlock(
 			verdict: await judge(current, self),
 			owner: current === "unreadable" ? undefined : current,
 		};
+	};
+	// No recovery starts past the deadline. The waiter fails naming what blocks it: a leftover
+	// `.recover` when there is one, since deleting the dead owner's lock alone would not help.
+	if (performance.now() >= deadline) {
+		return (await recoverBlocker()) ?? { path: lockPath, verdict, owner };
 	}
+
+	const recoverer = { ...self, ownerId: crypto.randomUUID(), createdAt: new Date().toISOString() };
+	if (!(await createRecord(recoverPath, recoverer))) return recoverBlocker();
 	await releasing(recoverPath, recoverer.ownerId, async () => {
 		// Since the verdict, another waiter may have recovered this lock and a successor taken
 		// the path: only the record that was judged dead is removed.

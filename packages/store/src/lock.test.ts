@@ -410,6 +410,27 @@ describe("withLock", () => {
 			expect(existsSync(`${lockPath}.recover`)).toBe(false);
 		});
 
+		it("names a leftover `.recover`, not the dead owner's lock, when the deadline passed while judging", async () => {
+			const recover = await writeRecord(`${lockPath}.recover`, { pid: MISSING_PID });
+			const lock = await writeRecord(lockPath, { pid: MISSING_PID });
+			const kill = process.kill.bind(process);
+			vi.spyOn(process, "kill").mockImplementation((pid, signal) => {
+				if (pid === MISSING_PID && !vi.isMockFunction(performance.now)) jumpPastDeadline();
+				return kill(pid, signal);
+			});
+
+			expect(await lockError({ timeout: 1_000 })).toMatchObject({
+				code: "LOCK",
+				details: {
+					path: `${lockPath}.recover`,
+					verdict: "dead",
+					owner: { ownerId: JSON.parse(recover).ownerId },
+				},
+			});
+			expect(readFileSync(lockPath, "utf-8")).toBe(lock);
+			expect(readFileSync(`${lockPath}.recover`, "utf-8")).toBe(recover);
+		});
+
 		it("makes no new attempt once the deadline passed during a recovery", async () => {
 			await writeRecord(lockPath, { pid: MISSING_PID });
 			const kill = process.kill.bind(process);
