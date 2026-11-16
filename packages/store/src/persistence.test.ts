@@ -1,5 +1,6 @@
 /**
  * @module-tag windows
+ * @module-tag macos
  */
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
