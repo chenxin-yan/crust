@@ -22,7 +22,7 @@ npm install @crustjs/auth
 
 - `app` is your CLI's name: non-empty, without `/` or `\`. The login is stored in `credentials.json` in its state directory, as [Storing tokens](#storing-tokens) describes. The device-login message shows `name`, which defaults to `app`.
 - `apiOrigins` are the only origins the stored login's token is sent to. Declare them in code, never from the environment.
-- `env` names a variable, such as `ACME_TOKEN`, whose non-blank value `token()` returns instead of the stored login, so CI and agents need no login. It is never stored, refreshed, or revoked.
+- `env` names a variable, such as `ACME_TOKEN`, whose value `token()` returns, trimmed, instead of the stored login when it is not blank, so CI and agents need no login. It is never stored, refreshed, or revoked, and not checked against `apiOrigins`.
 - `issuer`, `clientId`, `clientSecret`, `redirectPath`, and `allowInsecureLoopback` follow the rules of [Servers](#servers); `hosts` and `ports` those of [Browser login](#browser-login).
 - `resource` names the API every login asks tokens for (RFC 8707 resource indicators, absolute URIs without a fragment), for a server that issues tokens per API; both logins and the code exchange send it.
 
@@ -59,7 +59,7 @@ If `onUrl` or `onCode` throws or rejects, the login fails with that error, close
 
 <include lang="ts">../../../examples/modules/auth.ts#token</include>
 
-- `auth.token({ signal?, baseUrl? })` returns the `env` variable's value when it is set and not blank, with `source` `"env"` and no `refresh`. Otherwise it returns the stored login's token, refreshed first when it expires within 30 seconds; with `baseUrl`, its origin must be one of `apiOrigins`, or it throws `CredentialMismatchError` before anything is sent. No login → `LoginRequiredError`.
+- `auth.token({ signal?, baseUrl? })` returns the `env` variable's value, trimmed, when it is set and not blank, with `source` `"env"` and no `refresh`. Otherwise it returns the stored login's token, refreshed first when it expires within 30 seconds; with `baseUrl`, its origin must be one of `apiOrigins`, or it throws `CredentialMismatchError` before anything is sent. A token from `env` is not checked against `apiOrigins`. No login → `LoginRequiredError`.
 - `refresh()` on a stored login's token refreshes it unless another process already did, for a 401 retry.
 - `auth.status()` reads where the token would come from and the stored login's `expiresAt` and `scope`, without a request, a refresh, or waiting for a lock. A corrupt file or an unsafe directory still throws its error.
 - `auth.logout({ signal? })` deletes the login, then revokes it at the server, and reports both outcomes as in [Login and logout](#login-and-logout).
@@ -74,7 +74,7 @@ With [`@crustjs/openapi`](/docs/modules/openapi#authentication), pass `auth.toke
 
 ### Errors by code
 
-Every error is an `AuthError`; match on its `code`, typed as the `AuthErrorCode` union, never on `message`:
+Errors the library raises are `AuthError`s with a stable `code`, typed as the `AuthErrorCode` union; match on `code`, never on `message`. An error thrown by your own `onUrl` or `onCode` reaches you unchanged. `createAuth()` itself throws `OAuthConfigError` for an invalid option, and, since it resolves the state directory's path (without touching the disk), the store's `CrustStoreError` (`PATH`) on an unsupported platform or when `XDG_STATE_HOME` (`LOCALAPPDATA` on Windows) is unset or relative and the home directory is not an absolute path.
 
 <include lang="ts">../../../examples/modules/auth.ts#errors</include>
 
@@ -264,7 +264,7 @@ A refresh, login, logout, or reset of one login holds a lock file next to `crede
 <include lang="ts">../../../examples/modules/auth.ts#resolve</include>
 
 1. `fromStdin({ enabled, maxBytes? })`: piped stdin, read only when `enabled` (such as with a `--token-stdin` flag) and stdin is not a terminal, without its trailing newline. More than `maxBytes` (16 KiB) rejects with a `RangeError` while reading.
-2. `fromEnv(name)`: an environment variable, the usual choice on CI.
+2. `fromEnv(name)`: an environment variable, the usual choice on CI. Its value is trimmed, and a blank one counts as unset.
 3. `fromEnvFile(values, name)`: a variable from a dotenv file you parsed, so an exported variable wins.
 4. `fromStore(tokenSource)`: the stored login, refreshed when it expires.
 5. `fromFlag(value)`, when you must accept a `--token` flag: put it first. A token on the command line is visible to other users (`ps`), and stays in shell history and CI logs.
@@ -277,7 +277,7 @@ With [`@crustjs/openapi`](/docs/modules/openapi#authentication), pass the resolv
 
 ## Errors
 
-Every error extends `AuthError` and has a stable `code`. Match on `code` or the class, never on `message`. The classes are exported from `@crustjs/auth/oauth`; the root exports `AuthError` and `AuthErrorCode`.
+Every error the library raises extends `AuthError` and has a stable `code`. Match on `code` or the class, never on `message`. The classes are exported from `@crustjs/auth/oauth`; the root exports `AuthError` and `AuthErrorCode`.
 
 | Error                           | `code`                       | When                                                                                                                                               |
 | ------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |

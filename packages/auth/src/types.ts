@@ -236,11 +236,15 @@ export interface CreateAuthOptions extends AuthServerOptions {
 	 */
 	app: string;
 	/**
-	 * The API origins the token may be sent to, such as `["https://api.acme.example"]`: `https`
-	 * (plain `http` only on a development server's origin). Set them in code, never from env.
+	 * The API origins the stored login's token may be sent to, such as
+	 * `["https://api.acme.example"]`: `https` (plain `http` only on a development server's
+	 * origin). Set them in code, never from env. A token from `env` is not checked against them.
 	 */
 	apiOrigins: readonly string[];
-	/** An environment variable, such as `ACME_TOKEN`, whose non-blank value wins over the stored login. */
+	/**
+	 * An environment variable, such as `ACME_TOKEN`, whose value (trimmed) wins over the stored
+	 * login when it is not blank.
+	 */
 	env?: string;
 	/** Space-separated scopes every login asks for. Omitted from the request when unset. */
 	scope?: string;
@@ -325,8 +329,8 @@ export interface AuthClient {
 	readonly login: (options: LoginOptions) => Promise<void>;
 	/**
 	 * The token to send: the `env` variable's when it is set, else the stored login's, refreshed
-	 * first when it is about to expire. With `baseUrl`, its origin must be one of `apiOrigins`.
-	 * No login → `LoginRequiredError`.
+	 * first when it is about to expire. With `baseUrl`, the stored login's token is returned only
+	 * when its origin is one of `apiOrigins`. No login → `LoginRequiredError`.
 	 */
 	readonly token: (options?: { signal?: AbortSignal; baseUrl?: string }) => Promise<AuthToken>;
 	/** Where the token would come from, and the stored login's expiry and scope. */

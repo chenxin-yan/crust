@@ -17,7 +17,7 @@ Register your CLI with your authorization server as a **public client**, with re
 
 What they do:
 
-1. `createAuth()` checks the settings once, without any request or file access. `apiOrigins` are the only hosts the token is ever sent to; declare them in code.
+1. `createAuth()` checks the settings once, without any request or file access. `apiOrigins` are the only hosts the stored login's token is sent to; declare them in code. A token from `ACME_TOKEN` is the user's own choice and is not checked against them.
 2. `auth.login()` picks the login: `--device` always means a device code; on CI or with no terminal it refuses with `LoginRequiresInteractionError` (`code` `"login-requires-interaction"`), whose message says to use the device login or set `ACME_TOKEN`; at a terminal over SSH or on Linux without a display it uses a device code; otherwise the browser. See [Choosing a login](/docs/modules/auth#choosing-a-login).
 3. **Browser:** `onUrl` gets the sign-in URL and `open()`, which opens it in the system browser. The command prints the URL, then opens it; the login waits for the browser to come back and frees the port on every path.
 4. **Device code:** `onCode` gets the code and `message`, the default instructions with the URL's host and an anti-phishing line. The login waits for approval at the pace the server asks for.
