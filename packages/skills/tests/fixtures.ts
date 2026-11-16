@@ -6,6 +6,16 @@ import type {
 	FlagDef,
 } from "@crustjs/core";
 import { Crust, defineCommand } from "@crustjs/core";
+import { vi } from "vite-plus/test";
+
+import { AGENTS } from "../src/agents.generated.ts";
+
+/** Unsets every variable that relocates an agent's global directory, so the host's do not leak in. */
+export function stubAgentOverridesUnset(): void {
+	for (const row of Object.values(AGENTS)) {
+		if (row.length === 5) vi.stubEnv(row[3], undefined);
+	}
+}
 
 export async function withCwd<T>(dir: string, run: () => Promise<T>): Promise<T> {
 	// Preserve the original method for restoration; it is never called unbound.

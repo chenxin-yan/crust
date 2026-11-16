@@ -45,13 +45,27 @@ function agentClass(agent: AgentTarget): AgentClass {
 		: "additional";
 }
 
-/** Absolute global skills directory, or `undefined` when the agent has none. */
+const AGENT_ROWS: Readonly<
+	Record<
+		AgentTarget,
+		readonly [
+			label: string,
+			projectDir: string,
+			globalDir: string | null,
+			overrideVariable?: string,
+			overrideDir?: string,
+		]
+	>
+> = AGENTS;
+
+/**
+ * Absolute global skills directory, or `undefined` when the agent has none. A non-blank override
+ * variable, trimmed as upstream does, replaces the home-relative directory.
+ */
 function globalSkillsDir(agent: AgentTarget): string | undefined {
-	// The one upstream override carried here; the snapshot has none of upstream's other
-	// environment overrides or per-platform paths.
-	const claudeConfigDir = agent === "claude-code" ? process.env.CLAUDE_CONFIG_DIR?.trim() : "";
-	if (claudeConfigDir) return join(claudeConfigDir, "skills");
-	const dir = AGENTS[agent][2];
+	const [, , dir, overrideVariable, overrideDir = ""] = AGENT_ROWS[agent];
+	const override = overrideVariable && process.env[overrideVariable]?.trim();
+	if (override) return join(override, overrideDir);
 	return dir === null ? undefined : join(homedir(), dir);
 }
 

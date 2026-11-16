@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { withCwd } from "../tests/fixtures.ts";
+import { stubAgentOverridesUnset, withCwd } from "../tests/fixtures.ts";
 import {
 	agentDetectionFolder,
 	detectInstalledAgents,
@@ -26,6 +26,32 @@ describe("resolveAgentPath", () => {
 		vi.stubEnv("CLAUDE_CONFIG_DIR", join(homedir(), "custom-claude"));
 		expect(resolveAgentPath("claude-code", "global", "my-cli")).toBe(
 			join(homedir(), "custom-claude", "skills", "my-cli"),
+		);
+	});
+
+	it("follows XDG_CONFIG_HOME for an agent whose global directory is under it", () => {
+		vi.stubEnv("XDG_CONFIG_HOME", undefined);
+		expect(resolveAgentPath("amp", "global", "my-cli")).toBe(
+			join(homedir(), ".config", "agents", "skills", "my-cli"),
+		);
+		vi.stubEnv("XDG_CONFIG_HOME", join(homedir(), "xdg"));
+		expect(resolveAgentPath("amp", "global", "my-cli")).toBe(
+			join(homedir(), "xdg", "agents", "skills", "my-cli"),
+		);
+	});
+
+	it("falls back to the home directory when the override variable is blank", () => {
+		vi.stubEnv("GROK_HOME", "  ");
+		expect(resolveAgentPath("grok", "global", "my-cli")).toBe(
+			join(homedir(), ".grok", "skills", "my-cli"),
+		);
+	});
+
+	it("ignores override variables for an agent without one", () => {
+		vi.stubEnv("CLAUDE_CONFIG_DIR", join(homedir(), "custom-claude"));
+		vi.stubEnv("XDG_CONFIG_HOME", join(homedir(), "xdg"));
+		expect(resolveAgentPath("kiro-cli", "global", "my-cli")).toBe(
+			join(homedir(), ".kiro", "skills", "my-cli"),
 		);
 	});
 
@@ -60,7 +86,7 @@ describe("detectInstalledAgents", () => {
 		mkdirSync(home);
 		vi.stubEnv("HOME", home);
 		vi.stubEnv("USERPROFILE", home);
-		vi.stubEnv("CLAUDE_CONFIG_DIR", undefined);
+		stubAgentOverridesUnset();
 	});
 
 	afterEach(() => {

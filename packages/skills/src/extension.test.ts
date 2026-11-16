@@ -20,7 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 
 import { reapBoundedProcesses, runBoundedProcess } from "../../crust/tests/bounded-process.ts";
 import { runBuildHooks } from "../../crust/tests/build-hooks.ts";
-import { withCwd } from "../tests/fixtures.ts";
+import { stubAgentOverridesUnset, withCwd } from "../tests/fixtures.ts";
 import { skill } from "./extension.ts";
 import { installSkill } from "./install.ts";
 
@@ -46,6 +46,7 @@ beforeEach(async () => {
 	await mkdir(home);
 	vi.stubEnv("HOME", home);
 	vi.stubEnv("USERPROFILE", home);
+	stubAgentOverridesUnset();
 });
 
 afterEach(async () => {

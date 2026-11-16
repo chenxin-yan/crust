@@ -104,7 +104,7 @@ Universal targets, such as codex, cline, and pi, read the shared folders at both
 
 An additional agent is detected when the folder containing its global skills directory exists, such as `~/.claude` for `~/.claude/skills`. Project folders, the home directory itself, and the shared `~/.agents` do not count.
 
-The agent list is generated from the registry of the [`skills`](https://www.npmjs.com/package/skills) package; [`agents.generated.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/skills/src/agents.generated.ts) lists every target and its directories. `CLAUDE_CONFIG_DIR` replaces `~/.claude` for Claude Code's global directory. The snapshot does not carry upstream's other environment overrides or per-platform paths: every other agent uses the directories in that file.
+The agent list is generated from the registry of the [`skills`](https://www.npmjs.com/package/skills) package; [`agents.generated.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/skills/src/agents.generated.ts) lists every target and its directories. The table also records the environment variables upstream honors for a global directory, such as `CLAUDE_CONFIG_DIR` for Claude Code or `XDG_CONFIG_HOME` for OpenCode: when one is set to a non-blank value, the global directory moves under it, and detection follows. Per-platform paths are not carried: every agent uses the POSIX directories in that file on every platform.
 
 When the working directory is the home directory, project scope becomes global scope. Result objects include the effective scope.
 
