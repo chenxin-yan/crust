@@ -43,13 +43,13 @@ onCode: ({ message }) => stderr(message),
 
 <auto-type-table path="../../../../../packages/auth/src/types.ts" name="BrowserLoginPrompt" />
 
-`open()` calls [`openBrowser()`](#opening-the-browser) with the URL; it never throws, so always show the URL as well. You may skip it, or ask first.
+`open()` calls [`openBrowser()`](#opening-the-browser) with the URL and resolves `true` when a browser was launched, `false` when none could be, so you can ask the user to open the URL by hand. It never throws; show the URL in any case. You may skip it, or ask first.
 
 <auto-type-table path="../../../../../packages/auth/src/types.ts" name="DeviceLoginPrompt" />
 
 `message` is the [`deviceCodeMessage()`](#device-login) text for this login: the URL and its host, the code, and the anti-phishing warning. The prompt never carries the device code.
 
-If `onUrl` or `onCode` throws or rejects, the login fails with that error and closes the listener. `signal` cancels any wait with `AbortError`; `page` renders the browser's result page as in [Browser login](#browser-login).
+If `onUrl` or `onCode` throws or rejects, the login fails with that error and closes the listener. `signal` cancels any wait with `AbortError`, including a pending `onUrl` or `onCode`: the login rejects at once, closes the listener, and ignores the callback's later result; `page` renders the browser's result page as in [Browser login](#browser-login).
 
 ### Errors by code
 

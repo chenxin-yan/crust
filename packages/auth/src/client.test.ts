@@ -2,6 +2,9 @@
  * @module-tag windows
  * @module-tag macos
  */
+import { once } from "node:events";
+import { type AddressInfo, createServer } from "node:net";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
@@ -62,7 +65,7 @@ type Route = Parameters<typeof fakeFetch>[0][string];
 /** A fresh authorization server behind a fake fetch, and a client for it. */
 function setup(
 	routes: (issuer: string) => Record<string, Route> = () => ({}),
-	options: { name?: string; scope?: string } = {},
+	options: { name?: string; scope?: string; ports?: number[] } = {},
 ) {
 	const issuer = uniqueIssuer();
 	const fake = fakeFetch({
@@ -102,6 +105,16 @@ function browser() {
 		seen,
 		redirectUri: () => new URL(seen.prompt!.url).searchParams.get("redirect_uri")!,
 	};
+}
+
+/** A loopback port free right now. */
+async function freePort(): Promise<number> {
+	const server = createServer().listen(0, "127.0.0.1");
+	await once(server, "listening");
+	const { port } = server.address() as AddressInfo;
+	server.close();
+	await once(server, "close");
+	return port;
 }
 
 /** A response that never comes; the request aborts `controller` when it arrives. */
@@ -188,8 +201,24 @@ describe("login() in a browser", () => {
 		expect(openBrowser.mock.calls[0]![0]).toBe(play.seen.prompt!.url);
 	});
 
+	it("open() reports whether a browser was launched", async () => {
+		const { auth } = setup();
+		const play = browser();
+		const opened: boolean[] = [];
+		openBrowser.mockResolvedValueOnce(false);
+		await auth.login({
+			onUrl: async (prompt) => {
+				opened.push(await prompt.open());
+				play.onUrl(prompt);
+			},
+			onCode: noCode,
+		});
+		expect(opened).toEqual([false]);
+	});
+
 	it("passes the scope override, the fixed port and the result page", async () => {
-		const { auth } = setup(undefined, { scope: "read" });
+		const port = await freePort();
+		const { auth } = setup(undefined, { scope: "read", ports: [port] });
 		const play = browser();
 		await auth.login({
 			scope: "write",
@@ -198,6 +227,7 @@ describe("login() in a browser", () => {
 			page: ({ outcome }) => `<p>${outcome} at Acme</p>`,
 		});
 		expect(new URL(play.seen.prompt!.url).searchParams.get("scope")).toBe("write");
+		expect(new URL(play.redirectUri()).port).toBe(String(port));
 		expect((await play.seen.page!).body).toBe("<p>success at Acme</p>");
 	});
 
@@ -217,6 +247,51 @@ describe("login() in a browser", () => {
 		expect(error).toBe(thrown);
 		expect(await isClosed(redirectUri)).toBe(true);
 		expect(requests.some((request) => request.body.get("grant_type"))).toBe(false);
+	});
+
+	it("aborts while onUrl is pending: rejects at once, closes the listener, ignores the late result", async () => {
+		const { auth } = setup();
+		const controller = new AbortController();
+		const unhandled = vi.fn();
+		process.on("unhandledRejection", unhandled);
+		let redirectUri = "";
+		let fail!: (error: Error) => void;
+		const login = auth.login({
+			signal: controller.signal,
+			onUrl: ({ url }) => {
+				redirectUri = new URL(url).searchParams.get("redirect_uri")!;
+				queueMicrotask(() => controller.abort());
+				// A prompt the user never answers.
+				return new Promise<void>((_resolve, reject) => {
+					fail = reject;
+				});
+			},
+			onCode: noCode,
+		});
+		expect(await rejection(login)).toBeInstanceOf(AbortError);
+		expect(await isClosed(redirectUri)).toBe(true);
+		fail(new Error("the prompt failed late"));
+		await new Promise((resolve) => setImmediate(resolve));
+		process.off("unhandledRejection", unhandled);
+		expect(unhandled).not.toHaveBeenCalled();
+	});
+
+	it("a second login after a failed one succeeds", async () => {
+		const { auth } = setup();
+		const thrown = new Error("onUrl failed");
+		expect(
+			await rejection(
+				auth.login({
+					onUrl: () => {
+						throw thrown;
+					},
+					onCode: noCode,
+				}),
+			),
+		).toBe(thrown);
+		expect(await auth.login({ onUrl: browser().onUrl, onCode: noCode })).toMatchObject({
+			accessToken: "AT",
+		});
 	});
 
 	it("aborts while waiting for the browser and leaves no listener", async () => {
@@ -309,6 +384,22 @@ describe("login() with a device code", () => {
 		const onCode = vi.fn();
 		await settle(auth.login({ onUrl: noUrl, onCode }));
 		expect(onCode).toHaveBeenCalledTimes(1);
+	});
+
+	it("aborts while onCode is pending: rejects at once and never polls", async () => {
+		const { auth, requests, issuer } = setup();
+		const controller = new AbortController();
+		const login = auth.login({
+			device: true,
+			signal: controller.signal,
+			onUrl: noUrl,
+			onCode: () => {
+				queueMicrotask(() => controller.abort());
+				return new Promise<void>(() => {});
+			},
+		});
+		expect(await rejection(login)).toBeInstanceOf(AbortError);
+		expect(requests.some((request) => request.url === `${issuer}/token`)).toBe(false);
 	});
 
 	it("fails with the error of a rejecting onCode and never polls", async () => {

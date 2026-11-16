@@ -243,8 +243,11 @@ export interface CreateAuthOptions extends AuthServerOptions {
 export interface BrowserLoginPrompt {
 	/** The authorization URL to show. It carries `state` and the PKCE challenge, which are not secrets. */
 	readonly url: string;
-	/** Opens `url` in the system browser, best effort; show `url` as well. */
-	readonly open: () => Promise<void>;
+	/**
+	 * Opens `url` in the system browser, best effort; show `url` as well. Resolves `false` when
+	 * no browser could be launched, so you can ask the user to open the URL by hand.
+	 */
+	readonly open: () => Promise<boolean>;
 }
 
 /** What `onCode` receives in a device login. The device code itself is never included. */

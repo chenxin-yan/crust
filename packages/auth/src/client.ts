@@ -3,7 +3,7 @@ import { defineServers } from "./config.ts";
 import { startDeviceFlow } from "./device.ts";
 import { discover, serverInternals } from "./discovery.ts";
 import { deviceCodeMessage } from "./display.ts";
-import { LoginRequiresInteractionError, OAuthConfigError } from "./errors.ts";
+import { AbortError, LoginRequiresInteractionError, OAuthConfigError } from "./errors.ts";
 import { detectLoginMode } from "./login-mode.ts";
 import { checkScope } from "./params.ts";
 import { checkLoopbackOptions, createAuthorizationSession } from "./session.ts";
@@ -25,6 +25,25 @@ function checkName(value: unknown, field: "app" | "name"): string {
 		);
 	}
 	return value;
+}
+
+/**
+ * The result of an app callback, or `AbortError` as soon as `signal` aborts: a prompt nobody
+ * answers must not hold the login (and its listener) open. A later result is ignored.
+ */
+function unlessAborted<T>(result: T | Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+	if (!signal) return Promise.resolve(result);
+	return new Promise<T>((resolve, reject) => {
+		const abort = () => reject(new AbortError());
+		if (signal.aborted) {
+			abort();
+			return;
+		}
+		signal.addEventListener("abort", abort, { once: true });
+		Promise.resolve(result)
+			.then(resolve, reject)
+			.finally(() => signal.removeEventListener("abort", abort));
+	});
 }
 
 /**
@@ -67,13 +86,16 @@ export function createAuth(options: CreateAuthOptions): AuthClient {
 		if (mode === "device") {
 			const flow = await startDeviceFlow(server, { scope: loginScope, signal, fetch });
 			const { userCode, verificationUri, verificationUriComplete, expiresAt } = flow;
-			await onCode({
-				userCode,
-				verificationUri,
-				verificationUriComplete,
-				expiresAt,
-				message: deviceCodeMessage({ app: name, userCode, verificationUri }),
-			});
+			await unlessAborted(
+				onCode({
+					userCode,
+					verificationUri,
+					verificationUriComplete,
+					expiresAt,
+					message: deviceCodeMessage({ app: name, userCode, verificationUri }),
+				}),
+				signal,
+			);
 			return flow.poll({ signal });
 		}
 		const client = createTokenClient(server, { fetch });
@@ -86,12 +108,10 @@ export function createAuth(options: CreateAuthOptions): AuthClient {
 		try {
 			const url = session.url;
 			const allowInsecureLoopbackOrigin = serverInternals(server).devOrigin;
-			await onUrl({
-				url,
-				async open() {
-					await openBrowser(url, { allowInsecureLoopbackOrigin });
-				},
-			});
+			await unlessAborted(
+				onUrl({ url, open: () => openBrowser(url, { allowInsecureLoopbackOrigin }) }),
+				signal,
+			);
 			return await session.wait(({ code }) => client.exchangeCode(session, code, { signal }), {
 				signal,
 				page,
