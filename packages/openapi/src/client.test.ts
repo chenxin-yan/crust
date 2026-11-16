@@ -15,6 +15,7 @@ import {
 
 interface Call {
 	url: string;
+	method: string;
 	authorization: string | null;
 	body: string | undefined;
 }
@@ -25,6 +26,7 @@ function stubFetch(respond: (call: Call, index: number) => Response) {
 	vi.stubGlobal("fetch", async (url: URL, init: RequestInit) => {
 		const call: Call = {
 			url: url.href,
+			method: init.method ?? "GET",
 			authorization: new Headers(init.headers).get("authorization"),
 			body: init.body == null ? undefined : String(init.body),
 		};
@@ -112,6 +114,88 @@ describe("apiClient auth retry", () => {
 		]);
 		expect(retries).toEqual(["AT1"]);
 		expect(cancel).toHaveBeenCalledTimes(1);
+	});
+
+	it("retries only the redirected request that got the 401, never the write before it", async () => {
+		const calls = stubFetch(({ url, authorization }) => {
+			if (url.endsWith("/create")) {
+				return new Response(null, { status: 303, headers: { location: "/v1/result" } });
+			}
+			return authorization === "Bearer AT1" ? unauthorized() : ok();
+		});
+		await withApi(
+			() => attempts(["AT1", "AT2"]),
+			async (api) => {
+				const response = await api.fetch("/create", { method: "POST", body: "name=x" });
+				expect(response.status).toBe(200);
+				expect(response.redirected).toBe(true);
+			},
+		);
+		expect(calls.map((call) => [call.method, call.url, call.authorization, call.body])).toEqual([
+			["POST", "https://api.example.com/v1/create", "Bearer AT1", "name=x"],
+			["GET", "https://api.example.com/v1/result", "Bearer AT1", undefined],
+			["GET", "https://api.example.com/v1/result", "Bearer AT2", undefined],
+		]);
+	});
+
+	it("resends the body a 307 kept, once, to the redirect target that got the 401", async () => {
+		const calls = stubFetch(({ url, authorization }) => {
+			if (url.endsWith("/upload")) {
+				return new Response(null, { status: 307, headers: { location: "/v1/store" } });
+			}
+			return authorization === "Bearer AT1" ? unauthorized() : ok();
+		});
+		await withApi(
+			() => attempts(["AT1", "AT2"]),
+			async (api) => {
+				expect((await api.fetch("/upload", { method: "PUT", body: "data" })).status).toBe(200);
+			},
+		);
+		expect(calls.map((call) => [call.method, call.url, call.authorization, call.body])).toEqual([
+			["PUT", "https://api.example.com/v1/upload", "Bearer AT1", "data"],
+			["PUT", "https://api.example.com/v1/store", "Bearer AT1", "data"],
+			["PUT", "https://api.example.com/v1/store", "Bearer AT2", "data"],
+		]);
+	});
+
+	it("retries when retry reads the 401 body", async () => {
+		const calls = stubFetch((_call, index) => (index === 0 ? unauthorized() : ok()));
+		await withApi(
+			() => ({
+				headers: { authorization: "Bearer AT1" },
+				retry: async (response) => {
+					expect(await response.text()).toBe("expired");
+					return { headers: { authorization: "Bearer AT2" } };
+				},
+			}),
+			async (api) => {
+				expect((await api.fetch("/me")).status).toBe(200);
+			},
+		);
+		expect(calls.map((call) => call.authorization)).toEqual(["Bearer AT1", "Bearer AT2"]);
+	});
+
+	it("keeps retry's own error when it throws with the 401 body locked", async () => {
+		stubFetch(unauthorized);
+		const failure = new Error("refresh failed");
+		const locked = vi.fn();
+		await expect(
+			withApi(
+				() => ({
+					headers: { authorization: "Bearer AT1" },
+					retry: async (response) => {
+						// Holds a reader, so the stream stays locked.
+						response.body!.getReader();
+						locked();
+						throw failure;
+					},
+				}),
+				async (api) => {
+					await api.fetch("/me");
+				},
+			),
+		).rejects.toBe(failure);
+		expect(locked).toHaveBeenCalledTimes(1);
 	});
 
 	it("returns the second 401 without a third request", async () => {

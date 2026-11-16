@@ -120,6 +120,10 @@ function snapshot(body: RequestInit["body"]): RequestInit["body"] {
 	return body;
 }
 
+/** Cancels a response body that `retry` may already have read or locked. */
+const discard = (response: Response): Promise<void> =>
+	response.body?.cancel().catch(() => {}) ?? Promise.resolve();
+
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const MAX_REDIRECTS = 20;
 // Request-body headers the Fetch standard drops when a redirect turns the request into a GET.
@@ -229,11 +233,12 @@ export const apiClient: ContextFactory<"api", ApiClientOptions, ApiClient> =
 
 		// Redirects are followed here, not by `fetch()`, which would forward headers other than
 		// Authorization to any origin and restart its redirect count on every call.
-		// A 401 to a request that carried the `auth` headers is replayed once from `first` with the
-		// attempt `retry` returns, which becomes the invocation's auth state.
-		async function send(first: Hop, retried = false): Promise<Response> {
+		// A 401 to a request that carried the `auth` headers is sent again once, as that hop was sent
+		// (never an earlier hop of the chain), with the attempt `retry` returns, which becomes the
+		// invocation's auth state.
+		async function send(first: Hop): Promise<Response> {
 			const redirect = first.init.redirect ?? "follow";
-			const replayable = !retried && isReplayable(first.init.body);
+			let retried = false;
 			for (let hop = first; ;) {
 				const headers = new Headers(hop.init.headers);
 				let attached: AuthState | undefined;
@@ -257,15 +262,22 @@ export const apiClient: ContextFactory<"api", ApiClientOptions, ApiClient> =
 					redirect: redirect === "follow" ? "manual" : redirect,
 				});
 				const signal = hop.init.signal ?? input.signal;
-				if (response.status === 401 && attached?.retry && replayable && !signal.aborted) {
+				if (
+					response.status === 401 &&
+					attached?.retry &&
+					!retried &&
+					isReplayable(hop.init.body) &&
+					!signal.aborted
+				) {
+					retried = true;
 					const next = await attached.retry(response, { signal }).catch(async (error: unknown) => {
-						await response.body?.cancel();
+						await discard(response);
 						throw error;
 					});
 					if (next !== undefined) {
-						await response.body?.cancel();
+						await discard(response);
 						authState = Promise.resolve(toAuthState(next));
-						return send(first, true);
+						continue;
 					}
 				}
 				const location = response.headers.get("location");
