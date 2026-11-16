@@ -179,7 +179,7 @@ export async function createAuthorizationSession(
 	const pkce = await createPkce();
 	const state = randomState();
 
-	let hostHeader: string | undefined;
+	let allowedHosts: readonly string[] = [];
 	let consumed = false;
 	let deliver!: (callback: Callback) => void;
 	const arrival = new Promise<Callback>((resolve) => {
@@ -198,7 +198,7 @@ export async function createAuthorizationSession(
 			void respond(response, 404, "Not found");
 			return;
 		}
-		if (hostHeader === undefined || request.headers.host !== hostHeader) {
+		if (!allowedHosts.includes(request.headers.host ?? "")) {
 			void respond(response, 421, "Misdirected request");
 			return;
 		}
@@ -236,7 +236,9 @@ export async function createAuthorizationSession(
 		);
 	}
 	const literal = listener.host === "::1" ? "[::1]" : "127.0.0.1";
-	hostHeader = `${literal}:${listener.port}`;
+	const hostHeader = `${literal}:${listener.port}`;
+	// Browsers omit the default port from Host, so only port 80 also accepts the bare literal.
+	allowedHosts = listener.port === 80 ? [hostHeader, literal] : [hostHeader];
 	const redirectUri = `http://${hostHeader}${server.redirectPath}`;
 
 	// The endpoint's own query is kept byte for byte; the library's parameters follow it (SEC-B1).

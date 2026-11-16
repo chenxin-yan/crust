@@ -20,9 +20,10 @@ import type {
 	CallbackPageView,
 } from "./types.ts";
 
-// Pass-through wrapper so tests can count binds and inject a listener whose path differs.
+// Pass-through wrapper so tests can count binds and inject a listener whose path or port differs.
 const loopback = vi.hoisted(() => ({
 	pathOverride: undefined as string | undefined,
+	portOverride: undefined as number | undefined,
 	last: undefined as LoopbackListener | undefined,
 }));
 vi.mock("./loopback.ts", async (importOriginal) => {
@@ -32,7 +33,11 @@ vi.mock("./loopback.ts", async (importOriginal) => {
 		listenLoopback: vi.fn(async (...args: Parameters<typeof actual.listenLoopback>) => {
 			const listener = await actual.listenLoopback(...args);
 			loopback.last = listener;
-			return loopback.pathOverride ? { ...listener, path: loopback.pathOverride } : listener;
+			return {
+				...listener,
+				path: loopback.pathOverride ?? listener.path,
+				port: loopback.portOverride ?? listener.port,
+			};
 		}),
 	};
 });
@@ -46,6 +51,7 @@ const sessions: AuthorizationSession[] = [];
 afterEach(() => {
 	for (const session of sessions.splice(0)) session.close();
 	loopback.pathOverride = undefined;
+	loopback.portOverride = undefined;
 	vi.useRealTimers();
 	vi.restoreAllMocks();
 	vi.mocked(listenLoopback).mockClear();
@@ -378,6 +384,23 @@ describe("createAuthorizationSession", () => {
 					.status,
 			).toBe(200);
 			expect(await result).toEqual({ value: "CODE" });
+		},
+	);
+
+	it.each([
+		["127.0.0.1", "127.0.0.1"],
+		["::1", "[::1]"],
+	] as const)(
+		"SEC-C8 accepts the Host a browser sends without the default port 80 on %s",
+		async (host, literal) => {
+			loopback.portOverride = 80;
+			const session = await open({ hosts: [host], ports: [0] });
+			expect(session.redirectUri).toBe(`http://${literal}:80/callback`);
+			const { onCallback, result } = waitFor(session);
+			const actual = `http://${literal}:${loopback.last!.port}/callback`;
+			expect((await rawRequest(actual, good(session), { host: literal })).status).toBe(200);
+			expect(await result).toEqual({ value: "CODE" });
+			expect(onCallback).toHaveBeenCalledTimes(1);
 		},
 	);
 

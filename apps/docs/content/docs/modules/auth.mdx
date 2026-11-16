@@ -76,7 +76,7 @@ The issuer must then be `http://127.0.0.1:<port>` or `http://[::1]:<port>`, neve
 
 `session.wait(onCallback, { timeoutMs?, signal?, page? })` waits for the browser, runs `onCallback({ code })` once, then answers the browser and closes the listener. Pass `client.exchangeCode(session, code)` as `onCallback`; the result page shows its outcome.
 
-- It serves only `GET` on the exact redirect path, compared byte for byte before any decoding, with a `Host` header of exactly `127.0.0.1:<port>` (or `[::1]:<port>`). Anything else gets a 404 or 421.
+- It serves only `GET` on the exact redirect path, compared byte for byte before any decoding, with a `Host` header of exactly `127.0.0.1:<port>` (or `[::1]:<port>`); on port 80 the browser's `127.0.0.1` (or `[::1]`) without the port also matches. Anything else gets a 404 or 421.
 - A request whose `state` is wrong or missing, or that repeats `code`, `state`, `error`, or `iss`, gets a 400 and the session keeps waiting: a stray or forged request cannot end the login.
 - The `iss` check runs before `error` or `code` is used. An `error` response rejects with an `OAuthError` and is never exchanged.
 - It rejects with `TimeoutError` after `timeoutMs` (5 minutes) and with `AbortError` on `signal` or `session.close()`, also while `onCallback` is still running (its late result is ignored). The listener and every open connection close on every outcome; a connection idle for 10 seconds is dropped.
