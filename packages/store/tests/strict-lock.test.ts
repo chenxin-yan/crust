@@ -91,7 +91,8 @@ interface Child {
 }
 
 function startChild(runtime: string, args: string[]): Child {
-	const child = spawn(runtime, [childScript, ...args], { timeout: 60_000 });
+	// SIGKILL, because a suspended child does not act on SIGTERM.
+	const child = spawn(runtime, [childScript, ...args], { timeout: 60_000, killSignal: "SIGKILL" });
 	let stdout = "";
 	let stderr = "";
 	child.stdout.on("data", (chunk: Buffer) => {
@@ -105,8 +106,9 @@ function startChild(runtime: string, args: string[]): Child {
 		process: child,
 		printed: async (line) => {
 			while (!stdout.split("\n").includes(line)) {
-				if (child.exitCode !== null || child.signalCode === "SIGKILL") {
-					throw new Error(`child exited before printing ${line}:\n${stderr}`);
+				if (child.exitCode !== null || child.signalCode !== null) {
+					const ended = child.exitCode ?? child.signalCode;
+					throw new Error(`child ended (${ended}) before printing ${line}:\n${stderr}`);
 				}
 				await new Promise((resolvePromise) => setTimeout(resolvePromise, 10));
 			}
