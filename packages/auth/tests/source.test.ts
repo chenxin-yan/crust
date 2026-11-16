@@ -86,12 +86,14 @@ describe("entry points", () => {
 			"AuthClient",
 			"AuthError",
 			"AuthErrorCode",
+			"AuthStatus",
+			"AuthToken",
 			"BrowserLoginPrompt",
 			"CallbackPageView",
 			"CreateAuthOptions",
 			"DeviceLoginPrompt",
 			"LoginOptions",
-			"TokenSet",
+			"LogoutResult",
 			"createAuth",
 		]);
 		expect(index).not.toMatch(/export \*/);

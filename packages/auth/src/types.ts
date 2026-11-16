@@ -230,8 +230,18 @@ export type LoginMode = "browser" | "device" | "refuse";
 
 /** Options of `createAuth()`: the one authorization server your CLI signs in with. */
 export interface CreateAuthOptions extends AuthServerOptions {
-	/** Your CLI's name, such as `acme`: a non-empty name without path separators. */
+	/**
+	 * Your CLI's name, such as `acme`: a non-empty name without path separators. The login is
+	 * stored in its state directory.
+	 */
 	app: string;
+	/**
+	 * The API origins the token may be sent to, such as `["https://api.acme.example"]`: `https`
+	 * (plain `http` only on a development server's origin). Set them in code, never from env.
+	 */
+	apiOrigins: readonly string[];
+	/** An environment variable, such as `ACME_TOKEN`, whose non-blank value wins over the stored login. */
+	env?: string;
 	/** Space-separated scopes every login asks for. Omitted from the request when unset. */
 	scope?: string;
 	/**
@@ -287,13 +297,42 @@ export interface LoginOptions {
 	page?: (view: CallbackPageView) => string;
 }
 
+/** The token `token()` returns. Its `value` prints as `[Redacted]`. */
+export interface AuthToken {
+	readonly value: string;
+	/** `"env"`: the `env` variable; `"login"`: the stored login. */
+	readonly source: "env" | "login";
+	/** Only for the stored login: refreshes it unless it already changed (for a 401). */
+	readonly refresh?: (options: { signal?: AbortSignal }) => Promise<AuthToken>;
+}
+
+/** What `status()` reports, read without a request, a refresh or a lock. */
+export interface AuthStatus {
+	readonly source: "env" | "login" | "none";
+	/** The stored login's expiry, in epoch milliseconds, when the server sent one. */
+	readonly expiresAt?: number;
+	/** The scope the server granted the stored login. */
+	readonly scope?: string;
+}
+
 /** The client `createAuth()` returns. Its methods work detached from it. */
 export interface AuthClient {
 	/**
-	 * Signs in: a browser login on a desktop, a device login elsewhere or with `device`, and
-	 * `LoginRequiresInteractionError` on CI or without a terminal.
+	 * Signs in and stores the login: a browser login on a desktop, a device login elsewhere or
+	 * with `device`, and `LoginRequiresInteractionError` on CI or without a terminal. A logout
+	 * that runs meanwhile is not undone: the login then fails with `StaleCommitError`.
 	 */
-	readonly login: (options: LoginOptions) => Promise<TokenSet>;
+	readonly login: (options: LoginOptions) => Promise<void>;
+	/**
+	 * The token to send: the `env` variable's when it is set, else the stored login's, refreshed
+	 * first when it is about to expire. With `baseUrl`, its origin must be one of `apiOrigins`.
+	 * No login → `LoginRequiredError`.
+	 */
+	readonly token: (options?: { signal?: AbortSignal; baseUrl?: string }) => Promise<AuthToken>;
+	/** Where the token would come from, and the stored login's expiry and scope. */
+	readonly status: () => Promise<AuthStatus>;
+	/** Deletes the stored login, then revokes it at the server as a best effort. */
+	readonly logout: (options?: { signal?: AbortSignal }) => Promise<LogoutResult>;
 }
 
 /** Options of `credentialStore()`. */

@@ -106,6 +106,9 @@ export type ProtocolCodesAreAuthErrorCodes = Expect<
 	Equal<Extract<AuthErrorCode, OAuthError["code"]>, OAuthError["code"]>
 >;
 
+// The client's token() is bearerAuth()'s resolver as is, detached.
+export const clientAuth: NonNullable<ApiClientOptions["auth"]> = bearerAuth(client.token);
+
 // The @crustjs/openapi bridge needs no dependency either way: a resolved credential fits
 // bearerAuth()'s resolver structurally, and only a stored login carries a refresh.
 declare const tokens: TokenSource;

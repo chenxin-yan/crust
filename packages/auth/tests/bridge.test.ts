@@ -7,6 +7,7 @@ import { Crust, defineCommand } from "@crustjs/core";
 import { type ApiClient, apiClient, apiCommand, bearerAuth } from "@crustjs/openapi";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
+import { createAuth } from "../src/client.ts";
 import { credentialStoreInternals } from "../src/credentials.ts";
 import { AbortError, CredentialMismatchError } from "../src/errors.ts";
 import { fromEnv, fromStore, resolveCredential } from "../src/resolve.ts";
@@ -234,5 +235,39 @@ describe("bearer tokens for the API", () => {
 		for (const spy of spies) expect(spy).not.toHaveBeenCalled();
 		expect(w.requests).toEqual([]);
 		expect(calls).toEqual([{ url: "https://api.example.com/v1/status", authorization: null }]);
+	});
+
+	it("bearerAuth(auth.token) refreshes the client's login once on a 401", async () => {
+		const w = world();
+		await login(w.source(), { expiresAt: undefined });
+		const auth = createAuth({
+			app: w.app,
+			issuer: w.issuer,
+			clientId: "cli",
+			apiOrigins: ["https://api.example.com"],
+			fetch: w.fetch,
+		});
+		const calls = stubApi(({ authorization }) =>
+			authorization === "Bearer AT1" ? unauthorized() : new Response("{}"),
+		);
+		const app = new Crust("acme")
+			.extend(
+				apiCommand({
+					spec: { openapi: "3.1.0", paths: {} },
+					baseUrl: "https://api.example.com/v1",
+					auth: bearerAuth(auth.token),
+				}),
+			)
+			.add(
+				defineCommand("call", {}, (command) =>
+					command
+						.use(apiClient)
+						.action(async ({ ctx }) => (await (await ctx.api).fetch("/me")).status),
+				),
+			);
+		const outcome = await app.run(["call"]);
+		expect(outcome).toMatchObject({ status: "completed", result: 200 });
+		expect(calls.map((call) => call.authorization)).toEqual(["Bearer AT1", "Bearer AT2"]);
+		expect(w.tokenRequests()).toHaveLength(1);
 	});
 });

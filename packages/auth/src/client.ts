@@ -1,14 +1,31 @@
 import { openBrowser } from "./browser.ts";
 import { defineServers } from "./config.ts";
+import { credentialStore } from "./credentials.ts";
 import { startDeviceFlow } from "./device.ts";
 import { discover, serverInternals } from "./discovery.ts";
 import { deviceCodeMessage } from "./display.ts";
-import { AbortError, LoginRequiresInteractionError, OAuthConfigError } from "./errors.ts";
+import {
+	AbortError,
+	LoginRequiredError,
+	LoginRequiresInteractionError,
+	OAuthConfigError,
+} from "./errors.ts";
 import { detectLoginMode } from "./login-mode.ts";
 import { checkResources, checkScope } from "./params.ts";
+import { fromEnv, fromStore } from "./resolve.ts";
 import { checkLoopbackOptions, createAuthorizationSession } from "./session.ts";
-import { createTokenClient } from "./token-client.ts";
-import type { AuthClient, CreateAuthOptions, LoginOptions, TokenSet } from "./types.ts";
+import { createTokenClient, redacted } from "./token-client.ts";
+import { createTokenSource, tokenSourceInternals } from "./token-source.ts";
+import type {
+	AuthClient,
+	AuthServer,
+	AuthStatus,
+	AuthToken,
+	CreateAuthOptions,
+	LoginOptions,
+	SourceValue,
+	TokenSet,
+} from "./types.ts";
 
 function checkName(value: unknown, field: "app" | "name"): string {
 	// `app` names a directory later, so it follows the store's rule for an app name.
@@ -49,12 +66,15 @@ function unlessAborted<T>(result: T | Promise<T>, signal: AbortSignal | undefine
 
 /**
  * Validates the server your CLI signs in with and returns a frozen client. Does no I/O:
- * the server is discovered on the first login.
+ * the server is discovered on the first login, and the login file read on first use.
  */
 export function createAuth(options: CreateAuthOptions): AuthClient {
 	const app = checkName(options?.app, "app");
 	const name = checkName(options.name ?? app, "name");
-	const { issuer, scope, hosts, ports, fetch } = options;
+	const { issuer, scope, hosts, ports, fetch, env } = options;
+	if (env !== undefined && (typeof env !== "string" || env.trim() === "")) {
+		throw new OAuthConfigError("invalid-option", "env must name an environment variable");
+	}
 	const config = defineServers({
 		servers: [
 			{
@@ -69,22 +89,43 @@ export function createAuth(options: CreateAuthOptions): AuthClient {
 	checkScope(scope);
 	const resource = checkResources(options.resource);
 	checkLoopbackOptions({ hosts, ports });
+	const source = createTokenSource({
+		config,
+		identity: { issuer, clientId: options.clientId, apiOrigins: options.apiOrigins },
+		store: credentialStore({ app }),
+		fetch,
+	});
+	const stored = fromStore(source);
 
-	async function login({
-		device,
-		signal,
-		scope: loginScope = scope,
-		onUrl,
-		onCode,
-		page,
-	}: LoginOptions): Promise<TokenSet> {
-		const mode = detectLoginMode({ device });
+	/** The `env` variable's value, when it is set and not blank. */
+	async function envValue(): Promise<string | undefined> {
+		const found = env === undefined ? undefined : await fromEnv(env).resolve({});
+		return found?.value.trim() ? found.value : undefined;
+	}
+
+	async function login(loginOptions: LoginOptions): Promise<void> {
+		const mode = detectLoginMode({ device: loginOptions.device });
 		if (mode === "refuse") {
 			throw new LoginRequiresInteractionError(
-				`Signing in to ${name} needs a person at a terminal. Use the device login to sign in with a code instead.`,
+				`Signing in to ${name} needs a person at a terminal. Use the device login to sign in with a code instead${env === undefined ? "" : `, or set ${env} to a token`}.`,
 			);
 		}
+		const { signal } = loginOptions;
 		const server = await discover(config, issuer, { signal, fetch });
+		// Opened before the flow, so a logout while it runs makes the commit fail, not undo it.
+		const ticket = await source.beginLogin({ signal });
+		try {
+			await ticket.commit(await signIn(server, mode, loginOptions), { signal });
+		} finally {
+			ticket.cancel();
+		}
+	}
+
+	async function signIn(
+		server: AuthServer,
+		mode: "browser" | "device",
+		{ signal, scope: loginScope = scope, onUrl, onCode, page }: LoginOptions,
+	): Promise<TokenSet> {
 		if (mode === "device") {
 			const flow = await startDeviceFlow(server, { scope: loginScope, resource, signal, fetch });
 			const { userCode, verificationUri, verificationUriComplete, expiresAt } = flow;
@@ -124,5 +165,42 @@ export function createAuth(options: CreateAuthOptions): AuthClient {
 		}
 	}
 
-	return Object.freeze({ login });
+	const loginToken = (value: SourceValue): AuthToken =>
+		redacted(
+			{
+				value: value.value,
+				source: "login" as const,
+				refresh: async (refreshOptions: { signal?: AbortSignal }) =>
+					loginToken(await value.refresh!(refreshOptions)),
+			},
+			["value"],
+		);
+
+	async function token({
+		signal,
+		baseUrl,
+	}: { signal?: AbortSignal; baseUrl?: string } = {}): Promise<AuthToken> {
+		const value = await envValue();
+		if (value !== undefined) return redacted({ value, source: "env" as const }, ["value"]);
+		const found = await stored.resolve({ signal, baseUrl });
+		if (!found) throw new LoginRequiredError("missing");
+		return loginToken(found);
+	}
+
+	async function status(): Promise<AuthStatus> {
+		if ((await envValue()) !== undefined) return { source: "env" };
+		try {
+			const { expiresAt, scope: granted } = await tokenSourceInternals(source).storedLogin();
+			return { source: "login", expiresAt, scope: granted };
+		} catch (error) {
+			if (error instanceof LoginRequiredError && error.reason === "missing") {
+				return { source: "none" };
+			}
+			throw error;
+		}
+	}
+
+	const logout = (logoutOptions?: { signal?: AbortSignal }) => source.logout(logoutOptions);
+
+	return Object.freeze({ login, token, status, logout });
 }

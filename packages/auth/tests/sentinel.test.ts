@@ -30,6 +30,7 @@ import {
 	rawRequest,
 	type RecordedRequest,
 	restoreTerminal,
+	tempApp,
 	terminal,
 	tokenWorld,
 	uniqueIssuer,
@@ -228,12 +229,15 @@ async function deviceLogin(token: () => Response) {
 /** The same logins through `createAuth()`; what its callbacks receive is a sink too. */
 async function clientLogins(token: () => Response) {
 	terminal({ tty: true });
+	const temp = tempApp();
+	roots.push(temp.root);
 	const w = world(token);
 	const auth = createAuth({
-		app: "acme",
+		app: temp.app,
 		issuer: w.issuer,
 		clientId: "cli",
 		clientSecret: STATIC.secret,
+		apiOrigins: ["https://api.example.com"],
 		fetch: w.fake.fetch,
 	});
 	record(auth);
@@ -258,6 +262,8 @@ async function clientLogins(token: () => Response) {
 	sinks.push(response.body, JSON.stringify(response.headers));
 
 	vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+	// Fake time for the polls, real event loop turns for the login file's I/O.
+	const state = { done: false };
 	const device = auth
 		.login({
 			device: true,
@@ -266,10 +272,18 @@ async function clientLogins(token: () => Response) {
 			},
 			onCode: (prompt) => record(prompt),
 		})
-		.then(record, record);
-	await vi.advanceTimersByTimeAsync(700_000);
+		.then(record, record)
+		.finally(() => {
+			state.done = true;
+		});
+	for (let turn = 0; turn < 800 && !state.done; turn += 1) {
+		await vi.advanceTimersByTimeAsync(1_000);
+		await new Promise((resolve) => setImmediate(resolve));
+	}
 	await device;
 	vi.useRealTimers();
+	await auth.token().then(record, record);
+	await auth.status().then(record, record);
 }
 
 function expectNoSecretInSinks() {

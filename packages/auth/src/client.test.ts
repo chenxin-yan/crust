@@ -3,7 +3,9 @@
  * @module-tag macos
  */
 import { once } from "node:events";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { type AddressInfo, createServer } from "node:net";
+import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -11,19 +13,32 @@ import {
 	callbackPath,
 	configReason,
 	fakeFetch,
+	holdLock,
 	isClosed,
 	json,
 	metadataFor,
 	rawRequest,
 	type RawResponse,
 	restoreTerminal,
+	tempApp,
 	terminal,
 	uniqueIssuer,
 	wellKnown,
 } from "../tests/helpers.ts";
 import { createAuth } from "./client.ts";
+import { defineServers } from "./config.ts";
+import { credentialStore, credentialStoreInternals } from "./credentials.ts";
 import { deviceCodeMessage } from "./display.ts";
-import { AbortError, LoginRequiresInteractionError, OAuthConfigError } from "./errors.ts";
+import {
+	AbortError,
+	CredentialMismatchError,
+	CredentialStoreCorruptError,
+	LoginRequiredError,
+	LoginRequiresInteractionError,
+	OAuthConfigError,
+	StaleCommitError,
+} from "./errors.ts";
+import { createTokenSource } from "./token-source.ts";
 import type { BrowserLoginPrompt, DeviceLoginPrompt, LoginOptions } from "./types.ts";
 
 const openBrowser = vi.hoisted(() => vi.fn(async (_url: string, _options?: object) => true));
@@ -37,7 +52,15 @@ const DEVICE = {
 	expires_in: 600,
 	interval: 5,
 };
-const TOKEN = { access_token: "AT", refresh_token: "RT", token_type: "Bearer", expires_in: 3600 };
+const TOKEN = {
+	access_token: "AT",
+	refresh_token: "RT",
+	token_type: "Bearer",
+	expires_in: 3600,
+	scope: "read",
+};
+const API = "https://api.example.com";
+const roots: string[] = [];
 
 const writes: string[] = [];
 
@@ -58,31 +81,48 @@ afterEach(() => {
 	restoreTerminal();
 	vi.restoreAllMocks();
 	vi.useRealTimers();
+	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
 type Route = Parameters<typeof fakeFetch>[0][string];
 
-/** A fresh authorization server behind a fake fetch, and a client for it. */
+/**
+ * A fresh authorization server behind a fake fetch, a fresh state directory, and a client for
+ * both. `routes` and `metadata` replace the defaults.
+ */
 function setup(
 	routes: (issuer: string) => Record<string, Route> = () => ({}),
-	options: { name?: string; scope?: string; ports?: number[]; resource?: string | string[] } = {},
+	options: {
+		name?: string;
+		scope?: string;
+		ports?: number[];
+		resource?: string | string[];
+		env?: string;
+		metadata?: Record<string, unknown>;
+	} = {},
 ) {
+	const temp = tempApp();
+	roots.push(temp.root);
 	const issuer = uniqueIssuer();
+	const { metadata, ...rest } = options;
 	const fake = fakeFetch({
-		[wellKnown(issuer)]: () => json(metadataFor(issuer)),
+		[wellKnown(issuer)]: () => json(metadataFor(issuer, metadata)),
 		[`${issuer}/token`]: () => json(TOKEN),
 		[`${issuer}/device`]: () => json(DEVICE),
+		[`${issuer}/revoke`]: () => new Response(null, { status: 200 }),
 		...routes(issuer),
 	});
 	const auth = createAuth({
-		app: "acme",
+		app: temp.app,
 		issuer,
 		clientId: "cli",
+		apiOrigins: [API],
 		scope: "read",
 		fetch: fake.fetch,
-		...options,
+		...rest,
 	});
-	return { issuer, auth, ...fake };
+	const tokenRequests = () => fake.requests.filter(({ url }) => url === `${issuer}/token`);
+	return { issuer, auth, ...temp, ...fake, tokenRequests };
 }
 
 /** An `onUrl` that plays the browser: it sends the callback for the URL it is given. */
@@ -140,7 +180,13 @@ async function rejection(promise: Promise<unknown>): Promise<unknown> {
 describe("createAuth", () => {
 	it("validates its options with the building blocks' rules and does no I/O", async () => {
 		const fetch = vi.fn();
-		const base = { app: "acme", issuer: "https://as.example", clientId: "cli", fetch };
+		const base = {
+			app: "acme",
+			issuer: "https://as.example",
+			clientId: "cli",
+			apiOrigins: [API],
+			fetch,
+		};
 		const auth = createAuth(base);
 		expect(Object.isFrozen(auth)).toBe(true);
 		expect(fetch).not.toHaveBeenCalled();
@@ -161,8 +207,16 @@ describe("createAuth", () => {
 		expect(await reason({ resource: [42] })).toBe("invalid-option");
 		expect(await reason({ ports: [70_000] })).toBe("invalid-option");
 		expect(await reason({ hosts: ["localhost"] })).toBe("invalid-option");
+		expect(await reason({ apiOrigins: [] })).toBe("invalid-option");
+		expect(await reason({ apiOrigins: ["http://api.example.com"] })).toBe("invalid-url");
+		expect(await reason({ env: " " })).toBe("invalid-option");
 		expect(() =>
-			createAuth({ ...base, issuer: "http://127.0.0.1:9000", allowInsecureLoopback: true }),
+			createAuth({
+				...base,
+				issuer: "http://127.0.0.1:9000",
+				allowInsecureLoopback: true,
+				apiOrigins: ["http://127.0.0.1:9000"],
+			}),
 		).not.toThrow();
 	});
 });
@@ -172,8 +226,8 @@ describe("login() in a browser", () => {
 		const { auth, requests } = setup();
 		const { login } = auth;
 		const play = browser();
-		const tokens = await login({ onUrl: play.onUrl, onCode: noCode });
-		expect(tokens).toMatchObject({ accessToken: "AT", refreshToken: "RT" });
+		expect(await login({ onUrl: play.onUrl, onCode: noCode })).toBeUndefined();
+		expect(await auth.token()).toMatchObject({ value: "AT", source: "login" });
 		expect((await play.seen.page!).status).toBe(200);
 		const url = new URL(play.seen.prompt!.url);
 		expect(url.searchParams.get("scope")).toBe("read");
@@ -260,6 +314,7 @@ describe("login() in a browser", () => {
 		expect(error).toBe(thrown);
 		expect(await isClosed(redirectUri)).toBe(true);
 		expect(requests.some((request) => request.body.get("grant_type"))).toBe(false);
+		expect(await auth.status()).toEqual({ source: "none" });
 	});
 
 	it("aborts while onUrl is pending: rejects at once, closes the listener, ignores the late result", async () => {
@@ -330,9 +385,8 @@ describe("login() in a browser", () => {
 				}),
 			),
 		).toBe(thrown);
-		expect(await auth.login({ onUrl: browser().onUrl, onCode: noCode })).toMatchObject({
-			accessToken: "AT",
-		});
+		expect(await auth.login({ onUrl: browser().onUrl, onCode: noCode })).toBeUndefined();
+		expect(await auth.token()).toMatchObject({ value: "AT", source: "login" });
 	});
 
 	it("aborts while waiting for the browser and leaves no listener", async () => {
@@ -349,6 +403,7 @@ describe("login() in a browser", () => {
 		});
 		expect(await rejection(login)).toBeInstanceOf(AbortError);
 		expect(await isClosed(redirectUri)).toBe(true);
+		expect(await auth.status()).toEqual({ source: "none" });
 	});
 
 	it("aborts during the code exchange and leaves no listener", async () => {
@@ -360,6 +415,7 @@ describe("login() in a browser", () => {
 		);
 		expect(error).toBeInstanceOf(AbortError);
 		expect(await isClosed(play.redirectUri())).toBe(true);
+		expect(await auth.status()).toEqual({ source: "none" });
 	});
 
 	it("aborts during discovery before any listener", async () => {
@@ -369,27 +425,51 @@ describe("login() in a browser", () => {
 		const error = await rejection(auth.login({ signal: controller.signal, onUrl, onCode: noCode }));
 		expect(error).toBeInstanceOf(AbortError);
 		expect(onUrl).not.toHaveBeenCalled();
+		expect(await auth.status()).toEqual({ source: "none" });
 	});
 });
 
-describe("login() with a device code", () => {
-	beforeEach(() => {
+/** An `onCode` that switches to fake timers first, so the device poll's waits can be skipped. */
+function fakeTimersFrom(onCode: LoginOptions["onCode"] = () => {}): LoginOptions["onCode"] {
+	return (prompt) => {
 		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+		return onCode(prompt);
+	};
+}
+
+/**
+ * Settles a device login: once {@link fakeTimersFrom} switched timers, a second of fake time
+ * per event loop turn; the login file's I/O runs on real time meanwhile.
+ */
+async function settle<T>(promise: Promise<T>): Promise<unknown> {
+	const state = { done: false };
+	const result = promise.then(
+		(value) => value,
+		(error: unknown) => error,
+	);
+	void result.finally(() => {
+		state.done = true;
 	});
-
-	async function settle<T>(promise: Promise<T>, ms = 6_000): Promise<unknown> {
-		const result = promise.catch((error: unknown) => error);
-		await vi.advanceTimersByTimeAsync(ms);
-		return result;
+	const deadline = Date.now() + 4_000;
+	while (!state.done && Date.now() < deadline) {
+		if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(1_000);
+		await new Promise((resolve) => setImmediate(resolve));
 	}
+	return result;
+}
 
+describe("login() with a device code", () => {
 	it("shows the code through onCode, never the device code, and writes nothing", async () => {
 		const { auth } = setup(undefined, { name: "Acme" });
 		const prompts: DeviceLoginPrompt[] = [];
-		const tokens = await settle(
-			auth.login({ device: true, onUrl: noUrl, onCode: (prompt) => void prompts.push(prompt) }),
+		await settle(
+			auth.login({
+				device: true,
+				onUrl: noUrl,
+				onCode: fakeTimersFrom((prompt) => void prompts.push(prompt)),
+			}),
 		);
-		expect(tokens).toMatchObject({ accessToken: "AT" });
+		expect(await auth.token()).toMatchObject({ value: "AT", source: "login" });
 		expect(prompts).toHaveLength(1);
 		expect(prompts[0]).toEqual({
 			userCode: DEVICE.user_code,
@@ -407,16 +487,16 @@ describe("login() with a device code", () => {
 	});
 
 	it("names the app in the message by default", async () => {
-		const { auth } = setup();
+		const { auth, app } = setup();
 		let message = "";
 		await settle(
 			auth.login({
 				device: true,
 				onUrl: noUrl,
-				onCode: (prompt) => void (message = prompt.message),
+				onCode: fakeTimersFrom((prompt) => void (message = prompt.message)),
 			}),
 		);
-		expect(message).toContain("To sign in to acme, open:");
+		expect(message).toContain(`To sign in to ${app}, open:`);
 	});
 
 	it("sends resource in the device authorization request and every poll", async () => {
@@ -435,7 +515,7 @@ describe("login() with a device code", () => {
 		vi.stubEnv("SSH_CONNECTION", "1 2 3 4");
 		const { auth } = setup();
 		const onCode = vi.fn();
-		await settle(auth.login({ onUrl: noUrl, onCode }));
+		await settle(auth.login({ onUrl: noUrl, onCode: fakeTimersFrom(onCode) }));
 		expect(onCode).toHaveBeenCalledTimes(1);
 	});
 
@@ -463,6 +543,7 @@ describe("login() with a device code", () => {
 		);
 		expect(error).toBe(thrown);
 		expect(requests.some((request) => request.url === `${issuer}/token`)).toBe(false);
+		expect(await auth.status()).toEqual({ source: "none" });
 	});
 
 	it("aborts while starting and while polling", async () => {
@@ -472,6 +553,7 @@ describe("login() with a device code", () => {
 		const login = first.auth.login({ device: true, signal: starting.signal, onUrl: noUrl, onCode });
 		expect(await settle(login)).toBeInstanceOf(AbortError);
 		expect(onCode).not.toHaveBeenCalled();
+		expect(await first.auth.status()).toEqual({ source: "none" });
 
 		const polling = new AbortController();
 		const second = setup();
@@ -479,10 +561,11 @@ describe("login() with a device code", () => {
 			device: true,
 			signal: polling.signal,
 			onUrl: noUrl,
-			onCode: () => void setTimeout(() => polling.abort(), 1_000),
+			onCode: fakeTimersFrom(() => void setTimeout(() => polling.abort(), 1_000)),
 		});
 		expect(await settle(waiting)).toBeInstanceOf(AbortError);
 		expect(second.requests.some((request) => request.body.get("grant_type"))).toBe(false);
+		expect(await second.auth.status()).toEqual({ source: "none" });
 	});
 });
 
@@ -498,28 +581,136 @@ describe("login() without a person at a terminal", () => {
 		expect(error).toBeInstanceOf(LoginRequiresInteractionError);
 		expect((error as LoginRequiresInteractionError).code).toBe("login-requires-interaction");
 		expect((error as Error).message).toContain("device login");
+		expect((error as Error).message).not.toContain("ACME_TOKEN");
 		expect(requests).toEqual([]);
+	});
+
+	it("names the token variable when env is configured", async () => {
+		terminal({ tty: false });
+		const { auth } = setup(undefined, { env: "ACME_TOKEN" });
+		const error = await rejection(auth.login({ onUrl: noUrl, onCode: noCode }));
+		expect((error as Error).message).toContain("or set ACME_TOKEN to a token");
 	});
 
 	it("runs the device login when asked to, even on CI", async () => {
 		terminal({ tty: false, ci: true });
-		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 		const { auth } = setup();
 		const onCode = vi.fn();
-		const result = auth.login({ device: true, onUrl: noUrl, onCode }).catch((error) => error);
-		await vi.advanceTimersByTimeAsync(6_000);
-		expect(await result).toMatchObject({ accessToken: "AT" });
+		expect(
+			await settle(auth.login({ device: true, onUrl: noUrl, onCode: fakeTimersFrom(onCode) })),
+		).toBeUndefined();
 		expect(onCode).toHaveBeenCalledTimes(1);
 	});
 });
 
 it("an OAuthConfigError from a building block reaches the caller", async () => {
-	const issuer = uniqueIssuer();
-	const fake = fakeFetch({
-		[wellKnown(issuer)]: () => json(metadataFor(issuer, { authorization_endpoint: undefined })),
-	});
-	const auth = createAuth({ app: "acme", issuer, clientId: "cli", fetch: fake.fetch });
+	const { auth } = setup(undefined, { metadata: { authorization_endpoint: undefined } });
 	const error = await rejection(auth.login({ onUrl: noUrl, onCode: noCode }));
 	expect(error).toBeInstanceOf(OAuthConfigError);
 	expect((error as OAuthConfigError).reason).toBe("unsupported");
+});
+
+/** Signs in through the browser and returns the client's world. */
+async function signedIn(...args: Parameters<typeof setup>) {
+	const world = setup(...args);
+	await world.auth.login({ onUrl: browser().onUrl, onCode: noCode });
+	return world;
+}
+
+describe("the stored login", () => {
+	it("token() returns it, refreshes it when it is about to expire, and checks the API origin", async () => {
+		let issued = 0;
+		const { auth, tokenRequests } = await signedIn((issuer) => ({
+			[`${issuer}/token`]: () => {
+				issued += 1;
+				return json({ ...TOKEN, access_token: `AT${issued}`, expires_in: issued === 1 ? 1 : 3600 });
+			},
+		}));
+		const { token } = auth;
+		const first = await token({ baseUrl: `${API}/v1` });
+		expect(first).toMatchObject({ value: "AT2", source: "login" });
+		expect(tokenRequests()).toHaveLength(2);
+		expect(JSON.stringify(first)).not.toContain("AT2");
+		expect((await first.refresh!({})).value).toBe("AT3");
+		expect(await rejection(token({ baseUrl: "https://evil.example" }))).toBeInstanceOf(
+			CredentialMismatchError,
+		);
+	});
+
+	it("token() without a login throws LoginRequiredError", async () => {
+		const { auth } = setup();
+		const error = await rejection(auth.token());
+		expect(error).toBeInstanceOf(LoginRequiredError);
+		expect((error as LoginRequiredError).code).toBe("login-required");
+	});
+
+	it("an env token wins, and is never stored or refreshed", async () => {
+		const { auth, dir, tokenRequests } = setup(undefined, { env: "ACME_TOKEN" });
+		vi.stubEnv("ACME_TOKEN", "ENV_TOKEN");
+		const fromEnv = await auth.token();
+		expect(fromEnv).toEqual({ value: "ENV_TOKEN", source: "env" });
+		expect(fromEnv.refresh).toBeUndefined();
+		expect(await auth.status()).toEqual({ source: "env" });
+		await auth.login({ onUrl: browser().onUrl, onCode: noCode });
+		expect((await auth.token()).value).toBe("ENV_TOKEN");
+		expect(readFileSync(join(dir, "credentials.json"), "utf8")).not.toContain("ENV_TOKEN");
+		expect(tokenRequests()).toHaveLength(1);
+		vi.stubEnv("ACME_TOKEN", "  ");
+		expect(await auth.token()).toMatchObject({ value: "AT", source: "login" });
+	});
+
+	it("status() reports the three sources without a request or waiting for a lock", async () => {
+		const { auth, app, issuer, fetch, requests } = setup();
+		expect(await auth.status()).toEqual({ source: "none" });
+		await auth.login({ onUrl: browser().onUrl, onCode: noCode });
+		const before = requests.length;
+		// Another process of the app holds the login's lock.
+		const store = credentialStore({ app });
+		const other = createTokenSource({
+			config: defineServers({ servers: [{ issuer, clientId: "cli" }] }),
+			identity: { issuer, clientId: "cli", apiOrigins: [API] },
+			store,
+			fetch,
+		});
+		const lock = await holdLock((fn) =>
+			credentialStoreInternals(store).lockIdentity(other.key, fn),
+		);
+		expect(await auth.status()).toEqual({
+			source: "login",
+			expiresAt: expect.any(Number),
+			scope: "read",
+		});
+		await lock.release();
+		expect(requests).toHaveLength(before);
+	});
+
+	it("status() throws for a corrupt file", async () => {
+		const { auth, dir } = await signedIn();
+		writeFileSync(join(dir, "credentials.json"), "{ not json");
+		expect(await rejection(auth.status())).toBeInstanceOf(CredentialStoreCorruptError);
+	});
+
+	it("logout() deletes the login and revokes it, detached", async () => {
+		const { auth, requests, issuer } = await signedIn();
+		const { logout } = auth;
+		expect(await logout()).toEqual({ local: "deleted", remote: "revoked" });
+		expect(await auth.status()).toEqual({ source: "none" });
+		expect(requests.filter(({ url }) => url === `${issuer}/revoke`).length).toBeGreaterThan(0);
+	});
+
+	it("a logout while a login runs is not undone", async () => {
+		const { auth } = setup();
+		const play = browser();
+		const error = await rejection(
+			auth.login({
+				onUrl: async (prompt) => {
+					await auth.logout();
+					play.onUrl(prompt);
+				},
+				onCode: noCode,
+			}),
+		);
+		expect(error).toBeInstanceOf(StaleCommitError);
+		expect(await auth.status()).toEqual({ source: "none" });
+	});
 });

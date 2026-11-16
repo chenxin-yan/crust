@@ -68,6 +68,11 @@ const openLogins = new Set<string>();
 interface TokenSourceInternals {
 	/** Whether a live (not logged-out) record exists: no lock, no refresh. */
 	hasCredential(): Promise<boolean>;
+	/**
+	 * The live record's expiry and scope, read the same way: no lock, no refresh, no request.
+	 * No login → `LoginRequiredError` (`missing`); a file it can't read throws its error.
+	 */
+	storedLogin(): Promise<{ expiresAt: number | undefined; scope: string | undefined }>;
 }
 
 const sourceInternals = new WeakMap<TokenSource, TokenSourceInternals>();
@@ -547,6 +552,10 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 			} catch {
 				return false;
 			}
+		},
+		async storedLogin() {
+			const { expiresAt, scope } = await readRecord(undefined, undefined);
+			return { expiresAt, scope };
 		},
 	});
 	return source;
