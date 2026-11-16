@@ -133,6 +133,20 @@ describe("resolveCredential", () => {
 		expect(section).toContain("visible to other users");
 	});
 
+	it("SEC-N1 reads an environment variable when it resolves, not when the source is built", async () => {
+		const env: Record<string, string | undefined> = {};
+		const file: Record<string, string | undefined> = {};
+		const sources = [fromEnv("ACME_TOKEN", env), fromEnvFile(file, "ACME_TOKEN")];
+		file.ACME_TOKEN = "FROM_FILE";
+		await expect(resolveCredential(sources)).resolves.toMatchObject({ source: "env-file" });
+		env.ACME_TOKEN = "FROM_SHELL";
+		await expect(resolveCredential(sources)).resolves.toMatchObject({
+			source: "env",
+			value: "FROM_SHELL",
+			shadowed: ["env-file"],
+		});
+	});
+
 	it("SEC-N4 an exported variable wins over the same variable from an env file", async () => {
 		const file = { ACME_TOKEN: "FROM_FILE" };
 		await expect(

@@ -1,5 +1,6 @@
 import { existsSync, rmSync } from "node:fs";
 
+import { withLock } from "@crustjs/store";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
@@ -564,6 +565,45 @@ describe("logout", () => {
 			local: "deleted",
 			remote: "revoked",
 		});
+	});
+
+	it.each([
+		["a 503", "failed"],
+		["an abort", "unknown"],
+	])(
+		"SEC-G2 reports %s of the access-token revocation after the refresh token was revoked",
+		async (failure, remote) => {
+			const w = world();
+			await login(w.source());
+			const controller = new AbortController();
+			const answers = fakeFetch({
+				[wellKnown(w.issuer)]: () => json(metadataFor(w.issuer)),
+				[`${w.issuer}/revoke`]: (request) => {
+					if (request.body.get("token_type_hint") === "refresh_token") return json({});
+					if (failure === "a 503") return new Response("", { status: 503 });
+					controller.abort();
+					return new Promise<Response>(() => {});
+				},
+			});
+			await expect(
+				w.source({ fetch: answers.fetch }).logout({ signal: controller.signal }),
+			).resolves.toEqual({ local: "deleted", remote });
+		},
+	);
+
+	it("SEC-G2 SEC-P2 a logout waiting for the credentials file's lock is cancellable and writes nothing", async () => {
+		const w = world();
+		const source = w.source();
+		await login(source, { expiresAt: undefined });
+		const lock = await holdLock((fn) => withLock(w.file, fn));
+		const controller = new AbortController();
+		const logout = source.logout({ signal: controller.signal });
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		controller.abort();
+		await expect(logout).rejects.toBeInstanceOf(AbortError);
+		await lock.release();
+		await expect(source.get()).resolves.toMatchObject({ value: "AT1" });
+		expect(w.requests.filter((request) => request.url.endsWith("/revoke"))).toEqual([]);
 	});
 
 	it("SEC-G4 SEC-DEC-07 a server that never answers ends the logout at the revocation timeout", async () => {

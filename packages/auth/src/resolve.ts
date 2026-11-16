@@ -18,11 +18,15 @@ const STDIN_MAX_BYTES = 16 * 1024;
 const nonEmpty = (value: string | undefined): value is string =>
 	typeof value === "string" && value !== "";
 
-function fromValue(name: string, value: string | undefined): CredentialSource {
+/** A source whose value `read()` returns, read when the source is resolved or probed. */
+function fromValue(name: string, read: () => string | undefined): CredentialSource {
 	return Object.freeze({
 		name,
-		probe: () => nonEmpty(value),
-		resolve: async () => (nonEmpty(value) ? { value } : undefined),
+		probe: () => nonEmpty(read()),
+		async resolve() {
+			const value = read();
+			return nonEmpty(value) ? { value } : undefined;
+		},
 	});
 }
 
@@ -31,7 +35,7 @@ function fromValue(name: string, value: string | undefined): CredentialSource {
  * lands in shell history and CI logs: prefer {@link fromEnv} or {@link fromStdin}.
  */
 export function fromFlag(value: string | undefined): CredentialSource {
-	return fromValue("flag", value);
+	return fromValue("flag", () => value);
 }
 
 /** An environment variable, such as `ACME_TOKEN`. */
@@ -39,7 +43,7 @@ export function fromEnv(
 	name: string,
 	env: Readonly<Record<string, string | undefined>> = process.env,
 ): CredentialSource {
-	return fromValue("env", env[name]);
+	return fromValue("env", () => env[name]);
 }
 
 /** A variable from a dotenv file you parsed; list it after {@link fromEnv} so the shell wins (SEC-N4). */
@@ -47,7 +51,7 @@ export function fromEnvFile(
 	values: Readonly<Record<string, string | undefined>>,
 	name: string,
 ): CredentialSource {
-	return fromValue("env-file", values[name]);
+	return fromValue("env-file", () => values[name]);
 }
 
 /**

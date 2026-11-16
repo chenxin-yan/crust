@@ -340,7 +340,10 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 			// The access token too, where the server can revoke one (SEC-G1, G3).
 			await client
 				.revoke(tokens.accessToken, { tokenTypeHint: "access_token", signal })
-				.catch(() => {});
+				.catch((error: unknown) => {
+					if (!(error instanceof OAuthError && error.code === "unsupported_token_type"))
+						throw error;
+				});
 			return "revoked";
 		} catch (error) {
 			const unanswered =
@@ -517,12 +520,15 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 					}
 					throwIfAborted(signal);
 					try {
-						await store.update((current) =>
-							withRecord(current ?? emptyDocument(), tombstone(identity)),
+						await store.update(
+							(current) => withRecord(current ?? emptyDocument(), tombstone(identity)),
+							signal,
 						);
 						return "deleted";
 					} catch (error) {
-						if (error instanceof CredentialStoreCorruptError) throw error;
+						if (error instanceof CredentialStoreCorruptError || error instanceof AbortError) {
+							throw error;
+						}
 						return "failed";
 					}
 				},

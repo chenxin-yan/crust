@@ -275,7 +275,8 @@ function storageError(error: unknown, path: string, signal: AbortSignal | undefi
 			platform: owner.platform,
 			createdAt: owner.createdAt,
 		};
-		return verdict === "alive"
+		// A `.recover` file left past the deadline needs the manual step, whoever wrote it.
+		return verdict === "alive" && !lockPath.endsWith(".recover")
 			? new LockTimeoutError(lockPath, recorded, manualStep)
 			: new LockRecoveryRequiredError(lockPath, recorded, manualStep);
 	}
@@ -351,7 +352,7 @@ export function credentialStore(options: CredentialStoreOptions): CredentialStor
 							...current,
 							records: { ...current.records, [key]: serializeRecord(tombstone(identity)) },
 						};
-					});
+					}, signal);
 				},
 				signal,
 			);
