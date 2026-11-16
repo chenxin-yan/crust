@@ -3,7 +3,7 @@
  * @module-tag macos
  */
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { chmod, mkdir, readdir, rm, stat, symlink } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join, sep } from "node:path";
@@ -556,6 +556,22 @@ describe("withLock", () => {
 				details: { path: join(dir, "link"), reason: "directory" },
 			});
 			expect(await readdir(real)).toEqual([]);
+		});
+
+		it("refuses a missing directory that another process creates open before the lock", async () => {
+			const nested = join(dir, "nested");
+			path = join(nested, "doc.json");
+			duringLstat.set(nested, () => {
+				duringLstat.delete(nested);
+				mkdirSync(nested);
+				chmodSync(nested, 0o755);
+			});
+
+			expect(await lockError()).toMatchObject({
+				code: "PATH",
+				details: { path: nested, reason: "directory" },
+			});
+			expect(await readdir(nested)).toEqual([]);
 		});
 
 		it("creates a missing directory owner-only", async () => {

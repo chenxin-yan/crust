@@ -279,8 +279,9 @@ async function recoverOrBlock(
 }
 
 /**
- * POSIX: refuses an existing directory that is a symbolic link, belongs to another user, or
- * grants group or other permissions, before any file is created in it.
+ * POSIX: creates a missing directory with mode `0700`, then refuses a directory that is a symbolic
+ * link, belongs to another user, or grants group or other permissions, before any file is created
+ * in it.
  */
 async function validateDirectory(path: string): Promise<void> {
 	if (process.platform === "win32") return;
@@ -289,7 +290,11 @@ async function validateDirectory(path: string): Promise<void> {
 	try {
 		stats = await lstat(dir);
 	} catch (err: unknown) {
-		if (isErrnoException(err) && err.code === "ENOENT") return;
+		if (isErrnoException(err) && err.code === "ENOENT") {
+			// Checked again once created: another process may have created it first, with its own mode.
+			await ensureDirectory(path, 0o700);
+			return validateDirectory(path);
+		}
 		throw new CrustStoreError(
 			"IO",
 			`Failed to inspect store directory: ${dir}`,
