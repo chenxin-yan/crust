@@ -97,7 +97,7 @@ export function lint(input: LintInput): Diagnostic[] {
 			});
 		const entry = Object.hasOwn(override, op.id) ? override[op.id] : undefined;
 		const fields = mergeOverride(input.each?.(op), entry);
-		const bodyFields = Object.keys(record(op.body?.schema?.properties) ?? {});
+		const bodyFields = Object.keys(record(record(op.body?.schema)?.properties) ?? {});
 
 		if (entry?.expect !== undefined) {
 			const { method, path } = entry.expect;
@@ -190,7 +190,7 @@ export function lint(input: LintInput): Diagnostic[] {
 			const { body } = op;
 			if (isJsonMediaType(body.contentType)) {
 				inputs.push({ kind: "flag", name: "body", source: "the request body" });
-				const properties = record(body.schema?.properties) ?? {};
+				const properties = record(record(body.schema)?.properties) ?? {};
 				for (const field of bodyFields) {
 					if (bound.has(field) || valueKind(spec, properties[field], "other") === "other") continue;
 					const repeated = sent.find((param) => kebab(param.name) === kebab(field));
@@ -212,7 +212,7 @@ export function lint(input: LintInput): Diagnostic[] {
 					`${label}: the request body is ${body.contentType}; only JSON bodies are generated`,
 					`Call the operation with \`api ${op.path} --body\`, or set \`exclude: true\` in its override`,
 				);
-			} else if (Object.keys(record(body.schema?.properties) ?? {}).length > 0) {
+			} else if (Object.keys(record(record(body.schema)?.properties) ?? {}).length > 0) {
 				report(
 					"warning",
 					"unsupported-body-type",
@@ -342,13 +342,24 @@ function addGroup(groups: Set<string>, group: string): void {
 
 /**
  * Whether a schema's values fit a typed flag: a scalar (a scalar type, or an enum of scalars), an
- * array of scalars, or neither. `untyped` is the kind of a schema with no `type` and no `enum`.
+ * array of scalars, or neither. `untyped` is the kind of a schema with no `type` and no `enum`
+ * (also `true`); `false` accepts no value, so it is neither. Only one item level is read, so a
+ * recursive array schema ends.
  */
 function valueKind(
 	spec: OpenApiSpec,
 	value: unknown,
 	untyped: "scalar" | "other",
 ): "scalar" | "array" | "other" {
+	const kind = shapeOf(value, untyped);
+	if (kind !== "array") return kind;
+	const items = deref(spec, (value as Readonly<Record<string, unknown>>).items);
+	return shapeOf(items, untyped) === "scalar" ? "array" : "other";
+}
+
+/** {@link valueKind} for the schema itself, without reading its `items`. */
+function shapeOf(value: unknown, untyped: "scalar" | "other"): "scalar" | "array" | "other" {
+	if (value === false) return "other";
 	const schema = record(value);
 	if (schema === undefined) return untyped;
 	const types = (
@@ -364,8 +375,7 @@ function valueKind(
 	}
 	if (types.length > 1) return "other";
 	if (SCALAR_TYPES.includes(types[0])) return "scalar";
-	if (types[0] !== "array") return "other";
-	return valueKind(spec, deref(spec, schema.items), untyped) === "scalar" ? "array" : "other";
+	return types[0] === "array" ? "array" : "other";
 }
 
 /**

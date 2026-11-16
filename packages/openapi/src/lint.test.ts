@@ -453,6 +453,38 @@ describe("lint", () => {
 		]);
 	});
 
+	it("reports a recursive or unsatisfiable parameter schema instead of overflowing", () => {
+		const recursive = spec(
+			{
+				"/a": {
+					get: op("a", {
+						parameters: [
+							{ name: "deep", in: "query", schema: { $ref: "#/components/schemas/A" } },
+							{ name: "never", in: "query", schema: false },
+						],
+					}),
+				},
+			},
+			{ schemas: { A: { type: "array", items: { $ref: "#/components/schemas/A" } } } },
+		);
+		expect(
+			lint({ spec: recursive }).map(
+				({ level, code, message }) => `${level} ${code} ${message.split('"')[1]}`,
+			),
+		).toEqual(["warning unsupported-param-style deep", "warning unsupported-param-style never"]);
+	});
+
+	it("offers a body field named __proto__ an input like any other", () => {
+		const proto = JSON.parse(`{ "openapi": "3.1.0", "paths": { "/p": { "post": {
+			"operationId": "p", "summary": "p", "responses": { "200": { "description": "ok" } },
+			"requestBody": { "content": { "application/json": { "schema": { "type": "object",
+				"properties": { "__proto__": { "type": "string" }, "proto": { "type": "string" } } } } } }
+		} } } }`);
+		expect(lint({ spec: proto }).map(({ code, message }) => `${code} ${message}`)).toEqual([
+			'flag-collision POST /p: body field "__proto__" and body field "proto" share the input name "proto"',
+		]);
+	});
+
 	it("reports a command that is also a group, and an added command clashing with a generated one", () => {
 		const nested = spec({
 			"/dns": { get: op("dns", { tags: [] }) },
