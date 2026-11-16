@@ -127,6 +127,23 @@ describe("createAuthorizationSession", () => {
 		expect(listenLoopback).not.toHaveBeenCalled();
 	});
 
+	it("SEC-B1 keeps the endpoint query byte for byte", async () => {
+		const endpoint = "https://login.example/authorize?tenant=a%20b&sig=~&x=a+b";
+		const session = await open(
+			{ extra: { "a&b": "c d" } },
+			{ metadata: { authorization_endpoint: endpoint } },
+		);
+		expect(session.url.startsWith(`${endpoint}&response_type=code&`)).toBe(true);
+		const params = new URL(session.url).searchParams;
+		expect(params.get("tenant")).toBe("a b");
+		expect(params.get("a&b")).toBe("c d");
+		const bare = await open(
+			{},
+			{ metadata: { authorization_endpoint: "https://login.example/authorize?" } },
+		);
+		expect(bare.url.startsWith("https://login.example/authorize?response_type=code&")).toBe(true);
+	});
+
 	it("SEC-B1 keeps the endpoint query once and refuses names that repeat it", async () => {
 		const endpoint = {
 			metadata: { authorization_endpoint: "https://login.example/authorize?tenant=t" },
@@ -665,6 +682,41 @@ describe("createAuthorizationSession", () => {
 		});
 		expect(await isClosed(session.redirectUri)).toBe(true);
 	});
+
+	it.each(["timeout", "abort", "close"])(
+		"SEC-C14 SEC-P1 settles wait() and closes the listener on %s while onCallback runs",
+		async (stop) => {
+			const session = await open();
+			const controller = new AbortController();
+			let finish!: (value: string) => void;
+			const onCallback = vi.fn(() => new Promise<string>((resolve) => (finish = resolve)));
+			const result = session
+				.wait(onCallback, {
+					timeoutMs: stop === "timeout" ? 200 : 60_000,
+					signal: controller.signal,
+				})
+				.then(
+					(value) => ({ value }),
+					(error: unknown) => ({ error }),
+				);
+			const browser = rawRequest(session.redirectUri, good(session)).catch(
+				(error: unknown) => error,
+			);
+			await vi.waitFor(() => expect(onCallback).toHaveBeenCalled());
+			if (stop === "abort") controller.abort();
+			if (stop === "close") session.close();
+			expect(await result).toEqual({
+				error: expect.any(stop === "timeout" ? TimeoutError : AbortError),
+			});
+			expect(await isClosed(session.redirectUri)).toBe(true);
+			expect(await browser).toBeInstanceOf(Error);
+			// The callback finishing late changes nothing.
+			finish("late");
+			expect(await result).toEqual({
+				error: expect.any(stop === "timeout" ? TimeoutError : AbortError),
+			});
+		},
+	);
 
 	it("SEC-C14 SEC-P3 destroys a kept-alive browser connection on abort", async () => {
 		const session = await open();

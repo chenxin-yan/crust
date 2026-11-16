@@ -234,16 +234,21 @@ export async function createAuthorizationSession(
 	hostHeader = `${literal}:${listener.port}`;
 	const redirectUri = `http://${hostHeader}${server.redirectPath}`;
 
-	const url = new URL(server.authorizationEndpoint);
-	url.searchParams.append("response_type", "code");
-	url.searchParams.append("client_id", server.clientId);
-	url.searchParams.append("redirect_uri", redirectUri);
-	url.searchParams.append("state", state);
-	url.searchParams.append("code_challenge", pkce.challenge);
-	url.searchParams.append("code_challenge_method", pkce.method);
-	if (scope !== undefined) url.searchParams.append("scope", scope);
-	for (const value of resource) url.searchParams.append("resource", value);
-	for (const [name, value] of extra) url.searchParams.append(name, value);
+	// The endpoint's own query is kept byte for byte; the library's parameters follow it (SEC-B1).
+	const authorizationParams = new URLSearchParams({
+		response_type: "code",
+		client_id: server.clientId,
+		redirect_uri: redirectUri,
+		state,
+		code_challenge: pkce.challenge,
+		code_challenge_method: pkce.method,
+	});
+	if (scope !== undefined) authorizationParams.append("scope", scope);
+	for (const value of resource) authorizationParams.append("resource", value);
+	for (const [name, value] of extra) authorizationParams.append(name, value);
+	const base = server.authorizationEndpoint;
+	const separator = /[?&]$/.test(base) ? "" : base.includes("?") ? "&" : "?";
+	const url = `${base}${separator}${authorizationParams.toString()}`;
 
 	const closer = new AbortController();
 	let waited = false;
@@ -261,16 +266,16 @@ export async function createAuthorizationSession(
 		const link = linkSignal(
 			AbortSignal.any(signal ? [signal, closer.signal] : [closer.signal]),
 			timeoutMs,
-			() => new TimeoutError("No browser callback arrived in time"),
+			() => new TimeoutError("The browser login timed out"),
 		);
-		try {
-			if (link.signal.aborted) throw link.signal.reason;
-			const { params, response } = await Promise.race([
-				arrival,
-				new Promise<never>((_, reject) => {
-					link.signal.addEventListener("abort", () => reject(link.signal.reason), { once: true });
-				}),
-			]);
+		// The deadline, the signal and close() bound the whole wait, onCallback included; a
+		// callback still running when they fire is left to finish unobserved (SEC-C14, P1).
+		const stopped = new Promise<never>((_, reject) => {
+			if (link.signal.aborted) reject(link.signal.reason);
+			link.signal.addEventListener("abort", () => reject(link.signal.reason), { once: true });
+		});
+		const handle = async (): Promise<T> => {
+			const { params, response } = await arrival;
 			let outcome: { ok: true; value: T } | { ok: false; error: unknown };
 			try {
 				// The issuer is checked before error or code is acted on (SEC-C10, I2–I4, I7).
@@ -291,9 +296,13 @@ export async function createAuthorizationSession(
 				: outcome.error instanceof OAuthError
 					? { outcome: "failure", errorCode: outcome.error.code }
 					: { outcome: "failure" };
-			await respond(response, outcome.ok ? 200 : 400, renderPage(view, page));
+			if (!link.signal.aborted)
+				await respond(response, outcome.ok ? 200 : 400, renderPage(view, page));
 			if (!outcome.ok) throw outcome.error;
 			return outcome.value;
+		};
+		try {
+			return await Promise.race([handle(), stopped]);
 		} finally {
 			link.clear();
 			close();
@@ -304,7 +313,7 @@ export async function createAuthorizationSession(
 		issuer: server.issuer,
 		clientId: server.clientId,
 		redirectUri,
-		url: url.href,
+		url,
 		state,
 		server,
 		wait,
