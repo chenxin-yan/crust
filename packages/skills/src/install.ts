@@ -1,4 +1,4 @@
-import { lstat, mkdir, readlink, rm, stat, symlink, unlink } from "node:fs/promises";
+import { lstat, mkdir, readlink, realpath, rm, stat, symlink, unlink } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
 import { isErrnoException } from "@crustjs/utils/error";
@@ -46,6 +46,16 @@ async function pathExists(path: string): Promise<boolean> {
 	}
 }
 
+/** Compares real paths, so a link that reaches the source through another link (`.agents/skills`) counts. */
+async function isSamePath(a: string, b: string): Promise<boolean> {
+	try {
+		return (await realpath(a)) === (await realpath(b));
+	} catch (error) {
+		if (!isErrnoException(error) || error.code !== "ENOENT") throw error;
+		return false;
+	}
+}
+
 type LinkInspection =
 	| { readonly status: "absent" }
 	| { readonly status: "conflict" }
@@ -75,7 +85,7 @@ async function inspectLink(
 	return {
 		status: "owned",
 		resolves: await pathExists(resolvedTarget),
-		correct: expectedSourceDir === undefined || resolvedTarget === resolve(expectedSourceDir),
+		correct: expectedSourceDir === undefined || (await isSamePath(outputDir, expectedSourceDir)),
 	};
 }
 

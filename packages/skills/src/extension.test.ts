@@ -462,6 +462,27 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		expect(await readlink(installed)).toBe(other);
 	});
 
+	// The layout `npx skills` writes: the agent's link reaches this copy through `.agents/skills`.
+	it("treats a link that reaches this copy through another link as linked", async () => {
+		const source = await writeSource("demo", "current");
+		const shared = join(tempRoot, ".agents", "skills", "demo");
+		await mkdir(dirname(shared), { recursive: true });
+		await symlink(join(source, "demo"), shared);
+		const installed = join(tempRoot, ".claude", "skills", "demo");
+		await mkdir(dirname(installed), { recursive: true });
+		await symlink(join("..", "..", ".agents", "skills", "demo"), installed);
+
+		const captured = await onTerminal(() =>
+			asInstalled(() => withCwd(tempRoot, () => captureExecute(createApp(), []))),
+		);
+		expect(captured.stderr).toBe("");
+		const repaired = await withCwd(tempRoot, () =>
+			captureExecute(createApp(), ["skills", "repair", "--scope", "project"]),
+		);
+		expect(repaired.stdout).toContain("No repairs needed [demo] (project).");
+		expect(await readlink(installed)).toBe(join("..", "..", ".agents", "skills", "demo"));
+	});
+
 	it("notices a link to another live copy once when both scopes resolve to it", async () => {
 		vi.stubEnv("CLAUDE_CONFIG_DIR", join(tempRoot, ".claude"));
 		await writeSource("demo");

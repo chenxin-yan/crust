@@ -101,7 +101,7 @@ const status = await getSkillStatus({ name: "my-cli", sourceDir });
 await uninstallSkill({ name: "my-cli" });
 ```
 
-`getSkillStatus()` reports `linked`, `dangling`, `conflict`, or `absent` per agent directory. `uninstallSkill()` removes only owned links, including dangling ones. Only missing paths (`ENOENT`) count as absent; permission and other filesystem failures reject. Each result lists one entry per agent with its effective `scope` and status.
+`getSkillStatus()` reports `linked`, `dangling`, `conflict`, or `absent` per agent directory. A link is `linked` when it leads to the given `sourceDir`, directly or through another link, such as an agent directory that links to `.agents/skills/<name>`; real paths are compared. `uninstallSkill()` removes only owned links, including dangling ones. Only missing paths (`ENOENT`) count as absent; permission and other filesystem failures reject. Each result lists one entry per agent with its effective `scope` and status.
 
 <auto-type-table path="../../../../../packages/skills/src/types.ts" name="InstallSkillOptions" />
 
