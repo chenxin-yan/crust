@@ -687,6 +687,60 @@ describe("createAuthorizationSession", () => {
 		expect(await isClosed(session.redirectUri)).toBe(true);
 	});
 
+	it.each(["success", "failure"])(
+		"SEC-C4 SEC-C14 settles wait() with the %s and closes the listener when the browser left during onCallback",
+		async (result) => {
+			const session = await open();
+			let finish!: () => void;
+			const failure = new Error("exchange failed");
+			const onCallback = vi.fn(
+				() =>
+					new Promise<string>((resolve, reject) => {
+						finish = () => (result === "success" ? resolve("tokens") : reject(failure));
+					}),
+			);
+			const waiting = session.wait(onCallback, { timeoutMs: 60_000 }).then(
+				(value) => ({ value }),
+				(error: unknown) => ({ error }),
+			);
+			const browser = connect(Number(new URL(session.redirectUri).port), "127.0.0.1");
+			browser.on("error", () => {});
+			await once(browser, "connect");
+			browser.write(
+				`GET ${good(session)} HTTP/1.1\r\nHost: ${new URL(session.redirectUri).host}\r\n\r\n`,
+			);
+			await vi.waitFor(() => expect(onCallback).toHaveBeenCalled());
+			// The user closes the tab: the server sees the connection end before the page is ready.
+			browser.destroy();
+			await new Promise((resolve) => setTimeout(resolve, 100));
+			finish();
+			expect(await waiting).toEqual(
+				result === "success" ? { value: "tokens" } : { error: failure },
+			);
+			expect(await isClosed(session.redirectUri)).toBe(true);
+		},
+	);
+
+	it("SEC-C14 settles wait() on close() after the browser left during onCallback", async () => {
+		const session = await open();
+		const onCallback = vi.fn(() => new Promise<string>(() => {}));
+		const waiting = session
+			.wait(onCallback, { timeoutMs: 60_000 })
+			.catch((error: unknown) => error);
+		const browser = connect(Number(new URL(session.redirectUri).port), "127.0.0.1");
+		browser.on("error", () => {});
+		await once(browser, "connect");
+		browser.write(
+			`GET ${good(session)} HTTP/1.1\r\nHost: ${new URL(session.redirectUri).host}\r\n\r\n`,
+		);
+		await vi.waitFor(() => expect(onCallback).toHaveBeenCalled());
+		browser.destroy();
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		session.close();
+		expect(await waiting).toBeInstanceOf(AbortError);
+		expect(await isClosed(session.redirectUri)).toBe(true);
+	});
+
 	it.each(["timeout", "abort", "close"])(
 		"SEC-C14 SEC-P1 settles wait() and closes the listener on %s while onCallback runs",
 		async (stop) => {

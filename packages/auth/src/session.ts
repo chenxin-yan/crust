@@ -58,6 +58,11 @@ const RESPONSE_HEADERS = {
 
 function respond(response: ServerResponse, status: number, body: string): Promise<void> {
 	return new Promise((resolve) => {
+		// The browser may have left already (a closed tab): its 'close' event has fired.
+		if (response.destroyed || response.writableEnded) {
+			resolve();
+			return;
+		}
 		response.once("close", resolve);
 		response.once("finish", resolve);
 		response.writeHead(status, RESPONSE_HEADERS).end(body);
