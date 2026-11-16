@@ -1,4 +1,5 @@
-// Source-level checks for rules a behavioral test cannot prove by absence.
+// Source-level checks for rules a behavioral test cannot prove by absence, and for the docs
+// statements a rule requires.
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -67,5 +68,16 @@ describe("library source", () => {
 		expect(code.filter(({ lines }) => lines.length > 0)).toEqual([
 			{ file: "display.ts", lines: ['\t"id_token",'] },
 		]);
+	});
+});
+
+describe("auth module page", () => {
+	it("SEC-DEC-11 tells CLIs to register as a public client", () => {
+		const page = readFileSync(
+			join(import.meta.dirname, "../../../apps/docs/content/docs/modules/auth.mdx"),
+			"utf8",
+		);
+		expect(page).toContain("### Public clients");
+		expect(page).toContain("as a **public client** (token endpoint authentication `none`)");
 	});
 });
