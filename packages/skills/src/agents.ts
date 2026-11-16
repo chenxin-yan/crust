@@ -114,9 +114,7 @@ export function agentDetectionFolder(skillsDir: string, home: string): string | 
 /**
  * Detects installed non-universal agents by the folder containing their global skills
  * directory, such as `~/.claude` for `~/.claude/skills`. Project folders are not consulted.
- *
- * Universal agents are intentionally not detected here so callers can always
- * present them as a single optional "Universal" install target.
+ * Universal agents are not detected: they read the shared folder, which is always linked.
  */
 export async function detectInstalledAgents(): Promise<AgentTarget[]> {
 	const home = homedir();
