@@ -20,9 +20,10 @@ describe("redactUrl", () => {
 		expect(redactUrl(url)).toBe(expected);
 	});
 
-	it("SEC-K4 never leaks a sentinel from random URLs", () => {
+	it("SEC-K4 never leaks a sentinel from 28 mixes of secret and plain parameters", () => {
 		const names = ["code", "state", "token", "a", "access_token", "%63ode", "refresh_token"];
-		for (let index = 0; index < 500; index += 1) {
+		// 7 names by 4 lengths: the pattern repeats after 28.
+		for (let index = 0; index < 28; index += 1) {
 			const params = Array.from({ length: 1 + (index % 4) }, (_, n) => {
 				const name = names[(index + n * 3) % names.length]!;
 				return `${name}=${["code", "%63ode", "state", "token", "access_token", "refresh_token"].includes(name) ? "SENTINEL" : "v"}`;
