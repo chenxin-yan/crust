@@ -260,7 +260,7 @@ async function recoverOrBlock(
 	}
 	signal?.throwIfAborted();
 	// No recovery starts past the deadline: the waiter fails, naming the dead owner's lock.
-	if (Date.now() >= deadline) return { path: lockPath, verdict, owner };
+	if (performance.now() >= deadline) return { path: lockPath, verdict, owner };
 
 	const recoverPath = `${lockPath}.recover`;
 	const recoverer = { ...self, ownerId: crypto.randomUUID(), createdAt: new Date().toISOString() };
@@ -388,7 +388,8 @@ export async function withLock<T>(
 	const { signal } = options;
 	checkLockTimeout("timeout", options.timeout);
 	const lockPath = `${path}.lock`;
-	const deadline = Date.now() + (options.timeout ?? DEFAULT_LOCK_TIMEOUT_MS);
+	// Monotonic, so setting the system clock back does not extend the wait.
+	const deadline = performance.now() + (options.timeout ?? DEFAULT_LOCK_TIMEOUT_MS);
 	const self = await ownRecord();
 	let ownerId: string;
 	let blocker: Blocker = { path: lockPath, verdict: "unknown", owner: undefined };
@@ -396,7 +397,7 @@ export async function withLock<T>(
 		await validateDirectory(path);
 		signal?.throwIfAborted();
 		// The first attempt always runs; no later one starts past the deadline.
-		if (!first && Date.now() >= deadline) throw timeoutError(blocker);
+		if (!first && performance.now() >= deadline) throw timeoutError(blocker);
 		first = false;
 		const record = { ...self, ownerId: crypto.randomUUID(), createdAt: new Date().toISOString() };
 		try {
@@ -423,7 +424,7 @@ export async function withLock<T>(
 			}
 			blocker = { path: lockPath, verdict: "unknown", owner: undefined };
 		}
-		const remaining = deadline - Date.now();
+		const remaining = deadline - performance.now();
 		if (remaining <= 0) throw timeoutError(blocker);
 		await abortableSleep(Math.min(delay * (1 + Math.random()), remaining), signal);
 	}

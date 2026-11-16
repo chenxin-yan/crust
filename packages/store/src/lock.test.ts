@@ -199,6 +199,20 @@ describe("withLock", () => {
 		}
 	});
 
+	it("keeps its deadline when the system clock moves back while it waits", async () => {
+		const release = await holdLock();
+		try {
+			const now = Date.now();
+			setTimeout(() => vi.spyOn(Date, "now").mockReturnValue(now - 3_600_000), 50);
+			const start = performance.now();
+
+			expect(await lockError({ timeout: 300 })).toMatchObject({ code: "LOCK" });
+			expect(performance.now() - start).toBeLessThan(2_000);
+		} finally {
+			await release();
+		}
+	});
+
 	it.each([Number.NaN, Number.POSITIVE_INFINITY, -1])(
 		"rejects a timeout of %s with DEFINITION and creates nothing",
 		async (timeout) => {
@@ -376,8 +390,8 @@ describe("withLock", () => {
 
 	describe("past its deadline", () => {
 		const jumpPastDeadline = () => {
-			const now = Date.now() + 3_600_000;
-			vi.spyOn(Date, "now").mockReturnValue(now);
+			const now = performance.now() + 3_600_000;
+			vi.spyOn(performance, "now").mockReturnValue(now);
 		};
 
 		it("starts no recovery once the deadline passed while judging a dead owner", async () => {
