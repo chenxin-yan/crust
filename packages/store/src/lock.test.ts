@@ -199,6 +199,14 @@ describe("withLock", () => {
 		}
 	});
 
+	it.each([Number.NaN, Number.POSITIVE_INFINITY, -1])(
+		"rejects a timeout of %s with DEFINITION and creates nothing",
+		async (timeout) => {
+			expect(await lockError({ timeout })).toMatchObject({ code: "DEFINITION" });
+			expect(await readdir(dir)).toEqual([]);
+		},
+	);
+
 	it("takes over the lock of an owner whose process is gone", async () => {
 		await writeRecord(lockPath, { pid: MISSING_PID });
 

@@ -89,8 +89,9 @@ export interface StoreErrorDetailsMap {
  * - `PARSE` — Malformed JSON in persisted config file
  * - `IO` — Filesystem read, write, or delete failure
  * - `VALIDATION` — Config object rejected by a store validator
- * - `DEFINITION` — A field mixes mutually exclusive definition modes, or `strict` is combined
- *   with an `access` other than `"private"`
+ * - `DEFINITION` — A field mixes mutually exclusive definition modes, `strict` is combined
+ *   with an `access` other than `"private"`, or a lock timeout is not a finite number of at
+ *   least 0
  * - `LOCK` — A strict lock was not acquired before its deadline
  *
  * @example

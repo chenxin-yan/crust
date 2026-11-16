@@ -1043,6 +1043,15 @@ describe("strict", () => {
 		).not.toThrow();
 	});
 
+	it.each([Number.NaN, Number.POSITIVE_INFINITY, -1])(
+		"rejects a lockTimeout of %s with DEFINITION",
+		(lockTimeout) => {
+			expect(() =>
+				createStore({ dirPath, name: "auth", fields: BASIC_FIELDS, strict: true, lockTimeout }),
+			).toThrow(expect.objectContaining({ code: "DEFINITION" }));
+		},
+	);
+
 	it.skipIf(process.platform === "win32")(
 		"writes the file owner-only in a directory it creates owner-only",
 		async () => {

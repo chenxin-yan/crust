@@ -21,6 +21,19 @@ const DEFAULT_LOCK_TIMEOUT_MS = 40_000;
  */
 const PID_RULE_PLATFORMS: ReadonlySet<string> = new Set(["darwin", "win32"]);
 
+/**
+ * NaN or Infinity would leave the deadline unreachable.
+ *
+ * @throws {CrustStoreError} `DEFINITION` unless `timeout` is undefined or a finite number >= 0.
+ */
+export function checkLockTimeout(option: string, timeout: number | undefined): void {
+	if (timeout === undefined || (Number.isFinite(timeout) && timeout >= 0)) return;
+	throw new CrustStoreError(
+		"DEFINITION",
+		`"${option}" must be a finite number of milliseconds, at least 0: got ${String(timeout)}`,
+	);
+}
+
 /** Options for {@link withLock}. */
 export interface LockOptions {
 	/**
@@ -362,6 +375,7 @@ const isWindowsContention = (err: unknown): boolean =>
  * created with mode `0700`.
  *
  * @throws {CrustStoreError} `LOCK` when the lock is not acquired before `timeout`.
+ * @throws {CrustStoreError} `DEFINITION` when `timeout` is not a finite number of at least 0.
  * @throws {CrustStoreError} `PATH` when the directory is unsafe (POSIX).
  * @throws {CrustStoreError} `IO` when a lock or `.recover` file cannot be created or removed. An
  *   error of `fn` wins over a failed removal of the lock.
@@ -372,6 +386,7 @@ export async function withLock<T>(
 	options: LockOptions = {},
 ): Promise<T> {
 	const { signal } = options;
+	checkLockTimeout("timeout", options.timeout);
 	const lockPath = `${path}.lock`;
 	const deadline = Date.now() + (options.timeout ?? DEFAULT_LOCK_TIMEOUT_MS);
 	const self = await ownRecord();

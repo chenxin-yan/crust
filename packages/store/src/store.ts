@@ -12,7 +12,7 @@ import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
 import { normalizeStandardIssues, type StandardSchema } from "@crustjs/utils/schema";
 
 import { CrustStoreError, type ValidationErrorDetails } from "./errors.ts";
-import { withLock } from "./lock.ts";
+import { checkLockTimeout, withLock } from "./lock.ts";
 import { applyFieldDefaults, setDocumentValue, withUnknownKeys } from "./merge.ts";
 import { resolveStorePath } from "./path.ts";
 import {
@@ -199,7 +199,9 @@ function enqueue<T>(
  * @param options - Store configuration options.
  * @returns A {@link Store} instance with `read`, `write`, `update`, `patch`, and `reset` methods.
  * @throws {CrustStoreError} `PATH` if `dirPath` or `name` is invalid.
- * @throws {CrustStoreError} `DEFINITION` if a field mixes `schema` with `default` or `validate`.
+ * @throws {CrustStoreError} `DEFINITION` if a field mixes `schema` with `default` or `validate`,
+ *   `strict` is combined with a non-private `access`, or a strict store's `lockTimeout` is not a
+ *   finite number of at least 0.
  *
  * @example
  * ```ts
@@ -255,6 +257,7 @@ export function createStore<const F extends FieldsDef>(
 			`a strict store is always private: "strict" cannot be combined with access ${JSON.stringify(access)}`,
 		);
 	}
+	if (strict === true) checkLockTimeout("lockTimeout", lockTimeout);
 
 	const filePath = resolveStorePath(dirPath, name);
 
