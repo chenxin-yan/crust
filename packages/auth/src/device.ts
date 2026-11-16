@@ -118,6 +118,8 @@ export async function startDeviceFlow(
 					throw new OAuthError("expired_token");
 				}
 				await sleep(waitMs, deadline.signal);
+				// A stalled process can wake past the deadline before the expiry timer runs (SEC-D4).
+				if (Date.now() >= expiresAt) throw new OAuthError("expired_token");
 				const pollBody = new URLSearchParams({
 					grant_type: DEVICE_GRANT,
 					device_code: deviceCode as string,

@@ -134,6 +134,20 @@ describe("startDeviceFlow", () => {
 		expect(pollTimes).toHaveLength(2);
 	});
 
+	it("SEC-D4 expires instead of polling when a stalled process wakes past the deadline", async () => {
+		const { start, pollTimes } = await deviceSetup({ ...DEVICE, expires_in: 8 }, [pending]);
+		const flow = await start();
+		const result = flow.poll().catch((error: unknown) => error);
+		await vi.advanceTimersByTimeAsync(4_000);
+		// The wall clock passes the deadline while no timer runs; the 5 s wait then fires first.
+		vi.setSystemTime(9_000);
+		await vi.advanceTimersByTimeAsync(1_000);
+		expect(pollTimes).toEqual([]);
+		await vi.advanceTimersByTimeAsync(5_000);
+		expect(await result).toMatchObject({ code: "expired_token" });
+		expect(pollTimes).toEqual([]);
+	});
+
 	it("SEC-D4 aborts a poll still in flight at the deadline", async () => {
 		const signals: AbortSignal[] = [];
 		const { server, fetch } = await deviceSetup({ ...DEVICE, expires_in: 8 }, [
