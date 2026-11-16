@@ -102,6 +102,22 @@ const hostile: Record<string, () => Response> = {
 	"a 200 with an error": () =>
 		json({ error: echoAll(), access_token: STATIC.accessToken, token_type: "Bearer" }),
 	"an invalid token type": () => json({ access_token: STATIC.accessToken, token_type: echoAll() }),
+	// Transport failures: the error a fetch implementation throws quotes what was sent.
+	"a throwing transport": () => {
+		throw Object.assign(new Error(`connect failed: ${echoAll()}`), {
+			cause: new Error(echoAll()),
+			body: echoAll(),
+		});
+	},
+	"a failing response stream": () =>
+		new Response(
+			new ReadableStream({
+				start(controller) {
+					controller.enqueue(new TextEncoder().encode(`{"access_token":"${STATIC.accessToken}"`));
+					controller.error(new Error(`stream reset: ${echoAll()}`));
+				},
+			}),
+		),
 };
 
 function world(token: () => Response) {
@@ -176,7 +192,8 @@ async function deviceLogin(token: () => Response) {
 		(tokens) => record(tokens),
 		(error: unknown) => record(error),
 	);
-	await vi.advanceTimersByTimeAsync(6_000);
+	// Long enough for a poll that keeps failing to back off until the code expires.
+	await vi.advanceTimersByTimeAsync(700_000);
 	await result;
 	vi.useRealTimers();
 }

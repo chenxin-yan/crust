@@ -7,6 +7,7 @@ import { TOKEN_ENDPOINT_PARAMS } from "./endpoint.ts";
 import {
 	AbortError,
 	HttpError,
+	NetworkError,
 	OAuthConfigError,
 	OAuthError,
 	ResponseTooLargeError,
@@ -316,6 +317,34 @@ describe("createTokenClient", () => {
 		expect(Buffer.from(header.slice(6), "base64").toString()).toBe("a+b%3Ac:p%2Fw%2Bd");
 		expect(request!.body.has("client_secret")).toBe(false);
 		expect(request!.body.has("client_id")).toBe(false);
+	});
+
+	it("SEC-O1 SEC-K2 wraps a transport or stream failure in NetworkError without its cause", async () => {
+		const failures: (() => Response)[] = [
+			() => {
+				throw Object.assign(new TypeError("fetch failed: SENTINEL_RT"), {
+					cause: new Error("SENTINEL_RT"),
+				});
+			},
+			() =>
+				new Response(
+					new ReadableStream({
+						start(controller) {
+							controller.error(new Error("SENTINEL_RT"));
+						},
+					}),
+				),
+		];
+		for (const failure of failures) {
+			const { server } = await setupServer();
+			const error = await createTokenClient(server, { fetch: async () => failure() })
+				.refresh("SENTINEL_RT")
+				.catch((caught: unknown) => caught);
+			expect(error).toBeInstanceOf(NetworkError);
+			expect((error as NetworkError).code).toBe("network");
+			expect((error as Error).cause).toBeUndefined();
+			expect(inspect(error, { depth: 10, showHidden: true })).not.toContain("SENTINEL");
+		}
 	});
 
 	it("SEC-E7 sends only client_id for a public client", async () => {

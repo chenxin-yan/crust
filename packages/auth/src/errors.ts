@@ -123,6 +123,19 @@ export class IssuerMismatchError extends AuthError {
 	}
 }
 
+/**
+ * The request could not be sent or its response not read: DNS, connection, TLS or a broken
+ * response stream. The underlying error is dropped: it can quote what was sent (SEC-K2).
+ */
+export class NetworkError extends AuthError {
+	declare readonly code: "network";
+
+	constructor() {
+		super("network", "Could not reach the authorization server");
+		this.name = "NetworkError";
+	}
+}
+
 /** An operation ran past its deadline. */
 export class TimeoutError extends AuthError {
 	declare readonly code: "timeout";
@@ -161,7 +174,7 @@ export class LoginRequiresInteractionError extends AuthError {
 	declare readonly code: "login-requires-interaction";
 
 	constructor(
-		message = "Login needs an interactive terminal. Run it in a terminal, or pass --device to sign in with a code on another device.",
+		message = "Login needs a terminal. Run it in a terminal, choose the device login explicitly, or set a token in the environment.",
 	) {
 		super("login-requires-interaction", message);
 		this.name = "LoginRequiresInteractionError";

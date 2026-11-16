@@ -1,6 +1,8 @@
 import {
 	AbortError,
+	AuthError,
 	HttpError,
+	NetworkError,
 	OAuthError,
 	oauthErrorCode,
 	ResponseTooLargeError,
@@ -83,7 +85,9 @@ export async function requestJson(
 		}
 		return { status: response.status, body };
 	} catch (error) {
-		throw link.signal.aborted ? link.signal.reason : error;
+		if (link.signal.aborted) throw link.signal.reason;
+		// Transport and stream failures carry no message, property or cause of their own.
+		throw error instanceof AuthError ? error : new NetworkError();
 	} finally {
 		link.clear();
 	}

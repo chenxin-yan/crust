@@ -12,6 +12,7 @@ export {
 	HttpError,
 	IssuerMismatchError,
 	LoginRequiresInteractionError,
+	NetworkError,
 	OAuthConfigError,
 	OAuthError,
 	ResponseTooLargeError,

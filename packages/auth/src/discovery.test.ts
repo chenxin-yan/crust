@@ -22,6 +22,7 @@ import {
 	AbortError,
 	HttpError,
 	IssuerMismatchError,
+	NetworkError,
 	OAuthConfigError,
 	ResponseTooLargeError,
 	TimeoutError,
@@ -83,7 +84,7 @@ describe("discover", () => {
 				const config = defineAuth({ servers: [{ issuer, clientId: "cli" }] });
 				const error = await discover(config, issuer).catch((caught: unknown) => caught);
 				// The TLS handshake fails, so no request reaches the server.
-				expect(error).toBeInstanceOf(TypeError);
+				expect(error).toBeInstanceOf(NetworkError);
 				expect(served).toBe(0);
 			} finally {
 				tls.close();

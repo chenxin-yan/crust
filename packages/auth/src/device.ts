@@ -1,7 +1,7 @@
 import { serverInternals } from "./discovery.ts";
 import { sanitizeDisplay } from "./display.ts";
 import { checkUrl } from "./endpoint.ts";
-import { AbortError, AuthError, OAuthConfigError, OAuthError, TimeoutError } from "./errors.ts";
+import { AbortError, NetworkError, OAuthConfigError, OAuthError, TimeoutError } from "./errors.ts";
 import { jsonObject, linkSignal, oauthFailure, throwIfAborted } from "./http.ts";
 import { checkResources, checkScope } from "./params.ts";
 import { parseTokenResponse, postForm } from "./token-client.ts";
@@ -130,10 +130,7 @@ export async function startDeviceFlow(
 					});
 				} catch (error) {
 					// A connection error or request timeout backs off; anything else stops.
-					if (
-						!(error instanceof TimeoutError) &&
-						(error instanceof AuthError || error instanceof DeadlineError)
-					) {
+					if (!(error instanceof NetworkError || error instanceof TimeoutError)) {
 						throw error;
 					}
 					failures += 1;
