@@ -648,6 +648,20 @@ describe("login tickets", () => {
 		await expect(login(source)).resolves.toMatchObject({ accessToken: "AT1" });
 	});
 
+	it("SEC-Q2 SEC-P2 a beginLogin waiting for the file's lock to create the document is cancellable", async () => {
+		const w = world();
+		const lock = await holdLock((fn) => withLock(w.file, fn));
+		const controller = new AbortController();
+		const begin = w.source().beginLogin({ signal: controller.signal });
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		controller.abort();
+		await expect(begin).rejects.toBeInstanceOf(AbortError);
+		await lock.release();
+		expect(existsSync(w.file)).toBe(false);
+		// The guard was released too.
+		(await w.source().beginLogin()).cancel();
+	});
+
 	it("SEC-Q2 creates the document when the file is absent, so the ticket observes a storeId", async () => {
 		const w = world();
 		const ticket = await w.source().beginLogin();

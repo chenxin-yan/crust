@@ -403,7 +403,8 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 					async () => {
 						// An absent file gets its document now, so the ticket observes a storeId (SEC-Q2).
 						const document =
-							(await store.read()) ?? (await store.update((current) => current ?? emptyDocument()));
+							(await store.read()) ??
+							(await store.update((current) => current ?? emptyDocument(), signal));
 						const raw = document.records[key];
 						const record = raw === undefined ? undefined : parseRecord(raw);
 						if (raw !== undefined && !record) {
