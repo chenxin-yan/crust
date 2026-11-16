@@ -308,6 +308,44 @@ describe("symlink-only skill installation", () => {
 		expect((await lstat(kiro)).isDirectory()).toBe(true);
 	});
 
+	it("matches an approved path for an agent relocated by a relative override", async () => {
+		const sourceDir = await createSource();
+		const home = join(tempRoot, "home");
+		await mkdir(home);
+		vi.stubEnv("GROK_HOME", "relative-grok/");
+		const grok = join(tempRoot, "relative-grok", "skills", "demo");
+		await mkdir(grok, { recursive: true });
+
+		const result = await withHome(home, () =>
+			withCwd(tempRoot, () =>
+				installSkill({ sourceDir, agents: ["grok"], scope: "global", force: [grok] }),
+			),
+		);
+		expect(result.agents[0]).toMatchObject({ outputDir: grok, status: "repaired" });
+		expect((await lstat(grok)).isSymbolicLink()).toBe(true);
+	});
+
+	it("treats a relative override that lands on the shared folder as the shared folder", async () => {
+		const sourceDir = await createSource();
+		vi.stubEnv("GROK_HOME", ".agents/");
+		await withHome(tempRoot, () =>
+			withCwd(tempRoot, async () => {
+				const installed = await installSkill({
+					sourceDir,
+					agents: ["codex", "grok"],
+					scope: "global",
+				});
+				expect(installed.agents.map((entry) => entry.outputDir)).toEqual([
+					sharedDir(),
+					sharedDir(),
+				]);
+				const removed = await uninstallSkill({ name: "demo", agents: ["grok"], scope: "global" });
+				expect(removed.agents[0]).toMatchObject({ outputDir: sharedDir(), status: "not-found" });
+			}),
+		);
+		expect(await readlink(sharedDir())).toBe(sourceDir);
+	});
+
 	it("keeps the shared link when uninstalling for some agents", async () => {
 		const sourceDir = await createSource();
 		await withCwd(tempRoot, () =>

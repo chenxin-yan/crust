@@ -4,7 +4,7 @@
 
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { AGENTS } from "./agents.generated.ts";
 import { sharedSkillsDir } from "./link.ts";
@@ -60,12 +60,14 @@ const AGENT_ROWS: Readonly<
 
 /**
  * Absolute global skills directory, or `undefined` when the agent has none. A non-blank override
- * variable, trimmed as upstream does, replaces the home-relative directory.
+ * value replaces the home-relative directory; it is trimmed, as upstream does for every override
+ * except `XDG_CONFIG_HOME`, and a relative value resolves against the working directory, so
+ * folders always compare in one absolute form.
  */
 function globalSkillsDir(agent: AgentTarget): string | undefined {
 	const [, , dir, overrideVariable, overrideDir = ""] = AGENT_ROWS[agent];
 	const override = overrideVariable && process.env[overrideVariable]?.trim();
-	if (override) return join(override, overrideDir);
+	if (override) return resolve(override, overrideDir);
 	return dir === null ? undefined : join(homedir(), dir);
 }
 

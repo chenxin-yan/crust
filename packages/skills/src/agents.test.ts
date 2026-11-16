@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -37,6 +37,20 @@ describe("resolveAgentPath", () => {
 		vi.stubEnv("XDG_CONFIG_HOME", join(homedir(), "xdg"));
 		expect(resolveAgentPath("amp", "global", "my-cli")).toBe(
 			join(homedir(), "xdg", "agents", "skills", "my-cli"),
+		);
+	});
+
+	it("resolves a relative override value against the working directory", () => {
+		vi.stubEnv("GROK_HOME", "relative-grok/");
+		expect(resolveAgentPath("grok", "global", "my-cli")).toBe(
+			join(process.cwd(), "relative-grok", "skills", "my-cli"),
+		);
+	});
+
+	it("ignores a trailing separator in the override value", () => {
+		vi.stubEnv("GROK_HOME", join(homedir(), "grok") + sep);
+		expect(resolveAgentPath("grok", "global", "my-cli")).toBe(
+			join(homedir(), "grok", "skills", "my-cli"),
 		);
 	});
 
