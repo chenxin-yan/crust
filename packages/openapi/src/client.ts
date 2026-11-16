@@ -102,6 +102,24 @@ const isReplayable = (body: RequestInit["body"]): boolean =>
 	body instanceof Blob ||
 	body instanceof FormData;
 
+/**
+ * A copy of a mutable replayable body, so the first request, its redirects and a retry all send
+ * it as it was when `fetch()` was called.
+ */
+function snapshot(body: RequestInit["body"]): RequestInit["body"] {
+	if (body instanceof URLSearchParams) return new URLSearchParams(body);
+	if (body instanceof ArrayBuffer) return body.slice(0);
+	if (ArrayBuffer.isView(body)) {
+		return new Uint8Array(body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength));
+	}
+	if (body instanceof FormData) {
+		const copy = new FormData();
+		body.forEach((value, name) => copy.append(name, value));
+		return copy;
+	}
+	return body;
+}
+
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const MAX_REDIRECTS = 20;
 // Request-body headers the Fetch standard drops when a redirect turns the request into a GET.
@@ -150,7 +168,13 @@ export const apiClient: ContextFactory<"api", ApiClientOptions, ApiClient> =
 				typeof result?.headers === "object" && result.headers !== null
 					? (result as AuthAttempt)
 					: undefined;
-			const headers = new Headers(attempt ? attempt.headers : (result as Record<string, string>));
+			let headers: Headers;
+			try {
+				headers = new Headers(attempt ? attempt.headers : (result as Record<string, string>));
+			} catch {
+				// Node's error quotes the value, which is a credential.
+				throw new TypeError("The auth header value is not valid");
+			}
 			credentialHeaders.push(...headers.keys());
 			return { headers, retry: attempt?.retry };
 		}
@@ -162,7 +186,12 @@ export const apiClient: ContextFactory<"api", ApiClientOptions, ApiClient> =
 			{ auth, ...init }: Parameters<ApiClient["fetch"]>[1] = {},
 		): Hop => ({
 			url,
-			init: { ...init, headers: new Headers(init.headers), signal: init.signal ?? input.signal },
+			init: {
+				...init,
+				body: snapshot(init.body),
+				headers: new Headers(init.headers),
+				signal: init.signal ?? input.signal,
+			},
 			auth: auth !== false,
 			redirects: 0,
 		});
@@ -210,11 +239,17 @@ export const apiClient: ContextFactory<"api", ApiClientOptions, ApiClient> =
 				let attached: AuthState | undefined;
 				if (hop.auth && hop.url.origin === origin) {
 					const state = await (authState ??= loadAuthState());
+					// Retried only when every header of the attempt went as the library set it.
+					let overridden = false;
+					let sent = false;
 					for (const [name, value] of state.headers) {
-						if (headers.has(name)) continue;
-						headers.set(name, value);
-						attached = state;
+						if (headers.has(name)) overridden = true;
+						else {
+							headers.set(name, value);
+							sent = true;
+						}
 					}
+					if (sent && !overridden) attached = state;
 				}
 				const response = await fetch(hop.url, {
 					...hop.init,

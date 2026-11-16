@@ -1,3 +1,5 @@
+import { inspect } from "node:util";
+
 import { Crust, defineCommand } from "@crustjs/core";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -172,6 +174,87 @@ describe("apiClient auth retry", () => {
 		expect(retries).toEqual([]);
 		expect(calls).toHaveLength(6);
 		expect(calls[5]).toMatchObject({ url: "https://other.example/x", authorization: null });
+	});
+});
+
+describe("apiClient auth headers and bodies", () => {
+	it.each([
+		["a header record", () => ({ authorization: "Bearer SECRET_SENTINEL\nx" })],
+		[
+			"an AuthAttempt",
+			() => ({ headers: { authorization: "Bearer SECRET_SENTINEL\nx" } }) satisfies AuthAttempt,
+		],
+	])("rejects an invalid auth header value from %s without quoting it", async (_name, auth) => {
+		const calls = stubFetch(ok);
+		const error = await withApi(auth, async (api) => {
+			await api.fetch("/me");
+		}).catch((caught: unknown) => caught);
+		expect(error).toBeInstanceOf(TypeError);
+		expect((error as Error).message).toBe("The auth header value is not valid");
+		expect((error as Error).cause).toBeUndefined();
+		expect(inspect(error, { depth: 10, showHidden: true })).not.toContain("SECRET_SENTINEL");
+		expect(calls).toEqual([]);
+	});
+
+	it.each([
+		[
+			"URLSearchParams",
+			() => new URLSearchParams({ amount: "1" }),
+			(body: URLSearchParams) => body.set("amount", "100"),
+		],
+		[
+			"Uint8Array",
+			() => new TextEncoder().encode("amount=1"),
+			(body: Uint8Array) => body.set([0x39], 7),
+		],
+		[
+			"FormData",
+			() => {
+				const form = new FormData();
+				form.set("amount", "1");
+				return form;
+			},
+			(body: FormData) => body.set("amount", "100"),
+		],
+	] as const)(
+		"retries with the %s body as it was when the request was first sent",
+		async (_name, create, mutate) => {
+			const body = create();
+			const sent: string[] = [];
+			vi.stubGlobal("fetch", async (url: URL, init: RequestInit) => {
+				sent.push(await new Response(init.body).text());
+				if (sent.length > 1) return ok();
+				// The caller changes its object while the first response is pending.
+				(mutate as (value: typeof body) => void)(body);
+				return unauthorized();
+			});
+			await withApi(
+				() => attempts(["AT1", "AT2"]),
+				async (api) => {
+					expect((await api.fetch("/pay", { method: "POST", body })).status).toBe(200);
+				},
+			);
+			expect(sent).toHaveLength(2);
+			for (const text of sent) expect(text).toMatch(/amount(=|"\r\n\r\n)1(?!00)/);
+		},
+	);
+
+	it("does not retry when the request set any header the attempt would have set", async () => {
+		const retries: string[] = [];
+		const calls = stubFetch(unauthorized);
+		await withApi(
+			() => ({
+				...attempts(["AT1", "AT2"], retries),
+				headers: { authorization: "Bearer AT1", "user-agent": "acme" },
+			}),
+			async (api) => {
+				expect((await api.fetch("/me", { headers: { authorization: "Bearer mine" } })).status).toBe(
+					401,
+				);
+			},
+		);
+		expect(retries).toEqual([]);
+		expect(calls).toHaveLength(1);
 	});
 });
 
