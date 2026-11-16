@@ -701,14 +701,14 @@ type SkillActionContext = SkillIO & {
 
 function buildSkillCommand(commandName: string, options: SkillOptions) {
 	const install = async (context: SkillActionContext) => {
-		const { all: installAll = false, agent, skill } = context.flags;
-		if (installAll && (agent || skill)) {
+		const { all: installAll = false, agent: agentFlag, skill: skillFlag } = context.flags;
+		if (installAll && (agentFlag || skillFlag)) {
 			throw new CrustError("PARSE", "--all cannot be combined with --agent or --skill.", {
 				flag: "all",
 			});
 		}
-		const agents = agent && parseAgentFlag(agent);
-		const skills = skill && checkSkillFlag(skill);
+		const agents = agentFlag && parseAgentFlag(agentFlag);
+		const skills = skillFlag && checkSkillFlag(skillFlag);
 		const scope = await resolveScope(context.flags.scope, options, installAll);
 		await installSkills({ scope, installAll, agents, skills, io: context });
 	};
@@ -740,13 +740,13 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 								...SKILL_FLAG,
 							})
 							.action(async (context) => {
-								const { all: removeAll = false, skill } = context.flags;
-								if (removeAll && skill) {
+								const { all: removeAll = false, skill: skillFlag } = context.flags;
+								if (removeAll && skillFlag) {
 									throw new CrustError("PARSE", "--all cannot be combined with --skill.", {
 										flag: "all",
 									});
 								}
-								const skills = skill && checkSkillFlag(skill);
+								const skills = skillFlag && checkSkillFlag(skillFlag);
 								const scope = await resolveScope(context.flags.scope, options, removeAll);
 								await uninstallSkills({ scope, removeAll, skills, io: context });
 							}),
