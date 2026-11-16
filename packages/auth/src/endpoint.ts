@@ -1,9 +1,9 @@
 import { OAuthConfigError } from "./errors.ts";
 
-// One URL policy for every issuer, endpoint, verification URI and browser URL (SEC-B3, E1,
-// H4, H8, L1, DEC-09): HTTPS, no userinfo, no fragment. Plain HTTP only on the dev origin.
+// One URL policy for every issuer, endpoint, verification URI and browser URL: HTTPS,
+// no userinfo, no fragment. Plain HTTP only on the dev origin.
 
-/** Names the library sets on an authorization request; rejected in `extra` and the endpoint query (SEC-B1). */
+/** Names the library sets on an authorization request; rejected in `extra` and the endpoint query. */
 export const AUTHORIZATION_PARAMS: ReadonlySet<string> = new Set([
 	"response_type",
 	"client_id",
@@ -19,7 +19,7 @@ export const AUTHORIZATION_PARAMS: ReadonlySet<string> = new Set([
 	"request_uri",
 ]);
 
-/** Names rejected in a token, device or revocation endpoint query (SEC-E1). */
+/** Names rejected in a token, device or revocation endpoint query. */
 export const TOKEN_ENDPOINT_PARAMS: ReadonlySet<string> = new Set([
 	"client_id",
 	"client_secret",
@@ -57,7 +57,7 @@ function parseAbsolute(value: unknown, what: string): URL {
 }
 
 /**
- * Validates an issuer identifier (SEC-H8) and returns its DEC-09 dev origin: the issuer's
+ * Validates an issuer identifier and returns its dev origin: the issuer's
  * own origin when `allowInsecureLoopback` is set and the issuer is `http://127.0.0.1` or
  * `http://[::1]`, otherwise `undefined` (HTTPS only).
  */
@@ -93,7 +93,7 @@ export function checkUrl(
 	return value as string;
 }
 
-/** Decoded query names of `url`, each at most once and none of them `reserved` (SEC-B1, E1). */
+/** Decoded query names of `url`, each at most once and none of them `reserved`. */
 export function queryNames(url: URL, what: string, reserved: ReadonlySet<string>): Set<string> {
 	const names = new Set<string>();
 	for (const name of url.searchParams.keys()) {
@@ -104,7 +104,7 @@ export function queryNames(url: URL, what: string, reserved: ReadonlySet<string>
 			);
 		}
 		if (names.has(name)) {
-			// The name is not quoted: it can come from server metadata (SEC-K2).
+			// The name is not quoted: it can come from server metadata.
 			throw new OAuthConfigError("duplicate-parameter", `${what} repeats a query parameter`);
 		}
 		names.add(name);

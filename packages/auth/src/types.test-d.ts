@@ -14,7 +14,7 @@ type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Expect<T extends true> = T;
 
-// SEC-I1, SEC-B4: the exchange takes the session and a code; no redirect URI or endpoint.
+// The exchange takes the session and a code; no redirect URI or endpoint.
 export type ExchangeTakesOnlySessionCodeAndSignal = Expect<
 	Equal<
 		Parameters<TokenClient["exchangeCode"]>,
@@ -22,7 +22,7 @@ export type ExchangeTakesOnlySessionCodeAndSignal = Expect<
 	>
 >;
 
-// SEC-B2, SEC-A4, SEC-DEC-20: no response type, response mode, PKCE method or nonce option.
+// No response type, response mode, PKCE method or nonce option.
 export type SessionOptionKeys = Expect<
 	Equal<
 		keyof AuthorizationSessionOptions,
@@ -34,10 +34,10 @@ export type DeviceOptionKeys = Expect<
 >;
 export type OnlyS256 = Expect<Equal<Pkce["method"], "S256">>;
 
-// SEC-DEC-18: only bearer tokens.
+// Only bearer tokens.
 export type OnlyBearer = Expect<Equal<TokenSet["tokenType"], "Bearer">>;
 
-// SEC-C1: hosts are the two loopback literals.
+// Hosts are the two loopback literals.
 export type LoopbackHosts = Expect<
 	Equal<NonNullable<AuthorizationSessionOptions["hosts"]>[number], "127.0.0.1" | "::1">
 >;
@@ -45,7 +45,7 @@ export type LoopbackHosts = Expect<
 declare const session: AuthorizationSession;
 declare const server: AuthServer;
 
-// SEC-I1: the session and the server are read-only.
+// The session and the server are read-only.
 // @ts-expect-error -- readonly
 session.redirectUri = "http://evil.example/cb";
 // @ts-expect-error -- readonly

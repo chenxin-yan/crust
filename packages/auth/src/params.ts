@@ -1,6 +1,6 @@
 import { OAuthConfigError } from "./errors.ts";
 
-/** A scope string, or `undefined` to omit it (SEC-B6). */
+/** A scope string, or `undefined` to omit it. */
 export function checkScope(scope: unknown): string | undefined {
 	if (scope !== undefined && (typeof scope !== "string" || scope.trim() === "")) {
 		throw new OAuthConfigError("invalid-option", "scope must be a non-empty string");
@@ -8,7 +8,7 @@ export function checkScope(scope: unknown): string | undefined {
 	return scope;
 }
 
-/** RFC 8707 resource indicators: absolute URIs without a fragment (SEC-B5). */
+/** RFC 8707 resource indicators: absolute URIs without a fragment. */
 export function checkResources(resource: unknown): readonly string[] {
 	if (resource === undefined) return [];
 	const values = typeof resource === "string" ? [resource] : resource;

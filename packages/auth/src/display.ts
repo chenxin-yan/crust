@@ -1,4 +1,4 @@
-/** Query parameters whose values {@link redactUrl} replaces (SEC-K4). */
+/** Query parameters whose values {@link redactUrl} replaces. */
 const SECRET_PARAMS = new Set([
 	"code",
 	"state",
@@ -48,7 +48,7 @@ const ESCAPE_SEQUENCE =
 const CONTROL_CHARACTER = /[\x00-\x1f\x7f-\x9f]/g;
 
 /**
- * Makes a server-supplied string safe to print on a terminal or page (SEC-K5): removes
+ * Makes a server-supplied string safe to print on a terminal or page: removes
  * escape sequences and every C0 and C1 control character (including CR, LF and TAB) and DEL,
  * then truncates to 200 characters.
  */
@@ -70,8 +70,8 @@ export interface DeviceCodeMessageOptions {
 }
 
 /**
- * The default device-login instructions (SEC-D7, D11, DEC-16): the verification URL and its
- * host, the code, and the anti-phishing warning. Every value is sanitized (SEC-K5).
+ * The default device-login instructions: the verification URL and its
+ * host, the code, and the anti-phishing warning. Every value is sanitized.
  */
 export function deviceCodeMessage(options: DeviceCodeMessageOptions): string {
 	const uri = sanitizeDisplay(options.verificationUri);

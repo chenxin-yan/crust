@@ -7,12 +7,12 @@ import type { AuthConfig, AuthServer, DiscoverOptions } from "./types.ts";
 /** What the library keeps about a discovered server off the frozen public object. */
 export interface ServerInternals {
 	clientSecret: string | undefined;
-	/** The DEC-09 dev origin, when plain HTTP is allowed for this server. */
+	/** The dev origin, when plain HTTP is allowed for this server. */
 	devOrigin: string | undefined;
 }
 
 const discovered = new WeakMap<AuthServer, ServerInternals>();
-// Validated metadata per issuer, for this process only; never persisted (SEC-H6).
+// Validated metadata per issuer, for this process only; never persisted.
 const metadataCache = new Map<string, Record<string, unknown>>();
 
 /** The internals of a server from `discover()`; anything else is refused. */
@@ -32,7 +32,7 @@ async function fetchMetadata(
 	const url = new URL(issuer);
 	const path = url.pathname.replace(/\/$/, "");
 	// RFC 8414 §3 inserts the well-known segment before the issuer's path; on 404 only,
-	// fall back to OIDC Discovery's appended form (SEC-H3).
+	// fall back to OIDC Discovery's appended form.
 	let response = await requestJson(
 		fetchImpl,
 		`${url.origin}/.well-known/oauth-authorization-server${path}`,
@@ -50,13 +50,13 @@ async function fetchMetadata(
 	if (response.status !== 200) throw new HttpError(response.status);
 	const metadata = jsonObject(response.body);
 	if (!metadata) throw new OAuthError("invalid_response", response.status);
-	// Exact code-point comparison: no normalization, trailing slash significant (SEC-H2).
+	// Exact code-point comparison: no normalization, trailing slash significant.
 	if (metadata.issuer !== issuer) throw new IssuerMismatchError("mismatch");
 	return metadata;
 }
 
 /**
- * Fetches and validates an issuer's metadata (SEC-H1–H8) and returns a frozen server. The
+ * Fetches and validates an issuer's metadata and returns a frozen server. The
  * issuer must be declared in `config`, or `allowCustomIssuers` set and `clientId` given.
  * Metadata is cached in memory for the process.
  */
@@ -114,7 +114,7 @@ export async function discover(
 			Array.isArray(grantTypes) && grantTypes.every((type) => typeof type === "string")
 				? Object.freeze([...grantTypes])
 				: undefined,
-		// SEC-I3 first, then the I7 outcome: one pinned issuer, or a path only this server uses.
+		// An advertised iss is required first; otherwise the mix-up policy: one pinned issuer, or a path only this server uses.
 		issPolicy: issParameterSupported
 			? "required"
 			: singlePinned || entry?.redirectPath !== undefined

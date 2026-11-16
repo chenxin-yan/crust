@@ -3,7 +3,7 @@ import { isCI } from "@crustjs/utils/terminal";
 import type { LoginMode, LoginModeOptions } from "./types.ts";
 
 /**
- * Chooses the login to run (SEC-L5, DEC-14), first match wins:
+ * Chooses the login to run, first match wins:
  * 1. `device` or `noBrowser` (the user opted in): `"device"`, even on CI;
  * 2. `CI` set: `"refuse"`, since nobody asked for a code someone else might approve;
  * 3. no terminal (stdin, and stdout or stderr, not TTYs): `"refuse"`, since nobody is there

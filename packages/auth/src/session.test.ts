@@ -81,7 +81,7 @@ function waitFor(
 }
 
 describe("createAuthorizationSession", () => {
-	it("SEC-A3 SEC-B2 SEC-DEC-02 SEC-DEC-20 builds a code request with S256 PKCE and state", async () => {
+	it("builds a code request with S256 PKCE and state", async () => {
 		const session = await open();
 		const params = new URL(session.url).searchParams;
 		expect(params.getAll("response_type")).toEqual(["code"]);
@@ -93,7 +93,7 @@ describe("createAuthorizationSession", () => {
 		expect(params.has("nonce")).toBe(false);
 	});
 
-	it("SEC-A9 SEC-B6 puts only a random state and no default scope in the URL", async () => {
+	it("puts only a random state and no default scope in the URL", async () => {
 		const session = await open();
 		const params = new URL(session.url).searchParams;
 		expect(params.get("state")).toMatch(/^[A-Za-z0-9_-]{43}$/);
@@ -113,7 +113,7 @@ describe("createAuthorizationSession", () => {
 		[{ code_challenge_method: "plain" }, "reserved-parameter"],
 		[{ "": "x" }, "invalid-option"],
 		[{ a: 1 }, "invalid-option"],
-	])("SEC-B1 SEC-A4 refuses extra %j without binding", async (extra, expected) => {
+	])("refuses extra %j without binding", async (extra, expected) => {
 		const { server } = await setupServer();
 		// SAFETY: untyped extra values on purpose.
 		expect(await configReason(createAuthorizationSession(server, { extra: extra as never }))).toBe(
@@ -131,7 +131,7 @@ describe("createAuthorizationSession", () => {
 		["https://login.example/authorize?tenant=t&", "https://login.example/authorize?tenant=t&"],
 		["https://login.example/authorize", "https://login.example/authorize?"],
 		["https://login.example/authorize&", "https://login.example/authorize&?"],
-	])("SEC-B1 keeps the endpoint %s byte for byte", async (endpoint, prefix) => {
+	])("keeps the endpoint %s byte for byte", async (endpoint, prefix) => {
 		const session = await open(
 			{ extra: { "a&b": "c d" } },
 			{ metadata: { authorization_endpoint: endpoint } },
@@ -143,7 +143,7 @@ describe("createAuthorizationSession", () => {
 		expect(url.searchParams.get("a&b")).toBe("c d");
 	});
 
-	it("SEC-B1 keeps the endpoint query once and refuses names that repeat it", async () => {
+	it("keeps the endpoint query once and refuses names that repeat it", async () => {
 		const endpoint = {
 			metadata: { authorization_endpoint: "https://login.example/authorize?tenant=t" },
 		};
@@ -162,7 +162,7 @@ describe("createAuthorizationSession", () => {
 		expect(listenLoopback).toHaveBeenCalledTimes(1);
 	});
 
-	it("SEC-B1 SEC-B5 encodes extra values and repeats only the typed resource", async () => {
+	it("encodes extra values and repeats only the typed resource", async () => {
 		const session = await open({
 			resource: ["urn:example:api", "https://a.example/v1/x"],
 			extra: { "a&b": "c d", audience: "api" },
@@ -174,7 +174,7 @@ describe("createAuthorizationSession", () => {
 	});
 
 	it.each(["/relative", "https://a.example/#f", "", 7])(
-		"SEC-B5 refuses the resource %j",
+		"refuses the resource %j",
 		async (resource) => {
 			const { server } = await setupServer();
 			// SAFETY: untyped resource values on purpose.
@@ -195,7 +195,7 @@ describe("createAuthorizationSession", () => {
 		[{ ports: [1.5] }],
 		[{ ports: [] }],
 		[{ scope: "" }],
-	])("SEC-C1 refuses %j before listening", async (options) => {
+	])("refuses %j before listening", async (options) => {
 		const { server } = await setupServer();
 		// SAFETY: untyped options on purpose.
 		expect(await configReason(createAuthorizationSession(server, options as never))).toBe(
@@ -204,7 +204,7 @@ describe("createAuthorizationSession", () => {
 		expect(listenLoopback).not.toHaveBeenCalled();
 	});
 
-	it("SEC-C1 SEC-C2 SEC-C3 SEC-DEC-04 SEC-DEC-05 binds 127.0.0.1 on an ephemeral port by default", async () => {
+	it("binds 127.0.0.1 on an ephemeral port by default", async () => {
 		const first = await open();
 		const second = await open();
 		expect(first.redirectUri).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/callback$/);
@@ -213,7 +213,7 @@ describe("createAuthorizationSession", () => {
 		expect(first.redirectUri).not.toContain("localhost");
 	});
 
-	it("SEC-C3 SEC-C5 tries the next fixed port when one is taken, then fails with a typed error", async () => {
+	it("tries the next fixed port when one is taken, then fails with a typed error", async () => {
 		const taken = await open();
 		const port = Number(new URL(taken.redirectUri).port);
 		expect(await configReason(open({ ports: [port] }))).toBe("loopback-unavailable");
@@ -224,7 +224,7 @@ describe("createAuthorizationSession", () => {
 		expect(JSON.stringify(listen.mock.calls[0]![0])).not.toContain("reusePort");
 	});
 
-	it("SEC-C16 SEC-DEC-04 falls back to [::1] only when 127.0.0.1 cannot bind", async () => {
+	it("falls back to [::1] only when 127.0.0.1 cannot bind", async () => {
 		const original = Server.prototype.listen;
 		vi.spyOn(Server.prototype, "listen").mockImplementation(function (
 			this: Server,
@@ -249,7 +249,7 @@ describe("createAuthorizationSession", () => {
 		expect(await configReason(open())).toBe("loopback-unavailable");
 	});
 
-	it("SEC-A6 SEC-C9 SEC-A8 ignores wrong or missing state without consuming the slot", async () => {
+	it("ignores wrong or missing state without consuming the slot", async () => {
 		const session = await open();
 		const { onCallback, result } = waitFor(session);
 		const wrongLength = callbackPath(session.redirectUri, { code: "x", state: "WRONG" });
@@ -277,7 +277,7 @@ describe("createAuthorizationSession", () => {
 		expect(onCallback).toHaveBeenCalledTimes(1);
 	});
 
-	it("SEC-A7 accepts a valid callback once", async () => {
+	it("accepts a valid callback once", async () => {
 		const session = await open();
 		let release!: () => void;
 		const onCallback = vi.fn(
@@ -307,7 +307,7 @@ describe("createAuthorizationSession", () => {
 		["GET", "/callback/."],
 		["GET", "/%63allback"],
 		["GET", "/favicon.ico"],
-	])("SEC-C6 answers %s %s with 404 and keeps waiting", async (method, path) => {
+	])("answers %s %s with 404 and keeps waiting", async (method, path) => {
 		const session = await open();
 		const { onCallback, result } = waitFor(session);
 		const response = await rawRequest(
@@ -323,7 +323,7 @@ describe("createAuthorizationSession", () => {
 		expect(await result).toEqual({ value: "CODE" });
 	});
 
-	it("SEC-C6 SEC-C7 refuses an absolute-form request target", async () => {
+	it("refuses an absolute-form request target", async () => {
 		const session = await open();
 		const { onCallback, result } = waitFor(session);
 		expect(
@@ -345,7 +345,7 @@ describe("createAuthorizationSession", () => {
 		["a repeated iss", (state: string) => `code=a&state=${state}&iss=x&iss=y`],
 		["a repeated error", (state: string) => `error=a&error=b&state=${state}`],
 		["both code and error", (state: string) => `code=a&error=access_denied&state=${state}`],
-	])("SEC-C7 answers 400 to %s and keeps waiting", async (_name, query) => {
+	])("answers 400 to %s and keeps waiting", async (_name, query) => {
 		const session = await open();
 		const { onCallback, result } = waitFor(session);
 		const path = new URL(session.redirectUri).pathname;
@@ -358,7 +358,7 @@ describe("createAuthorizationSession", () => {
 	});
 
 	it.each(["evil.example:PORT", "localhost:PORT", "127.0.0.1", "127.0.0.1:1"])(
-		"SEC-C8 SEC-DEC-06 refuses Host %s",
+		"refuses Host %s",
 		async (host) => {
 			const session = await open();
 			const { onCallback, result } = waitFor(session);
@@ -380,7 +380,7 @@ describe("createAuthorizationSession", () => {
 		["127.0.0.1", "127.0.0.1"],
 		["::1", "[::1]"],
 	] as const)(
-		"SEC-C8 accepts the Host a browser sends without the default port 80 on %s",
+		"accepts the Host a browser sends without the default port 80 on %s",
 		async (host, literal) => {
 			loopback.portOverride = 80;
 			const session = await open({ hosts: [host], ports: [0] });
@@ -393,7 +393,7 @@ describe("createAuthorizationSession", () => {
 		},
 	);
 
-	it("SEC-C10 surfaces an error response with its allowlisted code and no exchange", async () => {
+	it("surfaces an error response with its allowlisted code and no exchange", async () => {
 		const session = await open();
 		const { onCallback, result } = waitFor(session);
 		const response = await rawRequest(
@@ -407,7 +407,7 @@ describe("createAuthorizationSession", () => {
 		expect(onCallback).not.toHaveBeenCalled();
 	});
 
-	it("SEC-C10 SEC-I2 checks iss before the error", async () => {
+	it("checks iss before the error", async () => {
 		const session = await open();
 		const { onCallback, result } = waitFor(session);
 		await rawRequest(
@@ -424,7 +424,7 @@ describe("createAuthorizationSession", () => {
 		expect(onCallback).not.toHaveBeenCalled();
 	});
 
-	it("SEC-I2 rejects a mismatched iss and accepts an equal one", async () => {
+	it("rejects a mismatched iss and accepts an equal one", async () => {
 		const session = await open();
 		const mismatch = waitFor(session);
 		await rawRequest(session.redirectUri, good(session, { iss: "https://evil.example" }));
@@ -438,7 +438,7 @@ describe("createAuthorizationSession", () => {
 		expect(await accepted.result).toEqual({ value: "CODE" });
 	});
 
-	it("SEC-I3 SEC-C10 requires iss when the server advertises it", async () => {
+	it("requires iss when the server advertises it", async () => {
 		const session = await open(
 			{},
 			{ metadata: { authorization_response_iss_parameter_supported: true } },
@@ -452,7 +452,7 @@ describe("createAuthorizationSession", () => {
 		expect(onCallback).not.toHaveBeenCalled();
 	});
 
-	it("SEC-I4 compares a present iss from a server that does not advertise it", async () => {
+	it("compares a present iss from a server that does not advertise it", async () => {
 		const session = await open();
 		expect(session.server.issParameterSupported).toBe(false);
 		const { result } = waitFor(session);
@@ -466,7 +466,7 @@ describe("createAuthorizationSession", () => {
 		);
 	});
 
-	it("SEC-I7 accepts a missing iss for one pinned issuer", async () => {
+	it("accepts a missing iss for one pinned issuer", async () => {
 		const session = await open();
 		expect(session.server.issPolicy).toBe("compare-if-present");
 		const { result } = waitFor(session);
@@ -474,7 +474,7 @@ describe("createAuthorizationSession", () => {
 		expect(await result).toEqual({ value: "CODE" });
 	});
 
-	it("SEC-I7 SEC-DEC-03 refuses an unprotected multi-server login before binding", async () => {
+	it("refuses an unprotected multi-server login before binding", async () => {
 		const multi = await setupServer({
 			others: [{ issuer: "https://other.example", clientId: "cli" }],
 		});
@@ -488,7 +488,7 @@ describe("createAuthorizationSession", () => {
 		expect(listenLoopback).not.toHaveBeenCalled();
 	});
 
-	it("SEC-I7 closes the listener when its path differs from the declared one", async () => {
+	it("closes the listener when its path differs from the declared one", async () => {
 		const { server } = await setupServer({
 			server: { redirectPath: "/acme/callback" },
 			others: [{ issuer: "https://other.example", clientId: "cli" }],
@@ -498,7 +498,7 @@ describe("createAuthorizationSession", () => {
 		expect(loopback.last!.server.listening).toBe(false);
 	});
 
-	it("SEC-I7 serves only the declared per-issuer path", async () => {
+	it("serves only the declared per-issuer path", async () => {
 		const session = await open(
 			{},
 			{
@@ -516,7 +516,7 @@ describe("createAuthorizationSession", () => {
 		expect(await result).toEqual({ value: "CODE" });
 	});
 
-	it("SEC-K6 exposes a printable URL that carries the challenge, never the verifier", async () => {
+	it("exposes a printable URL that carries the challenge, never the verifier", async () => {
 		const session = await open();
 		const { verifier } = sessionInternals(session);
 		expect(new URL(session.url).searchParams.get("code_challenge")).toBe(
@@ -526,7 +526,7 @@ describe("createAuthorizationSession", () => {
 		expect(JSON.stringify(session)).not.toContain(verifier);
 	});
 
-	it("SEC-I1 freezes the session and keeps the verifier off it", async () => {
+	it("freezes the session and keeps the verifier off it", async () => {
 		const session = await open();
 		expect(Object.isFrozen(session)).toBe(true);
 		expect(Object.keys(session).sort()).toEqual([
@@ -542,7 +542,7 @@ describe("createAuthorizationSession", () => {
 		expect(session.server.issuer).toBe(session.issuer);
 	});
 
-	it("SEC-C11 sets the security headers on default and custom pages", async () => {
+	it("sets the security headers on default and custom pages", async () => {
 		for (const page of [undefined, () => "<p>custom</p>"]) {
 			const session = await open();
 			const { result } = waitFor(session, { page });
@@ -560,7 +560,7 @@ describe("createAuthorizationSession", () => {
 		}
 	});
 
-	it("SEC-C11 never renders server text and gives a custom page only the outcome and code", async () => {
+	it("never renders server text and gives a custom page only the outcome and code", async () => {
 		const session = await open();
 		const views: CallbackPageView[] = [];
 		const { result } = waitFor(session, {
@@ -596,7 +596,7 @@ describe("createAuthorizationSession", () => {
 		expect(response.body).toContain("(unknown)");
 	});
 
-	it("SEC-C11 SEC-O3 serves the default page when a custom page throws", async () => {
+	it("serves the default page when a custom page throws", async () => {
 		const session = await open();
 		const { result } = waitFor(session, {
 			page: () => {
@@ -613,7 +613,7 @@ describe("createAuthorizationSession", () => {
 		expect(await isClosed(session.redirectUri)).toBe(true);
 	});
 
-	it("SEC-C12 SEC-C13 never redirects and never echoes the code", async () => {
+	it("never redirects and never echoes the code", async () => {
 		const session = await open();
 		const { result } = waitFor(session);
 		const response = await rawRequest(
@@ -632,7 +632,7 @@ describe("createAuthorizationSession", () => {
 		await result;
 	});
 
-	it("SEC-O3 serves a failure page and rejects when onCallback throws", async () => {
+	it("serves a failure page and rejects when onCallback throws", async () => {
 		const session = await open();
 		const failure = new Error("exchange failed");
 		const result = session
@@ -647,7 +647,7 @@ describe("createAuthorizationSession", () => {
 		expect(await isClosed(session.redirectUri)).toBe(true);
 	});
 
-	it("SEC-C4 closes the listener after success, failure, timeout and abort", async () => {
+	it("closes the listener after success, failure, timeout and abort", async () => {
 		const ok = await open();
 		const okWait = waitFor(ok);
 		await rawRequest(ok.redirectUri, good(ok));
@@ -674,7 +674,7 @@ describe("createAuthorizationSession", () => {
 		expect(await isClosed(closed.redirectUri)).toBe(true);
 	});
 
-	it("SEC-C14 SEC-DEC-07 times out after 5 minutes by default", async () => {
+	it("times out after 5 minutes by default", async () => {
 		expect(DEFAULT_WAIT_MS).toBe(300_000);
 		const session = await open();
 		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -686,7 +686,7 @@ describe("createAuthorizationSession", () => {
 		expect(await isClosed(session.redirectUri)).toBe(true);
 	});
 
-	it("SEC-C14 SEC-P1 rejects a pre-aborted signal without listening", async () => {
+	it("rejects a pre-aborted signal without listening", async () => {
 		const { server } = await setupServer();
 		await expect(
 			createAuthorizationSession(server, { signal: AbortSignal.abort() }),
@@ -700,7 +700,7 @@ describe("createAuthorizationSession", () => {
 	});
 
 	it.each(["success", "failure"])(
-		"SEC-C4 SEC-C14 settles wait() with the %s and closes the listener when the browser left during onCallback",
+		"settles wait() with the %s and closes the listener when the browser left during onCallback",
 		async (result) => {
 			const session = await open();
 			let finish!: () => void;
@@ -736,7 +736,7 @@ describe("createAuthorizationSession", () => {
 		},
 	);
 
-	it("SEC-C14 settles wait() on close() after the browser left during onCallback", async () => {
+	it("settles wait() on close() after the browser left during onCallback", async () => {
 		const session = await open();
 		const onCallback = vi.fn(() => new Promise<string>(() => {}));
 		const waiting = session
@@ -760,7 +760,7 @@ describe("createAuthorizationSession", () => {
 	});
 
 	it.each(["an aborted signal", "close()"])(
-		"SEC-C14 SEC-P1 never runs onCallback for a queued callback after %s",
+		"never runs onCallback for a queued callback after %s",
 		async (stop) => {
 			const session = await open();
 			// The listener's own handler runs first, so the callback is queued once this fires.
@@ -783,7 +783,7 @@ describe("createAuthorizationSession", () => {
 	);
 
 	it.each(["timeout", "abort", "close"])(
-		"SEC-C14 SEC-P1 settles wait() and closes the listener on %s while onCallback runs",
+		"settles wait() and closes the listener on %s while onCallback runs",
 		async (stop) => {
 			const session = await open();
 			const controller = new AbortController();
@@ -818,7 +818,7 @@ describe("createAuthorizationSession", () => {
 		},
 	);
 
-	it("SEC-C14 SEC-P3 destroys a kept-alive browser connection on abort", async () => {
+	it("destroys a kept-alive browser connection on abort", async () => {
 		const session = await open();
 		const controller = new AbortController();
 		const { result } = waitFor(session, { signal: controller.signal });
@@ -834,7 +834,7 @@ describe("createAuthorizationSession", () => {
 		expect(socket.destroyed).toBe(true);
 	});
 
-	it("SEC-C15 sends Connection: close on every response", async () => {
+	it("sends Connection: close on every response", async () => {
 		const session = await open();
 		const { result } = waitFor(session);
 		for (const path of ["/nope", good(session, { state: "x" })]) {
@@ -844,7 +844,7 @@ describe("createAuthorizationSession", () => {
 		await result;
 	});
 
-	it("SEC-C15 closes an idle connection that sends nothing", async () => {
+	it("closes an idle connection that sends nothing", async () => {
 		const actual = await vi.importActual<typeof import("./loopback.ts")>("./loopback.ts");
 		const listener = await actual.listenLoopback(["127.0.0.1"], [0], "/callback", () => {}, 200);
 		try {
@@ -862,7 +862,7 @@ describe("createAuthorizationSession", () => {
 		expect(actual.LOOPBACK_IDLE_TIMEOUT_MS).toBe(10_000);
 	});
 
-	it("SEC-A4 surfaces an authorization error without retrying another method", async () => {
+	it("surfaces an authorization error without retrying another method", async () => {
 		const session = await open();
 		const { result } = waitFor(session);
 		await rawRequest(

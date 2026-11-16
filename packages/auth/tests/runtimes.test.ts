@@ -11,7 +11,7 @@ import { describe, expect, it } from "vite-plus/test";
 const script = join(import.meta.dirname, "fixtures", "flows.ts");
 
 describe.each(["node", "bun"])("on %s", (runtime) => {
-	it("SEC-C4 SEC-C14 SEC-C15 SEC-E6 SEC-D1 runs the browser and device logins over real sockets", () => {
+	it("runs the browser and device logins over real sockets", () => {
 		const run = spawnSync(runtime, [script], { encoding: "utf8", timeout: 60_000 });
 		expect(run.error).toBeUndefined();
 		expect(run.stderr).toBe("");

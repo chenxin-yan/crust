@@ -141,7 +141,7 @@ const failure = (error: unknown) => ({ code: (error as { code?: string }).code, 
 	};
 }
 
-// SEC-C14: timeout and abort reject and free the port; a kept-alive connection is destroyed.
+// Timeout and abort reject and free the port; a kept-alive connection is destroyed.
 {
 	const server = await discover(config, issuer);
 	const timed = await createAuthorizationSession(server);
@@ -164,7 +164,7 @@ const failure = (error: unknown) => ({ code: (error as { code?: string }).code, 
 	};
 }
 
-// SEC-C15: an idle connection that sends nothing is closed.
+// An idle connection that sends nothing is closed.
 {
 	const listener = await listenLoopback(["127.0.0.1"], [0], "/callback", () => {}, 300);
 	const socket = connect(listener.port, "127.0.0.1");
@@ -179,7 +179,7 @@ const failure = (error: unknown) => ({ code: (error as { code?: string }).code, 
 	report.idle = { closed, ms: Date.now() - started };
 }
 
-// SEC-E6: a redirected metadata or token response is an error, and its target gets nothing.
+// A redirected metadata or token response is an error, and its target gets nothing.
 {
 	const moved = await discover(config, `${issuer}/moved`).catch(failure);
 	const server = await discover(config, `${issuer}/redirecting`);

@@ -57,7 +57,7 @@ async function tokenSetup(
 }
 
 describe("createTokenClient", () => {
-	it("SEC-E2 SEC-B4 exchanges the code with the session's redirect URI and verifier", async () => {
+	it("exchanges the code with the session's redirect URI and verifier", async () => {
 		const { session, client, tokenRequests } = await tokenSetup(() => json(bearer));
 		const tokens = await client.exchangeCode(session, "CODE");
 		expect(tokens.accessToken).toBe("AT");
@@ -82,7 +82,7 @@ describe("createTokenClient", () => {
 		);
 	});
 
-	it("SEC-E2 sends one exchange per session and never retries", async () => {
+	it("sends one exchange per session and never retries", async () => {
 		const { session, client, tokenRequests } = await tokenSetup(() => json({}, 500));
 		const error = await client.exchangeCode(session, "CODE").catch((caught: unknown) => caught);
 		expect(error).toBeInstanceOf(HttpError);
@@ -93,7 +93,7 @@ describe("createTokenClient", () => {
 		expect(tokenRequests()).toHaveLength(1);
 	});
 
-	it("SEC-E1 posts to the endpoint URL exactly as configured, never adding a query", async () => {
+	it("posts to the endpoint URL exactly as configured, never adding a query", async () => {
 		const { session, client, requests, server } = await tokenSetup(() => json(bearer), {
 			metadata: { token_endpoint: "https://tokens.example/token?tenant=t" },
 			routes: { "https://tokens.example/token": () => json(bearer) },
@@ -111,7 +111,7 @@ describe("createTokenClient", () => {
 	it.each([
 		[{ ...bearer, token_type: "bearer" }, "AT"],
 		[{ ...bearer, token_type: "BEARER" }, "AT"],
-	])("SEC-E3 accepts token_type %j", async (body) => {
+	])("accepts token_type %j", async (body) => {
 		const { session, client } = await tokenSetup(() => json(body));
 		expect((await client.exchangeCode(session, "C")).tokenType).toBe("Bearer");
 	});
@@ -129,14 +129,14 @@ describe("createTokenClient", () => {
 		["numeric access_token", { ...bearer, access_token: 1 }],
 		["numeric refresh_token", { ...bearer, refresh_token: 1 }],
 		["a non-object body", ["AT"]],
-	])("SEC-E3 SEC-DEC-18 rejects a token response with %s", async (_name, body) => {
+	])("rejects a token response with %s", async (_name, body) => {
 		const { session, client } = await tokenSetup(() => json(body));
 		const error = await client.exchangeCode(session, "C").catch((caught: unknown) => caught);
 		expect(error).toBeInstanceOf(OAuthError);
 		expect((error as OAuthError).code).toBe("invalid_response");
 	});
 
-	it("SEC-E3 SEC-DEC-12 drops id_token and unknown fields; a missing expires_in stays unknown", async () => {
+	it("drops id_token and unknown fields; a missing expires_in stays unknown", async () => {
 		vi.useFakeTimers({ now: 1_000_000, toFake: ["Date"] });
 		const { session, client } = await tokenSetup(() =>
 			json({ access_token: "AT", token_type: "Bearer", id_token: "SENTINEL_IDT", foo: "bar" }),
@@ -154,7 +154,7 @@ describe("createTokenClient", () => {
 		expect(JSON.stringify({ ...tokens })).not.toContain("SENTINEL_IDT");
 	});
 
-	it("SEC-E3 computes expiresAt from the request start", async () => {
+	it("computes expiresAt from the request start", async () => {
 		vi.useFakeTimers({ now: 1_000_000, toFake: ["Date"] });
 		const { session, client } = await tokenSetup(() => {
 			vi.setSystemTime(1_010_000);
@@ -163,7 +163,7 @@ describe("createTokenClient", () => {
 		expect((await client.exchangeCode(session, "C")).expiresAt).toBe(1_060_000);
 	});
 
-	it("SEC-K3 prints token sets redacted", async () => {
+	it("prints token sets redacted", async () => {
 		const { session, client } = await tokenSetup(() =>
 			json({ ...bearer, access_token: "SENTINEL_AT", refresh_token: "SENTINEL_RT" }),
 		);
@@ -183,7 +183,7 @@ describe("createTokenClient", () => {
 		});
 	});
 
-	it("SEC-O2 SEC-E3 treats a 200 carrying error, and a 400 without one, as failures", async () => {
+	it("treats a 200 carrying error, and a 400 without one, as failures", async () => {
 		const ok = await tokenSetup(() =>
 			json({ error: "x", access_token: "AT", token_type: "Bearer" }),
 		);
@@ -199,7 +199,7 @@ describe("createTokenClient", () => {
 		expect((error as HttpError).status).toBe(400);
 	});
 
-	it("SEC-E4 maps errors to allowlisted codes and never echoes the body", async () => {
+	it("maps errors to allowlisted codes and never echoes the body", async () => {
 		const html = await tokenSetup(() => new Response("<h1>SENTINEL gateway</h1>", { status: 502 }));
 		const gateway = await html.client
 			.exchangeCode(html.session, "C")
@@ -244,7 +244,7 @@ describe("createTokenClient", () => {
 		expect(error.cause).toBeUndefined();
 	});
 
-	it("SEC-E5 SEC-DEC-08 aborts an endless body at the cap", async () => {
+	it("aborts an endless body at the cap", async () => {
 		let cancelled = false;
 		const { session, client } = await tokenSetup(
 			() =>
@@ -264,7 +264,7 @@ describe("createTokenClient", () => {
 		expect(cancelled).toBe(true);
 	});
 
-	it("SEC-E5 rejects a Content-Length over the cap before reading", async () => {
+	it("rejects a Content-Length over the cap before reading", async () => {
 		let pulled = 0;
 		const { session, client } = await tokenSetup(
 			() =>
@@ -286,7 +286,7 @@ describe("createTokenClient", () => {
 		expect(pulled).toBe(0);
 	});
 
-	it("SEC-E5 SEC-DEC-07 times out a server that never answers", async () => {
+	it("times out a server that never answers", async () => {
 		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 		const { session, client } = await tokenSetup(() => new Promise<Response>(() => {}));
 		const pending = client.exchangeCode(session, "C").catch((caught: unknown) => caught);
@@ -294,7 +294,7 @@ describe("createTokenClient", () => {
 		expect(await pending).toBeInstanceOf(TimeoutError);
 	});
 
-	it("SEC-E6 refuses a redirect and never contacts its target", async () => {
+	it("refuses a redirect and never contacts its target", async () => {
 		const { session, client, requests } = await tokenSetup(
 			() =>
 				new Response(null, { status: 307, headers: { location: "https://evil.example/token" } }),
@@ -310,7 +310,7 @@ describe("createTokenClient", () => {
 		expect(init.mock.calls[0]![1].redirect).toBe("manual");
 	});
 
-	it("SEC-E7 SEC-DEC-11 uses HTTP Basic with form-encoded credentials for a configured secret", async () => {
+	it("uses HTTP Basic with form-encoded credentials for a configured secret", async () => {
 		const { session, client, tokenRequests } = await tokenSetup(() => json(bearer), {
 			server: { clientId: "a b:c", clientSecret: "p/w+d" },
 		});
@@ -323,7 +323,7 @@ describe("createTokenClient", () => {
 		expect(request!.body.has("client_id")).toBe(false);
 	});
 
-	it("SEC-O1 SEC-K2 wraps a transport or stream failure in NetworkError without its cause", async () => {
+	it("wraps a transport or stream failure in NetworkError without its cause", async () => {
 		const failures: (() => Response)[] = [
 			() => {
 				throw Object.assign(new TypeError("fetch failed: SENTINEL_RT"), {
@@ -351,7 +351,7 @@ describe("createTokenClient", () => {
 		}
 	});
 
-	it("SEC-E7 sends only client_id for a public client", async () => {
+	it("sends only client_id for a public client", async () => {
 		const { session, client, tokenRequests } = await tokenSetup(() => json(bearer));
 		await client.exchangeCode(session, "C");
 		const [request] = tokenRequests();
@@ -360,7 +360,7 @@ describe("createTokenClient", () => {
 		expect(request!.body.has("client_secret")).toBe(false);
 	});
 
-	it("SEC-I1 refuses a session from another server or not from createAuthorizationSession", async () => {
+	it("refuses a session from another server or not from createAuthorizationSession", async () => {
 		const first = await tokenSetup(() => json(bearer));
 		const second = await tokenSetup(() => json(bearer));
 		await expect(first.client.exchangeCode(second.session, "C")).rejects.toMatchObject({
@@ -374,7 +374,7 @@ describe("createTokenClient", () => {
 		expect(() => createTokenClient({ ...first.server })).toThrow(OAuthConfigError);
 	});
 
-	it("SEC-B5 sends each resource on the token request", async () => {
+	it("sends each resource on the token request", async () => {
 		const { server } = await setupServer();
 		const session = await createAuthorizationSession(server, {
 			resource: ["urn:a", "https://api.example/v1/x"],
@@ -387,7 +387,7 @@ describe("createTokenClient", () => {
 		expect(body.getAll("resource")).toEqual(["urn:a", "https://api.example/v1/x"]);
 	});
 
-	it("SEC-E1 refreshes and revokes with POSTed forms on the configured URLs", async () => {
+	it("refreshes and revokes with POSTed forms on the configured URLs", async () => {
 		const setup = await setupServer({
 			metadata: { revocation_endpoint: "https://revoke.example/r?tenant=t" },
 		});
@@ -422,7 +422,7 @@ describe("createTokenClient", () => {
 		});
 	});
 
-	it("SEC-P1 rejects pre-aborted exchange, refresh and revoke calls without a request", async () => {
+	it("rejects pre-aborted exchange, refresh and revoke calls without a request", async () => {
 		const { session, client, tokenRequests, requests } = await tokenSetup(() => json(bearer));
 		const before = requests.length;
 		const signal = AbortSignal.abort();

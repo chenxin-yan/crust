@@ -8,9 +8,9 @@ import { parseTokenResponse, postForm } from "./token-client.ts";
 import type { AuthServer, DeviceFlow, DeviceFlowOptions, TokenSet } from "./types.ts";
 
 const DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
-/** Floor and default polling interval, RFC 8628 §3.2 (SEC-D1, D6). */
+/** Floor and default polling interval, RFC 8628 §3.2. */
 const MIN_INTERVAL_S = 5;
-/** Upper bound for `interval` and `expires_in`; keeps every timer below setTimeout's limit (SEC-D6). */
+/** Upper bound for `interval` and `expires_in`; keeps every timer below setTimeout's limit. */
 const MAX_DEVICE_SECONDS = 86_400;
 
 class DeadlineError extends Error {}
@@ -24,7 +24,7 @@ function seconds(value: unknown, positive: boolean): number | undefined {
 		: undefined;
 }
 
-/** Sleeps `ms`; rejects at once on `signal` (SEC-D5). */
+/** Sleeps `ms`; rejects at once on `signal`. */
 function sleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
 	return new Promise((resolve, reject) => {
 		if (signal?.aborted) {
@@ -44,7 +44,7 @@ function sleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
 }
 
 /**
- * Starts a device login (RFC 8628; SEC-D1–D11). Validates the server's response before
+ * Starts a device login (RFC 8628). Validates the server's response before
  * anything is shown; the device code stays private. Show `userCode` and `verificationUri`
  * (`deviceCodeMessage()`), then call `poll()`.
  */
@@ -99,7 +99,7 @@ export async function startDeviceFlow(
 		if (polling)
 			throw new OAuthConfigError("already-used", "poll() can be called once per device login");
 		polling = true;
-		// The code's expiry also aborts a sleep or a request in flight (SEC-D4).
+		// The code's expiry also aborts a sleep or a request in flight.
 		const deadline = linkSignal(
 			signal,
 			Math.max(0, expiresAt - Date.now()),
@@ -109,16 +109,16 @@ export async function startDeviceFlow(
 		let failures = 0;
 		try {
 			for (;;) {
-				// Network failures double the wait; it never drops below the interval (SEC-D3, D6).
+				// Network failures double the wait; it never drops below the interval.
 				const waitMs = intervalS * 1000 * 2 ** failures;
 				const remainingMs = expiresAt - Date.now();
-				// No poll whose wait would end at or after the deadline: expire instead (SEC-D4, D6).
+				// No poll whose wait would end at or after the deadline: expire instead.
 				if (waitMs >= remainingMs) {
 					await sleep(Math.max(0, remainingMs), signal);
 					throw new OAuthError("expired_token");
 				}
 				await sleep(waitMs, deadline.signal);
-				// A stalled process can wake past the deadline before the expiry timer runs (SEC-D4).
+				// A stalled process can wake past the deadline before the expiry timer runs.
 				if (Date.now() >= expiresAt) throw new OAuthError("expired_token");
 				const pollBody = new URLSearchParams({
 					grant_type: DEVICE_GRANT,
@@ -146,7 +146,7 @@ export async function startDeviceFlow(
 					intervalS += 5;
 					continue;
 				}
-				// Any other error stops polling (SEC-D2).
+				// Any other error stops polling.
 				return parseTokenResponse(result, pollStart);
 			}
 		} catch (error) {

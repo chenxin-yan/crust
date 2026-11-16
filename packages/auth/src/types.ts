@@ -56,7 +56,7 @@ export interface AuthConfig {
 }
 
 /**
- * How an authorization response's `iss` is checked (SEC-I7, DEC-03):
+ * How an authorization response's `iss` is checked:
  * - `"required"`: the response must carry `iss`, equal to the issuer;
  * - `"compare-if-present"`: a present `iss` must equal the issuer (one pinned server, or a distinct `redirectPath`);
  * - `"unprotected"`: browser login is refused with `mix-up-unprotected`.

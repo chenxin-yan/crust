@@ -15,7 +15,7 @@ import type { AuthServer, TokenClient, TokenSet } from "./types.ts";
 const MAX_EXPIRES_IN_SECONDS = 10 * 365 * 24 * 60 * 60;
 const INSPECT = Symbol.for("nodejs.util.inspect.custom");
 
-/** A frozen token set whose `toJSON()` and `util.inspect()` hide the tokens (SEC-K3). */
+/** A frozen token set whose `toJSON()` and `util.inspect()` hide the tokens. */
 function createTokenSet(fields: TokenSet): TokenSet {
 	const redacted = () => ({
 		...fields,
@@ -31,7 +31,7 @@ function createTokenSet(fields: TokenSet): TokenSet {
 }
 
 /**
- * Validates a token response (SEC-E3, O2, DEC-12, DEC-18). Only the known fields are kept;
+ * Validates a token response. Only the known fields are kept;
  * `id_token` and every other field are dropped unread.
  */
 export function parseTokenResponse(response: JsonResponse, requestStart: number): TokenSet {
@@ -63,7 +63,7 @@ export function parseTokenResponse(response: JsonResponse, requestStart: number)
 }
 
 /**
- * Adds client authentication to a token-endpoint request (SEC-E7, DEC-11): `client_id` in
+ * Adds client authentication to a token-endpoint request: `client_id` in
  * the body for a public client, or HTTP Basic with the form-urlencoded id and secret.
  */
 export function clientAuthentication(
@@ -82,7 +82,7 @@ export function clientAuthentication(
 	return { authorization: `Basic ${credentials}` };
 }
 
-/** POSTs a form to a token-style endpoint (SEC-E1): the endpoint URL is used exactly as configured. */
+/** POSTs a form to a token-style endpoint: the endpoint URL is used exactly as configured. */
 export function postForm(
 	server: AuthServer,
 	fetchImpl: Fetch,
@@ -97,7 +97,7 @@ export function postForm(
 	return requestJson(fetchImpl, endpoint, { method: "POST", headers, body }, options);
 }
 
-/** Creates the token-endpoint client of a discovered server (SEC-E1–E8). */
+/** Creates the token-endpoint client of a discovered server. */
 export function createTokenClient(
 	server: AuthServer,
 	options: { fetch?: Fetch } = {},
@@ -118,7 +118,7 @@ export function createTokenClient(
 			if (typeof code !== "string" || code === "") {
 				throw new OAuthConfigError("invalid-option", "code must be a non-empty string");
 			}
-			// One exchange per session, even after a failed one: the code may be spent (SEC-E2).
+			// One exchange per session, even after a failed one: the code may be spent.
 			if (internals.exchanged) {
 				throw new OAuthConfigError("already-used", "This session's code was already exchanged");
 			}

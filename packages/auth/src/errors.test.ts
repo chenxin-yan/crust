@@ -32,14 +32,14 @@ describe("errors", () => {
 			"LoginRequiresInteractionError",
 			"login-requires-interaction",
 		],
-	])("SEC-O1 %s has a stable name and code", (error, name, code) => {
+	])("%s has a stable name and code", (error, name, code) => {
 		expect(error).toBeInstanceOf(AuthError);
 		expect(error).toBeInstanceOf(Error);
 		expect(error.name).toBe(name);
 		expect(error.code).toBe(code);
 	});
 
-	it("SEC-K2 keeps allowlisted protocol codes and maps the rest to unknown", () => {
+	it("keeps allowlisted protocol codes and maps the rest to unknown", () => {
 		expect(oauthErrorCode("access_denied")).toBe("access_denied");
 		expect(oauthErrorCode("invalid_target")).toBe("invalid_target");
 		expect(oauthErrorCode("unsupported_token_type")).toBe("unsupported_token_type");
@@ -48,7 +48,7 @@ describe("errors", () => {
 		expect(oauthErrorCode("toString")).toBe("unknown");
 	});
 
-	it("SEC-K2 SEC-E4 keeps no remote text in any diagnostic", () => {
+	it("keeps no remote text in any diagnostic", () => {
 		const error = oauthFailure({
 			status: 400,
 			body: {

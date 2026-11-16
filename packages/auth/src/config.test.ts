@@ -35,11 +35,11 @@ describe("defineAuth", () => {
 		["http://as.example", "plain http"],
 		["as.example", "no scheme"],
 		["ftp://as.example", "another scheme"],
-	])("SEC-H8 refuses the issuer %s (%s)", (issuer) => {
+	])("refuses the issuer %s (%s)", (issuer) => {
 		expect(reason(() => defineAuth({ servers: [server(issuer)] }))).toBe("invalid-url");
 	});
 
-	it("SEC-H8 SEC-DEC-09 accepts loopback http issuers only with allowInsecureLoopback", () => {
+	it("accepts loopback http issuers only with allowInsecureLoopback", () => {
 		expect(reason(() => defineAuth({ servers: [server("http://127.0.0.1:9000")] }))).toBe(
 			"invalid-url",
 		);
@@ -72,7 +72,7 @@ describe("defineAuth", () => {
 		).toBeUndefined();
 	});
 
-	it("SEC-DEC-09 cannot be enabled from the environment", () => {
+	it("never enables allowInsecureLoopback from the environment", () => {
 		for (const name of [
 			"ALLOW_INSECURE_LOOPBACK",
 			"CRUST_AUTH_ALLOW_INSECURE_LOOPBACK",
@@ -90,7 +90,7 @@ describe("defineAuth", () => {
 		).toBe(false);
 	});
 
-	it("SEC-I6 refuses a second entry for the same issuer", () => {
+	it("refuses a second entry for the same issuer", () => {
 		expect(
 			reason(() =>
 				defineAuth({
@@ -121,14 +121,14 @@ describe("defineAuth", () => {
 		"/a\\b",
 		"/a b",
 		42,
-	])("SEC-C1 refuses the redirectPath %s", (redirectPath) => {
+	])("refuses the redirectPath %s", (redirectPath) => {
 		expect(
 			reason(() => defineAuth({ servers: [server("https://as.example", { redirectPath })] })),
 		).toBe("invalid-option");
 	});
 
 	it.each(["/café", "/a<b", "/a{b}", '/a"b', "/a`b", "/a\x01b"])(
-		"SEC-C1 SEC-C6 refuses the redirectPath %j, which a browser would send encoded",
+		"refuses the redirectPath %j, which a browser would send encoded",
 		(redirectPath) => {
 			expect(
 				reason(() => defineAuth({ servers: [server("https://as.example", { redirectPath })] })),
@@ -136,7 +136,7 @@ describe("defineAuth", () => {
 		},
 	);
 
-	it("SEC-I7 refuses a redirectPath another server also listens on", () => {
+	it("refuses a redirectPath another server also listens on", () => {
 		expect(
 			reason(() =>
 				defineAuth({
@@ -181,12 +181,12 @@ describe("defineAuth", () => {
 		[{ servers: [server("https://as.example")], allowCustomIssuers: "yes" }],
 		[{ servers: [server("https://as.example", { allowInsecureLoopback: "true" })] }],
 		[undefined],
-	])("SEC-I6 validates untyped options at runtime: %j", (options) => {
+	])("validates untyped options at runtime: %j", (options) => {
 		// SAFETY: untyped input on purpose; the runtime checks are under test.
 		expect(reason(() => defineAuth(options as never))).toBe("invalid-option");
 	});
 
-	it("SEC-DEC-11 SEC-K1 keeps the client secret out of the printed config", () => {
+	it("keeps the client secret out of the printed config", () => {
 		const config = defineAuth({
 			servers: [server("https://as.example", { clientSecret: "SENTINEL_SECRET" })],
 		});

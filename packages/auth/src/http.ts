@@ -9,11 +9,11 @@ import {
 	TimeoutError,
 } from "./errors.ts";
 
-/** Response body cap for every authorization-server request (DEC-08). */
+/** Response body cap for every authorization-server request. */
 export const MAX_RESPONSE_BYTES: number = 1024 * 1024;
-/** Discovery, token and device requests (DEC-07). */
+/** Discovery, token and device requests. */
 export const REQUEST_TIMEOUT_MS = 30_000;
-/** Revocation requests (DEC-07). */
+/** Revocation requests. */
 export const REVOCATION_TIMEOUT_MS = 10_000;
 
 /** The `fetch` the library calls; injectable for tests and custom transports. */
@@ -40,7 +40,7 @@ export function linkSignal(
 	};
 }
 
-/** Rejects with {@link AbortError} when `signal` is already aborted (SEC-P1). */
+/** Rejects with {@link AbortError} when `signal` is already aborted. */
 export function throwIfAborted(signal: AbortSignal | undefined): void {
 	if (signal?.aborted) throw new AbortError();
 }
@@ -52,8 +52,8 @@ export interface JsonResponse {
 }
 
 /**
- * Sends one request to the authorization server: never follows a redirect (SEC-E6), caps
- * the body while streaming (SEC-E5, DEC-08) and enforces a timeout (DEC-07). The request is
+ * Sends one request to the authorization server: never follows a redirect, caps
+ * the body while streaming and enforces a timeout. The request is
  * sent once; nothing here retries.
  */
 export async function requestJson(
@@ -123,9 +123,9 @@ export function jsonObject(body: unknown): Record<string, unknown> | undefined {
 }
 
 /**
- * The error for a failed OAuth response (SEC-E4, O2): an allowlisted {@link OAuthError} when
+ * The error for a failed OAuth response: an allowlisted {@link OAuthError} when
  * the body is a JSON object with a string `error`, otherwise {@link HttpError}. Nothing from
- * the body except the allowlisted code is kept (SEC-K2).
+ * the body except the allowlisted code is kept.
  */
 export function oauthFailure(response: JsonResponse): OAuthError | HttpError {
 	const error = jsonObject(response.body)?.error;

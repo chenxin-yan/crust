@@ -2,7 +2,7 @@
  * @module-tag windows
  * @module-tag macos
  */
-// SEC-K1 gate: run both logins with sentinel secrets, including a hostile server that echoes
+// Run both logins with sentinel secrets, including a hostile server that echoes
 // them back, and check every diagnostic sink. Network bodies sent on purpose are not sinks.
 import { inspect } from "node:util";
 
@@ -213,19 +213,19 @@ function expectNoSecretInSinks() {
 }
 
 describe("secret sentinel gate", () => {
-	it("SEC-K1 SEC-E8 SEC-C13 SEC-DEC-17 a successful browser login leaks nothing", async () => {
+	it("a successful browser login leaks nothing", async () => {
 		await browserLogin(success);
 		expect(secrets.size).toBeGreaterThan(Object.keys(STATIC).length);
 		expectNoSecretInSinks();
 	});
 
-	it("SEC-K1 SEC-D9 SEC-DEC-17 a successful device login leaks nothing", async () => {
+	it("a successful device login leaks nothing", async () => {
 		await deviceLogin(success);
 		expectNoSecretInSinks();
 	});
 
 	it.each(Object.keys(hostile))(
-		"SEC-K1 SEC-K2 SEC-E8 a server echoing secrets through %s leaks nothing",
+		"a server echoing secrets through %s leaks nothing",
 		async (name) => {
 			await browserLogin(hostile[name]!);
 			await deviceLogin(hostile[name]!);
@@ -233,7 +233,7 @@ describe("secret sentinel gate", () => {
 		},
 	);
 
-	it("SEC-K1 SEC-C11 SEC-K2 an error callback echoing secrets leaks nothing", async () => {
+	it("an error callback echoing secrets leaks nothing", async () => {
 		await browserLogin(success, (state) => ({
 			error: `x${echoAll()}`,
 			error_description: `<script>${echoAll()}</script>`,

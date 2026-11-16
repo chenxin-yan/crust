@@ -6,7 +6,7 @@ import type { AuthConfig, AuthServerEntry, DefineAuthOptions } from "./types.ts"
 export const DEFAULT_REDIRECT_PATH = "/callback";
 
 // Configs from defineAuth() and the client secrets of their entries. Kept off the frozen
-// objects so printing a config never shows a secret (SEC-K1).
+// objects so printing a config never shows a secret.
 const configs = new WeakSet<AuthConfig>();
 const clientSecrets = new WeakMap<AuthServerEntry, string>();
 
@@ -16,7 +16,7 @@ function option(message: string): OAuthConfigError {
 
 /**
  * An absolute path with no query, fragment, percent-encoding, dot segments, empty segments
- * or backslashes (SEC-C1). It is compared byte for byte with the raw request target (SEC-C6),
+ * or backslashes. It is compared byte for byte with the raw request target,
  * so it must also be what a browser sends: a path URL serialization leaves unchanged
  * (no non-ASCII or characters a browser percent-encodes).
  */
@@ -41,7 +41,7 @@ export function checkRedirectPath(path: unknown): string {
 }
 
 /**
- * Validates the authorization servers your CLI uses (SEC-H8, I6, I7, DEC-09, DEC-11) and
+ * Validates the authorization servers your CLI uses and
  * returns a frozen config. Each issuer and each `redirectPath` may appear once.
  */
 export function defineAuth(options: DefineAuthOptions): AuthConfig {
@@ -73,7 +73,7 @@ export function defineAuth(options: DefineAuthOptions): AuthConfig {
 			throw new OAuthConfigError("duplicate-issuer", "Each issuer may appear once in servers");
 		}
 		issuers.add(server.issuer);
-		// A declared path is a mix-up defense only if no other server listens on it (SEC-I7).
+		// A declared path is a mix-up defense only if no other server listens on it.
 		if (
 			server.redirectPath !== undefined &&
 			effectivePaths.filter((path) => path === checkRedirectPath(server.redirectPath)).length > 1

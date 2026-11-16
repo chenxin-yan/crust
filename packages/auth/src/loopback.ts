@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 
 import { OAuthConfigError } from "./errors.ts";
 
-/** Slow-loris bound for the loopback receiver (SEC-C15, DEC-07). */
+/** Slow-loris bound for the loopback receiver. */
 export const LOOPBACK_IDLE_TIMEOUT_MS = 10_000;
 
 /** A bound loopback listener. */
@@ -13,14 +13,14 @@ export interface LoopbackListener {
 	readonly port: number;
 	/** The only path the listener serves. */
 	readonly path: string;
-	/** Closes the server and destroys every open connection (SEC-C4, C14). */
+	/** Closes the server and destroys every open connection. */
 	close(): void;
 }
 
 function bind(server: Server, host: string, port: number): Promise<void> {
 	return new Promise((resolve, reject) => {
 		server.once("error", reject);
-		// No reusePort or exclusive-mode tweaks: the OS default refuses a second bind (SEC-C5).
+		// No reusePort or exclusive-mode tweaks: the OS default refuses a second bind.
 		server.listen({ host, port }, () => {
 			server.off("error", reject);
 			resolve();
@@ -30,7 +30,7 @@ function bind(server: Server, host: string, port: number): Promise<void> {
 
 /**
  * Binds the first loopback literal and port that work: hosts in order, ports in order within
- * each host (SEC-C1, C3, C16, DEC-04, DEC-05). Never a wildcard or `localhost`.
+ * each host. Never a wildcard or `localhost`.
  */
 export async function listenLoopback(
 	hosts: readonly ("127.0.0.1" | "::1")[],

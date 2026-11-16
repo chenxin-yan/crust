@@ -59,7 +59,7 @@ async function settle<T>(promise: Promise<T>, ms: number): Promise<unknown> {
 }
 
 describe("startDeviceFlow", () => {
-	it("SEC-D1 waits the interval before every poll and adds 5 s per slow_down", async () => {
+	it("waits the interval before every poll and adds 5 s per slow_down", async () => {
 		const { start, pollTimes } = await deviceSetup(DEVICE, [
 			pending,
 			pending,
@@ -73,7 +73,7 @@ describe("startDeviceFlow", () => {
 		expect(pollTimes).toEqual([5_000, 10_000, 15_000, 25_000, 35_000]);
 	});
 
-	it("SEC-D1 SEC-D6 defaults a missing interval to 5 s", async () => {
+	it("defaults a missing interval to 5 s", async () => {
 		const { start, pollTimes } = await deviceSetup({ ...DEVICE, interval: undefined }, [success]);
 		const flow = await start();
 		await settle(flow.poll(), 6_000);
@@ -81,7 +81,7 @@ describe("startDeviceFlow", () => {
 	});
 
 	it.each(["invalid_client", "access_denied", "expired_token", "foo"])(
-		"SEC-D2 stops polling on %s",
+		"stops polling on %s",
 		async (code) => {
 			const { start, pollTimes } = await deviceSetup(DEVICE, [
 				() => json({ error: code }, 400),
@@ -95,7 +95,7 @@ describe("startDeviceFlow", () => {
 		},
 	);
 
-	it("SEC-D3 doubles the wait after network failures", async () => {
+	it("doubles the wait after network failures", async () => {
 		const offline = () => Promise.reject(new TypeError("fetch failed"));
 		const { start, pollTimes } = await deviceSetup(DEVICE, [offline, offline, offline, success]);
 		const flow = await start();
@@ -111,12 +111,12 @@ describe("startDeviceFlow", () => {
 		["null", null],
 		["missing", undefined],
 		["above the cap", 86_401],
-	])("SEC-D4 rejects expires_in %s before showing a code", async (_name, expiresIn) => {
+	])("rejects expires_in %s before showing a code", async (_name, expiresIn) => {
 		const { start } = await deviceSetup({ ...DEVICE, expires_in: expiresIn });
 		await expect(start()).rejects.toMatchObject({ code: "invalid_response" });
 	});
 
-	it("SEC-D4 expires at the deadline without another poll", async () => {
+	it("expires at the deadline without another poll", async () => {
 		const { start, pollTimes } = await deviceSetup({ ...DEVICE, expires_in: 12 }, [
 			pending,
 			pending,
@@ -134,7 +134,7 @@ describe("startDeviceFlow", () => {
 		expect(pollTimes).toHaveLength(2);
 	});
 
-	it("SEC-D4 expires instead of polling when a stalled process wakes past the deadline", async () => {
+	it("expires instead of polling when a stalled process wakes past the deadline", async () => {
 		const { start, pollTimes } = await deviceSetup({ ...DEVICE, expires_in: 8 }, [pending]);
 		const flow = await start();
 		const result = flow.poll().catch((error: unknown) => error);
@@ -148,7 +148,7 @@ describe("startDeviceFlow", () => {
 		expect(pollTimes).toEqual([]);
 	});
 
-	it("SEC-D4 aborts a poll still in flight at the deadline", async () => {
+	it("aborts a poll still in flight at the deadline", async () => {
 		const signals: AbortSignal[] = [];
 		const { server, fetch } = await deviceSetup({ ...DEVICE, expires_in: 8 }, [
 			() => new Promise<Response>(() => {}),
@@ -164,7 +164,7 @@ describe("startDeviceFlow", () => {
 		expect(signals.at(-1)?.aborted).toBe(true);
 	});
 
-	it("SEC-D5 SEC-P1 aborts the sleep between polls without another request", async () => {
+	it("aborts the sleep between polls without another request", async () => {
 		const { start, pollTimes } = await deviceSetup(DEVICE, [pending, pending]);
 		const flow = await start();
 		const controller = new AbortController();
@@ -176,7 +176,7 @@ describe("startDeviceFlow", () => {
 		expect(pollTimes).toEqual([5_000]);
 	});
 
-	it("SEC-P1 rejects a pre-aborted start or poll without a request", async () => {
+	it("rejects a pre-aborted start or poll without a request", async () => {
 		const { server, fetch, requests, start } = await deviceSetup(DEVICE);
 		const before = requests.length;
 		await expect(
@@ -187,7 +187,7 @@ describe("startDeviceFlow", () => {
 		await expect(flow.poll({ signal: AbortSignal.abort() })).rejects.toBeInstanceOf(AbortError);
 	});
 
-	it("SEC-D6 never polls before a long interval and floors a short one at 5 s", async () => {
+	it("never polls before a long interval and floors a short one at 5 s", async () => {
 		const long = await deviceSetup({ ...DEVICE, interval: 120 }, [success]);
 		await settle((await long.start()).poll(), 121_000);
 		expect(long.pollTimes).toEqual([120_000]);
@@ -197,7 +197,7 @@ describe("startDeviceFlow", () => {
 		expect(zero.pollTimes).toEqual([5_000]);
 	});
 
-	it("SEC-D6 expires without polling when the interval outlasts the code", async () => {
+	it("expires without polling when the interval outlasts the code", async () => {
 		const { start, pollTimes } = await deviceSetup({ ...DEVICE, interval: 500, expires_in: 300 }, [
 			success,
 		]);
@@ -214,12 +214,12 @@ describe("startDeviceFlow", () => {
 		["negative", -1],
 		["null", null],
 		["above the cap", 1e9],
-	])("SEC-D6 rejects interval %s before showing a code", async (_name, interval) => {
+	])("rejects interval %s before showing a code", async (_name, interval) => {
 		const { start } = await deviceSetup({ ...DEVICE, interval });
 		await expect(start()).rejects.toMatchObject({ code: "invalid_response" });
 	});
 
-	it("SEC-D7 always exposes the user code and the verification URI", async () => {
+	it("always exposes the user code and the verification URI", async () => {
 		const { start } = await deviceSetup({
 			...DEVICE,
 			verification_uri_complete: "https://login.example/device?user_code=WDJB-MJHT",
@@ -238,7 +238,7 @@ describe("startDeviceFlow", () => {
 		["verification_uri", "https://u:p@login.example/device"],
 		["verification_uri", undefined],
 		["verification_uri_complete", "http://evil.example/?c=1"],
-	])("SEC-D8 SEC-DEC-15 rejects %s %s before display", async (name, value) => {
+	])("rejects %s %s before display", async (name, value) => {
 		const { start } = await deviceSetup({ ...DEVICE, [name]: value });
 		await expect(start()).rejects.toBeInstanceOf(Error);
 	});
@@ -248,12 +248,12 @@ describe("startDeviceFlow", () => {
 		["device_code", ""],
 		["user_code", undefined],
 		["user_code", "\x1b[2J\n"],
-	])("SEC-D8 requires %s (%j)", async (name, value) => {
+	])("requires %s (%j)", async (name, value) => {
 		const { start } = await deviceSetup({ ...DEVICE, [name]: value });
 		await expect(start()).rejects.toMatchObject({ code: "invalid_response" });
 	});
 
-	it("SEC-D8 SEC-DEC-15 accepts a verification URI on another host and sanitizes the user code", async () => {
+	it("accepts a verification URI on another host and sanitizes the user code", async () => {
 		const { start } = await deviceSetup({
 			...DEVICE,
 			user_code: "AB\x1b[2JCD\nEF",
@@ -264,14 +264,14 @@ describe("startDeviceFlow", () => {
 		expect(flow.verificationUri).toBe("https://microsoft.example/devicelogin");
 	});
 
-	it("SEC-D9 never exposes the device code on the flow", async () => {
+	it("never exposes the device code on the flow", async () => {
 		const { start } = await deviceSetup(DEVICE);
 		const flow = await start();
 		expect(JSON.stringify(flow)).not.toContain("SENTINEL_DEVICE");
 		expect(Object.values(flow)).not.toContain("SENTINEL_DEVICE");
 	});
 
-	it("SEC-D10 polls with the device grant body over a form POST", async () => {
+	it("polls with the device grant body over a form POST", async () => {
 		const { start, requests, server } = await deviceSetup(DEVICE, [success]);
 		const flow = await start();
 		await settle(flow.poll(), 6_000);
@@ -287,7 +287,7 @@ describe("startDeviceFlow", () => {
 		expect(Object.fromEntries(start_.body)).toEqual({ client_id: "cli" });
 	});
 
-	it("SEC-B5 sends each resource on the device request and on every poll", async () => {
+	it("sends each resource on the device request and on every poll", async () => {
 		const { server, fetch, requests } = await deviceSetup(DEVICE, [pending, success]);
 		const resource = ["urn:example:api", "https://a.example/v1/x"];
 		const flow = await startDeviceFlow(server, { fetch, resource });
@@ -300,7 +300,7 @@ describe("startDeviceFlow", () => {
 		for (const request of sent) expect(request.body.getAll("resource")).toEqual(resource);
 	});
 
-	it("SEC-H7 refuses a server that does not offer the device grant", async () => {
+	it("refuses a server that does not offer the device grant", async () => {
 		const listed = await deviceSetup(DEVICE, [], {
 			metadata: { grant_types_supported: ["authorization_code"] },
 		});
@@ -313,7 +313,7 @@ describe("startDeviceFlow", () => {
 		await expect(missing.start()).rejects.toMatchObject({ reason: "unsupported" });
 	});
 
-	it("SEC-D2 refuses a second poll() on the same flow", async () => {
+	it("refuses a second poll() on the same flow", async () => {
 		const { start } = await deviceSetup(DEVICE, [success]);
 		const flow = await start();
 		const first = flow.poll();

@@ -2,7 +2,7 @@
 export interface Pkce {
 	readonly verifier: string;
 	readonly challenge: string;
-	/** Always `"S256"`; there is no `plain` method (SEC-A4, DEC-01). */
+	/** Always `"S256"`; there is no `plain` method. */
 	readonly method: "S256";
 }
 
@@ -17,13 +17,13 @@ export async function pkceChallenge(verifier: string): Promise<string> {
 	return Buffer.from(digest).toString("base64url");
 }
 
-/** Creates a fresh PKCE pair: a 256-bit random verifier and its S256 challenge (SEC-A1, A2). */
+/** Creates a fresh PKCE pair: a 256-bit random verifier and its S256 challenge. */
 export async function createPkce(): Promise<Pkce> {
 	const verifier = randomToken();
 	return Object.freeze({ verifier, challenge: await pkceChallenge(verifier), method: "S256" });
 }
 
-/** Creates an unpredictable, opaque OAuth `state` value: 256 random bits, base64url (SEC-A6, A9). */
+/** Creates an unpredictable, opaque OAuth `state` value: 256 random bits, base64url. */
 export function randomState(): string {
 	return randomToken();
 }

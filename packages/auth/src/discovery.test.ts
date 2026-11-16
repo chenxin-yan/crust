@@ -48,47 +48,44 @@ async function discoverWith(metadata: Record<string, unknown>, issuer = uniqueIs
 
 describe("discover", () => {
 	// A throwaway self-signed certificate; *.pem files are never committed.
-	it.skipIf(!hasOpenssl)(
-		"SEC-H1 rejects a server whose TLS certificate does not verify",
-		async () => {
-			const dir = mkdtempSync(join(tmpdir(), "crust-auth-tls-"));
-			const key = join(dir, "key.pem");
-			const cert = join(dir, "cert.pem");
-			const subject = ["-subj", "/CN=127.0.0.1", "-addext", "subjectAltName=IP:127.0.0.1"];
-			const ec = ["-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:prime256v1", "-nodes"];
-			const made = spawnSync(
-				"openssl",
-				["req", "-x509", ...ec, "-keyout", key, "-out", cert, "-days", "1", ...subject],
-				{
-					timeout: 30_000,
-				},
-			);
-			expect(made.status).toBe(0);
-			let served = 0;
-			const tls = createServer(
-				{ key: readFileSync(key), cert: readFileSync(cert) },
-				(_request, response) => {
-					served += 1;
-					response.end("{}");
-				},
-			);
-			tls.listen(0, "127.0.0.1");
-			await once(tls, "listening");
-			try {
-				const issuer = `https://127.0.0.1:${(tls.address() as AddressInfo).port}`;
-				const config = defineAuth({ servers: [{ issuer, clientId: "cli" }] });
-				const error = await discover(config, issuer).catch((caught: unknown) => caught);
-				// The TLS handshake fails, so no request reaches the server.
-				expect(error).toBeInstanceOf(NetworkError);
-				expect(served).toBe(0);
-			} finally {
-				tls.close();
-				rmSync(dir, { recursive: true, force: true });
-			}
-		},
-	);
+	it.skipIf(!hasOpenssl)("rejects a server whose TLS certificate does not verify", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "crust-auth-tls-"));
+		const key = join(dir, "key.pem");
+		const cert = join(dir, "cert.pem");
+		const subject = ["-subj", "/CN=127.0.0.1", "-addext", "subjectAltName=IP:127.0.0.1"];
+		const ec = ["-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:prime256v1", "-nodes"];
+		const made = spawnSync(
+			"openssl",
+			["req", "-x509", ...ec, "-keyout", key, "-out", cert, "-days", "1", ...subject],
+			{
+				timeout: 30_000,
+			},
+		);
+		expect(made.status).toBe(0);
+		let served = 0;
+		const tls = createServer(
+			{ key: readFileSync(key), cert: readFileSync(cert) },
+			(_request, response) => {
+				served += 1;
+				response.end("{}");
+			},
+		);
+		tls.listen(0, "127.0.0.1");
+		await once(tls, "listening");
+		try {
+			const issuer = `https://127.0.0.1:${(tls.address() as AddressInfo).port}`;
+			const config = defineAuth({ servers: [{ issuer, clientId: "cli" }] });
+			const error = await discover(config, issuer).catch((caught: unknown) => caught);
+			// The TLS handshake fails, so no request reaches the server.
+			expect(error).toBeInstanceOf(NetworkError);
+			expect(served).toBe(0);
+		} finally {
+			tls.close();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
 
-	it("SEC-H1 SEC-DEC-09 refuses a plain-http issuer", async () => {
+	it("refuses a plain-http issuer", async () => {
 		const config = defineAuth({
 			servers: [{ issuer: "https://as.example", clientId: "cli" }],
 			allowCustomIssuers: true,
@@ -106,7 +103,7 @@ describe("discover", () => {
 		["different case", (issuer: string) => issuer.toUpperCase().replace("HTTPS", "https")],
 		["another host", () => "https://evil.example"],
 		["no issuer", () => undefined],
-	])("SEC-H2 rejects metadata whose issuer has %s", async (_name, mutate) => {
+	])("rejects metadata whose issuer has %s", async (_name, mutate) => {
 		const issuer = uniqueIssuer();
 		const error = await discoverWith({ issuer: mutate(issuer) }, issuer).catch(
 			(caught: unknown) => caught,
@@ -115,7 +112,7 @@ describe("discover", () => {
 		expect((error as IssuerMismatchError).reason).toBe("mismatch");
 	});
 
-	it("SEC-H3 inserts the well-known segment before the path, then falls back on 404 only", async () => {
+	it("inserts the well-known segment before the path, then falls back on 404 only", async () => {
 		const issuer = uniqueIssuer("/x/");
 		const origin = new URL(issuer).origin;
 		const fake = fakeFetch({
@@ -130,7 +127,7 @@ describe("discover", () => {
 		expect(server.issuer).toBe(issuer);
 	});
 
-	it("SEC-H3 does not fall back on a 500, and checks the issuer of the fallback document", async () => {
+	it("does not fall back on a 500, and checks the issuer of the fallback document", async () => {
 		const issuer = uniqueIssuer("/t");
 		const origin = new URL(issuer).origin;
 		const failing = fakeFetch({
@@ -149,7 +146,7 @@ describe("discover", () => {
 		);
 	});
 
-	it("SEC-H3 SEC-DEC-07 does not fall back after a timeout", async () => {
+	it("does not fall back after a timeout", async () => {
 		vi.useFakeTimers();
 		const issuer = uniqueIssuer();
 		const fake = fakeFetch({ [wellKnown(issuer)]: () => new Promise<Response>(() => {}) });
@@ -175,7 +172,7 @@ describe("discover", () => {
 		["token_endpoint", "https://as.example/t?%63lient_id=x", "reserved-parameter"],
 		["token_endpoint", "https://as.example/t?tenant=a&tenant=b", "duplicate-parameter"],
 		["revocation_endpoint", "https://as.example/r?token=x", "reserved-parameter"],
-	])("SEC-H4 SEC-E1 refuses %s %s", async (name, value, expected) => {
+	])("refuses %s %s", async (name, value, expected) => {
 		expect(await configReason(discoverWith({ [name]: value }))).toBe(expected);
 	});
 
@@ -188,11 +185,11 @@ describe("discover", () => {
 		["https://as.example/authorize?nonce=x", "reserved-parameter"],
 		["https://as.example/authorize?tenant=a&tenant=b", "duplicate-parameter"],
 		["https://as.example/authorize?tenant=a&%74enant=b", "duplicate-parameter"],
-	])("SEC-B3 SEC-B1 refuses the authorization endpoint %s", async (value, expected) => {
+	])("refuses the authorization endpoint %s", async (value, expected) => {
 		expect(await configReason(discoverWith({ authorization_endpoint: value }))).toBe(expected);
 	});
 
-	it("SEC-H4 SEC-E1 keeps endpoint queries exactly and allows cross-origin https endpoints", async () => {
+	it("keeps endpoint queries exactly and allows cross-origin https endpoints", async () => {
 		const issuer = uniqueIssuer();
 		const server = await discoverWith(
 			{
@@ -211,7 +208,7 @@ describe("discover", () => {
 		expect(server.revocationEndpoint).toBe("https://tokens.vendor.example/revoke?tenant=t");
 	});
 
-	it("SEC-DEC-09 SEC-H4 keeps every endpoint on the dev origin", async () => {
+	it("keeps every endpoint on the dev origin", async () => {
 		const issuer = `http://127.0.0.1:${40_000 + (process.pid % 1000)}`;
 		const routes = (metadata: Record<string, unknown>) =>
 			fakeFetch({
@@ -246,7 +243,7 @@ describe("discover", () => {
 		expect(server.tokenEndpoint).toBe(`${issuer}/token`);
 	});
 
-	it("SEC-H5 SEC-E6 refuses a redirected metadata response", async () => {
+	it("refuses a redirected metadata response", async () => {
 		const issuer = uniqueIssuer();
 		const fake = fakeFetch({
 			[wellKnown(issuer)]: () =>
@@ -261,7 +258,7 @@ describe("discover", () => {
 		expect(fake.requests.map((request) => request.url)).toEqual([wellKnown(issuer)]);
 	});
 
-	it("SEC-H5 SEC-DEC-08 refuses a metadata document over 1 MiB", async () => {
+	it("refuses a metadata document over 1 MiB", async () => {
 		const issuer = uniqueIssuer();
 		const fake = fakeFetch({
 			[wellKnown(issuer)]: () => json({ ...metadataFor(issuer), padding: "x".repeat(1024 * 1024) }),
@@ -272,7 +269,7 @@ describe("discover", () => {
 		);
 	});
 
-	it("SEC-H6 caches metadata in memory for the process", async () => {
+	it("caches metadata in memory for the process", async () => {
 		const issuer = uniqueIssuer();
 		const fake = fakeFetch({ [wellKnown(issuer)]: () => json(metadataFor(issuer)) });
 		const config = defineAuth({ servers: [{ issuer, clientId: "cli" }] });
@@ -285,13 +282,13 @@ describe("discover", () => {
 		[["plain"], "unsupported"],
 		["S256", "unsupported"],
 		[[], "unsupported"],
-	])("SEC-A5 refuses code_challenge_methods_supported %j", async (methods, expected) => {
+	])("refuses code_challenge_methods_supported %j", async (methods, expected) => {
 		expect(await configReason(discoverWith({ code_challenge_methods_supported: methods }))).toBe(
 			expected,
 		);
 	});
 
-	it("SEC-A5 accepts S256 and a missing field", async () => {
+	it("accepts S256 and a missing field", async () => {
 		await expect(
 			discoverWith({ code_challenge_methods_supported: ["plain", "S256"] }),
 		).resolves.toBeDefined();
@@ -300,7 +297,7 @@ describe("discover", () => {
 		).resolves.toBeDefined();
 	});
 
-	it("SEC-I3 SEC-I7 SEC-DEC-03 derives the iss policy from metadata and the server set", async () => {
+	it("derives the iss policy from metadata and the server set", async () => {
 		const single = await setupServer();
 		expect(single.server.issPolicy).toBe("compare-if-present");
 		const advertised = await setupServer({
@@ -322,7 +319,7 @@ describe("discover", () => {
 		expect(custom.server.issPolicy).toBe("unprotected");
 	});
 
-	it("SEC-I6 SEC-I7 needs allowCustomIssuers and a client id for an undeclared issuer", async () => {
+	it("needs allowCustomIssuers and a client id for an undeclared issuer", async () => {
 		const declared = uniqueIssuer();
 		const custom = uniqueIssuer();
 		const fake = fakeFetch({ [wellKnown(custom)]: () => json(metadataFor(custom)) });
@@ -343,7 +340,7 @@ describe("discover", () => {
 		expect(fake.requests).toHaveLength(1);
 	});
 
-	it("SEC-I6 allows two client ids at the same issuer", async () => {
+	it("allows two client ids at the same issuer", async () => {
 		const issuer = uniqueIssuer();
 		const fake = fakeFetch({ [wellKnown(issuer)]: () => json(metadataFor(issuer)) });
 		const config = defineAuth({ servers: [{ issuer, clientId: "cli" }] });
@@ -353,7 +350,7 @@ describe("discover", () => {
 		expect(second.tokenEndpoint).toBe(first.tokenEndpoint);
 	});
 
-	it("SEC-P1 rejects a pre-aborted signal without any request", async () => {
+	it("rejects a pre-aborted signal without any request", async () => {
 		const issuer = uniqueIssuer();
 		const fake = fakeFetch({ [wellKnown(issuer)]: () => json(metadataFor(issuer)) });
 		const config = defineAuth({ servers: [{ issuer, clientId: "cli" }] });
@@ -363,7 +360,7 @@ describe("discover", () => {
 		expect(fake.requests).toHaveLength(0);
 	});
 
-	it("SEC-P1 aborts a metadata request in flight", async () => {
+	it("aborts a metadata request in flight", async () => {
 		const issuer = uniqueIssuer();
 		const fake = fakeFetch({ [wellKnown(issuer)]: () => new Promise<Response>(() => {}) });
 		const config = defineAuth({ servers: [{ issuer, clientId: "cli" }] });
@@ -373,7 +370,7 @@ describe("discover", () => {
 		await expect(pending).rejects.toBeInstanceOf(AbortError);
 	});
 
-	it("SEC-H4 returns a frozen server and refuses a config not from defineAuth", async () => {
+	it("returns a frozen server and refuses a config not from defineAuth", async () => {
 		const { server } = await setupServer();
 		expect(Object.isFrozen(server)).toBe(true);
 		const forged = {

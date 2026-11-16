@@ -16,11 +16,11 @@ describe("redactUrl", () => {
 		],
 		["https://u:SENTINEL@h/#access_token=SENTINEL", "https://u:REDACTED@h/#[REDACTED]"],
 		["not a url SENTINEL", "[REDACTED]"],
-	])("SEC-K4 redacts %s", (url, expected) => {
+	])("redacts %s", (url, expected) => {
 		expect(redactUrl(url)).toBe(expected);
 	});
 
-	it("SEC-K4 never leaks a sentinel from 28 mixes of secret and plain parameters", () => {
+	it("never leaks a sentinel from 28 mixes of secret and plain parameters", () => {
 		const names = ["code", "state", "token", "a", "access_token", "%63ode", "refresh_token"];
 		// 7 names by 4 lengths: the pattern repeats after 28.
 		for (let index = 0; index < 28; index += 1) {
@@ -34,20 +34,20 @@ describe("redactUrl", () => {
 });
 
 describe("sanitizeDisplay", () => {
-	it("SEC-K5 removes escape sequences and C0/C1 controls", () => {
+	it("removes escape sequences and C0/C1 controls", () => {
 		const output = sanitizeDisplay("\x1b[31m\r\nFAKE PROMPT\x9b2J\x1b]8;;https://evil\x07X\tY\x7f");
 		expect(output).toBe("FAKE PROMPTXY");
 		// oxlint-disable-next-line no-control-regex -- asserting control characters are gone.
 		expect(output).not.toMatch(/[\x00-\x1f\x7f-\x9f]/);
 	});
 
-	it("SEC-K5 truncates to 200 characters", () => {
+	it("truncates to 200 characters", () => {
 		expect(sanitizeDisplay("x".repeat(500))).toHaveLength(200);
 	});
 });
 
 describe("deviceCodeMessage", () => {
-	it("SEC-D11 SEC-DEC-16 SEC-D7 shows the host, the code and the anti-phishing line", () => {
+	it("shows the host, the code and the anti-phishing line", () => {
 		const message = deviceCodeMessage({
 			app: "Acme",
 			userCode: "WDJB-MJHT",
@@ -60,7 +60,7 @@ describe("deviceCodeMessage", () => {
 		expect(message).toContain("If anyone sent you this link or code, do not enter it.");
 	});
 
-	it("SEC-K5 sanitizes every value it prints", () => {
+	it("sanitizes every value it prints", () => {
 		const message = deviceCodeMessage({
 			app: "Acme\x1b[2J",
 			userCode: "AB\x1b[2JCD\nEF",

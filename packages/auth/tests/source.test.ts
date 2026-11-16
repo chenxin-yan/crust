@@ -16,21 +16,21 @@ const filesMatching = (pattern: RegExp) =>
 	sources.filter(({ text }) => pattern.test(text)).map(({ file }) => file);
 
 describe("library source", () => {
-	it("SEC-O4 never exits the process", () => {
+	it("never exits the process", () => {
 		expect(filesMatching(/process\.exit/)).toEqual([]);
 	});
 
-	it("SEC-A1 never uses Math.random", () => {
+	it("never uses Math.random", () => {
 		expect(filesMatching(/Math\.random/)).toEqual([]);
 	});
 
-	it("SEC-H1 never weakens TLS verification", () => {
+	it("never weakens TLS verification", () => {
 		expect(
 			filesMatching(/rejectUnauthorized|NODE_TLS_REJECT_UNAUTHORIZED|checkServerIdentity/),
 		).toEqual([]);
 	});
 
-	it("SEC-DEC-09 reads the environment only to pick a login mode", () => {
+	it("reads the environment only to pick a login mode", () => {
 		expect(filesMatching(/process\.env|Bun\.env|import\.meta\.env/)).toEqual([
 			"login-mode.ts",
 			"types.ts",
@@ -38,7 +38,7 @@ describe("library source", () => {
 		expect(readFileSync(join(srcDir, "types.ts"), "utf8").match(/process\.env/g)).toHaveLength(1);
 	});
 
-	it("SEC-B7 SEC-L4 offers no password grant, credential form or embedded browser", () => {
+	it("offers no password grant, credential form or embedded browser", () => {
 		expect(
 			Object.keys(api).filter((name) => /password|username|webview|embedded/i.test(name)),
 		).toEqual([]);
@@ -47,7 +47,7 @@ describe("library source", () => {
 		).toEqual([]);
 	});
 
-	it("SEC-DEC-20 sets nonce nowhere; it is only a reserved name", () => {
+	it("sets nonce nowhere; it is only a reserved name", () => {
 		const uses = sources.flatMap(({ file, text }) =>
 			text
 				.split("\n")
@@ -57,7 +57,7 @@ describe("library source", () => {
 		expect(uses).toEqual(['endpoint.ts: "nonce",']);
 	});
 
-	it("SEC-I5 SEC-DEC-12 never reads an id_token", () => {
+	it("never reads an id_token", () => {
 		const code = sources.map(({ file, text }) => ({
 			file,
 			lines: text
@@ -72,7 +72,7 @@ describe("library source", () => {
 });
 
 describe("auth module page", () => {
-	it("SEC-DEC-11 tells CLIs to register as a public client", () => {
+	it("tells CLIs to register as a public client", () => {
 		const page = readFileSync(
 			join(import.meta.dirname, "../../../apps/docs/content/docs/modules/auth.mdx"),
 			"utf8",

@@ -1,6 +1,6 @@
 // Every error carries local text, a stable `code` and, where it applies, an HTTP `status`.
 // Remote text (`error_description`, `error_uri`, bodies, headers, URLs with a query) never
-// reaches a message, property or `cause` (SEC-K2): an authorization server can echo secrets.
+// reaches a message, property or `cause`: an authorization server can echo secrets.
 
 /**
  * Protocol error codes kept verbatim from an authorization server; any other code becomes
@@ -125,7 +125,7 @@ export class IssuerMismatchError extends AuthError {
 
 /**
  * The request could not be sent or its response not read: DNS, connection, TLS or a broken
- * response stream. The underlying error is dropped: it can quote what was sent (SEC-K2).
+ * response stream. The underlying error is dropped: it can quote what was sent.
  */
 export class NetworkError extends AuthError {
 	declare readonly code: "network";

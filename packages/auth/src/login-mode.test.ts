@@ -62,7 +62,7 @@ describe("detectLoginMode", () => {
 			"device",
 			{ noBrowser: true, env: { CI: "true" }, stdin: pipe, stdout: pipe },
 		],
-	])("SEC-L5 SEC-DEC-14 %s → %s", (_name, expected, options) => {
+	])("%s → %s", (_name, expected, options) => {
 		expect(detectLoginMode({ platform: "linux", ...options })).toBe(expected);
 	});
 });

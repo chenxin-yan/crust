@@ -22,10 +22,10 @@ import type {
 	WaitOptions,
 } from "./types.ts";
 
-/** Browser callback wait (DEC-07). */
+/** Browser callback wait. */
 export const DEFAULT_WAIT_MS = 300_000;
 
-/** Session values kept off the frozen public object: the verifier is a secret (SEC-K1). */
+/** Session values kept off the frozen public object: the verifier is a secret. */
 export interface SessionInternals {
 	readonly verifier: string;
 	readonly resource: readonly string[];
@@ -46,7 +46,7 @@ export function sessionInternals(session: AuthorizationSession): SessionInternal
 	return internals;
 }
 
-// The library owns these headers on every response, custom pages included (SEC-C11).
+// The library owns these headers on every response, custom pages included.
 const RESPONSE_HEADERS = {
 	"content-type": "text/html; charset=utf-8",
 	"cache-control": "no-store",
@@ -73,7 +73,7 @@ function escapeHtml(text: string): string {
 	return text.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 }
 
-/** The built-in result page: no links, no remote resources, no server text (SEC-C11, C13). */
+/** The built-in result page: no links, no remote resources, no server text. */
 function defaultPage(view: CallbackPageView): string {
 	const [heading, detail] =
 		view.outcome === "success"
@@ -151,7 +151,7 @@ interface Callback {
 }
 
 /**
- * Starts a browser login (SEC-I1, I7): checks the mix-up policy and every parameter, then
+ * Starts a browser login: checks the mix-up policy and every parameter, then
  * binds a loopback listener on the server's redirect path and freezes the issuer, client id,
  * redirect URI, `state`, PKCE pair and authorization URL in one session. A refusal binds no
  * socket; a failure after binding closes it.
@@ -187,7 +187,7 @@ export async function createAuthorizationSession(
 	});
 
 	// Exact raw-target match before any parsing, Host check, then the state filter: a stray
-	// or forged request never consumes the one-shot slot (SEC-C6–C9, C12, A7).
+	// or forged request never consumes the one-shot slot.
 	const onRequest = (request: IncomingMessage, response: ServerResponse) => {
 		const target = request.url ?? "";
 		const query = target.indexOf("?");
@@ -226,7 +226,7 @@ export async function createAuthorizationSession(
 		server.redirectPath,
 		onRequest,
 	);
-	// The listener must serve exactly the declared path, or the I7 path defense does not hold.
+	// The listener must serve exactly the declared path, or the mix-up path defense does not hold.
 	if (listener.path !== server.redirectPath || options.signal?.aborted) {
 		listener.close();
 		if (options.signal?.aborted) throw new AbortError();
@@ -241,7 +241,7 @@ export async function createAuthorizationSession(
 	allowedHosts = listener.port === 80 ? [hostHeader, literal] : [hostHeader];
 	const redirectUri = `http://${hostHeader}${server.redirectPath}`;
 
-	// The endpoint's own query is kept byte for byte; the library's parameters follow it (SEC-B1).
+	// The endpoint's own query is kept byte for byte; the library's parameters follow it.
 	const authorizationParams = new URLSearchParams({
 		response_type: "code",
 		client_id: server.clientId,
@@ -277,7 +277,7 @@ export async function createAuthorizationSession(
 			() => new TimeoutError("The browser login timed out"),
 		);
 		// The deadline, the signal and close() bound the whole wait, onCallback included; a
-		// callback still running when they fire is left to finish unobserved (SEC-C14, P1).
+		// callback still running when they fire is left to finish unobserved.
 		const stopped = new Promise<never>((_, reject) => {
 			if (link.signal.aborted) reject(link.signal.reason);
 			link.signal.addEventListener("abort", () => reject(link.signal.reason), { once: true });
@@ -290,7 +290,7 @@ export async function createAuthorizationSession(
 			if (link.signal.aborted) throw link.signal.reason;
 			let outcome: { ok: true; value: T } | { ok: false; error: unknown };
 			try {
-				// The issuer is checked before error or code is acted on (SEC-C10, I2–I4, I7).
+				// The issuer is checked before error or code is acted on.
 				const iss = params.get("iss");
 				if (iss !== null ? iss !== server.issuer : server.issPolicy === "required") {
 					throw new IssuerMismatchError(iss === null ? "missing" : "mismatch");

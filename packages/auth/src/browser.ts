@@ -5,13 +5,13 @@ import { checkUrl } from "./endpoint.ts";
 /** Options of {@link openBrowser}. */
 export interface OpenBrowserOptions {
 	/**
-	 * The DEC-09 dev origin, such as `http://127.0.0.1:9000`: plain `http` URLs on exactly this
+	 * The dev origin, such as `http://127.0.0.1:9000`: plain `http` URLs on exactly this
 	 * origin may open. Only for an issuer configured with `allowInsecureLoopback`.
 	 */
 	allowInsecureLoopbackOrigin?: string;
 }
 
-/** The system launcher and its arguments; the URL is always one argv element (SEC-L2). */
+/** The system launcher and its arguments; the URL is always one argv element. */
 export function browserCommand(
 	url: string,
 	platform: string = process.platform,
@@ -25,7 +25,7 @@ export function browserCommand(
 const LOOPBACK_ORIGIN = /^http:\/\/(?:127\.0\.0\.1|\[::1\])(?::\d+)?$/;
 
 /**
- * Opens `url` in the system browser, best effort (SEC-L1–L4). Only `https` URLs (or `http` on
+ * Opens `url` in the system browser, best effort. Only `https` URLs (or `http` on
  * the dev origin) without user info or control characters open. Resolves `false` instead of
  * throwing when the URL is refused or no launcher starts; always print the URL as well.
  */

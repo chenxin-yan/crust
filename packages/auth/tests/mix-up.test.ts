@@ -94,7 +94,7 @@ function world(options: { attackerAdvertisesIss?: boolean } = {}) {
 }
 
 describe("mix-up defense", () => {
-	it("SEC-I7 SEC-DEC-03 refuses a multi-server login without iss or distinct paths, binding nothing", async () => {
+	it("refuses a multi-server login without iss or distinct paths, binding nothing", async () => {
 		const w = world();
 		const config = w.config({ honest: {}, attacker: {} });
 		const server = await discover(config, w.attacker, { fetch: w.fake.fetch });
@@ -105,7 +105,7 @@ describe("mix-up defense", () => {
 		expect(listen).not.toHaveBeenCalled();
 	});
 
-	it("SEC-I7 SEC-C6 SEC-I1 with distinct paths, the honest code never reaches the attacker", async () => {
+	it("with distinct paths, the honest code never reaches the attacker", async () => {
 		const w = world();
 		const config = w.config({
 			honest: { redirectPath: "/honest/callback" },
@@ -128,7 +128,7 @@ describe("mix-up defense", () => {
 		expect(w.attackerTokenRequests).toHaveLength(0);
 	});
 
-	it("SEC-I3 SEC-I7 an iss-advertising attacker session rejects the honest response without iss", async () => {
+	it("an iss-advertising attacker session rejects the honest response without iss", async () => {
 		const w = world({ attackerAdvertisesIss: true });
 		const config = w.config({ honest: {}, attacker: {} });
 		const server = await discover(config, w.attacker, { fetch: w.fake.fetch });
@@ -143,7 +143,7 @@ describe("mix-up defense", () => {
 		expect(w.attackerTokenRequests).toHaveLength(0);
 	});
 
-	it("SEC-I7 accepts the honest server without iss when it is the one pinned issuer", async () => {
+	it("accepts the honest server without iss when it is the one pinned issuer", async () => {
 		const w = world();
 		const config = w.config({ honest: {} });
 		const server = await discover(config, w.honest, { fetch: w.fake.fetch });
@@ -155,7 +155,7 @@ describe("mix-up defense", () => {
 		expect((await result).accessToken).toBe("HONEST_AT");
 	});
 
-	it("SEC-I7 refuses a custom issuer that does not advertise iss", async () => {
+	it("refuses a custom issuer that does not advertise iss", async () => {
 		const w = world();
 		const config = w.config({ honest: {} }, true);
 		const server = await discover(config, w.attacker, { fetch: w.fake.fetch, clientId: "cli" });
@@ -164,7 +164,7 @@ describe("mix-up defense", () => {
 		});
 	});
 
-	it("SEC-I7 refuses duplicate redirect paths across servers", () => {
+	it("refuses duplicate redirect paths across servers", () => {
 		const w = world();
 		expect(() =>
 			w.config({ honest: { redirectPath: "/cb" }, attacker: { redirectPath: "/cb" } }),
