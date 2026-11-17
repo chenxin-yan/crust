@@ -465,7 +465,11 @@ function apiExtension(
 				baseUrl: base.baseUrl,
 				paginate: base.paginate,
 				unavailable,
-				preview: createPreviewCommand(base.client, base.baseUrl, previews),
+				preview: createPreviewCommand(base.client, {
+					baseUrl: base.baseUrl,
+					paginates: base.paginate !== undefined,
+					generated: previews,
+				}),
 			}),
 		)
 		.setup((ctx) => {

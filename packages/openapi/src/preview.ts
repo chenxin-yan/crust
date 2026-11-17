@@ -41,6 +41,20 @@ export interface GeneratedPreview {
 
 const REDACTED_HEADERS = new Set(["authorization", "proxy-authorization", "cookie", "x-api-key"]);
 
+/** The largest `--body @file` a preview reads. */
+const MAX_BODY_BYTES = 16 * 1024 * 1024;
+
+/** `api <path>`'s `--paginate`, which a preview takes to show the first page's request. */
+const paginateFlag = {
+	paginate: {
+		type: "boolean",
+		noNegate: true,
+		description: "Preview the first request of --paginate",
+	},
+} as const;
+
+const previewFlags = { ...requestFlags, ...paginateFlag };
+
 const targetArg = {
 	name: "target",
 	type: "string",
@@ -84,7 +98,7 @@ const previewSchema: StandardSchema<unknown, ApiPreview> & StandardJSONSchema = 
 /** The shape of `api preview`, a child of the `api` command's. */
 export type PreviewShape = CommandShape<
 	readonly [typeof targetArg, typeof argvArg],
-	ApiRequestFlags,
+	ApiRequestFlags & typeof paginateFlag,
 	{},
 	ApiPreview,
 	{},
@@ -106,8 +120,16 @@ export type PreviewCommandDefinition = CommandDefinition<
  */
 export function createPreviewCommand(
 	client: ContextFactory<"api", void, ApiClient>,
-	baseUrl: string,
-	generated: WeakMap<ApiClient, GeneratedPreview>,
+	{
+		baseUrl,
+		paginates,
+		generated,
+	}: {
+		readonly baseUrl: string;
+		/** Whether `defineApi` has a `paginate`, without which `--paginate` fails as for `api <path>`. */
+		readonly paginates: boolean;
+		readonly generated: WeakMap<ApiClient, GeneratedPreview>;
+	},
 ): PreviewCommandDefinition {
 	return defineCommand(
 		"preview",
@@ -119,7 +141,7 @@ export function createPreviewCommand(
 			command
 				.use(client)
 				.args(targetArg, argvArg)
-				.flags(requestFlags)
+				.flags(previewFlags)
 				.output(previewSchema)
 				.action(async ({ args, flags, ctx, signal, stdout }) => {
 					const found = generated.get(await ctx.api);
@@ -127,7 +149,7 @@ export function createPreviewCommand(
 					if (found !== undefined) {
 						const [given] =
 							Object.entries(flags).find(
-								([name, value]) => value !== undefined && Object.hasOwn(requestFlags, name),
+								([name, value]) => value !== undefined && Object.hasOwn(previewFlags, name),
 							) ?? [];
 						if (given !== undefined) {
 							throw new CrustError(
@@ -153,21 +175,64 @@ export function createPreviewCommand(
 								{ argument: "target" },
 							);
 						}
-						// Reading stdin would take what an MCP client or a pipe sends next.
-						if (flags.body === "-") {
-							throw new CrustError(
-								"PARSE",
-								"api preview: --body - would read stdin; pass the body inline or as @file",
-								{ flag: "body" },
-							);
+						if (flags.paginate && !paginates) {
+							throw new Error("--paginate: this CLI does not configure pagination");
 						}
-						const request = await passThroughRequest(baseUrl, path, flags, signal);
+						const request = await passThroughRequest(baseUrl, path, flags, signal, previewBody);
 						preview = previewOf(request.method, request.url.href, request.headers, request.body);
 					}
 					stdout(JSON.stringify(preview, null, 2));
 					return preview;
 				}),
 	);
+}
+
+/**
+ * `--body` for a preview: inline text, or the text of a regular file, opened without blocking and
+ * at most {@link MAX_BODY_BYTES}. Never stdin, which would take what an MCP client or a pipe sends
+ * next: neither `-` nor a file such as `/dev/stdin` or a FIFO.
+ */
+async function previewBody(value: string): Promise<string> {
+	if (value === "-") {
+		throw new CrustError(
+			"PARSE",
+			"api preview: --body - would read stdin; pass the body inline or as @file",
+			{ flag: "body" },
+		);
+	}
+	if (!value.startsWith("@")) return value;
+	const file = value.slice(1);
+	const fs = process.getBuiltinModule("node:fs");
+	let fd: number;
+	try {
+		// Non-blocking, so opening a FIFO without a writer returns at once; Windows has no such flag.
+		fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0));
+	} catch (cause) {
+		const reason = cause instanceof Error ? ` (${cause.message})` : "";
+		throw new CrustError("PARSE", `--body: cannot read "${file}"${reason}`, {
+			flag: "body",
+		}).withCause(cause);
+	}
+	try {
+		const stats = fs.fstatSync(fd);
+		if (!stats.isFile()) {
+			throw new CrustError(
+				"PARSE",
+				`api preview: --body @${file} is not a regular file; pass the body inline or as a file`,
+				{ flag: "body" },
+			);
+		}
+		if (stats.size > MAX_BODY_BYTES) {
+			throw new CrustError(
+				"PARSE",
+				`api preview: --body @${file} is larger than ${MAX_BODY_BYTES} bytes`,
+				{ flag: "body" },
+			);
+		}
+		return fs.readFileSync(fd, "utf8");
+	} finally {
+		fs.closeSync(fd);
+	}
 }
 
 /** The preview of a request, with credential headers redacted. */

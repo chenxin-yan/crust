@@ -307,8 +307,9 @@ export interface PassThroughRequest {
 }
 
 /**
- * The request `api <path>` sends for its request flags, failing with a `PARSE` error, before any
- * request, for a path off the base URL's origin or a flag value it cannot send.
+ * The request `api <path>` sends for its request flags, with `--body` read by `readBodyFrom`,
+ * failing with a `PARSE` error, before any request, for a path off the base URL's origin or a flag
+ * value it cannot send.
  */
 export async function passThroughRequest(
 	baseUrl: string,
@@ -320,6 +321,7 @@ export async function passThroughRequest(
 		readonly body?: string | undefined;
 	},
 	signal: AbortSignal,
+	readBodyFrom: (value: string, signal: AbortSignal) => Promise<string> = readBody,
 ): Promise<PassThroughRequest> {
 	let url: URL;
 	try {
@@ -330,7 +332,7 @@ export async function passThroughRequest(
 	}
 
 	const fields = (flags.field ?? []).map(parseField);
-	const body = flags.body === undefined ? undefined : await readBody(flags.body, signal);
+	const body = flags.body === undefined ? undefined : await readBodyFrom(flags.body, signal);
 	const method = parseMethod(
 		flags.method ?? (fields.length > 0 || body !== undefined ? "POST" : "GET"),
 	);

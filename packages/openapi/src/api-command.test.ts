@@ -1118,6 +1118,60 @@ describe("api preview <path>", () => {
 		);
 	});
 
+	// In a child process, so a read that blocks fails the test by its timeout instead of hanging it.
+	it.skipIf(process.platform === "win32")(
+		"reads a --body @file only from a regular file, never stdin or a FIFO",
+		() => {
+			const dir = mkdtempSync(join(tmpdir(), "crust-openapi-preview-"));
+			const fifo = join(dir, "fifo");
+			expect(spawnSync("mkfifo", [fifo]).status).toBe(0);
+			// Through a shell pipe, as `printf … | cli` gives stdin; spawnSync's `input` is a socket.
+			const preview = (file: string) =>
+				spawnSync(
+					"sh",
+					["-c", 'printf stdin-sentinel | "$NODE" --input-type=module -e "$SCRIPT"'],
+					{
+						cwd: join(import.meta.dirname, ".."),
+						encoding: "utf8",
+						timeout: 10_000,
+						env: {
+							...process.env,
+							NODE: process.execPath,
+							SCRIPT: `
+			import { Crust } from "@crustjs/core";
+			import { defineApi } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "define-api.ts")).href)};
+			const app = new Crust("tool").extend(defineApi({ spec: {}, baseUrl: "https://api.example.com" }).extension);
+			process.exitCode = await app.execute({ argv: ["api", "preview", "/x", "--body", ${JSON.stringify(`@${file}`)}] });
+		`,
+						},
+					},
+				);
+
+			for (const file of ["/dev/stdin", fifo]) {
+				expect(preview(file)).toMatchObject({
+					stdout: "",
+					stderr: `Error: api preview: --body @${file} is not a regular file; pass the body inline or as a file\n`,
+					status: 1,
+				});
+			}
+		},
+	);
+
+	it("previews the first request of --paginate, which needs pagination as api <path> does", async () => {
+		const paginate = vi.fn(() => undefined);
+		const preview = async (options: Partial<DefineApiOptions>) =>
+			captureExecute(buildApp(options), ["api", "preview", "/users", "--paginate"]);
+
+		expect(JSON.parse((await preview({ paginate })).stdout)).toMatchObject({
+			method: "GET",
+			url: "https://api.example.com/v1/users",
+		});
+		expect(paginate).not.toHaveBeenCalled();
+		expect((await preview({})).stderr).toBe(
+			"Error: --paginate: this CLI does not configure pagination",
+		);
+	});
+
 	it("returns the preview as the JSON result under --json, and api <path> still requests a path", async () => {
 		const calls = stubFetch();
 		const app = new Crust("tool").extend(json(), buildApi().extension);
