@@ -3,6 +3,7 @@ import {
 	existsSync,
 	lstatSync,
 	mkdirSync,
+	readFileSync,
 	readdirSync,
 	realpathSync,
 	statSync,
@@ -120,10 +121,11 @@ export type ArtifactOwner = { command: string; directory: boolean; path: string 
 
 /**
  * Copies one entry's Extension build hook output into the shared artifact
- * directory. Identically spelled directories merge; case-only directory aliases
- * and a file or file/directory mismatch at a path
- * another entry already produced is an error, so no entry's hooks can replace
- * another's output. `owners` tracks case-folded POSIX-relative paths across
+ * directory. Identically spelled directories merge, and so does a file another
+ * entry already wrote at the same path with the same bytes (one API's data shared
+ * by several bins); case-only aliases, a file with other bytes and a file/directory
+ * mismatch at a path another entry already produced are an error, so no entry's
+ * hooks can replace another's output. `owners` tracks case-folded POSIX-relative paths across
  * entries, including directories so file/ancestor conflicts are portable.
  */
 export function mergeEntryArtifacts(
@@ -145,6 +147,14 @@ export function mergeEntryArtifacts(
 			const key = relativePath.toLowerCase();
 			const owner = owners.get(key);
 			const existing = lstatSync(destination, { throwIfNoEntry: false });
+			if (
+				dirent.isFile() &&
+				owner?.path === relativePath &&
+				existing?.isFile() === true &&
+				readFileSync(source).equals(readFileSync(destination))
+			) {
+				continue;
+			}
 			if (
 				(owner && !(dirent.isDirectory() && owner.directory && owner.path === relativePath)) ||
 				(existing && !(dirent.isDirectory() && existing.isDirectory()))
