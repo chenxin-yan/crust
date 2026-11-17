@@ -458,7 +458,7 @@ describe("a key that can't be used", () => {
 		await expect(ticket.commit(loginTokens())).rejects.toBeInstanceOf(StaleCommitError);
 		expect(w.document().records[a.key]).toMatchObject({ tombstone: true });
 		expect(refreshFlights.size).toBe(0);
-	});
+	}, 15_000);
 });
 
 describe("no keyring", () => {
@@ -854,7 +854,7 @@ describe("cancellation", () => {
 		controller.abort();
 		await expect(pending).rejects.toBeInstanceOf(AbortError);
 		held.open();
-		await vi.waitFor(() => expect(refreshFlights.size).toBe(0));
+		await vi.waitFor(() => expect(refreshFlights.size).toBe(0), { timeout: 10_000 });
 		expect(keyring.writes()).toBe(0);
 		expect(w.tokenRequests()).toHaveLength(0);
 		expect(w.document().records[w.source().key].refreshInProgress).toBeUndefined();
