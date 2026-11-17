@@ -483,14 +483,23 @@ describe("call()", () => {
 		});
 	});
 
-	it("rejects an invalid JSON body", async () => {
+	it("rejects an invalid JSON body with an ApiResponseError that does not repeat it", async () => {
 		const error = await withClient(
-			() => new Response("{", { headers: { "content-type": "application/json" } }),
+			() =>
+				new Response('{"token": SECRET_SENTINEL', {
+					headers: { "content-type": "application/json" },
+				}),
 			(api) => api.call("status").catch((caught: unknown) => caught),
 		);
 
-		expect(error).toMatchObject({ message: "GET /status: the response is not valid JSON" });
-		expect((error as Error).cause).toBeInstanceOf(SyntaxError);
+		expect(error).toBeInstanceOf(ApiResponseError);
+		expect(error).toMatchObject({
+			status: 200,
+			message: "GET /status: HTTP 200 answered application/json that is not valid JSON",
+		});
+		// The parser's own error quotes the body.
+		expect((error as Error).cause).toBeUndefined();
+		expect(JSON.stringify(error, Object.getOwnPropertyNames(error))).not.toContain("SECRET");
 	});
 
 	it("rejects an unknown or shared operationId, naming it, before any request", async () => {

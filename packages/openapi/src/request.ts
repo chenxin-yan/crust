@@ -13,8 +13,8 @@ export interface OperationRequest {
 
 /**
  * A non-2xx response to `api <path>`, whose body was already printed (to stderr under `--json`),
- * or to `call()`, or a 2xx answer to `call()` that is not the JSON the spec declares. The `json()`
- * Extension prints its `status` as the error's `details`.
+ * or to `call()`, or a 2xx answer to `call()` that is not the JSON the spec declares or not valid
+ * JSON. The `json()` Extension prints its `status` as the error's `details`.
  */
 export class ApiResponseError extends Error {
 	override name = "ApiResponseError";
@@ -239,9 +239,9 @@ function serializable(
 /**
  * Sends `op` through `fetch` (without credentials for a public operation, `security: []`) and
  * returns a 2xx response's JSON body, `undefined` for no content, or the unread `Response` of
- * another media type where the spec declares no JSON for that status. A non-2xx response, or a
- * 2xx answered with another media type than the JSON it declares, rejects with an
- * {@link ApiResponseError}.
+ * another media type where the spec declares no JSON for that status. A non-2xx response, a 2xx
+ * answered with another media type than the JSON it declares, or a JSON body that does not parse
+ * rejects with an {@link ApiResponseError}.
  */
 export async function callOperation(
 	fetch: ApiClient["fetch"],
@@ -265,8 +265,12 @@ export async function callOperation(
 		if (text === "") return undefined;
 		try {
 			return JSON.parse(text);
-		} catch (cause) {
-			throw new Error(`${shown}: the response is not valid JSON`, { cause });
+		} catch {
+			// Without the parser's error as cause: it quotes the body.
+			throw new ApiResponseError(
+				response.status,
+				`${shown}: HTTP ${response.status} answered ${type} that is not valid JSON`,
+			);
 		}
 	}
 	if (response.body === null || response.headers.get("content-length") === "0") {

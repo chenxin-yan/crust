@@ -63,8 +63,15 @@ export interface ApiClient<Operations = unknown> {
 	/**
 	 * Sends the operation with this `operationId` through {@link ApiClient.fetch}, its request built
 	 * from the spec and `input`, and resolves to the 2xx response's JSON body, `undefined` without
-	 * content, or the unread `Response` for another media type; a non-2xx response rejects with an
-	 * `ApiResponseError`. Without a registered spec, any id compiles and the result is `unknown`.
+	 * content, or the unread `Response` for a media type the spec declares instead of JSON. Without a
+	 * registered spec, any id compiles and the result is `unknown`. It rejects with:
+	 * - a `VALIDATION` `CrustError`, before any request, for an input it cannot send;
+	 * - an `Error` for an `operationId` the spec lacks or several operations share, or a spec it
+	 *   cannot read;
+	 * - an `ApiResponseError` (with `status`) for a non-2xx response, a 2xx in another media type
+	 *   than the JSON the spec declares, or a JSON body that does not parse;
+	 * - whatever `fetch()` rejects with, such as a network error, a refused redirect, or an error
+	 *   `auth` throws.
 	 */
 	readonly call: unknown extends Operations ? UntypedCall : TypedCall<Operations>;
 }
