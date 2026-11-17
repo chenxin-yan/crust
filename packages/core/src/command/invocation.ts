@@ -7,6 +7,7 @@ import {
 
 import { validateContextAvailability } from "../api/context.ts";
 import type {
+	BindInputOptions,
 	ExtensionData,
 	ExtensionHandler,
 	ExtensionHooks,
@@ -19,7 +20,9 @@ import type {
 import { CrustError, type CaughtError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import {
+	bindConfigInput,
 	bindStructuredInput,
+	flagOrigins,
 	parseArgs,
 	parseStructured,
 	validateParsed,
@@ -713,6 +716,9 @@ async function dispatch(
 	const resolvedNode = route.command;
 	// `bindInput` replaces this; hooks and `terminal()` read it live.
 	let bound = parsed;
+	// Its two layers: the parse with config values, and the last plain payload bound over it.
+	let configured = parsed;
+	let plainPayload: RunInputPayload | undefined;
 
 	// One resource scope and resolver span pre-run, the action, and post-run.
 	await using disposal = new AsyncDisposableStack();
@@ -755,8 +761,24 @@ async function dispatch(
 		},
 		signal,
 		ctx: resolver.bag(extensions.flatMap((extension) => extension.use)),
-		bindInput(payload: RunInputPayload) {
-			bound = bindStructuredInput(resolvedNode, parsed, payload);
+		bindInput(payload: RunInputPayload, options?: BindInputOptions) {
+			// Each layer is replaced only by its own last call, so the order of the binding
+			// Extensions never changes the result. Nothing changes when a call throws.
+			if (options && (payload.args !== undefined || payload.raw !== undefined)) {
+				throw new CrustError("DEFINITION", 'bindInput with source "config" binds flags only.', {
+					subject: "extension",
+					reason: "config-bind-args",
+				});
+			}
+			const nextConfigured = options
+				? bindConfigInput(resolvedNode, parsed, payload.flags ?? {}, options.from)
+				: configured;
+			const nextPayload = options ? plainPayload : payload;
+			bound = nextPayload
+				? bindStructuredInput(resolvedNode, nextConfigured, nextPayload)
+				: nextConfigured;
+			configured = nextConfigured;
+			plainPayload = nextPayload;
 		},
 		stdout: output.io.stdout,
 		stderr: output.io.stderr,
@@ -778,7 +800,7 @@ async function dispatch(
 
 		// Standard Schemas on arg/flag definitions own value validation and
 		// transformation; actions and flag-owning Contexts receive schema outputs.
-		const validated = await applySchemas(resolvedNode, bound);
+		const validated = await applySchemas(resolvedNode, bound, flagOrigins(resolvedNode, bound));
 		resolver.setValidatedFlags(validated.flags);
 
 		let result: unknown;

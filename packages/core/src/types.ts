@@ -324,6 +324,13 @@ interface FlagDefBase {
 	aliases?: readonly string[];
 	/** When `true`, the parser throws if the flag is not provided */
 	required?: true;
+	/**
+	 * Top-level config-file key that may supply the value: argv, typed `run()` input and `env`
+	 * win over it, and it wins over the default. Core only declares it; a config Extension
+	 * reads the files and binds the values with `ctx.bindInput(input, { source: "config", from })`.
+	 * Non-empty, without `.` (reserved for nested keys).
+	 */
+	config?: string;
 	/** Not supported with core value options — see {@link SchemaStringFlagDef} */
 	schema?: never;
 }
@@ -772,9 +779,9 @@ export type InputArgs<A extends ArgsDef> = number extends A["length"]
 			: never;
 
 // Distribute before inspecting keys: each alternative must permit omission.
-// An `env` binding may supply the value, so typed input can omit it like argv can.
+// An `env` binding or `config` key may supply the value, so typed input can omit it like argv can.
 type RequiredFlagName<D, K> = D extends unknown
-	? D extends { readonly env: object }
+	? D extends { readonly env: object } | { readonly config: string }
 		? never
 		: "required" extends keyof D
 			? true extends D["required"]
@@ -943,9 +950,10 @@ export type RawParsedArgs<A extends ArgsDef> = number extends A["length"]
 
 /**
  * Where an argument's or flag's current value came from: given on `argv`, typed `run()`
- * input, the flag's `env` variable, `ExtensionContext.bindInput`, or the definition's `default`.
+ * input, the flag's `env` variable, `ExtensionContext.bindInput`, a config file through
+ * `bindInput(input, { source: "config", from })`, or the definition's `default`.
  */
-export type ValueSource = "argv" | "run" | "env" | "bound" | "default";
+export type ValueSource = "argv" | "run" | "env" | "bound" | "config" | "default";
 
 /** A declared default on any argument or flag definition. */
 export type DeclaredDefault = (ArgDef | FlagDef)["default"];

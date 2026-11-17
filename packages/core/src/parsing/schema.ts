@@ -33,13 +33,17 @@ async function runSchema(
  * exclusively owns coercion, defaults, requiredness, and validation. Returns transformed copies of
  * `args`/`flags`; definitions without a schema pass through unchanged.
  *
+ * @param origins - Where an env- or config-supplied flag value came from (`$ACME_REGION`),
+ *   named after each of its issue paths
  * @throws {CrustError} `VALIDATION` aggregating every schema issue
  */
 export async function applySchemas<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
 	node: { args: A; effectiveFlags: F },
 	parsed: Pick<ParseResult<A, F>, "args" | "flags">,
+	origins: Readonly<Record<string, string>> = {},
 ): Promise<ValidatedInput<A, F>> {
 	const issues: ValidationIssue[] = [];
+	const issueOrigins = new Map<ValidationIssue, string>();
 	const args = new Map<string, unknown>(Object.entries(parsed.args));
 	const flags = new Map<string, unknown>(Object.entries(parsed.flags));
 
@@ -51,12 +55,19 @@ export async function applySchemas<A extends ArgsDef = ArgsDef, F extends FlagsD
 
 	for (const [name, def] of Object.entries(node.effectiveFlags)) {
 		if (def.schema === undefined) continue;
+		const start = issues.length;
 		const result = await runSchema(def.schema, flags.get(name), ["flags", name], issues);
 		if (result.ok) flags.set(name, result.value);
+		const origin = Object.hasOwn(origins, name) ? origins[name] : undefined;
+		if (origin !== undefined)
+			for (const issue of issues.slice(start)) issueOrigins.set(issue, origin);
 	}
 
 	if (issues.length > 0) {
-		const lines = issues.map((issue) => `  - ${issue.path}: ${issue.message}`);
+		const lines = issues.map((issue) => {
+			const origin = issueOrigins.get(issue);
+			return `  - ${issue.path}${origin === undefined ? "" : ` (from ${origin})`}: ${issue.message}`;
+		});
 		throw new CrustError("VALIDATION", `Invalid input:\n${lines.join("\n")}`, { issues });
 	}
 

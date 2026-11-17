@@ -175,7 +175,7 @@ export interface ExtensionContext<
 	 * invocation of it would, without running it: argv, then environment fallbacks and defaults,
 	 * then required-value checks and Standard Schemas. It builds only the commands on the path and
 	 * runs no Extension hook, Context setup, or Command Action, so values other Extensions bind in
-	 * their hooks (`bindInput`) are not applied.
+	 * their hooks (`bindInput`, config-file values included) are not applied.
 	 *
 	 * @throws {CrustError} `COMMAND_NOT_FOUND` for a name the path does not have, `PARSE` for a path
 	 *   that does not start at the root, and the `PARSE` and `VALIDATION` errors the command's
@@ -215,8 +215,8 @@ export interface ExtensionContext<
 	 * Where each current value came from, keyed by declared argument name and canonical flag
 	 * name; a name without a value is absent. `argv` covers aliases, `--no-<name>`, and
 	 * `--tags ""`; `raw` is `argv` when passthrough tokens were left after `--`. It reads live:
-	 * after {@link ExtensionContext.bindInput}, supplied keys report `bound`. Empty in `onError`
-	 * after a routing or argv-syntax failure.
+	 * after {@link ExtensionContext.bindInput}, supplied keys report `bound` (`config` for a
+	 * config bind). Empty in `onError` after a routing or argv-syntax failure.
 	 *
 	 * @example `{ args: { target: "argv" }, flags: { trace: "env", port: "default" }, raw: undefined }`
 	 */
@@ -241,15 +241,23 @@ export interface ExtensionContext<
 	 * given explicitly on argv win, even when equal to the default; every other supplied key
 	 * replaces the environment value or default, converted exactly as typed `run()` input is.
 	 * Under typed `run()` nothing came from argv, so supplied keys replace the typed input.
-	 * Each call re-binds against the original input, so the last call wins. Afterwards
+	 * Each call re-binds against the original input, so the last call wins.
+	 *
+	 * With `{ source: "config", from }` the flags bind as config-file values instead: each
+	 * fills a flag only when nothing but its default supplied one (argv, typed `run()` input
+	 * and `env` win, and plain `bindInput` values replace it), `sources` reports `config`, and
+	 * a value that fails conversion is deferred like an environment value, its messages naming
+	 * `from[flag]`. A config call and a plain call each replace only their own last call, so
+	 * the order of the binding Extensions never changes the result. Afterwards
 	 * `args`, `flags`, `rawArgs`, and `sources` report the bound values, and validation and the Command
 	 * Action use them. Flag handlers are chosen from the original input, so a bound flag never
 	 * selects one, even when bound in `setup`. A no-op in `onError` after a routing or argv-syntax failure.
 	 *
 	 * @throws {CrustError} `PARSE` on an unknown key, a positional argument supplied after an
 	 *   omitted earlier one, or a value that fails conversion (including a non-array value for
-	 *   a variadic argument or `multiple` flag); it fails the invocation like any error thrown
-	 *   from the hook that called it
+	 *   a variadic argument or `multiple` flag; a config bind defers these); `DEFINITION`
+	 *   (`config-bind-args`) when a config bind supplies `args` or `raw`. It fails the
+	 *   invocation like any error thrown from the hook that called it
 	 *
 	 * @example
 	 * ```ts
@@ -258,7 +266,17 @@ export interface ExtensionContext<
 	 * }
 	 * ```
 	 */
-	readonly bindInput: (input: RunInputPayload) => void;
+	readonly bindInput: {
+		(input: RunInputPayload): void;
+		(input: { readonly flags: RunInputPayload["flags"] }, options: BindInputOptions): void;
+	};
+}
+
+/** Binds {@link ExtensionContext.bindInput} values as config-file values; see there. */
+export interface BindInputOptions {
+	readonly source: "config";
+	/** Each bound flag's origin for messages, e.g. `/repo/acme.config.json key "org"`. */
+	readonly from: Readonly<Record<string, string>>;
 }
 
 /** What {@link ExtensionContext.parseCommandArgv} returns: the values the Command Action would receive. */

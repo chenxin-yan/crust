@@ -416,6 +416,20 @@ import type {
 	type Record = FlagRecordErrors<{ t: { type: "string"; env: { name: "" } } }, never>;
 	type _record = Expect<Equal<Record["t"]["FIX_EMPTY_ENV"], "env.name must be a non-empty string">>;
 
+	// config keys: non-empty, no "."; a widened key stays runtime-checked
+	type ConfigEmpty = LocalFlagBrand<{ name: "t"; type: "string"; config: "" }>;
+	type ConfigDotted = FlagRecordErrors<{ t: { type: "string"; config: "api.org" } }, never>;
+	type ConfigOpen = LocalFlagBrand<{ name: "t"; type: "string"; config: string }>;
+	type ConfigValid = LocalFlagBrand<{ name: "t"; type: "string"; config: "org" }>;
+	type _configEmpty = Expect<
+		Equal<ConfigEmpty["FIX_CONFIG_KEY"], 'config must be a non-empty key without "."'>
+	>;
+	type _configDotted = Expect<
+		Equal<ConfigDotted["t"]["FIX_CONFIG_KEY"], 'config must be a non-empty key without "."'>
+	>;
+	type _configOpen = Expect<Equal<Extract<keyof ConfigOpen, `FIX_${string}`>, never>>;
+	type _configValid = Expect<Equal<Extract<keyof ConfigValid, `FIX_${string}`>, never>>;
+
 	// optional and undefined-unioned literals are still known-empty when supplied
 	type OptionalEnvDelimiter = LocalFlagBrand<{
 		name: "t";

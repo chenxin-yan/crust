@@ -124,19 +124,27 @@ function propertySchema(
 			// Advisory metadata must not break discovery; run() still owns the actual default.
 		}
 	}
-	const env = "env" in def ? def.env?.name : undefined;
+	const fallbacks = "negatable" in def ? fallbackNames(def) : "";
 	const declared = "description" in schema ? schema.description : def.description;
 	const description =
-		env === undefined
+		fallbacks === ""
 			? declared
 			: typeof declared === "string"
-				? `${declared} (falls back to $${env})`
-				: `Falls back to $${env}`;
+				? `${declared} (falls back to ${fallbacks})`
+				: `Falls back to ${fallbacks}`;
 	return {
 		...schema,
 		...(description === undefined ? {} : { description }),
 		...(defaultValue === undefined || "default" in schema ? {} : { default: defaultValue }),
 	};
+}
+
+/** `$NAME, then config key "name"`, in the order they rank; empty when the flag has neither. */
+function fallbackNames({ env, config }: FlagSnapshot): string {
+	return [
+		...(env ? [`$${env.name}`] : []),
+		...(config === undefined ? [] : [`config key "${config}"`]),
+	].join(", then ");
 }
 
 /** Extension flags (`--help`, `--json`, `--input`, …) configure the invocation, not the command. */
@@ -156,8 +164,8 @@ function formatPath(path: readonly string[]): string {
  * `--yes` stay. Mapped from the snapshot's
  * declared types, so custom `parse` definitions appear as their token type, and
  * only declared `required` definitions are required, except flags with an `env`
- * binding: the variable may supply them, so they are optional and their
- * description names it. A Standard Schema definition appears as its `inputSchema` (without
+ * binding or a `config` key: the variable or config file may supply them, so they are
+ * optional and their description names the variable and the key. A Standard Schema definition appears as its `inputSchema` (without
  * `$schema`, filling in a missing `description`) when that describes what
  * `run()` accepts for it: top-level `type` `"string"` (`"boolean"` for
  * `type: "boolean"` flags), or `"array"` with such `items` (and no `prefixItems`)
@@ -183,7 +191,9 @@ export function commandInputSchema(
 			);
 		}
 		properties[name] = propertySchema(def, list);
-		if (def.required === true && !("env" in def && def.env)) required.push(name);
+		// An `env` or `config` fallback may supply a required flag.
+		if (def.required === true && !("negatable" in def && fallbackNames(def) !== ""))
+			required.push(name);
 	};
 	for (const arg of command.args) claim(arg.name, arg, arg.variadic === true);
 	for (const [name, flag] of commandInputFlags(command)) {

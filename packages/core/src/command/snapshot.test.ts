@@ -121,6 +121,16 @@ describe("snapshotCommand", () => {
 		expect(JSON.stringify(snapshot)).not.toContain(JSON.stringify(process.env.HOME));
 	});
 
+	it("carries a declared config key, and none when the flag declares none", () => {
+		const root = createCommandNode("cli");
+		registerFlag(root, "org", { type: "string", config: "org" }, "local");
+		registerFlag(root, "port", { type: "number" }, "local");
+		const snapshot = snapshotCommand(root);
+
+		expect(snapshot.flags.org).toEqual({ type: "string", negatable: false, config: "org" });
+		expect(snapshot.flags.port).not.toHaveProperty("config");
+	});
+
 	it("marks the commands and flags an Extension contributes with its id", async () => {
 		const tooling = defineExtensionId("tooling");
 		const app = new Crust("cli")

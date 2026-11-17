@@ -34,6 +34,15 @@ describe("formatDescription", () => {
 			"[env: APP_TOKEN]",
 		);
 	});
+
+	it("renders the config key after the env variable name", () => {
+		expect(formatDescription("Org", "acme", undefined, (t) => `<${t}>`, "APP_ORG", "org")).toBe(
+			'Org <[env: APP_ORG]> <[config: org]> <[default: "acme"]>',
+		);
+		expect(formatDescription(undefined, undefined, undefined, undefined, undefined, "org")).toBe(
+			"[config: org]",
+		);
+	});
 });
 
 describe("buildCommandDocumentation", () => {

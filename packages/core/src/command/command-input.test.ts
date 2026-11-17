@@ -345,6 +345,30 @@ describe("commandInputSchema", () => {
 		expect(schema.required).toEqual(["scope"]);
 	});
 
+	it("leaves config-backed flags optional and names the key after the variable", async () => {
+		const app = new Crust("cli").add(
+			defineCommand("login", (c) =>
+				c
+					.flags({
+						org: { type: "string", config: "org", required: true, description: "Org" },
+						region: { type: "string", env: { name: "REGION" }, config: "region" },
+						scope: { type: "string", required: true },
+					})
+					.action(noop),
+			),
+		);
+		const schema = commandInputSchema((await app.snapshot()).subCommands.login!, ["login"]);
+		expect(schema.properties.org).toEqual({
+			type: "string",
+			description: 'Org (falls back to config key "org")',
+		});
+		expect(schema.properties.region).toEqual({
+			type: "string",
+			description: 'Falls back to $REGION, then config key "region"',
+		});
+		expect(schema.required).toEqual(["scope"]);
+	});
+
 	it("rejects an arg and flag sharing a name, or a definition named raw, naming the path", async () => {
 		const snapshot = await new Crust("cli")
 			.add(

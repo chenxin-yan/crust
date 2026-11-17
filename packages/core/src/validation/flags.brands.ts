@@ -115,11 +115,18 @@ type EmptyDelimiterBrand<F> = "" extends Delimiters<F> | Delimiters<EnvBinding<F
 	? { readonly FIX_EMPTY_DELIMITER: "delimiter and env.delimiter must be non-empty strings" }
 	: {};
 
-// Most flags have neither field; testing for them first keeps the common case cheap.
+type ConfigKeys<F> = F extends { config?: infer C } ? ClosedMembers<Extract<C, string>> : never;
+
+/** Reject an empty config key, and `.`, which stays free for nested key paths. */
+type ConfigKeyBrand<F> = [Extract<ConfigKeys<F>, "" | `${string}.${string}`>] extends [never]
+	? {}
+	: { readonly FIX_CONFIG_KEY: 'config must be a non-empty key without "."' };
+
+// Most flags have none of these fields; testing for them first keeps the common case cheap.
 type EmptyTextBrand<F> = F extends unknown
-	? [Extract<keyof F, "env" | "delimiter">] extends [never]
+	? [Extract<keyof F, "env" | "delimiter" | "config">] extends [never]
 		? {}
-		: EmptyEnvBrand<F> & EmptyDelimiterBrand<F>
+		: EmptyEnvBrand<F> & EmptyDelimiterBrand<F> & ConfigKeyBrand<F>
 	: never;
 
 type RepeatedAliases<
@@ -620,7 +627,15 @@ type DefinedRecord<F> = false extends StrictNulls
 		: never;
 
 // Only these fields can make one flag invalid on its own; other flags need name checks only.
-type RiskyFlagField = "short" | "aliases" | "choices" | "parse" | "env" | "delimiter" | "schema";
+type RiskyFlagField =
+	| "short"
+	| "aliases"
+	| "choices"
+	| "parse"
+	| "env"
+	| "delimiter"
+	| "config"
+	| "schema";
 
 type RecordFlagBrand<
 	F,

@@ -260,6 +260,11 @@ function _typecheckPreservesCommandAliasesAndPreParseInputTypes() {
 	const envOptional: RunInput<(typeof login)["_types"]["shape"]> = { flags: { scope: "repo" } };
 	// @ts-expect-error -- a required flag without an `env` binding stays required
 	const missingScope: RunInput<(typeof login)["_types"]["shape"]> = { flags: { token: "t" } };
+	// A `config` key may supply it too.
+	const configured = new Crust("configured")
+		.flags({ org: { type: "string", config: "org", required: true } })
+		.action(() => {});
+	const configOptional: RunInput<(typeof configured)["_types"]["shape"]> = {};
 	const unknownArg: DeployInput = {
 		// @ts-expect-error -- unknown argument name
 		args: { target: "prod", host: "localhost" },
@@ -287,6 +292,7 @@ function _typecheckPreservesCommandAliasesAndPreParseInputTypes() {
 		missingArg,
 		envOptional,
 		missingScope,
+		configOptional,
 		unknownArg,
 		invalidChoice,
 		invalidNegation,
