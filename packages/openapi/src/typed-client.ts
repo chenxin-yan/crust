@@ -55,13 +55,22 @@ type JsonMediaType =
 	| `application/${string}+json`
 	| `application/${string}+json;${string}`;
 
-type ParamPart<Parameters, In extends "path" | "query" | "header"> = In extends keyof Parameters
+type ParamPart<Parameters, In extends "path" | "query"> = In extends keyof Parameters
 	? [Defined<Parameters[In]>] extends [never]
 		? {}
 		: undefined extends Parameters[In]
 			? { readonly [_ in In]?: Defined<Parameters[In]> }
 			: { readonly [_ in In]: Parameters[In] }
 	: {};
+/** The `Accept` override `call()` sends instead of its own, whatever headers the spec declares. */
+type AcceptOverride = { readonly Accept?: string; readonly accept?: string };
+type HeaderPart<Parameters> = "header" extends keyof Parameters
+	? [Defined<Parameters["header"]>] extends [never]
+		? { readonly header?: AcceptOverride }
+		: undefined extends Parameters["header"]
+			? { readonly header?: Defined<Parameters["header"]> & AcceptOverride }
+			: { readonly header: Parameters["header"] & AcceptOverride }
+	: { readonly header?: AcceptOverride };
 // The JSON media type's schema; without one, every media type's.
 type MediaOf<Content> = [Extract<keyof Content, JsonMediaType>] extends [never]
 	? Content[keyof Content]
@@ -80,10 +89,8 @@ type Flatten<T> = { [K in keyof T]: T[K] } & {};
 /** The input of a typed operation: each of `path`, `query`, `header` and `body` it takes. */
 type OperationInput<Op> = Flatten<
 	(Op extends { parameters: infer Parameters }
-		? ParamPart<Parameters, "path"> &
-				ParamPart<Parameters, "query"> &
-				ParamPart<Parameters, "header">
-		: {}) &
+		? ParamPart<Parameters, "path"> & ParamPart<Parameters, "query"> & HeaderPart<Parameters>
+		: { readonly header?: AcceptOverride }) &
 		BodyPart<Op>
 >;
 
@@ -108,12 +115,11 @@ type OperationResult<Op> = Op extends { responses: infer Responses }
 	: unknown;
 
 type RequiredKeys<T> = { [K in keyof T]-?: {} extends Pick<T, K> ? never : K }[keyof T];
-// `{}` would accept any property and even a primitive, so an operation without input takes `{}` only.
-type InputArgs<Op> = [keyof OperationInput<Op>] extends [never]
-	? [input?: Record<string, never>]
-	: [RequiredKeys<OperationInput<Op>>] extends [never]
-		? [input?: OperationInput<Op>]
-		: [input: OperationInput<Op>];
+// Every input has an optional `header` for the Accept override, so it is never `{}`, which would
+// accept any property and even a primitive.
+type InputArgs<Op> = [RequiredKeys<OperationInput<Op>>] extends [never]
+	? [input?: OperationInput<Op>]
+	: [input: OperationInput<Op>];
 // After an unknown id, TypeScript checks `call` again with `Id` as every id; computing every input
 // then exceeds the instantiation limit on large specs (TS2589) instead of reporting the id (TS2345).
 // A spec with one operation has no such union, so its input is still checked.

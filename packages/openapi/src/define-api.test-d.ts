@@ -82,6 +82,16 @@ interface AcmeOperations {
 			};
 		};
 	};
+	signUser: {
+		parameters: {
+			query?: never;
+			header: { "X-Signature": string };
+			path: { id: string };
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: { 204: { headers: { [name: string]: unknown }; content?: never } };
+	};
 	ping: {
 		parameters: NoParameters;
 		requestBody?: never;
@@ -141,6 +151,25 @@ function _typecheckRegisteredSpecById() {
 				// JSON and another media type for one status: the JSON body, which call() asks for.
 				const report = await api.call("getReport");
 				type _Report = Expect<Equal<typeof report, { title: string }>>;
+				// Every operation takes an Accept override, as `Accept` or `accept`, next to its own headers.
+				await api.call("getReport", { header: { Accept: "application/xml" } });
+				await api.call("getReport", { header: { accept: "application/xml" } });
+				await api.call("getUser", {
+					path: { id: "1" },
+					header: { Accept: "a", "X-Request-Id": "r" },
+				});
+				await api.call("signUser", {
+					path: { id: "1" },
+					header: { "X-Signature": "s", Accept: "a" },
+				});
+				// @ts-expect-error -- a header the operation does not declare
+				await api.call("getReport", { header: { "X-Other": "1" } });
+				// @ts-expect-error -- a header the operation does not declare, next to its own
+				await api.call("getUser", { path: { id: "1" }, header: { "X-Other": "1" } });
+				// @ts-expect-error -- Accept does not stand in for a required header
+				await api.call("signUser", { path: { id: "1" }, header: { Accept: "a" } });
+				// @ts-expect-error -- the override is text
+				await api.call("getReport", { header: { Accept: 1 } });
 				// No 2xx response: unknown.
 				const pong = await api.call("ping");
 				type _Pong = Expect<Equal<typeof pong, unknown>>;
