@@ -69,8 +69,10 @@ interface TokenSourceInternals {
 	/** Whether a live (not logged-out) record exists: no lock, no refresh. */
 	hasCredential(): Promise<boolean>;
 	/**
-	 * The live record's expiry and scope, read the same way: no lock, no refresh, no request.
-	 * No login → `LoginRequiredError` (`missing`); a file it can't read throws its error.
+	 * The live record's expiry and scope, checked like `get()` but with no lock, refresh or
+	 * request. Unlike `hasCredential()`, it throws: no login → `LoginRequiredError` (`missing`),
+	 * a login for another identity → `CredentialMismatchError`, and an unreadable, corrupt or
+	 * unsafe file throws its error.
 	 */
 	storedLogin(): Promise<{ expiresAt: number | undefined; scope: string | undefined }>;
 }
