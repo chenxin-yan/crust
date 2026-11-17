@@ -318,6 +318,14 @@ export function planCommands(input: LintInput): {
 			paginates && resultSchema !== undefined
 				? withoutListLimits(spec, resultSchema, 0)
 				: resultSchema;
+		if (fields.paginate !== undefined && !paginates) {
+			report(
+				"error",
+				"paginate-needs-array",
+				`${label}: the override sets \`paginate\`, but its result after \`unwrap\` is not a list, so pages cannot be joined`,
+				"Set `unwrap` to return the page's list (with its `outputSchema`), or remove `paginate` from the override",
+			);
+		}
 		if (paginates) {
 			inputs.push({
 				kind: "flag",

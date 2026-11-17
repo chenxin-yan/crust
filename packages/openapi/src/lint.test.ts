@@ -299,6 +299,30 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 		},
 		expected: [{ operationId: "a" }],
 	},
+	// The operation's own `paginate` on a result that is not a list; the global one is only offered where it applies.
+	"paginate-needs-array": {
+		input: {
+			spec: spec({
+				"/a": {
+					get: op("a", {
+						responses: {
+							"200": {
+								description: "ok",
+								content: { "application/json": { schema: object({}) } },
+							},
+						},
+					}),
+				},
+				"/b": { get: op("b") },
+			}),
+			override: { a: { paginate: () => undefined }, b: { paginate: () => undefined } },
+			hasPaginate: true,
+		},
+		expected: [
+			{ level: "error", operationId: "a" },
+			{ level: "error", operationId: "b" },
+		],
+	},
 };
 
 describe("lint", () => {
