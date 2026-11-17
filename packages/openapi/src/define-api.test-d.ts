@@ -131,6 +131,11 @@ function _typecheckRegisteredSpecById() {
 				// No 2xx response: unknown.
 				const pong = await api.call("ping");
 				type _Pong = Expect<Equal<typeof pong, unknown>>;
+				await api.call("ping", {});
+				// @ts-expect-error -- no input for an operation that takes none
+				await api.call("ping", { body: { unexpected: true } });
+				// @ts-expect-error -- not an input object
+				await api.call("ping", 1);
 
 				// @ts-expect-error -- not an operationId of acme
 				await api.call("getUsr", { path: { id: "42" } });
@@ -164,6 +169,15 @@ function _typecheckSecondRegisteredSpecById() {
 			type _Invoice = Expect<Equal<typeof invoice, { total: number }>>;
 			// @ts-expect-error -- an operationId of the other spec
 			await api.call("getUser", { path: { id: "42" } });
+			// A spec with one operation checks its input too.
+			// @ts-expect-error -- the input is required
+			await api.call("getInvoice");
+			// @ts-expect-error -- a parameter the operation does not have
+			await api.call("getInvoice", { path: { invoce: "in_1" } });
+			// @ts-expect-error -- a parameter value of the wrong type
+			await api.call("getInvoice", { path: { invoice: 1 } });
+			// @ts-expect-error -- a body the operation does not take
+			await api.call("getInvoice", { path: { invoice: "in_1" }, body: { wrong: true } });
 		}),
 	);
 }

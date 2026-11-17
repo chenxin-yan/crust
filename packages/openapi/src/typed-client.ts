@@ -5,8 +5,9 @@
  */
 export interface Specs {}
 
-/** A path, query or header parameter value; an array for a parameter that takes several. */
-type ParamValue = string | number | boolean | readonly (string | number | boolean)[];
+type Scalar = string | number | boolean;
+/** A path, query or header parameter value: a scalar, an array of scalars, or an object of scalars. */
+type ParamValue = Scalar | readonly Scalar[] | { readonly [key: string]: Scalar | undefined };
 
 /** What `call()` takes for an operation it has no types for. */
 export interface CallInput {
@@ -107,14 +108,19 @@ type OperationResult<Op> = Op extends { responses: infer Responses }
 	: unknown;
 
 type RequiredKeys<T> = { [K in keyof T]-?: {} extends Pick<T, K> ? never : K }[keyof T];
-type InputArgs<Op> = [RequiredKeys<OperationInput<Op>>] extends [never]
-	? [input?: OperationInput<Op>]
-	: [input: OperationInput<Op>];
+// `{}` would accept any property and even a primitive, so an operation without input takes `{}` only.
+type InputArgs<Op> = [keyof OperationInput<Op>] extends [never]
+	? [input?: Record<string, never>]
+	: [RequiredKeys<OperationInput<Op>>] extends [never]
+		? [input?: OperationInput<Op>]
+		: [input: OperationInput<Op>];
 // After an unknown id, TypeScript checks `call` again with `Id` as every id; computing every input
 // then exceeds the instantiation limit on large specs (TS2589) instead of reporting the id (TS2345).
-// shortcut: a spec with a single operation gets an unchecked input too; upgrade if one-operation specs matter.
+// A spec with one operation has no such union, so its input is still checked.
 type InputFor<Operations, Id extends keyof Operations> = [keyof Operations] extends [Id]
-	? [input?: unknown]
+	? IsUnion<Id> extends true
+		? [input?: unknown]
+		: InputArgs<Operations[Id]>
 	: InputArgs<Operations[Id]>;
 
 /** `call()` typed by a registered spec's operations. */
