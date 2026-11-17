@@ -41,8 +41,12 @@ export function readSpec(url: URL, id: string): OpenApiSpec {
  * directory `id`, in a built CLI.
  */
 export function readBuiltFile(id: string, file: string): object {
-	const path = process.getBuiltinModule("node:path").join(resolveArtifactDir(id), file);
-	return readObject(path, JSON.parse, id);
+	return readObject(builtFilePath(id, file), JSON.parse, id);
+}
+
+/** Where a built CLI finds `file` below the artifact directory `id`. */
+export function builtFilePath(id: string, file: string): string {
+	return process.getBuiltinModule("node:path").join(resolveArtifactDir(id), file);
 }
 
 /** The JSON object in `file`, read with `parse`; `artifact` names the directory a built file comes from. */

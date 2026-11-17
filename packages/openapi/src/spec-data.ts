@@ -17,17 +17,23 @@ import {
 import type { CommandPlan } from "./lint.ts";
 import { kebab } from "./names.ts";
 import type { Operation } from "./operations.ts";
+import { record } from "./schema.ts";
 import { BUILT_SPEC_FILE } from "./spec-source.ts";
 import { METHODS, isLocalRef, pointerKeys } from "./spec-traversal.ts";
 
 export const INDEX_FILE = "index.json";
+// The layout this version writes and reads; a built CLI rejects an index of another.
+const INDEX_VERSION = 1;
 const ROOT_FILE = "root.json";
 // A spec whose `$ref`s are so connected that each group reaches most of it (Stripe's) would ship
 // it many times over; past this many times its size, every command reads the whole spec instead.
 const MAX_SLICES_RATIO = 2;
+// A group file's name keeps this many characters of the group's, far below file system limits.
+const MAX_FILE_NAME = 64;
 
 /** What a built CLI reads at start: enough to add the generated top-level commands without a slice. */
 export interface SpecIndex {
+	readonly version: typeof INDEX_VERSION;
 	/** The generated root commands, in order. */
 	readonly commands: readonly {
 		readonly name: string;
@@ -65,21 +71,25 @@ export function specDataFiles(
 		({ group }) => group.split(" ")[0]!,
 	);
 	const files = groupFiles([...byGroup.keys()]);
+	// An override's output schema may `$ref` what none of its operations does.
 	const slice = (planned: readonly CommandPlan[]) =>
 		JSON.stringify(
 			sliceSpec(
 				spec,
 				planned.map(({ op }) => op),
+				planned.flatMap(({ fields }) => fields.outputSchema ?? []),
 			),
 		);
 	const slices = new Map<string, string>();
 	if (tree.plans.length > 0) slices.set(ROOT_FILE, slice(tree.plans));
 	for (const [group, groupPlans] of byGroup) slices.set(files.get(group)!, slice(groupPlans));
+	const { Buffer } = process.getBuiltinModule("node:buffer");
 	let size = 0;
-	for (const text of slices.values()) size += text.length;
-	const whole = size > MAX_SLICES_RATIO * specText.length;
+	for (const text of slices.values()) size += Buffer.byteLength(text);
+	const whole = size > MAX_SLICES_RATIO * Buffer.byteLength(specText);
 	const fileOf = (file: string) => (whole ? BUILT_SPEC_FILE : file);
 	const index: SpecIndex = {
+		version: INDEX_VERSION,
 		commands: tree.plans.map((plan) => ({
 			name: plan.name,
 			meta: operationMeta(plan),
@@ -101,14 +111,20 @@ export function specDataFiles(
 
 /**
  * Each group's file name: `groups/g-<kebab-case name>.json`, which no Windows device name can be,
- * and `.2`, `.3`... after it for names that kebab-case alike (also by case), numbered in code unit
- * order of the names so every build and platform agrees.
+ * a long name cut short and ended by a hash of the group's, and `.2`, `.3`... after it for names
+ * that come out alike (also by case), numbered in code unit order of the names so every build and
+ * platform agrees.
  */
 function groupFiles(groups: readonly string[]): Map<string, string> {
 	const taken = new Map<string, number>();
 	const files = new Map<string, string>();
 	for (const group of [...groups].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))) {
-		const name = `g-${kebab(group)}`;
+		const words = kebab(group);
+		const short =
+			words.length <= MAX_FILE_NAME
+				? words
+				: `${words.slice(0, MAX_FILE_NAME)}-${process.getBuiltinModule("node:crypto").createHash("sha256").update(group).digest("hex").slice(0, 12)}`;
+		const name = `g-${short}`;
 		const count = (taken.get(name) ?? 0) + 1;
 		taken.set(name, count);
 		files.set(group, `groups/${count === 1 ? name : `${name}.${count}`}.json`);
@@ -120,12 +136,13 @@ function groupFiles(groups: readonly string[]): Map<string, string> {
  * The part of `spec` the `operations` need, which the operation model reads them from as from the
  * spec: its `openapi`, `swagger` and `security`, each operation's path item with only those
  * operations among its methods, and every local `$ref` target reached from them, at the same
- * pointer. No `tags`: kebab-case names have no spaces, so only a top-level group matches a tag, and
+ * pointer, also from `roots` (other values whose `$ref`s must resolve). No `tags`: kebab-case names have no spaces, so only a top-level group matches a tag, and
  * the index holds its description.
  */
-export function sliceSpec(
+function sliceSpec(
 	spec: OpenApiSpec,
 	operations: readonly Pick<Operation, "method" | "path">[],
+	roots: readonly unknown[] = [],
 ): OpenApiSpec {
 	const methods = new Set<string>(METHODS);
 	const kept = Map.groupBy(operations, ({ path }) => path);
@@ -151,7 +168,7 @@ export function sliceSpec(
 
 	const refs = new Set<string>();
 	const walked = new WeakSet<object>();
-	const pending: unknown[] = [paths];
+	const pending: unknown[] = [paths, ...roots];
 	while (pending.length > 0) {
 		const value = pending.pop();
 		if (typeof value !== "object" || value === null || walked.has(value)) continue;
@@ -205,6 +222,77 @@ function put(target: object, key: string, value: unknown): void {
 		writable: true,
 		configurable: true,
 	});
+}
+
+/** Whether `value`, read from a built CLI's `index.json`, is an index of this version's layout. */
+export function isSpecIndex(value: unknown): value is SpecIndex {
+	const text = (field: unknown) => typeof field === "string";
+	const isMeta = (field: unknown) => {
+		const meta = record(field);
+		return (
+			meta !== undefined &&
+			(meta.description === undefined || text(meta.description)) &&
+			(meta.hidden === undefined || typeof meta.hidden === "boolean")
+		);
+	};
+	const index = record(value);
+	return (
+		index?.version === INDEX_VERSION &&
+		Array.isArray(index.commands) &&
+		index.commands.every((entry) => {
+			const command = record(entry);
+			return (
+				command !== undefined &&
+				text(command.name) &&
+				isMeta(command.meta) &&
+				text(command.operationId) &&
+				text(command.file)
+			);
+		}) &&
+		Array.isArray(index.groups) &&
+		index.groups.every((entry) => {
+			const group = record(entry);
+			return (
+				group !== undefined &&
+				text(group.name) &&
+				isMeta(group.meta) &&
+				Array.isArray(group.operationIds) &&
+				group.operationIds.every(text) &&
+				(group.file === undefined || text(group.file))
+			);
+		})
+	);
+}
+
+/**
+ * `spec` as the operation model reads only the operations `operationIds` from it: every other
+ * operation of its `paths` is copied without its operationId, which leaves it out, and the rest of
+ * the spec stays, so every `$ref` resolves as before.
+ */
+export function onlyOperations(spec: OpenApiSpec, operationIds: ReadonlySet<string>): OpenApiSpec {
+	const methods = new Set<string>(METHODS);
+	const paths: Record<string, unknown> = {};
+	for (const [path, item] of Object.entries(spec.paths ?? {})) {
+		const entries = record(item);
+		put(
+			paths,
+			path,
+			entries === undefined
+				? item
+				: Object.fromEntries(
+						Object.entries(entries).map(([key, value]) => {
+							const operation = methods.has(key) ? record(value) : undefined;
+							const { operationId } = operation ?? {};
+							if (typeof operationId !== "string" || operationIds.has(operationId)) {
+								return [key, value];
+							}
+							const { operationId: _operationId, ...rest } = operation!;
+							return [key, rest];
+						}),
+					),
+		);
+	}
+	return { ...spec, paths };
 }
 
 /** A data file of a built CLI, and the plans of generated operations in it. */
@@ -272,7 +360,10 @@ export function missingCommands(
 	return fewest === undefined || fewest.length === plans.length ? undefined : fewest;
 }
 
-/** Whether `node` holds the planned command, with its arguments and at least its flags. */
+/**
+ * Whether `node` holds the planned command with its description, hidden state and arguments, and at
+ * least its flags.
+ */
 function holds(node: CommandSnapshot, plan: CommandPlan): boolean {
 	let command: CommandSnapshot | undefined = node;
 	for (const word of [...(plan.group === "" ? [] : plan.group.split(" ")), plan.name]) {
@@ -280,7 +371,10 @@ function holds(node: CommandSnapshot, plan: CommandPlan): boolean {
 		if (command === undefined) return false;
 	}
 	const args = plan.inputs.filter(({ kind }) => kind === "arg").map(({ name }) => name);
+	const meta = operationMeta(plan);
 	return (
+		command.meta.description === meta.description &&
+		(command.meta.hidden === true) === (meta.hidden === true) &&
 		command.args.length === args.length &&
 		command.args.every(({ name }, position) => name === args[position]) &&
 		plan.inputs.every(({ kind, name }) => kind === "arg" || Object.hasOwn(command.flags, name))

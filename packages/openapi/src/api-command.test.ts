@@ -284,7 +284,7 @@ describe("the spec", () => {
 }
 `;
 	// The index of a CLI without generated commands: this spec's one operation has a lint error.
-	const noCommands = JSON.stringify({ commands: [], groups: [] });
+	const noCommands = JSON.stringify({ version: 1, commands: [], groups: [] });
 	const writeSpec = (text = jsonc) => {
 		const file = join(mkdtempSync(join(tmpdir(), "crust-openapi-spec-")), "acme.openapi.jsonc");
 		writeFileSync(file, text);

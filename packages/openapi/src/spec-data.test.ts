@@ -99,6 +99,8 @@ const spec = {
 			"Zone Record": { type: "object", properties: { ttl: { $ref: "#/components/schemas/Ttl" } } },
 			Ttl: { $ref: "#/components/schemas/Page" },
 			Unused: { type: "string", description: "Never reached" },
+			// Only an override's output schema reaches it.
+			Item: { type: "string" },
 		},
 		requestBodies: {
 			NewUser: {
@@ -192,6 +194,7 @@ describe("spec data files", () => {
 			"openapi/spec.json",
 		]);
 		expect(JSON.parse(files.files.get("openapi/index.json")!)).toEqual({
+			version: 1,
 			commands: [
 				{
 					name: "health",
@@ -252,6 +255,35 @@ describe("spec data files", () => {
 		expect(await builtApp.snapshot()).toEqual(await sourceApp.snapshot());
 		expect(await captureExecute(builtApp, ["api", "--list"])).toEqual(sourceList);
 		expect(builtApi.manifest()).toEqual(source.manifest());
+	});
+
+	it("give a built CLI the output schemas of the chain, also one that $refs what no operation does", async () => {
+		const withSchemas = () =>
+			defineApi({ spec: specUrl, baseUrl: "https://api.acme.test", paginate: () => undefined })
+				.each((op) =>
+					op.id === "status"
+						? { outputSchema: { $ref: "#/components/schemas/Unused" } }
+						: undefined,
+				)
+				.override({
+					listRecords: {
+						unwrap: (body) => body,
+						outputSchema: { type: "array", items: { $ref: "#/components/schemas/Item" } },
+					},
+				});
+		const source = await appOf(withSchemas()).snapshot();
+		await ship(appOf(withSchemas()));
+		const builtSnapshot = await appOf(withSchemas()).snapshot();
+
+		expect(builtSnapshot).toEqual(source);
+		expect(builtSnapshot.subCommands.dns!.subCommands["list-records"]).toMatchObject({
+			outputSchema: { type: "array", items: { type: "string" } },
+			flags: { paginate: expect.anything() },
+		});
+		expect(builtSnapshot.subCommands.status!.outputSchema).toEqual({
+			type: "string",
+			description: "Never reached",
+		});
 	});
 
 	it("are read in a built CLI as it needs them: the index at start, a group's file when it runs", async () => {
@@ -316,6 +348,54 @@ describe("spec data files", () => {
 		});
 	});
 
+	it("compare the bytes they write, not characters, against twice the spec", async () => {
+		// Each slice holds the shared non-ASCII description: fewer than twice the spec's characters, more than twice its bytes.
+		const wide = {
+			openapi: "3.1.0",
+			info: { title: "Acme", version: "1", description: "x".repeat(3500) },
+			paths: Object.fromEntries(
+				["a", "b", "c"].map((tag) => [
+					`/${tag}`,
+					{
+						get: {
+							operationId: `get-${tag}`,
+							tags: [tag],
+							summary: tag,
+							responses: ok({ $ref: "#/components/schemas/Wide" }),
+						},
+					},
+				]),
+			),
+			components: { schemas: { Wide: { type: "string", description: "漢".repeat(3000) } } },
+		};
+		writeFileSync(specUrl, JSON.stringify(wide));
+		const { files } = await runBuildHooks(
+			appOf(defineApi({ spec: specUrl, baseUrl: "https://api.acme.test" })),
+		);
+
+		expect([...files.keys()].sort()).toEqual(["openapi/index.json", "openapi/spec.json"]);
+	});
+
+	it("name a long group's file within file system limits", async () => {
+		const long = "a".repeat(300);
+		const named = () =>
+			defineApi({ spec: specUrl, baseUrl: "https://api.acme.test" }).override({
+				listUsers: { group: long },
+				getUser: { group: `${long}b` },
+			});
+		const files = await ship(appOf(named()));
+		const groupFiles = [...files.keys()].filter((path) => path.includes("/groups/"));
+
+		expect(groupFiles.every((path) => path.split("/").at(-1)!.length <= 100)).toBe(true);
+		expect(new Set(groupFiles).size).toBe(4);
+		expect(await captureExecute(appOf(named()), [long, "list-users"])).toMatchObject({
+			exitCode: 0,
+		});
+		expect(await captureExecute(appOf(named()), [`${long}b`, "get-user", "1"])).toMatchObject({
+			exitCode: 0,
+		});
+	});
+
 	it("name group files so no Windows device name or names that differ only in case collide", async () => {
 		const named = () =>
 			defineApi({ spec: specUrl, baseUrl: "https://api.acme.test" }).override({
@@ -366,6 +446,40 @@ describe("spec data files", () => {
 		expect(
 			(await runBuildHooks(new Crust("acme").extend(acme.extension).add(acme.commands[0]!))).error,
 		).toContain('missing or different "users list-users", "users create-user"');
+		// The description and the hidden state are in the index too.
+		const described = acme.override({ listUsers: { description: "Changed" } });
+		expect(
+			(await runBuildHooks(new Crust("acme").extend(acme.extension).add(...described.commands)))
+				.error,
+		).toContain('missing or different "users list-users";');
+		const hidden = acme.override({ getUser: { hidden: true } });
+		expect(
+			(await runBuildHooks(new Crust("acme").extend(acme.extension).add(...hidden.commands))).error,
+		).toContain('missing or different "users get-user";');
+	});
+
+	it("fail the build when the app holds another handle's commands and none of this one's", async () => {
+		writeFileSync(
+			specUrl,
+			JSON.stringify({
+				openapi: "3.1.0",
+				paths: { "/x": { get: { operationId: "getX", summary: "X", responses: ok() } } },
+			}),
+		);
+		const acme = defineApi({ spec: specUrl, baseUrl: "https://api.acme.test" });
+		const renamed = acme.override({ getX: { name: "changed" } });
+
+		expect(
+			(await runBuildHooks(new Crust("acme").extend(acme.extension).add(...renamed.commands)))
+				.error,
+		).toBe(
+			'Extension "crust:openapi" build failed: defineApi: the app\'s generated commands are those of another handle of this API; take `extension` and `commands` from the same handle, and add `commands` whole (`exclude` an operation to leave it out)',
+		);
+		// Its own app builds.
+		expect(
+			(await runBuildHooks(new Crust("acme").extend(renamed.extension).add(...renamed.commands)))
+				.error,
+		).toBeUndefined();
 	});
 
 	it("fail a source run whose app holds generated commands of another chain of the API", async () => {
@@ -385,6 +499,37 @@ describe("spec data files", () => {
 		expect(await captureExecute(first, ["users", "list-users"])).toMatchObject({ exitCode: 0 });
 		expect(await captureExecute(second, ["users", "all"])).toMatchObject({ exitCode: 0 });
 	});
+
+	it.each([
+		["not an index", JSON.stringify({ commands: [] }), "is not an index"],
+		[
+			"an index of another layout",
+			JSON.stringify({ version: 2, commands: [], groups: [] }),
+			"is not an index",
+		],
+		[
+			"a group without operations",
+			JSON.stringify({ version: 1, commands: [], groups: [{ name: "x" }] }),
+			"is not an index",
+		],
+		["not JSON", "{", "cannot read the OpenAPI document"],
+	])(
+		"fail every invocation of a built CLI whose index is %s, naming it",
+		async (_, text, problem) => {
+			built.dir = join(root, "corrupt");
+			mkdirSync(join(built.dir, "openapi"), { recursive: true });
+			writeFileSync(join(built.dir, "openapi", "index.json"), text);
+			const acme = chained();
+			const app = appOf(acme);
+
+			for (const argv of [["--help"], ["users", "list-users"]]) {
+				const { stdout, stderr, exitCode } = await captureExecute(app, argv);
+				expect({ stdout, exitCode }).toEqual({ stdout: "", exitCode: 1 });
+				expect(stderr).toContain(problem);
+				expect(stderr).toContain(join(built.dir, "openapi", "index.json"));
+			}
+		},
+	);
 
 	it("fail every invocation of a built CLI without its index with why, and no stack", async () => {
 		built.dir = join(root, "not-built");

@@ -36,14 +36,13 @@ import { isPlainObject } from "./request.ts";
 import {
 	type DataFile,
 	INDEX_FILE,
-	type SpecIndex,
 	indexedCommands,
+	isSpecIndex,
 	missingCommands,
-	sliceSpec,
+	onlyOperations,
 	specDataFiles,
 } from "./spec-data.ts";
-import { BUILT_SPEC_FILE, readBuiltFile, readSpec } from "./spec-source.ts";
-import { rawOperations } from "./spec-traversal.ts";
+import { BUILT_SPEC_FILE, builtFilePath, readBuiltFile, readSpec } from "./spec-source.ts";
 import type { SpecOperationsOf, Specs } from "./typed-client.ts";
 
 const API: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:openapi");
@@ -160,8 +159,11 @@ interface ApiBase {
 	readonly client: ContextFactory<"api", void, ApiClient>;
 	/** The spec, read once. */
 	readonly document: () => OpenApiSpec;
-	/** The commands of each chain whose `commands` was read. */
-	readonly readCommands: Map<ApiState, readonly GeneratedDefinition[]>;
+	/** The commands of each chain whose `commands` was read, and the plans they come from. */
+	readonly readCommands: Map<
+		ApiState,
+		{ readonly commands: readonly GeneratedDefinition[]; readonly built: () => CommandPlan[] }
+	>;
 	/** Why a built CLI's `index.json` could not be read, once `commands` tried. */
 	indexFailure?: unknown;
 }
@@ -265,20 +267,14 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 		baseUrl: base.baseUrl,
 		paginate: base.paginate,
 	};
-	// A built CLI's data files, each read once. Operations are planned from the slice of their
-	// own, which plans them as the whole spec does: a command plans only what it runs.
+	// A built CLI's data files, each read once. A command plans only the operations it runs, which
+	// plan as from the whole spec: the plan of one does not depend on the others.
 	const dataFiles = new Map<string, DataFile>();
 	const dataFile = (file: string): DataFile => {
 		let data = dataFiles.get(file);
 		if (data === undefined) {
 			const spec =
 				file === BUILT_SPEC_FILE ? base.document() : (readBuiltFile(base.id, file) as OpenApiSpec);
-			const routes = new Map(
-				rawOperations(spec).map(({ method, path, operation }) => [
-					(operation as { operationId?: unknown }).operationId,
-					{ method, path },
-				]),
-			);
 			const mismatch = (operationId: string) =>
 				new Error(
 					`api: the OpenAPI data "${file}" has no operation "${operationId}": its "${base.id}" directory comes from another build. Ship the one \`crust build\` wrote with this CLI.`,
@@ -286,9 +282,11 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 			data = {
 				spec,
 				plans: (operationIds) => {
-					const own = operationIds.flatMap((operationId) => routes.get(operationId) ?? []);
 					const byId = new Map(
-						planFor(sliceSpec(spec, own)).commands.map((each) => [each.op.id, each]),
+						planFor(onlyOperations(spec, new Set(operationIds))).commands.map((each) => [
+							each.op.id,
+							each,
+						]),
 					);
 					return operationIds.map((operationId) => {
 						const found = byId.get(operationId);
@@ -304,15 +302,18 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 	// A built CLI's index names the top-level commands; without it there are none, and the
 	// Extension reports why.
 	const indexed = (): readonly GeneratedDefinition[] => {
-		let index: SpecIndex;
 		try {
-			// Written by this package's build hook, as its slices are.
-			index = readBuiltFile(base.id, INDEX_FILE) as SpecIndex;
+			const index = readBuiltFile(base.id, INDEX_FILE);
+			if (!isSpecIndex(index)) {
+				throw new Error(
+					`api: the OpenAPI data "${builtFilePath(base.id, INDEX_FILE)}" is not an index this version of @crustjs/openapi reads. Run \`crust build\`, and ship its "${base.id}" directory with the CLI.`,
+				);
+			}
+			return indexedCommands(index, state.added, options, dataFile);
 		} catch (error) {
 			base.indexFailure = error;
 			return [];
 		}
-		return indexedCommands(index, state.added, options, dataFile);
 	};
 	let extension: Api["extension"] | undefined;
 	let commands: readonly GeneratedDefinition[] | undefined;
@@ -327,7 +328,7 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 					base.spec instanceof URL && !isSourceRun()
 						? indexed()
 						: generateCommands(built(), state.added, { ...options, spec: base.document() });
-				base.readCommands.set(state, commands);
+				base.readCommands.set(state, { commands, built });
 			}
 			return commands;
 		},
@@ -392,9 +393,9 @@ function apiExtension(
 			if (base.indexFailure !== undefined) throw base.indexFailure;
 			// A built CLI's commands were checked when it was built.
 			if (!isSourceRun()) return;
-			for (const [chain, definitions] of base.readCommands) {
+			for (const [chain, { commands }] of base.readCommands) {
 				if (chain === state) continue;
-				if (definitions.some((definition) => ctx.commandPathOf(definition) !== undefined)) {
+				if (commands.some((definition) => ctx.commandPathOf(definition) !== undefined)) {
 					throw mismatch("the app holds generated commands of another chain of this API");
 				}
 			}
@@ -414,14 +415,24 @@ function apiExtension(
 				const text = JSON.stringify(document);
 				const files = new Map([[BUILT_SPEC_FILE, text]]);
 				const plans = built();
-				// The index claims the app's commands: those of this handle's plan, or none.
+				// The index claims the app's commands: those of this handle's plan, or none of any.
 				const missing = missingCommands(snapshot, plans);
 				if (missing !== undefined && missing.length > 0) {
 					throw mismatch(
 						`the app's generated commands are not this handle's: missing or different ${missing.map((path) => `"${path}"`).join(", ")}`,
 					);
 				}
-				if (missing !== undefined) {
+				if (missing === undefined) {
+					for (const [chain, other] of base.readCommands) {
+						if (chain === state) continue;
+						const otherPlans = other.built();
+						if (otherPlans.length > 0 && missingCommands(snapshot, otherPlans) !== undefined) {
+							throw mismatch(
+								"the app's generated commands are those of another handle of this API",
+							);
+						}
+					}
+				} else {
 					for (const [path, content] of specDataFiles(document, text, plans, state.added)) {
 						files.set(path, content);
 					}
