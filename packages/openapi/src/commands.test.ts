@@ -731,6 +731,26 @@ describe("api preview", () => {
 		expect(bind).not.toHaveBeenCalled();
 	});
 
+	it("lists a rule's binding as bound only where the operation has an input of its name", async () => {
+		const bind = vi.fn(async () => "me");
+		const acme = buildApi().each(() => ({ bind: { id: bind } }));
+		const app = new Crust("acme").extend(acme.extension).add(...acme.commands);
+		const preview = async (...target: [string, ...string[]]) =>
+			(await app.run(["api", "preview"], { args: { target } })) as {
+				result?: unknown;
+				error?: unknown;
+			};
+
+		const list = await preview("users", "list-users");
+		expect(list.error).toBeUndefined();
+		expect(list.result).not.toHaveProperty("bound");
+		expect((await preview("users", "get-user")).result).toMatchObject({
+			url: "https://api.example.com/v1/users/{id}",
+			bound: ["id"],
+		});
+		expect(bind).not.toHaveBeenCalled();
+	});
+
 	it("fails as the command would, and for a target that is not a generated command", async () => {
 		const { app } = guardedApp();
 		const preview = (...argv: string[]) => captureExecute(app, ["api", "preview", ...argv]);

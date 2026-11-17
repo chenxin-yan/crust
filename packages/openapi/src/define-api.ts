@@ -31,7 +31,7 @@ import {
 	generateCommands,
 	operationRequest,
 } from "./commands.ts";
-import { type CommandPlan, boundNames, planCommands } from "./lint.ts";
+import { type CommandPlan, planCommands } from "./lint.ts";
 import { type ApiManifest, manifest } from "./manifest.ts";
 import { type MissingValueHandler, bindMissingValues, canAsk } from "./missing-values.ts";
 import { type Diagnostic, type Operation, operationLabel, operations } from "./operations.ts";
@@ -502,17 +502,19 @@ function apiExtension(
 						{ argument: "target" },
 					);
 				}
-				// A binding is never called: its value is the placeholder `{name}`.
+				// A binding is never called: its value is the placeholder `{name}`. The builder asks only
+				// for those the operation has an input of, as the command does.
+				const bound: string[] = [];
 				const request = await operationRequest(
 					found.spec,
 					found.plan,
 					{ arg: parsed.args, flag: parsed.flags },
-					(name) => `{${name}}`,
+					(name) => {
+						bound.push(name);
+						return `{${name}}`;
+					},
 				);
-				previews.set(await ctx.ctx.api, {
-					request,
-					bound: [...boundNames(found.plan.fields)],
-				});
+				previews.set(await ctx.ctx.api, { request, bound });
 				return;
 			}
 			if (state.onMissing === undefined || !canAsk()) return;
