@@ -66,6 +66,21 @@ describe("createCommandIndex", () => {
 		expect(index.search("Credentials", 5)).toEqual([["keys"]]);
 	});
 
+	it("ranks an exact word above a word that only shares its singular", async () => {
+		const plural = new Crust("acme").add(
+			defineCommand("new", (cmd) => cmd.action(() => {})),
+			defineCommand("news", (cmd) => cmd.action(() => {})),
+		);
+		const words = createCommandIndex(entries(await plural.snapshot()));
+		expect(words.search("news", 5)).toEqual([["news"], ["new"]]);
+		expect(words.search("new", 5)).toEqual([["new"], ["news"]]);
+	});
+
+	it("finds the root command by its name", async () => {
+		const root = createCommandIndex(entries(await new Crust("deploy").action(() => {}).snapshot()));
+		expect(root.search("deploy", 5)).toEqual([[]]);
+	});
+
 	it("returns nothing for a query without a match", () => {
 		expect(index.search("nothing here", 5)).toEqual([]);
 		expect(index.search("  ", 5)).toEqual([]);

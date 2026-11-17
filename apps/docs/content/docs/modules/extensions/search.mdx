@@ -41,6 +41,6 @@ const outcome = await app.run(["search"], { args: { task: ["rotate", "key"] } })
 
 ## Ranking
 
-Words are matched without letter case, in their singular form (`keys` matches `key`), split at camelCase and punctuation, and a word also matches the start of a longer one (`rot` matches `rotate`). A command scores more for words in its path and aliases than in its description, and least for words in its argument and flag names and descriptions; flags an Extension declares, such as `--help`, are left out. Ties keep command path order.
+Words are matched without letter case and split at camelCase and punctuation. A word counts most when it matches as written, less when only its singular form matches (`keys` matches `key`; `news` also matches `new`, below an exact `news`), and least when it only starts a longer word (`rot` matches `rotate`). A command scores more for words in its name, path, and aliases than in its description, and least for words in its argument and flag names and descriptions; flags an Extension declares, such as `--help`, are left out. Ties keep command path order.
 
 The ranking is `createCommandIndex()` from [`@crustjs/core/tooling`](/docs/modules/core#tooling-subpath). [MCP](/docs/modules/mcp#discovery)'s `search_tools` uses it too, over its tools, so a command ranks the same in both.
