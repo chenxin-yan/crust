@@ -72,6 +72,16 @@ interface AcmeOperations {
 		requestBody?: never;
 		responses: { 200: { headers: { [name: string]: unknown }; content: { "image/png": string } } };
 	};
+	getReport: {
+		parameters: NoParameters;
+		requestBody?: never;
+		responses: {
+			200: {
+				headers: { [name: string]: unknown };
+				content: { "application/json": { title: string }; "application/xml": string };
+			};
+		};
+	};
 	ping: {
 		parameters: NoParameters;
 		requestBody?: never;
@@ -128,6 +138,9 @@ function _typecheckRegisteredSpecById() {
 				// Not JSON: the Response, typed unknown.
 				const avatar = await api.call("getAvatar", { path: { id: "1" } });
 				type _Avatar = Expect<Equal<typeof avatar, unknown>>;
+				// JSON and another media type for one status: the JSON body, which call() asks for.
+				const report = await api.call("getReport");
+				type _Report = Expect<Equal<typeof report, { title: string }>>;
 				// No 2xx response: unknown.
 				const pong = await api.call("ping");
 				type _Pong = Expect<Equal<typeof pong, unknown>>;

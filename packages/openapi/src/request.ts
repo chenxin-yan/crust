@@ -13,7 +13,8 @@ export interface OperationRequest {
 
 /**
  * A non-2xx response to `api <path>`, whose body was already printed (to stderr under `--json`),
- * or to `call()`. The `json()` Extension prints its `status` as the error's `details`.
+ * or to `call()`, or a 2xx answer to `call()` that is not the JSON the spec declares. The `json()`
+ * Extension prints its `status` as the error's `details`.
  */
 export class ApiResponseError extends Error {
 	override name = "ApiResponseError";
@@ -29,6 +30,18 @@ export class ApiResponseError extends Error {
 }
 
 const LOCATIONS = ["path", "query", "header"] as const;
+
+/** A 2xx status of the spec: `"200"` or a range such as `"2XX"`. */
+const isSuccess = (status: string): boolean => /^2(?:\d\d|XX)$/i.test(status);
+
+/** The JSON media types of the operation's 2xx responses. */
+function successJsonTypes(op: Operation): string[] {
+	return op.responses.flatMap(({ status, contentType }) =>
+		isSuccess(status) && contentType !== undefined && isJsonMediaType(contentType)
+			? [contentType]
+			: [],
+	);
+}
 
 /** Percent-encodes all but RFC 3986 unreserved characters, as RFC 6570 does; `encodeURIComponent` keeps `!'()*`. */
 function encode(value: string | number | boolean): string {
@@ -62,9 +75,15 @@ const isScalar = (value: unknown): value is Scalar =>
  * value that would make an empty, `.` or `..` segment and so address another resource.
  */
 export function buildRequest(op: Operation, input: CallInput = {}): OperationRequest {
+	// The model leaves out Accept parameters, as OpenAPI says; the caller may still send one.
+	const accept = Object.keys(input.header ?? {}).find((name) => name.toLowerCase() === "accept");
+	const params: readonly Param[] =
+		accept === undefined
+			? op.params
+			: [...op.params, { name: accept, in: "header", required: false }];
 	for (const location of LOCATIONS) {
 		for (const name of Object.keys(input[location] ?? {})) {
-			if (!op.params.some((param) => param.in === location && param.name === name)) {
+			if (!params.some((param) => param.in === location && param.name === name)) {
 				throw invalid(op, `no ${location} parameter "${name}"`);
 			}
 		}
@@ -73,7 +92,7 @@ export function buildRequest(op: Operation, input: CallInput = {}): OperationReq
 	const filled = new Map<string, string>();
 	const query: string[] = [];
 	const headers = new Headers();
-	for (const param of op.params) {
+	for (const param of params) {
 		if (param.in === "cookie") {
 			if (param.required)
 				throw invalid(op, `the required cookie parameter "${param.name}" cannot be sent`);
@@ -106,6 +125,11 @@ export function buildRequest(op: Operation, input: CallInput = {}): OperationReq
 		} else {
 			for (const item of items) query.push(`${encode(param.name)}=${encode(item)}`);
 		}
+	}
+	// Asks for the JSON the result type promises, where the spec also allows another media type.
+	const jsonTypes = successJsonTypes(op);
+	if (!headers.has("accept") && jsonTypes.length > 0) {
+		headers.set("accept", [...new Set([...jsonTypes, "application/json"])].join(", "));
 	}
 
 	// Segment by segment: a URL parser resolves an empty, `.` or `..` segment (even `%2E`) to
@@ -214,8 +238,10 @@ function serializable(
 
 /**
  * Sends `op` through `fetch` (without credentials for a public operation, `security: []`) and
- * returns a 2xx response's JSON body, `undefined` for no content, or the unread `Response` of any
- * other media type. A non-2xx response rejects with an {@link ApiResponseError}.
+ * returns a 2xx response's JSON body, `undefined` for no content, or the unread `Response` of
+ * another media type where the spec declares no JSON for that status. A non-2xx response, or a
+ * 2xx answered with another media type than the JSON it declares, rejects with an
+ * {@link ApiResponseError}.
  */
 export async function callOperation(
 	fetch: ApiClient["fetch"],
@@ -246,6 +272,22 @@ export async function callOperation(
 	if (response.body === null || response.headers.get("content-length") === "0") {
 		await response.body?.cancel();
 		return undefined;
+	}
+	// The result type is the JSON body where this status (or, undeclared, any 2xx) declares JSON,
+	// so another media type is an error rather than a Response typed as that body.
+	const status = String(response.status);
+	const declared =
+		op.responses.find((entry) => entry.status === status) ??
+		op.responses.find((entry) => entry.status.toUpperCase() === `${status[0]}XX`);
+	const expectsJson = declared
+		? declared.contentType !== undefined && isJsonMediaType(declared.contentType)
+		: successJsonTypes(op).length > 0;
+	if (expectsJson) {
+		await response.body?.cancel();
+		throw new ApiResponseError(
+			response.status,
+			`${shown}: HTTP ${response.status} answered ${type ?? "no Content-Type"}, not JSON`,
+		);
 	}
 	return response;
 }

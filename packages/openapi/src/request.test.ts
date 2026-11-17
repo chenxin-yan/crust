@@ -45,6 +45,39 @@ const spec = {
 		"/status": {
 			get: { operationId: "status", security: [], responses: { "200": { description: "ok" } } },
 		},
+		"/reports/{id}": {
+			get: {
+				operationId: "getReport",
+				parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+				responses: {
+					"200": {
+						description: "The report, as JSON or XML",
+						content: {
+							"application/json": { schema: { type: "object" } },
+							"application/xml": { schema: { type: "string" } },
+						},
+					},
+				},
+			},
+		},
+		"/feed": {
+			get: {
+				operationId: "getFeed",
+				responses: {
+					"200": {
+						description: "ok",
+						content: { "application/vnd.feed+json": { schema: { type: "object" } } },
+					},
+					"202": { description: "queued", content: { "text/plain": { schema: {} } } },
+				},
+			},
+		},
+		"/export": {
+			get: {
+				operationId: "export",
+				responses: { "200": { description: "ok", content: { "text/csv": { schema: {} } } } },
+			},
+		},
 		"/maps/{at}/{near}": {
 			get: {
 				operationId: "locate",
@@ -238,6 +271,19 @@ describe("buildRequest", () => {
 		expect((error as Error).cause).toBeUndefined();
 	});
 
+	it("asks for JSON when the operation declares a JSON 2xx response, unless the input sets Accept", () => {
+		expect(request("getReport", { path: { id: "1" } }).headers).toEqual({
+			accept: "application/json",
+		});
+		expect(request("getFeed").headers).toEqual({
+			accept: "application/vnd.feed+json, application/json",
+		});
+		expect(request("export").headers).toEqual({});
+		expect(
+			request("getReport", { path: { id: "1" }, header: { ACCEPT: "application/xml" } }).headers,
+		).toEqual({ accept: "application/xml" });
+	});
+
 	it("names what call() cannot send and points to fetch()", () => {
 		const unsent = {
 			...op("upload"),
@@ -368,6 +414,57 @@ describe("call()", () => {
 		);
 
 		expect(result).toEqual([false, "a,b\n"]);
+	});
+
+	it("still returns the Response, sending no Accept, for an operation that declares no JSON", async () => {
+		const result = await withClient(
+			() => new Response("a,b\n", { headers: { "content-type": "text/csv" } }),
+			async (api) => {
+				const response = await api.call("export");
+				return response instanceof Response ? await response.text() : response;
+			},
+		);
+
+		expect(result).toBe("a,b\n");
+		expect(fetched[0]?.headers).toEqual({ authorization: "Bearer secret" });
+	});
+
+	it.each([
+		["getReport", "application/xml", "GET /reports/1: HTTP 200 answered application/xml, not JSON"],
+		["getFeed", null, "GET /feed: HTTP 200 answered no Content-Type, not JSON"],
+	])(
+		"rejects a 2xx answer to %s that is not the JSON it declares, without its body",
+		async (id, type, message) => {
+			const error = await withClient(
+				() =>
+					// Bytes, so the Response adds no Content-Type of its own.
+					new Response(new TextEncoder().encode("<secret>SECRET_SENTINEL</secret>"), {
+						headers: type === null ? {} : { "content-type": type },
+					}),
+				(api) =>
+					api
+						.call(id, id === "getReport" ? { path: { id: "1" } } : undefined)
+						.catch((caught: unknown) => caught),
+			);
+
+			expect(error).toBeInstanceOf(ApiResponseError);
+			expect(error).toMatchObject({ status: 200, message });
+			expect(fetched[0]?.headers.accept).toBe(
+				id === "getReport" ? "application/json" : "application/vnd.feed+json, application/json",
+			);
+		},
+	);
+
+	it("returns the Response for a declared non-JSON status of an operation that also declares JSON", async () => {
+		const result = await withClient(
+			() => new Response("queued", { status: 202, headers: { "content-type": "text/plain" } }),
+			async (api) => {
+				const response = await api.call("getFeed");
+				return response instanceof Response ? await response.text() : response;
+			},
+		);
+
+		expect(result).toBe("queued");
 	});
 
 	it("rejects a non-2xx response with an ApiResponseError, leaving out the query", async () => {
