@@ -1,9 +1,12 @@
 import { readFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
 
+import { withLock } from "@crustjs/store";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
 	fakeKeyring,
+	holdLock,
 	json,
 	login,
 	loginTokens,
@@ -13,6 +16,7 @@ import {
 } from "../tests/helpers.ts";
 import { credentialStore, credentialStoreInternals } from "./credentials.ts";
 import {
+	AbortError,
 	CredentialKeyError,
 	CredentialStoreCorruptError,
 	LoginRequiredError,
@@ -767,5 +771,104 @@ describe("status", () => {
 		await expect(fromStore(w.source({ store: reopen(w, {}) })).probe()).resolves.toBe(true);
 		expect(keyring.calls.length).toBe(reads);
 		expect(keyring.writes()).toBe(1);
+	});
+});
+
+describe("an empty keyring entry", () => {
+	it("is an unreadable key, never an absent one: reads, refreshes and logins fail and write nothing", async () => {
+		const keyring = fakeKeyring();
+		const w = world();
+		await login(w.source());
+		await login(w.source({ identity: { ...w.identity, profile: "work" } }), {
+			expiresAt: undefined,
+		});
+		keyring.entries.set(`${w.app}\0credentials-key`, "");
+		const before = readFileSync(w.file, "utf8");
+		for (const call of [
+			() => w.source({ store: reopen(w, {}), identity: { ...w.identity, profile: "work" } }).get(),
+			() => w.source({ store: reopen(w, {}) }).forceRefresh(),
+			() => login(w.source({ store: reopen(w, {}) })),
+		]) {
+			await expect(call()).rejects.toMatchObject({ code: "credential-key", reason: "unreadable" });
+		}
+		expect(readFileSync(w.file, "utf8")).toBe(before);
+		expect(keyring.writes()).toBe(1);
+		expect(w.tokenRequests()).toHaveLength(0);
+	});
+});
+
+describe("cancellation", () => {
+	it("an abort during a login's keyring read stops waiting and never writes a key", async () => {
+		const keyring = fakeKeyring();
+		keyrings.deadlineMs = 5_000;
+		const held = gate();
+		keyring.state.readGate = held.wait;
+		const w = world();
+		const ticket = await w.source().beginLogin();
+		const controller = new AbortController();
+		const commit = ticket.commit(loginTokens(), { signal: controller.signal });
+		await vi.waitFor(() => expect(keyring.calls).toHaveLength(1));
+		controller.abort();
+		// The keyring answers "no key" right after the abort.
+		held.open();
+		await expect(commit).rejects.toBeInstanceOf(AbortError);
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		expect(keyring.writes()).toBe(0);
+		expect(w.document().records).toEqual({});
+	});
+
+	it("an abort while a login waits for the key-init lock stops waiting and never writes a key", async () => {
+		const keyring = fakeKeyring();
+		const w = world();
+		const lock = await holdLock((fn) => withLock(join(w.dir, "key-init"), fn));
+		const ticket = await w.source().beginLogin();
+		const controller = new AbortController();
+		const commit = ticket.commit(loginTokens(), { signal: controller.signal });
+		await vi.waitFor(() => expect(keyring.calls).toHaveLength(1));
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		controller.abort();
+		await expect(commit).rejects.toBeInstanceOf(AbortError);
+		await lock.release();
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		expect(keyring.writes()).toBe(0);
+		expect(keyring.calls).toHaveLength(1);
+	});
+
+	it("a refresh whose callers all left during its keyring read writes no key, no mark and sends nothing", async () => {
+		const keyring = fakeKeyring();
+		const w = world();
+		await login(w.source({ store: reopen(w) }));
+		const held = gate();
+		keyring.state.readGate = held.wait;
+		const controller = new AbortController();
+		const pending = w.source().get({ signal: controller.signal });
+		await vi.waitFor(() => expect(keyring.calls).toHaveLength(1));
+		controller.abort();
+		await expect(pending).rejects.toBeInstanceOf(AbortError);
+		held.open();
+		await vi.waitFor(() => expect(refreshFlights.size).toBe(0));
+		expect(keyring.writes()).toBe(0);
+		expect(w.tokenRequests()).toHaveLength(0);
+		expect(w.document().records[w.source().key].refreshInProgress).toBeUndefined();
+	});
+
+	it("an abort during the keyring read of get() or status() rejects at once", async () => {
+		const keyring = fakeKeyring();
+		keyrings.deadlineMs = 5_000;
+		const w = world();
+		await login(w.source(), { expiresAt: undefined });
+		keyring.state.get = "hang";
+		const store = reopen(w, {});
+		for (const call of [
+			(signal: AbortSignal) => w.source({ store }).get({ signal }),
+			(signal: AbortSignal) => store.status({ signal }),
+		]) {
+			const controller = new AbortController();
+			const started = performance.now();
+			const pending = call(controller.signal);
+			setTimeout(() => controller.abort(), 50);
+			await expect(pending).rejects.toBeInstanceOf(AbortError);
+			expect(performance.now() - started).toBeLessThan(1_000);
+		}
 	});
 });

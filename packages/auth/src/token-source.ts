@@ -204,8 +204,12 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 	});
 
 	/** The access token of this key's live `record` in `document`. */
-	async function tokenOf(document: CredentialsDocument, record: StoredRecord) {
-		const { accessToken: value } = await store.reveal(document, key, record);
+	async function tokenOf(
+		document: CredentialsDocument,
+		record: StoredRecord,
+		signal: AbortSignal | undefined,
+	) {
+		const { accessToken: value } = await store.reveal(document, key, record, signal);
 		return accessToken(value, record.generation as string);
 	}
 
@@ -223,11 +227,11 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 				// With the lock held, a mark's refresh is no longer running: its outcome is unknown.
 				if (record.refreshInProgress) throw new RefreshOutcomeUnknownError();
 				// Another process or source refreshed or logged in meanwhile: use its token.
-				if (record.generation !== generation) return tokenOf(document, record);
+				if (record.generation !== generation) return tokenOf(document, record, signal);
 				// The keys come first: one that can't be read or created stops the refresh unmarked.
-				const secret = await store.reveal(document, key, record);
+				const secret = await store.reveal(document, key, record, signal);
 				if (secret.refreshToken === undefined) throw new LoginRequiredError("expired");
-				const writeKey = await store.writeKey(document, false);
+				const writeKey = await store.writeKey(document, false, signal);
 				const server = await discoverServer(signal);
 				throwIfAborted(signal);
 				const storeId = document.storeId;
@@ -390,7 +394,9 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 			const fresh =
 				!record.refreshInProgress &&
 				(record.expiresAt === undefined || Date.now() < record.expiresAt - skewMs);
-			return fresh ? tokenOf(document, record) : sharedRefresh(record.generation as string, signal);
+			return fresh
+				? tokenOf(document, record, signal)
+				: sharedRefresh(record.generation as string, signal);
 		},
 
 		async forceRefresh({
@@ -405,7 +411,7 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 				record.generation !== ifGeneration &&
 				!record.refreshInProgress
 			) {
-				return tokenOf(document, record);
+				return tokenOf(document, record, signal);
 			}
 			return sharedRefresh(record.generation as string, signal);
 		},
@@ -489,7 +495,7 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 							key,
 							async () => {
 								throwIfAborted(stop);
-								const writeKey = await store.writeKey(await store.read(), true);
+								const writeKey = await store.writeKey(await store.read(), true, stop);
 								const stored = await store.withSecret(writeKey, key, record, {
 									accessToken: tokens.accessToken,
 									refreshToken: tokens.refreshToken,
@@ -556,7 +562,7 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 						!mismatch(record.identity as StoredIdentity, identity)
 					) {
 						captured = await store
-							.reveal(document as CredentialsDocument, key, record)
+							.reveal(document as CredentialsDocument, key, record, signal)
 							.catch(() => undefined);
 					}
 					throwIfAborted(signal);

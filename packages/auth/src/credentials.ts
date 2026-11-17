@@ -111,13 +111,22 @@ export interface CredentialStoreInternals {
 	 * The tokens of `record`, the live record of `key` in `document`: decrypted when encrypted,
 	 * which needs the file's key in the keyring. Writes nothing.
 	 */
-	reveal(document: CredentialsDocument, key: string, record: StoredRecord): Promise<PlainSecret>;
+	reveal(
+		document: CredentialsDocument,
+		key: string,
+		record: StoredRecord,
+		signal: AbortSignal | undefined,
+	): Promise<PlainSecret>;
 	/**
 	 * How a write into `document` stores its secret, picked before the document lock: the file's
 	 * key, else the keyring's (created once), else plaintext. Only a `login` replaces a file key
-	 * the keyring no longer holds.
+	 * the keyring no longer holds. `signal` is observed until a key write is dispatched.
 	 */
-	writeKey(document: CredentialsDocument | undefined, login: boolean): Promise<WriteKey>;
+	writeKey(
+		document: CredentialsDocument | undefined,
+		login: boolean,
+		signal: AbortSignal | undefined,
+	): Promise<WriteKey>;
 	/** `record` (key `key`) holding `secret`, stored as `writeKey` says. */
 	withSecret(
 		writeKey: WriteKey,
@@ -442,19 +451,19 @@ export function credentialStore(options: CredentialStoreOptions): CredentialStor
 	};
 
 	// App-wide: every credentials file of the app shares the keyring's one key.
-	const keys = fileKeys(options.app, keyring, async (fn) => {
+	const keys = fileKeys(options.app, keyring, async (fn, signal) => {
 		try {
-			await withLock(join(dir, "key-init"), fn, { timeout: options.lockTimeout });
+			await withLock(join(dir, "key-init"), fn, { signal, timeout: options.lockTimeout });
 		} catch (error) {
-			throw storageError(error, path, undefined);
+			throw storageError(error, path, signal);
 		}
 	});
 
-	const reveal: CredentialStoreInternals["reveal"] = async (document, key, record) => {
+	const reveal: CredentialStoreInternals["reveal"] = async (document, key, record, signal) => {
 		const secret = record.secret as StoredSecret;
 		if (!isSealed(secret)) return secret;
 		if (document.keyId === undefined) throw new CredentialStoreCorruptError(path, { key });
-		const { key: cryptoKey } = await keys.forFile(document.keyId);
+		const { key: cryptoKey } = await keys.forFile(document.keyId, signal);
 		let plain: StoredSecret | undefined;
 		try {
 			plain = parseSecret(
@@ -489,7 +498,7 @@ export function credentialStore(options: CredentialStoreOptions): CredentialStor
 				const secret = parseRecord(raw)?.secret;
 				return secret !== undefined && !isSealed(secret);
 			}).length;
-			const { kind, keyReadable } = await keys.status(document?.keyId);
+			const { kind, keyReadable } = await keys.status(document?.keyId, signal);
 			return {
 				kind,
 				encryption: document?.keyId === undefined ? "plaintext" : "aes-256-gcm",
@@ -532,7 +541,7 @@ export function credentialStore(options: CredentialStoreOptions): CredentialStor
 		update,
 		lockIdentity,
 		reveal,
-		writeKey: (document, login) => keys.forWrite(document?.keyId, login),
+		writeKey: (document, login, signal) => keys.forWrite(document?.keyId, login, signal),
 		withSecret,
 	});
 	return credentials;

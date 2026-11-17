@@ -364,7 +364,11 @@ export interface FakeKeyring {
 	/** Stored values by `<service>\0<name>`. */
 	entries: Map<string, string>;
 	calls: { op: "get" | "set"; service: string; name: string }[];
-	state: { get: "value" | "error" | "hang"; writeGate: Promise<void> | undefined };
+	state: {
+		get: "value" | "error" | "hang";
+		readGate: Promise<void> | undefined;
+		writeGate: Promise<void> | undefined;
+	};
 	writes(): number;
 	/** The stored entry of `app`, parsed. */
 	entry(app: string): { keyId: string; key: string } | undefined;
@@ -373,19 +377,21 @@ export interface FakeKeyring {
 /**
  * An in-memory OS keyring, installed as the backend every credential store of the test loads.
  * `get` is how the next reads answer: the stored value, an error, or never (past the deadline).
- * A write waits for `writeGate` when one is set.
+ * A read waits for `readGate`, and a write for `writeGate`, when one is set.
  */
 export function fakeKeyring(kind: KeyringKind = "bun-secrets"): FakeKeyring {
 	const entries = new Map<string, string>();
 	const calls: { op: "get" | "set"; service: string; name: string }[] = [];
 	const state: FakeKeyring["state"] = {
 		get: "value",
+		readGate: undefined,
 		writeGate: undefined,
 	};
 	const backend: KeyringBackend = {
 		kind,
 		async get(service, name) {
 			calls.push({ op: "get", service, name });
+			await state.readGate;
 			if (state.get === "error") throw new Error("The keyring is locked");
 			if (state.get === "hang") return new Promise<never>(() => {});
 			return entries.get(`${service}\0${name}`);

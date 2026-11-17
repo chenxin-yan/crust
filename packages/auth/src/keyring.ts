@@ -1,5 +1,6 @@
 import { importKey } from "./cipher.ts";
-import { CredentialKeyError, LoginRequiredError } from "./errors.ts";
+import { AbortError, CredentialKeyError, LoginRequiredError } from "./errors.ts";
+import { throwIfAborted } from "./http.ts";
 import type { KeyringOptions } from "./types.ts";
 
 // The OS keyring holds one entry per app, `service=<app>`, `name="credentials-key"`: the key that
@@ -83,11 +84,19 @@ const sealed = (fileKey: FileKey): WriteKey => ({ kind: "sealed", fileKey, repla
 /** Apps whose plaintext fallback was reported: once per process. */
 const warned = new Set<string>();
 
-/** `promise`, or a rejection once the keyring deadline passes. The native call is not stopped. */
-function withinDeadline<T>(promise: Promise<T>): Promise<T> {
+/**
+ * `promise`, or a rejection once the keyring deadline passes or `signal` aborts
+ * (`AbortError`). The native call is not stopped.
+ */
+function withinDeadline<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
 	return new Promise<T>((resolve, reject) => {
+		const abort = () => reject(new AbortError());
 		const timer = setTimeout(() => reject(new Error("keyring deadline")), keyrings.deadlineMs);
-		void promise.then(resolve, reject).finally(() => clearTimeout(timer));
+		signal?.addEventListener("abort", abort, { once: true });
+		void promise.then(resolve, reject).finally(() => {
+			clearTimeout(timer);
+			signal?.removeEventListener("abort", abort);
+		});
 	});
 }
 
@@ -109,26 +118,32 @@ function parseValue(value: string): { keyId: string; bytes: Uint8Array<ArrayBuff
 /** The file key of what a credentials file stores: `undefined` options mean no keyring at all. */
 export interface FileKeys {
 	/** The key of a file encrypted under `keyId`: the keyring must hold it. Never writes. */
-	forFile(keyId: string): Promise<FileKey>;
+	forFile(keyId: string, signal: AbortSignal | undefined): Promise<FileKey>;
 	/**
 	 * How a write into a file recording `fileKeyId` stores its secret. Creates the key when the
 	 * keyring has none. Only a `login` may replace a file key that is missing or another.
+	 * `signal` is observed until the key's write is dispatched.
 	 */
-	forWrite(fileKeyId: string | undefined, login: boolean): Promise<WriteKey>;
+	forWrite(
+		fileKeyId: string | undefined,
+		login: boolean,
+		signal: AbortSignal | undefined,
+	): Promise<WriteKey>;
 	/** The backend, and whether the key of a file recording `fileKeyId` can be read. Never writes. */
 	status(
 		fileKeyId: string | undefined,
+		signal: AbortSignal | undefined,
 	): Promise<{ kind: KeyringKind | "file"; keyReadable: boolean }>;
 }
 
 /**
  * The file key of `app`. `lockKeyInit` runs its function under the app-wide `key-init` lock,
- * which serializes key creation across processes.
+ * which serializes key creation across processes; `signal` cancels only the wait for it.
  */
 export function fileKeys(
 	app: string,
 	options: KeyringOptions | undefined,
-	lockKeyInit: (fn: () => Promise<void>) => Promise<void>,
+	lockKeyInit: (fn: () => Promise<void>, signal: AbortSignal | undefined) => Promise<void>,
 ): FileKeys {
 	let backend: Promise<KeyringBackend | undefined> | undefined;
 	// Only a key read back after its creation, or recorded by the file, is kept.
@@ -136,16 +151,19 @@ export function fileKeys(
 	const opened = () =>
 		(backend ??= options ? keyrings.load().catch(() => undefined) : Promise.resolve(undefined));
 
-	async function read(): Promise<KeyringRead> {
+	async function read(signal: AbortSignal | undefined): Promise<KeyringRead> {
+		throwIfAborted(signal);
 		const keyring = await opened();
 		if (!keyring) return { state: "unavailable" };
 		let value: string | undefined;
 		try {
-			value = await withinDeadline(keyring.get(app, ENTRY));
-		} catch {
+			value = await withinDeadline(keyring.get(app, ENTRY), signal);
+		} catch (error) {
+			if (error instanceof AbortError) throw error;
 			return { state: "unavailable" };
 		}
-		if (value === undefined || value === "") return { state: "absent" };
+		// Only no value is no key: an empty one is an entry this package can't read.
+		if (value === undefined) return { state: "absent" };
 		const parsed = parseValue(value);
 		if (!parsed) return { state: "invalid" };
 		return {
@@ -155,9 +173,9 @@ export function fileKeys(
 		};
 	}
 
-	async function forFile(keyId: string): Promise<FileKey> {
+	async function forFile(keyId: string, signal: AbortSignal | undefined): Promise<FileKey> {
 		if (validated?.keyId === keyId) return validated;
-		const found = await read();
+		const found = await read(signal);
 		if (found.state === "absent") throw new LoginRequiredError("key-missing");
 		if (found.state !== "found") throw new CredentialKeyError("unreadable");
 		if (found.fileKey.keyId !== keyId) throw new LoginRequiredError("key-mismatch");
@@ -166,16 +184,18 @@ export function fileKeys(
 	}
 
 	/** The keyring's key, created when there is none. Re-reads under the lock: never a cached absence. */
-	function create(): Promise<FileKey> {
+	function create(signal: AbortSignal | undefined): Promise<FileKey> {
 		const outcome = Promise.withResolvers<FileKey>();
 		lockKeyInit(async () => {
-			const found = await read();
+			const found = await read(signal);
 			if (found.state === "found") return outcome.resolve(found.fileKey);
 			if (found.state !== "absent") {
 				return outcome.reject(
 					new CredentialKeyError(found.state === "invalid" ? "unreadable" : "unavailable"),
 				);
 			}
+			// The last moment a cancelled call writes nothing.
+			if (signal?.aborted) return outcome.reject(new AbortError());
 			const bytes = crypto.getRandomValues(new Uint8Array(32));
 			const value = JSON.stringify({
 				keyId: crypto.randomUUID(),
@@ -189,7 +209,7 @@ export function fileKeys(
 			);
 			try {
 				await (await opened())!.set(app, ENTRY, value);
-				const back = await read();
+				const back = await read(undefined);
 				if (back.state !== "found" || back.value !== value) throw new Error("key not stored");
 				validated = back.fileKey;
 				outcome.resolve(back.fileKey);
@@ -198,16 +218,20 @@ export function fileKeys(
 			} finally {
 				clearTimeout(timer);
 			}
-		}).catch((error: unknown) => outcome.reject(error));
+		}, signal).catch((error: unknown) => outcome.reject(error));
 		return outcome.promise;
 	}
 
-	async function forWrite(fileKeyId: string | undefined, login: boolean): Promise<WriteKey> {
+	async function forWrite(
+		fileKeyId: string | undefined,
+		login: boolean,
+		signal: AbortSignal | undefined,
+	): Promise<WriteKey> {
 		if (fileKeyId !== undefined && (!login || validated?.keyId === fileKeyId)) {
-			return sealed(await forFile(fileKeyId));
+			return sealed(await forFile(fileKeyId, signal));
 		}
 		if (fileKeyId === undefined && !options) return PLAINTEXT;
-		const found = await read();
+		const found = await read(signal);
 		// A file with a key never takes plaintext, and an unreadable key is never replaced.
 		if (found.state === "invalid" || (found.state === "unavailable" && fileKeyId !== undefined)) {
 			throw new CredentialKeyError("unreadable");
@@ -225,7 +249,7 @@ export function fileKeys(
 			return sealed(found.fileKey);
 		}
 		// The first key, or a login replacing a file key the keyring no longer holds.
-		const fileKey = await create();
+		const fileKey = await create(signal);
 		return {
 			kind: "sealed",
 			fileKey,
@@ -233,13 +257,14 @@ export function fileKeys(
 		};
 	}
 
-	async function status(fileKeyId: string | undefined) {
+	async function status(fileKeyId: string | undefined, signal: AbortSignal | undefined) {
+		throwIfAborted(signal);
 		const keyring = await opened();
 		if (!keyring) return { kind: "file" as const, keyReadable: false };
 		if (fileKeyId !== undefined && validated?.keyId === fileKeyId) {
 			return { kind: keyring.kind, keyReadable: true };
 		}
-		const found = await read();
+		const found = await read(signal);
 		// Without a key in the file, a keyring that does not answer means plaintext writes.
 		if (found.state === "unavailable" && fileKeyId === undefined) {
 			return { kind: "file" as const, keyReadable: false };
