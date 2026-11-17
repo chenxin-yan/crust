@@ -541,6 +541,113 @@ describe("createMcpServer", () => {
 	});
 });
 
+describe('discovery: "progressive"', () => {
+	const progressive = { discovery: "progressive" } as const;
+
+	it("lists only search_tools, get_tool_details and call_tool", async () => {
+		const client = await connect(fixture, progressive);
+		const { tools } = await client.listTools();
+		expect(tools.map((tool) => tool.name)).toEqual([
+			"search_tools",
+			"get_tool_details",
+			"call_tool",
+		]);
+		expect(tools.every((tool) => tool.outputSchema === undefined)).toBe(true);
+		await expect(client.callTool({ name: "echo", arguments: { word: "a" } })).rejects.toThrow(
+			"Tool echo not found",
+		);
+	});
+
+	it("searches the tool manifest, best first, up to the limit", async () => {
+		const client = await connect(fixture, progressive);
+		const search = async (args: Record<string, unknown>) =>
+			(await client.callTool({ name: "search_tools", arguments: args })).structuredContent;
+		expect(await search({ query: "echo the input" })).toEqual({
+			result: [{ name: "echo", description: "Echo input" }],
+		});
+		expect(await search({ query: "slow date fail", limit: 2 })).toEqual({
+			result: [{ name: "date" }, { name: "fail" }],
+		});
+		// Hidden and Extension commands are no tools, so search never finds them.
+		expect(await search({ query: "secret extra" })).toEqual({ result: [] });
+		const included = await connect(fixture, { ...progressive, include: [["extra"]] });
+		expect(
+			(await included.callTool({ name: "search_tools", arguments: { query: "extra" } }))
+				.structuredContent,
+		).toEqual({ result: [{ name: "extra", description: "From an Extension" }] });
+	});
+
+	it("details a tool as tools/list would list it", async () => {
+		const app = new Crust("cli").add(
+			defineCommand("count", { description: "Count" }, (c) =>
+				c
+					.args({ name: "what", type: "string" })
+					.output(jsonSchemaOutput({ type: "number" }))
+					.action(() => 2),
+			),
+		);
+		const [listed] = (await (await connect(app)).listTools()).tools;
+		const client = await connect(app, progressive);
+		const details = await client.callTool({
+			name: "get_tool_details",
+			arguments: { name: "count" },
+		});
+		expect(details.structuredContent).toEqual(listed);
+		expect(listed?.outputSchema).toMatchObject({ properties: { result: { type: "number" } } });
+	});
+
+	it("calls a tool as tools/call would, progress included", async () => {
+		const direct = await connect(fixture);
+		const client = await connect(fixture, progressive);
+		for (const [name, args] of [
+			["echo", { word: "ab", times: 2, origin: "https://example.com/", raw: ["-x"] }],
+			["echo", {}],
+			["fail", undefined],
+			["print", undefined],
+		] as const) {
+			expect(
+				await client.callTool({ name: "call_tool", arguments: { name, arguments: args } }),
+			).toEqual(await direct.callTool({ name, arguments: args }));
+		}
+		const app = new Crust("cli").add(
+			defineCommand("sync", (c) =>
+				c.action(async function* () {
+					yield "fetching";
+					return { synced: 1 };
+				}),
+			),
+		);
+		const progress: unknown[] = [];
+		const result = await (
+			await connect(app, progressive)
+		).callTool(
+			{ name: "call_tool", arguments: { name: "sync" } },
+			{ onprogress: (notification) => progress.push(notification) },
+		);
+		expect(result.structuredContent).toEqual({ synced: 1 });
+		expect(progress).toEqual([{ progress: 1, message: "fetching" }]);
+	});
+
+	it("rejects unknown tools and malformed requests at the protocol level", async () => {
+		const client = await connect(fixture, progressive);
+		const call = (name: string, args: Record<string, unknown>) =>
+			client.callTool({ name, arguments: args });
+		await expect(call("call_tool", { name: "secret" })).rejects.toThrow("Tool secret not found");
+		await expect(call("call_tool", { name: "extra" })).rejects.toThrow("Tool extra not found");
+		await expect(call("get_tool_details", { name: "secret" })).rejects.toThrow(
+			"Tool secret not found",
+		);
+		await expect(call("call_tool", { name: "echo", arguments: ["ab"] })).rejects.toThrow(
+			"arguments must be an object",
+		);
+		await expect(call("search_tools", {})).rejects.toThrow("query must be a string");
+		await expect(call("search_tools", { query: "x", limit: 0 })).rejects.toThrow(
+			"limit must be an integer from 1 to 20",
+		);
+		await expect(call("get_tool_details", {})).rejects.toThrow("name must be a string");
+	});
+});
+
 describe("serveStdio", () => {
 	it("rejects before serving when the tool manifest is invalid", async () => {
 		await expect(serveStdio(fixture, { exclude: [["nope"]] })).rejects.toThrow(

@@ -192,6 +192,7 @@ Crust doesn't detect agents or add a global `--no-input`: the TTY check is the r
 - Flags with an `env` binding are optional tool inputs: a variable set in the client's `env` configuration reaches the server, as it would reach the CLI in a shell.
 - `.output()` schemas and generator events become the tool's output schema and progress notifications.
 - What a call writes to stderr, next steps included, follows its result in the tool result.
+- With [`discovery: "progressive"`](/docs/modules/mcp#discovery), a large CLI lists three tools instead of one per command: `search_tools` ranks the tools as `search()` ranks commands, `get_tool_details` returns one tool's schemas, and `call_tool` calls it.
 
 ## Skills
 

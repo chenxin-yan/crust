@@ -44,6 +44,14 @@ export interface McpToolsOptions {
 	 * wins over `include`, and `mcp` is never a tool.
 	 */
 	readonly include?: readonly (readonly string[])[];
+	/**
+	 * How a server offers the tools. `"direct"` (the default) lists every tool.
+	 * `"progressive"` lists only `search_tools`, `get_tool_details`, and
+	 * `call_tool`, which search, describe, and call the same tools, so a large
+	 * CLI does not fill the client's context with every schema up front.
+	 * {@link toolsFromSnapshot} returns the same tools either way.
+	 */
+	readonly discovery?: "direct" | "progressive";
 }
 
 /** Name of the command `mcpExtension` contributes; never exposed as a tool. */
