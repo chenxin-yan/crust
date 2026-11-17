@@ -1,3 +1,4 @@
+import { lstat } from "node:fs/promises";
 import { connect } from "node:net";
 
 import { importKey } from "./cipher.ts";
@@ -53,9 +54,11 @@ async function load(): Promise<KeyringBackend | undefined> {
 	let probing: Promise<boolean | undefined> | undefined;
 	const entry = async (service: string, name: string) => {
 		if (process.platform === "linux" && !busAnswered) {
-			probing ??= busAnswers(process.env.DBUS_SESSION_BUS_ADDRESS).finally(() => {
-				probing = undefined;
-			});
+			probing ??= sessionBusAddress()
+				.then(busAnswers)
+				.finally(() => {
+					probing = undefined;
+				});
 			if ((await probing) === false) throw new Error("The D-Bus session bus does not answer");
 			busAnswered = true;
 		}
@@ -67,6 +70,28 @@ async function load(): Promise<KeyringBackend | undefined> {
 		get: async (service, name) => (await (await entry(service, name)).getPassword()) ?? undefined,
 		set: async (service, name, value) => (await entry(service, name)).setPassword(value),
 	};
+}
+
+/**
+ * The session bus address libdbus connects to (dbus `init_session_address`): a non-empty
+ * `DBUS_SESSION_BUS_ADDRESS`, else `$XDG_RUNTIME_DIR/bus` when it is a socket of this user
+ * (`_dbus_lookup_user_bus`). `undefined` for libdbus' last resort, `autolaunch:`, which is not
+ * probed.
+ */
+export async function sessionBusAddress(): Promise<string | undefined> {
+	const variable = process.env.DBUS_SESSION_BUS_ADDRESS;
+	if (variable) return variable;
+	const runtimeDir = process.env.XDG_RUNTIME_DIR;
+	if (runtimeDir === undefined) return undefined;
+	const path = `${runtimeDir}/bus`;
+	try {
+		const found = await lstat(path);
+		if (!found.isSocket() || found.uid !== process.getuid?.()) return undefined;
+	} catch {
+		return undefined;
+	}
+	// Escaped as a D-Bus address value, so `,`, `;` and `%` in the path survive the parsing.
+	return `unix:path=${encodeURIComponent(path)}`;
 }
 
 /** The socket of one `unix:path=` or `unix:abstract=` D-Bus address. */

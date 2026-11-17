@@ -30,7 +30,7 @@ describe("library source", () => {
 		).toEqual([]);
 	});
 
-	it("reads the environment only to pick a login mode, for the client's env token, and for the D-Bus address", () => {
+	it("reads the environment only to pick a login mode, for the client's env token, and for the D-Bus session bus", () => {
 		expect(filesMatching(/process\.env|Bun\.env|import\.meta\.env/)).toEqual([
 			"client.ts",
 			"keyring.ts",
@@ -41,6 +41,7 @@ describe("library source", () => {
 		expect(readFileSync(join(srcDir, "types.ts"), "utf8").match(/process\.env/g)).toHaveLength(1);
 		expect(readFileSync(join(srcDir, "keyring.ts"), "utf8").match(/process\.env\.\w+/g)).toEqual([
 			"process.env.DBUS_SESSION_BUS_ADDRESS",
+			"process.env.XDG_RUNTIME_DIR",
 		]);
 	});
 

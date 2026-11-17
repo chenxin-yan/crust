@@ -3,14 +3,14 @@
 // touches it. Linux only: no other platform reaches a keyring through D-Bus.
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { busAnswers, keyrings } from "../src/keyring.ts";
+import { busAnswers, keyrings, sessionBusAddress } from "../src/keyring.ts";
 
 const cleanup: (() => void)[] = [];
 const deadlineMs = keyrings.deadlineMs;
@@ -95,6 +95,47 @@ describe.runIf(process.platform === "linux")("the session bus probe", () => {
 		await expect(busAnswers(`${dead};${dead}`)).resolves.toBe(false);
 		// An address form it does not handle anywhere in the list: not probed, as libdbus may use it.
 		await expect(busAnswers(`${dead};tcp:host=127.0.0.1,port=1`)).resolves.toBeUndefined();
+	});
+
+	it("without DBUS_SESSION_BUS_ADDRESS, uses libdbus' default: $XDG_RUNTIME_DIR/bus when it is this user's socket", async () => {
+		for (const unset of [undefined, ""]) {
+			vi.stubEnv("DBUS_SESSION_BUS_ADDRESS", unset);
+			// No socket there, or not a socket: libdbus autolaunches, which is not probed.
+			vi.stubEnv("XDG_RUNTIME_DIR", tempDir());
+			await expect(sessionBusAddress()).resolves.toBeUndefined();
+			const file = tempDir();
+			writeFileSync(join(file, "bus"), "");
+			vi.stubEnv("XDG_RUNTIME_DIR", file);
+			await expect(sessionBusAddress()).resolves.toBeUndefined();
+			const live = tempDir();
+			await bus(join(live, "bus"), "OK 0123456789abcdef\r\n");
+			vi.stubEnv("XDG_RUNTIME_DIR", live);
+			const address = await sessionBusAddress();
+			expect(address).toBeDefined();
+			await expect(busAnswers(address)).resolves.toBe(true);
+		}
+		vi.stubEnv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/elsewhere");
+		await expect(sessionBusAddress()).resolves.toBe("unix:path=/elsewhere");
+		vi.stubEnv("DBUS_SESSION_BUS_ADDRESS", undefined);
+		vi.stubEnv("XDG_RUNTIME_DIR", undefined);
+		await expect(sessionBusAddress()).resolves.toBeUndefined();
+	});
+
+	it("probes the default bus too: a silent $XDG_RUNTIME_DIR/bus is no keyring, not a hang", async () => {
+		keyrings.deadlineMs = 500;
+		vi.doMock("@napi-rs/keyring", () => ({
+			AsyncEntry: class {
+				getPassword = async () => "value";
+				setPassword = async () => {};
+			},
+		}));
+		const dir = join(tempDir(), "run, with %25 and ;");
+		mkdirSync(dir);
+		await bus(join(dir, "bus"));
+		vi.stubEnv("DBUS_SESSION_BUS_ADDRESS", undefined);
+		vi.stubEnv("XDG_RUNTIME_DIR", dir);
+		const backend = (await keyrings.load())!;
+		await expect(backend.get("acme", "credentials-key")).rejects.toThrow();
 	});
 
 	it("remembers only a bus that answered: one that failed is probed again by the next call", async () => {
