@@ -1,7 +1,7 @@
 // The Node backend on Linux: @napi-rs/keyring connects to the D-Bus session bus synchronously,
 // so the bus is probed (asynchronously, within the keyring deadline) before the native module
 // touches it. Linux only: no other platform reaches a keyring through D-Bus.
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
@@ -22,14 +22,73 @@ afterEach(() => {
 	for (const step of cleanup.splice(0)) step();
 });
 
-/** A Unix socket at `path` whose connections get `answer`, or nothing at all. */
-async function bus(path: string, answer?: string): Promise<Server> {
+/**
+ * A D-Bus method return to the call with serial 1, from the bus, with the body `s` `:1.1`:
+ * the reply a bus sends to `Hello` (D-Bus specification, "Message Format").
+ */
+function helloReply(): Buffer {
+	const bytes: number[] = [];
+	const align = (size: number) => {
+		while (bytes.length % size !== 0) bytes.push(0);
+	};
+	const uint32 = (value: number) => {
+		align(4);
+		bytes.push(value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, value >>> 24);
+	};
+	const string = (value: string) => {
+		uint32(value.length);
+		bytes.push(...Buffer.from(value), 0);
+	};
+	const body = ":1.1";
+	bytes.push("l".charCodeAt(0), 2, 0, 1);
+	uint32(4 + body.length + 1);
+	uint32(1);
+	uint32(0);
+	const start = bytes.length;
+	align(8);
+	bytes.push(5, 1, "u".charCodeAt(0), 0);
+	uint32(1);
+	align(8);
+	bytes.push(8, 1, "g".charCodeAt(0), 0, 1, "s".charCodeAt(0), 0);
+	const length = bytes.length - start;
+	bytes.splice(12, 4, length & 0xff, (length >>> 8) & 0xff, 0, 0);
+	align(8);
+	string(body);
+	return Buffer.from(bytes);
+}
+
+/**
+ * A Unix socket at `path` that plays a session bus: `"hello"` authenticates and answers `Hello`;
+ * `"auth-only"` authenticates and then answers nothing; `"rejected"` refuses the authentication;
+ * none answers nothing at all.
+ */
+async function bus(path: string, answer?: "hello" | "auth-only" | "rejected"): Promise<Server> {
 	const sockets: Socket[] = [];
 	const server = createServer((socket) => {
 		sockets.push(socket);
-		socket.once("data", () => {
-			if (answer !== undefined) socket.write(answer);
+		let received = Buffer.alloc(0);
+		let authenticated = false;
+		let replied = false;
+		socket.on("data", (chunk: Buffer) => {
+			received = Buffer.concat([received, chunk]);
+			const text = received.toString("latin1");
+			if (!text.includes("\r\n") || answer === undefined) return;
+			if (answer === "rejected") {
+				socket.end("REJECTED EXTERNAL\r\n");
+				return;
+			}
+			if (!authenticated) {
+				authenticated = true;
+				socket.write("OK 0123456789abcdef0123456789abcdef\r\n");
+			}
+			const begin = text.indexOf("BEGIN\r\n");
+			// The Hello call follows BEGIN: its fixed header is 16 bytes.
+			if (answer === "hello" && !replied && begin !== -1 && received.length >= begin + 7 + 16) {
+				replied = true;
+				socket.write(helloReply());
+			}
 		});
+		socket.on("error", () => {});
 	}).listen(path);
 	await once(server, "listening");
 	cleanup.push(() => {
@@ -48,10 +107,10 @@ function tempDir(): string {
 describe.runIf(process.platform === "linux")("the session bus probe", () => {
 	it("passes a bus that answers the authentication", async () => {
 		const path = join(tempDir(), "bus");
-		await bus(path, "OK 0123456789abcdef\r\n");
+		await bus(path, "hello");
 		await expect(busAnswers(`unix:path=${path},guid=0123456789abcdef`)).resolves.toBe(true);
 		const name = `crust-bus-${process.pid}-${Date.now()}`;
-		await bus(`\0${name}`, "OK 0123456789abcdef\r\n");
+		await bus(`\0${name}`, "hello");
 		await expect(busAnswers(`unix:abstract=${name};unix:path=/nowhere`)).resolves.toBe(true);
 	});
 
@@ -59,16 +118,64 @@ describe.runIf(process.platform === "linux")("the session bus probe", () => {
 		keyrings.deadlineMs = 300;
 		const dir = tempDir();
 		await bus(join(dir, "silent"));
-		await bus(join(dir, "rejects"), "REJECTED EXTERNAL\r\n");
+		await bus(join(dir, "rejects"), "rejected");
+		await bus(join(dir, "auth-only"), "auth-only");
 		for (const address of [
 			`unix:path=${join(dir, "silent")}`,
 			`unix:path=${join(dir, "rejects")}`,
 			`unix:path=${join(dir, "missing")}`,
+			// Authenticates, then never answers Hello: libdbus would wait 25 s for it.
+			`unix:path=${join(dir, "auth-only")}`,
 		]) {
 			const started = performance.now();
 			await expect(busAnswers(address)).resolves.toBe(false);
 			expect(performance.now() - started).toBeLessThan(1_000);
 		}
+	});
+
+	it("a bus that authenticates but never answers Hello is no keyring: the native entry is never made", async () => {
+		keyrings.deadlineMs = 300;
+		let constructed = 0;
+		vi.doMock("@napi-rs/keyring", () => ({
+			AsyncEntry: class {
+				constructor() {
+					constructed += 1;
+				}
+				getPassword = async () => "value";
+				setPassword = async () => {};
+			},
+		}));
+		const path = join(tempDir(), "bus");
+		await bus(path, "auth-only");
+		vi.stubEnv("DBUS_SESSION_BUS_ADDRESS", `unix:path=${path}`);
+		await expect(busAnswers(`unix:path=${path}`)).resolves.toBe(false);
+		const backend = (await keyrings.load())!;
+		await expect(backend.get("acme", "credentials-key")).rejects.toThrow();
+		expect(constructed).toBe(0);
+	});
+
+	it("passes a real dbus-daemon: the Hello call is well formed", async (context) => {
+		const found = spawnSync("dbus-daemon", ["--version"], { encoding: "utf8" });
+		context.skip(found.error !== undefined, "dbus-daemon is not installed on this host.");
+		keyrings.deadlineMs = 2_000;
+		const dir = tempDir();
+		const config = join(dir, "session.conf");
+		writeFileSync(
+			config,
+			`<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig><type>session</type><listen>unix:path=${join(dir, "bus")}</listen>
+<policy context="default"><allow send_destination="*" eavesdrop="true"/><allow eavesdrop="true"/><allow own="*"/></policy></busconfig>`,
+		);
+		const daemon = spawn(
+			"dbus-daemon",
+			[`--config-file=${config}`, "--nofork", "--print-address"],
+			{
+				stdio: ["ignore", "pipe", "pipe"],
+			},
+		);
+		cleanup.push(() => daemon.kill("SIGKILL"));
+		const [address] = (await once(daemon.stdout, "data")) as [Buffer];
+		await expect(busAnswers(address.toString().trim())).resolves.toBe(true);
 	});
 
 	it("does not probe an address it does not handle, or none", async () => {
@@ -88,7 +195,7 @@ describe.runIf(process.platform === "linux")("the session bus probe", () => {
 		keyrings.deadlineMs = 1_000;
 		const dir = tempDir();
 		const live = join(dir, "live");
-		await bus(live, "OK 0123456789abcdef\r\n");
+		await bus(live, "hello");
 		const dead = `unix:path=${join(dir, "missing")}`;
 		await expect(busAnswers(`${dead};unix:path=${live}`)).resolves.toBe(true);
 		await expect(busAnswers(`unix:path=${live};${dead}`)).resolves.toBe(true);
@@ -108,7 +215,7 @@ describe.runIf(process.platform === "linux")("the session bus probe", () => {
 			vi.stubEnv("XDG_RUNTIME_DIR", file);
 			await expect(sessionBusAddress()).resolves.toBeUndefined();
 			const live = tempDir();
-			await bus(join(live, "bus"), "OK 0123456789abcdef\r\n");
+			await bus(join(live, "bus"), "hello");
 			vi.stubEnv("XDG_RUNTIME_DIR", live);
 			const address = await sessionBusAddress();
 			expect(address).toBeDefined();
@@ -152,7 +259,7 @@ describe.runIf(process.platform === "linux")("the session bus probe", () => {
 		expect(backend.kind).toBe("napi-keyring");
 		await expect(backend.get("acme", "credentials-key")).rejects.toThrow();
 		// The bus comes back.
-		await bus(path, "OK 0123456789abcdef\r\n");
+		await bus(path, "hello");
 		await expect(backend.get("acme", "credentials-key")).resolves.toBe("value");
 	});
 

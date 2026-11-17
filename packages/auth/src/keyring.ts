@@ -48,7 +48,9 @@ async function load(): Promise<KeyringBackend | undefined> {
 		return undefined;
 	}
 	// Constructing an entry connects to the session bus synchronously on Linux: a bus that never
-	// answers would block the event loop past every deadline, so it must answer a probe first.
+	// answers would block the event loop past every deadline (libdbus waits 25 s for `Hello`), so
+	// it must answer a probe first. Its Secret Service is not probed: when it does not answer, the
+	// constructor still blocks for its 2 s proxy timeout (dbus-secret-service 4.1.0).
 	// Only an answer is remembered: a bus that failed is probed again by the next call.
 	let busAnswered = false;
 	let probing: Promise<boolean | undefined> | undefined;
@@ -116,10 +118,10 @@ function busSocket(address: string): string | undefined {
 }
 
 /**
- * Whether the D-Bus session bus at `address` accepts an `EXTERNAL` authentication within the
- * keyring deadline, trying the addresses of a `;` list in order, as libdbus does. `undefined`:
- * not probed, as there is no address or one of them is not a `unix:path=` or `unix:abstract=`
- * one. It does not show that the Secret Service behind the bus answers.
+ * Whether the D-Bus session bus at `address` authenticates this user (`EXTERNAL`) and answers
+ * `Hello` within the keyring deadline, trying the addresses of a `;` list in order, as libdbus
+ * does. `undefined`: not probed, as there is no address or one of them is not a `unix:path=` or
+ * `unix:abstract=` one. It does not show that the Secret Service behind the bus answers.
  */
 export async function busAnswers(address: string | undefined): Promise<boolean | undefined> {
 	const sockets = (address ?? "")
@@ -137,10 +139,55 @@ export async function busAnswers(address: string | undefined): Promise<boolean |
 	return false;
 }
 
+/**
+ * The D-Bus `Hello` method call, serial 1, with no body (D-Bus specification, "Message
+ * Protocol": "Message Format" for the header, "Type System" for the marshaling). Every
+ * connection must send it after authenticating; a bus that answers it is up.
+ */
+function helloCall(): Buffer {
+	const bytes: number[] = [];
+	const align = (size: number) => {
+		while (bytes.length % size !== 0) bytes.push(0);
+	};
+	const uint32 = (value: number) => {
+		align(4);
+		bytes.push(value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, value >>> 24);
+	};
+	// A header field: aligned to 8, its code, a one-type variant signature, then the string.
+	const field = (code: number, type: "o" | "s", value: string) => {
+		align(8);
+		bytes.push(code, 1, type.charCodeAt(0), 0);
+		uint32(value.length);
+		bytes.push(...Buffer.from(value, "latin1"), 0);
+	};
+	// Little endian, METHOD_CALL, no flags, protocol 1, no body, serial 1.
+	bytes.push("l".charCodeAt(0), 1, 0, 1);
+	uint32(0);
+	uint32(1);
+	uint32(0);
+	const fieldsStart = bytes.length;
+	field(1, "o", "/org/freedesktop/DBus"); // PATH
+	field(2, "s", "org.freedesktop.DBus"); // INTERFACE
+	field(3, "s", "Hello"); // MEMBER
+	field(6, "s", "org.freedesktop.DBus"); // DESTINATION
+	const length = bytes.length - fieldsStart;
+	bytes.splice(12, 4, length & 0xff, (length >>> 8) & 0xff, 0, 0);
+	// The header ends on an 8-byte boundary, where the (empty) body starts.
+	align(8);
+	return Buffer.from(bytes);
+}
+
+const HELLO = helloCall();
+
+/**
+ * Whether the bus at `path` authenticates this user and answers `Hello` (a method return, or
+ * an error) within `timeoutMs`: libdbus waits up to 25 s for that answer, blocking the thread.
+ */
 function socketAnswers(path: string, timeoutMs: number): Promise<boolean> {
 	return new Promise((resolve) => {
 		const socket = connect(path);
-		let text = "";
+		let received = Buffer.alloc(0);
+		let authenticated = false;
 		const done = (answers: boolean) => {
 			clearTimeout(timer);
 			socket.destroy();
@@ -152,8 +199,17 @@ function socketAnswers(path: string, timeoutMs: number): Promise<boolean> {
 			socket.write(`\0AUTH EXTERNAL ${uid}\r\n`);
 		});
 		socket.on("data", (chunk: Buffer) => {
-			text += chunk.toString("latin1");
-			if (text.includes("\r\n")) done(text.startsWith("OK "));
+			received = Buffer.concat([received, chunk]);
+			if (!authenticated) {
+				const end = received.indexOf("\r\n");
+				if (end === -1) return;
+				if (!received.subarray(0, end).toString("latin1").startsWith("OK ")) return done(false);
+				authenticated = true;
+				received = received.subarray(end + 2);
+				socket.write(Buffer.concat([Buffer.from("BEGIN\r\n"), HELLO]));
+			}
+			// The first message's type: 2 METHOD_RETURN, 3 ERROR.
+			if (received.length >= 2) done(received[1] === 2 || received[1] === 3);
 		});
 		socket.on("error", () => done(false));
 		socket.on("close", () => done(false));
