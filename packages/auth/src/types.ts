@@ -472,8 +472,8 @@ export interface Credential {
 	readonly tokenType: "Bearer";
 	readonly generation: string;
 	/**
-	 * Logins this one logged out: when the keyring no longer held the file's key, every record
-	 * encrypted under it, in every profile.
+	 * Logins this one logged out: when the keyring no longer held the file's key, every login
+	 * stored under that old key, whichever identity it belongs to.
 	 */
 	readonly discarded: number;
 }
