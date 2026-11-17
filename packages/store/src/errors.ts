@@ -29,27 +29,70 @@ export interface ValidationErrorDetails {
 	issues: readonly StoreValidatorIssue[];
 }
 
+/** The owner a lock record names, as reported by a `LOCK` error. */
+export interface LockOwner {
+	/** Random per acquisition; tells this owner's lock from a later owner's at the same path. */
+	ownerId: string;
+	/** The owner's process id on `host`. */
+	pid: number;
+	/** `os.hostname()` of the owner. */
+	host: string;
+	/** `process.platform` of the owner. */
+	platform: string;
+	/** When the owner acquired the lock (ISO 8601). */
+	createdAt: string;
+}
+
+/**
+ * Contextual details attached to a `LOCK` error.
+ *
+ * Returned when a strict lock is not acquired before its deadline.
+ */
+export interface LockErrorDetails {
+	/** The file that blocked: the lock file, or its `.recover` file left by an unfinished recovery. */
+	path: string;
+	/**
+	 * Whether the owner of `path` runs (`alive`), cannot be judged from this process (`unknown`), or
+	 * provably no longer runs (`dead`): a `.recover` file, which is never removed automatically, or a
+	 * lock whose dead owner was found only when the deadline had passed.
+	 */
+	verdict: "alive" | "unknown" | "dead";
+	/** The owner `path` names, or `undefined` when its record is empty or unreadable. */
+	owner: LockOwner | undefined;
+	/** What a person must do before deleting `path` by hand. */
+	manualStep: string;
+}
+
 /**
  * Maps each {@link StoreErrorCode} to its structured details type.
  *
  * Used internally for conditional constructor parameters and type narrowing.
  */
 export interface StoreErrorDetailsMap {
-	PATH: { path: string };
+	PATH: {
+		path: string;
+		/** Set when a strict store refuses a target that is a symbolic link, or an unsafe directory. */
+		reason?: "symlink" | "directory";
+	};
 	PARSE: { path: string };
 	IO: IOErrorDetails;
 	VALIDATION: ValidationErrorDetails;
 	DEFINITION: undefined;
+	LOCK: LockErrorDetails;
 }
 
 /**
  * All possible error codes emitted by `@crustjs/store`.
  *
- * - `PATH` — Invalid or unsupported config file path
+ * - `PATH` — Invalid or unsupported store file path, or (strict stores) a symbolic link or
+ *   unsafe directory
  * - `PARSE` — Malformed JSON in persisted config file
  * - `IO` — Filesystem read, write, or delete failure
  * - `VALIDATION` — Config object rejected by a store validator
- * - `DEFINITION` — A field mixes mutually exclusive definition modes
+ * - `DEFINITION` — A field mixes mutually exclusive definition modes, `strict` is combined
+ *   with an `access` other than `"private"`, or a lock timeout is not a finite number of at
+ *   least 0
+ * - `LOCK` — A strict lock was not acquired before its deadline
  *
  * @example
  * ```ts
@@ -80,7 +123,7 @@ export type StoreErrorDetails<C extends StoreErrorCode> = StoreErrorDetailsMap[C
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * A typed error thrown by `@crustjs/store` for path, parse, IO, and validation failures.
+ * A typed error thrown by `@crustjs/store` for path, parse, IO, validation, and lock failures.
  *
  * Every `CrustStoreError` carries a {@link StoreErrorCode} that identifies the failure
  * category. Codes other than `DEFINITION` include structured {@link StoreErrorDetails}

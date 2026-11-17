@@ -1,5 +1,6 @@
 /**
  * @module-tag windows
+ * @module-tag macos
  */
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -8,10 +9,8 @@ import {
 	chown,
 	lstat,
 	mkdir,
-	open,
 	readdir,
 	readFile,
-	rename,
 	rm,
 	stat,
 	symlink,
@@ -28,21 +27,46 @@ import { deleteJson, readJson, withFileLock, writeJson } from "./persistence.ts"
 const renameFailures = vi.hoisted((): string[] => []);
 // Error codes the next `rm` calls fail with, as when another program holds the lock file open.
 const rmFailures = vi.hoisted((): string[] => []);
+// Error codes the next `sync` of a handle opened on the keyed path fails with.
+const syncFailures = vi.hoisted(() => new Map<string, string>());
+// Durability-relevant fs calls in order, as `<call> <path>`; the fsync order is asserted on it.
+const fsTrace = vi.hoisted((): string[] => []);
 vi.mock("node:fs/promises", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("node:fs/promises")>();
 	const rename = vi.fn(async (from: string, to: string) => {
+		fsTrace.push(`rename ${to}`);
 		const code = renameFailures.shift();
 		if (code !== undefined) throw Object.assign(new Error(code), { code });
 		return actual.rename(from, to);
 	});
 	// Unprivileged tests cannot give a file another owner, so the owner copy is observed here.
 	const chown = vi.fn(actual.chown);
+	const chmod: typeof actual.chmod = async (path, mode) => {
+		fsTrace.push(`chmod ${String(path)}`);
+		return actual.chmod(path, mode);
+	};
 	const rm: typeof actual.rm = async (path, options) => {
+		fsTrace.push(`rm ${String(path)}`);
 		const code = rmFailures.shift();
 		if (code !== undefined) throw Object.assign(new Error(code), { code });
 		return actual.rm(path, options);
 	};
-	return { ...actual, rename, chown, rm, default: { ...actual, rename, chown, rm } };
+	const open = vi.fn(async (...args: Parameters<typeof actual.open>) => {
+		const path = String(args[0]);
+		const handle = await actual.open(...args);
+		fsTrace.push(`open ${path} ${String(args[1] ?? "r")}`);
+		const sync = handle.sync.bind(handle);
+		handle.sync = async () => {
+			fsTrace.push(`sync ${path}`);
+			const code = syncFailures.get(path);
+			syncFailures.delete(path);
+			if (code !== undefined) throw Object.assign(new Error(code), { code });
+			return sync();
+		};
+		return handle;
+	});
+	const mocked = { rename, chown, chmod, rm, open };
+	return { ...actual, ...mocked, default: { ...actual, ...mocked } };
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -229,22 +253,66 @@ describe("writeJson", () => {
 		},
 	);
 
-	it("flushes the temp file to disk before renaming it into place", async () => {
-		await mkdir(tempDir);
-		const probe = await open(join(tempDir, "probe"), "w");
-		const sync = vi.spyOn(Object.getPrototypeOf(probe), "sync");
-		await probe.close();
-		try {
-			await writeJson(filePath, { data: true });
+	// Killing a process cannot show power-loss durability; the order of the flushes can.
+	it.skipIf(process.platform === "win32")(
+		"creates the temp file exclusively, flushes it before the rename and the directory after",
+		async () => {
+			await mkdir(tempDir);
+			fsTrace.length = 0;
 
-			expect(sync).toHaveBeenCalledTimes(1);
-			expect(sync.mock.invocationCallOrder[0]).toBeLessThan(
-				vi.mocked(rename).mock.invocationCallOrder.at(-1) ?? 0,
-			);
-		} finally {
-			sync.mockRestore();
-		}
-	});
+			await writeJson(filePath, { data: true }, { fileMode: 0o600 });
+
+			const tempPath = fsTrace[0]?.split(" ")[1] ?? "";
+			expect(tempPath).toMatch(/[\\/]\.config-[\w-]+\.tmp$/);
+			expect(fsTrace).toEqual([
+				`open ${tempPath} wx`,
+				`sync ${tempPath}`,
+				`chmod ${tempPath}`,
+				`rename ${filePath}`,
+				`open ${tempDir} r`,
+				`sync ${tempDir}`,
+			]);
+		},
+	);
+
+	// A new directory's entry lives in its parent, so each parent it was created in is flushed too.
+	it.skipIf(process.platform === "win32")(
+		"flushes the parent of every directory it creates before the first write",
+		async () => {
+			await mkdir(tempDir);
+			const nested = join(tempDir, "a", "b", "config.json");
+			fsTrace.length = 0;
+
+			await writeJson(nested, { data: true });
+
+			const tempPath = fsTrace.find((entry) => entry.endsWith(" wx"))?.split(" ")[1] ?? "";
+			expect(fsTrace).toEqual([
+				`open ${join(tempDir, "a")} r`,
+				`sync ${join(tempDir, "a")}`,
+				`open ${tempDir} r`,
+				`sync ${tempDir}`,
+				`open ${tempPath} wx`,
+				`sync ${tempPath}`,
+				`rename ${nested}`,
+				`open ${join(tempDir, "a", "b")} r`,
+				`sync ${join(tempDir, "a", "b")}`,
+			]);
+		},
+	);
+
+	it.skipIf(process.platform === "win32")(
+		"rejects with IO when the directory flush after the rename fails",
+		async () => {
+			await mkdir(tempDir);
+			syncFailures.set(tempDir, "EIO");
+
+			await expect(writeJson(filePath, { data: true })).rejects.toMatchObject({
+				code: "IO",
+				details: { path: filePath, operation: "write" },
+				cause: { code: "EIO" },
+			});
+		},
+	);
 
 	it.skipIf(process.platform === "win32")(
 		"does not retry a failed rename outside Windows",
@@ -278,6 +346,16 @@ describe("writeJson", () => {
 			expect(renameFailures).toEqual([]);
 			expect(JSON.parse(await readFile(filePath, "utf-8"))).toEqual({ data: true });
 			expect(await readdir(tempDir)).toEqual(["config.json"]);
+		});
+
+		it("skips the modes and the directory flush", async () => {
+			await mkdir(tempDir);
+			fsTrace.length = 0;
+
+			await writeJson(filePath, { data: true }, { fileMode: 0o600 });
+
+			const tempPath = fsTrace[0]?.split(" ")[1] ?? "";
+			expect(fsTrace).toEqual([`open ${tempPath} wx`, `sync ${tempPath}`, `rename ${filePath}`]);
 		});
 
 		it("does not retry other rename errors", async () => {
@@ -344,6 +422,46 @@ describe("deleteJson", () => {
 
 	afterEach(async () => {
 		await rm(tempDir, { recursive: true, force: true });
+	});
+
+	// A reset that resolved must not come back after a power loss.
+	it.skipIf(process.platform === "win32")("flushes the directory after the delete", async () => {
+		await writeFile(filePath, "{}");
+		fsTrace.length = 0;
+
+		await deleteJson(filePath);
+
+		expect(fsTrace).toEqual([`rm ${filePath}`, `open ${tempDir} r`, `sync ${tempDir}`]);
+		expect(existsSync(filePath)).toBe(false);
+	});
+
+	it.skipIf(process.platform === "win32")(
+		"rejects with IO when the directory flush after the delete fails",
+		async () => {
+			await writeFile(filePath, "{}");
+			syncFailures.set(tempDir, "EIO");
+
+			await expect(deleteJson(filePath)).rejects.toMatchObject({
+				code: "IO",
+				details: { path: filePath, operation: "delete" },
+				cause: { code: "EIO" },
+			});
+		},
+	);
+
+	it("does not flush the directory on Windows", async () => {
+		const platform = process.platform;
+		Object.defineProperty(process, "platform", { value: "win32" });
+		try {
+			await writeFile(filePath, "{}");
+			fsTrace.length = 0;
+
+			await deleteJson(filePath);
+
+			expect(fsTrace).toEqual([`rm ${filePath}`]);
+		} finally {
+			Object.defineProperty(process, "platform", { value: platform });
+		}
 	});
 
 	// POSIX-only: on Windows chmod does not stop deletion from a directory.

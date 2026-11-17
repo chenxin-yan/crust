@@ -2,7 +2,7 @@
 // @crustjs/store — JSON persistence primitives
 // ────────────────────────────────────────────────────────────────────────────
 
-import { chmod, chown, mkdir, open, readFile, rename, rm, stat } from "node:fs/promises";
+import { chmod, chown, lstat, mkdir, open, readFile, rename, rm, stat } from "node:fs/promises";
 import { hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -10,7 +10,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { isErrnoException } from "@crustjs/utils/error";
 import type { JsonValue } from "@crustjs/utils/json";
 
-import { CrustStoreError } from "./errors.ts";
+import { CrustStoreError, type IOErrorDetails } from "./errors.ts";
 import type { StoreDocument } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -110,9 +110,10 @@ function isChownErrorOk(err: unknown): boolean {
 
 /**
  * Creates the store file's parent directory if missing, enforcing `directoryMode`
- * exactly when this call created it.
+ * exactly when this call created it. On POSIX, every directory it creates is flushed into
+ * its parent, so the store file's directory survives a power loss.
  */
-async function ensureDirectory(filePath: string, mode: number | undefined): Promise<void> {
+export async function ensureDirectory(filePath: string, mode: number | undefined): Promise<void> {
 	const directoryMode = isWindows() ? undefined : mode;
 	const dir = dirname(filePath);
 	let createdDir: string | undefined;
@@ -147,6 +148,43 @@ async function ensureDirectory(filePath: string, mode: number | undefined): Prom
 			);
 		}
 	}
+	// A new directory's entry lives in its parent: flush the parent of each directory created.
+	if (createdDir === undefined) return;
+	for (let created = dir; ; created = dirname(created)) {
+		await syncDirectory(created, "write");
+		if (created === createdDir || dirname(created) === created) break;
+	}
+}
+
+/**
+ * Refuses a store file that is a symbolic link (on Windows, whatever `lstat` reports as one),
+ * so nothing is read or written through it. A missing file passes.
+ *
+ * @throws {CrustStoreError} `PATH` when the file is a symbolic link.
+ */
+export async function refuseSymlink(
+	filePath: string,
+	operation: IOErrorDetails["operation"],
+): Promise<void> {
+	let stats;
+	try {
+		stats = await lstat(filePath);
+	} catch (err: unknown) {
+		if (isErrnoException(err) && err.code === "ENOENT") return;
+		throw new CrustStoreError(
+			"IO",
+			`Failed to inspect store file: ${filePath}`,
+			{ path: filePath, operation },
+			err,
+		);
+	}
+	if (stats.isSymbolicLink()) {
+		throw new CrustStoreError(
+			"PATH",
+			`Refusing store file that is a symbolic link: ${filePath}. A strict store never reads or writes through a link; remove the link yourself.`,
+			{ path: filePath, reason: "symlink" },
+		);
+	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -165,6 +203,10 @@ async function ensureDirectory(filePath: string, mode: number | undefined): Prom
  * 3. Renames the temp file to the target path (atomic on local filesystems).
  *    On Windows, a rename blocked by another program's open handle (`EPERM`,
  *    `EACCES`, `EBUSY`) is retried for up to 2 seconds.
+ * 4. On POSIX, flushes the directory (`fsync`), so the rename survives a power loss.
+ *    Windows has no directory flush.
+ *
+ * The temp file is created exclusively (`wx`).
  *
  * If any step fails, the function cleans up the temp file (best-effort) and
  * throws a `CrustStoreError` with `IO` code.
@@ -195,7 +237,7 @@ export async function writeJson(
 
 	try {
 		const json = JSON.stringify(data, null, "\t");
-		const handle = await open(tempPath, "w", fileMode);
+		const handle = await open(tempPath, "wx", fileMode);
 		try {
 			await handle.writeFile(json, "utf-8");
 			await handle.sync();
@@ -241,12 +283,45 @@ export async function writeJson(
 			err,
 		);
 	}
+
+	await syncDirectory(filePath, "write");
+}
+
+/**
+ * Flushes the directory that holds `filePath`, so a completed rename, delete, or `mkdir` of
+ * `filePath` survives a power loss. POSIX only: Windows cannot open a directory for flushing.
+ * A missing directory has nothing to flush.
+ */
+async function syncDirectory(filePath: string, operation: "write" | "delete"): Promise<void> {
+	if (isWindows()) return;
+	const dir = dirname(filePath);
+	try {
+		const handle = await open(dir, "r");
+		try {
+			await handle.sync();
+		} finally {
+			await handle.close();
+		}
+	} catch (err: unknown) {
+		if (isErrnoException(err) && err.code === "ENOENT") return;
+		throw new CrustStoreError(
+			"IO",
+			`Failed to flush store directory: ${dir}`,
+			{ path: filePath, operation },
+			err,
+		);
+	}
 }
 
 /** How long a rename blocked by another program's open handle is retried on Windows. */
 const RENAME_RETRY_MS = 2_000;
-const MAX_RETRY_DELAY_MS = 100;
-const BUSY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
+export const MAX_RETRY_DELAY_MS = 100;
+export const BUSY_CODES: ReadonlySet<string> = new Set(["EPERM", "EACCES", "EBUSY"]);
+
+/** Sleeps `ms`; an abort rejects with `signal.reason`. */
+export async function abortableSleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
+	await sleep(ms, undefined, { signal }).catch(() => signal?.throwIfAborted());
+}
 
 /**
  * Renames `tempPath` over `filePath`.
@@ -276,7 +351,8 @@ async function commit(tempPath: string, filePath: string): Promise<void> {
  * Deletes a persisted store file from disk.
  *
  * Silently succeeds when the file does not exist (ENOENT) — deleting an
- * already-absent file is not an error.
+ * already-absent file is not an error. On POSIX the directory is then flushed,
+ * so a completed delete survives a power loss.
  *
  * @param filePath - Absolute path to the JSON store file to delete.
  * @throws {CrustStoreError} `IO` on filesystem deletion failures other than ENOENT.
@@ -295,6 +371,7 @@ export async function deleteJson(filePath: string): Promise<void> {
 			err,
 		);
 	}
+	await syncDirectory(filePath, "delete");
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -310,6 +387,8 @@ export interface FileLockOptions {
 	readonly operation: "write" | "delete";
 	/** Applied when acquiring the lock creates the parent directory, as in {@link writeJson}. */
 	readonly directoryMode?: number;
+	/** Stops waiting for the lock: rejects with `signal.reason`. Not observed once the lock is held. */
+	readonly signal?: AbortSignal;
 }
 
 function isProcessAlive(pid: number): boolean {
@@ -360,8 +439,8 @@ async function isStaleLock(lockPath: string): Promise<boolean> {
  *
  * shortcut: checking a lock and removing it are two steps, so two waiters that find the
  * same abandoned lock at the same instant can both take it, and a mutation running past
- * 10 seconds loses its lock; either costs lost updates, never a corrupt file. Use an
- * OS file lock or a heartbeat if stores ever need exclusion to survive a crashed writer.
+ * 10 seconds loses its lock; either costs lost updates, never a corrupt file. A store that
+ * cannot accept that sets `strict`, which locks with `withLock` instead.
  *
  * @throws {CrustStoreError} `IO` when the lock file cannot be created or an abandoned one removed.
  */
@@ -392,6 +471,7 @@ export async function withFileLock<T>(
 	// An unnamed lock of ours is only taken over by age, so it is still ours to remove.
 	let named = true;
 	for (let delay = 1; ; delay = Math.min(delay * 2, MAX_RETRY_DELAY_MS)) {
+		options.signal?.throwIfAborted();
 		try {
 			const handle = await open(lockPath, "wx");
 			// Creating the file took the lock; one without an owner is only recovered by age.
@@ -419,7 +499,7 @@ export async function withFileLock<T>(
 					return false;
 				},
 			));
-		if (!removed) await sleep(delay * (1 + Math.random()));
+		if (!removed) await abortableSleep(delay * (1 + Math.random()), options.signal);
 	}
 	try {
 		return await fn();

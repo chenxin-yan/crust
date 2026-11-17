@@ -318,6 +318,47 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 	 * @example { file: 0o600, directory: 0o700 }
 	 */
 	access?: StoreAccess;
+
+	/**
+	 * For a file that must not lose an update and must stay private, such as credentials.
+	 *
+	 * - Mutations lock with `withLock`: a lock is never taken from a process that may still
+	 *   run, so a waiter fails with `LOCK` after `lockTimeout` instead.
+	 * - A store file that is a symbolic link is refused with `PATH` by every operation, on every
+	 *   platform.
+	 * - On POSIX, an existing directory must be owned by the current user and not writable by
+	 *   group or other users; otherwise reads and mutations fail with `PATH`, before any file is
+	 *   read or created.
+	 * - Implies `access: "private"`; any other `access` is a `DEFINITION` error.
+	 *
+	 * Every process that opens the file must set it: a default store still takes a lock over
+	 * after 10 seconds.
+	 *
+	 * @default false
+	 */
+	strict?: boolean;
+
+	/**
+	 * Milliseconds a strict store's mutation waits for the lock before failing with `LOCK`.
+	 * Ignored unless `strict` is set.
+	 *
+	 * @default 40000
+	 */
+	lockTimeout?: number;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// StoreMutationOptions — Per-call mutation options
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Options for {@link Store.write}, {@link Store.update}, {@link Store.patch}, and {@link Store.reset}. */
+export interface StoreMutationOptions {
+	/**
+	 * Stops a mutation that is still waiting, behind earlier mutations of the same file or for
+	 * its lock: it rejects with `signal.reason` and changes nothing. Not observed once the
+	 * mutation holds the lock.
+	 */
+	signal?: AbortSignal;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -399,11 +440,12 @@ export interface Store<TConfig> {
 	 * persistence.
 	 *
 	 * @param config - The complete config to persist.
+	 * @param options - {@link StoreMutationOptions}.
 	 * @returns The persisted config, including schema transformations.
 	 * @throws {CrustStoreError} `VALIDATION` if field validation fails.
 	 * @throws {CrustStoreError} `IO` on filesystem write failures.
 	 */
-	write(config: NoInfer<TConfig>): Promise<TConfig>;
+	write(config: NoInfer<TConfig>, options?: StoreMutationOptions): Promise<TConfig>;
 
 	/**
 	 * Reads and validates current config before calling the updater. Applies
@@ -415,12 +457,13 @@ export interface Store<TConfig> {
 	 * The final file replacement is atomic.
 	 *
 	 * @param updater - Function receiving current config and returning updated config.
+	 * @param options - {@link StoreMutationOptions}.
 	 * @returns The persisted config, including schema transformations.
 	 * @throws {CrustStoreError} `PARSE` if persisted JSON is malformed or its root is not an object.
 	 * @throws {CrustStoreError} `VALIDATION` if field validation fails.
 	 * @throws {CrustStoreError} `IO` on filesystem failures.
 	 */
-	update(updater: StoreUpdater<TConfig>): Promise<TConfig>;
+	update(updater: StoreUpdater<TConfig>, options?: StoreMutationOptions): Promise<TConfig>;
 
 	/**
 	 * Applies a partial update to the current config and persists.
@@ -434,18 +477,21 @@ export interface Store<TConfig> {
 	 * serialized and locked.
 	 *
 	 * @param partial - A partial subset of the config to merge in.
+	 * @param options - {@link StoreMutationOptions}.
 	 * @returns The persisted config, including schema transformations.
 	 * @throws {CrustStoreError} `VALIDATION` if field validation fails.
 	 * @throws {CrustStoreError} `PARSE` if persisted JSON is malformed or its root is not an object.
 	 * @throws {CrustStoreError} `IO` on filesystem failures.
 	 */
-	patch(partial: Partial<NoInfer<TConfig>>): Promise<TConfig>;
+	patch(partial: Partial<NoInfer<TConfig>>, options?: StoreMutationOptions): Promise<TConfig>;
 
 	/**
 	 * Removes the persisted config file, returning the store to
-	 * defaults-on-read behavior.
+	 * defaults-on-read behavior. On POSIX the directory is flushed before it resolves, so the
+	 * reset survives a power loss.
 	 *
+	 * @param options - {@link StoreMutationOptions}.
 	 * @throws {CrustStoreError} `IO` on filesystem deletion failures.
 	 */
-	reset(): Promise<void>;
+	reset(options?: StoreMutationOptions): Promise<void>;
 }
