@@ -134,10 +134,13 @@ function groupFiles(groups: readonly string[]): Map<string, string> {
 
 /**
  * The part of `spec` the `operations` need, which the operation model reads them from as from the
- * spec: its `openapi`, `swagger` and `security`, each operation's path item with only those
- * operations among its methods, and every local `$ref` target reached from them, at the same
- * pointer, also from `roots` (other values whose `$ref`s must resolve). No `tags`: kebab-case names have no spaces, so only a top-level group matches a tag, and
- * the index holds its description.
+ * spec: its `openapi`, `swagger` and `security`; each operation's path item with only those
+ * operations among its own methods and its `$ref` kept, so it resolves as in the spec (its own
+ * methods and fields over its target's), with its other own methods, when it has a `$ref`, replaced
+ * by placeholders that are no operation and still hide the target's; and every local `$ref` target reached from them, at the same pointer, also from `roots`
+ * (other values whose `$ref`s must resolve). So a slice's operations are some of the spec's, at the
+ * same paths, and include `operations`. No `tags`: kebab-case names have no spaces, so only a
+ * top-level group matches a tag, and the index holds its description.
  */
 function sliceSpec(
 	spec: OpenApiSpec,
@@ -150,12 +153,19 @@ function sliceSpec(
 	for (const [path, item] of Object.entries(spec.paths ?? {})) {
 		const own = kept.get(path);
 		if (own === undefined || typeof item !== "object" || item === null) continue;
+		const referencing = Object.hasOwn(item, "$ref");
 		put(
 			paths,
 			path,
 			Object.fromEntries(
-				Object.entries(item).filter(
-					([key]) => !methods.has(key) || own.some(({ method }) => method === key),
+				Object.entries(item).flatMap(([key, value]) =>
+					!methods.has(key) || own.some(({ method }) => method === key)
+						? [[key, value]]
+						: // A method left out must still hide its `$ref` target's, as it does in the spec: a
+							// deprecated operation without an operationId is none, and is not reported.
+							referencing
+							? [[key, { deprecated: true }]]
+							: [],
 				),
 			),
 		);

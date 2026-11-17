@@ -257,6 +257,79 @@ describe("spec data files", () => {
 		expect(builtApi.manifest()).toEqual(source.manifest());
 	});
 
+	it("give a built CLI the operations path items with a $ref resolve to, also those their own methods override", async () => {
+		const op = (operationId: string, tag: string) => ({
+			operationId,
+			tags: [tag],
+			summary: operationId,
+			responses: ok(),
+		});
+		const query = (name: string) => ({ name, in: "query", schema: { type: "string" } });
+		writeFileSync(
+			specUrl,
+			JSON.stringify({
+				openapi: "3.1.0",
+				paths: {
+					"/actual": { get: op("fetchItem", "g") },
+					// Its own GET and parameters win over Base's; Base's POST shows through.
+					"/shadow": {
+						$ref: "#/components/pathItems/Base",
+						parameters: [query("s")],
+						get: op("otherItem", "other"),
+					},
+					// Two paths through one item, each overriding another method; `twice` shows
+					// through both and `both` is also an operation of its own: all four are left out.
+					"/x": { $ref: "#/components/pathItems/Shared", get: op("xGet", "g") },
+					"/y": { $ref: "#/components/pathItems/Shared", post: op("yPost", "other") },
+					"/direct": { put: op("both", "h") },
+				},
+				components: {
+					pathItems: {
+						Base: {
+							parameters: [query("b")],
+							get: op("fetchItem", "g"),
+							post: op("createItem", "g"),
+						},
+						Shared: {
+							parameters: [query("t")],
+							get: op("sharedGet", "h"),
+							post: op("sharedPost", "h"),
+							delete: op("twice", "h"),
+							put: op("both", "h"),
+						},
+					},
+				},
+			}),
+		);
+		const plain = () => defineApi({ spec: specUrl, baseUrl: "https://api.acme.test" });
+		const sent = async () => {
+			const calls: string[] = [];
+			vi.stubGlobal("fetch", async (url: URL, init: RequestInit) => {
+				calls.push(`${init.method} ${url.href}`);
+				return Response.json([]);
+			});
+			const app = appOf(plain());
+			for (const argv of [
+				["g", "fetch-item"],
+				["g", "create-item", "--s", "1"],
+				["g", "x-get", "--t", "1"],
+				["h", "shared-post", "--t", "1"],
+				["h", "shared-get", "--t", "1"],
+				["other", "item", "--s", "1"],
+				["other", "y-post", "--t", "1"],
+			]) {
+				const result = await captureExecute(app, argv);
+				expect({ argv, ...result }).toMatchObject({ argv, exitCode: 0 });
+			}
+			return { calls, snapshot: await app.snapshot(), manifest: plain().manifest() };
+		};
+		const source = await sent();
+		await ship(appOf(plain()));
+
+		expect(source.calls).toContain("GET https://api.acme.test/actual");
+		expect(await sent()).toEqual(source);
+	});
+
 	it("give a built CLI the output schemas of the chain, also one that $refs what no operation does", async () => {
 		const withSchemas = () =>
 			defineApi({ spec: specUrl, baseUrl: "https://api.acme.test", paginate: () => undefined })
