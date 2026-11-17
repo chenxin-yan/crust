@@ -573,6 +573,21 @@ describe("spec data files", () => {
 		expect(await captureExecute(second, ["users", "all"])).toMatchObject({ exitCode: 0 });
 	});
 
+	it("let two handles that share added commands each run and build with its own", async () => {
+		const a = defineApi({ spec: specUrl, baseUrl: "https://api.acme.test" }).add("", hello);
+		const b = a.override({ listUsers: { name: "other" } });
+		const first = new Crust("acme").extend(a.extension).add(...a.commands);
+		const second = new Crust("acme").extend(b.extension).add(...b.commands);
+
+		expect(await captureExecute(first, ["hello"])).toMatchObject({ exitCode: 0 });
+		expect(await captureExecute(second, ["hello"])).toMatchObject({ exitCode: 0 });
+		expect((await runBuildHooks(first)).error).toBeUndefined();
+		expect((await runBuildHooks(second)).error).toBeUndefined();
+		// Paired wrongly, the generated commands still give it away.
+		const mixed = new Crust("acme").extend(a.extension).add(...b.commands);
+		expect(await captureExecute(mixed, ["hello"])).toMatchObject({ exitCode: 1 });
+	});
+
 	it.each([
 		["not an index", JSON.stringify({ commands: [] }), "is not an index"],
 		[

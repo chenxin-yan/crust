@@ -159,10 +159,13 @@ interface ApiBase {
 	readonly client: ContextFactory<"api", void, ApiClient>;
 	/** The spec, read once. */
 	readonly document: () => OpenApiSpec;
-	/** The commands of each chain whose `commands` was read, and the plans they come from. */
+	/**
+	 * The generated top-level commands of each chain whose `commands` was read, and the plans they
+	 * come from. Root commands from `.add("")` are left out: handles share them on purpose.
+	 */
 	readonly readCommands: Map<
 		ApiState,
-		{ readonly commands: readonly GeneratedDefinition[]; readonly built: () => CommandPlan[] }
+		{ readonly generated: readonly GeneratedDefinition[]; readonly built: () => CommandPlan[] }
 	>;
 	/** Why a built CLI's `index.json` could not be read, once `commands` tried. */
 	indexFailure?: unknown;
@@ -328,7 +331,13 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 					base.spec instanceof URL && !isSourceRun()
 						? indexed()
 						: generateCommands(built(), state.added, { ...options, spec: base.document() });
-				base.readCommands.set(state, { commands, built });
+				const shared = new Set(
+					state.added.flatMap(({ group, definitions }) => (group === "" ? definitions : [])),
+				);
+				base.readCommands.set(state, {
+					generated: commands.filter((definition) => !shared.has(definition)),
+					built,
+				});
 			}
 			return commands;
 		},
@@ -393,9 +402,9 @@ function apiExtension(
 			if (base.indexFailure !== undefined) throw base.indexFailure;
 			// A built CLI's commands were checked when it was built.
 			if (!isSourceRun()) return;
-			for (const [chain, { commands }] of base.readCommands) {
+			for (const [chain, { generated }] of base.readCommands) {
 				if (chain === state) continue;
-				if (commands.some((definition) => ctx.commandPathOf(definition) !== undefined)) {
+				if (generated.some((definition) => ctx.commandPathOf(definition) !== undefined)) {
 					throw mismatch("the app holds generated commands of another chain of this API");
 				}
 			}
