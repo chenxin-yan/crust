@@ -265,7 +265,7 @@ A refresh, login, logout, or reset of one login holds a lock file next to `crede
 
 1. `fromStdin({ enabled, maxBytes? })`: piped stdin, read only when `enabled` (such as with a `--token-stdin` flag) and stdin is not a terminal, without its trailing newline. More than `maxBytes` (16 KiB) rejects with a `RangeError` while reading.
 2. `fromEnv(name)`: an environment variable, the usual choice on CI. Its value is trimmed, and a blank one counts as unset.
-3. `fromEnvFile(values, name)`: a variable from a dotenv file you parsed, so an exported variable wins.
+3. `fromEnvFile(values, name)`: a variable from a dotenv file you parsed, so an exported variable wins. It is trimmed the same way, since a quoted dotenv value keeps its padding.
 4. `fromStore(tokenSource)`: the stored login, refreshed when it expires.
 5. `fromFlag(value)`, when you must accept a `--token` flag: put it first. A token on the command line is visible to other users (`ps`), and stays in shell history and CI logs.
 

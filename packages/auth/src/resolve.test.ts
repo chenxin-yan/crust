@@ -155,6 +155,15 @@ describe("resolveCredential", () => {
 		await expect(blank.resolve({})).resolves.toBeUndefined();
 	});
 
+	it("trims an env file variable, and treats a blank one as unset", async () => {
+		// A quoted dotenv value keeps its padding: util.parseEnv('A=" T "') is { A: " T " }.
+		const padded = fromEnvFile({ ACME_TOKEN: " FILE_TOKEN " }, "ACME_TOKEN");
+		await expect(padded.resolve({})).resolves.toEqual({ value: "FILE_TOKEN" });
+		const blank = fromEnvFile({ ACME_TOKEN: "   " }, "ACME_TOKEN");
+		expect(await blank.probe()).toBe(false);
+		await expect(blank.resolve({})).resolves.toBeUndefined();
+	});
+
 	it("an exported variable wins over the same variable from an env file", async () => {
 		const file = { ACME_TOKEN: "FROM_FILE" };
 		await expect(

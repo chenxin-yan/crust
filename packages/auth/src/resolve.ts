@@ -47,12 +47,16 @@ export function fromEnv(
 	return fromValue("env", () => env[name]?.trim());
 }
 
-/** A variable from a dotenv file you parsed; list it after {@link fromEnv} so the shell wins. */
+/**
+ * A variable from a dotenv file you parsed, trimmed like {@link fromEnv}; a blank one counts as
+ * unset. List it after {@link fromEnv} so the shell wins.
+ */
 export function fromEnvFile(
 	values: Readonly<Record<string, string | undefined>>,
 	name: string,
 ): CredentialSource {
-	return fromValue("env-file", () => values[name]);
+	// Dotenv parsers keep a quoted value's padding.
+	return fromValue("env-file", () => values[name]?.trim());
 }
 
 /**
