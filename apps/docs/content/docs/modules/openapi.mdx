@@ -197,16 +197,18 @@ Sends the operation with that `operationId`, as `whoami` does above. `input` hol
 - Query parameters are sent in style `form`: an array repeats the parameter (`?tag=a&tag=b`), or with `explode: false` is comma-separated (`?tag=a,b`); an object sends each property as a parameter (`?role=admin`), or with `explode: false` as `?filter=role,admin`.
 - Header parameters are sent as headers (style `simple`), like path values without percent-encoding.
 - `body` is sent as JSON, with the operation's JSON media type as `Content-Type`.
+- When a 2xx response of the operation declares JSON, the request asks for it with `Accept: application/json` (and the operation's own `+json` types), unless `input.header` sets `Accept`.
 - The request goes through [`fetch()`](#fetchpath-init), so it gets the same base URL, auth, redirects and [401 retry](#authentication). An operation with `security: []` is public: it is sent with `auth: false`.
 
 It resolves to:
 
-| Response                                                                                             | Result                                                                                                                                         |
-| ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2xx with a JSON media type                                                                           | The parsed body; `undefined` when the body is empty                                                                                            |
-| 2xx of another media type known to be empty: no body (such as `204` or `205`) or `Content-Length: 0` | `undefined`                                                                                                                                    |
-| Any other 2xx with another media type, even one whose empty body is only known after reading it      | The `Response` itself, unread. For a download or a stream, `fetch()` is usually more direct                                                    |
-| Non-2xx                                                                                              | Rejects with an `ApiResponseError` whose `status` holds the code, such as `GET /users/9: HTTP 404 Not Found`; its message leaves out the query |
+| Response                                                                                                                        | Result                                                                                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2xx with a JSON media type                                                                                                      | The parsed body; `undefined` when the body is empty                                                                                                           |
+| 2xx of another media type known to be empty: no body (such as `204` or `205`) or `Content-Length: 0`                            | `undefined`                                                                                                                                                   |
+| Any other 2xx with another media type, where the spec declares JSON for that status (or, for an undeclared status, for any 2xx) | Rejects with an `ApiResponseError` whose `status` holds the code, such as `GET /reports/1: HTTP 200 answered application/xml, not JSON`; the body is not read |
+| Any other 2xx with another media type, even one whose empty body is only known after reading it                                 | The `Response` itself, unread. For a download or a stream, `fetch()` is usually more direct                                                                   |
+| Non-2xx                                                                                                                         | Rejects with an `ApiResponseError` whose `status` holds the code, such as `GET /users/9: HTTP 404 Not Found`; its message leaves out the query                |
 
 Before any request, `call()` fails with a `VALIDATION` [`CrustError`](/docs/api/errors) for a missing required parameter or body, a parameter the operation does not have, or a body it does not take; for a path value that would make an empty, `.` or `..` segment, a header value HTTP does not allow, or a body `JSON.stringify()` cannot send (a function, a symbol, a cycle, a `BigInt`), whose messages never repeat the value; and for an input it cannot send: a body that is not JSON, a parameter in another style or described by `content`, a required cookie. Use `fetch()` for those. An `operationId` the spec does not have, or that several operations share, fails with an error naming it. `call()` does not paginate; use `fetch()` with your own loop, or `api <path> --paginate`.
 
@@ -280,7 +282,7 @@ user.nickname;
 ```
 
 - `input` has `path`, `query`, `header` and `body` exactly as the operation takes them, each required when the operation requires one of its values. The argument is optional when nothing is required.
-- The result is the JSON body of the operation's 2xx responses (a union when there are several), `undefined` for one without content, and `unknown` for another media type or an operation with no 2xx response.
+- The result is the JSON body of the operation's 2xx responses (a union when there are several; the JSON one where a status also declares another media type), `undefined` for one without content, and `unknown` for another media type or an operation with no 2xx response.
 - With one spec registered, every handle uses it. With several, pass `id` set to the spec's name (`id: "acme"` for `acme.openapi.jsonc`); `id` also names the directory `crust build` writes the document to.
 
 Editors run the mapper only when allowed to: VS Code asks for workspace trust and the content mapper permission. An editor that starts TypeScript's language server (`tsc --lsp --stdio`) itself must pass `runExternalCode: true` in its initialization options (in Neovim, `init_options = { runExternalCode = true }`).
