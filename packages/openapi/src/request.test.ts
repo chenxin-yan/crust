@@ -45,6 +45,31 @@ const spec = {
 		"/status": {
 			get: { operationId: "status", security: [], responses: { "200": { description: "ok" } } },
 		},
+		"/maps/{at}/{near}": {
+			get: {
+				operationId: "locate",
+				parameters: [
+					{ name: "at", in: "path", required: true, schema: { type: "object" } },
+					{ name: "near", in: "path", required: true, explode: true, schema: { type: "object" } },
+					{ name: "filter", in: "query", schema: { type: "object" } },
+					{ name: "range", in: "query", explode: false, schema: { type: "object" } },
+					{ name: "X-At", in: "header", schema: { type: "object" } },
+					{ name: "X-Near", in: "header", explode: true, schema: { type: "object" } },
+				],
+				responses: { "200": { description: "ok" } },
+			},
+		},
+		"/inherited": {
+			get: {
+				operationId: "inherited",
+				parameters: ["toString", "constructor", "__proto__"].map((name) => ({
+					name,
+					in: "query",
+					schema: { type: "string" },
+				})),
+				responses: { "200": { description: "ok" } },
+			},
+		},
 		"/upload": {
 			post: {
 				operationId: "upload",
@@ -119,8 +144,8 @@ describe("buildRequest", () => {
 		],
 		[
 			"getPost",
-			{ path: { id: "1", slug: "s" }, query: { draft: { yes: true } as never } },
-			'getPost: the query parameter "draft" must be a scalar or an array of scalars',
+			{ path: { id: "1", slug: "s" }, query: { draft: { yes: { deep: true } } as never } },
+			'getPost: the query parameter "draft" must be a scalar, an array of scalars, or an object of scalars',
 		],
 		["createUser", {}, "createUser: missing the request body"],
 		["status", { body: {} }, "status: the operation takes no request body"],
@@ -130,6 +155,87 @@ describe("buildRequest", () => {
 
 		expect(error).toBeInstanceOf(CrustError);
 		expect(error).toMatchObject({ code: "VALIDATION", message });
+	});
+
+	it("serializes object parameters by style and explode", () => {
+		expect(
+			request("locate", {
+				path: { at: { x: 1, y: "a b" }, near: { x: 1, y: 2 } },
+				query: { filter: { role: "admin", team: "a&b" }, range: { min: 1, max: 5 } },
+				header: { "X-At": { x: 1, y: 2 }, "X-Near": { x: 1, y: 2 } },
+			}),
+		).toEqual({
+			path: "/maps/x,1,y,a%20b/x=1,y=2?role=admin&team=a%26b&range=min,1,max,5",
+			method: "GET",
+			headers: { "x-at": "x,1,y,2", "x-near": "x=1,y=2" },
+			body: undefined,
+		});
+	});
+
+	it("reads only a parameter's own value, whatever its name", () => {
+		expect(request("inherited", { query: {} }).path).toBe("/inherited");
+		const query: Record<string, string> = JSON.parse(
+			'{"toString":"a","constructor":"b","__proto__":"c"}',
+		);
+		expect(request("inherited", { query }).path).toBe(
+			"/inherited?toString=a&constructor=b&__proto__=c",
+		);
+	});
+
+	it.each(["", ".", ".."])(
+		"rejects the path value %j, which would address another resource",
+		(value) => {
+			const error = failure("getPost", { path: { id: value, slug: "s" } });
+
+			expect(error).toBeInstanceOf(CrustError);
+			expect(error).toMatchObject({
+				code: "VALIDATION",
+				message: 'getPost: the path parameter "id" would make an empty, "." or ".." path segment',
+			});
+		},
+	);
+
+	it("rejects a header value HTTP does not allow without repeating it", () => {
+		const error = failure("getPost", {
+			path: { id: "1", slug: "s" },
+			header: { "X-Trace": "SECRET_SENTINEL\nx" },
+		});
+
+		expect(error).toBeInstanceOf(CrustError);
+		expect(error).toMatchObject({
+			code: "VALIDATION",
+			message: 'getPost: the header parameter "X-Trace" has characters HTTP does not allow',
+		});
+		expect((error as Error).cause).toBeUndefined();
+		expect(JSON.stringify(error, Object.getOwnPropertyNames(error))).not.toContain("SECRET");
+	});
+
+	it("sends a null body as JSON", () => {
+		expect(request("createUser", { body: null }).body).toBe("null");
+	});
+
+	it.each([
+		["a function", () => 1],
+		["a symbol", Symbol("body")],
+		["toJSON returning undefined", { toJSON: () => undefined }],
+		[
+			"a cycle",
+			(() => {
+				const cycle: Record<string, unknown> = {};
+				cycle.self = cycle;
+				return cycle;
+			})(),
+		],
+		["a BigInt", { total: 1n }],
+	])("rejects a body that is %s before any request", (_, body) => {
+		const error = failure("createUser", { body });
+
+		expect(error).toBeInstanceOf(CrustError);
+		expect(error).toMatchObject({
+			code: "VALIDATION",
+			message: "createUser: the request body cannot be sent as JSON",
+		});
+		expect((error as Error).cause).toBeUndefined();
 	});
 
 	it("names what call() cannot send and points to fetch()", () => {
@@ -199,6 +305,29 @@ describe("call()", () => {
 				headers: { authorization: "Bearer secret", "content-type": "application/merge-patch+json" },
 				body: '{"name":"Ada"}',
 			},
+		]);
+	});
+
+	it("sends reserved characters in a path value as one segment, and no request for a dot segment", async () => {
+		const errors = await withClient(
+			() => Response.json({}),
+			async (api) => [
+				await api.call("getPost", { path: { id: "a/b?c#d%", slug: "..x" } }),
+				...(await Promise.all(
+					["", ".", ".."].map((id) =>
+						api.call("getPost", { path: { id, slug: "s" } }).catch((caught: unknown) => caught),
+					),
+				)),
+			],
+		);
+
+		expect(fetched.map(({ url }) => url)).toEqual([
+			"https://api.example.com/v1/users/a%2Fb%3Fc%23d%25/posts/..x",
+		]);
+		expect(errors?.slice(1)).toEqual([
+			expect.objectContaining({ code: "VALIDATION" }),
+			expect.objectContaining({ code: "VALIDATION" }),
+			expect.objectContaining({ code: "VALIDATION" }),
 		]);
 	});
 

@@ -42,12 +42,24 @@ function invalid(op: Operation, message: string): CrustError {
 	return new CrustError("VALIDATION", `${op.id}: ${message}`);
 }
 
+/** An object literal or `Object.create(null)`: not an array, a class instance or a function. */
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
+	if (typeof value !== "object" || value === null) return false;
+	const prototype = Object.getPrototypeOf(value);
+	return prototype === Object.prototype || prototype === null;
+}
+
+type Scalar = string | number | boolean;
+const isScalar = (value: unknown): value is Scalar =>
+	typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+
 /**
  * The request for `op` with `input`: path parameters filled into the path template (style
- * `simple`), query parameters in style `form` (repeated per array item unless `explode` is
- * `false`, then comma-separated), header parameters in style `simple`, and `body` as JSON. Cookie
- * parameters are never sent. Throws a `VALIDATION` error, before any request, for a missing
- * required input, a parameter the operation does not have, or one it cannot send.
+ * `simple`), query parameters in style `form`, header parameters in style `simple`, each a scalar,
+ * an array of scalars or an object of scalars serialized by its `explode`, and `body` as JSON.
+ * Cookie parameters are never sent. Throws a `VALIDATION` error, before any request, for a missing
+ * required input, a parameter the operation does not have, or one it cannot send, such as a path
+ * value that would make an empty, `.` or `..` segment and so address another resource.
  */
 export function buildRequest(op: Operation, input: CallInput = {}): OperationRequest {
 	for (const location of LOCATIONS) {
@@ -58,7 +70,7 @@ export function buildRequest(op: Operation, input: CallInput = {}): OperationReq
 		}
 	}
 
-	let path = op.path;
+	const filled = new Map<string, string>();
 	const query: string[] = [];
 	const headers = new Headers();
 	for (const param of op.params) {
@@ -67,22 +79,56 @@ export function buildRequest(op: Operation, input: CallInput = {}): OperationReq
 				throw invalid(op, `the required cookie parameter "${param.name}" cannot be sent`);
 			continue;
 		}
-		const value = input[param.in]?.[param.name];
+		const values = input[param.in];
+		// Own values only: a parameter may be named like an Object.prototype member.
+		const value = values && Object.hasOwn(values, param.name) ? values[param.name] : undefined;
 		if (value === undefined) {
 			if (param.required) throw invalid(op, `missing the ${param.in} parameter "${param.name}"`);
 			continue;
 		}
-		const values = serializable(op, param, value);
+		const { items, entries, explode } = serializable(op, param, value);
 		if (param.in === "path") {
-			path = path.replaceAll(`{${param.name}}`, values.map(encode).join(","));
+			filled.set(param.name, serialize(items, entries, explode, encode));
 		} else if (param.in === "header") {
-			headers.set(param.name, values.join(","));
-		} else if (param.explode === false) {
-			query.push(`${encode(param.name)}=${values.map(encode).join(",")}`);
+			try {
+				headers.set(param.name, serialize(items, entries, explode, String));
+			} catch {
+				// Not the platform's error: Node's quotes the value, which may be a credential.
+				throw invalid(
+					op,
+					`the header parameter "${param.name}" has characters HTTP does not allow`,
+				);
+			}
+		} else if (!explode) {
+			query.push(`${encode(param.name)}=${serialize(items, entries, false, encode)}`);
+		} else if (entries) {
+			for (const [key, item] of entries) query.push(`${encode(key)}=${encode(item)}`);
 		} else {
-			for (const item of values) query.push(`${encode(param.name)}=${encode(item)}`);
+			for (const item of items) query.push(`${encode(param.name)}=${encode(item)}`);
 		}
 	}
+
+	// Segment by segment: a URL parser resolves an empty, `.` or `..` segment (even `%2E`) to
+	// another resource, such as `DELETE /users/..` to the API's root.
+	const path = op.path
+		.split("/")
+		.map((template) => {
+			const names: string[] = [];
+			const segment = template.replace(/\{([^}]+)\}/g, (placeholder, name: string) => {
+				const value = filled.get(name);
+				if (value === undefined) return placeholder;
+				names.push(name);
+				return value;
+			});
+			if (names.length > 0 && /^\.{0,2}$/.test(segment)) {
+				throw invalid(
+					op,
+					`the path parameter "${names.join('", "')}" would make an empty, "." or ".." path segment`,
+				);
+			}
+			return segment;
+		})
+		.join("/");
 
 	let body: string | undefined;
 	if (input.body !== undefined) {
@@ -93,7 +139,13 @@ export function buildRequest(op: Operation, input: CallInput = {}): OperationReq
 				`the request body is ${op.body.contentType}; call() sends only JSON, so use fetch()`,
 			);
 		}
-		body = JSON.stringify(input.body);
+		try {
+			body = JSON.stringify(input.body);
+		} catch {
+			// A cycle or a BigInt; the platform's message may quote the body.
+		}
+		// `undefined` for a function, a symbol, or a `toJSON()` returning it.
+		if (body === undefined) throw invalid(op, "the request body cannot be sent as JSON");
 		headers.set("content-type", op.body.contentType);
 	} else if (op.body?.required) {
 		throw invalid(op, "missing the request body");
@@ -105,12 +157,38 @@ export function buildRequest(op: Operation, input: CallInput = {}): OperationReq
 	};
 }
 
-/** `value` as the scalars to send for `param`, which must be in its location's default style. */
+/**
+ * `items` and an object's `entries` joined with commas: `a,b`, `k,v,k2,v2`, or exploded `k=v,k2=v2`.
+ */
+function serialize(
+	items: readonly Scalar[],
+	entries: readonly (readonly [string, Scalar])[] | undefined,
+	explode: boolean,
+	encodeValue: (value: Scalar) => string,
+): string {
+	if (entries === undefined) return items.map(encodeValue).join(",");
+	return entries
+		.map(([key, item]) =>
+			explode
+				? `${encodeValue(key)}=${encodeValue(item)}`
+				: `${encodeValue(key)},${encodeValue(item)}`,
+		)
+		.join(",");
+}
+
+/**
+ * `value` for `param`, which must be in its location's default style: its scalars, or for an object
+ * its entries (properties set to `undefined` left out), and whether it explodes.
+ */
 function serializable(
 	op: Operation,
 	param: Param,
 	value: unknown,
-): readonly (string | number | boolean)[] {
+): {
+	readonly items: readonly Scalar[];
+	readonly entries?: readonly (readonly [string, Scalar])[];
+	readonly explode: boolean;
+} {
 	const style = param.in === "query" ? "form" : "simple";
 	if (param.contentType !== undefined || (param.style ?? style) !== style) {
 		const how = param.contentType === undefined ? `style ${param.style}` : param.contentType;
@@ -119,14 +197,19 @@ function serializable(
 			`the ${param.in} parameter "${param.name}" is in ${how}; call() sends only style ${style}, so use fetch()`,
 		);
 	}
-	const values = Array.isArray(value) ? value : [value];
-	if (!values.every((item) => ["string", "number", "boolean"].includes(typeof item))) {
-		throw invalid(
-			op,
-			`the ${param.in} parameter "${param.name}" must be a scalar or an array of scalars`,
-		);
+	const explode = param.explode ?? style === "form";
+	if (isScalar(value)) return { items: [value], explode };
+	if (Array.isArray(value) && value.every(isScalar)) return { items: value, explode };
+	if (isPlainObject(value)) {
+		const entries = Object.entries(value).filter(([, item]) => item !== undefined);
+		if (entries.every((entry): entry is [string, Scalar] => isScalar(entry[1]))) {
+			return { items: [], entries, explode };
+		}
 	}
-	return values;
+	throw invalid(
+		op,
+		`the ${param.in} parameter "${param.name}" must be a scalar, an array of scalars, or an object of scalars`,
+	);
 }
 
 /**
