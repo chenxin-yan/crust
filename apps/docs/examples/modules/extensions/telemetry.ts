@@ -6,11 +6,12 @@ const app = new Crust("acme")
 		telemetry({
 			env: "ACME_TELEMETRY",
 			enabled: "opt-in",
-			send: async (event) => {
+			send: async (event, { signal }) => {
 				await fetch("https://telemetry.acme.dev/events", {
 					method: "POST",
 					headers: { "content-type": "application/json" },
 					body: JSON.stringify(event),
+					signal,
 				});
 			},
 		}),

@@ -57,7 +57,9 @@ Not covered:
 
 ## Delivery
 
-`send` runs inside `postRun`, so the invocation ends only when it resolves, or after 1 second at most. It does not get `ctx.signal`, which is already aborted after Ctrl-C; the 1 second limit bounds it instead. A `send` that throws, rejects, or takes longer is ignored and never changes the outcome or the exit code.
+`send` runs inside `postRun`, so the invocation ends only when it settles, or after 1 second at most. At that deadline its `signal` aborts with a `TimeoutError`; pass it to `fetch` (or whatever does the work) so the request ends too. It is not `ctx.signal`, which is already aborted after Ctrl-C. A `send` that throws, rejects, or takes longer is ignored and never changes the outcome or the exit code.
+
+The 1 second bounds only the wait. Work that ignores `signal`, such as a request without it or a timer, keeps the process alive until it finishes, and so does code that blocks the event loop. That includes Ctrl-C: Crust exits by the signal only once the event loop is empty.
 
 ## API
 
