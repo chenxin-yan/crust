@@ -6,7 +6,7 @@
 // lock files and a real authorization server on the loopback.
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -141,6 +141,13 @@ function child(runtime: string, args: string[], root: string): ChildProcess {
 	return process_;
 }
 
+/** `credentials.json` of the app `acme`, wherever the platform keeps its state directory. */
+const credentialsFile = () => credentialStore({ app: "acme" }).path;
+
+/** How many keyring writes the file-backed keyring of the fixture saw. */
+const keyWrites = (keyring: string) =>
+	readFileSync(`${keyring}.writes`, "utf8").trim().split("\n").length;
+
 async function output(process_: ChildProcess): Promise<string> {
 	let text = "";
 	let errors = "";
@@ -245,8 +252,8 @@ describe.each(["node", "bun"])("on %s", (runtime) => {
 			child(runtime, ["login", as.issuer, "acme", profile, keyring, "300"], root),
 		);
 		expect(await Promise.all([output(a!), output(b!)])).toEqual(["ok", "ok"]);
-		expect(readFileSync(`${keyring}.writes`, "utf8").trim().split("\n")).toHaveLength(1);
-		const document = JSON.parse(readFileSync(join(root, "acme", "credentials.json"), "utf8"));
+		expect(keyWrites(keyring)).toBe(1);
+		const document = JSON.parse(readFileSync(credentialsFile(), "utf8"));
 		expect(document.encryption).toEqual({
 			kind: "aes-256-gcm",
 			keyId: JSON.parse(readFileSync(keyring, "utf8")).keyId,
@@ -259,14 +266,14 @@ describe.each(["node", "bun"])("on %s", (runtime) => {
 			child(runtime, ["read", as.issuer, "acme", profile, keyring], root),
 		);
 		expect(await Promise.all(readers.map(output))).toEqual(["AT_a", "AT_b", "AT2"]);
-		expect(readFileSync(join(root, "acme", "credentials.json"), "utf8")).not.toMatch(/"AT|"RT/);
+		expect(readFileSync(credentialsFile(), "utf8")).not.toMatch(/"AT|"RT/);
 	}, 90_000);
 
 	it("a process killed before its login's write leaves the file intact, and the next login writes no second key", async () => {
 		const as = await authorizationServer(0);
 		const { root } = await loggedIn(as.issuer);
 		const keyring = join(root, "keyring");
-		const file = join(root, "acme", "credentials.json");
+		const file = credentialsFile();
 		const before = readFileSync(file, "utf8");
 		const killed = child(runtime, ["login-hang", as.issuer, "acme", "a", keyring], root);
 		await new Promise<void>((resolve) => killed.stdout!.once("data", () => resolve()));
@@ -276,9 +283,48 @@ describe.each(["node", "bun"])("on %s", (runtime) => {
 		expect(existsSync(keyring)).toBe(true);
 		const next = child(runtime, ["login", as.issuer, "acme", "a", keyring], root);
 		expect(await output(next)).toBe("ok");
-		expect(readFileSync(`${keyring}.writes`, "utf8").trim().split("\n")).toHaveLength(1);
+		expect(keyWrites(keyring)).toBe(1);
 		const reader = child(runtime, ["read", as.issuer, "acme", "a", keyring], root);
 		expect(await output(reader)).toBe("AT_a");
+	}, 90_000);
+
+	it("a key write past one process's deadline fails its login; a process waiting for it reuses that key", async () => {
+		const as = await authorizationServer(0);
+		const { root } = await loggedIn(as.issuer);
+		const keyring = join(root, "keyring");
+		const login = (profile: string, delay: string) =>
+			child(runtime, ["login", as.issuer, "acme", profile, keyring, delay, "500"], root);
+		const a = login("a", "3000");
+		const outputA = output(a);
+		await until(() => existsSync(`${keyring}.writes`));
+		// A is still running and holds the key-init lock until its write lands.
+		const outputB = output(login("b", "0"));
+		expect(await outputA).toBe("credential-key");
+		expect(await outputB).toBe("ok");
+		expect(keyWrites(keyring)).toBe(1);
+		const reader = child(runtime, ["read", as.issuer, "acme", "b", keyring], root);
+		expect(await output(reader)).toBe("AT_b");
+	}, 90_000);
+
+	it("a creator killed during its key write: a late write replaces the key, and one login restores service", async () => {
+		const as = await authorizationServer(0);
+		const { root } = await loggedIn(as.issuer);
+		const keyring = join(root, "keyring");
+		const killed = child(runtime, ["login", as.issuer, "acme", "a", keyring, "hang"], root);
+		await until(() => existsSync(`${keyring}.late`));
+		killed.kill("SIGKILL");
+		await once(killed, "exit");
+		const run = async (args: string[]) =>
+			output(child(runtime, [args[0]!, as.issuer, "acme", "b", keyring, ...args.slice(1)], root));
+		// The next process takes over the dead creator's lock and creates its own key.
+		expect(await run(["login"])).toBe("ok");
+		expect(await run(["read"])).toBe("AT_b");
+		// The killed creator's write lands after all.
+		copyFileSync(`${keyring}.late`, keyring);
+		expect(await run(["read"])).toBe("login-required:key-mismatch");
+		expect(await run(["login"])).toBe("ok");
+		expect(await run(["read"])).toBe("AT_b");
+		expect(keyWrites(keyring)).toBe(2);
 	}, 90_000);
 
 	it("retries a 401 over real sockets and proves a refused connection sent nothing", () => {
