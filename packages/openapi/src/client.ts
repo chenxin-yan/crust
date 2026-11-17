@@ -1,5 +1,9 @@
 import { type ContextFactory, type ContextSetup, defineContext } from "@crustjs/core";
 
+import type { Operation } from "./operations.ts";
+import { callOperation } from "./request.ts";
+import type { TypedCall, UntypedCall } from "./typed-client.ts";
+
 /**
  * What `auth` may return to have a 401 retried: its headers, and how to get new ones.
  * `bearerAuth()` builds one.
@@ -39,8 +43,11 @@ export interface ApiClientOptions {
 		| Promise<Readonly<Record<string, string>> | AuthAttempt | undefined>;
 }
 
-/** The `api` Context value: `fetch()` bound to the API's base URL and auth. */
-export interface ApiClient {
+/**
+ * The `api` Context value: `fetch()` bound to the API's base URL and auth, and `call()` for an
+ * operation of the spec, typed by `Operations` when a spec is registered in `Specs`.
+ */
+export interface ApiClient<Operations = unknown> {
 	readonly baseUrl: string;
 	/**
 	 * `fetch()` for `path` below {@link ApiClient.baseUrl} (an absolute URL is used as is, but
@@ -53,6 +60,13 @@ export interface ApiClient {
 	 * call `auth` or carry its headers.
 	 */
 	fetch(path: string, init?: RequestInit & { readonly auth?: false }): Promise<Response>;
+	/**
+	 * Sends the operation with this `operationId` through {@link ApiClient.fetch}, its request built
+	 * from the spec and `input`, and resolves to the 2xx response's JSON body, `undefined` without
+	 * content, or the unread `Response` for another media type; a non-2xx response rejects with an
+	 * `ApiResponseError`. Without a registered spec, any id compiles and the result is `unknown`.
+	 */
+	readonly call: unknown extends Operations ? UntypedCall : TypedCall<Operations>;
 }
 
 /** `path` joined below `baseUrl`, keeping the base's own path; absolute URLs pass through. */
@@ -152,16 +166,18 @@ export function fetchNextPage(
 	init?: Parameters<ApiClient["fetch"]>[1],
 ): Promise<Response> {
 	const fetchNext = nextPageFetchers.get(client);
-	if (fetchNext === undefined) throw new TypeError("fetchNextPage: not an apiClient Context value");
+	if (fetchNext === undefined) throw new TypeError("fetchNextPage: not an `api` Context value");
 	return fetchNext(path, init);
 }
 
 /**
- * The shared API client Context. {@link apiCommand} provides it, so app commands
- * declare `.use(apiClient)` and call `(await ctx.api).fetch("/users")`.
+ * The `api` Context of one `defineApi()` handle; `call()` reads its operation through `findOperation`.
  */
-export const apiClient: ContextFactory<"api", ApiClientOptions, ApiClient> =
-	/* @__PURE__ */ defineContext("api").setup(async (input, options: ApiClientOptions) => {
+export function apiClientContext(
+	options: ApiClientOptions,
+	findOperation: (operationId: string) => Promise<Operation>,
+): ContextFactory<"api", void, ApiClient> {
+	return defineContext("api").setup(async (input) => {
 		const origin = new URL(options.baseUrl).origin;
 		// The headers the Fetch standard strips on a cross-origin redirect, plus every auth header name once `auth` ran.
 		const credentialHeaders = ["authorization", "cookie", "proxy-authorization"];
@@ -289,9 +305,13 @@ export const apiClient: ContextFactory<"api", ApiClientOptions, ApiClient> =
 			}
 		}
 
+		const fetchPath: ApiClient["fetch"] = async (path, init) =>
+			send(firstHop(baseOriginUrl(options.baseUrl, path), init));
 		const client: ApiClient = {
 			baseUrl: options.baseUrl,
-			fetch: async (path, init) => send(firstHop(baseOriginUrl(options.baseUrl, path), init)),
+			fetch: fetchPath,
+			call: async (operationId, callInput) =>
+				callOperation(fetchPath, await findOperation(operationId), callInput),
 		};
 		nextPageFetchers.set(client, (path, init) => {
 			const target = resolveUrl(options.baseUrl, path);
@@ -299,3 +319,4 @@ export const apiClient: ContextFactory<"api", ApiClientOptions, ApiClient> =
 		});
 		return client;
 	});
+}

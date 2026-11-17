@@ -1,6 +1,8 @@
-export type { ApiCommandOptions, ApiRequest, OpenApiSpec } from "./api-command.ts";
-export { ApiResponseError, apiCommand } from "./api-command.ts";
+export type { ApiRequest, OpenApiSpec } from "./api-command.ts";
 export type { BearerCredential, BearerResolveOptions } from "./bearer-auth.ts";
 export { bearerAuth } from "./bearer-auth.ts";
 export type { ApiClient, ApiClientOptions, AuthAttempt } from "./client.ts";
-export { apiClient } from "./client.ts";
+export type { DefineApiOptions } from "./define-api.ts";
+export { defineApi } from "./define-api.ts";
+export { ApiResponseError } from "./request.ts";
+export type { Specs } from "./typed-client.ts";

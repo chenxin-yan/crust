@@ -1,0 +1,9 @@
+{
+	"name": "typed-client-fixture",
+	"private": true,
+	"type": "module",
+	"devDependencies": {
+		"inspex": "0.1.0",
+		"typescript": "7.1.0-beta"
+	}
+}

@@ -3,15 +3,14 @@ import { inspect } from "node:util";
 import { Crust, defineCommand } from "@crustjs/core";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { apiCommand } from "./api-command.ts";
 import { bearerAuth } from "./bearer-auth.ts";
 import {
 	type ApiClient,
 	type ApiClientOptions,
 	type AuthAttempt,
-	apiClient,
 	fetchNextPage,
 } from "./client.ts";
+import { defineApi } from "./define-api.ts";
 
 interface Call {
 	url: string;
@@ -41,17 +40,16 @@ const ok = () => new Response("{}");
 
 /** Runs `use` with the `api` Context of an app configured with `auth`. */
 async function withApi(auth: ApiClientOptions["auth"], use: (api: ApiClient) => Promise<void>) {
+	const acme = defineApi({
+		spec: { openapi: "3.1.0", paths: {} },
+		baseUrl: "https://api.example.com/v1",
+		auth,
+	});
 	const app = new Crust("tool")
-		.extend(
-			apiCommand({
-				spec: { openapi: "3.1.0", paths: {} },
-				baseUrl: "https://api.example.com/v1",
-				auth,
-			}),
-		)
+		.extend(acme.extension)
 		.add(
 			defineCommand("call", {}, (command) =>
-				command.use(apiClient).action(async ({ ctx }) => use(await ctx.api)),
+				command.use(acme.client).action(async ({ ctx }) => use(await ctx.api)),
 			),
 		);
 	const outcome = await app.run(["call"]);
@@ -74,7 +72,7 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-describe("apiClient auth retry", () => {
+describe("api client auth retry", () => {
 	it("keeps working with an auth function that returns plain headers, and never retries it", async () => {
 		const calls = stubFetch(unauthorized);
 		const auth = vi.fn(() => ({ authorization: "Bearer plain" }));
@@ -261,7 +259,7 @@ describe("apiClient auth retry", () => {
 	});
 });
 
-describe("apiClient auth headers and bodies", () => {
+describe("api client auth headers and bodies", () => {
 	it.each([
 		["a header record", () => ({ authorization: "Bearer SECRET_SENTINEL\nx" })],
 		[

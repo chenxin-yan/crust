@@ -10,10 +10,13 @@ import { pathToFileURL } from "node:url";
 import { Crust, CrustError, defineCommand } from "@crustjs/core";
 import { json } from "@crustjs/extensions";
 import { captureExecute } from "@crustjs/testing";
+import { resolveArtifactDir } from "@crustjs/utils/artifacts";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { type ApiCommandOptions, ApiResponseError, apiCommand } from "./api-command.ts";
-import { apiClient, fetchNextPage } from "./client.ts";
+import { runBuildHooks } from "../../crust/tests/build-hooks.ts";
+import { fetchNextPage } from "./client.ts";
+import { type DefineApiOptions, defineApi } from "./define-api.ts";
+import { ApiResponseError } from "./request.ts";
 
 const spec = {
 	openapi: "3.1.0",
@@ -53,9 +56,6 @@ const spec = {
 	},
 };
 
-const getUserSpec =
-	'{"method":"GET","path":"/users/{id}","operationId":"getUser","parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"string"}}]}';
-
 interface FetchCall {
 	url: string;
 	method: string;
@@ -81,15 +81,17 @@ function stubFetch(respond: (call: FetchCall) => Response = () => new Response("
 	return calls;
 }
 
-function buildApp(options: Partial<ApiCommandOptions> = {}) {
-	return new Crust("tool").extend(
-		apiCommand({
-			spec,
-			baseUrl: "https://api.example.com/v1/",
-			auth: () => ({ authorization: "Bearer secret" }),
-			...options,
-		}),
-	);
+function buildApi(options: Partial<DefineApiOptions> = {}) {
+	return defineApi({
+		spec,
+		baseUrl: "https://api.example.com/v1/",
+		auth: () => ({ authorization: "Bearer secret" }),
+		...options,
+	});
+}
+
+function buildApp(options: Partial<DefineApiOptions> = {}) {
+	return new Crust("tool").extend(buildApi(options).extension);
 }
 
 /** A real HTTP server on a free local port, so `fetch()` follows redirects for real. */
@@ -272,148 +274,116 @@ describe("api --list and --spec", () => {
 	});
 });
 
-describe("spec loader", () => {
-	it("is called once per --list or --spec invocation with its signal, never for requests or app commands", async () => {
+describe("the spec", () => {
+	const jsonc = `// The pinned spec
+{
+	"openapi": "3.1.0", /* an inline comment */
+	"paths": {
+		"/users": { "get": { "operationId": "listUsers", "summary": "List // users /* all */ ,}", }, },
+	},
+}
+`;
+	const writeSpec = (text = jsonc) => {
+		const file = join(mkdtempSync(join(tmpdir(), "crust-openapi-spec-")), "acme.openapi.jsonc");
+		writeFileSync(file, text);
+		return file;
+	};
+
+	it.each([
+		["a loader", () => spec],
+		["a URL that is not a file", new URL("https://api.example.com/openapi.json")],
+		["a path", "./openapi.json"],
+	])("is a DEFINITION error as %s: specs are pinned, never fetched", (_, value) => {
+		let error: unknown;
+		try {
+			defineApi({ spec: value as never, baseUrl: "https://api.example.com" });
+		} catch (thrown) {
+			error = thrown;
+		}
+
+		expect(error).toBeInstanceOf(CrustError);
+		expect(error).toMatchObject({
+			code: "DEFINITION",
+			message:
+				"defineApi: `spec` must be a file: URL or the OpenAPI document as an object; specs are pinned, never fetched",
+		});
+	});
+
+	it("reads a file: URL from source, with comments and trailing commas, only when a command needs it", async () => {
 		stubFetch();
-		const loader = vi.fn(async (_input: { signal: AbortSignal }) => spec);
-		const app = buildApp({ spec: loader }).add(
-			defineCommand("me", {}, (command) =>
-				command.use(apiClient).action(async ({ ctx }) => {
-					await (await ctx.api).fetch("/me");
-				}),
-			),
-		);
+		const file = join(mkdtempSync(join(tmpdir(), "crust-openapi-spec-")), "acme.openapi.jsonc");
+		const app = buildApp({ spec: pathToFileURL(file) });
 
+		// Not read for a request: the file does not exist yet.
 		expect((await captureExecute(app, ["api", "/users"])).exitCode).toBe(0);
-		expect((await captureExecute(app, ["me"])).exitCode).toBe(0);
-		expect(loader).not.toHaveBeenCalled();
-
-		expect((await captureExecute(app, ["api", "--list"])).stdout).toContain("GET /users listUsers");
-		expect(loader).toHaveBeenCalledTimes(1);
-		expect(loader.mock.calls[0]?.[0]).toEqual({ signal: expect.any(AbortSignal) });
-
-		const controller = new AbortController();
-		const outcome = await app.run(
-			["api"],
-			{ flags: { spec: "getUser" } },
-			{ signal: controller.signal },
-		);
-		expect(outcome).toMatchObject({ status: "completed", stdout: getUserSpec });
-		expect(loader).toHaveBeenCalledTimes(2);
-		controller.abort();
-		expect(loader.mock.calls[1]?.[0].signal.aborted).toBe(true);
-	});
-
-	it("accepts a synchronous loader", async () => {
-		const { stdout } = await captureExecute(buildApp({ spec: () => spec }), [
-			"api",
-			"--spec",
-			"getUser",
-		]);
-
-		expect(stdout).toBe(getUserSpec);
+		writeFileSync(file, jsonc);
+		expect(await captureExecute(app, ["api", "--list"])).toEqual({
+			stdout: "GET /users listUsers List // users /* all */ ,}",
+			stderr: "",
+			exitCode: 0,
+		});
 	});
 
 	it.each([
-		["rejects", () => Promise.reject(new Error("ENOENT openapi.json"))],
-		[
-			"throws",
-			() => {
-				throw new Error("ENOENT openapi.json");
+		["missing", undefined, "ENOENT"],
+		["not JSON", "{ paths: {} }", "JSON"],
+		["not an object", "[]", undefined],
+	])("fails naming the file when it is %s", async (_, text, reason) => {
+		const file =
+			text === undefined ? join(tmpdir(), "crust-openapi-missing.openapi.jsonc") : writeSpec(text);
+		const { stdout, stderr, exitCode } = await captureExecute(
+			buildApp({ spec: pathToFileURL(file) }),
+			["api", "--list"],
+		);
+
+		expect({ stdout, exitCode }).toEqual({ stdout: "", exitCode: 1 });
+		expect(stderr).toMatch(
+			reason === undefined
+				? `Error: api: the OpenAPI document "${file}" is not a JSON object`
+				: `Error: api: cannot read the OpenAPI document "${file}" (`,
+		);
+		if (reason !== undefined) expect(stderr).toContain(reason);
+	});
+
+	it("fails in a built CLI whose data directory is missing, naming it and the fix", async () => {
+		vi.stubEnv("CRUST_INTERNAL_BUILD", "1");
+		try {
+			const dir = resolveArtifactDir("acme-not-built");
+			const { stderr, exitCode } = await captureExecute(
+				buildApp({ spec: pathToFileURL(writeSpec()), id: "acme-not-built" }),
+				["api", "--list"],
+			);
+
+			expect({ stderr, exitCode }).toEqual({
+				stderr: `Error: api: the OpenAPI document was not found at "${join(dir, "spec.json")}". Run \`crust build\` first, and ship its "acme-not-built" directory with the CLI.`,
+				exitCode: 1,
+			});
+		} finally {
+			vi.unstubAllEnvs();
+		}
+	});
+
+	it("is written by crust build as plain JSON to <id>/spec.json; an object spec writes nothing", async () => {
+		const url = pathToFileURL(writeSpec());
+		const parsed = {
+			openapi: "3.1.0",
+			paths: {
+				"/users": { get: { operationId: "listUsers", summary: "List // users /* all */ ,}" } },
 			},
-		],
-	])("fails with the loader's reason and cause when it %s", async (_, loader) => {
-		const outcome = await buildApp({ spec: loader }).run(["api"], { flags: { list: true } });
+		};
 
-		expect(outcome.status).toBe("failed");
-		const error = outcome.status === "failed" ? outcome.error : undefined;
-		expect(error).toBeInstanceOf(Error);
-		expect(error).not.toHaveProperty("code");
-		expect(error).toMatchObject({
-			message: "api: cannot load the OpenAPI document (ENOENT openapi.json)",
-			cause: new Error("ENOENT openapi.json"),
+		expect(await runBuildHooks(buildApp({ spec: url }))).toEqual({
+			files: new Map([["openapi/spec.json", JSON.stringify(parsed)]]),
 		});
-		expect(await captureExecute(buildApp({ spec: loader }), ["api", "--list"])).toEqual({
-			stdout: "",
-			stderr: "Error: api: cannot load the OpenAPI document (ENOENT openapi.json)",
-			exitCode: 1,
+		expect(await runBuildHooks(buildApp({ spec: url, id: "acme" }))).toEqual({
+			files: new Map([["acme/spec.json", JSON.stringify(parsed)]]),
 		});
-	});
-
-	it.each([
-		["null", null],
-		["array", []],
-		["string", "{}"],
-		// Like a module namespace: null prototype, `Module` tag.
-		[
-			"module",
-			Object.assign(Object.create(null), { default: spec, [Symbol.toStringTag]: "Module" }),
-		],
-		[
-			"class instance",
-			new (class Spec {
-				paths = spec.paths;
-			})(),
-		],
-	])("fails when the loader resolves to %s instead of a plain object", async (kind, value) => {
-		const app = buildApp({ spec: async () => value as never });
-
-		expect(await captureExecute(app, ["api", "--spec", "getUser"])).toEqual({
-			stdout: "",
-			stderr: `Error: api: cannot load the OpenAPI document (expected a plain object, got ${kind})`,
-			exitCode: 1,
+		expect(await runBuildHooks(buildApp())).toEqual({ files: new Map() });
+		expect(await runBuildHooks(buildApp({ spec: url, id: "a/b" }))).toEqual({
+			files: new Map(),
+			error:
+				'Extension "crust:openapi" build failed: Artifact name must be a single directory name, got "a/b".',
 		});
-	});
-
-	it("accepts a plain object without a prototype", async () => {
-		const app = buildApp({ spec: async () => Object.assign(Object.create(null), spec) });
-
-		expect((await captureExecute(app, ["api", "--spec", "getUser"])).stdout).toBe(getUserSpec);
-	});
-
-	it.each([
-		["the signal's reason", (signal: AbortSignal) => signal.reason],
-		["an AbortError", () => new DOMException("This operation was aborted", "AbortError")],
-	])("passes cancellation through unchanged as %s", async (_, reason) => {
-		const controller = new AbortController();
-		let thrown: unknown;
-		const app = buildApp({
-			spec: ({ signal }) =>
-				new Promise((_, reject) => {
-					signal.addEventListener("abort", () => reject((thrown = reason(signal))));
-					controller.abort();
-				}),
-		});
-		const outcome = await app.run(
-			["api"],
-			{ flags: { list: true } },
-			{ signal: controller.signal },
-		);
-
-		expect(outcome.status === "failed" && outcome.error).toBe(thrown);
-	});
-
-	it("passes an AbortError through unchanged even when the signal is not aborted", async () => {
-		const abort = new DOMException("This operation was aborted", "AbortError");
-		const outcome = await buildApp({ spec: () => Promise.reject(abort) }).run(["api"], {
-			flags: { list: true },
-		});
-
-		expect(outcome.status === "failed" && outcome.error).toBe(abort);
-	});
-
-	it("wraps a thrown non-Error named AbortError as a load failure", async () => {
-		const thrown = { name: "AbortError" };
-		const outcome = await buildApp({ spec: () => Promise.reject(thrown) }).run(["api"], {
-			flags: { list: true },
-		});
-
-		const error = outcome.status === "failed" ? outcome.error : undefined;
-		expect(error).toBeInstanceOf(Error);
-		expect(error).toMatchObject({
-			message: "api: cannot load the OpenAPI document ([object Object])",
-		});
-		expect((error as Error).cause).toBe(thrown);
 	});
 });
 
@@ -585,9 +555,9 @@ describe("api <path>", () => {
 	it("rejects on Bun a method its fetch() would send as GET, and sends one it knows", () => {
 		const script = (method: string) => `
 			import { Crust } from "@crustjs/core";
-			import { apiCommand } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "api-command.ts")).href)};
+			import { defineApi } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "define-api.ts")).href)};
 			globalThis.fetch = async (url, init) => new Response(init.method);
-			const app = new Crust("tool").extend(apiCommand({ spec: {}, baseUrl: "https://api.example.com" }));
+			const app = new Crust("tool").extend(defineApi({ spec: {}, baseUrl: "https://api.example.com" }).extension);
 			process.exitCode = await app.execute({ argv: ["api", "/x", "-X", ${JSON.stringify(method)}] });
 		`;
 		const run = (method: string) =>
@@ -614,7 +584,7 @@ describe("api <path>", () => {
 		(_runtime, command, options) => {
 			const script = `
 			import { Crust } from "@crustjs/core";
-			import { apiCommand } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "api-command.ts")).href)};
+			import { defineApi } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "define-api.ts")).href)};
 			globalThis.fetch = async (url) => url.pathname === "/zip"
 				? new Response(new TextEncoder().encode("PK\\n"), { headers: { "content-type": "application/zip" } })
 				: url.pathname === "/csv"
@@ -622,7 +592,7 @@ describe("api <path>", () => {
 					: url.pathname === "/json"
 						? new Response("{}", { headers: { "content-type": "application/json" } })
 						: new Response(new Uint8Array([0xff, 0xfe, 0x00, 0x01, 0x80, 0x0a]));
-			const app = new Crust("tool").extend(apiCommand({ spec: {}, baseUrl: "https://api.example.com" }));
+			const app = new Crust("tool").extend(defineApi({ spec: {}, baseUrl: "https://api.example.com" }).extension);
 			process.exitCode = await app.execute({ argv: ["api", process.argv.at(-1)] });
 		`;
 			const run = (path: string) =>
@@ -653,9 +623,9 @@ describe("api <path>", () => {
 		const script = `
 			process.getBuiltinModule("node:tty").isatty = (fd) => fd === 1;
 			const { Crust } = await import("@crustjs/core");
-			const { apiCommand } = await import(${JSON.stringify(pathToFileURL(join(import.meta.dirname, "api-command.ts")).href)});
+			const { defineApi } = await import(${JSON.stringify(pathToFileURL(join(import.meta.dirname, "define-api.ts")).href)});
 			globalThis.fetch = async () => new Response(new Uint8Array([0x50, 0x4b, 0xff]), { headers: { "content-type": "application/zip" } });
-			const app = new Crust("tool").extend(apiCommand({ spec: {}, baseUrl: "https://api.example.com" }));
+			const app = new Crust("tool").extend(defineApi({ spec: {}, baseUrl: "https://api.example.com" }).extension);
 			process.exitCode = await app.execute({ argv: ["api", "/export.zip"] });
 		`;
 		const { stdout, stderr, status } = spawnSync(command, [...options, "-e", script], {
@@ -994,9 +964,9 @@ describe("api <path>", () => {
 	])("reads --body - from stdin on %s", (_runtime, command, options) => {
 		const script = `
 			import { Crust } from "@crustjs/core";
-			import { apiCommand } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "api-command.ts")).href)};
+			import { defineApi } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "define-api.ts")).href)};
 			globalThis.fetch = async (url, init) => new Response(init.method + " " + init.body);
-			const app = new Crust("tool").extend(apiCommand({ spec: {}, baseUrl: "https://api.example.com" }));
+			const app = new Crust("tool").extend(defineApi({ spec: {}, baseUrl: "https://api.example.com" }).extension);
 			process.exitCode = await app.execute({ argv: ["api", "/echo", "--body", "-"] });
 		`;
 		const run = spawnSync(command, [...options, "-e", script], {
@@ -1020,10 +990,10 @@ describe("api <path>", () => {
 		(_runtime, command, options) => {
 			const script = `
 			import { Crust } from "@crustjs/core";
-			import { apiCommand } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "api-command.ts")).href)};
+			import { defineApi } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "define-api.ts")).href)};
 			globalThis.fetch = async (url, init) => new Response(init.method + " [" + init.body + "]");
 			for await (const _ of process.stdin);
-			const app = new Crust("tool").extend(apiCommand({ spec: {}, baseUrl: "https://api.example.com" }));
+			const app = new Crust("tool").extend(defineApi({ spec: {}, baseUrl: "https://api.example.com" }).extension);
 			process.exitCode = await app.execute({ argv: ["api", "/echo", "--body", "-"] });
 		`;
 			const run = spawnSync(command, [...options, "-e", script], {
@@ -1041,7 +1011,7 @@ describe("api <path>", () => {
 });
 
 describe("api with json()", () => {
-	const jsonApp = (options: Partial<ApiCommandOptions> = {}) => buildApp(options).extend(json());
+	const jsonApp = (options: Partial<DefineApiOptions> = {}) => buildApp(options).extend(json());
 
 	it("prints the response body as the JSON result on stdout", async () => {
 		stubFetch(({ url }) =>
@@ -1203,12 +1173,13 @@ describe("api with json()", () => {
 	});
 });
 
-describe("apiClient", () => {
+describe("the api client", () => {
 	it("is shared with app commands that declare it", async () => {
 		const calls = stubFetch(() => new Response('{"id":"u1"}'));
-		const app = buildApp().add(
+		const acme = buildApi();
+		const app = new Crust("tool").extend(acme.extension).add(
 			defineCommand("whoami", {}, (command) =>
-				command.use(apiClient).action(async ({ ctx, stdout }) => {
+				command.use(acme.client).action(async ({ ctx, stdout }) => {
 					const api = await ctx.api;
 					const response = await api.fetch("/me", { headers: { accept: "application/json" } });
 					stdout(`${api.baseUrl} ${await response.text()}`);
@@ -1231,9 +1202,10 @@ describe("apiClient", () => {
 		const auth = vi.fn(() => ({ authorization: "Bearer secret" }));
 		const calls = stubFetch();
 		const authCalls: number[] = [];
-		const app = buildApp({ auth }).add(
+		const acme = buildApi({ auth });
+		const app = new Crust("tool").extend(acme.extension).add(
 			defineCommand("sync", {}, (command) =>
-				command.use(apiClient).action(async ({ ctx }) => {
+				command.use(acme.client).action(async ({ ctx }) => {
 					const api = await ctx.api;
 					authCalls.push(auth.mock.calls.length);
 					await api.fetch("https://api.example.com/v1/a");
@@ -1260,9 +1232,10 @@ describe("apiClient", () => {
 				? new Response(null, { status: 302, headers: { location: "/v1/new" } })
 				: new Response("{}"),
 		);
-		const app = buildApp({ auth }).add(
+		const acme = buildApi({ auth });
+		const app = new Crust("tool").extend(acme.extension).add(
 			defineCommand("public", {}, (command) =>
-				command.use(apiClient).action(async ({ ctx }) => {
+				command.use(acme.client).action(async ({ ctx }) => {
 					const api = await ctx.api;
 					await api.fetch("/old", { auth: false, headers: { accept: "application/json" } });
 					await fetchNextPage(api, "/users?page=2", { auth: false });
@@ -1285,9 +1258,10 @@ describe("apiClient", () => {
 		async (auth) => {
 			const calls = stubFetch();
 			const errors: unknown[] = [];
-			const app = buildApp({ auth }).add(
+			const acme = buildApi({ auth });
+			const app = new Crust("tool").extend(acme.extension).add(
 				defineCommand("leak", {}, (command) =>
-					command.use(apiClient).action(async ({ ctx }) => {
+					command.use(acme.client).action(async ({ ctx }) => {
 						const api = await ctx.api;
 						const headers = { authorization: "Bearer secret", "x-api-key": "secret" };
 						for (const path of [
@@ -1358,11 +1332,12 @@ describe("apiClient", () => {
 				: new Response("{}"),
 		);
 		const seen: boolean[] = [];
-		const app = buildApp({
+		const acme = buildApi({
 			paginate: (response) => void seen.push(response.redirected),
-		}).add(
+		});
+		const app = new Crust("tool").extend(acme.extension).add(
 			defineCommand("probe", {}, (command) =>
-				command.use(apiClient).action(async ({ ctx }) => {
+				command.use(acme.client).action(async ({ ctx }) => {
 					const api = await ctx.api;
 					const moved = await api.fetch("/old");
 					const direct = await api.fetch("/new");
@@ -1402,30 +1377,31 @@ describe("apiClient", () => {
 			if (location === undefined) return record(request, response);
 			response.writeHead(request.url === "/v1/created" ? 303 : 302, { location }).end();
 		});
-		const app = new Crust("tool")
-			.extend(
-				apiCommand({ spec, baseUrl: `${api.url}/v1`, auth: () => ({ "X-Api-Key": "secret" }) }),
-			)
-			.add(
-				defineCommand("probe", {}, (command) =>
-					command.use(apiClient).action(async ({ ctx, stdout }) => {
-						const client = await ctx.api;
-						for (const response of [
-							await client.fetch("/moved"),
-							await client.fetch("/away"),
-							await client.fetch("/away-overridden", { headers: { "X-Api-Key": "override" } }),
-							await client.fetch("/away-cookie", { headers: { Cookie: "session=secret" } }),
-							await client.fetch("/created", {
-								method: "POST",
-								body: "{}",
-								headers: { "content-type": "application/json" },
-							}),
-						]) {
-							stdout(`${response.status} ${await response.text()}`);
-						}
-					}),
-				),
-			);
+		const acme = defineApi({
+			spec,
+			baseUrl: `${api.url}/v1`,
+			auth: () => ({ "X-Api-Key": "secret" }),
+		});
+		const app = new Crust("tool").extend(acme.extension).add(
+			defineCommand("probe", {}, (command) =>
+				command.use(acme.client).action(async ({ ctx, stdout }) => {
+					const client = await ctx.api;
+					for (const response of [
+						await client.fetch("/moved"),
+						await client.fetch("/away"),
+						await client.fetch("/away-overridden", { headers: { "X-Api-Key": "override" } }),
+						await client.fetch("/away-cookie", { headers: { Cookie: "session=secret" } }),
+						await client.fetch("/created", {
+							method: "POST",
+							body: "{}",
+							headers: { "content-type": "application/json" },
+						}),
+					]) {
+						stdout(`${response.status} ${await response.text()}`);
+					}
+				}),
+			),
+		);
 		try {
 			const { stdout, stderr } = await captureExecute(app, ["probe"]);
 

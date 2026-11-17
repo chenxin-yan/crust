@@ -104,7 +104,12 @@ export default defineConfig({
 
 			"vite-plus/prefer-vite-plus-imports": "error",
 		},
-		ignorePatterns: [...sharedIgnorePatterns, "packages/create-crust/templates/base/"],
+		ignorePatterns: [
+			...sharedIgnorePatterns,
+			"packages/create-crust/templates/base/",
+			// Type-checked by its test with TypeScript 7.1 and a content mapper, which lint does not run.
+			"packages/openapi/tests/fixtures/typed-client/",
+		],
 		overrides: [
 			{
 				files: ["**/*.test.ts", "**/*.test-d.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"],

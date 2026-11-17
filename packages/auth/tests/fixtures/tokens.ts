@@ -22,7 +22,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { type AddressInfo, connect } from "node:net";
 
 import { Crust, defineCommand } from "@crustjs/core";
-import { apiClient, apiCommand, type BearerCredential, bearerAuth } from "@crustjs/openapi";
+import { type BearerCredential, bearerAuth, defineApi } from "@crustjs/openapi";
 
 import { createAuth } from "../../src/client.ts";
 import { credentialStoreInternals } from "../../src/credentials.ts";
@@ -145,18 +145,17 @@ if (mode === "refresh") {
 	}
 } else if (mode === "api") {
 	const { source } = sourceFor(issuerArg!);
+	const acme = defineApi({
+		spec: { openapi: "3.1.0", paths: {} },
+		baseUrl: `${issuerArg}/api`,
+		auth: bearer(source),
+	});
 	const cli = new Crust("acme")
-		.extend(
-			apiCommand({
-				spec: { openapi: "3.1.0", paths: {} },
-				baseUrl: `${issuerArg}/api`,
-				auth: bearer(source),
-			}),
-		)
+		.extend(acme.extension)
 		.add(
 			defineCommand("call", {}, (command) =>
 				command
-					.use(apiClient)
+					.use(acme.client)
 					.action(async ({ ctx }) => (await (await ctx.api).fetch("/me")).status),
 			),
 		);
@@ -254,17 +253,16 @@ if (mode === "refresh") {
 			scope: undefined,
 		});
 	await commit(undefined);
+	const acme = defineApi({
+		spec: { openapi: "3.1.0", paths: {} },
+		baseUrl: `${as.origin}/api`,
+		auth: bearer(source),
+	});
 	const cli = new Crust("acme")
-		.extend(
-			apiCommand({
-				spec: { openapi: "3.1.0", paths: {} },
-				baseUrl: `${as.origin}/api`,
-				auth: bearer(source),
-			}),
-		)
+		.extend(acme.extension)
 		.add(
 			defineCommand("call", {}, (command) =>
-				command.use(apiClient).action(async ({ ctx }) => {
+				command.use(acme.client).action(async ({ ctx }) => {
 					const api = await ctx.api;
 					const me = (await api.fetch("/me")).status;
 					const moved = await (await api.fetch("/moved")).json();
