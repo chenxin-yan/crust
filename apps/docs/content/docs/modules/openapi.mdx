@@ -192,20 +192,23 @@ $ my-cli api /users/9 --json
 
 Sends the operation with that `operationId`, as `whoami` does above. `input` holds the operation's `path`, `query` and `header` parameters by name, and its `body`:
 
-- Path parameters fill the path template, percent-encoded. Query parameters are sent in style `form`: an array repeats the parameter (`?tag=a&tag=b`), or with `explode: false` is comma-separated (`?tag=a,b`). Header parameters are sent as headers, an array comma-separated. Cookie parameters are never sent.
+- A parameter value is a scalar, an array of scalars, or an object of scalars, serialized by the parameter's `explode` as OpenAPI says. Cookie parameters are never sent.
+- Path parameters fill the path template, percent-encoded (style `simple`): an array as `a,b`, an object as `k,v` or exploded `k=v`. A value that would make an empty, `.` or `..` path segment is rejected, since the URL would address another resource, such as `/users/..` the API's root.
+- Query parameters are sent in style `form`: an array repeats the parameter (`?tag=a&tag=b`), or with `explode: false` is comma-separated (`?tag=a,b`); an object sends each property as a parameter (`?role=admin`), or with `explode: false` as `?filter=role,admin`.
+- Header parameters are sent as headers (style `simple`), like path values without percent-encoding.
 - `body` is sent as JSON, with the operation's JSON media type as `Content-Type`.
 - The request goes through [`fetch()`](#fetchpath-init), so it gets the same base URL, auth, redirects and [401 retry](#authentication). An operation with `security: []` is public: it is sent with `auth: false`.
 
 It resolves to:
 
-| Response                                   | Result                                                                                                                                         |
-| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2xx with a JSON media type                 | The parsed body; `undefined` when the body is empty                                                                                            |
-| 2xx without content (`204`, an empty body) | `undefined`                                                                                                                                    |
-| 2xx with another media type                | The `Response` itself, unread. For a download or a stream, `fetch()` is usually more direct                                                    |
-| Non-2xx                                    | Rejects with an `ApiResponseError` whose `status` holds the code, such as `GET /users/9: HTTP 404 Not Found`; its message leaves out the query |
+| Response                                                                                             | Result                                                                                                                                         |
+| ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2xx with a JSON media type                                                                           | The parsed body; `undefined` when the body is empty                                                                                            |
+| 2xx of another media type known to be empty: no body (such as `204` or `205`) or `Content-Length: 0` | `undefined`                                                                                                                                    |
+| Any other 2xx with another media type, even one whose empty body is only known after reading it      | The `Response` itself, unread. For a download or a stream, `fetch()` is usually more direct                                                    |
+| Non-2xx                                                                                              | Rejects with an `ApiResponseError` whose `status` holds the code, such as `GET /users/9: HTTP 404 Not Found`; its message leaves out the query |
 
-Before any request, `call()` fails with a `VALIDATION` [`CrustError`](/docs/api/errors) for a missing required parameter or body, a parameter the operation does not have, or a body it does not take, and for an input it cannot send: a body that is not JSON, a parameter in another style or described by `content`, a required cookie. Use `fetch()` for those. An `operationId` the spec does not have, or that several operations share, fails with an error naming it. `call()` does not paginate; use `fetch()` with your own loop, or `api <path> --paginate`.
+Before any request, `call()` fails with a `VALIDATION` [`CrustError`](/docs/api/errors) for a missing required parameter or body, a parameter the operation does not have, or a body it does not take; for a path value that would make an empty, `.` or `..` segment, a header value HTTP does not allow, or a body `JSON.stringify()` cannot send (a function, a symbol, a cycle, a `BigInt`), whose messages never repeat the value; and for an input it cannot send: a body that is not JSON, a parameter in another style or described by `content`, a required cookie. Use `fetch()` for those. An `operationId` the spec does not have, or that several operations share, fails with an error naming it. `call()` does not paginate; use `fetch()` with your own loop, or `api <path> --paginate`.
 
 ### `fetch(path, init?)`
 
