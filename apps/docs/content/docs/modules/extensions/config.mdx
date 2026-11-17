@@ -25,10 +25,10 @@ A flag opts in with `config: "<key>"`, a top-level key of the file. The flag sta
 
 `config({ name, project?, user? })` reads up to two JSON files:
 
-- **Project file** (`project`): the first file with that name found from the working directory up to the filesystem root.
+- **Project file** (`project`): the first entry with that name found from the working directory up to the filesystem root. The search stops at that entry, so a directory or other non-file with the name is an error, not skipped.
 - **User file** (`user: true`): `config.json` in [`configDir(name)`](/docs/modules/store#storage-paths) from `@crustjs/store`, such as `~/.config/acme/config.json` on Linux and macOS (`$XDG_CONFIG_HOME` when set) or `%APPDATA%\acme\config.json` on Windows.
 
-The project file wins over the user file key by key. A missing file is skipped. Each file must be a JSON object; a byte order mark is allowed. TypeScript config files and commands that write the file are not included: write the user file with [`@crustjs/store`](/docs/modules/store) if your CLI needs to.
+The project file wins over the user file key by key. A missing file is skipped. Each file must be a regular file (a symlink to one is followed) of at most 1 MiB holding a JSON object; a byte order mark is allowed. TypeScript config files and commands that write the file are not included: write the user file with [`@crustjs/store`](/docs/modules/store) if your CLI needs to.
 
 `config()` reads the files in `setup`, so every `preRun` sees the values whatever the `.extend()` order, and it reads nothing when the routed command has no flag with a `config` key.
 
@@ -55,7 +55,7 @@ Values are converted and validated as typed `run()` input, then by the flag's `c
 
 ## Errors
 
-- **Malformed file**: a file that cannot be read, invalid JSON, or JSON that is not an object fails every command that reads the file, `--help` included, with a `PARSE` [`CrustError`](/docs/api/errors) naming the path, such as `Invalid JSON in config file /repo/acme.config.json.` The message never quotes the file.
+- **Malformed file**: a path that cannot be searched or read, a directory, FIFO, or other non-regular file, a file larger than 1 MiB, invalid JSON, or JSON that is not an object fails every command that reads the file, `--help` included, with a `PARSE` [`CrustError`](/docs/api/errors) naming the path, such as `Invalid JSON in config file /repo/acme.config.json.` The message never quotes the file.
 - **Invalid value**: a value of the wrong type fails like an invalid environment value, naming the file and key but not the value, such as `Expected a number for --port (from /repo/acme.config.json key "port").` It does not block `--help` or `--version`.
 - **Schema issues**: a schema-backed flag's issue names its origin, such as `flags.region (from /repo/acme.config.json key "region"): …`. The message after it is the schema's own and may quote the value.
 

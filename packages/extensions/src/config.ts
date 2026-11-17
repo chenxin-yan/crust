@@ -13,7 +13,7 @@ const CONFIG: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:config");
 export interface ConfigOptions {
 	/** App name: the user file is `config.json` in `configDir(name)` from `@crustjs/store`. */
 	readonly name: string;
-	/** Project file name, searched from the working directory up to the filesystem root. */
+	/** Project file name: the first entry with it from the working directory up to the filesystem root. */
 	readonly project?: string;
 	/** Also read the user file; the project file wins key by key. */
 	readonly user?: boolean;
@@ -21,25 +21,75 @@ export interface ConfigOptions {
 
 type ConfigValues = Readonly<Record<string, RunInputValue>>;
 
+const MAX_BYTES = 1024 * 1024;
+
+function isMissing(cause: unknown): boolean {
+	return (
+		cause instanceof Error &&
+		"code" in cause &&
+		(cause.code === "ENOENT" || cause.code === "ENOTDIR")
+	);
+}
+
+function cannotRead(path: string, cause: unknown): CrustError {
+	return new CrustError("PARSE", `Cannot read config file ${path}.`).withCause(cause);
+}
+
+/** The first entry named `name` from `from` up to the filesystem root. */
 function findUp(name: string, from: string): string | undefined {
 	const { dirname, join } = process.getBuiltinModule("node:path");
 	const { statSync } = process.getBuiltinModule("node:fs");
 	for (let dir = from; ; dir = dirname(dir)) {
 		const file = join(dir, name);
-		if (statSync(file, { throwIfNoEntry: false })?.isFile()) return file;
+		try {
+			statSync(file);
+			return file;
+		} catch (cause) {
+			if (!isMissing(cause)) throw cannotRead(file, cause);
+		}
 		if (dirname(dir) === dir) return undefined;
+	}
+}
+
+/** At most {@link MAX_BYTES} of a regular file (or a symlink to one); `undefined` when missing. */
+function readBounded(path: string): string | undefined {
+	const { closeSync, constants, fstatSync, openSync, readSync } =
+		process.getBuiltinModule("node:fs");
+	const notRegular = () => new CrustError("PARSE", `Config file ${path} is not a regular file.`);
+	let fd: number;
+	try {
+		// Non-blocking, so opening a FIFO returns at once instead of waiting for a writer.
+		fd = openSync(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
+	} catch (cause) {
+		if (isMissing(cause)) return undefined;
+		if (cause instanceof Error && "code" in cause && cause.code === "EISDIR") throw notRegular();
+		throw cannotRead(path, cause);
+	}
+	try {
+		if (!fstatSync(fd).isFile()) throw notRegular();
+		// Read to the end rather than trusting the size: the file may grow while it is read.
+		const buffer = Buffer.alloc(MAX_BYTES + 1);
+		let length = 0;
+		for (;;) {
+			const read = readSync(fd, buffer, length, buffer.length - length, null);
+			length += read;
+			if (read === 0 || length > MAX_BYTES) break;
+		}
+		if (length > MAX_BYTES) {
+			throw new CrustError("PARSE", `Config file ${path} is larger than 1 MiB.`);
+		}
+		return buffer.toString("utf8", 0, length);
+	} catch (cause) {
+		throw cause instanceof CrustError ? cause : cannotRead(path, cause);
+	} finally {
+		closeSync(fd);
 	}
 }
 
 /** A missing file is no layer; every other failure names the path and never the content. */
 function readConfigFile(path: string): ConfigValues | undefined {
-	let text: string;
-	try {
-		text = process.getBuiltinModule("node:fs").readFileSync(path, "utf8");
-	} catch (cause) {
-		if (cause instanceof Error && "code" in cause && cause.code === "ENOENT") return undefined;
-		throw new CrustError("PARSE", `Cannot read config file ${path}.`).withCause(cause);
-	}
+	const text = readBounded(path);
+	if (text === undefined) return undefined;
 	let values: unknown;
 	try {
 		// Editors on Windows may save a byte order mark, which JSON.parse rejects.

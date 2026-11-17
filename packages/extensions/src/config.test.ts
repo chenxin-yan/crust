@@ -2,7 +2,8 @@
  * @module-tag windows
  * @module-tag macos
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -169,6 +170,75 @@ describe("config()", () => {
 				expect(stderr).toContain(userFile());
 				expect(stderr).toContain(message);
 				expect(stderr).not.toContain("s3cret");
+			}
+		},
+	);
+
+	const posix = process.platform !== "win32";
+	const MiB = 1024 * 1024;
+	/** `{"org":"x"}` padded with spaces to `size` bytes. */
+	const sized = (size: number) => JSON.stringify({ org: "x" }).padEnd(size, " ");
+
+	/** A file error fails the command and `--help` alike, naming only the path. */
+	async function expectFileError(path: string, message: string) {
+		const app = acme("config").app.extend(help());
+		for (const argv of [[], ["--help"]]) {
+			const { exitCode, stderr } = await captureExecute(app, argv, { env: {} });
+			expect({ exitCode, stderr }).toEqual({ exitCode: 1, stderr: `Error: ${message}` });
+			expect(stderr).toContain(path);
+		}
+	}
+
+	it("reads a file of exactly 1 MiB and rejects a larger one", async () => {
+		write(projectFile(), sized(MiB));
+		expect(await acme("config").app.run([])).toMatchObject({ result: { org: "x" } });
+		write(projectFile(), sized(MiB + 1));
+		await expectFileError(projectFile(), `Config file ${projectFile()} is larger than 1 MiB.`);
+	});
+
+	it("rejects a file that grew past 1 MiB after it was opened", async () => {
+		write(userFile(), sized(2 * MiB));
+		const fs = process.getBuiltinModule("node:fs");
+		const fstatSync = fs.fstatSync;
+		// The size seen when the file was opened, before it grew.
+		vi.spyOn(fs, "fstatSync").mockImplementation((fd) =>
+			Object.assign(fstatSync(fd), { size: 16 }),
+		);
+		await expectFileError(userFile(), `Config file ${userFile()} is larger than 1 MiB.`);
+	});
+
+	it("rejects a directory where the user file should be", async () => {
+		mkdirSync(userFile(), { recursive: true });
+		await expectFileError(userFile(), `Config file ${userFile()} is not a regular file.`);
+	});
+
+	it.skipIf(!posix)("rejects a FIFO without waiting for a writer", async () => {
+		mkdirSync(dirname(userFile()), { recursive: true });
+		execFileSync("mkfifo", [userFile()]);
+		await expectFileError(userFile(), `Config file ${userFile()} is not a regular file.`);
+	});
+
+	it.skipIf(!posix)("follows a symlink to a regular file", async () => {
+		write(join(root, "real.json"), JSON.stringify({ org: "linked" }));
+		symlinkSync(join(root, "real.json"), projectFile());
+		expect(await acme("config").app.run([])).toMatchObject({ result: { org: "linked" } });
+	});
+
+	it.skipIf(!posix)("names the path when the project search hits a symlink loop", async () => {
+		symlinkSync(projectFile(), projectFile());
+		await expectFileError(projectFile(), `Cannot read config file ${projectFile()}.`);
+	});
+
+	it.skipIf(!posix || process.getuid?.() === 0)(
+		"names the path when the project search cannot enter a directory",
+		async () => {
+			const locked = join(root, "repo", "a");
+			chmodSync(locked, 0o000);
+			try {
+				const candidate = join(locked, "b", "acme.config.json");
+				await expectFileError(candidate, `Cannot read config file ${candidate}.`);
+			} finally {
+				chmodSync(locked, 0o755);
 			}
 		},
 	);
