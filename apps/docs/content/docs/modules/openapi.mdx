@@ -197,7 +197,7 @@ Sends the operation with that `operationId`, as `whoami` does above. `input` hol
 - Query parameters are sent in style `form`: an array repeats the parameter (`?tag=a&tag=b`), or with `explode: false` is comma-separated (`?tag=a,b`); an object sends each property as a parameter (`?role=admin`), or with `explode: false` as `?filter=role,admin`.
 - Header parameters are sent as headers (style `simple`), like path values without percent-encoding.
 - `body` is sent as JSON, with the operation's JSON media type as `Content-Type`.
-- When a 2xx response of the operation declares JSON, the request asks for it with `Accept: application/json` (and the operation's own `+json` types), unless `input.header` sets `Accept`.
+- When a 2xx response of the operation declares JSON, the request asks for it with `Accept: application/json` (and the operation's own `+json` types), unless `input.header` sets `Accept` (or `accept`), which the typed input allows for every operation, next to the headers the spec declares.
 - The request goes through [`fetch()`](#fetchpath-init), so it gets the same base URL, auth, redirects and [401 retry](#authentication). An operation with `security: []` is public: it is sent with `auth: false`.
 
 It resolves to:
