@@ -9,8 +9,8 @@
 // Needs bun, hyperfine, and a Node that `crust build` accepts for executables. For each spec it
 // times root `--help`, a generated command's `--help` and a run of it against a local server, and
 // `api --list`; the command is the first GET without arguments, in a group when there is one.
-// Writes hyperfine's JSON per artifact and prints the medians. Not a CI gate: run it on a quiet
-// machine, and on the baseline revision with the same arguments to compare.
+// Writes hyperfine's JSON for every case to one `results.json` and prints the medians. Not a CI
+// gate: run it on a quiet machine, and on the baseline revision with the same arguments to compare.
 import { spawn, spawnSync } from "node:child_process";
 import {
 	cpSync,
