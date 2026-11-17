@@ -628,6 +628,26 @@ describe('discovery: "progressive"', () => {
 		expect(progress).toEqual([{ progress: 1, message: "fetching" }]);
 	});
 
+	it("rejects null arguments without running the command, as tools/call does", async () => {
+		let ran = false;
+		const app = new Crust("cli").add(
+			defineCommand("probe", (c) =>
+				c.action(() => {
+					ran = true;
+					return { executed: true };
+				}),
+			),
+		);
+		const direct = await connect(app);
+		// SAFETY: a client that ignores the schema; the SDK's types forbid null.
+		await expect(direct.callTool({ name: "probe", arguments: null as never })).rejects.toThrow();
+		const client = await connect(app, progressive);
+		await expect(
+			client.callTool({ name: "call_tool", arguments: { name: "probe", arguments: null } }),
+		).rejects.toThrow("call_tool: arguments must be an object");
+		expect(ran).toBe(false);
+	});
+
 	it("rejects unknown tools and malformed requests at the protocol level", async () => {
 		const client = await connect(fixture, progressive);
 		const call = (name: string, args: Record<string, unknown>) =>

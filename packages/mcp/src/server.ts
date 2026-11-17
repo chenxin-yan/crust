@@ -250,7 +250,7 @@ async function serverFactory(app: AnyCrust, options: McpToolsOptions): Promise<(
 				}
 				case "call_tool": {
 					if (typeof values.name !== "string") throw invalid("call_tool: name must be a string");
-					const input = values.arguments ?? {};
+					const input = values.arguments === undefined ? {} : values.arguments;
 					if (!isRecord(input)) throw invalid("call_tool: arguments must be an object");
 					return callCommandTool(app, toolNamed(values.name), input, ctx);
 				}
