@@ -1,0 +1,67 @@
+---
+title: Telemetry
+description: Send one usage event per invocation through your own send function.
+---
+
+## Usage
+
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../../examples/modules/extensions/telemetry.ts
+</include>
+
+With `ACME_TELEMETRY=1`, `acme deploy` passes this event to `send` after the command settles:
+
+```json
+{ "command": ["acme", "deploy"], "outcome": "completed", "durationMs": 12, "ci": false }
+```
+
+Crust has no network code and no default: your `send` delivers the event, and you choose `"opt-in"` or `"opt-out"`. The Extension writes nothing to the terminal; tell your users about telemetry and the variable that turns it off in your own docs.
+
+## When it sends
+
+The user switches telemetry with the variable named by `env`. `DO_NOT_TRACK` wins over it in both modes.
+
+| Environment                                     | `"opt-in"` | `"opt-out"` |
+| ----------------------------------------------- | ---------- | ----------- |
+| `DO_NOT_TRACK` set to anything but empty or `0` | no event   | no event    |
+| `env` unset or empty                            | no event   | sends       |
+| `env` is `0` or `false` (any letter case)       | no event   | no event    |
+| `env` set to anything else, such as `1`         | sends      | sends       |
+
+Both variables are read from `process.env` when the command settles; `execute({ env })` and `run()`'s `env` option only feed flags' `env` fallbacks. There is no test-runner detection, so a test suite opts out explicitly: set `DO_NOT_TRACK=1` or the `env` variable to `0`, or use `"opt-in"`.
+
+## The event
+
+| Field        | Value                                                                                        |
+| ------------ | -------------------------------------------------------------------------------------------- |
+| `command`    | Command names from the root through the command that ran, such as `["acme", "deploy"]`       |
+| `outcome`    | `"completed"`, `"failed"`, or `"handled"`                                                    |
+| `durationMs` | Whole milliseconds from the Extension's `setup` to its `postRun`; `0` if its setup never ran |
+| `ci`         | Whether `CI` is set to anything other than empty, `0`, or `false`                            |
+
+The event never contains argument or flag values: `command` holds only the names you defined, never what the user typed after them.
+
+## What the outcome covers
+
+The event reports the outcome the Extension's `postRun` hook sees:
+
+- `completed`: the Command Action finished. A command without an action also reports `completed` unless an Extension with a `noAction` hook, such as [`help()`](/docs/modules/extensions/help), takes it.
+- `handled`: a flag handler (`--help`, `--version`, `--llms`) or a `noAction` hook ended the invocation.
+- `failed`: the action, a hook, or validation threw. A run cancelled with Ctrl-C or `SIGTERM` reports `failed` (an `AbortError`), or `completed` if the action ignored the cancellation.
+
+Not covered:
+
+- Routing and argument parsing failures, such as an unknown command: they happen before any `setup`, so no event is sent.
+- Outcome changes by later hooks: another Extension's `postRun` that throws fails a completed invocation, but every `postRun` receives the outcome as it was, so the event still says `completed`.
+- The process exit code.
+
+## Delivery
+
+`send` runs inside `postRun`, so the invocation ends only when it resolves, or after 1 second at most. It does not get `ctx.signal`, which is already aborted after Ctrl-C; the 1 second limit bounds it instead. A `send` that throws, rejects, or takes longer is ignored and never changes the outcome or the exit code.
+
+## API
+
+<auto-type-table
+  path="../../../../../../packages/extensions/src/telemetry.ts"
+  name="TelemetryOptions"
+/>
