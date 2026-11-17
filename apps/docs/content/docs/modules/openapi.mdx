@@ -51,9 +51,21 @@ spec: new URL("./acme.openapi.jsonc", import.meta.url),
 
 - Running from source (`bun run`, `node`, tests), the file is read when it is first needed: when the app reads `acme.commands` (at start, when it adds them), for `crust build`, or for `api --list`, `api --spec`, or a `call()`. Requests through `fetch()` and `api <path>` never read it. It is read once per process.
 - The file may be JSONC: comments and trailing commas are allowed, whatever its name. Name it `<name>.openapi.jsonc` to have it [typed](#typed-client).
-- [`crust build`](/docs/guide/build-and-distribution) writes the parsed document as plain JSON to `<id>/spec.json` in the build output (`id` defaults to `"openapi"`), and a built CLI reads it there with [`resolveArtifactDir(id)`](/docs/api/crust#resolveartifactdirname). The entry never imports the document, so it stays out of the bundle; a CLI without generated commands does not parse it at start.
-- Like skills and man pages, a standalone executable needs that directory beside it. A built CLI without it fails, when it needs the document, with ``api: the OpenAPI document was not found at "<dir>/spec.json". Run `crust build` first, and ship its "<id>" directory with the CLI.`` A CLI that adds `acme.commands` needs it at start, so it fails before parsing its arguments, and the runtime prints this message as an uncaught error, with its stack.
 - A file that cannot be read or parsed fails with `api: cannot read the OpenAPI document "<file>" (<reason>)`, and exit code 1.
+
+[`crust build`](/docs/guide/build-and-distribution) writes the document's data files to `<id>/` in the build output (`id` defaults to `"openapi"`), and a built CLI reads them there with [`resolveArtifactDir(id)`](/docs/api/crust#resolveartifactdirname). The entry never imports the document, so it stays out of the bundle, and start-up depends on the command that runs, not on the size of the API:
+
+| File                                 | Holds                                                                                                                  | Read                                                                          |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `index.json`                         | The generated root commands and top-level groups, with their descriptions                                              | At start, when the app reads `acme.commands`                                  |
+| `root.json`, `groups/g-<group>.json` | The part of the document the root commands, or one top-level group, need: their operations and every `$ref` they reach | When one of those commands first runs or shows its help                       |
+| `spec.json`                          | The whole document, as plain JSON                                                                                      | For `api --list`, `api --spec`, `call()`, `acme.lint()` and `acme.manifest()` |
+
+- A command reads only the operations it needs from its file. Anything that walks every command, such as `--llms`, a completion script, or MCP's list of tools, reads every file.
+- When the group files would total more than twice the document (a spec whose schemas all reference each other), they are not written, and every command reads `spec.json`.
+- The files describe the commands of the app that was built: take `acme.extension` and `acme.commands` from the same handle, and add `acme.commands` whole (`exclude` an operation to leave it out). Otherwise `crust build` fails with a `DEFINITION` error naming the commands that are missing or different, and a run from source fails with one when the app holds the commands of another handle of the same call. An app that adds no generated commands gets only `spec.json`.
+- Several bins of one CLI can share one API: `crust build` merges the identical files each one writes.
+- Like skills and man pages, a standalone executable needs the `<id>` directory beside it, and the directory belongs to the build that wrote it: never copy one from another build. A built CLI without it has no generated commands, and every invocation fails with ``api: the OpenAPI data was not found at "<dir>/index.json". Run `crust build` first, and ship its "<id>" directory with the CLI.`` and exit code 1. The same message names any other missing file when a command needs it. Extend `acme.extension` before [`didYouMean()`](/docs/modules/extensions/did-you-mean): an Extension extended earlier reports a command it cannot find first.
 
 A plain object, such as a small inline spec or one in a test, works too: it is kept in memory, bundled with the CLI, and the build writes nothing.
 
@@ -197,7 +209,7 @@ $ my-cli api /users/9 --json
 
 ## Generated commands
 
-`acme.commands` holds a command per operation, built at run time from the pinned spec, and your commands from `.add()`: the root commands and the top-level groups, to pass to `.add()`. They are ordinary application commands, so help, completion, [`schema()`](/docs/modules/extensions/schema), [skills](/docs/modules/skills), and [MCP](/docs/modules/mcp) (as tools) treat them like the commands you write. Each one `.use()`s `acme.client`, which `acme.extension` provides, and the sources from `.use()`; adding them to an app that lacks a provider is a TypeScript error.
+`acme.commands` holds a command per operation, built at run time from the pinned spec (in a built CLI, from its [data files](#the-spec)), and your commands from `.add()`: the root commands and the top-level groups, to pass to `.add()`. They are ordinary application commands, so help, completion, [`schema()`](/docs/modules/extensions/schema), [skills](/docs/modules/skills), and [MCP](/docs/modules/mcp) (as tools) treat them like the commands you write. Each one `.use()`s `acme.client`, which `acme.extension` provides, and the sources from `.use()`; adding them to an app that lacks a provider is a TypeScript error.
 
 ```sh
 $ acme users --help                        # the group of the operations tagged "Users"
