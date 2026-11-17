@@ -14,12 +14,14 @@ import {
 	callbackPath,
 	configReason,
 	fakeFetch,
+	fakeKeyring,
 	fakeTimersFrom,
 	holdLock,
 	login as storeLogin,
 	isClosed,
 	json,
 	metadataFor,
+	noKeyring,
 	rawRequest,
 	type RawResponse,
 	restoreTerminal,
@@ -35,6 +37,7 @@ import { credentialStore, credentialStoreInternals } from "./credentials.ts";
 import { deviceCodeMessage } from "./display.ts";
 import {
 	AbortError,
+	CredentialKeyError,
 	CredentialMismatchError,
 	CredentialStoreCorruptError,
 	LoginRequiredError,
@@ -44,7 +47,7 @@ import {
 	UnsafeStorageError,
 } from "./errors.ts";
 import { createTokenSource } from "./token-source.ts";
-import type { BrowserLoginPrompt, DeviceLoginPrompt, LoginOptions } from "./types.ts";
+import type { AuthWarning, BrowserLoginPrompt, DeviceLoginPrompt, LoginOptions } from "./types.ts";
 
 const openBrowser = vi.hoisted(() => vi.fn(async (_url: string, _options?: object) => true));
 vi.mock("./browser.ts", () => ({ openBrowser }));
@@ -69,7 +72,12 @@ const roots: string[] = [];
 
 const writes: string[] = [];
 
+/** `status().storage` without a keyring and without a stored login. */
+const noLogins = { kind: "file", plaintextRecords: 0 } as const;
+
 beforeEach(() => {
+	// No test reaches the OS keyring; the keyring tests install a fake.
+	noKeyring();
 	terminal({ tty: true });
 	openBrowser.mockClear();
 	writes.length = 0;
@@ -104,6 +112,8 @@ function setup(
 		resource?: string | string[];
 		env?: string;
 		metadata?: Record<string, unknown>;
+		strict?: boolean;
+		onWarning?: (warning: AuthWarning) => void;
 	} = {},
 ) {
 	const temp = tempApp();
@@ -335,7 +345,7 @@ describe("login() in a browser", () => {
 		expect(error).toBe(thrown);
 		expect(await isClosed(redirectUri)).toBe(true);
 		expect(requests.some((request) => request.body.get("grant_type"))).toBe(false);
-		expect(await auth.status()).toEqual({ source: "none" });
+		expect(await auth.status()).toEqual({ source: "none", storage: noLogins });
 	});
 
 	it("aborts while onUrl is pending: rejects at once, closes the listener, ignores the late result", async () => {
@@ -424,7 +434,7 @@ describe("login() in a browser", () => {
 		});
 		expect(await rejection(login)).toBeInstanceOf(AbortError);
 		expect(await isClosed(redirectUri)).toBe(true);
-		expect(await auth.status()).toEqual({ source: "none" });
+		expect(await auth.status()).toEqual({ source: "none", storage: noLogins });
 	});
 
 	it("aborts during the code exchange and leaves no listener", async () => {
@@ -436,7 +446,7 @@ describe("login() in a browser", () => {
 		);
 		expect(error).toBeInstanceOf(AbortError);
 		expect(await isClosed(play.redirectUri())).toBe(true);
-		expect(await auth.status()).toEqual({ source: "none" });
+		expect(await auth.status()).toEqual({ source: "none", storage: noLogins });
 	});
 
 	it("aborts during discovery before any listener", async () => {
@@ -446,7 +456,7 @@ describe("login() in a browser", () => {
 		const error = await rejection(auth.login({ signal: controller.signal, onUrl, onCode: noCode }));
 		expect(error).toBeInstanceOf(AbortError);
 		expect(onUrl).not.toHaveBeenCalled();
-		expect(await auth.status()).toEqual({ source: "none" });
+		expect(await auth.status()).toEqual({ source: "none", storage: noLogins });
 	});
 });
 
@@ -535,7 +545,7 @@ describe("login() with a device code", () => {
 		);
 		expect(error).toBe(thrown);
 		expect(requests.some((request) => request.url === `${issuer}/token`)).toBe(false);
-		expect(await auth.status()).toEqual({ source: "none" });
+		expect(await auth.status()).toEqual({ source: "none", storage: noLogins });
 	});
 
 	it("aborts while starting and while polling", async () => {
@@ -545,7 +555,7 @@ describe("login() with a device code", () => {
 		const login = first.auth.login({ device: true, signal: starting.signal, onUrl: noUrl, onCode });
 		expect(await settle(login)).toBeInstanceOf(AbortError);
 		expect(onCode).not.toHaveBeenCalled();
-		expect(await first.auth.status()).toEqual({ source: "none" });
+		expect(await first.auth.status()).toEqual({ source: "none", storage: noLogins });
 
 		const polling = new AbortController();
 		const second = setup();
@@ -557,7 +567,7 @@ describe("login() with a device code", () => {
 		});
 		expect(await settle(waiting)).toBeInstanceOf(AbortError);
 		expect(second.requests.some((request) => request.body.get("grant_type"))).toBe(false);
-		expect(await second.auth.status()).toEqual({ source: "none" });
+		expect(await second.auth.status()).toEqual({ source: "none", storage: noLogins });
 	});
 });
 
@@ -678,7 +688,7 @@ describe("the stored login", () => {
 		const envToken = await auth.token();
 		expect(envToken).toEqual({ value: "ENV_TOKEN", source: "env" });
 		expect(envToken.refresh).toBeUndefined();
-		expect(await auth.status()).toEqual({ source: "env" });
+		expect(await auth.status()).toEqual({ source: "env", storage: noLogins });
 		await auth.login({ onUrl: browser().onUrl, onCode: noCode });
 		expect((await auth.token()).value).toBe("ENV_TOKEN");
 		expect(readFileSync(join(dir, "credentials.json"), "utf8")).not.toContain("ENV_TOKEN");
@@ -726,7 +736,7 @@ describe("the stored login", () => {
 		await lock!.release();
 		expect(error).toBeInstanceOf(AbortError);
 		expect(world.tokenRequests()).toHaveLength(1);
-		expect(await world.auth.status()).toEqual({ source: "none" });
+		expect(await world.auth.status()).toEqual({ source: "none", storage: noLogins });
 	});
 
 	it("status() throws for a login stored for another issuer", async () => {
@@ -773,7 +783,7 @@ describe("the stored login", () => {
 
 	it("status() reports the three sources without a request or waiting for a lock", async () => {
 		const { auth, app, issuer, fetch, requests } = setup();
-		expect(await auth.status()).toEqual({ source: "none" });
+		expect(await auth.status()).toEqual({ source: "none", storage: noLogins });
 		await auth.login({ onUrl: browser().onUrl, onCode: noCode });
 		const before = requests.length;
 		// Another process of the app holds the login's lock.
@@ -791,6 +801,7 @@ describe("the stored login", () => {
 			source: "login",
 			expiresAt: expect.any(Number),
 			scope: "read",
+			storage: { kind: "file", plaintextRecords: 1 },
 		});
 		await lock.release();
 		expect(requests).toHaveLength(before);
@@ -806,7 +817,7 @@ describe("the stored login", () => {
 		const { auth, requests, issuer } = await signedIn();
 		const { logout } = auth;
 		expect(await logout()).toEqual({ local: "deleted", remote: "revoked" });
-		expect(await auth.status()).toEqual({ source: "none" });
+		expect(await auth.status()).toEqual({ source: "none", storage: noLogins });
 		expect(requests.filter(({ url }) => url === `${issuer}/revoke`).length).toBeGreaterThan(0);
 	});
 
@@ -823,6 +834,55 @@ describe("the stored login", () => {
 			}),
 		);
 		expect(error).toBeInstanceOf(StaleCommitError);
-		expect(await auth.status()).toEqual({ source: "none" });
+		expect(await auth.status()).toEqual({ source: "none", storage: noLogins });
+	});
+});
+
+describe("storage", () => {
+	it("encrypts the login under a key in the OS keyring by default; status() reads the key, never writes it", async () => {
+		const keyring = fakeKeyring("napi-keyring");
+		const warnings: AuthWarning[] = [];
+		const { auth, app, dir } = setup(undefined, { onWarning: (warning) => warnings.push(warning) });
+		expect(await auth.status()).toEqual({
+			source: "none",
+			storage: { kind: "napi-keyring", plaintextRecords: 0 },
+		});
+		await auth.login({ onUrl: browser().onUrl, onCode: noCode });
+		const text = readFileSync(join(dir, "credentials.json"), "utf8");
+		expect(JSON.parse(text).encryption).toEqual({
+			kind: "aes-256-gcm",
+			keyId: keyring.entry(app)!.keyId,
+		});
+		expect(text).not.toMatch(/"AT"|"RT"/);
+		expect((await auth.token()).value).toBe("AT");
+		const before = keyring.calls.length;
+		expect((await auth.status()).storage).toEqual({ kind: "napi-keyring", plaintextRecords: 0 });
+		expect(keyring.calls.length - before).toBeLessThanOrEqual(1);
+		expect(keyring.writes()).toBe(1);
+		expect(warnings).toEqual([]);
+	});
+
+	it("without a keyring, stores the login in plaintext and tells onWarning once, printing nothing", async () => {
+		const warnings: AuthWarning[] = [];
+		const { auth } = setup(undefined, { onWarning: (warning) => warnings.push(warning) });
+		await auth.login({ onUrl: browser().onUrl, onCode: noCode });
+		await auth.login({ onUrl: browser().onUrl, onCode: noCode });
+		expect(warnings).toEqual([{ code: "plaintext-storage" }]);
+		expect(writes).toEqual([]);
+		expect((await auth.status()).storage).toEqual({ kind: "file", plaintextRecords: 1 });
+	});
+
+	it("strict refuses to store a login without a keyring, with a typed key error", async () => {
+		const { auth } = setup(undefined, { strict: true });
+		const error = await rejection(auth.login({ onUrl: browser().onUrl, onCode: noCode }));
+		expect(error).toBeInstanceOf(CredentialKeyError);
+		expect(error).toMatchObject({ code: "credential-key", reason: "unavailable" });
+		expect(await auth.status()).toEqual({ source: "none", storage: noLogins });
+	});
+
+	it("rejects a strict or onWarning of the wrong type", () => {
+		for (const options of [{ strict: "yes" }, { onWarning: "print" }]) {
+			expect(() => setup(undefined, options as never)).toThrow(OAuthConfigError);
+		}
 	});
 });

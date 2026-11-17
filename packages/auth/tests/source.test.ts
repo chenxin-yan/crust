@@ -40,6 +40,16 @@ describe("library source", () => {
 		expect(readFileSync(join(srcDir, "types.ts"), "utf8").match(/process\.env/g)).toHaveLength(1);
 	});
 
+	it("never runs a keyring command, and loads the optional keyring module only on use", () => {
+		expect(filesMatching(/child_process|\bspawn\(|\bexec(File)?\(|secret-tool|"security"/)).toEqual(
+			["browser.ts"],
+		);
+		expect(filesMatching(/@napi-rs\/keyring/)).toEqual(["keyring.ts"]);
+		const keyring = readFileSync(join(srcDir, "keyring.ts"), "utf8");
+		expect(keyring).not.toMatch(/^import[^;]*@napi-rs\/keyring/m);
+		expect(keyring).toMatch(/try \{\s*napi = await import\("@napi-rs\/keyring"\);\s*\} catch/);
+	});
+
 	it("offers no password grant, credential form or embedded browser", () => {
 		expect(
 			Object.keys(api).filter((name) => /password|username|webview|embedded/i.test(name)),
@@ -88,6 +98,7 @@ describe("entry points", () => {
 			"AuthErrorCode",
 			"AuthStatus",
 			"AuthToken",
+			"AuthWarning",
 			"BrowserLoginPrompt",
 			"CallbackPageView",
 			"CreateAuthOptions",

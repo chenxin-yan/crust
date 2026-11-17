@@ -261,7 +261,21 @@ export interface CreateAuthOptions extends AuthServerOptions {
 	ports?: AuthorizationSessionOptions["ports"];
 	/** The `fetch` used for every request to the server. @default globalThis.fetch */
 	fetch?: Fetch;
+	/**
+	 * Refuse to store a login without an OS keyring, with `CredentialKeyError` (`unavailable`),
+	 * instead of storing its tokens in plaintext.
+	 * @default false
+	 */
+	strict?: boolean;
+	/** Receives what you may want to tell the user, such as a login stored in plaintext. */
+	onWarning?: (warning: AuthWarning) => void;
 }
+
+/**
+ * A notice for your CLI to show; the library prints nothing. `"plaintext-storage"`: there is no
+ * OS keyring, so a login's tokens were stored in plaintext. Reported once per process.
+ */
+export type AuthWarning = { readonly code: "plaintext-storage" };
 
 /** What `onUrl` receives in a browser login. */
 export interface BrowserLoginPrompt {
@@ -317,6 +331,13 @@ export interface AuthStatus {
 	readonly expiresAt?: number;
 	/** The scope the server granted the stored login. */
 	readonly scope?: string;
+	/** Where stored logins are kept, whichever `source` is used. */
+	readonly storage: {
+		/** The OS keyring holding the file's key, or `"file"` when tokens are stored in plaintext. */
+		readonly kind: CredentialStoreStatus["kind"];
+		/** Stored logins whose tokens are still plaintext, until their next login or refresh. */
+		readonly plaintextRecords: number;
+	};
 }
 
 /** The client `createAuth()` returns. Its methods work detached from it. */
@@ -333,7 +354,10 @@ export interface AuthClient {
 	 * when its origin is one of `apiOrigins`. No login → `LoginRequiredError`.
 	 */
 	readonly token: (options?: { signal?: AbortSignal; baseUrl?: string }) => Promise<AuthToken>;
-	/** Where the token would come from, and the stored login's expiry and scope. */
+	/**
+	 * Where the token would come from, the stored login's expiry and scope, and where logins are
+	 * stored. Reads the login file and asks the OS keyring for the key, within 5 seconds.
+	 */
 	readonly status: () => Promise<AuthStatus>;
 	/** Deletes the stored login, then revokes it at the server as a best effort. */
 	readonly logout: (options?: { signal?: AbortSignal }) => Promise<LogoutResult>;
@@ -354,12 +378,46 @@ export interface CredentialStoreOptions {
 	 * @default 40000
 	 */
 	lockTimeout?: number;
+	/**
+	 * Encrypt the tokens with a key kept in the OS keyring. Without this option, tokens are
+	 * stored in plaintext and no keyring is used.
+	 */
+	keyring?: KeyringOptions;
+}
+
+/** Options of the OS keyring that keeps the credentials file's key. */
+export interface KeyringOptions {
+	/**
+	 * Without a keyring, refuse to store a secret (`CredentialKeyError`, `unavailable`) instead of
+	 * storing it in plaintext.
+	 * @default false
+	 */
+	strict?: boolean;
+	/** Called once per process when a secret is stored in plaintext for want of a keyring. */
+	onWarning?: (warning: AuthWarning) => void;
+}
+
+/** Where a credentials file's secrets are, as `status()` reports it. */
+export interface CredentialStoreStatus {
+	/**
+	 * The OS keyring holding the file's key: `"bun-secrets"` or `"napi-keyring"`; `"file"` when
+	 * there is none, so secrets are written in plaintext.
+	 */
+	readonly kind: "bun-secrets" | "napi-keyring" | "file";
+	/** `"aes-256-gcm"` once a secret was encrypted; the file then never takes plaintext. */
+	readonly encryption: "plaintext" | "aes-256-gcm";
+	/** Whether the keyring answered with a valid key, the file's own when it records one. */
+	readonly keyReadable: boolean;
+	/** Live records whose secret is still plaintext, until their next login or refresh. */
+	readonly plaintextRecords: number;
 }
 
 /** The private credentials file of an app, shared by its token sources. */
 export interface CredentialStore {
 	/** Absolute path of the file. */
 	readonly path: string;
+	/** Where the file's secrets are. Reads the file and the keyring (within 5 seconds); never writes. */
+	status(options?: { signal?: AbortSignal }): Promise<CredentialStoreStatus>;
 	/**
 	 * Without `key`, deletes the file (a corrupt one too) and every login in it. Copy the file
 	 * first to keep it. With `key` (a token source's `key`), replaces that credential with a
@@ -412,6 +470,11 @@ export interface Credential {
 	readonly resource: readonly string[] | undefined;
 	readonly tokenType: "Bearer";
 	readonly generation: string;
+	/**
+	 * Logins this one logged out: when the keyring no longer held the file's key, every record
+	 * encrypted under it, in every profile.
+	 */
+	readonly discarded: number;
 }
 
 /** An open login for one credential. Finish it with `commit()` or `cancel()`. */

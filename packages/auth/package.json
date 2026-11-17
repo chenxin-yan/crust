@@ -56,12 +56,17 @@
 		"@crustjs/config": "workspace:*",
 		"@crustjs/core": "workspace:*",
 		"@crustjs/openapi": "workspace:*",
+		"@napi-rs/keyring": "^2.1.2",
 		"vite-plus": "catalog:"
 	},
 	"peerDependencies": {
+		"@napi-rs/keyring": "^2.1.2",
 		"typescript": ">=5.9.0"
 	},
 	"peerDependenciesMeta": {
+		"@napi-rs/keyring": {
+			"optional": true
+		},
 		"typescript": {
 			"optional": true
 		}

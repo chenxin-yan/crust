@@ -18,15 +18,18 @@ import { credentialStore, credentialStoreInternals } from "../src/credentials.ts
 import { startDeviceFlow } from "../src/device.ts";
 import { discover } from "../src/discovery.ts";
 import { LockRecoveryRequiredError } from "../src/errors.ts";
+import { keyrings } from "../src/keyring.ts";
 import { createAuthorizationSession } from "../src/session.ts";
 import { createTokenClient } from "../src/token-client.ts";
 import {
 	callbackPath,
 	fakeFetch,
+	fakeKeyring,
 	fakeTimersFrom,
 	json,
 	login,
 	metadataFor,
+	noKeyring,
 	rawRequest,
 	type RecordedRequest,
 	restoreTerminal,
@@ -87,6 +90,7 @@ function captureSecretsFrom(request: RecordedRequest): void {
 }
 
 beforeEach(() => {
+	noKeyring();
 	for (const method of ["log", "error", "warn", "info", "debug"] as const) {
 		vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
 			sinks.push(args.map((arg) => inspect(arg)).join(" "));
@@ -469,6 +473,69 @@ describe("secret sentinel gate: stored credentials", () => {
 		writeFileSync(w.file, `{"version":1,"records":{"x":"${STATIC.refreshToken}`);
 		await source.get().then(record, record);
 		await source.logout().then(record, record);
+		expectNoSecretInSinks();
+	});
+});
+
+describe("secret sentinel gate: the keyring", () => {
+	it("encrypted logins, key errors, warnings and status leak neither a token nor the key", async () => {
+		const keyring = fakeKeyring();
+		const w = tokenWorld({
+			keyring: { onWarning: record },
+			token: (request) => {
+				captureSecretsFrom(request);
+				return refreshed();
+			},
+		});
+		roots.push(w.root);
+		const source = w.source();
+		record(
+			await login(source, { accessToken: STATIC.accessToken, refreshToken: STATIC.refreshToken }),
+		);
+		const value = keyring.entries.get(`${w.app}\0credentials-key`)!;
+		const { keyId, key } = keyring.entry(w.app)!;
+		secrets.add(value).add(key);
+		record(await source.get());
+		record(await w.store.status());
+		const reopened = () => w.source({ store: credentialStore({ app: w.app, keyring: {} }) });
+
+		keyring.state.get = "error";
+		await reopened().get().then(record, record);
+		keyring.state.get = "hang";
+		const deadlineMs = keyrings.deadlineMs;
+		keyrings.deadlineMs = 100;
+		await reopened()
+			.forceRefresh()
+			.then(record, record)
+			.finally(() => {
+				keyrings.deadlineMs = deadlineMs;
+			});
+		keyring.state.get = "value";
+		// Another key with the same bytes, then none at all.
+		keyring.entries.set(`${w.app}\0credentials-key`, JSON.stringify({ keyId: `${keyId}-2`, key }));
+		await reopened().get().then(record, record);
+		keyring.entries.clear();
+		await reopened().get().then(record, record);
+		await reopened().logout().then(record, record);
+
+		noKeyring();
+		const strict = tokenWorld({ keyring: { strict: true } });
+		roots.push(strict.root);
+		await login(strict.source(), { accessToken: STATIC.accessToken }).then(record, record);
+		const plain = tokenWorld({ keyring: { onWarning: record } });
+		roots.push(plain.root);
+		record(await login(plain.source(), { accessToken: STATIC.accessToken }));
+		record(await plain.store.status());
+		expectNoSecretInSinks();
+	});
+
+	it("a client login stored under the keyring leaks neither a token nor the key", async () => {
+		const keyring = fakeKeyring();
+		await clientLogins(success);
+		for (const [name, value] of keyring.entries) {
+			secrets.add(value).add(keyring.entry(name.split("\0")[0]!)!.key);
+		}
+		expect(keyring.writes()).toBe(1);
 		expectNoSecretInSinks();
 	});
 });

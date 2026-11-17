@@ -1,5 +1,6 @@
 import { isAuthConfig } from "./config.ts";
 import {
+	accepts,
 	type CredentialsDocument,
 	credentialStoreInternals,
 	emptyDocument,
@@ -10,6 +11,7 @@ import {
 	type StoredIdentity,
 	type StoredRecord,
 	tombstone,
+	withFileKey,
 } from "./credentials.ts";
 import { discover } from "./discovery.ts";
 import { checkIssuer, checkUrl } from "./endpoint.ts";
@@ -41,7 +43,8 @@ import type {
 
 // Token sources. Every lifecycle change holds
 // the credential's identity lock, then makes one synchronous `store.update()` that rechecks
-// the lifecycle (storeId, epoch, generation) and throws to write nothing.
+// the lifecycle (storeId, epoch, generation) and throws to write nothing. A secret is encrypted
+// before that update, under a key picked before it; the update rechecks the file's key too.
 
 /** RFC 6749 §5.2 token-endpoint error codes: proof the request was refused, not processed. */
 const TOKEN_ERROR_CODES: ReadonlySet<string> = new Set([
@@ -83,10 +86,8 @@ export function tokenSourceInternals(source: TokenSource): TokenSourceInternals 
 	return found;
 }
 
-const accessToken = (record: StoredRecord): AccessToken =>
-	redacted({ value: record.accessToken as string, generation: record.generation as string }, [
-		"value",
-	]);
+const accessToken = (value: string, generation: string): AccessToken =>
+	redacted({ value, generation }, ["value"]);
 
 /** Rejects with {@link AbortError} on `signal` without stopping `promise`, which others share. */
 function detach<T>(promise: Promise<T>, signal: AbortSignal | undefined, onAbort: () => void) {
@@ -202,6 +203,12 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 		records: { ...document.records, [key]: serializeRecord(record) },
 	});
 
+	/** The access token of this key's live `record` in `document`. */
+	async function tokenOf(document: CredentialsDocument, record: StoredRecord) {
+		const { accessToken: value } = await store.reveal(document, key, record);
+		return accessToken(value, record.generation as string);
+	}
+
 	/**
 	 * Refreshes the credential observed at `generation` under the identity lock.
 	 * `signal` (all waiters gone) is observed only until the mark is written.
@@ -210,20 +217,26 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 		return store.lockIdentity(
 			key,
 			async () => {
-				const document = await store.read();
-				const record = liveRecord(document);
+				const read = await store.read();
+				const record = liveRecord(read);
+				const document = read as CredentialsDocument;
 				// With the lock held, a mark's refresh is no longer running: its outcome is unknown.
 				if (record.refreshInProgress) throw new RefreshOutcomeUnknownError();
 				// Another process or source refreshed or logged in meanwhile: use its token.
-				if (record.generation !== generation) return accessToken(record);
-				if (record.refreshToken === undefined) throw new LoginRequiredError("expired");
+				if (record.generation !== generation) return tokenOf(document, record);
+				// The keys come first: one that can't be read or created stops the refresh unmarked.
+				const secret = await store.reveal(document, key, record);
+				if (secret.refreshToken === undefined) throw new LoginRequiredError("expired");
+				const writeKey = await store.writeKey(document, false);
 				const server = await discoverServer(signal);
 				throwIfAborted(signal);
-				const storeId = (document as CredentialsDocument).storeId;
+				const storeId = document.storeId;
 				try {
 					await store.update((current) => {
 						const found = unchanged(current, storeId, record);
-						if (!found) throw new RefreshFailedError();
+						if (!found || !accepts(current as CredentialsDocument, writeKey)) {
+							throw new RefreshFailedError();
+						}
 						const mark = { generation, since: new Date().toISOString() };
 						return withRecord(current as CredentialsDocument, {
 							...found,
@@ -239,29 +252,38 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 				let tokens: TokenSet;
 				try {
 					tokens = await createTokenClient(server, { fetch: fetchImpl }).refresh(
-						record.refreshToken,
+						secret.refreshToken,
 						{ resource: record.resource },
 					);
 				} catch (error) {
 					throw await failedRefresh(error, storeId, record);
 				}
 				try {
-					const written = await store.update((current) => {
-						const found = unchanged(current, storeId, record);
-						if (!found?.refreshInProgress) throw new LoginRequiredError("store-changed");
-						return withRecord(current as CredentialsDocument, {
-							...found,
+					const next = await store.withSecret(
+						writeKey,
+						key,
+						{
+							...record,
 							generation: newId(),
 							refreshInProgress: undefined,
-							accessToken: tokens.accessToken,
-							// The old refresh token stays when the server sent none.
-							refreshToken: tokens.refreshToken ?? found.refreshToken,
 							expiresAt: tokens.expiresAt,
 							// A response without scope keeps the granted scope.
-							scope: tokens.scope ?? found.scope,
-						});
+							scope: tokens.scope ?? record.scope,
+						},
+						// The old refresh token stays when the server sent none.
+						{
+							accessToken: tokens.accessToken,
+							refreshToken: tokens.refreshToken ?? secret.refreshToken,
+						},
+					);
+					await store.update((current) => {
+						const found = unchanged(current, storeId, record);
+						if (!found?.refreshInProgress || !accepts(current as CredentialsDocument, writeKey)) {
+							throw new LoginRequiredError("store-changed");
+						}
+						return withRecord(withFileKey(current as CredentialsDocument, writeKey).document, next);
 					});
-					return accessToken(parseRecord(written.records[key]) as StoredRecord);
+					return accessToken(tokens.accessToken, next.generation as string);
 				} catch (error) {
 					// The tokens are discarded; the mark stays unless a reset removed the record.
 					throw error instanceof LoginRequiredError ? error : new RefreshOutcomeUnknownError();
@@ -325,7 +347,8 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 
 	async function readRecord(signal: AbortSignal | undefined, baseUrl: string | undefined) {
 		throwIfAborted(signal);
-		return liveRecord(await store.read(), baseUrl);
+		const document = await store.read();
+		return { document: document as CredentialsDocument, record: liveRecord(document, baseUrl) };
 	}
 
 	async function revoke(
@@ -362,12 +385,12 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 		key,
 
 		async get({ signal, baseUrl }: { signal?: AbortSignal; baseUrl?: string } = {}) {
-			const record = await readRecord(signal, baseUrl);
+			const { document, record } = await readRecord(signal, baseUrl);
 			// A mark read without the lock may be a refresh still running elsewhere: wait for the lock.
 			const fresh =
 				!record.refreshInProgress &&
 				(record.expiresAt === undefined || Date.now() < record.expiresAt - skewMs);
-			return fresh ? accessToken(record) : sharedRefresh(record.generation as string, signal);
+			return fresh ? tokenOf(document, record) : sharedRefresh(record.generation as string, signal);
 		},
 
 		async forceRefresh({
@@ -375,14 +398,14 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 			ifGeneration,
 			baseUrl,
 		}: { signal?: AbortSignal; ifGeneration?: string; baseUrl?: string } = {}) {
-			const record = await readRecord(signal, baseUrl);
+			const { document, record } = await readRecord(signal, baseUrl);
 			// A newer credential than the one that failed is used as is.
 			if (
 				ifGeneration !== undefined &&
 				record.generation !== ifGeneration &&
 				!record.refreshInProgress
 			) {
-				return accessToken(record);
+				return tokenOf(document, record);
 			}
 			return sharedRefresh(record.generation as string, signal);
 		},
@@ -460,13 +483,19 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 							expiresAt: tokens.expiresAt,
 							scope: tokens.scope,
 							resource: resources,
-							accessToken: tokens.accessToken,
-							refreshToken: tokens.refreshToken,
+							secret: undefined,
 						};
 						return await store.lockIdentity(
 							key,
 							async () => {
 								throwIfAborted(stop);
+								const writeKey = await store.writeKey(await store.read(), true);
+								const stored = await store.withSecret(writeKey, key, record, {
+									accessToken: tokens.accessToken,
+									refreshToken: tokens.refreshToken,
+								});
+								throwIfAborted(stop);
+								let discarded = 0;
 								// The boundary: once the write starts, it completes.
 								await store.update((current) => {
 									const raw = current?.records[key];
@@ -474,10 +503,16 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 										typeof raw === "object" && raw !== null && !Array.isArray(raw)
 											? (raw as { epoch?: unknown }).epoch
 											: undefined;
-									if (current?.storeId !== observed.storeId || epoch !== observed.epoch) {
+									if (
+										current?.storeId !== observed.storeId ||
+										epoch !== observed.epoch ||
+										!accepts(current, writeKey)
+									) {
 										throw new StaleCommitError();
 									}
-									return withRecord(current, record);
+									const next = withFileKey(current, writeKey);
+									discarded = next.discarded;
+									return withRecord(next.document, stored);
 								}, stop);
 								return redacted(
 									{
@@ -489,6 +524,7 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 										resource: resources,
 										tokenType: "Bearer",
 										generation: record.generation as string,
+										discarded,
 									} satisfies Credential,
 									["accessToken", "refreshToken"],
 								);
@@ -512,16 +548,16 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 				async (): Promise<LogoutResult["local"]> => {
 					const document = await store.read();
 					const record = parseRecord(document?.records[key]);
-					// Revoke only this identity's readable tokens; logout still happens.
+					// Revoke only this identity's readable tokens; logout still happens, also when
+					// the keyring's key can't decrypt them.
 					if (
 						record &&
 						!record.tombstone &&
 						!mismatch(record.identity as StoredIdentity, identity)
 					) {
-						captured = {
-							accessToken: record.accessToken as string,
-							refreshToken: record.refreshToken,
-						};
+						captured = await store
+							.reveal(document as CredentialsDocument, key, record)
+							.catch(() => undefined);
 					}
 					throwIfAborted(signal);
 					try {
@@ -545,7 +581,7 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 	});
 	sourceInternals.set(source, {
 		async storedLogin() {
-			const { expiresAt, scope } = await readRecord(undefined, undefined);
+			const { expiresAt, scope } = (await readRecord(undefined, undefined)).record;
 			return { expiresAt, scope };
 		},
 	});

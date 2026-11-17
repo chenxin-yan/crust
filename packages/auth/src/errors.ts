@@ -64,6 +64,7 @@ export type AuthErrorCode = (
 	| RefreshOutcomeUnknownError
 	| UnsafeStorageError
 	| CredentialStoreCorruptError
+	| CredentialKeyError
 	| LockTimeoutError
 	| LockRecoveryRequiredError
 	| LoginRequiresInteractionError
@@ -217,9 +218,17 @@ export class CredentialMismatchError extends AuthError {
  * - `"missing"`: no credential is stored, or it was logged out;
  * - `"expired"`: the access token expired and there is no refresh token;
  * - `"invalid-grant"`: the server refused the refresh token;
- * - `"store-changed"`: the credentials file was reset while a refresh ran, so its tokens were discarded.
+ * - `"store-changed"`: the credentials file was reset while a refresh ran, so its tokens were discarded;
+ * - `"key-missing"`: the login is encrypted, and the OS keyring no longer holds the file's key;
+ * - `"key-mismatch"`: the login is encrypted, and the OS keyring holds another key than the file's.
  */
-export type LoginRequiredReason = "missing" | "expired" | "invalid-grant" | "store-changed";
+export type LoginRequiredReason =
+	| "missing"
+	| "expired"
+	| "invalid-grant"
+	| "store-changed"
+	| "key-missing"
+	| "key-mismatch";
 
 /** There is no usable credential: the user must log in. */
 export class LoginRequiredError extends AuthError {
@@ -322,6 +331,29 @@ export class CredentialStoreCorruptError extends AuthError {
 		this.name = "CredentialStoreCorruptError";
 		this.path = path;
 		this.key = options.key;
+	}
+}
+
+/**
+ * The OS keyring's file key can't be used:
+ * - `"unreadable"`: the login is encrypted, and the keyring did not answer, refused, or holds an
+ *   invalid key. Nothing was changed: unlock the keyring and retry;
+ * - `"unavailable"`: a secret must be stored and the keyring can't take the key (`strict` with no
+ *   keyring, or a key write that failed or timed out). Nothing was stored.
+ */
+export class CredentialKeyError extends AuthError {
+	declare readonly code: "credential-key";
+	readonly reason: "unavailable" | "unreadable";
+
+	constructor(reason: "unavailable" | "unreadable") {
+		super(
+			"credential-key",
+			reason === "unreadable"
+				? "Can't read the login's key from the OS keyring; unlock the keyring and try again"
+				: "Can't store the login's key in the OS keyring, so the login was not stored",
+		);
+		this.name = "CredentialKeyError";
+		this.reason = reason;
 	}
 }
 

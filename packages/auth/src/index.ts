@@ -5,6 +5,7 @@ export type {
 	AuthClient,
 	AuthStatus,
 	AuthToken,
+	AuthWarning,
 	BrowserLoginPrompt,
 	CallbackPageView,
 	CreateAuthOptions,

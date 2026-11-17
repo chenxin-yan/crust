@@ -5,11 +5,11 @@ import { rmSync } from "node:fs";
 
 import { Crust, defineCommand } from "@crustjs/core";
 import { type ApiClient, apiClient, apiCommand, bearerAuth } from "@crustjs/openapi";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { createAuth } from "../src/client.ts";
 import { AbortError, CredentialMismatchError, LoginRequiredError } from "../src/errors.ts";
-import { login, type TokenWorld, tokenWorld } from "./helpers.ts";
+import { login, noKeyring, type TokenWorld, tokenWorld } from "./helpers.ts";
 
 interface ApiCall {
 	url: string;
@@ -17,6 +17,9 @@ interface ApiCall {
 }
 
 const roots: string[] = [];
+
+// createAuth() uses the OS keyring by default; no test here reaches the real one.
+beforeEach(noKeyring);
 
 afterEach(() => {
 	vi.restoreAllMocks();

@@ -5,20 +5,24 @@ import { createStore, CrustStoreError, stateDir, withLock } from "@crustjs/store
 import type { JsonObject, JsonValue } from "@crustjs/utils/json";
 import type { StandardSchema } from "@crustjs/utils/schema";
 
+import { type SealedSecret, seal, unseal } from "./cipher.ts";
 import {
 	AbortError,
 	AuthError,
 	CredentialStoreCorruptError,
 	LockRecoveryRequiredError,
 	LockTimeoutError,
+	OAuthConfigError,
 	UnsafeStorageError,
 } from "./errors.ts";
 import { throwIfAborted } from "./http.ts";
-import type { CredentialStore, CredentialStoreOptions } from "./types.ts";
+import { fileKeys, type WriteKey } from "./keyring.ts";
+import type { CredentialStore, CredentialStoreOptions, CredentialStoreStatus } from "./types.ts";
 
 // The credentials file: one strict `@crustjs/store` document, changed only
 // through synchronous `store.update()` updaters and deleted only by `store.reset()`. Records are
-// validated here, one key at a time, and written by an explicit serializer.
+// validated here, one key at a time, and written by an explicit serializer. Only a record's
+// tokens are encrypted: its lifecycle fields stay readable without the keyring's key.
 
 /** The document format this version reads and writes. A higher version fails closed. */
 const VERSION = 1;
@@ -31,6 +35,17 @@ export interface StoredIdentity {
 	apiOrigins: string[];
 }
 
+/** A record's tokens, as a plaintext file stores them and as they are before encryption. */
+export interface PlainSecret {
+	accessToken: string;
+	refreshToken: string | undefined;
+}
+
+/** A record's tokens as stored: plaintext, or encrypted under the file's key. */
+export type StoredSecret = PlainSecret | SealedSecret;
+
+export const isSealed = (secret: StoredSecret): secret is SealedSecret => "ciphertext" in secret;
+
 /** One credential's lifecycle record. A tombstone keeps only its epoch (and identity). */
 export interface StoredRecord {
 	identity: StoredIdentity | undefined;
@@ -42,13 +57,15 @@ export interface StoredRecord {
 	expiresAt: number | undefined;
 	scope: string | undefined;
 	resource: string[] | undefined;
-	accessToken: string | undefined;
-	refreshToken: string | undefined;
+	/** `undefined` only in a tombstone. */
+	secret: StoredSecret | undefined;
 }
 
 /** A parsed credentials document. `records` stay raw so one invalid record fails only its key. */
 export interface CredentialsDocument {
 	storeId: string;
+	/** The key the file's encrypted records use; `undefined` while every record is plaintext. */
+	keyId: string | undefined;
 	records: Record<string, JsonValue | undefined>;
 }
 
@@ -90,6 +107,24 @@ export interface CredentialStoreInternals {
 	): Promise<CredentialsDocument>;
 	/** Runs `fn` holding the identity lock of `key`. */
 	lockIdentity<T>(key: string, fn: () => Promise<T>, signal?: AbortSignal): Promise<T>;
+	/**
+	 * The tokens of `record`, the live record of `key` in `document`: decrypted when encrypted,
+	 * which needs the file's key in the keyring. Writes nothing.
+	 */
+	reveal(document: CredentialsDocument, key: string, record: StoredRecord): Promise<PlainSecret>;
+	/**
+	 * How a write into `document` stores its secret, picked before the document lock: the file's
+	 * key, else the keyring's (created once), else plaintext. Only a `login` replaces a file key
+	 * the keyring no longer holds.
+	 */
+	writeKey(document: CredentialsDocument | undefined, login: boolean): Promise<WriteKey>;
+	/** `record` (key `key`) holding `secret`, stored as `writeKey` says. */
+	withSecret(
+		writeKey: WriteKey,
+		key: string,
+		record: StoredRecord,
+		secret: PlainSecret,
+	): Promise<StoredRecord>;
 }
 
 const internals = new WeakMap<CredentialStore, CredentialStoreInternals>();
@@ -133,6 +168,18 @@ function parseIdentity(value: unknown): StoredIdentity | undefined {
 	return { issuer, clientId, profile, apiOrigins: [...apiOrigins] };
 }
 
+function parseSecret(value: unknown): StoredSecret | undefined {
+	if (!isObject(value)) return undefined;
+	const { accessToken, refreshToken, iv, ciphertext } = value;
+	if (accessToken === undefined && refreshToken === undefined) {
+		return isString(iv) && isString(ciphertext) ? { iv, ciphertext } : undefined;
+	}
+	if (iv !== undefined || ciphertext !== undefined) return undefined;
+	return isString(accessToken) && optional(refreshToken, isString)
+		? { accessToken, refreshToken }
+		: undefined;
+}
+
 /** A record, or `undefined` when it is invalid. */
 export function parseRecord(value: JsonValue | undefined): StoredRecord | undefined {
 	if (!isObject(value) || !isString(value.epoch)) return undefined;
@@ -147,11 +194,11 @@ export function parseRecord(value: JsonValue | undefined): StoredRecord | undefi
 		expiresAt: undefined,
 		scope: undefined,
 		resource: undefined,
-		accessToken: undefined,
-		refreshToken: undefined,
+		secret: undefined,
 	};
 	if (value.tombstone === true) return empty;
-	const { generation, refreshInProgress, expiresAt, scope, resource, tokenType, secret } = value;
+	const { generation, refreshInProgress, expiresAt, scope, resource, tokenType } = value;
+	const secret = parseSecret(value.secret);
 	const mark = refreshInProgress;
 	const valid =
 		identity !== undefined &&
@@ -162,9 +209,7 @@ export function parseRecord(value: JsonValue | undefined): StoredRecord | undefi
 		optional(expiresAt, (v): v is number => typeof v === "number" && Number.isFinite(v)) &&
 		optional(scope, (v): v is string => typeof v === "string") &&
 		optional(resource, isStringArray) &&
-		isObject(secret) &&
-		isString(secret.accessToken) &&
-		optional(secret.refreshToken, isString);
+		secret !== undefined;
 	if (!valid) return undefined;
 	return {
 		...empty,
@@ -177,8 +222,7 @@ export function parseRecord(value: JsonValue | undefined): StoredRecord | undefi
 		expiresAt,
 		scope,
 		resource: resource && [...resource],
-		accessToken: secret.accessToken as string,
-		refreshToken: secret.refreshToken as string | undefined,
+		secret,
 	};
 }
 
@@ -194,10 +238,12 @@ export function serializeRecord(record: StoredRecord): JsonObject {
 	if (record.expiresAt !== undefined) persisted.expiresAt = record.expiresAt;
 	if (record.scope !== undefined) persisted.scope = record.scope;
 	if (record.resource !== undefined) persisted.resource = [...record.resource];
-	persisted.secret =
-		record.refreshToken === undefined
-			? { accessToken: record.accessToken as string }
-			: { accessToken: record.accessToken as string, refreshToken: record.refreshToken };
+	const secret = record.secret as StoredSecret;
+	persisted.secret = isSealed(secret)
+		? { iv: secret.iv, ciphertext: secret.ciphertext }
+		: secret.refreshToken === undefined
+			? { accessToken: secret.accessToken }
+			: { accessToken: secret.accessToken, refreshToken: secret.refreshToken };
 	return persisted;
 }
 
@@ -212,9 +258,38 @@ export function tombstone(identity: StoredIdentity | undefined): StoredRecord {
 		expiresAt: undefined,
 		scope: undefined,
 		resource: undefined,
-		accessToken: undefined,
-		refreshToken: undefined,
+		secret: undefined,
 	};
+}
+
+/** Whether `document` may take a secret stored as `writeKey` says: a commit's key check. */
+export function accepts(document: CredentialsDocument, writeKey: WriteKey): boolean {
+	if (writeKey.kind === "plaintext") return document.keyId === undefined;
+	if (writeKey.replaces !== undefined) return document.keyId === writeKey.replaces;
+	return document.keyId === undefined || document.keyId === writeKey.fileKey.keyId;
+}
+
+/**
+ * `document` recording `writeKey`'s key. A login replacing the file's key logs out every record
+ * encrypted under the old one, in every profile, and counts them as `discarded`.
+ */
+export function withFileKey(
+	document: CredentialsDocument,
+	writeKey: WriteKey,
+): { document: CredentialsDocument; discarded: number } {
+	if (writeKey.kind === "plaintext") return { document, discarded: 0 };
+	const keyId = writeKey.fileKey.keyId;
+	if (writeKey.replaces === undefined) return { document: { ...document, keyId }, discarded: 0 };
+	let discarded = 0;
+	const records = Object.fromEntries(
+		Object.entries(document.records).map(([key, raw]) => {
+			const record = parseRecord(raw);
+			if (!record?.secret || !isSealed(record.secret)) return [key, raw];
+			discarded += 1;
+			return [key, serializeRecord(tombstone(record.identity))];
+		}),
+	);
+	return { document: { ...document, keyId, records }, discarded };
 }
 
 function parseDocument(raw: RawDocument, path: string): CredentialsDocument | undefined {
@@ -230,29 +305,55 @@ function parseDocument(raw: RawDocument, path: string): CredentialsDocument | un
 	if (typeof version === "number" && version > VERSION) {
 		throw new CredentialStoreCorruptError(path, { newerVersion: true });
 	}
+	const keyId =
+		isObject(encryption) && encryption.kind === "aes-256-gcm" && isString(encryption.keyId)
+			? encryption.keyId
+			: undefined;
 	if (
 		version !== VERSION ||
 		!isString(storeId) ||
 		!isObject(encryption) ||
-		encryption.kind !== "plaintext" ||
+		(encryption.kind !== "plaintext" && keyId === undefined) ||
 		!isObject(records)
 	) {
 		throw new CredentialStoreCorruptError(path);
 	}
-	return { storeId, records: { ...(records as Record<string, JsonValue | undefined>) } };
+	return { storeId, keyId, records: { ...(records as Record<string, JsonValue | undefined>) } };
 }
 
 function serializeDocument(document: CredentialsDocument): RawDocument {
 	return {
 		version: VERSION,
 		storeId: document.storeId,
-		encryption: { kind: "plaintext" },
+		encryption:
+			document.keyId === undefined
+				? { kind: "plaintext" }
+				: { kind: "aes-256-gcm", keyId: document.keyId },
 		records: document.records as JsonObject,
 	};
 }
 
 /** A new, empty document with a fresh `storeId`. */
-export const emptyDocument = (): CredentialsDocument => ({ storeId: newId(), records: {} });
+export const emptyDocument = (): CredentialsDocument => ({
+	storeId: newId(),
+	keyId: undefined,
+	records: {},
+});
+
+/** The AAD of a record's secret: it binds the ciphertext to its file, record and generation. */
+function aadOf(app: string, key: string, record: StoredRecord): string[] {
+	const { issuer, clientId, profile, apiOrigins } = record.identity as StoredIdentity;
+	return [
+		String(VERSION),
+		app,
+		key,
+		issuer,
+		clientId,
+		profile,
+		...[...apiOrigins].sort(),
+		record.generation as string,
+	];
+}
 
 /**
  * Maps a store or lock error to the auth error it means. A store error is never forwarded with
@@ -285,10 +386,23 @@ function storageError(error: unknown, path: string, signal: AbortSignal | undefi
 
 /**
  * The private credentials file of an app: `credentials.json` in the app's state
- * directory, `0600` in a `0700` directory on POSIX, never a symbolic link. Creating it does no
- * I/O; the file is read when a token source first needs it.
+ * directory, `0600` in a `0700` directory on POSIX, never a symbolic link. With `keyring`, its
+ * tokens are encrypted under a key kept in the OS keyring. Creating it does no I/O; the file is
+ * read when a token source first needs it.
  */
 export function credentialStore(options: CredentialStoreOptions): CredentialStore {
+	const { keyring } = options;
+	if (
+		keyring !== undefined &&
+		(!isObject(keyring) ||
+			(keyring.strict !== undefined && typeof keyring.strict !== "boolean") ||
+			(keyring.onWarning !== undefined && typeof keyring.onWarning !== "function"))
+	) {
+		throw new OAuthConfigError(
+			"invalid-option",
+			"keyring must be an object; its strict must be a boolean and its onWarning a function",
+		);
+	}
 	const name = options.name ?? "credentials";
 	const dir = stateDir(options.app);
 	const store = createDocumentStore(dir, name, options.lockTimeout);
@@ -327,8 +441,62 @@ export function credentialStore(options: CredentialStoreOptions): CredentialStor
 		}
 	};
 
+	// App-wide: every credentials file of the app shares the keyring's one key.
+	const keys = fileKeys(options.app, keyring, async (fn) => {
+		try {
+			await withLock(join(dir, "key-init"), fn, { timeout: options.lockTimeout });
+		} catch (error) {
+			throw storageError(error, path, undefined);
+		}
+	});
+
+	const reveal: CredentialStoreInternals["reveal"] = async (document, key, record) => {
+		const secret = record.secret as StoredSecret;
+		if (!isSealed(secret)) return secret;
+		if (document.keyId === undefined) throw new CredentialStoreCorruptError(path, { key });
+		const { key: cryptoKey } = await keys.forFile(document.keyId);
+		let plain: StoredSecret | undefined;
+		try {
+			plain = parseSecret(
+				JSON.parse(await unseal(cryptoKey, secret, aadOf(options.app, key, record))),
+			);
+		} catch {
+			// Tampered, or moved from another record, key or generation.
+			throw new CredentialStoreCorruptError(path, { key });
+		}
+		if (!plain || isSealed(plain)) throw new CredentialStoreCorruptError(path, { key });
+		return plain;
+	};
+
+	const withSecret: CredentialStoreInternals["withSecret"] = async (
+		writeKey,
+		key,
+		record,
+		secret,
+	) => {
+		if (writeKey.kind === "plaintext") return { ...record, secret };
+		const plaintext = JSON.stringify(secret);
+		const sealed = await seal(writeKey.fileKey.key, plaintext, aadOf(options.app, key, record));
+		return { ...record, secret: sealed };
+	};
+
 	const credentials: CredentialStore = Object.freeze({
 		path,
+		async status({ signal }: { signal?: AbortSignal } = {}): Promise<CredentialStoreStatus> {
+			throwIfAborted(signal);
+			const document = await read();
+			const plaintextRecords = Object.values(document?.records ?? {}).filter((raw) => {
+				const secret = parseRecord(raw)?.secret;
+				return secret !== undefined && !isSealed(secret);
+			}).length;
+			const { kind, keyReadable } = await keys.status(document?.keyId);
+			return {
+				kind,
+				encryption: document?.keyId === undefined ? "plaintext" : "aes-256-gcm",
+				keyReadable,
+				plaintextRecords,
+			};
+		},
 		async resetCredentials({ key, signal }: { key?: string; signal?: AbortSignal } = {}) {
 			throwIfAborted(signal);
 			if (key === undefined) {
@@ -358,6 +526,14 @@ export function credentialStore(options: CredentialStoreOptions): CredentialStor
 			);
 		},
 	});
-	internals.set(credentials, { path, read, update, lockIdentity });
+	internals.set(credentials, {
+		path,
+		read,
+		update,
+		lockIdentity,
+		reveal,
+		writeKey: (document, login) => keys.forWrite(document?.keyId, login),
+		withSecret,
+	});
 	return credentials;
 }
