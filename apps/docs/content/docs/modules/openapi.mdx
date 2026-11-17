@@ -27,12 +27,13 @@ The package has a peer dependency on `@crustjs/core` and uses the runtime's glob
 
 Its chain shapes the generated commands, like `defineCommand` and `defineExtension`: every method returns a new frozen handle and leaves the one it was called on unchanged.
 
-| Method | Does | A second call |
-| `.use(...sources)` | Context factories or Extensions every generated command `.use()`s; types `ctx` in the callbacks after it | Appends |
-| `.onConfirm((ctx, message) => …)` | Asks to confirm an operation's [`confirm`](#confirmation) message; resolves when confirmed, throws otherwise | Replaces |
-| `.each((op) => override)` | The [override](#overrides) for every operation | Replaces |
-| `.override({ [operationId]: override })` | Overrides for single operations, whose fields replace the rule's | Appends; an entry for the same operationId replaces the earlier entry's fields one by one |
-| `.add(group, ...definitions)` | Puts your own commands in a group path, such as `"users"` or `"dns records"` (`""` is the root), creating the group when no operation maps to it | Appends |
+| Method                                   | Does                                                                                                                                             | A second call                                                                             |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `.use(...sources)`                       | Context factories or Extensions every generated command `.use()`s; types `ctx` in the callbacks after it                                         | Appends                                                                                   |
+| `.onConfirm((ctx, message) => …)`        | Asks to confirm an operation's [`confirm`](#confirmation) message; resolves when confirmed, throws otherwise                                     | Replaces                                                                                  |
+| `.each((op) => override)`                | The [override](#overrides) for every operation                                                                                                   | Replaces                                                                                  |
+| `.override({ [operationId]: override })` | Overrides for single operations, whose fields replace the rule's                                                                                 | Appends; an entry for the same operationId replaces the earlier entry's fields one by one |
+| `.add(group, ...definitions)`            | Puts your own commands in a group path, such as `"users"` or `"dns records"` (`""` is the root), creating the group when no operation maps to it | Appends                                                                                   |
 
 Declare a source with `.use()` before the callbacks that read it. The Contexts of the commands you `.add()` are required from the app too, but the callbacks see only those of `.use()`, which the generated commands use. Every handle of one `defineApi()` call shares the same `client`, so a command you `.add()` uses the client of an earlier handle, as `whoami` does with `api.client`.
 
@@ -51,7 +52,7 @@ spec: new URL("./acme.openapi.jsonc", import.meta.url),
 
 - Running from source (`bun run`, `node`, tests), the file is read when it is first needed: when the app reads `acme.commands` (at start, when it adds them), `acme.lint()` or `acme.manifest()`, or for `api --list`, `api --spec`, or a `call()`. Requests through `fetch()` and `api <path>` never read it. It is read once per process.
 - The file may be JSONC: comments and trailing commas are allowed, whatever its name. Name it `<name>.openapi.jsonc` to have it [typed](#typed-client).
-- [`crust build`](/docs/guide/build-and-distribution) writes the parsed document as plain JSON to `<id>/spec.json` in the build output (`id` defaults to `"openapi"`), and a built CLI reads it there with [`resolveArtifactDir(id)`](/docs/api/crust#resolveartifactdirname). The entry never imports the document, so it stays out of the bundle and startup does not parse it.
+- [`crust build`](/docs/guide/build-and-distribution) writes the parsed document as plain JSON to `<id>/spec.json` in the build output (`id` defaults to `"openapi"`), and a built CLI reads it there with [`resolveArtifactDir(id)`](/docs/api/crust#resolveartifactdirname). The entry never imports the document, so it stays out of the bundle; a CLI without generated commands does not parse it at start.
 - Like skills and man pages, a standalone executable needs that directory beside it. A built CLI without it fails, when it needs the document, with ``api: the OpenAPI document was not found at "<dir>/spec.json". Run `crust build` first, and ship its "<id>" directory with the CLI.`` A CLI that adds `acme.commands` needs it at start, so it fails before parsing its arguments, and the runtime prints this message as an uncaught error, with its stack.
 - A file that cannot be read or parsed fails with `api: cannot read the OpenAPI document "<file>" (<reason>)`, and exit code 1.
 
@@ -206,16 +207,17 @@ $ acme users list-users --role admin --limit 5 --tag a --tag b
 $ acme users create-user --name Ada --body '{"profile":{"bio":"hi"}}'
 ```
 
-| From the operation | The command |
-| First tag | Its group, in kebab case; an untagged operation is a root command. A tag's `description` is its group's |
-| `operationId` | Its name, in kebab case, without a leading `<group>-` |
-| `summary` | Its description |
-| Path parameters | Required positional arguments, in template order |
-| Query and header parameters | Typed flags: a number for `number` and `integer`, a boolean, else a string, with a string enum as its choices (a numeric enum is a plain number: the API checks it); an array of those is a repeatable flag; required when the parameter is |
-| Top-level scalar, enum, or scalar-array fields of a JSON body | Typed flags in the same way, never required |
-| A JSON request body | `--body`, a JSON flag; files and stdin go through `--input @file` or `--input -` of the [`input()`](/docs/modules/extensions/input) Extension |
-| `security: []` | A public request: `auth` is never called, also for the next pages |
-| The 2xx JSON response schema | The output schema; see [Output](#output) |
+| From the operation                                            | The command                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| First tag                                                     | Its group, in kebab case; an untagged operation is a root command. A tag's `description` is its group's                                                                                                                                     |
+| `operationId`                                                 | Its name, in kebab case, without a leading `<group>-`                                                                                                                                                                                       |
+| `summary`                                                     | Its description                                                                                                                                                                                                                             |
+| Path parameters                                               | Required positional arguments, in template order                                                                                                                                                                                            |
+| Query and header parameters                                   | Typed flags: a number for `number` and `integer`, a boolean, else a string, with a string enum as its choices (a numeric enum is a plain number: the API checks it); an array of those is a repeatable flag; required when the parameter is |
+| Top-level scalar, enum, or scalar-array fields of a JSON body | Typed flags in the same way, never required                                                                                                                                                                                                 |
+| A JSON request body                                           | `--body`, a JSON flag; files and stdin go through `--input @file` or `--input -` of the [`input()`](/docs/modules/extensions/input) Extension                                                                                               |
+| `security: []`                                                | A public request: `auth` is never called, also for the next pages                                                                                                                                                                           |
+| The 2xx JSON response schema                                  | The output schema; see [Output](#output)                                                                                                                                                                                                    |
 
 Names are [kebab-cased](#operations), and the inputs an operation cannot offer are left out as described there. A body field that repeats a parameter's name gets no flag: the parameter keeps its input, and the body field is sent only from `--body`. Cookie parameters are never sent. Deprecated operations are left out unless an override sets `exclude: false`.
 
@@ -225,18 +227,19 @@ The command sends the request through the client, so it gets the base URL, auth,
 
 - The body is `--body` with the body field flags merged over it. Before the request, the command checks it: a required body or required field that is missing, or a flagged field's value of another type or outside its enum, such as one from `--body`, is a `VALIDATION` error naming it (`missing the body field "name" (--name)`). An optional body with nothing given is not sent.
 - `--body` takes a JSON object for an object body. Its published JSON Schema stands alone: every local `$ref` is replaced by its target (in a 3.0 document, translated like the [operation model's schemas](#operations)), and the required fields a flag can fill are left out of its `required`. A recursive or very large schema is published as its top-level fields, each standing alone or `{}`.
-- A [`bind`](#overrides) fills its parameter or body field before the request, and that input is not offered.
-- A [`confirm`](#confirmation) message is confirmed after the inputs are checked and before the request.
+- A [`bind`](#overrides) runs once before the request and fills every parameter and the body field of its name, and those inputs are not offered.
+- A [`confirm`](#confirmation) message is confirmed after the whole request is built and checked, so a rejected one never asks, and before it is sent.
 
 ### Output
 
 The command prints the result for people, pretty-printed JSON or text, and returns it as the command's result:
 
-| Response | Result |
-| 2xx JSON | The parsed body, after `unwrap` |
-| 2xx text | The text, after `unwrap` |
-| 2xx without content | `undefined`; nothing is printed |
-| A 2xx body that is not UTF-8 | An error: use `api <path>` to save it |
+| Response                                                              | Result                                                                        |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| 2xx JSON                                                              | The parsed body, after `unwrap`                                               |
+| 2xx text                                                              | The text, after `unwrap`                                                      |
+| 2xx without content                                                   | `undefined`; nothing is printed                                               |
+| A 2xx body that is not UTF-8                                          | An error: use `api <path>` to save it                                         |
 | Non-2xx, or 2xx in another media type than the JSON the spec declares | An `ApiResponseError`, as for [`call()`](#calloperationid-input), exit code 1 |
 
 Every generated command declares [`.output()`](/docs/api/crust#outputschema): with the [`json()`](/docs/modules/extensions/json) Extension, `--json` prints only the result as JSON. The output JSON Schema is advertised when every 2xx response is JSON with the same schema, which stands alone like the body's; with `unwrap`, only an override's `outputSchema` is advertised. A command without one still has `output: true` in its snapshot.
@@ -267,7 +270,7 @@ One shape, given for every operation by `.each(op)` or for one operationId by `.
 - A field set in `.override()` replaces the same field from `.each()` whole: `bind: {}` removes the rule's bindings for that operation.
 - `.each()` runs once per operation, synchronously, and must be pure. Its `flagName`, `bind` and `positional` entries for a parameter an operation does not have are ignored; in `.override()` they are an `override-unknown-param` lint error.
 - An `.override()` entry may also set `expect: { method, path }`, the operation it was written for: when the spec moves the operationId elsewhere, lint reports `override-stale`.
-- `positional` takes parameter names, and a body field is never positional. `flagName` and `bind` also take top-level body field names.
+- `positional` takes parameter names, and a body field is never positional. Values fill the arguments in order, so the required ones come first, and a list parameter, a variadic argument, comes last; any other order is a `positional-order` lint error. `flagName` and `bind` also take top-level body field names. An entry set to `undefined` is no entry: the default applies.
 - `bind` functions may be async and get the command's `ctx`, typed by `.use()`; they run before every request.
 
 ## Drift guard
@@ -285,7 +288,7 @@ test("maps the spec to commands", async () => {
 });
 ```
 
-- `acme.lint()` returns every problem with turning the operations into commands, as [`Diagnostic`](#operations)s: the model's, each operation's (an unsupported required input, a missing 2xx response or summary, inputs that share a name, a body field that repeats a parameter, a command, group or argument name core rejects, such as the empty name of an operationId without ASCII letters or digits), command collisions, overrides of unknown operations, stale or unknown names in overrides, a `confirm` without `.onConfirm()`, and more than 20 untagged root commands. Each error leaves its operation out.
+- `acme.lint()` returns every problem with turning the operations into commands, as [`Diagnostic`](#operations)s: the model's, each operation's (an unsupported required input, a missing 2xx response or summary, inputs that share a name, a body field that repeats a parameter, a command, group or argument name core rejects, such as the empty name of an operationId without ASCII letters or digits, positionals out of order), command collisions, overrides of unknown operations, stale or unknown names in overrides, a `confirm` without `.onConfirm()`, and more than 20 untagged root commands. Each error leaves its operation out.
 - `acme.manifest()` is the generated surface: `commands`, sorted by command path, each `{ command, operationId, method, path, args, flags, outputSchema }` (positional names in order, flag names sorted, whether an output schema is advertised), and the lint errors as `diagnostics`. It comes from the spec and the overrides, not from the built commands, and is the same on every platform, so a snapshot of it shows the CLI's diff in the review of a spec bump.
 
 A CI job can bump the pin and open a pull request with the new snapshot for review; Crust ships no updater.
