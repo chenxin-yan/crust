@@ -4,9 +4,17 @@
 // - `api <issuer> <app>`: GET <issuer>/api/me through bearerAuth() and a stored login; prints
 //   the status, or the error code;
 // - `hold <issuer> <app>`: takes the credential's identity lock, prints "locked" and waits;
+// - `login <issuer> <app> <profile> <keyring file> <write delay ms>`: logs in with the keyring on,
+//   over a keyring kept in a file (each write appends a line to `<file>.writes` first); prints
+//   "ok", or the error code;
+// - `login-hang <issuer> <app> <profile> <keyring file>`: the same, but prints "writing" and
+//   waits forever once the login's file write is about to start;
+// - `read <issuer> <app> <profile> <keyring file>`: prints the access token `get()` returns, or
+//   the error code;
 // - `runtime`: real sockets: a refused token request on the runtime's own fetch, and a 401
 //   retry and a cross-origin redirect through @crustjs/openapi. Prints one JSON report.
 import { once } from "node:events";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { type AddressInfo, connect } from "node:net";
 
@@ -14,21 +22,45 @@ import { Crust, defineCommand } from "@crustjs/core";
 import { apiClient, apiCommand, type BearerCredential, bearerAuth } from "@crustjs/openapi";
 
 import { credentialStoreInternals } from "../../src/credentials.ts";
+import { keyrings } from "../../src/keyring.ts";
 import { createTokenSource, credentialStore, defineServers } from "../../src/oauth.ts";
 import type { AccessToken, TokenSource } from "../../src/types.ts";
 
-const [mode, issuerArg, app = "acme"] = process.argv.slice(2);
+const [mode, issuerArg, app = "acme", profile = "default", keyringFile, writeDelay = "0"] =
+	process.argv.slice(2);
+
+if (keyringFile) {
+	keyrings.load = async () => ({
+		kind: "bun-secrets",
+		async get() {
+			try {
+				return readFileSync(keyringFile, "utf8") || undefined;
+			} catch {
+				return undefined;
+			}
+		},
+		async set(_service, _name, value) {
+			appendFileSync(`${keyringFile}.writes`, `${process.pid}\n`);
+			await new Promise((resolve) => setTimeout(resolve, Number(writeDelay)));
+			writeFileSync(keyringFile, value);
+		},
+	});
+}
 
 function sourceFor(issuer: string) {
 	const config = defineServers({
 		servers: [{ issuer, clientId: "cli", allowInsecureLoopback: true }],
 	});
-	const store = credentialStore({ app, lockTimeout: 20_000 });
+	const store = credentialStore({
+		app,
+		lockTimeout: 20_000,
+		keyring: keyringFile ? {} : undefined,
+	});
 	return {
 		store,
 		source: createTokenSource({
 			config,
-			identity: { issuer, clientId: "cli", apiOrigins: [issuer] },
+			identity: { issuer, clientId: "cli", apiOrigins: [issuer], profile },
 			store,
 		}),
 	};
@@ -118,6 +150,35 @@ if (mode === "refresh") {
 				? ((outcome.error as { code?: string }).code ?? String(outcome.error))
 				: outcome.status,
 	);
+} else if (mode === "login" || mode === "login-hang") {
+	const { store, source } = sourceFor(issuerArg!);
+	if (mode === "login-hang") {
+		credentialStoreInternals(store).update = async () => {
+			console.log("writing");
+			return new Promise(() => {});
+		};
+	}
+	try {
+		await (
+			await source.beginLogin()
+		).commit({
+			accessToken: `AT_${profile}`,
+			refreshToken: `RT_${profile}`,
+			tokenType: "Bearer",
+			expiresAt: undefined,
+			scope: undefined,
+		});
+		console.log("ok");
+	} catch (error) {
+		console.log((error as { code?: string }).code ?? String(error));
+	}
+} else if (mode === "read") {
+	const { source } = sourceFor(issuerArg!);
+	try {
+		console.log((await source.get()).value);
+	} catch (error) {
+		console.log((error as { code?: string }).code ?? String(error));
+	}
 } else if (mode === "hold") {
 	const { store, source } = sourceFor(issuerArg!);
 	await credentialStoreInternals(store).lockIdentity(source.key, async () => {
