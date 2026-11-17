@@ -106,6 +106,8 @@ function operationCommand(plan: CommandPlan, options: GenerateOptions): Generate
 	const { spec } = options;
 	const description = fields.description ?? op.summary;
 	const paginate = fields.paginate ?? options.paginate;
+	// Set only when the command offers `--paginate`; a spec parameter may also be named `paginate`.
+	const paginateFlag = inputs.find(({ target }) => target.in === "paginate")?.name;
 	return defineCommand(
 		plan.name,
 		{
@@ -129,18 +131,23 @@ function operationCommand(plan: CommandPlan, options: GenerateOptions): Generate
 					.flags(flags)
 					.output(outputWrapper(advertisedOutput(spec, plan)))
 					.action(async ({ args: argValues, flags: flagValues, ctx, stdout }) => {
-						const values: Readonly<Record<string, unknown>> = { ...argValues, ...flagValues };
+						// Arguments and flags apart: an inherited flag may share an argument's name.
+						const values: Record<PlannedInput["kind"], Readonly<Record<string, unknown>>> = {
+							arg: argValues,
+							flag: flagValues,
+						};
+						// Keyed by the spec's names, which may be `__proto__`: without a prototype, it is a key.
 						// Cookie parameters get no input and are never sent.
 						const input: Record<Param["in"], Record<string, unknown>> = {
-							path: {},
-							query: {},
-							header: {},
-							cookie: {},
+							path: Object.create(null),
+							query: Object.create(null),
+							header: Object.create(null),
+							cookie: Object.create(null),
 						};
-						const bodyFields: Record<string, unknown> = {};
+						const bodyFields: Record<string, unknown> = Object.create(null);
 						let body: unknown;
-						for (const { name, target } of inputs) {
-							const value = values[name];
+						for (const { kind, name, target } of inputs) {
+							const value = Object.hasOwn(values[kind], name) ? values[kind][name] : undefined;
 							if (value === undefined) continue;
 							if (target.in === "param") input[target.param.in][target.param.name] = value;
 							else if (target.in === "field") bodyFields[target.field.name] = value;
@@ -173,7 +180,9 @@ function operationCommand(plan: CommandPlan, options: GenerateOptions): Generate
 						for (let pageNumber = 1; ; pageNumber++) {
 							// Bun types `clone()` as undici's Response, which lacks Bun's Headers extras.
 							const copy =
-								flagValues.paginate === true ? (response.clone() as Response) : undefined;
+								paginateFlag !== undefined && flagValues[paginateFlag] === true
+									? (response.clone() as Response)
+									: undefined;
 							let value = await readOperationResponse(op, sent, response);
 							if (value instanceof Response) value = await responseText(value);
 							if (fields.unwrap !== undefined) value = fields.unwrap(value, response);
@@ -255,7 +264,9 @@ function effectiveBody(
 	const flagOf = (field: SchemaField) =>
 		inputs.find(({ target }) => target.in === "field" && target.field === field);
 	for (const field of plan.bodyFields) {
-		const value = isPlainObject(body) ? body[field.name] : undefined;
+		// Own values only: a field may be named like an Object.prototype member.
+		const value =
+			isPlainObject(body) && Object.hasOwn(body, field.name) ? body[field.name] : undefined;
 		const input = flagOf(field);
 		if (value === undefined) {
 			if (field.required) {
@@ -264,15 +275,16 @@ function effectiveBody(
 			continue;
 		}
 		if (input === undefined) continue;
-		const { type, multiple, choices } = flagValue(spec, field.schema);
-		const items = multiple && Array.isArray(value) ? value : [value];
-		if (items.some((item) => typeof item !== type)) {
+		const { type, multiple, choices, nullable } = flagValue(spec, field.schema);
+		if (value === null && nullable) continue;
+		const items = multiple ? value : [value];
+		if (!Array.isArray(items) || items.some((item) => typeof item !== type)) {
 			problems.push(
 				`the body field "${field.name}" must be ${multiple ? "a list of " : "a "}${type}`,
 			);
 		} else if (
 			choices &&
-			items.some((item) => typeof item === "string" && !choices.includes(item))
+			items.some((item: unknown) => typeof item === "string" && !choices.includes(item))
 		) {
 			problems.push(`the body field "${field.name}" must be one of ${choices.join(", ")}`);
 		}
@@ -338,9 +350,13 @@ function flagDef(spec: OpenApiSpec, { target }: PlannedInput, plan: CommandPlan)
 function bodySchema(spec: OpenApiSpec, plan: CommandPlan): StandardSchema & StandardJSONSchema {
 	const schema = plan.op.body?.schema;
 	const objectBody = plan.bodyFields.length > 0 || record(schema)?.type === "object";
-	const flagged = new Set(
-		plan.inputs.flatMap(({ target }) => (target.in === "field" ? [target.field.name] : [])),
-	);
+	// Body fields the command fills itself: from a flag, or bound.
+	const filled = new Set([
+		...plan.inputs.flatMap(({ target }) => (target.in === "field" ? [target.field.name] : [])),
+		...Object.keys(plan.fields.bind ?? {}).filter((name) =>
+			plan.bodyFields.some((field) => field.name === name),
+		),
+	]);
 	const published =
 		record(standaloneSchema(spec, schema)) ??
 		(objectBody
@@ -355,11 +371,7 @@ function bodySchema(spec: OpenApiSpec, plan: CommandPlan): StandardSchema & Stan
 					required: plan.bodyFields.filter((field) => field.required).map((field) => field.name),
 				}
 			: {});
-	const required = Array.isArray(published.required)
-		? published.required.filter((name) => typeof name !== "string" || !flagged.has(name))
-		: [];
-	const { required: _required, ...rest } = published;
-	const jsonSchema = required.length > 0 ? { ...rest, required } : rest;
+	const jsonSchema = withoutRequired(published, filled);
 	return {
 		"~standard": {
 			version: 1,
@@ -370,6 +382,30 @@ function bodySchema(spec: OpenApiSpec, plan: CommandPlan): StandardSchema & Stan
 					: { issues: [{ message: "must be a JSON object" }] },
 			jsonSchema: { input: () => jsonSchema, output: () => jsonSchema },
 		},
+	};
+}
+
+/**
+ * `schema` without the `names` in its `required`, and in its `allOf` members' `required`: the body's
+ * own fields, as {@link schemaFields} lists them. Nested objects keep theirs.
+ */
+function withoutRequired(
+	schema: Readonly<Record<string, unknown>>,
+	names: ReadonlySet<string>,
+): Record<string, unknown> {
+	const { required, allOf, ...rest } = schema;
+	const kept = Array.isArray(required)
+		? required.filter((name) => typeof name !== "string" || !names.has(name))
+		: [];
+	return {
+		...rest,
+		...(kept.length > 0 && { required: kept }),
+		...(Array.isArray(allOf) && {
+			allOf: allOf.map((member) => {
+				const node = record(member);
+				return node === undefined ? member : withoutRequired(node, names);
+			}),
+		}),
 	};
 }
 

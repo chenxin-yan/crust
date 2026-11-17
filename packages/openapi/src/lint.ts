@@ -16,6 +16,7 @@ import {
 	type JsonSchema,
 	type SchemaField,
 	isArraySchema,
+	record,
 	schemaFields,
 	valueKind,
 } from "./schema.ts";
@@ -68,6 +69,9 @@ const MANY_ROOT_COMMANDS = 20;
 // The canonical flag spellings core rejects (`assertUsableSpelling`): integer-like names, `no-`
 // (boolean negation), `__proto__`, whitespace, `=` or a leading `-`.
 const UNFLAGGABLE = /^$|^(?:0|[1-9]\d*)$|^no-|^__proto__$|^-|[\s=]/;
+// The command and group names core rejects (`resolveCommandName`, `isBareToken`): empty,
+// whitespace, a leading `-` or `__proto__`. An argument name must only be non-empty.
+const UNUSABLE_COMMAND = /^$|[ \t\n\r\v\f]|^-|^__proto__$/;
 
 /**
  * Every problem with turning the spec's operations into commands: the model's diagnostics, then
@@ -201,15 +205,21 @@ export function planCommands(input: LintInput): {
 				.map((match) => match[1]!)
 				.filter((name) => pathParams.has(name));
 		const inputs: PlannedInput[] = [];
-		const sent = op.params.filter((param) => param.in !== "cookie");
+		const sent = op.params.filter(
+			(param) => param.in !== "cookie" && !bound.has(param.name) && !unmapped.has(param),
+		);
+		const paramInput = (param: Param, kind: PlannedInput["kind"]): PlannedInput => ({
+			kind,
+			name: rename(param.name),
+			source: `${param.in} parameter "${param.name}"`,
+			target: { in: "param", param },
+		});
+		// Arguments in the positional order, which fills the path: never the declaration order.
+		for (const name of positional) {
+			for (const param of sent) if (param.name === name) inputs.push(paramInput(param, "arg"));
+		}
 		for (const param of sent) {
-			if (bound.has(param.name) || unmapped.has(param)) continue;
-			inputs.push({
-				kind: positional.includes(param.name) ? "arg" : "flag",
-				name: rename(param.name),
-				source: `${param.in} parameter "${param.name}"`,
-				target: { in: "param", param },
-			});
+			if (!positional.includes(param.name)) inputs.push(paramInput(param, "flag"));
 		}
 		if (op.body !== undefined) {
 			const { body } = op;
@@ -223,13 +233,15 @@ export function planCommands(input: LintInput): {
 				for (const bodyField of bodySchemaFields) {
 					const { name: field, kind } = bodyField;
 					if (bound.has(field) || kind === "other") continue;
-					const repeated = sent.find((param) => kebab(param.name) === kebab(field));
+					const repeated = op.params.find(
+						(param) => param.in !== "cookie" && kebab(param.name) === kebab(field),
+					);
 					if (repeated !== undefined) {
 						report(
 							"warning",
 							"body-field-shadowed",
-							`${label}: the body field "${field}" repeats the ${repeated.in} parameter "${repeated.name}"; the parameter's input fills it, and the field gets no flag`,
-							"Pass the body field in `--body` when it needs another value",
+							`${label}: the body field "${field}" repeats the ${repeated.in} parameter "${repeated.name}", so it gets no flag; the parameter keeps its input`,
+							"Pass the body field in `--body`",
 						);
 						continue;
 					}
@@ -258,14 +270,18 @@ export function planCommands(input: LintInput): {
 		}
 
 		// The result after `unwrap`: the override's `outputSchema`, else the response's without `unwrap`.
-		const outputSchema =
+		const resultSchema =
 			fields.outputSchema ?? (fields.unwrap === undefined ? successSchema(op) : undefined);
-		// `--paginate` joins the pages' lists, so the result must be one, or unknown after `unwrap`.
+		// `--paginate` joins the pages' lists, so the result must be one, or unknown after `unwrap`,
+		// and not a tuple, whose positions joining would break.
 		const paginates =
 			(fields.paginate !== undefined || input.hasPaginate === true) &&
-			(outputSchema === undefined
+			(resultSchema === undefined
 				? fields.unwrap !== undefined
-				: isArraySchema(spec, outputSchema));
+				: isArraySchema(spec, resultSchema) && !isTupleSchema(resultSchema));
+		// One schema for one page and the joined pages: without the limits of one page's list.
+		const outputSchema =
+			paginates && resultSchema !== undefined ? withoutListLimits(resultSchema) : resultSchema;
 		if (paginates) {
 			inputs.push({
 				kind: "flag",
@@ -306,6 +322,26 @@ export function planCommands(input: LintInput): {
 		const group = fields.group ?? defaultGroup(op);
 		const name = fields.name ?? defaultName(op, group);
 		const command = group === "" ? name : `${group} ${name}`;
+		const names = [
+			...(group === "" ? [] : group.split(" ").map((word) => ["group", word] as const)),
+			["command", name] as const,
+			...inputs.flatMap(({ kind, name: arg }) =>
+				kind === "arg" ? [["argument", arg] as const] : [],
+			),
+		];
+		const unusable = names.filter(([kind, word]) =>
+			kind === "argument" ? word === "" : UNUSABLE_COMMAND.test(word),
+		);
+		for (const [kind, word] of unusable) {
+			report(
+				"error",
+				"unusable-name",
+				`${label}: the ${kind} name "${word}" is ${kind === "argument" ? "empty" : 'empty, has whitespace, starts with "-" or is "__proto__"'}, which core rejects`,
+				kind === "argument"
+					? "Set `flagName` for its parameter in the operation's override"
+					: `Set \`${kind === "group" ? "group" : "name"}\` in the operation's override`,
+			);
+		}
 		placed.push({
 			op,
 			fields,
@@ -408,14 +444,18 @@ export function planCommands(input: LintInput): {
 	return { diagnostics, commands: placed.map(({ command: _command, ...plan }) => plan) };
 }
 
-/** The JSON Schema of the operation's 2xx JSON responses, when every one has the same. */
+/**
+ * The JSON Schema of the operation's 2xx responses, when every one is JSON with the same schema:
+ * a text or empty 2xx result would not fit it.
+ */
 function successSchema(op: Operation): JsonSchema | undefined {
-	const schemas = op.responses
-		.filter(
-			({ status, contentType }) =>
-				isSuccess(status) && contentType !== undefined && isJsonMediaType(contentType),
-		)
-		.map(({ schema }) => schema);
+	const successes = op.responses.filter(({ status }) => isSuccess(status));
+	if (
+		successes.some(({ contentType }) => contentType === undefined || !isJsonMediaType(contentType))
+	) {
+		return undefined;
+	}
+	const schemas = successes.map(({ schema }) => schema);
 	const [first] = schemas;
 	if (first === undefined || schemas.some((schema) => schema === undefined)) return undefined;
 	const text = JSON.stringify(first);
@@ -476,4 +516,33 @@ function paramProblem(
 	}
 	const shape = param.in === "path" ? "a scalar" : "a scalar or an array of scalars";
 	return [level, "unsupported-param-style", `is not ${shape} in style ${expected}${reach}`, fix];
+}
+
+/** Keywords that constrain one list as a whole, which joined pages need not meet. */
+const LIST_LIMITS = [
+	"minItems",
+	"maxItems",
+	"uniqueItems",
+	"contains",
+	"minContains",
+	"maxContains",
+];
+
+/** A schema with list-wide keywords dropped from it and from its `allOf` members; its items keep theirs. */
+function withoutListLimits(schema: JsonSchema): JsonSchema {
+	const node = record(schema);
+	if (node === undefined) return schema;
+	const out = Object.fromEntries(
+		Object.entries(node).filter(([key]) => !LIST_LIMITS.includes(key)),
+	);
+	if (Array.isArray(node.allOf)) out.allOf = node.allOf.map(withoutListLimits);
+	return out;
+}
+
+/** Whether a list schema fixes its leading items (`prefixItems`, or a 3.0-style `items` array), also in `allOf`. */
+function isTupleSchema(schema: unknown): boolean {
+	const node = record(schema);
+	if (node === undefined) return false;
+	if (node.prefixItems !== undefined || Array.isArray(node.items)) return true;
+	return Array.isArray(node.allOf) && node.allOf.some(isTupleSchema);
 }

@@ -123,7 +123,7 @@ describe("api --list and --spec", () => {
 			"GET /users listUsers List users [unavailable: no-success-response]",
 			"POST /users createUser [unavailable: no-success-response]",
 			"GET /users/{id} getUser [unavailable: no-success-response]",
-			"DELETE /users/{id}",
+			"DELETE /users/{id} [unavailable: missing-operation-id]",
 			"GET /teams listTeams List teams [unavailable: no-success-response]",
 		]);
 		expect(calls).toEqual([]);
@@ -1094,7 +1094,7 @@ describe("api with json()", () => {
 				operationId: "getUser",
 				unavailable: "no-success-response",
 			},
-			{ method: "DELETE", path: "/users/{id}" },
+			{ method: "DELETE", path: "/users/{id}", unavailable: "missing-operation-id" },
 			{
 				method: "GET",
 				path: "/teams",

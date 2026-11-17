@@ -449,6 +449,14 @@ describe("generated commands", () => {
 		);
 	});
 
+	it("marks an operation without an operationId unavailable in api --list", async () => {
+		const { app } = appFor({ "/anonymous": { get: {} } });
+
+		expect((await captureExecute(app, ["api", "--list"])).stdout).toBe(
+			"GET /anonymous Probe [unavailable: missing-operation-id]",
+		);
+	});
+
 	it("leaves out an operation whose group would clash with the api command", async () => {
 		const acme = defineApi({
 			spec: {
@@ -637,5 +645,308 @@ describe("acme.manifest()", () => {
 				}),
 			],
 		});
+	});
+});
+
+const ok = {
+	"200": { description: "OK", content: { "application/json": { schema: { type: "object" } } } },
+};
+
+/** A handle and an app for `paths`, with the operations' common fields filled in. */
+function appFor(
+	paths: Record<string, Record<string, Record<string, unknown>>>,
+	options: Partial<DefineApiOptions> & { openapi?: string } = {},
+) {
+	const { openapi = "3.1.0", ...rest } = options;
+	const filled = Object.fromEntries(
+		Object.entries(paths).map(([path, item]) => [
+			path,
+			Object.fromEntries(
+				Object.entries(item).map(([method, op]) => [
+					method,
+					method === "parameters" ? op : { summary: "Probe", responses: ok, ...op },
+				]),
+			),
+		]),
+	);
+	const acme = buildApi({ spec: { openapi, paths: filled }, ...rest });
+	return { acme, app: new Crust("acme").extend(acme.extension).add(...acme.commands) };
+}
+
+const pathParam = (name: string) => ({
+	name,
+	in: "path",
+	required: true,
+	schema: { type: "string" },
+});
+const jsonBody = (schema: unknown) => ({
+	requestBody: { required: true, content: { "application/json": { schema } } },
+});
+
+describe("generated command inputs", () => {
+	it("orders arguments by the path template, or by the override's positional list", async () => {
+		const calls = stubFetch(() => Response.json({}));
+		const paths = {
+			"/{a}/{b}/x": { get: { operationId: "probe", parameters: [pathParam("b"), pathParam("a")] } },
+		};
+		const { app } = appFor(paths);
+		const reordered = appFor(paths).acme.override({ probe: { positional: ["b", "a"] } });
+
+		await captureExecute(app, ["probe", "A", "B"]);
+		await captureExecute(new Crust("acme").extend(reordered.extension).add(...reordered.commands), [
+			"probe",
+			"B",
+			"A",
+		]);
+
+		expect(calls.map(({ url }) => url)).toEqual([
+			"https://api.example.com/v1/A/B/x",
+			"https://api.example.com/v1/A/B/x",
+		]);
+	});
+
+	it("reads an argument from the arguments, not from an inherited flag of the same name", async () => {
+		const calls = stubFetch(() => Response.json({}));
+		const { acme } = appFor({
+			"/{json}": { get: { operationId: "probe", parameters: [pathParam("json")] } },
+		});
+		const app = new Crust("acme").extend(json(), acme.extension).add(...acme.commands);
+
+		expect((await captureExecute(app, ["probe", "42"])).exitCode).toBe(0);
+		expect(calls[0]?.url).toBe("https://api.example.com/v1/42");
+	});
+
+	it("sends parameters, body fields and bindings named like Object.prototype members", async () => {
+		const calls = stubFetch(() => Response.json({}));
+		const { app } = appFor({
+			"/{__proto__}": { get: { operationId: "probe", parameters: [pathParam("__proto__")] } },
+			"/body": {
+				post: {
+					operationId: "post-body",
+					// Computed: a literal `__proto__` key would set the prototype.
+					...jsonBody({ type: "object", properties: { ["__proto__"]: { type: "string" } } }),
+				},
+			},
+			"/required": {
+				post: {
+					operationId: "post-required",
+					...jsonBody({
+						type: "object",
+						required: ["toString"],
+						properties: { toString: { type: "object" } },
+					}),
+				},
+			},
+		});
+		const bound = appFor({
+			"/{__proto__}": { get: { operationId: "probe", parameters: [pathParam("__proto__")] } },
+		}).acme.override({ probe: { bind: Object.fromEntries([["__proto__", () => "bound"]]) } });
+
+		expect((await captureExecute(app, ["probe", "abc"])).exitCode).toBe(0);
+		expect((await captureExecute(app, ["post-body", "--proto", "abc"])).exitCode).toBe(0);
+		expect(await captureExecute(app, ["post-required", "--body", "{}"])).toMatchObject({
+			exitCode: 1,
+			stderr: expect.stringContaining('missing the body field "toString"'),
+		});
+		await captureExecute(new Crust("acme").extend(bound.extension).add(...bound.commands), [
+			"probe",
+		]);
+
+		expect(calls.map(({ url, body }) => [url, body])).toEqual([
+			["https://api.example.com/v1/abc", undefined],
+			["https://api.example.com/v1/body", '{"__proto__":"abc"}'],
+			["https://api.example.com/v1/bound", undefined],
+		]);
+	});
+
+	it("checks a list field given in --body as a list, and accepts null where the schema does", async () => {
+		const calls = stubFetch(() => Response.json({}));
+		const fields = {
+			tags: { type: "array", items: { type: "string" } },
+			name: { type: ["string", "null"] },
+		};
+		const { app } = appFor({
+			"/p": { post: { operationId: "probe", ...jsonBody({ type: "object", properties: fields }) } },
+		});
+		const v30 = appFor(
+			{
+				"/p": {
+					post: {
+						operationId: "probe",
+						...jsonBody({
+							type: "object",
+							properties: { name: { type: "string", nullable: true } },
+						}),
+					},
+				},
+			},
+			{ openapi: "3.0.3" },
+		);
+
+		expect(await captureExecute(app, ["probe", "--body", '{"tags":"x"}'])).toMatchObject({
+			exitCode: 1,
+			stderr: expect.stringContaining('the body field "tags" must be a list of string'),
+		});
+		expect(
+			(await captureExecute(app, ["probe", "--body", '{"tags":[],"name":null}'])).exitCode,
+		).toBe(0);
+		expect((await captureExecute(v30.app, ["probe", "--body", '{"name":null}'])).exitCode).toBe(0);
+		expect(calls).toHaveLength(2);
+	});
+
+	it("publishes no required body field a flag or a binding fills, also inside allOf", async () => {
+		const schema = {
+			allOf: [
+				{
+					type: "object",
+					required: ["name", "region", "nested"],
+					properties: {
+						name: { type: "string" },
+						region: { type: "string" },
+						nested: {
+							type: "object",
+							required: ["name"],
+							properties: { name: { type: "string" } },
+						},
+					},
+				},
+			],
+		};
+		const { acme } = appFor({ "/p": { post: { operationId: "probe", ...jsonBody(schema) } } });
+		const bound = acme.override({ probe: { bind: { region: () => "eu" } } });
+		const app = new Crust("acme").extend(bound.extension).add(...bound.commands);
+		const body = at(await app.snapshot(), "probe").flags.body?.inputSchema;
+
+		expect(body).toEqual({
+			allOf: [
+				{
+					type: "object",
+					required: ["nested"],
+					properties: {
+						name: { type: "string" },
+						region: { type: "string" },
+						nested: {
+							type: "object",
+							required: ["name"],
+							properties: { name: { type: "string" } },
+						},
+					},
+				},
+			],
+		});
+	});
+
+	it("leaves out an operation whose command, group or argument name core rejects", async () => {
+		const { acme, app } = appFor({
+			"/a": { get: { operationId: "日本" } },
+			"/b": { get: { operationId: "___" } },
+			"/c/{___}": { get: { operationId: "probe", parameters: [pathParam("___")] } },
+		});
+
+		expect(Object.keys((await app.snapshot()).subCommands)).toEqual(["api"]);
+		expect(
+			acme
+				.lint()
+				.flatMap(({ code, operationId }) => (code === "unusable-name" ? [operationId] : [])),
+		).toEqual(["日本", "___", "probe"]);
+	});
+
+	it("binds from a `.use()`d Context that owns a flag, which the generated command takes", async () => {
+		const calls = stubFetch(() => Response.json({}));
+		const region = defineContext("region")
+			.flags({ region: { type: "string", default: "eu" } })
+			.setup(({ flags }) => flags.region);
+		const acme = appFor({
+			"/{id}": { get: { operationId: "probe", parameters: [pathParam("id")] } },
+		})
+			.acme.use(region)
+			.override({ probe: { bind: { id: async (ctx) => await ctx.region } } });
+		const app = new Crust("acme")
+			.extend(acme.extension)
+			.provide(region())
+			.add(...acme.commands);
+
+		expect((await captureExecute(app, ["probe", "--region", "us"])).exitCode).toBe(0);
+		expect(calls[0]?.url).toBe("https://api.example.com/v1/us");
+	});
+
+	it("enters --paginate only when the command offers it, not for a spec parameter named paginate", async () => {
+		const calls = stubFetch(() => Response.json({ id: "1" }));
+		const { app } = appFor(
+			{
+				"/p": {
+					get: {
+						operationId: "probe",
+						parameters: [{ name: "paginate", in: "query", schema: { type: "boolean" } }],
+					},
+				},
+			},
+			{ paginate: () => ({ path: "/next" }) },
+		);
+
+		expect(await app.run(["probe"], { flags: { paginate: true } })).toMatchObject({
+			status: "completed",
+			result: { id: "1" },
+		});
+		expect(calls.map(({ url }) => url)).toEqual(["https://api.example.com/v1/p?paginate=true"]);
+	});
+});
+
+describe("generated output schemas", () => {
+	const responses = (extra: Record<string, unknown>) => ({ ...ok, ...extra });
+
+	it("advertises the response schema only when every 2xx response is that JSON", async () => {
+		const { app } = appFor({
+			"/text": {
+				get: {
+					operationId: "text",
+					responses: responses({ "201": { description: "x", content: { "text/plain": {} } } }),
+				},
+			},
+			"/empty": {
+				get: { operationId: "empty", responses: responses({ "204": { description: "x" } }) },
+			},
+			"/same": { get: { operationId: "same", responses: responses({ "201": ok["200"] }) } },
+		});
+		const snapshot = await app.snapshot();
+
+		expect(at(snapshot, "text").outputSchema).toBeUndefined();
+		expect(at(snapshot, "empty").outputSchema).toBeUndefined();
+		expect(at(snapshot, "same").outputSchema).toEqual({ type: "object" });
+	});
+
+	it("advertises a joined --paginate result without the page's own list limits, and offers no joining for a tuple", async () => {
+		const list = (schema: unknown) => ({
+			"200": { description: "OK", content: { "application/json": { schema } } },
+		});
+		const { app } = appFor(
+			{
+				"/bounded": {
+					get: {
+						operationId: "bounded",
+						responses: list({
+							type: "array",
+							maxItems: 1,
+							uniqueItems: true,
+							items: { type: "number", maximum: 9 },
+						}),
+					},
+				},
+				"/tuple": {
+					get: {
+						operationId: "tuple",
+						responses: list({ type: "array", prefixItems: [{ type: "number" }] }),
+					},
+				},
+			},
+			{ paginate: () => undefined },
+		);
+		const snapshot = await app.snapshot();
+
+		expect(at(snapshot, "bounded").outputSchema).toEqual({
+			type: "array",
+			items: { type: "number", maximum: 9 },
+		});
+		expect(Object.keys(at(snapshot, "tuple").flags)).not.toContain("paginate");
 	});
 });

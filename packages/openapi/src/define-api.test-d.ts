@@ -309,6 +309,15 @@ function _typecheckChainContexts() {
 		.use(confirm)
 		// @ts-expect-error -- a binding resolves to a string
 		.each(() => ({ bind: { id: async (ctx) => (await ctx.confirm)("x") } }));
+	// An added command's Contexts are not the generated commands': `.use()` them for a callback.
+	defineApi({ spec, baseUrl })
+		.add("users", purge)
+		// @ts-expect-error -- `region` is only used by the added `purge`
+		.onConfirm(async (ctx) => void (await ctx.region));
+	defineApi({ spec, baseUrl })
+		.add("users", purge)
+		// @ts-expect-error -- `region` is only used by the added `purge`
+		.each(() => ({ bind: { id: async (ctx) => await ctx.region } }));
 	// The client is in `ctx` from the start.
 	defineApi({ spec, baseUrl }).each(() => ({
 		bind: { id: async (ctx) => (await ctx.api).baseUrl },

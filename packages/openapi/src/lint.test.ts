@@ -240,6 +240,24 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 			message: expect.stringContaining(`the flag "${name}"`),
 		})),
 	},
+	"unusable-name": {
+		input: {
+			spec: spec({
+				"/a": { get: op("日本") },
+				"/b/{___}": {
+					get: op("b", { parameters: [{ name: "___", in: "path", schema: { type: "string" } }] }),
+				},
+				"/c": { get: op("c") },
+			}),
+			override: { c: { group: "dns  records", name: "-c" } },
+		},
+		expected: [
+			'the command name ""',
+			'the argument name ""',
+			'the group name ""',
+			'the command name "-c"',
+		].map((text) => ({ level: "error" as const, message: expect.stringContaining(text) })),
+	},
 	"body-field-shadowed": {
 		input: {
 			spec: spec({

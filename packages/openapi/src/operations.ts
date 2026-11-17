@@ -73,6 +73,7 @@ export interface Diagnostic {
 		| "flag-collision"
 		| "reserved-input-name"
 		| "unflaggable-name"
+		| "unusable-name"
 		| "body-field-shadowed"
 		| "many-root-commands"
 		| "override-unknown-operation"

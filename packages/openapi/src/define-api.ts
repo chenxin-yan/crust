@@ -77,6 +77,8 @@ type AddedDeps<Ds extends readonly unknown[]> = Ds extends readonly [infer D, ..
 export interface Api<
 	Operations = unknown,
 	Deps extends ContextMap = { api: ApiClient<Operations> },
+	// The Contexts of the `.add()`ed commands, which the generated commands do not `.use()`.
+	Added extends ContextMap = {},
 > {
 	/** Contributes the `api` command and provides the `api` Context; pass it to `.extend()`. */
 	readonly extension: Extension<
@@ -94,28 +96,33 @@ export interface Api<
 	 * commands and the top-level groups, to pass to `.add()`. An operation with a lint error is
 	 * left out. Reads the spec.
 	 */
-	readonly commands: readonly CommandDefinition<string, readonly string[], CommandShape, Deps>[];
+	readonly commands: readonly CommandDefinition<
+		string,
+		readonly string[],
+		CommandShape,
+		MergeContext<Deps, Added>
+	>[];
 	/** Context factories or Extensions every generated command `.use()`s, which types `ctx` in the callbacks after it. */
 	use<const Us extends readonly [UseSource, ...UseSource[]]>(
 		...sources: Us
-	): Api<Operations, MergeContext<Deps, UsedContexts<Us>>>;
+	): Api<Operations, MergeContext<Deps, UsedContexts<Us>>, Added>;
 	/** Asks to confirm an operation's `confirm` message before its request; resolves when confirmed, throws otherwise. */
 	onConfirm(
 		handler: (ctx: ContextBag<Deps>, message: string) => void | Promise<void>,
-	): Api<Operations, Deps>;
+	): Api<Operations, Deps, Added>;
 	/** The override for every operation, synchronous and pure; replaces the previous rule. */
 	each(
 		rule: (
 			operation: Operation & { readonly id: OperationIdOf<Operations> },
 		) => OperationOverride<Deps> | undefined,
-	): Api<Operations, Deps>;
+	): Api<Operations, Deps, Added>;
 	/** Overrides by operationId, whose fields replace the rule's; an entry for the same operationId replaces the previous one's fields. */
-	override(entries: Overrides<Operations, Deps>): Api<Operations, Deps>;
+	override(entries: Overrides<Operations, Deps>): Api<Operations, Deps, Added>;
 	/** Puts the app's own commands in a group path, such as `"dns records"` (`""` is the root), creating the group when no operation maps to it. */
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
 		group: string,
 		...definitions: Ds
-	): Api<Operations, Deps & AddedDeps<Ds>>;
+	): Api<Operations, Deps, Added & AddedDeps<Ds>>;
 	/** Every problem with turning the operations into commands; an error leaves its operation out. Reads the spec. */
 	lint(): Diagnostic[];
 	/** The generated command surface, sorted, with the lint errors. Reads the spec. */
@@ -185,7 +192,10 @@ export function defineApi(options: DefineApiOptions): Api {
 }
 
 // Untyped by the spec, like the `defineApi` implementation; its overload adds the spec's names.
-function createApi<Deps extends ContextMap>(base: ApiBase, state: ApiState): Api<unknown, Deps> {
+function createApi<Deps extends ContextMap, Added extends ContextMap>(
+	base: ApiBase,
+	state: ApiState,
+): Api<unknown, Deps, Added> {
 	let planned: ReturnType<typeof planCommands> | undefined;
 	const plan = () =>
 		(planned ??= planCommands({
@@ -212,12 +222,13 @@ function createApi<Deps extends ContextMap>(base: ApiBase, state: ApiState): Api
 		);
 		return commands.filter(({ op }) => !failed.has(op.id));
 	};
+	// By `METHOD path`: an operation without an operationId is left out too.
 	const unavailable = (): Map<string, string> => {
 		const codes = new Map<string, string>();
-		for (const { level, operationId, code } of plan().diagnostics) {
-			if (level === "error" && operationId !== undefined && !codes.has(operationId)) {
-				codes.set(operationId, code);
-			}
+		for (const { level, method, path, code } of plan().diagnostics) {
+			if (level !== "error" || method === undefined || path === undefined) continue;
+			const label = operationLabel(method, path);
+			if (!codes.has(label)) codes.set(label, code);
 		}
 		return codes;
 	};
@@ -239,15 +250,15 @@ function createApi<Deps extends ContextMap>(base: ApiBase, state: ApiState): Api
 			}));
 		},
 		use: <const Us extends readonly [UseSource, ...UseSource[]]>(...sources: Us) =>
-			createApi<MergeContext<Deps, UsedContexts<Us>>>(base, {
+			createApi<MergeContext<Deps, UsedContexts<Us>>, Added>(base, {
 				...state,
 				sources: [...state.sources, ...sources],
 			}),
 		onConfirm: (onConfirm: NonNullable<ApiState["onConfirm"]>) =>
-			createApi<Deps>(base, { ...state, onConfirm }),
-		each: (each: NonNullable<ApiState["each"]>) => createApi<Deps>(base, { ...state, each }),
+			createApi<Deps, Added>(base, { ...state, onConfirm }),
+		each: (each: NonNullable<ApiState["each"]>) => createApi<Deps, Added>(base, { ...state, each }),
 		override: (entries: Readonly<Record<string, OverrideEntry>>) =>
-			createApi<Deps>(base, {
+			createApi<Deps, Added>(base, {
 				...state,
 				override: Object.fromEntries([
 					...Object.entries(state.override),
@@ -258,7 +269,7 @@ function createApi<Deps extends ContextMap>(base: ApiBase, state: ApiState): Api
 				]),
 			}),
 		add: <const Ds extends readonly GeneratedDefinition[]>(group: string, ...definitions: Ds) =>
-			createApi<Deps & AddedDeps<Ds>>(base, {
+			createApi<Deps, Added & AddedDeps<Ds>>(base, {
 				...state,
 				added: [...state.added, { group, definitions }],
 			}),
@@ -267,7 +278,7 @@ function createApi<Deps extends ContextMap>(base: ApiBase, state: ApiState): Api
 	});
 	// The callbacks are stored with an erased `ctx`: each generated command passes them its own,
 	// which has every Context `Deps` lists, since it `.use()`s the client and the same sources.
-	return handle as Api<unknown, Deps>;
+	return handle as Api<unknown, Deps, Added>;
 }
 
 /** The `api` Extension of a handle: `api --list` marks the operations it leaves out. */

@@ -80,7 +80,7 @@ function listOperations(
 ): ListedOperation[] {
 	return rawOperations(spec).map(({ method, path, operation }) => {
 		const { operationId, summary } = operation as { operationId?: unknown; summary?: unknown };
-		const code = typeof operationId === "string" ? unavailable.get(operationId) : undefined;
+		const code = unavailable.get(`${method.toUpperCase()} ${path}`);
 		return {
 			method: method.toUpperCase(),
 			path,
@@ -338,7 +338,7 @@ export function createApiCommand(
 		paginate,
 		unavailable,
 	}: Pick<DefineApiOptions, "baseUrl" | "paginate"> & {
-		/** The code of the lint error that leaves each such operation out, by operationId. */
+		/** The code of the lint error that leaves each such operation out, by `METHOD path`. */
 		readonly unavailable: () => ReadonlyMap<string, string>;
 	},
 ): ApiCommandDefinition {

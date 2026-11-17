@@ -194,8 +194,16 @@ export function isArraySchema(spec: OpenApiSpec, value: unknown): boolean {
 export function flagValue(
 	spec: OpenApiSpec,
 	value: unknown,
-): { type: "string" | "number" | "boolean"; multiple: boolean; choices?: string[] } {
+): {
+	type: "string" | "number" | "boolean";
+	multiple: boolean;
+	choices?: string[];
+	/** Whether the value itself may be `null` (by `type` or `enum`), which no flag sends. */
+	nullable: boolean;
+} {
 	const view = record(typedView(spec, value, 0));
+	const nullable =
+		[view?.type].flat().includes("null") || (Array.isArray(view?.enum) && view.enum.includes(null));
 	const multiple = typeShape(view) === "array";
 	const item = multiple ? record(typedView(spec, publishedSchema(spec, view?.items), 0)) : view;
 	const values = Array.isArray(item?.enum) ? item.enum.filter((entry) => entry !== null) : [];
@@ -206,7 +214,7 @@ export function flagValue(
 			? "boolean"
 			: "string";
 	const choices = values.every((entry): entry is string => typeof entry === "string") ? values : [];
-	return { type, multiple, ...(type === "string" && choices.length > 0 && { choices }) };
+	return { type, multiple, nullable, ...(type === "string" && choices.length > 0 && { choices }) };
 }
 
 /** The node budget of {@link standaloneSchema}: a larger schema is too big to publish whole. */
