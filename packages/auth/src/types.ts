@@ -331,8 +331,8 @@ export interface AuthStatus {
 	readonly expiresAt?: number;
 	/** The scope the server granted the stored login. */
 	readonly scope?: string;
-	/** Where stored logins are kept, whichever `source` is used. */
-	readonly storage: {
+	/** Where stored logins are kept; absent for `"env"`, which reads no file or keyring. */
+	readonly storage?: {
 		/** The OS keyring holding the file's key, or `"file"` when tokens are stored in plaintext. */
 		readonly kind: CredentialStoreStatus["kind"];
 		/** Stored logins whose tokens are still plaintext, until their next login or refresh. */
@@ -356,7 +356,8 @@ export interface AuthClient {
 	readonly token: (options?: { signal?: AbortSignal; baseUrl?: string }) => Promise<AuthToken>;
 	/**
 	 * Where the token would come from, the stored login's expiry and scope, and where logins are
-	 * stored. Reads the login file and asks the OS keyring for the key, within 5 seconds.
+	 * stored. Without an `env` token, reads the login file and asks the OS keyring for the key,
+	 * within 5 seconds.
 	 */
 	readonly status: () => Promise<AuthStatus>;
 	/** Deletes the stored login, then revokes it at the server as a best effort. */

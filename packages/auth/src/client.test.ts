@@ -688,7 +688,7 @@ describe("the stored login", () => {
 		const envToken = await auth.token();
 		expect(envToken).toEqual({ value: "ENV_TOKEN", source: "env" });
 		expect(envToken.refresh).toBeUndefined();
-		expect(await auth.status()).toEqual({ source: "env", storage: noLogins });
+		expect(await auth.status()).toEqual({ source: "env" });
 		await auth.login({ onUrl: browser().onUrl, onCode: noCode });
 		expect((await auth.token()).value).toBe("ENV_TOKEN");
 		expect(readFileSync(join(dir, "credentials.json"), "utf8")).not.toContain("ENV_TOKEN");
@@ -696,6 +696,21 @@ describe("the stored login", () => {
 		vi.stubEnv("ACME_TOKEN", "  ");
 		expect(await auth.token()).toMatchObject({ value: "AT", source: "login" });
 	});
+
+	it.each(["corrupt", "unsafe"])(
+		"status() with an env token reads neither the file nor the keyring, even when it is %s",
+		async (state) => {
+			const keyring = fakeKeyring();
+			const { auth, dir } = await signedIn(undefined, { env: "ACME_TOKEN" });
+			if (state === "corrupt") writeFileSync(join(dir, "credentials.json"), "{ not json");
+			else if (process.platform !== "win32") chmodSync(dir, 0o777);
+			vi.stubEnv("ACME_TOKEN", "ENV_TOKEN");
+			const reads = keyring.calls.length;
+			expect(await auth.status()).toEqual({ source: "env" });
+			expect(keyring.calls.length).toBe(reads);
+			expect((await auth.token()).value).toBe("ENV_TOKEN");
+		},
+	);
 
 	it("an env token is trimmed and honors an aborted signal", async () => {
 		const { auth } = setup(undefined, { env: "ACME_TOKEN" });

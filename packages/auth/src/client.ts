@@ -194,9 +194,10 @@ export function createAuth(options: CreateAuthOptions): AuthClient {
 	}
 
 	async function status(): Promise<AuthStatus> {
+		// An env token needs no login file: CI and containers may have none, or a broken one.
+		if (envValue() !== undefined) return { source: "env" };
 		const { kind, plaintextRecords } = await store.status();
 		const storage = { kind, plaintextRecords };
-		if (envValue() !== undefined) return { source: "env", storage };
 		try {
 			const { expiresAt, scope: granted } = await tokenSourceInternals(source).storedLogin();
 			return { source: "login", expiresAt, scope: granted, storage };
