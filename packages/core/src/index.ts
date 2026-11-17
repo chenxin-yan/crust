@@ -30,6 +30,8 @@ export type {
 	InferExtensionFlags,
 	InvocationOutcome,
 	Renderer,
+	UsedContexts,
+	UseSource,
 } from "./api/extension.ts";
 export { defineExtension } from "./api/extension.ts";
 export type { ExtensionId } from "./identity.ts";
