@@ -64,7 +64,7 @@ If `onUrl` or `onCode` throws or rejects, the login fails with that error, close
 
 - `auth.token({ signal?, baseUrl? })` returns the `env` variable's value, trimmed, when it is set and not blank, with `source` `"env"` and no `refresh`. Otherwise it returns the stored login's token, refreshed first when it expires within 30 seconds; with `baseUrl`, its origin must be one of `apiOrigins`, or it throws `CredentialMismatchError` before anything is sent. A token from `env` is not checked against `apiOrigins`. No login → `LoginRequiredError`.
 - `refresh()` on a stored login's token refreshes it unless another process already did, for a 401 retry.
-- `auth.status()` reads where the token would come from, the stored login's `expiresAt` and `scope`, and `storage`: the keyring `kind` (`"file"` without one) and `plaintextRecords`, the logins not yet encrypted. It sends no request, refreshes nothing, and waits for no lock; it asks the keyring for the key once, within 5 seconds, and never writes it. A corrupt file or an unsafe directory still throws its error.
+- `auth.status()` reads where the token would come from, the stored login's `expiresAt` and `scope`, and `storage`: the keyring `kind` (`"file"` without one) and `plaintextRecords`, the logins not yet encrypted. It sends no request, refreshes nothing, and waits for no lock; it asks the keyring for the key once, within 5 seconds, and never writes it. A corrupt file or an unsafe directory still throws its error. When the `env` variable is set, it returns `{ source: "env" }` without reading the file or the keyring.
 - `auth.logout({ signal? })` deletes the login, then revokes it at the server, and reports both outcomes as in [Login and logout](#login-and-logout).
 
 <auto-type-table path="../../../../../packages/auth/src/types.ts" name="AuthToken" />
@@ -263,7 +263,7 @@ An unreadable key is never replaced, since the old one may still exist. The next
 
 <auto-type-table path="../../../../../packages/auth/src/types.ts" name="CredentialStoreStatus" />
 
-On Node, add `@napi-rs/keyring` to your `dependencies`. A CLI that `crust build` bundles for Node should also list it in [`crust.external`](/docs/guide/build-and-distribution#keep-dependencies-external), so npm installs the native module for the user's platform; bundled, the build machine's native module would be copied instead. A CLI that runs only on Bun does not need it.
+On Node, add `@napi-rs/keyring` to your `dependencies`. A CLI that `crust build` bundles for Node should also list it in [`crust.external`](/docs/guide/build-and-distribution#keep-dependencies-external), so npm installs the native module for the user's platform; bundled, the build machine's native module would be copied instead. On a platform that module does not fit, it fails to load, which counts as no keyring: tokens go to the file in plaintext with the `plaintext-storage` warning, or `strict: true` refuses the login. A CLI that runs only on Bun does not need it.
 
 ### Login and logout
 
