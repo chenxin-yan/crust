@@ -1013,6 +1013,34 @@ describe("generated command bindings, positionals and confirmation", () => {
 		expect(bind).toHaveBeenCalledTimes(1);
 	});
 
+	it("runs an `.each()` binding only for an operation with an input of its name", async () => {
+		const calls = stubFetch(() => Response.json({}));
+		const accountId = vi.fn(async () => "a1");
+		const { acme } = appFor({
+			"/status": { get: { operationId: "status" } },
+			"/accounts/{accountId}": {
+				get: {
+					operationId: "account",
+					parameters: [
+						pathParam("accountId"),
+						{ name: "accountId", in: "query", required: true, schema: { type: "string" } },
+					],
+				},
+			},
+		});
+		const shared = acme.each(() => ({ bind: { accountId } }));
+		const app = new Crust("acme").extend(shared.extension).add(...shared.commands);
+
+		expect((await captureExecute(app, ["status"])).exitCode).toBe(0);
+		expect(accountId).not.toHaveBeenCalled();
+		expect((await captureExecute(app, ["account"])).exitCode).toBe(0);
+		expect(accountId).toHaveBeenCalledTimes(1);
+		expect(calls.map(({ url }) => url)).toEqual([
+			"https://api.example.com/v1/status",
+			"https://api.example.com/v1/accounts/a1?accountId=a1",
+		]);
+	});
+
 	it("maps a parameter by default when its bind or flagName entry is undefined", async () => {
 		const { acme } = appFor({
 			"/{id}": {

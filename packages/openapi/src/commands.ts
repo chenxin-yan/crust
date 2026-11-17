@@ -157,13 +157,17 @@ function operationCommand(plan: CommandPlan, options: GenerateOptions): Generate
 							else if (target.in === "body") body = value;
 						}
 						// One value per binding, for every parameter and body field of its name.
+						// A binding the operation has no input for (an `.each()` rule's) is never called.
 						for (const [name, bind] of Object.entries(fields.bind ?? {})) {
 							if (bind === undefined) continue;
+							const params = op.params.filter(
+								(param) => param.name === name && param.in !== "cookie",
+							);
+							const field = plan.bodyFields.some((bodyField) => bodyField.name === name);
+							if (params.length === 0 && !field) continue;
 							const value = await bind(ctx);
-							for (const param of op.params) {
-								if (param.name === name && param.in !== "cookie") input[param.in][name] = value;
-							}
-							if (plan.bodyFields.some((field) => field.name === name)) bodyFields[name] = value;
+							for (const param of params) input[param.in][name] = value;
+							if (field) bodyFields[name] = value;
 						}
 						body = effectiveBody(spec, plan, body, bodyFields);
 						const { path, query, header } = input;

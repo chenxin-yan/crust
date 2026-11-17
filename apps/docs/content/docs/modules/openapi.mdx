@@ -227,7 +227,7 @@ The command sends the request through the client, so it gets the base URL, auth,
 
 - The body is `--body` with the body field flags merged over it. Before the request, the command checks it: a required body or required field that is missing, or a flagged field's value of another type or outside its enum, such as one from `--body`, is a `VALIDATION` error naming it (`missing the body field "name" (--name)`). An optional body with nothing given is not sent.
 - `--body` takes a JSON object for an object body. Its published JSON Schema stands alone: every local `$ref` is replaced by its target (in a 3.0 document, translated like the [operation model's schemas](#operations)), and the required fields a flag can fill are left out of its `required`. A recursive or very large schema is published as its top-level fields, each standing alone or `{}`.
-- A [`bind`](#overrides) runs once before the request and fills every parameter and the body field of its name, and those inputs are not offered.
+- A [`bind`](#overrides) runs once before the request and fills every parameter and the body field of its name, and those inputs are not offered. It runs only for an operation that has such an input, so an `.each()` binding is never called for the others.
 - A [`confirm`](#confirmation) message is confirmed after the whole request is built and checked, so a rejected one never asks, and before it is sent.
 
 ### Output
