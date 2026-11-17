@@ -431,7 +431,8 @@ function apiExtension(
 						`the app's generated commands are not this handle's: missing or different ${missing.map((path) => `"${path}"`).join(", ")}`,
 					);
 				}
-				if (missing === undefined) {
+				// This handle's commands are not in the app, or it generates none: another handle's may be.
+				if (missing === undefined || plans.length === 0) {
 					for (const [chain, other] of base.readCommands) {
 						if (chain === state) continue;
 						const otherPlans = other.built();
@@ -441,7 +442,8 @@ function apiExtension(
 							);
 						}
 					}
-				} else {
+				}
+				if (missing !== undefined) {
 					for (const [path, content] of specDataFiles(document, text, plans, state.added)) {
 						files.set(path, content);
 					}

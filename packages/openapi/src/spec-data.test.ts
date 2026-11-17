@@ -589,6 +589,21 @@ describe("spec data files", () => {
 		).toBeUndefined();
 	});
 
+	it("fail the build and a source run when the app holds another handle's commands and this one generates none", async () => {
+		const acme = defineApi({ spec: specUrl, baseUrl: "https://api.acme.test" });
+		const none = acme.each(() => ({ exclude: true }));
+		const mixed = new Crust("acme").extend(none.extension).add(...acme.commands);
+
+		expect((await runBuildHooks(mixed)).error).toBe(
+			'Extension "crust:openapi" build failed: defineApi: the app\'s generated commands are those of another handle of this API; take `extension` and `commands` from the same handle, and add `commands` whole (`exclude` an operation to leave it out)',
+		);
+		expect(await captureExecute(mixed, ["users", "list-users"])).toMatchObject({ exitCode: 1 });
+		// Its own app, without generated commands, builds.
+		expect(
+			(await runBuildHooks(new Crust("acme").extend(none.extension).add(...none.commands))).error,
+		).toBeUndefined();
+	});
+
 	it("fail a source run whose app holds generated commands of another chain of the API", async () => {
 		const acme = defineApi({ spec: specUrl, baseUrl: "https://api.acme.test" });
 		const renamed = acme.override({ listUsers: { name: "all" } });
