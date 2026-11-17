@@ -125,9 +125,15 @@ describe.each([
 				// and on this headless host nobody answers. The read must still end at its deadline.
 				const file = readFileSync(join(root, app, "credentials.json"), "utf8");
 				const lines = await runBounded(reader, ["read", app, "2000"], root, 15_000);
-				expect(lines[0]).toBeDefined();
-				expect(["CONFORMANCE_AT", "credential-key:unreadable"]).toContain(lines[0]!.value);
-				expect(lines[0]!.ms).toBeLessThan(5_000);
+				// The fixture started; a missing result below then means the read never settled.
+				expect(lines[0]).toMatchObject({ started: "read" });
+				const result = lines.find((line) => "value" in line);
+				expect(
+					result,
+					`no result before the kill; printed: ${JSON.stringify(lines)}`,
+				).toBeDefined();
+				expect(["CONFORMANCE_AT", "credential-key:unreadable"]).toContain(result!.value);
+				expect(result!.ms).toBeLessThan(5_000);
 				expect(readFileSync(join(root, app, "credentials.json"), "utf8")).toBe(file);
 				// The writer's key is still there and still the file's: nothing replaced it.
 				expect(run(writer, "read", app, root).value).toBe("CONFORMANCE_AT");

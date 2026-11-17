@@ -1,5 +1,6 @@
 // A child process for tests/keyring.conformance.test.ts, run under Node and Bun with a state
 // directory and a throwaway app name (the keyring service) of its own, on the real OS keyring:
+// Every run first prints `{ started: <mode> }`. Then:
 // - `login <app>`: logs in with the keyring on; prints the store's status, warnings and time;
 // - `read <app> [deadline ms]`: prints the stored login's access token (or the error's code and
 //   reason) with the time, then on a second line the status with the time;
@@ -41,6 +42,9 @@ async function login(keyring: KeyringOptions) {
 const started = performance.now();
 const report = (fields: object) =>
 	console.log(JSON.stringify({ ...fields, ms: Math.round(performance.now() - started) }));
+
+// Printed before any keyring call, so a run that prints nothing more is known to be stuck in one.
+report({ started: mode });
 
 if (mode === "login") {
 	const store = await login({ onWarning: (warning) => warnings.push(warning) });
