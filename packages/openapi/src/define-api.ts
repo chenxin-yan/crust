@@ -17,6 +17,7 @@ import {
 } from "./api-command.ts";
 import { type ApiClient, type ApiClientOptions, apiClientContext } from "./client.ts";
 import { type Operation, operationLabel, operations } from "./operations.ts";
+import { isPlainObject } from "./request.ts";
 import { BUILT_SPEC_FILE, readSpec } from "./spec-source.ts";
 import type { SpecOperationsOf, Specs } from "./typed-client.ts";
 
@@ -72,7 +73,7 @@ export function defineApi<const Id extends string = never>(
 export function defineApi(options: DefineApiOptions): Api {
 	const { spec, id = "openapi", paginate, ...clientOptions } = options;
 	const isUrl = spec instanceof URL;
-	if (isUrl ? spec.protocol !== "file:" : typeof spec !== "object" || spec === null) {
+	if (isUrl ? spec.protocol !== "file:" : !isPlainObject(spec)) {
 		throw new CrustError(
 			"DEFINITION",
 			"defineApi: `spec` must be a file: URL or the OpenAPI document as an object; specs are pinned, never fetched",

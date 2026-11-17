@@ -5,13 +5,18 @@ import type { OpenApiSpec } from "./api-command.ts";
 /** The file `crust build` writes the spec of a URL `spec` to, below the artifact directory `id`. */
 export const BUILT_SPEC_FILE = "spec.json";
 
-/** JSONC text (JSON with comments and trailing commas) parsed as JSON. */
+/**
+ * JSONC text (JSON with comments and trailing commas) parsed as JSON, read as inspex reads it: a
+ * leading byte order mark is skipped, and a line comment ends at CR or LF.
+ */
 function parseJsonc(text: string): unknown {
 	const strings = /"(?:[^"\\]|\\.)*"/.source;
-	const withoutComments = text.replace(
-		new RegExp(`(${strings})|//[^\\n]*|/\\*[\\s\\S]*?\\*/`, "g"),
-		(match, string?: string) => string ?? " ",
-	);
+	const withoutComments = text
+		.replace(/^\uFEFF/, "")
+		.replace(
+			new RegExp(`(${strings})|//[^\\r\\n]*|/\\*[\\s\\S]*?\\*/`, "g"),
+			(match, string?: string) => string ?? " ",
+		);
 	return JSON.parse(
 		withoutComments.replace(
 			new RegExp(`(${strings})|,(?=\\s*[}\\]])`, "g"),

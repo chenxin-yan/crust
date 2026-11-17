@@ -293,6 +293,14 @@ describe("the spec", () => {
 		["a loader", () => spec],
 		["a URL that is not a file", new URL("https://api.example.com/openapi.json")],
 		["a path", "./openapi.json"],
+		["an array", []],
+		["a Date", new Date(0)],
+		[
+			"a class instance",
+			new (class Spec {
+				paths = {};
+			})(),
+		],
 	])("is a DEFINITION error as %s: specs are pinned, never fetched", (_, value) => {
 		let error: unknown;
 		try {
@@ -321,6 +329,31 @@ describe("the spec", () => {
 			stdout: "GET /users listUsers List // users /* all */ ,}",
 			stderr: "",
 			exitCode: 0,
+		});
+	});
+
+	it("reads a JSONC file as inspex does: a leading BOM, a comment ended by CR, escaped quotes", async () => {
+		const url = pathToFileURL(
+			writeSpec(
+				'\uFEFF// ended by CR\r{"openapi": "3.1.0", "paths": {"/users": {"get": {"operationId": "listUsers", "summary": "a \\"//\\" b /*,}*/",},},},}',
+			),
+		);
+
+		expect(await captureExecute(buildApp({ spec: url }), ["api", "--list"])).toEqual({
+			stdout: 'GET /users listUsers a "//" b /*,}*/',
+			stderr: "",
+			exitCode: 0,
+		});
+		expect(await runBuildHooks(buildApp({ spec: url }))).toEqual({
+			files: new Map([
+				[
+					"openapi/spec.json",
+					JSON.stringify({
+						openapi: "3.1.0",
+						paths: { "/users": { get: { operationId: "listUsers", summary: 'a "//" b /*,}*/' } } },
+					}),
+				],
+			]),
 		});
 	});
 
