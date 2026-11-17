@@ -1,8 +1,9 @@
 import { Crust, defineCommand } from "@crustjs/core";
+import { confirm } from "@crustjs/extensions";
 import { defineApi } from "@crustjs/openapi";
 
 //#region cli
-const acme = defineApi({
+const api = defineApi({
 	// The pinned OpenAPI document, kept out of the bundle.
 	spec: new URL("./acme.openapi.jsonc", import.meta.url),
 	baseUrl: "https://api.acme.example/v1",
@@ -14,15 +15,35 @@ const acme = defineApi({
 	},
 });
 
+// Your own command, with the client every handle of `api` shares.
 const whoami = defineCommand("whoami", { description: "Print the signed-in user" }, (command) =>
-	command.use(acme.client).action(async ({ ctx, stdout }) => {
-		const api = await ctx.api;
-		const user = await api.call("getUser", { path: { id: "me" } });
+	command.use(api.client).action(async ({ ctx, stdout }) => {
+		const client = await ctx.api;
+		const user = await client.call("getUser", { path: { id: "me" } });
 		stdout(user.name);
 	}),
 );
 
-await new Crust("acme").extend(acme.extension).add(whoami).execute();
+const acme = api
+	// Every generated command uses `confirm`, which types `ctx` below.
+	.use(confirm)
+	.onConfirm(async (ctx, message) => (await ctx.confirm)(message))
+	// A command per operation, in its first tag's group: `acme users get-user <id>`.
+	.each((op) => ({ name: op.id === "getUser" ? "get" : undefined }))
+	.override({
+		deleteUser: {
+			expect: { method: "DELETE", path: "/users/{id}" },
+			name: "delete",
+			confirm: "Delete this user?",
+		},
+	})
+	// Beside the generated commands: `acme users whoami`.
+	.add("users", whoami);
+
+await new Crust("acme")
+	.extend(confirm(), acme.extension)
+	.add(...acme.commands)
+	.execute();
 //#endregion
 
 // What inspex registers from acme.openapi.jsonc, for this docs site, which runs no content mapper.
@@ -41,6 +62,11 @@ declare module "@crustjs/openapi" {
 							content: { "application/json": { id: string; name: string } };
 						};
 					};
+				};
+				deleteUser: {
+					parameters: { query?: never; header?: never; path: { id: string }; cookie?: never };
+					requestBody?: never;
+					responses: { 204: { headers: { [name: string]: unknown }; content?: never } };
 				};
 			};
 		};
