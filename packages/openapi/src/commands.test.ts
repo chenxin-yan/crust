@@ -1116,6 +1116,122 @@ describe("acme.onMissing()", () => {
 	});
 });
 
+describe("generated commands of the same shape at several mounts", () => {
+	// Two operations whose commands have one shape: `users list` and `other users list`.
+	const query = (name: string, description: string) => ({
+		name,
+		in: "query",
+		required: true,
+		schema: { type: "string" },
+		description,
+	});
+	const twins = {
+		openapi: "3.1.0",
+		paths: Object.fromEntries(
+			["users", "admins"].map((path) => [
+				`/${path}`,
+				{
+					get: {
+						operationId: path,
+						summary: "List",
+						parameters: [query("q", `Search the ${path}`), query("page", "The page")],
+						responses: { "200": { description: "OK" } },
+					},
+				},
+			]),
+		),
+	};
+
+	function twinsApp(mounts: "root" | "other" | "both") {
+		const sent = stubFetch(() => Response.json({}));
+		const asked: string[] = [];
+		const acme = defineApi({ spec: twins, baseUrl: "https://api.example.com/v1/" })
+			.override({
+				users: { group: "users", name: "list" },
+				admins: { group: "other users", name: "list" },
+			})
+			.onMissing((field) => {
+				asked.push(`${field.name}: ${field.description}`);
+				return "x";
+			});
+		const under = (name: string) => defineCommand(name, (command) => command.add(...acme.commands));
+		const api = new Crust("acme").extend(acme.extension);
+		const app: AnyCrust =
+			mounts === "root"
+				? api.add(...acme.commands)
+				: mounts === "other"
+					? api.add(under("other"))
+					: api.add(...acme.commands).add(under("more"));
+		/** The URL `api preview` shows for a path, and the one the command requests. */
+		const urls = async (...path: [string, ...string[]]) => {
+			const outcome = await app.run(["api", "preview"], {
+				args: { target: path, argv: ["--q", "a", "--page", "1"] },
+			});
+			const preview =
+				outcome.status === "failed"
+					? (outcome.error as Error).message
+					: (outcome as { result: { url: string } }).result.url;
+			sent.length = 0;
+			await captureExecute(app, [...path, "--q", "a", "--page", "1"]);
+			return { preview, sent: sent[0]?.url };
+		};
+		/** What `.onMissing()` asks for a path, and what the command then fails with. */
+		const prompts = async (...path: string[]) => {
+			asked.length = 0;
+			const { stderr } = await withTerminalIO(createPromptIO().io, () => captureExecute(app, path));
+			return { asked: [...asked], stderr };
+		};
+		return { urls, prompts };
+	}
+	const users = "https://api.example.com/v1/users?q=a&page=1";
+	const admins = "https://api.example.com/v1/admins?q=a&page=1";
+
+	it("decides a single mount by where the app adds the commands", async () => {
+		const { urls, prompts } = twinsApp("other");
+
+		expect(await urls("other", "users", "list")).toEqual({ preview: users, sent: users });
+		expect(await urls("other", "other", "users", "list")).toEqual({
+			preview: admins,
+			sent: admins,
+		});
+		expect((await prompts("other", "users", "list")).asked).toEqual([
+			"q: Search the users",
+			"page: The page",
+		]);
+	});
+
+	it("decides the root mount by where the app adds the commands", async () => {
+		const { urls, prompts } = twinsApp("root");
+
+		expect(await urls("users", "list")).toEqual({ preview: users, sent: users });
+		expect(await urls("other", "users", "list")).toEqual({ preview: admins, sent: admins });
+		expect((await prompts("other", "users", "list")).asked).toEqual([
+			"q: Search the admins",
+			"page: The page",
+		]);
+	});
+
+	it("never guesses at a further mount where two operations fit", async () => {
+		const { urls, prompts } = twinsApp("both");
+
+		expect(await urls("more", "users", "list")).toEqual({ preview: users, sent: users });
+		expect(await urls("more", "other", "users", "list")).toEqual({
+			preview:
+				'api preview: "more other users list" fits several generated commands, as the app adds them more than once: preview "other users list" (admins) or "users list" (users) instead',
+			sent: admins,
+		});
+		expect((await prompts("more", "users", "list")).asked).toEqual([
+			"q: Search the users",
+			"page: The page",
+		]);
+		// Only the question both operations would ask; the other value stays missing.
+		expect(await prompts("more", "other", "users", "list")).toEqual({
+			asked: ["page: The page"],
+			stderr: 'Error: Missing required flag "--q"',
+		});
+	});
+});
+
 describe("acme.manifest()", () => {
 	it("lists the generated surface sorted by command, with the diagnostics of left-out operations", () => {
 		const acme = buildApi({ paginate: () => undefined });

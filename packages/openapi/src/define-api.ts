@@ -7,6 +7,7 @@ import {
 	type ContextInstance,
 	type ContextMap,
 	type Extension,
+	type ExtensionContext,
 	type ExtensionId,
 	type MergeContext,
 	type UseSource,
@@ -435,21 +436,38 @@ function apiExtension(
 	// Each `api preview` invocation's generated request, by its `api` Context value.
 	const previews = new WeakMap<ApiClient, GeneratedPreview>();
 	/**
-	 * The generated command of this handle at a canonical command path, whose snapshot is `command`,
-	 * wherever the app adds `commands`, as often as it does: a tail of the path names a planned
-	 * command, and `command` has that plan's shape. Reads no group file a path does not route through.
+	 * The generated commands of this handle that the command at a canonical `path`, whose snapshot
+	 * is `command`, can be. Where the app's tree places a top-level generated command on the path
+	 * (its first mount, `commandPathOf`), that decides: one, or none for a command `.add()`ed there.
+	 * Below a further mount, which the tree does not tell, it is every planned command a tail of the
+	 * path names and `command` has the shape of. Reads no group file a path does not route through.
 	 */
 	const generatedAt = (
 		path: readonly string[],
 		command: () => CommandSnapshot,
-	): PlannedCommand | undefined => {
-		const tops = new Set((base.readCommands.get(state)?.generated ?? []).map(({ name }) => name));
+		commandPathOf: ExtensionContext["commandPathOf"],
+	): readonly MountedCommand[] => {
+		const generated = base.readCommands.get(state)?.generated ?? [];
+		const tails: { readonly words: readonly string[]; readonly mount: readonly string[] }[] = [];
 		for (let depth = 1; depth < path.length; depth++) {
-			if (!tops.has(path[depth]!)) continue;
-			const found = planAt(path.slice(depth));
-			if (found !== undefined && isPlannedCommand(command(), found.plan)) return found;
+			for (const definition of generated) {
+				if (definition.name !== path[depth]) continue;
+				const mount = commandPathOf(definition);
+				if (mount === undefined) continue;
+				const words = path.slice(depth);
+				if (mount.length === depth + 1 && mount.every((word, at) => word === path[at])) {
+					const found = planAt(words);
+					return found === undefined ? [] : [{ ...found, path: path.slice(1) }];
+				}
+				tails.push({ words, mount });
+			}
 		}
-		return undefined;
+		return tails.flatMap(({ words, mount }) => {
+			const found = planAt(words);
+			return found !== undefined && isPlannedCommand(command(), found.plan)
+				? [{ ...found, path: [...mount.slice(1, -1), ...words] }]
+				: [];
+		});
 	};
 	const loadSpec = async () => base.document();
 	const mismatch = (detail: string) =>
@@ -492,13 +510,27 @@ function apiExtension(
 				if (!isWords(target) || target.length === 0 || target[0]!.startsWith("/")) return;
 				const parsed = await ctx.parseCommandArgv([root!, ...target], isWords(argv) ? argv : []);
 				// The target's snapshot: walking the root's builds only the commands on its path.
-				const found = generatedAt(parsed.path, () =>
-					parsed.path.slice(1).reduce((node, name) => node.subCommands[name]!, ctx.rootCommand),
+				const candidates = generatedAt(
+					parsed.path,
+					() =>
+						parsed.path.slice(1).reduce((node, name) => node.subCommands[name]!, ctx.rootCommand),
+					ctx.commandPathOf,
 				);
+				const [found] = candidates;
 				if (found === undefined) {
 					throw new CrustError(
 						"PARSE",
 						`api preview: "${target.join(" ")}" is not a command generated from the OpenAPI spec`,
+						{ argument: "target" },
+					);
+				}
+				if (candidates.length > 1) {
+					const where = candidates
+						.map(({ path, plan }) => `"${path.join(" ")}" (${plan.op.id})`)
+						.join(" or ");
+					throw new CrustError(
+						"PARSE",
+						`api preview: "${target.join(" ")}" fits several generated commands, as the app adds them more than once: preview ${where} instead`,
 						{ argument: "target" },
 					);
 				}
@@ -518,10 +550,8 @@ function apiExtension(
 				return;
 			}
 			if (state.onMissing === undefined || !canAsk()) return;
-			const found = generatedAt(ctx.commandPath, () => ctx.command);
-			if (found !== undefined) {
-				await bindMissingValues(ctx, found.spec, found.plan, state.onMissing);
-			}
+			const candidates = generatedAt(ctx.commandPath, () => ctx.command, ctx.commandPathOf);
+			await bindMissingValues(ctx, candidates, state.onMissing);
 		})
 		// A broken build fails every invocation with why, also one a missing command fails first.
 		.onError((error, ctx) => {
@@ -575,6 +605,11 @@ function apiExtension(
 interface PlannedCommand {
 	readonly plan: CommandPlan;
 	readonly spec: OpenApiSpec;
+}
+
+/** A planned command, and its path below the root where the app first adds it. */
+interface MountedCommand extends PlannedCommand {
+	readonly path: readonly string[];
 }
 
 /** Whether an argument value is a list of words, as a variadic string argument's. */
