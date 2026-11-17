@@ -177,8 +177,6 @@ function helloCall(): Buffer {
 	return Buffer.from(bytes);
 }
 
-const HELLO = helloCall();
-
 /**
  * Whether the bus at `path` authenticates this user and answers `Hello` (a method return, or
  * an error) within `timeoutMs`: libdbus waits up to 25 s for that answer, blocking the thread.
@@ -206,7 +204,7 @@ function socketAnswers(path: string, timeoutMs: number): Promise<boolean> {
 				if (!received.subarray(0, end).toString("latin1").startsWith("OK ")) return done(false);
 				authenticated = true;
 				received = received.subarray(end + 2);
-				socket.write(Buffer.concat([Buffer.from("BEGIN\r\n"), HELLO]));
+				socket.write(Buffer.concat([Buffer.from("BEGIN\r\n"), helloCall()]));
 			}
 			// The first message's type: 2 METHOD_RETURN, 3 ERROR.
 			if (received.length >= 2) done(received[1] === 2 || received[1] === 3);
