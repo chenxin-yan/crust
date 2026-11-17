@@ -318,6 +318,11 @@ function _typecheckChainContexts() {
 		.add("users", purge)
 		// @ts-expect-error -- `region` is only used by the added `purge`
 		.each(() => ({ bind: { id: async (ctx) => await ctx.region } }));
+	// A handler may also resolve to a boolean, as a prompt does: `false` declines.
+	defineApi({ spec, baseUrl }).onConfirm(async () => false);
+	defineApi({ spec, baseUrl })
+		// @ts-expect-error -- a confirmation is nothing, a boolean, or a throw
+		.onConfirm(async () => "yes");
 	// The client is in `ctx` from the start.
 	defineApi({ spec, baseUrl }).each(() => ({
 		bind: { id: async (ctx) => (await ctx.api).baseUrl },

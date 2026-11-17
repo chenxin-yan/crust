@@ -27,13 +27,16 @@ import { buildRequest, isPlainObject, readOperationResponse } from "./request.ts
 export type GeneratedDefinition = CommandDefinition<any, any, any, any>;
 import { type SchemaField, flagValue, record, standaloneSchema } from "./schema.ts";
 
+/** What a confirmation handler resolves to: nothing or `true` confirms, `false` declines. */
+export type ConfirmResult = void | boolean;
+
 /** What every generated command shares. */
 export interface GenerateOptions {
 	readonly spec: OpenApiSpec;
 	readonly client: ContextFactory<"api", void, ApiClient>;
 	/** The app's sources from `.use()`, which every generated command `.use()`s too. */
 	readonly sources: readonly UseSource[];
-	readonly onConfirm?: (ctx: ContextBag, message: string) => void | Promise<void>;
+	readonly onConfirm?: (ctx: ContextBag, message: string) => ConfirmResult | Promise<ConfirmResult>;
 	readonly baseUrl: string;
 	readonly paginate?: DefineApiOptions["paginate"];
 }
@@ -168,7 +171,10 @@ function operationCommand(plan: CommandPlan, options: GenerateOptions): Generate
 						const request = buildRequest(op, { path, query, header, body });
 						if (typeof fields.confirm === "string") {
 							// Lint leaves out an operation with `confirm` and no handler, so this is set.
-							await options.onConfirm?.(ctx, fields.confirm);
+							// `false` declines like a throw, so a prompt that answers no sends nothing.
+							if ((await options.onConfirm?.(ctx, fields.confirm)) === false) {
+								throw new Error(`${op.id}: not confirmed: ${fields.confirm} Nothing was sent.`);
+							}
 						}
 
 						const api = await ctx.api;

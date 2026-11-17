@@ -23,7 +23,12 @@ import {
 	createApiCommand,
 } from "./api-command.ts";
 import { type ApiClient, type ApiClientOptions, apiClientContext } from "./client.ts";
-import { type AddedCommands, type GeneratedDefinition, generateCommands } from "./commands.ts";
+import {
+	type AddedCommands,
+	type ConfirmResult,
+	type GeneratedDefinition,
+	generateCommands,
+} from "./commands.ts";
 import { type CommandPlan, planCommands } from "./lint.ts";
 import { type ApiManifest, manifest } from "./manifest.ts";
 import { type Diagnostic, type Operation, operationLabel, operations } from "./operations.ts";
@@ -106,9 +111,12 @@ export interface Api<
 	use<const Us extends readonly [UseSource, ...UseSource[]]>(
 		...sources: Us
 	): Api<Operations, MergeContext<Deps, UsedContexts<Us>>, Added>;
-	/** Asks to confirm an operation's `confirm` message before its request; resolves when confirmed, throws otherwise. */
+	/**
+	 * Asks to confirm an operation's `confirm` message before its request: resolving to nothing (or
+	 * `true`) confirms it; resolving to `false`, or throwing, declines it, and nothing is sent.
+	 */
 	onConfirm(
-		handler: (ctx: ContextBag<Deps>, message: string) => void | Promise<void>,
+		handler: (ctx: ContextBag<Deps>, message: string) => ConfirmResult | Promise<ConfirmResult>,
 	): Api<Operations, Deps, Added>;
 	/** The override for every operation, synchronous and pure; replaces the previous rule. */
 	each(
@@ -132,7 +140,7 @@ export interface Api<
 /** The configuration a handle's chain adds. */
 interface ApiState {
 	readonly sources: readonly UseSource[];
-	readonly onConfirm?: (ctx: ContextBag, message: string) => void | Promise<void>;
+	readonly onConfirm?: (ctx: ContextBag, message: string) => ConfirmResult | Promise<ConfirmResult>;
 	readonly each?: (operation: Operation) => OperationOverride | undefined;
 	readonly override: Readonly<Record<string, OverrideEntry>>;
 	readonly added: readonly AddedCommands[];

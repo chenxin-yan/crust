@@ -1091,6 +1091,35 @@ describe("generated command bindings, positionals and confirmation", () => {
 		expect(calls[0]?.url).toBe("https://api.example.com/v1/1?tag=a&tag=b");
 	});
 
+	it.each([
+		["resolves to nothing", () => undefined, true],
+		["resolves to true", () => true, true],
+		["resolves to false", () => false, false],
+		[
+			"throws",
+			() => {
+				throw new Error("Declined");
+			},
+			false,
+		],
+	])("sends the request when the confirmation handler %s: %s", async (outcome, handler, sent) => {
+		const calls = stubFetch(() => new Response(null, { status: 204 }));
+		const acme = appFor({
+			"/{id}": { delete: { operationId: "probe", parameters: [pathParam("id")] } },
+		})
+			.acme.onConfirm(handler)
+			.override({ probe: { confirm: "Delete it?" } });
+		const app = new Crust("acme").extend(acme.extension).add(...acme.commands);
+
+		const result = await captureExecute(app, ["probe", "1"]);
+
+		expect(calls).toHaveLength(sent ? 1 : 0);
+		expect(result.exitCode).toBe(sent ? 0 : 1);
+		if (outcome === "resolves to false") {
+			expect(result.stderr).toBe("Error: probe: not confirmed: Delete it? Nothing was sent.");
+		}
+	});
+
 	it("checks the whole request before asking to confirm it", async () => {
 		const calls = stubFetch(() => Response.json({}));
 		const asked = vi.fn();
