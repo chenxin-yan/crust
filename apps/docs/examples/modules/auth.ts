@@ -12,7 +12,7 @@ import {
 	startDeviceFlow,
 } from "@crustjs/auth/oauth";
 import { defineCommand } from "@crustjs/core";
-import { apiCommand, type BearerCredential, bearerAuth } from "@crustjs/openapi";
+import { type BearerCredential, bearerAuth, defineApi } from "@crustjs/openapi";
 
 //#region client
 const auth = createAuth({
@@ -63,8 +63,8 @@ const loggedOut = await auth.logout();
 //#endregion
 
 //#region openapi
-const api = apiCommand({
-	spec: { openapi: "3.1.0", info: { title: "Acme", version: "1" }, paths: {} },
+const api = defineApi({
+	spec: new URL("./acme.openapi.jsonc", import.meta.url),
 	baseUrl: "https://api.acme.example",
 	// Resolved on the first authenticated request; a 401 refreshes a stored login once.
 	auth: bearerAuth(auth.token),
@@ -195,8 +195,8 @@ const { local, remote } = await acme.logout();
 //#endregion
 
 //#region blocks-openapi
-const blocksApi = apiCommand({
-	spec: { openapi: "3.1.0", info: { title: "Acme", version: "1" }, paths: {} },
+const blocksApi = defineApi({
+	spec: new URL("./acme.openapi.jsonc", import.meta.url),
 	baseUrl: "https://api.acme.example",
 	auth: bearerAuth(async ({ signal, baseUrl }) => {
 		const credential = (stored: AccessToken): BearerCredential => ({
