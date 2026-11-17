@@ -359,6 +359,40 @@ describe("spec data files", () => {
 		});
 	});
 
+	it("let a built CLI call a binding only for an operation with an input of its name, as the source run does", async () => {
+		const run = async () => {
+			const calls: string[] = [];
+			vi.stubGlobal("fetch", async (url: URL, init: RequestInit) => {
+				calls.push(`${init.method} ${url.href}`);
+				return Response.json([]);
+			});
+			const id = vi.fn(async () => "u1");
+			const acme = defineApi({ spec: specUrl, baseUrl: "https://api.acme.test" }).each(() => ({
+				bind: { id },
+			}));
+			const app = appOf(acme);
+			const status = await captureExecute(app, ["status"]);
+			const called = id.mock.calls.length;
+			const user = await captureExecute(app, ["users", "get-user"]);
+			return { status, called, user, calledAfter: id.mock.calls.length, calls };
+		};
+		const source = await run();
+		await ship(
+			appOf(
+				defineApi({ spec: specUrl, baseUrl: "https://api.acme.test" }).each(() => ({
+					bind: { id: async () => "u1" },
+				})),
+			),
+		);
+
+		expect(source).toMatchObject({ called: 0, calledAfter: 1 });
+		expect(source.calls).toEqual([
+			"GET https://api.acme.test/status",
+			"GET https://api.acme.test/users/u1",
+		]);
+		expect(await run()).toEqual(source);
+	});
+
 	it("are read in a built CLI as it needs them: the index at start, a group's file when it runs", async () => {
 		await ship();
 		for (const file of ["root.json", "groups/g-dns.json", "spec.json"]) {
