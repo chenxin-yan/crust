@@ -21,7 +21,7 @@ What they do:
 2. `auth.login()` picks the login: `--device` always means a device code; on CI or with no terminal it refuses with `LoginRequiresInteractionError` (`code` `"login-requires-interaction"`), whose message says to use the device login or set `ACME_TOKEN`; at a terminal over SSH or on Linux without a display it uses a device code; otherwise the browser. See [Choosing a login](/docs/modules/auth#choosing-a-login).
 3. **Browser:** `onUrl` gets the sign-in URL and `open()`, which opens it in the system browser. The command prints the URL, then opens it; the login waits for the browser to come back and frees the port on every path.
 4. **Device code:** `onCode` gets the code and `message`, the default instructions with the URL's host and an anti-phishing line. The login waits for approval at the pace the server asks for.
-5. The tokens go to `credentials.json` in the app's state directory (`0600` on Unix). A `logout` that runs while a login waits is not undone: that login fails with `StaleCommitError` and stores nothing.
+5. The tokens go to `credentials.json` in the app's state directory (`0600` on Unix), encrypted under a key in the OS keyring. Without a keyring they are stored unencrypted: pass `onWarning` to tell the user, or `strict: true` to refuse, as [Encryption and the OS keyring](/docs/modules/auth#encryption-and-the-os-keyring) shows. A `logout` that runs while a login waits is not undone: that login fails with `StaleCommitError` and stores nothing.
 6. The command's `ctx.signal` cancels the login, or the logout's wait for the file, on Ctrl-C.
 
 The client prints nothing itself: it does not know your command's output stream. Print to stderr, as above, so `--json` output and pipes stay clean.
