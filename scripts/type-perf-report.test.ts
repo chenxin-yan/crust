@@ -35,6 +35,7 @@ const report = (
 		"50 in one .add()": wide,
 		"60 Contexts in one call": contexts,
 		"60 Extensions in one call": extensions,
+		"100 with config keys": large,
 	},
 	checkSeconds: { 200: check200, 400: check400 },
 });
@@ -112,6 +113,13 @@ describe("type performance report", () => {
 		expect(source).not.toContain("wide59");
 	});
 
+	it("gives each command flag a config key only when asked", () => {
+		expect(generateConsumerSource(10)).not.toContain("config:");
+		expect(generateConsumerSource(10, false, false, false, true)).toContain(
+			'.flags({ "command-0-output": { type: "string", short: "o", aliases: ["output-0"], config: "command-0-output" } })',
+		);
+	});
+
 	it("measures all consumer sizes using the harness compiler, not the target tree's compiler", async () => {
 		const root = mkdtempSync(join(tmpdir(), "crust-type-perf-test-"));
 		try {
@@ -132,6 +140,7 @@ describe("type performance report", () => {
 				"50 in one .add()",
 				"60 Contexts in one call",
 				"60 Extensions in one call",
+				"100 with config keys",
 			]);
 			expect(measured.instantiations[10]).toBeGreaterThan(0);
 			expect(measured.instantiations["50 in one .add()"]).toBeGreaterThan(0);
@@ -181,6 +190,7 @@ describe("type performance report", () => {
 				"50 in one .add()": { error: "TS2305" },
 				"60 Contexts in one call": { error: "TS2305" },
 				"60 Extensions in one call": { error: "TS2305" },
+				"100 with config keys": { error: "TS2305" },
 			});
 		} finally {
 			rmSync(root, { recursive: true, force: true });

@@ -3,12 +3,47 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 const fixtures = [
-	{ name: "10", size: 10, wideAdd: false, wideContexts: false, wideExtensions: false },
-	{ name: "100", size: 100, wideAdd: false, wideContexts: false, wideExtensions: false },
-	{ name: "200", size: 200, wideAdd: false, wideContexts: false, wideExtensions: false },
-	{ name: "400", size: 400, wideAdd: false, wideContexts: false, wideExtensions: false },
+	{
+		name: "10",
+		size: 10,
+		wideAdd: false,
+		wideContexts: false,
+		wideExtensions: false,
+		configKeys: false,
+	},
+	{
+		name: "100",
+		size: 100,
+		wideAdd: false,
+		wideContexts: false,
+		wideExtensions: false,
+		configKeys: false,
+	},
+	{
+		name: "200",
+		size: 200,
+		wideAdd: false,
+		wideContexts: false,
+		wideExtensions: false,
+		configKeys: false,
+	},
+	{
+		name: "400",
+		size: 400,
+		wideAdd: false,
+		wideContexts: false,
+		wideExtensions: false,
+		configKeys: false,
+	},
 	// Core used to hit TS2589 at ~44 definitions in one `.add(...)` call.
-	{ name: "50 in one .add()", size: 50, wideAdd: true, wideContexts: false, wideExtensions: false },
+	{
+		name: "50 in one .add()",
+		size: 50,
+		wideAdd: true,
+		wideContexts: false,
+		wideExtensions: false,
+		configKeys: false,
+	},
 	// Core used to hit TS2589 at ~46 Contexts in one `.provide()`, `.extend()` or `.use()` call.
 	{
 		name: "60 Contexts in one call",
@@ -16,6 +51,7 @@ const fixtures = [
 		wideAdd: false,
 		wideContexts: true,
 		wideExtensions: false,
+		configKeys: false,
 	},
 	// Core used to hit TS2589 at ~45 Extensions in one `.extend()` call.
 	{
@@ -24,6 +60,16 @@ const fixtures = [
 		wideAdd: false,
 		wideContexts: false,
 		wideExtensions: true,
+		configKeys: false,
+	},
+	// Every command flag declares a `config` key, which typed run() input treats like `env`.
+	{
+		name: "100 with config keys",
+		size: 100,
+		wideAdd: false,
+		wideContexts: false,
+		wideExtensions: false,
+		configKeys: true,
 	},
 ] as const;
 type FixtureName = (typeof fixtures)[number]["name"];
@@ -117,16 +163,20 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
  * to the app's `.provide()`, a command's `.use()`, and an Extension's `.provide()`
  * that a second app `.extend()`s. `wideExtensions` adds 60 Extensions, each with a flag,
  * a provided Context and a command, that another app passes to one `.extend()` call.
+ * `configKeys` gives each command flag a `config` key named after it.
  */
 export function generateConsumerSource(
 	size: number,
 	wideAdd = false,
 	wideContexts = false,
 	wideExtensions = false,
+	configKeys = false,
 ): string {
 	if (!Number.isInteger(size) || size < 1) throw new Error("size must be a positive integer");
 	const contextCount = Math.max(3, Math.ceil(size / 10));
 	const flag = (name: string, fields: string) => `{ "${name}": { ${fields} } }`;
+	const commandFlag = (name: string, fields: string) =>
+		flag(name, configKeys ? `${fields}, config: "${name}"` : fields);
 	const lines = [
 		'import { Crust, defineCommand, defineContext, defineExtension, defineExtensionId, defineFlag } from "@crustjs/core";',
 		"",
@@ -185,9 +235,9 @@ export function generateConsumerSource(
 			`const command${index} = defineCommand("command-${index}", { aliases: ["cmd-${index}", "c-${index}"] }, (command) =>`,
 			"\tcommand",
 			`\t\t.use(context${contextIndex})`,
-			`\t\t.flags(${flag(`command-${index}-verbose`, `type: "boolean", short: "v", aliases: ["verbose-${index}"]`)})`,
-			`\t\t.flags(${flag(`command-${index}-output`, `type: "string", short: "o", aliases: ["output-${index}"]`)})`,
-			`\t\t.flags(${flag(`command-${index}-force`, `type: "boolean", short: "f", aliases: ["force-${index}"]`)})`,
+			`\t\t.flags(${commandFlag(`command-${index}-verbose`, `type: "boolean", short: "v", aliases: ["verbose-${index}"]`)})`,
+			`\t\t.flags(${commandFlag(`command-${index}-output`, `type: "string", short: "o", aliases: ["output-${index}"]`)})`,
+			`\t\t.flags(${commandFlag(`command-${index}-force`, `type: "boolean", short: "f", aliases: ["force-${index}"]`)})`,
 			`\t\t.args({ name: "source-${index}", type: "string", required: true })`,
 			`\t\t.args({ name: "destination-${index}", type: "string" })`,
 		);
@@ -243,6 +293,7 @@ export function generateConsumerFixture(
 	wideAdd = false,
 	wideContexts = false,
 	wideExtensions = false,
+	configKeys = false,
 ): void {
 	const fixtureDir = resolve(outputDir);
 	const root = resolve(rootDir);
@@ -257,7 +308,7 @@ export function generateConsumerFixture(
 	}
 	writeFileSync(
 		join(fixtureDir, "consumer.ts"),
-		generateConsumerSource(size, wideAdd, wideContexts, wideExtensions),
+		generateConsumerSource(size, wideAdd, wideContexts, wideExtensions, configKeys),
 	);
 	writeFileSync(
 		join(fixtureDir, "tsconfig.json"),
@@ -311,10 +362,18 @@ function measure(outputPath: string, rootDir = ".", allowCompileErrors = false):
 	try {
 		for (const [
 			index,
-			{ name, size, wideAdd, wideContexts, wideExtensions },
+			{ name, size, wideAdd, wideContexts, wideExtensions, configKeys },
 		] of fixtures.entries()) {
 			const fixtureDir = join(fixtureRoot, String(index));
-			generateConsumerFixture(fixtureDir, root, size, wideAdd, wideContexts, wideExtensions);
+			generateConsumerFixture(
+				fixtureDir,
+				root,
+				size,
+				wideAdd,
+				wideContexts,
+				wideExtensions,
+				configKeys,
+			);
 			let diagnostics: string;
 			try {
 				diagnostics = run(
