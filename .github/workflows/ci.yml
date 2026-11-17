@@ -58,6 +58,16 @@ jobs:
 
       - uses: ./.github/actions/setup
 
+      # The image has no Secret Service; with one, the auth tests use a real keyring on Linux too.
+      - name: Start a keyring
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gnome-keyring libsecret-1-0
+          address=$(dbus-daemon --session --fork --print-address)
+          echo "DBUS_SESSION_BUS_ADDRESS=$address" >> "$GITHUB_ENV"
+          echo -n ci | DBUS_SESSION_BUS_ADDRESS=$address gnome-keyring-daemon --unlock --components=secrets --daemonize
+
       - name: Build and test
         run: pnpm test ${{ matrix.tags }}
 

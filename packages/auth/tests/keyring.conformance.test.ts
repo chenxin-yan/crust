@@ -4,8 +4,9 @@
  */
 // The real OS keyring, through Bun.secrets and @napi-rs/keyring, in subprocesses with a hard
 // deadline. Each run uses a throwaway app name as the keyring service and deletes its entry.
-// macOS and Windows must have a keyring. A Linux host may have none (CI has no Secret Service):
-// then the result must be the plaintext fallback within the keyring deadline, never a hang.
+// macOS and Windows must have a keyring, and so must CI's Linux job, which starts one (ci.yml).
+// Another Linux host may have none: then the result must be the plaintext fallback within the
+// keyring deadline, never a hang.
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -77,6 +78,8 @@ describe.each(["node", "bun"])("on %s", (runtime) => {
 			expect(read.value).toBe("CONFORMANCE_AT");
 			if (kind === "file") {
 				expect(process.platform).toBe("linux");
+				// A fallback on CI means its keyring did not start, and nothing below would run.
+				expect(process.env.GITHUB_ACTIONS).toBeUndefined();
 				expect(login.warnings).toEqual([{ code: "plaintext-storage" }]);
 				expect(login.status).toMatchObject({ encryption: "plaintext", plaintextRecords: 1 });
 				const strictRoot = mkdtempSync(join(tmpdir(), "crust-auth-"));
