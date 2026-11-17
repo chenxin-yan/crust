@@ -8,7 +8,7 @@
 //   retry and a cross-origin redirect through @crustjs/openapi. Prints one JSON report.
 import { once } from "node:events";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import type { AddressInfo } from "node:net";
+import { type AddressInfo, connect } from "node:net";
 
 import { Crust, defineCommand } from "@crustjs/core";
 import { apiClient, apiCommand, bearerAuth } from "@crustjs/openapi";
@@ -40,9 +40,30 @@ function sourceFor(issuer: string) {
 }
 
 async function listen(handler: (request: IncomingMessage, response: ServerResponse) => void) {
-	const server = createServer(handler).listen(0, "127.0.0.1");
+	// No keep-alive: a pooled connection the server already closed makes the next request fail
+	// with a reset, possibly after it was written (seen with Bun 1.4.4 under load), not a refusal.
+	const server = createServer((request, response) => {
+		response.setHeader("connection", "close");
+		handler(request, response);
+	}).listen(0, "127.0.0.1");
 	await once(server, "listening");
-	return { server, origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}` };
+	const { port } = server.address() as AddressInfo;
+	return { server, port, origin: `http://127.0.0.1:${port}` };
+}
+
+/** Closes `server` and proves its port now refuses a TCP connect. */
+async function shutDown(server: ReturnType<typeof createServer>, port: number) {
+	server.closeAllConnections();
+	await new Promise((resolve) => server.close(resolve));
+	const socket = connect(port, "127.0.0.1");
+	try {
+		await once(socket, "connect");
+		throw new Error(`port ${port} still accepts connections after close`);
+	} catch (error) {
+		if ((error as { code?: string }).code !== "ECONNREFUSED") throw error;
+	} finally {
+		socket.destroy();
+	}
 }
 
 function sendJson(response: ServerResponse, status: number, body: unknown) {
@@ -153,13 +174,51 @@ if (mode === "refresh") {
 
 	// The server is gone, so the runtime's own fetch fails to connect: nothing was sent.
 	await commit(Date.now() - 1);
-	as.server.closeAllConnections();
-	as.server.close();
-	offsite.server.close();
+	await shutDown(as.server, as.port);
+	await shutDown(offsite.server, offsite.port);
+	// Records what the runtime's fetch threw, so an unexpected outcome explains itself.
+	const runtimeFetch = globalThis.fetch;
+	const fetchErrors: unknown[] = [];
+	const fetchStatuses: number[] = [];
+	const postsBefore = tokenPosts;
+	const started = Date.now();
+	globalThis.fetch = Object.assign(
+		async (...args: Parameters<typeof fetch>) => {
+			try {
+				const response = await runtimeFetch(...args);
+				fetchStatuses.push(response.status);
+				return response;
+			} catch (error) {
+				fetchErrors.push(error);
+				throw error;
+			}
+		},
+		runtimeFetch,
+	);
 	const refused = await source.get().catch((error: { code?: string }) => error.code);
 	const document = await credentialStoreInternals(store).read();
 	const record = document?.records[source.key] as { refreshInProgress?: unknown } | undefined;
-	console.log(
-		JSON.stringify({ api, refused, markCleared: record?.refreshInProgress === undefined }),
-	);
+	const report: Record<string, unknown> = {
+		api,
+		refused,
+		markCleared: record?.refreshInProgress === undefined,
+	};
+	if (refused !== "refresh-failed") {
+		report.diagnostic = {
+			ms: Date.now() - started,
+			tokenPostsAfterClose: tokenPosts - postsBefore,
+			fetchStatuses,
+			fetchErrors: fetchErrors.map((error) => {
+				const { name, message, code, cause } = error as Error & { code?: unknown };
+				const inner = cause as (Error & { code?: unknown }) | undefined;
+				return {
+					name,
+					code,
+					message,
+					cause: inner && { name: inner.name, code: inner.code, message: inner.message },
+				};
+			}),
+		};
+	}
+	console.log(JSON.stringify(report));
 }
