@@ -1,7 +1,8 @@
 // A child process for tests/keyring.conformance.test.ts, run under Node and Bun with a state
 // directory and a throwaway app name (the keyring service) of its own, on the real OS keyring:
 // - `login <app>`: logs in with the keyring on; prints the store's status, warnings and time;
-// - `read <app>`: prints the stored login's access token, the status and the time;
+// - `read <app>`: prints the stored login's access token (or the error's code and reason), the
+//   status and the time;
 // - `strict <app>`: logs in with `strict`; prints "ok" or the error code and reason;
 // - `delete <app>`: deletes the app's keyring entry.
 import { createTokenSource, credentialStore, defineServers } from "../../src/oauth.ts";
@@ -44,7 +45,11 @@ if (mode === "login") {
 	report({ status: await store.status(), warnings });
 } else if (mode === "read") {
 	const { store, source } = sourceFor({});
-	report({ value: (await source.get()).value, status: await store.status() });
+	const value = await source.get().then(
+		(token) => token.value,
+		(error: { code?: string; reason?: string }) => `${error.code}:${error.reason}`,
+	);
+	report({ value, status: await store.status() });
 } else if (mode === "strict") {
 	try {
 		await login({ strict: true });

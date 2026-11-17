@@ -1,4 +1,4 @@
-import { readFileSync, rmSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { withLock } from "@crustjs/store";
@@ -63,7 +63,7 @@ const gate = () => {
 };
 
 describe("keyring backends", () => {
-	it("on Bun uses Bun.secrets, with the key kept on this computer", async () => {
+	it("on Bun uses Bun.secrets and asks it to keep the key on this computer (persist: local)", async () => {
 		const secrets = {
 			get: vi.fn(async (_options: object) => null),
 			set: vi.fn(async (_options: object) => {}),
@@ -134,7 +134,11 @@ describe("the file key", () => {
 		expect(keyring.writes()).toBe(1);
 		const entry = keyring.entry(w.app)!;
 		expect(Buffer.from(entry.key, "base64url")).toHaveLength(32);
-		expect(w.document().encryption).toEqual({ kind: "aes-256-gcm", keyId: entry.keyId });
+		expect(w.document().encryption).toEqual({
+			kind: "aes-256-gcm",
+			keyId: entry.keyId,
+			keyring: "bun-secrets",
+		});
 		for (let round = 0; round < 34; round += 1) {
 			await source.get();
 			await login(w.source({ identity: { ...w.identity, profile: `p${round}` } }));
@@ -367,7 +371,11 @@ describe("a key that can't be used", () => {
 		});
 		expect(committed.discarded).toBe(1);
 		expect(keyring.writes()).toBe(1);
-		expect(w.document().encryption).toEqual({ kind: "aes-256-gcm", keyId: "other-key" });
+		expect(w.document().encryption).toEqual({
+			kind: "aes-256-gcm",
+			keyId: "other-key",
+			keyring: "bun-secrets",
+		});
 		expect(w.document().records[work.key]).toMatchObject({ tombstone: true });
 		expect(w.document().records[plain.key].secret.accessToken).toBe("AT_PLAIN");
 		await expect(w.source({ store }).get()).resolves.toMatchObject({ value: "AT_NEW" });
@@ -503,7 +511,7 @@ describe("encryption on the next write", () => {
 		const a = w.source({ identity: { ...w.identity, profile: "a" } });
 		await login(a, { accessToken: "AT_A", expiresAt: undefined });
 		const keyId = keyring.entry(w.app)!.keyId;
-		expect(w.document().encryption).toEqual({ kind: "aes-256-gcm", keyId });
+		expect(w.document().encryption).toEqual({ kind: "aes-256-gcm", keyId, keyring: "bun-secrets" });
 		expect(w.document().records[a.key].secret).toHaveProperty("ciphertext");
 		expect(w.document().records[b.key].secret.accessToken).toBe("SENTINEL_B1");
 		await expect(w.store.status()).resolves.toEqual({
@@ -870,5 +878,95 @@ describe("cancellation", () => {
 			await expect(pending).rejects.toBeInstanceOf(AbortError);
 			expect(performance.now() - started).toBeLessThan(1_000);
 		}
+	});
+});
+
+describe("the other runtime's keyring", () => {
+	it("a file whose key Bun.secrets holds asks Node for a login with key-other-keyring; that login replaces the key", async () => {
+		const bun = fakeKeyring("bun-secrets");
+		const w = world();
+		await login(w.source({ store: reopen(w), identity: { ...w.identity, profile: "plain" } }), {
+			accessToken: "AT_PLAIN",
+			expiresAt: undefined,
+		});
+		await login(w.source(), { expiresAt: undefined });
+		const keyId = bun.entry(w.app)!.keyId;
+		expect(w.document().encryption).toEqual({ kind: "aes-256-gcm", keyId, keyring: "bun-secrets" });
+		const before = readFileSync(w.file, "utf8");
+		// The same app under Node: @napi-rs/keyring addresses another native entry.
+		const node = fakeKeyring("napi-keyring");
+		const store = reopen(w, {});
+		for (const call of [
+			() => w.source({ store }).get(),
+			() => w.source({ store }).forceRefresh(),
+		]) {
+			await expect(call()).rejects.toMatchObject({
+				code: "login-required",
+				reason: "key-other-keyring",
+			});
+		}
+		await expect(store.status()).resolves.toEqual({
+			kind: "bun-secrets",
+			encryption: "aes-256-gcm",
+			keyReadable: false,
+			plaintextRecords: 1,
+		});
+		expect(readFileSync(w.file, "utf8")).toBe(before);
+		expect(node.writes()).toBe(0);
+		const committed = await login(w.source({ store }), {
+			accessToken: "AT_NODE",
+			expiresAt: undefined,
+		});
+		expect(committed.discarded).toBe(1);
+		expect(w.document().encryption).toEqual({
+			kind: "aes-256-gcm",
+			keyId: node.entry(w.app)!.keyId,
+			keyring: "napi-keyring",
+		});
+		await expect(w.source({ store }).get()).resolves.toMatchObject({ value: "AT_NODE" });
+		await expect(
+			w.source({ store, identity: { ...w.identity, profile: "plain" } }).get(),
+		).resolves.toMatchObject({ value: "AT_PLAIN" });
+	});
+
+	it("a key both runtimes reach (one macOS Keychain item) keeps working under the other runtime", async () => {
+		const bun = fakeKeyring("bun-secrets");
+		const w = world();
+		await login(w.source(), { accessToken: "AT_BUN", expiresAt: undefined });
+		const node = fakeKeyring("napi-keyring");
+		for (const [name, value] of bun.entries) node.entries.set(name, value);
+		await expect(w.source({ store: reopen(w, {}) }).get()).resolves.toMatchObject({
+			value: "AT_BUN",
+		});
+		await expect(reopen(w, {}).status()).resolves.toMatchObject({
+			kind: "bun-secrets",
+			keyReadable: true,
+		});
+		expect(node.writes()).toBe(0);
+	});
+
+	it("a file that records no keyring keeps key-missing", async () => {
+		fakeKeyring("bun-secrets");
+		const w = world();
+		await login(w.source());
+		const raw = JSON.parse(readFileSync(w.file, "utf8"));
+		delete raw.encryption.keyring;
+		writeFileSync(w.file, JSON.stringify(raw));
+		fakeKeyring("napi-keyring");
+		await expect(w.source({ store: reopen(w, {}) }).get()).rejects.toMatchObject({
+			reason: "key-missing",
+		});
+	});
+
+	it("an unknown keyring in the file is a corrupt file", async () => {
+		fakeKeyring();
+		const w = world();
+		await login(w.source());
+		const raw = JSON.parse(readFileSync(w.file, "utf8"));
+		raw.encryption.keyring = "rot13";
+		writeFileSync(w.file, JSON.stringify(raw));
+		await expect(w.source({ store: reopen(w, {}) }).get()).rejects.toBeInstanceOf(
+			CredentialStoreCorruptError,
+		);
 	});
 });

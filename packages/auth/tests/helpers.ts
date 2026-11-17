@@ -292,7 +292,7 @@ export interface TokenWorld {
 	/** `credentials.json`, parsed. */
 	document(): {
 		storeId: string;
-		encryption: { kind: string; keyId?: string };
+		encryption: { kind: string; keyId?: string; keyring?: string };
 		records: Record<string, any>;
 	};
 }

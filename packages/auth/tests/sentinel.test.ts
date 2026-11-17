@@ -516,6 +516,13 @@ describe("secret sentinel gate: the keyring", () => {
 		await reopened().get().then(record, record);
 		keyring.entries.clear();
 		await reopened().get().then(record, record);
+		// The other runtime's keyring: key-other-keyring.
+		fakeKeyring("napi-keyring");
+		const other = await reopened()
+			.get()
+			.catch((error: unknown) => error);
+		expect(other).toMatchObject({ reason: "key-other-keyring" });
+		record(other);
 		await reopened().logout().then(record, record);
 
 		noKeyring();

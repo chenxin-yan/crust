@@ -1,3 +1,5 @@
+import { connect } from "node:net";
+
 import { importKey } from "./cipher.ts";
 import { AbortError, CredentialKeyError, LoginRequiredError } from "./errors.ts";
 import { throwIfAborted } from "./http.ts";
@@ -5,7 +7,8 @@ import type { KeyringOptions } from "./types.ts";
 
 // The OS keyring holds one entry per app, `service=<app>`, `name="credentials-key"`: the key that
 // encrypts the tokens in the credentials file, `{ keyId, key }`. It is created once and never
-// rewritten; the file records the `keyId` of the key its records are encrypted under.
+// rewritten; the file records the `keyId` of the key its records are encrypted under, and the
+// backend that holds it: the two backends address different native entries on Linux and Windows.
 
 /** The OS keyring backends: `Bun.secrets` on Bun, the optional `@napi-rs/keyring` on Node. */
 export type KeyringKind = "bun-secrets" | "napi-keyring";
@@ -32,7 +35,8 @@ async function load(): Promise<KeyringBackend | undefined> {
 		return {
 			kind: "bun-secrets",
 			get: async (service, name) => (await secrets.get({ service, name })) ?? undefined,
-			// On Windows, keeps the key on this computer instead of roaming it to others.
+			// On Windows, keeps the key on this computer instead of roaming it to others (Bun 1.4.3+;
+			// earlier versions ignore it).
 			set: (service, name, value) => secrets.set({ service, name, value, persist: "local" }),
 		};
 	}
@@ -42,14 +46,74 @@ async function load(): Promise<KeyringBackend | undefined> {
 	} catch {
 		return undefined;
 	}
-	// Linux's default falls back to the in-memory keyutils store, which loses the key at reboot.
-	const entry = (service: string, name: string) =>
-		new napi.AsyncEntry(service, name, { linux: { store: "secret-service" } });
+	// Constructing an entry connects to the session bus synchronously on Linux: a bus that never
+	// answers would block the event loop past every deadline, so it must answer a probe first.
+	let bus: Promise<boolean | undefined> | undefined;
+	const entry = async (service: string, name: string) => {
+		if (process.platform === "linux") {
+			bus ??= busAnswers(process.env.DBUS_SESSION_BUS_ADDRESS);
+			if ((await bus) === false) throw new Error("The D-Bus session bus does not answer");
+		}
+		// Linux's default falls back to the in-memory keyutils store, which loses the key at reboot.
+		return new napi.AsyncEntry(service, name, { linux: { store: "secret-service" } });
+	};
 	return {
 		kind: "napi-keyring",
-		get: async (service, name) => (await entry(service, name).getPassword()) ?? undefined,
-		set: (service, name, value) => entry(service, name).setPassword(value),
+		get: async (service, name) => (await (await entry(service, name)).getPassword()) ?? undefined,
+		set: async (service, name, value) => (await entry(service, name)).setPassword(value),
 	};
+}
+
+/** The socket of a `unix:path=` or `unix:abstract=` D-Bus address (the first of a list). */
+function busSocket(address: string | undefined): string | undefined {
+	const first = address?.split(";")[0];
+	if (!first?.startsWith("unix:")) return undefined;
+	const fields = new Map(
+		first
+			.slice("unix:".length)
+			.split(",")
+			.map((field) => [field.slice(0, field.indexOf("=")), field.slice(field.indexOf("=") + 1)]),
+	);
+	const path = fields.get("path");
+	const abstract = fields.get("abstract");
+	try {
+		// D-Bus escapes address bytes as `%xx`.
+		if (path !== undefined) return decodeURIComponent(path);
+		if (abstract !== undefined) return `\0${decodeURIComponent(abstract)}`;
+	} catch {
+		return undefined;
+	}
+	return undefined;
+}
+
+/**
+ * Whether the D-Bus session bus at `address` accepts an `EXTERNAL` authentication within the
+ * keyring deadline. `undefined`: not probed, as the address is none or not a `unix:path=` or
+ * `unix:abstract=` one. It does not show that the Secret Service behind the bus answers.
+ */
+export function busAnswers(address: string | undefined): Promise<boolean | undefined> {
+	const path = busSocket(address);
+	if (path === undefined) return Promise.resolve(undefined);
+	return new Promise((resolve) => {
+		const socket = connect(path);
+		let text = "";
+		const done = (answers: boolean) => {
+			clearTimeout(timer);
+			socket.destroy();
+			resolve(answers);
+		};
+		const timer = setTimeout(() => done(false), keyrings.deadlineMs);
+		socket.on("connect", () => {
+			const uid = Buffer.from(String(process.getuid?.() ?? "")).toString("hex");
+			socket.write(`\0AUTH EXTERNAL ${uid}\r\n`);
+		});
+		socket.on("data", (chunk: Buffer) => {
+			text += chunk.toString("latin1");
+			if (text.includes("\r\n")) done(text.startsWith("OK "));
+		});
+		socket.on("error", () => done(false));
+		socket.on("close", () => done(false));
+	});
 }
 
 /** How this package reaches the OS keyring. Tests replace `load` and shorten `deadlineMs`. */
@@ -58,10 +122,11 @@ export const keyrings: {
 	deadlineMs: number;
 } = { load, deadlineMs: 5_000 };
 
-/** A validated file key. */
+/** A validated file key, and the backend that holds it. */
 export interface FileKey {
 	readonly keyId: string;
 	readonly key: CryptoKey;
+	readonly keyring: KeyringKind;
 }
 
 /** How a write stores a secret: in plaintext, or encrypted under a file key. */
@@ -75,7 +140,9 @@ export type WriteKey =
 	  };
 
 type KeyringRead =
-	| { readonly state: "unavailable" | "absent" | "invalid" }
+	| { readonly state: "unavailable" }
+	| { readonly state: "absent" }
+	| { readonly state: "invalid" }
 	| { readonly state: "found"; readonly fileKey: FileKey; readonly value: string };
 
 const PLAINTEXT: WriteKey = { kind: "plaintext" };
@@ -117,21 +184,33 @@ function parseValue(value: string): { keyId: string; bytes: Uint8Array<ArrayBuff
 
 /** The file key of what a credentials file stores: `undefined` options mean no keyring at all. */
 export interface FileKeys {
-	/** The key of a file encrypted under `keyId`: the keyring must hold it. Never writes. */
-	forFile(keyId: string, signal: AbortSignal | undefined): Promise<FileKey>;
 	/**
-	 * How a write into a file recording `fileKeyId` stores its secret. Creates the key when the
+	 * The key of a file encrypted under `keyId`, held by the backend `keyring` (`undefined` for a
+	 * file that does not record it): this runtime's keyring must hold it. Never writes.
+	 */
+	forFile(
+		keyId: string,
+		keyring: KeyringKind | undefined,
+		signal: AbortSignal | undefined,
+	): Promise<FileKey>;
+	/**
+	 * How a write into a file recording `fileKeyId` and `fileKeyring` stores its secret. Creates the key when the
 	 * keyring has none. Only a `login` may replace a file key that is missing or another.
 	 * `signal` is observed until the key's write is dispatched.
 	 */
 	forWrite(
 		fileKeyId: string | undefined,
+		fileKeyring: KeyringKind | undefined,
 		login: boolean,
 		signal: AbortSignal | undefined,
 	): Promise<WriteKey>;
-	/** The backend, and whether the key of a file recording `fileKeyId` can be read. Never writes. */
+	/**
+	 * Where the key of a file recording `fileKeyId` and `fileKeyring` is (the file's backend when
+	 * it records one), and whether this runtime can read it. Never writes.
+	 */
 	status(
 		fileKeyId: string | undefined,
+		fileKeyring: KeyringKind | undefined,
 		signal: AbortSignal | undefined,
 	): Promise<{ kind: KeyringKind | "file"; keyReadable: boolean }>;
 }
@@ -168,17 +247,28 @@ export function fileKeys(
 		if (!parsed) return { state: "invalid" };
 		return {
 			state: "found",
-			fileKey: { keyId: parsed.keyId, key: await importKey(parsed.bytes) },
+			fileKey: { keyId: parsed.keyId, key: await importKey(parsed.bytes), keyring: keyring.kind },
 			value,
 		};
 	}
 
-	async function forFile(keyId: string, signal: AbortSignal | undefined): Promise<FileKey> {
+	async function forFile(
+		keyId: string,
+		keyring: KeyringKind | undefined,
+		signal: AbortSignal | undefined,
+	): Promise<FileKey> {
 		if (validated?.keyId === keyId) return validated;
 		const found = await read(signal);
-		if (found.state === "absent") throw new LoginRequiredError("key-missing");
-		if (found.state !== "found") throw new CredentialKeyError("unreadable");
-		if (found.fileKey.keyId !== keyId) throw new LoginRequiredError("key-mismatch");
+		if (found.state === "invalid" || found.state === "unavailable") {
+			throw new CredentialKeyError("unreadable");
+		}
+		if (found.state === "absent" || found.fileKey.keyId !== keyId) {
+			// Bun.secrets and @napi-rs/keyring address different entries on Linux and Windows.
+			if (keyring !== undefined && keyring !== (await opened())?.kind) {
+				throw new LoginRequiredError("key-other-keyring");
+			}
+			throw new LoginRequiredError(found.state === "absent" ? "key-missing" : "key-mismatch");
+		}
 		validated = found.fileKey;
 		return validated;
 	}
@@ -224,11 +314,12 @@ export function fileKeys(
 
 	async function forWrite(
 		fileKeyId: string | undefined,
+		fileKeyring: KeyringKind | undefined,
 		login: boolean,
 		signal: AbortSignal | undefined,
 	): Promise<WriteKey> {
 		if (fileKeyId !== undefined && (!login || validated?.keyId === fileKeyId)) {
-			return sealed(await forFile(fileKeyId, signal));
+			return sealed(await forFile(fileKeyId, fileKeyring, signal));
 		}
 		if (fileKeyId === undefined && !options) return PLAINTEXT;
 		const found = await read(signal);
@@ -257,12 +348,16 @@ export function fileKeys(
 		};
 	}
 
-	async function status(fileKeyId: string | undefined, signal: AbortSignal | undefined) {
+	async function status(
+		fileKeyId: string | undefined,
+		fileKeyring: KeyringKind | undefined,
+		signal: AbortSignal | undefined,
+	) {
 		throwIfAborted(signal);
 		const keyring = await opened();
-		if (!keyring) return { kind: "file" as const, keyReadable: false };
+		if (!keyring) return { kind: fileKeyring ?? ("file" as const), keyReadable: false };
 		if (fileKeyId !== undefined && validated?.keyId === fileKeyId) {
-			return { kind: keyring.kind, keyReadable: true };
+			return { kind: fileKeyring ?? keyring.kind, keyReadable: true };
 		}
 		const found = await read(signal);
 		// Without a key in the file, a keyring that does not answer means plaintext writes.
@@ -271,7 +366,7 @@ export function fileKeys(
 		}
 		const keyReadable =
 			found.state === "found" && (fileKeyId === undefined || found.fileKey.keyId === fileKeyId);
-		return { kind: keyring.kind, keyReadable };
+		return { kind: fileKeyring ?? keyring.kind, keyReadable };
 	}
 
 	return { forFile, forWrite, status };

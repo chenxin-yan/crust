@@ -257,6 +257,7 @@ describe.each(["node", "bun"])("on %s", (runtime) => {
 		expect(document.encryption).toEqual({
 			kind: "aes-256-gcm",
 			keyId: JSON.parse(readFileSync(keyring, "utf8")).keyId,
+			keyring: "bun-secrets",
 		});
 		// The default profile logged in before the keyring and stayed plaintext; its expired
 		// login's refresh encrypts it.

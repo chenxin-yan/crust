@@ -16,7 +16,7 @@ import {
 	UnsafeStorageError,
 } from "./errors.ts";
 import { throwIfAborted } from "./http.ts";
-import { fileKeys, type WriteKey } from "./keyring.ts";
+import { fileKeys, type KeyringKind, type WriteKey } from "./keyring.ts";
 import type { CredentialStore, CredentialStoreOptions, CredentialStoreStatus } from "./types.ts";
 
 // The credentials file: one strict `@crustjs/store` document, changed only
@@ -66,6 +66,8 @@ export interface CredentialsDocument {
 	storeId: string;
 	/** The key the file's encrypted records use; `undefined` while every record is plaintext. */
 	keyId: string | undefined;
+	/** The backend holding that key; `undefined` in a file written before it was recorded. */
+	keyring: KeyringKind | undefined;
 	records: Record<string, JsonValue | undefined>;
 }
 
@@ -288,7 +290,14 @@ export function withFileKey(
 ): { document: CredentialsDocument; discarded: number } {
 	if (writeKey.kind === "plaintext") return { document, discarded: 0 };
 	const keyId = writeKey.fileKey.keyId;
-	if (writeKey.replaces === undefined) return { document: { ...document, keyId }, discarded: 0 };
+	// The backend that wrote the key; one that reaches the same entry (macOS) does not change it.
+	const keyring =
+		document.keyId === keyId && document.keyring !== undefined
+			? document.keyring
+			: writeKey.fileKey.keyring;
+	if (writeKey.replaces === undefined) {
+		return { document: { ...document, keyId, keyring }, discarded: 0 };
+	}
 	let discarded = 0;
 	const records = Object.fromEntries(
 		Object.entries(document.records).map(([key, raw]) => {
@@ -298,7 +307,7 @@ export function withFileKey(
 			return [key, serializeRecord(tombstone(record.identity))];
 		}),
 	);
-	return { document: { ...document, keyId, records }, discarded };
+	return { document: { ...document, keyId, keyring, records }, discarded };
 }
 
 function parseDocument(raw: RawDocument, path: string): CredentialsDocument | undefined {
@@ -318,16 +327,24 @@ function parseDocument(raw: RawDocument, path: string): CredentialsDocument | un
 		isObject(encryption) && encryption.kind === "aes-256-gcm" && isString(encryption.keyId)
 			? encryption.keyId
 			: undefined;
+	const keyring = isObject(encryption) ? encryption.keyring : undefined;
 	if (
 		version !== VERSION ||
 		!isString(storeId) ||
 		!isObject(encryption) ||
 		(encryption.kind !== "plaintext" && keyId === undefined) ||
+		(keyring !== undefined &&
+			(keyId === undefined || (keyring !== "bun-secrets" && keyring !== "napi-keyring"))) ||
 		!isObject(records)
 	) {
 		throw new CredentialStoreCorruptError(path);
 	}
-	return { storeId, keyId, records: { ...(records as Record<string, JsonValue | undefined>) } };
+	return {
+		storeId,
+		keyId,
+		keyring,
+		records: { ...(records as Record<string, JsonValue | undefined>) },
+	};
 }
 
 function serializeDocument(document: CredentialsDocument): RawDocument {
@@ -337,7 +354,9 @@ function serializeDocument(document: CredentialsDocument): RawDocument {
 		encryption:
 			document.keyId === undefined
 				? { kind: "plaintext" }
-				: { kind: "aes-256-gcm", keyId: document.keyId },
+				: document.keyring === undefined
+					? { kind: "aes-256-gcm", keyId: document.keyId }
+					: { kind: "aes-256-gcm", keyId: document.keyId, keyring: document.keyring },
 		records: document.records as JsonObject,
 	};
 }
@@ -346,6 +365,7 @@ function serializeDocument(document: CredentialsDocument): RawDocument {
 export const emptyDocument = (): CredentialsDocument => ({
 	storeId: newId(),
 	keyId: undefined,
+	keyring: undefined,
 	records: {},
 });
 
@@ -463,7 +483,7 @@ export function credentialStore(options: CredentialStoreOptions): CredentialStor
 		const secret = record.secret as StoredSecret;
 		if (!isSealed(secret)) return secret;
 		if (document.keyId === undefined) throw new CredentialStoreCorruptError(path, { key });
-		const { key: cryptoKey } = await keys.forFile(document.keyId, signal);
+		const { key: cryptoKey } = await keys.forFile(document.keyId, document.keyring, signal);
 		let plain: StoredSecret | undefined;
 		try {
 			plain = parseSecret(
@@ -498,7 +518,7 @@ export function credentialStore(options: CredentialStoreOptions): CredentialStor
 				const secret = parseRecord(raw)?.secret;
 				return secret !== undefined && !isSealed(secret);
 			}).length;
-			const { kind, keyReadable } = await keys.status(document?.keyId, signal);
+			const { kind, keyReadable } = await keys.status(document?.keyId, document?.keyring, signal);
 			return {
 				kind,
 				encryption: document?.keyId === undefined ? "plaintext" : "aes-256-gcm",
@@ -541,7 +561,8 @@ export function credentialStore(options: CredentialStoreOptions): CredentialStor
 		update,
 		lockIdentity,
 		reveal,
-		writeKey: (document, login, signal) => keys.forWrite(document?.keyId, login, signal),
+		writeKey: (document, login, signal) =>
+			keys.forWrite(document?.keyId, document?.keyring, login, signal),
 		withSecret,
 	});
 	return credentials;

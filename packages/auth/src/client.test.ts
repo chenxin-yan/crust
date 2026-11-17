@@ -867,6 +867,7 @@ describe("storage", () => {
 		expect(JSON.parse(text).encryption).toEqual({
 			kind: "aes-256-gcm",
 			keyId: keyring.entry(app)!.keyId,
+			keyring: "napi-keyring",
 		});
 		expect(text).not.toMatch(/"AT"|"RT"/);
 		expect((await auth.token()).value).toBe("AT");

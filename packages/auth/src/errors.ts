@@ -220,7 +220,9 @@ export class CredentialMismatchError extends AuthError {
  * - `"invalid-grant"`: the server refused the refresh token;
  * - `"store-changed"`: the credentials file was reset while a refresh ran, so its tokens were discarded;
  * - `"key-missing"`: the login is encrypted, and the OS keyring no longer holds the file's key;
- * - `"key-mismatch"`: the login is encrypted, and the OS keyring holds another key than the file's.
+ * - `"key-mismatch"`: the login is encrypted, and the OS keyring holds another key than the file's;
+ * - `"key-other-keyring"`: the login is encrypted under a key the other runtime's keyring holds
+ *   (`Bun.secrets` or `@napi-rs/keyring`), which this runtime can't reach.
  */
 export type LoginRequiredReason =
 	| "missing"
@@ -228,7 +230,8 @@ export type LoginRequiredReason =
 	| "invalid-grant"
 	| "store-changed"
 	| "key-missing"
-	| "key-mismatch";
+	| "key-mismatch"
+	| "key-other-keyring";
 
 /** There is no usable credential: the user must log in. */
 export class LoginRequiredError extends AuthError {
