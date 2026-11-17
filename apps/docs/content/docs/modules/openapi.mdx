@@ -34,7 +34,7 @@ Its chain shapes the generated commands, like `defineCommand` and `defineExtensi
 | `.override({ [operationId]: override })` | Overrides for single operations, whose fields replace the rule's | Appends; an entry for the same operationId replaces the earlier entry's fields one by one |
 | `.add(group, ...definitions)` | Puts your own commands in a group path, such as `"users"` or `"dns records"` (`""` is the root), creating the group when no operation maps to it | Appends |
 
-Declare a source with `.use()` before the callbacks that read it. Every handle of one `defineApi()` call shares the same `client`, so a command you `.add()` uses the client of an earlier handle, as `whoami` does with `api.client`.
+Declare a source with `.use()` before the callbacks that read it. The Contexts of the commands you `.add()` are required from the app too, but the callbacks see only those of `.use()`, which the generated commands use. Every handle of one `defineApi()` call shares the same `client`, so a command you `.add()` uses the client of an earlier handle, as `whoami` does with `api.client`.
 
 <auto-type-table
   path="../../../../../packages/openapi/src/define-api.ts"
@@ -217,7 +217,7 @@ $ acme users create-user --name Ada --body '{"profile":{"bio":"hi"}}'
 | `security: []` | A public request: `auth` is never called, also for the next pages |
 | The 2xx JSON response schema | The output schema; see [Output](#output) |
 
-Names are [kebab-cased](#operations), and the inputs an operation cannot offer are left out as described there. A body field that repeats a parameter's name gets no flag (the parameter's input fills it). Cookie parameters are never sent. Deprecated operations are left out unless an override sets `exclude: false`.
+Names are [kebab-cased](#operations), and the inputs an operation cannot offer are left out as described there. A body field that repeats a parameter's name gets no flag: the parameter keeps its input, and the body field is sent only from `--body`. Cookie parameters are never sent. Deprecated operations are left out unless an override sets `exclude: false`.
 
 ### The request
 
@@ -239,7 +239,7 @@ The command prints the result for people, pretty-printed JSON or text, and retur
 | A 2xx body that is not UTF-8 | An error: use `api <path>` to save it |
 | Non-2xx, or 2xx in another media type than the JSON the spec declares | An `ApiResponseError`, as for [`call()`](#calloperationid-input), exit code 1 |
 
-Every generated command declares [`.output()`](/docs/api/crust#outputschema): with the [`json()`](/docs/modules/extensions/json) Extension, `--json` prints only the result as JSON. The output JSON Schema is advertised when every 2xx JSON response has the same schema and it stands alone like the body's; with `unwrap`, only an override's `outputSchema` is advertised. A command without one still has `output: true` in its snapshot.
+Every generated command declares [`.output()`](/docs/api/crust#outputschema): with the [`json()`](/docs/modules/extensions/json) Extension, `--json` prints only the result as JSON. The output JSON Schema is advertised when every 2xx response is JSON with the same schema, which stands alone like the body's; with `unwrap`, only an override's `outputSchema` is advertised. A command without one still has `output: true` in its snapshot.
 
 ### Confirmation
 
@@ -247,7 +247,7 @@ A `confirm` message from `.each()` or `.override()` makes the command call the `
 
 ### `--paginate`
 
-A command gets `--paginate` when a `paginate` function applies (an override's, else `defineApi`'s) and its result after `unwrap` is a list, or unknown: a 2xx schema that is an array (without `unwrap`), an override's `outputSchema` that is one, or an `unwrap` without `outputSchema`, such as `.each(() => ({ unwrap: (body) => body.result }))` for an API that wraps every result. Its result is every page's result joined into one array, as `paginate` requests them; a page whose result is not a list fails, naming the operation, and so does a `paginate` that returns the request just sent. (`api <path> --paginate` instead prints one JSON line per page.)
+A command gets `--paginate` when a `paginate` function applies (an override's, else `defineApi`'s) and its result after `unwrap` is a list, or unknown: a 2xx schema that is an array (without `unwrap`), an override's `outputSchema` that is one, or an `unwrap` without `outputSchema`, such as `.each(() => ({ unwrap: (body) => body.result }))` for an API that wraps every result. A tuple schema (`prefixItems`) gets no `--paginate`. Its result is every page's result joined into one array, as `paginate` requests them, and the advertised schema leaves out the limits of one page's list (`minItems`, `maxItems`, `uniqueItems`, `contains`); the items keep theirs. Without `--paginate` offered, a spec parameter named `paginate` is an ordinary flag. a page whose result is not a list fails, naming the operation, and so does a `paginate` that returns the request just sent. (`api <path> --paginate` instead prints one JSON line per page.)
 
 ### Collisions and left-out operations
 
@@ -285,7 +285,7 @@ test("maps the spec to commands", async () => {
 });
 ```
 
-- `acme.lint()` returns every problem with turning the operations into commands, as [`Diagnostic`](#operations)s: the model's, each operation's (an unsupported required input, a missing 2xx response or summary, inputs that share a name, a body field that repeats a parameter), command collisions, overrides of unknown operations, stale or unknown names in overrides, a `confirm` without `.onConfirm()`, and more than 20 untagged root commands. Each error leaves its operation out.
+- `acme.lint()` returns every problem with turning the operations into commands, as [`Diagnostic`](#operations)s: the model's, each operation's (an unsupported required input, a missing 2xx response or summary, inputs that share a name, a body field that repeats a parameter, a command, group or argument name core rejects, such as the empty name of an operationId without ASCII letters or digits), command collisions, overrides of unknown operations, stale or unknown names in overrides, a `confirm` without `.onConfirm()`, and more than 20 untagged root commands. Each error leaves its operation out.
 - `acme.manifest()` is the generated surface: `commands`, sorted by command path, each `{ command, operationId, method, path, args, flags, outputSchema }` (positional names in order, flag names sorted, whether an output schema is advertised), and the lint errors as `diagnostics`. It comes from the spec and the overrides, not from the built commands, and is the same on every platform, so a snapshot of it shows the CLI's diff in the review of a spec bump.
 
 A CI job can bump the pin and open a pull request with the new snapshot for review; Crust ships no updater.
