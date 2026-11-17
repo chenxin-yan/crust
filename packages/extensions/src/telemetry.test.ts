@@ -102,14 +102,40 @@ describe("telemetry", () => {
 			expect(send.mock.calls.map(([event]) => event.outcome)).toEqual(["failed", "completed"]);
 		});
 
-		it("sends no event for a routing failure, which happens before setup", async () => {
-			const send = recorder();
-			const app = new Crust("acme")
-				.extend(telemetry({ env: ENV, enabled: "opt-out", send }))
-				.add(defineCommand("deploy", (cmd) => cmd.action(() => {})));
+		const deployApp = (send: TelemetryOptions["send"]) =>
+			new Crust("acme").extend(telemetry({ env: ENV, enabled: "opt-out", send })).add(
+				defineCommand("deploy", (cmd) =>
+					cmd
+						.args({ name: "target", type: "string", required: true })
+						.flags({ replicas: { type: "number", description: "Replicas" } })
+						.action(() => {}),
+				),
+			);
 
-			expect((await captureExecute(app, ["nope"])).exitCode).toBe(1);
+		it.each([
+			["an unknown command", ["nope"], 'Error: Unknown command "nope".'],
+			["an unknown flag", ["deploy", "prod", "--nope"], 'Error: Unknown flag "--nope"'],
+		])("sends no event for %s, which fails before setup", async (_case, argv, stderr) => {
+			const send = recorder();
+			const result = await captureExecute(deployApp(send), argv);
+			expect(result).toMatchObject({ exitCode: 1, stderr: expect.stringContaining(stderr) });
 			expect(send).not.toHaveBeenCalled();
+		});
+
+		it.each([
+			["a missing required argument", ["deploy"], 'Error: Missing required argument "<target>"'],
+			[
+				"a flag value of the wrong type",
+				["deploy", "prod", "--replicas", "many"],
+				"Error: Expected a number for --replicas.",
+			],
+		])("reports %s as failed: it is checked after setup", async (_case, argv, stderr) => {
+			const send = recorder();
+			const result = await captureExecute(deployApp(send), argv);
+			expect(result).toMatchObject({ exitCode: 1, stderr: expect.stringContaining(stderr) });
+			expect(send.mock.calls.map(([event]) => [event.command, event.outcome])).toEqual([
+				[["acme", "deploy"], "failed"],
+			]);
 		});
 
 		it("reports ci from the CI variable", async () => {
