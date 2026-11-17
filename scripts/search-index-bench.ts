@@ -3,7 +3,8 @@
 //
 //   pnpm run build:pkgs && bun scripts/search-index-bench.ts [--groups 100] [--runs 21]
 //
-// 100 groups of 30 commands each give 3,100 indexed commands.
+// 100 groups of 30 commands each give 3,104 indexed commands (the groups themselves are indexed,
+// and so are the root, `search`, `noop` and `bench`).
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { cpus, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
