@@ -1129,6 +1129,44 @@ describe("strict", () => {
 		},
 	);
 
+	it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+		"reports a delete, not a write, when a reset cannot inspect its directory",
+		async () => {
+			const locked = join(tempDir, "locked");
+			await mkdir(join(locked, "store"), { recursive: true });
+			await chmod(locked, 0o000);
+			const store = createStore({
+				dirPath: join(locked, "store"),
+				name: "auth",
+				fields: BASIC_FIELDS,
+				strict: true,
+			});
+			try {
+				await expect(store.reset()).rejects.toMatchObject({
+					code: "IO",
+					details: { operation: "delete" },
+				});
+			} finally {
+				await chmod(locked, 0o700);
+			}
+		},
+	);
+
+	it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+		"reports a delete, not a write, when a reset cannot take its lock",
+		async () => {
+			await mkdir(dirPath, { mode: 0o500 });
+			try {
+				await expect(strictStore().reset()).rejects.toMatchObject({
+					code: "IO",
+					details: { operation: "delete" },
+				});
+			} finally {
+				await chmod(dirPath, 0o700);
+			}
+		},
+	);
+
 	it("reads defaults when there is no directory, and creates none", async () => {
 		expect(await strictStore().read()).toEqual({ theme: "light", verbose: false });
 		expect(existsSync(dirPath)).toBe(false);

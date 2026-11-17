@@ -12,7 +12,7 @@ import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
 import { normalizeStandardIssues, type StandardSchema } from "@crustjs/utils/schema";
 
 import { CrustStoreError, type ValidationErrorDetails } from "./errors.ts";
-import { checkDirectory, checkLockTimeout, withLock } from "./lock.ts";
+import { checkDirectory, checkLockTimeout, withOperationLock } from "./lock.ts";
 import { applyFieldDefaults, setDocumentValue, withUnknownKeys } from "./merge.ts";
 import { resolveStorePath } from "./path.ts";
 import {
@@ -250,7 +250,9 @@ export function createStore<const F extends FieldsDef>(
 		}
 	}
 
-	// A strict directory must be owner-only, and only private bits create one.
+	// A strict store creates its directory (0700) and file (0600) with private bits only. An existing
+	// directory is accepted unless group or others can write to it, it is a symbolic link, or another
+	// user owns it (checkDirectory).
 	if (strict === true && access !== undefined && access !== "private") {
 		throw new CrustStoreError(
 			"DEFINITION",
@@ -422,7 +424,10 @@ export function createStore<const F extends FieldsDef>(
 					await refuseSymlink(filePath, operation);
 					return task();
 				};
-				return withLock(filePath, checkedTask, { signal, timeout: lockTimeout });
+				return withOperationLock(operation, filePath, checkedTask, {
+					signal,
+					timeout: lockTimeout,
+				});
 			},
 			signal,
 		);

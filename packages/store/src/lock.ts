@@ -308,6 +308,8 @@ async function recoverOrBlock(
  *
  * @returns `false` when the directory does not exist.
  * @throws {CrustStoreError} `PATH` when the directory is unsafe.
+ * @throws {CrustStoreError} `IO`, reporting `operation`, when the directory cannot be inspected
+ *   for a reason other than not existing.
  */
 export async function checkDirectory(
 	path: string,
@@ -337,14 +339,21 @@ export async function checkDirectory(
 	);
 }
 
+/** The operations a strict store locks for: an `IO` error of the lock reports which one failed. */
+type LockedOperation = Extract<IOErrorDetails["operation"], "write" | "delete">;
+
 /** POSIX: creates a missing directory with mode `0700`, then checks it, before any file is created in it. */
-async function validateDirectory(path: string, signal: AbortSignal | undefined): Promise<void> {
-	if (await checkDirectory(path, "write")) return;
+async function validateDirectory(
+	path: string,
+	operation: LockedOperation,
+	signal: AbortSignal | undefined,
+): Promise<void> {
+	if (await checkDirectory(path, operation)) return;
 	// A cancelled call creates nothing.
 	signal?.throwIfAborted();
 	// Checked again once created: another process may have created it first, with its own mode.
 	await ensureDirectory(path, 0o700);
-	await checkDirectory(path, "write");
+	await checkDirectory(path, operation);
 }
 
 function timeoutError(blocker: Blocker): CrustStoreError<"LOCK"> {
@@ -402,10 +411,20 @@ const isWindowsContention = (err: unknown): boolean =>
  * @throws {CrustStoreError} `IO` when a lock or `.recover` file cannot be created or removed. An
  *   error of `fn` wins over a failed removal of the lock.
  */
-export async function withLock<T>(
+export function withLock<T>(
 	path: string,
 	fn: () => Promise<T>,
 	options: LockOptions = {},
+): Promise<T> {
+	return withOperationLock("write", path, fn, options);
+}
+
+/** {@link withLock}, reporting `operation` when the directory cannot be inspected or the lock created. */
+export async function withOperationLock<T>(
+	operation: LockedOperation,
+	path: string,
+	fn: () => Promise<T>,
+	options: LockOptions,
 ): Promise<T> {
 	const { signal } = options;
 	checkLockTimeout("timeout", options.timeout);
@@ -416,7 +435,7 @@ export async function withLock<T>(
 	let ownerId: string;
 	let blocker: Blocker = { path: lockPath, verdict: "unknown", owner: undefined };
 	for (let delay = 1, first = true; ; delay = Math.min(delay * 2, MAX_RETRY_DELAY_MS)) {
-		await validateDirectory(path, signal);
+		await validateDirectory(path, operation, signal);
 		signal?.throwIfAborted();
 		// The first attempt always runs; no later one starts past the deadline.
 		if (!first && performance.now() >= deadline) throw timeoutError(blocker);
@@ -437,12 +456,7 @@ export async function withLock<T>(
 				continue;
 			}
 			if (!isWindowsContention(err)) {
-				throw new CrustStoreError(
-					"IO",
-					`Failed to lock: ${path}`,
-					{ path, operation: "write" },
-					err,
-				);
+				throw new CrustStoreError("IO", `Failed to lock: ${path}`, { path, operation }, err);
 			}
 			blocker = { path: lockPath, verdict: "unknown", owner: undefined };
 		}
