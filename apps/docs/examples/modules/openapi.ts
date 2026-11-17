@@ -1,6 +1,7 @@
 import { Crust, defineCommand } from "@crustjs/core";
 import { confirm } from "@crustjs/extensions";
 import { defineApi } from "@crustjs/openapi";
+import { input, select } from "@crustjs/prompts";
 
 //#region cli
 const api = defineApi({
@@ -28,6 +29,12 @@ const acme = api
 	// Every generated command uses `confirm`, which types `ctx` below.
 	.use(confirm)
 	.onConfirm(async (ctx, message) => (await ctx.confirm)(message))
+	// On a terminal, asks for a required value the command was not given.
+	.onMissing((field) =>
+		field.choices
+			? select({ message: field.name, choices: field.choices })
+			: input({ message: field.name }),
+	)
 	// A command per operation, in its first tag's group: `acme users get-user <id>`.
 	.each((op) => ({ name: op.id === "getUser" ? "get" : undefined }))
 	.override({
