@@ -9,12 +9,13 @@ function _telemetryOptions() {
 		telemetry({
 			env: "APP_TELEMETRY",
 			enabled: "opt-out",
-			send: async (event) => {
+			send: async (event, { signal }) => {
+				const aborted: boolean = signal.aborted;
 				const command: readonly string[] = event.command;
 				const outcome: "completed" | "failed" | "handled" = event.outcome;
 				const numbers: number = event.durationMs;
 				const ci: boolean = event.ci;
-				void [command, outcome, numbers, ci];
+				void [aborted, command, outcome, numbers, ci];
 			},
 		}),
 	);

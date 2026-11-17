@@ -28,12 +28,15 @@ describe("telemetry", () => {
 
 			expect((await captureExecute(app, ["deploy"])).exitCode).toBe(0);
 			expect(send).toHaveBeenCalledTimes(1);
-			expect(send).toHaveBeenCalledWith({
-				command: ["acme", "deploy"],
-				outcome: "completed",
-				durationMs: expect.any(Number),
-				ci: false,
-			});
+			expect(send).toHaveBeenCalledWith(
+				{
+					command: ["acme", "deploy"],
+					outcome: "completed",
+					durationMs: expect.any(Number),
+					ci: false,
+				},
+				{ signal: expect.any(AbortSignal) },
+			);
 			const event = send.mock.calls[0]![0];
 			expect(Number.isInteger(event.durationMs)).toBe(true);
 			expect(event.durationMs).toBeGreaterThanOrEqual(0);
@@ -180,14 +183,21 @@ describe("telemetry", () => {
 			expect(rejecting).toHaveBeenCalledTimes(2);
 		});
 
-		it("stops waiting for send after 1 s, and its later rejection stays handled", async () => {
+		it("aborts send's signal and stops waiting after 1 s; a send that ignores it and rejects later stays handled", async () => {
 			const unhandled = vi.fn();
 			process.on("unhandledRejection", unhandled);
 			try {
-				const send = vi.fn<TelemetryOptions["send"]>(
-					() =>
-						new Promise((_resolve, reject) => setTimeout(() => reject(new Error("late")), 1_500)),
-				);
+				const rejected = Promise.withResolvers<void>();
+				let signal: AbortSignal | undefined;
+				const send = vi.fn<TelemetryOptions["send"]>((_event, options) => {
+					signal = options.signal;
+					return new Promise((_resolve, reject) =>
+						setTimeout(() => {
+							reject(new Error("late"));
+							rejected.resolve();
+						}, 1_500),
+					);
+				});
 				const app = new Crust("acme")
 					.extend(telemetry({ env: ENV, enabled: "opt-out", send }))
 					.action(() => {});
@@ -197,8 +207,12 @@ describe("telemetry", () => {
 				const elapsed = performance.now() - started;
 				expect(elapsed).toBeGreaterThanOrEqual(950);
 				expect(elapsed).toBeLessThan(1_400);
+				expect(signal?.aborted).toBe(true);
+				expect(signal?.reason).toMatchObject({ name: "TimeoutError" });
 
-				await new Promise((resolve) => setTimeout(resolve, 300));
+				// Node reports an unhandled rejection after the microtasks of the turn that rejected it.
+				await rejected.promise;
+				await new Promise((resolve) => setImmediate(resolve));
 				expect(unhandled).not.toHaveBeenCalled();
 			} finally {
 				process.off("unhandledRejection", unhandled);

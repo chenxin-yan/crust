@@ -31,8 +31,11 @@ export interface TelemetryOptions {
 	env: string;
 	/** `"opt-in"` sends only when the user sets `env`; `"opt-out"` sends unless the user turns it off. */
 	enabled: "opt-in" | "opt-out";
-	/** Delivers one event. Waited for at most 1 second; its failures are ignored. */
-	send: (event: TelemetryEvent) => Promise<void>;
+	/**
+	 * Delivers one event. Waited for at most 1 second, when `signal` aborts with a `TimeoutError`;
+	 * pass `signal` to the request so it ends too, or it keeps the process alive. Failures are ignored.
+	 */
+	send: (event: TelemetryEvent, options: { readonly signal: AbortSignal }) => Promise<void>;
 }
 
 const SEND_TIMEOUT_MS = 1_000;
@@ -73,13 +76,18 @@ export const telemetry: ExtensionFactory<[options: TelemetryOptions]> =
 					durationMs,
 					ci: isCI(),
 				};
-				// Its own timer, not `ctx.signal`: that is already aborted after Ctrl-C.
-				let timer: ReturnType<typeof setTimeout> | undefined;
+				// Its own deadline, not `ctx.signal`: that is already aborted after Ctrl-C.
+				const deadline = new AbortController();
+				const timer = setTimeout(
+					() => deadline.abort(new DOMException("Telemetry send timed out.", "TimeoutError")),
+					SEND_TIMEOUT_MS,
+				);
 				try {
+					// The race stops the wait even when `send` ignores the signal.
 					await Promise.race([
-						options.send(event),
+						options.send(event, { signal: deadline.signal }),
 						new Promise<void>((resolve) => {
-							timer = setTimeout(resolve, SEND_TIMEOUT_MS);
+							deadline.signal.addEventListener("abort", () => resolve(), { once: true });
 						}),
 					]);
 				} catch {
