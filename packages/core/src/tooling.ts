@@ -21,6 +21,8 @@ export type {
 	CommandInputPropertySchema,
 	CommandInputSchema,
 } from "./command/command-input.ts";
+export { createCommandIndex } from "./command/command-index.ts";
+export type { CommandIndex } from "./command/command-index.ts";
 export {
 	buildCommandDocumentation,
 	formatDefault,
