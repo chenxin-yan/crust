@@ -54,7 +54,7 @@ function successJsonTypes(op: Operation): string[] {
 }
 
 /** Percent-encodes all but RFC 3986 unreserved characters, as RFC 6570 does; `encodeURIComponent` keeps `!'()*`. */
-function encode(value: string | number | boolean): string {
+export function encode(value: string | number | boolean): string {
 	return encodeURIComponent(String(value)).replace(
 		/[!'()*]/g,
 		(char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,

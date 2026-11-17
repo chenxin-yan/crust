@@ -157,4 +157,51 @@ describe("generated commands in their consumers", () => {
 			},
 		]);
 	});
+
+	it("MCP lists api preview only when included, as a tool whose result is the preview", async () => {
+		vi.stubGlobal("fetch", () => {
+			throw new Error("fetch called");
+		});
+		const connect = async (include?: readonly (readonly string[])[]) => {
+			const server = await createMcpServer(app, include === undefined ? {} : { include });
+			const client = new Client({ name: "test-client", version: "0.0.0" });
+			const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+			await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+			cleanups.push(async () => {
+				await client.close();
+				await server.close();
+			});
+			return client;
+		};
+
+		const hidden = await (await connect()).listTools();
+		const client = await connect([["api", "preview"]]);
+		const { tools } = await client.listTools();
+		const result = await client.callTool({
+			name: "api_preview",
+			arguments: { target: ["users", "create-user"], argv: ["--name", "Ada"] },
+		});
+
+		expect(hidden.tools.map((tool) => tool.name)).not.toContain("api_preview");
+		expect(tools.map((tool) => tool.name)).toContain("api_preview");
+		expect(tools.find((tool) => tool.name === "api_preview")?.outputSchema).toMatchObject({
+			required: ["method", "url", "headers", "bodyKind", "body"],
+		});
+		expect(result.isError).toBeUndefined();
+		expect(result.structuredContent).toEqual({
+			method: "POST",
+			url: "https://api.example.com/v1/users",
+			headers: { accept: "application/json", "content-type": "application/json" },
+			bodyKind: "json",
+			body: { name: "Ada" },
+		});
+	});
+
+	it("schema() describes api preview with the preview's output schema", async () => {
+		const { stdout } = await captureExecute(app, ["schema", "api", "preview"]);
+
+		expect(JSON.parse(stdout)).toMatchObject({
+			output: { required: ["method", "url", "headers", "bodyKind", "body"] },
+		});
+	});
 });

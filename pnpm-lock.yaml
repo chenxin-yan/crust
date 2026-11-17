@@ -622,6 +622,9 @@ importers:
       '@crustjs/mcp':
         specifier: workspace:*
         version: link:../mcp
+      '@crustjs/prompts':
+        specifier: workspace:*
+        version: link:../prompts
       '@crustjs/skills':
         specifier: workspace:*
         version: link:../skills

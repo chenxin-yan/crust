@@ -1,11 +1,21 @@
-import { type CommandSnapshot, Crust, defineCommand, defineContext } from "@crustjs/core";
+import {
+	type AnyCrust,
+	type CommandSnapshot,
+	Crust,
+	defineCommand,
+	defineContext,
+} from "@crustjs/core";
 import { commandInputSchema } from "@crustjs/core/tooling";
-import { confirm, json } from "@crustjs/extensions";
+import { confirm, input, json } from "@crustjs/extensions";
+import { input as ask, select, withTerminalIO } from "@crustjs/prompts";
+import { createPromptIO } from "@crustjs/prompts/testing";
 import { captureExecute } from "@crustjs/testing";
+import { runInteractive } from "@crustjs/testing/interactive";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { runBuildHooks } from "../../crust/tests/build-hooks.ts";
 import { type DefineApiOptions, defineApi } from "./define-api.ts";
+import type { MissingField } from "./missing-values.ts";
 import { ApiResponseError } from "./request.ts";
 
 const spec = {
@@ -566,6 +576,27 @@ describe("generated --paginate", () => {
 		expect(failure(looping)).toContain("page 2 repeats the previous request");
 	});
 
+	it("uses an operation's own async paginate over the global one, printing the one list or returning it under --json", async () => {
+		const calls = stubFetch(({ url }) =>
+			url.endsWith("page=2")
+				? Response.json([{ id: "2" }])
+				: Response.json([{ id: "1" }], { headers: { "x-next": "/users?page=2" } }),
+		);
+		const acme = buildApi({ paginate: () => undefined }).override({ listUsers: { paginate } });
+		const app = new Crust("acme").extend(json(), acme.extension).add(...acme.commands);
+
+		const human = await captureExecute(app, ["users", "list-users", "--paginate"]);
+		const data = await captureExecute(app, ["users", "list-users", "--paginate", "--json"]);
+
+		expect(human).toEqual({
+			stdout: JSON.stringify([{ id: "1" }, { id: "2" }], null, 2),
+			stderr: "",
+			exitCode: 0,
+		});
+		expect(JSON.parse(data.stdout)).toEqual([{ id: "1" }, { id: "2" }]);
+		expect(calls).toHaveLength(4);
+	});
+
 	it("is offered after an unwrap without an outputSchema, not for a known non-list result, and fails for a page that is not a list", async () => {
 		stubFetch(() => Response.json({ result: { id: "1" } }));
 		const acme = buildApi({ paginate }).each(() => ({
@@ -621,8 +652,325 @@ describe("generated --paginate", () => {
 	});
 });
 
-describe("the app's snapshot", () => {
-	it("shows every generated command with its arguments, flags and output schema", async () => {
+describe("api preview", () => {
+	/** An app whose generated commands fail the test if they authenticate, confirm, bind or send. */
+	function guardedApp() {
+		const sent = stubFetch(() => {
+			throw new Error("fetch called");
+		});
+		const credentials = vi.fn(async () => ({ id: "me" }));
+		const account = defineContext("account").setup(credentials);
+		const onConfirm = vi.fn();
+		const bind = vi.fn(async () => "acc_1");
+		const acme = buildApi({
+			auth: () => {
+				throw new Error("auth called");
+			},
+		})
+			.use(account)
+			.onConfirm(onConfirm)
+			.override({
+				deleteUser: { confirm: "Delete the user?" },
+				createUser: { bind: { role: bind } },
+			});
+		const app = new Crust("acme")
+			.extend(json(), acme.extension)
+			.provide(account())
+			.add(...acme.commands);
+		return { app, sent, untouched: [credentials, onConfirm, bind] };
+	}
+
+	it("prints the request a generated command would send, and touches nothing", async () => {
+		const { app, sent, untouched } = guardedApp();
+
+		const remove = await captureExecute(app, [
+			"api",
+			"preview",
+			"users",
+			"delete-user",
+			"--",
+			"u 1",
+		]);
+		const create = await app.run(["api", "preview"], {
+			args: { target: ["users", "create-user"], argv: ["--name", "Ada", "--age", "3"] },
+		});
+
+		expect(JSON.parse(remove.stdout)).toEqual({
+			method: "DELETE",
+			url: "https://api.example.com/v1/users/u%201",
+			headers: {},
+			bodyKind: "none",
+			body: null,
+		});
+		expect(create).toMatchObject({
+			status: "completed",
+			result: {
+				method: "POST",
+				url: "https://api.example.com/v1/users",
+				headers: { accept: "application/json", "content-type": "application/json" },
+				bodyKind: "json",
+				// The bound field is its placeholder, never the binding's value.
+				body: { name: "Ada", age: 3, role: "{role}" },
+				bound: ["role"],
+			},
+		});
+		expect(sent).toEqual([]);
+		for (const spy of untouched) expect(spy).not.toHaveBeenCalled();
+	});
+
+	it("keeps a bound path parameter as its placeholder in the URL", async () => {
+		const bind = vi.fn(async () => "me");
+		const acme = buildApi().override({ getUser: { bind: { id: bind } } });
+		const app = new Crust("acme").extend(acme.extension).add(...acme.commands);
+
+		expect(
+			await app.run(["api", "preview"], { args: { target: ["users", "get-user"] } }),
+		).toMatchObject({
+			result: { method: "GET", url: "https://api.example.com/v1/users/{id}", bound: ["id"] },
+		});
+		expect(bind).not.toHaveBeenCalled();
+	});
+
+	it("fails as the command would, and for a target that is not a generated command", async () => {
+		const { app } = guardedApp();
+		const preview = (...argv: string[]) => captureExecute(app, ["api", "preview", ...argv]);
+
+		expect((await preview("users", "get-user")).stderr).toBe(
+			'Error: Missing required argument "<id>"',
+		);
+		expect((await preview("users", "create-user")).stderr).toBe(
+			'Error: createUser: missing the body field "name" (--name)',
+		);
+		expect((await preview("users", "nope")).stderr).toContain('Unknown command "nope"');
+		expect((await preview("api")).stderr).toBe(
+			'Error: api preview: "api" is not a command generated from the OpenAPI spec',
+		);
+		expect((await preview("users", "get-user", "-X", "PUT", "--", "1")).stderr).toBe(
+			"Error: api preview: --method is for a request path; put the command's own flags after --",
+		);
+	});
+
+	it("runs no set-up, so a value input()'s --input would bind is not applied", async () => {
+		const acme = buildApi();
+		const app = new Crust("acme").extend(input(), acme.extension).add(...acme.commands);
+
+		const { stderr } = await captureExecute(app, [
+			"api",
+			"preview",
+			"users",
+			"create-user",
+			"--",
+			"--input",
+			'{"name":"Ada"}',
+		]);
+
+		expect(stderr).toBe('Error: createUser: missing the body field "name" (--name)');
+	});
+
+	it("gives generated commands no --dry-run flag", async () => {
+		const acme = buildApi();
+		const snapshot = await new Crust("acme")
+			.extend(acme.extension)
+			.add(...acme.commands)
+			.snapshot();
+
+		expect(Object.keys(at(snapshot, "users", "create-user").flags)).not.toContain("dry-run");
+		expect(at(snapshot, "api", "preview").outputSchema).toMatchObject({
+			required: ["method", "url", "headers", "bodyKind", "body"],
+		});
+	});
+});
+
+describe("acme.onMissing()", () => {
+	const members = {
+		openapi: "3.1.0",
+		paths: {
+			"/teams/{team}/members": {
+				post: {
+					operationId: "addMember",
+					summary: "Add a member",
+					parameters: [
+						{ name: "team", in: "path", required: true, schema: { type: "string" } },
+						{
+							name: "role",
+							in: "query",
+							required: true,
+							schema: { type: "string", enum: ["admin", "member"] },
+							description: "The member's role",
+						},
+						{ name: "tags", in: "query", schema: { type: "array", items: { type: "string" } } },
+					],
+					requestBody: {
+						required: true,
+						content: {
+							"application/json": {
+								schema: {
+									type: "object",
+									required: ["name", "age"],
+									properties: {
+										name: { type: "string" },
+										age: { type: "integer" },
+										note: { type: "string" },
+									},
+								},
+							},
+						},
+					},
+					responses: { "201": { description: "Added" } },
+				},
+			},
+		},
+	};
+	const answers: Readonly<Record<string, string>> = { team: "t 1", role: "member", age: "30" };
+
+	/** The app, the fields its handler was asked for, and the requests it sent. */
+	function membersApp(
+		handler: (field: MissingField) => string | undefined | Promise<string | undefined> = (field) =>
+			answers[field.name],
+		inputFirst = true,
+	) {
+		const sent = stubFetch(() => new Response(null, { status: 201 }));
+		const asked: MissingField[] = [];
+		// A flag whose `parse` turns its text into an object: binding the parsed value again would fail.
+		const tagged = defineContext("tagged")
+			.flags({ tag: { type: "string", parse: (raw) => ({ tag: `${raw}!` }) } })
+			.setup(({ flags }) => flags.tag);
+		const acme = defineApi({ spec: members, baseUrl: "https://api.example.com/v1/" })
+			.use(tagged)
+			.onMissing((field) => {
+				asked.push(field);
+				return handler(field);
+			})
+			.override({ addMember: { bind: { note: async (ctx) => (await ctx.tagged)?.tag ?? "" } } });
+		const app = new Crust("acme")
+			.extend(...(inputFirst ? [input(), acme.extension] : [acme.extension, input()]))
+			.provide(tagged())
+			.add(...acme.commands);
+		return { app, asked, sent };
+	}
+
+	/** Runs `argv` with a test terminal on stdin and stderr. */
+	function onTerminal(app: AnyCrust, argv: readonly string[]) {
+		return withTerminalIO(createPromptIO().io, () => captureExecute(app, [...argv]));
+	}
+
+	it.each([true, false])(
+		"asks for each missing value and binds the answers with --input's once (input() first: %s)",
+		async (inputFirst) => {
+			const { app, asked, sent } = membersApp(undefined, inputFirst);
+
+			const result = await onTerminal(app, [
+				"add-member",
+				"--tags",
+				"a",
+				"--input",
+				'{"name":"Ada","tag":"x"}',
+			]);
+
+			expect(result).toEqual({ stdout: "", stderr: "", exitCode: 0 });
+			expect(asked).toEqual([
+				{ name: "team", in: "path", kind: "string", multiple: false },
+				{
+					name: "role",
+					in: "query",
+					kind: "string",
+					multiple: false,
+					choices: ["admin", "member"],
+					description: "The member's role",
+				},
+				{ name: "age", in: "body", kind: "number", multiple: false },
+			]);
+			expect(sent.map(({ url, body }) => [url, body])).toEqual([
+				[
+					"https://api.example.com/v1/teams/t%201/members?role=member&tags=a",
+					// The tag was parsed once, from the bound text.
+					'{"name":"Ada","age":30,"note":"x!"}',
+				],
+			]);
+		},
+	);
+
+	it("asks for nothing argv, the input or --body gave", async () => {
+		const { app, asked, sent } = membersApp();
+
+		const result = await onTerminal(app, [
+			"add-member",
+			"t1",
+			"--role",
+			"admin",
+			"--body",
+			'{"name":"Ada","age":1}',
+		]);
+
+		expect(result.exitCode).toBe(0);
+		expect(asked).toEqual([]);
+		expect(sent).toHaveLength(1);
+	});
+
+	it("fails as without a handler when the handler gives no value, or when nobody can answer", async () => {
+		const missing = 'Error: Missing required argument "<team>"';
+		const declined = membersApp(() => undefined);
+		expect((await onTerminal(declined.app, ["add-member"])).stderr).toBe(missing);
+		expect(declined.asked).toHaveLength(1);
+		expect(declined.sent).toEqual([]);
+
+		// Not a terminal: the test's own stdin.
+		const piped = membersApp();
+		expect((await captureExecute(piped.app, ["add-member"])).stderr).toBe(missing);
+		expect(piped.asked).toEqual([]);
+
+		// A terminal under CI that no test injected.
+		vi.stubEnv("CI", "true");
+		const tty = [process.stdin, process.stderr].map((stream) => [stream, stream.isTTY] as const);
+		for (const [stream] of tty) stream.isTTY = true;
+		try {
+			const ci = membersApp();
+			expect((await captureExecute(ci.app, ["add-member"])).stderr).toBe(missing);
+			expect(ci.asked).toEqual([]);
+		} finally {
+			for (const [stream, isTTY] of tty) stream.isTTY = isTTY;
+			vi.unstubAllEnvs();
+		}
+	});
+
+	it("is never asked by api preview", async () => {
+		const { app, asked } = membersApp();
+
+		const { stderr } = await onTerminal(app, ["api", "preview", "add-member"]);
+
+		expect(stderr).toBe('Error: Missing required argument "<team>"');
+		expect(asked).toEqual([]);
+	});
+
+	it("reaches the terminal run() and runInteractive() inject through @crustjs/prompts", async () => {
+		const { app, sent } = membersApp((field) =>
+			field.choices
+				? select({ message: field.name, choices: field.choices })
+				: ask({ message: field.name }),
+		);
+
+		const run = runInteractive(app, ["add-member"], { flags: { input: '{"name":"Ada"}' } });
+		await run.waitFor(/team/);
+		run.type("t1");
+		run.keys("return");
+		await run.waitFor(/role/);
+		run.keys("down", "return");
+		await run.waitFor(/age/);
+		run.type("30");
+		run.keys("return");
+
+		expect(await run.done).toMatchObject({ status: "completed" });
+		expect(sent.map(({ url, body }) => [url, body])).toEqual([
+			[
+				"https://api.example.com/v1/teams/t1/members?role=member",
+				'{"name":"Ada","age":30,"note":""}',
+			],
+		]);
+	});
+});
+
+describe("acme.manifest()", () => {
+	it("lists the generated surface sorted by command, with the diagnostics of left-out operations", () => {
 		const acme = buildApi({ paginate: () => undefined });
 		const app = new Crust("acme").extend(acme.extension).add(...acme.commands);
 

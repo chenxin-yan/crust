@@ -437,6 +437,29 @@ describe("spec data files", () => {
 		});
 	});
 
+	it("give api preview the plan of a built CLI's command from its group's file only", async () => {
+		await ship();
+		for (const file of ["root.json", "groups/g-dns.json", "spec.json"]) {
+			rmSync(join(built.dir!, "openapi", file));
+		}
+		const app = appOf(chained());
+
+		expect(
+			await app.run(["api", "preview"], { args: { target: ["users", "get-user"], argv: ["u1"] } }),
+		).toMatchObject({
+			status: "completed",
+			result: { method: "GET", url: "https://api.acme.test/users/u1", bodyKind: "none" },
+		});
+		expect(
+			await app.run(["api", "preview"], {
+				args: { target: ["dns", "records", "list"], argv: ["z1"] },
+			}),
+		).toMatchObject({
+			status: "failed",
+			error: { message: expect.stringContaining("g-dns.json") },
+		});
+	});
+
 	it("fail a command whose file lacks its operation, as one from another build does", async () => {
 		await ship();
 		writeFileSync(

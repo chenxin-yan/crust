@@ -1043,6 +1043,93 @@ describe("api <path>", () => {
 	);
 });
 
+describe("api preview <path>", () => {
+	it("prints the request api <path> would send, credential headers redacted, and sends nothing", async () => {
+		const calls = stubFetch();
+		const auth = vi.fn(() => ({ authorization: "Bearer secret" }));
+		const sentinel = "s3cr3t-sentinel";
+		const { stdout, exitCode } = await captureExecute(buildApp({ auth }), [
+			"api",
+			"preview",
+			"/users?page=2",
+			"-X",
+			"patch",
+			"-F",
+			"active=true",
+			"--body",
+			'{"name":"ada"}',
+			...["Authorization", "Proxy-Authorization", "Cookie", "X-Api-Key"].flatMap((name) => [
+				"-H",
+				`${name}: ${sentinel}`,
+			]),
+			"-H",
+			"X-Trace: 1",
+		]);
+
+		expect(exitCode).toBe(0);
+		expect(stdout).not.toContain(sentinel);
+		expect(JSON.parse(stdout)).toEqual({
+			method: "PATCH",
+			url: "https://api.example.com/v1/users?page=2&active=true",
+			headers: {
+				authorization: "<redacted>",
+				"content-type": "application/json",
+				cookie: "<redacted>",
+				"proxy-authorization": "<redacted>",
+				"x-api-key": "<redacted>",
+				"x-trace": "1",
+			},
+			bodyKind: "json",
+			body: { name: "ada" },
+		});
+		expect(calls).toEqual([]);
+		expect(auth).not.toHaveBeenCalled();
+	});
+
+	it("shows a body that is not JSON as text, and no body as none", async () => {
+		const preview = async (...argv: string[]) =>
+			JSON.parse((await captureExecute(buildApp(), ["api", "preview", ...argv])).stdout) as unknown;
+
+		expect(
+			await preview("/users", "--body", "a=1", "-H", "Content-Type: text/plain"),
+		).toMatchObject({
+			method: "POST",
+			bodyKind: "bytes",
+			body: "a=1",
+		});
+		expect(await preview("/users")).toEqual({
+			method: "GET",
+			url: "https://api.example.com/v1/users",
+			headers: {},
+			bodyKind: "none",
+			body: null,
+		});
+	});
+
+	it("refuses to read stdin or take a second path", async () => {
+		const preview = async (...argv: string[]) =>
+			(await captureExecute(buildApp(), ["api", "preview", ...argv])).stderr;
+
+		expect(await preview("/users", "--body", "-")).toBe(
+			"Error: api preview: --body - would read stdin; pass the body inline or as @file",
+		);
+		expect(await preview("/users", "/teams")).toBe(
+			'Error: api preview: "/users /teams" is neither one request path nor a generated command',
+		);
+	});
+
+	it("returns the preview as the JSON result under --json, and api <path> still requests a path", async () => {
+		const calls = stubFetch();
+		const app = new Crust("tool").extend(json(), buildApi().extension);
+
+		const preview = await captureExecute(app, ["api", "preview", "/users", "--json"]);
+		await captureExecute(app, ["api", "/preview"]);
+
+		expect(JSON.parse(preview.stdout)).toMatchObject({ method: "GET", bodyKind: "none" });
+		expect(calls.map(({ url }) => url)).toEqual(["https://api.example.com/v1/preview"]);
+	});
+});
+
 describe("api with json()", () => {
 	const jsonApp = (options: Partial<DefineApiOptions> = {}) => buildApp(options).extend(json());
 

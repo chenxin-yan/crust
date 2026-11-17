@@ -1,7 +1,7 @@
 import { Crust, defineCommand, defineContext } from "@crustjs/core";
 import { confirm, help } from "@crustjs/extensions";
 
-import { type ApiClient, defineApi } from "./index.ts";
+import { type ApiClient, type MissingField, defineApi } from "./index.ts";
 import type { SpecOperationsOf } from "./typed-client.ts";
 
 type Equal<A, B> =
@@ -323,6 +323,14 @@ function _typecheckChainContexts() {
 	defineApi({ spec, baseUrl })
 		// @ts-expect-error -- a confirmation is nothing, a boolean, or a throw
 		.onConfirm(async () => "yes");
+	// A missing value's handler gets the field only, and answers with text.
+	defineApi({ spec, baseUrl }).onMissing(async (field) => {
+		type _field = Expect<Equal<typeof field, MissingField>>;
+		return field.choices?.[0];
+	});
+	defineApi({ spec, baseUrl })
+		// @ts-expect-error -- an answer is text, converted to the field's kind
+		.onMissing(() => 30);
 	// The client is in `ctx` from the start.
 	defineApi({ spec, baseUrl }).each(() => ({
 		bind: { id: async (ctx) => (await ctx.api).baseUrl },
