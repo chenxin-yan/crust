@@ -121,8 +121,9 @@ It throws, naming `path`, when an arg and a flag share a name or a definition is
 | `type: "json"`                 | `{}` (any JSON)                                                                                                     |
 | `choices`                      | `{ type: "string", enum }`                                                                                          |
 | `variadic` / `multiple`        | `{ type: "array", items }`                                                                                          |
-| `required` without `default`   | listed in `required`, unless the flag has an `env` binding                                                          |
+| `required` without `default`   | listed in `required`, unless the flag has an `env` binding or a `config` key                                        |
 | flag `env`                     | The description ends with `(falls back to $NAME)`, or is `Falls back to $NAME`                                      |
+| flag `config`                  | Named after `env`: `(falls back to config key "org")`, or `(falls back to $NAME, then config key "org")`            |
 | Standard Schema                | Its input JSON Schema when `run()` accepts that shape; otherwise the declared token type (`string` for schema args) |
 | custom `parse`                 | The declared token type; the command validates and transforms when it runs                                          |
 | every command                  | `raw: { type: "array", items: { type: "string" } }`, delivered to the action as `rawArgs`                           |

@@ -73,9 +73,11 @@ const flags = {
 
 `env` is consulted only when the flag has no value: no argv occurrence, or omitted from structured [`run()`](/docs/api/crust#runpath-input-options) input. The given value wins over env, and env wins over `default`. The env value goes through the same conversion as an argv token and satisfies `required`. Variables come from `process.env`, or from the `env` option of [`run()`](/docs/api/crust#runpath-input-options) and [`execute()`](/docs/api/crust#executeoptions) when given; MCP tool calls read the server's `process.env`. Help, man pages, and generated skills show `[env: NAME]`, never the value.
 
+`config` names a top-level key of a config file that may supply the value when argv, typed `run()` input, and `env` give none; it wins over `default`, satisfies `required`, and lets typed `run()` input omit a `required` flag, as `env` does. Core only declares it: the [`config()`](/docs/modules/extensions/config) Extension, or any Extension binding with [`bindInput(input, { source: "config", from })`](#bindinput-args-flags-raw), supplies the values. The key must be non-empty and must not contain `.`. Help, man pages, and generated skills show `[config: key]`.
+
 `delimiter` splits string argv occurrences; `env.delimiter` independently splits environment text. Both require `multiple: true` and drop empty segments. Boolean argv switches are never split.
 
-Schema-backed flags set `type: "string" | "boolean"` only to declare whether a value token follows, plus `schema` and the syntax fields `description`, `short`, `aliases`, `multiple`, `env`, `delimiter`, and (boolean only) `noNegate`. The schema receives the raw `string | undefined` or `boolean | undefined`; with `multiple: true` it receives an array when the flag appears and `undefined` when omitted. As for arguments, TypeScript rejects a schema whose input type cannot accept a present value.
+Schema-backed flags set `type: "string" | "boolean"` only to declare whether a value token follows, plus `schema` and the syntax fields `description`, `short`, `aliases`, `multiple`, `env`, `config`, `delimiter`, and (boolean only) `noNegate`. The schema receives the raw `string | undefined` or `boolean | undefined`; with `multiple: true` it receives an array when the flag appears and `undefined` when omitted. As for arguments, TypeScript rejects a schema whose input type cannot accept a present value.
 
 A schema-backed flag with `type: "json"` takes one value token (no `multiple` or `delimiter`) and parses it as JSON. The schema receives the parsed `JsonValue | undefined`, and structured input (`run()`, `--input`, MCP) passes the JSON value itself; a value that is not JSON data is a `PARSE` error. Its input type must accept JSON data, typed `run()` input takes that input type, and the schema's input JSON Schema is the flag's command input property.
 
@@ -152,7 +154,7 @@ Snapshots from Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details
 
 <auto-type-table path="../../../../../packages/core/src/command/snapshot.ts" name="FlagSnapshot" />
 
-`required` is the effective requiredness the parser enforces: it is absent when the definition has a `default`. `URL` defaults become strings. `env` records the variable name and delimiter, never the value. Object-valued JSON defaults are shared references, not copies; treat them as immutable.
+`required` is the effective requiredness the parser enforces: it is absent when the definition has a `default`. `URL` defaults become strings. `env` records the variable name and delimiter, and `config` the key, never a value. Object-valued JSON defaults are shared references, not copies; treat them as immutable.
 
 ## Typed invocation
 
@@ -371,6 +373,13 @@ Binds structured input from `setup` or `preRun`, with the conversion typed `run(
 - Flag handlers are chosen from the original input, so a bound flag never selects one, even when bound in `setup`.
 - A failure fails the invocation as an error thrown from the calling hook would.
 
+`bindInput({ flags }, { source: "config", from })` binds flags as config-file values instead, ranked between `env` and `default`:
+
+- A value fills a flag only when nothing but its default supplied one: argv, typed `run()` input, and `env` win, and plain `bindInput` values replace it. `sources` reports `config`.
+- `from` labels each flag's origin, such as `/repo/acme.config.json key "org"`. A value that fails conversion is deferred like an invalid environment value, so `--help` still works, and its message names the origin, never the value: `Expected a number for --port (from /repo/acme.config.json key "port").` Schema issues for the flag name it too.
+- A config call and a plain call each replace only their own last call, so the order of the binding Extensions never changes the result.
+- Supplying `args` or `raw` throws a `DEFINITION` error (`config-bind-args`); an undeclared flag throws `PARSE`, as with plain `bindInput`.
+
 #### `sources`
 
 Reports where each current value came from as a [`ValueSource`](#valuesource), keyed by declared argument name (`args`) and canonical flag name (`flags`). A name is absent when no source gave it a value.
@@ -381,6 +390,7 @@ Reports where each current value came from as a [`ValueSource`](#valuesource), k
 | `run`     | Typed `run()` input. An empty array for a variadic argument, a `multiple` flag, or `raw` gives no value, as on argv                                 |
 | `env`     | The flag's `env` variable                                                                                                                           |
 | `bound`   | Supplied by `bindInput`                                                                                                                             |
+| `config`  | Supplied by `bindInput` with `{ source: "config" }`, such as a [`config()`](/docs/modules/extensions/config) file                                   |
 | `default` | The definition's default                                                                                                                            |
 
 - `raw` is `argv` when passthrough tokens are left after `--`, `run` when typed `run()` supplied `raw`, `bound` when `bindInput` did, and otherwise `undefined`.
@@ -390,7 +400,7 @@ Reports where each current value came from as a [`ValueSource`](#valuesource), k
 
 ### `ValueSource`
 
-`"argv" | "run" | "env" | "bound" | "default"`: where an argument's or flag's current value came from, as reported by [`ExtensionContext.sources`](#extensioncontext).
+`"argv" | "run" | "env" | "bound" | "config" | "default"`: where an argument's or flag's current value came from, as reported by [`ExtensionContext.sources`](#extensioncontext).
 
 ### `ExtensionHooks`
 

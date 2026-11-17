@@ -247,6 +247,10 @@ publishing to npm tags=latest,beta,next
 - [`run()`](/docs/api/crust#runpath-input-options) takes arrays and never splits them.
 - Boolean argv stays `--flag` / `--no-flag`. Repeated booleans can split environment text such as `true,false` with `env: { name: "FEATURES", delimiter: "," }`.
 
+### Config files
+
+`config: "org"` lets a JSON config file supply a flag when argv and `env` don't: argv, then env, then the config file, then `default`. Core only declares the key; register [`config()`](/docs/modules/extensions/config) to read a project file found by walking up from the working directory and a user file in the platform config directory. Keep secrets in `env`, not config files.
+
 ### Values that start with `-`
 
 ```sh

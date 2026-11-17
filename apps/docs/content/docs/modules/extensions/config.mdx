@@ -1,0 +1,69 @@
+---
+title: Config
+description: Read flag values from JSON config files, ranked below flags and environment variables.
+---
+
+## Usage
+
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../../examples/modules/extensions/config.ts
+</include>
+
+```sh
+$ cat acme.config.json
+{ "org": "acme-corp", "region": "eu" }
+
+$ acme
+org=acme-corp region=eu
+$ ACME_ORG=other acme --region us
+org=other region=us
+```
+
+A flag opts in with `config: "<key>"`, a top-level key of the file. The flag stays the only declaration: keys no flag on the routed command declares are ignored, so one file can serve every command. A key must be non-empty and must not contain `.`, which is kept for nested keys; TypeScript rejects such a literal, and a computed one throws a `DEFINITION` error.
+
+## Files
+
+`config({ name, project?, user? })` reads up to two JSON files:
+
+- **Project file** (`project`): the first file with that name found from the working directory up to the filesystem root.
+- **User file** (`user: true`): `config.json` in [`configDir(name)`](/docs/modules/store#storage-paths) from `@crustjs/store`, such as `~/.config/acme/config.json` on Linux and macOS (`$XDG_CONFIG_HOME` when set) or `%APPDATA%\acme\config.json` on Windows.
+
+The project file wins over the user file key by key. A missing file is skipped. Each file must be a JSON object; a byte order mark is allowed. TypeScript config files and commands that write the file are not included: write the user file with [`@crustjs/store`](/docs/modules/store) if your CLI needs to.
+
+`config()` reads the files in `setup`, so every `preRun` sees the values whatever the `.extend()` order, and it reads nothing when the routed command has no flag with a `config` key.
+
+## Precedence
+
+A config value fills a flag only when nothing but its default supplied one:
+
+| Entry point                                      | Order                                               |
+| ------------------------------------------------ | --------------------------------------------------- |
+| [`execute()`](/docs/api/crust#executeoptions)    | argv > bound > `env` > config file > `default`      |
+| [`run()`](/docs/api/crust#runpath-input-options) | bound > run input > `env` > config file > `default` |
+
+"Bound" is [`ctx.bindInput()`](/docs/api/types#extensioncontext), for example [`input()`](/docs/modules/extensions/input)'s `--input` values; they win over the file in either `.extend()` order. [`ctx.sources`](/docs/api/types#extensioncontext) reports `config` for a value taken from a file.
+
+A `required` flag with a `config` key may be omitted from typed `run()` input, as with `env`; it still fails at run time when nothing supplies it. [`commandInputSchema()`](/docs/modules/core#command-input-as-json), `--llms`, and the [MCP](/docs/modules/mcp) server list it as optional, and help, man pages, and skills show the key as `[config: org]`, never the value.
+
+## Values
+
+Values are converted and validated as typed `run()` input, then by the flag's `choices`, `parse`, and schema:
+
+- `multiple` flags take a JSON array; strings are not split by `delimiter`. An empty array supplies nothing.
+- `url` flags take a URL string.
+- `null` is a value, not "unset": it fails for every type except `json`. Delete the key to unset it.
+
+## Errors
+
+- **Malformed file**: a file that cannot be read, invalid JSON, or JSON that is not an object fails every command that reads the file, `--help` included, with a `PARSE` [`CrustError`](/docs/api/errors) naming the path, such as `Invalid JSON in config file /repo/acme.config.json.` The message never quotes the file.
+- **Invalid value**: a value of the wrong type fails like an invalid environment value, naming the file and key but not the value, such as `Expected a number for --port (from /repo/acme.config.json key "port").` It does not block `--help` or `--version`.
+- **Schema issues**: a schema-backed flag's issue names its origin, such as `flags.region (from /repo/acme.config.json key "region"): …`. The message after it is the schema's own and may quote the value.
+
+## Security
+
+- Keep secrets out of config files: read tokens from `env` or a prompt. A project file is found in any parent directory, including one a cloned repository ships, so a config key must never choose where credentials are sent.
+- Under tests, `config()` reads the real working directory and user directory, even through `run()`; leave it out of apps under test, or test the values through `env` or `run()` input.
+
+## Custom sources
+
+`config()` is built on [`ctx.bindInput(input, { source: "config", from })`](/docs/api/types#extensioncontext). An Extension that reads values from somewhere else can bind them with the same rank, `config` source, and deferred errors labeled by `from`.
