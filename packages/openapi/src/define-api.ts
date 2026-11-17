@@ -443,7 +443,7 @@ function apiExtension(
 		path: readonly string[],
 		command: () => CommandSnapshot,
 	): PlannedCommand | undefined => {
-		const tops = new Set((base.readCommands.get(state)?.commands ?? []).map(({ name }) => name));
+		const tops = new Set((base.readCommands.get(state)?.generated ?? []).map(({ name }) => name));
 		for (let depth = 1; depth < path.length; depth++) {
 			if (!tops.has(path[depth]!)) continue;
 			const found = planAt(path.slice(depth));
