@@ -398,10 +398,8 @@ function _parseAndBoundInput() {
 		type _parsed = Expect<Equal<typeof parsed, ParsedCommandArgv>>;
 		type _flags = Expect<Equal<typeof parsed.flags, Readonly<Record<string, unknown>>>>;
 		type _bound = Expect<Equal<typeof ctx.boundInput, RunInputPayload | undefined>>;
+		const db = defineCommand("db", (c) => c);
 		// @ts-expect-error A path is a list of names, not a definition.
-		await ctx.parseCommandArgv(
-			defineCommand("db", (c) => c),
-			[],
-		);
+		await ctx.parseCommandArgv(db, []);
 	});
 }
