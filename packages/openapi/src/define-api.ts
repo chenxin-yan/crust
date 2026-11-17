@@ -1,12 +1,12 @@
 import {
 	type CommandDefinition,
 	type CommandShape,
+	type CommandSnapshot,
 	type ContextBag,
 	type ContextFactory,
 	type ContextInstance,
 	type ContextMap,
 	type Extension,
-	type ExtensionContext,
 	type ExtensionId,
 	type MergeContext,
 	type UseSource,
@@ -43,6 +43,7 @@ import {
 	INDEX_FILE,
 	indexedCommands,
 	type SpecIndex,
+	isPlannedCommand,
 	isSpecIndex,
 	missingCommands,
 	onlyOperations,
@@ -433,20 +434,20 @@ function apiExtension(
 	const { id, spec } = base;
 	// Each `api preview` invocation's generated request, by its `api` Context value.
 	const previews = new WeakMap<ApiClient, GeneratedPreview>();
-	/** The generated command of this handle at a command path, as `ctx.commandPath` gives it. */
+	/**
+	 * The generated command of this handle at a canonical command path, whose snapshot is `command`,
+	 * wherever the app adds `commands`, as often as it does: a tail of the path names a planned
+	 * command, and `command` has that plan's shape. Reads no group file a path does not route through.
+	 */
 	const generatedAt = (
 		path: readonly string[],
-		commandPathOf: ExtensionContext["commandPathOf"],
+		command: () => CommandSnapshot,
 	): PlannedCommand | undefined => {
-		const added = base.readCommands.get(state)?.commands ?? [];
+		const tops = new Set((base.readCommands.get(state)?.commands ?? []).map(({ name }) => name));
 		for (let depth = 1; depth < path.length; depth++) {
-			for (const definition of added) {
-				if (definition.name !== path[depth]) continue;
-				const mounted = commandPathOf(definition);
-				if (mounted?.length === depth + 1 && mounted.every((word, at) => word === path[at])) {
-					return planAt(path.slice(depth));
-				}
-			}
+			if (!tops.has(path[depth]!)) continue;
+			const found = planAt(path.slice(depth));
+			if (found !== undefined && isPlannedCommand(command(), found.plan)) return found;
 		}
 		return undefined;
 	};
@@ -490,7 +491,10 @@ function apiExtension(
 				// A request path is previewed by the command itself; its values are not checked yet.
 				if (!isWords(target) || target.length === 0 || target[0]!.startsWith("/")) return;
 				const parsed = await ctx.parseCommandArgv([root!, ...target], isWords(argv) ? argv : []);
-				const found = generatedAt(parsed.path, ctx.commandPathOf);
+				// The target's snapshot: walking the root's builds only the commands on its path.
+				const found = generatedAt(parsed.path, () =>
+					parsed.path.slice(1).reduce((node, name) => node.subCommands[name]!, ctx.rootCommand),
+				);
 				if (found === undefined) {
 					throw new CrustError(
 						"PARSE",
@@ -512,7 +516,7 @@ function apiExtension(
 				return;
 			}
 			if (state.onMissing === undefined || !canAsk()) return;
-			const found = generatedAt(ctx.commandPath, ctx.commandPathOf);
+			const found = generatedAt(ctx.commandPath, () => ctx.command);
 			if (found !== undefined) {
 				await bindMissingValues(ctx, found.spec, found.plan, state.onMissing);
 			}

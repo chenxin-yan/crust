@@ -750,6 +750,41 @@ describe("api preview", () => {
 		);
 	});
 
+	it("previews a command at every place the app adds it, but not an app command at a generated path", async () => {
+		const acme = buildApi();
+		const app = new Crust("acme")
+			.extend(acme.extension)
+			.add(...acme.commands)
+			.command("other", (command) => command.add(...acme.commands))
+			.command("mine", (command) =>
+				command.command("users", (users) =>
+					users.command("get-user", (own) =>
+						own.args({ name: "id", type: "string", required: true }).action(() => {}),
+					),
+				),
+			);
+		const preview = (...target: [string, ...string[]]) =>
+			app.run(["api", "preview"], { args: { target, argv: ["1"] } });
+
+		const targets: [string, ...string[]][] = [
+			["users", "get-user"],
+			["other", "users", "get-user"],
+		];
+		for (const target of targets) {
+			expect(await preview(...target)).toMatchObject({
+				status: "completed",
+				result: { url: "https://api.example.com/v1/users/1" },
+			});
+		}
+		expect(await preview("mine", "users", "get-user")).toMatchObject({
+			status: "failed",
+			error: {
+				message:
+					'api preview: "mine users get-user" is not a command generated from the OpenAPI spec',
+			},
+		});
+	});
+
 	it("previews a command below an aliased parent, and refuses --paginate before --", async () => {
 		const acme = buildApi({ paginate: () => undefined });
 		const app = new Crust("acme")
@@ -948,6 +983,38 @@ describe("acme.onMissing()", () => {
 		expect((await onTerminal(app, ["create"])).exitCode).toBe(0);
 		expect(asked).toEqual(["name"]);
 		expect(sent.map(({ body }) => body)).toEqual(['{"name":"Ada","note":"bound"}']);
+	});
+
+	it("asks at every place the app adds the generated commands, not for its own look-alike", async () => {
+		const sent = stubFetch(() => new Response(null, { status: 201 }));
+		const asked: string[] = [];
+		const acme = defineApi({ spec: members, baseUrl: "https://api.example.com/v1/" }).onMissing(
+			(field) => {
+				asked.push(field.name);
+				return answers[field.name];
+			},
+		);
+		const app = new Crust("acme")
+			.extend(acme.extension)
+			.add(...acme.commands)
+			.command("other", { aliases: ["o"] }, (command) => command.add(...acme.commands))
+			// An app command at a generated command's path below another parent, with other inputs.
+			.command("mine", (command) =>
+				command.command("add-member", (own) =>
+					own.args({ name: "team", type: "string", required: true }).action(() => {}),
+				),
+			);
+		const body = ["--body", '{"name":"Ada","age":1}'];
+
+		for (const path of [["add-member"], ["other", "add-member"], ["o", "add-member"]]) {
+			expect((await onTerminal(app, [...path, ...body])).exitCode).toBe(0);
+		}
+		expect(asked).toEqual(["team", "role", "team", "role", "team", "role"]);
+		expect(sent).toHaveLength(3);
+		expect((await onTerminal(app, ["mine", "add-member"])).stderr).toBe(
+			'Error: Missing required argument "<team>"',
+		);
+		expect(asked).toHaveLength(6);
 	});
 
 	it("asks for nothing argv, the input or --body gave", async () => {
