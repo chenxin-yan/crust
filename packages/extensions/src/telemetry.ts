@@ -54,7 +54,7 @@ function isSending(options: TelemetryOptions): boolean {
 
 /**
  * Sends one usage event per invocation through the app's `send`, after the invocation settles.
- * Reports the outcome this Extension's `postRun` sees; routing failures before setup send nothing.
+ * Reports the outcome this Extension's `postRun` sees; an unknown command or flag fails before setup and sends nothing.
  *
  * @see https://crustjs.com/docs/modules/extensions/telemetry
  */

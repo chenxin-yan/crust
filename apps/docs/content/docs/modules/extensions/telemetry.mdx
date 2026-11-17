@@ -51,7 +51,7 @@ The event reports the outcome the Extension's `postRun` hook sees:
 
 Not covered:
 
-- Routing and argument parsing failures, such as an unknown command: they happen before any `setup`, so no event is sent.
+- An unknown command or an unknown flag: they fail before any `setup`, so no event is sent. A missing required argument or a value of the wrong type (`--replicas many` for a number flag) fails after `setup` and reports `failed`.
 - Outcome changes by later hooks: another Extension's `postRun` that throws fails a completed invocation, but every `postRun` receives the outcome as it was, so the event still says `completed`.
 - The process exit code.
 
