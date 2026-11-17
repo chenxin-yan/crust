@@ -109,7 +109,14 @@ export function renderHelpText(
 				(flag) =>
 					[
 						cyan(flag.spellings.join(", ") + (flag.type === "boolean" ? "" : ` <${flag.type}>`)),
-						formatDescription(flag.description, flag.default, flag.choices, dim, flag.env?.name),
+						formatDescription(
+							flag.description,
+							flag.default,
+							flag.choices,
+							dim,
+							flag.env?.name,
+							flag.config,
+						),
 					] as const,
 			),
 		),

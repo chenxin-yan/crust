@@ -122,6 +122,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 				flag.choices,
 				undefined,
 				flag.env?.name,
+				flag.config,
 			);
 			if (body) lines.push(...bodyLines(body));
 		}

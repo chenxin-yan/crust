@@ -627,7 +627,7 @@ describe("renderSkill", () => {
 			);
 		});
 
-		it("annotates env, defaults, and choices like Core help", async () => {
+		it("annotates env, config, defaults, and choices like Core help", async () => {
 			const cmd = makeCommand({
 				meta: { name: "serve" },
 				args: [{ name: "mode", type: "string", choices: ["dev", "prod"], default: "dev" }],
@@ -637,6 +637,7 @@ describe("renderSkill", () => {
 						description: "Output format",
 						choices: ["json", "text"],
 						env: { name: "SERVE_FORMAT" },
+						config: "format",
 					},
 				},
 				run() {},
@@ -648,7 +649,7 @@ describe("renderSkill", () => {
 				'| `mode` | string | No | `[default: "dev"]` `[choices: dev, prod]` |',
 			);
 			expect(serve).toContain(
-				"| `--format` | string | No | Output format `[env: SERVE_FORMAT]` `[choices: json, text]` |",
+				"| `--format` | string | No | Output format `[env: SERVE_FORMAT]` `[config: format]` `[choices: json, text]` |",
 			);
 		});
 

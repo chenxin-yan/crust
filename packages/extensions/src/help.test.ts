@@ -371,12 +371,13 @@ describe("help", () => {
 		expect(plain).not.toContain("__complete");
 	});
 
-	it("renderHelp surfaces the `env` variable name after the description, never its value", async () => {
+	it("renderHelp surfaces the `env` variable name and `config` key after the description, never a value", async () => {
 		const command = new Crust("app")
 			.flags({
 				token: {
 					type: "string",
 					env: { name: "HOME" },
+					config: "token",
 					default: "anon",
 					description: "API token",
 				},
@@ -384,7 +385,7 @@ describe("help", () => {
 			.action(() => {});
 		const plain = stripAnsi(await renderHelp(await command.snapshot()));
 		const tokenLine = plain.split("\n").find((l) => l.includes("--token"));
-		expect(tokenLine).toContain('API token [env: HOME] [default: "anon"]');
+		expect(tokenLine).toContain('API token [env: HOME] [config: token] [default: "anon"]');
 		// HOME is set in every test environment; help must show the name only.
 		expect(process.env.HOME).toBeTruthy();
 		expect(plain).not.toContain(process.env.HOME as string);
