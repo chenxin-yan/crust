@@ -6,9 +6,11 @@ import { fileURLToPath } from "node:url";
 
 import { Crust } from "@crustjs/core";
 import { help } from "@crustjs/extensions";
+import { captureExecute } from "@crustjs/testing";
 import { expect, it } from "vite-plus/test";
 
 import { database } from "../examples/guide/contexts-setup";
+import { debug } from "../examples/guide/error-handling";
 import { audited, list } from "../examples/guide/extensions-provider-flags";
 import { app as extensionsExample } from "../examples/modules/extensions/index";
 
@@ -139,6 +141,25 @@ it("error-handling example reports an unreadable config as is, not as missing", 
 	} finally {
 		await rm(cwd, { recursive: true, force: true });
 	}
+});
+
+it("error-handling debug example prints the stack and the cause chain under --debug", () => {
+	const result = runGuideExample("error-handling.ts", ["debug", "--debug"]);
+	expect(result.status).toBe(1);
+	expect(result.stdout).toBe("");
+	expect(result.stderr).toMatch(/^ConfigNotFoundError: No app\.config\.json found\./);
+	expect(result.stderr).toMatch(/\n {4}at /);
+	expect(result.stderr).toMatch(/\[cause\]: Error: ENOENT/);
+	expect(runGuideExample("error-handling.ts", ["debug"]).stderr).toBe(
+		"Error: No app.config.json found. Run `app init` to create one.\n",
+	);
+});
+
+it("error-handling debug example leaves cancellation silent under --debug", async () => {
+	const app = new Crust("app").extend(debug).action(() => {
+		throw new DOMException("Cancelled", "AbortError");
+	});
+	expect(await captureExecute(app, ["--debug"])).toEqual({ stdout: "", stderr: "", exitCode: 130 });
 });
 
 it("build guide example names its root after the guide's `bin` launcher", async () => {

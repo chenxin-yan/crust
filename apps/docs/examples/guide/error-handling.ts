@@ -70,6 +70,26 @@ const configured = new Crust("app").action(async () => {
 });
 //#endregion
 
+//#region debug
+import { inspect } from "node:util";
+
+import { defineExtension, defineExtensionId } from "@crustjs/core";
+
+export const debug = defineExtension(defineExtensionId("acme:debug"))
+	.flags({ debug: { type: "boolean", description: "Print errors with their stack and causes" } })
+	// [!code highlight:5]
+	.onError((error, { flags, stderr }) => {
+		// A cancellation is not a bug: leave it to Crust.
+		if (flags.debug !== true || (error instanceof Error && error.name === "AbortError")) return;
+		stderr(inspect(error));
+		return true;
+	});
+
+const traced = new Crust("app").extend(debug).action(async () => {
+	await loadConfig("app.config.json");
+});
+//#endregion
+
 const cancelled = new Crust("app").action(() => {
 	throw new DOMException("Cancelled", "AbortError");
 });
@@ -87,6 +107,7 @@ if (import.meta.main) {
 		validate: declared,
 		cleanup: deploy,
 		config: configured,
+		debug: traced,
 		cancel: cancelled,
 		prompt: prompted,
 	}[process.argv[2] ?? ""];

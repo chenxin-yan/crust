@@ -63,12 +63,37 @@ Error: No app.config.json found. Run `app init` to create one.
 ```
 
 - Recognize it with `instanceof`, never by message text, in [`run()` outcomes](#handle-errors-in-code), tests, and [`onError` hooks](#customize-error-output).
-- Pass the underlying failure as `{ cause }` to keep it for debugging. Crust renders only the message.
+- Pass the underlying failure as `{ cause }` to keep it for [debugging](#print-stack-traces). Crust renders only the message.
 - Setting `name` is optional: it labels stack traces. Crust never reads `name` or any other field of your errors to decide what to do, except `AbortError` for [cancellation](#cancellation).
 
 ## Customize error output
 
 To change how failures are presented, write an Extension with an [`onError`](/docs/api/types#extensionhooks) hook. The first hook that returns `true` claims the failure and replaces the default `Error:` line; the exit status doesn't change. A [renderer's `error`](/docs/guide/extensions#renderers) handles failures no hook claimed.
+
+### Print stack traces
+
+Crust prints only the message. To see the stack and the `cause` chain when debugging, add a `--debug` flag and an `onError` hook that prints the error with Node's `inspect()`:
+
+<include lang="ts">../../../examples/guide/error-handling.ts#debug</include>
+
+```sh
+$ app --debug
+ConfigNotFoundError: No app.config.json found. Run `app init` to create one.
+    at loadConfig (cli.ts:…)
+    … {
+  [cause]: Error: ENOENT: no such file or directory, open 'app.config.json'
+      at loadConfig (cli.ts:…)
+      … {
+    code: 'ENOENT',
+    …
+  }
+}
+# exit 1
+```
+
+- The hook skips cancellations, so Ctrl+C stays silent with `--debug`.
+- Failures to route or parse argv, such as an unknown flag, reach `onError` before flags are parsed, so they print only the message.
+- A claimed failure skips the renderer's `error`: under [`--json`](/docs/modules/extensions/json), `--debug` prints the stack instead of the JSON error line.
 
 ## Cancellation
 
