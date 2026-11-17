@@ -1,0 +1,5 @@
+---
+"@crustjs/openapi": minor
+---
+
+`defineApi()` generates a command per operation of the pinned spec: `new Crust("acme").extend(acme.extension).add(...acme.commands)`. Each is an ordinary app command in its first tag's group, with path parameters as arguments, typed query, header and top-level body field flags, the JSON body as a `--body` JSON flag whose schema stands alone for `schema` and MCP, and `.output()` with the response's JSON Schema; it prints the result for people and returns it. The handle's chain shapes them: `.use()` (Contexts for the callbacks, typed), `.onConfirm()`, `.each()` and `.override()` (one `OperationOverride` shape: `exclude`, `group`, `name`, `hidden`, `description`, `flagName`, `positional`, `bind`, `confirm`, `paginate`, `unwrap`, `outputSchema`, with names checked against a registered spec), and `.add(group, ...commands)`. An operation with a lint error is left out, and `api --list` marks it `[unavailable: <code>]`; `acme.lint()` and `acme.manifest()` are the drift guard to test on a spec bump. A built CLI that adds the generated commands reads its `<id>/spec.json` at start.

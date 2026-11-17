@@ -86,6 +86,28 @@ type BodyOf<Body> = [Defined<Body>] extends [never]
 		: {};
 type Flatten<T> = { [K in keyof T]: T[K] } & {};
 
+// `keyof never` is every key, so an absent location (typed `never`) must give no names.
+type KeysOf<T> = [T] extends [never] ? never : keyof T & string;
+type LocationNames<Parameters, In extends string> = In extends keyof Parameters
+	? KeysOf<Defined<Parameters[In]>>
+	: never;
+/** The names of an operation's path, query and header parameters; `string` when untyped. */
+export type ParamNamesOf<Op> = unknown extends Op
+	? string
+	: Op extends { parameters: infer Parameters }
+		? LocationNames<Parameters, "path" | "query" | "header">
+		: never;
+type ObjectKeys<T> = T extends readonly unknown[] ? never : T extends object ? KeysOf<T> : never;
+type JsonBodyNames<Body> = [Defined<Body>] extends [never]
+	? never
+	: Defined<Body> extends { content: infer Content }
+		? ObjectKeys<Content[Extract<keyof Content, JsonMediaType>]>
+		: never;
+/** The top-level property names of an operation's JSON request body. */
+export type BodyNamesOf<Op> = Op extends { requestBody?: unknown }
+	? JsonBodyNames<Op["requestBody"]>
+	: never;
+
 /** The input of a typed operation: each of `path`, `query`, `header` and `body` it takes. */
 type OperationInput<Op> = Flatten<
 	(Op extends { parameters: infer Parameters }

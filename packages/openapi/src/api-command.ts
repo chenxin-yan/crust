@@ -21,10 +21,44 @@ export interface OpenApiSpec {
 	readonly [key: string]: unknown;
 }
 
-/** A request for {@link ApiClient.fetch}; without `init`, the previous request's is reused. */
+/**
+ * A request for {@link ApiClient.fetch}; without `init`, the previous request's is reused.
+ * `init.auth: false` sends it without credentials, as for a public operation.
+ */
 export interface ApiRequest {
 	readonly path: string;
-	readonly init?: RequestInit;
+	readonly init?: Parameters<ApiClient["fetch"]>[1];
+}
+
+/** A page request `--paginate` sent, with its method as sent: `paginate` may change a reused `init` afterwards. */
+export interface SentPage extends ApiRequest {
+	readonly method: string;
+}
+
+/**
+ * The page request after `previous` for `next`, a `paginate` result; fails when `next` repeats
+ * `previous` (same URL and method, `init` reused) instead of looping.
+ */
+export function nextPage(
+	baseUrl: string,
+	previous: SentPage,
+	next: ApiRequest,
+	pageNumber: number,
+): SentPage {
+	const init = next.init ?? previous.init;
+	const method = init?.method ?? "GET";
+	const url = resolveUrl(baseUrl, next.path).href;
+	// shortcut: compares only with the previous request, so a longer cycle (A→B→A) still loops; upgrade to a seen-set if that shows up.
+	if (
+		init === previous.init &&
+		method === previous.method &&
+		url === resolveUrl(baseUrl, previous.path).href
+	) {
+		throw new Error(
+			`--paginate: page ${pageNumber} repeats the previous request (${method} ${withoutQuery(url)})`,
+		);
+	}
+	return { path: next.path, init, method };
 }
 
 type ListedOperation = {
@@ -32,17 +66,27 @@ type ListedOperation = {
 	readonly path: string;
 	readonly operationId?: string;
 	readonly summary?: string;
+	/** The code of the lint error that leaves its generated command out. */
+	readonly unavailable?: string;
 };
 
-/** Each operation's method, path, and the `operationId` and `summary` the spec has. */
-function listOperations(spec: OpenApiSpec): ListedOperation[] {
+/**
+ * Each operation's method, path, the `operationId` and `summary` the spec has, and the code of the
+ * lint error that leaves it out of the generated commands.
+ */
+function listOperations(
+	spec: OpenApiSpec,
+	unavailable: ReadonlyMap<string, string>,
+): ListedOperation[] {
 	return rawOperations(spec).map(({ method, path, operation }) => {
 		const { operationId, summary } = operation as { operationId?: unknown; summary?: unknown };
+		const code = typeof operationId === "string" ? unavailable.get(operationId) : undefined;
 		return {
 			method: method.toUpperCase(),
 			path,
 			...(typeof operationId === "string" && operationId !== "" ? { operationId } : {}),
 			...(typeof summary === "string" && summary !== "" ? { summary } : {}),
+			...(code !== undefined && { unavailable: code }),
 		};
 	});
 }
@@ -279,7 +323,7 @@ export type ApiCommandDefinition<Operations = unknown> = CommandDefinition<
 
 /**
  * The `api` command over the `client` Context: `api --list` and `api --spec <operationId|path>`
- * read the spec from `loadSpec`; `api <path>` sends a request through the client, prints the
+ * read the spec from `loadSpec`, and `api --list` marks the `unavailable` operations; `api <path>` sends a request through the client, prints the
  * response body to stdout (its exact bytes to a pipe or file; as text to a terminal, failing
  * instead for a binary body), and fails with {@link ApiResponseError} on a non-2xx status. Under
  * the `json()` Extension's `--json`, `api` returns its data as the command result instead: the
@@ -289,7 +333,14 @@ export type ApiCommandDefinition<Operations = unknown> = CommandDefinition<
 export function createApiCommand(
 	client: ContextFactory<"api", void, ApiClient>,
 	loadSpec: () => Promise<OpenApiSpec>,
-	{ baseUrl, paginate }: Pick<DefineApiOptions, "baseUrl" | "paginate">,
+	{
+		baseUrl,
+		paginate,
+		unavailable,
+	}: Pick<DefineApiOptions, "baseUrl" | "paginate"> & {
+		/** The code of the lint error that leaves each such operation out, by operationId. */
+		readonly unavailable: () => ReadonlyMap<string, string>;
+	},
 ): ApiCommandDefinition {
 	return defineCommand(
 		"api",
@@ -303,9 +354,12 @@ export function createApiCommand(
 					// Under the json() Extension's `--json`, the result is the output: JSON data on stdout.
 					const json = (flags as { json?: unknown }).json === true;
 					if (flags.list) {
-						const listed = listOperations(await loadSpec());
+						const listed = listOperations(await loadSpec(), unavailable());
 						if (json) return listed;
-						for (const entry of listed) stdout(Object.values(entry).join(" "));
+						for (const { unavailable: code, ...entry } of listed) {
+							const mark = code === undefined ? [] : [`[unavailable: ${code}]`];
+							stdout([...Object.values(entry), ...mark].join(" "));
+						}
 						return undefined;
 					}
 					if (flags.spec !== undefined) {
@@ -360,11 +414,9 @@ export function createApiCommand(
 					const api = await ctx.api;
 					/** The response and body of each page: just one without --paginate. Fails after a non-2xx page. */
 					async function* pages(): AsyncGenerator<Page> {
-						let request: ApiRequest = { path, init: { method, headers, body: requestBody } };
+						let request: SentPage = { path, init: { method, headers, body: requestBody }, method };
 						// What messages show: the request's path as given, never a query added by -F.
 						let shown = args.path as string;
-						// Snapshot at send time: a reused `init` may be mutated by `paginate` afterwards.
-						let sentMethod = method;
 						let response = await api.fetch(request.path, request.init);
 						for (let pageNumber = 2; ; pageNumber++) {
 							// Bun types `clone()` as undici's Response, which lacks Bun's Headers extras.
@@ -373,28 +425,14 @@ export function createApiCommand(
 							if (!response.ok) {
 								throw new ApiResponseError(
 									response.status,
-									`${sentMethod} ${withoutQuery(shown)}: HTTP ${response.status} ${response.statusText}`.trimEnd(),
+									`${request.method} ${withoutQuery(shown)}: HTTP ${response.status} ${response.statusText}`.trimEnd(),
 								);
 							}
 							const next: ApiRequest | undefined =
 								page && paginate ? await paginate(page) : undefined;
 							if (next === undefined) return;
-							const nextInit = next.init ?? request.init;
-							const nextUrl = resolveUrl(baseUrl, next.path).href;
-							// shortcut: compares only with the previous request, so a longer cycle (A→B→A) still loops; upgrade to a seen-set if that shows up.
-							const nextMethod = nextInit?.method ?? "GET";
-							if (
-								nextInit === request.init &&
-								nextMethod === sentMethod &&
-								nextUrl === resolveUrl(baseUrl, request.path).href
-							) {
-								throw new Error(
-									`--paginate: page ${pageNumber} repeats the previous request (${nextMethod} ${withoutQuery(nextUrl)})`,
-								);
-							}
-							request = { path: next.path, init: nextInit };
+							request = nextPage(baseUrl, request, next, pageNumber);
 							shown = next.path;
-							sentMethod = nextMethod;
 							response = await fetchNextPage(api, request.path, request.init);
 						}
 					}

@@ -1,4 +1,5 @@
-import { Crust, defineCommand } from "@crustjs/core";
+import { Crust, defineCommand, defineContext } from "@crustjs/core";
+import { confirm, help } from "@crustjs/extensions";
 
 import { type ApiClient, defineApi } from "./index.ts";
 import type { SpecOperationsOf } from "./typed-client.ts";
@@ -262,7 +263,100 @@ function _typecheckSpecIsAUrlOrAnObject() {
 	defineApi({ spec: "./acme.openapi.jsonc", baseUrl });
 }
 
+const account = defineContext("account").setup(() => ({ id: "acc_1" }));
+const region = defineContext("region").setup(() => "eu");
+const purge = defineCommand("purge", (command) =>
+	command.use(region).action(async ({ ctx }) => {
+		await ctx.region;
+	}),
+);
+
+function _typecheckChainContexts() {
+	const acme = defineApi({ spec, baseUrl })
+		.use(confirm, account)
+		.onConfirm(async (ctx, message) => (await ctx.confirm)(message))
+		.each((op) => ({
+			bind: { id: async (ctx) => (await ctx.account).id },
+			confirm: op.method === "delete" ? `Delete ${op.path}?` : undefined,
+		}))
+		.add("users", purge);
+	// Every Context the generated and the added commands use is provided.
+	new Crust("acme")
+		.extend(help(), confirm(), acme.extension)
+		.provide(account(), region())
+		.add(...acme.commands);
+	new Crust("acme")
+		.extend(help(), confirm(), acme.extension)
+		.provide(account())
+		// @ts-expect-error -- FIX_MISSING_DEPENDENCY: `region`, which the added `purge` uses
+		.add(...acme.commands);
+	new Crust("acme")
+		.extend(help(), confirm(), acme.extension)
+		.provide(region())
+		// @ts-expect-error -- FIX_MISSING_DEPENDENCY: `account`, which `.use()` declared
+		.add(...acme.commands);
+	new Crust("acme")
+		.extend(help(), confirm())
+		.provide(account(), region())
+		// @ts-expect-error -- FIX_MISSING_DEPENDENCY: `api`, which acme.extension provides
+		.add(...acme.commands);
+
+	defineApi({ spec, baseUrl })
+		.use(account)
+		// @ts-expect-error -- `confirm` was not `.use()`d before
+		.onConfirm(async (ctx, message) => (await ctx.confirm)(message));
+	defineApi({ spec, baseUrl })
+		.use(confirm)
+		// @ts-expect-error -- a binding resolves to a string
+		.each(() => ({ bind: { id: async (ctx) => (await ctx.confirm)("x") } }));
+	// The client is in `ctx` from the start.
+	defineApi({ spec, baseUrl }).each(() => ({
+		bind: { id: async (ctx) => (await ctx.api).baseUrl },
+	}));
+}
+
+function _typecheckTypedNames() {
+	defineApi({ id: "acme", spec, baseUrl })
+		.each((op) => {
+			type _Id = Expect<Equal<typeof op.id, keyof AcmeOperations>>;
+			// A rule names parameters of any operation; those an operation lacks are ignored.
+			return { flagName: { anything: "x" } };
+		})
+		.override({
+			getUser: {
+				expect: { method: "GET", path: "/users/{id}" },
+				flagName: { expand: "full", "X-Request-Id": "request-id" },
+				positional: ["id"],
+				bind: { "X-Request-Id": () => "r1" },
+			},
+			// A top-level body property is named like a parameter.
+			createUser: { flagName: { email: "mail" }, bind: { name: () => "Ada" } },
+		})
+		.override({
+			// @ts-expect-error -- not an operationId of acme
+			getUsr: { name: "get" },
+		})
+		// @ts-expect-error -- not a parameter of getUser
+		.override({ getUser: { flagName: { nope: "x" } } })
+		// @ts-expect-error -- a body property is not positional
+		.override({ createUser: { positional: ["name"] } })
+		// @ts-expect-error -- not a parameter of listUsers
+		.override({ listUsers: { bind: { id: () => "1" } } });
+}
+
+function _typecheckUntypedNames() {
+	defineApi({ spec, baseUrl })
+		.each((op) => {
+			type _Id = Expect<Equal<typeof op.id, string>>;
+			return undefined;
+		})
+		.override({ anything: { flagName: { any: "x" }, positional: ["id"], bind: { x: () => "1" } } });
+}
+
 void [
+	_typecheckChainContexts,
+	_typecheckTypedNames,
+	_typecheckUntypedNames,
 	_typecheckRegisteredSpecById,
 	_typecheckSecondRegisteredSpecById,
 	_typecheckUntyped,
