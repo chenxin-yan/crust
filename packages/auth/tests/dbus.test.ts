@@ -8,7 +8,7 @@ import { createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { busAnswers, keyrings } from "../src/keyring.ts";
 
@@ -17,6 +17,8 @@ const deadlineMs = keyrings.deadlineMs;
 
 afterEach(() => {
 	keyrings.deadlineMs = deadlineMs;
+	vi.unstubAllEnvs();
+	vi.doUnmock("@napi-rs/keyring");
 	for (const step of cleanup.splice(0)) step();
 });
 
@@ -80,6 +82,37 @@ describe.runIf(process.platform === "linux")("the session bus probe", () => {
 		]) {
 			await expect(busAnswers(address)).resolves.toBeUndefined();
 		}
+	});
+
+	it("tries every address of the list in order, within one deadline", async () => {
+		keyrings.deadlineMs = 1_000;
+		const dir = tempDir();
+		const live = join(dir, "live");
+		await bus(live, "OK 0123456789abcdef\r\n");
+		const dead = `unix:path=${join(dir, "missing")}`;
+		await expect(busAnswers(`${dead};unix:path=${live}`)).resolves.toBe(true);
+		await expect(busAnswers(`unix:path=${live};${dead}`)).resolves.toBe(true);
+		await expect(busAnswers(`${dead};${dead}`)).resolves.toBe(false);
+		// An address form it does not handle anywhere in the list: not probed, as libdbus may use it.
+		await expect(busAnswers(`${dead};tcp:host=127.0.0.1,port=1`)).resolves.toBeUndefined();
+	});
+
+	it("remembers only a bus that answered: one that failed is probed again by the next call", async () => {
+		keyrings.deadlineMs = 500;
+		vi.doMock("@napi-rs/keyring", () => ({
+			AsyncEntry: class {
+				getPassword = async () => "value";
+				setPassword = async () => {};
+			},
+		}));
+		const path = join(tempDir(), "bus");
+		vi.stubEnv("DBUS_SESSION_BUS_ADDRESS", `unix:path=${path}`);
+		const backend = (await keyrings.load())!;
+		expect(backend.kind).toBe("napi-keyring");
+		await expect(backend.get("acme", "credentials-key")).rejects.toThrow();
+		// The bus comes back.
+		await bus(path, "OK 0123456789abcdef\r\n");
+		await expect(backend.get("acme", "credentials-key")).resolves.toBe("value");
 	});
 
 	it("a bus that never answers leaves Node's event loop free and the status bounded: no keyring", async () => {

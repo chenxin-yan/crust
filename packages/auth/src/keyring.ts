@@ -48,11 +48,16 @@ async function load(): Promise<KeyringBackend | undefined> {
 	}
 	// Constructing an entry connects to the session bus synchronously on Linux: a bus that never
 	// answers would block the event loop past every deadline, so it must answer a probe first.
-	let bus: Promise<boolean | undefined> | undefined;
+	// Only an answer is remembered: a bus that failed is probed again by the next call.
+	let busAnswered = false;
+	let probing: Promise<boolean | undefined> | undefined;
 	const entry = async (service: string, name: string) => {
-		if (process.platform === "linux") {
-			bus ??= busAnswers(process.env.DBUS_SESSION_BUS_ADDRESS);
-			if ((await bus) === false) throw new Error("The D-Bus session bus does not answer");
+		if (process.platform === "linux" && !busAnswered) {
+			probing ??= busAnswers(process.env.DBUS_SESSION_BUS_ADDRESS).finally(() => {
+				probing = undefined;
+			});
+			if ((await probing) === false) throw new Error("The D-Bus session bus does not answer");
+			busAnswered = true;
 		}
 		// Linux's default falls back to the in-memory keyutils store, which loses the key at reboot.
 		return new napi.AsyncEntry(service, name, { linux: { store: "secret-service" } });
@@ -64,12 +69,11 @@ async function load(): Promise<KeyringBackend | undefined> {
 	};
 }
 
-/** The socket of a `unix:path=` or `unix:abstract=` D-Bus address (the first of a list). */
-function busSocket(address: string | undefined): string | undefined {
-	const first = address?.split(";")[0];
-	if (!first?.startsWith("unix:")) return undefined;
+/** The socket of one `unix:path=` or `unix:abstract=` D-Bus address. */
+function busSocket(address: string): string | undefined {
+	if (!address.startsWith("unix:")) return undefined;
 	const fields = new Map(
-		first
+		address
 			.slice("unix:".length)
 			.split(",")
 			.map((field) => [field.slice(0, field.indexOf("=")), field.slice(field.indexOf("=") + 1)]),
@@ -88,12 +92,27 @@ function busSocket(address: string | undefined): string | undefined {
 
 /**
  * Whether the D-Bus session bus at `address` accepts an `EXTERNAL` authentication within the
- * keyring deadline. `undefined`: not probed, as the address is none or not a `unix:path=` or
- * `unix:abstract=` one. It does not show that the Secret Service behind the bus answers.
+ * keyring deadline, trying the addresses of a `;` list in order, as libdbus does. `undefined`:
+ * not probed, as there is no address or one of them is not a `unix:path=` or `unix:abstract=`
+ * one. It does not show that the Secret Service behind the bus answers.
  */
-export function busAnswers(address: string | undefined): Promise<boolean | undefined> {
-	const path = busSocket(address);
-	if (path === undefined) return Promise.resolve(undefined);
+export async function busAnswers(address: string | undefined): Promise<boolean | undefined> {
+	const sockets = (address ?? "")
+		.split(";")
+		.filter(Boolean)
+		.map((one) => busSocket(one));
+	if (sockets.length === 0 || sockets.includes(undefined)) return undefined;
+	// One deadline for the whole list.
+	const deadline = performance.now() + keyrings.deadlineMs;
+	for (const path of sockets as string[]) {
+		const remaining = deadline - performance.now();
+		if (remaining <= 0) return false;
+		if (await socketAnswers(path, remaining)) return true;
+	}
+	return false;
+}
+
+function socketAnswers(path: string, timeoutMs: number): Promise<boolean> {
 	return new Promise((resolve) => {
 		const socket = connect(path);
 		let text = "";
@@ -102,7 +121,7 @@ export function busAnswers(address: string | undefined): Promise<boolean | undef
 			socket.destroy();
 			resolve(answers);
 		};
-		const timer = setTimeout(() => done(false), keyrings.deadlineMs);
+		const timer = setTimeout(() => done(false), timeoutMs);
 		socket.on("connect", () => {
 			const uid = Buffer.from(String(process.getuid?.() ?? "")).toString("hex");
 			socket.write(`\0AUTH EXTERNAL ${uid}\r\n`);
