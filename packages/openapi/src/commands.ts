@@ -14,7 +14,7 @@ import type { StandardJSONSchema, StandardSchema } from "@crustjs/utils/schema";
 import { type OpenApiSpec, type SentPage, nextPage } from "./api-command.ts";
 import { type ApiClient, fetchNextPage } from "./client.ts";
 import type { DefineApiOptions } from "./define-api.ts";
-import type { CommandPlan, PlannedInput } from "./lint.ts";
+import { type CommandPlan, type PlannedInput, boundNames } from "./lint.ts";
 import { kebab } from "./names.ts";
 import type { Param } from "./operations.ts";
 import { buildRequest, isPlainObject, readOperationResponse } from "./request.ts";
@@ -153,23 +153,25 @@ function operationCommand(plan: CommandPlan, options: GenerateOptions): Generate
 							else if (target.in === "field") bodyFields[target.field.name] = value;
 							else if (target.in === "body") body = value;
 						}
+						// One value per binding, for every parameter and body field of its name.
 						for (const [name, bind] of Object.entries(fields.bind ?? {})) {
 							if (bind === undefined) continue;
-							const param = op.params.find((entry) => entry.name === name && entry.in !== "cookie");
-							if (param !== undefined) input[param.in][name] = await bind(ctx);
-							else if (plan.bodyFields.some((field) => field.name === name)) {
-								bodyFields[name] = await bind(ctx);
+							const value = await bind(ctx);
+							for (const param of op.params) {
+								if (param.name === name && param.in !== "cookie") input[param.in][name] = value;
 							}
+							if (plan.bodyFields.some((field) => field.name === name)) bodyFields[name] = value;
 						}
 						body = effectiveBody(spec, plan, body, bodyFields);
+						const { path, query, header } = input;
+						// Built, and so checked, before the confirmation, which a rejected request must not ask for.
+						const request = buildRequest(op, { path, query, header, body });
 						if (typeof fields.confirm === "string") {
 							// Lint leaves out an operation with `confirm` and no handler, so this is set.
 							await options.onConfirm?.(ctx, fields.confirm);
 						}
 
 						const api = await ctx.api;
-						const { path, query, header } = input;
-						const request = buildRequest(op, { path, query, header, body });
 						let sent: SentPage = {
 							path: request.path,
 							init: request.init,
@@ -275,10 +277,13 @@ function effectiveBody(
 			continue;
 		}
 		if (input === undefined) continue;
-		const { type, multiple, choices, nullable } = flagValue(spec, field.schema);
+		const { type, multiple, choices, nullable, itemNullable } = flagValue(spec, field.schema);
 		if (value === null && nullable) continue;
 		const items = multiple ? value : [value];
-		if (!Array.isArray(items) || items.some((item) => typeof item !== type)) {
+		if (
+			!Array.isArray(items) ||
+			items.some((item: unknown) => typeof item !== type && !(item === null && itemNullable))
+		) {
 			problems.push(
 				`the body field "${field.name}" must be ${multiple ? "a list of " : "a "}${type}`,
 			);
@@ -299,11 +304,14 @@ function effectiveBody(
 	return body;
 }
 
+// A list is only ever the last argument: lint reports one before another (`positional-order`).
 function argDef(spec: OpenApiSpec, { name, target }: PlannedInput): ArgDef {
 	const param = target.in === "param" ? target.param : undefined;
+	const { type, multiple } = flagValue(spec, param?.schema);
 	return {
 		name,
-		type: flagValue(spec, param?.schema).type,
+		type,
+		...(multiple && { variadic: true }),
 		...(param?.required && { required: true }),
 		...(param?.description !== undefined && { description: param.description }),
 	};
@@ -353,7 +361,7 @@ function bodySchema(spec: OpenApiSpec, plan: CommandPlan): StandardSchema & Stan
 	// Body fields the command fills itself: from a flag, or bound.
 	const filled = new Set([
 		...plan.inputs.flatMap(({ target }) => (target.in === "field" ? [target.field.name] : [])),
-		...Object.keys(plan.fields.bind ?? {}).filter((name) =>
+		...[...boundNames(plan.fields)].filter((name) =>
 			plan.bodyFields.some((field) => field.name === name),
 		),
 	]);

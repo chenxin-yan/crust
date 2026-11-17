@@ -949,4 +949,197 @@ describe("generated output schemas", () => {
 		});
 		expect(Object.keys(at(snapshot, "tuple").flags)).not.toContain("paginate");
 	});
+
+	it("drops the list limits and finds a tuple through an allOf reference", async () => {
+		const ref = (name: string) => ({
+			"200": {
+				description: "OK",
+				content: {
+					"application/json": { schema: { allOf: [{ $ref: `#/components/schemas/${name}` }] } },
+				},
+			},
+		});
+		const acme = buildApi({
+			paginate: () => undefined,
+			spec: {
+				openapi: "3.1.0",
+				paths: {
+					"/page": { get: { operationId: "page", summary: "Page", responses: ref("Page") } },
+					"/tuple": { get: { operationId: "tuple", summary: "Tuple", responses: ref("Tuple") } },
+				},
+				components: {
+					schemas: {
+						Page: { type: "array", maxItems: 1, items: { type: "number", maximum: 9 } },
+						Tuple: { type: "array", prefixItems: [{ type: "number" }], items: false },
+					},
+				},
+			},
+		});
+		const snapshot = await new Crust("acme")
+			.extend(acme.extension)
+			.add(...acme.commands)
+			.snapshot();
+
+		expect(at(snapshot, "page").outputSchema).toEqual({
+			allOf: [{ type: "array", items: { type: "number", maximum: 9 } }],
+		});
+		expect(Object.keys(at(snapshot, "tuple").flags)).not.toContain("paginate");
+	});
+});
+
+describe("generated command bindings, positionals and confirmation", () => {
+	const shared = ["path", "query", "header"].map((location) => ({
+		name: "id",
+		in: location,
+		required: true,
+		schema: { type: "string" },
+	}));
+
+	it("fills every parameter a binding names, once", async () => {
+		const calls = stubFetch(() => Response.json({}));
+		const bind = vi.fn(async () => "42");
+		const acme = appFor({
+			"/{id}": { get: { operationId: "probe", parameters: shared } },
+		}).acme.override({
+			probe: { bind: { id: bind } },
+		});
+		const app = new Crust("acme").extend(acme.extension).add(...acme.commands);
+
+		expect((await captureExecute(app, ["probe"])).exitCode).toBe(0);
+		expect(calls[0]).toMatchObject({
+			url: "https://api.example.com/v1/42?id=42",
+			headers: { id: "42" },
+		});
+		expect(bind).toHaveBeenCalledTimes(1);
+	});
+
+	it("maps a parameter by default when its bind or flagName entry is undefined", async () => {
+		const { acme } = appFor({
+			"/{id}": {
+				get: {
+					operationId: "probe",
+					parameters: [pathParam("id"), { name: "q", in: "query", schema: { type: "string" } }],
+				},
+			},
+		});
+		const handle = acme.override({
+			probe: { bind: { id: undefined }, flagName: { id: undefined, q: undefined } },
+		});
+
+		expect(handle.manifest().commands).toEqual([
+			expect.objectContaining({ command: "probe", args: ["id"], flags: ["q"] }),
+		]);
+	});
+
+	it("leaves out an operation whose positionals put an optional one or a list before another", () => {
+		const { acme } = appFor({
+			"/{id}": {
+				get: {
+					operationId: "probe",
+					parameters: [
+						pathParam("id"),
+						{ name: "q", in: "query", schema: { type: "string" } },
+						{
+							name: "tag",
+							in: "query",
+							required: true,
+							schema: { type: "array", items: { type: "string" } },
+						},
+					],
+				},
+			},
+		});
+		const codes = (positional: string[]) =>
+			acme
+				.override({ probe: { positional } })
+				.lint()
+				.flatMap(({ code }) => (code === "positional-order" ? [code] : []));
+
+		expect(codes(["q", "id"])).toEqual(["positional-order"]);
+		expect(codes(["tag", "id"])).toEqual(["positional-order"]);
+		expect(codes(["id", "q"])).toEqual([]);
+		expect(codes(["id", "tag"])).toEqual([]);
+	});
+
+	it("takes a list parameter as the last positional, variadic", async () => {
+		const calls = stubFetch(() => Response.json({}));
+		const acme = appFor({
+			"/{id}": {
+				get: {
+					operationId: "probe",
+					parameters: [
+						pathParam("id"),
+						{
+							name: "tag",
+							in: "query",
+							required: true,
+							schema: { type: "array", items: { type: "string" } },
+						},
+					],
+				},
+			},
+		}).acme.override({ probe: { positional: ["id", "tag"] } });
+		const app = new Crust("acme").extend(acme.extension).add(...acme.commands);
+
+		expect(
+			at(await app.snapshot(), "probe").args.map(({ name, variadic }) => [name, variadic]),
+		).toEqual([
+			["id", undefined],
+			["tag", true],
+		]);
+		expect((await captureExecute(app, ["probe", "1", "a", "b"])).exitCode).toBe(0);
+		expect(calls[0]?.url).toBe("https://api.example.com/v1/1?tag=a&tag=b");
+	});
+
+	it("checks the whole request before asking to confirm it", async () => {
+		const calls = stubFetch(() => Response.json({}));
+		const asked = vi.fn();
+		const acme = appFor({
+			"/{id}": { delete: { operationId: "probe", parameters: [pathParam("id")] } },
+		})
+			.acme.onConfirm(asked)
+			.override({ probe: { confirm: "Send?" } });
+		const app = new Crust("acme").extend(acme.extension).add(...acme.commands);
+
+		expect(await captureExecute(app, ["probe", ".."])).toMatchObject({ exitCode: 1 });
+		expect(asked).not.toHaveBeenCalled();
+		expect(calls).toEqual([]);
+	});
+
+	it("checks nullable list items and an enum that does not allow null", async () => {
+		const calls = stubFetch(() => Response.json({}));
+		const fields = {
+			tags: { type: "array", items: { type: ["string", "null"] } },
+			name: { type: ["string", "null"], enum: ["a"] },
+		};
+		const { app } = appFor({
+			"/p": { post: { operationId: "probe", ...jsonBody({ type: "object", properties: fields }) } },
+		});
+		const v30 = appFor(
+			{
+				"/p": {
+					post: {
+						operationId: "probe",
+						...jsonBody({
+							type: "object",
+							properties: { tags: { type: "array", items: { type: "string", nullable: true } } },
+						}),
+					},
+				},
+			},
+			{ openapi: "3.0.3" },
+		);
+
+		expect((await captureExecute(app, ["probe", "--body", '{"tags":[null,"x"]}'])).exitCode).toBe(
+			0,
+		);
+		expect(
+			(await captureExecute(v30.app, ["probe", "--body", '{"tags":[null,"x"]}'])).exitCode,
+		).toBe(0);
+		expect(await captureExecute(app, ["probe", "--body", '{"name":null}'])).toMatchObject({
+			exitCode: 1,
+			stderr: expect.stringContaining('the body field "name"'),
+		});
+		expect(calls).toHaveLength(2);
+	});
 });

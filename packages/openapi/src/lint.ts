@@ -16,6 +16,7 @@ import {
 	type JsonSchema,
 	type SchemaField,
 	isArraySchema,
+	publishedSchema,
 	record,
 	schemaFields,
 	valueKind,
@@ -193,9 +194,14 @@ export function planCommands(input: LintInput): {
 
 		// Inputs, as generated commands map them: positional parameters become arguments, other
 		// parameters and the scalar fields of a JSON body flags, the whole JSON body `--body`.
-		const bound = new Set(Object.keys(fields.bind ?? {}));
-		const rename = (name: string) =>
-			Object.hasOwn(fields.flagName ?? {}, name) ? fields.flagName![name]! : kebab(name);
+		// An `undefined` entry is no entry: the default applies.
+		const bound = boundNames(fields);
+		const rename = (name: string) => {
+			const renamed = Object.hasOwn(fields.flagName ?? {}, name)
+				? fields.flagName![name]
+				: undefined;
+			return typeof renamed === "string" ? renamed : kebab(name);
+		};
 		const pathParams = new Set(
 			op.params.filter((param) => param.in === "path").map(({ name }) => name),
 		);
@@ -220,6 +226,29 @@ export function planCommands(input: LintInput): {
 		}
 		for (const param of sent) {
 			if (!positional.includes(param.name)) inputs.push(paramInput(param, "flag"));
+		}
+		// Positional values fill arguments in order, so one can be left out only at the end, and a
+		// list takes every value after it.
+		const args = inputs.flatMap(({ kind, target }) =>
+			kind === "arg" && target.in === "param" ? [target.param] : [],
+		);
+		for (const [index, param] of args.entries()) {
+			const later = args.slice(index + 1);
+			const problem =
+				later.length === 0
+					? undefined
+					: valueKind(spec, param.schema, "scalar") === "array"
+						? "is a list, which takes every value after it"
+						: !param.required && later.some((next) => next.required)
+							? "is optional, before a required one"
+							: undefined;
+			if (problem === undefined) continue;
+			report(
+				"error",
+				"positional-order",
+				`${label}: the positional ${param.in} parameter "${param.name}" ${problem}`,
+				"Order `positional` with the required parameters first and a list last",
+			);
 		}
 		if (op.body !== undefined) {
 			const { body } = op;
@@ -278,10 +307,12 @@ export function planCommands(input: LintInput): {
 			(fields.paginate !== undefined || input.hasPaginate === true) &&
 			(resultSchema === undefined
 				? fields.unwrap !== undefined
-				: isArraySchema(spec, resultSchema) && !isTupleSchema(resultSchema));
+				: isArraySchema(spec, resultSchema) && !isTupleSchema(spec, resultSchema, 0));
 		// One schema for one page and the joined pages: without the limits of one page's list.
 		const outputSchema =
-			paginates && resultSchema !== undefined ? withoutListLimits(resultSchema) : resultSchema;
+			paginates && resultSchema !== undefined
+				? withoutListLimits(spec, resultSchema, 0)
+				: resultSchema;
 		if (paginates) {
 			inputs.push({
 				kind: "flag",
@@ -311,11 +342,15 @@ export function planCommands(input: LintInput): {
 		for (const [name, same] of Map.groupBy(inputs, (item) => item.name)) {
 			if (same.length < 2) continue;
 			const sources = same.map(({ source }) => source);
+			// `flagName` is keyed by the spec's name, so it renames every input of one name alike.
+			const specNames = new Set(same.map(({ target }) => specName(target)));
 			report(
 				"error",
 				"flag-collision",
 				`${label}: ${sources.slice(0, -1).join(", ")} and ${sources.at(-1)} share the input name "${name}"`,
-				"Set `flagName` for one of them in the operation's override",
+				specNames.size === 1
+					? "Fill them with one `bind` entry, or set `exclude: true` and write the command with `call()`, or use `api`"
+					: "Set `flagName` for one of them in the operation's override",
 			);
 		}
 
@@ -528,21 +563,57 @@ const LIST_LIMITS = [
 	"maxContains",
 ];
 
-/** A schema with list-wide keywords dropped from it and from its `allOf` members; its items keep theirs. */
-function withoutListLimits(schema: JsonSchema): JsonSchema {
+/** How many nested `allOf` levels the list helpers follow, as {@link valueKind} does. */
+const ALL_OF_DEPTH = 8;
+
+/**
+ * A schema with list-wide keywords dropped from it and from its `allOf` members, each resolved like
+ * a published schema (so a `$ref` member is replaced by its target); the items keep theirs.
+ */
+function withoutListLimits(spec: OpenApiSpec, schema: JsonSchema, depth: number): JsonSchema {
 	const node = record(schema);
 	if (node === undefined) return schema;
 	const out = Object.fromEntries(
 		Object.entries(node).filter(([key]) => !LIST_LIMITS.includes(key)),
 	);
-	if (Array.isArray(node.allOf)) out.allOf = node.allOf.map(withoutListLimits);
+	if (Array.isArray(node.allOf) && depth < ALL_OF_DEPTH) {
+		out.allOf = node.allOf.map((member) => {
+			const resolved = publishedSchema(spec, member);
+			return record(resolved) === undefined
+				? member
+				: withoutListLimits(spec, resolved as JsonSchema, depth + 1);
+		});
+	}
 	return out;
 }
 
-/** Whether a list schema fixes its leading items (`prefixItems`, or a 3.0-style `items` array), also in `allOf`. */
-function isTupleSchema(schema: unknown): boolean {
+/**
+ * Whether a list schema fixes its leading items (`prefixItems`, or a 3.0-style `items` array),
+ * also in its `allOf` members, resolved like published schemas.
+ */
+function isTupleSchema(spec: OpenApiSpec, schema: unknown, depth: number): boolean {
 	const node = record(schema);
 	if (node === undefined) return false;
 	if (node.prefixItems !== undefined || Array.isArray(node.items)) return true;
-	return Array.isArray(node.allOf) && node.allOf.some(isTupleSchema);
+	return (
+		Array.isArray(node.allOf) &&
+		depth < ALL_OF_DEPTH &&
+		node.allOf.some((member) => isTupleSchema(spec, publishedSchema(spec, member), depth + 1))
+	);
+}
+
+/** The names `bind` fills: its entries that are functions. */
+export function boundNames(fields: OperationOverride): Set<string> {
+	return new Set(
+		Object.entries(fields.bind ?? {}).flatMap(([name, bind]) => (bind === undefined ? [] : [name])),
+	);
+}
+
+/** The spec's name an input comes from. */
+function specName(target: PlannedInput["target"]): string {
+	return target.in === "param"
+		? target.param.name
+		: target.in === "field"
+			? target.field.name
+			: target.in;
 }

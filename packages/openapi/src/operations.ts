@@ -74,6 +74,7 @@ export interface Diagnostic {
 		| "reserved-input-name"
 		| "unflaggable-name"
 		| "unusable-name"
+		| "positional-order"
 		| "body-field-shadowed"
 		| "many-root-commands"
 		| "override-unknown-operation"

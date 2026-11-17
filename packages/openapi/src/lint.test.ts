@@ -240,6 +240,26 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 			message: expect.stringContaining(`the flag "${name}"`),
 		})),
 	},
+	"positional-order": {
+		input: {
+			spec: spec({
+				"/a/{id}": {
+					get: op("a", {
+						parameters: [
+							{ name: "id", in: "path", schema: { type: "string" } },
+							{ name: "q", in: "query", schema: { type: "string" } },
+							{ name: "tag", in: "query", schema: { type: "array", items: { type: "string" } } },
+						],
+					}),
+				},
+			}),
+			override: { a: { positional: ["q", "tag", "id"] } },
+		},
+		expected: ['"q" is optional, before a required one', '"tag" is a list'].map((text) => ({
+			level: "error" as const,
+			message: expect.stringContaining(text),
+		})),
+	},
 	"unusable-name": {
 		input: {
 			spec: spec({
@@ -628,6 +648,30 @@ describe("lint", () => {
 			`command-collision api GET /api: the command "api" is also a command group`,
 			`command-collision api GET /api: the command "api" is also the Extension's "api" command`,
 			`command-collision listKeys GET /keys: the command "api list-keys" is in the group "api", which is also the Extension's "api" command`,
+		]);
+	});
+
+	it("advises `bind` or a written command when inputs share their spec name, which `flagName` renames alike", () => {
+		const shared = spec({
+			"/a/{id}": {
+				get: op("a", {
+					parameters: [
+						{ name: "id", in: "path", schema: { type: "string" } },
+						{ name: "id", in: "query", schema: { type: "string" } },
+					],
+				}),
+			},
+		});
+		expect(
+			lint({
+				spec: shared,
+				override: { a: { positional: [], flagName: { id: "identifier" } } },
+			}).map(({ code, fix }) => [code, fix]),
+		).toEqual([
+			[
+				"flag-collision",
+				"Fill them with one `bind` entry, or set `exclude: true` and write the command with `call()`, or use `api`",
+			],
 		]);
 	});
 
