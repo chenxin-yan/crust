@@ -149,10 +149,56 @@ it("error-handling debug example prints the stack and the cause chain under --de
 	expect(result.stdout).toBe("");
 	expect(result.stderr).toMatch(/^ConfigNotFoundError: No app\.config\.json found\./);
 	expect(result.stderr).toMatch(/\n {4}at /);
-	expect(result.stderr).toMatch(/\[cause\]: Error: ENOENT/);
+	expect(result.stderr).toMatch(/\nCaused by: Error: ENOENT/);
 	expect(runGuideExample("error-handling.ts", ["debug"]).stderr).toBe(
 		"Error: No app.config.json found. Run `app init` to create one.\n",
 	);
+});
+
+it("error-handling debug example prints a deep cause chain to its root", async () => {
+	let error = new Error("ROOT_CAUSE");
+	for (let depth = 1; depth <= 6; depth++) error = new Error(`WRAPPER_${depth}`, { cause: error });
+	const app = new Crust("app").extend(debug).action(() => {
+		throw error;
+	});
+	const { stderr } = await captureExecute(app, ["--debug"]);
+	expect(stderr.match(/^(?:Caused by: )?Error: \w+$/gm)).toEqual([
+		"Error: WRAPPER_6",
+		...[5, 4, 3, 2, 1].map((depth) => `Caused by: Error: WRAPPER_${depth}`),
+		"Caused by: Error: ROOT_CAUSE",
+	]);
+});
+
+it("error-handling debug example prints each error of a cause cycle once", async () => {
+	const first = new Error("CYCLE_A");
+	first.cause = new Error("CYCLE_B", { cause: first });
+	const app = new Crust("app").extend(debug).action(() => {
+		throw first;
+	});
+	const { stderr } = await captureExecute(app, ["--debug"]);
+	expect(stderr.match(/^(?:Caused by: )?Error: \w+$/gm)).toEqual([
+		"Error: CYCLE_A",
+		"Caused by: Error: CYCLE_B",
+	]);
+});
+
+it("error-handling debug example prints no error fields besides stacks", async () => {
+	const app = new Crust("app")
+		.extend(debug)
+		.flags({ token: { type: "string" } })
+		.action(({ flags }) => {
+			const request = { headers: { authorization: flags.token } };
+			throw Object.assign(
+				new Error("request failed", { cause: Object.assign(new Error("401"), { request }) }),
+				{
+					request,
+				},
+			);
+		});
+	const { stderr } = await captureExecute(app, ["--debug", "--token", "SECRET_SENTINEL"]);
+	expect(stderr).not.toContain("SECRET_SENTINEL");
+	expect(stderr).toMatch(/^Error: request failed\n/);
+	expect(stderr).toContain("Caused by: Error: 401");
 });
 
 it("error-handling debug example leaves cancellation silent under --debug", async () => {

@@ -71,17 +71,22 @@ const configured = new Crust("app").action(async () => {
 //#endregion
 
 //#region debug
-import { inspect } from "node:util";
-
 import { defineExtension, defineExtensionId } from "@crustjs/core";
 
 export const debug = defineExtension(defineExtensionId("acme:debug"))
 	.flags({ debug: { type: "boolean", description: "Print errors with their stack and causes" } })
-	// [!code highlight:5]
+	// [!code highlight:12]
 	.onError((error, { flags, stderr }) => {
 		// A cancellation is not a bug: leave it to Crust.
 		if (flags.debug !== true || (error instanceof Error && error.name === "AbortError")) return;
-		stderr(inspect(error));
+		// Stacks and messages only: other fields, such as a request's headers, can hold secrets.
+		const printed = new Set<unknown>();
+		for (let current: unknown = error; current !== undefined && !printed.has(current);) {
+			const text = current instanceof Error ? (current.stack ?? current.message) : String(current);
+			stderr(printed.size === 0 ? text : `Caused by: ${text}`);
+			printed.add(current);
+			current = current instanceof Error ? current.cause : undefined;
+		}
 		return true;
 	});
 
