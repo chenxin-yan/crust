@@ -283,6 +283,8 @@ describe("the spec", () => {
 	},
 }
 `;
+	// The index of a CLI without generated commands: this spec's one operation has a lint error.
+	const noCommands = JSON.stringify({ commands: [], groups: [] });
 	const writeSpec = (text = jsonc) => {
 		const file = join(mkdtempSync(join(tmpdir(), "crust-openapi-spec-")), "acme.openapi.jsonc");
 		writeFileSync(file, text);
@@ -353,6 +355,7 @@ describe("the spec", () => {
 						paths: { "/users": { get: { operationId: "listUsers", summary: 'a "//" b /*,}*/' } } },
 					}),
 				],
+				["openapi/index.json", noCommands],
 			]),
 		});
 	});
@@ -388,7 +391,7 @@ describe("the spec", () => {
 			);
 
 			expect({ stderr, exitCode }).toEqual({
-				stderr: `Error: api: the OpenAPI document was not found at "${join(dir, "spec.json")}". Run \`crust build\` first, and ship its "acme-not-built" directory with the CLI.`,
+				stderr: `Error: api: the OpenAPI data was not found at "${join(dir, "spec.json")}". Run \`crust build\` first, and ship its "acme-not-built" directory with the CLI.`,
 				exitCode: 1,
 			});
 		} finally {
@@ -396,7 +399,7 @@ describe("the spec", () => {
 		}
 	});
 
-	it("is written by crust build as plain JSON to <id>/spec.json; an object spec writes nothing", async () => {
+	it("is written by crust build as plain JSON to <id>/spec.json, beside its index; an object spec writes nothing", async () => {
 		const url = pathToFileURL(writeSpec());
 		const parsed = {
 			openapi: "3.1.0",
@@ -406,10 +409,16 @@ describe("the spec", () => {
 		};
 
 		expect(await runBuildHooks(buildApp({ spec: url }))).toEqual({
-			files: new Map([["openapi/spec.json", JSON.stringify(parsed)]]),
+			files: new Map([
+				["openapi/spec.json", JSON.stringify(parsed)],
+				["openapi/index.json", noCommands],
+			]),
 		});
 		expect(await runBuildHooks(buildApp({ spec: url, id: "acme" }))).toEqual({
-			files: new Map([["acme/spec.json", JSON.stringify(parsed)]]),
+			files: new Map([
+				["acme/spec.json", JSON.stringify(parsed)],
+				["acme/index.json", noCommands],
+			]),
 		});
 		expect(await runBuildHooks(buildApp())).toEqual({ files: new Map() });
 		expect(await runBuildHooks(buildApp({ spec: url, id: "a/b" }))).toEqual({

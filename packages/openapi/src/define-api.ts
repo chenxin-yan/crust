@@ -14,7 +14,7 @@ import {
 	defineExtension,
 	defineExtensionId,
 } from "@crustjs/core";
-import { resolveArtifactDir } from "@crustjs/utils/artifacts";
+import { isSourceRun, resolveArtifactDir } from "@crustjs/utils/artifacts";
 
 import {
 	type ApiCommandDefinition,
@@ -33,7 +33,17 @@ import { type CommandPlan, buildProblems, planCommands } from "./lint.ts";
 import { type Operation, operationLabel, operations } from "./operations.ts";
 import type { OperationOverride, OverrideEntry } from "./overrides.ts";
 import { isPlainObject } from "./request.ts";
-import { BUILT_SPEC_FILE, readSpec } from "./spec-source.ts";
+import {
+	type DataFile,
+	INDEX_FILE,
+	type SpecIndex,
+	indexedCommands,
+	missingCommands,
+	sliceSpec,
+	specDataFiles,
+} from "./spec-data.ts";
+import { BUILT_SPEC_FILE, readBuiltFile, readSpec } from "./spec-source.ts";
+import { rawOperations } from "./spec-traversal.ts";
 import type { SpecOperationsOf, Specs } from "./typed-client.ts";
 
 const API: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:openapi");
@@ -150,6 +160,10 @@ interface ApiBase {
 	readonly client: ContextFactory<"api", void, ApiClient>;
 	/** The spec, read once. */
 	readonly document: () => OpenApiSpec;
+	/** The commands of each chain whose `commands` was read. */
+	readonly readCommands: Map<ApiState, readonly GeneratedDefinition[]>;
+	/** Why a built CLI's `index.json` could not be read, once `commands` tried. */
+	indexFailure?: unknown;
 }
 
 /**
@@ -189,7 +203,15 @@ export function defineApi(options: DefineApiOptions): Api {
 
 	const client = apiClientContext(clientOptions, findOperation);
 	return createApi(
-		{ id, spec, baseUrl: clientOptions.baseUrl, paginate, client, document },
+		{
+			id,
+			spec,
+			baseUrl: clientOptions.baseUrl,
+			paginate,
+			client,
+			document,
+			readCommands: new Map(),
+		},
 		{ sources: [], override: {}, added: [] },
 	);
 }
@@ -199,10 +221,9 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 	base: ApiBase,
 	state: ApiState,
 ): Api<unknown, Deps, Added> {
-	let planned: ReturnType<typeof planCommands> | undefined;
-	const plan = () =>
-		(planned ??= planCommands({
-			spec: base.document(),
+	const planFor = (spec: OpenApiSpec) =>
+		planCommands({
+			spec,
 			each: state.each,
 			override: state.override,
 			added: Object.fromEntries(
@@ -216,8 +237,10 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 			extensionCommands: ["api"],
 			hasConfirmHandler: state.onConfirm !== undefined,
 			hasPaginate: base.paginate !== undefined,
-		}));
-	// An operation with a problem is never built: the CLI works without it.
+		});
+	let planned: ReturnType<typeof planCommands> | undefined;
+	const plan = () => (planned ??= planFor(base.document()));
+	// An operation with a lint error is never built: the CLI works without it.
 	const built = (): CommandPlan[] => {
 		const { diagnostics, commands } = plan();
 		const failed = new Set(diagnostics.map(({ operationId }) => operationId));
@@ -235,26 +258,78 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 		}
 		return codes;
 	};
+	const options = {
+		client: base.client,
+		sources: state.sources,
+		onConfirm: state.onConfirm,
+		baseUrl: base.baseUrl,
+		paginate: base.paginate,
+	};
+	// A built CLI's data files, each read once. Operations are planned from the slice of their
+	// own, which plans them as the whole spec does: a command plans only what it runs.
+	const dataFiles = new Map<string, DataFile>();
+	const dataFile = (file: string): DataFile => {
+		let data = dataFiles.get(file);
+		if (data === undefined) {
+			const spec =
+				file === BUILT_SPEC_FILE ? base.document() : (readBuiltFile(base.id, file) as OpenApiSpec);
+			const routes = new Map(
+				rawOperations(spec).map(({ method, path, operation }) => [
+					(operation as { operationId?: unknown }).operationId,
+					{ method, path },
+				]),
+			);
+			const mismatch = (operationId: string) =>
+				new Error(
+					`api: the OpenAPI data "${file}" has no operation "${operationId}": its "${base.id}" directory comes from another build. Ship the one \`crust build\` wrote with this CLI.`,
+				);
+			data = {
+				spec,
+				plans: (operationIds) => {
+					const own = operationIds.flatMap((operationId) => routes.get(operationId) ?? []);
+					const byId = new Map(
+						planFor(sliceSpec(spec, own)).commands.map((each) => [each.op.id, each]),
+					);
+					return operationIds.map((operationId) => {
+						const found = byId.get(operationId);
+						if (found === undefined) throw mismatch(operationId);
+						return found;
+					});
+				},
+			};
+			dataFiles.set(file, data);
+		}
+		return data;
+	};
+	// A built CLI's index names the top-level commands; without it there are none, and the
+	// Extension reports why.
+	const indexed = (): readonly GeneratedDefinition[] => {
+		let index: SpecIndex;
+		try {
+			// Written by this package's build hook, as its slices are.
+			index = readBuiltFile(base.id, INDEX_FILE) as SpecIndex;
+		} catch (error) {
+			base.indexFailure = error;
+			return [];
+		}
+		return indexedCommands(index, state.added, options, dataFile);
+	};
 	let extension: Api["extension"] | undefined;
 	let commands: readonly GeneratedDefinition[] | undefined;
 	const handle = Object.freeze({
 		get extension() {
-			// Only an app that read `commands`, the one way to have the generated commands, has
-			// problems to settle: one that uses the `api` command alone builds as without them.
-			return (extension ??= apiExtension(base, unavailable, () =>
-				commands === undefined ? undefined : buildProblems(plan().diagnostics),
-			));
+			return (extension ??= apiExtension(base, state, unavailable, built));
 		},
 		client: base.client,
 		get commands() {
-			return (commands ??= generateCommands(built(), state.added, {
-				spec: base.document(),
-				client: base.client,
-				sources: state.sources,
-				onConfirm: state.onConfirm,
-				baseUrl: base.baseUrl,
-				paginate: base.paginate,
-			}));
+			if (commands === undefined) {
+				commands =
+					base.spec instanceof URL && !isSourceRun()
+						? indexed()
+						: generateCommands(built(), state.added, { ...options, spec: base.document() });
+				base.readCommands.set(state, commands);
+			}
+			return commands;
 		},
 		use: <const Us extends readonly [UseSource, ...UseSource[]]>(...sources: Us) =>
 			createApi<MergeContext<Deps, UsedContexts<Us>>, Added>(base, {
@@ -287,16 +362,23 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 }
 
 /**
- * The `api` Extension of a handle: `api --list` marks the operations it leaves out, and its build
- * hook fails with the handle's problems that need a decision.
+ * The `api` Extension of a handle with the chain `state`: `api --list` marks the operations it
+ * leaves out, and `crust build` writes the data files of its `built` commands.
  */
 function apiExtension(
 	base: ApiBase,
+	state: ApiState,
 	unavailable: () => ReadonlyMap<string, string>,
-	problems: () => string | undefined,
+	built: () => readonly CommandPlan[],
 ): Api["extension"] {
 	const { id, spec } = base;
 	const loadSpec = async () => base.document();
+	const mismatch = (detail: string) =>
+		new CrustError(
+			"DEFINITION",
+			`defineApi: ${detail}; take \`extension\` and \`commands\` from the same handle, and add \`commands\` whole (\`exclude\` an operation to leave it out)`,
+			{ subject: "extension", name: API, reason: "commands-mismatch" },
+		);
 	const extension = defineExtension(API)
 		.provide(base.client())
 		.add(
@@ -305,13 +387,46 @@ function apiExtension(
 				paginate: base.paginate,
 				unavailable,
 			}),
-		);
-	return extension.build(async () => {
-		const problem = problems();
-		if (problem !== undefined) throw new Error(problem);
-		if (!(spec instanceof URL)) return [];
-		// Fails for an `id` the built CLI could not look up, by the lookup's own rule.
-		resolveArtifactDir(id);
-		return [{ path: `${id}/${BUILT_SPEC_FILE}`, content: JSON.stringify(await loadSpec()) }];
-	});
+		)
+		.setup((ctx) => {
+			if (base.indexFailure !== undefined) throw base.indexFailure;
+			// A built CLI's commands were checked when it was built.
+			if (!isSourceRun()) return;
+			for (const [chain, definitions] of base.readCommands) {
+				if (chain === state) continue;
+				if (definitions.some((definition) => ctx.commandPathOf(definition) !== undefined)) {
+					throw mismatch("the app holds generated commands of another chain of this API");
+				}
+			}
+		})
+		// A broken build fails every invocation with why, also one a missing command fails first.
+		.onError((error, ctx) => {
+			const failure = base.indexFailure;
+			if (failure === undefined || error === failure) return;
+			ctx.stderr(`Error: ${failure instanceof Error ? failure.message : String(failure)}`);
+			return true;
+		});
+	return spec instanceof URL
+		? extension.build(async ({ snapshot }) => {
+				// Fails for an `id` the built CLI could not look up, by the lookup's own rule.
+				resolveArtifactDir(id);
+				const document = base.document();
+				const text = JSON.stringify(document);
+				const files = new Map([[BUILT_SPEC_FILE, text]]);
+				const plans = built();
+				// The index claims the app's commands: those of this handle's plan, or none.
+				const missing = missingCommands(snapshot, plans);
+				if (missing !== undefined && missing.length > 0) {
+					throw mismatch(
+						`the app's generated commands are not this handle's: missing or different ${missing.map((path) => `"${path}"`).join(", ")}`,
+					);
+				}
+				if (missing !== undefined) {
+					for (const [path, content] of specDataFiles(document, text, plans, state.added)) {
+						files.set(path, content);
+					}
+				}
+				return [...files].map(([path, content]) => ({ path: `${id}/${path}`, content }));
+			})
+		: extension;
 }
