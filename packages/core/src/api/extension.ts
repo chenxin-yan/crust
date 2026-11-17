@@ -181,7 +181,7 @@ export interface ExtensionContext<
 	 *   that does not start at the root, and the `PARSE` and `VALIDATION` errors the command's
 	 *   own invocation would fail with
 	 *
-	 * @example `await ctx.parseCommandArgv(["tool", "db", "migrate"], ["--to", "3"])` → `{ args: {}, flags: { to: 3 }, rawArgs: [] }`
+	 * @example `await ctx.parseCommandArgv(["tool", "db", "migrate"], ["--to", "3"])` → `{ path: ["tool", "db", "migrate"], args: {}, flags: { to: 3 }, rawArgs: [] }`
 	 */
 	readonly parseCommandArgv: (
 		path: readonly string[],
@@ -271,6 +271,8 @@ export interface ExtensionContext<
 
 /** What {@link ExtensionContext.parseCommandArgv} returns: the values the Command Action would receive. */
 export interface ParsedCommandArgv {
+	/** The command's canonical path, in the form of {@link ExtensionContext.commandPath}, also when `path` used an alias. */
+	readonly path: readonly string[];
 	readonly args: Readonly<Record<string, unknown>>;
 	readonly flags: Readonly<Record<string, unknown>>;
 	/** Tokens after the `--` separator that no declared argument consumed. */

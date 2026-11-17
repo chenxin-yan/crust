@@ -592,11 +592,11 @@ async function parseCommandArgv(
 			`A command path starts with the root command "${root.meta.name}".`,
 		);
 	}
-	const { command } = resolveTypedPath(root, path.slice(1));
+	const { command, commandPath } = resolveTypedPath(root, path.slice(1));
 	const parsed = parseArgs(command, [...argv], env);
 	validateParsed(command, parsed);
 	const { args, flags } = await applySchemas(command, parsed);
-	return { args, flags, rawArgs: parsed.rawArgs };
+	return { path: Object.freeze([...commandPath]), args, flags, rawArgs: parsed.rawArgs };
 }
 
 function resolveStructuredInput(

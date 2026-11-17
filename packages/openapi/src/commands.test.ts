@@ -750,6 +750,25 @@ describe("api preview", () => {
 		);
 	});
 
+	it("previews a command below an aliased parent, and refuses --paginate before --", async () => {
+		const acme = buildApi({ paginate: () => undefined });
+		const app = new Crust("acme")
+			.extend(acme.extension)
+			.add(defineCommand("nested", { aliases: ["n"] }, (command) => command.add(...acme.commands)));
+
+		expect(
+			await app.run(["api", "preview"], {
+				args: { target: ["n", "users", "get-user"], argv: ["1"] },
+			}),
+		).toMatchObject({ result: { url: "https://api.example.com/v1/users/1" } });
+		expect(
+			(await captureExecute(app, ["api", "preview", "n", "users", "list-users", "--paginate"]))
+				.stderr,
+		).toBe(
+			"Error: api preview: --paginate is for a request path; put the command's own flags after --",
+		);
+	});
+
 	it("runs no set-up, so a value input()'s --input would bind is not applied", async () => {
 		const acme = buildApi();
 		const app = new Crust("acme").extend(input(), acme.extension).add(...acme.commands);
@@ -889,6 +908,47 @@ describe("acme.onMissing()", () => {
 			]);
 		},
 	);
+
+	it("asks for a required field of an optional body that a binding fills", async () => {
+		const sent = stubFetch(() => new Response(null, { status: 201 }));
+		const asked: string[] = [];
+		const acme = defineApi({
+			spec: {
+				openapi: "3.1.0",
+				paths: {
+					"/notes": {
+						post: {
+							operationId: "create",
+							summary: "Create a note",
+							requestBody: {
+								content: {
+									"application/json": {
+										schema: {
+											type: "object",
+											required: ["name"],
+											properties: { name: { type: "string" }, note: { type: "string" } },
+										},
+									},
+								},
+							},
+							responses: { "201": { description: "Created" } },
+						},
+					},
+				},
+			},
+			baseUrl: "https://api.example.com/v1/",
+		})
+			.onMissing(({ name }) => {
+				asked.push(name);
+				return "Ada";
+			})
+			.override({ create: { bind: { note: () => "bound" } } });
+		const app = new Crust("acme").extend(acme.extension).add(...acme.commands);
+
+		expect((await onTerminal(app, ["create"])).exitCode).toBe(0);
+		expect(asked).toEqual(["name"]);
+		expect(sent.map(({ body }) => body)).toEqual(['{"name":"Ada","note":"bound"}']);
+	});
 
 	it("asks for nothing argv, the input or --body gave", async () => {
 		const { app, asked, sent } = membersApp();

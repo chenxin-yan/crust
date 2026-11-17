@@ -549,7 +549,7 @@ describe("Invocation pipeline — parseCommandArgv", () => {
 				})
 				.action(() => void ran.push("delete action")),
 		);
-		const users = defineCommand("users", (c) => {
+		const users = defineCommand("users", { aliases: ["u"] }, (c) => {
 			ran.push("users recipe");
 			return c.add(remove);
 		});
@@ -573,13 +573,15 @@ describe("Invocation pipeline — parseCommandArgv", () => {
 	it("parses, checks and transforms argv for the command at a path without running it", async () => {
 		const { ran, parsed, app } = setUp();
 		const outcome = await app(
-			["app", "users", "delete"],
+			["app", "u", "delete"],
 			["u_1", "--force", "--tag", "a", "--trace", "--", "rest"],
 		).run(["preview"], {}, { env: { REGION: "eu" } });
 
 		expect(outcome).toMatchObject({ status: "completed" });
 		expect(parsed).toEqual([
 			{
+				// The canonical path, also when routed through an alias.
+				path: ["app", "users", "delete"],
 				args: { id: "u_1" },
 				flags: { force: true, region: "eu", tag: ["A"], trace: true },
 				rawArgs: ["rest"],

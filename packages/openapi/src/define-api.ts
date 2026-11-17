@@ -489,9 +489,8 @@ function apiExtension(
 				const { target, argv } = ctx.args;
 				// A request path is previewed by the command itself; its values are not checked yet.
 				if (!isWords(target) || target.length === 0 || target[0]!.startsWith("/")) return;
-				const path = [root!, ...target];
-				const parsed = await ctx.parseCommandArgv(path, isWords(argv) ? argv : []);
-				const found = generatedAt(path, ctx.commandPathOf);
+				const parsed = await ctx.parseCommandArgv([root!, ...target], isWords(argv) ? argv : []);
+				const found = generatedAt(parsed.path, ctx.commandPathOf);
 				if (found === undefined) {
 					throw new CrustError(
 						"PARSE",
