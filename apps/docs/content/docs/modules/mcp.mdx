@@ -78,10 +78,11 @@ Each tool's `inputSchema` comes from [`commandInputSchema()`](/docs/modules/core
 
 By default `tools/list` returns every tool with its schemas. A CLI with hundreds of commands, such as one generated from an OpenAPI spec, fills the client's context with them before the first call. With `discovery: "progressive"`, `tools/list` returns three fixed tools over the same tool list instead:
 
-| Tool | Arguments | Result |
-| `search_tools` | `query` (a task in words), `limit` (1–20, default 5) | `{ "result": [{ name, description? }] }`: the tools that best match `query`, best first, without their schemas |
-| `get_tool_details` | `name` | The tool as `tools/list` would list it: `name`, `description`, `inputSchema`, and its wrapped `outputSchema` if it has one |
-| `call_tool` | `name`, `arguments` | The tool's own result, exactly as `tools/call` would return it, with [progress](#progress) for the request's token |
+| Tool               | Arguments                                            | Result                                                                                                                     |
+| ------------------ | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `search_tools`     | `query` (a task in words), `limit` (1–20, default 5) | `{ "result": [{ name, description? }] }`: the tools that best match `query`, best first, without their schemas             |
+| `get_tool_details` | `name`                                               | The tool as `tools/list` would list it: `name`, `description`, `inputSchema`, and its wrapped `outputSchema` if it has one |
+| `call_tool`        | `name`, `arguments`                                  | The tool's own result, exactly as `tools/call` would return it, with [progress](#progress) for the request's token         |
 
 ```ts
 mcpExtension({ app: (): AnyCrust => app, discovery: "progressive" });
