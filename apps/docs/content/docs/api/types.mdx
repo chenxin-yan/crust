@@ -352,6 +352,14 @@ Returns where a [command definition](/docs/api/crust#definecommandname-config-re
 - A definition added more than once resolves to its shallowest path, then the first added.
 - The search builds the commands it passes, running their recipes.
 
+#### `parseCommandArgv(path, argv)`
+
+Parses `argv` for the command at `path` as an invocation of that command would, and resolves to a `ParsedCommandArgv`: the `args`, `flags`, and `rawArgs` its Command Action would receive. `path` has the form of `commandPath`, starting with the root's name; an alias routes as it does on the command line.
+
+- Values come from argv, then environment fallbacks and defaults; required values and Standard Schemas are checked, and schemas transform values, as before an action.
+- Only the commands on the path are built. No Extension hook, Context setup, or Command Action runs, so values other Extensions bind in their hooks, such as [`input()`](/docs/modules/extensions/input)'s `--input`, are not applied.
+- It rejects with `COMMAND_NOT_FOUND` for a name the path does not have, `PARSE` for a path that does not start at the root, and the `PARSE` or `VALIDATION` error the command's own invocation would fail with.
+
 #### `bindInput({ args, flags, raw })`
 
 Binds structured input from `setup` or `preRun`, with the conversion typed `run()` uses.
@@ -360,6 +368,7 @@ Binds structured input from `setup` or `preRun`, with the conversion typed `run(
 - Supplied values replace environment values (including an invalid one) and defaults. Values that are not replaced are kept as bound, without re-running defaults or `parse`.
 - Positional arguments follow typed `run()` order: kept argv or `run()` positionals count as supplied, and bound input cannot skip one.
 - Each call re-binds against the original input, so the last call wins. Bound values are visible to every later hook; binding in `setup` lets each `preRun` see them whatever the `.extend()` order.
+- `boundInput` is the payload last passed, as given (`undefined` before the first call). To add values without dropping ones bound earlier, bind it merged with yours: `ctx.bindInput({ ...ctx.boundInput, flags: { ...ctx.boundInput?.flags, name } })`.
 - Flag handlers are chosen from the original input, so a bound flag never selects one, even when bound in `setup`.
 - A failure fails the invocation as an error thrown from the calling hook would.
 

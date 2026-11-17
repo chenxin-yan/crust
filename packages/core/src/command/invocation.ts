@@ -13,6 +13,7 @@ import type {
 	ExtensionSetupContext,
 	ExtensionContext,
 	InvocationOutcome,
+	ParsedCommandArgv,
 	Renderer,
 } from "../api/extension.ts";
 import { CrustError, type CaughtError } from "../errors.ts";
@@ -578,6 +579,26 @@ export function resolveTypedPath(root: CommandNode, path: readonly string[]): Co
 	return route;
 }
 
+/** `argv` as the command at `path` (root name first) would receive it, without running anything. */
+async function parseCommandArgv(
+	root: CommandNode,
+	path: readonly string[],
+	argv: readonly string[],
+	env: FlagEnvironment,
+): Promise<ParsedCommandArgv> {
+	if (path[0] !== root.meta.name) {
+		throw new CrustError(
+			"PARSE",
+			`A command path starts with the root command "${root.meta.name}".`,
+		);
+	}
+	const { command } = resolveTypedPath(root, path.slice(1));
+	const parsed = parseArgs(command, [...argv], env);
+	validateParsed(command, parsed);
+	const { args, flags } = await applySchemas(command, parsed);
+	return { args, flags, rawArgs: parsed.rawArgs };
+}
+
 function resolveStructuredInput(
 	root: CommandNode,
 	path: readonly string[],
@@ -690,8 +711,9 @@ async function dispatch(
 			? resolveArgvInput(rootNode, input.argv, env)
 			: resolveStructuredInput(rootNode, input.path, input.input, env);
 	const resolvedNode = route.command;
-	// `bindInput` replaces this; hooks and `terminal()` read it live.
+	// `bindInput` replaces these; hooks and `terminal()` read them live.
 	let bound = parsed;
+	let boundInput: RunInputPayload | undefined;
 
 	// One resource scope and resolver span pre-run, the action, and post-run.
 	await using disposal = new AsyncDisposableStack();
@@ -718,6 +740,8 @@ async function dispatch(
 		},
 		commandPath: Object.freeze([...route.commandPath]),
 		commandPathOf: (definition: CommandDefinition) => commandPathOf(rootNode, definition),
+		parseCommandArgv: (path: readonly string[], commandArgv: readonly string[]) =>
+			parseCommandArgv(rootNode, path, commandArgv, env),
 		get args() {
 			return bound.args;
 		},
@@ -734,6 +758,10 @@ async function dispatch(
 		ctx: resolver.bag(extensions.flatMap((extension) => extension.use)),
 		bindInput(payload: RunInputPayload) {
 			bound = bindStructuredInput(resolvedNode, parsed, payload);
+			boundInput = payload;
+		},
+		get boundInput() {
+			return boundInput;
 		},
 		stdout: output.io.stdout,
 		stderr: output.io.stderr,
@@ -906,6 +934,7 @@ async function renderFailure(
 	prepared: PreparedInvocation,
 	output: InvocationOutput,
 	signal: AbortSignal,
+	env: FlagEnvironment,
 	extensionContext: ExtensionContext | undefined,
 ): Promise<ExtensionId | undefined> {
 	// Reuse the dispatch context so per-invocation identity (e.g. WeakMap keys
@@ -952,6 +981,8 @@ async function renderFailure(
 			},
 			commandPath: Object.freeze(route ? [...route.commandPath] : [prepared.rootNode.meta.name]),
 			commandPathOf: (definition) => commandPathOf(prepared.rootNode, definition),
+			parseCommandArgv: (path, commandArgv) =>
+				parseCommandArgv(prepared.rootNode, path, commandArgv, env),
 			args: Object.freeze({}),
 			flags: Object.freeze({}),
 			rawArgs: [],
@@ -961,6 +992,7 @@ async function renderFailure(
 			stderr: output.io.stderr,
 			// No action runs after a failure this early, so there is nothing to bind.
 			bindInput() {},
+			boundInput: undefined,
 			ctx: unavailableContext,
 		} satisfies ExtensionContext);
 	}
@@ -1075,6 +1107,7 @@ export async function executeInvocation(
 	// arrives as `--x` (https://github.com/oven-sh/bun/issues/13984). Crust cannot recover it here;
 	// guide/arguments-and-flags.mdx documents the `-- --` workaround. Drop that callout once fixed.
 	const argv = options?.argv ?? process.argv.slice(2);
+	const env = options?.env ?? process.env;
 	const io: InvocationIO = { ...DEFAULT_IO, ...options?.io };
 	// One controller per invocation so SIGINT, SIGTERM and a caller signal share `ctx.signal`.
 	const controller = new AbortController();
@@ -1154,7 +1187,7 @@ export async function executeInvocation(
 		let exitCode = 0;
 		try {
 			await dispatch(
-				{ argv, env: options?.env },
+				{ argv, env },
 				prepared,
 				output,
 				signal,
@@ -1166,7 +1199,7 @@ export async function executeInvocation(
 					rendered = { error };
 					const cancelled = cancellationCleanupFailures(error) !== undefined;
 					process.exitCode = cancelled ? cancelledExitCode : 1;
-					return renderFailure(error, argv, prepared, output, signal, context);
+					return renderFailure(error, argv, prepared, output, signal, env, context);
 				},
 			);
 		} catch (error) {
@@ -1193,7 +1226,7 @@ export async function executeInvocation(
 			exitCode = cancellationCleanupFailures(error) === undefined ? 1 : cancelledExitCode;
 			process.exitCode = exitCode;
 			if (!rendered) {
-				await renderFailure(error, argv, prepared, output, signal, extensionContext);
+				await renderFailure(error, argv, prepared, output, signal, env, extensionContext);
 				// Reassert: a presentation hook may have reassigned process.exitCode.
 				process.exitCode = exitCode;
 			}

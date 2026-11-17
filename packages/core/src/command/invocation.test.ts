@@ -532,6 +532,129 @@ describe("Invocation pipeline — commandPathOf", () => {
 	});
 });
 
+describe("Invocation pipeline — parseCommandArgv", () => {
+	function setUp() {
+		const ran: string[] = [];
+		const trace = defineExtension(defineExtensionId("trace"))
+			.flags({ trace: { type: "boolean" } })
+			.setup(() => void ran.push("setup"))
+			.preRun((ctx) => void ran.push(`preRun ${ctx.commandPath.join(" ")}`));
+		const remove = defineCommand("delete", (c) =>
+			c
+				.args({ name: "id", type: "string", required: true })
+				.flags({
+					region: { type: "string", env: { name: "REGION" }, default: "us" },
+					tag: { type: "string", multiple: true, parse: (raw) => raw.toUpperCase() },
+					force: { type: "boolean" },
+				})
+				.action(() => void ran.push("delete action")),
+		);
+		const users = defineCommand("users", (c) => {
+			ran.push("users recipe");
+			return c.add(remove);
+		});
+		const teams = defineCommand("teams", (c) => {
+			ran.push("teams recipe");
+			return c.action(() => {});
+		});
+		const parsed: unknown[] = [];
+		const preview = (path: readonly string[], argv: readonly string[]) =>
+			defineExtension(defineExtensionId("preview")).preRun(async (ctx) => {
+				parsed.push(await ctx.parseCommandArgv(path, argv));
+			});
+		const app = (path: readonly string[], argv: readonly string[]) =>
+			new Crust("app")
+				.extend(trace, preview(path, argv))
+				.add(users, teams)
+				.command("preview", (c) => c.action(() => void ran.push("preview action")));
+		return { ran, parsed, app };
+	}
+
+	it("parses, checks and transforms argv for the command at a path without running it", async () => {
+		const { ran, parsed, app } = setUp();
+		const outcome = await app(
+			["app", "users", "delete"],
+			["u_1", "--force", "--tag", "a", "--trace", "--", "rest"],
+		).run(["preview"], {}, { env: { REGION: "eu" } });
+
+		expect(outcome).toMatchObject({ status: "completed" });
+		expect(parsed).toEqual([
+			{
+				args: { id: "u_1" },
+				flags: { force: true, region: "eu", tag: ["A"], trace: true },
+				rawArgs: ["rest"],
+			},
+		]);
+		// Only the preview invocation's own hooks and action ran; no sibling recipe was built.
+		expect(ran).toEqual(["setup", "preRun app preview", "users recipe", "preview action"]);
+	});
+
+	it("fails as the command's own invocation would", async () => {
+		const failures = async (path: readonly string[], argv: readonly string[]) => {
+			const outcome = await setUp().app(path, argv).run(["preview"]);
+			return outcome.status === "failed" ? outcome.error : outcome;
+		};
+
+		expect(await failures(["app", "users", "delete"], [])).toMatchObject({
+			code: "VALIDATION",
+			message: expect.stringContaining("<id>"),
+		});
+		expect(await failures(["app", "users", "delete"], ["u_1", "--nope"])).toMatchObject({
+			code: "PARSE",
+			message: expect.stringContaining("--nope"),
+		});
+		expect(await failures(["app", "users", "nope"], [])).toMatchObject({
+			code: "COMMAND_NOT_FOUND",
+			details: { input: "nope", commandPath: ["app", "users"] },
+		});
+		expect(await failures(["other", "users"], [])).toMatchObject({ code: "PARSE" });
+	});
+});
+
+describe("Invocation pipeline — boundInput", () => {
+	it("is the payload last bound, so a later hook can add to it and bind once", async () => {
+		const reads: unknown[] = [];
+		const received: unknown[] = [];
+		const first = defineExtension(defineExtensionId("first")).setup((ctx) => {
+			reads.push(ctx.boundInput);
+			ctx.bindInput({ flags: { a: "x" } });
+		});
+		const second = defineExtension(defineExtensionId("second")).preRun((ctx) => {
+			reads.push(ctx.boundInput);
+			ctx.bindInput({ ...ctx.boundInput, flags: { ...ctx.boundInput?.flags, b: "y" } });
+			reads.push(ctx.boundInput);
+		});
+		const app = new Crust("app")
+			.extend(second, first)
+			.flags({ a: { type: "string" }, b: { type: "string" } })
+			.action(({ flags }) => void received.push(flags));
+
+		expect(await app.run([])).toMatchObject({ status: "completed" });
+		expect(received).toEqual([{ a: "x", b: "y" }]);
+		expect(reads).toEqual([undefined, { flags: { a: "x" } }, { flags: { a: "x", b: "y" } }]);
+	});
+
+	it("is undefined in onError after a failure before dispatch", async () => {
+		const reads: unknown[] = [];
+		const app = new Crust("app")
+			.extend(
+				defineExtension(defineExtensionId("observer")).onError((_error, ctx) => {
+					reads.push(ctx.boundInput);
+					return true;
+				}),
+			)
+			.command("db", (c) => c.action(() => {}));
+
+		const originalExitCode = process.exitCode;
+		try {
+			await app.execute({ argv: ["nope"], io: { stderr: () => {} } });
+		} finally {
+			process.exitCode = originalExitCode ?? 0;
+		}
+		expect(reads).toEqual([undefined]);
+	});
+});
+
 describe("Invocation pipeline — inherited signal ignores", () => {
 	// Bun keeps an inherited SIG_IGN (Node resets it at startup). The real executable, not a
 	// version-manager shim that may reset signals before exec.
