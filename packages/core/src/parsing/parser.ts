@@ -66,6 +66,8 @@ export interface ArgvParseResult<
 	valueErrors?: ReadonlyMap<string, CrustError>;
 	/** Origin label of each flag {@link bindConfigInput} bound; read only while its source is `config`. */
 	configFrom?: Readonly<Record<string, string>>;
+	/** Flags {@link bindStructuredInput} replaced; {@link overlayBound} keeps them over config values. */
+	boundFlags?: ReadonlySet<string>;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -1023,6 +1025,36 @@ export function bindStructuredInput(
 			raw: raw === undefined ? sources.raw : structured.sources.raw && ("bound" as const),
 		}),
 		valueErrors,
+		boundFlags: new Set(Object.keys(inputFlags)),
+	};
+}
+
+/**
+ * Lay a {@link bindStructuredInput} result over a {@link bindConfigInput} result, both bound
+ * against the same parse, without converting either payload again: the flags `bound`
+ * replaced keep its values, every other flag keeps the config layer's.
+ */
+export function overlayBound(configured: ArgvParseResult, bound: ArgvParseResult): ArgvParseResult {
+	const replaced = bound.boundFlags ?? new Set<string>();
+	const replacedLabels = new Set([...replaced].map((name) => `--${name}`));
+	const flags = { ...configured.flags };
+	const sources = Object.fromEntries(
+		Object.entries(configured.sources.flags).filter(([name]) => !replaced.has(name)),
+	);
+	for (const name of replaced) {
+		flags[name] = bound.flags[name];
+		const source = Object.hasOwn(bound.sources.flags, name) ? bound.sources.flags[name] : undefined;
+		if (source !== undefined) sources[name] = source;
+	}
+	return {
+		...bound,
+		flags,
+		sources: Object.freeze({ ...bound.sources, flags: Object.freeze(sources) }),
+		// A replaced flag's config value error no longer applies, like its environment one.
+		valueErrors: new Map(
+			[...(configured.valueErrors ?? [])].filter(([label]) => !replacedLabels.has(label)),
+		),
+		configFrom: configured.configFrom,
 	};
 }
 

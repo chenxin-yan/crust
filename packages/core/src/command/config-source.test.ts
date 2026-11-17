@@ -112,6 +112,31 @@ describe('bindInput(input, { source: "config" })', () => {
 		},
 	);
 
+	it.each(["config-first", "bound-first"] as const)(
+		"converts a plain bind once, however many config binds follow (%s)",
+		async (order) => {
+			let calls = 0;
+			const crust = new Crust("acme")
+				.flags({
+					x: { type: "string", parse: () => ++calls },
+					y: { type: "string", config: "y" },
+				})
+				.extend(
+					defineExtension(defineExtensionId("binder")).setup((ctx) => {
+						const bindConfig = () =>
+							ctx.bindInput({ flags: { y: "config" } }, { source: "config", from: {} });
+						if (order === "config-first") bindConfig();
+						ctx.bindInput({ flags: { x: "bound" } });
+						if (order === "bound-first") bindConfig();
+						bindConfig();
+					}),
+				)
+				.action(({ flags }) => flags);
+			expect(await unwrap(crust.run([]))).toMatchObject({ result: { x: 1, y: "config" } });
+			expect(calls).toBe(1);
+		},
+	);
+
 	it("a second call replaces only its own layer", async () => {
 		const seen: unknown[] = [];
 		const crust = new Crust("acme")

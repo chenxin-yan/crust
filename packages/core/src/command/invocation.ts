@@ -23,6 +23,7 @@ import {
 	bindConfigInput,
 	bindStructuredInput,
 	flagOrigins,
+	overlayBound,
 	parseArgs,
 	parseStructured,
 	validateParsed,
@@ -716,9 +717,9 @@ async function dispatch(
 	const resolvedNode = route.command;
 	// `bindInput` replaces this; hooks and `terminal()` read it live.
 	let bound = parsed;
-	// Its two layers: the parse with config values, and the last plain payload bound over it.
+	// Its two layers, each bound against the parse once: the last config call and the last plain call.
 	let configured = parsed;
-	let plainPayload: RunInputPayload | undefined;
+	let plainBound: ArgvParseResult | undefined;
 
 	// One resource scope and resolver span pre-run, the action, and post-run.
 	await using disposal = new AsyncDisposableStack();
@@ -770,15 +771,12 @@ async function dispatch(
 					reason: "config-bind-args",
 				});
 			}
-			const nextConfigured = options
-				? bindConfigInput(resolvedNode, parsed, payload.flags ?? {}, options.from)
-				: configured;
-			const nextPayload = options ? plainPayload : payload;
-			bound = nextPayload
-				? bindStructuredInput(resolvedNode, nextConfigured, nextPayload)
-				: nextConfigured;
-			configured = nextConfigured;
-			plainPayload = nextPayload;
+			if (options) {
+				configured = bindConfigInput(resolvedNode, parsed, payload.flags ?? {}, options.from);
+			} else {
+				plainBound = bindStructuredInput(resolvedNode, parsed, payload);
+			}
+			bound = plainBound ? overlayBound(configured, plainBound) : configured;
 		},
 		stdout: output.io.stdout,
 		stderr: output.io.stderr,
