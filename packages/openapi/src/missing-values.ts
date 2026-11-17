@@ -3,7 +3,7 @@ import type { ExtensionContext } from "@crustjs/core";
 import { getTerminalIO, isCI } from "@crustjs/utils/terminal";
 
 import type { OpenApiSpec } from "./api-command.ts";
-import type { CommandPlan } from "./lint.ts";
+import { type CommandPlan, boundNames } from "./lint.ts";
 import { flagValue, record } from "./schema.ts";
 
 /** A required value a generated command was not given, which the `.onMissing()` handler is asked for. */
@@ -44,7 +44,7 @@ export function canAsk(): boolean {
  * Asks `handler` for each required value of `plan`'s command that nothing gave (argv, the
  * environment, a default, bound input or a binding), in input order, and binds the answers once,
  * merged over the input bound before. A required body field is asked for only without `--body`,
- * and only when the body is required or a body field was given. An unanswered value stops the
+ * and only when the body is required or a body field has a value (given, or bound). An unanswered value stops the
  * asking, and nothing is bound: validation reports it.
  */
 export async function bindMissingValues(
@@ -57,10 +57,13 @@ export async function bindMissingValues(
 	const given = (kind: "arg" | "flag", name: string) =>
 		Object.hasOwn(kind === "arg" ? ctx.sources.args : ctx.sources.flags, name);
 	const bodyGiven = inputs.some(({ target, name }) => target.in === "body" && given("flag", name));
+	// A body is sent when it is required, or a body field has a value: from a flag, or a binding.
+	const bound = boundNames(plan.fields);
 	const bodyNeeded =
 		op.body !== undefined &&
 		(op.body.required ||
-			inputs.some(({ target, name }) => target.in === "field" && given("flag", name)));
+			inputs.some(({ target, name }) => target.in === "field" && given("flag", name)) ||
+			plan.bodyFields.some((field) => bound.has(field.name)));
 	type Answer = string | number | boolean | (string | number | boolean)[];
 	// Keyed by input names, which may be `__proto__`.
 	const answers: Record<"args" | "flags", Record<string, Answer>> = {
