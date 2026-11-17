@@ -46,6 +46,13 @@ await new Crust("acme")
 	.execute();
 //#endregion
 
+//#region unwrap
+// For an API that wraps every result as `{ "result": … }`: `body` is `unknown`, so cast it.
+export const unwrapped = api.each(() => ({
+	unwrap: (body) => (body as { result: unknown }).result,
+}));
+//#endregion
+
 // What inspex registers from acme.openapi.jsonc, for this docs site, which runs no content mapper.
 declare module "@crustjs/openapi" {
 	interface Specs {

@@ -33,7 +33,7 @@ export interface OperationOverride<Deps extends ContextMap = {}, Op = unknown> {
 	readonly paginate?: (
 		response: Response,
 	) => ApiRequest | undefined | Promise<ApiRequest | undefined>;
-	/** The command's result from the response body, such as `(body) => body.result`. */
+	/** The command's result from the response body, such as `(body) => (body as { result: unknown }).result`. */
 	readonly unwrap?: (body: unknown, response: Response) => unknown;
 	/** The JSON Schema of the result after `unwrap`; without it, an `unwrap`ped command advertises no output schema. */
 	readonly outputSchema?: JsonSchema;

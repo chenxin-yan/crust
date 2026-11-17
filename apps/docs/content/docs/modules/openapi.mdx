@@ -226,7 +226,7 @@ Names are [kebab-cased](#operations), and the inputs an operation cannot offer a
 The command sends the request through the client, so it gets the base URL, auth, redirects, the 401 retry and the request rules of [`call()`](#calloperationid-input), and fails with a `VALIDATION` [`CrustError`](/docs/api/errors) before any request for a value `call()` rejects.
 
 - The body is `--body` with the body field flags merged over it. Before the request, the command checks it: a required body or required field that is missing, or a flagged field's value of another type or outside its enum, such as one from `--body`, is a `VALIDATION` error naming it (`missing the body field "name" (--name)`). An optional body with nothing given is not sent.
-- `--body` takes a JSON object for an object body. Its published JSON Schema stands alone: every local `$ref` is replaced by its target (in a 3.0 document, translated like the [operation model's schemas](#operations)), and the required fields a flag can fill are left out of its `required`. A recursive or very large schema is published as its top-level fields, each standing alone or `{}`.
+- `--body` takes a JSON object for an object body. Its published JSON Schema stands alone: every local `$ref` is replaced by its target (in a 3.0 document, translated like the [operation model's schemas](#operations)), and the required fields a flag can fill are left out of its `required`. A recursive or very large schema, or one with a `$ref` that cannot be followed or a `$dynamicRef` / `$recursiveRef`, is published as its top-level fields, each standing alone or `{}`.
 - A [`bind`](#overrides) runs once before the request and fills every parameter and the body field of its name, and those inputs are not offered. It runs only for an operation that has such an input, so an `.each()` binding is never called for the others.
 - A [`confirm`](#confirmation) message is confirmed after the whole request is built and checked, so a rejected one never asks, and before it is sent.
 
@@ -250,7 +250,11 @@ A `confirm` message from `.each()` or `.override()` makes the command call the `
 
 ### `--paginate`
 
-A command gets `--paginate` when a `paginate` function applies (an override's, else `defineApi`'s) and its result after `unwrap` is a list, or unknown: a 2xx schema that is an array (without `unwrap`), an override's `outputSchema` that is one, or an `unwrap` without `outputSchema`, such as `.each(() => ({ unwrap: (body) => body.result }))` for an API that wraps every result. A tuple schema (`prefixItems`) gets no `--paginate`. Its result is every page's result joined into one array, as `paginate` requests them, and the advertised schema leaves out the limits of one page's list (`minItems`, `maxItems`, `uniqueItems`, `contains`); the items keep theirs. Without `--paginate` offered, a spec parameter named `paginate` is an ordinary flag. a page whose result is not a list fails, naming the operation, and so does a `paginate` that returns the request just sent. (`api <path> --paginate` instead prints one JSON line per page.)
+A command gets `--paginate` when a `paginate` function applies (an override's, else `defineApi`'s) and its result after `unwrap` is a list, or unknown: a 2xx schema that is an array (without `unwrap`), an override's `outputSchema` that is one, or an `unwrap` without `outputSchema`, as for an API that wraps every result:
+
+<include lang="ts">../../../examples/modules/openapi.ts#unwrap</include>
+
+A tuple schema (`prefixItems`) gets no `--paginate`. Its result is every page's result joined into one array, as `paginate` requests them, and the advertised schema leaves out the limits of one page's list (`minItems`, `maxItems`, `uniqueItems`, `contains`); the items keep theirs. Without `--paginate` offered, a spec parameter named `paginate` is an ordinary flag. A page whose result is not a list fails, naming the operation, and so does a `paginate` that returns the request just sent. (`api <path> --paginate` instead prints one JSON line per page.)
 
 ### Collisions and left-out operations
 
