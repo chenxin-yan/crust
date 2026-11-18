@@ -219,14 +219,14 @@ $ acme users create-user --name Ada --body '{"profile":{"bio":"hi"}}'
 | `security: []`                                                | A public request: `auth` is never called, also for the next pages                                                                                                                                                                           |
 | The 2xx JSON response schema                                  | The output schema; see [Output](#output)                                                                                                                                                                                                    |
 
-Names are [kebab-cased](#operations), and the inputs an operation cannot offer are left out as described there. A body field that repeats a parameter's name gets no flag: the parameter keeps its input, and the body field is sent only from `--body`. Cookie parameters are never sent. Deprecated operations are left out unless an override sets `exclude: false`.
+Names are [kebab-cased](#how-the-spec-is-read), and the inputs an operation cannot offer are left out as described there. A body field that repeats a parameter's name gets no flag: the parameter keeps its input, and the body field is sent only from `--body`. Cookie parameters are never sent. Deprecated operations are left out unless an override sets `exclude: false`.
 
 ### The request
 
 The command sends the request through the client, so it gets the base URL, auth, redirects, the 401 retry and the request rules of [`call()`](#calloperationid-input), and fails with a `VALIDATION` [`CrustError`](/docs/api/errors) before any request for a value `call()` rejects.
 
 - The body is `--body` with the body field flags merged over it. Before the request, the command checks it: a required body or required field that is missing, or a flagged field's value of another type or outside its enum, such as one from `--body`, is a `VALIDATION` error naming it (`missing the body field "name" (--name)`). An optional body with nothing given is not sent.
-- `--body` takes a JSON object for an object body. Its published JSON Schema stands alone: every local `$ref` is replaced by its target (in a 3.0 document, translated like the [operation model's schemas](#operations)), and the required fields a flag can fill are left out of its `required`. A recursive or very large schema, or one with a `$ref` that cannot be followed or a `$dynamicRef` / `$recursiveRef`, is published as its top-level fields, each standing alone or `{}`.
+- `--body` takes a JSON object for an object body. Its published JSON Schema stands alone: every local `$ref` is replaced by its target (in a 3.0 document, translated like the [schemas of the spec's operations](#how-the-spec-is-read)), and the required fields a flag can fill are left out of its `required`. A recursive or very large schema, or one with a `$ref` that cannot be followed or a `$dynamicRef` / `$recursiveRef`, is published as its top-level fields, each standing alone or `{}`.
 - A [`bind`](#overrides) runs once before the request and fills every parameter and the body field of its name, and those inputs are not offered. It runs only for an operation that has such an input, so an `.each()` binding is never called for the others.
 - A [`confirm`](#confirmation) message is confirmed after the whole request is built and checked, so a rejected one never asks, and before it is sent.
 
@@ -292,10 +292,56 @@ test("maps the spec to commands", async () => {
 });
 ```
 
-- `acme.lint()` returns every problem with turning the operations into commands, as [`Diagnostic`](#operations)s: the model's, each operation's (an unsupported required input, a missing 2xx response or summary, inputs that share a name, a body field that repeats a parameter, a command, group or argument name core rejects, such as the empty name of an operationId without ASCII letters or digits, positionals out of order), command collisions, overrides of unknown operations, stale or unknown names in overrides, a `confirm` without `.onConfirm()`, and more than 20 untagged root commands. Each error leaves its operation out.
+- `acme.lint()` returns every problem with turning the operations into commands, as [`Diagnostic`](#how-the-spec-is-read)s: the model's, each operation's (an unsupported required input, a missing 2xx response or summary, inputs that share a name, a body field that repeats a parameter, a command, group or argument name core rejects, such as the empty name of an operationId without ASCII letters or digits, positionals out of order), command collisions, overrides of unknown operations, stale or unknown names in overrides, a `confirm` without `.onConfirm()`, and more than 20 untagged root commands. Each error leaves its operation out.
 - `acme.manifest()` is the generated surface: `commands`, sorted by command path, each `{ command, operationId, method, path, args, flags, outputSchema }` (positional names in order, flag names sorted, whether an output schema is advertised), and the lint errors as `diagnostics`. It comes from the spec and the overrides, not from the built commands, and is the same on every platform, so a snapshot of it shows the CLI's diff in the review of a spec bump.
 
 A CI job can bump the pin and open a pull request with the new snapshot for review; Crust ships no updater.
+
+## How the spec is read
+
+Generated commands, `acme.lint()` and `acme.manifest()` read the spec's operations one way. They walk `paths` the way [`api --list`](#browse-the-spec) does, in the same order, and normalize each operation once:
+
+- Local `$ref`s are followed for path items, parameters, request bodies, responses, and each top-level schema. Deeper `$ref`s inside schemas stay as they are, so a recursive schema stays finite.
+- Each schema is published as a JSON Schema 2020-12 schema that means what the API's schema means. Only these changes are made; everything else, such as `allOf`, stays as written:
+  - In a 3.1 document, a schema `$ref` with keywords beside it applies in place like a one-member `allOf`: the keywords stay as written, and the resolved target becomes the first member of their `allOf`. A `$ref` alone is replaced by its target. Boolean schemas (`true`, `false`) stay booleans.
+  - In a 3.0 document, the dialect differences are translated at every inline level: `nullable: true` adds `"null"` to `type` (`{ type: ["string", "null"] }`), the boolean `exclusiveMinimum` / `exclusiveMaximum` become the numeric form, and a `$ref` keeps no sibling keywords, which 3.0 ignores. A schema reached through a nested `$ref` is still in the document's own 3.0 form.
+- The path item's `parameters` are merged in: an operation parameter with the same `name` and `in` replaces the shared one. `Accept`, `Content-Type`, and `Authorization` header parameters are left out, as OpenAPI says to ignore them.
+- A request body or response with several media types is read through its JSON one (`application/json` or `application/*+json`), else its first.
+- `security` is the operation's, else the document's; `[]` marks a public operation.
+- The spec is never modified.
+
+Each operation is an `Operation`, the `op` that [`.each()`](#overrides) receives:
+
+<auto-type-table path="../../../../../packages/openapi/src/operations.ts" name="Operation" />
+
+Each of its `params`:
+
+<auto-type-table path="../../../../../packages/openapi/src/operations.ts" name="Param" />
+
+Deprecated operations are read too (and left out of the generated commands unless an override sets `exclude: false`). Besides the problems listed under [Drift guard](#drift-guard), `acme.lint()` reports these problems with the document, each an error:
+
+| `code`                   | When                                                                                                  |
+| ------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `unsupported-version`    | `openapi` is missing or not 3.0.x or 3.1.x, as in a Swagger 2.0 document. No operation is read.       |
+| `missing-operation-id`   | An operation has no `operationId`; it is left out. A deprecated one is left out without a diagnostic. |
+| `duplicate-operation-id` | Several operations share an `operationId`. Each of them gets the error, so none becomes a command.    |
+
+Each problem is a `Diagnostic`, as `acme.lint()` and `acme.manifest().diagnostics` return them:
+
+<auto-type-table path="../../../../../packages/openapi/src/operations.ts" name="Diagnostic" />
+
+`api --list` and `api --spec` stay permissive: they also read documents without a version and operations without an `operationId`.
+
+When Crust turns spec names (operationIds, tags, parameter and body field names) into command, group, or flag names, it kebab-cases them: a capital after a lowercase letter or digit, and the last capital of a capital run followed by a lowercase letter, start a word, and every run of other characters than ASCII letters and digits is one `-`. So `DeleteWebhook` and `deleteWebhook` both become `delete-webhook`, `notification_url` becomes `notification-url`, and `getHTTPResponse` becomes `get-http-response`, while plural acronyms split before their last capital: `CAs` becomes `c-as` and `AAGUIDs` becomes `aagui-ds`. Names are compared after kebab-casing, so two that differ only in case or separators are the same name.
+
+When Crust maps an operation's inputs to a command, it cannot offer:
+
+- a path parameter that is not a scalar in style `simple`;
+- a query (style `form`) or header (style `simple`) parameter in another style, or one that is not a scalar or an array of scalars;
+- a parameter described by `content`, or a cookie parameter;
+- a request body that is not JSON, such as form-encoded or multipart.
+
+Such an input leaves the operation out only when the operation cannot be called without it: a required one does; an optional one gets no flag, with a warning, and stays reachable through `api <path>`.
 
 ## The API client
 
