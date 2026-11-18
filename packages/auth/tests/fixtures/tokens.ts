@@ -64,10 +64,12 @@ async function shutDown(server: ReturnType<typeof createServer>, port: number) {
 /** `bearerAuth()` over a token source, as the auth docs connect one. */
 function bearer(source: TokenSource) {
 	return bearerAuth(async ({ signal, baseUrl }) => {
-		const credential = (token: AccessToken): BearerCredential => ({
-			value: token.value,
+		const credential = (stored: AccessToken): BearerCredential => ({
+			value: stored.value,
 			refresh: async (options) =>
-				credential(await source.forceRefresh({ ...options, ifGeneration: token.generation, baseUrl })),
+				credential(
+					await source.forceRefresh({ ...options, ifGeneration: stored.generation, baseUrl }),
+				),
 		});
 		return credential(await source.get({ signal, baseUrl }));
 	});

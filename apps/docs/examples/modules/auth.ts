@@ -131,10 +131,12 @@ const blocksApi = apiCommand({
 	spec: { openapi: "3.1.0", info: { title: "Acme", version: "1" }, paths: {} },
 	baseUrl: "https://api.acme.example",
 	auth: bearerAuth(async ({ signal, baseUrl }) => {
-		const credential = (token: AccessToken): BearerCredential => ({
-			value: token.value,
+		const credential = (stored: AccessToken): BearerCredential => ({
+			value: stored.value,
 			refresh: async (options) =>
-				credential(await acme.forceRefresh({ ...options, ifGeneration: token.generation, baseUrl })),
+				credential(
+					await acme.forceRefresh({ ...options, ifGeneration: stored.generation, baseUrl }),
+				),
 		});
 		return credential(await acme.get({ signal, baseUrl }));
 	}),
