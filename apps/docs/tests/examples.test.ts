@@ -201,6 +201,28 @@ it("error-handling debug example prints no error fields besides stacks", async (
 	expect(stderr).toContain("Caused by: Error: 401");
 });
 
+it.each([
+	[[], {}, "Uploading 3 files...\nPublished v1.2.0\n"],
+	[["-q"], {}, "Published v1.2.0\n"],
+	[["--quiet"], {}, "Published v1.2.0\n"],
+	[[], { APP_QUIET: "1" }, "Published v1.2.0\n"],
+	[["--no-quiet"], { APP_QUIET: "1" }, "Uploading 3 files...\nPublished v1.2.0\n"],
+])("error-handling quiet example publishes with %j and %j", (argv, env, stdout) => {
+	const result = spawnSync(
+		"bun",
+		[
+			fileURLToPath(new URL("../examples/guide/error-handling.ts", import.meta.url)),
+			"quiet",
+			"publish",
+			...argv,
+		],
+		{ encoding: "utf8", env: { ...process.env, ...env }, timeout: 10_000 },
+	);
+	expect(result.status).toBe(0);
+	expect(result.stdout).toBe(stdout);
+	expect(result.stderr).toBe("");
+});
+
 it("error-handling debug example leaves cancellation silent under --debug", async () => {
 	const app = new Crust("app").extend(debug).action(() => {
 		throw new DOMException("Cancelled", "AbortError");

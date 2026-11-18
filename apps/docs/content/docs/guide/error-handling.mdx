@@ -92,6 +92,25 @@ Caused by: Error: ENOENT: no such file or directory, open 'app.config.json'
 - Failures to route or parse argv, such as an unknown flag, reach `onError` before flags are parsed, so they print only the message.
 - A claimed failure skips the renderer's `error`: under [`--json`](/docs/modules/extensions/json), `--debug` prints the stack instead of the JSON error line.
 
+## Quiet output
+
+Errors always print. To let users skip a command's optional output, such as progress lines, define a `--quiet` flag on a [Context](/docs/guide/contexts#flags-owned-by-a-context) and check it in the commands that [`.use()`](/docs/guide/contexts#use-from-a-reusable-command) it:
+
+<include lang="ts">../../../examples/guide/error-handling.ts#quiet</include>
+
+```sh
+$ app publish
+Uploading 3 files...
+Published v1.2.0
+$ app publish -q
+Published v1.2.0
+$ APP_QUIET=1 app publish
+Published v1.2.0
+```
+
+- `APP_QUIET` applies when the flag is omitted: `1` or `true` turns quiet on, and `--no-quiet` overrides it. See [environment variables](/docs/guide/arguments-and-flags#environment-variables).
+- Each command decides what to skip. Other commands reject `--quiet` as an unknown flag, and Extensions keep their own output.
+
 ## Cancellation
 
 Ctrl+C in a Crust prompt raises an `AbortError`. By default, `execute()` prints no error and returns exit code 130:

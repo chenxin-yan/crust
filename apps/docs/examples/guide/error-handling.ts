@@ -95,6 +95,26 @@ const traced = new Crust("app").extend(debug).action(async () => {
 });
 //#endregion
 
+//#region quiet
+import { defineCommand } from "@crustjs/core";
+
+// [!code highlight:4]
+const quiet = defineContext("quiet")
+	.flags({
+		quiet: { type: "boolean", short: "q", description: "Print less", env: { name: "APP_QUIET" } },
+	})
+	.setup(({ flags }) => flags.quiet === true);
+
+const publish = defineCommand("publish", (command) =>
+	command.use(quiet).action(async ({ ctx, stdout }) => {
+		if (!(await ctx.quiet)) stdout("Uploading 3 files..."); // [!code highlight]
+		stdout("Published v1.2.0");
+	}),
+);
+
+const quieted = new Crust("app").provide(quiet()).add(publish);
+//#endregion
+
 const cancelled = new Crust("app").action(() => {
 	throw new DOMException("Cancelled", "AbortError");
 });
@@ -113,6 +133,7 @@ if (import.meta.main) {
 		cleanup: deploy,
 		config: configured,
 		debug: traced,
+		quiet: quieted,
 		cancel: cancelled,
 		prompt: prompted,
 	}[process.argv[2] ?? ""];
