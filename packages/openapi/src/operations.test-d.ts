@@ -1,4 +1,4 @@
-import { type Diagnostic, type Operation, type Param, operations } from "./index.ts";
+import { type Diagnostic, type Operation, type Param, operations } from "./operations.ts";
 
 // Compile-time regression checks; intentionally never invoked.
 function _typecheckOperations() {

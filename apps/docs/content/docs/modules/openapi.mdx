@@ -219,64 +219,6 @@ When a request gets a 401, it is sent again once with the attempt `retry(respons
 
 The 401 response's body is cancelled (even if `retry` read it), and only the request that got the 401 is sent again: after a redirect, that is the redirected request, with the method and body it was sent with, never the request before it. Redirects after it are followed as usual. The new attempt replaces the old one for the rest of the invocation, so later requests and `--paginate` pages use it. A 403 or a 5xx is never retried. `retry` returning `undefined` keeps the 401; an error it throws, such as `RefreshOutcomeUnknownError`, rejects the request.
 
-## Operations
-
-`operations(spec)` reads every operation of an OpenAPI 3.0 or 3.1 document into plain data, for tests, reports, or your own tooling around the spec:
-
-```ts
-import { operations } from "@crustjs/openapi";
-
-import spec from "./openapi.json" with { type: "json" };
-
-const { operations: list, diagnostics } = operations(spec);
-for (const op of list) {
-  console.log(
-    op.method,
-    op.path,
-    op.id,
-    op.params.map((param) => param.name),
-  );
-}
-```
-
-It walks `paths` the way [`api --list`](#browse-the-spec) does, in the same order, and normalizes each operation once:
-
-- Local `$ref`s are followed for path items, parameters, request bodies, responses, and each top-level schema. Deeper `$ref`s inside schemas stay as they are, so a recursive schema stays finite.
-- Each schema is published as a JSON Schema 2020-12 schema that means what the API's schema means. Only these changes are made; everything else, such as `allOf`, stays as written:
-  - In a 3.1 document, a schema `$ref` with keywords beside it applies in place like a one-member `allOf`: the keywords stay as written, and the resolved target becomes the first member of their `allOf`. A `$ref` alone is replaced by its target. Boolean schemas (`true`, `false`) stay booleans.
-  - In a 3.0 document, the dialect differences are translated at every inline level: `nullable: true` adds `"null"` to `type` (`{ type: ["string", "null"] }`), the boolean `exclusiveMinimum` / `exclusiveMaximum` become the numeric form, and a `$ref` keeps no sibling keywords, which 3.0 ignores. A schema reached through a nested `$ref` is still in the document's own 3.0 form.
-- The path item's `parameters` are merged in: an operation parameter with the same `name` and `in` replaces the shared one. `Accept`, `Content-Type`, and `Authorization` header parameters are left out, as OpenAPI says to ignore them.
-- A request body or response with several media types is read through its JSON one (`application/json` or `application/*+json`), else its first.
-- `security` is the operation's, else the document's; `[]` marks a public operation.
-- The input is never modified.
-
-<auto-type-table path="../../../../../packages/openapi/src/operations.ts" name="Operation" />
-
-<auto-type-table path="../../../../../packages/openapi/src/operations.ts" name="Param" />
-
-Deprecated operations are included. `diagnostics` reports these problems with the document:
-
-| `code`                   | When                                                                                                  |
-| ------------------------ | ----------------------------------------------------------------------------------------------------- |
-| `unsupported-version`    | `openapi` is missing or not 3.0.x or 3.1.x, as in a Swagger 2.0 document. `operations` is empty.      |
-| `missing-operation-id`   | An operation has no `operationId`; it is left out. A deprecated one is left out without a diagnostic. |
-| `duplicate-operation-id` | Several operations share an `operationId`. Each of them stays in the list and gets a diagnostic.      |
-
-<auto-type-table path="../../../../../packages/openapi/src/operations.ts" name="Diagnostic" />
-
-`api --list` and `api --spec` stay permissive: they also read documents without a version and operations without an `operationId`.
-
-When Crust turns spec names (operationIds, tags, parameter and body field names) into command, group, or flag names, it kebab-cases them: a capital after a lowercase letter or digit, and the last capital of a capital run followed by a lowercase letter, start a word, and every run of other characters than ASCII letters and digits is one `-`. So `DeleteWebhook` and `deleteWebhook` both become `delete-webhook`, `notification_url` becomes `notification-url`, and `getHTTPResponse` becomes `get-http-response`, while plural acronyms split before their last capital: `CAs` becomes `c-as` and `AAGUIDs` becomes `aagui-ds`. Names are compared after kebab-casing, so two that differ only in case or separators are the same name.
-
-When Crust maps an operation's inputs to a command, it cannot offer:
-
-- a path parameter that is not a scalar in style `simple`;
-- a query (style `form`) or header (style `simple`) parameter in another style, or one that is not a scalar or an array of scalars;
-- a parameter described by `content`, or a cookie parameter;
-- a request body that is not JSON, such as form-encoded or multipart.
-
-Such an input leaves the operation out only when the operation cannot be called without it: a required one does; an optional one gets no flag, with a warning, and stays reachable through `api <path>`.
-
 ## Out of scope
 
 `@crustjs/openapi` does not generate one command per operation, filter output (`--jq`), or template endpoint paths. Write commands for the operations that deserve them, with `apiClient` for the request.
