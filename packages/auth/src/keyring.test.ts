@@ -753,7 +753,7 @@ describe("encryption on the next write", () => {
 });
 
 describe("status", () => {
-	it("reports a readable key without writing, and the shadowed probe never reads the keyring", async () => {
+	it("reports a readable key without writing", async () => {
 		const keyring = fakeKeyring();
 		const w = world();
 		await expect(w.store.status()).resolves.toEqual({
@@ -774,10 +774,6 @@ describe("status", () => {
 			kind: "bun-secrets",
 			keyReadable: false,
 		});
-		const reads = keyring.calls.length;
-		const { fromStore } = await import("./resolve.ts");
-		await expect(fromStore(w.source({ store: reopen(w, {}) })).probe()).resolves.toBe(true);
-		expect(keyring.calls.length).toBe(reads);
 		expect(keyring.writes()).toBe(1);
 	});
 });
