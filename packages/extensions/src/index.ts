@@ -19,8 +19,6 @@ export { json } from "./json.ts";
 export { nextSteps } from "./next-steps.ts";
 export type { NextStep, NextSteps, NextStepsOptions } from "./next-steps.ts";
 export { noColor } from "./no-color.ts";
-export { quiet } from "./quiet.ts";
-export type { QuietOptions } from "./quiet.ts";
 export { schema } from "./schema.ts";
 export type { CommandSchema } from "./schema.ts";
 export { search } from "./search.ts";
