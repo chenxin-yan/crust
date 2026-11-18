@@ -11,7 +11,8 @@ function _typecheckPublicTypes(op: Operation, diagnostic: Diagnostic) {
 	const method: "get" | "put" | "post" | "delete" | "options" | "head" | "patch" | "trace" =
 		op.method;
 	const level: "error" | "warning" = diagnostic.level;
-	const location: Param["in"] | Operation["params"][number]["in"] = op.params[0]!.in;
+	const location: Operation["params"][number]["in"] = op.params[0]!.in;
+	type _Param = Param;
 	void [method, level, location, operations];
 }
 void _typecheckPublicTypes;
