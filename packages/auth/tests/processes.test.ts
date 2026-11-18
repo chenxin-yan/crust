@@ -267,7 +267,8 @@ describe.each(["node", "bun"])("on %s", (runtime) => {
 			child(runtime, ["read", as.issuer, "acme", profile, keyring], root),
 		);
 		expect(await Promise.all(readers.map(output))).toEqual(["AT_a", "AT_b", "AT2"]);
-		expect(readFileSync(credentialsFile(), "utf8")).not.toMatch(/"AT|"RT/);
+		// By key, not by value: a ciphertext is random text that can itself begin with "AT" or "RT".
+		expect(readFileSync(credentialsFile(), "utf8")).not.toMatch(/"accessToken"|"refreshToken"/);
 	}, 90_000);
 
 	it("a process killed before its login's write leaves the file intact, and the next login writes no second key", async () => {
