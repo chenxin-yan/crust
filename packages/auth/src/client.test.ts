@@ -639,9 +639,9 @@ describe("the stored login", () => {
 	it("an env token wins, and is never stored or refreshed", async () => {
 		const { auth, dir, tokenRequests } = setup(undefined, { env: "ACME_TOKEN" });
 		vi.stubEnv("ACME_TOKEN", "ENV_TOKEN");
-		const fromEnv = await auth.token();
-		expect(fromEnv).toEqual({ value: "ENV_TOKEN", source: "env" });
-		expect(fromEnv.refresh).toBeUndefined();
+		const envToken = await auth.token();
+		expect(envToken).toEqual({ value: "ENV_TOKEN", source: "env" });
+		expect(envToken.refresh).toBeUndefined();
 		expect(await auth.status()).toEqual({ source: "env" });
 		await auth.login({ onUrl: browser().onUrl, onCode: noCode });
 		expect((await auth.token()).value).toBe("ENV_TOKEN");
