@@ -275,13 +275,8 @@ export async function runProcess(
  * reader consumes stdin (a flowing stream with a `data` listener), such as an
  * MCP stdio transport whose protocol frames arrive there: reading would steal
  * them, and the read would end only when that reader's peer hangs up.
- * With `maxBytes`, rejects with a `RangeError` as soon as more bytes arrive, without
- * waiting for the end of the input.
  */
-export async function readStdin(
-	signal: AbortSignal,
-	options: { maxBytes?: number } = {},
-): Promise<string> {
+export async function readStdin(signal: AbortSignal): Promise<string> {
 	signal.throwIfAborted();
 	const { stdin } = process;
 	if (stdin.readableEnded || stdin.destroyed) return "";
@@ -289,16 +284,10 @@ export async function readStdin(
 		throw new Error("stdin is in use by another reader");
 	}
 	const chunks: Buffer[] = [];
-	let size = 0;
-	const { maxBytes = Infinity } = options;
 	const done = Promise.withResolvers<string>();
 	// Strings arrive when something already called `stdin.setEncoding()`.
-	const onData = (chunk: Buffer | string) => {
-		const bytes = typeof chunk === "string" ? Buffer.from(chunk, "utf8") : chunk;
-		size += bytes.byteLength;
-		if (size > maxBytes) done.reject(new RangeError(`stdin is larger than ${maxBytes} bytes`));
-		else chunks.push(bytes);
-	};
+	const onData = (chunk: Buffer | string) =>
+		void chunks.push(typeof chunk === "string" ? Buffer.from(chunk, "utf8") : chunk);
 	const onEnd = () => done.resolve(Buffer.concat(chunks).toString("utf8"));
 	const onAbort = () => done.reject(signal.reason);
 	stdin.on("data", onData).once("end", onEnd).once("error", done.reject);

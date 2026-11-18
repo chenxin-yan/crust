@@ -14,13 +14,12 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
-import { PassThrough } from "node:stream";
 import { pathToFileURL } from "node:url";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { isErrnoException } from "./error.ts";
-import { getWindowsShimCommand, readStdin, runProcess, shellQuote, which } from "./process.ts";
+import { getWindowsShimCommand, runProcess, shellQuote, which } from "./process.ts";
 
 describe("shellQuote", () => {
 	it("keeps safe words bare and single-quotes empty, apostrophe, and punctuation words", () => {
@@ -392,31 +391,6 @@ console.log("alive");`,
 			}
 		},
 	);
-});
-
-describe("readStdin", () => {
-	afterEach(() => {
-		vi.restoreAllMocks();
-	});
-
-	it("rejects with a RangeError once maxBytes is passed, without waiting for the end", async () => {
-		const stdin = new PassThrough();
-		vi.spyOn(process, "stdin", "get").mockReturnValue(stdin as unknown as typeof process.stdin);
-		const read = readStdin(new AbortController().signal, { maxBytes: 8 });
-		stdin.write("12345");
-		stdin.write("6789");
-		await expect(read).rejects.toThrow(new RangeError("stdin is larger than 8 bytes"));
-		expect(stdin.isPaused()).toBe(true);
-		expect(stdin.listenerCount("data")).toBe(0);
-	});
-
-	it("reads input of exactly maxBytes", async () => {
-		const stdin = new PassThrough();
-		vi.spyOn(process, "stdin", "get").mockReturnValue(stdin as unknown as typeof process.stdin);
-		const read = readStdin(new AbortController().signal, { maxBytes: 4 });
-		stdin.end("abcd");
-		await expect(read).resolves.toBe("abcd");
-	});
 });
 
 describe("which", () => {
