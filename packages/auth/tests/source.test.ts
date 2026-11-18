@@ -30,13 +30,13 @@ describe("library source", () => {
 		).toEqual([]);
 	});
 
-	it("reads the environment only to pick a login mode and for fromEnv()", () => {
+	it("reads the environment only to pick a login mode and for the client's env token", () => {
 		expect(filesMatching(/process\.env|Bun\.env|import\.meta\.env/)).toEqual([
+			"client.ts",
 			"login-mode.ts",
-			"resolve.ts",
 			"types.ts",
 		]);
-		expect(readFileSync(join(srcDir, "resolve.ts"), "utf8").match(/process\.env/g)).toHaveLength(1);
+		expect(readFileSync(join(srcDir, "client.ts"), "utf8").match(/process\.env/g)).toHaveLength(1);
 		expect(readFileSync(join(srcDir, "types.ts"), "utf8").match(/process\.env/g)).toHaveLength(1);
 	});
 

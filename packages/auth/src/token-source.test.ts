@@ -373,6 +373,40 @@ describe("refresh", () => {
 		expect(w.requests).toHaveLength(0);
 	});
 
+	it("an API or issuer override from env meets the same checks as code, before any request", async () => {
+		const w = world();
+		const tokens = w.source();
+		await login(tokens, { expiresAt: undefined });
+		await expect(tokens.get({ baseUrl: "https://api.b.example" })).rejects.toBeInstanceOf(
+			CredentialMismatchError,
+		);
+
+		const config = defineServers({
+			servers: [{ issuer: "http://127.0.0.1:8000", clientId: "cli", allowInsecureLoopback: true }],
+		});
+		for (const issuer of ["http://127.0.0.1:9000", "http://localhost:8000"]) {
+			expect(() =>
+				createTokenSource({
+					config,
+					identity: { issuer, clientId: "cli", apiOrigins: ["http://127.0.0.1:9000"] },
+					store: w.store,
+				}),
+			).toThrow(OAuthConfigError);
+		}
+		expect(() =>
+			createTokenSource({
+				config,
+				identity: {
+					issuer: "http://127.0.0.1:8000",
+					clientId: "cli",
+					apiOrigins: ["http://127.0.0.1:9000"],
+				},
+				store: w.store,
+			}),
+		).toThrow(OAuthConfigError);
+		expect(w.requests).toHaveLength(0);
+	});
+
 	it("writes the mark before the request is sent", async () => {
 		const marks: unknown[] = [];
 		const w = world({

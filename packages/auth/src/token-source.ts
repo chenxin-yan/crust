@@ -64,15 +64,12 @@ export const refreshFlights: Map<string, Flight> = new Map();
 /** Open login tickets, by credentials file and key. */
 const openLogins = new Set<string>();
 
-/** What `fromStore()` needs of a token source; kept off the public object. */
+/** What `createAuth()` needs of a token source; kept off the public object. */
 interface TokenSourceInternals {
-	/** Whether a live (not logged-out) record exists: no lock, no refresh. */
-	hasCredential(): Promise<boolean>;
 	/**
 	 * The live record's expiry and scope, checked like `get()` but with no lock, refresh or
-	 * request. Unlike `hasCredential()`, it throws: no login → `LoginRequiredError` (`missing`),
-	 * a login for another identity → `CredentialMismatchError`, and an unreadable, corrupt or
-	 * unsafe file throws its error.
+	 * request: no login → `LoginRequiredError` (`missing`), a login for another identity →
+	 * `CredentialMismatchError`, and an unreadable, corrupt or unsafe file throws its error.
 	 */
 	storedLogin(): Promise<{ expiresAt: number | undefined; scope: string | undefined }>;
 }
@@ -547,14 +544,6 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 		},
 	});
 	sourceInternals.set(source, {
-		async hasCredential() {
-			try {
-				const record = parseRecord((await store.read())?.records[key]);
-				return record !== undefined && !record.tombstone;
-			} catch {
-				return false;
-			}
-		},
 		async storedLogin() {
 			const { expiresAt, scope } = await readRecord(undefined, undefined);
 			return { expiresAt, scope };

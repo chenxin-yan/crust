@@ -1,5 +1,5 @@
-// The @crustjs/openapi bridge: bearerAuth() over resolveCredential() and a stored login, through
-// a real apiClient Context. The API is a stubbed global fetch; the authorization server is
+// The @crustjs/openapi bridge: bearerAuth(auth.token) over an env token or a stored login,
+// through a real apiClient Context. The API is a stubbed global fetch; the authorization server is
 // the scripted fetch of the token source.
 import { rmSync } from "node:fs";
 
@@ -8,10 +8,7 @@ import { type ApiClient, apiClient, apiCommand, bearerAuth } from "@crustjs/open
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { createAuth } from "../src/client.ts";
-import { credentialStoreInternals } from "../src/credentials.ts";
-import { AbortError, CredentialMismatchError } from "../src/errors.ts";
-import { fromEnv, fromStore, resolveCredential } from "../src/resolve.ts";
-import type { TokenSource } from "../src/types.ts";
+import { AbortError, CredentialMismatchError, LoginRequiredError } from "../src/errors.ts";
 import { login, type TokenWorld, tokenWorld } from "./helpers.ts";
 
 interface ApiCall {
@@ -45,20 +42,30 @@ function stubApi(respond: (call: ApiCall) => Response | Promise<Response>): ApiC
 	return calls;
 }
 
-/** Runs `use` with the `api` Context of a CLI whose `auth` is `bearerAuth` over `sources`. */
+/**
+ * Runs `use` with the `api` Context of a CLI whose `auth` is `bearerAuth(auth.token)`, for the
+ * login of `w` and the `ACME_TOKEN` variable set to `envToken` (blank: unset).
+ */
 async function withApi(
-	tokens: TokenSource,
+	w: TokenWorld,
 	use: (api: ApiClient) => Promise<void>,
-	options: { baseUrl?: string; env?: Record<string, string>; signal?: AbortSignal } = {},
+	options: { baseUrl?: string; envToken?: string; signal?: AbortSignal } = {},
 ) {
+	vi.stubEnv("ACME_TOKEN", options.envToken ?? "");
+	const auth = createAuth({
+		app: w.app,
+		issuer: w.issuer,
+		clientId: "cli",
+		apiOrigins: w.identity.apiOrigins,
+		fetch: w.fetch,
+		env: "ACME_TOKEN",
+	});
 	const app = new Crust("acme")
 		.extend(
 			apiCommand({
 				spec: { openapi: "3.1.0", paths: {} },
 				baseUrl: options.baseUrl ?? "https://api.example.com/v1",
-				auth: bearerAuth((resolve) =>
-					resolveCredential([fromEnv("ACME_TOKEN", options.env ?? {}), fromStore(tokens)], resolve),
-				),
+				auth: bearerAuth(auth.token),
 			}),
 		)
 		.add(
@@ -84,10 +91,9 @@ describe("bearer tokens for the API", () => {
 		["https://api.example.com./v1", false],
 	])("sends the token to %s only when its origin is the login's (%s)", async (baseUrl, allowed) => {
 		const w = world();
-		const tokens = w.source();
-		await login(tokens, { expiresAt: undefined });
+		await login(w.source(), { expiresAt: undefined });
 		const calls = stubApi(() => new Response("{}"));
-		const result = withApi(tokens, (api) => api.fetch("/me").then(() => {}), { baseUrl });
+		const result = withApi(w, (api) => api.fetch("/me").then(() => {}), { baseUrl });
 		if (allowed) {
 			await result;
 			expect(calls.map((call) => call.authorization)).toEqual(["Bearer AT1"]);
@@ -100,14 +106,13 @@ describe("bearer tokens for the API", () => {
 
 	it("sends no token after a redirect to another origin, and never one in a URL", async () => {
 		const w = world();
-		const tokens = w.source();
-		await login(tokens, { accessToken: "SENTINEL_AT_1", expiresAt: undefined });
+		await login(w.source(), { accessToken: "SENTINEL_AT_1", expiresAt: undefined });
 		const calls = stubApi(({ url }) =>
 			url.startsWith("https://api.example.com")
 				? new Response(null, { status: 302, headers: { location: "https://files.example/x" } })
 				: new Response("{}"),
 		);
-		await withApi(tokens, (api) => api.fetch("/download").then(() => {}));
+		await withApi(w, (api) => api.fetch("/download").then(() => {}));
 		expect(calls).toEqual([
 			{ url: "https://api.example.com/v1/download", authorization: "Bearer SENTINEL_AT_1" },
 			{ url: "https://files.example/x", authorization: null },
@@ -120,15 +125,14 @@ describe("bearer tokens for the API", () => {
 
 	it("refreshes once on a 401 and replays the request; a second 401 is returned", async () => {
 		const w = world();
-		const tokens = w.source();
-		await login(tokens, { expiresAt: undefined });
+		await login(w.source(), { expiresAt: undefined });
 		const calls = stubApi(({ authorization }) =>
 			authorization === "Bearer AT1" || authorization === "Bearer AT2"
 				? unauthorized()
 				: new Response("{}"),
 		);
 		const statuses: number[] = [];
-		await withApi(tokens, async (api) => {
+		await withApi(w, async (api) => {
 			statuses.push((await api.fetch("/me")).status);
 		});
 		expect(statuses).toEqual([401]);
@@ -138,13 +142,12 @@ describe("bearer tokens for the API", () => {
 
 	it("pages after a refresh use the new token; parallel 401s share one refresh", async () => {
 		const w = world();
-		const tokens = w.source();
-		await login(tokens, { expiresAt: undefined });
+		await login(w.source(), { expiresAt: undefined });
 		const cancel = vi.spyOn(ReadableStream.prototype, "cancel");
 		const calls = stubApi(({ authorization }) =>
 			authorization === "Bearer AT1" ? unauthorized() : new Response("{}"),
 		);
-		await withApi(tokens, async (api) => {
+		await withApi(w, async (api) => {
 			const responses = await Promise.all(
 				Array.from({ length: 10 }, (_, page) => api.fetch(`/users?page=${page}`)),
 			);
@@ -158,21 +161,20 @@ describe("bearer tokens for the API", () => {
 
 	it("never refreshes an environment token, a caller's Authorization, or a 401 from another origin", async () => {
 		const w = world();
-		const tokens = w.source();
-		await login(tokens, { expiresAt: undefined });
+		await login(w.source(), { expiresAt: undefined });
 		const calls = stubApi(({ url }) =>
 			url.endsWith("/moved")
 				? new Response(null, { status: 302, headers: { location: "https://other.example/x" } })
 				: unauthorized(),
 		);
 		await withApi(
-			tokens,
+			w,
 			async (api) => {
 				expect((await api.fetch("/me")).status).toBe(401);
 			},
-			{ env: { ACME_TOKEN: "ENV_TOKEN" } },
+			{ envToken: "ENV_TOKEN" },
 		);
-		await withApi(tokens, async (api) => {
+		await withApi(w, async (api) => {
 			await api.fetch("/me", { headers: { authorization: "Bearer mine" } });
 			await api.fetch("/moved");
 		});
@@ -193,10 +195,9 @@ describe("bearer tokens for the API", () => {
 				return new Promise<Response>(() => {});
 			},
 		});
-		const tokens = w.source();
-		await login(tokens, { expiresAt: undefined });
+		await login(w.source(), { expiresAt: undefined });
 		const calls = stubApi(unauthorized);
-		const error = await withApi(tokens, (api) => api.fetch("/me").then(() => {}), {
+		const error = await withApi(w, (api) => api.fetch("/me").then(() => {}), {
 			signal: controller.signal,
 		}).catch((caught: unknown) => caught);
 		expect(error).toBeInstanceOf(AbortError);
@@ -205,12 +206,11 @@ describe("bearer tokens for the API", () => {
 
 	it("never refreshes on a 403 or a 5xx", async () => {
 		const w = world();
-		const tokens = w.source();
-		await login(tokens, { expiresAt: undefined });
+		await login(w.source(), { expiresAt: undefined });
 		const calls = stubApi(
 			({ url }) => new Response(null, { status: url.endsWith("/a") ? 403 : 503 }),
 		);
-		await withApi(tokens, async (api) => {
+		await withApi(w, async (api) => {
 			await api.fetch("/a");
 			await api.fetch("/b");
 		});
@@ -219,22 +219,17 @@ describe("bearer tokens for the API", () => {
 	});
 
 	it("reading the Context and a public request resolve no credential", async () => {
+		// Without a login, resolving a credential throws LoginRequiredError.
 		const w = world();
-		const tokens = w.source();
-		await login(tokens);
-		const internals = credentialStoreInternals(w.store);
-		const spies = [
-			vi.spyOn(internals, "read"),
-			vi.spyOn(internals, "update"),
-			vi.spyOn(internals, "lockIdentity"),
-		];
 		const calls = stubApi(() => new Response("{}"));
-		await withApi(tokens, async (api) => {
+		await withApi(w, async (api) => {
 			await api.fetch("/status", { auth: false });
 		});
-		for (const spy of spies) expect(spy).not.toHaveBeenCalled();
 		expect(w.requests).toEqual([]);
 		expect(calls).toEqual([{ url: "https://api.example.com/v1/status", authorization: null }]);
+		await expect(withApi(w, (api) => api.fetch("/me").then(() => {}))).rejects.toBeInstanceOf(
+			LoginRequiredError,
+		);
 	});
 
 	it("bearerAuth(auth.token) refreshes the client's login once on a 401", async () => {

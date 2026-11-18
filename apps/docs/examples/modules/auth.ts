@@ -1,5 +1,6 @@
 import { AuthError, createAuth } from "@crustjs/auth";
 import {
+	type AccessToken,
 	createAuthorizationSession,
 	createTokenClient,
 	createTokenSource,
@@ -7,14 +8,10 @@ import {
 	defineServers,
 	deviceCodeMessage,
 	discover,
-	fromEnv,
-	fromStdin,
-	fromStore,
 	openBrowser,
-	resolveCredential,
 	startDeviceFlow,
 } from "@crustjs/auth/oauth";
-import { apiCommand, bearerAuth } from "@crustjs/openapi";
+import { apiCommand, type BearerCredential, bearerAuth } from "@crustjs/openapi";
 
 //#region client
 const auth = createAuth({
@@ -129,24 +126,18 @@ await fetch("https://api.acme.example/me", { headers: { authorization: `Bearer $
 const { local, remote } = await acme.logout();
 //#endregion
 
-//#region resolve
-const credential = await resolveCredential([
-	fromStdin({ enabled: process.argv.includes("--token-stdin") }),
-	fromEnv("ACME_TOKEN"),
-	fromStore(acme),
-]);
-if (credential.shadowed.includes("store")) {
-	console.error(`Using the token from ${credential.source}, not your login`);
-}
-//#endregion
-
 //#region blocks-openapi
 const blocksApi = apiCommand({
 	spec: { openapi: "3.1.0", info: { title: "Acme", version: "1" }, paths: {} },
 	baseUrl: "https://api.acme.example",
-	auth: bearerAuth((options) =>
-		resolveCredential([fromEnv("ACME_TOKEN"), fromStore(acme)], options),
-	),
+	auth: bearerAuth(async ({ signal, baseUrl }) => {
+		const credential = (token: AccessToken): BearerCredential => ({
+			value: token.value,
+			refresh: async (options) =>
+				credential(await acme.forceRefresh({ ...options, ifGeneration: token.generation, baseUrl })),
+		});
+		return credential(await acme.get({ signal, baseUrl }));
+	}),
 });
 //#endregion
 

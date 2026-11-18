@@ -464,37 +464,3 @@ export interface TokenSource {
 	/** Logs out locally, then revokes the tokens at the server as a best effort. */
 	logout(options?: { signal?: AbortSignal }): Promise<LogoutResult>;
 }
-
-/** Options of `resolveCredential()` and of a source's `resolve()`. */
-export interface ResolveOptions {
-	signal?: AbortSignal;
-	/** The API's base URL: a stored credential must list its origin in `apiOrigins`. */
-	baseUrl?: string;
-}
-
-/** A value from a {@link CredentialSource}, and how to refresh it after a 401 (stored logins only). */
-export interface SourceValue {
-	readonly value: string;
-	readonly refresh?: (options: { signal?: AbortSignal }) => Promise<SourceValue>;
-}
-
-/** Where a credential may come from: `fromFlag()`, `fromStdin()`, `fromEnv()`, `fromEnvFile()`, `fromStore()`. */
-export interface CredentialSource {
-	/** Reported as `source`: `"flag"`, `"stdin"`, `"env"`, `"env-file"` or `"store"`. */
-	readonly name: string;
-	/** Whether the source has a value, without reading stdin, waiting for a lock or refreshing. */
-	probe(): boolean | Promise<boolean>;
-	/** The value, or `undefined` when the source has none. */
-	resolve(options: ResolveOptions): Promise<SourceValue | undefined>;
-}
-
-/** The credential `resolveCredential()` picked. */
-export interface ResolvedCredential {
-	/** The source it came from, for messages such as "using ACME_TOKEN, not your login". */
-	readonly source: string;
-	readonly value: string;
-	/** Later sources that also have a value, such as `["store"]` when an env token wins. */
-	readonly shadowed: readonly string[];
-	/** Only for a stored login: refreshes it unless it already changed (for a 401). */
-	readonly refresh?: (options: { signal?: AbortSignal }) => Promise<ResolvedCredential>;
-}

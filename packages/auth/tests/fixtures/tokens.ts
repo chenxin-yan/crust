@@ -11,16 +11,11 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { type AddressInfo, connect } from "node:net";
 
 import { Crust, defineCommand } from "@crustjs/core";
-import { apiClient, apiCommand, bearerAuth } from "@crustjs/openapi";
+import { apiClient, apiCommand, type BearerCredential, bearerAuth } from "@crustjs/openapi";
 
 import { credentialStoreInternals } from "../../src/credentials.ts";
-import {
-	createTokenSource,
-	credentialStore,
-	defineServers,
-	fromStore,
-	resolveCredential,
-} from "../../src/oauth.ts";
+import { createTokenSource, credentialStore, defineServers } from "../../src/oauth.ts";
+import type { AccessToken, TokenSource } from "../../src/types.ts";
 
 const [mode, issuerArg, app = "acme"] = process.argv.slice(2);
 
@@ -66,6 +61,18 @@ async function shutDown(server: ReturnType<typeof createServer>, port: number) {
 	}
 }
 
+/** `bearerAuth()` over a token source, as the auth docs connect one. */
+function bearer(source: TokenSource) {
+	return bearerAuth(async ({ signal, baseUrl }) => {
+		const credential = (token: AccessToken): BearerCredential => ({
+			value: token.value,
+			refresh: async (options) =>
+				credential(await source.forceRefresh({ ...options, ifGeneration: token.generation, baseUrl })),
+		});
+		return credential(await source.get({ signal, baseUrl }));
+	});
+}
+
 function sendJson(response: ServerResponse, status: number, body: unknown) {
 	response.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
 }
@@ -91,7 +98,7 @@ if (mode === "refresh") {
 			apiCommand({
 				spec: { openapi: "3.1.0", paths: {} },
 				baseUrl: `${issuerArg}/api`,
-				auth: bearerAuth((options) => resolveCredential([fromStore(source)], options)),
+				auth: bearer(source),
 			}),
 		)
 		.add(
@@ -155,7 +162,7 @@ if (mode === "refresh") {
 			apiCommand({
 				spec: { openapi: "3.1.0", paths: {} },
 				baseUrl: `${as.origin}/api`,
-				auth: bearerAuth((options) => resolveCredential([fromStore(source)], options)),
+				auth: bearer(source),
 			}),
 		)
 		.add(

@@ -18,7 +18,6 @@ import { credentialStore, credentialStoreInternals } from "../src/credentials.ts
 import { startDeviceFlow } from "../src/device.ts";
 import { discover } from "../src/discovery.ts";
 import { LockRecoveryRequiredError } from "../src/errors.ts";
-import { fromEnv, fromStore, resolveCredential } from "../src/resolve.ts";
 import { createAuthorizationSession } from "../src/session.ts";
 import { createTokenClient } from "../src/token-client.ts";
 import {
@@ -34,6 +33,7 @@ import {
 	settle,
 	tempApp,
 	terminal,
+	type TokenWorld,
 	tokenWorld,
 	uniqueIssuer,
 	wellKnown,
@@ -354,6 +354,19 @@ async function storedLogin(respond: () => Response) {
 	return { w, source };
 }
 
+/** The client of the stored login in `w`, with `ACME_TOKEN` (blank until a test sets it) as its `env`. */
+function clientOf(w: TokenWorld) {
+	vi.stubEnv("ACME_TOKEN", "");
+	return createAuth({
+		app: w.app,
+		issuer: w.issuer,
+		clientId: "cli",
+		apiOrigins: w.identity.apiOrigins,
+		fetch: w.fetch,
+		env: "ACME_TOKEN",
+	});
+}
+
 const refreshed = () =>
 	json({
 		access_token: STATIC.refreshedAccessToken,
@@ -363,12 +376,13 @@ const refreshed = () =>
 	});
 
 describe("secret sentinel gate: stored credentials", () => {
-	it("a refresh, a resolution and a logout leak nothing", async () => {
-		const { source } = await storedLogin(refreshed);
+	it("a refresh, the client's tokens and a logout leak nothing", async () => {
+		const { w, source } = await storedLogin(refreshed);
 		record(await source.get());
-		const resolved = await resolveCredential([fromEnv("ACME_TOKEN", {}), fromStore(source)]);
-		record(resolved);
-		record(await resolveCredential([fromEnv("ACME_TOKEN", { ACME_TOKEN: STATIC.envToken })]));
+		const auth = clientOf(w);
+		record(await auth.token());
+		vi.stubEnv("ACME_TOKEN", STATIC.envToken);
+		record(await auth.token());
 		record(await source.logout());
 		expectNoSecretInSinks();
 	});
@@ -390,7 +404,7 @@ describe("secret sentinel gate: stored credentials", () => {
 		"a %s token that is not a valid header value leaks nothing through bearerAuth",
 		async (_name, stored, refreshedValue) => {
 			secrets.add(stored).add(refreshedValue);
-			const { source } = await storedLogin(() =>
+			const { w, source } = await storedLogin(() =>
 				json({ access_token: refreshedValue, token_type: "Bearer", expires_in: 3600 }),
 			);
 			await (
@@ -409,7 +423,7 @@ describe("secret sentinel gate: stored credentials", () => {
 					apiCommand({
 						spec: { openapi: "3.1.0", paths: {} },
 						baseUrl: "https://api.example.com",
-						auth: bearerAuth((options) => resolveCredential([fromStore(source)], options)),
+						auth: bearerAuth(clientOf(w).token),
 					}),
 				)
 				.add(

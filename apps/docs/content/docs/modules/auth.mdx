@@ -206,7 +206,7 @@ On `"refuse"`, nobody is there to read a code, or nobody asked for one that some
 
 <auto-type-table path="../../../../../packages/auth/src/types.ts" name="TokenSet" />
 
-`JSON.stringify()` and `util.inspect()` of a `TokenSet`, and of what token sources and `resolveCredential()` return, print `[Redacted]` for its tokens. A copy made with `{ ...tokens }`, or the token strings themselves, are not protected.
+`JSON.stringify()` and `util.inspect()` of a `TokenSet`, and of what token sources and `auth.token()` return, print `[Redacted]` for its tokens. A copy made with `{ ...tokens }`, or the token strings themselves, are not protected.
 
 ## Storing tokens
 
@@ -257,21 +257,9 @@ A refresh, login, logout, or reset of one login holds a lock file next to `crede
 - `LockTimeoutError`: the owner is still running. Try again when it is done.
 - `LockRecoveryRequiredError`: the owner can't be judged from here, such as a process in a container. Both errors carry the lock file's `path`, its recorded `owner`, and `manualStep`: stop every process of your CLI that uses this directory, including on other machines or containers that share it, and keep new ones from starting; only then delete the file. If you can't be sure of that, leave it in place.
 
-## Choosing a credential
+## A token source and bearerAuth()
 
-`resolveCredential(sources, { signal?, baseUrl? })` returns the first credential in `sources` that has a value, as `{ source, value, shadowed, refresh? }`. List the sources in this order:
-
-<include lang="ts">../../../examples/modules/auth.ts#resolve</include>
-
-1. `fromStdin({ enabled, maxBytes? })`: piped stdin, read only when `enabled` (such as with a `--token-stdin` flag) and stdin is not a terminal, without its trailing newline. More than `maxBytes` (16 KiB) rejects with a `RangeError` while reading.
-2. `fromEnv(name)`: an environment variable, the usual choice on CI. Its value is trimmed, and a blank one counts as unset.
-3. `fromEnvFile(values, name)`: a variable from a dotenv file you parsed, so an exported variable wins. It is trimmed the same way, since a quoted dotenv value keeps its padding.
-4. `fromStore(tokenSource)`: the stored login, refreshed when it expires.
-5. `fromFlag(value)`, when you must accept a `--token` flag: put it first. A token on the command line is visible to other users (`ps`), and stays in shell history and CI logs.
-
-Nothing is read until you call `resolveCredential()`. `shadowed` lists the later sources that also have a value, such as `["store"]` when `ACME_TOKEN` wins over a login, so you can say so once on stderr; stdin is never read for it, and the store is checked without waiting for a lock or refreshing. Only a stored login has `refresh`: a token from a flag, stdin, or the environment is never stored, refreshed, or revoked. When the API rejects such a token, say which `source` it came from, as in "ACME_TOKEN was rejected". No source → `LoginRequiredError` (`missing`).
-
-With [`@crustjs/openapi`](/docs/modules/openapi#authentication), pass the resolver to `bearerAuth()`:
+`createAuth()`'s `token` is a `bearerAuth()` resolver as it is. For a token source built from these blocks, return its token from the resolver, with a `refresh` that calls `forceRefresh()` with the token's `generation`, so a 401 refreshes the login once, and a login that another process refreshed meanwhile is used without a second refresh. Pass `baseUrl` on, so the token is only sent to the login's `apiOrigins`:
 
 <include lang="ts">../../../examples/modules/auth.ts#blocks-openapi</include>
 
@@ -305,7 +293,7 @@ Errors carry local text, the `status`, and the allowlisted code only. A server's
 
 ## Cancellation
 
-`auth.login()`, `auth.token()`, `auth.logout()`, `discover()`, `createAuthorizationSession()`, `session.wait()`, `startDeviceFlow()`, `flow.poll()`, the token client's `exchangeCode()`, `refresh()`, and `revoke()`, a token source's `get()`, `forceRefresh()`, `beginLogin()`, `ticket.commit()`, and `logout()`, `resolveCredential()`, and `resetCredentials()` take a `signal`. An aborted signal rejects with `AbortError` before any request or listener; aborting mid-way stops the request, sleep, or wait and closes the listener. Handle Ctrl-C in your command (a Crust command's `ctx.signal` already does) and pass its signal down.
+`auth.login()`, `auth.token()`, `auth.logout()`, `discover()`, `createAuthorizationSession()`, `session.wait()`, `startDeviceFlow()`, `flow.poll()`, the token client's `exchangeCode()`, `refresh()`, and `revoke()`, a token source's `get()`, `forceRefresh()`, `beginLogin()`, `ticket.commit()`, and `logout()`, and `resetCredentials()` take a `signal`. An aborted signal rejects with `AbortError` before any request or listener; aborting mid-way stops the request, sleep, or wait and closes the listener. Handle Ctrl-C in your command (a Crust command's `ctx.signal` already does) and pass its signal down.
 
 A change to the credentials file can be cancelled until its first write, including while it waits for a lock; from then on it completes and reports its real outcome:
 

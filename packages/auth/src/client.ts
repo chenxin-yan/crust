@@ -13,18 +13,17 @@ import {
 import { throwIfAborted } from "./http.ts";
 import { detectLoginMode } from "./login-mode.ts";
 import { checkResources, checkScope } from "./params.ts";
-import { fromEnv, fromStore } from "./resolve.ts";
 import { checkLoopbackOptions, createAuthorizationSession } from "./session.ts";
 import { createTokenClient, redacted } from "./token-client.ts";
 import { createTokenSource, tokenSourceInternals } from "./token-source.ts";
 import type {
+	AccessToken,
 	AuthClient,
 	AuthServer,
 	AuthStatus,
 	AuthToken,
 	CreateAuthOptions,
 	LoginOptions,
-	SourceValue,
 	TokenSet,
 } from "./types.ts";
 
@@ -96,11 +95,11 @@ export function createAuth(options: CreateAuthOptions): AuthClient {
 		store: credentialStore({ app }),
 		fetch,
 	});
-	const stored = fromStore(source);
 
 	/** The `env` variable's trimmed value, when it is set and not blank. */
-	async function envValue(): Promise<string | undefined> {
-		return env === undefined ? undefined : (await fromEnv(env).resolve({}))?.value;
+	function envValue(): string | undefined {
+		// A bearer token never contains whitespace; padding comes from how the variable was set.
+		return (env === undefined ? undefined : process.env[env]?.trim()) || undefined;
 	}
 
 	async function login(loginOptions: LoginOptions): Promise<void> {
@@ -165,13 +164,16 @@ export function createAuth(options: CreateAuthOptions): AuthClient {
 		}
 	}
 
-	const loginToken = (value: SourceValue): AuthToken =>
+	const loginToken = (stored: AccessToken, baseUrl: string | undefined): AuthToken =>
 		redacted(
 			{
-				value: value.value,
+				value: stored.value,
 				source: "login" as const,
-				refresh: async (refreshOptions: { signal?: AbortSignal }) =>
-					loginToken(await value.refresh!(refreshOptions)),
+				refresh: async ({ signal }: { signal?: AbortSignal }) =>
+					loginToken(
+						await source.forceRefresh({ signal, ifGeneration: stored.generation, baseUrl }),
+						baseUrl,
+					),
 			},
 			["value"],
 		);
@@ -181,15 +183,13 @@ export function createAuth(options: CreateAuthOptions): AuthClient {
 		baseUrl,
 	}: { signal?: AbortSignal; baseUrl?: string } = {}): Promise<AuthToken> {
 		throwIfAborted(signal);
-		const value = await envValue();
+		const value = envValue();
 		if (value !== undefined) return redacted({ value, source: "env" as const }, ["value"]);
-		const found = await stored.resolve({ signal, baseUrl });
-		if (!found) throw new LoginRequiredError("missing");
-		return loginToken(found);
+		return loginToken(await source.get({ signal, baseUrl }), baseUrl);
 	}
 
 	async function status(): Promise<AuthStatus> {
-		if ((await envValue()) !== undefined) return { source: "env" };
+		if (envValue() !== undefined) return { source: "env" };
 		try {
 			const { expiresAt, scope: granted } = await tokenSourceInternals(source).storedLogin();
 			return { source: "login", expiresAt, scope: granted };

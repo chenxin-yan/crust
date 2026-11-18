@@ -36,14 +36,6 @@ export {
 	UnsafeStorageError,
 } from "./errors.ts";
 export { detectLoginMode } from "./login-mode.ts";
-export {
-	fromEnv,
-	fromEnvFile,
-	fromFlag,
-	fromStdin,
-	fromStore,
-	resolveCredential,
-} from "./resolve.ts";
 export { createAuthorizationSession } from "./session.ts";
 export { createTokenClient } from "./token-client.ts";
 export { createTokenSource } from "./token-source.ts";
@@ -58,7 +50,6 @@ export type {
 	CallbackPageView,
 	Credential,
 	CredentialIdentity,
-	CredentialSource,
 	CredentialStore,
 	CredentialStoreOptions,
 	DefineServersOptions,
@@ -71,9 +62,6 @@ export type {
 	LoginModeOptions,
 	LoginTicket,
 	LogoutResult,
-	ResolvedCredential,
-	ResolveOptions,
-	SourceValue,
 	TokenClient,
 	TokenSet,
 	TokenSource,
