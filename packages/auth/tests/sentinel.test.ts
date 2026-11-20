@@ -379,7 +379,41 @@ const refreshed = () =>
 		expires_in: 3600,
 	});
 
+/**
+ * Every profile surface of a client with `profiles` over the stored login in `w`: `list()`,
+ * `use()`, `status()`, a profile without a login, and a profile variable holding a secret.
+ */
+async function recordProfiles(w: TokenWorld) {
+	vi.stubEnv("ACME_PROFILE", "");
+	const auth = createAuth({
+		app: w.app,
+		issuer: w.issuer,
+		clientId: "cli",
+		apiOrigins: w.identity.apiOrigins,
+		fetch: w.fetch,
+		profiles: { env: "ACME_PROFILE" },
+	});
+	record(auth);
+	record(auth.profile("default"));
+	record(await auth.profiles.list());
+	record(await auth.profiles.use("default"));
+	record(await auth.status());
+	record(await auth.profile("default").status());
+	record(await auth.profile("default").token());
+	await auth.profile("nobody").token().then(record, record);
+	await auth.profiles.use("nobody").then(record, record);
+	vi.stubEnv("ACME_PROFILE", `${STATIC.refreshToken}/`);
+	await auth.token().then(record, record);
+	await auth.status().then(record, record);
+}
+
 describe("secret sentinel gate: stored credentials", () => {
+	it("profiles, their errors and status leak nothing", async () => {
+		const { w } = await storedLogin(refreshed);
+		await recordProfiles(w);
+		expectNoSecretInSinks();
+	});
+
 	it("a refresh, the client's tokens and a logout leak nothing", async () => {
 		const { w, source } = await storedLogin(refreshed);
 		record(await source.get());
@@ -533,6 +567,16 @@ describe("secret sentinel gate: the keyring", () => {
 		roots.push(plain.root);
 		record(await login(plain.source(), { accessToken: STATIC.accessToken }));
 		record(await plain.store.status());
+		expectNoSecretInSinks();
+	});
+
+	it("profiles over an encrypted file leak neither a token nor the key", async () => {
+		const keyring = fakeKeyring();
+		const w = tokenWorld({ keyring: {} });
+		roots.push(w.root);
+		await login(w.source(), { accessToken: STATIC.accessToken, refreshToken: STATIC.refreshToken });
+		secrets.add(keyring.entries.get(`${w.app}\0credentials-key`)!).add(keyring.entry(w.app)!.key);
+		await recordProfiles(w);
 		expectNoSecretInSinks();
 	});
 

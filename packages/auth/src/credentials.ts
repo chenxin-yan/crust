@@ -69,6 +69,8 @@ export interface CredentialsDocument {
 	/** The backend holding that key; `undefined` in a file written before it was recorded. */
 	keyring: KeyringKind | undefined;
 	records: Record<string, JsonValue | undefined>;
+	/** The profile chosen with `profiles.use()`, by {@link serverKey}; written only when not empty. */
+	currentProfile: Record<string, string>;
 }
 
 /** Accepts any JSON value: the document is validated here, not by the store. */
@@ -85,6 +87,7 @@ const FIELDS = {
 	storeId: { schema: anyJson },
 	encryption: { schema: anyJson },
 	records: { schema: anyJson },
+	currentProfile: { schema: anyJson },
 } as const;
 
 function createDocumentStore(dirPath: string, name: string, lockTimeout: number | undefined) {
@@ -154,12 +157,20 @@ export const newId = (): string => crypto.randomUUID();
 export const hashOf = (value: string): string =>
 	createHash("sha256").update(value).digest("base64url");
 
+/** The server part of a record key: `hash(issuer, clientId)`. */
+export const serverKey = (identity: Pick<StoredIdentity, "issuer" | "clientId">): string =>
+	hashOf(`${identity.issuer}\0${identity.clientId}`);
+
 /** The record key of an identity: `<profile>#<hash(issuer, clientId)>`. */
 export function recordKey(
 	identity: Pick<StoredIdentity, "issuer" | "clientId" | "profile">,
 ): string {
-	return `${identity.profile}#${hashOf(`${identity.issuer}\0${identity.clientId}`)}`;
+	return `${identity.profile}#${serverKey(identity)}`;
 }
+
+/** A name `createAuth()` accepts for a profile: 1 to 64 letters, digits, `-`, `_` and `.`, not starting with `.` or `-`. */
+export const isProfileName = (value: unknown): value is string =>
+	typeof value === "string" && /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$/.test(value);
 
 const isString = (value: unknown): value is string => typeof value === "string" && value !== "";
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -311,12 +322,13 @@ export function withFileKey(
 }
 
 function parseDocument(raw: RawDocument, path: string): CredentialsDocument | undefined {
-	const { version, storeId, encryption, records } = raw;
+	const { version, storeId, encryption, records, currentProfile = {} } = raw;
 	if (
 		version === undefined &&
 		storeId === undefined &&
 		encryption === undefined &&
-		records === undefined
+		records === undefined &&
+		raw.currentProfile === undefined
 	) {
 		return undefined;
 	}
@@ -335,7 +347,9 @@ function parseDocument(raw: RawDocument, path: string): CredentialsDocument | un
 		(encryption.kind !== "plaintext" && keyId === undefined) ||
 		(keyring !== undefined &&
 			(keyId === undefined || (keyring !== "bun-secrets" && keyring !== "napi-keyring"))) ||
-		!isObject(records)
+		!isObject(records) ||
+		!isObject(currentProfile) ||
+		!Object.values(currentProfile).every(isProfileName)
 	) {
 		throw new CredentialStoreCorruptError(path);
 	}
@@ -344,6 +358,7 @@ function parseDocument(raw: RawDocument, path: string): CredentialsDocument | un
 		keyId,
 		keyring,
 		records: { ...(records as Record<string, JsonValue | undefined>) },
+		currentProfile: { ...(currentProfile as Record<string, string>) },
 	};
 }
 
@@ -358,6 +373,8 @@ function serializeDocument(document: CredentialsDocument): RawDocument {
 					? { kind: "aes-256-gcm", keyId: document.keyId }
 					: { kind: "aes-256-gcm", keyId: document.keyId, keyring: document.keyring },
 		records: document.records as JsonObject,
+		currentProfile:
+			Object.keys(document.currentProfile).length === 0 ? undefined : document.currentProfile,
 	};
 }
 
@@ -367,6 +384,7 @@ export const emptyDocument = (): CredentialsDocument => ({
 	keyId: undefined,
 	keyring: undefined,
 	records: {},
+	currentProfile: {},
 });
 
 /** The AAD of a record's secret: it binds the ciphertext to its file, record and generation. */

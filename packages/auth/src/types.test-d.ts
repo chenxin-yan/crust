@@ -2,6 +2,7 @@
 
 import { type ApiClientOptions, bearerAuth } from "@crustjs/openapi";
 
+import { createAuth } from "./client.ts";
 import type { AuthError, AuthErrorCode, OAuthError } from "./errors.ts";
 import type * as oauth from "./oauth.ts";
 import type { Pkce } from "./pkce.ts";
@@ -10,7 +11,10 @@ import type {
 	AuthorizationSession,
 	AuthorizationSessionOptions,
 	AuthServer,
+	AuthStatus,
+	CreateAuthOptions,
 	DeviceFlowOptions,
+	ProfileAuthClient,
 	TokenClient,
 	TokenSet,
 } from "./types.ts";
@@ -110,3 +114,41 @@ export type ProtocolCodesAreAuthErrorCodes = Expect<
 // The client's token() is bearerAuth()'s resolver as is, detached: it fits structurally, with no
 // dependency between the packages.
 export const clientAuth: NonNullable<ApiClientOptions["auth"]> = bearerAuth(client.token);
+
+// Profiles are opt-in, also in the types: only a client created with `profiles` has them.
+declare const serverOptions: Omit<CreateAuthOptions, "profiles">;
+const withoutProfiles = createAuth(serverOptions);
+// @ts-expect-error -- no profiles without the profiles option
+void withoutProfiles.profile;
+// @ts-expect-error -- no profiles without the profiles option
+void withoutProfiles.profiles;
+const withProfiles: ProfileAuthClient = createAuth({ ...serverOptions, profiles: {} });
+void withProfiles;
+// A variable of the wide options type may or may not turn profiles on: the four verbs only.
+declare const wide: CreateAuthOptions;
+// @ts-expect-error -- not known to have profiles
+const fromWide: ProfileAuthClient = createAuth(wide);
+void fromWide;
+
+declare const profiled: ProfileAuthClient;
+// A profile is the same four verbs; no name means the current profile.
+export type ProfileIsAClient = Expect<Equal<ReturnType<ProfileAuthClient["profile"]>, AuthClient>>;
+declare const flag: string | undefined;
+void profiled.profile(flag).login({ onUrl, onCode });
+export const profileAuth: NonNullable<ApiClientOptions["auth"]> = bearerAuth(
+	profiled.profile("work").token,
+);
+export type ListedProfiles = Expect<
+	Equal<
+		Awaited<ReturnType<ProfileAuthClient["profiles"]["list"]>>,
+		readonly { readonly name: string; readonly current: boolean }[]
+	>
+>;
+export type StatusProfile = Expect<
+	Equal<
+		AuthStatus["profile"],
+		{ readonly name: string; readonly via: "argument" | "env" | "current" | "default" } | undefined
+	>
+>;
+// @ts-expect-error -- use() needs a name
+void profiled.profiles.use();

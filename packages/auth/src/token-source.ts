@@ -8,6 +8,7 @@ import {
 	parseRecord,
 	recordKey,
 	serializeRecord,
+	serverKey,
 	type StoredIdentity,
 	type StoredRecord,
 	tombstone,
@@ -567,10 +568,15 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 					}
 					throwIfAborted(signal);
 					try {
-						await store.update(
-							(current) => withRecord(current ?? emptyDocument(), tombstone(identity)),
-							signal,
-						);
+						await store.update((current) => {
+							const next = withRecord(current ?? emptyDocument(), tombstone(identity));
+							// The profile chosen as current falls back to "default" once its login is gone.
+							const server = serverKey(identity);
+							if (next.currentProfile[server] !== identity.profile) return next;
+							const currentProfile = { ...next.currentProfile };
+							delete currentProfile[server];
+							return { ...next, currentProfile };
+						}, signal);
 						return "deleted";
 					} catch (error) {
 						if (error instanceof CredentialStoreCorruptError || error instanceof AbortError) {

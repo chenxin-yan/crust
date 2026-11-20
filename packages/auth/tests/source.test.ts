@@ -101,6 +101,7 @@ describe("entry points", () => {
 			"AuthClient",
 			"AuthError",
 			"AuthErrorCode",
+			"AuthProfile",
 			"AuthStatus",
 			"AuthToken",
 			"AuthWarning",
@@ -110,6 +111,8 @@ describe("entry points", () => {
 			"DeviceLoginPrompt",
 			"LoginOptions",
 			"LogoutResult",
+			"ProfileAuthClient",
+			"ProfilesOptions",
 			"createAuth",
 		]);
 		expect(index).not.toMatch(/export \*/);

@@ -494,6 +494,28 @@ describe("generation-conditional refresh", () => {
 });
 
 describe("logout", () => {
+	it("clears the profile remembered as current in the same write, and only that one", async () => {
+		const w = world();
+		const work = w.source({ identity: { ...w.identity, profile: "work" } });
+		await login(w.source());
+		await login(work);
+		const internals = credentialStoreInternals(w.store);
+		const server = work.key.slice("work#".length);
+		const remember = (name: string) =>
+			internals.update((document) => ({
+				...document!,
+				currentProfile: { ...document!.currentProfile, [server]: name, other: "work" },
+			}));
+		await remember("work");
+		await w.source().logout();
+		expect(w.document()).toMatchObject({ currentProfile: { [server]: "work", other: "work" } });
+		const update = vi.spyOn(internals, "update");
+		await work.logout();
+		expect(update).toHaveBeenCalledTimes(1);
+		expect(w.document()).toMatchObject({ currentProfile: { other: "work" } });
+		expect(w.document()).not.toHaveProperty(["currentProfile", server]);
+	});
+
 	it("tombstones the record, then revokes the refresh token with a POST to the endpoint as configured", async () => {
 		const order: string[] = [];
 		const w = world({

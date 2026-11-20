@@ -1014,3 +1014,237 @@ describe("without profiles", () => {
 		`);
 	});
 });
+
+/**
+ * A client with `profiles` over `setup()`'s server: every login gets the next token, `AT1`,
+ * `AT2`, and so on.
+ */
+function profiled(options: { env?: string; profilesEnv?: string } = {}) {
+	let issued = 0;
+	const world = setup((issuer) => ({
+		[`${issuer}/token`]: () => {
+			issued += 1;
+			return json({ ...TOKEN, access_token: `AT${issued}` });
+		},
+	}));
+	const auth = createAuth({
+		app: world.app,
+		issuer: world.issuer,
+		clientId: "cli",
+		apiOrigins: [API],
+		scope: "read",
+		fetch: world.fetch,
+		env: options.env,
+		profiles: { env: options.profilesEnv },
+	});
+	const signIn = (client: Pick<typeof auth, "login">) =>
+		client.login({ onUrl: browser().onUrl, onCode: noCode });
+	const document = () => JSON.parse(readFileSync(join(world.dir, "credentials.json"), "utf8"));
+	return { ...world, auth, signIn, document };
+}
+
+describe("profiles", () => {
+	it("are absent without the profiles option, and status() names no profile", async () => {
+		const { auth } = await signedIn();
+		expect(Object.keys(auth).sort()).toEqual(["login", "logout", "status", "token"]);
+		expect(await auth.status()).not.toHaveProperty("profile");
+	});
+
+	it("validates the profiles option", async () => {
+		const base = { app: "acme", issuer: "https://as.example", clientId: "cli", apiOrigins: [API] };
+		for (const profiles of [null, [], "work", { env: "" }, { env: " " }, { env: 7 }]) {
+			const created = Promise.resolve().then(() =>
+				createAuth({ ...base, profiles: profiles as never }),
+			);
+			expect(await configReason(created)).toBe("invalid-option");
+		}
+		const noOrigins = Promise.resolve().then(() =>
+			createAuth({ ...base, apiOrigins: [], profiles: {} }),
+		);
+		expect(await configReason(noOrigins)).toBe("invalid-option");
+		const auth = createAuth({ ...base, profiles: {} });
+		expect(Object.isFrozen(auth) && Object.isFrozen(auth.profiles)).toBe(true);
+		expect(Object.keys(auth).sort()).toEqual([
+			"login",
+			"logout",
+			"profile",
+			"profiles",
+			"status",
+			"token",
+		]);
+	});
+
+	it("keep two logins side by side, each with its own token, refresh and logout, detached", async () => {
+		const { auth, signIn, tokenRequests } = profiled();
+		const { profile } = auth;
+		const work = profile("work");
+		await signIn(auth);
+		await signIn(work);
+		expect((await auth.token()).value).toBe("AT1");
+		expect((await profile("default").token()).value).toBe("AT1");
+		const { token } = work;
+		const workToken = await token();
+		expect(workToken.value).toBe("AT2");
+		expect((await workToken.refresh!({})).value).toBe("AT3");
+		expect((await auth.token()).value).toBe("AT1");
+		expect(tokenRequests().map((request) => request.body.get("grant_type"))).toEqual([
+			"authorization_code",
+			"authorization_code",
+			"refresh_token",
+		]);
+		expect(await work.status()).toMatchObject({
+			source: "login",
+			profile: { name: "work", via: "argument" },
+		});
+		expect(await work.logout()).toEqual({ local: "deleted", remote: "revoked" });
+		expect(await work.status()).toMatchObject({ source: "none" });
+		expect((await auth.token()).value).toBe("AT1");
+		expect(await auth.profiles.list()).toEqual([{ name: "default", current: true }]);
+	});
+
+	it("pick the current profile: argument, then the env variable, then use(), then default", async () => {
+		const { auth, signIn } = profiled({ profilesEnv: "ACME_PROFILE" });
+		vi.stubEnv("ACME_PROFILE", "");
+		const via = async (client: Pick<typeof auth, "status"> = auth) =>
+			(await client.status()).profile;
+		expect(await via()).toEqual({ name: "default", via: "default" });
+		expect(await via(auth.profile())).toEqual({ name: "default", via: "default" });
+		await signIn(auth.profile("work"));
+		await auth.profiles.use("work");
+		expect(await via()).toEqual({ name: "work", via: "current" });
+		vi.stubEnv("ACME_PROFILE", " personal\n");
+		expect(await via()).toEqual({ name: "personal", via: "env" });
+		expect(await via(auth.profile(undefined))).toEqual({ name: "personal", via: "env" });
+		expect(await via(auth.profile("work"))).toEqual({ name: "work", via: "argument" });
+		vi.stubEnv("ACME_PROFILE", "  ");
+		expect(await via()).toEqual({ name: "work", via: "current" });
+		expect((await auth.token()).value).toBe("AT1");
+	});
+
+	it("a profile with no login is told to log in, by name, however it was picked", async () => {
+		const { auth } = profiled({ profilesEnv: "ACME_PROFILE" });
+		const missing = async (client: Pick<typeof auth, "token" | "status">, name: string) => {
+			const error = await rejection(client.token());
+			expect(error).toBeInstanceOf(LoginRequiredError);
+			expect(error).toMatchObject({ reason: "missing" });
+			expect((error as Error).message).toContain(`"${name}"`);
+			expect(await client.status()).toMatchObject({ source: "none" });
+		};
+		await missing(auth, "default");
+		await missing(auth.profile("work"), "work");
+		vi.stubEnv("ACME_PROFILE", "personal");
+		await missing(auth, "personal");
+	});
+
+	it("an env token wins for every profile, and status() then reads no file", async () => {
+		const { auth, signIn, dir } = profiled({ env: "ACME_TOKEN", profilesEnv: "ACME_PROFILE" });
+		await signIn(auth);
+		vi.stubEnv("ACME_TOKEN", "ENV_TOKEN");
+		vi.stubEnv("ACME_PROFILE", "personal");
+		writeFileSync(join(dir, "credentials.json"), "{ not json");
+		for (const client of [auth, auth.profile("work"), auth.profile()]) {
+			expect(await client.token()).toEqual({ value: "ENV_TOKEN", source: "env" });
+			expect(await client.status()).toEqual({ source: "env" });
+		}
+	});
+
+	it("list() shows this server's logins by name, from the file only", async () => {
+		const keyring = fakeKeyring();
+		const { auth, signIn, app, requests } = profiled();
+		await signIn(auth.profile("work"));
+		await signIn(auth.profile("b-side"));
+		await signIn(auth);
+		await auth.profile("b-side").logout();
+		const otherIssuer = uniqueIssuer();
+		await storeLogin(
+			createTokenSource({
+				config: defineServers({ servers: [{ issuer: otherIssuer, clientId: "cli" }] }),
+				identity: { issuer: otherIssuer, clientId: "cli", apiOrigins: [API], profile: "elsewhere" },
+				store: credentialStore({ app, keyring: {} }),
+			}),
+		);
+		const before = { requests: requests.length, keyring: keyring.calls.length };
+		const { list } = auth.profiles;
+		expect(await list()).toEqual([
+			{ name: "default", current: true },
+			{ name: "work", current: false },
+		]);
+		expect({ requests: requests.length, keyring: keyring.calls.length }).toEqual(before);
+	});
+
+	it("use() remembers a profile with a login, and refuses one without, writing nothing", async () => {
+		const keyring = fakeKeyring();
+		const { auth, signIn, document, dir } = profiled();
+		await signIn(auth.profile("work"));
+		await signIn(auth.profile("gone"));
+		await auth.profile("gone").logout();
+		const { use } = auth.profiles;
+		for (const name of ["nobody", "gone"]) {
+			const before = readFileSync(join(dir, "credentials.json"), "utf8");
+			const error = await rejection(use(name));
+			expect(error).toBeInstanceOf(LoginRequiredError);
+			expect(error).toMatchObject({ reason: "missing" });
+			expect((error as Error).message).toContain(`"${name}"`);
+			expect(readFileSync(join(dir, "credentials.json"), "utf8")).toBe(before);
+		}
+		expect(await rejection(use("work", { signal: AbortSignal.abort() }))).toBeInstanceOf(
+			AbortError,
+		);
+		expect(await auth.profiles.list()).toEqual([{ name: "work", current: false }]);
+		expect(await use("work")).toBeUndefined();
+		expect(await auth.profiles.list()).toEqual([{ name: "work", current: true }]);
+		expect((await auth.token()).value).toBe("AT1");
+		// The file stays encrypted; the remembered profile is not a secret.
+		expect(document().encryption).toMatchObject({ kind: "aes-256-gcm" });
+		expect(Object.values(document().currentProfile)).toEqual(["work"]);
+		expect(keyring.writes()).toBe(1);
+	});
+
+	it("the remembered profile survives other profiles' logins, refreshes and logouts, and its own logout clears it", async () => {
+		const { auth, signIn, document } = profiled();
+		await signIn(auth.profile("work"));
+		await auth.profiles.use("work");
+		const personal = auth.profile("personal");
+		await signIn(personal);
+		await (
+			await personal.token()
+		).refresh!({});
+		await personal.logout();
+		expect((await auth.status()).profile).toEqual({ name: "work", via: "current" });
+		await auth.profile("work").logout();
+		expect((await auth.status()).profile).toEqual({ name: "default", via: "default" });
+		expect(document()).not.toHaveProperty("currentProfile");
+	});
+
+	it("a login does not change the current profile", async () => {
+		const { auth, signIn } = profiled();
+		await signIn(auth.profile("work"));
+		expect((await auth.status()).profile).toEqual({ name: "default", via: "default" });
+	});
+
+	it("refuse a bad name where it is received, without echoing it", async () => {
+		const { auth } = profiled({ profilesEnv: "ACME_PROFILE" });
+		const long = "a".repeat(65);
+		for (const name of ["", ".work", "-work", "a/b", "a b", "wörk", "a#b", long]) {
+			let error: unknown;
+			try {
+				auth.profile(name);
+			} catch (caught) {
+				error = caught;
+			}
+			expect(error).toMatchObject({ code: "oauth-config", reason: "invalid-option" });
+			expect(await configReason(auth.profiles.use(name))).toBe("invalid-option");
+			vi.stubEnv("ACME_PROFILE", name === "" ? "." : name);
+			const fromEnv = await rejection(auth.token());
+			expect(fromEnv).toMatchObject({ reason: "invalid-option" });
+			expect((fromEnv as Error).message).toContain("ACME_PROFILE");
+			for (const message of [(error as Error).message, (fromEnv as Error).message]) {
+				if (name.length > 1) expect(message).not.toContain(name);
+			}
+		}
+		vi.stubEnv("ACME_PROFILE", "");
+		for (const name of ["a", "A_b-1.2", "0", "_x", "a".repeat(64)]) {
+			expect(await auth.profile(name).status()).toMatchObject({ profile: { name } });
+		}
+	});
+});
