@@ -32,12 +32,29 @@ await auth.login({
 });
 //#endregion
 
+//#region storage
+const secured = createAuth({
+	app: "acme",
+	issuer: "https://login.acme.example",
+	clientId: "acme-cli",
+	apiOrigins: ["https://api.acme.example"],
+	// Without an OS keyring the login is stored unencrypted; say so (or pass `strict: true`).
+	onWarning: ({ code }) => {
+		if (code === "plaintext-storage") {
+			console.error("No OS keyring found: your login is stored unencrypted.");
+		}
+	},
+});
+// "bun-secrets", "napi-keyring" or "file", and the logins not yet encrypted.
+const { storage } = await secured.status();
+//#endregion
+
 //#region token
 // The env variable's value, else the stored login, refreshed first when it is about to expire.
 const token = await auth.token({ baseUrl: "https://api.acme.example" });
 await fetch("https://api.acme.example/me", { headers: { authorization: `Bearer ${token.value}` } });
 
-// "env", "login" or "none": no request, no refresh, no lock.
+// "env", "login" or "none", and where logins are stored: no request, no refresh, no lock.
 const { source, expiresAt } = await auth.status();
 
 // Deletes the login, then revokes it at the server.
@@ -109,7 +126,8 @@ const acme = createTokenSource({
 		// The only API origins this login's token is sent to.
 		apiOrigins: ["https://api.acme.example"],
 	},
-	store: credentialStore({ app: "acme" }),
+	// The tokens are encrypted under a key in the OS keyring; plaintext without one.
+	store: credentialStore({ app: "acme", keyring: {} }),
 });
 
 // In `acme login`, around the browser or device login:
@@ -166,4 +184,4 @@ const dev = defineServers({
 });
 //#endregion
 
-console.log(source, expiresAt, loggedOut, api, multi, dev, local, remote, blocksApi);
+console.log(source, expiresAt, loggedOut, api, multi, dev, local, remote, blocksApi, storage);

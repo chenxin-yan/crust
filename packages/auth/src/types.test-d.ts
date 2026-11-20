@@ -97,6 +97,9 @@ declare const error: AuthError;
 // A misspelled code does not compile; a real one narrows.
 // @ts-expect-error -- not an AuthErrorCode
 void (error.code === "login-requird");
+export type KeyErrorsAreAuthErrorCodes = Expect<
+	Equal<Extract<AuthErrorCode, "credential-key">, "credential-key">
+>;
 const narrowed = (caught: AuthError): "login-requires-interaction" | undefined =>
 	caught.code === "login-requires-interaction" ? caught.code : undefined;
 void narrowed;

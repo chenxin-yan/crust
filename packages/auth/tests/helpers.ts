@@ -13,6 +13,7 @@ import { credentialStore } from "../src/credentials.ts";
 import { discover } from "../src/discovery.ts";
 import { OAuthConfigError } from "../src/errors.ts";
 import type { Fetch } from "../src/http.ts";
+import { type KeyringBackend, type KeyringKind, keyrings } from "../src/keyring.ts";
 import { createTokenSource } from "../src/token-source.ts";
 import type {
 	AuthConfig,
@@ -21,6 +22,7 @@ import type {
 	Credential,
 	CredentialIdentity,
 	CredentialStore,
+	CredentialStoreOptions,
 	DeviceLoginPrompt,
 	TokenSet,
 	TokenSource,
@@ -288,7 +290,11 @@ export interface TokenWorld {
 	/** `credentials.json`. */
 	file: string;
 	/** `credentials.json`, parsed. */
-	document(): { storeId: string; records: Record<string, any> };
+	document(): {
+		storeId: string;
+		encryption: { kind: string; keyId?: string; keyring?: string };
+		records: Record<string, any>;
+	};
 }
 
 /**
@@ -302,6 +308,7 @@ export function tokenWorld(
 		metadata?: Record<string, unknown>;
 		identity?: Partial<CredentialIdentity>;
 		lockTimeout?: number;
+		keyring?: CredentialStoreOptions["keyring"];
 	} = {},
 ): TokenWorld {
 	const temp = tempApp();
@@ -312,7 +319,11 @@ export function tokenWorld(
 		...options.routes,
 	});
 	const config = defineServers({ servers: [{ issuer, clientId: "cli" }] });
-	const store = credentialStore({ app: temp.app, lockTimeout: options.lockTimeout ?? 5_000 });
+	const store = credentialStore({
+		app: temp.app,
+		lockTimeout: options.lockTimeout ?? 5_000,
+		keyring: options.keyring,
+	});
 	const identity: CredentialIdentity = {
 		issuer,
 		clientId: "cli",
@@ -346,6 +357,70 @@ export async function login(
 ): Promise<Credential> {
 	const ticket = await source.beginLogin();
 	return ticket.commit(loginTokens(tokens));
+}
+
+export interface FakeKeyring {
+	backend: KeyringBackend;
+	/** Stored values by `<service>\0<name>`. */
+	entries: Map<string, string>;
+	calls: { op: "get" | "set"; service: string; name: string }[];
+	state: {
+		get: "value" | "error" | "hang";
+		readGate: Promise<void> | undefined;
+		writeGate: Promise<void> | undefined;
+	};
+	writes(): number;
+	/** The stored entry of `app`, parsed. */
+	entry(app: string): { keyId: string; key: string } | undefined;
+}
+
+/**
+ * An in-memory OS keyring, installed as the backend every credential store of the test loads.
+ * `get` is how the next reads answer: the stored value, an error, or never (past the deadline).
+ * A read waits for `readGate`, and a write for `writeGate`, when one is set.
+ */
+export function fakeKeyring(kind: KeyringKind = "bun-secrets"): FakeKeyring {
+	const entries = new Map<string, string>();
+	const calls: { op: "get" | "set"; service: string; name: string }[] = [];
+	const state: FakeKeyring["state"] = {
+		get: "value",
+		readGate: undefined,
+		writeGate: undefined,
+	};
+	const backend: KeyringBackend = {
+		kind,
+		async get(service, name) {
+			calls.push({ op: "get", service, name });
+			await state.readGate;
+			if (state.get === "error") throw new Error("The keyring is locked");
+			if (state.get === "hang") return new Promise<never>(() => {});
+			return entries.get(`${service}\0${name}`);
+		},
+		async set(service, name, value) {
+			calls.push({ op: "set", service, name });
+			await state.writeGate;
+			entries.set(`${service}\0${name}`, value);
+		},
+	};
+	vi.spyOn(keyrings, "load").mockResolvedValue(backend);
+	return {
+		backend,
+		entries,
+		calls,
+		state,
+		writes: () => calls.filter((call) => call.op === "set").length,
+		entry: (app) => {
+			const value = entries.get(`${app}\0credentials-key`);
+			return value === undefined
+				? undefined
+				: (JSON.parse(value) as { keyId: string; key: string });
+		},
+	};
+}
+
+/** No OS keyring: every credential store of the test falls back to the plaintext file. */
+export function noKeyring(): void {
+	vi.spyOn(keyrings, "load").mockResolvedValue(undefined);
 }
 
 /** Takes a lock with `take` and holds it until `release()`; resolves once it is held. */

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
 	AbortError,
 	AuthError,
+	CredentialKeyError,
 	HttpError,
 	IssuerMismatchError,
 	LoginRequiresInteractionError,
@@ -27,6 +28,7 @@ describe("errors", () => {
 		[new TimeoutError(), "TimeoutError", "timeout"],
 		[new AbortError(), "AbortError", "abort"],
 		[new ResponseTooLargeError(), "ResponseTooLargeError", "response-too-large"],
+		[new CredentialKeyError("unreadable"), "CredentialKeyError", "credential-key"],
 		[
 			new LoginRequiresInteractionError(),
 			"LoginRequiresInteractionError",
@@ -37,6 +39,16 @@ describe("errors", () => {
 		expect(error).toBeInstanceOf(Error);
 		expect(error.name).toBe(name);
 		expect(error.code).toBe(code);
+	});
+
+	it("a key error says what to do and keeps its reason", () => {
+		const unreadable = new CredentialKeyError("unreadable");
+		expect(unreadable.reason).toBe("unreadable");
+		expect(unreadable.message).toContain("unlock");
+		const unavailable = new CredentialKeyError("unavailable");
+		expect(unavailable.reason).toBe("unavailable");
+		expect(unavailable.message).toContain("keyring");
+		expect(Object.keys(unavailable).sort()).toEqual(["code", "name", "reason"]);
 	});
 
 	it("keeps allowlisted protocol codes and maps the rest to unknown", () => {

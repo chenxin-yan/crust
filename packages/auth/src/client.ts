@@ -71,7 +71,7 @@ function unlessAborted<T>(result: T | Promise<T>, signal: AbortSignal | undefine
 export function createAuth(options: CreateAuthOptions): AuthClient {
 	const app = checkName(options?.app, "app");
 	const name = checkName(options.name ?? app, "name");
-	const { issuer, scope, hosts, ports, fetch, env } = options;
+	const { issuer, scope, hosts, ports, fetch, env, strict, onWarning } = options;
 	if (env !== undefined && (typeof env !== "string" || env.trim() === "")) {
 		throw new OAuthConfigError("invalid-option", "env must name an environment variable");
 	}
@@ -89,10 +89,11 @@ export function createAuth(options: CreateAuthOptions): AuthClient {
 	checkScope(scope);
 	const resource = checkResources(options.resource);
 	checkLoopbackOptions({ hosts, ports });
+	const store = credentialStore({ app, keyring: { strict, onWarning } });
 	const source = createTokenSource({
 		config,
 		identity: { issuer, clientId: options.clientId, apiOrigins: options.apiOrigins },
-		store: credentialStore({ app }),
+		store,
 		fetch,
 	});
 
@@ -193,13 +194,16 @@ export function createAuth(options: CreateAuthOptions): AuthClient {
 	}
 
 	async function status(): Promise<AuthStatus> {
+		// An env token needs no login file: CI and containers may have none, or a broken one.
 		if (envValue() !== undefined) return { source: "env" };
+		const { kind, plaintextRecords } = await store.status();
+		const storage = { kind, plaintextRecords };
 		try {
 			const { expiresAt, scope: granted } = await tokenSourceInternals(source).storedLogin();
-			return { source: "login", expiresAt, scope: granted };
+			return { source: "login", expiresAt, scope: granted, storage };
 		} catch (error) {
 			if (error instanceof LoginRequiredError && error.reason === "missing") {
-				return { source: "none" };
+				return { source: "none", storage };
 			}
 			throw error;
 		}
