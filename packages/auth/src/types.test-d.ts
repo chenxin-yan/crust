@@ -1,6 +1,7 @@
 // Compile-time contracts, enforced by check:types (not vp test).
 
 import type { AuthError, AuthErrorCode, OAuthError } from "./errors.ts";
+import type * as oauth from "./oauth.ts";
 import type { Pkce } from "./pkce.ts";
 import type {
 	AuthClient,
@@ -35,6 +36,18 @@ export type DeviceOptionKeys = Expect<
 	Equal<keyof DeviceFlowOptions, "scope" | "resource" | "signal" | "fetch">
 >;
 export type OnlyS256 = Expect<Equal<Pkce["method"], "S256">>;
+
+// What a session or the device flow does internally is not a building block.
+// @ts-expect-error -- not exported from @crustjs/auth/oauth
+export type NoCreatePkce = typeof oauth.createPkce;
+// @ts-expect-error -- not exported from @crustjs/auth/oauth
+export type NoRandomState = typeof oauth.randomState;
+// @ts-expect-error -- not exported from @crustjs/auth/oauth
+export type NoPkce = oauth.Pkce;
+// @ts-expect-error -- not exported from @crustjs/auth/oauth
+export type NoRedactUrl = typeof oauth.redactUrl;
+// @ts-expect-error -- not exported from @crustjs/auth/oauth
+export type NoSanitizeDisplay = typeof oauth.sanitizeDisplay;
 
 // Only bearer tokens.
 export type OnlyBearer = Expect<Equal<TokenSet["tokenType"], "Bearer">>;

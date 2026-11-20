@@ -4,7 +4,7 @@ export { defineServers } from "./config.ts";
 export { startDeviceFlow } from "./device.ts";
 export { discover } from "./discovery.ts";
 export type { DeviceCodeMessageOptions } from "./display.ts";
-export { deviceCodeMessage, redactUrl, sanitizeDisplay } from "./display.ts";
+export { deviceCodeMessage } from "./display.ts";
 export type { OAuthConfigErrorReason, OAuthErrorCode } from "./errors.ts";
 export {
 	AbortError,
@@ -19,8 +19,6 @@ export {
 	TimeoutError,
 } from "./errors.ts";
 export { detectLoginMode } from "./login-mode.ts";
-export type { Pkce } from "./pkce.ts";
-export { createPkce, randomState } from "./pkce.ts";
 export { createAuthorizationSession } from "./session.ts";
 export { createTokenClient } from "./token-client.ts";
 export type {
