@@ -83,13 +83,13 @@ The codes and their classes are listed in [Errors](#errors).
 - A server that lists `code_challenge_methods_supported` without `S256` is refused.
 - Metadata is cached in memory for the process, never on disk.
 
+Declare `servers` in code. Do not build the list from environment variables or other runtime input: the list is what decides which servers your users' tokens may reach.
+
 ### Who is signed in
 
 `server.userinfoEndpoint` is the OpenID Connect user-info address from the metadata (`userinfo_endpoint`), checked like the other endpoints, or `undefined` when there is none. The library never requests it and drops the `id_token` unread: fetch it yourself with the access token as a bearer token.
 
 <include lang="ts">../../../examples/modules/auth.ts#userinfo</include>
-
-Declare `servers` in code. Do not build the list from environment variables or other runtime input: the list is what decides which servers your users' tokens may reach.
 
 ### Public clients
 
