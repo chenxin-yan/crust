@@ -289,7 +289,7 @@ An operation that does not fit is left out of `acme.commands`, so a CLI run from
       fix: Set `group` or `name` in the override of one of them
   ```
 
-- **No: the operation is skipped**, and the build passes. It stays reachable through `api <path>` and `call()`.
+- **No: the operation is skipped**, and the build passes. It becomes no command, so it clashes with none, and stays reachable through `api <path>` and `call()`.
 - A document that is not OpenAPI 3.0 or 3.1 fails the build: no command can come from it.
 
 | `code`                       | When                                                                                                                     | `crust build` |
