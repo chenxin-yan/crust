@@ -241,7 +241,6 @@ describe("operations", () => {
 		expect(result.operations).toEqual(expected);
 		expect(result.diagnostics).toEqual([
 			{
-				level: "error",
 				code: "missing-operation-id",
 				method: "delete",
 				path: "/users/{id}",
@@ -604,7 +603,6 @@ describe("operations", () => {
 			operations: [],
 			diagnostics: [
 				{
-					level: "error",
 					code: "unsupported-version",
 					message: expect.stringContaining("OpenAPI 3.0 and 3.1"),
 					fix: "Convert the document to OpenAPI 3.1 or 3.0",

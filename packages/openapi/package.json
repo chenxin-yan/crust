@@ -1,7 +1,7 @@
 {
 	"name": "@crustjs/openapi",
 	"version": "0.1.1",
-	"description": "Call a CLI's HTTP API and browse its OpenAPI spec from an api command",
+	"description": "Commands, a typed client and an api command from a CLI's pinned OpenAPI spec",
 	"type": "module",
 	"sideEffects": false,
 	"license": "MIT",
@@ -50,7 +50,10 @@
 		"@crustjs/config": "workspace:*",
 		"@crustjs/core": "workspace:*",
 		"@crustjs/extensions": "workspace:*",
+		"@crustjs/mcp": "workspace:*",
+		"@crustjs/skills": "workspace:*",
 		"@crustjs/testing": "workspace:*",
+		"@modelcontextprotocol/client": "^2.4.0",
 		"vite-plus": "catalog:"
 	},
 	"peerDependencies": {

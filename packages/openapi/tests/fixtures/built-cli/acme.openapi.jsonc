@@ -4,7 +4,11 @@
 	"info": { "title": "Acme", "version": "1" },
 	"paths": {
 		"/users": {
-			"get": { "operationId": "listUsers", "summary": "List the users (built-cli-marker)" },
+			"get": {
+				"operationId": "listUsers",
+				"summary": "List the users (built-cli-marker)",
+				"responses": { "200": { "description": "The users", "content": { "application/json": {} } } },
+			},
 		},
 	},
 }

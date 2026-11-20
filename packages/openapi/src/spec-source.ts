@@ -41,9 +41,11 @@ export function readSpec(url: URL, id: string): OpenApiSpec {
 		spec = source ? parseJsonc(text) : JSON.parse(text);
 	} catch (cause) {
 		if (!source && cause instanceof Error && "code" in cause && cause.code === "ENOENT") {
+			// No `cause`: the generated commands read the spec at start, where a runtime prints an
+			// uncaught error's cause (a raw ENOENT), and this message already says what is missing.
+			// oxlint-disable-next-line preserve-caught-error -- see above.
 			throw new Error(
 				`api: the OpenAPI document was not found at "${file}". Run \`crust build\` first, and ship its "${id}" directory with the CLI.`,
-				{ cause },
 			);
 		}
 		const reason = cause instanceof Error ? cause.message : String(cause);

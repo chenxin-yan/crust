@@ -1,6 +1,6 @@
 # @crustjs/openapi
 
-Call a CLI's HTTP API and browse its OpenAPI spec from an api command
+Commands, a typed client and an api command from a CLI's pinned OpenAPI spec
 
 ## Install
 

@@ -55,26 +55,23 @@ export interface Operation {
 	readonly security?: readonly Readonly<Record<string, readonly string[]>>[];
 }
 
-/** A problem that keeps an operation from becoming a command (`"error"`) or that is worth a look. */
+/** A problem that keeps an operation from becoming a command; `PROBLEM_KINDS` (`lint.ts`) says what `crust build` does with it. */
 export interface Diagnostic {
-	readonly level: "error" | "warning";
 	readonly code:
 		| "unsupported-version"
 		| "missing-operation-id"
 		| "duplicate-operation-id"
 		| "no-success-response"
-		| "missing-summary"
 		| "unsupported-param-style"
 		| "content-param"
 		| "required-cookie-param"
-		| "cookie-param-ignored"
 		| "unsupported-body-type"
 		| "command-collision"
 		| "flag-collision"
 		| "reserved-input-name"
 		| "unflaggable-name"
-		| "body-field-shadowed"
-		| "many-root-commands"
+		| "unusable-name"
+		| "positional-order"
 		| "override-unknown-operation"
 		| "override-stale"
 		| "override-unknown-param"
@@ -127,7 +124,6 @@ export function operations(spec: OpenApiSpec): {
 			operations: [],
 			diagnostics: [
 				{
-					level: "error",
 					code: "unsupported-version",
 					message: `Only OpenAPI 3.0 and 3.1 documents are supported; this one is ${found}`,
 					fix: "Convert the document to OpenAPI 3.1 or 3.0",
@@ -156,7 +152,6 @@ export function operations(spec: OpenApiSpec): {
 		if (id === undefined) {
 			if (op.deprecated !== true) {
 				diagnostics.push({
-					level: "error",
 					code: "missing-operation-id",
 					method,
 					path,
@@ -226,7 +221,6 @@ export function operations(spec: OpenApiSpec): {
 		const others = byId.get(id)!.filter((other) => other.method !== method || other.path !== path);
 		if (others.length === 0) continue;
 		diagnostics.push({
-			level: "error",
 			code: "duplicate-operation-id",
 			operationId: id,
 			method,
