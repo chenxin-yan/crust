@@ -262,7 +262,7 @@ Each `bin` key is an installed command name and each value is the TypeScript ent
 Registered Extensions such as [`man()`](/docs/modules/man), [`skill()`](/docs/modules/skills), and [`completion()`](/docs/modules/extensions/completion) contribute build hooks. `crust build` runs those hooks while preparing each entry, writes the files they return, and copies each top-level directory into `.crust/root/` and every platform package's `bin/`. A CLI reads them back with [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname).
 
 - Each hook's returned paths are recorded per `bin` entry under `build` in `.crust/manifest.json`. Loose top-level files are recorded but not copied into packages.
-- With several `bin` entries, same-named directories merge, so `man/greet.1` and `man/admin.1` coexist. A path two entries both write fails the build naming both commands; collisions are compared case-insensitively.
+- With several `bin` entries, same-named directories merge, so `man/greet.1` and `man/admin.1` coexist, and a file two entries write at the same path with the same bytes is kept once, so bins can share data such as one API's. A path two entries both write with different bytes fails the build naming both commands; collisions are compared case-insensitively.
 - Upgrade `@crustjs/core`, `@crustjs/crust`, and build-hook Extensions together. Reports from an incompatible Core fail preparation with upgrade guidance.
 - `--no-validate` skips all build hooks, so no artifact directories are staged and the manifest has no `build` field.
 

@@ -1,7 +1,9 @@
 // The generated commands: one per planned operation, in groups, with the app's own commands added.
 import {
 	type ArgDef,
+	type CommandConfig,
 	type CommandDefinition,
+	type CommandDefinitionBuilder,
 	type ContextBag,
 	type ContextFactory,
 	type FlagDef,
@@ -47,8 +49,10 @@ export interface AddedCommands {
 	readonly definitions: readonly GeneratedDefinition[];
 }
 
-interface GroupNode {
-	readonly commands: GeneratedDefinition[];
+/** The commands of a group path: generated ones by plan, the app's own, and its subgroups. */
+export interface GroupNode {
+	readonly plans: CommandPlan[];
+	readonly added: GeneratedDefinition[];
 	readonly groups: Map<string, GroupNode>;
 }
 
@@ -64,33 +68,64 @@ export function generateCommands(
 	added: readonly AddedCommands[],
 	options: GenerateOptions,
 ): GeneratedDefinition[] {
-	const root: GroupNode = { commands: [], groups: new Map() };
+	return groupChildren(groupTree(plans, added), "", options);
+}
+
+/** The root group of `plans` and `added`, each in its group path; groups in the order they first appear. */
+export function groupTree(
+	plans: readonly CommandPlan[],
+	added: readonly AddedCommands[],
+): GroupNode {
+	const root: GroupNode = { plans: [], added: [], groups: new Map() };
 	const nodeAt = (group: string): GroupNode => {
 		let node = root;
 		for (const word of group === "" ? [] : group.split(" ")) {
 			let child = node.groups.get(word);
-			if (child === undefined) node.groups.set(word, (child = { commands: [], groups: new Map() }));
+			if (child === undefined) {
+				node.groups.set(word, (child = { plans: [], added: [], groups: new Map() }));
+			}
 			node = child;
 		}
 		return node;
 	};
-	for (const plan of plans) nodeAt(plan.group).commands.push(operationCommand(plan, options));
-	for (const { group, definitions } of added) nodeAt(group).commands.push(...definitions);
-	return groupChildren(root, "", options.spec);
+	for (const plan of plans) nodeAt(plan.group).plans.push(plan);
+	for (const { group, definitions } of added) nodeAt(group).added.push(...definitions);
+	return root;
 }
 
 /** A group's commands, then its subgroups as commands that hold theirs. */
-function groupChildren(node: GroupNode, path: string, spec: OpenApiSpec): GeneratedDefinition[] {
+export function groupChildren(
+	node: GroupNode,
+	path: string,
+	options: GenerateOptions,
+): GeneratedDefinition[] {
 	return [
-		...node.commands,
+		...node.plans.map((plan) =>
+			operationCommand(plan.name, operationMeta(plan), () => ({ plan, options })),
+		),
+		...node.added,
 		...[...node.groups].map(([word, child]): GeneratedDefinition => {
 			const group = path === "" ? word : `${path} ${word}`;
-			const description = tagDescription(spec, group);
-			return defineCommand(word, description === undefined ? {} : { description }, (command) =>
-				command.add(...groupChildren(child, group, spec)),
+			return defineCommand(word, groupMeta(options.spec, group), (command) =>
+				command.add(...groupChildren(child, group, options)),
 			);
 		}),
 	];
+}
+
+/** The metadata of a group's command. */
+export function groupMeta(spec: OpenApiSpec, group: string): Pick<CommandConfig, "description"> {
+	const description = tagDescription(spec, group);
+	return description === undefined ? {} : { description };
+}
+
+/** The metadata of a planned operation's command. */
+export function operationMeta(plan: CommandPlan): Pick<CommandConfig, "description" | "hidden"> {
+	const description = plan.fields.description ?? plan.op.summary;
+	return {
+		...(description !== undefined && { description }),
+		...(plan.fields.hidden !== undefined && { hidden: plan.fields.hidden }),
+	};
 }
 
 /** The description of the spec's tag whose kebab-case name is the group path, as a group's. */
@@ -104,119 +139,125 @@ function tagDescription(spec: OpenApiSpec, group: string): string | undefined {
 		: undefined;
 }
 
-function operationCommand(plan: CommandPlan, options: GenerateOptions): GeneratedDefinition {
+/**
+ * The command `name` of a planned operation: `load` gives its plan when the command is first used,
+ * so only then are its schemas built.
+ */
+export function operationCommand(
+	name: string,
+	meta: Pick<CommandConfig, "description" | "hidden">,
+	load: () => { readonly plan: CommandPlan; readonly options: GenerateOptions },
+): GeneratedDefinition {
+	return defineCommand(name, meta, (command) => {
+		const { plan, options } = load();
+		return operationRecipe(command, plan, options);
+	});
+}
+
+function operationRecipe(
+	command: CommandDefinitionBuilder<{}, [], {}, never, never>,
+	plan: CommandPlan,
+	options: GenerateOptions,
+) {
 	const { op, fields, inputs } = plan;
 	const { spec } = options;
-	const description = fields.description ?? op.summary;
 	const paginate = fields.paginate ?? options.paginate;
 	// Set only when the command offers `--paginate`; a spec parameter may also be named `paginate`.
 	const paginateFlag = inputs.find(({ target }) => target.in === "paginate")?.name;
-	return defineCommand(
-		plan.name,
-		{
-			...(description !== undefined && { description }),
-			...(fields.hidden !== undefined && { hidden: fields.hidden }),
-		},
-		// The recipe runs when the command is first used, so only then are its schemas built.
-		(command) => {
-			const args: ArgDef[] = [];
-			const flags: Record<string, FlagDef> = {};
-			for (const input of inputs) {
-				if (input.kind === "arg") args.push(argDef(spec, input));
-				else flags[input.name] = flagDef(spec, input, plan);
-			}
-			return (
-				command
-					// The first `.use()` types `ctx.api`; the second declares the app's sources, known only at run time.
-					.use(options.client)
-					.use(options.client, ...options.sources)
-					.args(...args)
-					.flags(flags)
-					.output(outputWrapper(advertisedOutput(spec, plan)))
-					.action(async ({ args: argValues, flags: flagValues, ctx, stdout }) => {
-						// Arguments and flags apart: an inherited flag may share an argument's name.
-						const values: Record<PlannedInput["kind"], Readonly<Record<string, unknown>>> = {
-							arg: argValues,
-							flag: flagValues,
-						};
-						// Keyed by the spec's names, which may be `__proto__`: without a prototype, it is a key.
-						// Cookie parameters get no input and are never sent.
-						const input: Record<Param["in"], Record<string, unknown>> = {
-							path: Object.create(null),
-							query: Object.create(null),
-							header: Object.create(null),
-							cookie: Object.create(null),
-						};
-						const bodyFields: Record<string, unknown> = Object.create(null);
-						let body: unknown;
-						for (const { kind, name, target } of inputs) {
-							const value = Object.hasOwn(values[kind], name) ? values[kind][name] : undefined;
-							if (value === undefined) continue;
-							if (target.in === "param") input[target.param.in][target.param.name] = value;
-							else if (target.in === "field") bodyFields[target.field.name] = value;
-							else if (target.in === "body") body = value;
-						}
-						// One value per binding, for every parameter and body field of its name.
-						// A binding the operation has no input for (an `.each()` rule's) is never called.
-						for (const [name, bind] of Object.entries(fields.bind ?? {})) {
-							if (bind === undefined) continue;
-							const params = op.params.filter(
-								(param) => param.name === name && param.in !== "cookie",
-							);
-							const field = plan.bodyFields.some((bodyField) => bodyField.name === name);
-							if (params.length === 0 && !field) continue;
-							const value = await bind(ctx);
-							for (const param of params) input[param.in][name] = value;
-							if (field) bodyFields[name] = value;
-						}
-						body = effectiveBody(spec, plan, body, bodyFields);
-						const { path, query, header } = input;
-						// Built, and so checked, before the confirmation, which a rejected request must not ask for.
-						const request = buildRequest(op, { path, query, header, body });
-						if (typeof fields.confirm === "string") {
-							// An operation with `confirm` and no handler is left out (`confirm-without-handler`), so this is set.
-							// `false` declines like a throw, so a prompt that answers no sends nothing.
-							if ((await options.onConfirm?.(ctx, fields.confirm)) === false) {
-								throw new Error(`${op.id}: not confirmed: ${fields.confirm} Nothing was sent.`);
-							}
-						}
+	const args: ArgDef[] = [];
+	const flags: Record<string, FlagDef> = {};
+	for (const input of inputs) {
+		if (input.kind === "arg") args.push(argDef(spec, input));
+		else flags[input.name] = flagDef(spec, input, plan);
+	}
+	return (
+		command
+			// The first `.use()` types `ctx.api`; the second declares the app's sources, known only at run time.
+			.use(options.client)
+			.use(options.client, ...options.sources)
+			.args(...args)
+			.flags(flags)
+			.output(outputWrapper(advertisedOutput(spec, plan)))
+			.action(async ({ args: argValues, flags: flagValues, ctx, stdout }) => {
+				// Arguments and flags apart: an inherited flag may share an argument's name.
+				const values: Record<PlannedInput["kind"], Readonly<Record<string, unknown>>> = {
+					arg: argValues,
+					flag: flagValues,
+				};
+				// Keyed by the spec's names, which may be `__proto__`: without a prototype, it is a key.
+				// Cookie parameters get no input and are never sent.
+				const input: Record<Param["in"], Record<string, unknown>> = {
+					path: Object.create(null),
+					query: Object.create(null),
+					header: Object.create(null),
+					cookie: Object.create(null),
+				};
+				const bodyFields: Record<string, unknown> = Object.create(null);
+				let body: unknown;
+				for (const { kind, name, target } of inputs) {
+					const value = Object.hasOwn(values[kind], name) ? values[kind][name] : undefined;
+					if (value === undefined) continue;
+					if (target.in === "param") input[target.param.in][target.param.name] = value;
+					else if (target.in === "field") bodyFields[target.field.name] = value;
+					else if (target.in === "body") body = value;
+				}
+				// One value per binding, for every parameter and body field of its name.
+				// A binding the operation has no input for (an `.each()` rule's) is never called.
+				for (const [name, bind] of Object.entries(fields.bind ?? {})) {
+					if (bind === undefined) continue;
+					const params = op.params.filter((param) => param.name === name && param.in !== "cookie");
+					const field = plan.bodyFields.some((bodyField) => bodyField.name === name);
+					if (params.length === 0 && !field) continue;
+					const value = await bind(ctx);
+					for (const param of params) input[param.in][name] = value;
+					if (field) bodyFields[name] = value;
+				}
+				body = effectiveBody(spec, plan, body, bodyFields);
+				const { path, query, header } = input;
+				// Built, and so checked, before the confirmation, which a rejected request must not ask for.
+				const request = buildRequest(op, { path, query, header, body });
+				if (typeof fields.confirm === "string") {
+					// An operation with `confirm` and no handler is left out (`confirm-without-handler`), so this is set.
+					// `false` declines like a throw, so a prompt that answers no sends nothing.
+					if ((await options.onConfirm?.(ctx, fields.confirm)) === false) {
+						throw new Error(`${op.id}: not confirmed: ${fields.confirm} Nothing was sent.`);
+					}
+				}
 
-						const api = await ctx.api;
-						let sent: SentPage = {
-							path: request.path,
-							init: request.init,
-							method: request.init.method,
-						};
-						let response = await api.fetch(sent.path, sent.init);
-						const pages: unknown[] = [];
-						for (let pageNumber = 1; ; pageNumber++) {
-							// Bun types `clone()` as undici's Response, which lacks Bun's Headers extras.
-							const copy =
-								paginateFlag !== undefined && flagValues[paginateFlag] === true
-									? (response.clone() as Response)
-									: undefined;
-							let value = await readOperationResponse(op, sent, response);
-							if (value instanceof Response) value = await responseText(value);
-							if (fields.unwrap !== undefined) value = fields.unwrap(value, response);
-							if (copy === undefined || paginate === undefined) return present(value, stdout);
-							if (!Array.isArray(value)) {
-								throw new Error(
-									`${op.id}: --paginate needs each page's result to be a list, and page ${pageNumber}'s is not`,
-								);
-							}
-							pages.push(...value);
-							const next = await paginate(copy);
-							if (next === undefined) return present(pages, stdout);
-							sent = nextPage(options.baseUrl, sent, next, pageNumber + 1);
-							// A public operation's next pages are public too.
-							if (request.init.auth === false && sent.init?.auth !== false) {
-								sent = { ...sent, init: { ...sent.init, auth: false } };
-							}
-							response = await fetchNextPage(api, sent.path, sent.init);
-						}
-					})
-			);
-		},
+				const api = await ctx.api;
+				let sent: SentPage = {
+					path: request.path,
+					init: request.init,
+					method: request.init.method,
+				};
+				let response = await api.fetch(sent.path, sent.init);
+				const pages: unknown[] = [];
+				for (let pageNumber = 1; ; pageNumber++) {
+					// Bun types `clone()` as undici's Response, which lacks Bun's Headers extras.
+					const copy =
+						paginateFlag !== undefined && flagValues[paginateFlag] === true
+							? (response.clone() as Response)
+							: undefined;
+					let value = await readOperationResponse(op, sent, response);
+					if (value instanceof Response) value = await responseText(value);
+					if (fields.unwrap !== undefined) value = fields.unwrap(value, response);
+					if (copy === undefined || paginate === undefined) return present(value, stdout);
+					if (!Array.isArray(value)) {
+						throw new Error(
+							`${op.id}: --paginate needs each page's result to be a list, and page ${pageNumber}'s is not`,
+						);
+					}
+					pages.push(...value);
+					const next = await paginate(copy);
+					if (next === undefined) return present(pages, stdout);
+					sent = nextPage(options.baseUrl, sent, next, pageNumber + 1);
+					// A public operation's next pages are public too.
+					if (request.init.auth === false && sent.init?.auth !== false) {
+						sent = { ...sent, init: { ...sent.init, auth: false } };
+					}
+					response = await fetchNextPage(api, sent.path, sent.init);
+				}
+			})
 	);
 }
 

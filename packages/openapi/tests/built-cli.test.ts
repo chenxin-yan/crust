@@ -1,6 +1,6 @@
 // A URL spec in the four artifact types `crust build` makes: the bundle leaves the spec out, and
-// each artifact reads the copy the build hook wrote to its data directory, for `api --list` and
-// for the generated commands.
+// each artifact reads the data files the build hook wrote to its data directory: the index and the
+// root commands' file for the generated commands, the spec for `api --list`.
 import { execFile, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -23,7 +23,7 @@ const canBuildSea = process.platform === "linux" && (major > 25 || (major === 25
 const listed = "GET /users listUsers List the users (built-cli-marker)\n";
 
 let root = "";
-let spec = "";
+let data = new Map<string, string>();
 let server: Server | undefined;
 let baseUrl = "";
 
@@ -63,10 +63,12 @@ function bundle(outfile: string, ...options: string[]) {
 	return outfile;
 }
 
-/** Writes the build hook's spec copy to `dir`'s data directory. */
-function shipSpec(dir: string) {
-	mkdirSync(join(dir, "openapi"), { recursive: true });
-	writeFileSync(join(dir, "openapi", "spec.json"), spec);
+/** Writes the build hook's files to `dir`'s data directory. */
+function shipData(dir: string) {
+	for (const [path, content] of data) {
+		mkdirSync(dirname(join(dir, path)), { recursive: true });
+		writeFileSync(join(dir, path), content);
+	}
 }
 
 describe.skipIf(!which("bun"))("a URL spec in a built CLI", () => {
@@ -74,8 +76,12 @@ describe.skipIf(!which("bun"))("a URL spec in a built CLI", () => {
 		root = mkdtempSync(join(tmpdir(), "crust-openapi-built-"));
 		const { files, error } = await runBuildHooks(app);
 		expect(error).toBeUndefined();
-		spec = files.get("openapi/spec.json") ?? "";
-		expect(JSON.parse(spec)).toMatchObject({ openapi: "3.1.0" });
+		data = files;
+		expect([...files.keys()].sort()).toEqual([
+			"openapi/index.json",
+			"openapi/root.json",
+			"openapi/spec.json",
+		]);
 		server = createServer((request, response) => {
 			response.setHeader("content-type", "application/json");
 			response.end(request.url === "/users" ? '[{"id":"1"}]' : "null");
@@ -100,16 +106,16 @@ describe.skipIf(!which("bun"))("a URL spec in a built CLI", () => {
 			const entry = bundle(join(installed, "bin", "cli.js"), `--target=${target}`);
 			expect(readFileSync(entry, "utf8")).not.toContain("built-cli-marker");
 
-			// The generated commands read the spec when the app is set up, so it fails at start,
-			// as an uncaught error the runtime prints with its stack.
-			const missing = run(runtime, [entry, "api", "--list"]);
-			expect(missing.status).toBe(1);
-			expect(missing.stderr).toContain(
-				`api: the OpenAPI document was not found at "${join(installed, "openapi", "spec.json")}". Run \`crust build\` first, and ship its "openapi" directory with the CLI.`,
-			);
-			expect(missing.stderr).not.toContain("ENOENT");
+			// Without its index the CLI has no generated commands, and every invocation says why.
+			for (const argv of [["--help"], ["api", "--list"], ["list-users"]]) {
+				expect(run(runtime, [entry, ...argv])).toMatchObject({
+					stdout: "",
+					stderr: `Error: api: the OpenAPI data was not found at "${join(installed, "openapi", "index.json")}". Run \`crust build\` first, and ship its "openapi" directory with the CLI.\n`,
+					status: 1,
+				});
+			}
 
-			shipSpec(installed);
+			shipData(installed);
 			expect(run(runtime, [entry, "api", "--list"])).toMatchObject({ stdout: listed, status: 0 });
 			expect(await listUsers(entry, runtime)).toBe(users);
 		},
@@ -118,7 +124,7 @@ describe.skipIf(!which("bun"))("a URL spec in a built CLI", () => {
 
 	it("runs from a Bun executable with its data directory beside it", async () => {
 		const executable = bundle(join(root, "bun-exe", "cli"), "--compile");
-		shipSpec(dirname(executable));
+		shipData(dirname(executable));
 
 		expect(run(executable, ["api", "--list"], tmpdir())).toMatchObject({
 			stdout: listed,
@@ -146,7 +152,7 @@ describe.skipIf(!which("bun"))("a URL spec in a built CLI", () => {
 			);
 			const sea = run(process.execPath, ["--build-sea", join(dir, "sea.json")]);
 			expect(sea.status, sea.stderr).toBe(0);
-			shipSpec(dirname(executable));
+			shipData(dirname(executable));
 
 			expect(run(executable, ["api", "--list"], tmpdir())).toMatchObject({
 				stdout: listed,

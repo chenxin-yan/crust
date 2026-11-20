@@ -18,6 +18,20 @@ export const METHODS = [
  * in `spec`, or `undefined`, also for other fragments such as `#anchor`.
  */
 export function refTarget(spec: OpenApiSpec, ref: string): unknown {
+	const keys = pointerKeys(ref);
+	if (keys === undefined) return undefined;
+	let target: unknown = spec;
+	for (const key of keys) {
+		target =
+			typeof target === "object" && target !== null && Object.hasOwn(target, key)
+				? (target as Record<string, unknown>)[key]
+				: undefined;
+	}
+	return target;
+}
+
+/** The keys a local `$ref`'s JSON Pointer fragment walks from the document root, or `undefined` for another fragment. */
+export function pointerKeys(ref: string): string[] | undefined {
 	let pointer: string;
 	try {
 		pointer = decodeURIComponent(ref.slice(1));
@@ -25,15 +39,10 @@ export function refTarget(spec: OpenApiSpec, ref: string): unknown {
 		return undefined;
 	}
 	if (pointer !== "" && !pointer.startsWith("/")) return undefined;
-	let target: unknown = spec;
-	for (const token of pointer.split("/").slice(1)) {
-		const key = token.replaceAll("~1", "/").replaceAll("~0", "~");
-		target =
-			typeof target === "object" && target !== null && Object.hasOwn(target, key)
-				? (target as Record<string, unknown>)[key]
-				: undefined;
-	}
-	return target;
+	return pointer
+		.split("/")
+		.slice(1)
+		.map((token) => token.replaceAll("~1", "/").replaceAll("~0", "~"));
 }
 
 /** A Path Item with its own local `$ref`s (e.g. to `components.pathItems`) followed; sibling keys win. */
