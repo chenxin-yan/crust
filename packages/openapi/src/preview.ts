@@ -53,12 +53,12 @@ const paginateFlag = {
 	},
 } as const;
 
-const previewFlags = {
-	...requestFlags,
-	// A preview never reads stdin, so its help does not offer `-`.
-	body: { ...requestFlags.body, description: "Request body: inline or @file" },
-	...paginateFlag,
-} as const;
+// A preview never reads stdin, so its help does not offer `-`.
+const bodyFlag = { type: "string", description: "Request body: inline or @file" } as const;
+type PreviewFlags = Omit<ApiRequestFlags, "body"> & {
+	readonly body: typeof bodyFlag;
+} & typeof paginateFlag;
+const previewFlags: PreviewFlags = { ...requestFlags, body: bodyFlag, ...paginateFlag };
 
 const targetArg = {
 	name: "target",
@@ -103,7 +103,7 @@ const previewSchema: StandardSchema<unknown, ApiPreview> & StandardJSONSchema = 
 /** The shape of `api preview`, a child of the `api` command's. */
 export type PreviewShape = CommandShape<
 	readonly [typeof targetArg, typeof argvArg],
-	ApiRequestFlags & typeof paginateFlag,
+	PreviewFlags,
 	{},
 	ApiPreview,
 	{},
