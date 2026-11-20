@@ -1182,6 +1182,16 @@ describe("api preview <path>", () => {
 		expect(JSON.parse(preview.stdout)).toMatchObject({ method: "GET", bodyKind: "none" });
 		expect(calls.map(({ url }) => url)).toEqual(["https://api.example.com/v1/preview"]);
 	});
+
+	it("describes api as the fallback, and a preview's --body without stdin, which it refuses", async () => {
+		const api = (await new Crust("tool").extend(buildApi().extension).snapshot()).subCommands.api;
+
+		expect(api?.meta.description).toBe(
+			"Send a request to any endpoint, or browse the OpenAPI spec; prefer a specific command when one exists",
+		);
+		expect(api?.flags.body?.description).toBe("Request body: inline, @file, or - for stdin");
+		expect(api?.subCommands.preview?.flags.body?.description).toBe("Request body: inline or @file");
+	});
 });
 
 describe("api with json()", () => {

@@ -421,7 +421,10 @@ export function createApiCommand(
 ): ApiCommandDefinition {
 	return defineCommand(
 		"api",
-		{ description: "Call the HTTP API, or browse its OpenAPI spec" },
+		{
+			description:
+				"Send a request to any endpoint, or browse the OpenAPI spec; prefer a specific command when one exists",
+		},
 		(command) =>
 			command
 				.use(client)

@@ -53,7 +53,12 @@ const paginateFlag = {
 	},
 } as const;
 
-const previewFlags = { ...requestFlags, ...paginateFlag };
+const previewFlags = {
+	...requestFlags,
+	// A preview never reads stdin, so its help does not offer `-`.
+	body: { ...requestFlags.body, description: "Request body: inline or @file" },
+	...paginateFlag,
+} as const;
 
 const targetArg = {
 	name: "target",
