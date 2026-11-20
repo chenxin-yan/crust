@@ -368,7 +368,6 @@ Binds structured input from `setup` or `preRun`, with the conversion typed `run(
 - Supplied values replace environment values (including an invalid one) and defaults. Values that are not replaced are kept as bound, without re-running defaults or `parse`.
 - Positional arguments follow typed `run()` order: kept argv or `run()` positionals count as supplied, and bound input cannot skip one.
 - Each call re-binds against the original input, so the last call wins. Bound values are visible to every later hook; binding in `setup` lets each `preRun` see them whatever the `.extend()` order.
-- `boundInput` is the payload last passed, as given (`undefined` before the first call). To add values without dropping ones bound earlier, bind it merged with yours: `ctx.bindInput({ ...ctx.boundInput, flags: { ...ctx.boundInput?.flags, name } })`.
 - Flag handlers are chosen from the original input, so a bound flag never selects one, even when bound in `setup`.
 - A failure fails the invocation as an error thrown from the calling hook would.
 

@@ -137,7 +137,7 @@ Besides `args`, `flags`, and output, a hook's `ctx` offers:
 
 - **`ctx.bindInput({ args, flags, raw })`** in `setup` or `preRun` binds structured input, such as JSON read from a flag, as [`input()`](/docs/modules/extensions/input) does. Values given explicitly on argv win; other supplied keys replace environment values and defaults, converted as typed `run()` input. Later hooks, validation, and the action see the bound values.
   - Bind in `setup` so every `preRun` sees the values; it then also happens for `--help` and `--version`. Bind in `preRun` to bind only when the action will run.
-  - The last call wins, and a bound flag never selects a handler. To add values without dropping earlier ones, bind `ctx.boundInput` (the payload last bound, or `undefined`) merged with yours.
+  - The last call wins, and a bound flag never selects a handler.
   - An unknown key or a value that fails conversion throws a `PARSE` error from the calling hook.
 - **`ctx.sources`** reports where each value came from: `"argv"`, `"run"`, `"env"`, `"bound"`, or `"default"`. For example, with a boolean `verbose` flag (short `-V`) and a `port` flag read from `PORT`, `my-cli -V` with `PORT=9000` set gives `{ args: {}, flags: { verbose: "argv", port: "env" }, raw: undefined }`. Use it to skip the keys argv gave before converting input yourself.
 - **`ctx.commandPathOf(definition)`** returns where a command definition is mounted, such as `["my-cli", "deploy"]`, or `undefined`. Use it to print command lines for definitions that app code passes to your Extension.
