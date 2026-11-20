@@ -196,8 +196,8 @@ export function planCommands(input: LintInput): {
 		if (typeof fields.confirm === "string" && input.hasConfirmHandler !== true) {
 			report(
 				"confirm-without-handler",
-				`${label}: the override sets \`confirm\`, but no confirmation handler is configured`,
-				"Configure a confirmation handler, or remove `confirm` from the override",
+				`${label}: the override sets \`confirm\`, but the handle has no \`.onConfirm()\` handler`,
+				"Add `.onConfirm()` to the handle, or remove `confirm` from the override",
 			);
 		}
 

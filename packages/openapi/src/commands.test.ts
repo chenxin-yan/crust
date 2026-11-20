@@ -443,7 +443,7 @@ describe("generated commands", () => {
 			"delete-user",
 		);
 		expect((await runBuildHooks(app2)).error).toContain(
-			"DELETE /users/{id}: the override sets `confirm`, but no confirmation handler is configured",
+			"DELETE /users/{id}: the override sets `confirm`, but the handle has no `.onConfirm()` handler",
 		);
 	});
 
