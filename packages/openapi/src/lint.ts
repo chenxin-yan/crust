@@ -389,12 +389,19 @@ export function planCommands(input: LintInput): {
 				op.body !== undefined && isJsonMediaType(op.body.contentType) ? bodySchemaFields : [],
 			...(outputSchema !== undefined && { outputSchema }),
 		});
-		addGroup(groups, group);
 	}
 
 	const addedGroups = new Set<string>();
 	for (const group of Object.keys(added)) addGroup(addedGroups, group);
 	for (const group of addedGroups) groups.add(group);
+	// A skipped operation becomes no command, so it clashes with nothing.
+	const skipped = new Set(
+		diagnostics.flatMap(({ code, operationId }) =>
+			PROBLEM_KINDS[code] === "skip" ? [operationId] : [],
+		),
+	);
+	const commanded = placed.filter(({ op }) => !skipped.has(op.id));
+	for (const { group } of commanded) addGroup(groups, group);
 	const commands = new Map<string, Operation>();
 	const collide = (op: Operation, command: string, other: string) =>
 		diagnostics.push({
@@ -405,7 +412,7 @@ export function planCommands(input: LintInput): {
 			message: `${operationLabel(op.method, op.path)}: the command "${command}" is also ${other}`,
 			fix: "Set `group` or `name` in the override of one of them",
 		});
-	for (const { op, command } of placed) {
+	for (const { op, command } of commanded) {
 		const first = commands.get(command);
 		if (first !== undefined) {
 			collide(
@@ -435,7 +442,7 @@ export function planCommands(input: LintInput): {
 		const op = commands.get(command);
 		if (op !== undefined) collide(op, command, by);
 		if (!groups.has(command)) continue;
-		for (const inside of placed.filter((plan) => plan.command.startsWith(`${command} `))) {
+		for (const inside of commanded.filter((plan) => plan.command.startsWith(`${command} `))) {
 			diagnostics.push({
 				code: "command-collision",
 				operationId: inside.op.id,

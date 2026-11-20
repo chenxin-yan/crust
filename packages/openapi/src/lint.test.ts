@@ -638,6 +638,18 @@ describe("lint", () => {
 		expect(buildProblems(diagnostics.slice(0, 1))).toBeUndefined();
 	});
 
+	it("lets a skipped operation clash with nothing, since it becomes no command", () => {
+		const shared = spec({
+			"/x": { get: op("twice", { tags: ["t"] }) },
+			"/y": { get: op("twice", { tags: ["t"] }) },
+			"/z": { get: op("t-z", { tags: ["t"], responses: {} }) },
+			"/w": { get: op("z", { tags: ["t"] }) },
+		});
+		expect(lint({ spec: shared }).map(({ code, operationId }) => `${code} ${operationId}`)).toEqual(
+			["duplicate-operation-id twice", "duplicate-operation-id twice", "no-success-response t-z"],
+		);
+	});
+
 	it("settles every problem of an excluded operation, also its override's", () => {
 		const one = spec({ "/a": { get: op("a") } });
 		expect(
