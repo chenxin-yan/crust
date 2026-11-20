@@ -259,14 +259,6 @@ export interface ExtensionContext<
 	 * ```
 	 */
 	readonly bindInput: (input: RunInputPayload) => void;
-	/**
-	 * The payload last passed to {@link ExtensionContext.bindInput} in this invocation, as given;
-	 * `undefined` before the first call. Since the last call wins, a hook that adds values binds
-	 * this payload merged with its own, so values bound earlier (for example from a JSON flag) stay.
-	 *
-	 * @example `ctx.bindInput({ ...ctx.boundInput, flags: { ...ctx.boundInput?.flags, name } })`
-	 */
-	readonly boundInput: RunInputPayload | undefined;
 }
 
 /** What {@link ExtensionContext.parseCommandArgv} returns: the values the Command Action would receive. */

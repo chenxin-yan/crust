@@ -613,50 +613,6 @@ describe("Invocation pipeline — parseCommandArgv", () => {
 	});
 });
 
-describe("Invocation pipeline — boundInput", () => {
-	it("is the payload last bound, so a later hook can add to it and bind once", async () => {
-		const reads: unknown[] = [];
-		const received: unknown[] = [];
-		const first = defineExtension(defineExtensionId("first")).setup((ctx) => {
-			reads.push(ctx.boundInput);
-			ctx.bindInput({ flags: { a: "x" } });
-		});
-		const second = defineExtension(defineExtensionId("second")).preRun((ctx) => {
-			reads.push(ctx.boundInput);
-			ctx.bindInput({ ...ctx.boundInput, flags: { ...ctx.boundInput?.flags, b: "y" } });
-			reads.push(ctx.boundInput);
-		});
-		const app = new Crust("app")
-			.extend(second, first)
-			.flags({ a: { type: "string" }, b: { type: "string" } })
-			.action(({ flags }) => void received.push(flags));
-
-		expect(await app.run([])).toMatchObject({ status: "completed" });
-		expect(received).toEqual([{ a: "x", b: "y" }]);
-		expect(reads).toEqual([undefined, { flags: { a: "x" } }, { flags: { a: "x", b: "y" } }]);
-	});
-
-	it("is undefined in onError after a failure before dispatch", async () => {
-		const reads: unknown[] = [];
-		const app = new Crust("app")
-			.extend(
-				defineExtension(defineExtensionId("observer")).onError((_error, ctx) => {
-					reads.push(ctx.boundInput);
-					return true;
-				}),
-			)
-			.command("db", (c) => c.action(() => {}));
-
-		const originalExitCode = process.exitCode;
-		try {
-			await app.execute({ argv: ["nope"], io: { stderr: () => {} } });
-		} finally {
-			process.exitCode = originalExitCode ?? 0;
-		}
-		expect(reads).toEqual([undefined]);
-	});
-});
-
 describe("Invocation pipeline — inherited signal ignores", () => {
 	// Bun keeps an inherited SIG_IGN (Node resets it at startup). The real executable, not a
 	// version-manager shim that may reset signals before exec.

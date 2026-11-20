@@ -711,9 +711,8 @@ async function dispatch(
 			? resolveArgvInput(rootNode, input.argv, env)
 			: resolveStructuredInput(rootNode, input.path, input.input, env);
 	const resolvedNode = route.command;
-	// `bindInput` replaces these; hooks and `terminal()` read them live.
+	// `bindInput` replaces this; hooks and `terminal()` read it live.
 	let bound = parsed;
-	let boundInput: RunInputPayload | undefined;
 
 	// One resource scope and resolver span pre-run, the action, and post-run.
 	await using disposal = new AsyncDisposableStack();
@@ -758,10 +757,6 @@ async function dispatch(
 		ctx: resolver.bag(extensions.flatMap((extension) => extension.use)),
 		bindInput(payload: RunInputPayload) {
 			bound = bindStructuredInput(resolvedNode, parsed, payload);
-			boundInput = payload;
-		},
-		get boundInput() {
-			return boundInput;
 		},
 		stdout: output.io.stdout,
 		stderr: output.io.stderr,
@@ -992,7 +987,6 @@ async function renderFailure(
 			stderr: output.io.stderr,
 			// No action runs after a failure this early, so there is nothing to bind.
 			bindInput() {},
-			boundInput: undefined,
 			ctx: unavailableContext,
 		} satisfies ExtensionContext);
 	}

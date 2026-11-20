@@ -3,7 +3,7 @@ import { Crust, defineCommand, type AnyCrust, type RootCommandMeta } from "../co
 import type { CommandSnapshot } from "../command/snapshot.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { CommandSection } from "../types.ts";
-import type { ParsedFlagValue, RunInputPayload } from "../types.ts";
+import type { ParsedFlagValue } from "../types.ts";
 import { defineContext } from "./context.ts";
 import {
 	defineExtension,
@@ -392,12 +392,13 @@ function _rendererSelector() {
 	const _renderer: Renderer = { text() {}, diag() {}, error(_error: unknown) {} };
 }
 
-function _parseAndBoundInput() {
+function _parseCommandArgv() {
 	defineExtension(defineExtensionId("test:parse")).preRun(async (ctx) => {
 		const parsed = await ctx.parseCommandArgv(["app", "db"], ["--to", "3"]);
 		type _parsed = Expect<Equal<typeof parsed, ParsedCommandArgv>>;
 		type _flags = Expect<Equal<typeof parsed.flags, Readonly<Record<string, unknown>>>>;
-		type _bound = Expect<Equal<typeof ctx.boundInput, RunInputPayload | undefined>>;
+		// @ts-expect-error -- `bindInput` replaces; there is no getter for the last payload
+		void ctx.boundInput;
 		const db = defineCommand("db", (c) => c);
 		// @ts-expect-error A path is a list of names, not a definition.
 		await ctx.parseCommandArgv(db, []);
