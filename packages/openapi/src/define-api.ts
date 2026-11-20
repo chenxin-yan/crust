@@ -1,4 +1,5 @@
 import {
+	type AnyContextFactory,
 	type CommandDefinition,
 	type CommandShape,
 	type CommandSnapshot,
@@ -24,7 +25,7 @@ import {
 	type OpenApiSpec,
 	createApiCommand,
 } from "./api-command.ts";
-import { type ApiClient, type ApiClientOptions, apiClientContext } from "./client.ts";
+import { type ApiAuth, type ApiClient, apiClientContext } from "./client.ts";
 import {
 	type AddedCommands,
 	type ConfirmResult,
@@ -53,7 +54,9 @@ import type { SpecOperationsOf, Specs } from "./typed-client.ts";
 
 const API: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:openapi");
 
-export interface DefineApiOptions<Id extends string = string> extends ApiClientOptions {
+export interface DefineApiOptions<Id extends string = string> {
+	/** URL request paths resolve against, e.g. `https://api.example.com/v1`. */
+	readonly baseUrl: string;
 	/**
 	 * The pinned OpenAPI document: a `file:` URL, such as
 	 * `new URL("./acme.openapi.jsonc", import.meta.url)`, read when a command first needs it, with
@@ -84,6 +87,14 @@ type Overrides<Operations, Deps extends ContextMap> = unknown extends Operations
 	? { readonly [operationId: string]: OverrideEntry<Deps> }
 	: { readonly [Id in keyof Operations & string]?: OverrideEntry<Deps, Operations[Id]> };
 
+// The Context factories among `.use()` sources: a Context's own `.use()` takes only those, so they are all `.auth()` can read.
+type ContextFactoriesOf<
+	Us extends readonly unknown[],
+	Acc extends readonly AnyContextFactory[] = [],
+> = Us extends readonly [infer H, ...infer T]
+	? ContextFactoriesOf<T, H extends AnyContextFactory ? [...Acc, H] : Acc>
+	: Acc;
+
 // The Contexts each definition declares, intersected one by one; `any` matches every definition, as in `Crust.add()`.
 type AddedDeps<Ds extends readonly unknown[]> = Ds extends readonly [infer D, ...infer Rest]
 	? (D extends CommandDefinition<any, any, any, infer Deps> ? Deps : {}) & AddedDeps<Rest>
@@ -98,18 +109,26 @@ export interface Api<
 	Deps extends ContextMap = { api: ApiClient<Operations> },
 	// The Contexts of the `.add()`ed commands, which the generated commands do not `.use()`.
 	Added extends ContextMap = {},
+	// The Contexts of the Context factories `.use()`d so far: what `.auth()` reads.
+	AuthCtx extends ContextMap = {},
+	// The Contexts the last `.auth()` reads: the client's dependencies.
+	AuthDeps extends ContextMap = {},
 > {
 	/** Contributes the `api` command and provides the `api` Context; pass it to `.extend()`. */
 	readonly extension: Extension<
-		{ api: ApiClient<Operations> },
-		readonly [ContextInstance<"api", ApiClient<Operations>, {}, {}>],
+		{ api: ApiClient<Operations, AuthDeps> } & AuthDeps,
+		readonly [ContextInstance<"api", ApiClient<Operations, AuthDeps>, {}, AuthDeps>],
 		{},
-		readonly [ApiCommandDefinition<Operations>],
+		readonly [ApiCommandDefinition<Operations, AuthDeps>],
 		never,
-		{ api: ApiClient<Operations> }
+		{}
 	>;
-	/** The `api` Context: `.use(acme.client)` in a command, then `await ctx.api`. */
-	readonly client: ContextFactory<"api", void, ApiClient<Operations>>;
+	/**
+	 * The `api` Context: `.use(acme.client)` in a command, then `await ctx.api`. Each `.auth()` makes
+	 * a new one: take it from the handle whose `extension` the app extends, or from one before it
+	 * after the same `.auth()`.
+	 */
+	readonly client: ContextFactory<"api", void, ApiClient<Operations, AuthDeps>, {}, AuthDeps>;
 	/**
 	 * A command per operation, in its group, with the commands `.add()` put there: the root
 	 * commands and the top-level groups, to pass to `.add()`. An operation with a problem is left
@@ -124,31 +143,58 @@ export interface Api<
 	/** Context factories or Extensions every generated command `.use()`s, which types `ctx` in the callbacks after it. */
 	use<const Us extends readonly [UseSource, ...UseSource[]]>(
 		...sources: Us
-	): Api<Operations, MergeContext<Deps, UsedContexts<Us>>, Added>;
+	): Api<
+		Operations,
+		MergeContext<Deps, UsedContexts<Us>>,
+		Added,
+		MergeContext<AuthCtx, UsedContexts<ContextFactoriesOf<Us>>>,
+		AuthDeps
+	>;
+	/**
+	 * Sends credentials with requests: `auth` runs at most once per invocation, on the first request
+	 * that sends them, and reads the Contexts of the Context factories `.use()`d before it, which
+	 * become the client's dependencies. Not those of an Extension, such as `confirm`: the client is a
+	 * Context, and a Context's `.use()` takes only factories. Replaces the previous `auth`, with a new
+	 * `client`; without `.auth()`, requests carry no credentials.
+	 */
+	auth(
+		auth: ApiAuth<AuthCtx>,
+	): Api<
+		Operations,
+		Omit<Deps, "api"> & { api: ApiClient<Operations, AuthCtx> },
+		Added,
+		AuthCtx,
+		AuthCtx
+	>;
 	/**
 	 * Asks to confirm an operation's `confirm` message before its request: resolving to nothing (or
 	 * `true`) confirms it; resolving to `false`, or throwing, declines it, and nothing is sent.
 	 */
 	onConfirm(
 		handler: (ctx: ContextBag<Deps>, message: string) => ConfirmResult | Promise<ConfirmResult>,
-	): Api<Operations, Deps, Added>;
+	): Api<Operations, Deps, Added, AuthCtx, AuthDeps>;
 	/** The override for every operation, synchronous and pure; replaces the previous rule. */
 	each(
 		rule: (
 			operation: Operation & { readonly id: OperationIdOf<Operations> },
 		) => OperationOverride<Deps> | undefined,
-	): Api<Operations, Deps, Added>;
+	): Api<Operations, Deps, Added, AuthCtx, AuthDeps>;
 	/** Overrides by operationId, whose fields replace the rule's; an entry for the same operationId replaces the previous one's fields. */
-	override(entries: Overrides<Operations, Deps>): Api<Operations, Deps, Added>;
+	override(entries: Overrides<Operations, Deps>): Api<Operations, Deps, Added, AuthCtx, AuthDeps>;
 	/** Puts the app's own commands in a group path, such as `"dns records"` (`""` is the root), creating the group when no operation maps to it. */
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
 		group: string,
 		...definitions: Ds
-	): Api<Operations, Deps, Added & AddedDeps<Ds>>;
+	): Api<Operations, Deps, Added & AddedDeps<Ds>, AuthCtx, AuthDeps>;
 }
+
+// Every handle, its types erased: the chain methods build any of them.
+type AnyApi = Api<unknown, any, any, any, any>;
 
 /** The configuration a handle's chain adds. */
 interface ApiState {
+	/** The `api` Context: the last `.auth()`'s, else one without auth. */
+	readonly client: ContextFactory<"api", void, ApiClient>;
 	readonly sources: readonly UseSource[];
 	readonly onConfirm?: (ctx: ContextBag, message: string) => ConfirmResult | Promise<ConfirmResult>;
 	readonly each?: (operation: Operation) => OperationOverride | undefined;
@@ -162,7 +208,7 @@ interface ApiBase {
 	readonly spec: URL | OpenApiSpec;
 	readonly baseUrl: string;
 	readonly paginate?: DefineApiOptions["paginate"];
-	readonly client: ContextFactory<"api", void, ApiClient>;
+	readonly findOperation: (operationId: string) => Promise<Operation>;
 	/** The spec, read once. */
 	readonly document: () => OpenApiSpec;
 	/**
@@ -186,7 +232,7 @@ export function defineApi<const Id extends string = never>(
 	options: DefineApiOptions<Id>,
 ): Api<SpecOperationsOf<Specs, Id>>;
 export function defineApi(options: DefineApiOptions): Api {
-	const { spec, id = "openapi", paginate, ...clientOptions } = options;
+	const { spec, id = "openapi", paginate, baseUrl } = options;
 	const isUrl = spec instanceof URL;
 	if (isUrl ? spec.protocol !== "file:" : !isPlainObject(spec)) {
 		throw new CrustError(
@@ -212,26 +258,19 @@ export function defineApi(options: DefineApiOptions): Api {
 		return found[0]!;
 	};
 
-	const client = apiClientContext(clientOptions, findOperation);
 	return createApi(
+		{ id, spec, baseUrl, paginate, findOperation, document, readCommands: new Map() },
 		{
-			id,
-			spec,
-			baseUrl: clientOptions.baseUrl,
-			paginate,
-			client,
-			document,
-			readCommands: new Map(),
+			client: apiClientContext({ baseUrl }, findOperation),
+			sources: [],
+			override: {},
+			added: [],
 		},
-		{ sources: [], override: {}, added: [] },
 	);
 }
 
-// Untyped by the spec, like the `defineApi` implementation; its overload adds the spec's names.
-function createApi<Deps extends ContextMap, Added extends ContextMap>(
-	base: ApiBase,
-	state: ApiState,
-): Api<unknown, Deps, Added> {
+// Untyped, like the `defineApi` implementation; its overload and `Api`'s methods add the types.
+function createApi(base: ApiBase, state: ApiState): AnyApi {
 	const planFor = (spec: OpenApiSpec) =>
 		planCommands({
 			spec,
@@ -270,7 +309,7 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 		return codes;
 	};
 	const options = {
-		client: base.client,
+		client: state.client,
 		sources: state.sources,
 		onConfirm: state.onConfirm,
 		baseUrl: base.baseUrl,
@@ -349,7 +388,7 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 		const found = data.plans(grouped.operationIds).find(at);
 		return found && { plan: found, spec: data.spec };
 	};
-	let extension: Api["extension"] | undefined;
+	let extension: AnyApi["extension"] | undefined;
 	let commands: readonly GeneratedDefinition[] | undefined;
 	const handle = Object.freeze({
 		get extension() {
@@ -360,7 +399,7 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 				problems: () => buildProblems(plan().diagnostics),
 			}));
 		},
-		client: base.client,
+		client: state.client,
 		get commands() {
 			if (commands === undefined) {
 				commands =
@@ -377,16 +416,23 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 			}
 			return commands;
 		},
-		use: <const Us extends readonly [UseSource, ...UseSource[]]>(...sources: Us) =>
-			createApi<MergeContext<Deps, UsedContexts<Us>>, Added>(base, {
+		use: (...sources: readonly UseSource[]) =>
+			createApi(base, { ...state, sources: [...state.sources, ...sources] }),
+		auth: (auth: ApiAuth) =>
+			createApi(base, {
 				...state,
-				sources: [...state.sources, ...sources],
+				client: apiClientContext(
+					{ baseUrl: base.baseUrl, auth },
+					base.findOperation,
+					// As a Context's `.use()`, the client's takes Context factories only, not Extensions.
+					state.sources.filter((source) => "contextName" in source),
+				),
 			}),
 		onConfirm: (onConfirm: NonNullable<ApiState["onConfirm"]>) =>
-			createApi<Deps, Added>(base, { ...state, onConfirm }),
-		each: (each: NonNullable<ApiState["each"]>) => createApi<Deps, Added>(base, { ...state, each }),
+			createApi(base, { ...state, onConfirm }),
+		each: (each: NonNullable<ApiState["each"]>) => createApi(base, { ...state, each }),
 		override: (entries: Readonly<Record<string, OverrideEntry>>) =>
-			createApi<Deps, Added>(base, {
+			createApi(base, {
 				...state,
 				override: Object.fromEntries([
 					...Object.entries(state.override),
@@ -396,15 +442,12 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 					]),
 				]),
 			}),
-		add: <const Ds extends readonly GeneratedDefinition[]>(group: string, ...definitions: Ds) =>
-			createApi<Deps, Added & AddedDeps<Ds>>(base, {
-				...state,
-				added: [...state.added, { group, definitions }],
-			}),
+		add: (group: string, ...definitions: readonly GeneratedDefinition[]) =>
+			createApi(base, { ...state, added: [...state.added, { group, definitions }] }),
 	});
 	// The callbacks are stored with an erased `ctx`: each generated command passes them its own,
 	// which has every Context `Deps` lists, since it `.use()`s the client and the same sources.
-	return handle as Api<unknown, Deps, Added>;
+	return handle as AnyApi;
 }
 
 /**
@@ -426,10 +469,11 @@ function apiExtension(
 		readonly planAt: (words: readonly string[]) => PlannedCommand | undefined;
 		readonly problems: () => string | undefined;
 	},
-): Api["extension"] {
+): AnyApi["extension"] {
 	const { id, spec } = base;
-	// Each `api preview` invocation's generated request, by its `api` Context value.
-	const previews = new WeakMap<ApiClient, GeneratedPreview>();
+	// Each `api preview` invocation's generated request, by its signal: the hooks do not `.use()` the
+	// client, whose dependencies' flags would otherwise go on every command of the app.
+	const previews = new WeakMap<AbortSignal, GeneratedPreview>();
 	/**
 	 * The generated commands of this handle that the command at a canonical `path`, whose snapshot
 	 * is `command`, can be. Where the app's tree places a top-level generated command on the path
@@ -472,14 +516,13 @@ function apiExtension(
 			{ subject: "extension", name: API, reason: "commands-mismatch" },
 		);
 	const extension = defineExtension(API)
-		.use(base.client)
-		.provide(base.client())
+		.provide(state.client())
 		.add(
-			createApiCommand(base.client, loadSpec, {
+			createApiCommand(state.client, loadSpec, {
 				baseUrl: base.baseUrl,
 				paginate: base.paginate,
 				unavailable,
-				preview: createPreviewCommand(base.client, {
+				preview: createPreviewCommand({
 					baseUrl: base.baseUrl,
 					paginates: base.paginate !== undefined,
 					generated: previews,
@@ -541,7 +584,7 @@ function apiExtension(
 						return `{${name}}`;
 					},
 				);
-				previews.set(await ctx.ctx.api, { request, bound });
+				previews.set(ctx.signal, { request, bound });
 			}
 		})
 		// A broken build fails every invocation with why, also one a missing command fails first.

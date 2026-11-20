@@ -1,4 +1,10 @@
-import { type ContextFactory, type ContextSetup, defineContext } from "@crustjs/core";
+import {
+	type AnyContextFactory,
+	type ContextFactory,
+	type ContextMap,
+	type ContextSetup,
+	defineContext,
+} from "@crustjs/core";
 
 import type { Operation } from "./operations.ts";
 import { callOperation } from "./request.ts";
@@ -21,33 +27,35 @@ export interface AuthAttempt {
 	) => Promise<AuthAttempt | undefined>;
 }
 
-export interface ApiClientOptions {
-	/** URL request paths resolve against, e.g. `https://api.example.com/v1`. */
-	readonly baseUrl: string;
-	/**
-	 * Headers added to requests to the base URL's origin, e.g. an `Authorization` header, or any
-	 * default header such as `User-Agent` or an API-version header, or an {@link AuthAttempt}
-	 * with such headers. All of them are treated as credentials: they are never sent off the
-	 * base URL's origin.
-	 * Called at most once per invocation, on the first request that sends credentials: never
-	 * for a command that only reads the Context, nor for requests with `auth: false`. Its
-	 * second argument holds the `baseUrl` as configured.
-	 */
-	readonly auth?: (
-		input: ContextSetup,
-		client: { readonly baseUrl: string },
-	) =>
-		| Readonly<Record<string, string>>
-		| AuthAttempt
-		| undefined
-		| Promise<Readonly<Record<string, string>> | AuthAttempt | undefined>;
-}
+/**
+ * What a handle's `.auth()` takes: headers added to requests to the base URL's origin, e.g. an
+ * `Authorization` header, or any default header such as `User-Agent` or an API-version header, or
+ * an {@link AuthAttempt} with such headers. All of them are treated as credentials: they are never
+ * sent off the base URL's origin.
+ * Called at most once per invocation, on the first request that sends credentials: never for a
+ * command that only reads the Context, nor for requests with `auth: false`. `input.ctx` has the
+ * Contexts `Ctx` of the Context factories `.use()`d before `.auth()`; the second argument holds
+ * the `baseUrl` as configured.
+ */
+export type ApiAuth<Ctx extends ContextMap = {}> = (
+	input: ContextSetup<{}, Ctx>,
+	client: { readonly baseUrl: string },
+) =>
+	| Readonly<Record<string, string>>
+	| AuthAttempt
+	| undefined
+	| Promise<Readonly<Record<string, string>> | AuthAttempt | undefined>;
+
+declare const authContexts: unique symbol;
 
 /**
  * The `api` Context value: `fetch()` bound to the API's base URL and auth, and `call()` for an
- * operation of the spec, typed by `Operations` when a spec is registered in `Specs`.
+ * operation of the spec, typed by `Operations` when a spec is registered in `Specs`. `AuthDeps` are
+ * the Contexts its `.auth()` reads.
  */
-export interface ApiClient<Operations = unknown> {
+export interface ApiClient<Operations = unknown, AuthDeps extends ContextMap = {}> {
+	// Type only, and invariant: a command whose client's `auth` reads other Contexts than the app's client's fails to compile.
+	readonly [authContexts]?: (deps: AuthDeps) => AuthDeps;
 	readonly baseUrl: string;
 	/**
 	 * `fetch()` for `path` below {@link ApiClient.baseUrl} (an absolute URL is used as is, but
@@ -178,18 +186,21 @@ export function fetchNextPage(
 }
 
 /**
- * The `api` Context of one `defineApi()` handle; `call()` reads its operation through `findOperation`.
+ * The `api` Context of one `defineApi()` handle; `call()` reads its operation through `findOperation`,
+ * and `auth` reads the Contexts of `use`, which become the Context's dependencies.
  */
 export function apiClientContext(
-	options: ApiClientOptions,
+	options: { readonly baseUrl: string; readonly auth?: ApiAuth },
 	findOperation: (operationId: string) => Promise<Operation>,
+	use: readonly AnyContextFactory[] = [],
 ): ContextFactory<"api", void, ApiClient> {
-	return defineContext("api").setup(async (input) => {
+	const builder = defineContext("api").use(...use);
+	return builder.setup(async (input) => {
 		const origin = new URL(options.baseUrl).origin;
 		// The headers the Fetch standard strips on a cross-origin redirect, plus every auth header name once `auth` ran.
 		const credentialHeaders = ["authorization", "cookie", "proxy-authorization"];
 		let authState: Promise<AuthState> | undefined;
-		function toAuthState(result: Awaited<ReturnType<NonNullable<ApiClientOptions["auth"]>>>) {
+		function toAuthState(result: Awaited<ReturnType<ApiAuth>>) {
 			// A header value is a string, so an object `headers` marks an AuthAttempt.
 			const attempt =
 				typeof result?.headers === "object" && result.headers !== null

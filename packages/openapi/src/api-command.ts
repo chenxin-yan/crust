@@ -2,6 +2,7 @@ import {
 	type CommandDefinition,
 	type CommandShape,
 	type ContextFactory,
+	type ContextMap,
 	CrustError,
 	defineCommand,
 } from "@crustjs/core";
@@ -381,7 +382,10 @@ const paginateFlag = {
 type ApiFlags = typeof browseFlags & ApiRequestFlags & typeof paginateFlag;
 
 /** The contributed `api` command, spelled out because `defineApi()` needs a declared type. */
-export type ApiCommandDefinition<Operations = unknown> = CommandDefinition<
+export type ApiCommandDefinition<
+	Operations = unknown,
+	AuthDeps extends ContextMap = {},
+> = CommandDefinition<
 	"api",
 	readonly [],
 	CommandShape<
@@ -392,7 +396,7 @@ export type ApiCommandDefinition<Operations = unknown> = CommandDefinition<
 		{},
 		readonly JsonValue[] | undefined
 	>,
-	{ api: ApiClient<Operations> }
+	{ api: ApiClient<Operations, AuthDeps> } & AuthDeps
 >;
 
 /**

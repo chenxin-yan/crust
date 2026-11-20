@@ -1,21 +1,21 @@
-import { Crust, defineCommand } from "@crustjs/core";
+import { createAuth } from "@crustjs/auth";
+import { type ContextMap, Crust, defineCommand, defineContext } from "@crustjs/core";
 import { confirm } from "@crustjs/extensions";
-import { defineApi } from "@crustjs/openapi";
+import { type ApiClient, type Specs, bearerAuth, defineApi } from "@crustjs/openapi";
 
 //#region cli
 const api = defineApi({
 	// The pinned OpenAPI document, kept out of the bundle.
 	spec: new URL("./acme.openapi.jsonc", import.meta.url),
 	baseUrl: "https://api.acme.example/v1",
-	auth: () => ({ Authorization: `Bearer ${process.env.ACME_TOKEN}` }),
 	// The next page from a `Link: <url>; rel="next"` header; undefined after the last page.
 	paginate: (response) => {
 		const next = /<([^>]+)>;\s*rel="next"/.exec(response.headers.get("link") ?? "")?.[1];
 		return next === undefined ? undefined : { path: next };
 	},
-});
+}).auth(() => ({ Authorization: `Bearer ${process.env.ACME_TOKEN}` }));
 
-// Your own command, with the client every handle of `api` shares.
+// Your own command, with the client of `api`'s `.auth()`, which the handles after it share.
 const whoami = defineCommand("whoami", { description: "Print the signed-in user" }, (command) =>
 	command.use(api.client).action(async ({ ctx, stdout }) => {
 		const client = await ctx.api;
@@ -44,6 +44,47 @@ await new Crust("acme")
 	.extend(confirm(), acme.extension)
 	.add(...acme.commands)
 	.execute();
+//#endregion
+
+//#region profile
+// `--profile <name>` on the commands that send requests picks the login; without it, the current profile.
+const profile = defineContext("profile")
+	.flags({ profile: { type: "string", description: "The profile to use" } })
+	.setup(({ flags }) => flags.profile);
+
+const accounts = createAuth({
+	app: "acme",
+	issuer: "https://login.acme.example",
+	clientId: "acme-cli",
+	apiOrigins: ["https://api.acme.example"],
+	profiles: {},
+});
+
+const profiled = defineApi({
+	spec: new URL("./acme.openapi.jsonc", import.meta.url),
+	baseUrl: "https://api.acme.example/v1",
+})
+	.use(profile)
+	.auth(
+		bearerAuth(async ({ ctx, signal, baseUrl }) =>
+			accounts.profile(await ctx.profile).token({ signal, baseUrl }),
+		),
+	);
+
+// The app provides the Context before the Extension whose client reads it.
+export const profiledCli = new Crust("acme")
+	.provide(profile())
+	.extend(profiled.extension)
+	.add(...profiled.commands);
+//#endregion
+
+//#region helper
+// Generic in the Contexts the client's `auth` reads, so it takes the client of any `.auth()`.
+export async function userName<AuthDeps extends ContextMap>(
+	client: ApiClient<Specs["acme"]["operations"], AuthDeps>,
+): Promise<string> {
+	return (await client.call("getUser", { path: { id: "me" } })).name;
+}
 //#endregion
 
 //#region unwrap

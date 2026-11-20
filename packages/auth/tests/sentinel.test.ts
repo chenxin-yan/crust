@@ -487,8 +487,7 @@ describe("secret sentinel gate: stored credentials", () => {
 			const acme = defineApi({
 				spec: { openapi: "3.1.0", paths: {} },
 				baseUrl: "https://api.example.com",
-				auth: bearerAuth(clientOf(w).token),
-			});
+			}).auth(bearerAuth(clientOf(w).token));
 			const app = new Crust("acme")
 				.extend(acme.extension)
 				.add(

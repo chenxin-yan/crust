@@ -320,11 +320,9 @@ describe("call()", () => {
 			});
 			return respond();
 		});
-		const acme = defineApi({
-			spec,
-			baseUrl: "https://api.example.com/v1",
-			auth: () => ({ authorization: "Bearer secret" }),
-		});
+		const acme = defineApi({ spec, baseUrl: "https://api.example.com/v1" }).auth(() => ({
+			authorization: "Bearer secret",
+		}));
 		const app = new Crust("tool")
 			.extend(acme.extension)
 			.add(

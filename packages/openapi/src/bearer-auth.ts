@@ -1,4 +1,6 @@
-import type { ApiClientOptions, AuthAttempt } from "./client.ts";
+import type { ContextBag, ContextMap } from "@crustjs/core";
+
+import type { ApiAuth, AuthAttempt } from "./client.ts";
 
 /** A bearer token, and for a stored login how to refresh it. */
 export interface BearerCredential {
@@ -8,23 +10,25 @@ export interface BearerCredential {
 }
 
 /** What {@link bearerAuth} passes to its resolver. */
-export interface BearerResolveOptions {
+export interface BearerResolveOptions<Ctx extends ContextMap = {}> {
 	/** The invocation's cancellation signal. */
 	readonly signal: AbortSignal;
 	/** The client's `baseUrl` as configured, so a stored login can check it may go there. */
 	readonly baseUrl: string;
+	/** The Contexts `.auth()` reads, such as the login profile a flag picks. */
+	readonly ctx: ContextBag<Ctx>;
 }
 
 /**
- * The `auth` option for a bearer token: `Authorization: Bearer <value>` from `resolve`, called
+ * What `.auth()` takes for a bearer token: `Authorization: Bearer <value>` from `resolve`, called
  * on the first request that sends credentials. A 401 is retried once with `refresh()`.
  */
-export function bearerAuth(
-	resolve: (options: BearerResolveOptions) => BearerCredential | Promise<BearerCredential>,
-): NonNullable<ApiClientOptions["auth"]> {
+export function bearerAuth<Ctx extends ContextMap = {}>(
+	resolve: (options: BearerResolveOptions<Ctx>) => BearerCredential | Promise<BearerCredential>,
+): ApiAuth<Ctx> {
 	const attempt = ({ value, refresh }: BearerCredential): AuthAttempt => ({
 		headers: { authorization: `Bearer ${value}` },
 		retry: refresh && (async (_response, { signal }) => attempt(await refresh({ signal }))),
 	});
-	return async (input, { baseUrl }) => attempt(await resolve({ signal: input.signal, baseUrl }));
+	return async ({ signal, ctx }, { baseUrl }) => attempt(await resolve({ signal, baseUrl, ctx }));
 }

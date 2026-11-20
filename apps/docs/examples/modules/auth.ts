@@ -66,9 +66,9 @@ const loggedOut = await auth.logout();
 const api = defineApi({
 	spec: new URL("./acme.openapi.jsonc", import.meta.url),
 	baseUrl: "https://api.acme.example",
+})
 	// Resolved on the first authenticated request; a 401 refreshes a stored login once.
-	auth: bearerAuth(auth.token),
-});
+	.auth(bearerAuth(auth.token));
 //#endregion
 
 //#region profiles
@@ -198,7 +198,8 @@ const { local, remote } = await acme.logout();
 const blocksApi = defineApi({
 	spec: new URL("./acme.openapi.jsonc", import.meta.url),
 	baseUrl: "https://api.acme.example",
-	auth: bearerAuth(async ({ signal, baseUrl }) => {
+}).auth(
+	bearerAuth(async ({ signal, baseUrl }) => {
 		const credential = (stored: AccessToken): BearerCredential => ({
 			value: stored.value,
 			refresh: async (options) =>
@@ -208,7 +209,7 @@ const blocksApi = defineApi({
 		});
 		return credential(await acme.get({ signal, baseUrl }));
 	}),
-});
+);
 //#endregion
 
 //#region servers

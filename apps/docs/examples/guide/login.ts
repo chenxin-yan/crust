@@ -41,5 +41,4 @@ export const status = defineCommand("status", { description: "Show the sign-in" 
 export const api = defineApi({
 	spec: new URL("./acme.openapi.jsonc", import.meta.url),
 	baseUrl: "https://api.acme.example",
-	auth: bearerAuth(auth.token),
-});
+}).auth(bearerAuth(auth.token));

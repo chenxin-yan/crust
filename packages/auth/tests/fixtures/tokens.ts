@@ -148,8 +148,7 @@ if (mode === "refresh") {
 	const acme = defineApi({
 		spec: { openapi: "3.1.0", paths: {} },
 		baseUrl: `${issuerArg}/api`,
-		auth: bearer(source),
-	});
+	}).auth(bearer(source));
 	const cli = new Crust("acme")
 		.extend(acme.extension)
 		.add(
@@ -256,8 +255,7 @@ if (mode === "refresh") {
 	const acme = defineApi({
 		spec: { openapi: "3.1.0", paths: {} },
 		baseUrl: `${as.origin}/api`,
-		auth: bearer(source),
-	});
+	}).auth(bearer(source));
 	const cli = new Crust("acme")
 		.extend(acme.extension)
 		.add(
