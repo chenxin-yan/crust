@@ -75,6 +75,24 @@ With [`@crustjs/openapi`](/docs/modules/openapi#authentication), pass `auth.toke
 
 <include lang="ts">../../../examples/modules/auth.ts#openapi</include>
 
+### Profiles
+
+A profile is a named login, so one CLI can keep a work account and a personal one. Pass `profiles` to turn them on; `{}` is enough. Without it the client has no `profile` or `profiles` (also in its type), reads no other variable, and writes the credentials file exactly as before.
+
+<auto-type-table path="../../../../../packages/auth/src/types.ts" name="ProfilesOptions" />
+
+<include lang="ts">../../../examples/modules/auth.ts#profiles</include>
+
+- `auth.profile(name)` returns the same four methods, `login`, `token`, `status`, and `logout`, for the login named `name`; they work detached. A name is 1 to 64 letters, digits, `-`, `_`, and `.`, not starting with `.` or `-`; another is refused with `OAuthConfigError` (`invalid-option`) by the call that receives it, and the error does not quote it. A profile's first login creates it, a later one replaces only that profile's login, and its logout removes it. `auth.profile()` and `auth.profile(undefined)` are the current profile, so an optional `--profile` flag passes straight through.
+- The client's own methods use the current profile, picked at each call: the profiles `env` variable when it is set and not blank (trimmed, and refused like a bad name), else the profile last chosen with `auth.profiles.use()`, else `"default"`. A login does not change it.
+- The `env` token still wins over every profile: when it is set, `token()` returns it for any profile, and `status()` returns `{ source: "env" }` without reading the file or the keyring.
+- `auth.profiles.list()` returns the profiles with a stored login for this server and client id, sorted by name, each with `current` set when it is the current profile. It reads the credentials file only: no request, refresh, lock, or keyring.
+- `auth.profiles.use(name, { signal? })` remembers `name` as the current profile in the credentials file, per server and client id. A profile without a stored login fails with `LoginRequiredError` (`missing`), so the list never marks a profile that does not exist. Logging out of the remembered profile forgets it, in the same write, and `"default"` is current again.
+- `status()` adds `profile: { name, via }`, where `via` says why that profile was picked: `"argument"`, `"env"`, `"current"`, or `"default"`. A profile without a login reports `source: "none"`, and its `token()` throws `LoginRequiredError` naming the profile.
+- All profiles share the app's one keyring key, so a login that [replaces the key](#encryption-and-the-os-keyring) signs out every profile.
+
+`bearerAuth(auth.token)` sends the current profile's token. For another profile on one run, set the variable (`ACME_PROFILE=work acme zones list`), or pass `auth.profile(name).token`.
+
 ### Errors by code
 
 Errors the library raises are `AuthError`s with a stable `code`, typed as the `AuthErrorCode` union; match on `code`, never on `message`. An error thrown by your own `onUrl` or `onCode` reaches you unchanged. `createAuth()` itself throws `OAuthConfigError` for an invalid option, and, since it resolves the state directory's path (without touching the disk), the store's `CrustStoreError` (`PATH`) on an unsupported platform or when `XDG_STATE_HOME` (`LOCALAPPDATA` on Windows) is unset or relative and the home directory is not an absolute path.
@@ -215,7 +233,7 @@ On `"refuse"`, nobody is there to read a code, or nobody asked for one that some
 
 `credentialStore({ app, name?, lockTimeout?, keyring? })` names the credentials file, and `createTokenSource({ config, identity, store, skewMs?, fetch? })` one login in it. Neither touches the disk or the network until you call a method.
 
-The client keeps its login this way too: `createAuth()` opens `credentialStore({ app, keyring: { strict, onWarning } })` and a token source for `{ issuer, clientId, apiOrigins }`, so everything below about the file, refreshes, and locks applies to it.
+The client keeps its login this way too: `createAuth()` opens `credentialStore({ app, keyring: { strict, onWarning } })` and a token source for `{ issuer, clientId, apiOrigins, profile }`, with `profile` `"default"` unless [profiles](#profiles) pick another, so everything below about the file, refreshes, and locks applies to it.
 
 <include lang="ts">../../../examples/modules/auth.ts#credentials</include>
 
@@ -274,7 +292,7 @@ On Node, add `@napi-rs/keyring` to your `dependencies`. A CLI that `crust build`
 
 `beginLogin()` opens a login before you run the browser or device flow, and `ticket.commit(tokens, { resource? })` stores the result. A commit fails with `StaleCommitError`, storing nothing, if another login, a logout, or a reset of the same credential committed since `beginLogin()`, so a login that started before a logout can't bring the session back. A second open login in the same process fails with `LoginInProgressError`. Commit, a failed commit, `cancel()`, and an abort of `beginLogin()`'s `signal` each finish the ticket, so call `cancel()` in `finally` as above.
 
-`logout()` replaces the login with a logged-out record, then revokes the refresh token (and the access token, where the server can) at the server's revocation endpoint, and reports both outcomes:
+`logout()` replaces the login with a logged-out record (forgetting its profile if [`profiles.use()`](#profiles) chose it), then revokes the refresh token (and the access token, where the server can) at the server's revocation endpoint, and reports both outcomes:
 
 | `local`     | `remote`        | Meaning                                                                            |
 | ----------- | --------------- | ---------------------------------------------------------------------------------- |
@@ -295,7 +313,7 @@ A failed refresh never deletes the login; call `logout()` when you want that.
 
 ### A corrupt file
 
-A file that is not valid JSON, has an unknown structure, or comes from a newer version of your CLI makes every call fail with `CredentialStoreCorruptError`. A JSON object with none of the credentials fields (`version`, `storeId`, `encryption`, `records`), such as `{}`, counts as an empty file, and its other keys are kept; one with any of them must have all of them, valid. It is never repaired or replaced automatically. `store.resetCredentials()` deletes it; copy it first if you want to keep it. A single invalid login fails only for its own key (`error.key`), and `resetCredentials({ key })` replaces just that one with a logged-out record.
+A file that is not valid JSON, has an unknown structure, or comes from a newer version of your CLI makes every call fail with `CredentialStoreCorruptError`. A JSON object with none of the credentials fields (`version`, `storeId`, `encryption`, `records`, and `currentProfile`, the profiles chosen with `profiles.use()`), such as `{}`, counts as an empty file, and its other keys are kept; one with any of them must have the first four, and every field must be valid. It is never repaired or replaced automatically. `store.resetCredentials()` deletes it; copy it first if you want to keep it. A single invalid login fails only for its own key (`error.key`), and `resetCredentials({ key })` replaces just that one with a logged-out record.
 
 ### Locks
 

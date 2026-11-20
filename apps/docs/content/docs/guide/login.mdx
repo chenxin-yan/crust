@@ -32,6 +32,10 @@ The client prints nothing itself: it does not know your command's output stream.
 
 `auth.status()` reads where the token would come from without a request, so `status` stays fast and offline. `auth.logout()` deletes the login and revokes it at the server, and reports both outcomes.
 
+## Several accounts
+
+To let a user keep more than one login with your server, such as a work account and a personal one, pass `profiles: { env: "ACME_PROFILE" }` to `createAuth()`. Then `auth.profile(flags.profile)` signs in to, reads, or signs out of one named login, `acme profile use work` (`auth.profiles.use()`) picks the one later runs use, and `acme profile list` (`auth.profiles.list()`) shows them. `ACME_PROFILE=work` picks a profile for one run. See [Profiles](/docs/modules/auth#profiles).
+
 ## More than one server
 
 `createAuth()` signs in with one server. To sign in with several, compose the [building blocks](/docs/modules/auth#building-blocks) of `@crustjs/auth/oauth` yourself: each server must send the `iss` response parameter or have its own `redirectPath`, or the browser login refuses to start. [Several servers and mix-up](/docs/modules/auth#several-servers-and-mix-up) explains why and how to declare them.
