@@ -74,6 +74,11 @@ export interface AuthServer {
 	readonly tokenEndpoint: string;
 	readonly deviceAuthorizationEndpoint: string | undefined;
 	readonly revocationEndpoint: string | undefined;
+	/**
+	 * The OpenID Connect user-info address (`userinfo_endpoint`), for your own request with the
+	 * access token as a bearer token; `undefined` when the metadata lists none.
+	 */
+	readonly userinfoEndpoint: string | undefined;
 	/** Metadata `authorization_response_iss_parameter_supported`. */
 	readonly issParameterSupported: boolean;
 	readonly grantTypesSupported: readonly string[] | undefined;
@@ -229,6 +234,11 @@ export interface CreateAuthOptions extends AuthServerOptions {
 	app: string;
 	/** Space-separated scopes every login asks for. Omitted from the request when unset. */
 	scope?: string;
+	/**
+	 * RFC 8707 resource indicators every login asks tokens for, such as your API's URI:
+	 * absolute URIs without a fragment. Omitted from the request when unset.
+	 */
+	resource?: string | readonly string[];
 	/** The name the device-login message shows. @default app */
 	name?: string;
 	/** Loopback addresses the browser login tries in order. @default ["127.0.0.1"] */

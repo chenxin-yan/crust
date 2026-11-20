@@ -109,6 +109,7 @@ export async function discover(
 			TOKEN_ENDPOINT_PARAMS,
 		),
 		revocationEndpoint: optionalUrl("revocation_endpoint", TOKEN_ENDPOINT_PARAMS),
+		userinfoEndpoint: optionalUrl("userinfo_endpoint", TOKEN_ENDPOINT_PARAMS),
 		issParameterSupported,
 		grantTypesSupported:
 			Array.isArray(grantTypes) && grantTypes.every((type) => typeof type === "string")

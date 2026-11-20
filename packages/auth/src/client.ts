@@ -5,7 +5,7 @@ import { discover, serverInternals } from "./discovery.ts";
 import { deviceCodeMessage } from "./display.ts";
 import { AbortError, LoginRequiresInteractionError, OAuthConfigError } from "./errors.ts";
 import { detectLoginMode } from "./login-mode.ts";
-import { checkScope } from "./params.ts";
+import { checkResources, checkScope } from "./params.ts";
 import { checkLoopbackOptions, createAuthorizationSession } from "./session.ts";
 import { createTokenClient } from "./token-client.ts";
 import type { AuthClient, CreateAuthOptions, LoginOptions, TokenSet } from "./types.ts";
@@ -67,6 +67,7 @@ export function createAuth(options: CreateAuthOptions): AuthClient {
 		],
 	});
 	checkScope(scope);
+	const resource = checkResources(options.resource);
 	checkLoopbackOptions({ hosts, ports });
 
 	async function login({
@@ -85,7 +86,7 @@ export function createAuth(options: CreateAuthOptions): AuthClient {
 		}
 		const server = await discover(config, issuer, { signal, fetch });
 		if (mode === "device") {
-			const flow = await startDeviceFlow(server, { scope: loginScope, signal, fetch });
+			const flow = await startDeviceFlow(server, { scope: loginScope, resource, signal, fetch });
 			const { userCode, verificationUri, verificationUriComplete, expiresAt } = flow;
 			await unlessAborted(
 				onCode({
@@ -104,6 +105,7 @@ export function createAuth(options: CreateAuthOptions): AuthClient {
 			hosts,
 			ports,
 			scope: loginScope,
+			resource,
 			signal,
 		});
 		try {

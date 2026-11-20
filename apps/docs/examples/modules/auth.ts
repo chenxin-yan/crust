@@ -65,6 +65,15 @@ console.error(deviceCodeMessage({ app: "Acme", ...flow }));
 const deviceTokens = await flow.poll();
 //#endregion
 
+//#region userinfo
+if (server.userinfoEndpoint) {
+	const response = await fetch(server.userinfoEndpoint, {
+		headers: { authorization: `Bearer ${deviceTokens.accessToken}` },
+	});
+	console.error(await response.json());
+}
+//#endregion
+
 //#region servers
 const multi = defineServers({
 	servers: [

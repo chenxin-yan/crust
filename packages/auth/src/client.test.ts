@@ -65,7 +65,7 @@ type Route = Parameters<typeof fakeFetch>[0][string];
 /** A fresh authorization server behind a fake fetch, and a client for it. */
 function setup(
 	routes: (issuer: string) => Record<string, Route> = () => ({}),
-	options: { name?: string; scope?: string; ports?: number[] } = {},
+	options: { name?: string; scope?: string; ports?: number[]; resource?: string | string[] } = {},
 ) {
 	const issuer = uniqueIssuer();
 	const fake = fakeFetch({
@@ -156,6 +156,9 @@ describe("createAuth", () => {
 		expect(await reason({ clientSecret: "" })).toBe("invalid-option");
 		expect(await reason({ redirectPath: "/a/../b" })).toBe("invalid-option");
 		expect(await reason({ scope: " " })).toBe("invalid-option");
+		expect(await reason({ resource: "api" })).toBe("invalid-option");
+		expect(await reason({ resource: ["https://api.example.com/#v1"] })).toBe("invalid-option");
+		expect(await reason({ resource: [42] })).toBe("invalid-option");
 		expect(await reason({ ports: [70_000] })).toBe("invalid-option");
 		expect(await reason({ hosts: ["localhost"] })).toBe("invalid-option");
 		expect(() =>
@@ -214,6 +217,16 @@ describe("login() in a browser", () => {
 			onCode: noCode,
 		});
 		expect(opened).toEqual([false]);
+	});
+
+	it("sends resource in the authorization URL and the code exchange", async () => {
+		const resource = ["https://api.example.com", "urn:example:api"];
+		const { auth, requests } = setup(undefined, { resource });
+		const play = browser();
+		await auth.login({ onUrl: play.onUrl, onCode: noCode });
+		expect(new URL(play.seen.prompt!.url).searchParams.getAll("resource")).toEqual(resource);
+		const exchange = requests.filter((request) => request.body.get("grant_type"));
+		expect(exchange.map((request) => request.body.getAll("resource"))).toEqual([resource]);
 	});
 
 	it("passes the scope override, the fixed port and the result page", async () => {
@@ -404,6 +417,18 @@ describe("login() with a device code", () => {
 			}),
 		);
 		expect(message).toContain("To sign in to acme, open:");
+	});
+
+	it("sends resource in the device authorization request and every poll", async () => {
+		const { auth, issuer, requests } = setup(undefined, { resource: "https://api.example.com" });
+		await settle(auth.login({ device: true, onUrl: noUrl, onCode: () => {} }));
+		const sent = requests.filter(
+			({ url }) => url === `${issuer}/device` || url === `${issuer}/token`,
+		);
+		expect(sent.map(({ url }) => url)).toEqual([`${issuer}/device`, `${issuer}/token`]);
+		for (const request of sent) {
+			expect(request.body.getAll("resource")).toEqual(["https://api.example.com"]);
+		}
 	});
 
 	it("uses the device login where no browser can open", async () => {

@@ -22,6 +22,7 @@ npm install @crustjs/auth
 
 - `app` is your CLI's name: non-empty, without `/` or `\`. The device-login message shows `name`, which defaults to `app`.
 - `issuer`, `clientId`, `clientSecret`, `redirectPath`, and `allowInsecureLoopback` follow the rules of [Servers](#servers); `hosts` and `ports` those of [Browser login](#browser-login).
+- `resource` names the API every login asks tokens for (RFC 8707 resource indicators, absolute URIs without a fragment), for a server that issues tokens per API; both logins and the code exchange send it.
 
 ### Signing in
 
@@ -81,6 +82,12 @@ The codes and their classes are listed in [Errors](#errors).
 - Every endpoint must be an `https` URL without user info or a fragment. A query is kept byte for byte, but it must not set a parameter the library sends (`client_id`, `scope`, `redirect_uri`, …) or repeat a name. An endpoint on another host than the issuer is fine.
 - A server that lists `code_challenge_methods_supported` without `S256` is refused.
 - Metadata is cached in memory for the process, never on disk.
+
+### Who is signed in
+
+`server.userinfoEndpoint` is the OpenID Connect user-info address from the metadata (`userinfo_endpoint`), checked like the other endpoints, or `undefined` when there is none. The library never requests it and drops the `id_token` unread: fetch it yourself with the access token as a bearer token.
+
+<include lang="ts">../../../examples/modules/auth.ts#userinfo</include>
 
 Declare `servers` in code. Do not build the list from environment variables or other runtime input: the list is what decides which servers your users' tokens may reach.
 

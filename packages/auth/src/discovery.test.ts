@@ -172,6 +172,9 @@ describe("discover", () => {
 		["token_endpoint", "https://as.example/t?%63lient_id=x", "reserved-parameter"],
 		["token_endpoint", "https://as.example/t?tenant=a&tenant=b", "duplicate-parameter"],
 		["revocation_endpoint", "https://as.example/r?token=x", "reserved-parameter"],
+		["userinfo_endpoint", "http://as.example/userinfo", "invalid-url"],
+		["userinfo_endpoint", "https://as.example/userinfo#f", "invalid-url"],
+		["userinfo_endpoint", "https://as.example/userinfo?access_token=x", "reserved-parameter"],
 	])("refuses %s %s", async (name, value, expected) => {
 		expect(await configReason(discoverWith({ [name]: value }))).toBe(expected);
 	});
@@ -197,6 +200,7 @@ describe("discover", () => {
 				token_endpoint: "https://tokens.vendor.example/t?tenant=t",
 				device_authorization_endpoint: "https://tokens.vendor.example/device?tenant=t",
 				revocation_endpoint: "https://tokens.vendor.example/revoke?tenant=t",
+				userinfo_endpoint: "https://login.vendor.example/userinfo?tenant=t",
 			},
 			issuer,
 		);
@@ -206,6 +210,13 @@ describe("discover", () => {
 			"https://tokens.vendor.example/device?tenant=t",
 		);
 		expect(server.revocationEndpoint).toBe("https://tokens.vendor.example/revoke?tenant=t");
+		expect(server.userinfoEndpoint).toBe("https://login.vendor.example/userinfo?tenant=t");
+	});
+
+	it("leaves the user-info address undefined when the metadata has none", async () => {
+		const server = await discoverWith({});
+		expect(server.userinfoEndpoint).toBeUndefined();
+		expect(Object.keys(server)).toContain("userinfoEndpoint");
 	});
 
 	it("keeps every endpoint on the dev origin", async () => {
