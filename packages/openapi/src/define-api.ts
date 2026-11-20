@@ -32,10 +32,9 @@ import {
 	generateCommands,
 	operationRequest,
 } from "./commands.ts";
-import { type CommandPlan, planCommands } from "./lint.ts";
-import { type ApiManifest, manifest } from "./manifest.ts";
+import { type CommandPlan, buildProblems, planCommands } from "./lint.ts";
 import { type MissingValueHandler, bindMissingValues, canAsk } from "./missing-values.ts";
-import { type Diagnostic, type Operation, operationLabel, operations } from "./operations.ts";
+import { type Operation, operationLabel, operations } from "./operations.ts";
 import type { OperationOverride, OverrideEntry } from "./overrides.ts";
 import { type GeneratedPreview, createPreviewCommand } from "./preview.ts";
 import { isPlainObject } from "./request.ts";
@@ -363,7 +362,12 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 	let commands: readonly GeneratedDefinition[] | undefined;
 	const handle = Object.freeze({
 		get extension() {
-			return (extension ??= apiExtension(base, state, { unavailable, built, planAt }));
+			return (extension ??= apiExtension(base, state, {
+				unavailable,
+				built,
+				planAt,
+				problems: () => buildProblems(plan().diagnostics),
+			}));
 		},
 		client: base.client,
 		get commands() {
@@ -426,10 +430,12 @@ function apiExtension(
 		unavailable,
 		built,
 		planAt,
+		problems,
 	}: {
 		readonly unavailable: () => ReadonlyMap<string, string>;
 		readonly built: () => readonly CommandPlan[];
 		readonly planAt: (words: readonly string[]) => PlannedCommand | undefined;
+		readonly problems: () => string | undefined;
 	},
 ): Api["extension"] {
 	const { id, spec } = base;

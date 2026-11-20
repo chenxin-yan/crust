@@ -1232,8 +1232,8 @@ describe("generated commands of the same shape at several mounts", () => {
 	});
 });
 
-describe("acme.manifest()", () => {
-	it("lists the generated surface sorted by command, with the diagnostics of left-out operations", () => {
+describe("the app's snapshot", () => {
+	it("shows every generated command with its arguments, flags and output schema", async () => {
 		const acme = buildApi({ paginate: () => undefined });
 		const app = new Crust("acme").extend(acme.extension).add(...acme.commands);
 

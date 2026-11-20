@@ -305,7 +305,7 @@ A command gets `--paginate` when a `paginate` function applies (an override's, e
 
 <include lang="ts">../../../examples/modules/openapi.ts#unwrap</include>
 
-A tuple schema (`prefixItems`) gets no `--paginate`. Its result is every page's result joined into one array, as `paginate` requests them, and the advertised schema leaves out the limits of one page's list (`minItems`, `maxItems`, `uniqueItems`, `contains`); the items keep theirs. Without `--paginate` offered, a spec parameter named `paginate` is an ordinary flag. An override's `paginate` on an operation whose result is known not to be a list, or is a tuple, is a `paginate-needs-array` lint error, which leaves the operation out; `defineApi`'s `paginate` is offered only where it applies. A page whose result is not a list fails, naming the operation, and so does a `paginate` that returns the request just sent. With and without `--paginate`, the result is a list of the same items, so one output schema describes both. (`api <path> --paginate` instead prints one JSON line per page.)
+A tuple schema (`prefixItems`) gets no `--paginate`. Its result is every page's result joined into one array, as `paginate` requests them, and the advertised schema leaves out the limits of one page's list (`minItems`, `maxItems`, `uniqueItems`, `contains`); the items keep theirs. Without `--paginate` offered, a spec parameter named `paginate` is an ordinary flag. An override's `paginate` on an operation whose result is known not to be a list, or is a tuple, leaves the operation out and fails `crust build` (`paginate-needs-array`); `defineApi`'s `paginate` is offered only where it applies. A page whose result is not a list fails, naming the operation, and so does a `paginate` that returns the request just sent. With and without `--paginate`, the result is a list of the same items, so one output schema describes both. (`api <path> --paginate` instead prints one JSON line per page.)
 
 ### Collisions and left-out operations
 
@@ -337,8 +337,42 @@ An operation that does not fit is left out of `acme.commands`, so a CLI run from
   ```text
   Error: Extension "crust:openapi" build failed: defineApi: 1 problem needs a decision before this CLI can be built.
 
-- `acme.lint()` returns every problem with turning the operations into commands, as [`Diagnostic`](#how-the-spec-is-read)s: the model's, each operation's (an unsupported required input, a missing 2xx response or summary, inputs that share a name, a body field that repeats a parameter, a command, group or argument name core rejects, such as the empty name of an operationId without ASCII letters or digits, positionals out of order), command collisions, overrides of unknown operations, stale or unknown names in overrides, a `confirm` without `.onConfirm()`, an override's `paginate` on a result that is not a list, and more than 20 untagged root commands. Each error leaves its operation out.
-- `acme.manifest()` is the generated surface: `commands`, sorted by command path, each `{ command, operationId, method, path, args, flags, outputSchema }` (positional names in order, flag names sorted, whether an output schema is advertised), and the lint errors as `diagnostics`. It comes from the spec and the overrides, not from the built commands, and is the same on every platform, so a snapshot of it shows the CLI's diff in the review of a spec bump.
+    GET /people: the command "users list-users" is also the command of GET /users (listUsers)
+      fix: Set `group` or `name` in the override of one of them
+  ```
+
+- **No: the operation is skipped**, and the build passes. It becomes no command, so it clashes with none, and stays reachable through `api <path>` and `call()`.
+- A document that is not OpenAPI 3.0 or 3.1 fails the build: no command can come from it.
+
+| `code`                       | When                                                                                                                     | `crust build` |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------- |
+| `unsupported-version`        | `openapi` is missing or not 3.0.x or 3.1.x, as in a Swagger 2.0 document                                                 | Fails         |
+| `missing-operation-id`       | An operation has no `operationId` (a deprecated one is left out without a problem)                                       | Skips it      |
+| `duplicate-operation-id`     | Several operations share an `operationId`                                                                                | Skips each    |
+| `no-success-response`        | An operation has no 2xx response                                                                                         | Skips it      |
+| `unsupported-param-style`    | A required parameter in a style or shape no input carries (see [below](#how-the-spec-is-read))                           | Skips it      |
+| `content-param`              | A required parameter described by `content`                                                                              | Skips it      |
+| `required-cookie-param`      | A required cookie parameter: generated commands send no cookies                                                          | Skips it      |
+| `unsupported-body-type`      | A required request body that is not JSON                                                                                 | Skips it      |
+| `command-collision`          | Two commands, or a command and a group, with one path, also against a command you `.add()` or the `api` command          | Fails         |
+| `flag-collision`             | Two inputs of a command with one name                                                                                    | Fails         |
+| `reserved-input-name`        | An input named `raw`, which holds passthrough values                                                                     | Fails         |
+| `unflaggable-name`           | A flag name core rejects, such as `no-cache` or an empty one                                                             | Fails         |
+| `unusable-name`              | A command, group or argument name core rejects, such as the empty name of an operationId without ASCII letters or digits | Fails         |
+| `positional-order`           | An optional positional before a required one, or a list positional that is not last                                      | Fails         |
+| `override-unknown-operation` | An `.override()` entry for an operationId the spec does not have                                                         | Fails         |
+| `override-stale`             | An `.override()` entry whose `expect` no longer matches the operation's method and path                                  | Fails         |
+| `override-unknown-param`     | An `.override()` entry's `flagName`, `bind` or `positional` names an input the operation does not have                   | Fails         |
+| `confirm-without-handler`    | A `confirm` message with no `.onConfirm()`                                                                               | Fails         |
+| `paginate-needs-array`       | An override's `paginate` on a result that is not a list, or is a tuple                                                   | Fails         |
+
+An alias of an added command, or a flag that clashes with an Extension's or a Context's, is core's `DEFINITION` error, also during the build.
+
+## The CLI's surface in a test
+
+A spec bump changes the CLI. To see how in its review, snapshot the app: [`app.snapshot()`](/docs/api/crust#snapshot) holds every command, generated ones too, with its arguments, flags and output schema.
+
+<include lang="ts">../../../examples/modules/openapi-surface.ts#surface</include>
 
 A CI job can bump the pin and open a pull request with the new snapshot for review; Crust ships no updater.
 

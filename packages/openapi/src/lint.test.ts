@@ -318,10 +318,7 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 			override: { a: { paginate: () => undefined }, b: { paginate: () => undefined } },
 			hasPaginate: true,
 		},
-		expected: [
-			{ level: "error", operationId: "a" },
-			{ level: "error", operationId: "b" },
-		],
+		expected: [{ operationId: "a" }, { operationId: "b" }],
 	},
 };
 
