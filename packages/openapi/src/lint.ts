@@ -65,8 +65,35 @@ export interface CommandPlan {
 	readonly outputSchema?: JsonSchema;
 }
 
-/** More untagged root commands than this get a `many-root-commands` warning. */
-const MANY_ROOT_COMMANDS = 20;
+/**
+ * What each problem means for `crust build`, by one rule: can configuration (an override other
+ * than `exclude`, `.onConfirm()`, `.add()`) make the operation a working command?
+ * - `fix`: yes, so the build fails until it is configured, or the operation is excluded.
+ * - `skip`: no, so the operation is left out (marked in `api --list`), and the build passes.
+ * - `document`: no command can come from the document, so the build fails.
+ * At run time every problem leaves its operation out, and nothing throws.
+ */
+export const PROBLEM_KINDS: Readonly<Record<Diagnostic["code"], "fix" | "skip" | "document">> = {
+	"unsupported-version": "document",
+	"missing-operation-id": "skip",
+	"duplicate-operation-id": "skip",
+	"no-success-response": "skip",
+	"unsupported-param-style": "skip",
+	"content-param": "skip",
+	"required-cookie-param": "skip",
+	"unsupported-body-type": "skip",
+	"command-collision": "fix",
+	"flag-collision": "fix",
+	"reserved-input-name": "fix",
+	"unflaggable-name": "fix",
+	"unusable-name": "fix",
+	"positional-order": "fix",
+	"override-unknown-operation": "fix",
+	"override-stale": "fix",
+	"override-unknown-param": "fix",
+	"confirm-without-handler": "fix",
+};
+
 // The canonical flag spellings core rejects (`assertUsableSpelling`): integer-like names, `no-`
 // (boolean negation), `__proto__`, whitespace, `=` or a leading `-`.
 const UNFLAGGABLE = /^$|^(?:0|[1-9]\d*)$|^no-|^__proto__$|^-|[\s=]/;
@@ -76,23 +103,34 @@ const UNUSABLE_COMMAND = /^$|[ \t\n\r\v\f]|^-|^__proto__$/;
 
 /**
  * Every problem with turning the spec's operations into commands: the model's diagnostics, then
- * each operation's (an excluded operation is checked only against its override), then command
- * collisions, overrides of unknown operations and too many root commands. Names are compared after
- * {@link kebab}, so operationIds, tags and inputs that differ only in case or separators collide.
+ * each operation's that is not excluded, then command collisions and overrides of unknown
+ * operations. Names are compared after {@link kebab}, so operationIds, tags and inputs that differ
+ * only in case or separators collide. Each problem leaves its operation out.
  *
  * An input the mapping cannot offer (a parameter with an unsupported style, one described by
- * `content`, a cookie parameter, a non-JSON request body) excludes the operation only when the
- * operation cannot be called without it: a required one is an error, an optional one a warning
- * with the same code (`cookie-param-ignored` for cookies), and it gets no flag.
+ * `content`, a cookie parameter, a non-JSON request body) is a problem only when the operation
+ * cannot be called without it; an optional one just gets no flag.
  */
 export function lint(input: LintInput): Diagnostic[] {
 	return planCommands(input).diagnostics;
 }
 
 /**
- * The commands the spec's operations become, as generated commands, lint and the manifest map
- * them, and every problem {@link lint} reports.
+ * The `crust build` error for the problems that need a decision ({@link PROBLEM_KINDS}), each with
+ * its fix, or `undefined` when there is none.
  */
+export function buildProblems(diagnostics: readonly Diagnostic[]): string | undefined {
+	const failing = diagnostics.filter(({ code }) => PROBLEM_KINDS[code] !== "skip");
+	if (failing.length === 0) return undefined;
+	const count = failing.length === 1 ? "1 problem needs" : `${failing.length} problems need`;
+	return [
+		`defineApi: ${count} a decision before this CLI can be built.`,
+		"",
+		...failing.flatMap(({ message, fix }) => [`  ${message}`, `    fix: ${fix}`]),
+	].join("\n");
+}
+
+/** The commands the spec's operations become, and every problem {@link lint} reports. */
 export function planCommands(input: LintInput): {
 	diagnostics: Diagnostic[];
 	commands: CommandPlan[];
@@ -102,18 +140,11 @@ export function planCommands(input: LintInput): {
 	const diagnostics = [...model.diagnostics];
 	const groups = new Set<string>();
 	const placed: (CommandPlan & { command: string })[] = [];
-	let rootCommands = 0;
 
 	for (const op of model.operations) {
 		const label = operationLabel(op.method, op.path);
-		const report = (
-			level: Diagnostic["level"],
-			code: Diagnostic["code"],
-			message: string,
-			fix: string,
-		) =>
+		const report = (code: Diagnostic["code"], message: string, fix: string) =>
 			diagnostics.push({
-				level,
 				code,
 				operationId: op.id,
 				method: op.method,
@@ -126,11 +157,12 @@ export function planCommands(input: LintInput): {
 		const bodySchemaFields = op.body === undefined ? [] : schemaFields(spec, op.body.schema);
 		const bodyFields = bodySchemaFields.map(({ name }) => name);
 
+		// Excluding an operation settles every problem it has, also its override's.
+		if (fields.exclude ?? op.deprecated) continue;
 		if (entry?.expect !== undefined) {
 			const { method, path } = entry.expect;
 			if (method.toLowerCase() !== op.method || path !== op.path) {
 				report(
-					"error",
 					"override-stale",
 					`${label}: the override for "${op.id}" expects ${operationLabel(method, path)}`,
 					"Check that the override still fits the operation, then update its `expect`",
@@ -148,34 +180,21 @@ export function planCommands(input: LintInput): {
 			// Only parameters can be positional; a body field's value is never an argument.
 			if (field === "positional" ? paramNames.has(name) : known.has(name)) continue;
 			report(
-				"error",
 				"override-unknown-param",
 				`${label}: the override's \`${field}\` names "${name}", which is not a ${field === "positional" ? "parameter" : "parameter or body field"} of the operation`,
 				"Remove the entry, or use a parameter name from the spec",
 			);
 		}
 
-		if (fields.exclude ?? op.deprecated) continue;
-
 		if (!op.responses.some(({ status }) => isSuccess(status))) {
 			report(
-				"error",
 				"no-success-response",
 				`${label} has no 2xx response`,
 				"Add a 2xx response to the operation in the spec, or set `exclude: true` in its override",
 			);
 		}
-		if (op.summary === undefined) {
-			report(
-				"warning",
-				"missing-summary",
-				`${label} has no summary, so its command has no description`,
-				"Add a summary to the operation in the spec, or set `description` in its override",
-			);
-		}
 		if (typeof fields.confirm === "string" && input.hasConfirmHandler !== true) {
 			report(
-				"error",
 				"confirm-without-handler",
 				`${label}: the override sets \`confirm\`, but no confirmation handler is configured`,
 				"Configure a confirmation handler, or remove `confirm` from the override",
@@ -188,8 +207,10 @@ export function planCommands(input: LintInput): {
 			const problem = paramProblem(spec, param, op.path);
 			if (problem === undefined) continue;
 			unmapped.add(param);
-			const [level, code, tail, fix] = problem;
-			report(level, code, `${label}: the ${param.in} parameter "${param.name}" ${tail}`, fix);
+			// An optional one just gets no flag.
+			if (!param.required) continue;
+			const [code, tail, fix] = problem;
+			report(code, `${label}: the ${param.in} parameter "${param.name}" ${tail}`, fix);
 		}
 
 		// Inputs, as generated commands map them: positional parameters become arguments, other
@@ -244,7 +265,6 @@ export function planCommands(input: LintInput): {
 							: undefined;
 			if (problem === undefined) continue;
 			report(
-				"error",
 				"positional-order",
 				`${label}: the positional ${param.in} parameter "${param.name}" ${problem}`,
 				"Order `positional` with the required parameters first and a list last",
@@ -265,15 +285,8 @@ export function planCommands(input: LintInput): {
 					const repeated = op.params.find(
 						(param) => param.in !== "cookie" && kebab(param.name) === kebab(field),
 					);
-					if (repeated !== undefined) {
-						report(
-							"warning",
-							"body-field-shadowed",
-							`${label}: the body field "${field}" repeats the ${repeated.in} parameter "${repeated.name}", so it gets no flag; the parameter keeps its input`,
-							"Pass the body field in `--body`",
-						);
-						continue;
-					}
+					// The parameter keeps its input; the body field is sent only from `--body`.
+					if (repeated !== undefined) continue;
 					inputs.push({
 						kind: "flag",
 						name: rename(field),
@@ -283,17 +296,9 @@ export function planCommands(input: LintInput): {
 				}
 			} else if (body.required) {
 				report(
-					"error",
 					"unsupported-body-type",
 					`${label}: the request body is ${body.contentType}; only JSON bodies are generated`,
 					`Call the operation with \`api ${op.path} --body\`, or set \`exclude: true\` in its override`,
-				);
-			} else if (bodySchemaFields.length > 0) {
-				report(
-					"warning",
-					"unsupported-body-type",
-					`${label}: the optional ${body.contentType} request body is not offered; only JSON bodies are generated`,
-					`Send the body with \`api ${op.path} --body\` when you need it`,
 				);
 			}
 		}
@@ -325,14 +330,12 @@ export function planCommands(input: LintInput): {
 		for (const { kind, name, source } of inputs) {
 			if (name === RAW_INPUT_PROPERTY) {
 				report(
-					"error",
 					"reserved-input-name",
 					`${label}: ${source} would be the input "${name}", which holds passthrough values`,
 					"Set `flagName` for it in the operation's override",
 				);
 			} else if (kind === "flag" && UNFLAGGABLE.test(name)) {
 				report(
-					"error",
 					"unflaggable-name",
 					`${label}: ${source} would be the flag "${name}", which core rejects`,
 					"Set `flagName` for it in the operation's override",
@@ -345,7 +348,6 @@ export function planCommands(input: LintInput): {
 			// `flagName` is keyed by the spec's name, so it renames every input of one name alike.
 			const specNames = new Set(same.map(({ target }) => specName(target)));
 			report(
-				"error",
 				"flag-collision",
 				`${label}: ${sources.slice(0, -1).join(", ")} and ${sources.at(-1)} share the input name "${name}"`,
 				specNames.size === 1
@@ -369,7 +371,6 @@ export function planCommands(input: LintInput): {
 		);
 		for (const [kind, word] of unusable) {
 			report(
-				"error",
 				"unusable-name",
 				`${label}: the ${kind} name "${word}" is ${kind === "argument" ? "empty" : 'empty, has whitespace, starts with "-" or is "__proto__"'}, which core rejects`,
 				kind === "argument"
@@ -389,7 +390,6 @@ export function planCommands(input: LintInput): {
 			...(outputSchema !== undefined && { outputSchema }),
 		});
 		addGroup(groups, group);
-		if (group === "" && fields.group === undefined) rootCommands++;
 	}
 
 	const addedGroups = new Set<string>();
@@ -398,7 +398,6 @@ export function planCommands(input: LintInput): {
 	const commands = new Map<string, Operation>();
 	const collide = (op: Operation, command: string, other: string) =>
 		diagnostics.push({
-			level: "error",
 			code: "command-collision",
 			operationId: op.id,
 			method: op.method,
@@ -438,7 +437,6 @@ export function planCommands(input: LintInput): {
 		if (!groups.has(command)) continue;
 		for (const inside of placed.filter((plan) => plan.command.startsWith(`${command} `))) {
 			diagnostics.push({
-				level: "error",
 				code: "command-collision",
 				operationId: inside.op.id,
 				method: inside.op.method,
@@ -450,7 +448,6 @@ export function planCommands(input: LintInput): {
 		// A group the app's own commands are added to stays, so core reports the clash.
 		if (!addedGroups.has(command)) continue;
 		diagnostics.push({
-			level: "error",
 			code: "command-collision",
 			message: `The command "${command}", ${by}, is also a group of added commands`,
 			fix: "Rename the added command, or set `group` in the overrides of the operations in that group",
@@ -461,19 +458,10 @@ export function planCommands(input: LintInput): {
 	for (const id of Object.keys(override)) {
 		if (ids.has(id)) continue;
 		diagnostics.push({
-			level: "error",
 			code: "override-unknown-operation",
 			operationId: id,
 			message: `The override for "${id}" matches no operation in the spec`,
 			fix: "Remove the override, or correct its operationId",
-		});
-	}
-	if (rootCommands > MANY_ROOT_COMMANDS) {
-		diagnostics.push({
-			level: "warning",
-			code: "many-root-commands",
-			message: `${rootCommands} untagged operations become root commands`,
-			fix: "Set `group` in an `each` rule to put them in groups",
 		});
 	}
 	return { diagnostics, commands: placed.map(({ command: _command, ...plan }) => plan) };
@@ -505,39 +493,26 @@ function addGroup(groups: Set<string>, group: string): void {
 }
 
 /**
- * Why a parameter gets no input, as `[level, code, message tail, fix]`, or `undefined`. A required
- * one excludes the operation (error); an optional one is left out (warning).
+ * Why a parameter gets no input, as `[code, message tail, fix]`, or `undefined`. It is a problem
+ * only for a required parameter, which the operation cannot be called without.
  */
 function paramProblem(
 	spec: OpenApiSpec,
 	param: Param,
 	path: string,
-): [Diagnostic["level"], Diagnostic["code"], string, string] | undefined {
-	const level = param.required ? "error" : "warning";
-	const fix = param.required
-		? `Call the operation with \`api ${path}\`, or set \`exclude: true\` in its override`
-		: `Send the parameter with \`api ${path}\` when you need it`;
+): [Diagnostic["code"], string, string] | undefined {
+	const fix = `Call the operation with \`api ${path}\`, or set \`exclude: true\` in its override`;
 	if (param.in === "cookie") {
-		return param.required
-			? [
-					"error",
-					"required-cookie-param",
-					"is required, and generated commands send no cookies",
-					`Call the operation with \`api ${path}\` and a \`Cookie\` header, or set \`exclude: true\` in its override`,
-				]
-			: [
-					"warning",
-					"cookie-param-ignored",
-					"gets no flag and is never sent",
-					`Send it in a \`Cookie\` header with \`api ${path}\` when you need it`,
-				];
+		return [
+			"required-cookie-param",
+			"is required, and generated commands send no cookies",
+			`Call the operation with \`api ${path}\` and a \`Cookie\` header, or set \`exclude: true\` in its override`,
+		];
 	}
-	const reach = param.required ? "" : `; it gets no flag and is reachable through \`api ${path}\``;
 	if (param.contentType !== undefined) {
 		return [
-			level,
 			"content-param",
-			`is described by \`content\` (${param.contentType}), which maps to no flag${reach}`,
+			`is described by \`content\` (${param.contentType}), which maps to no flag`,
 			fix,
 		];
 	}
@@ -550,7 +525,7 @@ function paramProblem(
 		return undefined;
 	}
 	const shape = param.in === "path" ? "a scalar" : "a scalar or an array of scalars";
-	return [level, "unsupported-param-style", `is not ${shape} in style ${expected}${reach}`, fix];
+	return ["unsupported-param-style", `is not ${shape} in style ${expected}`, fix];
 }
 
 /** Keywords that constrain one list as a whole, which joined pages need not meet. */

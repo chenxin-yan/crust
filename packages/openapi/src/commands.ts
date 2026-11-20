@@ -314,7 +314,7 @@ function effectiveBody(
 	return body;
 }
 
-// A list is only ever the last argument: lint reports one before another (`positional-order`).
+// A list is only ever the last argument: one before another is a `positional-order` problem.
 function argDef(spec: OpenApiSpec, { name, target }: PlannedInput): ArgDef {
 	const param = target.in === "param" ? target.param : undefined;
 	const { type, multiple } = flagValue(spec, param?.schema);

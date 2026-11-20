@@ -66,13 +66,13 @@ type ListedOperation = {
 	readonly path: string;
 	readonly operationId?: string;
 	readonly summary?: string;
-	/** The code of the lint error that leaves its generated command out. */
+	/** The code of the problem that leaves its generated command out. */
 	readonly unavailable?: string;
 };
 
 /**
  * Each operation's method, path, the `operationId` and `summary` the spec has, and the code of the
- * lint error that leaves it out of the generated commands.
+ * problem that leaves it out of the generated commands.
  */
 function listOperations(
 	spec: OpenApiSpec,
@@ -338,7 +338,7 @@ export function createApiCommand(
 		paginate,
 		unavailable,
 	}: Pick<DefineApiOptions, "baseUrl" | "paginate"> & {
-		/** The code of the lint error that leaves each such operation out, by `METHOD path`. */
+		/** The code of the problem that leaves each such operation out, by `METHOD path`. */
 		readonly unavailable: () => ReadonlyMap<string, string>;
 	},
 ): ApiCommandDefinition {

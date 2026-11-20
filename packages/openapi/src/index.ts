@@ -4,7 +4,7 @@ export { bearerAuth } from "./bearer-auth.ts";
 export type { ApiClient, ApiClientOptions, AuthAttempt } from "./client.ts";
 export type { DefineApiOptions } from "./define-api.ts";
 export { defineApi } from "./define-api.ts";
-export type { Diagnostic, Operation } from "./operations.ts";
+export type { Operation } from "./operations.ts";
 export type { OperationOverride } from "./overrides.ts";
 export { ApiResponseError } from "./request.ts";
 export type { Specs } from "./typed-client.ts";

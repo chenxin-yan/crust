@@ -29,9 +29,8 @@ import {
 	type GeneratedDefinition,
 	generateCommands,
 } from "./commands.ts";
-import { type CommandPlan, planCommands } from "./lint.ts";
-import { type ApiManifest, manifest } from "./manifest.ts";
-import { type Diagnostic, type Operation, operationLabel, operations } from "./operations.ts";
+import { type CommandPlan, buildProblems, planCommands } from "./lint.ts";
+import { type Operation, operationLabel, operations } from "./operations.ts";
 import type { OperationOverride, OverrideEntry } from "./overrides.ts";
 import { isPlainObject } from "./request.ts";
 import { BUILT_SPEC_FILE, readSpec } from "./spec-source.ts";
@@ -98,8 +97,8 @@ export interface Api<
 	readonly client: ContextFactory<"api", void, ApiClient<Operations>>;
 	/**
 	 * A command per operation, in its group, with the commands `.add()` put there: the root
-	 * commands and the top-level groups, to pass to `.add()`. An operation with a lint error is
-	 * left out. Reads the spec.
+	 * commands and the top-level groups, to pass to `.add()`. An operation with a problem is left
+	 * out, and `crust build` fails for one that needs a decision. Reads the spec.
 	 */
 	readonly commands: readonly CommandDefinition<
 		string,
@@ -131,10 +130,6 @@ export interface Api<
 		group: string,
 		...definitions: Ds
 	): Api<Operations, Deps, Added & AddedDeps<Ds>>;
-	/** Every problem with turning the operations into commands; an error leaves its operation out. Reads the spec. */
-	lint(): Diagnostic[];
-	/** The generated command surface, sorted, with the lint errors. Reads the spec. */
-	manifest(): ApiManifest;
 }
 
 /** The configuration a handle's chain adds. */
@@ -222,19 +217,17 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 			hasConfirmHandler: state.onConfirm !== undefined,
 			hasPaginate: base.paginate !== undefined,
 		}));
-	// An operation with a lint error is never built: the CLI works without it.
+	// An operation with a problem is never built: the CLI works without it.
 	const built = (): CommandPlan[] => {
 		const { diagnostics, commands } = plan();
-		const failed = new Set(
-			diagnostics.flatMap(({ level, operationId }) => (level === "error" ? [operationId] : [])),
-		);
+		const failed = new Set(diagnostics.map(({ operationId }) => operationId));
 		return commands.filter(({ op }) => !failed.has(op.id));
 	};
 	// By `METHOD path`: an operation without an operationId is left out too.
 	const unavailable = (): Map<string, string> => {
 		const codes = new Map<string, string>();
-		for (const { level, method, path, code } of plan().diagnostics) {
-			if (level !== "error" || method === undefined || path === undefined) continue;
+		for (const { method, path, code } of plan().diagnostics) {
+			if (method === undefined || path === undefined) continue;
 			const label = operationLabel(method, path);
 			if (!codes.has(label)) codes.set(label, code);
 		}
@@ -244,7 +237,9 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 	let commands: readonly GeneratedDefinition[] | undefined;
 	const handle = Object.freeze({
 		get extension() {
-			return (extension ??= apiExtension(base, unavailable));
+			return (extension ??= apiExtension(base, unavailable, () =>
+				buildProblems(plan().diagnostics),
+			));
 		},
 		client: base.client,
 		get commands() {
@@ -281,18 +276,20 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 				...state,
 				added: [...state.added, { group, definitions }],
 			}),
-		lint: () => [...plan().diagnostics],
-		manifest: () => manifest(base.document(), built(), plan().diagnostics),
 	});
 	// The callbacks are stored with an erased `ctx`: each generated command passes them its own,
 	// which has every Context `Deps` lists, since it `.use()`s the client and the same sources.
 	return handle as Api<unknown, Deps, Added>;
 }
 
-/** The `api` Extension of a handle: `api --list` marks the operations it leaves out. */
+/**
+ * The `api` Extension of a handle: `api --list` marks the operations it leaves out, and its build
+ * hook fails with the handle's problems that need a decision.
+ */
 function apiExtension(
 	base: ApiBase,
 	unavailable: () => ReadonlyMap<string, string>,
+	problems: () => string | undefined,
 ): Api["extension"] {
 	const { id, spec } = base;
 	const loadSpec = async () => base.document();
@@ -305,11 +302,12 @@ function apiExtension(
 				unavailable,
 			}),
 		);
-	return spec instanceof URL
-		? extension.build(async () => {
-				// Fails for an `id` the built CLI could not look up, by the lookup's own rule.
-				resolveArtifactDir(id);
-				return [{ path: `${id}/${BUILT_SPEC_FILE}`, content: JSON.stringify(await loadSpec()) }];
-			})
-		: extension;
+	return extension.build(async () => {
+		const problem = problems();
+		if (problem !== undefined) throw new Error(problem);
+		if (!(spec instanceof URL)) return [];
+		// Fails for an `id` the built CLI could not look up, by the lookup's own rule.
+		resolveArtifactDir(id);
+		return [{ path: `${id}/${BUILT_SPEC_FILE}`, content: JSON.stringify(await loadSpec()) }];
+	});
 }

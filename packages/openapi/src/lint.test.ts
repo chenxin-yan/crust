@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { type LintInput, lint } from "./lint.ts";
+import { type LintInput, PROBLEM_KINDS, buildProblems, lint, planCommands } from "./lint.ts";
 import type { Diagnostic } from "./operations.ts";
 
 const ok = { "200": { description: "ok" } };
@@ -21,6 +21,12 @@ const json = (schema: unknown, required = false) => ({
 
 const object = (properties: Record<string, unknown>) => ({ type: "object", properties });
 
+/** The input names of the operation `a` as planned. */
+const inputs = (input: LintInput) =>
+	planCommands(input)
+		.commands.find(({ op }) => op.id === "a")
+		?.inputs.map(({ name }) => name);
+
 type Fixture = {
 	readonly input: LintInput;
 	readonly expected: readonly Partial<Diagnostic>[];
@@ -30,31 +36,26 @@ type Fixture = {
 const fixtures: Record<Diagnostic["code"], Fixture> = {
 	"unsupported-version": {
 		input: { spec: { swagger: "2.0", paths: { "/a": { get: op("a") } } } },
-		expected: [{ level: "error", message: expect.stringContaining("Swagger 2.0") }],
+		expected: [{ message: expect.stringContaining("Swagger 2.0") }],
 	},
 	"missing-operation-id": {
 		input: { spec: spec({ "/a": { get: { summary: "a", responses: ok } } }) },
-		expected: [{ level: "error", method: "get", path: "/a" }],
+		expected: [{ method: "get", path: "/a" }],
 	},
 	"duplicate-operation-id": {
 		input: { spec: spec({ "/a": { get: op("same") }, "/b": { get: op("same") } }) },
 		expected: [
-			{ level: "error", operationId: "same", path: "/a" },
-			{ level: "error", operationId: "same", path: "/b" },
+			{ operationId: "same", path: "/a" },
+			{ operationId: "same", path: "/b" },
 		],
 	},
 	"no-success-response": {
 		input: {
 			spec: spec({ "/a": { get: op("a", { responses: { default: { description: "x" } } }) } }),
 		},
-		expected: [{ level: "error", operationId: "a", message: "GET /a has no 2xx response" }],
+		expected: [{ operationId: "a", message: "GET /a has no 2xx response" }],
 	},
-	"missing-summary": {
-		input: { spec: spec({ "/a": { get: op("a", { summary: undefined }) } }) },
-		expected: [{ level: "warning", operationId: "a" }],
-	},
-	// Required: the operation cannot be called without the parameter, so it is excluded (error);
-	// optional: the parameter gets no flag and the operation stays (warning).
+	// Only a required parameter: an optional one just gets no flag.
 	"unsupported-param-style": {
 		input: {
 			spec: spec({
@@ -82,16 +83,7 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 				},
 			}),
 		},
-		expected: [
-			...["ids", "where"].map((name) => ({
-				level: "error" as const,
-				message: expect.stringContaining(`"${name}"`),
-			})),
-			...["filter", "page", "x-ids", "tags"].map((name) => ({
-				level: "warning" as const,
-				message: expect.stringMatching(`"${name}" .*api /a/\\{ids\\}`),
-			})),
-		],
+		expected: ["ids", "where"].map((name) => ({ message: expect.stringContaining(`"${name}"`) })),
 	},
 	"content-param": {
 		input: {
@@ -113,10 +105,8 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 		},
 		expected: [
 			{
-				level: "error",
 				message: expect.stringContaining('"q" is described by `content` (application/json)'),
 			},
-			{ level: "warning", message: expect.stringContaining('"x-meta" is described by `content`') },
 		],
 	},
 	"required-cookie-param": {
@@ -125,13 +115,7 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 				"/a": { get: op("a", { parameters: [{ name: "session", in: "cookie", required: true }] }) },
 			}),
 		},
-		expected: [{ level: "error", message: expect.stringContaining('"session"') }],
-	},
-	"cookie-param-ignored": {
-		input: {
-			spec: spec({ "/a": { get: op("a", { parameters: [{ name: "theme", in: "cookie" }] }) } }),
-		},
-		expected: [{ level: "warning", message: expect.stringContaining('"theme"') }],
+		expected: [{ message: expect.stringContaining('"session"') }],
 	},
 	"unsupported-body-type": {
 		input: {
@@ -157,10 +141,7 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 				},
 			}),
 		},
-		expected: [
-			{ level: "warning", operationId: "optionalWithFields" },
-			{ level: "error", operationId: "required" },
-		],
+		expected: [{ operationId: "required" }],
 	},
 	"command-collision": {
 		input: {
@@ -171,7 +152,6 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 		},
 		expected: [
 			{
-				level: "error",
 				operationId: "deleteWebhook",
 				message:
 					'DELETE /b: the command "webhooks delete-webhook" is also the command of DELETE /a (DeleteWebhook)',
@@ -202,13 +182,12 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 		},
 		expected: [
 			{
-				level: "error",
 				operationId: "a",
 				message:
 					'POST /a: query parameter "notificationUrl" and query parameter "notification_url" share the input name "notification-url"',
 			},
-			{ level: "error", operationId: "a", message: expect.stringContaining('"max-count"') },
-			{ level: "error", operationId: "b", message: expect.stringContaining("the request body") },
+			{ operationId: "a", message: expect.stringContaining('"max-count"') },
+			{ operationId: "b", message: expect.stringContaining("the request body") },
 		],
 	},
 	"reserved-input-name": {
@@ -219,7 +198,7 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 				},
 			}),
 		},
-		expected: [{ level: "error", message: expect.stringContaining('"raw"') }],
+		expected: [{ message: expect.stringContaining('"raw"') }],
 	},
 	"unflaggable-name": {
 		input: {
@@ -236,7 +215,6 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 			}),
 		},
 		expected: ["no-cache", "123", ""].map((name) => ({
-			level: "error" as const,
 			message: expect.stringContaining(`the flag "${name}"`),
 		})),
 	},
@@ -256,7 +234,6 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 			override: { a: { positional: ["q", "tag", "id"] } },
 		},
 		expected: ['"q" is optional, before a required one', '"tag" is a list'].map((text) => ({
-			level: "error" as const,
 			message: expect.stringContaining(text),
 		})),
 	},
@@ -276,46 +253,11 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 			'the argument name ""',
 			'the group name ""',
 			'the command name "-c"',
-		].map((text) => ({ level: "error" as const, message: expect.stringContaining(text) })),
-	},
-	"body-field-shadowed": {
-		input: {
-			spec: spec({
-				"/accounts/{account_id}": {
-					post: op("a", {
-						parameters: [
-							{ name: "account_id", in: "path", schema: { type: "string" } },
-							{ name: "Scan", in: "query", schema: { type: "boolean" } },
-							{ name: "x-trace", in: "header", schema: { type: "string" } },
-						],
-						requestBody: json(
-							object({
-								accountId: { type: "string" },
-								scan: { type: "boolean" },
-								xTrace: { type: "string" },
-								nested: object({}),
-							}),
-						),
-					}),
-				},
-			}),
-		},
-		expected: ["accountId", "scan", "xTrace"].map((field) => ({
-			level: "warning" as const,
-			message: expect.stringContaining(`body field "${field}"`),
-		})),
-	},
-	"many-root-commands": {
-		input: {
-			spec: spec(
-				Object.fromEntries(Array.from({ length: 21 }, (_, i) => [`/r${i}`, { get: op(`r${i}`) }])),
-			),
-		},
-		expected: [{ level: "warning", message: "21 untagged operations become root commands" }],
+		].map((text) => ({ message: expect.stringContaining(text) })),
 	},
 	"override-unknown-operation": {
 		input: { spec: spec({ "/a": { get: op("a") } }), override: { gone: { name: "x" } } },
-		expected: [{ level: "error", operationId: "gone" }],
+		expected: [{ operationId: "gone" }],
 	},
 	"override-stale": {
 		input: {
@@ -325,7 +267,7 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 				b: { expect: { method: "post", path: "/b" } },
 			},
 		},
-		expected: [{ level: "error", operationId: "b", message: expect.stringContaining("POST /b") }],
+		expected: [{ operationId: "b", message: expect.stringContaining("POST /b") }],
 	},
 	"override-unknown-param": {
 		input: {
@@ -347,7 +289,6 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 			},
 		},
 		expected: ["nope", "name", "ghost", "who"].map((name) => ({
-			level: "error" as const,
 			message: expect.stringContaining(`"${name}"`),
 		})),
 	},
@@ -356,7 +297,7 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 			spec: spec({ "/a": { delete: op("a") } }),
 			override: { a: { confirm: "Delete it?" } },
 		},
-		expected: [{ level: "error", operationId: "a" }],
+		expected: [{ operationId: "a" }],
 	},
 };
 
@@ -420,10 +361,12 @@ describe("lint", () => {
 			"/a": { get: op("a", { deprecated: true, summary: undefined }) },
 			"/b": { get: op("a2", { tags: [], deprecated: true, summary: undefined }) },
 		});
-		expect(lint({ spec: deprecated })).toEqual([]);
+		expect(planCommands({ spec: deprecated })).toEqual({ diagnostics: [], commands: [] });
 		expect(
-			lint({ spec: deprecated, override: { a: { exclude: false } } }).map(({ code }) => code),
-		).toEqual(["missing-summary"]);
+			planCommands({ spec: deprecated, override: { a: { exclude: false } } }).commands.map(
+				({ op }) => op.id,
+			),
+		).toEqual(["a"]);
 		expect(
 			lint({
 				spec: spec({ "/a": { get: op("a", { summary: undefined }) } }),
@@ -485,13 +428,11 @@ describe("lint", () => {
 				}),
 			},
 		});
-		expect(lint({ spec: optional }).map(({ level, code }) => `${level} ${code}`)).toEqual([
-			"warning unsupported-param-style",
-			"warning content-param",
-		]);
+		expect(lint({ spec: optional })).toEqual([]);
+		expect(inputs({ spec: optional })).toEqual(["id"]);
 	});
 
-	it("reports a recursive or unsatisfiable parameter schema instead of overflowing", () => {
+	it("offers no flag for a recursive or unsatisfiable parameter schema instead of overflowing", () => {
 		const recursive = spec(
 			{
 				"/a": {
@@ -505,11 +446,8 @@ describe("lint", () => {
 			},
 			{ schemas: { A: { type: "array", items: { $ref: "#/components/schemas/A" } } } },
 		);
-		expect(
-			lint({ spec: recursive }).map(
-				({ level, code, message }) => `${level} ${code} ${message.split('"')[1]}`,
-			),
-		).toEqual(["warning unsupported-param-style deep", "warning unsupported-param-style never"]);
+		expect(lint({ spec: recursive })).toEqual([]);
+		expect(inputs({ spec: recursive })).toEqual([]);
 	});
 
 	it("checks body fields from every allOf member that refers to the same schema", () => {
@@ -529,9 +467,9 @@ describe("lint", () => {
 			},
 			{ schemas: { Base: object({ id: { type: "string" } }) } },
 		);
-		expect(
-			lint({ spec: twice }).map(({ code, message }) => `${code} ${message.split('"')[1]}`),
-		).toEqual(["body-field-shadowed second"]);
+		// "second" repeats the query parameter, which keeps its input; the body field gets none.
+		expect(lint({ spec: twice })).toEqual([]);
+		expect(inputs({ spec: twice })).toEqual(["second", "body", "first", "id"]);
 	});
 
 	it("reads a body field's type through the $ref beside its own keywords", () => {
@@ -548,7 +486,7 @@ describe("lint", () => {
 			},
 			{ schemas: { Name: { type: "string" } } },
 		);
-		expect(lint({ spec: sibling }).map(({ code }) => code)).toEqual(["body-field-shadowed"]);
+		expect(inputs({ spec: sibling })).toEqual(["short", "body"]);
 	});
 
 	it("classifies a schema behind annotated $refs and $ref chains like its inline equivalent", () => {
@@ -569,9 +507,9 @@ describe("lint", () => {
 					},
 					{ schemas },
 				),
-			}).map(({ level, code }) => `${level} ${code}`);
+			}).map(({ code }) => code);
 		const ref = (name: string) => ({ $ref: `#/components/schemas/${name}`, description: "Outer" });
-		const unsupported = ["error unsupported-param-style"];
+		const unsupported = ["unsupported-param-style"];
 		expect(param(schemas.Objects)).toEqual(unsupported);
 		expect(param(ref("Objects"))).toEqual(unsupported);
 		expect(param(schemas.Object)).toEqual(unsupported);
@@ -580,23 +518,18 @@ describe("lint", () => {
 		expect(param(ref("Strings"))).toEqual([]);
 		expect(param(ref("StringsAlias"))).toEqual([]);
 
+		// A list of strings is a flag; a list of objects is not.
 		const field = (names: unknown) =>
-			lint({
+			inputs({
 				spec: spec(
-					{
-						"/a": {
-							post: op("a", {
-								parameters: [{ name: "names", in: "query", schema: { type: "string" } }],
-								requestBody: json(object({ names })),
-							}),
-						},
-					},
+					{ "/a": { post: op("a", { requestBody: json(object({ names })) }) } },
 					{ schemas },
 				),
-			}).map(({ level, code }) => `${level} ${code}`);
-		expect(field(schemas.Strings)).toEqual(["warning body-field-shadowed"]);
-		expect(field(ref("Strings"))).toEqual(["warning body-field-shadowed"]);
-		expect(field(ref("StringsAlias"))).toEqual(["warning body-field-shadowed"]);
+			});
+		expect(field(schemas.Strings)).toEqual(["body", "names"]);
+		expect(field(ref("Strings"))).toEqual(["body", "names"]);
+		expect(field(ref("StringsAlias"))).toEqual(["body", "names"]);
+		expect(field(ref("Objects"))).toEqual(["body"]);
 
 		// A cycle through `allOf` ends at the search's depth bound, as an untyped (string) parameter.
 		const cyclic = { Loop: { allOf: [{ $ref: "#/components/schemas/Loop", description: "x" }] } };
@@ -682,10 +615,38 @@ describe("lint", () => {
 		expect(lint({ ...input, each: () => ({ confirm: false as const }) })).toEqual([]);
 	});
 
-	it("warns about root commands only above 20 untagged operations, not about grouped ones", () => {
-		const paths = (n: number) =>
-			Object.fromEntries(Array.from({ length: n }, (_, i) => [`/r${i}`, { get: op(`r${i}`) }]));
-		expect(lint({ spec: spec(paths(20)) })).toEqual([]);
-		expect(lint({ spec: spec(paths(21)), each: () => ({ group: "all" }) })).toEqual([]);
+	it("fails the build for a problem configuration settles, and skips one it cannot", () => {
+		const diagnostics = lint({
+			spec: spec({
+				"/a": { get: op("a", { tags: ["t"] }) },
+				"/b": { get: op("t-a", { tags: ["t"] }) },
+				"/c": { get: op("c", { parameters: [{ name: "s", in: "cookie", required: true }] }) },
+			}),
+		});
+		expect(diagnostics.map(({ code }) => [code, PROBLEM_KINDS[code]])).toEqual([
+			["required-cookie-param", "skip"],
+			["command-collision", "fix"],
+		]);
+		expect(buildProblems(diagnostics)).toBe(
+			[
+				"defineApi: 1 problem needs a decision before this CLI can be built.",
+				"",
+				'  GET /b: the command "t a" is also the command of GET /a (a)',
+				"    fix: Set `group` or `name` in the override of one of them",
+			].join("\n"),
+		);
+		expect(buildProblems(diagnostics.slice(0, 1))).toBeUndefined();
+	});
+
+	it("settles every problem of an excluded operation, also its override's", () => {
+		const one = spec({ "/a": { get: op("a") } });
+		expect(
+			lint({
+				spec: one,
+				override: {
+					a: { exclude: true, expect: { method: "POST", path: "/a" }, flagName: { x: "y" } },
+				},
+			}),
+		).toEqual([]);
 	});
 });

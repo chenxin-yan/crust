@@ -44,7 +44,7 @@ export type OverrideEntry<Deps extends ContextMap = {}, Op = unknown> = Operatio
 	Deps,
 	Op
 > & {
-	/** Checked by `acme.lint()`: an operation that moved is an `override-stale` error. */
+	/** Checked by `crust build`: an operation that moved fails it (`override-stale`). */
 	readonly expect?: { readonly method: string; readonly path: string };
 };
 

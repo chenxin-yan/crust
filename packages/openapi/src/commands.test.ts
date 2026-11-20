@@ -4,6 +4,7 @@ import { confirm, json } from "@crustjs/extensions";
 import { captureExecute } from "@crustjs/testing";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
+import { runBuildHooks } from "../../crust/tests/build-hooks.ts";
 import { type DefineApiOptions, defineApi } from "./define-api.ts";
 import { ApiResponseError } from "./request.ts";
 
@@ -166,6 +167,25 @@ function at(root: CommandSnapshot, ...path: string[]): CommandSnapshot {
 	return path.reduce((node, name) => node.subCommands[name]!, root);
 }
 
+/** Each generated command of a snapshot: its path, arguments, flags, and whether it advertises an output schema. */
+function surface(root: CommandSnapshot): string[] {
+	const lines: string[] = [];
+	const walk = (node: CommandSnapshot, prefix: string) => {
+		for (const [name, child] of Object.entries(node.subCommands)) {
+			if (child.extension !== undefined) continue;
+			const path = prefix === "" ? name : `${prefix} ${name}`;
+			if (child.hasAction) {
+				const args = child.args.map((arg) => arg.name).join(",");
+				const flags = Object.keys(child.flags).sort().join(",");
+				lines.push(`${path} [${args}] [${flags}]${child.outputSchema ? " output" : ""}`);
+			}
+			walk(child, path);
+		}
+	};
+	walk(root, "");
+	return lines.sort();
+}
+
 /** The message of a failed outcome. */
 function failure(outcome: { status: string; error?: unknown }): string | undefined {
 	return outcome.error instanceof Error ? outcome.error.message : undefined;
@@ -193,9 +213,8 @@ describe("generated commands", () => {
 			["get-user", "Get a user"],
 			["delete-user", "Delete a user"],
 		]);
-		expect(acme.lint()).toContainEqual(
-			expect.objectContaining({ code: "unsupported-body-type", operationId: "uploadAvatar" }),
-		);
+		// uploadAvatar's multipart body cannot be generated, so it is skipped without failing the build.
+		expect(await runBuildHooks(app)).toEqual({ files: new Map() });
 	});
 
 	it("sends a path argument, typed query and header flags, prints the JSON for humans and returns it", async () => {
@@ -423,8 +442,8 @@ describe("generated commands", () => {
 		expect(Object.keys(at(await app2.snapshot(), "users").subCommands)).not.toContain(
 			"delete-user",
 		);
-		expect(unhandled.lint()).toContainEqual(
-			expect.objectContaining({ code: "confirm-without-handler", operationId: "deleteUser" }),
+		expect((await runBuildHooks(app2)).error).toContain(
+			"DELETE /users/{id}: the override sets `confirm`, but no confirmation handler is configured",
 		);
 	});
 
@@ -444,8 +463,8 @@ describe("generated commands", () => {
 		]);
 		expect(Object.keys(at(snapshot, "admin", "tools").subCommands)).toEqual(["purge"]);
 		expect(await app.run(["users", "get-user"], {})).toMatchObject({ result: "mine" });
-		expect(acme.lint()).toContainEqual(
-			expect.objectContaining({ code: "command-collision", operationId: "getUser" }),
+		expect((await runBuildHooks(app)).error).toContain(
+			'GET /users/{id}: the command "users get-user" is also a command added to the group "users"',
 		);
 	});
 
@@ -477,12 +496,12 @@ describe("generated commands", () => {
 		const app = new Crust("acme").extend(acme.extension).add(...acme.commands);
 
 		expect(Object.keys((await app.snapshot()).subCommands)).toEqual(["api"]);
-		expect(acme.lint()).toContainEqual(
-			expect.objectContaining({ code: "command-collision", operationId: "listKeys" }),
+		expect((await runBuildHooks(app)).error).toContain(
+			'GET /keys: the command "api list-keys" is in the group "api"',
 		);
 	});
 
-	it("lists lint-error operations as unavailable in api --list", async () => {
+	it("lists skipped operations as unavailable in api --list", async () => {
 		const acme = buildApi();
 		const app = new Crust("acme").extend(json(), acme.extension);
 
@@ -585,66 +604,18 @@ describe("generated --paginate", () => {
 	});
 });
 
-describe("acme.manifest()", () => {
-	it("lists the generated surface sorted by command, with the diagnostics of left-out operations", () => {
+describe("the app's snapshot", () => {
+	it("shows every generated command with its arguments, flags and output schema", async () => {
 		const acme = buildApi({ paginate: () => undefined });
+		const app = new Crust("acme").extend(acme.extension).add(...acme.commands);
 
-		expect(acme.manifest()).toEqual({
-			commands: [
-				{
-					command: "get-status",
-					operationId: "getStatus",
-					method: "GET",
-					path: "/status",
-					args: [],
-					flags: [],
-					outputSchema: false,
-				},
-				{
-					command: "users create-user",
-					operationId: "createUser",
-					method: "POST",
-					path: "/users",
-					args: [],
-					flags: ["age", "body", "name", "role"],
-					outputSchema: true,
-				},
-				{
-					command: "users delete-user",
-					operationId: "deleteUser",
-					method: "DELETE",
-					path: "/users/{id}",
-					args: ["id"],
-					flags: [],
-					outputSchema: false,
-				},
-				{
-					command: "users get-user",
-					operationId: "getUser",
-					method: "GET",
-					path: "/users/{id}",
-					args: ["id"],
-					flags: [],
-					outputSchema: true,
-				},
-				{
-					command: "users list-users",
-					operationId: "listUsers",
-					method: "GET",
-					path: "/users",
-					args: [],
-					flags: ["limit", "paginate", "role", "tag", "x-trace"],
-					outputSchema: true,
-				},
-			],
-			diagnostics: [
-				expect.objectContaining({
-					level: "error",
-					code: "unsupported-body-type",
-					operationId: "uploadAvatar",
-				}),
-			],
-		});
+		expect(surface(await app.snapshot())).toEqual([
+			"get-status [] []",
+			"users create-user [] [age,body,name,role] output",
+			"users delete-user [id] []",
+			"users get-user [id] [] output",
+			"users list-users [] [limit,paginate,role,tag,x-trace] output",
+		]);
 	});
 });
 
@@ -836,19 +807,18 @@ describe("generated command inputs", () => {
 		});
 	});
 
-	it("leaves out an operation whose command, group or argument name core rejects", async () => {
-		const { acme, app } = appFor({
+	it("leaves out an operation whose command, group or argument name core rejects, and fails the build", async () => {
+		const { app } = appFor({
 			"/a": { get: { operationId: "日本" } },
 			"/b": { get: { operationId: "___" } },
 			"/c/{___}": { get: { operationId: "probe", parameters: [pathParam("___")] } },
 		});
 
 		expect(Object.keys((await app.snapshot()).subCommands)).toEqual(["api"]);
-		expect(
-			acme
-				.lint()
-				.flatMap(({ code, operationId }) => (code === "unusable-name" ? [operationId] : [])),
-		).toEqual(["日本", "___", "probe"]);
+		const { error } = await runBuildHooks(app);
+		expect(error).toContain('GET /a: the command name "" is empty');
+		expect(error).toContain('GET /b: the command name "" is empty');
+		expect(error).toContain('GET /c/{___}: the argument name "" is empty');
 	});
 
 	it("binds from a `.use()`d Context that owns a flag, which the generated command takes", async () => {
@@ -1054,12 +1024,11 @@ describe("generated command bindings, positionals and confirmation", () => {
 			probe: { bind: { id: undefined }, flagName: { id: undefined, q: undefined } },
 		});
 
-		expect(handle.manifest().commands).toEqual([
-			expect.objectContaining({ command: "probe", args: ["id"], flags: ["q"] }),
-		]);
+		const app = new Crust("acme").extend(handle.extension).add(...handle.commands);
+		expect(surface(await app.snapshot())).toEqual(["probe [id] [q] output"]);
 	});
 
-	it("leaves out an operation whose positionals put an optional one or a list before another", () => {
+	it("fails the build for positionals that put an optional one or a list before another", async () => {
 		const { acme } = appFor({
 			"/{id}": {
 				get: {
@@ -1077,16 +1046,17 @@ describe("generated command bindings, positionals and confirmation", () => {
 				},
 			},
 		});
-		const codes = (positional: string[]) =>
-			acme
-				.override({ probe: { positional } })
-				.lint()
-				.flatMap(({ code }) => (code === "positional-order" ? [code] : []));
+		const error = async (positional: string[]) => {
+			const handle = acme.override({ probe: { positional } });
+			return (
+				await runBuildHooks(new Crust("acme").extend(handle.extension).add(...handle.commands))
+			).error;
+		};
 
-		expect(codes(["q", "id"])).toEqual(["positional-order"]);
-		expect(codes(["tag", "id"])).toEqual(["positional-order"]);
-		expect(codes(["id", "q"])).toEqual([]);
-		expect(codes(["id", "tag"])).toEqual([]);
+		expect(await error(["q", "id"])).toContain('the positional query parameter "q" is optional');
+		expect(await error(["tag", "id"])).toContain('the positional query parameter "tag" is a list');
+		expect(await error(["id", "q"])).toBeUndefined();
+		expect(await error(["id", "tag"])).toBeUndefined();
 	});
 
 	it("takes a list parameter as the last positional, variadic", async () => {
