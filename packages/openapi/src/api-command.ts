@@ -393,7 +393,8 @@ export type ApiCommandDefinition<
 	readonly [],
 	CommandShape<
 		readonly [typeof pathArg],
-		ApiFlags & AuthFlags,
+		// `ApiFlags` alone without them: an intersection with `{}` makes every typed `run(["api"])` cost more.
+		keyof AuthFlags extends never ? ApiFlags : ApiFlags & AuthFlags,
 		{ readonly preview: PreviewShape },
 		JsonValue | undefined,
 		{},
