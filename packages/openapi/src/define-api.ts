@@ -421,8 +421,13 @@ function apiExtension(
 			return true;
 		});
 	return extension.build(async ({ snapshot }) => {
-		// Before any file: an operation that needs a decision fails the build.
-		const problem = problems();
+		const plans = built();
+		// `undefined` when the app holds none of this handle's generated commands: it may use `api` alone.
+		const missing = missingCommands(snapshot, plans);
+		// A handle that generates none is held once the app read its `commands`.
+		const holds = plans.length === 0 ? base.readCommands.has(state) : missing !== undefined;
+		// Before any file: for an app that holds the commands, one that needs a decision fails the build.
+		const problem = holds ? problems() : undefined;
 		if (problem !== undefined) throw new Error(problem);
 		if (!(spec instanceof URL)) return [];
 		// Fails for an `id` the built CLI could not look up, by the lookup's own rule.
@@ -430,9 +435,7 @@ function apiExtension(
 		const document = base.document();
 		const text = JSON.stringify(document);
 		const files = new Map([[BUILT_SPEC_FILE, text]]);
-		const plans = built();
 		// The index claims the app's commands: those of this handle's plan, or none of any.
-		const missing = missingCommands(snapshot, plans);
 		if (missing !== undefined && missing.length > 0) {
 			throw mismatch(
 				`the app's generated commands are not this handle's: missing or different ${missing.map((path) => `"${path}"`).join(", ")}`,

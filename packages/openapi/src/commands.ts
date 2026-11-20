@@ -217,7 +217,7 @@ function operationRecipe(
 				// Built, and so checked, before the confirmation, which a rejected request must not ask for.
 				const request = buildRequest(op, { path, query, header, body });
 				if (typeof fields.confirm === "string") {
-					// Lint leaves out an operation with `confirm` and no handler, so this is set.
+					// An operation with `confirm` and no handler is left out (`confirm-without-handler`), so this is set.
 					// `false` declines like a throw, so a prompt that answers no sends nothing.
 					if ((await options.onConfirm?.(ctx, fields.confirm)) === false) {
 						throw new Error(`${op.id}: not confirmed: ${fields.confirm} Nothing was sent.`);
