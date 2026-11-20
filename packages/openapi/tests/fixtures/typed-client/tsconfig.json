@@ -1,0 +1,21 @@
+{
+	"compilerOptions": {
+		"lib": ["ESNext", "DOM"],
+		"types": [],
+		"target": "ESNext",
+		"module": "Preserve",
+		"moduleResolution": "bundler",
+		"allowImportingTsExtensions": true,
+		"noEmit": true,
+		"strict": true,
+		"skipLibCheck": true
+	},
+	"include": ["src"],
+	"contentMappers": [
+		{
+			"package": "inspex",
+			"extensions": [".openapi.jsonc"],
+			"options": { "register": { "module": "@crustjs/openapi", "interface": "Specs" } }
+		}
+	]
+}

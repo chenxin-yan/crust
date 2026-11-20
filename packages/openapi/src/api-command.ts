@@ -1,27 +1,16 @@
 import {
 	type CommandDefinition,
 	type CommandShape,
-	type ContextInstance,
-	type ExtensionFactory,
-	type ExtensionId,
+	type ContextFactory,
 	CrustError,
 	defineCommand,
-	defineExtension,
-	defineExtensionId,
 } from "@crustjs/core";
-import { type JsonValue, jsonErrorDetails } from "@crustjs/utils/json";
+import type { JsonValue } from "@crustjs/utils/json";
 
-import {
-	type ApiClient,
-	type ApiClientOptions,
-	apiClient,
-	baseOriginUrl,
-	fetchNextPage,
-	resolveUrl,
-} from "./client.ts";
+import { type ApiClient, baseOriginUrl, fetchNextPage, resolveUrl } from "./client.ts";
+import type { DefineApiOptions } from "./define-api.ts";
+import { ApiResponseError } from "./request.ts";
 import { isLocalRef, mergeParameters, rawOperations, refTarget } from "./spec-traversal.ts";
-
-const API: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:openapi");
 
 /**
  * An OpenAPI document; `api --list` and `--spec` read only `paths` and local `$ref` targets.
@@ -36,74 +25,6 @@ export interface OpenApiSpec {
 export interface ApiRequest {
 	readonly path: string;
 	readonly init?: RequestInit;
-}
-
-export interface ApiCommandOptions extends ApiClientOptions {
-	/**
-	 * The OpenAPI document, e.g. an imported JSON file bundled with the CLI and read offline;
-	 * or a loader for it, called with the invocation's signal only when `api --list` or
-	 * `api --spec` runs, e.g. a lazy `import()` of the JSON file that keeps it out of startup.
-	 */
-	readonly spec:
-		| OpenApiSpec
-		| ((input: { signal: AbortSignal }) => OpenApiSpec | Promise<OpenApiSpec>);
-	/**
-	 * The next page's request for `--paginate`, or `undefined` after the last page.
-	 * Receives a copy of each successful response, so it may read the body. The next page
-	 * must be http(s); off the base URL's origin it is requested without credential headers.
-	 * Returning the previous request again (same URL and method, `init` reused) fails instead of looping.
-	 */
-	readonly paginate?: (
-		response: Response,
-	) => ApiRequest | undefined | Promise<ApiRequest | undefined>;
-}
-
-/**
- * A non-2xx response to `api <path>`; its body was already printed (to stderr under `--json`).
- * The `json()` Extension prints its `status` as the error's `details`.
- */
-export class ApiResponseError extends Error {
-	override name = "ApiResponseError";
-
-	/** The HTTP status code. */
-	readonly status: number;
-
-	constructor(status: number, message: string) {
-		super(message);
-		this.status = status;
-		Object.defineProperty(this, jsonErrorDetails, { value: { status } });
-	}
-}
-
-/** `spec`, or what its loader returns; a failure other than cancellation becomes a plain `Error`. */
-async function loadSpec(
-	spec: ApiCommandOptions["spec"],
-	signal: AbortSignal,
-): Promise<OpenApiSpec> {
-	if (typeof spec !== "function") return spec;
-	let loaded: unknown;
-	try {
-		loaded = await spec({ signal });
-	} catch (cause) {
-		// Core treats any Error named AbortError as cancellation, so it passes through like the signal's reason.
-		if (
-			(signal.aborted && cause === signal.reason) ||
-			(cause instanceof Error && cause.name === "AbortError")
-		) {
-			throw cause;
-		}
-		const reason = cause instanceof Error ? cause.message : String(cause);
-		throw new Error(`api: cannot load the OpenAPI document (${reason})`, { cause });
-	}
-	// The tag rejects a module namespace (null prototype) returned instead of its default export;
-	// the prototype rejects class instances.
-	const tag = Object.prototype.toString.call(loaded).slice(8, -1);
-	const prototype = tag === "Object" ? Object.getPrototypeOf(loaded) : undefined;
-	if (tag !== "Object" || (prototype !== Object.prototype && prototype !== null)) {
-		const kind = tag === "Object" ? "class instance" : tag.toLowerCase();
-		throw new Error(`api: cannot load the OpenAPI document (expected a plain object, got ${kind})`);
-	}
-	return loaded as OpenApiSpec;
 }
 
 type ListedOperation = {
@@ -341,8 +262,8 @@ const apiFlags = {
 	},
 } as const;
 
-/** The contributed `api` command, spelled out because the exported factory needs a declared type. */
-type ApiCommandDefinition = CommandDefinition<
+/** The contributed `api` command, spelled out because `defineApi()` needs a declared type. */
+export type ApiCommandDefinition<Operations = unknown> = CommandDefinition<
 	"api",
 	readonly [],
 	CommandShape<
@@ -353,191 +274,183 @@ type ApiCommandDefinition = CommandDefinition<
 		{},
 		readonly JsonValue[] | undefined
 	>,
-	{ api: ApiClient }
+	{ api: ApiClient<Operations> }
 >;
 
 /**
- * Provides the {@link apiClient} Context and contributes `api`: `api --list` and
- * `api --spec <operationId|path>` read the spec (calling its loader, if any); `api <path>` sends
- * a request through the client, prints the response body to stdout (its exact bytes to a pipe or
- * file; as text to a terminal, failing instead for a binary body), and fails with {@link ApiResponseError} on a non-2xx
- * status. Under the `json()` Extension's `--json`, `api` returns its data as the command result instead: the operations, the
- * definition, or the parsed response body; `--paginate` yields each page body as an event.
+ * The `api` command over the `client` Context: `api --list` and `api --spec <operationId|path>`
+ * read the spec from `loadSpec`; `api <path>` sends a request through the client, prints the
+ * response body to stdout (its exact bytes to a pipe or file; as text to a terminal, failing
+ * instead for a binary body), and fails with {@link ApiResponseError} on a non-2xx status. Under
+ * the `json()` Extension's `--json`, `api` returns its data as the command result instead: the
+ * operations, the definition, or the parsed response body; `--paginate` yields each page body as
+ * an event.
  */
-export const apiCommand: ExtensionFactory<
-	[options: ApiCommandOptions],
-	{ api: ApiClient },
-	readonly [ContextInstance<"api", ApiClient, {}, {}>],
-	{},
-	readonly [ApiCommandDefinition],
-	never,
-	{}
-> = /* @__PURE__ */ defineExtension(API).factory(
-	(extension, { spec, paginate, ...client }: ApiCommandOptions) =>
-		extension.provide(apiClient(client)).add(
-			defineCommand(
-				"api",
-				{ description: "Call the HTTP API, or browse its OpenAPI spec" },
-				(command) =>
-					command
-						.use(apiClient)
-						.args(pathArg)
-						.flags(apiFlags)
-						.action(async ({ args, flags, ctx, signal, stdout, stderr }) => {
-							// Under the json() Extension's `--json`, the result is the output: JSON data on stdout.
-							const json = (flags as { json?: unknown }).json === true;
-							if (flags.list) {
-								const listed = listOperations(await loadSpec(spec, signal));
-								if (json) return listed;
-								for (const entry of listed) stdout(Object.values(entry).join(" "));
-								return undefined;
-							}
-							if (flags.spec !== undefined) {
-								const found = specFor(await loadSpec(spec, signal), flags.spec) as JsonValue;
-								if (json) return found;
-								stdout(JSON.stringify(found));
-								return undefined;
-							}
-							if (args.path === undefined) {
-								throw new CrustError(
-									"VALIDATION",
-									'Missing required argument "<path>" (or pass --list or --spec)',
+export function createApiCommand(
+	client: ContextFactory<"api", void, ApiClient>,
+	loadSpec: () => Promise<OpenApiSpec>,
+	{ baseUrl, paginate }: Pick<DefineApiOptions, "baseUrl" | "paginate">,
+): ApiCommandDefinition {
+	return defineCommand(
+		"api",
+		{ description: "Call the HTTP API, or browse its OpenAPI spec" },
+		(command) =>
+			command
+				.use(client)
+				.args(pathArg)
+				.flags(apiFlags)
+				.action(async ({ args, flags, ctx, signal, stdout, stderr }) => {
+					// Under the json() Extension's `--json`, the result is the output: JSON data on stdout.
+					const json = (flags as { json?: unknown }).json === true;
+					if (flags.list) {
+						const listed = listOperations(await loadSpec());
+						if (json) return listed;
+						for (const entry of listed) stdout(Object.values(entry).join(" "));
+						return undefined;
+					}
+					if (flags.spec !== undefined) {
+						const found = specFor(await loadSpec(), flags.spec) as JsonValue;
+						if (json) return found;
+						stdout(JSON.stringify(found));
+						return undefined;
+					}
+					if (args.path === undefined) {
+						throw new CrustError(
+							"VALIDATION",
+							'Missing required argument "<path>" (or pass --list or --spec)',
+						);
+					}
+					if (flags.paginate && paginate === undefined) {
+						throw new Error("--paginate: this CLI does not configure pagination");
+					}
+					let url: URL;
+					try {
+						url = baseOriginUrl(baseUrl, args.path);
+					} catch (cause) {
+						const message = cause instanceof Error ? cause.message : String(cause);
+						throw new CrustError("PARSE", message, { argument: "path" }).withCause(cause);
+					}
+
+					const fields = (flags.field ?? []).map(parseField);
+					const body = flags.body === undefined ? undefined : await readBody(flags.body, signal);
+					const method = parseMethod(
+						flags.method ?? (fields.length > 0 || body !== undefined ? "POST" : "GET"),
+					);
+					const headers = new Headers((flags.header ?? []).map(parseHeader));
+					let path = args.path;
+					let requestBody = body;
+					if (fields.length > 0) {
+						// Fields go in the query when the method takes no body or --body is the body.
+						if (body !== undefined || method === "GET" || method === "HEAD") {
+							const query = new URLSearchParams(
+								fields.map(([key, value]): [string, string] => [key, String(value)]),
+							).toString();
+							// Through `url.search`, so a `#fragment` does not swallow the query and the
+							// path's own query stays as written (`searchParams` would re-encode it).
+							url.search = url.search === "" ? query : `${url.search.slice(1)}&${query}`;
+							path = url.href;
+						} else {
+							requestBody = JSON.stringify(Object.fromEntries(fields));
+						}
+					}
+					if (requestBody !== undefined && !headers.has("content-type")) {
+						headers.set("content-type", "application/json");
+					}
+
+					const api = await ctx.api;
+					/** The response and body of each page: just one without --paginate. Fails after a non-2xx page. */
+					async function* pages(): AsyncGenerator<Page> {
+						let request: ApiRequest = { path, init: { method, headers, body: requestBody } };
+						// What messages show: the request's path as given, never a query added by -F.
+						let shown = args.path as string;
+						// Snapshot at send time: a reused `init` may be mutated by `paginate` afterwards.
+						let sentMethod = method;
+						let response = await api.fetch(request.path, request.init);
+						for (let pageNumber = 2; ; pageNumber++) {
+							// Bun types `clone()` as undici's Response, which lacks Bun's Headers extras.
+							const page = flags.paginate ? (response.clone() as Response) : undefined;
+							yield { response, bytes: new Uint8Array(await response.arrayBuffer()) };
+							if (!response.ok) {
+								throw new ApiResponseError(
+									response.status,
+									`${sentMethod} ${withoutQuery(shown)}: HTTP ${response.status} ${response.statusText}`.trimEnd(),
 								);
 							}
-							if (flags.paginate && paginate === undefined) {
-								throw new Error("--paginate: this CLI does not configure pagination");
+							const next: ApiRequest | undefined =
+								page && paginate ? await paginate(page) : undefined;
+							if (next === undefined) return;
+							const nextInit = next.init ?? request.init;
+							const nextUrl = resolveUrl(baseUrl, next.path).href;
+							// shortcut: compares only with the previous request, so a longer cycle (A→B→A) still loops; upgrade to a seen-set if that shows up.
+							const nextMethod = nextInit?.method ?? "GET";
+							if (
+								nextInit === request.init &&
+								nextMethod === sentMethod &&
+								nextUrl === resolveUrl(baseUrl, request.path).href
+							) {
+								throw new Error(
+									`--paginate: page ${pageNumber} repeats the previous request (${nextMethod} ${withoutQuery(nextUrl)})`,
+								);
 							}
-							let url: URL;
-							try {
-								url = baseOriginUrl(client.baseUrl, args.path);
-							} catch (cause) {
-								const message = cause instanceof Error ? cause.message : String(cause);
-								throw new CrustError("PARSE", message, { argument: "path" }).withCause(cause);
-							}
+							request = { path: next.path, init: nextInit };
+							shown = next.path;
+							sentMethod = nextMethod;
+							response = await fetchNextPage(api, request.path, request.init);
+						}
+					}
 
-							const fields = (flags.field ?? []).map(parseField);
-							const body =
-								flags.body === undefined ? undefined : await readBody(flags.body, signal);
-							const method = parseMethod(
-								flags.method ?? (fields.length > 0 || body !== undefined ? "POST" : "GET"),
-							);
-							const headers = new Headers((flags.header ?? []).map(parseHeader));
-							let path = args.path;
-							let requestBody = body;
-							if (fields.length > 0) {
-								// Fields go in the query when the method takes no body or --body is the body.
-								if (body !== undefined || method === "GET" || method === "HEAD") {
-									const query = new URLSearchParams(
-										fields.map(([key, value]): [string, string] => [key, String(value)]),
-									).toString();
-									// Through `url.search`, so a `#fragment` does not swallow the query and the
-									// path's own query stays as written (`searchParams` would re-encode it).
-									url.search = url.search === "" ? query : `${url.search.slice(1)}&${query}`;
-									path = url.href;
-								} else {
-									requestBody = JSON.stringify(Object.fromEntries(fields));
-								}
+					/** Prints each page's body; under --json, yields a successful page's body as JSON data instead. */
+					async function* bodies(): AsyncGenerator<JsonValue, undefined> {
+						const { getAmbientTerminalIO, writeProcessOutput } =
+							await import("@crustjs/utils/terminal");
+						// Why a body can only be printed as text; undefined when stdout is the process's own
+						// pipe or file, which gets every body's exact bytes, like gh api and curl. A page is
+						// one NDJSON line, JSON cannot hold bytes, injected output (`run()`) takes text lines,
+						// and raw bytes can garble a terminal.
+						let refusal: string | undefined;
+						if (flags.paginate) refusal = "--paginate prints only text and JSON bodies";
+						else if (json) {
+							refusal =
+								"--json prints only text and JSON bodies, so run without it to write the bytes to stdout";
+						} else if (getAmbientTerminalIO() !== undefined) {
+							refusal = "its bytes go only to the process's stdout, not to captured output";
+						} else if (process.getBuiltinModule("node:tty").isatty(1)) {
+							refusal = "redirect or pipe stdout to save it instead of printing it to the terminal";
+						}
+						for await (const { response, bytes } of pages()) {
+							if (refusal === undefined) {
+								writeProcessOutput(1, bytes);
+								continue;
 							}
-							if (requestBody !== undefined && !headers.has("content-type")) {
-								headers.set("content-type", "application/json");
-							}
-
-							const api = await ctx.api;
-							/** The response and body of each page: just one without --paginate. Fails after a non-2xx page. */
-							async function* pages(): AsyncGenerator<Page> {
-								let request: ApiRequest = { path, init: { method, headers, body: requestBody } };
-								// What messages show: the request's path as given, never a query added by -F.
-								let shown = args.path as string;
-								// Snapshot at send time: a reused `init` may be mutated by `paginate` afterwards.
-								let sentMethod = method;
-								let response = await api.fetch(request.path, request.init);
-								for (let pageNumber = 2; ; pageNumber++) {
-									// Bun types `clone()` as undici's Response, which lacks Bun's Headers extras.
-									const page = flags.paginate ? (response.clone() as Response) : undefined;
-									yield { response, bytes: new Uint8Array(await response.arrayBuffer()) };
-									if (!response.ok) {
-										throw new ApiResponseError(
-											response.status,
-											`${sentMethod} ${withoutQuery(shown)}: HTTP ${response.status} ${response.statusText}`.trimEnd(),
-										);
-									}
-									const next: ApiRequest | undefined =
-										page && paginate ? await paginate(page) : undefined;
-									if (next === undefined) return;
-									const nextInit = next.init ?? request.init;
-									const nextUrl = resolveUrl(client.baseUrl, next.path).href;
-									// shortcut: compares only with the previous request, so a longer cycle (A→B→A) still loops; upgrade to a seen-set if that shows up.
-									const nextMethod = nextInit?.method ?? "GET";
-									if (
-										nextInit === request.init &&
-										nextMethod === sentMethod &&
-										nextUrl === resolveUrl(client.baseUrl, request.path).href
-									) {
-										throw new Error(
-											`--paginate: page ${pageNumber} repeats the previous request (${nextMethod} ${withoutQuery(nextUrl)})`,
-										);
-									}
-									request = { path: next.path, init: nextInit };
-									shown = next.path;
-									sentMethod = nextMethod;
-									response = await fetchNextPage(api, request.path, request.init);
+							const text = bodyText(bytes);
+							if (text === undefined) {
+								if (response.ok) {
+									const type = response.headers.get("content-type") ?? "no Content-Type";
+									throw new Error(
+										`api: ${flags.paginate ? "a --paginate page" : "the response"} body is binary (${type}); ${refusal}`,
+									);
 								}
+								continue;
 							}
-
-							/** Prints each page's body; under --json, yields a successful page's body as JSON data instead. */
-							async function* bodies(): AsyncGenerator<JsonValue, undefined> {
-								const { getAmbientTerminalIO, writeProcessOutput } =
-									await import("@crustjs/utils/terminal");
-								// Why a body can only be printed as text; undefined when stdout is the process's own
-								// pipe or file, which gets every body's exact bytes, like gh api and curl. A page is
-								// one NDJSON line, JSON cannot hold bytes, injected output (`run()`) takes text lines,
-								// and raw bytes can garble a terminal.
-								let refusal: string | undefined;
-								if (flags.paginate) refusal = "--paginate prints only text and JSON bodies";
-								else if (json) {
-									refusal =
-										"--json prints only text and JSON bodies, so run without it to write the bytes to stdout";
-								} else if (getAmbientTerminalIO() !== undefined) {
-									refusal = "its bytes go only to the process's stdout, not to captured output";
-								} else if (process.getBuiltinModule("node:tty").isatty(1)) {
-									refusal =
-										"redirect or pipe stdout to save it instead of printing it to the terminal";
-								}
-								for await (const { response, bytes } of pages()) {
-									if (refusal === undefined) {
-										writeProcessOutput(1, bytes);
-										continue;
-									}
-									const text = bodyText(bytes);
-									if (text === undefined) {
-										if (response.ok) {
-											const type = response.headers.get("content-type") ?? "no Content-Type";
-											throw new Error(
-												`api: ${flags.paginate ? "a --paginate page" : "the response"} body is binary (${type}); ${refusal}`,
-											);
-										}
-										continue;
-									}
-									if (!json) {
-										if (flags.paginate) stdout(compactJson(text));
-										else if (text !== "") stdout(text.replace(/\r?\n$/, ""));
-									} else if (!response.ok) {
-										if (text !== "") stderr(text.replace(/\r?\n$/, ""));
-									} else if (flags.paginate || text !== "") {
-										yield bodyValue(text);
-									}
-								}
-								return undefined;
+							if (!json) {
+								if (flags.paginate) stdout(compactJson(text));
+								else if (text !== "") stdout(text.replace(/\r?\n$/, ""));
+							} else if (!response.ok) {
+								if (text !== "") stderr(text.replace(/\r?\n$/, ""));
+							} else if (flags.paginate || text !== "") {
+								yield bodyValue(text);
 							}
-							// Each page body is an event of json()'s NDJSON stream.
-							if (flags.paginate && json) return bodies();
-							let result: JsonValue | undefined;
-							for await (const value of bodies()) result = value;
-							return result;
-						}),
-			),
-		),
-);
+						}
+						return undefined;
+					}
+					// Each page body is an event of json()'s NDJSON stream.
+					if (flags.paginate && json) return bodies();
+					let result: JsonValue | undefined;
+					for await (const value of bodies()) result = value;
+					return result;
+				}),
+	);
+}
 
 /** One response of `api <path>` with its body. */
 interface Page {

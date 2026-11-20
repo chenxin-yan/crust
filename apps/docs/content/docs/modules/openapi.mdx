@@ -2,7 +2,7 @@
 title: "OpenAPI"
 ---
 
-`@crustjs/openapi` gives a CLI backed by an HTTP API a `gh api`-style escape hatch. `<cli> api` browses the OpenAPI document bundled with the CLI, offline, and sends authenticated requests to any endpoint, including ones no command wraps yet. Your own commands can use the same client as a [Context](/docs/guide/contexts).
+`@crustjs/openapi` connects a CLI to the HTTP API behind it, from the API's pinned OpenAPI document. Your commands call operations by `operationId` through a client typed from the spec, and `<cli> api` is a `gh api`-style escape hatch: it browses the spec offline and sends authenticated requests to any endpoint, including ones no command wraps yet.
 
 ## Install
 
@@ -12,34 +12,43 @@ npm install @crustjs/openapi
 
 The package has a peer dependency on `@crustjs/core` and uses the runtime's global `fetch`.
 
-## `apiCommand(options)`
+## `defineApi(options)`
 
 <include lang="ts" meta='title="cli.ts"'>
-  ../../../examples/modules/openapi.ts
+  ../../../examples/modules/openapi.ts#cli
 </include>
 
-`apiCommand()` provides the [`apiClient`](#apiclient) Context and contributes one `api` command. `apiCommand.id` is the Extension identity.
+`defineApi()` returns a frozen handle:
+
+- `acme.extension` is the Extension to pass to `.extend()`. It contributes one `api` command and provides the `api` Context; `acme.extension.id` is its identity.
+- `acme.client` is the `api` [Context](/docs/guide/contexts): a command declares it with `.use(acme.client)` and reads it with `await ctx.api`. See [The API client](#the-api-client).
 
 <auto-type-table
-  path="../../../../../packages/openapi/src/api-command.ts"
-  name="ApiCommandOptions"
+  path="../../../../../packages/openapi/src/define-api.ts"
+  name="DefineApiOptions"
 />
 
-### Spec loading
+### The spec
 
-Pass the OpenAPI document as an object, typically a bundled JSON import: it matches the CLI's version, and `--list` and `--spec` work offline without a token. To keep a large document out of startup, pass a loader instead:
+Pin the API's OpenAPI 3.0 or 3.1 document in your project and pass its location, a `file:` URL:
 
 ```ts
-apiCommand({
-  spec: async () => (await import("./openapi.json", { with: { type: "json" } })).default,
-  baseUrl: "https://api.example.com/v1",
-});
+spec: new URL("./acme.openapi.jsonc", import.meta.url),
 ```
 
-- The loader runs only for `api --list` and `api --spec`, once per invocation.
-- It receives the invocation's `signal`, so it may also fetch the document from a URL with your own caching and error policy.
-- A loader that throws, or returns anything but a plain object (such as the module namespace instead of its `default` export), fails with `api: cannot load the OpenAPI document (<reason>)` and exit code 1.
-- The signal's reason or an `AbortError` is rethrown unchanged, as [cancellation](/docs/api/errors#cancellation).
+- Running from source (`bun run`, `node`, tests), the file is read when a command first needs it: `api --list`, `api --spec`, or a `call()`. Requests through `fetch()` and `api <path>` never read it. It is read once per process.
+- The file may be JSONC: comments and trailing commas are allowed, whatever its name. Name it `<name>.openapi.jsonc` to have it [typed](#typed-client).
+- [`crust build`](/docs/guide/build-and-distribution) writes the parsed document as plain JSON to `<id>/spec.json` in the build output (`id` defaults to `"openapi"`), and a built CLI reads it there with [`resolveArtifactDir(id)`](/docs/api/crust#resolveartifactdirname). The entry never imports the document, so it stays out of the bundle and startup does not parse it.
+- Like skills and man pages, a standalone executable needs that directory beside it. A built CLI without it fails, when it needs the document, with ``api: the OpenAPI document was not found at "<dir>/spec.json". Run `crust build` first, and ship its "<id>" directory with the CLI.``
+- A file that cannot be read or parsed fails with `api: cannot read the OpenAPI document "<file>" (<reason>)`, and exit code 1.
+
+A plain object, such as a small inline spec or one in a test, works too: it is kept in memory, bundled with the CLI, and the build writes nothing.
+
+Specs are pinned, never fetched: any other `spec`, such as a loader function, an `https:` URL, or a path string, is a `DEFINITION` [`CrustError`](/docs/api/errors) when `defineApi()` runs.
+
+## The `api` command
+
+`acme.extension` contributes `api`: it browses the spec and sends requests below the base URL, with the client's auth.
 
 ### Browse the spec
 
@@ -173,11 +182,36 @@ $ my-cli api /users/9 --json
 - A non-2xx body is written to stderr, followed by the error JSON, whose `details` hold the `status`.
 - JSON numbers are read as JavaScript numbers, so digits beyond double precision are lost and `-0` becomes `0`. Without `--json`, the body is printed exactly, and `--paginate` pages keep their exact digits.
 
-## `apiClient`
+## The API client
 
-The `api` Context: a `fetch()` bound to the base URL and auth. `apiCommand()` provides it to every command, so a command declares it with `.use(apiClient)` and calls `(await ctx.api).fetch(path, init?)`, as `whoami` does above.
+`acme.client` is the `api` Context. Every command that declares it with `.use(acme.client)` gets the same client: `call()` for an operation of the spec, and `fetch()` for any request, both bound to the base URL and auth.
 
 <auto-type-table path="../../../../../packages/openapi/src/client.ts" name="ApiClient" />
+
+### `call(operationId, input?)`
+
+Sends the operation with that `operationId`, as `whoami` does above. `input` holds the operation's `path`, `query` and `header` parameters by name, and its `body`:
+
+- A parameter value is a scalar, an array of scalars, or an object of scalars, serialized by the parameter's `explode` as OpenAPI says. Cookie parameters are never sent.
+- Path parameters fill the path template, percent-encoded (style `simple`): an array as `a,b`, an object as `k,v` or exploded `k=v`. A value that would make an empty, `.` or `..` path segment is rejected, since the URL would address another resource, such as `/users/..` the API's root.
+- Query parameters are sent in style `form`: an array repeats the parameter (`?tag=a&tag=b`), or with `explode: false` is comma-separated (`?tag=a,b`); an object sends each property as a parameter (`?role=admin`), or with `explode: false` as `?filter=role,admin`.
+- Header parameters are sent as headers (style `simple`), like path values without percent-encoding.
+- `body` is sent as JSON, with the operation's JSON media type as `Content-Type`.
+- When a 2xx response of the operation declares JSON, the request asks for it with `Accept: application/json` (and the operation's own `+json` types), unless `input.header` sets `Accept` (or `accept`), which the typed input allows for every operation, next to the headers the spec declares.
+- The request goes through [`fetch()`](#fetchpath-init), so it gets the same base URL, auth, redirects and [401 retry](#authentication). An operation with `security: []` is public: it is sent with `auth: false`.
+
+It resolves to:
+
+| Response                                                                                                                        | Result                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2xx with a JSON media type                                                                                                      | The parsed body; `undefined` when the body is empty                                                                                                                                    |
+| 2xx with a JSON media type whose body does not parse                                                                            | Rejects with an `ApiResponseError` whose `status` holds the code, such as `GET /users/1: HTTP 200 answered application/json that is not valid JSON`; the message never quotes the body |
+| 2xx of another media type known to be empty: no body (such as `204` or `205`) or `Content-Length: 0`                            | `undefined`                                                                                                                                                                            |
+| Any other 2xx with another media type, where the spec declares JSON for that status (or, for an undeclared status, for any 2xx) | Rejects with an `ApiResponseError` whose `status` holds the code, such as `GET /reports/1: HTTP 200 answered application/xml, not JSON`; the body is not read                          |
+| Any other 2xx with another media type, even one whose empty body is only known after reading it                                 | The `Response` itself, unread. For a download or a stream, `fetch()` is usually more direct                                                                                            |
+| Non-2xx                                                                                                                         | Rejects with an `ApiResponseError` whose `status` holds the code, such as `GET /users/9: HTTP 404 Not Found`; its message leaves out the query                                         |
+
+Before any request, `call()` fails with a `VALIDATION` [`CrustError`](/docs/api/errors) for a missing required parameter or body, a parameter the operation does not have, or a body it does not take; for a path value that would make an empty, `.` or `..` segment, a header value HTTP does not allow, or a body `JSON.stringify()` cannot send (a function, a symbol, a cycle, a `BigInt`), whose messages never repeat the value; and for an input it cannot send: a body that is not JSON, a parameter in another style or described by `content`, a required cookie. Use `fetch()` for those. An `operationId` the spec does not have, or that several operations share, fails with an error naming it, and so does a spec that cannot be read ([The spec](#the-spec)). Errors of the request itself, such as a network error, a refused redirect or an error `auth` throws, reject `call()` as they reject [`fetch()`](#fetchpath-init); the table above lists the rest. `call()` does not paginate; use `fetch()` with your own loop, or `api <path> --paginate`.
 
 ### `fetch(path, init?)`
 
@@ -202,6 +236,60 @@ Unless `init.redirect` is `"manual"` or `"error"`, `fetch()` follows redirects i
 - Besides credentials, it may return any default headers, such as `User-Agent` or an API-version header. All of them are treated as credentials, so they go only to the base URL's origin.
 - It may return an `AuthAttempt` instead of the headers, to have a 401 retried; see [Authentication](#authentication).
 
+## Typed client
+
+<Callout type="warn">
+  Experimental: the typed client needs TypeScript 7.1, which is in beta.
+</Callout>
+
+`call()` is typed from the spec by [inspex](https://github.com/chenxin-yan/inspex), a TypeScript 7.1 content mapper: no generated file, no type import, and no type argument. Set it up once:
+
+1. Install it with TypeScript 7.1 as development dependencies. The compiler starts the mapper with `node`, so Node.js 26 or later must be on `PATH`.
+
+   ```npm
+   npm install --save-dev inspex typescript@beta
+   ```
+
+2. Save the spec as `<name>.openapi.jsonc` (inspex reads JSONC; TypeScript does not hand `.json` files to a mapper) in a directory your `tsconfig.json` includes, and pass its URL as `spec`.
+3. Register the mapper at the top level of `tsconfig.json`, not in `compilerOptions`, with `register` pointing at `@crustjs/openapi`'s `Specs` interface:
+
+   ```jsonc title="tsconfig.json"
+   {
+     "compilerOptions": {
+       // ...
+     },
+     "contentMappers": [
+       {
+         "package": "inspex",
+         "extensions": [".openapi.jsonc"],
+         "options": { "register": { "module": "@crustjs/openapi", "interface": "Specs" } },
+       },
+     ],
+   }
+   ```
+
+4. Pass `--runExternalCode` to every `tsc` run, such as `tsc --noEmit --runExternalCode`. The flag cannot be set in `tsconfig.json`: a mapper is a program the compiler runs.
+
+inspex then adds each `<name>.openapi.jsonc` in the program to `Specs` under `<name>`, and `call()` checks the `operationId`, each parameter and body field, and the fields read from the result:
+
+```ts
+const user = await api.call("getUser", { path: { id: "me" } }); // { id: string; name: string }
+await api.call("getUsr", { path: { id: "me" } });
+//             ~~~~~~~~ not assignable to '"createUser" | "getUser"'
+await api.call("createUser", { body: { nmae: "Ada" } });
+//                                     ~~~~ 'nmae' does not exist in type '{ name: string; }'
+user.nickname;
+//   ~~~~~~~~ Property 'nickname' does not exist on type '{ id: string; name: string; }'
+```
+
+- `input` has `path`, `query`, `header` and `body` exactly as the operation takes them, each required when the operation requires one of its values. The argument is optional when nothing is required.
+- The result is the JSON body of the operation's 2xx responses (a union when there are several; the JSON one where a status also declares another media type), `undefined` for one without content, and `unknown` for another media type or an operation with no 2xx response.
+- With one spec registered, every handle uses it. With several, pass `id` set to the spec's name (`id: "acme"` for `acme.openapi.jsonc`); `id` also names the directory `crust build` writes the document to.
+
+Editors run the mapper only when allowed to: VS Code asks for workspace trust and the content mapper permission. An editor that starts TypeScript's language server (`tsc --lsp --stdio`) itself must pass `runExternalCode: true` in its initialization options (in Neovim, `init_options = { runExternalCode = true }`).
+
+Where the mapper does not run (TypeScript 7.0 or older, 7.1 without `--runExternalCode`, which also reports `TS18068`, an editor without the opt-in, type-aware lint such as oxlint's), or with several specs registered and no `id`, `call()` is untyped: any `operationId` compiles, `input` only has to have the shape above, and the result is `unknown`. Calls still compile; code that reads a field of a result fails with `TS18046` until the mapper runs. See inspex's README for its diagnostics and limits.
+
 ## Authentication
 
 `bearerAuth(resolve)` builds the `auth` option for a bearer token. `resolve({ signal, baseUrl })` returns `{ value, refresh? }`, which the [`auth.token`](/docs/modules/auth#the-token-status-and-logout) of an `@crustjs/auth` client does: a token from the environment, or a stored login that checks `baseUrl` against the origins it was issued for.
@@ -221,4 +309,4 @@ The 401 response's body is cancelled (even if `retry` read it), and only the req
 
 ## Out of scope
 
-`@crustjs/openapi` does not generate one command per operation, filter output (`--jq`), or template endpoint paths. Write commands for the operations that deserve them, with `apiClient` for the request.
+`@crustjs/openapi` does not generate one command per operation, filter output (`--jq`), or template endpoint paths. Write commands for the operations that deserve them, with `call()` for the request.

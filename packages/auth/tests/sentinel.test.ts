@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { inspect } from "node:util";
 
 import { Crust, defineCommand } from "@crustjs/core";
-import { apiClient, apiCommand, bearerAuth } from "@crustjs/openapi";
+import { bearerAuth, defineApi } from "@crustjs/openapi";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { createAuth } from "../src/client.ts";
@@ -484,17 +484,16 @@ describe("secret sentinel gate: stored credentials", () => {
 			});
 			const api = vi.fn(async () => new Response("expired", { status: 401 }));
 			vi.stubGlobal("fetch", api);
+			const acme = defineApi({
+				spec: { openapi: "3.1.0", paths: {} },
+				baseUrl: "https://api.example.com",
+				auth: bearerAuth(clientOf(w).token),
+			});
 			const app = new Crust("acme")
-				.extend(
-					apiCommand({
-						spec: { openapi: "3.1.0", paths: {} },
-						baseUrl: "https://api.example.com",
-						auth: bearerAuth(clientOf(w).token),
-					}),
-				)
+				.extend(acme.extension)
 				.add(
 					defineCommand("call", {}, (command) =>
-						command.use(apiClient).action(async ({ ctx }) => (await ctx.api).fetch("/me")),
+						command.use(acme.client).action(async ({ ctx }) => (await ctx.api).fetch("/me")),
 					),
 				);
 			const outcome = await app.run(["call"]);
