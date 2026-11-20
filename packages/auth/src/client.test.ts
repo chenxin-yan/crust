@@ -902,3 +902,115 @@ describe("storage", () => {
 		}
 	});
 });
+
+describe("without profiles", () => {
+	it("writes the same credentials file bytes as before profiles existed, for login, refresh and logout", async () => {
+		const temp = tempApp();
+		roots.push(temp.root);
+		vi.useFakeTimers({ toFake: ["Date"], now: Date.UTC(2026, 0, 1) });
+		const issuer = "https://golden.example";
+		let issued = 0;
+		const { fetch } = fakeFetch({
+			[wellKnown(issuer)]: () => json(metadataFor(issuer)),
+			[`${issuer}/token`]: () => {
+				issued += 1;
+				return json({ ...TOKEN, access_token: `AT${issued}`, expires_in: issued === 1 ? 1 : 3600 });
+			},
+			[`${issuer}/revoke`]: () => new Response(null, { status: 200 }),
+		});
+		const auth = createAuth({ app: temp.app, issuer, clientId: "cli", apiOrigins: [API], fetch });
+		// Random ids are numbered by first appearance; everything else is compared byte for byte.
+		const ids = new Map<string, string>();
+		const file = () =>
+			readFileSync(join(temp.dir, "credentials.json"), "utf8").replace(
+				/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g,
+				(id) => ids.get(id) ?? (ids.set(id, `id-${ids.size + 1}`), `id-${ids.size}`),
+			);
+		await auth.login({ onUrl: browser().onUrl, onCode: noCode });
+		const afterLogin = file();
+		expect((await auth.token()).value).toBe("AT2");
+		const afterRefresh = file();
+		await auth.logout();
+		expect([afterLogin, afterRefresh, file()]).toMatchInlineSnapshot(`
+			[
+			  "{
+				"version": 1,
+				"storeId": "id-1",
+				"encryption": {
+					"kind": "plaintext"
+				},
+				"records": {
+					"default#qoqhgI6SdnPNKWNZ1a3M8AuWgbwS7niCcqo8mRUmu-k": {
+						"epoch": "id-2",
+						"identity": {
+							"issuer": "https://golden.example",
+							"clientId": "cli",
+							"profile": "default",
+							"apiOrigins": [
+								"https://api.example.com"
+							]
+						},
+						"generation": "id-3",
+						"tokenType": "Bearer",
+						"expiresAt": 1767225601000,
+						"scope": "read",
+						"secret": {
+							"accessToken": "AT1",
+							"refreshToken": "RT"
+						}
+					}
+				}
+			}",
+			  "{
+				"version": 1,
+				"storeId": "id-1",
+				"encryption": {
+					"kind": "plaintext"
+				},
+				"records": {
+					"default#qoqhgI6SdnPNKWNZ1a3M8AuWgbwS7niCcqo8mRUmu-k": {
+						"epoch": "id-2",
+						"identity": {
+							"issuer": "https://golden.example",
+							"clientId": "cli",
+							"profile": "default",
+							"apiOrigins": [
+								"https://api.example.com"
+							]
+						},
+						"generation": "id-4",
+						"tokenType": "Bearer",
+						"expiresAt": 1767229200000,
+						"scope": "read",
+						"secret": {
+							"accessToken": "AT2",
+							"refreshToken": "RT"
+						}
+					}
+				}
+			}",
+			  "{
+				"version": 1,
+				"storeId": "id-1",
+				"encryption": {
+					"kind": "plaintext"
+				},
+				"records": {
+					"default#qoqhgI6SdnPNKWNZ1a3M8AuWgbwS7niCcqo8mRUmu-k": {
+						"epoch": "id-5",
+						"identity": {
+							"issuer": "https://golden.example",
+							"clientId": "cli",
+							"profile": "default",
+							"apiOrigins": [
+								"https://api.example.com"
+							]
+						},
+						"tombstone": true
+					}
+				}
+			}",
+			]
+		`);
+	});
+});
