@@ -12,6 +12,7 @@
     "mcp",
     "openapi",
     "testing",
+    "auth",
     "create",
     "progress",
     "prompts",
