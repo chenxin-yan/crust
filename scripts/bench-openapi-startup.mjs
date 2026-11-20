@@ -9,7 +9,9 @@
 // Needs bun, hyperfine, and a Node that `crust build` accepts for executables. For each spec it
 // times root `--help`, a generated command's `--help` and a run of it against a local server, and
 // `api --list`; the command is the first generated one that needs no input (no argument, no
-// `--body`, no required flag), in a group when there is one.
+// `--body`, no required flag), in a group when there is one. The generated app excludes the
+// operations whose problems would fail `crust build` (a name clash, say), found with the internal
+// mapping in packages/openapi/src, and the script prints how many it excluded for each spec.
 // Writes hyperfine's JSON for every case to one `results.json` and prints the medians. Not a CI
 // gate: run it on a quiet machine, and on the baseline revision with the same arguments to compare.
 import { spawn, spawnSync } from "node:child_process";
@@ -41,6 +43,16 @@ if (positionals.length === 0) {
 const out = resolve(values.out ?? mkdtempSync(join(tmpdir(), "crust-openapi-bench-")));
 const { defineApi } = await import(join(repo, "packages/openapi/dist/index.js"));
 const { Crust } = await import(join(repo, "packages/core/dist/index.js"));
+// Internal: the problem list `crust build` checks, read from source (Node strips the types).
+const { PROBLEM_KINDS, lint } = await import(join(repo, "packages/openapi/src/lint.ts"));
+
+/** `.override()` entries that exclude the operations whose problems would fail `crust build`. */
+function exclusions(spec) {
+	const failing = lint({ spec, extensionCommands: ["api"] }).flatMap(({ code, operationId }) =>
+		PROBLEM_KINDS[code] === "fix" && operationId !== undefined ? [operationId] : [],
+	);
+	return Object.fromEntries([...new Set(failing)].map((id) => [id, { exclude: true }]));
+}
 
 /** Runs a command to completion, failing loudly. */
 function run(command, args, cwd) {
@@ -57,7 +69,7 @@ function run(command, args, cwd) {
 /** The generated command to time: the first that needs no input, preferably in a group. */
 async function pickCommand(specFile) {
 	const spec = JSON.parse(readFileSync(specFile, "utf8"));
-	const acme = defineApi({ spec, baseUrl: "http://127.0.0.1" });
+	const acme = defineApi({ spec, baseUrl: "http://127.0.0.1" }).override(exclusions(spec));
 	const snapshot = await new Crust("bench")
 		.extend(acme.extension)
 		.add(...acme.commands)
@@ -88,6 +100,11 @@ function buildApp(dir, specFile) {
 	}
 	const api = specFile !== undefined;
 	if (api) cpSync(specFile, join(dir, "src", "spec.json"));
+	const excluded = api ? exclusions(JSON.parse(readFileSync(specFile, "utf8"))) : {};
+	if (api)
+		console.log(
+			`${dir}: excluded ${Object.keys(excluded).length} operations crust build would refuse`,
+		);
 	writeFileSync(
 		join(dir, "src", "cli.ts"),
 		[
@@ -96,7 +113,7 @@ function buildApp(dir, specFile) {
 			...(api
 				? [
 						'import { defineApi } from "@crustjs/openapi";',
-						'const acme = defineApi({ spec: new URL("./spec.json", import.meta.url), baseUrl: process.env.BENCH_BASE_URL ?? "http://127.0.0.1:9" });',
+						`const acme = defineApi({ spec: new URL("./spec.json", import.meta.url), baseUrl: process.env.BENCH_BASE_URL ?? "http://127.0.0.1:9" }).override(${JSON.stringify(excluded)});`,
 						'await new Crust("bench").extend(help(), acme.extension).add(...acme.commands).execute();',
 					]
 				: ['await new Crust("bench").extend(help()).execute();']),
