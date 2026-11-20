@@ -115,7 +115,7 @@ export type PreviewCommandDefinition = CommandDefinition<"preview", readonly [],
 /**
  * The `api preview` command, which sets up no Context: a request path is built here, with the
  * `api` command's flags; a generated command's request is the one its Extension's `preRun` put in
- * `generated` for this invocation's signal.
+ * `generated` for this invocation's `target`.
  */
 export function createPreviewCommand({
 	baseUrl,
@@ -125,7 +125,7 @@ export function createPreviewCommand({
 	readonly baseUrl: string;
 	/** Whether `defineApi` has a `paginate`, without which `--paginate` fails as for `api <path>`. */
 	readonly paginates: boolean;
-	readonly generated: WeakMap<AbortSignal, GeneratedPreview>;
+	readonly generated: WeakMap<readonly string[], GeneratedPreview>;
 }): PreviewCommandDefinition {
 	return defineCommand(
 		"preview",
@@ -139,7 +139,7 @@ export function createPreviewCommand({
 				.flags(previewFlags)
 				.output(previewSchema)
 				.action(async ({ args, flags, signal, stdout }) => {
-					const found = generated.get(signal);
+					const found = generated.get(args.target);
 					let preview: ApiPreview;
 					if (found !== undefined) {
 						const [given] =

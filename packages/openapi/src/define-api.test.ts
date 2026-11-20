@@ -418,6 +418,22 @@ describe(".auth() reads the Contexts .use()d before it", () => {
 		expect(setup).not.toHaveBeenCalled();
 	});
 
+	it("previews each invocation's own request, also when runs share the caller's signal", async () => {
+		const { app } = profileApp();
+		const { signal } = new AbortController();
+		const preview = async (target: [string, ...string[]]) => {
+			const outcome = await app.run(["api", "preview"], { args: { target } }, { signal });
+			return outcome.status === "completed" && outcome.result.url;
+		};
+
+		expect(await preview(["zones", "list-zones"])).toBe(`${baseUrl}/zones`);
+		expect(await preview(["/status"])).toBe(`${baseUrl}/status`);
+		expect(await Promise.all([preview(["zones", "list-zones"]), preview(["get-status"])])).toEqual([
+			`${baseUrl}/zones`,
+			`${baseUrl}/status`,
+		]);
+	});
+
 	it("puts the flags of the Contexts auth reads on the commands that use the client, and those .use()d after it on the generated commands only", async () => {
 		const { app } = profileApp();
 		const flagsOf = async (...path: string[]) =>

@@ -471,9 +471,10 @@ function apiExtension(
 	},
 ): AnyApi["extension"] {
 	const { id, spec } = base;
-	// Each `api preview` invocation's generated request, by its signal: the hooks do not `.use()` the
-	// client, whose dependencies' flags would otherwise go on every command of the app.
-	const previews = new WeakMap<AbortSignal, GeneratedPreview>();
+	// Each `api preview` invocation's generated request, by its parsed `target` array, which core
+	// creates per invocation (a caller's signal is not): the hooks do not `.use()` the client, whose
+	// dependencies' flags would otherwise go on every command of the app.
+	const previews = new WeakMap<readonly string[], GeneratedPreview>();
 	/**
 	 * The generated commands of this handle that the command at a canonical `path`, whose snapshot
 	 * is `command`, can be. Where the app's tree places a top-level generated command on the path
@@ -584,7 +585,7 @@ function apiExtension(
 						return `{${name}}`;
 					},
 				);
-				previews.set(ctx.signal, { request, bound });
+				previews.set(target, { request, bound });
 			}
 		})
 		// A broken build fails every invocation with why, also one a missing command fails first.
