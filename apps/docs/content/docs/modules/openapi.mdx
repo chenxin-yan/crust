@@ -72,7 +72,7 @@ $ my-cli api --spec listUsers
 {"method":"GET","path":"/users","operationId":"listUsers","summary":"List users"}
 ```
 
-`--list` prints one line per operation: `METHOD path operationId summary`, leaving out an `operationId` or `summary` the spec lacks. An operation a [problem](#what-crust-build-checks) leaves out of the generated commands ends with `[unavailable: <code>]`. Under [`--json`](#json-output) it prints a JSON array of `{ method, path, operationId?, summary?, unavailable? }` objects instead, which an agent can read without guessing where a summary starts.
+`--list` prints one line per operation: `METHOD path operationId summary`, leaving out an `operationId` or `summary` the spec lacks. In an app that adds `acme.commands`, an operation a [problem](#what-crust-build-checks) leaves out of the generated commands ends with `[unavailable: <code>]` (`unavailable` under `--json`); an app that uses `api` alone has no generated commands, and marks nothing. Under [`--json`](#json-output) it prints a JSON array of `{ method, path, operationId?, summary?, unavailable? }` objects instead, which an agent can read without guessing where a summary starts.
 
 `--spec <operationId|path>` prints one line of JSON:
 

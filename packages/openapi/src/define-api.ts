@@ -224,9 +224,11 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 		const failed = new Set(diagnostics.map(({ operationId }) => operationId));
 		return commands.filter(({ op }) => !failed.has(op.id));
 	};
-	// By `METHOD path`: an operation without an operationId is left out too.
+	// By `METHOD path`: an operation without an operationId is left out too. Only an app that read
+	// `commands` has generated commands to leave one out of: `api` alone marks nothing.
 	const unavailable = (): Map<string, string> => {
 		const codes = new Map<string, string>();
+		if (commands === undefined) return codes;
 		for (const { method, path, code } of plan().diagnostics) {
 			if (method === undefined || path === undefined) continue;
 			const label = operationLabel(method, path);

@@ -501,9 +501,9 @@ describe("generated commands", () => {
 		);
 	});
 
-	it("lists skipped operations as unavailable in api --list", async () => {
+	it("lists skipped operations as unavailable in api --list of an app that has the generated commands", async () => {
 		const acme = buildApi();
-		const app = new Crust("acme").extend(json(), acme.extension);
+		const app = new Crust("acme").extend(json(), acme.extension).add(...acme.commands);
 
 		const { stdout } = await captureExecute(app, ["api", "--list"]);
 		const listed = await captureExecute(app, ["api", "--list", "--json"]);
@@ -518,6 +518,23 @@ describe("generated commands", () => {
 			summary: "Upload an avatar",
 			unavailable: "unsupported-body-type",
 		});
+	});
+
+	it("marks nothing in api --list of an app that never takes the generated commands", async () => {
+		const app = new Crust("acme").extend(json(), buildApi().extension);
+
+		const { stdout } = await captureExecute(app, ["api", "--list"]);
+		const listed = await captureExecute(app, ["api", "--list", "--json"]);
+
+		expect(stdout.split("\n")).toContain("POST /avatars uploadAvatar Upload an avatar");
+		expect(stdout).not.toContain("unavailable");
+		expect(JSON.parse(listed.stdout)).toContainEqual({
+			method: "POST",
+			path: "/avatars",
+			operationId: "uploadAvatar",
+			summary: "Upload an avatar",
+		});
+		expect(listed.stdout).not.toContain("unavailable");
 	});
 });
 

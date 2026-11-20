@@ -113,18 +113,17 @@ afterEach(() => {
 });
 
 describe("api --list and --spec", () => {
-	it("lists one line per operation without network access, marking those left out of the generated commands", async () => {
+	it("lists one line per operation without network access", async () => {
 		const calls = stubFetch();
 		const { stdout, exitCode } = await captureExecute(buildApp(), ["api", "--list"]);
 
 		expect(exitCode).toBe(0);
 		expect(stdout.split("\n")).toEqual([
-			// The fixture's operations declare no responses, so their commands are skipped.
-			"GET /users listUsers List users [unavailable: no-success-response]",
-			"POST /users createUser [unavailable: no-success-response]",
-			"GET /users/{id} getUser [unavailable: no-success-response]",
-			"DELETE /users/{id} [unavailable: missing-operation-id]",
-			"GET /teams listTeams List teams [unavailable: no-success-response]",
+			"GET /users listUsers List users",
+			"POST /users createUser",
+			"GET /users/{id} getUser",
+			"DELETE /users/{id}",
+			"GET /teams listTeams List teams",
 		]);
 		expect(calls).toEqual([]);
 	});
@@ -327,7 +326,7 @@ describe("the spec", () => {
 		expect((await captureExecute(app, ["api", "/users"])).exitCode).toBe(0);
 		writeFileSync(file, jsonc);
 		expect(await captureExecute(app, ["api", "--list"])).toEqual({
-			stdout: "GET /users listUsers List // users /* all */ ,} [unavailable: no-success-response]",
+			stdout: "GET /users listUsers List // users /* all */ ,}",
 			stderr: "",
 			exitCode: 0,
 		});
@@ -341,7 +340,7 @@ describe("the spec", () => {
 		);
 
 		expect(await captureExecute(buildApp({ spec: url }), ["api", "--list"])).toEqual({
-			stdout: 'GET /users listUsers a "//" b /*,}*/ [unavailable: no-success-response]',
+			stdout: 'GET /users listUsers a "//" b /*,}*/',
 			stderr: "",
 			exitCode: 0,
 		});
@@ -1075,33 +1074,11 @@ describe("api with json()", () => {
 
 		expect(list.stderr).toBe("");
 		expect(JSON.parse(list.stdout)).toEqual([
-			{
-				method: "GET",
-				path: "/users",
-				operationId: "listUsers",
-				summary: "List users",
-				unavailable: "no-success-response",
-			},
-			{
-				method: "POST",
-				path: "/users",
-				operationId: "createUser",
-				unavailable: "no-success-response",
-			},
-			{
-				method: "GET",
-				path: "/users/{id}",
-				operationId: "getUser",
-				unavailable: "no-success-response",
-			},
-			{ method: "DELETE", path: "/users/{id}", unavailable: "missing-operation-id" },
-			{
-				method: "GET",
-				path: "/teams",
-				operationId: "listTeams",
-				summary: "List teams",
-				unavailable: "no-success-response",
-			},
+			{ method: "GET", path: "/users", operationId: "listUsers", summary: "List users" },
+			{ method: "POST", path: "/users", operationId: "createUser" },
+			{ method: "GET", path: "/users/{id}", operationId: "getUser" },
+			{ method: "DELETE", path: "/users/{id}" },
+			{ method: "GET", path: "/teams", operationId: "listTeams", summary: "List teams" },
 		]);
 		expect(operation).toEqual({
 			stdout: '{"method":"GET","path":"/users","operationId":"listUsers","summary":"List users"}',
