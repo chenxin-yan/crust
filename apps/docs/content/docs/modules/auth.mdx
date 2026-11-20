@@ -71,7 +71,7 @@ If `onUrl` or `onCode` throws or rejects, the login fails with that error, close
 
 <auto-type-table path="../../../../../packages/auth/src/types.ts" name="AuthStatus" />
 
-With [`@crustjs/openapi`](/docs/modules/openapi#authentication), pass `auth.token` to `bearerAuth()`. A 401 refreshes a stored login once and retries; a token from `env` is never refreshed.
+With [`@crustjs/openapi`](/docs/modules/openapi#authentication), pass `bearerAuth(auth.token)` to the handle's `.auth()`. A 401 refreshes a stored login once and retries; a token from `env` is never refreshed.
 
 <include lang="ts">../../../examples/modules/auth.ts#openapi</include>
 
@@ -94,7 +94,7 @@ A profile is a named login, so one CLI can keep a work account and a personal on
 - The profiles `env` variable must differ from `env`, also in case: a token read as a profile name would be stored and listed in plaintext.
 - All profiles share the app's one keyring key. A login that [replaces the key](#encryption-and-the-os-keyring) signs out the other logins encrypted under the old key, in every profile; plaintext logins are kept.
 
-`bearerAuth(auth.token)` sends the current profile's token. For another profile on one run, set the variable (`ACME_PROFILE=work acme zones list`), or pass `auth.profile(name).token`.
+`bearerAuth(auth.token)` sends the current profile's token. For another profile on one run, set the variable (`ACME_PROFILE=work acme zones list`), or let a `--profile` flag pick it: [Auth that reads a flag](/docs/modules/openapi#auth-that-reads-a-flag) passes the flag's value to `auth.profile()`.
 
 ### Errors by code
 
