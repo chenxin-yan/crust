@@ -471,7 +471,15 @@ export function planCommands(input: LintInput): {
 			fix: "Remove the override, or correct its operationId",
 		});
 	}
-	return { diagnostics, commands: placed.map(({ command: _command, ...plan }) => plan) };
+	// A skipped operation becomes no command whatever its configuration, so its own problems that
+	// configuration settles (its inputs, names and override) are not reported: they fail no build.
+	return {
+		diagnostics: diagnostics.filter(
+			({ code, operationId }) =>
+				PROBLEM_KINDS[code] !== "fix" || operationId === undefined || !skipped.has(operationId),
+		),
+		commands: placed.map(({ command: _command, ...plan }) => plan),
+	};
 }
 
 /**

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { type CommandSnapshot, Crust, defineCommand, defineContext } from "@crustjs/core";
+import { captureExecute } from "@crustjs/testing";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { runBuildHooks } from "../../crust/tests/build-hooks.ts";
@@ -138,6 +139,63 @@ describe("crust build checks the handle", () => {
 		});
 
 		expect(await build(settled)).toEqual({ files: new Map() });
+	});
+
+	it("lets nothing of a skipped operation fail the build, not even its input names", async () => {
+		const names = ["notificationUrl", "notification_url"].map((name) => ({
+			name,
+			in: "query",
+			schema: { type: "string" },
+		}));
+		const upload = (extra: Record<string, unknown> = {}) => ({
+			openapi: "3.1.0",
+			paths: {
+				"/upload": {
+					post: {
+						operationId: "upload",
+						summary: "Upload",
+						parameters: names,
+						requestBody: {
+							required: true,
+							content: { "multipart/form-data": { schema: { type: "object" } } },
+						},
+						responses: { "200": { description: "OK" } },
+					},
+				},
+				...extra,
+			},
+		});
+		const skipped = defineApi({ spec: upload(), baseUrl: "https://api.example.com" }).override({
+			upload: { confirm: "Sure?", expect: { method: "PUT", path: "/upload" } },
+		});
+		const app = new Crust("acme").extend(skipped.extension).add(...skipped.commands);
+		const generatable = defineApi({
+			spec: upload({
+				"/notify": {
+					get: {
+						operationId: "notify",
+						summary: "Notify",
+						parameters: names,
+						responses: { "200": { description: "OK" } },
+					},
+				},
+			}),
+			baseUrl: "https://api.example.com",
+		});
+
+		expect(await runBuildHooks(app)).toEqual({ files: new Map() });
+		expect(Object.keys((await app.snapshot()).subCommands)).toEqual(["api"]);
+		expect((await captureExecute(app, ["api", "--list"])).stdout).toBe(
+			"POST /upload upload Upload [unavailable: unsupported-body-type]",
+		);
+		expect((await build(generatable)).error).toBe(
+			[
+				'Extension "crust:openapi" build failed: defineApi: 1 problem needs a decision before this CLI can be built.',
+				"",
+				'  GET /notify: query parameter "notificationUrl" and query parameter "notification_url" share the input name "notification-url"',
+				"    fix: Set `flagName` for one of them in the operation's override",
+			].join("\n"),
+		);
 	});
 
 	const swagger = { swagger: "2.0", paths: { "/users": { get: { operationId: "listUsers" } } } };
