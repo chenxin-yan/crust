@@ -23,7 +23,6 @@ The package has a peer dependency on `@crustjs/core` and uses the runtime's glob
 - `acme.extension` is the Extension to pass to `.extend()`. It contributes one `api` command and provides the `api` Context; `acme.extension.id` is its identity.
 - `acme.client` is the `api` [Context](/docs/guide/contexts): a command declares it with `.use(acme.client)` and reads it with `await ctx.api`. See [The API client](#the-api-client).
 - `acme.commands` are the [generated commands](#generated-commands), to pass to `.add()`.
-- `acme.lint()` and `acme.manifest()` are the [drift guard](#drift-guard).
 
 Its chain shapes the generated commands, like `defineCommand` and `defineExtension`: every method returns a new frozen handle and leaves the one it was called on unchanged.
 
@@ -50,7 +49,7 @@ Pin the API's OpenAPI 3.0 or 3.1 document in your project and pass its location,
 spec: new URL("./acme.openapi.jsonc", import.meta.url),
 ```
 
-- Running from source (`bun run`, `node`, tests), the file is read when it is first needed: when the app reads `acme.commands` (at start, when it adds them), `acme.lint()` or `acme.manifest()`, or for `api --list`, `api --spec`, or a `call()`. Requests through `fetch()` and `api <path>` never read it. It is read once per process.
+- Running from source (`bun run`, `node`, tests), the file is read when it is first needed: when the app reads `acme.commands` (at start, when it adds them), for `crust build`, or for `api --list`, `api --spec`, or a `call()`. Requests through `fetch()` and `api <path>` never read it. It is read once per process.
 - The file may be JSONC: comments and trailing commas are allowed, whatever its name. Name it `<name>.openapi.jsonc` to have it [typed](#typed-client).
 - [`crust build`](/docs/guide/build-and-distribution) writes the parsed document as plain JSON to `<id>/spec.json` in the build output (`id` defaults to `"openapi"`), and a built CLI reads it there with [`resolveArtifactDir(id)`](/docs/api/crust#resolveartifactdirname). The entry never imports the document, so it stays out of the bundle; a CLI without generated commands does not parse it at start.
 - Like skills and man pages, a standalone executable needs that directory beside it. A built CLI without it fails, when it needs the document, with ``api: the OpenAPI document was not found at "<dir>/spec.json". Run `crust build` first, and ship its "<id>" directory with the CLI.`` A CLI that adds `acme.commands` needs it at start, so it fails before parsing its arguments, and the runtime prints this message as an uncaught error, with its stack.
@@ -73,7 +72,7 @@ $ my-cli api --spec listUsers
 {"method":"GET","path":"/users","operationId":"listUsers","summary":"List users"}
 ```
 
-`--list` prints one line per operation: `METHOD path operationId summary`, leaving out an `operationId` or `summary` the spec lacks. An operation that a [lint error](#drift-guard) leaves out of the generated commands ends with `[unavailable: <code>]`. Under [`--json`](#json-output) it prints a JSON array of `{ method, path, operationId?, summary?, unavailable? }` objects instead, which an agent can read without guessing where a summary starts.
+`--list` prints one line per operation: `METHOD path operationId summary`, leaving out an `operationId` or `summary` the spec lacks. An operation a [problem](#what-crust-build-checks) leaves out of the generated commands ends with `[unavailable: <code>]`. Under [`--json`](#json-output) it prints a JSON array of `{ method, path, operationId?, summary?, unavailable? }` objects instead, which an agent can read without guessing where a summary starts.
 
 `--spec <operationId|path>` prints one line of JSON:
 
@@ -246,7 +245,7 @@ Every generated command declares [`.output()`](/docs/api/crust#outputschema): wi
 
 ### Confirmation
 
-A `confirm` message from `.each()` or `.override()` makes the command call the `.onConfirm()` handler with its `ctx` and the message before the request. Resolving to nothing (as `(await ctx.confirm)(message)` does) or to `true` confirms. Resolving to `false`, as a prompt that returns the answer does, fails the command with `<operationId>: not confirmed: <message> Nothing was sent.`, and throwing fails it with that error; either way no request is sent. `@crustjs/openapi` never asks by itself, and confirms nothing by HTTP method. With the [`confirm()`](/docs/modules/extensions/confirm) Extension, `.use(confirm)` adds `--yes`, as in the example above. An operation with a `confirm` message and no `.onConfirm()` is never built without its confirmation: it is left out, with a [lint error](#drift-guard).
+A `confirm` message from `.each()` or `.override()` makes the command call the `.onConfirm()` handler with its `ctx` and the message before the request. Resolving to nothing (as `(await ctx.confirm)(message)` does) or to `true` confirms. Resolving to `false`, as a prompt that returns the answer does, fails the command with `<operationId>: not confirmed: <message> Nothing was sent.`, and throwing fails it with that error; either way no request is sent. `@crustjs/openapi` never asks by itself, and confirms nothing by HTTP method. With the [`confirm()`](/docs/modules/extensions/confirm) Extension, `.use(confirm)` adds `--yes`, as in the example above. An operation with a `confirm` message and no `.onConfirm()` is never built without its confirmation: it is left out, and [`crust build` fails](#what-crust-build-checks).
 
 ### `--paginate`
 
@@ -258,10 +257,10 @@ A tuple schema (`prefixItems`) gets no `--paginate`. Its result is every page's 
 
 ### Collisions and left-out operations
 
-An operation with a [lint error](#drift-guard) is left out of `acme.commands`, so the CLI works without it: `api --list` marks it `[unavailable: <code>]`, and the error is in `acme.lint()` and `acme.manifest()`. Nothing throws for one operation's problem, so check `acme.lint()` in a test.
+A generated command that would clash is left out of `acme.commands`, so the CLI works without it, `api --list` marks it `[unavailable: command-collision]`, and [`crust build` fails](#what-crust-build-checks) until an override settles it.
 
 - Two operations that become the same command: the later one, in `api --list` order, is left out with `command-collision`, naming both.
-- An operation and a command you `.add()` to its group with the same name: the operation is left out and yours stays. The same goes for the `api` command: an operation that would be the root command `api`, or in a group `api` (such as one tagged `API`), is left out; set `group` or `name` in its override. To replace a generated command on purpose, set `exclude: true` in its override and add yours, so lint stays clean.
+- An operation and a command you `.add()` to its group with the same name: the operation is left out and yours stays. The same goes for the `api` command: an operation that would be the root command `api`, or in a group `api` (such as one tagged `API`), is left out; set `group` or `name` in its override. To replace a generated command on purpose, set `exclude: true` in its override and add yours.
 - An alias of an added command, or a flag that clashes with an Extension's or a Context's (such as `--yes`), is a core `DEFINITION` error when the command is added or first used; `await app.snapshot()` in a test checks the whole tree.
 
 ## Overrides
@@ -272,34 +271,61 @@ One shape, given for every operation by `.each(op)` or for one operationId by `.
 
 - A field left out, or `undefined`, uses the default, so a rule can special-case some operations: `.each((op) => ({ group: op.path.startsWith("/admin") ? "admin" : undefined }))`.
 - A field set in `.override()` replaces the same field from `.each()` whole: `bind: {}` removes the rule's bindings for that operation.
-- `.each()` runs once per operation, synchronously, and must be pure. Its `flagName`, `bind` and `positional` entries for a parameter an operation does not have are ignored; in `.override()` they are an `override-unknown-param` lint error.
-- An `.override()` entry may also set `expect: { method, path }`, the operation it was written for: when the spec moves the operationId elsewhere, lint reports `override-stale`.
-- `positional` takes parameter names, and a body field is never positional. Values fill the arguments in order, so the required ones come first, and a list parameter, a variadic argument, comes last; any other order is a `positional-order` lint error. `flagName` and `bind` also take top-level body field names. An entry set to `undefined` is no entry: the default applies.
+- `.each()` runs once per operation, synchronously, and must be pure. Its `flagName`, `bind` and `positional` entries for a parameter an operation does not have are ignored; in `.override()` they fail `crust build` (`override-unknown-param`).
+- An `.override()` entry may also set `expect: { method, path }`, the operation it was written for: when the spec moves the operationId elsewhere, `crust build` fails (`override-stale`).
+- `positional` takes parameter names, and a body field is never positional. Values fill the arguments in order, so the required ones come first, and a list parameter, a variadic argument, comes last; any other order fails `crust build` (`positional-order`). `flagName` and `bind` also take top-level body field names. An entry set to `undefined` is no entry: the default applies.
 - `bind` functions may be async and get the command's `ctx`, typed by `.use()`; they run before every request.
 
-## Drift guard
+## What `crust build` checks
 
-The generated commands follow the pinned spec, so a spec bump changes the CLI. Check both in a test:
+An operation that does not fit is left out of `acme.commands`, so a CLI run from source keeps working while you fix it: `api --list` marks it `[unavailable: <code>]`, and nothing throws. The build hook of the handle whose `extension` the app registers then sorts its problems by one rule: can configuration make the operation a working command?
 
-```ts
-import { expect, test } from "bun:test";
+- **Yes: `crust build` fails** until an override (other than `exclude`), `.onConfirm()` or `.add()` settles each one, or `exclude: true` leaves the operation out on purpose. It lists every such problem with its fix:
 
-test("maps the spec to commands", async () => {
-  expect(acme.lint().filter((diagnostic) => diagnostic.level === "error")).toEqual([]);
-  expect(acme.manifest()).toMatchSnapshot();
-  // Builds every command, so a collision in the tree fails here.
-  await app.snapshot();
-});
-```
+  ```text
+  Error: Extension "crust:openapi" build failed: defineApi: 1 problem needs a decision before this CLI can be built.
 
-- `acme.lint()` returns every problem with turning the operations into commands, as [`Diagnostic`](#how-the-spec-is-read)s: the model's, each operation's (an unsupported required input, a missing 2xx response or summary, inputs that share a name, a body field that repeats a parameter, a command, group or argument name core rejects, such as the empty name of an operationId without ASCII letters or digits, positionals out of order), command collisions, overrides of unknown operations, stale or unknown names in overrides, a `confirm` without `.onConfirm()`, and more than 20 untagged root commands. Each error leaves its operation out.
-- `acme.manifest()` is the generated surface: `commands`, sorted by command path, each `{ command, operationId, method, path, args, flags, outputSchema }` (positional names in order, flag names sorted, whether an output schema is advertised), and the lint errors as `diagnostics`. It comes from the spec and the overrides, not from the built commands, and is the same on every platform, so a snapshot of it shows the CLI's diff in the review of a spec bump.
+    GET /people: the command "users list-users" is also the command of GET /users (listUsers)
+      fix: Set `group` or `name` in the override of one of them
+  ```
+
+- **No: the operation is skipped**, and the build passes. It stays reachable through `api <path>` and `call()`.
+- A document that is not OpenAPI 3.0 or 3.1 fails the build: no command can come from it.
+
+| `code`                       | When                                                                                                                     | `crust build` |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------- |
+| `unsupported-version`        | `openapi` is missing or not 3.0.x or 3.1.x, as in a Swagger 2.0 document                                                 | Fails         |
+| `missing-operation-id`       | An operation has no `operationId` (a deprecated one is left out without a problem)                                       | Skips it      |
+| `duplicate-operation-id`     | Several operations share an `operationId`                                                                                | Skips each    |
+| `no-success-response`        | An operation has no 2xx response                                                                                         | Skips it      |
+| `unsupported-param-style`    | A required parameter in a style or shape no input carries (see [below](#how-the-spec-is-read))                           | Skips it      |
+| `content-param`              | A required parameter described by `content`                                                                              | Skips it      |
+| `required-cookie-param`      | A required cookie parameter: generated commands send no cookies                                                          | Skips it      |
+| `unsupported-body-type`      | A required request body that is not JSON                                                                                 | Skips it      |
+| `command-collision`          | Two commands, or a command and a group, with one path, also against a command you `.add()` or the `api` command          | Fails         |
+| `flag-collision`             | Two inputs of a command with one name                                                                                    | Fails         |
+| `reserved-input-name`        | An input named `raw`, which holds passthrough values                                                                     | Fails         |
+| `unflaggable-name`           | A flag name core rejects, such as `no-cache` or an empty one                                                             | Fails         |
+| `unusable-name`              | A command, group or argument name core rejects, such as the empty name of an operationId without ASCII letters or digits | Fails         |
+| `positional-order`           | An optional positional before a required one, or a list positional that is not last                                      | Fails         |
+| `override-unknown-operation` | An `.override()` entry for an operationId the spec does not have                                                         | Fails         |
+| `override-stale`             | An `.override()` entry whose `expect` no longer matches the operation's method and path                                  | Fails         |
+| `override-unknown-param`     | An `.override()` entry's `flagName`, `bind` or `positional` names an input the operation does not have                   | Fails         |
+| `confirm-without-handler`    | A `confirm` message with no `.onConfirm()`                                                                               | Fails         |
+
+An alias of an added command, or a flag that clashes with an Extension's or a Context's, is core's `DEFINITION` error, also during the build.
+
+## The CLI's surface in a test
+
+A spec bump changes the CLI. To see how in its review, snapshot the app: [`app.snapshot()`](/docs/api/crust#snapshot) holds every command, generated ones too, with its arguments, flags and output schema.
+
+<include lang="ts">../../../examples/modules/openapi-surface.ts#surface</include>
 
 A CI job can bump the pin and open a pull request with the new snapshot for review; Crust ships no updater.
 
 ## How the spec is read
 
-Generated commands, `acme.lint()` and `acme.manifest()` read the spec's operations one way. They walk `paths` the way [`api --list`](#browse-the-spec) does, in the same order, and normalize each operation once:
+Generated commands, `api --list` marks and `crust build` read the spec's operations one way. They walk `paths` the way [`api --list`](#browse-the-spec) does, in the same order, and normalize each operation once:
 
 - Local `$ref`s are followed for path items, parameters, request bodies, responses, and each top-level schema. Deeper `$ref`s inside schemas stay as they are, so a recursive schema stays finite.
 - Each schema is published as a JSON Schema 2020-12 schema that means what the API's schema means. Only these changes are made; everything else, such as `allOf`, stays as written:
@@ -318,17 +344,7 @@ Each of its `params`:
 
 <auto-type-table path="../../../../../packages/openapi/src/operations.ts" name="Param" />
 
-Deprecated operations are read too (and left out of the generated commands unless an override sets `exclude: false`). Besides the problems listed under [Drift guard](#drift-guard), `acme.lint()` reports these problems with the document, each an error:
-
-| `code`                   | When                                                                                                  |
-| ------------------------ | ----------------------------------------------------------------------------------------------------- |
-| `unsupported-version`    | `openapi` is missing or not 3.0.x or 3.1.x, as in a Swagger 2.0 document. No operation is read.       |
-| `missing-operation-id`   | An operation has no `operationId`; it is left out. A deprecated one is left out without a diagnostic. |
-| `duplicate-operation-id` | Several operations share an `operationId`. Each of them gets the error, so none becomes a command.    |
-
-Each problem is a `Diagnostic`, as `acme.lint()` and `acme.manifest().diagnostics` return them:
-
-<auto-type-table path="../../../../../packages/openapi/src/operations.ts" name="Diagnostic" />
+Deprecated operations are read too, and left out of the generated commands unless an override sets `exclude: false`.
 
 `api --list` and `api --spec` stay permissive: they also read documents without a version and operations without an `operationId`.
 
@@ -341,7 +357,7 @@ When Crust maps an operation's inputs to a command, it cannot offer:
 - a parameter described by `content`, or a cookie parameter;
 - a request body that is not JSON, such as form-encoded or multipart.
 
-Such an input leaves the operation out only when the operation cannot be called without it: a required one does; an optional one gets no flag, with a warning, and stays reachable through `api <path>`.
+Such an input leaves the operation out only when the operation cannot be called without it: a required one does; an optional one gets no flag, and stays reachable through `api <path>`.
 
 ## The API client
 
@@ -445,12 +461,12 @@ user.nickname;
 
 - `input` has `path`, `query`, `header` and `body` exactly as the operation takes them, each required when the operation requires one of its values. The argument is optional when nothing is required.
 - The result is the JSON body of the operation's 2xx responses (a union when there are several; the JSON one where a status also declares another media type), `undefined` for one without content, and `unknown` for another media type or an operation with no 2xx response.
-- The [overrides](#overrides) are checked too: `.override()` keys must be operationIds of the spec, and an entry's `flagName` and `bind` keys the operation's parameter or top-level JSON body property names, and its `positional` entries parameter names. `op.id` in `.each()` is the union of the operationIds. (`expect` is checked by `acme.lint()`.)
+- The [overrides](#overrides) are checked too: `.override()` keys must be operationIds of the spec, and an entry's `flagName` and `bind` keys the operation's parameter or top-level JSON body property names, and its `positional` entries parameter names. `op.id` in `.each()` is the union of the operationIds. (`expect` is checked by `crust build`.)
 - With one spec registered, every handle uses it. With several, pass `id` set to the spec's name (`id: "acme"` for `acme.openapi.jsonc`); `id` also names the directory `crust build` writes the document to.
 
 Editors run the mapper only when allowed to: VS Code asks for workspace trust and the content mapper permission. An editor that starts TypeScript's language server (`tsc --lsp --stdio`) itself must pass `runExternalCode: true` in its initialization options (in Neovim, `init_options = { runExternalCode = true }`).
 
-Where the mapper does not run (TypeScript 7.0 or older, 7.1 without `--runExternalCode`, which also reports `TS18068`, an editor without the opt-in, type-aware lint such as oxlint's), or with several specs registered and no `id`, `call()` is untyped: any `operationId` compiles, `input` only has to have the shape above, and the result is `unknown`. Override names are plain strings then, checked by [`acme.lint()`](#drift-guard). Calls still compile; code that reads a field of a result fails with `TS18046` until the mapper runs. See inspex's README for its diagnostics and limits.
+Where the mapper does not run (TypeScript 7.0 or older, 7.1 without `--runExternalCode`, which also reports `TS18068`, an editor without the opt-in, type-aware lint such as oxlint's), or with several specs registered and no `id`, `call()` is untyped: any `operationId` compiles, `input` only has to have the shape above, and the result is `unknown`. Override names are plain strings then, checked by [`crust build`](#what-crust-build-checks). Calls still compile; code that reads a field of a result fails with `TS18046` until the mapper runs. See inspex's README for its diagnostics and limits.
 
 ## Authentication
 
