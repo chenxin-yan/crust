@@ -425,7 +425,7 @@ Such an input leaves the operation out only when the operation cannot be called 
 
 `acme.client` is the `api` Context. A command that declares it with `.use(acme.client)` gets the client: `call()` for an operation of the spec, and `fetch()` for any request, both bound to the base URL and [`.auth()`](#authfn).
 
-Each `.auth()` makes a new `client`, which the handles chained after it share; before any `.auth()`, every handle shares one client that sends no credentials. Take a command's client from the handle whose `extension` the app extends, or from one before it after the same `.auth()`. A command with another client fails to compile where the app adds it (`FIX_DEPENDENCY_TYPE`), also one that uses the client of a handle before `.auth()` and is `.add()`ed to a handle after it. The types tell clients apart by the Contexts their `auth` reads only: a client of another `.auth()` that reads Contexts of the same types, or of an `.auth()` that reads none against the handle before it, compiles, and its requests use the `auth` of the handle the app extends.
+Each `.auth()` makes a new `client`, which the handles chained after it share; before any `.auth()`, every handle shares one client that sends no credentials. Take a command's client from the handle whose `extension` the app extends, or from one before it after the same `.auth()`. A command with another client fails to compile where the app adds it (`FIX_DEPENDENCY_TYPE`), also one that uses the client of a handle before `.auth()` and is `.add()`ed to a handle after it. The types tell clients apart by the types of the Contexts their `auth` reads only: a client of another `.auth()` that reads Contexts of the same types, or of an `.auth()` that reads none against the handle before it, compiles. Its requests then use the `auth` of the handle the app extends, provided the command parses the flags of the Contexts that `auth` reads; otherwise the command fails with a `DEFINITION` error and sends nothing.
 
 `ApiClient<Operations>` is the client of an `auth` that reads no Contexts. A helper that takes any handle's client is generic in them:
 
@@ -480,7 +480,7 @@ Unless `init.redirect` is `"manual"` or `"error"`, `fetch()` follows redirects i
 
 - It runs at most once per invocation, on the first request that sends credentials: not when a command only reads the Context, not for `auth: false` requests, and not for `api --list`, `api --spec` or `api preview`.
 - It receives the [Context setup input](/docs/api/types#contextsetup-and-contextbag), including `signal`, `stdout`, and `stderr`, and as its second argument `{ baseUrl }`, the base URL as configured.
-- `input.ctx` holds the Contexts of the Context factories `.use()`d before `.auth()`, set up only when `fn` reads them. Those `.use()`d after it are for the other callbacks only. An Extension's Contexts, such as `confirm`, are not readable in `fn`, wherever they are `.use()`d: the client is a Context, and a Context's `.use()` takes only factories.
+- `input.ctx` holds the Contexts of the Context factories `.use()`d before `.auth()`, set up only when `fn` reads them; every factory a spread array may hold counts. Those `.use()`d after it are for the other callbacks only. An Extension's Contexts, such as `confirm`, are not readable in `fn`, wherever they are `.use()`d: the client is a Context, and a Context's `.use()` takes only factories.
 - Besides credentials, it may return any default headers, such as `User-Agent` or an API-version header. All of them are treated as credentials, so they go only to the base URL's origin.
 - It may return an `AuthAttempt` instead of the headers, to have a 401 retried; see [Authentication](#authentication).
 
@@ -490,7 +490,7 @@ The Contexts `fn` reads are the client's dependencies. Here a `profile` Context 
 
 <include lang="ts">../../../examples/modules/openapi.ts#profile</include>
 
-- `--profile` is a flag of the generated commands, of `api`, and of your commands that `.use(profiled.client)`; not of your other commands, nor of `api preview`.
+- `@crustjs/openapi` puts `--profile` on the generated commands, `api`, and your commands that `.use(profiled.client)`, not on every command: a reusable command you `.add()` that does not use the client, and `api preview`, do not parse it. As for any Context the app `.provide()`s, the root and the inline `.command()` children after `.provide()` parse it too.
 - The app `.provide()`s the Context before `.extend(profiled.extension)`. One it does not provide fails to compile there (`FIX_MISSING_DEPENDENCY`), and at run time with `No provider for Context "profile"`.
 - Its flags must not be named like a flag of `api` (`-X`, `-H`, `-F`, `--body`, `--paginate`, `--list`, `--spec`): the app fails with `Flag "body" collides with existing flag "body" on command "api"`.
 

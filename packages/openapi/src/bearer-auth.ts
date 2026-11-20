@@ -15,7 +15,7 @@ export interface BearerResolveOptions<Ctx extends ContextMap = {}> {
 	readonly signal: AbortSignal;
 	/** The client's `baseUrl` as configured, so a stored login can check it may go there. */
 	readonly baseUrl: string;
-	/** The Contexts `.auth()` reads, such as the login profile a flag picks. */
+	/** The Contexts of the Context factories `.use()`d before `.auth()`. */
 	readonly ctx: ContextBag<Ctx>;
 }
 
