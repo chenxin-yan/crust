@@ -278,7 +278,7 @@ One shape, given for every operation by `.each(op)` or for one operationId by `.
 
 ## What `crust build` checks
 
-An operation that does not fit is left out of `acme.commands`, so a CLI run from source keeps working while you fix it: `api --list` marks it `[unavailable: <code>]`, and nothing throws. When the app holds the generated commands of the handle whose `extension` it registers (its snapshot has them, at any mount), that handle's build hook sorts its problems by one rule: can configuration make the operation a working command? An app that uses only the `api` command checks nothing, and builds with any document, as without generated commands.
+An operation that does not fit is left out of `acme.commands`, so a CLI run from source keeps working while you fix it: `api --list` of an app that adds them marks it `[unavailable: <code>]`, and nothing throws. When the app takes the generated commands of the handle whose `extension` it registers (it reads that handle's `acme.commands`, to add at any mount), that handle's build hook sorts its problems by one rule: can configuration make the operation a working command? An app that never reads `acme.commands` checks nothing, whatever commands of its own it has, and builds with any document, as without generated commands.
 
 - **Yes: `crust build` fails** until an override (other than `exclude`), `.onConfirm()` or `.add()` settles each one, or `exclude: true` leaves the operation out on purpose. It lists every such problem with its fix:
 

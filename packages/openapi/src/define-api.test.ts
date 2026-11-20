@@ -141,6 +141,44 @@ describe("crust build checks the handle", () => {
 		expect(await build(settled)).toEqual({ files: new Map() });
 	});
 
+	it("checks nothing for an app that never takes the commands, also with its own command at a generated path", async () => {
+		const spec = {
+			openapi: "3.1.0",
+			paths: {
+				"/health": {
+					get: {
+						operationId: "health",
+						summary: "Health",
+						responses: { "200": { description: "OK" } },
+					},
+				},
+				"/delete": {
+					delete: {
+						operationId: "deleteAccount",
+						summary: "Delete",
+						responses: { "204": { description: "Deleted" } },
+					},
+				},
+			},
+		};
+		const acme = defineApi({ spec, baseUrl: "https://api.example.com" }).override({
+			deleteAccount: { confirm: "Delete?" },
+		});
+		const health = defineCommand("health", (command) => command.action(() => {}));
+
+		expect(await runBuildHooks(new Crust("acme").extend(acme.extension).add(health))).toEqual({
+			files: new Map(),
+		});
+		// Below a parent of the app's, the commands are checked.
+		const nested = new Crust("acme")
+			.extend(acme.extension)
+			.add(health)
+			.add(defineCommand("remote", (command) => command.add(...acme.commands)));
+		expect((await runBuildHooks(nested)).error).toContain(
+			"DELETE /delete: the override sets `confirm`, but the handle has no `.onConfirm()` handler",
+		);
+	});
+
 	it("lets nothing of a skipped operation fail the build, not even its input names", async () => {
 		const names = ["notificationUrl", "notification_url"].map((name) => ({
 			name,
