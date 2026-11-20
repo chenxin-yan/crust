@@ -11,6 +11,7 @@ import {
 	openBrowser,
 	startDeviceFlow,
 } from "@crustjs/auth/oauth";
+import { defineCommand } from "@crustjs/core";
 import { apiCommand, type BearerCredential, bearerAuth } from "@crustjs/openapi";
 
 //#region client
@@ -68,6 +69,53 @@ const api = apiCommand({
 	// Resolved on the first authenticated request; a 401 refreshes a stored login once.
 	auth: bearerAuth(auth.token),
 });
+//#endregion
+
+//#region profiles
+const accounts = createAuth({
+	app: "acme",
+	issuer: "https://login.acme.example",
+	clientId: "acme-cli",
+	apiOrigins: ["https://api.acme.example"],
+	env: "ACME_TOKEN",
+	// Turns profiles on; ACME_PROFILE=work picks the profile for one run.
+	profiles: { env: "ACME_PROFILE" },
+});
+
+// `acme login --profile work`; without the flag, the current profile.
+const profileLogin = defineCommand("login", (command) =>
+	command
+		.flags({ profile: { type: "string", description: "The profile to sign in to" } })
+		.action(({ flags, signal, stderr }) =>
+			accounts.profile(flags.profile).login({
+				signal,
+				onUrl: async ({ url, open }) => {
+					stderr(`Sign in at: ${url}`);
+					await open();
+				},
+				onCode: ({ message }) => stderr(message),
+			}),
+		),
+);
+
+// `acme profile list`: one line per profile, the current one marked.
+const profileList = defineCommand("list", (command) =>
+	command.action(async ({ stdout }) => {
+		for (const { name, current } of await accounts.profiles.list()) {
+			stdout(`${current ? "*" : " "} ${name}`);
+		}
+	}),
+);
+
+// `acme profile use work`: the profile every later run uses.
+const profileUse = defineCommand("use", (command) =>
+	command
+		.args({ name: "name", type: "string", required: true })
+		.action(({ args, signal }) => accounts.profiles.use(args.name, { signal })),
+);
+
+// The API commands use the current profile's token, as with one login.
+const profileApi = bearerAuth(accounts.token);
 //#endregion
 
 //#region errors
@@ -185,3 +233,4 @@ const dev = defineServers({
 //#endregion
 
 console.log(source, expiresAt, loggedOut, api, multi, dev, local, remote, blocksApi, storage);
+console.log(profileLogin, profileList, profileUse, profileApi);

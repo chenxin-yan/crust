@@ -4,7 +4,7 @@
  */
 // Run both logins with sentinel secrets, including a hostile server that echoes
 // them back, and check every diagnostic sink. Network bodies sent on purpose are not sinks.
-import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { inspect } from "node:util";
 
@@ -379,7 +379,69 @@ const refreshed = () =>
 		expires_in: 3600,
 	});
 
+/**
+ * Every profile surface of a client with `profiles` over the stored login in `w`: `list()`,
+ * `use()`, `status()`, a profile without a login, and a profile variable holding a secret.
+ */
+async function recordProfiles(w: TokenWorld) {
+	vi.stubEnv("ACME_PROFILE", "");
+	const auth = createAuth({
+		app: w.app,
+		issuer: w.issuer,
+		clientId: "cli",
+		apiOrigins: w.identity.apiOrigins,
+		fetch: w.fetch,
+		profiles: { env: "ACME_PROFILE" },
+	});
+	record(auth);
+	record(auth.profile("default"));
+	record(await auth.profiles.list());
+	record(await auth.profiles.use("default"));
+	record(await auth.status());
+	record(await auth.profile("default").status());
+	record(await auth.profile("default").token());
+	await auth.profile("nobody").token().then(record, record);
+	await auth.profiles.use("nobody").then(record, record);
+	vi.stubEnv("ACME_PROFILE", `${STATIC.refreshToken}/`);
+	await auth.token().then(record, record);
+	await auth.status().then(record, record);
+}
+
 describe("secret sentinel gate: stored credentials", () => {
+	it("an env token that is a valid profile name never becomes a profile, in the file or a list", async () => {
+		const { w } = await storedLogin(refreshed);
+		vi.stubEnv("ACME_TOKEN", STATIC.envToken);
+		vi.stubEnv("ACME_PROFILE", "");
+		const options = {
+			app: w.app,
+			issuer: w.issuer,
+			clientId: "cli",
+			apiOrigins: w.identity.apiOrigins,
+			fetch: w.fetch,
+			env: "ACME_TOKEN",
+		};
+		try {
+			const shared = createAuth({ ...options, profiles: { env: "ACME_TOKEN" } });
+			record(await shared.logout());
+			record(await shared.profiles.list());
+		} catch (error) {
+			record(error);
+		}
+		const auth = createAuth({ ...options, profiles: { env: "ACME_PROFILE" } });
+		record(await auth.token());
+		record(await auth.status());
+		record(await auth.logout());
+		record(await auth.profiles.list());
+		sinks.push(readFileSync(w.file, "utf8"));
+		expectNoSecretInSinks();
+	});
+
+	it("profiles, their errors and status leak nothing", async () => {
+		const { w } = await storedLogin(refreshed);
+		await recordProfiles(w);
+		expectNoSecretInSinks();
+	});
+
 	it("a refresh, the client's tokens and a logout leak nothing", async () => {
 		const { w, source } = await storedLogin(refreshed);
 		record(await source.get());
@@ -533,6 +595,16 @@ describe("secret sentinel gate: the keyring", () => {
 		roots.push(plain.root);
 		record(await login(plain.source(), { accessToken: STATIC.accessToken }));
 		record(await plain.store.status());
+		expectNoSecretInSinks();
+	});
+
+	it("profiles over an encrypted file leak neither a token nor the key", async () => {
+		const keyring = fakeKeyring();
+		const w = tokenWorld({ keyring: {} });
+		roots.push(w.root);
+		await login(w.source(), { accessToken: STATIC.accessToken, refreshToken: STATIC.refreshToken });
+		secrets.add(keyring.entries.get(`${w.app}\0credentials-key`)!).add(keyring.entry(w.app)!.key);
+		await recordProfiles(w);
 		expectNoSecretInSinks();
 	});
 

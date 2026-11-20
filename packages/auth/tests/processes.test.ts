@@ -271,6 +271,19 @@ describe.each(["node", "bun"])("on %s", (runtime) => {
 		expect(readFileSync(credentialsFile(), "utf8")).not.toMatch(/"accessToken"|"refreshToken"/);
 	}, 90_000);
 
+	it("a profile chosen in one process while another logs in to another profile keeps both", async () => {
+		const as = await authorizationServer(0);
+		const { root } = await loggedIn(as.issuer);
+		const keyring = join(root, "keyring");
+		const login = child(runtime, ["login", as.issuer, "acme", "b", keyring, "300"], root);
+		const use = child(runtime, ["use", as.issuer, "acme", "default"], root);
+		expect(await Promise.all([output(login), output(use)])).toEqual(["ok", "ok"]);
+		const document = JSON.parse(readFileSync(credentialsFile(), "utf8"));
+		expect(Object.values(document.currentProfile)).toEqual(["default"]);
+		const reader = child(runtime, ["read", as.issuer, "acme", "b", keyring], root);
+		expect(await output(reader)).toBe("AT_b");
+	}, 90_000);
+
 	it("a process killed before its login's write leaves the file intact, and the next login writes no second key", async () => {
 		const as = await authorizationServer(0);
 		const { root } = await loggedIn(as.issuer);
