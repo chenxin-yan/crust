@@ -197,7 +197,7 @@ afterEach(() => {
 });
 
 describe("generated commands", () => {
-	it("build one command per operation in its tag's group, leaving out deprecated and lint-error operations", async () => {
+	it("build one command per operation in its tag's group, leaving out deprecated operations and those it cannot generate", async () => {
 		const acme = buildApi();
 		const app = new Crust("acme").extend(acme.extension).add(...acme.commands);
 		const snapshot = await app.snapshot();

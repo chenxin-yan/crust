@@ -278,7 +278,7 @@ One shape, given for every operation by `.each(op)` or for one operationId by `.
 
 ## What `crust build` checks
 
-An operation that does not fit is left out of `acme.commands`, so a CLI run from source keeps working while you fix it: `api --list` marks it `[unavailable: <code>]`, and nothing throws. The build hook of the handle whose `extension` the app registers then sorts its problems by one rule: can configuration make the operation a working command?
+An operation that does not fit is left out of `acme.commands`, so a CLI run from source keeps working while you fix it: `api --list` marks it `[unavailable: <code>]`, and nothing throws. When the app holds the generated commands of the handle whose `extension` it registers (its snapshot has them, at any mount), that handle's build hook sorts its problems by one rule: can configuration make the operation a working command? An app that uses only the `api` command checks nothing, and builds with any document, as without generated commands.
 
 - **Yes: `crust build` fails** until an override (other than `exclude`), `.onConfirm()` or `.add()` settles each one, or `exclude: true` leaves the operation out on purpose. It lists every such problem with its fix:
 
@@ -346,7 +346,7 @@ Each of its `params`:
 
 Deprecated operations are read too, and left out of the generated commands unless an override sets `exclude: false`.
 
-`api --list` and `api --spec` stay permissive: they also read documents without a version and operations without an `operationId`.
+`api --list` and `api --spec` stay permissive: they also read documents without a version and operations without an `operationId`, also in a CLI built without generated commands.
 
 When Crust turns spec names (operationIds, tags, parameter and body field names) into command, group, or flag names, it kebab-cases them: a capital after a lowercase letter or digit, and the last capital of a capital run followed by a lowercase letter, start a word, and every run of other characters than ASCII letters and digits is one `-`. So `DeleteWebhook` and `deleteWebhook` both become `delete-webhook`, `notification_url` becomes `notification-url`, and `getHTTPResponse` becomes `get-http-response`, while plural acronyms split before their last capital: `CAs` becomes `c-as` and `AAGUIDs` becomes `aagui-ds`. Names are compared after kebab-casing, so two that differ only in case or separators are the same name.
 

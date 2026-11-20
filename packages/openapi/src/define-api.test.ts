@@ -1,3 +1,8 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+
 import { type CommandSnapshot, Crust, defineCommand, defineContext } from "@crustjs/core";
 import { describe, expect, it, vi } from "vite-plus/test";
 
@@ -135,11 +140,31 @@ describe("crust build checks the handle", () => {
 		expect(await build(settled)).toEqual({ files: new Map() });
 	});
 
-	it("fails for a document no command can come from", async () => {
-		const acme = defineApi({
-			spec: { swagger: "2.0", paths: {} },
-			baseUrl: "https://api.example.com",
+	const swagger = { swagger: "2.0", paths: { "/users": { get: { operationId: "listUsers" } } } };
+
+	it("checks nothing for an app that holds none of the handle's generated commands, as for `api` alone", async () => {
+		const file = join(mkdtempSync(join(tmpdir(), "crust-openapi-api-only-")), "acme.openapi.json");
+		writeFileSync(file, JSON.stringify(clash));
+		const apiOnly = (handle: Pick<ReturnType<typeof defineApi>, "extension">) =>
+			runBuildHooks(new Crust("acme").extend(handle.extension));
+		const unhandled = defineApi({ spec: clash, baseUrl: "https://api.example.com" }).override({
+			"users-list-users": { name: "list-b" },
+			listUsers: { confirm: "Sure?" },
 		});
+
+		expect(
+			await apiOnly(defineApi({ spec: pathToFileURL(file), baseUrl: "https://api.example.com" })),
+		).toEqual({ files: new Map([["openapi/spec.json", JSON.stringify(clash)]]) });
+		expect(await apiOnly(defineApi({ spec: swagger, baseUrl: "https://api.example.com" }))).toEqual(
+			{ files: new Map() },
+		);
+		expect(await apiOnly(unhandled)).toEqual({ files: new Map() });
+		// The same handles fail once the app holds their commands.
+		expect((await build(unhandled)).error).toContain("GET /a: the override sets `confirm`");
+	});
+
+	it("fails for a document no command can come from", async () => {
+		const acme = defineApi({ spec: swagger, baseUrl: "https://api.example.com" });
 
 		expect((await build(acme)).error).toContain(
 			"Only OpenAPI 3.0 and 3.1 documents are supported; this one is",

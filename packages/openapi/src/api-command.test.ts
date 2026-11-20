@@ -119,7 +119,7 @@ describe("api --list and --spec", () => {
 
 		expect(exitCode).toBe(0);
 		expect(stdout.split("\n")).toEqual([
-			// The fixture's operations declare no responses, which lint reports.
+			// The fixture's operations declare no responses, so their commands are skipped.
 			"GET /users listUsers List users [unavailable: no-success-response]",
 			"POST /users createUser [unavailable: no-success-response]",
 			"GET /users/{id} getUser [unavailable: no-success-response]",

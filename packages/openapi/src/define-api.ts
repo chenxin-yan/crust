@@ -1,6 +1,7 @@
 import {
 	type CommandDefinition,
 	type CommandShape,
+	type CommandSnapshot,
 	type ContextBag,
 	type ContextFactory,
 	type ContextInstance,
@@ -235,10 +236,28 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 	};
 	let extension: Api["extension"] | undefined;
 	let commands: readonly GeneratedDefinition[] | undefined;
+	// The app holds this handle's generated commands when its snapshot has one at its path, below
+	// any command (the app may add them below one); a handle that generates none is held once the
+	// app read its `commands`.
+	const holdsCommands = (snapshot: CommandSnapshot): boolean => {
+		const paths = built().map(({ group, name }) => [
+			...(group === "" ? [] : group.split(" ")),
+			name,
+		]);
+		if (paths.length === 0) return commands !== undefined;
+		const nodes = [snapshot];
+		for (const node of nodes) {
+			if (paths.some((path) => commandAt(node, path))) return true;
+			nodes.push(...Object.values(node.subCommands));
+		}
+		return false;
+	};
 	const handle = Object.freeze({
 		get extension() {
-			return (extension ??= apiExtension(base, unavailable, () =>
-				buildProblems(plan().diagnostics),
+			// Only an app that holds the generated commands has problems to settle: one that uses
+			// the `api` command alone builds as without them.
+			return (extension ??= apiExtension(base, unavailable, (snapshot) =>
+				holdsCommands(snapshot) ? buildProblems(plan().diagnostics) : undefined,
 			));
 		},
 		client: base.client,
@@ -284,12 +303,12 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 
 /**
  * The `api` Extension of a handle: `api --list` marks the operations it leaves out, and its build
- * hook fails with the handle's problems that need a decision.
+ * hook fails with the handle's problems that need a decision, for the app's snapshot.
  */
 function apiExtension(
 	base: ApiBase,
 	unavailable: () => ReadonlyMap<string, string>,
-	problems: () => string | undefined,
+	problems: (snapshot: CommandSnapshot) => string | undefined,
 ): Api["extension"] {
 	const { id, spec } = base;
 	const loadSpec = async () => base.document();
@@ -302,12 +321,22 @@ function apiExtension(
 				unavailable,
 			}),
 		);
-	return extension.build(async () => {
-		const problem = problems();
+	return extension.build(async ({ snapshot }) => {
+		const problem = problems(snapshot);
 		if (problem !== undefined) throw new Error(problem);
 		if (!(spec instanceof URL)) return [];
 		// Fails for an `id` the built CLI could not look up, by the lookup's own rule.
 		resolveArtifactDir(id);
 		return [{ path: `${id}/${BUILT_SPEC_FILE}`, content: JSON.stringify(await loadSpec()) }];
 	});
+}
+
+/** Whether `node` has a command at `path`, word by word. */
+function commandAt(node: CommandSnapshot, path: readonly string[]): boolean {
+	let command: CommandSnapshot | undefined = node;
+	for (const word of path) {
+		command = Object.hasOwn(command.subCommands, word) ? command.subCommands[word] : undefined;
+		if (command === undefined) return false;
+	}
+	return true;
 }
