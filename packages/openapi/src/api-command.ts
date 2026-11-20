@@ -4,6 +4,7 @@ import {
 	type ContextFactory,
 	type ContextMap,
 	CrustError,
+	type FlagsDef,
 	defineCommand,
 } from "@crustjs/core";
 import type { JsonValue } from "@crustjs/utils/json";
@@ -385,12 +386,14 @@ type ApiFlags = typeof browseFlags & ApiRequestFlags & typeof paginateFlag;
 export type ApiCommandDefinition<
 	Operations = unknown,
 	AuthDeps extends ContextMap = {},
+	// The flags of the Contexts the client's `auth` reads, which `api` parses.
+	AuthFlags extends FlagsDef = {},
 > = CommandDefinition<
 	"api",
 	readonly [],
 	CommandShape<
 		readonly [typeof pathArg],
-		ApiFlags,
+		ApiFlags & AuthFlags,
 		{ readonly preview: PreviewShape },
 		JsonValue | undefined,
 		{},

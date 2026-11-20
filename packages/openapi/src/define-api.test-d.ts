@@ -433,6 +433,51 @@ function _typecheckAuthChain() {
 		.extend(late.extension)
 		// @ts-expect-error -- FIX_DEPENDENCY_TYPE: `api`
 		.add(...late.commands);
+	// Commands `.add()`ed from a named array count as its element type, in both directions.
+	const befores = [before];
+	const authedWithBefores = api.add("users", ...befores);
+	new Crust("acme")
+		.provide(profile(), account())
+		.extend(authedWithBefores.extension)
+		// @ts-expect-error -- FIX_DEPENDENCY_TYPE: `api`, a client whose `auth` reads no Contexts
+		.add(...authedWithBefores.commands);
+	const whoamis = [whoami];
+	const plainWithWhoamis = plain.add("users", ...whoamis);
+	new Crust("acme")
+		.provide(profile(), account())
+		.extend(plainWithWhoamis.extension)
+		// @ts-expect-error -- FIX_DEPENDENCY_TYPE: `api`, a client whose `auth` reads `profile` and `account`
+		.add(...plainWithWhoamis.commands);
+
+	// The flags of the Contexts `auth` reads: a command that uses the client parses them, and so does `api`.
+	const flagged = new Crust("acme")
+		.provide(profile(), account())
+		.extend(api.extension)
+		.add(
+			defineCommand("me", (command) =>
+				command.use(api.client).action(({ flags }) => {
+					type _Flag = Expect<Equal<typeof flags.profile, string | undefined>>;
+				}),
+			),
+		);
+	void flagged.run(["api"], { args: { path: "/x" }, flags: { profile: "work" } });
+	void flagged.run(["me"], { flags: { profile: "work" } });
+	// `api preview` sets up no Context, so it does not.
+	void flagged.run(
+		["api", "preview"],
+		// @ts-expect-error -- `api preview` has no `--profile`
+		{ args: { target: ["/x"] }, flags: { profile: "work" } },
+	);
+
+	// The factories of a named array `.use()`d before `.auth()` count too.
+	const head = defineContext("head").setup(() => 1);
+	const more = [profile];
+	const spread = plain.use(head, ...more).auth(async ({ ctx }) => void (await ctx.profile));
+	new Crust("acme").provide(head(), profile()).extend(spread.extension);
+	new Crust("acme")
+		.provide(head())
+		// @ts-expect-error -- FIX_MISSING_DEPENDENCY: `profile`, of the spread array
+		.extend(spread.extension);
 
 	defineApi({ spec, baseUrl })
 		.use(profile)

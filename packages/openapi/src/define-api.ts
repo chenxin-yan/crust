@@ -10,6 +10,7 @@ import {
 	type Extension,
 	type ExtensionContext,
 	type ExtensionId,
+	type FlagsDef,
 	type MergeContext,
 	type UseSource,
 	type UsedContexts,
@@ -87,18 +88,47 @@ type Overrides<Operations, Deps extends ContextMap> = unknown extends Operations
 	? { readonly [operationId: string]: OverrideEntry<Deps> }
 	: { readonly [Id in keyof Operations & string]?: OverrideEntry<Deps, Operations[Id]> };
 
-// The Context factories among `.use()` sources: a Context's own `.use()` takes only those, so they are all `.auth()` can read.
+type UnionToIntersection<U> = (U extends unknown ? (value: U) => void : never) extends (
+	value: infer I,
+) => void
+	? I
+	: never;
+
+// The Context factories among `.use()` sources, a spread array's too: a Context's own `.use()` takes only those, so they are all `.auth()` can read.
 type ContextFactoriesOf<
 	Us extends readonly unknown[],
 	Acc extends readonly AnyContextFactory[] = [],
 > = Us extends readonly [infer H, ...infer T]
 	? ContextFactoriesOf<T, H extends AnyContextFactory ? [...Acc, H] : Acc>
-	: Acc;
+	: Us extends readonly []
+		? Acc
+		: [...Acc, ...Extract<Us[number], AnyContextFactory>[]];
 
-// The Contexts each definition declares, intersected one by one; `any` matches every definition, as in `Crust.add()`.
-type AddedDeps<Ds extends readonly unknown[]> = Ds extends readonly [infer D, ...infer Rest]
-	? (D extends CommandDefinition<any, any, any, infer Deps> ? Deps : {}) & AddedDeps<Rest>
-	: {};
+type FactoryContexts<F> = F extends AnyContextFactory ? UsedContexts<[F]> : never;
+
+// The Contexts of `Fs` with their dependencies: those of each factory a spread array may hold, as the client declares them all.
+type ClientDeps<Fs extends readonly AnyContextFactory[]> = [Fs[number]] extends [never]
+	? {}
+	: UnionToIntersection<FactoryContexts<Fs[number]>> extends infer Deps extends ContextMap
+		? Deps
+		: {};
+
+type FactoryFlags<F> =
+	F extends ContextFactory<any, any, any, any, any, infer Flags> ? Flags : never;
+
+// The flags a command that uses the client parses: those each factory of `Fs` owns, transitively, a spread array's too.
+type ClientFlags<Fs extends readonly AnyContextFactory[]> = [Fs[number]] extends [never]
+	? {}
+	: UnionToIntersection<FactoryFlags<Fs[number]>> extends infer Flags extends FlagsDef
+		? Flags
+		: {};
+
+type DefinitionDeps<D> = D extends CommandDefinition<any, any, any, infer Deps> ? Deps : {};
+
+// The Contexts each definition declares, intersected, those of each definition a spread array may hold too; `any` matches every definition, as in `Crust.add()`.
+type AddedDeps<Ds extends readonly unknown[]> = [Ds[number]] extends [never]
+	? {}
+	: UnionToIntersection<DefinitionDeps<Ds[number]>>;
 
 /**
  * What {@link defineApi} returns: the Extension to register, the client Context commands use, and
@@ -109,17 +139,25 @@ export interface Api<
 	Deps extends ContextMap = { api: ApiClient<Operations> },
 	// The Contexts of the `.add()`ed commands, which the generated commands do not `.use()`.
 	Added extends ContextMap = {},
-	// The Contexts of the Context factories `.use()`d so far: what `.auth()` reads.
-	AuthCtx extends ContextMap = {},
-	// The Contexts the last `.auth()` reads: the client's dependencies.
-	AuthDeps extends ContextMap = {},
+	// The Context factories `.use()` so far: what `.auth()` reads.
+	AuthUse extends readonly AnyContextFactory[] = [],
+	// Those the last `.auth()` reads: the client's dependencies.
+	ClientUse extends readonly AnyContextFactory[] = [],
 > {
 	/** Contributes the `api` command and provides the `api` Context; pass it to `.extend()`. */
 	readonly extension: Extension<
-		{ api: ApiClient<Operations, AuthDeps> } & AuthDeps,
-		readonly [ContextInstance<"api", ApiClient<Operations, AuthDeps>, {}, AuthDeps>],
+		{ api: ApiClient<Operations, ClientDeps<ClientUse>> } & ClientDeps<ClientUse>,
+		readonly [
+			ContextInstance<
+				"api",
+				ApiClient<Operations, ClientDeps<ClientUse>>,
+				{},
+				ClientDeps<ClientUse>,
+				ClientFlags<ClientUse>
+			>,
+		],
 		{},
-		readonly [ApiCommandDefinition<Operations, AuthDeps>],
+		readonly [ApiCommandDefinition<Operations, ClientDeps<ClientUse>, ClientFlags<ClientUse>>],
 		never,
 		{}
 	>;
@@ -128,7 +166,14 @@ export interface Api<
 	 * a new one: take it from the handle whose `extension` the app extends, or from one before it
 	 * after the same `.auth()`.
 	 */
-	readonly client: ContextFactory<"api", void, ApiClient<Operations, AuthDeps>, {}, AuthDeps>;
+	readonly client: ContextFactory<
+		"api",
+		void,
+		ApiClient<Operations, ClientDeps<ClientUse>>,
+		{},
+		ClientDeps<ClientUse>,
+		ClientFlags<ClientUse>
+	>;
 	/**
 	 * A command per operation, in its group, with the commands `.add()` put there: the root
 	 * commands and the top-level groups, to pass to `.add()`. An operation with a problem is left
@@ -147,8 +192,8 @@ export interface Api<
 		Operations,
 		MergeContext<Deps, UsedContexts<Us>>,
 		Added,
-		MergeContext<AuthCtx, UsedContexts<ContextFactoriesOf<Us>>>,
-		AuthDeps
+		ContextFactoriesOf<Us, AuthUse>,
+		ClientUse
 	>;
 	/**
 	 * Sends credentials with requests: `auth` runs at most once per invocation, on the first request
@@ -158,13 +203,13 @@ export interface Api<
 	 * `client`; without `.auth()`, requests carry no credentials.
 	 */
 	auth(
-		auth: ApiAuth<AuthCtx>,
+		auth: ApiAuth<ClientDeps<AuthUse>>,
 	): Api<
 		Operations,
-		Omit<Deps, "api"> & { api: ApiClient<Operations, AuthCtx> },
+		Omit<Deps, "api"> & { api: ApiClient<Operations, ClientDeps<AuthUse>> },
 		Added,
-		AuthCtx,
-		AuthCtx
+		AuthUse,
+		AuthUse
 	>;
 	/**
 	 * Asks to confirm an operation's `confirm` message before its request: resolving to nothing (or
@@ -172,20 +217,20 @@ export interface Api<
 	 */
 	onConfirm(
 		handler: (ctx: ContextBag<Deps>, message: string) => ConfirmResult | Promise<ConfirmResult>,
-	): Api<Operations, Deps, Added, AuthCtx, AuthDeps>;
+	): Api<Operations, Deps, Added, AuthUse, ClientUse>;
 	/** The override for every operation, synchronous and pure; replaces the previous rule. */
 	each(
 		rule: (
 			operation: Operation & { readonly id: OperationIdOf<Operations> },
 		) => OperationOverride<Deps> | undefined,
-	): Api<Operations, Deps, Added, AuthCtx, AuthDeps>;
+	): Api<Operations, Deps, Added, AuthUse, ClientUse>;
 	/** Overrides by operationId, whose fields replace the rule's; an entry for the same operationId replaces the previous one's fields. */
-	override(entries: Overrides<Operations, Deps>): Api<Operations, Deps, Added, AuthCtx, AuthDeps>;
+	override(entries: Overrides<Operations, Deps>): Api<Operations, Deps, Added, AuthUse, ClientUse>;
 	/** Puts the app's own commands in a group path, such as `"dns records"` (`""` is the root), creating the group when no operation maps to it. */
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
 		group: string,
 		...definitions: Ds
-	): Api<Operations, Deps, Added & AddedDeps<Ds>, AuthCtx, AuthDeps>;
+	): Api<Operations, Deps, Added & AddedDeps<Ds>, AuthUse, ClientUse>;
 }
 
 // Every handle, its types erased: the chain methods build any of them.
