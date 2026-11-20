@@ -69,8 +69,11 @@ export interface CredentialsDocument {
 	/** The backend holding that key; `undefined` in a file written before it was recorded. */
 	keyring: KeyringKind | undefined;
 	records: Record<string, JsonValue | undefined>;
-	/** The profile chosen with `profiles.use()`, by {@link serverKey}; written only when not empty. */
-	currentProfile: Record<string, string>;
+	/**
+	 * The profiles chosen with `profiles.use()`, by {@link serverKey}, as stored: read and checked
+	 * only by {@link currentProfiles}, so a client without profiles keeps it like an unknown key.
+	 */
+	currentProfile: JsonValue | undefined;
 }
 
 /** Accepts any JSON value: the document is validated here, not by the store. */
@@ -102,6 +105,11 @@ export interface CredentialStoreInternals {
 	readonly path: string;
 	/** The document, or `undefined` when there is none. Takes no lock. */
 	read(): Promise<CredentialsDocument | undefined>;
+	/** `status()` of `document`, a snapshot `read()` returned: asks the keyring, reads no file. */
+	statusOf(
+		document: CredentialsDocument | undefined,
+		signal: AbortSignal | undefined,
+	): Promise<CredentialStoreStatus>;
 	/**
 	 * One locked read-modify-write. `change` runs synchronously inside the document lock and
 	 * throws to write nothing. `signal` is observed only while waiting for the lock.
@@ -322,13 +330,12 @@ export function withFileKey(
 }
 
 function parseDocument(raw: RawDocument, path: string): CredentialsDocument | undefined {
-	const { version, storeId, encryption, records, currentProfile = {} } = raw;
+	const { version, storeId, encryption, records, currentProfile } = raw;
 	if (
 		version === undefined &&
 		storeId === undefined &&
 		encryption === undefined &&
-		records === undefined &&
-		raw.currentProfile === undefined
+		records === undefined
 	) {
 		return undefined;
 	}
@@ -347,9 +354,7 @@ function parseDocument(raw: RawDocument, path: string): CredentialsDocument | un
 		(encryption.kind !== "plaintext" && keyId === undefined) ||
 		(keyring !== undefined &&
 			(keyId === undefined || (keyring !== "bun-secrets" && keyring !== "napi-keyring"))) ||
-		!isObject(records) ||
-		!isObject(currentProfile) ||
-		!Object.values(currentProfile).every(isProfileName)
+		!isObject(records)
 	) {
 		throw new CredentialStoreCorruptError(path);
 	}
@@ -358,7 +363,7 @@ function parseDocument(raw: RawDocument, path: string): CredentialsDocument | un
 		keyId,
 		keyring,
 		records: { ...(records as Record<string, JsonValue | undefined>) },
-		currentProfile: { ...(currentProfile as Record<string, string>) },
+		currentProfile,
 	};
 }
 
@@ -373,8 +378,7 @@ function serializeDocument(document: CredentialsDocument): RawDocument {
 					? { kind: "aes-256-gcm", keyId: document.keyId }
 					: { kind: "aes-256-gcm", keyId: document.keyId, keyring: document.keyring },
 		records: document.records as JsonObject,
-		currentProfile:
-			Object.keys(document.currentProfile).length === 0 ? undefined : document.currentProfile,
+		currentProfile: document.currentProfile,
 	};
 }
 
@@ -384,7 +388,35 @@ export const emptyDocument = (): CredentialsDocument => ({
 	keyId: undefined,
 	keyring: undefined,
 	records: {},
-	currentProfile: {},
+	currentProfile: undefined,
+});
+
+/**
+ * The profiles chosen with `profiles.use()` in `document`, by {@link serverKey}. A field that is
+ * not an object of profile names fails closed.
+ */
+export function currentProfiles(
+	document: CredentialsDocument | undefined,
+	path: string,
+): Record<string, string> {
+	const stored = document?.currentProfile;
+	const chosen: Record<string, string> = {};
+	if (stored === undefined) return chosen;
+	if (!isObject(stored)) throw new CredentialStoreCorruptError(path);
+	for (const [server, profile] of Object.entries(stored)) {
+		if (!isProfileName(profile)) throw new CredentialStoreCorruptError(path);
+		chosen[server] = profile;
+	}
+	return chosen;
+}
+
+/** `document` with `chosen` as its profile choices; none removes the field. */
+export const withCurrentProfiles = (
+	document: CredentialsDocument,
+	chosen: Record<string, string>,
+): CredentialsDocument => ({
+	...document,
+	currentProfile: Object.keys(chosen).length === 0 ? undefined : chosen,
 });
 
 /** The AAD of a record's secret: it binds the ciphertext to its file, record and generation. */
@@ -467,7 +499,16 @@ export function credentialStore(options: CredentialStoreOptions): CredentialStor
 		throwIfAborted(signal);
 		try {
 			const written = await store.update(
-				(raw) => serializeDocument(change(parseDocument(raw, path))),
+				(raw) => {
+					const document = parseDocument(raw, path);
+					const next = change(document);
+					// A file without the credentials fields keeps `currentProfile` as one of its own keys.
+					return serializeDocument(
+						document === undefined && next.currentProfile === undefined
+							? { ...next, currentProfile: raw.currentProfile }
+							: next,
+					);
+				},
 				{ signal },
 			);
 			return parseDocument(written, path) as CredentialsDocument;
@@ -527,22 +568,25 @@ export function credentialStore(options: CredentialStoreOptions): CredentialStor
 		return { ...record, secret: sealed };
 	};
 
+	const statusOf: CredentialStoreInternals["statusOf"] = async (document, signal) => {
+		const plaintextRecords = Object.values(document?.records ?? {}).filter((raw) => {
+			const secret = parseRecord(raw)?.secret;
+			return secret !== undefined && !isSealed(secret);
+		}).length;
+		const { kind, keyReadable } = await keys.status(document?.keyId, document?.keyring, signal);
+		return {
+			kind,
+			encryption: document?.keyId === undefined ? "plaintext" : "aes-256-gcm",
+			keyReadable,
+			plaintextRecords,
+		};
+	};
+
 	const credentials: CredentialStore = Object.freeze({
 		path,
 		async status({ signal }: { signal?: AbortSignal } = {}): Promise<CredentialStoreStatus> {
 			throwIfAborted(signal);
-			const document = await read();
-			const plaintextRecords = Object.values(document?.records ?? {}).filter((raw) => {
-				const secret = parseRecord(raw)?.secret;
-				return secret !== undefined && !isSealed(secret);
-			}).length;
-			const { kind, keyReadable } = await keys.status(document?.keyId, document?.keyring, signal);
-			return {
-				kind,
-				encryption: document?.keyId === undefined ? "plaintext" : "aes-256-gcm",
-				keyReadable,
-				plaintextRecords,
-			};
+			return statusOf(await read(), signal);
 		},
 		async resetCredentials({ key, signal }: { key?: string; signal?: AbortSignal } = {}) {
 			throwIfAborted(signal);
@@ -576,6 +620,7 @@ export function credentialStore(options: CredentialStoreOptions): CredentialStor
 	internals.set(credentials, {
 		path,
 		read,
+		statusOf,
 		update,
 		lockIdentity,
 		reveal,

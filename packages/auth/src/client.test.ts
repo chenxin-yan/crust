@@ -3,7 +3,7 @@
  * @module-tag macos
  */
 import { once } from "node:events";
-import { chmodSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { type AddressInfo, createServer } from "node:net";
 import { join } from "node:path";
 
@@ -51,6 +51,17 @@ import type { AuthWarning, BrowserLoginPrompt, DeviceLoginPrompt, LoginOptions }
 
 const openBrowser = vi.hoisted(() => vi.fn(async (_url: string, _options?: object) => true));
 vi.mock("./browser.ts", () => ({ openBrowser }));
+
+/** Every file `node:fs/promises` reads, so a test can count the credentials file's reads. */
+const fileReads = vi.hoisted((): string[] => []);
+vi.mock("node:fs/promises", async (importOriginal) => {
+	const fs = await importOriginal<typeof import("node:fs/promises")>();
+	const readFile = ((path: Parameters<typeof fs.readFile>[0], ...rest: [never]) => {
+		fileReads.push(String(path));
+		return fs.readFile(path, ...rest);
+	}) as typeof fs.readFile;
+	return { ...fs, readFile, default: { ...fs, readFile } };
+});
 
 const DEVICE = {
 	device_code: "SENTINEL_DEVICE",
@@ -903,35 +914,142 @@ describe("storage", () => {
 	});
 });
 
+/**
+ * The credentials file after a login, a refresh and a logout by a client without profiles, over
+ * `existing` file text. Random ids are numbered by first appearance; the rest is byte for byte.
+ */
+async function goldenFiles(existing?: string): Promise<string[]> {
+	const temp = tempApp();
+	roots.push(temp.root);
+	vi.useFakeTimers({ toFake: ["Date"], now: Date.UTC(2026, 0, 1) });
+	const issuer = "https://golden.example";
+	let issued = 0;
+	const { fetch } = fakeFetch({
+		[wellKnown(issuer)]: () => json(metadataFor(issuer)),
+		[`${issuer}/token`]: () => {
+			issued += 1;
+			return json({ ...TOKEN, access_token: `AT${issued}`, expires_in: issued === 1 ? 1 : 3600 });
+		},
+		[`${issuer}/revoke`]: () => new Response(null, { status: 200 }),
+	});
+	const auth = createAuth({ app: temp.app, issuer, clientId: "cli", apiOrigins: [API], fetch });
+	if (existing !== undefined) {
+		mkdirSync(temp.dir, { recursive: true, mode: 0o700 });
+		writeFileSync(join(temp.dir, "credentials.json"), existing, { mode: 0o600 });
+	}
+	const ids = new Map<string, string>();
+	const file = () =>
+		readFileSync(join(temp.dir, "credentials.json"), "utf8").replace(
+			/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g,
+			(id) => ids.get(id) ?? (ids.set(id, `id-${ids.size + 1}`), `id-${ids.size}`),
+		);
+	await auth.login({ onUrl: browser().onUrl, onCode: noCode });
+	const afterLogin = file();
+	expect((await auth.token()).value).toBe("AT2");
+	const afterRefresh = file();
+	await auth.logout();
+	return [afterLogin, afterRefresh, file()];
+}
+
 describe("without profiles", () => {
+	it("an existing currentProfile key is kept like any unknown key, through login, refresh and logout", async () => {
+		const existing = {
+			currentProfile: { "qoqhgI6SdnPNKWNZ1a3M8AuWgbwS7niCcqo8mRUmu-k": "default" },
+		};
+		expect(await goldenFiles(JSON.stringify(existing))).toMatchInlineSnapshot(`
+			[
+			  "{
+				"version": 1,
+				"storeId": "id-1",
+				"encryption": {
+					"kind": "plaintext"
+				},
+				"records": {
+					"default#qoqhgI6SdnPNKWNZ1a3M8AuWgbwS7niCcqo8mRUmu-k": {
+						"epoch": "id-2",
+						"identity": {
+							"issuer": "https://golden.example",
+							"clientId": "cli",
+							"profile": "default",
+							"apiOrigins": [
+								"https://api.example.com"
+							]
+						},
+						"generation": "id-3",
+						"tokenType": "Bearer",
+						"expiresAt": 1767225601000,
+						"scope": "read",
+						"secret": {
+							"accessToken": "AT1",
+							"refreshToken": "RT"
+						}
+					}
+				},
+				"currentProfile": {
+					"qoqhgI6SdnPNKWNZ1a3M8AuWgbwS7niCcqo8mRUmu-k": "default"
+				}
+			}",
+			  "{
+				"version": 1,
+				"storeId": "id-1",
+				"encryption": {
+					"kind": "plaintext"
+				},
+				"records": {
+					"default#qoqhgI6SdnPNKWNZ1a3M8AuWgbwS7niCcqo8mRUmu-k": {
+						"epoch": "id-2",
+						"identity": {
+							"issuer": "https://golden.example",
+							"clientId": "cli",
+							"profile": "default",
+							"apiOrigins": [
+								"https://api.example.com"
+							]
+						},
+						"generation": "id-4",
+						"tokenType": "Bearer",
+						"expiresAt": 1767229200000,
+						"scope": "read",
+						"secret": {
+							"accessToken": "AT2",
+							"refreshToken": "RT"
+						}
+					}
+				},
+				"currentProfile": {
+					"qoqhgI6SdnPNKWNZ1a3M8AuWgbwS7niCcqo8mRUmu-k": "default"
+				}
+			}",
+			  "{
+				"version": 1,
+				"storeId": "id-1",
+				"encryption": {
+					"kind": "plaintext"
+				},
+				"records": {
+					"default#qoqhgI6SdnPNKWNZ1a3M8AuWgbwS7niCcqo8mRUmu-k": {
+						"epoch": "id-5",
+						"identity": {
+							"issuer": "https://golden.example",
+							"clientId": "cli",
+							"profile": "default",
+							"apiOrigins": [
+								"https://api.example.com"
+							]
+						},
+						"tombstone": true
+					}
+				},
+				"currentProfile": {
+					"qoqhgI6SdnPNKWNZ1a3M8AuWgbwS7niCcqo8mRUmu-k": "default"
+				}
+			}",
+			]
+		`);
+	});
+
 	it("writes the same credentials file bytes as before profiles existed, for login, refresh and logout", async () => {
-		const temp = tempApp();
-		roots.push(temp.root);
-		vi.useFakeTimers({ toFake: ["Date"], now: Date.UTC(2026, 0, 1) });
-		const issuer = "https://golden.example";
-		let issued = 0;
-		const { fetch } = fakeFetch({
-			[wellKnown(issuer)]: () => json(metadataFor(issuer)),
-			[`${issuer}/token`]: () => {
-				issued += 1;
-				return json({ ...TOKEN, access_token: `AT${issued}`, expires_in: issued === 1 ? 1 : 3600 });
-			},
-			[`${issuer}/revoke`]: () => new Response(null, { status: 200 }),
-		});
-		const auth = createAuth({ app: temp.app, issuer, clientId: "cli", apiOrigins: [API], fetch });
-		// Random ids are numbered by first appearance; everything else is compared byte for byte.
-		const ids = new Map<string, string>();
-		const file = () =>
-			readFileSync(join(temp.dir, "credentials.json"), "utf8").replace(
-				/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g,
-				(id) => ids.get(id) ?? (ids.set(id, `id-${ids.size + 1}`), `id-${ids.size}`),
-			);
-		await auth.login({ onUrl: browser().onUrl, onCode: noCode });
-		const afterLogin = file();
-		expect((await auth.token()).value).toBe("AT2");
-		const afterRefresh = file();
-		await auth.logout();
-		expect([afterLogin, afterRefresh, file()]).toMatchInlineSnapshot(`
+		expect(await goldenFiles()).toMatchInlineSnapshot(`
 			[
 			  "{
 				"version": 1,
@@ -1037,6 +1155,8 @@ function profiled(options: { env?: string; profilesEnv?: string } = {}) {
 		env: options.env,
 		profiles: { env: options.profilesEnv },
 	});
+	// The developer's own ACME_PROFILE must not pick a profile.
+	if (options.profilesEnv !== undefined) vi.stubEnv(options.profilesEnv, "");
 	const signIn = (client: Pick<typeof auth, "login">) =>
 		client.login({ onUrl: browser().onUrl, onCode: noCode });
 	const document = () => JSON.parse(readFileSync(join(world.dir, "credentials.json"), "utf8"));
@@ -1050,6 +1170,176 @@ describe("profiles", () => {
 		expect(await auth.status()).not.toHaveProperty("profile");
 	});
 
+	it("without the profiles option, the client reads only its token variable", async () => {
+		const { auth } = await signedIn(undefined, { env: "ACME_TOKEN" });
+		const env = process.env;
+		const read = new Set<string | symbol>();
+		process.env = new Proxy(env, {
+			get: (target, name) => {
+				read.add(name);
+				return typeof name === "string" ? target[name] : undefined;
+			},
+		});
+		try {
+			await auth.token();
+			await auth.status();
+			await auth.logout();
+		} finally {
+			process.env = env;
+		}
+		expect([...read]).toEqual(["ACME_TOKEN"]);
+	});
+
+	it("without the profiles option, a currentProfile key that is not a profile choice is kept, not corrupt", async () => {
+		const { auth, dir, app, issuer, fetch } = setup();
+		mkdirSync(dir, { recursive: true, mode: 0o700 });
+		writeFileSync(join(dir, "credentials.json"), '{"currentProfile":"work"}', { mode: 0o600 });
+		expect(await rejection(auth.token())).toMatchObject({ reason: "missing" });
+		await auth.login({ onUrl: browser().onUrl, onCode: noCode });
+		await auth.logout();
+		const file = JSON.parse(readFileSync(join(dir, "credentials.json"), "utf8"));
+		expect(file.currentProfile).toBe("work");
+		const profiledAuth = createAuth({
+			app,
+			issuer,
+			clientId: "cli",
+			apiOrigins: [API],
+			fetch,
+			profiles: {},
+		});
+		expect(await rejection(profiledAuth.status())).toBeInstanceOf(CredentialStoreCorruptError);
+		const internals = credentialStoreInternals(credentialStore({ app }));
+		for (const currentProfile of [[], { server: "../work" }, { server: 7 }]) {
+			await internals.update((document) => ({ ...document!, currentProfile }));
+			expect(await rejection(profiledAuth.token())).toBeInstanceOf(CredentialStoreCorruptError);
+			expect(await rejection(profiledAuth.profiles.list())).toBeInstanceOf(
+				CredentialStoreCorruptError,
+			);
+			expect((await auth.status()).source).toBe("none");
+		}
+	});
+
+	it("keep the client id and API origins they were created with", async () => {
+		const world = setup();
+		const options = {
+			app: world.app,
+			issuer: world.issuer,
+			clientId: "cli",
+			apiOrigins: [API],
+			fetch: world.fetch,
+			profiles: {},
+		};
+		const auth = createAuth(options);
+		options.clientId = "other";
+		options.apiOrigins.push("https://elsewhere.example");
+		await auth.profile("work").login({ onUrl: browser().onUrl, onCode: noCode });
+		const { records } = JSON.parse(readFileSync(join(world.dir, "credentials.json"), "utf8"));
+		expect(
+			Object.values(records).map((record) => (record as { identity: unknown }).identity),
+		).toEqual([{ issuer: world.issuer, clientId: "cli", profile: "work", apiOrigins: [API] }]);
+		expect(await auth.profiles.list()).toEqual([{ name: "work", current: false }]);
+	});
+
+	it("token() and status() read the file once, so the current profile and its login are one snapshot", async () => {
+		const { auth, signIn, dir } = profiled();
+		await signIn(auth.profile("work"));
+		await auth.profiles.use("work");
+		const file = join(dir, "credentials.json");
+		fileReads.length = 0;
+		expect((await auth.token()).value).toBe("AT1");
+		expect(fileReads.filter((path) => path === file)).toHaveLength(1);
+		fileReads.length = 0;
+		expect(await auth.status()).toMatchObject({ source: "login", profile: { name: "work" } });
+		expect(fileReads.filter((path) => path === file)).toHaveLength(1);
+	});
+
+	it("a profile with a login only for another client id is missing, not a mismatch", async () => {
+		const { auth, signIn, app, issuer, fetch } = profiled();
+		await signIn(auth.profile("work"));
+		const other = createAuth({
+			app,
+			issuer,
+			clientId: "other",
+			apiOrigins: [API],
+			fetch,
+			profiles: {},
+		});
+		const error = await rejection(other.profile("work").token());
+		expect(error).toBeInstanceOf(LoginRequiredError);
+		expect(error).toMatchObject({ reason: "missing" });
+		expect(await other.profile("work").status()).toMatchObject({ source: "none" });
+		expect(await other.profiles.list()).toEqual([]);
+	});
+
+	it("list() shows only logins that profile() can reach", async () => {
+		const { auth, signIn, app, issuer, fetch } = profiled();
+		await signIn(auth.profile("work"));
+		const config = defineServers({ servers: [{ issuer, clientId: "cli" }] });
+		const store = credentialStore({ app });
+		for (const profile of ["a".repeat(100), "bad\nname", "\u001b[31mred"]) {
+			await storeLogin(
+				createTokenSource({
+					config,
+					identity: { issuer, clientId: "cli", apiOrigins: [API], profile },
+					store,
+					fetch,
+				}),
+			);
+		}
+		const internals = credentialStoreInternals(store);
+		// The work login copied to the key of "moved": its identity does not match the key.
+		await internals.update((document) => {
+			const key = Object.keys(document!.records).find((name) => name.startsWith("work#"))!;
+			const moved = key.replace("work#", "moved#");
+			return { ...document!, records: { ...document!.records, [moved]: document!.records[key] } };
+		});
+		expect(await auth.profiles.list()).toEqual([{ name: "work", current: false }]);
+	});
+
+	it("use() refuses a corrupt login or one that belongs to another profile, writing nothing", async () => {
+		const { auth, signIn, app, dir } = profiled();
+		await signIn(auth.profile("personal"));
+		const internals = credentialStoreInternals(credentialStore({ app }));
+		const copy = (name: string, value: (raw: unknown) => unknown) =>
+			internals.update((document) => {
+				const key = Object.keys(document!.records).find((k) => k.startsWith("personal#"))!;
+				const target = key.replace("personal#", `${name}#`);
+				return {
+					...document!,
+					records: { ...document!.records, [target]: value(document!.records[key]) as never },
+				};
+			});
+		await copy("work", (raw) => raw);
+		await copy("broken", (raw) => ({ ...(raw as object), secret: { accessToken: 7 } }));
+		const file = join(dir, "credentials.json");
+		const before = readFileSync(file, "utf8");
+		expect(await rejection(auth.profiles.use("work"))).toBeInstanceOf(CredentialMismatchError);
+		expect(await rejection(auth.profiles.use("broken"))).toBeInstanceOf(
+			CredentialStoreCorruptError,
+		);
+		expect(readFileSync(file, "utf8")).toBe(before);
+	});
+
+	it("an aborted login() or logout() of the current profile fails with AbortError before reading the file", async () => {
+		const { auth, dir } = profiled();
+		mkdirSync(dir, { recursive: true, mode: 0o700 });
+		writeFileSync(join(dir, "credentials.json"), "{ not json", { mode: 0o600 });
+		const signal = AbortSignal.abort();
+		expect(await rejection(auth.logout({ signal }))).toBeInstanceOf(AbortError);
+		expect(await rejection(auth.login({ signal, onUrl: noUrl, onCode: noCode }))).toBeInstanceOf(
+			AbortError,
+		);
+	});
+
+	it("a profile's status() hands out a copy of its profile", async () => {
+		const { auth } = profiled();
+		const work = auth.profile("work");
+		const status = await work.status();
+		(status.profile as { name: string }).name = "x".repeat(100);
+		expect((await work.status()).profile).toEqual({ name: "work", via: "argument" });
+		expect(((await rejection(work.token())) as Error).message).toContain('"work"');
+	});
+
 	it("validates the profiles option", async () => {
 		const base = { app: "acme", issuer: "https://as.example", clientId: "cli", apiOrigins: [API] };
 		for (const profiles of [null, [], "work", { env: "" }, { env: " " }, { env: 7 }]) {
@@ -1057,6 +1347,13 @@ describe("profiles", () => {
 				createAuth({ ...base, profiles: profiles as never }),
 			);
 			expect(await configReason(created)).toBe("invalid-option");
+		}
+		// A token in the profile variable would become a profile name, stored in plaintext.
+		for (const profilesEnv of ["ACME_TOKEN", "acme_token"]) {
+			const shared = Promise.resolve().then(() =>
+				createAuth({ ...base, env: "ACME_TOKEN", profiles: { env: profilesEnv } }),
+			);
+			expect(await configReason(shared)).toBe("invalid-option");
 		}
 		const noOrigins = Promise.resolve().then(() =>
 			createAuth({ ...base, apiOrigins: [], profiles: {} }),

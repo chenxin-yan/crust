@@ -353,10 +353,14 @@ export interface AuthStatus {
 		/** Stored logins whose tokens are still plaintext, until their next login or refresh. */
 		readonly plaintextRecords: number;
 	};
+}
+
+/** What `status()` reports on a client with `profiles`. */
+export interface ProfileAuthStatus extends AuthStatus {
 	/**
-	 * With `profiles`, the profile and why it was picked: `"argument"`, the name given to
-	 * `profile()`; `"env"`, the profiles `env` variable; `"current"`, the one chosen with
-	 * `profiles.use()`; `"default"`, none of those. Absent for `"env"`.
+	 * The profile and why it was picked: `"argument"`, the name given to `profile()`; `"env"`,
+	 * the profiles `env` variable; `"current"`, the one chosen with `profiles.use()`;
+	 * `"default"`, none of those. Absent for `"env"`.
 	 */
 	readonly profile?: {
 		readonly name: string;
@@ -395,17 +399,22 @@ export interface AuthProfile {
 	readonly current: boolean;
 }
 
+/** The methods of one profile: its `status()` names the profile. */
+export interface ProfileClient extends AuthClient {
+	readonly status: () => Promise<ProfileAuthStatus>;
+}
+
 /**
  * The client `createAuth()` returns with `profiles`. Its own methods use the current profile:
  * the profiles `env` variable's, else the one chosen with `profiles.use()`, else `"default"`.
  */
-export interface ProfileAuthClient extends AuthClient {
+export interface ProfileAuthClient extends ProfileClient {
 	/**
 	 * The same methods for the profile `name`: 1 to 64 letters, digits, `-`, `_` and `.`, not
 	 * starting with `.` or `-` (else `OAuthConfigError`). No name means the current profile. A
 	 * profile's first login creates it.
 	 */
-	readonly profile: (name?: string) => AuthClient;
+	readonly profile: (name?: string) => ProfileClient;
 	readonly profiles: {
 		/**
 		 * The profiles with a stored login for this server and client id, by name. Reads the login

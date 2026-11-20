@@ -4,7 +4,7 @@
  */
 // Run both logins with sentinel secrets, including a hostile server that echoes
 // them back, and check every diagnostic sink. Network bodies sent on purpose are not sinks.
-import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { inspect } from "node:util";
 
@@ -408,6 +408,34 @@ async function recordProfiles(w: TokenWorld) {
 }
 
 describe("secret sentinel gate: stored credentials", () => {
+	it("an env token that is a valid profile name never becomes a profile, in the file or a list", async () => {
+		const { w } = await storedLogin(refreshed);
+		vi.stubEnv("ACME_TOKEN", STATIC.envToken);
+		vi.stubEnv("ACME_PROFILE", "");
+		const options = {
+			app: w.app,
+			issuer: w.issuer,
+			clientId: "cli",
+			apiOrigins: w.identity.apiOrigins,
+			fetch: w.fetch,
+			env: "ACME_TOKEN",
+		};
+		try {
+			const shared = createAuth({ ...options, profiles: { env: "ACME_TOKEN" } });
+			record(await shared.logout());
+			record(await shared.profiles.list());
+		} catch (error) {
+			record(error);
+		}
+		const auth = createAuth({ ...options, profiles: { env: "ACME_PROFILE" } });
+		record(await auth.token());
+		record(await auth.status());
+		record(await auth.logout());
+		record(await auth.profiles.list());
+		sinks.push(readFileSync(w.file, "utf8"));
+		expectNoSecretInSinks();
+	});
+
 	it("profiles, their errors and status leak nothing", async () => {
 		const { w } = await storedLogin(refreshed);
 		await recordProfiles(w);

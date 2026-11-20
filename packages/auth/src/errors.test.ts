@@ -8,7 +8,6 @@ import {
 	CredentialKeyError,
 	HttpError,
 	IssuerMismatchError,
-	LoginRequiredError,
 	LoginRequiresInteractionError,
 	NetworkError,
 	OAuthConfigError,
@@ -50,17 +49,6 @@ describe("errors", () => {
 		expect(unavailable.reason).toBe("unavailable");
 		expect(unavailable.message).toContain("keyring");
 		expect(Object.keys(unavailable).sort()).toEqual(["code", "name", "reason"]);
-	});
-
-	it("a login-required error names the profile it was given", () => {
-		expect(new LoginRequiredError("missing").message).toBe(
-			"Not logged in, or the login expired; log in again",
-		);
-		const named = new LoginRequiredError("expired", "work");
-		expect(named.reason).toBe("expired");
-		expect(named.message).toBe(
-			'Not logged in to profile "work", or the login expired; log in again',
-		);
 	});
 
 	it("keeps allowlisted protocol codes and maps the rest to unknown", () => {

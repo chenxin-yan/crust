@@ -255,27 +255,6 @@ describe("credentials file", () => {
 			"an unknown encryption",
 			{ version: 1, storeId: "s", encryption: { kind: "rot13" }, records: {} },
 		],
-		["only currentProfile", { currentProfile: {} }],
-		[
-			"currentProfile as an array",
-			{
-				version: 1,
-				storeId: "s",
-				encryption: { kind: "plaintext" },
-				records: {},
-				currentProfile: [],
-			},
-		],
-		[
-			"a current profile that is not a profile name",
-			{
-				version: 1,
-				storeId: "s",
-				encryption: { kind: "plaintext" },
-				records: {},
-				currentProfile: { server: "../work" },
-			},
-		],
 	])("fails closed on a file with %s", async (_name, document) => {
 		const w = world();
 		mkdirSync(w.dir, { recursive: true, mode: 0o700 });

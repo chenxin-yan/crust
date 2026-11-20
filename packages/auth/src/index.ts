@@ -14,5 +14,7 @@ export type {
 	LoginOptions,
 	LogoutResult,
 	ProfileAuthClient,
+	ProfileAuthStatus,
+	ProfileClient,
 	ProfilesOptions,
 } from "./types.ts";

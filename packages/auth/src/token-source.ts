@@ -3,6 +3,7 @@ import {
 	accepts,
 	type CredentialsDocument,
 	credentialStoreInternals,
+	currentProfiles,
 	emptyDocument,
 	newId,
 	parseRecord,
@@ -12,6 +13,7 @@ import {
 	type StoredIdentity,
 	type StoredRecord,
 	tombstone,
+	withCurrentProfiles,
 	withFileKey,
 } from "./credentials.ts";
 import { discover } from "./discovery.ts";
@@ -71,11 +73,19 @@ const openLogins = new Set<string>();
 /** What `createAuth()` needs of a token source; kept off the public object. */
 interface TokenSourceInternals {
 	/**
-	 * The live record's expiry and scope, checked like `get()` but with no lock, refresh or
-	 * request: no login → `LoginRequiredError` (`missing`), a login for another identity →
-	 * `CredentialMismatchError`, and an unreadable, corrupt or unsafe file throws its error.
+	 * The live record's expiry and scope in `document`, a snapshot of the file, checked like
+	 * `get()`: no login → `LoginRequiredError` (`missing`), a login for another identity →
+	 * `CredentialMismatchError`, a corrupt record → `CredentialStoreCorruptError`.
 	 */
-	storedLogin(): Promise<{ expiresAt: number | undefined; scope: string | undefined }>;
+	storedLogin(document: CredentialsDocument | undefined): {
+		expiresAt: number | undefined;
+		scope: string | undefined;
+	};
+	/** `get()` from `document`, a snapshot of the file; a refresh still rereads it under the lock. */
+	get(
+		document: CredentialsDocument | undefined,
+		options: { signal?: AbortSignal; baseUrl?: string },
+	): Promise<AccessToken>;
 }
 
 const sourceInternals = new WeakMap<TokenSource, TokenSourceInternals>();
@@ -149,6 +159,15 @@ function mismatch(stored: StoredIdentity, configured: StoredIdentity) {
  * Creating it does no I/O.
  */
 export function createTokenSource(options: TokenSourceOptions): TokenSource {
+	return tokenSource(options, false);
+}
+
+/**
+ * `createTokenSource()`, or with `profiles` the source of a `createAuth()` profile: a missing
+ * record is missing even when another server's login has the same profile, and a logout also
+ * forgets the profile if `profiles.use()` chose it.
+ */
+export function tokenSource(options: TokenSourceOptions, profiles: boolean): TokenSource {
 	const identity = checkIdentity(options);
 	const store = credentialStoreInternals(options.store);
 	const { config } = options;
@@ -164,7 +183,7 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 		const raw = document?.records[key];
 		if (raw === undefined) {
 			// Logged in to the same profile at another issuer or client id.
-			for (const [otherKey, value] of Object.entries(document?.records ?? {})) {
+			for (const [otherKey, value] of Object.entries(profiles ? {} : (document?.records ?? {}))) {
 				const other = otherKey === key ? undefined : parseRecord(value);
 				if (other && !other.tombstone && other.identity?.profile === identity.profile) {
 					throw new CredentialMismatchError(mismatch(other.identity, identity) ?? "origin");
@@ -350,6 +369,22 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 		});
 	}
 
+	async function getFrom(
+		snapshot: CredentialsDocument | undefined,
+		signal: AbortSignal | undefined,
+		baseUrl: string | undefined,
+	) {
+		const record = liveRecord(snapshot, baseUrl);
+		const document = snapshot as CredentialsDocument;
+		// A mark read without the lock may be a refresh still running elsewhere: wait for the lock.
+		const fresh =
+			!record.refreshInProgress &&
+			(record.expiresAt === undefined || Date.now() < record.expiresAt - skewMs);
+		return fresh
+			? tokenOf(document, record, signal)
+			: sharedRefresh(record.generation as string, signal);
+	}
+
 	async function readRecord(signal: AbortSignal | undefined, baseUrl: string | undefined) {
 		throwIfAborted(signal);
 		const document = await store.read();
@@ -390,14 +425,8 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 		key,
 
 		async get({ signal, baseUrl }: { signal?: AbortSignal; baseUrl?: string } = {}) {
-			const { document, record } = await readRecord(signal, baseUrl);
-			// A mark read without the lock may be a refresh still running elsewhere: wait for the lock.
-			const fresh =
-				!record.refreshInProgress &&
-				(record.expiresAt === undefined || Date.now() < record.expiresAt - skewMs);
-			return fresh
-				? tokenOf(document, record, signal)
-				: sharedRefresh(record.generation as string, signal);
+			throwIfAborted(signal);
+			return getFrom(await store.read(), signal, baseUrl);
 		},
 
 		async forceRefresh({
@@ -570,12 +599,13 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 					try {
 						await store.update((current) => {
 							const next = withRecord(current ?? emptyDocument(), tombstone(identity));
+							if (!profiles) return next;
 							// The profile chosen as current falls back to "default" once its login is gone.
 							const server = serverKey(identity);
-							if (next.currentProfile[server] !== identity.profile) return next;
-							const currentProfile = { ...next.currentProfile };
-							delete currentProfile[server];
-							return { ...next, currentProfile };
+							const chosen = currentProfiles(next, store.path);
+							if (chosen[server] !== identity.profile) return next;
+							delete chosen[server];
+							return withCurrentProfiles(next, chosen);
 						}, signal);
 						return "deleted";
 					} catch (error) {
@@ -592,10 +622,11 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 		},
 	});
 	sourceInternals.set(source, {
-		async storedLogin() {
-			const { expiresAt, scope } = (await readRecord(undefined, undefined)).record;
+		storedLogin(document) {
+			const { expiresAt, scope } = liveRecord(document);
 			return { expiresAt, scope };
 		},
+		get: (document, { signal, baseUrl }) => getFrom(document, signal, baseUrl),
 	});
 	return source;
 }

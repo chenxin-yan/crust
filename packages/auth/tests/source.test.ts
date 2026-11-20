@@ -30,7 +30,8 @@ describe("library source", () => {
 		).toEqual([]);
 	});
 
-	it("reads the environment only to pick a login mode, for the client's env token, and for the D-Bus session bus", () => {
+	// One helper reads the client's variables; client.test.ts checks which ones a call reads.
+	it("reads the environment only to pick a login mode, for the client's env token and profile variable, and for the D-Bus session bus", () => {
 		expect(filesMatching(/process\.env|Bun\.env|import\.meta\.env/)).toEqual([
 			"client.ts",
 			"keyring.ts",
@@ -112,6 +113,8 @@ describe("entry points", () => {
 			"LoginOptions",
 			"LogoutResult",
 			"ProfileAuthClient",
+			"ProfileAuthStatus",
+			"ProfileClient",
 			"ProfilesOptions",
 			"createAuth",
 		]);

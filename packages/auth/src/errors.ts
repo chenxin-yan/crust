@@ -238,11 +238,8 @@ export class LoginRequiredError extends AuthError {
 	declare readonly code: "login-required";
 	readonly reason: LoginRequiredReason;
 
-	constructor(reason: LoginRequiredReason, profile?: string) {
-		super(
-			"login-required",
-			`Not logged in${profile === undefined ? "" : ` to profile "${profile}"`}, or the login expired; log in again`,
-		);
+	constructor(reason: LoginRequiredReason) {
+		super("login-required", "Not logged in, or the login expired; log in again");
 		this.name = "LoginRequiredError";
 		this.reason = reason;
 	}

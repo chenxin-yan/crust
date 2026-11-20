@@ -4,10 +4,13 @@ import {
 	credentialStore,
 	credentialStoreInternals,
 	type CredentialsDocument,
+	currentProfiles,
+	emptyDocument,
 	isProfileName,
 	parseRecord,
 	recordKey,
 	serverKey,
+	withCurrentProfiles,
 } from "./credentials.ts";
 import { startDeviceFlow } from "./device.ts";
 import { discover, serverInternals } from "./discovery.ts";
@@ -23,23 +26,24 @@ import { detectLoginMode } from "./login-mode.ts";
 import { checkResources, checkScope } from "./params.ts";
 import { checkLoopbackOptions, createAuthorizationSession } from "./session.ts";
 import { createTokenClient, redacted } from "./token-client.ts";
-import { createTokenSource, tokenSourceInternals } from "./token-source.ts";
+import { tokenSource, tokenSourceInternals } from "./token-source.ts";
 import type {
 	AccessToken,
 	AuthClient,
 	AuthProfile,
 	AuthServer,
-	AuthStatus,
 	AuthToken,
 	CreateAuthOptions,
 	LoginOptions,
 	ProfileAuthClient,
+	ProfileAuthStatus,
+	ProfileClient,
 	ProfilesOptions,
 	TokenSet,
 	TokenSource,
 } from "./types.ts";
 
-type Profile = NonNullable<AuthStatus["profile"]>;
+type Profile = NonNullable<ProfileAuthStatus["profile"]>;
 
 /** The profile name `value`, else an error that names `field` but never quotes the value. */
 function checkProfile(value: unknown, field: string): string {
@@ -50,6 +54,13 @@ function checkProfile(value: unknown, field: string): string {
 		);
 	}
 	return value;
+}
+
+/** `LoginRequiredError` naming `profile`, a checked profile name. */
+function loginRequired(error: LoginRequiredError, profile: string): LoginRequiredError {
+	const named = new LoginRequiredError(error.reason);
+	named.message = `Not logged in to profile "${profile}", or the login expired; log in again`;
+	return named;
 }
 
 /** An environment variable's trimmed value, when it is set and not blank. */
@@ -122,11 +133,24 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 			"profiles must be an object; its env must name an environment variable",
 		);
 	}
+	// A token in the profile variable would be a profile name, stored and listed in plaintext.
+	// Compared ignoring case, as Windows looks variables up.
+	if (env !== undefined && env.toUpperCase() === profiles?.env?.toUpperCase()) {
+		throw new OAuthConfigError(
+			"invalid-option",
+			"profiles.env must name another variable than env",
+		);
+	}
+	// Copied now: a later change to `options` must not move this client's logins.
+	const clientId = options.clientId;
+	const apiOrigins = Array.isArray(options.apiOrigins)
+		? [...options.apiOrigins]
+		: options.apiOrigins;
 	const config = defineServers({
 		servers: [
 			{
 				issuer,
-				clientId: options.clientId,
+				clientId,
 				clientSecret: options.clientSecret,
 				redirectPath: options.redirectPath,
 				allowInsecureLoopback: options.allowInsecureLoopback,
@@ -137,13 +161,12 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 	const resource = checkResources(options.resource);
 	checkLoopbackOptions({ hosts, ports });
 	const store = credentialStore({ app, keyring: { strict, onWarning } });
+	const files = credentialStoreInternals(store);
 	const sourceOf = (profile: string) =>
-		createTokenSource({
-			config,
-			identity: { issuer, clientId: options.clientId, apiOrigins: options.apiOrigins, profile },
-			store,
-			fetch,
-		});
+		tokenSource(
+			{ config, identity: { issuer, clientId, apiOrigins, profile }, store, fetch },
+			profiles !== undefined,
+		);
 
 	// A bearer token never contains whitespace; padding comes from how the variable was set.
 	const envValue = () => (env === undefined ? undefined : readEnv(env));
@@ -192,21 +215,27 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 		}
 	}
 
+	/** `error`, naming `profile` when it is a `LoginRequiredError` of a client with profiles. */
+	const named =
+		(profile: Profile | undefined) =>
+		(error: unknown): never => {
+			throw profile && error instanceof LoginRequiredError
+				? loginRequired(error, profile.name)
+				: error;
+		};
+
 	/**
-	 * The four methods over the login `select` picks at each call. With profiles, the profile is
-	 * in `status()` and its name in a `LoginRequiredError`.
+	 * The four methods over the login `select` picks at each call, with `read`, the file as the
+	 * pick saw it. With profiles, the profile is in `status()` and its name in a
+	 * `LoginRequiredError`.
 	 */
 	function clientOf(
-		select: () => Promise<{ source: TokenSource; profile: Profile | undefined }>,
-	): AuthClient {
-		const named =
-			(profile: Profile | undefined) =>
-			(error: unknown): never => {
-				throw profile && error instanceof LoginRequiredError
-					? new LoginRequiredError(error.reason, profile.name)
-					: error;
-			};
-
+		select: () => Promise<{
+			source: TokenSource;
+			profile: Profile | undefined;
+			read: () => Promise<CredentialsDocument | undefined>;
+		}>,
+	): ProfileClient {
 		async function login(loginOptions: LoginOptions): Promise<void> {
 			const mode = detectLoginMode({ device: loginOptions.device });
 			if (mode === "refuse") {
@@ -215,6 +244,7 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 				);
 			}
 			const { signal } = loginOptions;
+			throwIfAborted(signal);
 			const { source } = await select();
 			const server = await discover(config, issuer, { signal, fetch });
 			// Opened before the flow, so a logout while it runs makes the commit fail, not undo it.
@@ -260,20 +290,23 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 			throwIfAborted(signal);
 			const value = envValue();
 			if (value !== undefined) return redacted({ value, source: "env" as const }, ["value"]);
-			const { source, profile } = await select();
-			const stored = await source.get({ signal, baseUrl }).catch(named(profile));
+			const { source, profile, read } = await select();
+			const stored = await tokenSourceInternals(source)
+				.get(await read(), { signal, baseUrl })
+				.catch(named(profile));
 			return loginToken(source, profile, stored, baseUrl);
 		}
 
-		async function status(): Promise<AuthStatus> {
+		async function status(): Promise<ProfileAuthStatus> {
 			// An env token needs no login file: CI and containers may have none, or a broken one.
 			if (envValue() !== undefined) return { source: "env" };
-			const { source, profile } = await select();
-			const { kind, plaintextRecords } = await store.status();
+			const { source, profile, read } = await select();
+			const document = await read();
+			const { kind, plaintextRecords } = await files.statusOf(document, undefined);
 			const storage = { kind, plaintextRecords };
-			const withProfile = profile && { profile };
+			const withProfile = profile && { profile: { ...profile } };
 			try {
-				const { expiresAt, scope: granted } = await tokenSourceInternals(source).storedLogin();
+				const { expiresAt, scope: granted } = tokenSourceInternals(source).storedLogin(document);
 				return { source: "login", expiresAt, scope: granted, storage, ...withProfile };
 			} catch (error) {
 				if (error instanceof LoginRequiredError && error.reason === "missing") {
@@ -284,6 +317,7 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 		}
 
 		async function logout(logoutOptions?: { signal?: AbortSignal }) {
+			throwIfAborted(logoutOptions?.signal);
 			const { source } = await select();
 			return source.logout(logoutOptions);
 		}
@@ -291,15 +325,19 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 		return Object.freeze({ login, token, status, logout });
 	}
 
+	const readDocument = () => files.read();
 	// Created now, so an invalid identity throws here, with or without profiles.
 	const defaultSource = sourceOf("default");
 	if (profiles === undefined) {
-		return clientOf(async () => ({ source: defaultSource, profile: undefined }));
+		return clientOf(async () => ({
+			source: defaultSource,
+			profile: undefined,
+			read: readDocument,
+		}));
 	}
 
 	const profileEnv = profiles.env;
-	const files = credentialStoreInternals(store);
-	const server = serverKey({ issuer, clientId: options.clientId });
+	const server = serverKey({ issuer, clientId });
 	/** The profile the profiles `env` variable names, when it is set and not blank. */
 	function envProfile(): Profile | undefined {
 		if (profileEnv === undefined) return undefined;
@@ -308,34 +346,39 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 	}
 	/** The profile chosen with `use()` in `document`, else `"default"`. */
 	function chosenIn(document: CredentialsDocument | undefined): Profile {
-		const chosen = document?.currentProfile[server];
+		const chosen = currentProfiles(document, files.path)[server];
 		return chosen === undefined
 			? { name: "default", via: "default" }
 			: { name: chosen, via: "current" };
 	}
 
 	const current = clientOf(async () => {
-		const profile = envProfile() ?? chosenIn(await files.read());
-		return { source: sourceOf(profile.name), profile };
+		const fromEnv = envProfile();
+		if (fromEnv) return { source: sourceOf(fromEnv.name), profile: fromEnv, read: readDocument };
+		const document = await files.read();
+		const profile = chosenIn(document);
+		return { source: sourceOf(profile.name), profile, read: async () => document };
 	});
 
-	function profileClient(profileName?: string): AuthClient {
+	function profileClient(profileName?: string): ProfileClient {
 		if (profileName === undefined) return current;
 		const chosen: Profile = { name: checkProfile(profileName, "A profile name"), via: "argument" };
 		const source = sourceOf(chosen.name);
-		return clientOf(async () => ({ source, profile: chosen }));
+		return clientOf(async () => ({ source, profile: chosen, read: readDocument }));
 	}
 
 	async function list(): Promise<readonly AuthProfile[]> {
 		const document = await files.read();
 		const currentName = (envProfile() ?? chosenIn(document)).name;
-		const names = Object.values(document?.records ?? {}).flatMap((raw) => {
+		// Only logins `profile()` can reach: a name it accepts, under the key of that identity.
+		const names = Object.entries(document?.records ?? {}).flatMap(([key, raw]) => {
 			const record = parseRecord(raw);
-			return record?.identity &&
-				!record.tombstone &&
-				record.identity.issuer === issuer &&
-				record.identity.clientId === options.clientId
-				? [record.identity.profile]
+			const identity = record?.tombstone === false ? record.identity : undefined;
+			return identity?.issuer === issuer &&
+				identity.clientId === clientId &&
+				isProfileName(identity.profile) &&
+				key === recordKey(identity)
+				? [identity.profile]
 				: [];
 		});
 		return names
@@ -345,11 +388,17 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 
 	async function use(profileName: string, { signal }: { signal?: AbortSignal } = {}) {
 		const chosen = checkProfile(profileName, "A profile name");
-		const key = recordKey({ issuer, clientId: options.clientId, profile: chosen });
+		const source = tokenSourceInternals(sourceOf(chosen));
 		await files.update((document) => {
-			const record = parseRecord(document?.records[key]);
-			if (!document || !record || record.tombstone) throw new LoginRequiredError("missing", chosen);
-			return { ...document, currentProfile: { ...document.currentProfile, [server]: chosen } };
+			// The same check as `token()`: a missing, corrupt or another identity's login is refused.
+			try {
+				source.storedLogin(document);
+			} catch (error) {
+				named({ name: chosen, via: "argument" })(error);
+			}
+			const choices = currentProfiles(document, files.path);
+			choices[server] = chosen;
+			return withCurrentProfiles(document ?? emptyDocument(), choices);
 		}, signal);
 	}
 
