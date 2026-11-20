@@ -147,13 +147,15 @@ const hello = defineCommand("hello", { description: "Says hello" }, (command) =>
 );
 const ping = defineCommand("ping", (command) => command.action(() => "pong"));
 
-/** The API with a chain that moves, renames, hides, nests and adds commands, and clashes with one. */
+/** The API with a chain that moves, renames, hides, nests and adds commands, and replaces one. */
 function chained(options: Partial<DefineApiOptions> = {}) {
 	return defineApi({ spec: specUrl, baseUrl: "https://api.acme.test", ...options })
 		.each((op) => (op.id === "listRecords" ? { group: "dns records", name: "list" } : undefined))
 		.override({
 			getZone: { group: "users", name: "zone" },
 			status: { name: "health", hidden: true },
+			// The added `users create-user` replaces it.
+			createUser: { exclude: true },
 		})
 		.add(
 			"users",
@@ -183,6 +185,17 @@ async function ship(app = appOf(chained())) {
 }
 
 describe("spec data files", () => {
+	it("are not written when an operation needs a decision: the build fails first", async () => {
+		const clash = chained().override({ createUser: { exclude: false } });
+
+		expect(await runBuildHooks(appOf(clash))).toEqual({
+			files: new Map(),
+			error: expect.stringContaining(
+				'POST /users: the command "users create-user" is also a command added to the group "users"',
+			),
+		});
+	});
+
 	it("are an index, root.json and a file per top-level group beside spec.json, the same every build", async () => {
 		const files = await runBuildHooks(appOf(chained()));
 
@@ -244,7 +257,7 @@ describe("spec data files", () => {
 		expect(slice("root.json")).not.toHaveProperty("components");
 	});
 
-	it("give a built CLI the commands of the source run, `api --list` and the manifest", async () => {
+	it("give a built CLI the commands of the source run and `api --list`", async () => {
 		const source = chained();
 		const sourceApp = appOf(source);
 		const sourceList = await captureExecute(sourceApp, ["api", "--list"]);
@@ -254,7 +267,6 @@ describe("spec data files", () => {
 
 		expect(await builtApp.snapshot()).toEqual(await sourceApp.snapshot());
 		expect(await captureExecute(builtApp, ["api", "--list"])).toEqual(sourceList);
-		expect(builtApi.manifest()).toEqual(source.manifest());
 	});
 
 	it("give a built CLI the operations path items with a $ref resolve to, also those their own methods override", async () => {
@@ -321,7 +333,7 @@ describe("spec data files", () => {
 				const result = await captureExecute(app, argv);
 				expect({ argv, ...result }).toMatchObject({ argv, exitCode: 0 });
 			}
-			return { calls, snapshot: await app.snapshot(), manifest: plain().manifest() };
+			return { calls, snapshot: await app.snapshot() };
 		};
 		const source = await sent();
 		await ship(appOf(plain()));

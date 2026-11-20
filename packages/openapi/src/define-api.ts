@@ -245,7 +245,7 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 		});
 	let planned: ReturnType<typeof planCommands> | undefined;
 	const plan = () => (planned ??= planFor(base.document()));
-	// An operation with a lint error is never built: the CLI works without it.
+	// An operation with a problem is never built: the CLI works without it.
 	const built = (): CommandPlan[] => {
 		const { diagnostics, commands } = plan();
 		const failed = new Set(diagnostics.map(({ operationId }) => operationId));
@@ -322,7 +322,9 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 	let commands: readonly GeneratedDefinition[] | undefined;
 	const handle = Object.freeze({
 		get extension() {
-			return (extension ??= apiExtension(base, state, unavailable, built));
+			return (extension ??= apiExtension(base, state, unavailable, built, () =>
+				buildProblems(plan().diagnostics),
+			));
 		},
 		client: base.client,
 		get commands() {
@@ -373,13 +375,15 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 
 /**
  * The `api` Extension of a handle with the chain `state`: `api --list` marks the operations it
- * leaves out, and `crust build` writes the data files of its `built` commands.
+ * leaves out, and `crust build` fails with the handle's `problems` that need a decision, then
+ * writes the data files of its `built` commands.
  */
 function apiExtension(
 	base: ApiBase,
 	state: ApiState,
 	unavailable: () => ReadonlyMap<string, string>,
 	built: () => readonly CommandPlan[],
+	problems: () => string | undefined,
 ): Api["extension"] {
 	const { id, spec } = base;
 	const loadSpec = async () => base.document();
@@ -416,39 +420,39 @@ function apiExtension(
 			ctx.stderr(`Error: ${failure instanceof Error ? failure.message : String(failure)}`);
 			return true;
 		});
-	return spec instanceof URL
-		? extension.build(async ({ snapshot }) => {
-				// Fails for an `id` the built CLI could not look up, by the lookup's own rule.
-				resolveArtifactDir(id);
-				const document = base.document();
-				const text = JSON.stringify(document);
-				const files = new Map([[BUILT_SPEC_FILE, text]]);
-				const plans = built();
-				// The index claims the app's commands: those of this handle's plan, or none of any.
-				const missing = missingCommands(snapshot, plans);
-				if (missing !== undefined && missing.length > 0) {
-					throw mismatch(
-						`the app's generated commands are not this handle's: missing or different ${missing.map((path) => `"${path}"`).join(", ")}`,
-					);
+	return extension.build(async ({ snapshot }) => {
+		// Before any file: an operation that needs a decision fails the build.
+		const problem = problems();
+		if (problem !== undefined) throw new Error(problem);
+		if (!(spec instanceof URL)) return [];
+		// Fails for an `id` the built CLI could not look up, by the lookup's own rule.
+		resolveArtifactDir(id);
+		const document = base.document();
+		const text = JSON.stringify(document);
+		const files = new Map([[BUILT_SPEC_FILE, text]]);
+		const plans = built();
+		// The index claims the app's commands: those of this handle's plan, or none of any.
+		const missing = missingCommands(snapshot, plans);
+		if (missing !== undefined && missing.length > 0) {
+			throw mismatch(
+				`the app's generated commands are not this handle's: missing or different ${missing.map((path) => `"${path}"`).join(", ")}`,
+			);
+		}
+		// This handle's commands are not in the app, or it generates none: another handle's may be.
+		if (missing === undefined || plans.length === 0) {
+			for (const [chain, other] of base.readCommands) {
+				if (chain === state) continue;
+				const otherPlans = other.built();
+				if (otherPlans.length > 0 && missingCommands(snapshot, otherPlans) !== undefined) {
+					throw mismatch("the app's generated commands are those of another handle of this API");
 				}
-				// This handle's commands are not in the app, or it generates none: another handle's may be.
-				if (missing === undefined || plans.length === 0) {
-					for (const [chain, other] of base.readCommands) {
-						if (chain === state) continue;
-						const otherPlans = other.built();
-						if (otherPlans.length > 0 && missingCommands(snapshot, otherPlans) !== undefined) {
-							throw mismatch(
-								"the app's generated commands are those of another handle of this API",
-							);
-						}
-					}
-				}
-				if (missing !== undefined) {
-					for (const [path, content] of specDataFiles(document, text, plans, state.added)) {
-						files.set(path, content);
-					}
-				}
-				return [...files].map(([path, content]) => ({ path: `${id}/${path}`, content }));
-			})
-		: extension;
+			}
+		}
+		if (missing !== undefined) {
+			for (const [path, content] of specDataFiles(document, text, plans, state.added)) {
+				files.set(path, content);
+			}
+		}
+		return [...files].map(([path, content]) => ({ path: `${id}/${path}`, content }));
+	});
 }

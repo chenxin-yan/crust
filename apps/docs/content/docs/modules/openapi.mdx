@@ -55,11 +55,11 @@ spec: new URL("./acme.openapi.jsonc", import.meta.url),
 
 [`crust build`](/docs/guide/build-and-distribution) writes the document's data files to `<id>/` in the build output (`id` defaults to `"openapi"`), and a built CLI reads them there with [`resolveArtifactDir(id)`](/docs/api/crust#resolveartifactdirname). The entry never imports the document, so it stays out of the bundle, and start-up depends on the command that runs, not on the size of the API:
 
-| File                                 | Holds                                                                                                                  | Read                                                                          |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `index.json`                         | The generated root commands and top-level groups, with their descriptions                                              | At start, when the app reads `acme.commands`                                  |
-| `root.json`, `groups/g-<group>.json` | The part of the document the root commands, or one top-level group, need: their operations and every `$ref` they reach | When one of those commands first runs or shows its help                       |
-| `spec.json`                          | The whole document, as plain JSON                                                                                      | For `api --list`, `api --spec`, `call()`, `acme.lint()` and `acme.manifest()` |
+| File                                 | Holds                                                                                                                  | Read                                                    |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `index.json`                         | The generated root commands and top-level groups, with their descriptions                                              | At start, when the app reads `acme.commands`            |
+| `root.json`, `groups/g-<group>.json` | The part of the document the root commands, or one top-level group, need: their operations and every `$ref` they reach | When one of those commands first runs or shows its help |
+| `spec.json`                          | The whole document, as plain JSON                                                                                      | For `api --list`, `api --spec` and `call()`             |
 
 - A command reads only the operations it needs from its file. Anything that walks every command, such as `--llms`, a completion script, or MCP's list of tools, reads every file.
 - When the group files would total more than twice the document's bytes (a spec whose schemas all reference each other), they are not written, and every command reads `spec.json`.

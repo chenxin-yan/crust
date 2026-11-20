@@ -8,7 +8,8 @@
 //
 // Needs bun, hyperfine, and a Node that `crust build` accepts for executables. For each spec it
 // times root `--help`, a generated command's `--help` and a run of it against a local server, and
-// `api --list`; the command is the first GET without arguments, in a group when there is one.
+// `api --list`; the command is the first generated one that needs no input (no argument, no
+// `--body`, no required flag), in a group when there is one.
 // Writes hyperfine's JSON for every case to one `results.json` and prints the medians. Not a CI
 // gate: run it on a quiet machine, and on the baseline revision with the same arguments to compare.
 import { spawn, spawnSync } from "node:child_process";
@@ -39,6 +40,7 @@ if (positionals.length === 0) {
 }
 const out = resolve(values.out ?? mkdtempSync(join(tmpdir(), "crust-openapi-bench-")));
 const { defineApi } = await import(join(repo, "packages/openapi/dist/index.js"));
+const { Crust } = await import(join(repo, "packages/core/dist/index.js"));
 
 /** Runs a command to completion, failing loudly. */
 function run(command, args, cwd) {
@@ -52,14 +54,29 @@ function run(command, args, cwd) {
 	return result.stdout;
 }
 
-/** The generated command to time: the first GET without arguments, preferably in a group. */
-function pickCommand(specFile) {
+/** The generated command to time: the first that needs no input, preferably in a group. */
+async function pickCommand(specFile) {
 	const spec = JSON.parse(readFileSync(specFile, "utf8"));
-	const { commands } = defineApi({ spec, baseUrl: "http://127.0.0.1" }).manifest();
-	const gets = commands.filter((command) => command.method === "GET" && command.args.length === 0);
-	const picked = gets.find((command) => command.command.includes(" ")) ?? gets[0];
-	if (picked === undefined) throw new Error(`${specFile} has no GET operation without arguments`);
-	return picked.command.split(" ");
+	const acme = defineApi({ spec, baseUrl: "http://127.0.0.1" });
+	const snapshot = await new Crust("bench")
+		.extend(acme.extension)
+		.add(...acme.commands)
+		.snapshot();
+	const ready = [];
+	const walk = (node, path) => {
+		for (const [name, child] of Object.entries(node.subCommands)) {
+			if (child.extension !== undefined) continue;
+			const flags = Object.entries(child.flags);
+			const needsInput =
+				child.args.length > 0 || flags.some(([flag, def]) => flag === "body" || def.required);
+			if (child.hasAction && !needsInput) ready.push([...path, name]);
+			walk(child, [...path, name]);
+		}
+	};
+	walk(snapshot, []);
+	const picked = ready.find((path) => path.length > 1) ?? ready[0];
+	if (picked === undefined) throw new Error(`${specFile} has no generated command without input`);
+	return picked;
 }
 
 /** A CLI app below `dir`, built for each artifact type; returns how to start each. */
@@ -144,7 +161,7 @@ const apps = [
 const cases = [];
 for (const [name, specFile] of apps) {
 	const artifacts = buildApp(join(out, name), specFile);
-	const leaf = specFile === undefined ? undefined : pickCommand(specFile);
+	const leaf = specFile === undefined ? undefined : await pickCommand(specFile);
 	for (const [artifact, start] of Object.entries(artifacts)) {
 		const timed = [
 			["--help"],
