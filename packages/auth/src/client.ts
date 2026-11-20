@@ -114,7 +114,11 @@ export function createAuth(options: CreateAuthOptions): AuthClient {
 		// Opened before the flow, so a logout while it runs makes the commit fail, not undo it.
 		const ticket = await source.beginLogin({ signal });
 		try {
-			await ticket.commit(await signIn(server, mode, loginOptions), { signal });
+			// Recorded with the login, so every refresh asks for the same resource.
+			await ticket.commit(await signIn(server, mode, loginOptions), {
+				resource: resource.length > 0 ? resource : undefined,
+				signal,
+			});
 		} finally {
 			ticket.cancel();
 		}

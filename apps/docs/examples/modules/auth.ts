@@ -91,8 +91,10 @@ const deviceTokens = await flow.poll();
 
 //#region userinfo
 if (server.userinfoEndpoint) {
+	// No baseUrl: the user-info address is on the issuer, not one of apiOrigins.
+	const { value: accessToken } = await auth.token();
 	const response = await fetch(server.userinfoEndpoint, {
-		headers: { authorization: `Bearer ${deviceTokens.accessToken}` },
+		headers: { authorization: `Bearer ${accessToken}` },
 	});
 	console.error(await response.json());
 }

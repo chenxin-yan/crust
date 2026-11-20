@@ -24,7 +24,7 @@ npm install @crustjs/auth
 - `apiOrigins` are the only origins the stored login's token is sent to. Declare them in code, never from the environment.
 - `env` names a variable, such as `ACME_TOKEN`, whose value `token()` returns, trimmed, instead of the stored login when it is not blank, so CI and agents need no login. It is never stored, refreshed, or revoked, and not checked against `apiOrigins`.
 - `issuer`, `clientId`, `clientSecret`, `redirectPath`, and `allowInsecureLoopback` follow the rules of [Servers](#servers); `hosts` and `ports` those of [Browser login](#browser-login).
-- `resource` names the API every login asks tokens for (RFC 8707 resource indicators, absolute URIs without a fragment), for a server that issues tokens per API; both logins and the code exchange send it.
+- `resource` names the API every login asks tokens for (RFC 8707 resource indicators, absolute URIs without a fragment), for a server that issues tokens per API; both logins and the code exchange send it, and the stored login records it, so every refresh sends it too. Nothing is derived from `apiOrigins`.
 
 ### Signing in
 
@@ -109,7 +109,7 @@ Declare `servers` in code. Do not build the list from environment variables or o
 
 ### Who is signed in
 
-`server.userinfoEndpoint` is the OpenID Connect user-info address from the metadata (`userinfo_endpoint`), checked like the other endpoints, or `undefined` when there is none. The library never requests it and drops the `id_token` unread: fetch it yourself with the access token as a bearer token.
+`server.userinfoEndpoint` is the OpenID Connect user-info address from the metadata (`userinfo_endpoint`), checked like the other endpoints, or `undefined` when there is none. The library never requests it and drops the `id_token` unread: fetch it yourself with the token from `auth.token()` or a token source's `get()`, without `baseUrl`, since the address is on the issuer rather than one of `apiOrigins` and `baseUrl` there would be refused.
 
 <include lang="ts">../../../examples/modules/auth.ts#userinfo</include>
 

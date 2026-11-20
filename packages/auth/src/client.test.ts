@@ -493,7 +493,7 @@ describe("login() with a device code", () => {
 
 	it("sends resource in the device authorization request and every poll", async () => {
 		const { auth, issuer, requests } = setup(undefined, { resource: "https://api.example.com" });
-		await settle(auth.login({ device: true, onUrl: noUrl, onCode: () => {} }));
+		await settle(auth.login({ device: true, onUrl: noUrl, onCode: fakeTimersFrom(() => {}) }));
 		const sent = requests.filter(
 			({ url }) => url === `${issuer}/device` || url === `${issuer}/token`,
 		);
@@ -625,6 +625,42 @@ describe("the stored login", () => {
 		expect(JSON.stringify(first)).not.toContain("AT2");
 		expect((await first.refresh!({})).value).toBe("AT3");
 		expect(await rejection(token({ baseUrl: "https://evil.example" }))).toBeInstanceOf(
+			CredentialMismatchError,
+		);
+	});
+
+	it("records the login's resource, and a refresh sends it as a token source would", async () => {
+		const resource = ["https://api.example.com", "urn:example:api"];
+		let issued = 0;
+		const { auth, dir, tokenRequests } = await signedIn(
+			(issuer) => ({
+				[`${issuer}/token`]: () => {
+					issued += 1;
+					return json({
+						...TOKEN,
+						access_token: `AT${issued}`,
+						expires_in: issued === 1 ? 1 : 3600,
+					});
+				},
+			}),
+			{ resource },
+		);
+		const { records } = JSON.parse(readFileSync(join(dir, "credentials.json"), "utf8"));
+		expect(
+			Object.values(records).map((record) => (record as { resource?: unknown }).resource),
+		).toEqual([resource]);
+		expect(await auth.token()).toMatchObject({ value: "AT2" });
+		expect(tokenRequests().map((request) => request.body.get("grant_type"))).toEqual([
+			"authorization_code",
+			"refresh_token",
+		]);
+		expect(tokenRequests()[1]!.body.getAll("resource")).toEqual(resource);
+	});
+
+	it("token() without baseUrl serves the user-info address on the issuer; with it, the origin check refuses", async () => {
+		const { auth, issuer } = await signedIn();
+		expect(await auth.token()).toMatchObject({ value: "AT", source: "login" });
+		expect(await rejection(auth.token({ baseUrl: `${issuer}/userinfo` }))).toBeInstanceOf(
 			CredentialMismatchError,
 		);
 	});
