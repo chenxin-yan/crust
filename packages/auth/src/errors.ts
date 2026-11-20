@@ -56,6 +56,16 @@ export type AuthErrorCode = (
 	| TimeoutError
 	| AbortError
 	| ResponseTooLargeError
+	| CredentialMismatchError
+	| LoginRequiredError
+	| LoginInProgressError
+	| StaleCommitError
+	| RefreshFailedError
+	| RefreshOutcomeUnknownError
+	| UnsafeStorageError
+	| CredentialStoreCorruptError
+	| LockTimeoutError
+	| LockRecoveryRequiredError
 	| LoginRequiresInteractionError
 )["code"];
 
@@ -176,6 +186,189 @@ export class ResponseTooLargeError extends AuthError {
 	constructor() {
 		super("response-too-large", "The authorization server's response is too large");
 		this.name = "ResponseTooLargeError";
+	}
+}
+
+/** Which part of a stored credential's identity differs from the configured one. */
+export type CredentialMismatchReason = "issuer" | "client" | "profile" | "origin";
+
+/**
+ * The stored credential belongs to another issuer, client, profile or set of API origins, or
+ * the API's base URL is not one of its origins. Nothing was sent.
+ */
+export class CredentialMismatchError extends AuthError {
+	declare readonly code: "credential-mismatch";
+	readonly reason: CredentialMismatchReason;
+
+	constructor(reason: CredentialMismatchReason) {
+		super(
+			"credential-mismatch",
+			reason === "origin"
+				? "The stored login is not for this API's origin; log in again"
+				: `The stored login is for another ${reason === "client" ? "client id" : reason}; log in again`,
+		);
+		this.name = "CredentialMismatchError";
+		this.reason = reason;
+	}
+}
+
+/**
+ * Why a login is needed:
+ * - `"missing"`: no credential is stored, or it was logged out;
+ * - `"expired"`: the access token expired and there is no refresh token;
+ * - `"invalid-grant"`: the server refused the refresh token;
+ * - `"store-changed"`: the credentials file was reset while a refresh ran, so its tokens were discarded.
+ */
+export type LoginRequiredReason = "missing" | "expired" | "invalid-grant" | "store-changed";
+
+/** There is no usable credential: the user must log in. */
+export class LoginRequiredError extends AuthError {
+	declare readonly code: "login-required";
+	readonly reason: LoginRequiredReason;
+
+	constructor(reason: LoginRequiredReason) {
+		super("login-required", "Not logged in, or the login expired; log in again");
+		this.name = "LoginRequiredError";
+		this.reason = reason;
+	}
+}
+
+/** Another login for the same credential is open in this process. */
+export class LoginInProgressError extends AuthError {
+	declare readonly code: "login-in-progress";
+
+	constructor() {
+		super("login-in-progress", "Another login for this credential is in progress");
+		this.name = "LoginInProgressError";
+	}
+}
+
+/**
+ * A login, logout or reset committed after this login began, so its tokens were not stored.
+ * Start the login again.
+ */
+export class StaleCommitError extends AuthError {
+	declare readonly code: "stale-commit";
+
+	constructor() {
+		super("stale-commit", "The credential changed while this login ran; nothing was stored");
+		this.name = "StaleCommitError";
+	}
+}
+
+/**
+ * A refresh failed before the server could have rotated the refresh token, so the stored
+ * credential is unchanged and a later refresh may succeed.
+ */
+export class RefreshFailedError extends AuthError {
+	declare readonly code: "refresh-failed";
+
+	constructor() {
+		super("refresh-failed", "Could not refresh the login; try again");
+		this.name = "RefreshFailedError";
+	}
+}
+
+/**
+ * A refresh was sent and its outcome is unknown: the server may have rotated the refresh
+ * token. It is never retried automatically; only a new login (or a logout) clears it.
+ */
+export class RefreshOutcomeUnknownError extends AuthError {
+	declare readonly code: "refresh-outcome-unknown";
+
+	constructor() {
+		super(
+			"refresh-outcome-unknown",
+			"An earlier token refresh did not finish, so the login can't be used safely; log in again",
+		);
+		this.name = "RefreshOutcomeUnknownError";
+	}
+}
+
+/** The credentials directory or file is unsafe: a symbolic link, another user's, or a directory others can write to. */
+export class UnsafeStorageError extends AuthError {
+	declare readonly code: "unsafe-storage";
+	readonly path: string;
+
+	constructor(path: string) {
+		super(
+			"unsafe-storage",
+			`Refusing to use ${path}: the directory must be yours and not writable by other users, and neither it nor the file may be a symbolic link`,
+		);
+		this.name = "UnsafeStorageError";
+		this.path = path;
+	}
+}
+
+/**
+ * The credentials file, or one record of it (`key`), can't be read. Nothing is changed
+ * automatically; `resetCredentials()` deletes the file, or tombstones the record.
+ */
+export class CredentialStoreCorruptError extends AuthError {
+	declare readonly code: "credential-store-corrupt";
+	readonly path: string;
+	/** The record that is invalid; `undefined` when the whole file is. */
+	readonly key: string | undefined;
+
+	constructor(path: string, options: { key?: string; newerVersion?: boolean } = {}) {
+		super(
+			"credential-store-corrupt",
+			options.newerVersion
+				? `${path} was written by a newer version of this CLI; update it`
+				: options.key === undefined
+					? `${path} is corrupt; reset the credentials and log in again`
+					: `The credential ${options.key} in ${path} is corrupt; reset it and log in again`,
+		);
+		this.name = "CredentialStoreCorruptError";
+		this.path = path;
+		this.key = options.key;
+	}
+}
+
+/** The owner a lock file names. */
+export interface LockOwner {
+	readonly ownerId: string;
+	readonly pid: number;
+	readonly host: string;
+	readonly platform: string;
+	/** ISO 8601. */
+	readonly createdAt: string;
+}
+
+/** A credentials lock was not acquired before its deadline: its owner is still running. */
+export class LockTimeoutError extends AuthError {
+	declare readonly code: "lock-timeout";
+	/** The lock file. */
+	readonly path: string;
+	readonly owner: LockOwner | undefined;
+	readonly manualStep: string;
+
+	constructor(path: string, owner: LockOwner | undefined, manualStep: string) {
+		super("lock-timeout", `Timed out waiting for ${path}, held by a running process`);
+		this.name = "LockTimeoutError";
+		this.path = path;
+		this.owner = owner;
+		this.manualStep = manualStep;
+	}
+}
+
+/**
+ * A credentials lock (or its `.recover` file) is held by an owner this process can't judge, so
+ * it is never taken over automatically. Follow `manualStep`.
+ */
+export class LockRecoveryRequiredError extends AuthError {
+	declare readonly code: "lock-recovery-required";
+	/** The lock or `.recover` file to delete after `manualStep`. */
+	readonly path: string;
+	readonly owner: LockOwner | undefined;
+	readonly manualStep: string;
+
+	constructor(path: string, owner: LockOwner | undefined, manualStep: string) {
+		super("lock-recovery-required", `${path} needs manual recovery: ${manualStep}`);
+		this.name = "LockRecoveryRequiredError";
+		this.path = path;
+		this.owner = owner;
+		this.manualStep = manualStep;
 	}
 }
 

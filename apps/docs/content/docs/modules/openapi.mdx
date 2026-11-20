@@ -198,8 +198,26 @@ Unless `init.redirect` is `"manual"` or `"error"`, `fetch()` follows redirects i
 ### `auth(input)`
 
 - It runs at most once per invocation, on the first request that sends credentials: not when a command reads the Context, not for `auth: false` requests, and not for `api --list` or `api --spec`.
-- It receives the [Context setup input](/docs/api/types#contextsetup-and-contextbag), including `signal`, `stdout`, and `stderr`.
+- It receives the [Context setup input](/docs/api/types#contextsetup-and-contextbag), including `signal`, `stdout`, and `stderr`, and as its second argument `{ baseUrl }`, the base URL as configured.
 - Besides credentials, it may return any default headers, such as `User-Agent` or an API-version header. All of them are treated as credentials, so they go only to the base URL's origin.
+- It may return an `AuthAttempt` instead of the headers, to have a 401 retried; see [Authentication](#authentication).
+
+## Authentication
+
+`bearerAuth(resolve)` builds the `auth` option for a bearer token. `resolve({ signal, baseUrl })` returns `{ value, refresh? }`, which the [`auth.token`](/docs/modules/auth#the-token-status-and-logout) of an `@crustjs/auth` client does: a token from the environment, or a stored login that checks `baseUrl` against the origins it was issued for.
+
+<include lang="ts">../../../examples/modules/auth.ts#openapi</include>
+
+<auto-type-table path="../../../../../packages/openapi/src/client.ts" name="AuthAttempt" />
+
+When a request gets a 401, it is sent again once with the attempt `retry(response, { signal })` returns, if all of these hold; otherwise the 401 is returned as is:
+
+- `auth` returned an `AuthAttempt` with `retry` (`bearerAuth()` sets it only when the credential has `refresh`, so never for a token from a flag or the environment).
+- The request that got the 401 carried an `auth` header the library added: not one the request set itself, and not a redirect to another origin, which carries none.
+- Its body can be sent again: none, a string, `URLSearchParams`, an `ArrayBuffer` or typed array, a `Blob`, or `FormData`, never a stream.
+- It is not already a retry, and the invocation was not cancelled.
+
+The 401 response's body is cancelled (even if `retry` read it), and only the request that got the 401 is sent again: after a redirect, that is the redirected request, with the method and body it was sent with, never the request before it. Redirects after it are followed as usual. The new attempt replaces the old one for the rest of the invocation, so later requests and `--paginate` pages use it. A 403 or a 5xx is never retried. `retry` returning `undefined` keeps the 401; an error it throws, such as `RefreshOutcomeUnknownError`, rejects the request.
 
 ## Out of scope
 

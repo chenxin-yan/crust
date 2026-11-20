@@ -15,20 +15,20 @@ import type { AuthServer, TokenClient, TokenSet } from "./types.ts";
 const MAX_EXPIRES_IN_SECONDS = 10 * 365 * 24 * 60 * 60;
 const INSPECT = Symbol.for("nodejs.util.inspect.custom");
 
-/** A frozen token set whose `toJSON()` and `util.inspect()` hide the tokens. */
-function createTokenSet(fields: TokenSet): TokenSet {
-	const redacted = () => ({
-		...fields,
-		accessToken: "[Redacted]",
-		refreshToken: fields.refreshToken === undefined ? undefined : "[Redacted]",
-	});
+/** A frozen copy of `fields` whose `toJSON()` and `util.inspect()` hide the `secrets`. */
+export function redacted<T extends object>(fields: T, secrets: readonly (keyof T)[]): T {
+	const view = () => {
+		const copy: Record<PropertyKey, unknown> = { ...(fields as Record<PropertyKey, unknown>) };
+		for (const key of secrets) if (copy[key] !== undefined) copy[key] = "[Redacted]";
+		return copy;
+	};
 	return Object.freeze(
-		Object.defineProperties(
-			{ ...fields },
-			{ toJSON: { value: redacted }, [INSPECT]: { value: redacted } },
-		),
+		Object.defineProperties({ ...fields }, { toJSON: { value: view }, [INSPECT]: { value: view } }),
 	);
 }
+
+const createTokenSet = (fields: TokenSet): TokenSet =>
+	redacted(fields, ["accessToken", "refreshToken"]);
 
 /**
  * Validates a token response. Only the known fields are kept;

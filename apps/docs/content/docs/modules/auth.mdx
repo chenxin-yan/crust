@@ -2,7 +2,7 @@
 title: "Auth"
 ---
 
-`@crustjs/auth` signs a CLI in with OAuth. `createAuth()` returns one client whose `login()` runs a browser login over a loopback redirect with PKCE, or a device-code login; [Add login to your CLI](/docs/guide/login) builds a `login` command with it. The pieces it is made of (discovery, the browser and device logins, the token client) are exported from `@crustjs/auth/oauth` for flows the client does not cover. It is standalone: no Crust Context, and no external OAuth library; it builds on the runtime's `fetch`, Web Crypto, and `node:http`.
+`@crustjs/auth` signs a CLI in with OAuth. `createAuth()` returns one client: `login()` runs a browser login over a loopback redirect with PKCE, or a device-code login, and stores the login in a private file; `token()` returns the token for your API, refreshed when it expires, or one from an environment variable; `status()` and `logout()` complete the set. [Add login to your CLI](/docs/guide/login) builds the commands with it. The pieces it is made of (discovery, the browser and device logins, the token client, the credentials file) are exported from `@crustjs/auth/oauth` for flows the client does not cover. It is standalone: no Crust Context, and no external OAuth library; it builds on the runtime's `fetch`, Web Crypto, and `node:http`, with [`@crustjs/store`](/docs/modules/store) for the credentials file.
 
 ## Install
 
@@ -16,17 +16,19 @@ npm install @crustjs/auth
 
 ## The client
 
-`createAuth(options)` validates the server settings with the same rules as the building blocks, does no I/O, and returns a frozen client. Its methods work detached, so you can pass `auth.login` around.
+`createAuth(options)` validates the settings with the same rules as the building blocks, does no I/O, and returns a frozen client. Its methods work detached, so you can pass `auth.token` around.
 
 <auto-type-table path="../../../../../packages/auth/src/types.ts" name="CreateAuthOptions" />
 
-- `app` is your CLI's name: non-empty, without `/` or `\`. The device-login message shows `name`, which defaults to `app`.
+- `app` is your CLI's name: non-empty, without `/` or `\`. The login is stored in `credentials.json` in its state directory, as [Storing tokens](#storing-tokens) describes. The device-login message shows `name`, which defaults to `app`.
+- `apiOrigins` are the only origins the stored login's token is sent to. Declare them in code, never from the environment.
+- `env` names a variable, such as `ACME_TOKEN`, whose value `token()` returns, trimmed, instead of the stored login when it is not blank, so CI and agents need no login. It is never stored, refreshed, or revoked, and not checked against `apiOrigins`.
 - `issuer`, `clientId`, `clientSecret`, `redirectPath`, and `allowInsecureLoopback` follow the rules of [Servers](#servers); `hosts` and `ports` those of [Browser login](#browser-login).
-- `resource` names the API every login asks tokens for (RFC 8707 resource indicators, absolute URIs without a fragment), for a server that issues tokens per API; both logins and the code exchange send it.
+- `resource` names the API every login asks tokens for (RFC 8707 resource indicators, absolute URIs without a fragment), for a server that issues tokens per API; both logins and the code exchange send it, and the stored login records it, so every refresh sends it too. Nothing is derived from `apiOrigins`.
 
 ### Signing in
 
-`auth.login(options)` runs the whole sign-in and resolves to the [`TokenSet`](#token-client). It does not store the tokens yet; keep them in a private file, such as a [strict store](/docs/modules/store#strict-stores) (`strict: true`).
+`auth.login(options)` runs the whole sign-in and resolves once the login is stored.
 
 <auto-type-table path="../../../../../packages/auth/src/types.ts" name="LoginOptions" />
 
@@ -34,6 +36,7 @@ npm install @crustjs/auth
 2. It discovers the server, once per process.
 3. **Browser:** it listens on the loopback address, calls `onUrl`, waits for the browser, and exchanges the code once. The listener closes on every path.
 4. **Device code:** it starts the device login, calls `onCode`, and polls until the user approves.
+5. It stores the tokens. A login opens its place in the file before the browser or device step, so a logout (or another login) that commits while it waits is not undone: this login then fails with `StaleCommitError` and stores nothing.
 
 The client prints nothing and opens no browser by itself: it does not know your command's output stream. Show the prompts yourself, usually in two lines:
 
@@ -50,11 +53,28 @@ onCode: ({ message }) => stderr(message),
 
 `message` is the [`deviceCodeMessage()`](#device-login) text for this login: the URL and its host, the code, and the anti-phishing warning. The prompt never carries the device code.
 
-If `onUrl` or `onCode` throws or rejects, the login fails with that error and closes the listener. `signal` cancels any wait with `AbortError`, including a pending `onUrl` or `onCode`: the login rejects at once, closes the listener, and ignores the callback's later result; `page` renders the browser's result page as in [Browser login](#browser-login).
+If `onUrl` or `onCode` throws or rejects, the login fails with that error, closes the listener, and stores nothing. `signal` cancels any wait with `AbortError`, including a pending `onUrl` or `onCode`: the login rejects at once, closes the listener, and ignores the callback's later result; `page` renders the browser's result page as in [Browser login](#browser-login).
+
+### The token, status, and logout
+
+<include lang="ts">../../../examples/modules/auth.ts#token</include>
+
+- `auth.token({ signal?, baseUrl? })` returns the `env` variable's value, trimmed, when it is set and not blank, with `source` `"env"` and no `refresh`. Otherwise it returns the stored login's token, refreshed first when it expires within 30 seconds; with `baseUrl`, its origin must be one of `apiOrigins`, or it throws `CredentialMismatchError` before anything is sent. A token from `env` is not checked against `apiOrigins`. No login → `LoginRequiredError`.
+- `refresh()` on a stored login's token refreshes it unless another process already did, for a 401 retry.
+- `auth.status()` reads where the token would come from and the stored login's `expiresAt` and `scope`, without a request, a refresh, or waiting for a lock. A corrupt file or an unsafe directory still throws its error.
+- `auth.logout({ signal? })` deletes the login, then revokes it at the server, and reports both outcomes as in [Login and logout](#login-and-logout).
+
+<auto-type-table path="../../../../../packages/auth/src/types.ts" name="AuthToken" />
+
+<auto-type-table path="../../../../../packages/auth/src/types.ts" name="AuthStatus" />
+
+With [`@crustjs/openapi`](/docs/modules/openapi#authentication), pass `auth.token` to `bearerAuth()`. A 401 refreshes a stored login once and retries; a token from `env` is never refreshed.
+
+<include lang="ts">../../../examples/modules/auth.ts#openapi</include>
 
 ### Errors by code
 
-Every error is an `AuthError`; match on its `code`, typed as the `AuthErrorCode` union, never on `message`:
+Errors the library raises are `AuthError`s with a stable `code`, typed as the `AuthErrorCode` union; match on `code`, never on `message`. An error thrown by your own `onUrl` or `onCode` reaches you unchanged. `createAuth()` itself throws `OAuthConfigError` for an invalid option, and, since it resolves the state directory's path (without touching the disk), the store's `CrustStoreError` (`PATH`) on an unsupported platform or when `XDG_STATE_HOME` (`LOCALAPPDATA` on Windows) is unset or relative and the home directory is not an absolute path.
 
 <include lang="ts">../../../examples/modules/auth.ts#errors</include>
 
@@ -69,6 +89,8 @@ The codes and their classes are listed in [Errors](#errors).
 <include lang="ts">../../../examples/modules/auth.ts#browser</include>
 
 <include lang="ts">../../../examples/modules/auth.ts#device</include>
+
+Store the tokens with a [token source](#storing-tokens), which also refreshes them.
 
 ## Servers
 
@@ -87,7 +109,7 @@ Declare `servers` in code. Do not build the list from environment variables or o
 
 ### Who is signed in
 
-`server.userinfoEndpoint` is the OpenID Connect user-info address from the metadata (`userinfo_endpoint`), checked like the other endpoints, or `undefined` when there is none. The library never requests it and drops the `id_token` unread: fetch it yourself with the access token as a bearer token.
+`server.userinfoEndpoint` is the OpenID Connect user-info address from the metadata (`userinfo_endpoint`), checked like the other endpoints, or `undefined` when there is none. The library never requests it and drops the `id_token` unread: fetch it yourself with the token from `auth.token()` or a token source's `get()`, without `baseUrl`, since the address is on the issuer rather than one of `apiOrigins` and `baseUrl` there would be refused.
 
 <include lang="ts">../../../examples/modules/auth.ts#userinfo</include>
 
@@ -184,11 +206,66 @@ On `"refuse"`, nobody is there to read a code, or nobody asked for one that some
 
 <auto-type-table path="../../../../../packages/auth/src/types.ts" name="TokenSet" />
 
-`JSON.stringify()` and `util.inspect()` of a `TokenSet` print `[Redacted]` for its tokens. A copy made with `{ ...tokens }`, or the token strings themselves, are not protected.
+`JSON.stringify()` and `util.inspect()` of a `TokenSet`, and of what token sources and `auth.token()` return, print `[Redacted]` for its tokens. A copy made with `{ ...tokens }`, or the token strings themselves, are not protected.
+
+## Storing tokens
+
+`credentialStore({ app, name?, lockTimeout? })` names the credentials file, and `createTokenSource({ config, identity, store, skewMs?, fetch? })` one login in it. Neither touches the disk or the network until you call a method.
+
+The client keeps its login this way too: `createAuth()` opens `credentialStore({ app })` and a token source for `{ issuer, clientId, apiOrigins }`, so everything below about the file, refreshes, and locks applies to it.
+
+<include lang="ts">../../../examples/modules/auth.ts#credentials</include>
+
+<auto-type-table path="../../../../../packages/auth/src/types.ts" name="TokenSource" />
+
+- **The file** is `credentials.json` in the app's state directory: `$XDG_STATE_HOME/<app>` when that variable holds an absolute path, else `~/.local/state/<app>`, or `%LOCALAPPDATA%\<app>\State` on Windows. On POSIX the file is `0600`, and a directory the store creates is `0700`. An existing directory, such as one `updateNotifier()` created first, must be yours and not writable by other users, and neither it nor the file may be a symbolic link; otherwise every call fails with `UnsafeStorageError` before writing anything. On Windows, the file is protected by the access rules (ACLs) of your user directory, not by file modes: there are no mode or owner checks, and a symbolic link is still refused. Tokens are stored as plain text, so anyone who can read the file can use them.
+- **The identity** binds a login to `issuer`, `clientId`, `profile` (default `"default"`), and `apiOrigins`, and is stored with its tokens. Every use checks that the stored identity equals the one in your code, and, with `baseUrl`, that its origin is one of `apiOrigins`; otherwise `CredentialMismatchError` (`reason`: `issuer`, `client`, `profile`, or `origin`) is thrown before any request. So an issuer or API URL taken from an environment variable never receives a token stored for another. Declare `apiOrigins` in code, like `servers`; `resource` values are sent and stored but never widen them.
+- **`get()`** returns the access token, refreshed first when it expires within `skewMs` (30 seconds). The refresh keeps the old refresh token when the server sends none, keeps the granted scope, sends the stored `resource` values, and stores the new tokens before it returns them. Concurrent refreshes of one login share one request: within a process, and across processes through a lock.
+- **`forceRefresh({ ifGeneration })`** is for a 401: if the login changed since the failed token's `generation`, it returns the newer token without a request.
+
+### Login and logout
+
+`beginLogin()` opens a login before you run the browser or device flow, and `ticket.commit(tokens, { resource? })` stores the result. A commit fails with `StaleCommitError`, storing nothing, if another login, a logout, or a reset of the same credential committed since `beginLogin()`, so a login that started before a logout can't bring the session back. A second open login in the same process fails with `LoginInProgressError`. Commit, a failed commit, `cancel()`, and an abort of `beginLogin()`'s `signal` each finish the ticket, so call `cancel()` in `finally` as above.
+
+`logout()` replaces the login with a logged-out record, then revokes the refresh token (and the access token, where the server can) at the server's revocation endpoint, and reports both outcomes:
+
+| `local`     | `remote`        | Meaning                                                                            |
+| ----------- | --------------- | ---------------------------------------------------------------------------------- |
+| `"deleted"` | `"revoked"`     | Logged out, and the server revoked the token                                       |
+| `"deleted"` | `"unsupported"` | Logged out; the server has no revocation endpoint                                  |
+| `"deleted"` | `"failed"`      | Logged out; the server refused or failed (such as a 503): the token may still work |
+| `"deleted"` | `"unknown"`     | Logged out; the request was sent but no answer came (a timeout or an abort)        |
+| `"deleted"` | `"skipped"`     | Logged out; there was no readable token of this identity to revoke                 |
+| `"failed"`  | `"skipped"`     | The file could not be written: still logged in, and nothing was sent               |
+
+A failed revocation is a result, not an error. Revocation waits at most 10 seconds.
+
+### When a refresh is uncertain
+
+A refresh is marked in the file before it is sent, and holds the login's lock until its result is stored, so a call that finds the mark waits for that lock and then uses the refreshed token. If the server answers with a protocol error (a 400, or a 401 for `invalid_client`), or the runtime's own `fetch` could not resolve or connect to the server, nothing was rotated and the mark is cleared: `invalid_grant` throws `LoginRequiredError`, any other code an `OAuthError`, a connection failure `RefreshFailedError`, and a later call may try again. After any other outcome, such as a 5xx, a timeout, a lost connection, an invalid response, or a crash, the server may have rotated the refresh token, and sending the old one again could make it revoke the login. So the mark stays, and every later `get()`, `forceRefresh()`, or 401 retry, in any process, throws `RefreshOutcomeUnknownError` without a request until the user logs in again (or logs out). Through a custom `fetch`, a connection failure is uncertain too, since a proxy or a retry may have sent the request.
+
+A failed refresh never deletes the login; call `logout()` when you want that.
+
+### A corrupt file
+
+A file that is not valid JSON, has an unknown structure, or comes from a newer version of your CLI makes every call fail with `CredentialStoreCorruptError`. A JSON object with none of the credentials fields (`version`, `storeId`, `encryption`, `records`), such as `{}`, counts as an empty file, and its other keys are kept; one with any of them must have all of them, valid. It is never repaired or replaced automatically. `store.resetCredentials()` deletes it; copy it first if you want to keep it. A single invalid login fails only for its own key (`error.key`), and `resetCredentials({ key })` replaces just that one with a logged-out record.
+
+### Locks
+
+A refresh, login, logout, or reset of one login holds a lock file next to `credentials.json` for its duration, and every write holds the file's own lock, so other logins in the file are never lost. A lock is taken over only from a process that provably no longer runs: on Linux, one on the same machine, boot, and PID namespace whose process is gone; on macOS and Windows, one written on the same platform and host name whose process is gone. This assumes no two machines with the same host name share the directory. Any other owner is waited for until `lockTimeout` (40 seconds), then the call fails:
+
+- `LockTimeoutError`: the owner is still running. Try again when it is done.
+- `LockRecoveryRequiredError`: the owner can't be judged from here, such as a process in a container. Both errors carry the lock file's `path`, its recorded `owner`, and `manualStep`: stop every process of your CLI that uses this directory, including on other machines or containers that share it, and keep new ones from starting; only then delete the file. If you can't be sure of that, leave it in place.
+
+## A token source and bearerAuth()
+
+`createAuth()`'s `token` is a `bearerAuth()` resolver as it is. For a token source built from these blocks, return its token from the resolver, with a `refresh` that calls `forceRefresh()` with the token's `generation`, so a 401 refreshes the login once, and a login that another process refreshed meanwhile is used without a second refresh. Pass `baseUrl` on, so the token is only sent to the login's `apiOrigins`:
+
+<include lang="ts">../../../examples/modules/auth.ts#blocks-openapi</include>
 
 ## Errors
 
-Every error extends `AuthError` and has a stable `code`. Match on `code` or the class, never on `message`. The classes are exported from `@crustjs/auth/oauth`; the root exports `AuthError` and `AuthErrorCode`.
+Every error the library raises extends `AuthError` and has a stable `code`. Match on `code` or the class, never on `message`. The classes are exported from `@crustjs/auth/oauth`; the root exports `AuthError` and `AuthErrorCode`.
 
 | Error                           | `code`                       | When                                                                                                                                               |
 | ------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -201,9 +278,26 @@ Every error extends `AuthError` and has a stable `code`. Match on `code` or the 
 | `ResponseTooLargeError`         | `response-too-large`         | A response body was over 1 MiB                                                                                                                     |
 | `NetworkError`                  | `network`                    | The request could not be sent or its response not read (DNS, connection, TLS, a broken stream); the underlying error is dropped                    |
 | `LoginRequiresInteractionError` | `login-requires-interaction` | `auth.login()` (or your code) found no person at a terminal: `detectLoginMode()` returned `"refuse"`                                               |
+| `LoginRequiredError`            | `login-required`             | No login, or it was logged out, expired without a refresh token, refused (`invalid-grant`), or reset during a refresh (`reason`)                   |
+| `CredentialMismatchError`       | `credential-mismatch`        | The stored login is for another issuer, client, profile, or API origin (`reason`); nothing was sent                                                |
+| `RefreshFailedError`            | `refresh-failed`             | A refresh failed before anything could be rotated; try again                                                                                       |
+| `RefreshOutcomeUnknownError`    | `refresh-outcome-unknown`    | An earlier refresh may have rotated the token; log in again                                                                                        |
+| `LoginInProgressError`          | `login-in-progress`          | `beginLogin()` while another login of the same credential is open in the process                                                                   |
+| `StaleCommitError`              | `stale-commit`               | A login, logout, or reset committed after `beginLogin()`; nothing was stored                                                                       |
+| `CredentialStoreCorruptError`   | `credential-store-corrupt`   | The credentials file, or one login in it (`key`), can't be read                                                                                    |
+| `UnsafeStorageError`            | `unsafe-storage`             | The credentials directory or file is open to other users or a symbolic link                                                                        |
+| `LockTimeoutError`              | `lock-timeout`               | A running process held a credentials lock past `lockTimeout`                                                                                       |
+| `LockRecoveryRequiredError`     | `lock-recovery-required`     | A credentials lock needs the manual step in `manualStep`                                                                                           |
 
-Errors carry local text, the `status`, and the allowlisted code only. A server's `error_description` and `error_uri`, response bodies, and URLs never appear in a message, property, or `cause`, since a hostile server could echo a secret into them.
+Errors carry local text, the `status`, and the allowlisted code only. A server's `error_description` and `error_uri`, response bodies, and URLs never appear in a message, property, or `cause`, since a hostile server could echo a secret into them. Neither does the content of a corrupt credentials file. Other file system failures surface as the store's `CrustStoreError` (`IO`).
 
 ## Cancellation
 
-`auth.login()`, `discover()`, `createAuthorizationSession()`, `session.wait()`, `startDeviceFlow()`, `flow.poll()`, and the token client's `exchangeCode()`, `refresh()`, and `revoke()` take a `signal`. An aborted signal rejects with `AbortError` before any request or listener; aborting mid-way stops the request, sleep, or wait and closes the listener. Handle Ctrl-C in your command (a Crust command's `ctx.signal` already does) and pass its signal down.
+`auth.login()`, `auth.token()`, `auth.logout()`, `discover()`, `createAuthorizationSession()`, `session.wait()`, `startDeviceFlow()`, `flow.poll()`, the token client's `exchangeCode()`, `refresh()`, and `revoke()`, a token source's `get()`, `forceRefresh()`, `beginLogin()`, `ticket.commit()`, and `logout()`, and `resetCredentials()` take a `signal`. An aborted signal rejects with `AbortError` before any request or listener; aborting mid-way stops the request, sleep, or wait and closes the listener. Handle Ctrl-C in your command (a Crust command's `ctx.signal` already does) and pass its signal down.
+
+A change to the credentials file can be cancelled until its first write, including while it waits for a lock; from then on it completes and reports its real outcome:
+
+- A refresh, once its mark is written: an abort only stops waiting for it, and another caller sharing the refresh still gets the token. When every caller has left before the mark, nothing is sent.
+- A login commit, once its write starts.
+- A logout, once the login is replaced. An abort afterwards stops the revocation, reported as `remote: "unknown"`.
+- `resetCredentials()`, once the file is deleted (or the record replaced).

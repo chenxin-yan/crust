@@ -30,11 +30,13 @@ describe("library source", () => {
 		).toEqual([]);
 	});
 
-	it("reads the environment only to pick a login mode", () => {
+	it("reads the environment only to pick a login mode and for the client's env token", () => {
 		expect(filesMatching(/process\.env|Bun\.env|import\.meta\.env/)).toEqual([
+			"client.ts",
 			"login-mode.ts",
 			"types.ts",
 		]);
+		expect(readFileSync(join(srcDir, "client.ts"), "utf8").match(/process\.env/g)).toHaveLength(1);
 		expect(readFileSync(join(srcDir, "types.ts"), "utf8").match(/process\.env/g)).toHaveLength(1);
 	});
 
@@ -84,12 +86,14 @@ describe("entry points", () => {
 			"AuthClient",
 			"AuthError",
 			"AuthErrorCode",
+			"AuthStatus",
+			"AuthToken",
 			"BrowserLoginPrompt",
 			"CallbackPageView",
 			"CreateAuthOptions",
 			"DeviceLoginPrompt",
 			"LoginOptions",
-			"TokenSet",
+			"LogoutResult",
 			"createAuth",
 		]);
 		expect(index).not.toMatch(/export \*/);
