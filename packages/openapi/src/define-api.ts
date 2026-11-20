@@ -421,11 +421,9 @@ function apiExtension(
 			return true;
 		});
 	return extension.build(async ({ snapshot }) => {
-		const plans = built();
-		// `undefined` when the app holds none of this handle's generated commands: it may use `api` alone.
-		const missing = missingCommands(snapshot, plans);
-		// A handle that generates none is held once the app read its `commands`.
-		const holds = plans.length === 0 ? base.readCommands.has(state) : missing !== undefined;
+		// The app has this handle's generated commands only if it read its `commands`, the one way to
+		// get them; one that never did uses `api` alone, whatever commands of its own it has.
+		const holds = base.readCommands.has(state);
 		// Before any file: for an app that holds the commands, one that needs a decision fails the build.
 		const problem = holds ? problems() : undefined;
 		if (problem !== undefined) throw new Error(problem);
@@ -435,6 +433,9 @@ function apiExtension(
 		const document = base.document();
 		const text = JSON.stringify(document);
 		const files = new Map([[BUILT_SPEC_FILE, text]]);
+		const plans = holds ? built() : [];
+		// Where the app mounts this handle's commands, or `undefined` when it does not.
+		const missing = holds ? missingCommands(snapshot, plans) : undefined;
 		// The index claims the app's commands: those of this handle's plan, or none of any.
 		if (missing !== undefined && missing.length > 0) {
 			throw mismatch(

@@ -283,8 +283,6 @@ describe("the spec", () => {
 	},
 }
 `;
-	// The index of a CLI without generated commands: this spec's one operation is skipped.
-	const noCommands = JSON.stringify({ version: 1, commands: [], groups: [] });
 	const writeSpec = (text = jsonc) => {
 		const file = join(mkdtempSync(join(tmpdir(), "crust-openapi-spec-")), "acme.openapi.jsonc");
 		writeFileSync(file, text);
@@ -355,7 +353,6 @@ describe("the spec", () => {
 						paths: { "/users": { get: { operationId: "listUsers", summary: 'a "//" b /*,}*/' } } },
 					}),
 				],
-				["openapi/index.json", noCommands],
 			]),
 		});
 	});
@@ -399,7 +396,7 @@ describe("the spec", () => {
 		}
 	});
 
-	it("is written by crust build as plain JSON to <id>/spec.json, beside its index; an object spec writes nothing", async () => {
+	it("is written by crust build as plain JSON to <id>/spec.json; an object spec writes nothing", async () => {
 		const url = pathToFileURL(writeSpec());
 		const parsed = {
 			openapi: "3.1.0",
@@ -409,16 +406,10 @@ describe("the spec", () => {
 		};
 
 		expect(await runBuildHooks(buildApp({ spec: url }))).toEqual({
-			files: new Map([
-				["openapi/spec.json", JSON.stringify(parsed)],
-				["openapi/index.json", noCommands],
-			]),
+			files: new Map([["openapi/spec.json", JSON.stringify(parsed)]]),
 		});
 		expect(await runBuildHooks(buildApp({ spec: url, id: "acme" }))).toEqual({
-			files: new Map([
-				["acme/spec.json", JSON.stringify(parsed)],
-				["acme/index.json", noCommands],
-			]),
+			files: new Map([["acme/spec.json", JSON.stringify(parsed)]]),
 		});
 		expect(await runBuildHooks(buildApp())).toEqual({ files: new Map() });
 		expect(await runBuildHooks(buildApp({ spec: url, id: "a/b" }))).toEqual({

@@ -185,6 +185,18 @@ async function ship(app = appOf(chained())) {
 }
 
 describe("spec data files", () => {
+	it("are not written for an app that never reads the commands, also with its own command named like one", async () => {
+		const acme = defineApi({ spec: specUrl, baseUrl: "https://api.acme.test" });
+		// Like the generated `status`: the same name, description and arguments.
+		const status = defineCommand("status", { description: "The status" }, (command) =>
+			command.action(() => {}),
+		);
+
+		expect(
+			await runBuildHooks(new Crust("acme").extend(help(), acme.extension).add(status)),
+		).toEqual({ files: new Map([["openapi/spec.json", JSON.stringify(spec)]]) });
+	});
+
 	it("are not written when an operation needs a decision: the build fails first", async () => {
 		const clash = chained().override({ createUser: { exclude: false } });
 
@@ -552,29 +564,22 @@ describe("spec data files", () => {
 
 	it("fail the build when the app's generated commands are not the handle's", async () => {
 		const acme = defineApi({ spec: specUrl, baseUrl: "https://api.acme.test" });
-		const renamed = acme.override({ listUsers: { name: "all" } });
-
-		expect(
-			await runBuildHooks(new Crust("acme").extend(acme.extension).add(...renamed.commands)),
-		).toEqual({
-			files: new Map(),
-			error:
-				'Extension "crust:openapi" build failed: defineApi: the app\'s generated commands are not this handle\'s: missing or different "users list-users"; take `extension` and `commands` from the same handle, and add `commands` whole (`exclude` an operation to leave it out)',
-		});
-		// Only the root command `status`.
+		const another =
+			'Extension "crust:openapi" build failed: defineApi: the app\'s generated commands are those of another handle of this API; take `extension` and `commands` from the same handle, and add `commands` whole (`exclude` an operation to leave it out)';
+		// Another handle's commands, renamed, described or hidden differently.
+		for (const other of [
+			acme.override({ listUsers: { name: "all" } }),
+			acme.override({ listUsers: { description: "Changed" } }),
+			acme.override({ getUser: { hidden: true } }),
+		]) {
+			expect(
+				await runBuildHooks(new Crust("acme").extend(acme.extension).add(...other.commands)),
+			).toEqual({ files: new Map(), error: another });
+		}
+		// Only the root command `status` of this handle's.
 		expect(
 			(await runBuildHooks(new Crust("acme").extend(acme.extension).add(acme.commands[0]!))).error,
 		).toContain('missing or different "users list-users", "users create-user"');
-		// The description and the hidden state are in the index too.
-		const described = acme.override({ listUsers: { description: "Changed" } });
-		expect(
-			(await runBuildHooks(new Crust("acme").extend(acme.extension).add(...described.commands)))
-				.error,
-		).toContain('missing or different "users list-users";');
-		const hidden = acme.override({ getUser: { hidden: true } });
-		expect(
-			(await runBuildHooks(new Crust("acme").extend(acme.extension).add(...hidden.commands))).error,
-		).toContain('missing or different "users get-user";');
 	});
 
 	it("fail the build when the app holds another handle's commands and none of this one's", async () => {
