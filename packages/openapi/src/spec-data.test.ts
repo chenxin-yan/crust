@@ -5,8 +5,6 @@ import { pathToFileURL } from "node:url";
 
 import { Crust, defineCommand } from "@crustjs/core";
 import { didYouMean, help } from "@crustjs/extensions";
-import { withTerminalIO } from "@crustjs/prompts";
-import { createPromptIO } from "@crustjs/prompts/testing";
 import { captureExecute } from "@crustjs/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -462,7 +460,7 @@ describe("spec data files", () => {
 		});
 	});
 
-	it("give api preview and onMissing in a built CLI the index and the target's group file only", async () => {
+	it("give api preview in a built CLI the index and the target's group file only", async () => {
 		await ship();
 		const fs = process.getBuiltinModule("node:fs");
 		const read = vi.spyOn(fs, "readFileSync");
@@ -472,26 +470,21 @@ describe("spec data files", () => {
 					? [file.slice(join(built.dir!, "openapi").length + 1)]
 					: [],
 			);
-		// A fresh app each time, which reads what it needs from the start: below `more` too.
-		const fresh = () => {
-			const acme = chained().onMissing(() => "u1");
-			return appOf(acme).add(defineCommand("more", (command) => command.add(...acme.commands)));
-		};
 		try {
-			const preview = fresh();
-			await preview.run(["api", "preview"], {
-				args: { target: ["more", "users", "get-user"], argv: ["u1"] },
-			});
-			expect(reads()).toEqual(["index.json", "groups/g-users.json"]);
-
-			for (const path of [
+			const targets: [string, ...string[]][] = [
 				["users", "get-user"],
 				["more", "users", "get-user"],
-			]) {
+			];
+			for (const target of targets) {
 				read.mockClear();
-				const app = fresh();
-				const outcome = await withTerminalIO(createPromptIO().io, () => captureExecute(app, path));
-				expect(outcome.exitCode).toBe(0);
+				// A fresh app, which reads what it needs from the start; it adds the commands below `more` too.
+				const acme = chained();
+				const app = appOf(acme).add(
+					defineCommand("more", (command) => command.add(...acme.commands)),
+				);
+				expect(await app.run(["api", "preview"], { args: { target, argv: ["u1"] } })).toMatchObject(
+					{ status: "completed" },
+				);
 				expect(reads()).toEqual(["index.json", "groups/g-users.json"]);
 			}
 		} finally {

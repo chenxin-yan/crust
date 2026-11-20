@@ -51,7 +51,6 @@
 		"@crustjs/core": "workspace:*",
 		"@crustjs/extensions": "workspace:*",
 		"@crustjs/mcp": "workspace:*",
-		"@crustjs/prompts": "workspace:*",
 		"@crustjs/skills": "workspace:*",
 		"@crustjs/testing": "workspace:*",
 		"@modelcontextprotocol/client": "^2.4.0",

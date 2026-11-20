@@ -7,15 +7,12 @@ import {
 } from "@crustjs/core";
 import { commandInputSchema } from "@crustjs/core/tooling";
 import { confirm, input, json } from "@crustjs/extensions";
-import { input as ask, select, withTerminalIO } from "@crustjs/prompts";
-import { createPromptIO } from "@crustjs/prompts/testing";
 import { captureExecute } from "@crustjs/testing";
 import { runInteractive } from "@crustjs/testing/interactive";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { runBuildHooks } from "../../crust/tests/build-hooks.ts";
 import { type DefineApiOptions, defineApi } from "./define-api.ts";
-import type { MissingField } from "./missing-values.ts";
 import { ApiResponseError } from "./request.ts";
 
 const spec = {
@@ -548,6 +545,23 @@ describe("generated commands", () => {
 	});
 });
 
+describe("a missing required value", () => {
+	it("fails with VALIDATION on a terminal too, and nothing asks for it", async () => {
+		const calls = stubFetch();
+		const acme = buildApi();
+		const app = new Crust("acme").extend(acme.extension).add(...acme.commands);
+
+		const run = runInteractive(app, ["users", "get-user"]);
+
+		await expect(run.done).rejects.toMatchObject({
+			code: "VALIDATION",
+			message: 'Missing required argument "<id>"',
+		});
+		expect(run.screen().trim()).toBe("");
+		expect(calls).toEqual([]);
+	});
+});
+
 describe("generated --paginate", () => {
 	const paginate = async (response: Response) => {
 		const next = response.headers.get("x-next");
@@ -855,267 +869,6 @@ describe("api preview", () => {
 	});
 });
 
-describe("acme.onMissing()", () => {
-	const members = {
-		openapi: "3.1.0",
-		paths: {
-			"/teams/{team}/members": {
-				post: {
-					operationId: "addMember",
-					summary: "Add a member",
-					parameters: [
-						{ name: "team", in: "path", required: true, schema: { type: "string" } },
-						{
-							name: "role",
-							in: "query",
-							required: true,
-							schema: { type: "string", enum: ["admin", "member"] },
-							description: "The member's role",
-						},
-						{ name: "tags", in: "query", schema: { type: "array", items: { type: "string" } } },
-					],
-					requestBody: {
-						required: true,
-						content: {
-							"application/json": {
-								schema: {
-									type: "object",
-									required: ["name", "age"],
-									properties: {
-										name: { type: "string" },
-										age: { type: "integer" },
-										note: { type: "string" },
-									},
-								},
-							},
-						},
-					},
-					responses: { "201": { description: "Added" } },
-				},
-			},
-		},
-	};
-	const answers: Readonly<Record<string, string>> = { team: "t 1", role: "member", age: "30" };
-
-	/** The app, the fields its handler was asked for, and the requests it sent. */
-	function membersApp(
-		handler: (field: MissingField) => string | undefined | Promise<string | undefined> = (field) =>
-			answers[field.name],
-		inputFirst = true,
-	) {
-		const sent = stubFetch(() => new Response(null, { status: 201 }));
-		const asked: MissingField[] = [];
-		// A flag whose `parse` turns its text into an object: binding the parsed value again would fail.
-		const tagged = defineContext("tagged")
-			.flags({ tag: { type: "string", parse: (raw) => ({ tag: `${raw}!` }) } })
-			.setup(({ flags }) => flags.tag);
-		const acme = defineApi({ spec: members, baseUrl: "https://api.example.com/v1/" })
-			.use(tagged)
-			.onMissing((field) => {
-				asked.push(field);
-				return handler(field);
-			})
-			.override({ addMember: { bind: { note: async (ctx) => (await ctx.tagged)?.tag ?? "" } } });
-		const app = new Crust("acme")
-			.extend(...(inputFirst ? [input(), acme.extension] : [acme.extension, input()]))
-			.provide(tagged())
-			.add(...acme.commands);
-		return { app, asked, sent };
-	}
-
-	/** Runs `argv` with a test terminal on stdin and stderr. */
-	function onTerminal(app: AnyCrust, argv: readonly string[]) {
-		return withTerminalIO(createPromptIO().io, () => captureExecute(app, [...argv]));
-	}
-
-	it.each([true, false])(
-		"asks for each missing value and binds the answers with --input's once (input() first: %s)",
-		async (inputFirst) => {
-			const { app, asked, sent } = membersApp(undefined, inputFirst);
-
-			const result = await onTerminal(app, [
-				"add-member",
-				"--tags",
-				"a",
-				"--input",
-				'{"name":"Ada","tag":"x"}',
-			]);
-
-			expect(result).toEqual({ stdout: "", stderr: "", exitCode: 0 });
-			expect(asked).toEqual([
-				{ name: "team", in: "path", kind: "string", multiple: false },
-				{
-					name: "role",
-					in: "query",
-					kind: "string",
-					multiple: false,
-					choices: ["admin", "member"],
-					description: "The member's role",
-				},
-				{ name: "age", in: "body", kind: "number", multiple: false },
-			]);
-			expect(sent.map(({ url, body }) => [url, body])).toEqual([
-				[
-					"https://api.example.com/v1/teams/t%201/members?role=member&tags=a",
-					// The tag was parsed once, from the bound text.
-					'{"name":"Ada","age":30,"note":"x!"}',
-				],
-			]);
-		},
-	);
-
-	it("asks for a required field of an optional body that a binding fills", async () => {
-		const sent = stubFetch(() => new Response(null, { status: 201 }));
-		const asked: string[] = [];
-		const acme = defineApi({
-			spec: {
-				openapi: "3.1.0",
-				paths: {
-					"/notes": {
-						post: {
-							operationId: "create",
-							summary: "Create a note",
-							requestBody: {
-								content: {
-									"application/json": {
-										schema: {
-											type: "object",
-											required: ["name"],
-											properties: { name: { type: "string" }, note: { type: "string" } },
-										},
-									},
-								},
-							},
-							responses: { "201": { description: "Created" } },
-						},
-					},
-				},
-			},
-			baseUrl: "https://api.example.com/v1/",
-		})
-			.onMissing(({ name }) => {
-				asked.push(name);
-				return "Ada";
-			})
-			.override({ create: { bind: { note: () => "bound" } } });
-		const app = new Crust("acme").extend(acme.extension).add(...acme.commands);
-
-		expect((await onTerminal(app, ["create"])).exitCode).toBe(0);
-		expect(asked).toEqual(["name"]);
-		expect(sent.map(({ body }) => body)).toEqual(['{"name":"Ada","note":"bound"}']);
-	});
-
-	it("asks at every place the app adds the generated commands, not for its own look-alike", async () => {
-		const sent = stubFetch(() => new Response(null, { status: 201 }));
-		const asked: string[] = [];
-		const acme = defineApi({ spec: members, baseUrl: "https://api.example.com/v1/" }).onMissing(
-			(field) => {
-				asked.push(field.name);
-				return answers[field.name];
-			},
-		);
-		const app = new Crust("acme")
-			.extend(acme.extension)
-			.add(...acme.commands)
-			.command("other", { aliases: ["o"] }, (command) => command.add(...acme.commands))
-			// An app command at a generated command's path below another parent, with other inputs.
-			.command("mine", (command) =>
-				command.command("add-member", (own) =>
-					own.args({ name: "team", type: "string", required: true }).action(() => {}),
-				),
-			);
-		const body = ["--body", '{"name":"Ada","age":1}'];
-
-		for (const path of [["add-member"], ["other", "add-member"], ["o", "add-member"]]) {
-			expect((await onTerminal(app, [...path, ...body])).exitCode).toBe(0);
-		}
-		expect(asked).toEqual(["team", "role", "team", "role", "team", "role"]);
-		expect(sent).toHaveLength(3);
-		expect((await onTerminal(app, ["mine", "add-member"])).stderr).toBe(
-			'Error: Missing required argument "<team>"',
-		);
-		expect(asked).toHaveLength(6);
-	});
-
-	it("asks for nothing argv, the input or --body gave", async () => {
-		const { app, asked, sent } = membersApp();
-
-		const result = await onTerminal(app, [
-			"add-member",
-			"t1",
-			"--role",
-			"admin",
-			"--body",
-			'{"name":"Ada","age":1}',
-		]);
-
-		expect(result.exitCode).toBe(0);
-		expect(asked).toEqual([]);
-		expect(sent).toHaveLength(1);
-	});
-
-	it("fails as without a handler when the handler gives no value, or when nobody can answer", async () => {
-		const missing = 'Error: Missing required argument "<team>"';
-		const declined = membersApp(() => undefined);
-		expect((await onTerminal(declined.app, ["add-member"])).stderr).toBe(missing);
-		expect(declined.asked).toHaveLength(1);
-		expect(declined.sent).toEqual([]);
-
-		// Not a terminal: the test's own stdin.
-		const piped = membersApp();
-		expect((await captureExecute(piped.app, ["add-member"])).stderr).toBe(missing);
-		expect(piped.asked).toEqual([]);
-
-		// A terminal under CI that no test injected.
-		vi.stubEnv("CI", "true");
-		const tty = [process.stdin, process.stderr].map((stream) => [stream, stream.isTTY] as const);
-		for (const [stream] of tty) stream.isTTY = true;
-		try {
-			const ci = membersApp();
-			expect((await captureExecute(ci.app, ["add-member"])).stderr).toBe(missing);
-			expect(ci.asked).toEqual([]);
-		} finally {
-			for (const [stream, isTTY] of tty) stream.isTTY = isTTY;
-			vi.unstubAllEnvs();
-		}
-	});
-
-	it("is never asked by api preview", async () => {
-		const { app, asked } = membersApp();
-
-		const { stderr } = await onTerminal(app, ["api", "preview", "add-member"]);
-
-		expect(stderr).toBe('Error: Missing required argument "<team>"');
-		expect(asked).toEqual([]);
-	});
-
-	it("reaches the terminal run() and runInteractive() inject through @crustjs/prompts", async () => {
-		const { app, sent } = membersApp((field) =>
-			field.choices
-				? select({ message: field.name, choices: field.choices })
-				: ask({ message: field.name }),
-		);
-
-		const run = runInteractive(app, ["add-member"], { flags: { input: '{"name":"Ada"}' } });
-		await run.waitFor(/team/);
-		run.type("t1");
-		run.keys("return");
-		await run.waitFor(/role/);
-		run.keys("down", "return");
-		await run.waitFor(/age/);
-		run.type("30");
-		run.keys("return");
-
-		expect(await run.done).toMatchObject({ status: "completed" });
-		expect(sent.map(({ url, body }) => [url, body])).toEqual([
-			[
-				"https://api.example.com/v1/teams/t1/members?role=member",
-				'{"name":"Ada","age":30,"note":""}',
-			],
-		]);
-	});
-});
-
 describe("generated commands of the same shape at several mounts", () => {
 	// Two operations whose commands have one shape: `users list` and `other users list`.
 	const query = (name: string, description: string) => ({
@@ -1144,16 +897,10 @@ describe("generated commands of the same shape at several mounts", () => {
 
 	function twinsApp(mounts: "root" | "other" | "both") {
 		const sent = stubFetch(() => Response.json({}));
-		const asked: string[] = [];
-		const acme = defineApi({ spec: twins, baseUrl: "https://api.example.com/v1/" })
-			.override({
-				users: { group: "users", name: "list" },
-				admins: { group: "other users", name: "list" },
-			})
-			.onMissing((field) => {
-				asked.push(`${field.name}: ${field.description}`);
-				return "x";
-			});
+		const acme = defineApi({ spec: twins, baseUrl: "https://api.example.com/v1/" }).override({
+			users: { group: "users", name: "list" },
+			admins: { group: "other users", name: "list" },
+		});
 		const under = (name: string) => defineCommand(name, (command) => command.add(...acme.commands));
 		const api = new Crust("acme").extend(acme.extension);
 		const app: AnyCrust =
@@ -1175,59 +922,36 @@ describe("generated commands of the same shape at several mounts", () => {
 			await captureExecute(app, [...path, "--q", "a", "--page", "1"]);
 			return { preview, sent: sent[0]?.url };
 		};
-		/** What `.onMissing()` asks for a path, and what the command then fails with. */
-		const prompts = async (...path: string[]) => {
-			asked.length = 0;
-			const { stderr } = await withTerminalIO(createPromptIO().io, () => captureExecute(app, path));
-			return { asked: [...asked], stderr };
-		};
-		return { urls, prompts };
+		return { urls };
 	}
 	const users = "https://api.example.com/v1/users?q=a&page=1";
 	const admins = "https://api.example.com/v1/admins?q=a&page=1";
 
 	it("decides a single mount by where the app adds the commands", async () => {
-		const { urls, prompts } = twinsApp("other");
+		const { urls } = twinsApp("other");
 
 		expect(await urls("other", "users", "list")).toEqual({ preview: users, sent: users });
 		expect(await urls("other", "other", "users", "list")).toEqual({
 			preview: admins,
 			sent: admins,
 		});
-		expect((await prompts("other", "users", "list")).asked).toEqual([
-			"q: Search the users",
-			"page: The page",
-		]);
 	});
 
 	it("decides the root mount by where the app adds the commands", async () => {
-		const { urls, prompts } = twinsApp("root");
+		const { urls } = twinsApp("root");
 
 		expect(await urls("users", "list")).toEqual({ preview: users, sent: users });
 		expect(await urls("other", "users", "list")).toEqual({ preview: admins, sent: admins });
-		expect((await prompts("other", "users", "list")).asked).toEqual([
-			"q: Search the admins",
-			"page: The page",
-		]);
 	});
 
 	it("never guesses at a further mount where two operations fit", async () => {
-		const { urls, prompts } = twinsApp("both");
+		const { urls } = twinsApp("both");
 
 		expect(await urls("more", "users", "list")).toEqual({ preview: users, sent: users });
 		expect(await urls("more", "other", "users", "list")).toEqual({
 			preview:
 				'api preview: "more other users list" fits several generated commands, as the app adds them more than once: preview "other users list" (admins) or "users list" (users) instead',
 			sent: admins,
-		});
-		expect((await prompts("more", "users", "list")).asked).toEqual([
-			"q: Search the users",
-			"page: The page",
-		]);
-		// Only the question both operations would ask; the other value stays missing.
-		expect(await prompts("more", "other", "users", "list")).toEqual({
-			asked: ["page: The page"],
-			stderr: 'Error: Missing required flag "--q"',
 		});
 	});
 });

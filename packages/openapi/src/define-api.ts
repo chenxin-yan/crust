@@ -33,7 +33,6 @@ import {
 	operationRequest,
 } from "./commands.ts";
 import { type CommandPlan, buildProblems, planCommands } from "./lint.ts";
-import { type MissingValueHandler, bindMissingValues, canAsk } from "./missing-values.ts";
 import { type Operation, operationLabel, operations } from "./operations.ts";
 import type { OperationOverride, OverrideEntry } from "./overrides.ts";
 import { type GeneratedPreview, createPreviewCommand } from "./preview.ts";
@@ -133,13 +132,6 @@ export interface Api<
 	onConfirm(
 		handler: (ctx: ContextBag<Deps>, message: string) => ConfirmResult | Promise<ConfirmResult>,
 	): Api<Operations, Deps, Added>;
-	/**
-	 * Asks for a required value a generated command was not given, on a terminal outside CI:
-	 * resolving to the value as text binds it, converted to the field's `kind`; to `undefined`, the
-	 * command fails as without it. Replaces the previous handler. It gets no `ctx`: it runs before
-	 * the command's Contexts are set up.
-	 */
-	onMissing(handler: MissingValueHandler): Api<Operations, Deps, Added>;
 	/** The override for every operation, synchronous and pure; replaces the previous rule. */
 	each(
 		rule: (
@@ -159,7 +151,6 @@ export interface Api<
 interface ApiState {
 	readonly sources: readonly UseSource[];
 	readonly onConfirm?: (ctx: ContextBag, message: string) => ConfirmResult | Promise<ConfirmResult>;
-	readonly onMissing?: MissingValueHandler;
 	readonly each?: (operation: Operation) => OperationOverride | undefined;
 	readonly override: Readonly<Record<string, OverrideEntry>>;
 	readonly added: readonly AddedCommands[];
@@ -393,8 +384,6 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 			}),
 		onConfirm: (onConfirm: NonNullable<ApiState["onConfirm"]>) =>
 			createApi<Deps, Added>(base, { ...state, onConfirm }),
-		onMissing: (onMissing: MissingValueHandler) =>
-			createApi<Deps, Added>(base, { ...state, onMissing }),
 		each: (each: NonNullable<ApiState["each"]>) => createApi<Deps, Added>(base, { ...state, each }),
 		override: (entries: Readonly<Record<string, OverrideEntry>>) =>
 			createApi<Deps, Added>(base, {
@@ -553,11 +542,7 @@ function apiExtension(
 					},
 				);
 				previews.set(await ctx.ctx.api, { request, bound });
-				return;
 			}
-			if (state.onMissing === undefined || !canAsk()) return;
-			const candidates = generatedAt(ctx.commandPath, () => ctx.command, ctx.commandPathOf);
-			await bindMissingValues(ctx, candidates, state.onMissing);
 		})
 		// A broken build fails every invocation with why, also one a missing command fails first.
 		.onError((error, ctx) => {
