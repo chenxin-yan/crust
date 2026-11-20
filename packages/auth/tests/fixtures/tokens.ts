@@ -15,7 +15,7 @@
 // - `runtime`: real sockets: a refused token request on the runtime's own fetch, and a 401
 //   retry and a cross-origin redirect through @crustjs/openapi. Prints one JSON report.
 import { once } from "node:events";
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { type AddressInfo, connect } from "node:net";
 
@@ -51,7 +51,9 @@ if (keyringFile) {
 		async set(_service, _name, value) {
 			appendFileSync(`${keyringFile}.writes`, `${process.pid}\n`);
 			if (writeDelay === "hang") {
-				writeFileSync(`${keyringFile}.late`, value);
+				// Renamed into place: the test kills this process as soon as the file exists, so it must never exist empty.
+				writeFileSync(`${keyringFile}.late.tmp`, value);
+				renameSync(`${keyringFile}.late.tmp`, `${keyringFile}.late`);
 				await new Promise(() => {});
 			}
 			await new Promise((resolve) => setTimeout(resolve, Number(writeDelay)));
