@@ -255,7 +255,7 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 	// `commands` has generated commands to leave one out of: `api` alone marks nothing.
 	const unavailable = (): Map<string, string> => {
 		const codes = new Map<string, string>();
-		if (commands === undefined) return codes;
+		if (!base.readCommands.has(state)) return codes;
 		for (const { method, path, code } of plan().diagnostics) {
 			if (method === undefined || path === undefined) continue;
 			const label = operationLabel(method, path);
