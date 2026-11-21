@@ -270,7 +270,7 @@ describe("settings", () => {
 		const { exitCode, stderr } = await captureExecute(acme().app, ["show", "--telemetry"]);
 		expect(exitCode).toBe(1);
 		expect(stderr).toContain("--telemetry");
-		const outcome = await acme().app.run(["show"], { flags: { telemetry: true } } as never);
+		const outcome = await acme().app.run(["show"], { flags: { telemetry: true } });
 		expect(outcome).toMatchObject({ status: "failed" });
 	});
 

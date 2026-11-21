@@ -450,8 +450,8 @@ function withSettings(
 			// Core resolves env for a flag; a setting without one gets the same env handling here.
 			const given =
 				flag === false
-					? own((await parseFlagValues({ [key]: owned }, process.env)) as FileValues, key)
-					: own(flags as FileValues, key);
+					? own(await parseFlagValues({ [key]: owned }, process.env), key)
+					: own(flags, key);
 			// `null` from a parser is a value: only undefined falls through, and a setting its flag or
 			// variable gave reads no file.
 			if (given !== undefined) return given;
