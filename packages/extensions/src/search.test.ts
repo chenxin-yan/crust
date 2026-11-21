@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { help } from "./help.ts";
 import { json } from "./json.ts";
+import { formatMatches } from "./search-render.ts";
 import { search } from "./search.ts";
 
 function buildCli() {
@@ -89,5 +90,22 @@ describe("search", () => {
 
 		expect(stdout).toContain("Find a command");
 		expect(stdout).toContain('acme search "<task>"');
+	});
+
+	it("prints one line per match, aligned by display width", () => {
+		expect(
+			formatMatches(
+				[
+					{ command: "acme 鍵", description: "Rotate a key\nand print it", hasAction: true },
+					{ command: "acme x", description: "Line one\r\n\nline two", hasAction: true },
+					{ command: "acme keys", hasAction: false },
+				],
+				"key",
+			),
+		).toBe(
+			["acme 鍵    Rotate a key and print it", "acme x     Line one line two", "acme keys"].join(
+				"\n",
+			),
+		);
 	});
 });

@@ -1,6 +1,7 @@
 import type { CommandSnapshot } from "@crustjs/core";
 import { isListed } from "@crustjs/core/tooling";
-import { createSearchIndex } from "@crustjs/utils/search";
+import { padEnd, stringWidth } from "@crustjs/style";
+import { commandSearchItem, createSearchIndex } from "@crustjs/utils/search";
 
 import type { SearchMatch } from "./search.ts";
 
@@ -14,16 +15,7 @@ export function searchCommands(root: CommandSnapshot, task: string): readonly Se
 	};
 	visit(root, []);
 	const search = createSearchIndex(
-		commands.map(({ path, command }) => ({
-			names: [...path, command.meta.name, ...(command.meta.aliases ?? [])],
-			descriptions: [command.meta.description],
-			details: [
-				...command.args.flatMap((arg) => [arg.name, arg.description]),
-				...Object.entries(command.flags).flatMap(([name, flag]) =>
-					flag.extension === undefined ? [name, flag.description] : [],
-				),
-			],
-		})),
+		commands.map(({ path, command }) => commandSearchItem(path, command)),
 	);
 	return search(task, 5).map((at) => {
 		const { path, command } = commands[at]!;
@@ -35,15 +27,15 @@ export function searchCommands(root: CommandSnapshot, task: string): readonly Se
 	});
 }
 
-/** One line per match: the command, padded, then its description. */
+/** One line per match: the command, padded to the widest, then its description on the same line. */
 export function formatMatches(matches: readonly SearchMatch[], task: string): string {
 	if (matches.length === 0) return `No command matches ${JSON.stringify(task)}.`;
-	const width = Math.max(...matches.map((match) => match.command.length));
+	const width = Math.max(...matches.map((match) => stringWidth(match.command)));
 	return matches
 		.map((match) =>
 			match.description === undefined
 				? match.command
-				: `${match.command.padEnd(width)}  ${match.description}`,
+				: `${padEnd(match.command, width)}  ${match.description.replace(/\s*[\r\n]+\s*/g, " ")}`,
 		)
 		.join("\n");
 }
