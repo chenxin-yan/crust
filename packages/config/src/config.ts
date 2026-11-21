@@ -422,6 +422,12 @@ function withSettings(
 	projectFile: string | undefined,
 	input: ConfigFlagsDef,
 ) {
+	// As core's `.flags()`: a `{ __proto__: def }` literal sets the prototype instead of naming a setting.
+	const proto: unknown =
+		input === null || input === undefined ? undefined : Object.getPrototypeOf(input);
+	if (proto !== Object.prototype && proto !== null) {
+		throw definitionError(`.flags() of config "${name}" expects a plain object record of settings`);
+	}
 	const settings = Object.entries(input).map(([key, def]) => {
 		// `$schema` in a file points editors at its JSON Schema; core refuses `__proto__` as a flag name
 		// and when it parses env, so neither can be a setting.

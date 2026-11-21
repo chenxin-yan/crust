@@ -785,6 +785,17 @@ describe("defineConfig(options).flags(settings)", () => {
 		).toThrow(expect.objectContaining({ code: "DEFINITION" }));
 	});
 
+	it("refuses a settings record that is not a plain object, such as a __proto__ literal", () => {
+		const builder = defineConfig({ name: "acme", global: true });
+		expect(() => builder.flags({ __proto__: { type: "string" } } as never)).toThrow(
+			expect.objectContaining({ code: "DEFINITION" }),
+		);
+		expect(() => builder.flags(null as never)).toThrow(
+			expect.objectContaining({ code: "DEFINITION" }),
+		);
+		expect(Object.keys(builder.flags(Object.create(null)).settings)).toEqual([]);
+	});
+
 	it("returns a builder whose only member is flags, and .flags() is called once", () => {
 		const builder = defineConfig({ name: "acme", global: true });
 		expect(Object.keys(builder)).toEqual(["flags"]);
