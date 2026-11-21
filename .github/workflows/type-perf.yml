@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - "packages/core/**"
-      - "packages/config/**"
+      - "packages/tsconfig/**"
       - "packages/utils/**"
       - "package.json"
       - "mise.toml"

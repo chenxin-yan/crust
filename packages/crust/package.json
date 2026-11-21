@@ -63,8 +63,8 @@
 	},
 	"devDependencies": {
 		"@arethetypeswrong/core": "^0.18.5",
-		"@crustjs/config": "workspace:*",
 		"@crustjs/testing": "workspace:*",
+		"@crustjs/tsconfig": "workspace:*",
 		"@crustjs/utils": "workspace:*",
 		"@types/semver": "^7.8.0",
 		"publint": "^0.3.25",

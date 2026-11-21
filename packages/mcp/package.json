@@ -47,9 +47,9 @@
 		"@modelcontextprotocol/server": "^2.4.0"
 	},
 	"devDependencies": {
-		"@crustjs/config": "workspace:*",
 		"@crustjs/core": "workspace:*",
 		"@crustjs/extensions": "workspace:*",
+		"@crustjs/tsconfig": "workspace:*",
 		"@modelcontextprotocol/client": "^2.4.0",
 		"vite-plus": "catalog:"
 	},

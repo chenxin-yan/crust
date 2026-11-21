@@ -45,7 +45,7 @@
 		"postpack": "rm -f LICENSE"
 	},
 	"devDependencies": {
-		"@crustjs/config": "workspace:*",
+		"@crustjs/tsconfig": "workspace:*",
 		"vite-plus": "catalog:"
 	},
 	"peerDependencies": {

@@ -354,23 +354,21 @@ importers:
         specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
-      '@crustjs/config':
-        specifier: workspace:*
-        version: link:../config
       '@crustjs/core':
         specifier: workspace:*
         version: link:../core
       '@crustjs/openapi':
         specifier: workspace:*
         version: link:../openapi
+      '@crustjs/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
       '@napi-rs/keyring':
         specifier: ^2.1.2
         version: 2.1.2
       vite-plus:
         specifier: 'catalog:'
         version: 1.4.0(@arethetypeswrong/core@0.18.5)(@types/node@26.6.6)(@vitest/ui@5.0.5)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.25)(typescript@7.0.2)(yaml@2.9.1)
-
-  packages/config: {}
 
   packages/core:
     dependencies:
@@ -381,9 +379,9 @@ importers:
         specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
-      '@crustjs/config':
+      '@crustjs/tsconfig':
         specifier: workspace:*
-        version: link:../config
+        version: link:../tsconfig
       vite-plus:
         specifier: 'catalog:'
         version: 1.4.0(@arethetypeswrong/core@0.18.5)(@types/node@26.6.6)(@vitest/ui@5.0.5)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.25)(typescript@7.0.2)(yaml@2.9.1)
@@ -400,9 +398,9 @@ importers:
         specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
-      '@crustjs/config':
+      '@crustjs/tsconfig':
         specifier: workspace:*
-        version: link:../config
+        version: link:../tsconfig
       vite-plus:
         specifier: 'catalog:'
         version: 1.4.0(@arethetypeswrong/core@0.18.5)(@types/node@26.6.6)(@vitest/ui@5.0.5)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.25)(typescript@7.0.2)(yaml@2.9.1)
@@ -425,15 +423,15 @@ importers:
         specifier: ^4.6.0
         version: 4.6.0
     devDependencies:
-      '@crustjs/config':
-        specifier: workspace:*
-        version: link:../config
       '@crustjs/crust':
         specifier: workspace:*
         version: link:../crust
       '@crustjs/extensions':
         specifier: workspace:*
         version: link:../extensions
+      '@crustjs/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
       vite-plus:
         specifier: 'catalog:'
         version: 1.4.0(@arethetypeswrong/core@0.18.5)(@types/node@26.6.6)(@vitest/ui@5.0.5)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.25)(typescript@7.0.2)(yaml@2.9.1)
@@ -453,12 +451,12 @@ importers:
       '@arethetypeswrong/core':
         specifier: ^0.18.5
         version: 0.18.5
-      '@crustjs/config':
-        specifier: workspace:*
-        version: link:../config
       '@crustjs/testing':
         specifier: workspace:*
         version: link:../testing
+      '@crustjs/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
       '@crustjs/utils':
         specifier: workspace:*
         version: link:../utils
@@ -488,9 +486,6 @@ importers:
         specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
-      '@crustjs/config':
-        specifier: workspace:*
-        version: link:../config
       '@crustjs/core':
         specifier: workspace:*
         version: link:../core
@@ -500,6 +495,9 @@ importers:
       '@crustjs/testing':
         specifier: workspace:*
         version: link:../testing
+      '@crustjs/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
       effect:
         specifier: 'catalog:'
         version: 4.1.1
@@ -513,12 +511,12 @@ importers:
         specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
-      '@crustjs/config':
-        specifier: workspace:*
-        version: link:../config
       '@crustjs/core':
         specifier: workspace:*
         version: link:../core
+      '@crustjs/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
       vite-plus:
         specifier: 'catalog:'
         version: 1.4.0(@arethetypeswrong/core@0.18.5)(@types/node@26.6.6)(@vitest/ui@5.0.5)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.25)(typescript@7.0.2)(yaml@2.9.1)
@@ -541,15 +539,15 @@ importers:
         specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
-      '@crustjs/config':
-        specifier: workspace:*
-        version: link:../config
       '@crustjs/core':
         specifier: workspace:*
         version: link:../core
       '@crustjs/testing':
         specifier: workspace:*
         version: link:../testing
+      '@crustjs/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
       vite-plus:
         specifier: 'catalog:'
         version: 1.4.0(@arethetypeswrong/core@0.18.5)(@types/node@26.6.6)(@vitest/ui@5.0.5)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.25)(typescript@7.0.2)(yaml@2.9.1)
@@ -560,15 +558,15 @@ importers:
         specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
-      '@crustjs/config':
-        specifier: workspace:*
-        version: link:../config
       '@crustjs/core':
         specifier: workspace:*
         version: link:../core
       '@crustjs/extensions':
         specifier: workspace:*
         version: link:../extensions
+      '@crustjs/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
       vite-plus:
         specifier: 'catalog:'
         version: 1.4.0(@arethetypeswrong/core@0.18.5)(@types/node@26.6.6)(@vitest/ui@5.0.5)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.25)(typescript@7.0.2)(yaml@2.9.1)
@@ -585,15 +583,15 @@ importers:
         specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
-      '@crustjs/config':
-        specifier: workspace:*
-        version: link:../config
       '@crustjs/core':
         specifier: workspace:*
         version: link:../core
       '@crustjs/extensions':
         specifier: workspace:*
         version: link:../extensions
+      '@crustjs/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
       '@modelcontextprotocol/client':
         specifier: ^2.4.0
         version: 2.4.0
@@ -610,9 +608,6 @@ importers:
         specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
-      '@crustjs/config':
-        specifier: workspace:*
-        version: link:../config
       '@crustjs/core':
         specifier: workspace:*
         version: link:../core
@@ -628,6 +623,9 @@ importers:
       '@crustjs/testing':
         specifier: workspace:*
         version: link:../testing
+      '@crustjs/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
       '@modelcontextprotocol/client':
         specifier: ^2.4.0
         version: 2.4.0
@@ -647,9 +645,9 @@ importers:
         specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
-      '@crustjs/config':
+      '@crustjs/tsconfig':
         specifier: workspace:*
-        version: link:../config
+        version: link:../tsconfig
       '@xterm/headless':
         specifier: ^6.0.0
         version: 6.0.0
@@ -669,9 +667,9 @@ importers:
         specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
-      '@crustjs/config':
+      '@crustjs/tsconfig':
         specifier: workspace:*
-        version: link:../config
+        version: link:../tsconfig
       vite-plus:
         specifier: 'catalog:'
         version: 1.4.0(@arethetypeswrong/core@0.18.5)(@types/node@26.6.6)(@vitest/ui@5.0.5)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.25)(typescript@7.0.2)(yaml@2.9.1)
@@ -697,9 +695,6 @@ importers:
         specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
-      '@crustjs/config':
-        specifier: workspace:*
-        version: link:../config
       '@crustjs/core':
         specifier: workspace:*
         version: link:../core
@@ -709,6 +704,9 @@ importers:
       '@crustjs/testing':
         specifier: workspace:*
         version: link:../testing
+      '@crustjs/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
       skills:
         specifier: 1.8.1
         version: 1.8.1
@@ -725,9 +723,9 @@ importers:
         specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
-      '@crustjs/config':
+      '@crustjs/tsconfig':
         specifier: workspace:*
-        version: link:../config
+        version: link:../tsconfig
       vite-plus:
         specifier: 'catalog:'
         version: 1.4.0(@arethetypeswrong/core@0.18.5)(@types/node@26.6.6)(@vitest/ui@5.0.5)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.25)(typescript@7.0.2)(yaml@2.9.1)
@@ -741,9 +739,9 @@ importers:
         specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
-      '@crustjs/config':
+      '@crustjs/tsconfig':
         specifier: workspace:*
-        version: link:../config
+        version: link:../tsconfig
       vite-plus:
         specifier: 'catalog:'
         version: 1.4.0(@arethetypeswrong/core@0.18.5)(@types/node@26.6.6)(@vitest/ui@5.0.5)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.25)(typescript@7.0.2)(yaml@2.9.1)
@@ -754,9 +752,6 @@ importers:
         specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
-      '@crustjs/config':
-        specifier: workspace:*
-        version: link:../config
       '@crustjs/core':
         specifier: workspace:*
         version: link:../core
@@ -766,9 +761,14 @@ importers:
       '@crustjs/style':
         specifier: workspace:*
         version: link:../style
+      '@crustjs/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
       vite-plus:
         specifier: 'catalog:'
         version: 1.4.0(@arethetypeswrong/core@0.18.5)(@types/node@26.6.6)(@vitest/ui@5.0.5)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.25)(typescript@7.0.2)(yaml@2.9.1)
+
+  packages/tsconfig: {}
 
   packages/tui:
     dependencies:
@@ -776,9 +776,9 @@ importers:
         specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
-      '@crustjs/config':
+      '@crustjs/tsconfig':
         specifier: workspace:*
-        version: link:../config
+        version: link:../tsconfig
       '@opentui/core':
         specifier: ^0.8.0
         version: 0.8.0(typescript@7.0.2)(web-tree-sitter@0.25.10)
@@ -788,9 +788,9 @@ importers:
 
   packages/utils:
     devDependencies:
-      '@crustjs/config':
+      '@crustjs/tsconfig':
         specifier: workspace:*
-        version: link:../config
+        version: link:../tsconfig
       vite-plus:
         specifier: 'catalog:'
         version: 1.4.0(@arethetypeswrong/core@0.18.5)(@types/node@26.6.6)(@vitest/ui@5.0.5)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.25)(typescript@7.0.2)(yaml@2.9.1)
