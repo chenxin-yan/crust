@@ -33,12 +33,13 @@ export async function readSavedSetting(file: string | Error): Promise<SavedSetti
 	} catch (error) {
 		if (!isErrnoException(error) || error.code !== "ENOENT") return "unreadable";
 		// A link whose target is missing also reads as ENOENT, and it is an entry, not an absent file.
-		return (await fs.lstat(file).then(
-			() => true,
-			() => false,
-		))
-			? "unreadable"
-			: undefined;
+		// Only lstat's own ENOENT proves there is none.
+		try {
+			await fs.lstat(file);
+			return "unreadable";
+		} catch (missing) {
+			return isErrnoException(missing) && missing.code === "ENOENT" ? undefined : "unreadable";
+		}
 	}
 	try {
 		const document: unknown = JSON.parse(text);

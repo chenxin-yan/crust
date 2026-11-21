@@ -590,6 +590,22 @@ describe("telemetry", () => {
 			},
 		);
 
+		it("reads the file as unreadable when it cannot tell whether an entry exists", async () => {
+			// readFile says the file is gone, and looking the entry up fails for another reason.
+			const fs = process.getBuiltinModule("node:fs/promises");
+			const failure = (code: string) => Object.assign(new Error(code), { code });
+			vi.spyOn(fs, "readFile").mockRejectedValue(failure("ENOENT"));
+			vi.spyOn(fs, "lstat").mockRejectedValue(failure("EIO"));
+			try {
+				expect(await readSavedSetting(savedFile())).toBe("unreadable");
+				vi.mocked(fs.lstat).mockRejectedValue(failure("ENOENT"));
+				expect(await readSavedSetting(savedFile())).toBeUndefined();
+			} finally {
+				vi.mocked(fs.readFile).mockRestore();
+				vi.mocked(fs.lstat).mockRestore();
+			}
+		});
+
 		it("removes its temporary file when the rename fails", async () => {
 			// A directory in the file's place: the temporary file is written, then cannot replace it.
 			mkdirSync(savedFile(), { recursive: true });
