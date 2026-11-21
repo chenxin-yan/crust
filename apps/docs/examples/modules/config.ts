@@ -14,13 +14,23 @@ export const config = defineConfig({
 	// No --telemetry flag: the variable and the files only.
 	telemetry: { type: "boolean", flag: false, env: { name: "ACME_TELEMETRY" } },
 });
+// One Context per setting, named after it.
+export const { org, region, port, telemetry } = config.settings;
 
+// deploy takes --org and --region, and only those.
 const deploy = defineCommand("deploy", { description: "Deploy the app" }, (command) =>
-	command.use(config).action(async ({ ctx, stdout }) => {
-		const { org, region, port } = await ctx.config;
-		//           ^?
-		stdout(`deploying ${org} to ${region}${port === undefined ? "" : ` on port ${port}`}`);
+	command.use(org, region).action(async ({ ctx, stdout }) => {
+		const where = await ctx.region;
+		//    ^?
+		stdout(`deploying ${await ctx.org} to ${where}`);
 	}),
+);
+
+// serve takes --port, and only that.
+const serve = defineCommand("serve", { description: "Serve the app" }, (command) =>
+	command
+		.use(port)
+		.action(async ({ ctx, stdout }) => stdout(`listening on ${(await ctx.port) ?? 3000}`)),
 );
 //#endregion
 
@@ -59,21 +69,20 @@ const api = defineApi({
 	spec: new URL("./acme.openapi.jsonc", import.meta.url),
 	baseUrl: "https://api.acme.example/v1",
 })
-	.use(config)
-	// Every generated command takes `{org}` in its path from the settings.
-	.each(() => ({ bind: { org: async (ctx) => (await ctx.config).org } }));
+	.use(org)
+	// Every generated command takes --org, and `{org}` in its path from the setting.
+	.each(() => ({ bind: { org: (ctx) => ctx.org } }));
 //#endregion
 
 //#region app
 export const app = new Crust("acme", { version: "1.0.0" })
-	.provide(config())
-	.extend(help(), version(), configSchema, api.extension)
-	.add(deploy, set, ...api.commands);
+	.extend(help(), version(), config.extension, configSchema, api.extension)
+	.add(deploy, serve, set, ...api.commands);
 //#endregion
 
 //#region testing
 const tested = await new Crust("acme")
-	.provide(config.of({ org: "test-org", region: "eu", port: undefined, telemetry: undefined }))
+	.provide(org.of("test-org"), region.of("eu"))
 	.add(deploy)
 	.run(["deploy"]);
 //#endregion
