@@ -745,6 +745,20 @@ describe("flag: false settings and parsers", () => {
 		}
 	});
 
+	it("names the setting, not an internal key, when a flag: false setting's variable is invalid", async () => {
+		const config = defineConfig({ name: "acme", project: true }).flags({
+			retries: { type: "number", flag: false, env: { name: "ACME_RETRIES" } },
+		});
+		process.env.ACME_RETRIES = "abc";
+		try {
+			await expect(result(shows(config))).rejects.toMatchObject({
+				message: "Expected a number for --retries (from $ACME_RETRIES).",
+			});
+		} finally {
+			delete process.env.ACME_RETRIES;
+		}
+	});
+
 	it.each([
 		["a file value", { when: "x" }, {}],
 		["a default", {}, { default: ["x"] }],

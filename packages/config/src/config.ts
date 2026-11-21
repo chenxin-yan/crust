@@ -479,19 +479,27 @@ function withSettings(
 		// The package applies `default` and `required` after the files; on the flag, core would apply
 		// them first.
 		const { flag, default: _default, required: _required, ...owned } = def;
-		// A setting without a flag reads only its variable: parsed under a fixed key, since its own name
-		// need not be a valid argv spelling, and without argv-only spellings.
+		// A setting without a flag reads only its variable, without argv-only spellings. It is parsed
+		// under its own name, so a message names the setting; a name core refuses as an argv spelling
+		// (such as `no-proxy`) is the one DEFINITION error left here, and gets a neutral key.
 		const { short: _short, aliases: _aliases, ...envOnly } = owned;
-		const fromEnv = owned.env === undefined ? undefined : (envOnly as FlagDef);
+		const fromVariable = async (as = key): Promise<unknown> => {
+			try {
+				return own(await parseFlagValues({ [as]: envOnly }, process.env), as);
+			} catch (error) {
+				if (as !== key || !(error instanceof CrustError && error.is("DEFINITION"))) throw error;
+				return fromVariable("value");
+			}
+		};
 		const base = defineContext(key);
 		const withFlag = flag === false ? base : base.flags({ [key]: owned } as never);
 		const context = withFlag.setup(async ({ flags }) => {
 			// Core resolves env for a flag; a setting without one gets the same env handling here.
 			const given =
 				flag === false
-					? fromEnv === undefined
+					? owned.env === undefined
 						? undefined
-						: own(await parseFlagValues({ value: fromEnv }, process.env), "value")
+						: await fromVariable()
 					: own(flags, key);
 			// `null` from a parser is a value: only undefined falls through, and a setting its flag or
 			// variable gave reads no file.
