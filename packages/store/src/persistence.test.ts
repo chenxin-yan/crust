@@ -29,6 +29,19 @@ const renameFailures = vi.hoisted((): string[] => []);
 const rmFailures = vi.hoisted((): string[] => []);
 // Error codes the next `sync` of a handle opened on the keyed path fails with.
 const syncFailures = vi.hoisted(() => new Map<string, string>());
+// Replaces `read` and `stat` of a handle opened on the keyed path, to model short reads and growth.
+const handleOverrides = vi.hoisted(
+	() =>
+		new Map<
+			string,
+			{
+				read?: (buffer: Buffer, offset: number, length: number) => number;
+				size?: number;
+			}
+		>(),
+);
+// Error codes the next `close` of a handle opened on the keyed path fails with, after closing.
+const closeFailures = vi.hoisted(() => new Map<string, string>());
 // Durability-relevant fs calls in order, as `<call> <path>`; the fsync order is asserted on it.
 const fsTrace = vi.hoisted((): string[] => []);
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -63,6 +76,26 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 			if (code !== undefined) throw Object.assign(new Error(code), { code });
 			return sync();
 		};
+		const close = handle.close.bind(handle);
+		handle.close = async () => {
+			await close();
+			const code = closeFailures.get(path);
+			closeFailures.delete(path);
+			if (code !== undefined) throw Object.assign(new Error(code), { code });
+		};
+		const override = handleOverrides.get(path);
+		if (override?.size !== undefined) {
+			const stat = handle.stat.bind(handle);
+			const size = override.size;
+			handle.stat = (async () => Object.assign(await stat(), { size })) as typeof handle.stat;
+		}
+		const read = override?.read;
+		if (read !== undefined) {
+			handle.read = (async (buffer: Buffer, offset: number, length: number) => ({
+				bytesRead: read(buffer, offset, length),
+				buffer,
+			})) as typeof handle.read;
+		}
 		return handle;
 	});
 	const mocked = { rename, chown, chmod, rm, open };
@@ -111,6 +144,51 @@ describe("readJson", () => {
 			details: { path: filePath },
 			cause: expect.any(SyntaxError),
 		});
+	});
+
+	it("fills one buffer across short reads, asking no more than it may keep", async () => {
+		const text = JSON.stringify({ items: "x".repeat(3000) });
+		await writeFile(filePath, text);
+		const buffers = new Set<ArrayBufferLike>();
+		let position = 0;
+		handleOverrides.set(filePath, {
+			read: (buffer, offset, length) => {
+				buffers.add(buffer.buffer);
+				expect(offset + length).toBeLessThanOrEqual(text.length + 1);
+				// One byte at a time, as a slow filesystem might answer.
+				if (position === text.length || length === 0) return 0;
+				buffer[offset] = text.charCodeAt(position++);
+				return 1;
+			},
+		});
+		try {
+			expect(await readJson(filePath)).toEqual(JSON.parse(text));
+			expect(buffers.size).toBe(1);
+		} finally {
+			handleOverrides.clear();
+		}
+	});
+
+	it("stops one byte past 16 MiB when the file grows after it was inspected", async () => {
+		await writeFile(filePath, "{}");
+		let requested = 0;
+		handleOverrides.set(filePath, {
+			size: 2,
+			read: (buffer, offset, length) => {
+				requested += length;
+				buffer.fill(32, offset, offset + length);
+				return length;
+			},
+		});
+		try {
+			await expect(readJson(filePath)).rejects.toMatchObject({
+				code: "PARSE",
+				message: `Store file is larger than 16 MiB: ${filePath}`,
+			});
+			expect(requested).toBe(16 * 1024 * 1024 + 1);
+		} finally {
+			handleOverrides.clear();
+		}
 	});
 
 	// POSIX-only: on Windows chmod cannot make a file unreadable.
@@ -403,6 +481,44 @@ describe("withFileLock", () => {
 			expect(existsSync(`${filePath}.lock`)).toBe(false);
 		} finally {
 			rmFailures.length = 0;
+			await rm(tempDir, { recursive: true, force: true });
+		}
+	});
+
+	it("takes no lock when the host name cannot be read", async () => {
+		const tempDir = createTempDir();
+		await mkdir(tempDir, { recursive: true });
+		const filePath = join(tempDir, "config.json");
+		const os = process.getBuiltinModule("node:os");
+		const hostname = vi.spyOn(os, "hostname").mockImplementation(() => {
+			throw new Error("no host name");
+		});
+		const fn = vi.fn(async () => {});
+		try {
+			await expect(withFileLock(filePath, fn, { operation: "write" })).rejects.toThrow();
+			expect(fn).not.toHaveBeenCalled();
+			expect(existsSync(`${filePath}.lock`)).toBe(false);
+		} finally {
+			hostname.mockRestore();
+			await rm(tempDir, { recursive: true, force: true });
+		}
+	});
+
+	it("removes the lock it created when closing it fails", async () => {
+		const tempDir = createTempDir();
+		await mkdir(tempDir, { recursive: true });
+		const filePath = join(tempDir, "config.json");
+		closeFailures.set(`${filePath}.lock`, "EIO");
+		const fn = vi.fn(async () => {});
+		try {
+			await expect(withFileLock(filePath, fn, { operation: "write" })).rejects.toMatchObject({
+				code: "IO",
+				cause: { code: "EIO" },
+			});
+			expect(fn).not.toHaveBeenCalled();
+			expect(existsSync(`${filePath}.lock`)).toBe(false);
+		} finally {
+			closeFailures.clear();
 			await rm(tempDir, { recursive: true, force: true });
 		}
 	});

@@ -59,9 +59,6 @@ export function isUnreadFile(error: unknown): boolean {
 	return error instanceof Error && unreadFiles.has(error);
 }
 
-/** The size of each read of a store file. */
-const READ_CHUNK_BYTES = 64 * 1024;
-
 /**
  * Reads and parses a JSON store file from disk.
  *
@@ -119,25 +116,24 @@ export async function readJson(filePath: string): Promise<JsonValue | undefined>
 		const stats = await handle.stat();
 		if (!stats.isFile()) throw notRegular();
 		if (stats.size > MAX_FILE_BYTES) throw tooLarge();
-		// Read to the end rather than trusting the size: the file may grow while it is read.
-		const chunks: Buffer[] = [];
+		// Read to the end rather than trusting the size: the file may grow while it is read. One buffer,
+		// grown only when full, and never more than one byte past the limit is asked for.
+		let buffer = Buffer.alloc(stats.size + 1);
 		let length = 0;
-		while (length <= MAX_FILE_BYTES) {
-			const { bytesRead, buffer } = await handle.read(
-				Buffer.alloc(READ_CHUNK_BYTES),
-				0,
-				READ_CHUNK_BYTES,
-				null,
-			);
+		for (;;) {
+			if (length === buffer.length) {
+				if (length > MAX_FILE_BYTES) break;
+				const grown = Buffer.alloc(Math.min(length * 2, MAX_FILE_BYTES + 1));
+				buffer.copy(grown, 0, 0, length);
+				buffer = grown;
+			}
+			const { bytesRead } = await handle.read(buffer, length, buffer.length - length, null);
 			if (bytesRead === 0) break;
-			chunks.push(buffer.subarray(0, bytesRead));
 			length += bytesRead;
 		}
 		if (length > MAX_FILE_BYTES) throw tooLarge();
 		// Editors on Windows may save a byte order mark, which JSON.parse rejects.
-		raw = Buffer.concat(chunks, length)
-			.toString("utf-8")
-			.replace(/^\uFEFF/u, "");
+		raw = buffer.toString("utf-8", 0, length).replace(/^\uFEFF/u, "");
 	} catch (err: unknown) {
 		throw err instanceof CrustStoreError ? err : readError(err);
 	} finally {
@@ -526,6 +522,11 @@ export async function withFileLock<T>(
 ): Promise<T> {
 	const { open, rm } = process.getBuiltinModule("node:fs/promises");
 	const lockPath = `${filePath}.lock`;
+	// Before the lock exists, so a failure here leaves nothing to clean up.
+	const owner = JSON.stringify({
+		pid: process.pid,
+		host: process.getBuiltinModule("node:os").hostname(),
+	});
 	const lockError = (err: unknown) =>
 		new CrustStoreError(
 			"IO",
@@ -550,12 +551,18 @@ export async function withFileLock<T>(
 		options.signal?.throwIfAborted();
 		try {
 			const handle = await open(lockPath, "wx");
-			// Creating the file took the lock; one without an owner is only recovered by age.
-			const host = process.getBuiltinModule("node:os").hostname();
-			await handle.writeFile(JSON.stringify({ pid: process.pid, host })).catch(() => {
-				named = false;
-			});
-			await handle.close();
+			try {
+				// Creating the file took the lock; one without an owner is only recovered by age.
+				await handle.writeFile(owner).catch(() => {
+					named = false;
+				});
+				await handle.close();
+			} catch (err: unknown) {
+				// The lock is ours but unusable: release it, so it never stalls the next mutation.
+				await handle.close().catch(() => {});
+				await rm(lockPath, { force: true }).catch(() => {});
+				throw err;
+			}
 			break;
 		} catch (err: unknown) {
 			if (isErrnoException(err) && err.code === "ENOENT") {
