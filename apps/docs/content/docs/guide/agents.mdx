@@ -107,7 +107,7 @@ An agent learns a CLI from what it prints about itself. Write `description`s for
 
 All of them read the same command snapshot (descriptions, arguments and flags, `.output()`, sections).
 
-On a large CLI in a shell, search for a task in words with `my-cli search "purge the cache"`, or grep for an exact word: `my-cli --llms | grep -i '^## .*purge'` prints the commands whose heading matches, and for an [API CLI](#the-api-command) `my-cli api --list | grep -i purge` prints the matching operations.
+On a large CLI in a shell, search for a task in words with `my-cli search "purge the cache"`, or grep for a word: `my-cli --llms | grep -i '^## .*purge'` prints the command headings containing `purge` (`grep '^## ' | grep -iw purge` keeps only the whole word), and for an [API CLI](#the-api-command) `my-cli api --list | grep -i purge` prints the operations whose line contains it.
 
 ```sh
 $ my-cli schema deploy

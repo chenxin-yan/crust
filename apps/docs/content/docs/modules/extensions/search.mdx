@@ -3,12 +3,12 @@ title: Search
 description: Find the commands that match a task, for agents working with large CLIs.
 ---
 
-`--llms` lists every command, which no longer fits an agent's context once a CLI has hundreds of them, such as one generated from an OpenAPI spec. `search()` adds a command that returns only the few that match a task.
+`--llms` lists every visible command, which no longer fits an agent's context once a CLI has hundreds of them, such as one generated from an OpenAPI spec. `search()` adds a command that returns only the few that match a task.
 
 ## Usage
 
 <include lang="ts" meta='title="cli.ts"'>
-  ../../../../examples/modules/extensions/search.ts
+  ../../../../examples/modules/extensions/search.ts#usage
 </include>
 
 ```sh
@@ -23,7 +23,7 @@ $ my-cli search rotate an api key --json
 
 ## `search <task...>`
 
-Ranks every visible command against the words of the task and prints the five best, best first, one per line. The words may be quoted or not. Each match has:
+Ranks every visible command against the words of the task and prints up to five matches, best first, one per line. The words may be quoted or not. Each match has:
 
 - `command`: the command line without its arguments, such as `my-cli keys rotate`;
 - `description`: the command's description, when it has one;
@@ -33,16 +33,14 @@ The index covers every visible command, including group commands and commands Ex
 
 The command declares an [`.output()`](/docs/api/crust#outputschema) schema and returns the matches, so [`run()`](/docs/api/crust#runpath-input-options) gets them as the outcome's `result`, and with [`json()`](/docs/modules/extensions/json) `--json` prints only the JSON array:
 
-```ts
-const outcome = await app.run(["search"], { args: { task: ["rotate", "key"] } });
-```
+<include lang="ts">../../../../examples/modules/extensions/search.ts#run</include>
 
-`search()` also adds a "Find a command" section, `my-cli search "<task>"`, to the root command's [documentation](/docs/guide/extensions#section-consumers), so `--help` and `--llms` point agents at it. An application that defines its own `search` command cannot also extend `search()`: the names collide.
+`search()` also contributes a "Find a command" section, `my-cli search "<task>"`, to the root command's [documentation](/docs/guide/extensions#section-consumers). [`help()`](/docs/modules/extensions/help) and [`schema()`](/docs/modules/extensions/schema), when installed, render it in `--help` and `--llms`, so those point agents at it. An application that defines its own `search` command cannot also extend `search()`: the names collide.
 
 ## Ranking
 
-Words are matched without letter case and split at camelCase and punctuation. A word counts most when it matches as written, less when only its singular form matches (`keys` matches `key`; `news` also matches `new`, below an exact `news`), and least when it only starts a longer word (`rot` matches `rotate`). A command scores more for words in its name, path, and aliases than in its description, and least for words in its argument and flag names and descriptions; flags an Extension declares, such as `--help`, are left out. Ties keep the order of the command tree.
+Words are matched without letter case and split at camelCase and punctuation. A word counts most when it matches as written, less when only its singular form matches (`keys` matches `key`; `news` also matches `new`, below an exact `news`), and least when it only starts a longer word (`rot` matches `rotate`). Words in a command's name, path, and aliases have the highest base weight, words in its description less, and words in its argument and flag names and descriptions the least, all else equal; flags an Extension declares, such as `--help`, are left out. Ties keep the order of the command tree.
 
 A word counts more the fewer commands it matches, so `for` or `a` in a long generated name weighs little next to a rare word such as `purge`, and a match counts more in a short name or description than in a long one. A command's score therefore depends on the other commands, and [MCP](/docs/modules/mcp#discovery)'s `search_tools`, which ranks tools the same way, can order two results differently.
 
-To find an exact word rather than a task, filter `--llms` instead: `my-cli --llms | grep -i '^## .*purge'`.
+To find a word rather than a task, filter `--llms` instead: `my-cli --llms | grep -i '^## .*purge'` prints the command headings containing `purge` (also `purged`), and `my-cli --llms | grep '^## ' | grep -iw purge` only those with the whole word.
