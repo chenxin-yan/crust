@@ -21,8 +21,6 @@ export type { NextStep, NextSteps, NextStepsOptions } from "./next-steps.ts";
 export { noColor } from "./no-color.ts";
 export { schema } from "./schema.ts";
 export type { CommandSchema } from "./schema.ts";
-export { search } from "./search.ts";
-export type { SearchMatch } from "./search.ts";
 export { updateNotifier } from "./update-notifier.ts";
 export type {
 	UpdateCommandResolver,
