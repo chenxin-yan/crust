@@ -1,7 +1,9 @@
 import type * as mcp from "./index.ts";
 
-// search_tools ranks with an internal index; it is not part of the package API.
+// search_tools ranks with @crustjs/utils/search; the ranking is not part of this package's API.
 // @ts-expect-error -- not exported from @crustjs/mcp
-export type NoCreateToolIndex = typeof mcp.createToolIndex;
+export type NoCreateSearchIndex = typeof mcp.createSearchIndex;
 // @ts-expect-error -- not exported from @crustjs/mcp
-export type NoToolIndex = mcp.ToolIndex;
+export type NoSearchIndex = mcp.SearchIndex;
+// @ts-expect-error -- not exported from @crustjs/mcp
+export type NoSearchItem = mcp.SearchItem;

@@ -1,10 +1,10 @@
 import { type AnyCrust, type CommandSnapshot, CrustError, type RunOutcome } from "@crustjs/core";
 import { parseCommandInput, type RunInputPayload } from "@crustjs/core/tooling";
 import { isJsonObject, parseJsonValue } from "@crustjs/utils/json";
+import type { SearchIndex, SearchItem } from "@crustjs/utils/search";
 // Type-only: the SDK loads inside the server functions, so CLIs pay for it only when `mcp` runs.
 import type { CallToolResult, Server, ServerContext, Tool } from "@modelcontextprotocol/server";
 
-import { createToolIndex, type ToolEntry } from "./tool-index.ts";
 import { type McpTool, type McpToolsOptions, toolsFromSnapshot } from "./tools.ts";
 
 /** Server `version` when the root command declares none; the SDK requires one. */
@@ -72,6 +72,23 @@ function resultFromOutcome(outcome: RunOutcome<unknown>): CallToolResult {
 		case "failed":
 			return { ...text(failureText(outcome)), isError: true };
 	}
+}
+
+/** A manifest entry with the snapshot of its command. */
+type ToolEntry = readonly [McpTool, CommandSnapshot];
+
+/** What `search_tools` matches a tool by: its command's path, names, description, then arguments and flags. */
+function searchItem([tool, command]: ToolEntry): SearchItem {
+	return {
+		names: [...tool.path, command.meta.name, ...(command.meta.aliases ?? [])],
+		descriptions: [command.meta.description],
+		details: [
+			...command.args.flatMap((arg) => [arg.name, arg.description]),
+			...Object.entries(command.flags).flatMap(([name, flag]) =>
+				flag.extension === undefined ? [name, flag.description] : [],
+			),
+		],
+	};
 }
 
 /** What `tools/list` and `get_tool_details` say about a tool: everything but the fields run() routing uses. */
@@ -193,8 +210,9 @@ async function serverFactory(app: AnyCrust, options: McpToolsOptions): Promise<(
 	const byName = new Map<string, ToolEntry>(
 		tools.map((tool) => [tool.name, [tool, commandAt(tool.path)]]),
 	);
-	const index =
-		options.discovery === "progressive" ? createToolIndex([...byName.values()]) : undefined;
+	const progressive = options.discovery === "progressive";
+	// Built on the first search_tools call, so serving tools never loads the ranking.
+	let search: Promise<SearchIndex> | undefined;
 	const { ProtocolError, ProtocolErrorCode, Server } = await import("@modelcontextprotocol/server");
 	const invalid = (message: string) => new ProtocolError(ProtocolErrorCode.InvalidParams, message);
 	const toolNamed = (name: string): ToolEntry => {
@@ -211,11 +229,11 @@ async function serverFactory(app: AnyCrust, options: McpToolsOptions): Promise<(
 			{ capabilities: { tools: {} } },
 		);
 		server.setRequestHandler("tools/list", () => ({
-			tools: index === undefined ? tools.map(listedTool) : DISCOVERY_TOOLS,
+			tools: progressive ? DISCOVERY_TOOLS : tools.map(listedTool),
 		}));
 		server.setRequestHandler("tools/call", async ({ params }, ctx) => {
 			const values = params.arguments ?? {};
-			if (index === undefined) return callCommandTool(app, toolNamed(params.name), values, ctx);
+			if (!progressive) return callCommandTool(app, toolNamed(params.name), values, ctx);
 			switch (params.name) {
 				case "search_tools": {
 					const { query, limit = SEARCH_LIMIT_DEFAULT } = values;
@@ -228,12 +246,14 @@ async function serverFactory(app: AnyCrust, options: McpToolsOptions): Promise<(
 					) {
 						throw invalid(`search_tools: limit must be an integer from 1 to ${SEARCH_LIMIT_MAX}`);
 					}
+					search ??= import("@crustjs/utils/search").then(({ createSearchIndex }) =>
+						createSearchIndex(tools.map((tool) => searchItem(byName.get(tool.name)!))),
+					);
 					return discovered(
-						index
-							.search(query, limit)
-							.map(({ name, description }) =>
-								description === undefined ? { name } : { name, description },
-							),
+						(await search)(query, limit).map((at) => {
+							const { name, description } = tools[at]!;
+							return description === undefined ? { name } : { name, description };
+						}),
 					);
 				}
 				case "get_tool_details": {
