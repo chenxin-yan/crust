@@ -49,10 +49,12 @@
 	},
 	"devDependencies": {
 		"@crustjs/core": "workspace:*",
+		"@crustjs/effect": "workspace:*",
 		"@crustjs/extensions": "workspace:*",
 		"@crustjs/openapi": "workspace:*",
 		"@crustjs/testing": "workspace:*",
 		"@crustjs/tsconfig": "workspace:*",
+		"effect": "catalog:",
 		"vite-plus": "catalog:"
 	},
 	"peerDependencies": {

@@ -315,6 +315,39 @@ describe("handler with layer", () => {
 		expect(builds).toBe(1);
 	});
 
+	describe("a structural copy of a factory, which core allows", () => {
+		const original = defineContext("config").setup(() => ({ port: 80 }));
+		const copy = Object.assign((...args: []) => original(...args), original);
+		const read = (factory: typeof original) =>
+			handler(() =>
+				service(factory).pipe(
+					Effect.map(({ port }) => port),
+					Effect.catchTag("CrustDefinitionError", (error) => Effect.succeed(error)),
+				),
+			);
+
+		it.each([
+			["the real provider", () => original()],
+			["the copy", () => copy()],
+			["the copy's .of() double", () => copy.of({ port: 123 })],
+		])("accepts %s for service(copy) and service(original)", async (_, provider) => {
+			for (const factory of [copy, original]) {
+				const outcome = await new Crust("cli").provide(provider()).action(read(factory)).run([]);
+				expect(outcome.status === "completed" && outcome.result).toBeTypeOf("number");
+			}
+		});
+
+		it("still rejects an unrelated same-name factory and another factory's .of() double", async () => {
+			const unrelated = defineContext("config").setup(() => ({ port: 1 }));
+			for (const provider of [unrelated(), unrelated.of({ port: 2 })]) {
+				const outcome = await new Crust("cli").provide(provider).action(read(copy)).run([]);
+				expect(outcome.status === "completed" && outcome.result).toBeInstanceOf(
+					CrustDefinitionError,
+				);
+			}
+		});
+	});
+
 	it("accepts descendant same-factory .of shadowing", async () => {
 		const config = defineContext("config").setup(() => ({ port: 80 }));
 		const app = new Crust("cli").provide(config()).command("child", (child) =>
