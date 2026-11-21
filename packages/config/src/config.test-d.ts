@@ -147,3 +147,22 @@ defineConfig({ name: "acme", global: "prefs.json.json", flags: {} });
 defineConfig({ name: "acme", global: true, flags: { $schema: { type: "string" } } });
 // @ts-expect-error -- also without a flag
 defineConfig({ name: "acme", global: true, flags: { $schema: { type: "string", flag: false } } });
+
+// Core's own flag-record checks apply to the settings' flags.
+defineConfig({
+	name: "acme",
+	global: true,
+	// @ts-expect-error -- a short spelling is one character
+	flags: { port: { type: "number", short: "xx" } },
+});
+defineConfig({
+	name: "acme",
+	global: true,
+	// @ts-expect-error -- two settings with the same short spelling
+	flags: { a: { type: "string", short: "x" }, b: { type: "string", short: "x" } },
+});
+defineConfig({
+	name: "acme",
+	global: true,
+	flags: { a: { type: "string", short: "x" }, b: { type: "string", short: "y", flag: false } },
+});

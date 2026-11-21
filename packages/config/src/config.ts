@@ -120,6 +120,17 @@ type ReservedNameBrand<F> = [Extract<keyof F, "$schema" | "__proto__">] extends 
 	? unknown
 	: { readonly FIX_RESERVED_NAME: "no setting may be named $schema or __proto__" };
 
+// Types only: core's public `.flags()` signature, to reuse its checks on the flags the Context owns.
+declare const ownedFlagsBuilder: ReturnType<typeof defineContext<"config">>;
+
+/** Core's checks of a flag record (a bad `short`, two settings with one spelling) on the owned flags. */
+type CoreFlagChecks<F extends ConfigFlagsDef> =
+	ConfigFlags<F> extends Parameters<typeof ownedFlagsBuilder.flags<ConfigFlags<F>>>[0]
+		? unknown
+		: {
+				readonly FIX_FLAG_SPELLING: "a setting's flag is one .flags() refuses: check each short and alias, and that no two settings share one";
+			};
+
 type NoFileBrand<G, P> = [G, P] extends [undefined, undefined]
 	? { readonly FIX_NO_FILE: "set global, project, or both" }
 	: unknown;
@@ -284,7 +295,8 @@ export function defineConfig<
 		// Same value brands as defineFlag (default within choices, synchronous parse), per setting.
 		readonly flags: F & {
 			readonly [K in keyof F]: LocalValueBrand<Omit<F[K], "flag">> & KnownPropertiesBrand<F[K]>;
-		} & ReservedNameBrand<F>;
+		} & ReservedNameBrand<F> &
+			CoreFlagChecks<F>;
 	} & NoFileBrand<G, P>,
 ): ConfigFactory<F, G> {
 	const name: string = options.name;
