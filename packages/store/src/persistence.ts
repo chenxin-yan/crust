@@ -2,21 +2,7 @@
 // @crustjs/store — JSON persistence primitives
 // ────────────────────────────────────────────────────────────────────────────
 
-import {
-	chmod,
-	chown,
-	type FileHandle,
-	lstat,
-	mkdir,
-	open,
-	readFile,
-	rename,
-	rm,
-	stat,
-} from "node:fs/promises";
-import { hostname } from "node:os";
-import { basename, dirname, join } from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
+import type { FileHandle } from "node:fs/promises";
 
 import { isErrnoException } from "@crustjs/utils/error";
 import type { JsonValue } from "@crustjs/utils/json";
@@ -179,6 +165,8 @@ function isChownErrorOk(err: unknown): boolean {
  * its parent, so the store file's directory survives a power loss.
  */
 export async function ensureDirectory(filePath: string, mode: number | undefined): Promise<void> {
+	const { chmod, mkdir } = process.getBuiltinModule("node:fs/promises");
+	const { dirname } = process.getBuiltinModule("node:path");
 	const directoryMode = isWindows() ? undefined : mode;
 	const dir = dirname(filePath);
 	let createdDir: string | undefined;
@@ -233,7 +221,7 @@ export async function refuseSymlink(
 ): Promise<void> {
 	let stats;
 	try {
-		stats = await lstat(filePath);
+		stats = await process.getBuiltinModule("node:fs/promises").lstat(filePath);
 	} catch (err: unknown) {
 		if (isErrnoException(err) && err.code === "ENOENT") return;
 		throw new CrustStoreError(
@@ -286,6 +274,8 @@ export async function writeJson(
 	json: string,
 	options: WriteJsonOptions = {},
 ): Promise<void> {
+	const { chmod, chown, open, rm, stat } = process.getBuiltinModule("node:fs/promises");
+	const { basename, dirname, join } = process.getBuiltinModule("node:path");
 	const tempPath = join(
 		dirname(filePath),
 		`.${basename(filePath, ".json")}-${crypto.randomUUID()}.tmp`,
@@ -358,9 +348,9 @@ export async function writeJson(
  */
 async function syncDirectory(filePath: string, operation: "write" | "delete"): Promise<void> {
 	if (isWindows()) return;
-	const dir = dirname(filePath);
+	const dir = process.getBuiltinModule("node:path").dirname(filePath);
 	try {
-		const handle = await open(dir, "r");
+		const handle = await process.getBuiltinModule("node:fs/promises").open(dir, "r");
 		try {
 			await handle.sync();
 		} finally {
@@ -384,7 +374,10 @@ export const BUSY_CODES: ReadonlySet<string> = new Set(["EPERM", "EACCES", "EBUS
 
 /** Sleeps `ms`; an abort rejects with `signal.reason`. */
 export async function abortableSleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
-	await sleep(ms, undefined, { signal }).catch(() => signal?.throwIfAborted());
+	await process
+		.getBuiltinModule("node:timers/promises")
+		.setTimeout(ms, undefined, { signal })
+		.catch(() => signal?.throwIfAborted());
 }
 
 /**
@@ -395,6 +388,7 @@ export async function abortableSleep(ms: number, signal: AbortSignal | undefined
  * usually brief.
  */
 async function commit(tempPath: string, filePath: string): Promise<void> {
+	const { rename } = process.getBuiltinModule("node:fs/promises");
 	const start = Date.now();
 	for (let delay = 1; ; delay = Math.min(delay * 2, MAX_RETRY_DELAY_MS)) {
 		try {
@@ -403,7 +397,7 @@ async function commit(tempPath: string, filePath: string): Promise<void> {
 			const busy = isWindows() && isErrnoException(err) && BUSY_CODES.has(err.code ?? "");
 			if (!busy || Date.now() - start >= RENAME_RETRY_MS) throw err;
 		}
-		await sleep(delay);
+		await process.getBuiltinModule("node:timers/promises").setTimeout(delay);
 	}
 }
 
@@ -423,7 +417,7 @@ async function commit(tempPath: string, filePath: string): Promise<void> {
  */
 export async function deleteJson(filePath: string): Promise<void> {
 	try {
-		await rm(filePath, { force: true });
+		await process.getBuiltinModule("node:fs/promises").rm(filePath, { force: true });
 	} catch (err: unknown) {
 		throw new CrustStoreError(
 			"IO",
@@ -469,10 +463,13 @@ function isProcessAlive(pid: number): boolean {
 async function readLockPid(lockPath: string): Promise<number | undefined> {
 	try {
 		const owner: { pid?: unknown; host?: unknown } | null = JSON.parse(
-			await readFile(lockPath, "utf-8"),
+			await process.getBuiltinModule("node:fs/promises").readFile(lockPath, "utf-8"),
 		);
 		// A pid only identifies a process on the host that wrote it.
-		return owner?.host === hostname() && typeof owner.pid === "number" ? owner.pid : undefined;
+		return owner?.host === process.getBuiltinModule("node:os").hostname() &&
+			typeof owner.pid === "number"
+			? owner.pid
+			: undefined;
 	} catch {
 		return undefined;
 	}
@@ -486,10 +483,13 @@ async function isStaleLock(lockPath: string): Promise<boolean> {
 	if (pid !== undefined && !isProcessAlive(pid) && (await readLockPid(lockPath)) === pid) {
 		return true;
 	}
-	return stat(lockPath).then(
-		(lock) => Date.now() - lock.mtimeMs > STALE_LOCK_MS,
-		() => false,
-	);
+	return process
+		.getBuiltinModule("node:fs/promises")
+		.stat(lockPath)
+		.then(
+			(lock) => Date.now() - lock.mtimeMs > STALE_LOCK_MS,
+			() => false,
+		);
 }
 
 /**
@@ -513,6 +513,7 @@ export async function withFileLock<T>(
 	fn: () => Promise<T>,
 	options: FileLockOptions,
 ): Promise<T> {
+	const { open, rm } = process.getBuiltinModule("node:fs/promises");
 	const lockPath = `${filePath}.lock`;
 	const lockError = (err: unknown) =>
 		new CrustStoreError(
@@ -539,7 +540,8 @@ export async function withFileLock<T>(
 		try {
 			const handle = await open(lockPath, "wx");
 			// Creating the file took the lock; one without an owner is only recovered by age.
-			await handle.writeFile(JSON.stringify({ pid: process.pid, host: hostname() })).catch(() => {
+			const host = process.getBuiltinModule("node:os").hostname();
+			await handle.writeFile(JSON.stringify({ pid: process.pid, host })).catch(() => {
 				named = false;
 			});
 			await handle.close();
@@ -578,7 +580,7 @@ export async function withFileLock<T>(
 				() => !named,
 			);
 			if (done) break;
-			await sleep(10);
+			await process.getBuiltinModule("node:timers/promises").setTimeout(10);
 		}
 	}
 }

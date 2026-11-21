@@ -2,10 +2,6 @@
 // @crustjs/store — createStore factory and async object-store API
 // ────────────────────────────────────────────────────────────────────────────
 
-import { lstat } from "node:fs/promises";
-import { dirname } from "node:path";
-import { isDeepStrictEqual } from "node:util";
-
 import { isErrnoException } from "@crustjs/utils/error";
 import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
 import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
@@ -35,6 +31,9 @@ import type {
 	StoreValidatorIssue,
 	ValueType,
 } from "./types.ts";
+
+const isDeepStrictEqual = (a: unknown, b: unknown): boolean =>
+	process.getBuiltinModule("node:util").isDeepStrictEqual(a, b);
 
 type FieldValidationResult = void | { value: JsonValue | undefined };
 type FieldValidator = (
@@ -444,10 +443,14 @@ export function createStore<const F extends FieldsDef>(
 				// not run the delete, which would be unlocked once another process creates the store.
 				// lstat, so a dangling link at the directory path still meets the directory checks.
 				if (operation === "delete") {
-					const missing = await lstat(dirname(filePath)).then(
-						() => false,
-						(err: unknown) => isErrnoException(err) && err.code === "ENOENT",
-					);
+					const dir = process.getBuiltinModule("node:path").dirname(filePath);
+					const missing = await process
+						.getBuiltinModule("node:fs/promises")
+						.lstat(dir)
+						.then(
+							() => false,
+							(err: unknown) => isErrnoException(err) && err.code === "ENOENT",
+						);
 					// SAFETY: only reset() deletes, and it resolves to undefined.
 					if (missing) return undefined as T;
 				}
