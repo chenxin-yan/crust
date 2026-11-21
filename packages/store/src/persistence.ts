@@ -2,7 +2,18 @@
 // @crustjs/store — JSON persistence primitives
 // ────────────────────────────────────────────────────────────────────────────
 
-import { chmod, chown, lstat, mkdir, open, readFile, rename, rm, stat } from "node:fs/promises";
+import {
+	chmod,
+	chown,
+	type FileHandle,
+	lstat,
+	mkdir,
+	open,
+	readFile,
+	rename,
+	rm,
+	stat,
+} from "node:fs/promises";
 import { hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -11,7 +22,6 @@ import { isErrnoException } from "@crustjs/utils/error";
 import type { JsonValue } from "@crustjs/utils/json";
 
 import { CrustStoreError, type IOErrorDetails } from "./errors.ts";
-import type { StoreDocument } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // WriteJsonOptions — File/directory permission control
@@ -49,29 +59,41 @@ export interface WriteJsonOptions {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
+ * The largest store file read or written. A store file may be one the user or another program
+ * put there, and it is read whole into memory; 16 MiB is far above any settings, state or cache
+ * document, and is the limit Crust already sets on a user-supplied file (`api preview --body @file`).
+ */
+export const MAX_FILE_BYTES: number = 16 * 1024 * 1024;
+
+/** The size of each read of a store file. */
+const READ_CHUNK_BYTES = 64 * 1024;
+
+/**
  * Reads and parses a JSON store file from disk.
  *
  * Returns `undefined` when the file does not exist (ENOENT), allowing callers
  * to fall back to defaults. Malformed JSON throws a `CrustStoreError` with `PARSE`
- * code — the store never silently recovers corrupt data.
+ * code — the store never silently recovers corrupt data. Only a regular file (or a
+ * symbolic link to one) is read, never more than {@link MAX_FILE_BYTES}, and a
+ * leading byte order mark is ignored.
  *
  * @param filePath - Absolute path to the JSON store file.
  * @returns Parsed JSON value, or `undefined` if the file does not exist.
- * @throws {CrustStoreError} `PARSE` if the file contains malformed JSON.
+ * @throws {CrustStoreError} `PATH` if the path is not a regular file (a directory, FIFO or device).
+ * @throws {CrustStoreError} `PARSE` if the file contains malformed JSON or is larger than the limit.
  * @throws {CrustStoreError} `IO` on filesystem read failures other than ENOENT.
  */
 export async function readJson(filePath: string): Promise<JsonValue | undefined> {
-	let raw: string;
-
-	try {
-		raw = await readFile(filePath, "utf-8");
-	} catch (err: unknown) {
-		// File not found is a normal case — nothing persisted yet
-		if (isErrnoException(err) && err.code === "ENOENT") {
-			return undefined;
-		}
-
-		throw new CrustStoreError(
+	const notRegular = () =>
+		new CrustStoreError("PATH", `Store file is not a regular file: ${filePath}`, {
+			path: filePath,
+		});
+	const tooLarge = () =>
+		new CrustStoreError("PARSE", `Store file is larger than 16 MiB: ${filePath}`, {
+			path: filePath,
+		});
+	const readError = (err: unknown) =>
+		new CrustStoreError(
 			"IO",
 			`Failed to read store file: ${filePath}`,
 			{
@@ -80,6 +102,49 @@ export async function readJson(filePath: string): Promise<JsonValue | undefined>
 			},
 			err,
 		);
+
+	const fs = process.getBuiltinModule("node:fs/promises");
+	let handle: FileHandle;
+	try {
+		// Non-blocking, so opening a FIFO without a writer returns at once; Windows has no such flag.
+		handle = await fs.open(filePath, fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0));
+	} catch (err: unknown) {
+		// File not found is a normal case — nothing persisted yet
+		if (isErrnoException(err) && err.code === "ENOENT") {
+			return undefined;
+		}
+		if (isErrnoException(err) && err.code === "EISDIR") throw notRegular();
+		throw readError(err);
+	}
+
+	let raw: string;
+	try {
+		const stats = await handle.stat();
+		if (!stats.isFile()) throw notRegular();
+		if (stats.size > MAX_FILE_BYTES) throw tooLarge();
+		// Read to the end rather than trusting the size: the file may grow while it is read.
+		const chunks: Buffer[] = [];
+		let length = 0;
+		while (length <= MAX_FILE_BYTES) {
+			const { bytesRead, buffer } = await handle.read(
+				Buffer.alloc(READ_CHUNK_BYTES),
+				0,
+				READ_CHUNK_BYTES,
+				null,
+			);
+			if (bytesRead === 0) break;
+			chunks.push(buffer.subarray(0, bytesRead));
+			length += bytesRead;
+		}
+		if (length > MAX_FILE_BYTES) throw tooLarge();
+		// Editors on Windows may save a byte order mark, which JSON.parse rejects.
+		raw = Buffer.concat(chunks, length)
+			.toString("utf-8")
+			.replace(/^\uFEFF/u, "");
+	} catch (err: unknown) {
+		throw err instanceof CrustStoreError ? err : readError(err);
+	} finally {
+		await handle.close().catch(() => {});
 	}
 
 	try {
@@ -192,11 +257,11 @@ export async function refuseSymlink(
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Atomically writes a JSON value to disk using a temp-file-and-rename strategy.
+ * Atomically writes JSON text to disk using a temp-file-and-rename strategy.
  *
  * Steps:
  * 1. Creates the parent directory if it does not exist.
- * 2. Writes serialized JSON to a temporary file in the same directory and
+ * 2. Writes the text to a temporary file in the same directory and
  *    flushes it to disk (`fsync`), so a crash after the rename cannot leave an
  *    empty or partial file in place. On POSIX the temp file gets the replaced
  *    file's owner and, unless `fileMode` is set, its mode.
@@ -212,13 +277,13 @@ export async function refuseSymlink(
  * throws a `CrustStoreError` with `IO` code.
  *
  * @param filePath - Absolute path to the target JSON store file.
- * @param data - The value to serialize and persist.
+ * @param json - The serialized document to persist.
  * @param options - Optional file/directory permission bits ({@link WriteJsonOptions}).
  * @throws {CrustStoreError} `IO` on filesystem write failures.
  */
 export async function writeJson(
 	filePath: string,
-	data: Readonly<StoreDocument>,
+	json: string,
 	options: WriteJsonOptions = {},
 ): Promise<void> {
 	const tempPath = join(
@@ -236,7 +301,6 @@ export async function writeJson(
 		: (options.fileMode ?? (existing === undefined ? undefined : existing.mode & 0o7777));
 
 	try {
-		const json = JSON.stringify(data, null, "\t");
 		const handle = await open(tempPath, "wx", fileMode);
 		try {
 			await handle.writeFile(json, "utf-8");

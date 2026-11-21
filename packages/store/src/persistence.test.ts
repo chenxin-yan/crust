@@ -150,18 +150,11 @@ describe("writeJson", () => {
 	it("should create parent directory if missing", async () => {
 		const nested = join(tempDir, "deep", "nested", "config.json");
 
-		await writeJson(nested, { created: true });
+		await writeJson(nested, JSON.stringify({ created: true }));
 
 		expect(existsSync(nested)).toBe(true);
 		const raw = await readFile(nested, "utf-8");
 		expect(JSON.parse(raw)).toEqual({ created: true });
-	});
-
-	it("should produce tab-indented JSON", async () => {
-		await writeJson(filePath, { theme: "dark" });
-
-		const raw = await readFile(filePath, "utf-8");
-		expect(raw).toBe(JSON.stringify({ theme: "dark" }, null, "\t"));
 	});
 
 	// POSIX permission bits only. On Windows the store ignores modes (it uses
@@ -171,7 +164,7 @@ describe("writeJson", () => {
 			await mkdir(tempDir);
 			const previous = process.umask(0o777);
 			try {
-				await writeJson(filePath, { secret: true }, { fileMode: 0o600 });
+				await writeJson(filePath, JSON.stringify({ secret: true }), { fileMode: 0o600 });
 
 				const { mode } = await stat(filePath);
 				// Mask off the file-type bits, keep permission bits only.
@@ -186,7 +179,7 @@ describe("writeJson", () => {
 			const nested = join(tempDir, "secret-dir", "config.json");
 			const previous = process.umask(0o777);
 			try {
-				await writeJson(nested, { data: true }, { directoryMode: 0o700 });
+				await writeJson(nested, JSON.stringify({ data: true }), { directoryMode: 0o700 });
 
 				const { mode } = await stat(join(tempDir, "secret-dir"));
 				expect(mode & 0o777).toBe(0o700);
@@ -199,37 +192,37 @@ describe("writeJson", () => {
 			await mkdir(tempDir, { recursive: true });
 			await chmod(tempDir, 0o755);
 
-			await writeJson(filePath, { data: true }, { directoryMode: 0o700 });
+			await writeJson(filePath, JSON.stringify({ data: true }), { directoryMode: 0o700 });
 
 			const { mode } = await stat(tempDir);
 			expect(mode & 0o777).toBe(0o755);
 		});
 
 		it("keeps the mode of the file it replaces when no fileMode is set", async () => {
-			await writeJson(filePath, { data: 1 });
+			await writeJson(filePath, JSON.stringify({ data: 1 }));
 			await chmod(filePath, 0o600);
 
-			await writeJson(filePath, { data: 2 });
+			await writeJson(filePath, JSON.stringify({ data: 2 }));
 
 			expect((await stat(filePath)).mode & 0o7777).toBe(0o600);
 		});
 
 		it("gives the replacement the owner of the file it replaces", async () => {
-			await writeJson(filePath, { data: 1 });
+			await writeJson(filePath, JSON.stringify({ data: 1 }));
 			const { uid, gid } = await stat(filePath);
 			vi.mocked(chown).mockClear();
 
-			await writeJson(filePath, { data: 2 });
+			await writeJson(filePath, JSON.stringify({ data: 2 }));
 
 			expect(chown).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), uid, gid);
 		});
 
 		it("ignores a refused owner copy when not running as root", async () => {
-			await writeJson(filePath, { data: 1 });
+			await writeJson(filePath, JSON.stringify({ data: 1 }));
 			vi.mocked(chown).mockRejectedValueOnce(Object.assign(new Error("EPERM"), { code: "EPERM" }));
 			const getuid = vi.spyOn(process, "getuid").mockReturnValue(1000);
 			try {
-				await writeJson(filePath, { data: 2 });
+				await writeJson(filePath, JSON.stringify({ data: 2 }));
 			} finally {
 				getuid.mockRestore();
 			}
@@ -246,7 +239,7 @@ describe("writeJson", () => {
 			await writeFile(target, "{}");
 			await symlink(target, filePath);
 
-			await writeJson(filePath, { data: true });
+			await writeJson(filePath, JSON.stringify({ data: true }));
 
 			expect((await lstat(filePath)).isFile()).toBe(true);
 			expect(await readFile(target, "utf-8")).toBe("{}");
@@ -260,7 +253,7 @@ describe("writeJson", () => {
 			await mkdir(tempDir);
 			fsTrace.length = 0;
 
-			await writeJson(filePath, { data: true }, { fileMode: 0o600 });
+			await writeJson(filePath, JSON.stringify({ data: true }), { fileMode: 0o600 });
 
 			const tempPath = fsTrace[0]?.split(" ")[1] ?? "";
 			expect(tempPath).toMatch(/[\\/]\.config-[\w-]+\.tmp$/);
@@ -283,7 +276,7 @@ describe("writeJson", () => {
 			const nested = join(tempDir, "a", "b", "config.json");
 			fsTrace.length = 0;
 
-			await writeJson(nested, { data: true });
+			await writeJson(nested, JSON.stringify({ data: true }));
 
 			const tempPath = fsTrace.find((entry) => entry.endsWith(" wx"))?.split(" ")[1] ?? "";
 			expect(fsTrace).toEqual([
@@ -306,7 +299,7 @@ describe("writeJson", () => {
 			await mkdir(tempDir);
 			syncFailures.set(tempDir, "EIO");
 
-			await expect(writeJson(filePath, { data: true })).rejects.toMatchObject({
+			await expect(writeJson(filePath, JSON.stringify({ data: true }))).rejects.toMatchObject({
 				code: "IO",
 				details: { path: filePath, operation: "write" },
 				cause: { code: "EIO" },
@@ -319,7 +312,7 @@ describe("writeJson", () => {
 		async () => {
 			renameFailures.push("EPERM");
 
-			await expect(writeJson(filePath, { data: true })).rejects.toMatchObject({
+			await expect(writeJson(filePath, JSON.stringify({ data: true }))).rejects.toMatchObject({
 				code: "IO",
 				message: `Failed to finalize store file: ${filePath}`,
 				cause: { code: "EPERM" },
@@ -341,7 +334,7 @@ describe("writeJson", () => {
 		it("retries a rename that another program's open handle blocks", async () => {
 			renameFailures.push("EPERM", "EBUSY", "EACCES");
 
-			await writeJson(filePath, { data: true });
+			await writeJson(filePath, JSON.stringify({ data: true }));
 
 			expect(renameFailures).toEqual([]);
 			expect(JSON.parse(await readFile(filePath, "utf-8"))).toEqual({ data: true });
@@ -352,7 +345,7 @@ describe("writeJson", () => {
 			await mkdir(tempDir);
 			fsTrace.length = 0;
 
-			await writeJson(filePath, { data: true }, { fileMode: 0o600 });
+			await writeJson(filePath, JSON.stringify({ data: true }), { fileMode: 0o600 });
 
 			const tempPath = fsTrace[0]?.split(" ")[1] ?? "";
 			expect(fsTrace).toEqual([`open ${tempPath} wx`, `sync ${tempPath}`, `rename ${filePath}`]);
@@ -361,7 +354,7 @@ describe("writeJson", () => {
 		it("does not retry other rename errors", async () => {
 			renameFailures.push("ENOENT", "EPERM");
 
-			await expect(writeJson(filePath, { data: true })).rejects.toMatchObject({
+			await expect(writeJson(filePath, JSON.stringify({ data: true }))).rejects.toMatchObject({
 				cause: { code: "ENOENT" },
 			});
 		});
@@ -373,7 +366,7 @@ describe("writeJson", () => {
 		await writeFile(parentFile, "sentinel");
 		const badPath = join(parentFile, "impossible", "config.json");
 
-		await expect(writeJson(badPath, { data: true })).rejects.toMatchObject({
+		await expect(writeJson(badPath, JSON.stringify({ data: true }))).rejects.toMatchObject({
 			name: "CrustStoreError",
 			code: "IO",
 			details: { operation: "write" },

@@ -43,14 +43,7 @@ async function at(name) {
 	while (kind === "gate" && !existsSync(join(dirPath, "go"))) await new Promise((r) => setTimeout(r, 10));
 }
 const fs = createRequire(import.meta.url)("node:fs/promises");
-const { readFile, chmod, rename, open } = fs;
-fs.readFile = async (path, ...rest) => {
-	if (String(path) !== storeFile) return readFile(path, ...rest);
-	await at("acquired");
-	const text = await readFile(path, ...rest);
-	await at("read");
-	return text;
-};
+const { chmod, rename, open } = fs;
 fs.chmod = async (path, ...rest) => {
 	if (String(path).endsWith(".tmp")) await at("temp-written");
 	return chmod(path, ...rest);
@@ -61,7 +54,16 @@ fs.rename = async (...args) => {
 };
 fs.open = async (path, flags, ...rest) => {
 	if (String(path).endsWith(".recover") && flags === "wx") await at("recover");
-	return open(path, flags, ...rest);
+	// The store reads its file through a handle opened with numeric flags.
+	if (String(path) !== storeFile || typeof flags !== "number") return open(path, flags, ...rest);
+	await at("acquired");
+	const handle = await open(path, flags, ...rest);
+	const close = handle.close.bind(handle);
+	handle.close = async () => {
+		await close();
+		await at("read");
+	};
+	return handle;
 };
 syncBuiltinESMExports();
 const { createStore } = await import(${JSON.stringify(storeEntry)});

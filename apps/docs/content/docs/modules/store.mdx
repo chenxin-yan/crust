@@ -33,6 +33,7 @@ Field types and defaults determine the state type. `createStore()` resolves `<di
 - `update()` rejects without calling `fn` when current state is invalid or a required value is missing. Use `write()` to initialize or `patch()` to repair.
 - `read()` coerces core number and boolean strings; only `"true"` and `"1"` become `true`. Persisted falsy values are kept.
 - Malformed JSON and non-object roots reject with `PARSE`. They never fall back to defaults; `write()` replaces such a file.
+- The store reads only a regular file, or a symbolic link to one (a [strict store](#strict-stores) refuses links). A directory, FIFO, or device at the path rejects with `PATH` at once, without waiting for a writer. A file larger than 16 MiB rejects with `PARSE`, and the store stops reading at the limit; a mutation that would write more than 16 MiB rejects with `VALIDATION` and leaves the file as it was. A leading byte order mark, which some Windows editors save, is ignored.
 - `write()`, `update()`, `patch()`, and `reset()` take an optional `{ signal }` last argument. Aborting it while the mutation still waits, behind earlier mutations of the same file or for its lock, rejects with `signal.reason` and changes nothing; once the mutation holds the lock, it runs to the end.
 
 ### Concurrency

@@ -17,6 +17,7 @@ import { applyFieldDefaults, setDocumentValue, withUnknownKeys } from "./merge.t
 import { resolveStorePath } from "./path.ts";
 import {
 	deleteJson,
+	MAX_FILE_BYTES,
 	readJson,
 	refuseSymlink,
 	withFileLock,
@@ -484,7 +485,17 @@ export function createStore<const F extends FieldsDef>(
 		await runFieldValidators(normalized, operation);
 		const output =
 			pruneUnknown === true ? normalized : withUnknownKeys(normalized, persisted, fields);
-		await writeJson(filePath, output, writeOptions);
+		const json = JSON.stringify(output, null, "\t");
+		// Refused here, so a mutation never leaves a file the next read() rejects.
+		if (Buffer.byteLength(json) > MAX_FILE_BYTES) {
+			const issue = { message: "the file would be larger than 16 MiB", path: "" };
+			throw new CrustStoreError(
+				"VALIDATION",
+				`Store validation failed (${operation}) in ${filePath}: ${issue.message}`,
+				{ path: filePath, operation, issues: [issue] },
+			);
+		}
+		await writeJson(filePath, json, writeOptions);
 		// SAFETY: the normalized document was validated against every field definition.
 		return normalized as Config;
 	}
