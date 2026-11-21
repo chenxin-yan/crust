@@ -42,13 +42,12 @@ const config = defineConfig({
 	name: "acme",
 	global: true,
 	project: true,
-	flags: {
-		account: {
-			type: "string",
-			description: "Account ID",
-			env: { name: "ACME_ACCOUNT" },
-			required: true,
-		},
+}).flags({
+	account: {
+		type: "string",
+		description: "Account ID",
+		env: { name: "ACME_ACCOUNT" },
+		required: true,
 	},
 });
 

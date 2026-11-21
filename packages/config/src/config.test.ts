@@ -62,16 +62,15 @@ function acme() {
 		name: "acme",
 		global: true,
 		project: true,
-		flags: {
-			level: { type: "string", env: { name: "ACME_LEVEL" }, default: "default" },
-			org: { type: "string", description: "Organization", env: { name: "ACME_ORG" } },
-			region: { type: "string", description: "Region", choices: ["us", "eu"], default: "us" },
-			port: { type: "number", short: "p" },
-			timeout: { type: "string", parse: (raw) => Number(raw) * 1000, default: "30" },
-			tags: { type: "string", multiple: true },
-			yes: { type: "boolean", noNegate: true },
-			telemetry: { type: "boolean", flag: false, env: { name: "ACME_TELEMETRY" } },
-		},
+	}).flags({
+		level: { type: "string", env: { name: "ACME_LEVEL" }, default: "default" },
+		org: { type: "string", description: "Organization", env: { name: "ACME_ORG" } },
+		region: { type: "string", description: "Region", choices: ["us", "eu"], default: "us" },
+		port: { type: "number", short: "p" },
+		timeout: { type: "string", parse: (raw) => Number(raw) * 1000, default: "30" },
+		tags: { type: "string", multiple: true },
+		yes: { type: "boolean", noNegate: true },
+		telemetry: { type: "boolean", flag: false, env: { name: "ACME_TELEMETRY" } },
 	});
 	const show = defineCommand("show", (command) =>
 		command.use(config).action(async ({ ctx, stdout }) => {
@@ -163,8 +162,7 @@ describe("files", () => {
 			name: "acme",
 			global: "settings.json",
 			project: ".acme.json",
-			flags: { org: { type: "string" }, region: { type: "string" } },
-		});
+		}).flags({ org: { type: "string" }, region: { type: "string" } });
 		write(join(root, "xdg", "acme", "settings.json"), { org: "global", region: "global" });
 		write(join(root, "repo", ".acme.json"), { org: "project" });
 		const app = new Crust("acme")
@@ -182,13 +180,13 @@ describe("files", () => {
 		["no name", { project: ".json" }],
 		["no file at all", {}],
 	])("rejects %s at definition", (_, files) => {
-		expect(() => defineConfig({ name: "acme", flags: {}, ...(files as { global: true }) })).toThrow(
+		expect(() => defineConfig({ name: "acme", ...(files as { global: true }) }).flags({})).toThrow(
 			expect.objectContaining({ code: "DEFINITION" }),
 		);
 	});
 
 	it("rejects an app name with a directory at definition", () => {
-		expect(() => defineConfig({ name: "a/b", global: true, flags: {} })).toThrow(
+		expect(() => defineConfig({ name: "a/b", global: true }).flags({})).toThrow(
 			expect.objectContaining({ code: "DEFINITION" }),
 		);
 	});
@@ -244,10 +242,9 @@ describe("settings", () => {
 			name: "acme",
 			global: true,
 			project: true,
-			flags: {
-				org: { type: "string", env: { name: "ACME_ORG" }, required: true },
-				token: { type: "string", flag: false, required: true },
-			},
+		}).flags({
+			org: { type: "string", env: { name: "ACME_ORG" }, required: true },
+			token: { type: "string", flag: false, required: true },
 		});
 		const app = new Crust("acme")
 			.provide(config())
@@ -302,13 +299,12 @@ describe("errors", () => {
 		const config = defineConfig({
 			name: "acme",
 			project: true,
-			flags: {
-				when: {
-					type: "string",
-					parse: (raw) => {
-						if (Number.isNaN(Date.parse(raw))) throw new Error("not a date");
-						return raw;
-					},
+		}).flags({
+			when: {
+				type: "string",
+				parse: (raw) => {
+					if (Number.isNaN(Date.parse(raw))) throw new Error("not a date");
+					return raw;
 				},
 			},
 		});
@@ -337,7 +333,7 @@ describe("errors", () => {
 			{ region: { type: "string", choices: ["us"], default: "eu" } },
 		],
 	])("rejects %s at definition", (_, flags) => {
-		expect(() => defineConfig({ name: "acme", global: true, flags: flags as never })).toThrow(
+		expect(() => defineConfig({ name: "acme", global: true }).flags(flags as never)).toThrow(
 			expect.objectContaining({ code: "DEFINITION" }),
 		);
 	});
@@ -359,7 +355,7 @@ describe("config.global", () => {
 	});
 
 	it("is absent without a global file", () => {
-		const config = defineConfig({ name: "acme", project: true, flags: {} });
+		const config = defineConfig({ name: "acme", project: true }).flags({});
 		expect("global" in config).toBe(false);
 	});
 });
@@ -447,8 +443,7 @@ describe("review fixes", () => {
 			name: "acme",
 			global: true,
 			project: true,
-			flags: { mode: { type: "string", parse: (raw) => (raw === "off" ? null : raw) } },
-		});
+		}).flags({ mode: { type: "string", parse: (raw) => (raw === "off" ? null : raw) } });
 		write(projectFile(), { mode: "on" });
 		write(globalFile(), { mode: "global" });
 		expect(await result(shows(config), { mode: "off" })).toEqual({ mode: null });
@@ -467,7 +462,7 @@ describe("review fixes", () => {
 			: { type: "string", flag: false, required: true };
 		// Object.fromEntries keeps `__proto__` an own key.
 		const flags = Object.fromEntries([[name, setting]]) as Record<string, { type: "string" }>;
-		const config = defineConfig({ name: "acme", global: true, project: true, flags });
+		const config = defineConfig({ name: "acme", global: true, project: true }).flags(flags);
 		await expect(result(shows(config))).rejects.toMatchObject({ code: "VALIDATION" });
 		write(projectFile(), JSON.parse(`{"${name}": "file"}`));
 		const values = await result(shows(config));
@@ -483,7 +478,7 @@ describe("review fixes", () => {
 				string,
 				{ type: "string" }
 			>;
-			expect(() => defineConfig({ name: "acme", global: true, flags })).toThrow(
+			expect(() => defineConfig({ name: "acme", global: true }).flags(flags)).toThrow(
 				expect.objectContaining({ code: "DEFINITION" }),
 			);
 		},
@@ -494,9 +489,8 @@ describe("review fixes", () => {
 		const config = defineConfig({
 			name: "acme",
 			global: true,
-			flags: {
-				tags: { type: "string", multiple: true, choices, default: ["a"] },
-			},
+		}).flags({
+			tags: { type: "string", multiple: true, choices, default: ["a"] },
 		});
 		choices.push("z");
 		const app = new Crust("acme").provide(config()).command("show", (command) =>
@@ -517,7 +511,7 @@ describe("review fixes", () => {
 	});
 
 	it("reads and writes the global file where the config directory is now", async () => {
-		const config = defineConfig({ name: "acme", global: true, flags: { org: { type: "string" } } });
+		const config = defineConfig({ name: "acme", global: true }).flags({ org: { type: "string" } });
 		const app = shows(config);
 		write(globalFile(), { org: "first" });
 		expect(await result(app)).toEqual({ org: "first" });
@@ -535,8 +529,7 @@ describe("review fixes", () => {
 		const config = defineConfig({
 			name: "acme",
 			global: true,
-			flags: { region: { type: "string", choices: ["us", "eu"] } },
-		});
+		}).flags({ region: { type: "string", choices: ["us", "eu"] } });
 		write(globalFile(), { region: "old" });
 		await expect(result(shows(config), { region: "us" })).rejects.toMatchObject({
 			code: "VALIDATION",
@@ -545,22 +538,17 @@ describe("review fixes", () => {
 	});
 
 	it.each([
-		[
-			"a setting named $schema",
-			{ name: "acme", global: true, flags: { $schema: { type: "string" } } },
-		],
+		["a setting named $schema", { name: "acme", global: true }, { $schema: { type: "string" } }],
 		[
 			"a flag: false setting named $schema",
-			{ name: "acme", global: true, flags: { $schema: { type: "string", flag: false } } },
+			{ name: "acme", global: true },
+			{ $schema: { type: "string", flag: false } },
 		],
-		["the name .", { name: ".", global: true, flags: {} }],
-		["the name ..", { name: "..", global: true, flags: {} }],
-		[
-			"a file name whose stem ends in .json",
-			{ name: "acme", global: "prefs.json.json", flags: {} },
-		],
-	])("rejects %s at definition", (_, options) => {
-		expect(() => defineConfig(options as never)).toThrow(
+		["the name .", { name: ".", global: true }, {}],
+		["the name ..", { name: "..", global: true }, {}],
+		["a file name whose stem ends in .json", { name: "acme", global: "prefs.json.json" }, {}],
+	])("rejects %s at definition", (_, options, settings) => {
+		expect(() => defineConfig(options as never).flags(settings as never)).toThrow(
 			expect.objectContaining({ code: "DEFINITION" }),
 		);
 	});
@@ -573,8 +561,7 @@ describe("review fixes", () => {
 		const config = defineConfig({
 			name: "acme",
 			project: true,
-			flags: { org: { type: "string" } },
-		});
+		}).flags({ org: { type: "string" } });
 		expect(await result(shows(config))).toEqual({ org: "dotted" });
 	});
 
@@ -586,8 +573,7 @@ describe("review fixes", () => {
 			const config = defineConfig({
 				name: "acme",
 				project: true,
-				flags: { org: { type: "string" } },
-			});
+			}).flags({ org: { type: "string" } });
 			expect(await result(shows(config))).toEqual({ org: undefined });
 		},
 	);
@@ -601,8 +587,7 @@ describe("review fixes", () => {
 				const config = defineConfig({
 					name: "acme",
 					project: true,
-					flags: { org: { type: "string" } },
-				});
+				}).flags({ org: { type: "string" } });
 				await expect(result(shows(config))).rejects.toMatchObject({
 					name: "CrustStoreError",
 					code: "IO",
@@ -613,4 +598,30 @@ describe("review fixes", () => {
 			}
 		},
 	);
+});
+
+describe("defineConfig(options).flags(settings)", () => {
+	it("checks the files in defineConfig(), before any setting is declared", () => {
+		expect(() => defineConfig({ name: "acme", global: "a/b.json" } as never)).toThrow(
+			expect.objectContaining({ code: "DEFINITION" }),
+		);
+		expect(() => defineConfig({ name: "acme" } as never)).toThrow(
+			expect.objectContaining({ code: "DEFINITION" }),
+		);
+	});
+
+	it("takes the settings only from .flags(), never as an option", () => {
+		expect(() =>
+			defineConfig({ name: "acme", global: true, flags: { org: { type: "string" } } } as never),
+		).toThrow(expect.objectContaining({ code: "DEFINITION" }));
+	});
+
+	it("returns a builder whose only member is flags, and .flags() is called once", () => {
+		const builder = defineConfig({ name: "acme", global: true });
+		expect(Object.keys(builder)).toEqual(["flags"]);
+		expect(Object.isFrozen(builder)).toBe(true);
+		const config = builder.flags({ org: { type: "string" } });
+		expect("flags" in config).toBe(false);
+		expect(config.contextName).toBe("config");
+	});
 });

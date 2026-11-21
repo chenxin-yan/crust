@@ -20,7 +20,7 @@ npm install @crustjs/config
 
 <include lang="ts">../../../examples/modules/config.ts#app</include>
 
-`defineConfig({ name, global, project, flags })` returns the `config` Context factory. `.use(config)` lets a command read `await ctx.config`, and `.provide(config())` on the root provides it to every command. The factory also has `config.global`, the typed store of the global file, and `config.jsonSchema()`.
+`defineConfig({ name, global, project })` says where the files are, and its `.flags({...})` declares the settings, as `.flags()` does on a command, and returns the `config` Context factory. Call `.flags()` once; until then there is no Context to use or provide. `.use(config)` lets a command read `await ctx.config`, and `.provide(config())` on the root provides it to every command. The factory also has `config.global`, the typed store of the global file, and `config.jsonSchema()`.
 
 ## Where a value comes from
 
@@ -50,7 +50,7 @@ The settings are ordinary flags of the `config` Context, so Core resolves the fi
 
 ## The files
 
-- `global: true` reads `config.json` in `configDir(name)`; `project: true` reads `<name>.config.json`. Either may instead be a file name of your own, such as `global: "settings.json"` or `project: ".acme.json"`. A name must end in `.json`, once, and cannot hold a directory: TypeScript rejects `"a/b.json"` and `"prefs.json.json"`, and `defineConfig()` throws a `DEFINITION` `CrustError` for them. Set at least one of the two. The app `name` cannot be `.` or `..`, and no setting may be named `$schema` (a file's pointer to its schema) or `__proto__`.
+- `global: true` reads `config.json` in `configDir(name)`; `project: true` reads `<name>.config.json`. Either may instead be a file name of your own, such as `global: "settings.json"` or `project: ".acme.json"`. A name must end in `.json`, once, and cannot hold a directory: TypeScript rejects `"a/b.json"` and `"prefs.json.json"`, and `defineConfig()` throws a `DEFINITION` `CrustError` for them, as for an option it does not have, such as `flags`. Set at least one of the two. The app `name` cannot be `.` or `..`, and no setting may be named `$schema` (a file's pointer to its schema) or `__proto__`.
 - The project file is looked for in the working directory, then in each parent up to the root. The first entry with that name is the project file; a dangling symbolic link there reads as a missing file, and the search stops at it. A file in a shared ancestor, such as `/tmp` or the home directory, applies to everything below it, outside any repository too.
 - A missing file is no values. Reading creates no file or directory.
 - Keys the config does not declare are ignored, so a file may hold `"$schema"` or keys of a newer version of your CLI.
@@ -68,7 +68,7 @@ What differs from a flag:
 | `required`    | Checked after the files, when a command reads `await ctx.config`. The flag itself is optional, in typed `run()` input and MCP tools too                                              |
 | `flag: false` | No flag: the setting comes from its environment variable, the files or its default. Typed `run()` input does not take it either                                                      |
 
-- Other types (`url`, `path`, `json`) and `schema` are not supported: a config file holds what the user types, a string, a number or a boolean. An unknown property is a compile error, and `defineConfig()` throws a `DEFINITION` `CrustError` for it, as for a default outside `choices`.
+- Other types (`url`, `path`, `json`) and `schema` are not supported: a config file holds what the user types, a string, a number or a boolean. An unknown property is a compile error, and `.flags()` throws a `DEFINITION` `CrustError` for it, as for a default outside `choices`.
 - In a file, a setting holds what the user would type for the flag: a `multiple` setting is a JSON array, a `parse` setting a string that is parsed after reading, and a `noNegate` boolean only `true`.
 - `flag: false` settings read `process.env` even under `run({ env })`, because a Context's setup does not get the invocation's environment.
 

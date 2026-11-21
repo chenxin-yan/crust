@@ -39,8 +39,7 @@ afterEach(() => {
 const config = defineConfig({
 	name: "acme",
 	global: true,
-	flags: { org: { type: "string", default: "from-default" } },
-});
+}).flags({ org: { type: "string", default: "from-default" } });
 
 const org = handler(function* () {
 	return (yield* service(config)).org;

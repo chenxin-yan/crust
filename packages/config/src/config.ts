@@ -268,19 +268,38 @@ function missingMessage(name: string, key: string, def: ConfigFlagDef, files: re
 	return `Missing setting "${key}" of ${name}: ${all}.`;
 }
 
+/** The options of {@link defineConfig}, so an unknown one, such as `flags`, is refused at run time. */
+const OPTIONS = new Set(["name", "global", "project"]);
+
+/** What {@link defineConfig} returns: where the files are, waiting for `.flags()` and its settings. */
+interface ConfigBuilder<G extends ConfigFileOption | undefined> {
+	/**
+	 * Declare the settings, each the flag definition you would write in a command's `.flags({...})`,
+	 * and get the `config` Context factory.
+	 */
+	flags<const F extends ConfigFlagsDef>(
+		// Same value brands as defineFlag (default within choices, synchronous parse), per setting.
+		settings: F & {
+			readonly [K in keyof F]: LocalValueBrand<Omit<F[K], "flag">> & KnownPropertiesBrand<F[K]>;
+		} & ReservedNameBrand<F> &
+			CoreFlagChecks<F>,
+	): ConfigFactory<F, G>;
+}
+
 /**
- * A CLI's settings as one lazy Context named `config`, declared once. Each setting is the flag
- * definition you would write in `.flags({...})`: the Context owns those flags, so argv, `--input`,
+ * A CLI's settings as one lazy Context named `config`, declared once:
+ * `defineConfig({ name, global, project }).flags({...})`. Each setting is the flag definition you
+ * would write in a command's `.flags({...})`: the Context owns those flags, so argv, `--input`,
  * typed `run()` input and `env` resolve as for any flag, and what is still unset comes from the
  * project file, then the global file, then the `default`. Nothing is read, and `@crustjs/store`
  * is not imported, until a command reads `await ctx.config`.
  *
- * @throws {CrustError} `DEFINITION` for a file name with a directory or not ending in `.json`, no
- *   file at all, a setting that is not a string, number or boolean flag definition, or one that
- *   `defineFlag` rejects (such as a default outside `choices`).
+ * @throws {CrustError} `DEFINITION` for an unknown option, a file name with a directory or not
+ *   ending in `.json`, or no file at all; `.flags()` throws it for a setting that is not a string,
+ *   number or boolean flag definition, or one that `defineFlag` rejects (such as a default outside
+ *   `choices`).
  */
 export function defineConfig<
-	const F extends ConfigFlagsDef,
 	const G extends ConfigFileOption | undefined = undefined,
 	const P extends ConfigFileOption | undefined = undefined,
 	const N extends string = string,
@@ -292,13 +311,14 @@ export function defineConfig<
 		readonly global?: G & FileNameBrand<G>;
 		/** `true` for `<name>.config.json`, or a file name of your own; the nearest from the working directory up. */
 		readonly project?: P & FileNameBrand<P>;
-		// Same value brands as defineFlag (default within choices, synchronous parse), per setting.
-		readonly flags: F & {
-			readonly [K in keyof F]: LocalValueBrand<Omit<F[K], "flag">> & KnownPropertiesBrand<F[K]>;
-		} & ReservedNameBrand<F> &
-			CoreFlagChecks<F>;
 	} & NoFileBrand<G, P>,
-): ConfigFactory<F, G> {
+): ConfigBuilder<G> {
+	const unknown = Object.keys(options).find((option) => !OPTIONS.has(option));
+	if (unknown !== undefined) {
+		throw definitionError(
+			`defineConfig() has no option "${unknown}"${unknown === "flags" ? ": declare the settings with .flags()" : ""}`,
+		);
+	}
 	const name: string = options.name;
 	if (!/^[^/\\]+$/u.test(name) || name === "." || name === "..") {
 		throw definitionError(`Config name "${name}" must be a non-empty name without a directory`);
@@ -308,7 +328,19 @@ export function defineConfig<
 	if (globalFile === undefined && projectFile === undefined) {
 		throw definitionError(`Config "${name}" reads no file: set global, project, or both`);
 	}
-	const settings = Object.entries(options.flags as ConfigFlagsDef).map(([key, def]) => {
+	return Object.freeze({
+		flags: (input: ConfigFlagsDef) => withSettings(name, globalFile, projectFile, input),
+	}) as unknown as ConfigBuilder<G>;
+}
+
+/** The `config` Context factory for `settings`, read from `globalFile` and `projectFile`. */
+function withSettings(
+	name: string,
+	globalFile: string | undefined,
+	projectFile: string | undefined,
+	input: ConfigFlagsDef,
+) {
+	const settings = Object.entries(input).map(([key, def]) => {
 		// `$schema` in a file points editors at its JSON Schema; core refuses `__proto__` as a flag name
 		// and when it parses env, so neither can be a setting.
 		if (key === "$schema" || key === "__proto__") {
@@ -433,8 +465,7 @@ export function defineConfig<
 		};
 		Object.defineProperty(factory, "global", { value: Object.freeze(global), enumerable: true });
 	}
-	// SAFETY: the phantom types follow from `flags` and the options; the runtime factory is erased.
-	return Object.freeze(factory) as unknown as ConfigFactory<F, G>;
+	return Object.freeze(factory);
 }
 
 /** What a user writes in a file for one setting: the text type for `parse`, never the parsed value. */
