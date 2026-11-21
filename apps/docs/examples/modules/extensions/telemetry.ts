@@ -1,5 +1,6 @@
+//#region usage
 import { Crust, defineCommand } from "@crustjs/core";
-import { telemetry } from "@crustjs/extensions";
+import { type TelemetryOptions, telemetry } from "@crustjs/extensions";
 
 const app = new Crust("acme")
 	.extend(
@@ -19,3 +20,14 @@ const app = new Crust("acme")
 	.add(defineCommand("deploy", (command) => command.action(() => {})));
 
 await app.execute();
+//#endregion
+
+export function renamed(send: TelemetryOptions["send"]) {
+	//#region command
+	// `acme analytics`, `acme analytics enable`, `acme analytics disable`
+	const cli = new Crust("acme").extend(
+		telemetry({ env: "ACME_TELEMETRY", enabled: "opt-in", send, command: "analytics" }),
+	);
+	//#endregion
+	return cli;
+}
