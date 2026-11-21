@@ -51,7 +51,7 @@ deploying flag-org to eu
 
 Each key is settled on its own: here `org` comes from the project file and `region` from the global file. The files do not merge beyond that: only the nearest project file is read.
 
-A setting's flag is an ordinary flag of its Context, so Core resolves the first two steps exactly as for any flag, and `--help`, typed `run()`, `--input`, [`schema`](/docs/modules/extensions/schema), [MCP](/docs/modules/mcp) and completion all see it. `@crustjs/config` does the last three when a command reads a setting that its flag and variable did not give: the files are read then, once for the invocation, and shared by its settings. A setting given by its flag or variable reads no file, so `--help`, `--version`, a command that uses no setting, and one whose settings all came from flags work whatever is in the files.
+A setting's flag is an ordinary flag of its Context, so Core resolves the first two steps exactly as for any flag, and `--help`, typed `run()`, `--input`, [`schema`](/docs/modules/extensions/schema), [MCP](/docs/modules/mcp) and completion all see it. `@crustjs/config` does the last three when a command reads a setting that its flag and variable did not give: the files are read then, for that setting, so a command that reads several such settings reads the files once for each. A setting given by its flag or variable reads no file, so `--help`, `--version`, a command that uses no setting, and one whose settings all came from flags work whatever is in the files.
 
 ## The files
 

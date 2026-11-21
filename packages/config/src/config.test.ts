@@ -439,7 +439,7 @@ describe("one Context per setting", () => {
 		expect(await app.run(["deploy"], {}, { env: {} })).toMatchObject({ result: "file" });
 	});
 
-	it("reads each file once for a command that reads three settings from it", async () => {
+	it("reads the files for each setting read from them, and not for one its flag gave", async () => {
 		const { config } = acme();
 		write(projectFile(), { org: "o", region: "eu", port: 1 });
 		const fs = process.getBuiltinModule("node:fs/promises");
@@ -460,7 +460,8 @@ describe("one Context per setting", () => {
 			expect(await app.run(["show"], {}, { env: {} })).toMatchObject({
 				result: ["o", "eu", 1],
 			});
-			expect(opened.filter((path) => path === projectFile())).toHaveLength(1);
+			// No snapshot is shared: each setting read from the files reads them.
+			expect(opened.filter((path) => path === projectFile())).toHaveLength(3);
 			opened.length = 0;
 			expect(await app.run(["show"], { flags: { org: "f", region: "us", port: 2 } })).toMatchObject(
 				{ result: ["f", "us", 2] },
@@ -469,6 +470,37 @@ describe("one Context per setting", () => {
 		} finally {
 			spy.mockRestore();
 		}
+	});
+
+	it("gives a run that starts after a write the new value while another run is still open", async () => {
+		const { config } = acme();
+		let release!: () => void;
+		const paused = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		let reading!: () => void;
+		const read = new Promise<void>((resolve) => {
+			reading = resolve;
+		});
+		const hold = defineCommand("hold", (command) =>
+			command.use(config.settings.org).action(async ({ ctx }) => {
+				const value = await ctx.org;
+				reading();
+				await paused;
+				return value;
+			}),
+		);
+		const deploy = defineCommand("deploy", (command) =>
+			command.use(config.settings.org).action(async ({ ctx }) => ctx.org),
+		);
+		const app = new Crust("acme").extend(config.extension).add(hold, deploy);
+		await config.global.patch({ org: "old" });
+		const first = app.run(["hold"], {}, { env: {} });
+		await read;
+		await config.global.patch({ org: "new" });
+		expect(await app.run(["deploy"], {}, { env: {} })).toMatchObject({ result: "new" });
+		release();
+		expect(await first).toMatchObject({ result: "old" });
 	});
 
 	it("reads the files again for the next run, even with the same caller signal", async () => {

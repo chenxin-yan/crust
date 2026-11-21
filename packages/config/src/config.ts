@@ -337,11 +337,13 @@ export interface ConfigBuilder<G extends ConfigFileOption | undefined> {
 /**
  * A CLI's settings, declared once: `defineConfig({ name, global, project }).flags({...})`. Each
  * setting is the flag definition you would write in a command's `.flags({...})` and becomes its own
- * lazy Context, named after it, that owns that flag: a command `.use()`s the settings it reads and
- * gets only their flags. argv, `--input`, typed `run()` input and `env` resolve as for any flag;
- * what is still unset comes from the project file, then the global file, then the `default`. The
- * files are read once per invocation, when a command first reads a setting its flag and variable
- * did not give, and `@crustjs/store` is not imported before that.
+ * lazy Context, named after it, that owns that flag. A command built with `defineCommand()` and
+ * added with `.add()` `.use()`s the settings it reads and gets only their flags; the root and its
+ * inline `.command()` children get every setting's flag, as for any Extension-provided Context.
+ * argv, `--input`, typed `run()` input and `env` resolve as for any flag; what is still unset comes
+ * from the project file, then the global file, then the `default`. The files are read for a setting
+ * when a command reads it and neither its flag nor its variable gave it, once for each such setting,
+ * and `@crustjs/store` is not imported before that.
  *
  * @throws {CrustError} `DEFINITION` for an unknown option, a file name with a directory or not
  *   ending in `.json`, or no file at all; `.flags()` throws it for a setting that is not a string,
@@ -431,10 +433,6 @@ function withSettings(
 		const [project, global] = await Promise.all([read(projectPath), read(globalPath)]);
 		return { project, projectPath, global, globalPath };
 	};
-	// One read of the files for the settings of an invocation, cleared when the invocation that started
-	// it ends: invocations that overlap in one process may share a read (the same files, read moments
-	// apart), and no read, or failed read, outlives the invocation that started it.
-	let filesRead: ReturnType<typeof readFiles> | undefined;
 
 	// Own properties only: a setting named `constructor` must not read Object.prototype.
 	const own = (record: FileValues | undefined, key: string) =>
@@ -446,7 +444,7 @@ function withSettings(
 		const { flag, default: _default, required: _required, ...owned } = def;
 		const base = defineContext(key);
 		const withFlag = flag === false ? base : base.flags({ [key]: owned } as never);
-		const context = withFlag.setup(async ({ flags, defer }) => {
+		const context = withFlag.setup(async ({ flags }) => {
 			// Core resolves env for a flag; a setting without one gets the same env handling here.
 			const given =
 				flag === false
@@ -455,14 +453,7 @@ function withSettings(
 			// `null` from a parser is a value: only undefined falls through, and a setting its flag or
 			// variable gave reads no file.
 			if (given !== undefined) return given;
-			if (filesRead === undefined) {
-				const started = readFiles();
-				filesRead = started;
-				defer(() => {
-					if (filesRead === started) filesRead = undefined;
-				});
-			}
-			const read = await filesRead;
+			const read = await readFiles();
 			for (const value of [
 				() => settled(key, def, own(read.project, key), read.projectPath!),
 				() => settled(key, def, own(read.global, key), read.globalPath!),
