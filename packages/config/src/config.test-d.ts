@@ -1,4 +1,10 @@
-import { Crust, defineCommand, type FactoryValueOf } from "@crustjs/core";
+import {
+	type ContextInstance,
+	Crust,
+	defineCommand,
+	type Extension,
+	type FactoryValueOf,
+} from "@crustjs/core";
 import type { Store } from "@crustjs/store";
 
 import { type Config, type ConfigBuilder, type ConfigFlagDef, defineConfig } from "./index.ts";
@@ -165,6 +171,29 @@ const last = defineCommand("last", (command) =>
 	}),
 );
 new Crust("thirty").extend(thirty.extension).add(first, last);
+
+// The Extension provides exactly the settings, each once, whatever order the tuple has.
+type Provided<E> = E extends Extension<any, infer P, any, any> ? P : never;
+type ProvidedNames<E> = Provided<E>[number] extends infer I
+	? I extends ContextInstance<infer N, any, any, any, any>
+		? N
+		: never
+	: never;
+type _ThirtyNames = Expect<
+	Equal<ProvidedNames<typeof thirty.extension>, keyof typeof thirty.settings>
+>;
+type _ThirtyLength = Expect<Equal<Provided<typeof thirty.extension>["length"], 30>>;
+type _ConfigNames = Expect<
+	Equal<ProvidedNames<typeof config.extension>, keyof typeof config.settings>
+>;
+type _ConfigLength = Expect<Equal<Provided<typeof config.extension>["length"], 7>>;
+type _OneLength = Expect<Equal<Provided<typeof one.extension>["length"], 1>>;
+// A setting of another config is not provided by this one's Extension.
+const foreign = defineCommand("foreign", (command) =>
+	command.use(one.settings.a).action(async ({ ctx }) => ctx.a),
+);
+// @ts-expect-error -- `a` belongs to another config
+new Crust("thirty").extend(thirty.extension).add(foreign);
 
 // A setting is a flag definition for a string, number or boolean.
 const shared = { type: "string", description: "Organization" } as const satisfies ConfigFlagDef;
