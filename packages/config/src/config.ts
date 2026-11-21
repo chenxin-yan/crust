@@ -415,7 +415,7 @@ export function defineConfig<
 	}) as unknown as ConfigBuilder<G>;
 }
 
-/** The `config` Context factory for `settings`, read from `globalFile` and `projectFile`. */
+/** The config for `input`: a Context per setting, the Extension providing them, its schema and global store. */
 function withSettings(
 	name: string,
 	globalFile: string | undefined,

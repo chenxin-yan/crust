@@ -2,7 +2,7 @@
 title: "Config"
 ---
 
-`@crustjs/config` reads a CLI's settings from JSON config files and gives each setting its own typed [Context](/docs/guide/contexts), named after it, so a command takes the flags of the settings it uses and no others. You declare each setting once, as the flag definition you would write in `.flags({...})`. Both files are read through [`@crustjs/store`](/docs/modules/store), and `@crustjs/core` needs nothing else.
+`@crustjs/config` reads a CLI's settings from JSON config files and gives each setting its own typed [Context](/docs/guide/contexts), named after it, so a command built with `defineCommand()` takes the flags of the settings it uses and no others. You declare each setting once, as the flag definition you would write in `.flags({...})`. Both files are read through [`@crustjs/store`](/docs/modules/store), and `@crustjs/core` needs nothing else.
 
 ## Install
 
@@ -22,10 +22,11 @@ npm install @crustjs/config
 
 `defineConfig({ name, global, project })` says where the files are, and its `.flags({...})` declares the settings, as `.flags()` does on a command. It returns `settings`, each setting's Context factory by name; `extension`, which provides them all (`.extend(config.extension)`); `jsonSchema()`; and, with `global` set, `global`, the typed store of the global file. Call `.flags()` once.
 
-- A command `.use()`s the settings it reads, and takes only their flags: `serve` above takes `--port`, and `serve --org x` is `Unknown flag "--org"`. Generated OpenAPI commands work the same way.
+- A command built with `defineCommand()` and added with `.add()` `.use()`s the settings it reads, and takes only their flags: `serve` above takes `--port`, and `serve --org x` is `Unknown flag "--org"`. Generated OpenAPI commands work the same way.
+- The root command and its inline `.command()` children take every setting's flag, as for any Context an Extension provides; use `defineCommand()` and `.add()` for a command that should take only its own.
 - Read a setting from `ctx`, one `await` per setting: `await ctx.port` is its settled value. `flags.port` holds only what was typed or came from the environment, never the files or the default.
-- The root command lists every setting's flag, since it provides them all (core gives the providing command the flags of the Contexts it provides).
-- A setting cannot share its name with another Context on the same command path: core makes that a compile error (`FIX_DUPLICATE_CONTEXT`) and a start-up error.
+- The root command lists every setting's flag, since it provides them all.
+- Names follow core's rules: a second provider of a setting's name that the types can see on a command path is a compile error (`FIX_DUPLICATE_CONTEXT`), and two owners of one flag spelling on a command collide.
 
 ## Where a value comes from
 
@@ -71,7 +72,7 @@ What differs from a flag:
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `default`     | Applied after the files. A `parse` setting's default is parsed. The flag itself has no default, so the providing command's help shows it under "Configuration", not on the flag line |
 | `required`    | Checked after the files, when a command reads the setting. The flag itself is optional, in typed `run()` input and MCP tools too                                                     |
-| `flag: false` | No flag: the setting comes from its environment variable, the files or its default. Typed `run()` input does not take it either                                                      |
+| `flag: false` | No flag: the setting comes from its environment variable, the files or its `default`. Typed `run()` input does not take it either                                                    |
 
 - Other types (`url`, `path`, `json`) and `schema` are not supported: a config file holds what the user types, a string, a number or a boolean. An unknown property is a compile error, and `.flags()` throws a `DEFINITION` `CrustError` for it, as for a default outside `choices`.
 - In a file, a setting holds what the user would type for the flag: a `multiple` setting is a JSON array, a `parse` setting a string that is parsed after reading, and a `noNegate` boolean only `true`.
@@ -79,7 +80,7 @@ What differs from a flag:
 
 ### One config per app
 
-A CLI has one config, and a setting is one value for the whole CLI, read the same way by every command that uses it. A setting that should never be an option is `flag: false`. An option only one command has, and that no file should set, stays a flag of that command.
+A CLI has one config: a second `defineConfig()` with the same `name` replaces the first's registration in the app. A setting is one value for the whole CLI, read the same way by every command that uses it. A setting that should never be an option is `flag: false`. An option only one command has, and that no file should set, stays a flag of that command.
 
 ## Errors
 
@@ -97,7 +98,7 @@ $ acme deploy --region mars
 Error: Invalid value for --region. Expected one of: us, eu
 ```
 
-- A missing required setting is a `VALIDATION` `CrustError` (issue `path: "config.<name>"`), naming every place the value can come from. It fails when a command reads that setting, after `preRun` hooks.
+- A missing required setting is a `VALIDATION` `CrustError` (issue `path: "config.<name>"`), naming every place the value can come from. It fails when the setting is first read: from an action, that is after `preRun` hooks.
 - A file's errors are the store's [`CrustStoreError`](/docs/modules/store#errors)s, naming the file and each key. They never repeat a value from the file.
 - A `parse` that throws on a file value is a `PARSE` `CrustError`, `Invalid value for "timeout" in <file>: <the parser's message>`, with the parser's error as its `cause`. As for a flag, a `parse` function's message is shown to the user, so it should not echo its input when the value may be sensitive.
 - A file is valid as a whole or not at all: once a command reads a setting from the files, a value of the wrong type or outside `choices` anywhere in them fails it, even a value whose setting a flag or a nearer file supplies, so it is reported the day it is written, not the day nothing overrides it. A `parse` function is the exception: it runs only on the value that wins, so a file value it would reject is reported only when that value is used.
