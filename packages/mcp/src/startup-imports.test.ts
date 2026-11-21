@@ -2,8 +2,6 @@ import { Crust, defineCommand } from "@crustjs/core";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { expect, it, vi } from "vite-plus/test";
 
-import type { McpToolsOptions } from "./tools.ts";
-
 const state = vi.hoisted(() => ({ allowSdk: false, rankingLoaded: false }));
 
 // The SDK takes ~100 ms to load; a CLI using mcpExtension() should pay that only when `mcp` runs.
@@ -20,25 +18,23 @@ vi.mock("@crustjs/utils/search", async (importOriginal) => {
 	return importOriginal();
 });
 
-it("loads neither the MCP SDK nor the search ranking when imported", async () => {
-	await expect(import("./index.ts")).resolves.toHaveProperty("mcpExtension");
-	expect(state.rankingLoaded).toBe(false);
-});
-
-async function connect(options: McpToolsOptions) {
-	state.allowSdk = true;
+// One lifecycle in one test: the module cache outlives a test, so a second test would see what the first loaded.
+it("loads the MCP SDK when serving and the search ranking only on the first search", async () => {
 	const { createMcpServer } = await import("./index.ts");
+	expect(state.rankingLoaded).toBe(false);
+
+	state.allowSdk = true;
 	const app = new Crust("acme").add(
 		defineCommand("deploy", { description: "Deploy the app" }, (cmd) => cmd.action(() => "ok")),
 	);
-	const server = await createMcpServer(app, options);
-	const client = new Client({ name: "test-client", version: "0.0.0" });
-	const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-	await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-	return client;
-}
+	const connect = async (options: Parameters<typeof createMcpServer>[1]) => {
+		const server = await createMcpServer(app, options);
+		const client = new Client({ name: "test-client", version: "0.0.0" });
+		const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+		await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+		return client;
+	};
 
-it("does not load the search ranking to list and call tools", async () => {
 	const direct = await connect({});
 	expect((await direct.listTools()).tools.map((tool) => tool.name)).toEqual(["deploy"]);
 	expect((await direct.callTool({ name: "deploy" })).isError).toBeUndefined();
@@ -47,6 +43,10 @@ it("does not load the search ranking to list and call tools", async () => {
 	expect((await progressive.listTools()).tools).toHaveLength(3);
 	expect(
 		(await progressive.callTool({ name: "call_tool", arguments: { name: "deploy" } })).isError,
+	).toBeUndefined();
+	expect(
+		(await progressive.callTool({ name: "get_tool_details", arguments: { name: "deploy" } }))
+			.isError,
 	).toBeUndefined();
 	expect(state.rankingLoaded).toBe(false);
 
@@ -58,4 +58,5 @@ it("does not load the search ranking to list and call tools", async () => {
 		result: [{ name: "deploy", description: "Deploy the app" }],
 	});
 	expect(state.rankingLoaded).toBe(true);
+	await Promise.all([direct.close(), progressive.close()]);
 });

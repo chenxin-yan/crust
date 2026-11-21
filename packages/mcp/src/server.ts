@@ -1,7 +1,7 @@
 import { type AnyCrust, type CommandSnapshot, CrustError, type RunOutcome } from "@crustjs/core";
 import { parseCommandInput, type RunInputPayload } from "@crustjs/core/tooling";
 import { isJsonObject, parseJsonValue } from "@crustjs/utils/json";
-import type { SearchIndex, SearchItem } from "@crustjs/utils/search";
+import type { SearchIndex } from "@crustjs/utils/search";
 // Type-only: the SDK loads inside the server functions, so CLIs pay for it only when `mcp` runs.
 import type { CallToolResult, Server, ServerContext, Tool } from "@modelcontextprotocol/server";
 
@@ -77,20 +77,6 @@ function resultFromOutcome(outcome: RunOutcome<unknown>): CallToolResult {
 /** A manifest entry with the snapshot of its command. */
 type ToolEntry = readonly [McpTool, CommandSnapshot];
 
-/** What `search_tools` matches a tool by: its command's path, names, description, then arguments and flags. */
-function searchItem([tool, command]: ToolEntry): SearchItem {
-	return {
-		names: [...tool.path, command.meta.name, ...(command.meta.aliases ?? [])],
-		descriptions: [command.meta.description],
-		details: [
-			...command.args.flatMap((arg) => [arg.name, arg.description]),
-			...Object.entries(command.flags).flatMap(([name, flag]) =>
-				flag.extension === undefined ? [name, flag.description] : [],
-			),
-		],
-	};
-}
-
 /** What `tools/list` and `get_tool_details` say about a tool: everything but the fields run() routing uses. */
 function listedTool({
 	path: _path,
@@ -157,52 +143,66 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 const SEARCH_LIMIT_DEFAULT = 5;
 const SEARCH_LIMIT_MAX = 20;
 
-/** The fixed tool set of progressive discovery. */
-const DISCOVERY_TOOLS: Tool[] = [
-	{
-		name: "search_tools",
-		description:
-			"Find this server's tools for a task described in words. Returns their names and descriptions, best first, without their schemas.",
-		inputSchema: {
-			type: "object",
-			properties: {
-				query: { type: "string", description: 'The task in words, e.g. "rotate an API key"' },
-				limit: {
-					type: "integer",
-					minimum: 1,
-					maximum: SEARCH_LIMIT_MAX,
-					default: SEARCH_LIMIT_DEFAULT,
+/** The fixed tool set of progressive discovery, built for each progressive server factory. */
+function discoveryTools(): Tool[] {
+	return [
+		{
+			name: "search_tools",
+			description:
+				"Find this server's tools for a task described in words. Returns their names and descriptions, best first, without their schemas.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					query: { type: "string", description: 'The task in words, e.g. "rotate an API key"' },
+					limit: {
+						type: "integer",
+						minimum: 1,
+						maximum: SEARCH_LIMIT_MAX,
+						default: SEARCH_LIMIT_DEFAULT,
+					},
 				},
+				required: ["query"],
 			},
-			required: ["query"],
 		},
-	},
-	{
-		name: "get_tool_details",
-		description: "Describe a tool: its description, inputSchema, and outputSchema when it has one.",
-		inputSchema: {
-			type: "object",
-			properties: { name: { type: "string", description: "A name search_tools returned" } },
-			required: ["name"],
-		},
-	},
-	{
-		name: "call_tool",
-		description:
-			"Call a tool with arguments that match its inputSchema. The result is the tool's own result.",
-		inputSchema: {
-			type: "object",
-			properties: {
-				name: { type: "string", description: "A name search_tools returned" },
-				arguments: { type: "object", description: "Input matching the tool's inputSchema" },
+		{
+			name: "get_tool_details",
+			description:
+				"Describe a tool: its description, inputSchema, and outputSchema when it has one.",
+			inputSchema: {
+				type: "object",
+				properties: { name: { type: "string", description: "A name search_tools returned" } },
+				required: ["name"],
 			},
-			required: ["name"],
 		},
-	},
-];
+		{
+			name: "call_tool",
+			description:
+				"Call a tool with arguments that match its inputSchema. The result is the tool's own result.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					name: { type: "string", description: "A name search_tools returned" },
+					arguments: { type: "object", description: "Input matching the tool's inputSchema" },
+				},
+				required: ["name"],
+			},
+		},
+	];
+}
+
+/** {@link createMcpServer} and {@link serveStdio} options: which tools, and how the server offers them. */
+export interface McpServerOptions extends McpToolsOptions {
+	/**
+	 * `"direct"` (the default) lists every tool. `"progressive"` lists only
+	 * `search_tools`, `get_tool_details`, and `call_tool`, which search,
+	 * describe, and call the same tools, so a large CLI does not fill the
+	 * client's context with every schema up front.
+	 */
+	readonly discovery?: "direct" | "progressive";
+}
 
 /** Prepares the tools once; each call of the result builds a new server for them. */
-async function serverFactory(app: AnyCrust, options: McpToolsOptions): Promise<() => Server> {
+async function serverFactory(app: AnyCrust, options: McpServerOptions): Promise<() => Server> {
 	const snapshot = await app.snapshot();
 	const tools = toolsFromSnapshot(snapshot, options);
 	const commandAt = (path: readonly string[]) =>
@@ -210,7 +210,7 @@ async function serverFactory(app: AnyCrust, options: McpToolsOptions): Promise<(
 	const byName = new Map<string, ToolEntry>(
 		tools.map((tool) => [tool.name, [tool, commandAt(tool.path)]]),
 	);
-	const progressive = options.discovery === "progressive";
+	const catalogue = options.discovery === "progressive" ? discoveryTools() : undefined;
 	// Built on the first search_tools call, so serving tools never loads the ranking.
 	let search: Promise<SearchIndex> | undefined;
 	const { ProtocolError, ProtocolErrorCode, Server } = await import("@modelcontextprotocol/server");
@@ -229,11 +229,11 @@ async function serverFactory(app: AnyCrust, options: McpToolsOptions): Promise<(
 			{ capabilities: { tools: {} } },
 		);
 		server.setRequestHandler("tools/list", () => ({
-			tools: progressive ? DISCOVERY_TOOLS : tools.map(listedTool),
+			tools: catalogue ?? tools.map(listedTool),
 		}));
 		server.setRequestHandler("tools/call", async ({ params }, ctx) => {
 			const values = params.arguments ?? {};
-			if (!progressive) return callCommandTool(app, toolNamed(params.name), values, ctx);
+			if (catalogue === undefined) return callCommandTool(app, toolNamed(params.name), values, ctx);
 			switch (params.name) {
 				case "search_tools": {
 					const { query, limit = SEARCH_LIMIT_DEFAULT } = values;
@@ -246,8 +246,11 @@ async function serverFactory(app: AnyCrust, options: McpToolsOptions): Promise<(
 					) {
 						throw invalid(`search_tools: limit must be an integer from 1 to ${SEARCH_LIMIT_MAX}`);
 					}
-					search ??= import("@crustjs/utils/search").then(({ createSearchIndex }) =>
-						createSearchIndex(tools.map((tool) => searchItem(byName.get(tool.name)!))),
+					search ??= import("@crustjs/utils/search").then(
+						({ commandSearchItem, createSearchIndex }) =>
+							createSearchIndex(
+								tools.map((tool) => commandSearchItem(tool.path, byName.get(tool.name)![1])),
+							),
 					);
 					return discovered(
 						(await search)(query, limit).map((at) => {
@@ -299,7 +302,7 @@ async function serverFactory(app: AnyCrust, options: McpToolsOptions): Promise<(
  */
 export async function createMcpServer(
 	app: AnyCrust,
-	options: McpToolsOptions = {},
+	options: McpServerOptions = {},
 ): Promise<Server> {
 	return (await serverFactory(app, options))();
 }
@@ -313,7 +316,7 @@ export async function createMcpServer(
  *
  * @throws before serving, when the snapshot cannot be prepared or the tool manifest is invalid
  */
-export async function serveStdio(app: AnyCrust, options: McpToolsOptions = {}): Promise<void> {
+export async function serveStdio(app: AnyCrust, options: McpServerOptions = {}): Promise<void> {
 	const createServer = await serverFactory(app, options);
 	const { StdioServerTransport, serveStdio: serve } =
 		await import("@modelcontextprotocol/server/stdio");

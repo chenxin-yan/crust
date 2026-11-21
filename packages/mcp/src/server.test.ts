@@ -12,15 +12,19 @@ import { json, nextSteps } from "@crustjs/extensions";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { createMcpServer, serveStdio, toolResultFromOutcome } from "./server.ts";
-import type { McpToolsOptions } from "./tools.ts";
+import {
+	createMcpServer,
+	type McpServerOptions,
+	serveStdio,
+	toolResultFromOutcome,
+} from "./server.ts";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
 	for (const cleanup of cleanups.splice(0)) await cleanup();
 });
 
-async function connect(app: AnyCrust, options: McpToolsOptions = {}) {
+async function connect(app: AnyCrust, options: McpServerOptions = {}) {
 	const server = await createMcpServer(app, options);
 	const client = new Client({ name: "test-client", version: "0.0.0" });
 	const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
