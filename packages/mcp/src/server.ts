@@ -1,9 +1,10 @@
 import { type AnyCrust, type CommandSnapshot, CrustError, type RunOutcome } from "@crustjs/core";
-import { createCommandIndex, parseCommandInput, type RunInputPayload } from "@crustjs/core/tooling";
+import { parseCommandInput, type RunInputPayload } from "@crustjs/core/tooling";
 import { isJsonObject, parseJsonValue } from "@crustjs/utils/json";
 // Type-only: the SDK loads inside the server functions, so CLIs pay for it only when `mcp` runs.
 import type { CallToolResult, Server, ServerContext, Tool } from "@modelcontextprotocol/server";
 
+import { createToolIndex, type ToolEntry } from "./tool-index.ts";
 import { type McpTool, type McpToolsOptions, toolsFromSnapshot } from "./tools.ts";
 
 /** Server `version` when the root command declares none; the SDK requires one. */
@@ -72,9 +73,6 @@ function resultFromOutcome(outcome: RunOutcome<unknown>): CallToolResult {
 			return { ...text(failureText(outcome)), isError: true };
 	}
 }
-
-/** A manifest entry with the snapshot of its command. */
-type ToolEntry = readonly [McpTool, CommandSnapshot];
 
 /** What `tools/list` and `get_tool_details` say about a tool: everything but the fields run() routing uses. */
 function listedTool({
@@ -196,12 +194,7 @@ async function serverFactory(app: AnyCrust, options: McpToolsOptions): Promise<(
 		tools.map((tool) => [tool.name, [tool, commandAt(tool.path)]]),
 	);
 	const index =
-		options.discovery === "progressive"
-			? createCommandIndex(
-					[...byName.values()].map(([tool, command]) => ({ path: tool.path, command })),
-				)
-			: undefined;
-	const byPath = new Map(tools.map((tool) => [JSON.stringify(tool.path), tool]));
+		options.discovery === "progressive" ? createToolIndex([...byName.values()]) : undefined;
 	const { ProtocolError, ProtocolErrorCode, Server } = await import("@modelcontextprotocol/server");
 	const invalid = (message: string) => new ProtocolError(ProtocolErrorCode.InvalidParams, message);
 	const toolNamed = (name: string): ToolEntry => {
@@ -236,10 +229,11 @@ async function serverFactory(app: AnyCrust, options: McpToolsOptions): Promise<(
 						throw invalid(`search_tools: limit must be an integer from 1 to ${SEARCH_LIMIT_MAX}`);
 					}
 					return discovered(
-						index.search(query, limit).map((path) => {
-							const { name, description } = byPath.get(JSON.stringify(path))!;
-							return description === undefined ? { name } : { name, description };
-						}),
+						index
+							.search(query, limit)
+							.map(({ name, description }) =>
+								description === undefined ? { name } : { name, description },
+							),
 					);
 				}
 				case "get_tool_details": {
@@ -276,7 +270,7 @@ async function serverFactory(app: AnyCrust, options: McpToolsOptions): Promise<(
  * `outputSchema` whose call yields only captured stdout returns `isError`,
  * since MCP requires its `structuredContent` otherwise. With `discovery: "progressive"`,
  * `tools/list` returns only `search_tools`, `get_tool_details`, and `call_tool`, which
- * search ({@link createCommandIndex}), describe, and call the same tools.
+ * search, describe, and call the same tools.
  *
  * Connected to a transport, the server speaks MCP 2025-11-25 and earlier;
  * {@link serveStdio} also serves 2026-07-28.

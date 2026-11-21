@@ -73,22 +73,21 @@ const documentation = buildCommandDocumentation(snapshot);
 const visible = visibleSectionsFor(snapshot, defineExtensionId("acme:web-docs"));
 ```
 
-| Export                                                                             | Role                                                                        |
-| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `BUILD_OUT_DIR_ENV` / `SNAPSHOT_PATH_ENV`                                          | Environment variable names for the first-party subprocess protocol          |
-| `buildCommandDocumentation()`                                                      | Builds a renderer-ready documentation tree from a Command Snapshot          |
-| `formatDefault()` / `formatDescription()`                                          | Formats input defaults and descriptions                                     |
-| `isListed()` / `sectionsFor()` / `visibleSectionsFor()`                            | Filters commands and sections for an Extension identity                     |
-| `isInstalledCommandName()` / `INSTALLED_COMMAND_NAME_RULE`                         | Checks and describes the installed command name rule                        |
-| `CommandDocumentation` / `DocumentationArg` / `DocumentationFlag` / `UsageSegment` | Documentation model types                                                   |
-| `CommandSnapshot`                                                                  | Same type as the root export, for tooling-only imports                      |
-| `parseFlagValues()` / `FlagEnvironment`                                            | Resolves flags from their `env` bindings without argv                       |
-| `commandInputSchema()` / `CommandInputSchema` / `CommandInputPropertySchema`       | Describes a command's flat JSON input as JSON Schema                        |
-| `parseCommandInput()` / `RunInputPayload` / `RunInputValue`                        | Splits flat JSON input into structured `run()` input                        |
-| `commandInputFields()` / `CommandInputFields`                                      | Lists a command's arg names and `url` fields for that split                 |
-| `RAW_INPUT_PROPERTY`                                                               | Name of the passthrough input property (`"raw"`)                            |
-| `standardJsonSchema()`                                                             | Converts a Standard Schema's input or output type to JSON Schema            |
-| `createCommandIndex()` / `CommandIndex`                                            | Ranks commands for a task in words, as `search()` and MCP `search_tools` do |
+| Export                                                                             | Role                                                               |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `BUILD_OUT_DIR_ENV` / `SNAPSHOT_PATH_ENV`                                          | Environment variable names for the first-party subprocess protocol |
+| `buildCommandDocumentation()`                                                      | Builds a renderer-ready documentation tree from a Command Snapshot |
+| `formatDefault()` / `formatDescription()`                                          | Formats input defaults and descriptions                            |
+| `isListed()` / `sectionsFor()` / `visibleSectionsFor()`                            | Filters commands and sections for an Extension identity            |
+| `isInstalledCommandName()` / `INSTALLED_COMMAND_NAME_RULE`                         | Checks and describes the installed command name rule               |
+| `CommandDocumentation` / `DocumentationArg` / `DocumentationFlag` / `UsageSegment` | Documentation model types                                          |
+| `CommandSnapshot`                                                                  | Same type as the root export, for tooling-only imports             |
+| `parseFlagValues()` / `FlagEnvironment`                                            | Resolves flags from their `env` bindings without argv              |
+| `commandInputSchema()` / `CommandInputSchema` / `CommandInputPropertySchema`       | Describes a command's flat JSON input as JSON Schema               |
+| `parseCommandInput()` / `RunInputPayload` / `RunInputValue`                        | Splits flat JSON input into structured `run()` input               |
+| `commandInputFields()` / `CommandInputFields`                                      | Lists a command's arg names and `url` fields for that split        |
+| `RAW_INPUT_PROPERTY`                                                               | Name of the passthrough input property (`"raw"`)                   |
+| `standardJsonSchema()`                                                             | Converts a Standard Schema's input or output type to JSON Schema   |
 
 The [tooling entry point](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/tooling.ts) is the full export list.
 

@@ -1,12 +1,17 @@
-import type { CommandSnapshot } from "./snapshot.ts";
+import type { CommandSnapshot } from "@crustjs/core";
 
-/** A built index; see {@link createCommandIndex}. */
-export interface CommandIndex {
+import type { McpTool } from "./tools.ts";
+
+/** A manifest entry with the snapshot of its command. */
+export type ToolEntry = readonly [McpTool, CommandSnapshot];
+
+/** A built index; see {@link createToolIndex}. */
+export interface ToolIndex {
 	/**
-	 * Up to `limit` canonical paths that match the words of `query`, best first,
-	 * ties in path order. Commands that match no word are left out.
+	 * Up to `limit` tools that match the words of `query`, best first, ties in
+	 * command path order. Tools that match no word are left out.
 	 */
-	search(query: string, limit: number): readonly (readonly string[])[];
+	search(query: string, limit: number): readonly McpTool[];
 }
 
 // Command words outrank description words, which outrank argument and flag words.
@@ -51,19 +56,14 @@ function fieldMatch(field: Field, word: string, wordStem: string): number {
 }
 
 /**
- * Build a search index over `commands`, each a canonical path (`[]` for the
- * root) with its snapshot. The caller picks the commands. Indexed: the path,
- * `meta.name` and `meta.aliases`, `meta.description`, and the names and descriptions
- * of arguments and of flags no Extension declares. The score of a command is
- * the same whatever else is indexed, so two indexes rank shared commands alike.
+ * Build the index `search_tools` ranks with. Indexed per tool: its command
+ * path, `meta.name` and `meta.aliases`, its description, and the names and
+ * descriptions of its arguments and of flags no Extension declares.
  *
  * shortcut: a linear scan with fixed field weights and plural-only stemming;
- * move to MiniSearch (inverted index, fuzzy matching, BM25) if ranking or
- * query time on large trees falls short.
+ * move to an inverted index if query time on large tool lists falls short.
  */
-export function createCommandIndex(
-	commands: readonly { readonly path: readonly string[]; readonly command: CommandSnapshot }[],
-): CommandIndex {
+export function createToolIndex(entries: readonly ToolEntry[]): ToolIndex {
 	// Generated commands repeat their texts (shared flags, templated descriptions), so split each text once.
 	const split = new Map<string, readonly string[]>();
 	const fieldOf = (texts: readonly (string | undefined)[]): Field => {
@@ -80,11 +80,11 @@ export function createCommandIndex(
 		}
 		return { exact, stems };
 	};
-	const entries = commands.map(({ path, command }) => ({
-		path,
-		key: path.join(" "),
+	const indexed = entries.map(([tool, command]) => ({
+		tool,
+		key: tool.path.join(" "),
 		fields: [
-			[PATH_WEIGHT, fieldOf([...path, command.meta.name, ...(command.meta.aliases ?? [])])],
+			[PATH_WEIGHT, fieldOf([...tool.path, command.meta.name, ...(command.meta.aliases ?? [])])],
 			[DESCRIPTION_WEIGHT, fieldOf([command.meta.description])],
 			[
 				INPUT_WEIGHT,
@@ -100,7 +100,7 @@ export function createCommandIndex(
 	return {
 		search(query, limit) {
 			const queryWords = [...new Set(words(query))].map((word) => [word, stem(word)] as const);
-			return entries
+			return indexed
 				.map((entry) => ({
 					entry,
 					score: queryWords.reduce(
@@ -119,7 +119,7 @@ export function createCommandIndex(
 						(a.entry.key < b.entry.key ? -1 : a.entry.key > b.entry.key ? 1 : 0),
 				)
 				.slice(0, limit)
-				.map(({ entry }) => entry.path);
+				.map(({ entry }) => entry.tool);
 		},
 	};
 }

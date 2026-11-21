@@ -90,7 +90,7 @@ mcpExtension({ app: (): AnyCrust => app, discovery: "progressive" });
 
 The three tools are the same for the server's whole life; the protocol does not let a server add tools as a side effect of other requests. `exclude`, `include`, and the rules above still decide which tools exist, so `search_tools` never finds a hidden, excluded, or unincluded Extension command, and `call_tool` and `get_tool_details` answer such names with `InvalidParams`, as `tools/call` does. A missing `query` or `name`, a `limit` out of range, or `arguments` that are not an object are `InvalidParams` too. The three tools advertise no `outputSchema`.
 
-`search_tools` ranks with `createCommandIndex()` from `@crustjs/core/tooling`, the index the [`search()`](/docs/modules/extensions/search) command uses, so both rank a command alike: command names and aliases first, then descriptions, then argument and flag names and descriptions.
+`search_tools` matches the words of `query` against each tool's command names and aliases first, then its description, then its argument and flag names and descriptions.
 
 ## Results
 
