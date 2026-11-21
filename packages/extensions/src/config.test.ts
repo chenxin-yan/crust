@@ -20,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import { config } from "./config.ts";
 import { help } from "./help.ts";
 import { input } from "./input.ts";
+import { version } from "./version.ts";
 
 let root: string;
 let userDir: string;
@@ -159,34 +160,61 @@ describe("config()", () => {
 		["{ org: s3cret", "Invalid JSON in config file"],
 		['["s3cret"]', "must contain a JSON object"],
 		["", "Invalid JSON in config file"],
-	])(
-		"rejects a malformed file by path without printing it, even for --help: %j",
-		async (text, message) => {
-			write(userFile(), text);
-			const app = acme("config").app.extend(help());
-			for (const argv of [[], ["--help"]]) {
-				const { exitCode, stderr } = await captureExecute(app, argv, { env: {} });
-				expect(exitCode).toBe(1);
-				expect(stderr).toContain(userFile());
-				expect(stderr).toContain(message);
-				expect(stderr).not.toContain("s3cret");
-			}
-		},
-	);
+	])("rejects a malformed file by path without printing it: %j", async (text, message) => {
+		write(userFile(), text);
+		const { exitCode, stderr } = await captureExecute(acme("config").app, [], { env: {} });
+		expect(exitCode).toBe(1);
+		expect(stderr).toContain(userFile());
+		expect(stderr).toContain(message);
+		expect(stderr).not.toContain("s3cret");
+	});
+
+	it("answers --help and --version with a broken file, binding none of its values", async () => {
+		write(projectFile(), "{ not json");
+		const seen: ExtensionContext["sources"]["flags"][] = [];
+		const app = new Crust("acme")
+			.flags(flags)
+			.extend(
+				// Registered after config(): its setup still sees no config values.
+				config({ name: "acme", project: "acme.config.json" }),
+				defineExtension(defineExtensionId("seen")).setup(
+					(ctx) => void seen.push(ctx.sources.flags),
+				),
+				help(),
+				version("1.2.3"),
+			)
+			.action(() => "ran");
+		const helped = await captureExecute(app, ["--help"], { env: {} });
+		expect(helped).toMatchObject({ exitCode: 0, stderr: "" });
+		expect(helped.stdout).toContain("[config: port]");
+		expect(await captureExecute(app, ["--version"], { env: {} })).toMatchObject({
+			exitCode: 0,
+			stdout: expect.stringContaining("1.2.3"),
+		});
+		expect(await captureExecute(app, [], { env: {} })).toEqual({
+			exitCode: 1,
+			stdout: "",
+			stderr: `Error: Invalid JSON in config file ${projectFile()}.`,
+		});
+		expect(seen).toEqual([
+			{ region: "default", help: "argv" },
+			{ region: "default", version: "argv" },
+			{ region: "default" },
+		]);
+	});
 
 	const posix = process.platform !== "win32";
 	const MiB = 1024 * 1024;
 	/** `{"org":"x"}` padded with spaces to `size` bytes. */
 	const sized = (size: number) => JSON.stringify({ org: "x" }).padEnd(size, " ");
 
-	/** A file error fails the command and `--help` alike, naming only the path. */
+	/** A file error fails the command, naming only the path; `--help` still answers. */
 	async function expectFileError(path: string, message: string) {
 		const app = acme("config").app.extend(help());
-		for (const argv of [[], ["--help"]]) {
-			const { exitCode, stderr } = await captureExecute(app, argv, { env: {} });
-			expect({ exitCode, stderr }).toEqual({ exitCode: 1, stderr: `Error: ${message}` });
-			expect(stderr).toContain(path);
-		}
+		const { exitCode, stderr } = await captureExecute(app, [], { env: {} });
+		expect({ exitCode, stderr }).toEqual({ exitCode: 1, stderr: `Error: ${message}` });
+		expect(stderr).toContain(path);
+		expect(await captureExecute(app, ["--help"], { env: {} })).toMatchObject({ exitCode: 0 });
 	}
 
 	it("reads a file of exactly 1 MiB and rejects a larger one", async () => {

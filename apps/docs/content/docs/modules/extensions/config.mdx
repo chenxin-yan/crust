@@ -55,7 +55,7 @@ Values are converted and validated as typed `run()` input, then by the flag's `c
 
 ## Errors
 
-- **Malformed file**: a path that cannot be searched or read, a directory, FIFO, or other non-regular file, a file larger than 1 MiB, invalid JSON, or JSON that is not an object fails every command that reads the file, `--help` included, with a `PARSE` [`CrustError`](/docs/api/errors) naming the path, such as `Invalid JSON in config file /repo/acme.config.json.` The message never quotes the file.
+- **Malformed file**: a path that cannot be searched or read, a directory, FIFO, or other non-regular file, a file larger than 1 MiB, invalid JSON, or JSON that is not an object fails every command that reads the file with a `PARSE` [`CrustError`](/docs/api/errors) naming the path, such as `Invalid JSON in config file /repo/acme.config.json.` The message never quotes the file. `config()` raises it in `preRun`, when the action is about to run, so `--help` and `--version` still answer; until then no hook sees a value from either file.
 - **Invalid value**: a value of the wrong type fails like an invalid environment value, naming the file and key but not the value, such as `Expected a number for --port (from /repo/acme.config.json key "port").` It does not block `--help` or `--version`.
 - **Schema issues**: a schema-backed flag's issue names its origin, such as `flags.region (from /repo/acme.config.json key "region"): …`. The message after it is the schema's own and may quote the value.
 

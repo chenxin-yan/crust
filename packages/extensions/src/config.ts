@@ -1,4 +1,5 @@
 import {
+	type ExtensionContext,
 	type ExtensionFactory,
 	type ExtensionId,
 	CrustError,
@@ -22,6 +23,9 @@ export interface ConfigOptions {
 type ConfigValues = Readonly<Record<string, RunInputValue>>;
 
 const MAX_BYTES = 1024 * 1024;
+
+/** Per invocation: why the files could not be read, raised in `preRun` so `--help` answers first. */
+const fileErrors = /* @__PURE__ */ new WeakMap<ExtensionContext, unknown>();
 
 function isMissing(cause: unknown): boolean {
 	return (
@@ -105,6 +109,25 @@ function readConfigFile(path: string): ConfigValues | undefined {
 	return values as ConfigValues;
 }
 
+/** The project file, then the user file, each when it exists. */
+async function readLayers(
+	options: ConfigOptions,
+): Promise<{ path: string; values: ConfigValues }[]> {
+	const paths: string[] = [];
+	if (options.project !== undefined) {
+		const project = findUp(options.project, process.cwd());
+		if (project) paths.push(project);
+	}
+	if (options.user) {
+		const { configDir } = await import("@crustjs/store");
+		paths.push(process.getBuiltinModule("node:path").join(configDir(options.name), "config.json"));
+	}
+	return paths.flatMap((path) => {
+		const values = readConfigFile(path);
+		return values ? [{ path, values }] : [];
+	});
+}
+
 /** JSON has no URL type: a `url` flag's string becomes a `URL`; anything else fails in core. */
 function toUrl(value: RunInputValue): RunInputValue {
 	return typeof value === "string" && URL.canParse(value) ? new URL(value) : value;
@@ -114,41 +137,38 @@ function toUrl(value: RunInputValue): RunInputValue {
  * Fills flags that declare a `config` key from JSON files: the project file found by walking
  * up from the working directory, then the user file. argv, typed `run()` input, `env` and
  * plain `bindInput` values win; the flag's default loses. It binds in `setup`, so every
- * `preRun` sees the values whatever the `.extend()` order. Reads no file when the routed
- * command has no flag with a `config` key.
+ * `preRun` sees the values whatever the `.extend()` order. A file it cannot read fails the
+ * invocation in `preRun`, so `--help` and `--version` still answer. Reads no file when the
+ * routed command has no flag with a `config` key.
  */
 export const config: ExtensionFactory<[options: ConfigOptions]> = /* @__PURE__ */ defineExtension(
 	CONFIG,
 ).factory((extension, options: ConfigOptions) =>
-	extension.setup(async (ctx) => {
-		const keyed = Object.entries(ctx.command.flags).flatMap(([name, flag]) =>
-			flag.config === undefined ? [] : [{ name, key: flag.config, url: flag.type === "url" }],
-		);
-		if (keyed.length === 0) return;
-		const paths: string[] = [];
-		if (options.project !== undefined) {
-			const project = findUp(options.project, process.cwd());
-			if (project) paths.push(project);
-		}
-		if (options.user) {
-			const { configDir } = await import("@crustjs/store");
-			paths.push(
-				process.getBuiltinModule("node:path").join(configDir(options.name), "config.json"),
+	extension
+		.setup(async (ctx) => {
+			const keyed = Object.entries(ctx.command.flags).flatMap(([name, flag]) =>
+				flag.config === undefined ? [] : [{ name, key: flag.config, url: flag.type === "url" }],
 			);
-		}
-		const layers = paths.flatMap((path) => {
-			const values = readConfigFile(path);
-			return values ? [{ path, values }] : [];
-		});
-		const flags: Record<string, RunInputValue> = {};
-		const from: Record<string, string> = {};
-		for (const { name, key, url } of keyed) {
-			const layer = layers.find(({ values }) => Object.hasOwn(values, key));
-			const value = layer?.values[key];
-			if (layer === undefined || value === undefined) continue;
-			flags[name] = url ? (Array.isArray(value) ? value.map(toUrl) : toUrl(value)) : value;
-			from[name] = `${layer.path} key "${key}"`;
-		}
-		ctx.bindInput({ flags }, { source: "config", from });
-	}),
+			if (keyed.length === 0) return;
+			let layers: { path: string; values: ConfigValues }[];
+			try {
+				layers = await readLayers(options);
+			} catch (error) {
+				fileErrors.set(ctx, error);
+				return;
+			}
+			const flags: Record<string, RunInputValue> = {};
+			const from: Record<string, string> = {};
+			for (const { name, key, url } of keyed) {
+				const layer = layers.find(({ values }) => Object.hasOwn(values, key));
+				const value = layer?.values[key];
+				if (layer === undefined || value === undefined) continue;
+				flags[name] = url ? (Array.isArray(value) ? value.map(toUrl) : toUrl(value)) : value;
+				from[name] = `${layer.path} key "${key}"`;
+			}
+			ctx.bindInput({ flags }, { source: "config", from });
+		})
+		.preRun((ctx) => {
+			if (fileErrors.has(ctx)) throw fileErrors.get(ctx);
+		}),
 );
