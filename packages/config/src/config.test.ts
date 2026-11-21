@@ -723,6 +723,52 @@ describe("review fixes", () => {
 	);
 });
 
+describe("flag: false settings and parsers", () => {
+	it("reads a flag: false setting whose name is no argv spelling, without and with a variable", async () => {
+		const config = defineConfig({ name: "acme", project: true }).flags({
+			"no-proxy": { type: "string", flag: false },
+			"no-cache": { type: "string", flag: false, env: { name: "ACME_NO_CACHE" } },
+		});
+		write(projectFile(), { "no-proxy": "local", "no-cache": "file" });
+		expect(await result(shows(config))).toEqual({ "no-proxy": "local", "no-cache": "file" });
+		const outcome = await shows(config).run(["show"], {}, { env: {} });
+		expect(outcome).toMatchObject({ status: "completed" });
+		process.env.ACME_NO_CACHE = "env";
+		try {
+			expect(await result(shows(config))).toMatchObject({ "no-cache": "env" });
+		} finally {
+			delete process.env.ACME_NO_CACHE;
+		}
+	});
+
+	it.each([
+		["a file value", { when: "x" }, {}],
+		["a default", {}, { default: ["x"] }],
+	])("refuses a parser that returns a promise for %s", async (_, file, extra) => {
+		const rejected = vi.fn();
+		process.on("unhandledRejection", rejected);
+		try {
+			const config = defineConfig({ name: "acme", project: true }).flags({
+				when: {
+					type: "string",
+					multiple: true,
+					parse: ((raw: string) => Promise.reject(new Error(raw))) as never,
+					...extra,
+				} as never,
+			});
+			write(projectFile(), Object.keys(file).length ? { when: ["x"] } : {});
+			await expect(result(shows(config))).rejects.toMatchObject({
+				code: "PARSE",
+				message: expect.stringContaining("parse must be synchronous"),
+			});
+			await new Promise((resolve) => setTimeout(resolve, 10));
+			expect(rejected).not.toHaveBeenCalled();
+		} finally {
+			process.off("unhandledRejection", rejected);
+		}
+	});
+});
+
 describe("defineConfig(options).flags(settings)", () => {
 	it("checks the files in defineConfig(), before any setting is declared", () => {
 		expect(() => defineConfig({ name: "acme", global: "a/b.json" } as never)).toThrow(

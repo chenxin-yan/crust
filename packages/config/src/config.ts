@@ -310,15 +310,28 @@ type AnyStore = Store<Record<string, unknown>>;
 function settled(key: string, def: ConfigFlagDef, value: unknown, where: string): unknown {
 	const { parse } = def;
 	if (parse === undefined || value === undefined) return value;
-	try {
-		return Array.isArray(value) ? value.map((item: string) => parse(item)) : parse(value as string);
-	} catch (cause) {
-		// As core shows a flag parser's message, so the parser must not echo a sensitive input.
-		const reason = cause instanceof Error ? cause.message : String(cause);
-		throw new CrustError("PARSE", `Invalid value for "${key}" in ${where}: ${reason}`).withCause(
-			cause,
-		);
-	}
+	const parseOne = (raw: string) => {
+		let parsed: unknown;
+		try {
+			parsed = parse(raw);
+		} catch (cause) {
+			// As core shows a flag parser's message, so the parser must not echo a sensitive input.
+			const reason = cause instanceof Error ? cause.message : String(cause);
+			throw new CrustError("PARSE", `Invalid value for "${key}" in ${where}: ${reason}`).withCause(
+				cause,
+			);
+		}
+		// As core refuses it for argv; the rejection is handled so it never goes unhandled.
+		if (process.getBuiltinModule("node:util/types").isPromise(parsed)) {
+			parsed.catch(() => {});
+			throw new CrustError(
+				"PARSE",
+				`Invalid value for "${key}" in ${where}: parse must be synchronous`,
+			);
+		}
+		return parsed;
+	};
+	return Array.isArray(value) ? value.map(parseOne) : parseOne(value as string);
 }
 
 function missingMessage(name: string, key: string, def: ConfigFlagDef, files: readonly string[]) {
@@ -460,13 +473,19 @@ function withSettings(
 		// The package applies `default` and `required` after the files; on the flag, core would apply
 		// them first.
 		const { flag, default: _default, required: _required, ...owned } = def;
+		// A setting without a flag reads only its variable: parsed under a fixed key, since its own name
+		// need not be a valid argv spelling, and without argv-only spellings.
+		const { short: _short, aliases: _aliases, ...envOnly } = owned;
+		const fromEnv = owned.env === undefined ? undefined : (envOnly as FlagDef);
 		const base = defineContext(key);
 		const withFlag = flag === false ? base : base.flags({ [key]: owned } as never);
 		const context = withFlag.setup(async ({ flags }) => {
 			// Core resolves env for a flag; a setting without one gets the same env handling here.
 			const given =
 				flag === false
-					? own(await parseFlagValues({ [key]: owned }, process.env), key)
+					? fromEnv === undefined
+						? undefined
+						: own(await parseFlagValues({ value: fromEnv }, process.env), "value")
 					: own(flags, key);
 			// `null` from a parser is a value: only undefined falls through, and a setting its flag or
 			// variable gave reads no file.
