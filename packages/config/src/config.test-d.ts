@@ -263,3 +263,18 @@ void builder.flags({ org: { type: "string" } }).flags;
 // A module that exports the builder for another to finish can name its type in a declaration.
 export const files: ConfigBuilder<true> = defineConfig({ name: "acme", global: true });
 void files.flags({ org: { type: "string" } }).global;
+
+// A definition typed as a union keeps each variant's value type; a flag it may not own is not typed.
+declare const either: { type: "string" } | { type: "string"; parse: (raw: string) => number };
+const unioned = defineConfig({ name: "acme", global: true }).flags({ x: either });
+type _Either = Expect<
+	Equal<FactoryValueOf<typeof unioned.settings.x>, string | number | undefined>
+>;
+declare const maybeFlag: { type: "number"; flag?: false };
+const maybe = defineConfig({ name: "acme", global: true }).flags({ y: maybeFlag });
+const usesMaybe = defineCommand("m", (command) =>
+	command.use(maybe.settings.y).action(async ({ ctx }) => ctx.y),
+);
+const maybeApp = new Crust("acme").extend(maybe.extension).add(usesMaybe);
+// @ts-expect-error -- `flag?: false` may own no flag, so typed input does not offer it
+void maybeApp.run(["m"], { flags: { y: 1 } });

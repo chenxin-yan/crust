@@ -53,8 +53,11 @@ const SETTING_PROPERTIES = {
 /** A config file: `true` for its default name, or a file name of your own ending in `.json`. */
 type ConfigFileOption = true | `${string}.json`;
 
-/** What a setting is once it can come from a file: no `default`, `required` or `flag` on the flag. */
-type FlagOf<D> = Omit<D, "default" | "required" | "flag">;
+/**
+ * What a setting is once it can come from a file: no `default`, `required` or `flag` on the flag.
+ * Distributed, so a definition typed as a union keeps each variant's own value type.
+ */
+type FlagOf<D> = D extends unknown ? Omit<D, "default" | "required" | "flag"> : never;
 
 /** The flags the Context owns: every setting without `flag: false`. */
 type ConfigFlags<F extends ConfigFlagsDef> = {
@@ -63,11 +66,14 @@ type ConfigFlags<F extends ConfigFlagsDef> = {
 	? D
 	: never;
 
-/** Each setting's value: inferred as the settings would be as flags (`required`, `default`, `choices`, `parse`). */
-type ConfigValue<F extends ConfigFlagsDef> = {
-	[K in keyof F]: Omit<F[K], "flag">;
-} extends infer D extends FlagsDef
-	? Readonly<ValidatedInput<[], D>["flags"]>
+/**
+ * A setting's value: inferred as the setting would be as a flag (`required`, `default`, `choices`,
+ * `parse`), for each variant of a definition typed as a union.
+ */
+type SettingValue<D> = D extends unknown
+	? { value: Omit<D, "flag"> } extends infer R extends FlagsDef
+		? ValidatedInput<[], R>["flags"]["value"]
+		: never
 	: never;
 
 /** The store field of a setting: what the user types, so a `parse` setting holds a string. */
@@ -83,9 +89,21 @@ type ConfigFileContent<F extends ConfigFlagsDef> = {
 	? { -readonly [K in keyof S]: InferStoreConfig<S>[K] }
 	: never;
 
-/** The flag a setting's Context owns: none for `flag: false`. */
+/** `true` for each variant of a definition that surely owns a flag: no `flag`, or `flag: undefined`. */
+type OwnsFlag<D> = D extends unknown
+	? "flag" extends keyof D
+		? D["flag" & keyof D] extends undefined
+			? true
+			: false
+		: true
+	: never;
+
+/**
+ * The flag a setting's Context owns: none for `flag: false`, and none in the types when a definition
+ * typed as a union or with an optional `flag` may not own one.
+ */
 type SettingFlags<F extends ConfigFlagsDef, K extends keyof F> = (
-	F[K] extends { flag: false } ? {} : { [P in K]: FlagOf<F[K]> }
+	[OwnsFlag<F[K]>] extends [true] ? { [P in K]: FlagOf<F[K]> } : {}
 ) extends infer D extends FlagsDef
 	? D
 	: never;
@@ -94,7 +112,7 @@ type SettingFlags<F extends ConfigFlagsDef, K extends keyof F> = (
 type SettingContext<F extends ConfigFlagsDef, K extends keyof F & string> = ContextFactory<
 	K,
 	void,
-	ConfigValue<F>[K],
+	SettingValue<F[K]>,
 	SettingFlags<F, K>
 >;
 
