@@ -495,7 +495,11 @@ describe("withFileLock", () => {
 		});
 		const fn = vi.fn(async () => {});
 		try {
-			await expect(withFileLock(filePath, fn, { operation: "write" })).rejects.toThrow();
+			await expect(withFileLock(filePath, fn, { operation: "write" })).rejects.toMatchObject({
+				code: "IO",
+				details: { path: filePath, operation: "write" },
+				cause: { message: "no host name" },
+			});
 			expect(fn).not.toHaveBeenCalled();
 			expect(existsSync(`${filePath}.lock`)).toBe(false);
 		} finally {

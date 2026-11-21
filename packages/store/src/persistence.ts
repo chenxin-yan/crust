@@ -513,11 +513,6 @@ export async function withFileLock<T>(
 ): Promise<T> {
 	const { open, rm } = process.getBuiltinModule("node:fs/promises");
 	const lockPath = `${filePath}.lock`;
-	// Before the lock exists, so a failure here leaves nothing to clean up.
-	const owner = JSON.stringify({
-		pid: process.pid,
-		host: process.getBuiltinModule("node:os").hostname(),
-	});
 	const lockError = (err: unknown) =>
 		new CrustStoreError(
 			"IO",
@@ -525,6 +520,14 @@ export async function withFileLock<T>(
 			{ path: filePath, operation: options.operation },
 			err,
 		);
+	// Before the lock exists, so a failure here leaves nothing to clean up.
+	let owner: string;
+	try {
+		const host = process.getBuiltinModule("node:os").hostname();
+		owner = JSON.stringify({ pid: process.pid, host });
+	} catch (err: unknown) {
+		throw lockError(err);
+	}
 	// On Windows a create or delete that races another process's delete of the same file
 	// fails with an access error. That is contention, until it outlasts a stale lock.
 	// TODO: Bun reports the delete's EPERM as EFAULT; drop EFAULT here once

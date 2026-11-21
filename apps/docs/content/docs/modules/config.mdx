@@ -95,7 +95,7 @@ Error: Invalid value for --region. Expected one of: us, eu
 - A missing required setting is a `VALIDATION` `CrustError` with one issue per setting (`path: "config.<name>"`), naming every place the value can come from. It fails when a command first reads `await ctx.config`, after `preRun` hooks.
 - A file's errors are the store's [`CrustStoreError`](/docs/modules/store#errors)s, naming the file and each key. They never repeat a value from the file.
 - A `parse` that throws on a file value is a `PARSE` `CrustError`, `Invalid value for "timeout" in <file>: <the parser's message>`, with the parser's error as its `cause`. As for a flag, a `parse` function's message is shown to the user, so it should not echo its input when the value may be sensitive.
-- A file must be valid as a whole: a wrong value fails even when a flag or a nearer file supplies that setting, so a bad value is reported the day it is written, not the day nothing overrides it.
+- A file must be valid as a whole: a value of the wrong type or outside `choices` fails even when a flag or a nearer file supplies that setting, so it is reported the day it is written, not the day nothing overrides it. A `parse` function is the exception: it runs only on the value that wins, so a file value it would reject is reported only when that value is used.
 - A quoted number or boolean (`"80"`, `"true"`) is accepted in a file although the published schema asks for the JSON type; other text, such as `"yes"` for a boolean, fails with `Expected boolean`.
 
 ## Writing the global file
