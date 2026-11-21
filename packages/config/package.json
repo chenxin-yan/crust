@@ -1,7 +1,7 @@
 {
 	"name": "@crustjs/config",
 	"version": "0.0.0",
-	"description": "A CLI's settings as one typed Crust Context, read from JSON config files",
+	"description": "A CLI's settings, read from JSON config files, as one typed Crust Context per setting",
 	"type": "module",
 	"sideEffects": false,
 	"license": "MIT",
