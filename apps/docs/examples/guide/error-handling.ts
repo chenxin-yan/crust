@@ -70,6 +70,51 @@ const configured = new Crust("app").action(async () => {
 });
 //#endregion
 
+//#region debug
+import { defineExtension, defineExtensionId } from "@crustjs/core";
+
+export const debug = defineExtension(defineExtensionId("acme:debug"))
+	.flags({ debug: { type: "boolean", description: "Print errors with their stack and causes" } })
+	// [!code highlight:12]
+	.onError((error, { flags, stderr }) => {
+		// A cancellation is not a bug: leave it to Crust.
+		if (flags.debug !== true || (error instanceof Error && error.name === "AbortError")) return;
+		// Stacks and messages only: other fields, such as a request's headers, can hold secrets.
+		const printed = new Set<unknown>();
+		for (let current: unknown = error; current !== undefined && !printed.has(current);) {
+			const text = current instanceof Error ? (current.stack ?? current.message) : String(current);
+			stderr(printed.size === 0 ? text : `Caused by: ${text}`);
+			printed.add(current);
+			current = current instanceof Error ? current.cause : undefined;
+		}
+		return true;
+	});
+
+const traced = new Crust("app").extend(debug).action(async () => {
+	await loadConfig("app.config.json");
+});
+//#endregion
+
+//#region quiet
+import { defineCommand } from "@crustjs/core";
+
+// [!code highlight:4]
+const quiet = defineContext("quiet")
+	.flags({
+		quiet: { type: "boolean", short: "q", description: "Print less", env: { name: "APP_QUIET" } },
+	})
+	.setup(({ flags }) => flags.quiet === true);
+
+const publish = defineCommand("publish", (command) =>
+	command.use(quiet).action(async ({ ctx, stdout }) => {
+		if (!(await ctx.quiet)) stdout("Uploading 3 files..."); // [!code highlight]
+		stdout("Published v1.2.0");
+	}),
+);
+
+const quieted = new Crust("app").provide(quiet()).add(publish);
+//#endregion
+
 const cancelled = new Crust("app").action(() => {
 	throw new DOMException("Cancelled", "AbortError");
 });
@@ -87,6 +132,8 @@ if (import.meta.main) {
 		validate: declared,
 		cleanup: deploy,
 		config: configured,
+		debug: traced,
+		quiet: quieted,
 		cancel: cancelled,
 		prompt: prompted,
 	}[process.argv[2] ?? ""];
