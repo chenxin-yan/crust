@@ -59,6 +59,56 @@ Values are converted and validated as typed `run()` input, then by the flag's `c
 - **Invalid value**: a value of the wrong type fails like an invalid environment value, naming the file and key but not the value, such as `Expected a number for --port (from /repo/acme.config.json key "port").` It does not block `--help` or `--version`.
 - **Schema issues**: a schema-backed flag's issue names its origin, such as `flags.region (from /repo/acme.config.json key "region"): …`. The message after it is the schema's own and may quote the value.
 
+## What `crust build` checks and writes
+
+`config()` adds a build hook, so [`crust build`](/docs/modules/crust#extension-artifacts) checks every flag that declares a key, across all commands, and writes a JSON Schema of the config file. Run time checks nothing.
+
+### One shape per key
+
+One file serves every command, so every flag that names a key must accept the same value: the flag's JSON Schema as [command input](/docs/modules/core#command-input-as-json) shows it, without its description and default. Flags may share a key when those are equal, also within one command. A flag with a custom `parse`, or a schema that cannot produce a JSON Schema command input uses, compares as its token type: a `string` flag with `parse: Number` is a string.
+
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../../examples/modules/extensions/config-types.ts
+</include>
+
+```sh
+$ crust build
+Error: Extension "crust:config" build failed: config: 1 problem needs a decision before this CLI can be built.
+
+  config key "port" is declared with different types:
+    acme serve --port  number
+    acme proxy --port  string
+    fix: give them one type, or give one of them another key
+```
+
+The error lists every such key. A flag may not declare the key `$schema`, which names the file's schema; that fails the build the same way.
+
+### The config file's JSON Schema
+
+When any flag declares a key, the build writes `config/schema.json` (draft 2020-12): one property per key with the flags' shared shape and the first description in command-tree order, a `$schema` property, and `additionalProperties: false`. For the [usage](#usage) example:
+
+```json title="config/schema.json"
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "acme config file",
+  "type": "object",
+  "properties": {
+    "$schema": { "type": "string", "description": "The JSON Schema this file follows" },
+    "org": { "type": "string" },
+    "region": { "type": "string", "enum": ["us", "eu"] }
+  },
+  "additionalProperties": false
+}
+```
+
+The file is in `.crust/root/config/` and beside each executable, `.crust/<platform>/bin/config/`, so an npm install has it at `node_modules/acme/config/schema.json`. Publish it where your users can reach it, and they point a config file at it so editors complete and check the keys:
+
+```json title="acme.config.json"
+{ "$schema": "https://acme.dev/config.schema.json", "org": "acme-corp" }
+```
+
+The schema describes the project file and the user file alike. `config()` ignores `$schema` and every other key no flag on the routed command declares, so an older CLI still reads a file written for a newer one. `--no-validate` skips build hooks, and with them the check and the schema.
+
 ## Security
 
 - Keep secrets out of config files: read tokens from `env` or a prompt. A project file is found in any parent directory, including one a cloned repository ships, so a config key must never choose where credentials are sent.

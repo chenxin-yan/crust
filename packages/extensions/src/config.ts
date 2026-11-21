@@ -139,12 +139,13 @@ function toUrl(value: RunInputValue): RunInputValue {
  * plain `bindInput` values win; the flag's default loses. It binds in `setup`, so every
  * `preRun` sees the values whatever the `.extend()` order. A file it cannot read fails the
  * invocation in `preRun`, so `--help` and `--version` still answer. Reads no file when the
- * routed command has no flag with a `config` key.
+ * routed command has no flag with a `config` key. `crust build` fails when flags give one key
+ * different value shapes, and otherwise writes the file's JSON Schema to `config/schema.json`.
  */
 export const config: ExtensionFactory<[options: ConfigOptions]> = /* @__PURE__ */ defineExtension(
 	CONFIG,
-).factory((extension, options: ConfigOptions) =>
-	extension
+).factory((extension, options: ConfigOptions) => {
+	const runtime = extension
 		.setup(async (ctx) => {
 			const keyed = Object.entries(ctx.command.flags).flatMap(([name, flag]) =>
 				flag.config === undefined ? [] : [{ name, key: flag.config, url: flag.type === "url" }],
@@ -170,5 +171,12 @@ export const config: ExtensionFactory<[options: ConfigOptions]> = /* @__PURE__ *
 		})
 		.preRun((ctx) => {
 			if (fileErrors.has(ctx)) throw fileErrors.get(ctx);
-		}),
-);
+		});
+	// `crust build` runs build hooks from source; literal property access lets a Crust-built
+	// bundle fold this and drop the schema builder.
+	return process.env.CRUST_INTERNAL_BUILD === "1"
+		? runtime
+		: runtime.build(async ({ snapshot }) =>
+				(await import("./config-build.ts")).configBuildArtifacts(snapshot),
+			);
+});
