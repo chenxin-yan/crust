@@ -120,7 +120,7 @@ $ my-cli schema deploy
 
 ## Dry run
 
-A command that can preview declares its own `dry-run` flag and returns the preview before asking for [confirmation](#confirmation), as `deploy` does above, so a dry run never prompts. Commands without the flag reject `--dry-run` as unknown instead of running for real. [`@crustjs/openapi`](/docs/modules/openapi)'s generated commands declare none: [`api preview`](#the-api-command) shows the request one would send.
+A command that can preview declares its own `dry-run` flag and returns the preview before asking for [confirmation](#confirmation), as `deploy` does above, so a dry run never prompts. Commands without the flag reject `--dry-run` as unknown instead of running for real. [`@crustjs/openapi`](/docs/modules/openapi)'s generated commands have no built-in dry run (a `--dry-run` flag on one is the API's own parameter, and the request is sent): [`api preview`](#the-api-command) shows the request without sending it.
 
 ```sh
 $ my-cli deploy prod --dry-run
@@ -208,14 +208,14 @@ For a CLI backed by an HTTP API, [`@crustjs/openapi`](/docs/modules/openapi) add
 
 With [`json()`](/docs/modules/extensions/json) registered, `api --list --json`, `api --spec <operationId> --json`, and `api <path> --json` print JSON data on stdout: the operations, the definition with its method, path, and parameters, or the parsed response body. A non-2xx response fails with the HTTP `status` in the error JSON's `details`; see [JSON output](/docs/modules/openapi#json-output).
 
-Agents and CI jobs can't complete a browser login. With [`@crustjs/auth`](/docs/modules/auth#the-token-status-and-logout), set `env: "ACME_TOKEN"` on `createAuth()` so that variable works without one, and pass `auth.token` to `bearerAuth()`. A `whoami` command that returns `auth.status()` tells an agent which credential is in use: `env`, `login`, or `none`. With [profiles](/docs/modules/auth#profiles), the profile variable picks the account without a flag or a prompt (`ACME_PROFILE=work`), and the token variable wins over every profile.
+Agents and CI jobs can't complete a browser login. With [`@crustjs/auth`](/docs/modules/auth#the-token-status-and-logout), set `env: "ACME_TOKEN"` on `createAuth()` so that variable works without one, and pass `auth.token` to `bearerAuth()`. A `whoami` command that returns `auth.status()` tells an agent which credential is in use: `env`, `login`, or `none`. With [profiles](/docs/modules/auth#profiles) and `profiles: { env: "ACME_PROFILE" }`, that variable picks the account without a flag or a prompt (`ACME_PROFILE=work`); without `env`, no variable is read. The token variable wins over every profile.
 
 ## Checklist
 
 - Every command, argument, and flag has a `description`.
 - Results are returned, not only printed.
 - Every command that returns data declares `.output()`: typed, validated, discoverable, and no duplicate text under `--json`.
-- [`json()`](/docs/modules/extensions/json), [`input()`](/docs/modules/extensions/input), and [`schema()`](/docs/modules/extensions/schema) are registered; a CLI with many commands adds [`search()`](/docs/modules/extensions/search).
+- [`json()`](/docs/modules/extensions/json), [`input()`](/docs/modules/extensions/input), and [`schema()`](/docs/modules/extensions/schema) are registered.
 - Long-running commands yield events.
 - Long-running work passes `signal` to what it awaits: CI cancellation, agent harnesses, and `timeout` stop a command with `SIGTERM`, which aborts the `signal` and runs cleanup; the process then ends by `SIGTERM` (shells report 143). Work that ignores it runs until it finishes or a second `SIGTERM` arrives, and still ends by `SIGTERM`.
 - Commands that can preview declare a `dry-run` flag; generated API commands are previewed with `api preview`.
