@@ -118,6 +118,7 @@ describe("telemetry() at startup", () => {
 	it("loads the store only when neither variable decides or `telemetry` runs", async () => {
 		const configHome = mkdtempSync(join(tmpdir(), "crust-telemetry-startup-"));
 		vi.stubEnv("XDG_CONFIG_HOME", configHome);
+		vi.stubEnv("APPDATA", configHome);
 		try {
 			const send = vi.fn(async () => {});
 			const app = new Crust("acme")

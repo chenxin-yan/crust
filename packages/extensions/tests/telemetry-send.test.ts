@@ -29,7 +29,8 @@ function runFixture(runtime: string, interrupt: boolean): Promise<Exit> {
 				...process.env,
 				CI: undefined,
 				DO_NOT_TRACK: undefined,
-				ACME_TELEMETRY: undefined,
+				// Decides by itself, so the run never reads the user's saved preference.
+				ACME_TELEMETRY: "1",
 				FIXTURE_WAIT: interrupt ? "1" : undefined,
 			},
 			timeout: 20_000,
