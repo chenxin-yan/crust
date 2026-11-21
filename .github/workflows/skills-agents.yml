@@ -48,14 +48,15 @@ jobs:
             exit 0
           fi
           version=$(node -p 'require("./packages/skills/package.json").devDependencies.skills')
-          # The file's first line names the version: a changeset only when an agent changed too.
-          # shellcheck disable=SC2016 # the backticks are Markdown
-          if git diff -U0 -- "$file" | grep -E '^[+-][^+-]' | grep -qv 'Generated from the agent registry'; then
-            printf -- '---\n"@crustjs/skills": patch\n---\n\nUpdate the agent list to `skills@%s`.\n' "$version" > .changeset/skills-agents.md
-          fi
           mkdir "$RUNNER_TEMP/out"
           cp "$file" "$RUNNER_TEMP/out/agents.generated.ts"
-          if [ -f .changeset/skills-agents.md ]; then cp .changeset/skills-agents.md "$RUNNER_TEMP/out/"; fi
+          # The lines above the table name the version and upstream's copyright: a changeset only
+          # when an agent changed.
+          agents() { sed -n '/^export const AGENTS/,$p'; }
+          if ! diff -q <(git show "HEAD:$file" | agents) <(agents < "$file") > /dev/null; then
+            # shellcheck disable=SC2016 # the backticks are Markdown
+            printf -- '---\n"@crustjs/skills": patch\n---\n\nUpdate the agent list to `skills@%s`.\n' "$version" > "$RUNNER_TEMP/out/changeset.md"
+          fi
           {
             echo "changed=true"
             echo "version=$version"
@@ -95,14 +96,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
           VERSION: ${{ needs.generate.outputs.version }}
         run: |
           # The other job ran the new package, so its output is data: two files by name, nothing else.
           case "$VERSION" in *[!0-9A-Za-z.+-]*|"") echo "unexpected version"; exit 1 ;; esac
           cp "$RUNNER_TEMP/in/agents.generated.ts" packages/skills/src/agents.generated.ts
-          if [ -f "$RUNNER_TEMP/in/skills-agents.md" ]; then
-            cp "$RUNNER_TEMP/in/skills-agents.md" .changeset/skills-agents.md
+          # One note per pull request, so a later bump does not overwrite an unreleased one.
+          if [ -f "$RUNNER_TEMP/in/changeset.md" ]; then
+            cp "$RUNNER_TEMP/in/changeset.md" ".changeset/skills-agents-$PR.md"
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
