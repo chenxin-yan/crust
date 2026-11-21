@@ -50,8 +50,8 @@ The settings are ordinary flags of the `config` Context, so Core resolves the fi
 
 ## The files
 
-- `global: true` reads `config.json` in `configDir(name)`; `project: true` reads `<name>.config.json`. Either may instead be a file name of your own, such as `global: "settings.json"` or `project: ".acme.json"`. A name must end in `.json` and cannot hold a directory: TypeScript rejects `"a/b.json"`, and `defineConfig()` throws a `DEFINITION` `CrustError` for it. Set at least one of the two.
-- The project file is looked for in the working directory, then in each parent up to the root. The first entry with that name is the project file.
+- `global: true` reads `config.json` in `configDir(name)`; `project: true` reads `<name>.config.json`. Either may instead be a file name of your own, such as `global: "settings.json"` or `project: ".acme.json"`. A name must end in `.json`, once, and cannot hold a directory: TypeScript rejects `"a/b.json"` and `"prefs.json.json"`, and `defineConfig()` throws a `DEFINITION` `CrustError` for them. Set at least one of the two. The app `name` cannot be `.` or `..`, and no setting may be named `$schema` (a file's pointer to its schema) or `__proto__`.
+- The project file is looked for in the working directory, then in each parent up to the root. The first entry with that name is the project file; a dangling symbolic link there reads as a missing file, and the search stops at it. A file in a shared ancestor, such as `/tmp` or the home directory, applies to everything below it, outside any repository too.
 - A missing file is no values. Reading creates no file or directory.
 - Keys the config does not declare are ignored, so a file may hold `"$schema"` or keys of a newer version of your CLI.
 - Both files are read as the store reads any file: only a regular file, or a symbolic link to one, of at most 16 MiB; a leading byte order mark is ignored.
@@ -94,7 +94,8 @@ Error: Invalid value for --region. Expected one of: us, eu
 
 - A missing required setting is a `VALIDATION` `CrustError` with one issue per setting (`path: "config.<name>"`), naming every place the value can come from. It fails when a command first reads `await ctx.config`, after `preRun` hooks.
 - A file's errors are the store's [`CrustStoreError`](/docs/modules/store#errors)s, naming the file and each key. They never repeat a value from the file.
-- A `parse` that throws on a file value is a `PARSE` `CrustError`, `Invalid value for "timeout" in <file>.`, with the parser's error as its `cause`.
+- A `parse` that throws on a file value is a `PARSE` `CrustError`, `Invalid value for "timeout" in <file>: <the parser's message>`, with the parser's error as its `cause`. As for a flag, a `parse` function's message is shown to the user, so it should not echo its input when the value may be sensitive.
+- A file must be valid as a whole: a wrong value fails even when a flag or a nearer file supplies that setting, so a bad value is reported the day it is written, not the day nothing overrides it.
 - A quoted number or boolean (`"80"`, `"true"`) is accepted in a file although the published schema asks for the JSON type; other text, such as `"yes"` for a boolean, fails with `Expected boolean`.
 
 ## Writing the global file

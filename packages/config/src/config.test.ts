@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -310,7 +318,8 @@ describe("errors", () => {
 			.command("show", (command) => command.use(config).action(async ({ ctx }) => ctx.config));
 		const { exitCode, stderr } = await captureExecute(app, ["show"]);
 		expect(exitCode).toBe(1);
-		expect(stderr).toContain(`Invalid value for "when" in ${projectFile()}.`);
+		// As core shows a parser's message for a flag, the file path shows it too.
+		expect(stderr).toContain(`Invalid value for "when" in ${projectFile()}: not a date`);
 	});
 
 	it("creates no file or directory when it reads", async () => {
@@ -403,4 +412,205 @@ describe("the factory", () => {
 		expect(stdout).toMatch(/region\s+Region \[default: "us"\] \[choices: us, eu\]/u);
 		expect(stdout).toMatch(/telemetry\s+\[env: ACME_TELEMETRY\]/u);
 	});
+});
+
+describe("review fixes", () => {
+	interface LooseCommand {
+		use(factory: unknown): LooseCommand;
+		action(run: (input: { ctx: { config: Promise<unknown> } }) => unknown): LooseCommand;
+	}
+	interface LooseApp {
+		provide(instance: unknown): LooseApp;
+		command(name: string, recipe: (command: LooseCommand) => LooseCommand): LooseApp;
+		run(path: string[], input: object, options?: object): Promise<unknown>;
+	}
+	/** An app whose `show` returns the settings of `config`, typed loosely for any config. */
+	function shows(config: unknown): LooseApp {
+		// SAFETY: test-only view of the same calls the typed tests make.
+		const app = new Crust("acme") as unknown as LooseApp;
+		return app
+			.provide((config as () => unknown)())
+			.command("show", (command) => command.use(config).action(async ({ ctx }) => ctx.config));
+	}
+	async function result(app: LooseApp, flags = {}) {
+		const outcome = (await app.run(["show"], { flags }, { env: {} })) as {
+			status: string;
+			result?: unknown;
+			error?: unknown;
+		};
+		if (outcome.status !== "completed") throw outcome.error;
+		return outcome.result as Record<string, unknown>;
+	}
+
+	it("keeps null from a parser as the winning value", async () => {
+		const config = defineConfig({
+			name: "acme",
+			global: true,
+			project: true,
+			flags: { mode: { type: "string", parse: (raw) => (raw === "off" ? null : raw) } },
+		});
+		write(projectFile(), { mode: "on" });
+		write(globalFile(), { mode: "global" });
+		expect(await result(shows(config), { mode: "off" })).toEqual({ mode: null });
+		write(projectFile(), { mode: "off" });
+		expect(await result(shows(config))).toEqual({ mode: null });
+	});
+
+	it.each([
+		["constructor", true],
+		["toString", true],
+		["constructor", false],
+		["toString", false],
+	])("reads a setting named %s (flag: %s) only from its own sources", async (name, flagged) => {
+		const setting = flagged
+			? { type: "string", required: true }
+			: { type: "string", flag: false, required: true };
+		// Object.fromEntries keeps `__proto__` an own key.
+		const flags = Object.fromEntries([[name, setting]]) as Record<string, { type: "string" }>;
+		const config = defineConfig({ name: "acme", global: true, project: true, flags });
+		await expect(result(shows(config))).rejects.toMatchObject({ code: "VALIDATION" });
+		write(projectFile(), JSON.parse(`{"${name}": "file"}`));
+		const values = await result(shows(config));
+		expect(Object.getOwnPropertyDescriptor(values, name)?.value).toBe("file");
+	});
+
+	it.each([true, false])(
+		"rejects a setting named __proto__ (flag: %s) at definition",
+		(flagged) => {
+			// Core refuses the name for a flag and for env parsing alike.
+			const setting = flagged ? { type: "string" } : { type: "string", flag: false };
+			const flags = Object.fromEntries([["__proto__", setting]]) as Record<
+				string,
+				{ type: "string" }
+			>;
+			expect(() => defineConfig({ name: "acme", global: true, flags })).toThrow(
+				expect.objectContaining({ code: "DEFINITION" }),
+			);
+		},
+	);
+
+	it("keeps its own copy of each setting, and a fresh array default per invocation", async () => {
+		const choices = ["a", "b"];
+		const config = defineConfig({
+			name: "acme",
+			global: true,
+			flags: {
+				tags: { type: "string", multiple: true, choices, default: ["a"] },
+			},
+		});
+		choices.push("z");
+		const app = new Crust("acme").provide(config()).command("show", (command) =>
+			command.use(config).action(async ({ ctx }) => {
+				const { tags } = await ctx.config;
+				const copy = [...tags];
+				tags.push("b");
+				return copy;
+			}),
+		);
+		expect(await app.run(["show"], {})).toMatchObject({ result: ["a"] });
+		expect(await app.run(["show"], {})).toMatchObject({ result: ["a"] });
+		expect(config.jsonSchema()).toMatchObject({
+			properties: { tags: { type: "array", items: { enum: ["a", "b"] }, default: ["a"] } },
+		});
+		write(globalFile(), { tags: ["z"] });
+		await expect(app.run(["show"], {})).resolves.toMatchObject({ status: "failed" });
+	});
+
+	it("reads and writes the global file where the config directory is now", async () => {
+		const config = defineConfig({ name: "acme", global: true, flags: { org: { type: "string" } } });
+		const app = shows(config);
+		write(globalFile(), { org: "first" });
+		expect(await result(app)).toEqual({ org: "first" });
+		process.env.XDG_CONFIG_HOME = join(root, "other");
+		process.env.APPDATA = join(root, "other");
+		const other = join(root, "other", "acme", "config.json");
+		write(other, { org: "second" });
+		expect(await result(app)).toEqual({ org: "second" });
+		await config.global.patch({ org: "patched" });
+		expect(JSON.parse(readFileSync(other, "utf8"))).toEqual({ org: "patched" });
+		expect(JSON.parse(readFileSync(globalFile(), "utf8"))).toEqual({ org: "first" });
+	});
+
+	it("fails on an invalid value in a file even when a flag overrides that setting", async () => {
+		const config = defineConfig({
+			name: "acme",
+			global: true,
+			flags: { region: { type: "string", choices: ["us", "eu"] } },
+		});
+		write(globalFile(), { region: "old" });
+		await expect(result(shows(config), { region: "us" })).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: { path: globalFile() },
+		});
+	});
+
+	it.each([
+		[
+			"a setting named $schema",
+			{ name: "acme", global: true, flags: { $schema: { type: "string" } } },
+		],
+		[
+			"a flag: false setting named $schema",
+			{ name: "acme", global: true, flags: { $schema: { type: "string", flag: false } } },
+		],
+		["the name .", { name: ".", global: true, flags: {} }],
+		["the name ..", { name: "..", global: true, flags: {} }],
+		[
+			"a file name whose stem ends in .json",
+			{ name: "acme", global: "prefs.json.json", flags: {} },
+		],
+	])("rejects %s at definition", (_, options) => {
+		expect(() => defineConfig(options as never)).toThrow(
+			expect.objectContaining({ code: "DEFINITION" }),
+		);
+	});
+
+	it("reads a project file in a directory whose name ends in .json", async () => {
+		const dir = join(root, "repo.json");
+		mkdirSync(dir);
+		process.chdir(dir);
+		write(join(dir, "acme.config.json"), { org: "dotted" });
+		const config = defineConfig({
+			name: "acme",
+			project: true,
+			flags: { org: { type: "string" } },
+		});
+		expect(await result(shows(config))).toEqual({ org: "dotted" });
+	});
+
+	it.skipIf(process.platform === "win32")(
+		"takes the first entry walking up, so a nearer dangling link reads as no values",
+		async () => {
+			write(projectFile(), { org: "far" });
+			symlinkSync(join(root, "missing.json"), join(cwd, "acme.config.json"));
+			const config = defineConfig({
+				name: "acme",
+				project: true,
+				flags: { org: { type: "string" } },
+			});
+			expect(await result(shows(config))).toEqual({ org: undefined });
+		},
+	);
+
+	it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+		"names the path when it cannot inspect a project file candidate",
+		async () => {
+			const { chmodSync } = await import("node:fs");
+			chmodSync(cwd, 0o000);
+			try {
+				const config = defineConfig({
+					name: "acme",
+					project: true,
+					flags: { org: { type: "string" } },
+				});
+				await expect(result(shows(config))).rejects.toMatchObject({
+					name: "CrustStoreError",
+					code: "IO",
+					details: { path: join(cwd, "acme.config.json"), operation: "read" },
+				});
+			} finally {
+				chmodSync(cwd, 0o755);
+			}
+		},
+	);
 });

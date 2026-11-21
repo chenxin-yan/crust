@@ -102,9 +102,23 @@ type KnownPropertiesBrand<D> = [Exclude<keyof D, AllKeys<ConfigFlagDef>>] extend
 		};
 
 /** A file name with a directory, or with no name before `.json`, would read another place. */
-type FileNameBrand<N> = N extends `${string}/${string}` | `${string}\\${string}` | ".json"
+type FileNameBrand<N> = N extends
+	| `${string}/${string}`
+	| `${string}\\${string}`
+	| ".json"
+	| `${string}.json.json`
 	? { readonly FIX_FILE_NAME: "a file name ending in .json, without a directory" }
 	: unknown;
+
+/** `.` and `..` would name a directory above the app's own. */
+type AppNameBrand<N> = N extends "." | ".."
+	? { readonly FIX_APP_NAME: "a name of its own, not . or .." }
+	: unknown;
+
+/** `$schema` is a file's pointer to its JSON Schema; core refuses `__proto__` as a flag name. */
+type ReservedNameBrand<F> = [Extract<keyof F, "$schema" | "__proto__">] extends [never]
+	? unknown
+	: { readonly FIX_RESERVED_NAME: "no setting may be named $schema or __proto__" };
 
 type NoFileBrand<G, P> = [G, P] extends [undefined, undefined]
 	? { readonly FIX_NO_FILE: "set global, project, or both" }
@@ -119,7 +133,8 @@ function fileName(name: string, option: "global" | "project", value: true | stri
 	if (value === undefined) return undefined;
 	const file =
 		value === true ? (option === "global" ? "config.json" : `${name}.config.json`) : value;
-	if (!/^[^/\\]+\.json$/u.test(file)) {
+	// The store refuses a name ending in .json, so `prefs.json.json` could never be read.
+	if (!/^[^/\\]+\.json$/u.test(file) || file.slice(0, -".json".length).endsWith(".json")) {
 		throw definitionError(
 			`${option} of config "${name}" must be true or a file name ending in .json, without a directory: got "${file}"`,
 		);
@@ -144,14 +159,17 @@ function ownSetting(name: string, key: string, def: ConfigFlagDef): ConfigFlagDe
 			`Setting "${key}" of config "${name}" is a string, number or boolean: a config file holds no ${(def as { type: string }).type}`,
 		);
 	}
-	const { flag: _flag, ...flag } = def;
+	const { flag, ...flagDef } = def;
+	let owned: FlagDef;
 	try {
-		defineFlag(flag as FlagDef);
+		// defineFlag's own copy, so changing the caller's definition later changes nothing here.
+		owned = defineFlag(flagDef as FlagDef);
 	} catch (error) {
 		if (!(error instanceof CrustError && error.is("DEFINITION"))) throw error;
 		throw definitionError(`Invalid setting "${key}" of config "${name}"`).withCause(error);
 	}
-	return def;
+	// SAFETY: the owned copy of a setting's flag definition, plus its own `flag`.
+	return (flag === undefined ? owned : { ...owned, flag }) as ConfigFlagDef;
 }
 
 /** The store field of each setting; a switch that cannot be negated is not negated in a file either. */
@@ -174,15 +192,41 @@ function storeFields(settings: readonly (readonly [string, ConfigFlagDef])[]): F
 	return Object.fromEntries(fields) as FieldsDef;
 }
 
-/** The nearest `file` from the working directory up, whatever it is: reading it checks the kind. */
-function findUp(file: string): string | undefined {
+/**
+ * The nearest entry named `file` from the working directory up, whatever it is: reading it checks
+ * the kind, and a dangling link reads as a missing file. Only a missing entry is skipped.
+ */
+function findUp(file: string, store: StoreModule): string | undefined {
 	const { dirname, join } = process.getBuiltinModule("node:path");
-	const { statSync } = process.getBuiltinModule("node:fs");
+	const { lstatSync } = process.getBuiltinModule("node:fs");
 	for (let dir = process.cwd(); ; dir = dirname(dir)) {
 		const path = join(dir, file);
-		if (statSync(path, { throwIfNoEntry: false }) !== undefined) return path;
+		try {
+			lstatSync(path);
+			return path;
+		} catch (error) {
+			const code = (error as { code?: unknown }).code;
+			if (code !== "ENOENT" && code !== "ENOTDIR") {
+				throw new store.CrustStoreError(
+					"IO",
+					`Failed to inspect store file: ${path}`,
+					{ path, operation: "read" },
+					error,
+				);
+			}
+		}
 		if (dirname(dir) === dir) return undefined;
 	}
+}
+
+type StoreModule = typeof import("@crustjs/store");
+
+/** A store for the file at `path`, wherever its directory is. */
+function storeAt(store: StoreModule, path: string, fields: FieldsDef): AnyStore {
+	const { basename, dirname, sep } = process.getBuiltinModule("node:path");
+	// The store takes a directory ending in `.json` for a file path; the separator says it is one.
+	const dirPath = `${dirname(path)}${sep}`;
+	return store.createStore({ dirPath, name: basename(path, ".json"), fields });
 }
 
 type FileValues = Readonly<Record<string, unknown>>;
@@ -195,7 +239,11 @@ function settled(key: string, def: ConfigFlagDef, value: unknown, where: string)
 	try {
 		return Array.isArray(value) ? value.map((item: string) => parse(item)) : parse(value as string);
 	} catch (cause) {
-		throw new CrustError("PARSE", `Invalid value for "${key}" in ${where}.`).withCause(cause);
+		// As core shows a flag parser's message, so the parser must not echo a sensitive input.
+		const reason = cause instanceof Error ? cause.message : String(cause);
+		throw new CrustError("PARSE", `Invalid value for "${key}" in ${where}: ${reason}`).withCause(
+			cause,
+		);
 	}
 }
 
@@ -224,10 +272,11 @@ export function defineConfig<
 	const F extends ConfigFlagsDef,
 	const G extends ConfigFileOption | undefined = undefined,
 	const P extends ConfigFileOption | undefined = undefined,
+	const N extends string = string,
 >(
 	options: {
 		/** The app name: the global file is in `configDir(name)`; the project file defaults to `<name>.config.json`. */
-		readonly name: string;
+		readonly name: N & AppNameBrand<N>;
 		/** `true` for `config.json` in `configDir(name)`, or a file name of your own there. */
 		readonly global?: G & FileNameBrand<G>;
 		/** `true` for `<name>.config.json`, or a file name of your own; the nearest from the working directory up. */
@@ -235,11 +284,11 @@ export function defineConfig<
 		// Same value brands as defineFlag (default within choices, synchronous parse), per setting.
 		readonly flags: F & {
 			readonly [K in keyof F]: LocalValueBrand<Omit<F[K], "flag">> & KnownPropertiesBrand<F[K]>;
-		};
+		} & ReservedNameBrand<F>;
 	} & NoFileBrand<G, P>,
 ): ConfigFactory<F, G> {
-	const { name } = options;
-	if (!/^[^/\\]+$/u.test(name)) {
+	const name: string = options.name;
+	if (!/^[^/\\]+$/u.test(name) || name === "." || name === "..") {
 		throw definitionError(`Config name "${name}" must be a non-empty name without a directory`);
 	}
 	const globalFile = fileName(name, "global", options.global);
@@ -247,33 +296,39 @@ export function defineConfig<
 	if (globalFile === undefined && projectFile === undefined) {
 		throw definitionError(`Config "${name}" reads no file: set global, project, or both`);
 	}
-	const settings = Object.entries(options.flags as ConfigFlagsDef).map(
-		([key, def]) => [key, ownSetting(name, key, def)] as const,
-	);
-	const flags: Record<string, FlagDef> = {};
-	const offline: Record<string, FlagDef> = {};
-	for (const [key, def] of settings) {
-		// The package applies `default` and `required` after the files; on the flag, core would apply them first.
-		const { flag, default: _default, required: _required, ...owned } = def;
-		(flag === false ? offline : flags)[key] = owned as FlagDef;
-	}
+	const settings = Object.entries(options.flags as ConfigFlagsDef).map(([key, def]) => {
+		// `$schema` in a file points editors at its JSON Schema; core refuses `__proto__` as a flag name
+		// and when it parses env, so neither can be a setting.
+		if (key === "$schema" || key === "__proto__") {
+			throw definitionError(`Config "${name}" cannot have a setting named "${key}"`);
+		}
+		return [key, ownSetting(name, key, def)] as const;
+	});
+	// The package applies `default` and `required` after the files; on the flag, core would apply
+	// them first. Built with fromEntries, so a key like `__proto__` stays an own property.
+	const flagsOf = (offline: boolean) =>
+		Object.fromEntries(
+			settings.flatMap(([key, def]) => {
+				const { flag, default: _default, required: _required, ...owned } = def;
+				return (flag === false) === offline ? [[key, owned]] : [];
+			}),
+		);
+	const flags = flagsOf(false);
+	const offline = flagsOf(true);
 	const fields = storeFields(settings);
 
-	let globalStore: Promise<AnyStore> | undefined;
-	const loadGlobalStore = () =>
-		(globalStore ??= import("@crustjs/store").then(
-			({ configDir, createStore }) =>
-				createStore({
-					dirPath: configDir(name),
-					name: globalFile!.slice(0, -".json".length),
-					fields,
-				}) as AnyStore,
-		));
-	const readProject = async (path: string | undefined): Promise<FileValues | undefined> => {
-		if (path === undefined) return undefined;
-		const { createStore } = await import("@crustjs/store");
-		const { basename, dirname } = process.getBuiltinModule("node:path");
-		return createStore({ dirPath: dirname(path), name: basename(path, ".json"), fields }).read();
+	// The import is cached, not a store: the config directory is resolved again for each use.
+	let storeModule: Promise<StoreModule> | undefined;
+	const loadStore = () =>
+		(storeModule ??= import("@crustjs/store").catch((error: unknown) => {
+			storeModule = undefined;
+			throw error;
+		}));
+	const globalAt = (store: StoreModule) =>
+		process.getBuiltinModule("node:path").join(store.configDir(name), globalFile!);
+	const globalStore = async () => {
+		const store = await loadStore();
+		return storeAt(store, globalAt(store), fields);
 	};
 
 	const where = [
@@ -297,27 +352,43 @@ export function defineConfig<
 			].join("\n"),
 		})
 		.setup(async ({ flags: parsed }) => {
-			const { configDir } = await import("@crustjs/store");
-			const projectPath = projectFile === undefined ? undefined : findUp(projectFile);
-			const globalPath =
-				globalFile === undefined
-					? undefined
-					: process.getBuiltinModule("node:path").join(configDir(name), globalFile);
+			const store = await loadStore();
+			const projectPath = projectFile === undefined ? undefined : findUp(projectFile, store);
+			const globalPath = globalFile === undefined ? undefined : globalAt(store);
+			const read = (path: string | undefined) =>
+				path === undefined ? undefined : storeAt(store, path, fields).read();
 			// Core resolves env for the flags; a setting without a flag gets the same env handling here.
 			const [fromProject, fromGlobal, fromEnv] = await Promise.all([
-				readProject(projectPath),
-				globalFile === undefined ? undefined : loadGlobalStore().then((store) => store.read()),
+				read(projectPath),
+				read(globalPath),
 				parseFlagValues(offline, process.env) as Promise<FileValues>,
 			]);
-			const given = parsed as FileValues;
+			// Own properties only: a setting named `constructor` must not read Object.prototype.
+			const own = (record: FileValues | undefined, key: string) =>
+				record !== undefined && Object.hasOwn(record, key) ? record[key] : undefined;
 			const issues: { message: string; path: string }[] = [];
 			const values = settings.map(([key, def]) => {
-				let value =
-					given[key] ??
-					fromEnv[key] ??
-					settled(key, def, fromProject?.[key], projectPath!) ??
-					settled(key, def, fromGlobal?.[key], globalPath!) ??
-					settled(key, def, def.default, "its default");
+				// The first source with a value wins; `null` from a parser is a value. Lazy, so a lower
+				// source's parser runs only when it is needed.
+				const sources = [
+					() => own(parsed, key),
+					() => own(fromEnv, key),
+					() => settled(key, def, own(fromProject, key), projectPath!),
+					() => settled(key, def, own(fromGlobal, key), globalPath!),
+					// A fresh array each time: an action may change the value it gets.
+					() =>
+						settled(
+							key,
+							def,
+							Array.isArray(def.default) ? [...def.default] : def.default,
+							"its default",
+						),
+				];
+				let value: unknown;
+				for (const source of sources) {
+					value = source();
+					if (value !== undefined) break;
+				}
 				if (value === undefined && def.required) {
 					const files = [
 						...(projectFile === undefined ? [] : [projectFile]),
@@ -342,11 +413,11 @@ export function defineConfig<
 	});
 	if (globalFile !== undefined) {
 		const global: AnyStore = {
-			read: async () => (await loadGlobalStore()).read(),
-			write: async (config, mutation) => (await loadGlobalStore()).write(config, mutation),
-			update: async (updater, mutation) => (await loadGlobalStore()).update(updater, mutation),
-			patch: async (partial, mutation) => (await loadGlobalStore()).patch(partial, mutation),
-			reset: async (mutation) => (await loadGlobalStore()).reset(mutation),
+			read: async () => (await globalStore()).read(),
+			write: async (config, mutation) => (await globalStore()).write(config, mutation),
+			update: async (updater, mutation) => (await globalStore()).update(updater, mutation),
+			patch: async (partial, mutation) => (await globalStore()).patch(partial, mutation),
+			reset: async (mutation) => (await globalStore()).reset(mutation),
 		};
 		Object.defineProperty(factory, "global", { value: Object.freeze(global), enumerable: true });
 	}
@@ -365,7 +436,9 @@ function settingSchema(def: ConfigFlagDef): Record<string, unknown> {
 	return {
 		...(def.multiple ? { type: "array", items: item } : item),
 		...(def.description === undefined ? {} : { description: def.description }),
-		...(def.default === undefined ? {} : { default: def.default }),
+		...(def.default === undefined
+			? {}
+			: { default: Array.isArray(def.default) ? [...def.default] : def.default }),
 	};
 }
 

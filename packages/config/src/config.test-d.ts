@@ -137,3 +137,13 @@ defineConfig({ name: "acme", project: "a\\b.json", flags: {} });
 defineConfig({ name: "acme", project: ".json", flags: {} });
 // @ts-expect-error -- a config reads at least one file
 defineConfig({ name: "acme", flags: {} });
+
+// Names the file or the store would read elsewhere, or not at all.
+// @ts-expect-error -- not the app's own directory
+defineConfig({ name: "..", global: true, flags: {} });
+// @ts-expect-error -- the store refuses a name ending in .json
+defineConfig({ name: "acme", global: "prefs.json.json", flags: {} });
+// @ts-expect-error -- `$schema` points a file at its JSON Schema
+defineConfig({ name: "acme", global: true, flags: { $schema: { type: "string" } } });
+// @ts-expect-error -- also without a flag
+defineConfig({ name: "acme", global: true, flags: { $schema: { type: "string", flag: false } } });
