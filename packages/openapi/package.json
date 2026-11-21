@@ -52,7 +52,7 @@
 		"@crustjs/mcp": "workspace:*",
 		"@crustjs/skills": "workspace:*",
 		"@crustjs/testing": "workspace:*",
-		"@crustjs/tsconfig": "workspace:*",
+		"@crustjs/internal-config": "workspace:*",
 		"@modelcontextprotocol/client": "^2.4.0",
 		"vite-plus": "catalog:"
 	},

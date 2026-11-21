@@ -1,4 +1,4 @@
 {
-	"extends": "@crustjs/tsconfig/tsconfig.base.json",
+	"extends": "@crustjs/internal-config/tsconfig.base.json",
 	"include": ["src", "tests", "scripts"]
 }

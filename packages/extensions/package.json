@@ -54,7 +54,7 @@
 	"devDependencies": {
 		"@crustjs/core": "workspace:*",
 		"@crustjs/testing": "workspace:*",
-		"@crustjs/tsconfig": "workspace:*",
+		"@crustjs/internal-config": "workspace:*",
 		"vite-plus": "catalog:"
 	},
 	"peerDependencies": {

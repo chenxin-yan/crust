@@ -60,7 +60,7 @@
 		}
 	},
 	"devDependencies": {
-		"@crustjs/tsconfig": "workspace:*",
+		"@crustjs/internal-config": "workspace:*",
 		"zod": "^4.6.7",
 		"vite-plus": "catalog:"
 	},

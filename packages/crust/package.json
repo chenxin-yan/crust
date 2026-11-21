@@ -64,7 +64,7 @@
 	"devDependencies": {
 		"@arethetypeswrong/core": "^0.18.5",
 		"@crustjs/testing": "workspace:*",
-		"@crustjs/tsconfig": "workspace:*",
+		"@crustjs/internal-config": "workspace:*",
 		"@crustjs/utils": "workspace:*",
 		"@types/semver": "^7.8.0",
 		"publint": "^0.3.25",

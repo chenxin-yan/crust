@@ -55,7 +55,7 @@
 		"@crustjs/core": "workspace:*",
 		"@crustjs/extensions": "workspace:*",
 		"@crustjs/testing": "workspace:*",
-		"@crustjs/tsconfig": "workspace:*",
+		"@crustjs/internal-config": "workspace:*",
 		"skills": "1.8.1",
 		"vite-plus": "catalog:"
 	},

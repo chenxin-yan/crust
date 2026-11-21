@@ -48,7 +48,7 @@
 		"@crustjs/core": "workspace:*",
 		"@crustjs/env": "workspace:*",
 		"@crustjs/testing": "workspace:*",
-		"@crustjs/tsconfig": "workspace:*",
+		"@crustjs/internal-config": "workspace:*",
 		"effect": "catalog:",
 		"vite-plus": "catalog:"
 	},

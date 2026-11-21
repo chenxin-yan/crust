@@ -1,0 +1,7 @@
+{
+	"name": "@crustjs/internal-config",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Configuration shared by the packages of this workspace; never published",
+	"license": "MIT"
+}

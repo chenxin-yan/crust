@@ -55,7 +55,7 @@
 	"devDependencies": {
 		"@crustjs/core": "workspace:*",
 		"@crustjs/openapi": "workspace:*",
-		"@crustjs/tsconfig": "workspace:*",
+		"@crustjs/internal-config": "workspace:*",
 		"@napi-rs/keyring": "^2.1.2",
 		"vite-plus": "catalog:"
 	},
