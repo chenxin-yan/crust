@@ -23,6 +23,8 @@ export interface IOErrorDetails {
  * read, write, update, or patch operations.
  */
 export interface ValidationErrorDetails {
+	/** Absolute path to the store file whose value failed validation. */
+	path: string;
 	/** The store operation during which validation failed. */
 	operation: "read" | "write" | "update" | "patch";
 	/** Structured validation issues for programmatic handling. */
@@ -89,7 +91,8 @@ export interface StoreErrorDetailsMap {
  * - `PARSE` — Malformed JSON in persisted config file
  * - `IO` — Filesystem read, write, or delete failure
  * - `VALIDATION` — Config object rejected by a store validator
- * - `DEFINITION` — A field mixes mutually exclusive definition modes, `strict` is combined
+ * - `DEFINITION` — A field mixes mutually exclusive definition modes or has a default outside
+ *   its `choices`, `strict` is combined
  *   with an `access` other than `"private"`, or a lock timeout is not a finite number of at
  *   least 0
  * - `LOCK` — A strict lock was not acquired before its deadline

@@ -81,6 +81,17 @@ function expectedTypeMessage(def: { type: ValueType; array?: true }): string {
 	return `Expected ${def.type}${def.array === true ? "[]" : ""}`;
 }
 
+/** The message for a value outside `choices`; never quotes the value, which may be a secret. */
+function outsideChoices(
+	def: { array?: true; choices?: readonly string[] },
+	value: JsonValue | undefined,
+): string | undefined {
+	if (def.choices === undefined) return undefined;
+	const items = def.array === true && Array.isArray(value) ? value : [value];
+	if (items.every((item) => def.choices!.includes(item as string))) return undefined;
+	return `Expected one of: ${def.choices.join(", ")}`;
+}
+
 function coerceByType(value: JsonValue, type: ValueType): JsonValue {
 	if (type === "number" && typeof value === "string") {
 		return tryCoerceNumber(value) ?? value;
@@ -200,6 +211,7 @@ function enqueue<T>(
  * @returns A {@link Store} instance with `read`, `write`, `update`, `patch`, and `reset` methods.
  * @throws {CrustStoreError} `PATH` if `dirPath` or `name` is invalid.
  * @throws {CrustStoreError} `DEFINITION` if a field mixes `schema` with `default` or `validate`,
+ *   a field's `default` is outside its `choices`,
  *   `strict` is combined with a non-private `access`, or a strict store's `lockTimeout` is not a
  *   finite number of at least 0.
  *
@@ -244,7 +256,12 @@ export function createStore<const F extends FieldsDef>(
 				}
 			}
 			validators.set(key, makeSchemaValidator(def.schema));
-		} else if (def.validate !== undefined) {
+			continue;
+		}
+		if (def.default !== undefined && outsideChoices(def, def.default) !== undefined) {
+			throw new CrustStoreError("DEFINITION", `field "${key}" has a default outside its choices`);
+		}
+		if (def.validate !== undefined) {
 			// SAFETY: each validator is only called for its own field after coercion and type checking.
 			validators.set(key, def.validate as FieldValidator);
 		}
@@ -322,6 +339,12 @@ export function createStore<const F extends FieldsDef>(
 				continue;
 			}
 
+			const choicesMessage = def.schema === undefined ? outsideChoices(def, value) : undefined;
+			if (choicesMessage !== undefined) {
+				issues.push({ message: choicesMessage, path: key });
+				continue;
+			}
+
 			const validator = validators.get(key);
 			if (!validator) continue;
 
@@ -354,6 +377,12 @@ export function createStore<const F extends FieldsDef>(
 					issues.push({ message: expectedTypeMessage(def), path: key });
 					continue;
 				}
+				const transformedChoices =
+					def.schema === undefined ? outsideChoices(def, transformed) : undefined;
+				if (transformedChoices !== undefined) {
+					issues.push({ message: transformedChoices, path: key });
+					continue;
+				}
 
 				// Persist-time path: if the transform changed the value, re-validate
 				// it. Compare structurally because Standard Schema parsers (e.g. Zod
@@ -373,9 +402,10 @@ export function createStore<const F extends FieldsDef>(
 
 		if (issues.length > 0) {
 			const lines = issues.map((i) => `  - ${i.path}: ${i.message}`);
-			const message = `Store validation failed (${operation})\n${lines.join("\n")}`;
+			const message = `Store validation failed (${operation}) in ${filePath}\n${lines.join("\n")}`;
 
 			throw new CrustStoreError("VALIDATION", message, {
+				path: filePath,
 				operation,
 				issues,
 			});

@@ -101,6 +101,7 @@ Windows uses inherited ACLs, so the bits are not enforced there, and a strict st
 
 - Core `validate` callbacks run on read and mutation and throw to reject. They may return `{ value }` to transform, but transforms apply only on mutation.
 - A schema field gives validation, transformation, defaults, and optionality to its Standard Schema v1 `schema`, and cannot also set `default` or `validate`. `read()` returns the schema output without writing it. The field's type is the schema's `types.output`, or its successful `validate()` result when `types` is omitted. An output that is not JSON data, such as `Date`, is a `FIX_JSON_OUTPUT` compile error; optional properties (`z.string().optional()`) are accepted, including under `exactOptionalPropertyTypes`.
+- A string field, scalar or array, may list `choices`. A literal tuple narrows the field's type to their union. `read()` and mutations reject any other value with `Expected one of: …`, which never repeats the value; a `default` outside the choices throws `DEFINITION`.
 - Mutations revalidate transformed values and reject transforms whose result would read back differently.
 - Mutations reject explicit `undefined` for defaulted core fields, and values JSON cannot round-trip, such as `NaN`, `Infinity`, `-0`, sparse arrays, `undefined` properties, and cycles.
 
@@ -114,6 +115,6 @@ try {
 }
 ```
 
-`CrustStoreError.code` is `PATH`, `PARSE`, `IO`, `VALIDATION`, `DEFINITION`, or `LOCK`; `.is(code)` narrows `details`. A strict store's refusals are `PATH` with `details.reason` set to `"symlink"` or `"directory"`; `LOCK` means a strict lock was not acquired before its deadline.
+`CrustStoreError.code` is `PATH`, `PARSE`, `IO`, `VALIDATION`, `DEFINITION`, or `LOCK`; `.is(code)` narrows `details`. A `VALIDATION` error names the file in its message and in `details.path`, with one entry per field in `details.issues`. A strict store's refusals are `PATH` with `details.reason` set to `"symlink"` or `"directory"`; `LOCK` means a strict lock was not acquired before its deadline.
 
 Store has no encryption, migrations, other formats, or synchronous methods. The [package entry point](https://github.com/chenxin-yan/crust/blob/main/packages/store/src/index.ts) lists every export.

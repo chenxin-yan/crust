@@ -208,6 +208,74 @@ describe("store.read", () => {
 			},
 		});
 	});
+
+	it("names the file of a value that fails validation", async () => {
+		const filePath = join(tempDir, "config.json");
+		await writeFile(filePath, JSON.stringify({ port: "x" }));
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: { port: { type: "number" } },
+		});
+
+		const error = await store.read().catch((err: unknown) => err);
+		expect(error).toMatchObject({ code: "VALIDATION", details: { path: filePath } });
+		expect((error as Error).message).toContain(filePath);
+	});
+
+	it("rejects a value outside choices, for a scalar and for each array item", async () => {
+		await writeFile(
+			join(tempDir, "config.json"),
+			JSON.stringify({ region: "mars", tags: ["a", "z"] }),
+		);
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: {
+				region: { type: "string", choices: ["us", "eu"] },
+				tags: { type: "string", array: true, choices: ["a", "b"] },
+			},
+		});
+
+		await expect(store.read()).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: {
+				issues: [
+					{ message: "Expected one of: us, eu", path: "region" },
+					{ message: "Expected one of: a, b", path: "tags" },
+				],
+			},
+		});
+		await expect(store.patch({ region: "eu", tags: ["b"] })).resolves.toEqual({
+			region: "eu",
+			tags: ["b"],
+		});
+	});
+
+	it("rejects a default outside choices at definition", () => {
+		expect(() =>
+			createStore({
+				dirPath: tempDir,
+				name: "config",
+				fields: { region: { type: "string", choices: ["us"], default: "eu" } },
+			}),
+		).toThrow(expect.objectContaining({ code: "DEFINITION" }));
+	});
+
+	it("rejects a validate transform outside choices on write", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: {
+				region: { type: "string", choices: ["us", "eu"], validate: () => ({ value: "mars" }) },
+			},
+		});
+
+		await expect(store.write({ region: "us" })).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: { issues: [{ message: "Expected one of: us, eu", path: "region" }] },
+		});
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
