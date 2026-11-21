@@ -264,6 +264,29 @@ describe("store.read", () => {
 		).toThrow(expect.objectContaining({ code: "DEFINITION" }));
 	});
 
+	it("rejects an array a validator changed in place to hold a value outside choices", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: {
+				regions: {
+					type: "string",
+					array: true,
+					choices: ["us"],
+					validate: (items: string[]) => {
+						items.push("mars");
+					},
+				},
+			},
+		});
+
+		await expect(store.write({ regions: ["us"] })).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: { issues: [{ message: "Expected one of: us", path: "regions" }] },
+		});
+		expect(existsSync(join(tempDir, "config.json"))).toBe(false);
+	});
+
 	it("rejects a validate transform outside choices on write", async () => {
 		const store = createStore({
 			dirPath: tempDir,
@@ -314,6 +337,20 @@ describe("the store file", () => {
 		expect((error as Error).message).toContain("16 MiB");
 		expect(await store.read()).toEqual({ blob: "old" });
 		expect(await readdir(tempDir)).toEqual(["config.json"]);
+	});
+
+	it("write() keeps a file over 16 MiB byte for byte: unread is not corrupt", async () => {
+		const filePath = join(tempDir, "config.json");
+		const text = JSON.stringify({ blob: "kept", newer: blobOf(MiB16 + 1) });
+		await writeFile(filePath, text);
+		const store = blobStore();
+
+		await expect(store.write({ blob: "small" })).rejects.toMatchObject({ code: "PARSE" });
+		await expect(store.patch({ blob: "small" })).rejects.toMatchObject({ code: "PARSE" });
+		await expect(store.update(() => ({ blob: "small" }))).rejects.toMatchObject({
+			code: "PARSE",
+		});
+		expect(await readFile(filePath, "utf-8")).toBe(text);
 	});
 
 	it("rejects a file over 16 MiB with PARSE", async () => {

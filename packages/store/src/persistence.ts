@@ -51,6 +51,14 @@ export interface WriteJsonOptions {
  */
 export const MAX_FILE_BYTES: number = 16 * 1024 * 1024;
 
+/** `PARSE` errors for a file the store did not read: its content is unknown, not corrupt. */
+const unreadFiles = new WeakSet<Error>();
+
+/** Whether `error` says a store file was too large to read, so nothing is known about its content. */
+export function isUnreadFile(error: unknown): boolean {
+	return error instanceof Error && unreadFiles.has(error);
+}
+
 /** The size of each read of a store file. */
 const READ_CHUNK_BYTES = 64 * 1024;
 
@@ -74,10 +82,13 @@ export async function readJson(filePath: string): Promise<JsonValue | undefined>
 		new CrustStoreError("PATH", `Store file is not a regular file: ${filePath}`, {
 			path: filePath,
 		});
-	const tooLarge = () =>
-		new CrustStoreError("PARSE", `Store file is larger than 16 MiB: ${filePath}`, {
+	const tooLarge = () => {
+		const error = new CrustStoreError("PARSE", `Store file is larger than 16 MiB: ${filePath}`, {
 			path: filePath,
 		});
+		unreadFiles.add(error);
+		return error;
+	};
 	const readError = (err: unknown) =>
 		new CrustStoreError(
 			"IO",

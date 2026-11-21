@@ -13,6 +13,7 @@ import { applyFieldDefaults, setDocumentValue, withUnknownKeys } from "./merge.t
 import { resolveStorePath } from "./path.ts";
 import {
 	deleteJson,
+	isUnreadFile,
 	MAX_FILE_BYTES,
 	readJson,
 	refuseSymlink,
@@ -357,8 +358,13 @@ export function createStore<const F extends FieldsDef>(
 				continue;
 			}
 
-			// Validation-only: validator returned no transformed value.
-			if (result === undefined) continue;
+			// Validation-only: validator returned no transformed value. It may still have changed an
+			// array in place, so the final array is checked against choices again.
+			if (result === undefined) {
+				const changed = def.schema === undefined ? outsideChoices(def, value) : undefined;
+				if (changed !== undefined) issues.push({ message: changed, path: key });
+				continue;
+			}
 
 			// Transform path: validator returned `{ value }`.
 			if (isFieldValueResult(result)) {
@@ -507,12 +513,15 @@ export function createStore<const F extends FieldsDef>(
 		return mutate(
 			"write",
 			async () => {
-				// write() replaces a corrupt file, which leaves no unknown keys to keep.
+				// write() replaces a corrupt file, which leaves no unknown keys to keep. A file too large to
+				// read is not known to be corrupt, so it is never replaced.
 				const persisted =
 					pruneUnknown === true
 						? undefined
 						: await readPersisted().catch((err: unknown) => {
-								if (err instanceof CrustStoreError && err.is("PARSE")) return undefined;
+								if (err instanceof CrustStoreError && err.is("PARSE") && !isUnreadFile(err)) {
+									return undefined;
+								}
 								throw err;
 							});
 				// SAFETY: field definitions constrain config values and schema outputs to JSON-compatible values.
