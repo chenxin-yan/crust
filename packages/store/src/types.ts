@@ -59,6 +59,8 @@ interface StringFieldDef extends ScalarFieldBase<string> {
 	type: "string";
 	/** Default string value when the field is not persisted. */
 	default?: string;
+	/** The only values the field accepts; a literal tuple narrows its type to their union. */
+	choices?: readonly string[];
 }
 
 /** A scalar number field. */
@@ -66,6 +68,7 @@ interface NumberFieldDef extends ScalarFieldBase<number> {
 	type: "number";
 	/** Default number value when the field is not persisted. */
 	default?: number;
+	choices?: never;
 }
 
 /** A scalar boolean field. */
@@ -73,6 +76,7 @@ interface BooleanFieldDef extends ScalarFieldBase<boolean> {
 	type: "boolean";
 	/** Default boolean value when the field is not persisted. */
 	default?: boolean;
+	choices?: never;
 }
 
 // ── Array fields ──────────────────────────────────────────────────────────
@@ -88,6 +92,8 @@ interface StringArrayFieldDef extends ArrayFieldBase<string[]> {
 	type: "string";
 	/** Default string array value when the field is not persisted. */
 	default?: readonly string[];
+	/** The only values each item accepts; a literal tuple narrows the item type to their union. */
+	choices?: readonly string[];
 }
 
 /** An array of numbers field. */
@@ -95,6 +101,7 @@ interface NumberArrayFieldDef extends ArrayFieldBase<number[]> {
 	type: "number";
 	/** Default number array value when the field is not persisted. */
 	default?: readonly number[];
+	choices?: never;
 }
 
 /** An array of booleans field. */
@@ -102,6 +109,7 @@ interface BooleanArrayFieldDef extends ArrayFieldBase<boolean[]> {
 	type: "boolean";
 	/** Default boolean array value when the field is not persisted. */
 	default?: readonly boolean[];
+	choices?: never;
 }
 
 /** A field whose Standard Schema exclusively owns its value semantics. */
@@ -113,6 +121,7 @@ interface SchemaFieldDef {
 	array?: true;
 	default?: never;
 	validate?: never;
+	choices?: never;
 }
 
 /**
@@ -174,12 +183,19 @@ type InferFieldValue<F extends FieldDef> = F extends {
 	: F extends { type: ValueType }
 		? F extends { array: true }
 			? F extends { default: readonly ResolvePrimitive<F["type"]>[] }
-				? ResolvePrimitive<F["type"]>[]
-				: ResolvePrimitive<F["type"]>[] | undefined
+				? FieldItem<F>[]
+				: FieldItem<F>[] | undefined
 			: F extends { default: ResolvePrimitive<F["type"]> }
-				? ResolvePrimitive<F["type"]>
-				: ResolvePrimitive<F["type"]> | undefined
+				? FieldItem<F>
+				: FieldItem<F> | undefined
 		: never;
+
+/** A core field's value, or one item of an array field: its `choices` union when declared. */
+type FieldItem<F extends { type: ValueType }> = F extends {
+	choices: readonly (infer C extends string)[];
+}
+	? C
+	: ResolvePrimitive<F["type"]>;
 
 /**
  * Maps a full {@link FieldsDef} record to the inferred config object type.

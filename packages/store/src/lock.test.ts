@@ -83,7 +83,12 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 		return handle;
 	};
 	const mocked = { lstat, chmod, rename, rm, readFile, open };
-	return { ...actual, ...mocked, default: { ...actual, ...mocked } };
+	const fs = { ...actual, ...mocked };
+	// The store loads built-ins with process.getBuiltinModule, which vi.mock does not reach.
+	const getBuiltinModule = process.getBuiltinModule.bind(process);
+	process.getBuiltinModule = (id: string) =>
+		id === "node:fs/promises" ? fs : getBuiltinModule(id);
+	return { ...fs, default: fs };
 });
 
 /** No process has this pid: `process.kill(pid, 0)` fails with `ESRCH`. */

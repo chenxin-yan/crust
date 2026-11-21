@@ -52,9 +52,9 @@
 		"@crustjs/utils": "workspace:^"
 	},
 	"devDependencies": {
-		"@crustjs/config": "workspace:*",
 		"@crustjs/core": "workspace:*",
 		"@crustjs/testing": "workspace:*",
+		"@crustjs/tsconfig": "workspace:*",
 		"vite-plus": "catalog:"
 	},
 	"peerDependencies": {

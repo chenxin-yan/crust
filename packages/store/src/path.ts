@@ -2,9 +2,6 @@
 // @crustjs/store — Cross-platform path resolution for config/data/state/cache
 // ────────────────────────────────────────────────────────────────────────────
 
-import { homedir } from "node:os";
-import { join, posix, win32 } from "node:path";
-
 import { CrustStoreError } from "./errors.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -35,7 +32,7 @@ function getRuntimeEnv(): PlatformEnv {
 	return {
 		platform: process.platform,
 		env: process.env,
-		homedir: homedir(),
+		homedir: process.getBuiltinModule("node:os").homedir(),
 	};
 }
 
@@ -65,7 +62,7 @@ function validateSegment(value: string, field: "appName" | "name"): void {
 function validateDirPath(value: string): void {
 	validateNonEmpty(value, "dirPath");
 
-	if (!win32.isAbsolute(value)) {
+	if (!process.getBuiltinModule("node:path").win32.isAbsolute(value)) {
 		throw new CrustStoreError("PATH", "dirPath must be an absolute path", { path: value });
 	}
 
@@ -128,6 +125,7 @@ function resolvePlatformDir(
 		});
 	}
 
+	const { join, posix, win32 } = process.getBuiltinModule("node:path");
 	const { isAbsolute } = windows ? win32 : posix;
 	const variable = windows ? config.windowsEnv : config.xdg;
 	const suffix = windows ? config.windowsSuffix : [];
@@ -302,5 +300,5 @@ export function cacheDir(appName: string, env?: PlatformEnv): string {
 export function resolveStorePath(dirPath: string, name: string): string {
 	validateDirPath(dirPath);
 	validateSegment(name, "name");
-	return join(dirPath, `${name}.json`);
+	return process.getBuiltinModule("node:path").join(dirPath, `${name}.json`);
 }

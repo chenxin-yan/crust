@@ -1,0 +1,158 @@
+---
+title: "Config"
+---
+
+`@crustjs/config` reads a CLI's settings from JSON config files and exposes them, typed, as one [Context](/docs/guide/contexts) named `config`. You declare each setting once, as the flag definition you would write in `.flags({...})`. Both files are read through [`@crustjs/store`](/docs/modules/store), and `@crustjs/core` needs nothing else.
+
+## Install
+
+```npm
+npm install @crustjs/config
+```
+
+`@crustjs/core` is a required peer. TypeScript is an optional peer.
+
+## Quick example
+
+<include lang="ts" meta="twoslash">
+  ../../../examples/modules/config.ts#quick-example
+</include>
+
+<include lang="ts">../../../examples/modules/config.ts#app</include>
+
+`defineConfig({ name, global, project, flags })` returns the `config` Context factory. `.use(config)` lets a command read `await ctx.config`, and `.provide(config())` on the root provides it to every command. The factory also has `config.global`, the typed store of the global file, and `config.jsonSchema()`.
+
+## Where a value comes from
+
+Each setting is the first of:
+
+1. its flag on the command line (`--org`), or its key in [`--input`](/docs/modules/extensions/input) or in typed [`run()`](/docs/api/crust#runpath-input-options) input;
+2. its environment variable (`$ACME_ORG`);
+3. the project file, `acme.config.json`, the nearest one from the working directory up;
+4. the global file, `config.json` in the [configuration directory](/docs/modules/store#storage-paths) of the app (`~/.config/acme` on Linux and macOS, `%APPDATA%\acme` on Windows);
+5. its `default`.
+
+```sh
+$ cat ~/.config/acme/config.json
+{"org":"global-org","region":"eu","port":8080}
+$ acme deploy
+deploying global-org to eu on port 8080
+$ echo '{"org":"project-org"}' > ../acme.config.json
+$ acme deploy
+deploying project-org to eu on port 8080
+$ ACME_ORG=env-org acme deploy --org flag-org
+deploying flag-org to eu on port 8080
+```
+
+Each key is settled on its own: here `org` comes from the project file and `region` from the global file. The files do not merge beyond that: only the nearest project file is read.
+
+The settings are ordinary flags of the `config` Context, so Core resolves the first two steps exactly as for any flag, and `--help`, typed `run()`, `--input`, [`schema`](/docs/modules/extensions/schema), [MCP](/docs/modules/mcp) and completion all see them. `@crustjs/config` does the last three when a command first reads `await ctx.config`. Until then no file is read, so `--help`, `--version` and a command that does not use the config work whatever is in the files.
+
+## The files
+
+- `global: true` reads `config.json` in `configDir(name)`; `project: true` reads `<name>.config.json`. Either may instead be a file name of your own, such as `global: "settings.json"` or `project: ".acme.json"`. A name must end in `.json` and cannot hold a directory: TypeScript rejects `"a/b.json"`, and `defineConfig()` throws a `DEFINITION` `CrustError` for it. Set at least one of the two.
+- The project file is looked for in the working directory, then in each parent up to the root. The first entry with that name is the project file.
+- A missing file is no values. Reading creates no file or directory.
+- Keys the config does not declare are ignored, so a file may hold `"$schema"` or keys of a newer version of your CLI.
+- Both files are read as the store reads any file: only a regular file, or a symbolic link to one, of at most 16 MiB; a leading byte order mark is ignored.
+
+## Settings
+
+A setting is the [flag definition](/docs/api/types#flagdef) of a string, number or boolean flag: `type`, `description`, `short`, `aliases`, `env` (the same `{ name, delimiter? }` object), `multiple`, `delimiter`, `choices`, `noNegate` and `parse`, with the same types as on a flag. Values are inferred as the flag's would be: `required` and `default` remove `undefined`, `choices` give a union, and `parse` gives its return type.
+
+What differs from a flag:
+
+| Property      | On a setting                                                                                                                                                     |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `default`     | Applied after the files. A `parse` setting's default is parsed. The flag itself has no default, so `--help` shows it under "Configuration", not on the flag line |
+| `required`    | Checked after the files, when a command reads `await ctx.config`. The flag itself is optional, in typed `run()` input and MCP tools too                          |
+| `flag: false` | No flag: the setting comes from its environment variable, the files or its default. Typed `run()` input does not take it either                                  |
+
+- Other types (`url`, `path`, `json`) and `schema` are not supported: a config file holds what the user types, a string, a number or a boolean. An unknown property is a compile error, and `defineConfig()` throws a `DEFINITION` `CrustError` for it, as for a default outside `choices`.
+- In a file, a setting holds what the user would type for the flag: a `multiple` setting is a JSON array, a `parse` setting a string that is parsed after reading, and a `noNegate` boolean only `true`.
+- `flag: false` settings read `process.env` even under `run({ env })`, because a Context's setup does not get the invocation's environment.
+
+### One config per app
+
+A CLI has one config. Its settings with a flag are the CLI's global options, like `--region` in `aws`: every command that `.use(config)`s takes them, and so does the command that provides it (`acme --org x deploy` works, and the root's help lists them). A setting that should not be an option on every command is `flag: false`. An option only one command has stays a flag of that command.
+
+## Errors
+
+```text
+$ acme deploy                                   # no org anywhere
+Error: Missing setting "org" of acme: pass --org, set ACME_ORG, or set "org" in acme.config.json or /home/me/.config/acme/config.json.
+$ acme deploy                                   # acme.config.json is not JSON
+Error: Malformed JSON in store file: /home/me/repo/acme.config.json
+$ acme deploy                                   # {"org": 7, "region": "mars", "port": "80x"}
+Error: Store validation failed (read) in /home/me/repo/acme.config.json
+  - org: Expected string
+  - region: Expected one of: us, eu
+  - port: Expected number
+$ acme deploy --region mars
+Error: Invalid value for --region. Expected one of: us, eu
+```
+
+- A missing required setting is a `VALIDATION` `CrustError` with one issue per setting (`path: "config.<name>"`), naming every place the value can come from. It fails when a command first reads `await ctx.config`, after `preRun` hooks.
+- A file's errors are the store's [`CrustStoreError`](/docs/modules/store#errors)s, naming the file and each key. They never repeat a value from the file.
+- A `parse` that throws on a file value is a `PARSE` `CrustError`, `Invalid value for "timeout" in <file>.`, with the parser's error as its `cause`.
+- Number and boolean text in a file is converted as the store converts it: `"8080"` reads as `8080`, and only `"true"` and `"1"` read as `true`.
+
+## Writing the global file
+
+`config.global` is the global file's [store](/docs/modules/store): `read()`, `write()`, `update()`, `patch()` and `reset()`, typed by the settings, in the shape the user types (a `parse` setting is a string). It is there only when `global` is set. There is no built-in `config` command; write the one your CLI needs, with only the settings a user should set from the command line:
+
+<include lang="ts">../../../examples/modules/config.ts#set</include>
+
+```sh
+$ acme set region eu
+region = eu
+$ acme set region mars
+Error: Store validation failed (patch) in /home/me/.config/acme/config.json
+  - region: Expected one of: us, eu
+```
+
+The store converts the text to the setting's type, checks it, keeps keys it does not know, and replaces the file atomically. It creates the directory and the file with the default permissions (`0755` and `0644` under the usual umask): a config file is not a secret.
+
+## JSON Schema
+
+`config.jsonSchema()` returns the JSON Schema (draft 2020-12) of a config file: one property per setting, as the user writes it (a `choices` setting is an `enum`, a `multiple` one an array, a `parse` one a string, a `noNegate` boolean `{ "const": true }`), plus `"$schema"`, and no other property. Point a file's `"$schema"` at it for completion and checks in editors. To write it at `crust build`, add a small [build Extension](/docs/guide/extensions):
+
+<include lang="ts">../../../examples/modules/config.ts#schema</include>
+
+## OpenAPI commands
+
+`defineApi().use(config)` gives every [generated command](/docs/modules/openapi) the settings, and a [`bind`](/docs/modules/openapi#overrides) reads them:
+
+<include lang="ts">../../../examples/modules/config.ts#openapi</include>
+
+```sh
+$ acme zones list-zones                 # acme.config.json: {"org":"file-org"}; requests /orgs/file-org/zones
+$ acme zones list-zones --org flag-org  # requests /orgs/flag-org/zones
+```
+
+Each generated command takes the settings' flags too. [`api preview`](/docs/modules/openapi#preview-a-request) calls no `bind`, so it reads no config file: the bound parameter stays `{org}` and is listed in `bound`.
+
+## Help
+
+`.provide(config())` adds a "Configuration" section to the providing command's help, `--llms` output and man page, listing the files and every setting:
+
+```text
+Configuration:
+  Each setting is the first of: its flag, its environment variable, acme.config.json (the nearest from the working directory up), config.json in the configuration directory of acme, its default.
+  org        Organization [env: ACME_ORG]
+  region     Region [default: "us"] [choices: us, eu]
+  port       Port
+  telemetry  [env: ACME_TELEMETRY]
+```
+
+## Testing
+
+Provide a fixed value with `config.of()`, as for any [Context](/docs/guide/contexts#replace-a-context-in-tests):
+
+<include lang="ts">../../../examples/modules/config.ts#testing</include>
+
+To test the files themselves, point `XDG_CONFIG_HOME` (`APPDATA` on Windows) at a temporary directory for the global file, and run in a temporary working directory for the project file.
+
+## Security
+
+A project file can come from a cloned repository, so anyone who can commit to a repository sets its values for everyone who runs your CLI there. Keep secrets out of settings, and take them from the environment or a [login](/docs/modules/auth) instead. Never let a setting choose where credentials are sent, such as the base URL of an API that receives a token.

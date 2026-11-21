@@ -67,6 +67,7 @@ export const MODULES: readonly LandingModule[] = [
 	moduleEntry("tui"),
 	moduleEntry("effect"),
 	moduleEntry("env"),
+	moduleEntry("config"),
 	moduleEntry("prompts"),
 	moduleEntry("style"),
 	moduleEntry("store"),

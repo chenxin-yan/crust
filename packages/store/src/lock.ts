@@ -2,11 +2,6 @@
 // @crustjs/store — withLock, the strict cross-process lock
 // ────────────────────────────────────────────────────────────────────────────
 
-import { lstat, open, readFile, readlink, rm } from "node:fs/promises";
-import { hostname } from "node:os";
-import { dirname } from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
-
 import { isErrnoException } from "@crustjs/utils/error";
 
 import {
@@ -75,10 +70,13 @@ interface Blocker {
 }
 
 const readTrimmed = (path: string): Promise<string | null> =>
-	readFile(path, "utf-8").then(
-		(text) => text.trim() || null,
-		() => null,
-	);
+	process
+		.getBuiltinModule("node:fs/promises")
+		.readFile(path, "utf-8")
+		.then(
+			(text) => text.trim() || null,
+			() => null,
+		);
 
 async function readStartTime(pid: number | "self"): Promise<string | null> {
 	const stat = await readTrimmed(`/proc/${pid}/stat`);
@@ -90,9 +88,10 @@ async function readStartTime(pid: number | "self"): Promise<string | null> {
 /** This process's record, without the per-acquisition `ownerId` and `createdAt`. */
 async function ownRecord(): Promise<Omit<LockRecord, "ownerId" | "createdAt">> {
 	const linux = process.platform === "linux";
+	const { readlink } = process.getBuiltinModule("node:fs/promises");
 	return {
 		pid: process.pid,
-		host: hostname(),
+		host: process.getBuiltinModule("node:os").hostname(),
 		platform: process.platform,
 		machineId: linux
 			? ((await readTrimmed("/etc/machine-id")) ?? (await readTrimmed("/var/lib/dbus/machine-id")))
@@ -109,7 +108,7 @@ const isNullableString = (value: unknown) => value === null || typeof value === 
 async function readRecord(path: string): Promise<LockRecord | "unreadable" | undefined> {
 	let text: string;
 	try {
-		text = await readFile(path, "utf-8");
+		text = await process.getBuiltinModule("node:fs/promises").readFile(path, "utf-8");
 	} catch (err: unknown) {
 		return isErrnoException(err) && err.code === "ENOENT" ? undefined : "unreadable";
 	}
@@ -186,6 +185,7 @@ async function judge(
 
 /** Creates `path` exclusively, holding `record`; `false` when it already exists. */
 async function createRecord(path: string, record: LockRecord): Promise<boolean> {
+	const { open, rm } = process.getBuiltinModule("node:fs/promises");
 	let handle;
 	try {
 		handle = await open(path, "wx", 0o600);
@@ -212,6 +212,7 @@ async function createRecord(path: string, record: LockRecord): Promise<boolean> 
  * @throws {CrustStoreError} `IO` when the record cannot be removed.
  */
 async function release(path: string, ownerId: string): Promise<void> {
+	const { rm } = process.getBuiltinModule("node:fs/promises");
 	let error: unknown;
 	// A refused delete is tried again: a lock left behind blocks every waiter while this process lives.
 	for (let attempt = 0; attempt < 3; attempt++) {
@@ -223,7 +224,7 @@ async function release(path: string, ownerId: string): Promise<void> {
 		} catch (err: unknown) {
 			error = err;
 		}
-		await sleep(10);
+		await process.getBuiltinModule("node:timers/promises").setTimeout(10);
 	}
 	throw new CrustStoreError(
 		"IO",
@@ -295,7 +296,7 @@ async function recoverOrBlock(
 			current.ownerId === owner.ownerId &&
 			(await judge(current, self)) === "dead"
 		) {
-			await rm(lockPath, { force: true });
+			await process.getBuiltinModule("node:fs/promises").rm(lockPath, { force: true });
 		}
 	});
 	return undefined;
@@ -316,10 +317,10 @@ export async function checkDirectory(
 	operation: IOErrorDetails["operation"],
 ): Promise<boolean> {
 	if (process.platform === "win32") return true;
-	const dir = dirname(path);
+	const dir = process.getBuiltinModule("node:path").dirname(path);
 	let stats;
 	try {
-		stats = await lstat(dir);
+		stats = await process.getBuiltinModule("node:fs/promises").lstat(dir);
 	} catch (err: unknown) {
 		if (isErrnoException(err) && err.code === "ENOENT") return false;
 		throw new CrustStoreError(
@@ -358,7 +359,8 @@ async function validateDirectory(
 
 function timeoutError(blocker: Blocker): CrustStoreError<"LOCK"> {
 	const { path, verdict, owner } = blocker;
-	const manualStep = `Stop every process that uses ${dirname(path)} and keep new ones from starting, including on other machines or containers that share it; only then delete ${path}. If you cannot be sure of that, leave the file in place.`;
+	const dir = process.getBuiltinModule("node:path").dirname(path);
+	const manualStep = `Stop every process that uses ${dir} and keep new ones from starting, including on other machines or containers that share it; only then delete ${path}. If you cannot be sure of that, leave the file in place.`;
 	return new CrustStoreError(
 		"LOCK",
 		`Timed out waiting for ${path} (owner ${verdict}). ${manualStep}`,

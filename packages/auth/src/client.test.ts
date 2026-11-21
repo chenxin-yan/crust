@@ -52,16 +52,25 @@ import type { AuthWarning, BrowserLoginPrompt, DeviceLoginPrompt, LoginOptions }
 const openBrowser = vi.hoisted(() => vi.fn(async (_url: string, _options?: object) => true));
 vi.mock("./browser.ts", () => ({ openBrowser }));
 
-/** Every file `node:fs/promises` reads, so a test can count the credentials file's reads. */
-const fileReads = vi.hoisted((): string[] => []);
-vi.mock("node:fs/promises", async (importOriginal) => {
-	const fs = await importOriginal<typeof import("node:fs/promises")>();
-	const readFile = ((path: Parameters<typeof fs.readFile>[0], ...rest: [never]) => {
-		fileReads.push(String(path));
-		return fs.readFile(path, ...rest);
-	}) as typeof fs.readFile;
-	return { ...fs, readFile, default: { ...fs, readFile } };
-});
+/**
+ * Every file `node:fs/promises` opens for reading from now until the spies are restored, so a
+ * test can count the credentials file's reads. The store opens its file with numeric flags.
+ */
+function recordFileReads(): string[] {
+	const fs = process.getBuiltinModule("node:fs/promises");
+	const { open } = fs;
+	const { O_RDWR, O_WRONLY } = fs.constants;
+	const reads: string[] = [];
+	vi.spyOn(fs, "open").mockImplementation((path, flags, ...rest) => {
+		const reading =
+			typeof flags === "number"
+				? (flags & (O_WRONLY | O_RDWR)) === 0
+				: flags === undefined || !/[wa+]/u.test(flags);
+		if (reading) reads.push(String(path));
+		return open(path, flags, ...rest);
+	});
+	return reads;
+}
 
 const DEVICE = {
 	device_code: "SENTINEL_DEVICE",
@@ -1245,7 +1254,7 @@ describe("profiles", () => {
 		await signIn(auth.profile("work"));
 		await auth.profiles.use("work");
 		const file = join(dir, "credentials.json");
-		fileReads.length = 0;
+		const fileReads = recordFileReads();
 		expect((await auth.token()).value).toBe("AT1");
 		expect(fileReads.filter((path) => path === file)).toHaveLength(1);
 		fileReads.length = 0;
