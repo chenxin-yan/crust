@@ -10,3 +10,4 @@ String fields take `choices`, validation errors name their file, and the store r
 - Behaviour change: a store file larger than 16 MiB now rejects with `PARSE` (`Store file is larger than 16 MiB: <path>`), read no further than the limit, and a mutation that would write more than 16 MiB rejects with `VALIDATION` and leaves the file as it was.
 - A leading byte order mark is ignored instead of failing with `PARSE`.
 - The store loads Node's built-in modules when it first needs them, so a bundled CLI that imports the store only when a command uses it does not load them at start-up.
+- Behaviour change: a boolean field converts only the text `"true"`, `"1"`, `"false"` and `"0"`, on read and on write. Any other text, such as `"yes"`, now fails with `Expected boolean` instead of reading as `false`, as non-numeric text already failed a number field.

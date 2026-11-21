@@ -95,7 +95,7 @@ Error: Invalid value for --region. Expected one of: us, eu
 - A missing required setting is a `VALIDATION` `CrustError` with one issue per setting (`path: "config.<name>"`), naming every place the value can come from. It fails when a command first reads `await ctx.config`, after `preRun` hooks.
 - A file's errors are the store's [`CrustStoreError`](/docs/modules/store#errors)s, naming the file and each key. They never repeat a value from the file.
 - A `parse` that throws on a file value is a `PARSE` `CrustError`, `Invalid value for "timeout" in <file>.`, with the parser's error as its `cause`.
-- Number and boolean text in a file is converted as the store converts it: `"8080"` reads as `8080`, and only `"true"` and `"1"` read as `true`.
+- A quoted number or boolean (`"80"`, `"true"`) is accepted in a file although the published schema asks for the JSON type; other text, such as `"yes"` for a boolean, fails with `Expected boolean`.
 
 ## Writing the global file
 

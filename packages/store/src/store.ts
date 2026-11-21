@@ -4,7 +4,7 @@
 
 import { isErrnoException } from "@crustjs/utils/error";
 import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
-import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
+import { tryCoerceNumber } from "@crustjs/utils/primitive";
 import { normalizeStandardIssues, type StandardSchema } from "@crustjs/utils/schema";
 
 import { CrustStoreError, type ValidationErrorDetails } from "./errors.ts";
@@ -93,13 +93,22 @@ function outsideChoices(
 	return `Expected one of: ${def.choices.join(", ")}`;
 }
 
+const BOOLEAN_TEXT: Readonly<Record<string, boolean>> = Object.assign(Object.create(null), {
+	true: true,
+	"1": true,
+	false: false,
+	"0": false,
+});
+
 function coerceByType(value: JsonValue, type: ValueType): JsonValue {
 	if (type === "number" && typeof value === "string") {
 		return tryCoerceNumber(value) ?? value;
 	}
 
+	// Only the four spellings that say true or false: any other text stays a string, so the type check
+	// rejects it, as a non-numeric string fails a number field. A typo must not read as false.
 	if (type === "boolean" && typeof value === "string") {
-		return coerceBooleanString(value);
+		return BOOLEAN_TEXT[value] ?? value;
 	}
 
 	return value;

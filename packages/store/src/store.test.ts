@@ -170,6 +170,44 @@ describe("store.read", () => {
 		expect(await store.read()).toEqual({ retries: 42, enabled: true, ports: [3000, 8080] });
 	});
 
+	it.each([
+		["true", true],
+		["1", true],
+		["false", false],
+		["0", false],
+	])("converts persisted %j to %j for a boolean field", async (text, value) => {
+		await writeFile(join(tempDir, "config.json"), JSON.stringify({ on: text, all: [text] }));
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: { on: { type: "boolean" }, all: { type: "boolean", array: true } },
+		});
+
+		expect(await store.read()).toEqual({ on: value, all: [value] });
+	});
+
+	it.each(["yes", "off", "", "TRUE"])(
+		"rejects persisted %j for a boolean field, on read and on write",
+		async (text) => {
+			await writeFile(join(tempDir, "config.json"), JSON.stringify({ on: text, all: [text] }));
+			const store = createStore({
+				dirPath: tempDir,
+				name: "config",
+				fields: { on: { type: "boolean" }, all: { type: "boolean", array: true } },
+			});
+
+			const issues = [
+				{ message: "Expected boolean", path: "on" },
+				{ message: "Expected boolean[]", path: "all" },
+			];
+			await expect(store.read()).rejects.toMatchObject({ details: { issues } });
+			await expect(store.write({ on: text, all: [text] } as never)).rejects.toMatchObject({
+				code: "VALIDATION",
+				details: { issues },
+			});
+		},
+	);
+
 	it.each(["abc", "", "  "])("should reject persisted %j for a number field", async (port) => {
 		const filePath = join(tempDir, "config.json");
 		await writeFile(filePath, JSON.stringify({ port }));
