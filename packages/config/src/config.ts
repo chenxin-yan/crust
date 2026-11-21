@@ -273,7 +273,7 @@ function missingMessage(name: string, key: string, def: ConfigFlagDef, files: re
  * definition you would write in `.flags({...})`: the Context owns those flags, so argv, `--input`,
  * typed `run()` input and `env` resolve as for any flag, and what is still unset comes from the
  * project file, then the global file, then the `default`. Nothing is read, and `@crustjs/store`
- * is not loaded, until a command reads `await ctx.config`.
+ * is not imported, until a command reads `await ctx.config`.
  *
  * @throws {CrustError} `DEFINITION` for a file name with a directory or not ending in `.json`, no
  *   file at all, a setting that is not a string, number or boolean flag definition, or one that

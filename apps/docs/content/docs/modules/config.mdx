@@ -62,11 +62,11 @@ A setting is the [flag definition](/docs/api/types#flagdef) of a string, number 
 
 What differs from a flag:
 
-| Property      | On a setting                                                                                                                                                     |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `default`     | Applied after the files. A `parse` setting's default is parsed. The flag itself has no default, so `--help` shows it under "Configuration", not on the flag line |
-| `required`    | Checked after the files, when a command reads `await ctx.config`. The flag itself is optional, in typed `run()` input and MCP tools too                          |
-| `flag: false` | No flag: the setting comes from its environment variable, the files or its default. Typed `run()` input does not take it either                                  |
+| Property      | On a setting                                                                                                                                                                         |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `default`     | Applied after the files. A `parse` setting's default is parsed. The flag itself has no default, so the providing command's help shows it under "Configuration", not on the flag line |
+| `required`    | Checked after the files, when a command reads `await ctx.config`. The flag itself is optional, in typed `run()` input and MCP tools too                                              |
+| `flag: false` | No flag: the setting comes from its environment variable, the files or its default. Typed `run()` input does not take it either                                                      |
 
 - Other types (`url`, `path`, `json`) and `schema` are not supported: a config file holds what the user types, a string, a number or a boolean. An unknown property is a compile error, and `defineConfig()` throws a `DEFINITION` `CrustError` for it, as for a default outside `choices`.
 - In a file, a setting holds what the user would type for the flag: a `multiple` setting is a JSON array, a `parse` setting a string that is parsed after reading, and a `noNegate` boolean only `true`.
