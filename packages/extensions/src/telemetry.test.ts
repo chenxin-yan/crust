@@ -1,8 +1,13 @@
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+
 import { Crust, defineCommand } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { help } from "./help.ts";
+import { json } from "./json.ts";
 import { type TelemetryEvent, type TelemetryOptions, telemetry } from "./telemetry.ts";
 
 const ENV = "ACME_TELEMETRY";
@@ -12,12 +17,25 @@ function recorder() {
 }
 
 describe("telemetry", () => {
+	// Every test gets its own config directory, so no saved setting leaks in from the machine or another test.
+	let configHome: string;
 	beforeEach(() => {
+		configHome = mkdtempSync(join(tmpdir(), "crust-telemetry-"));
+		vi.stubEnv("XDG_CONFIG_HOME", configHome);
 		vi.stubEnv("DO_NOT_TRACK", undefined);
 		vi.stubEnv("CI", undefined);
 		vi.stubEnv(ENV, undefined);
 	});
-	afterEach(() => vi.unstubAllEnvs());
+	afterEach(() => {
+		vi.unstubAllEnvs();
+		rmSync(configHome, { recursive: true, force: true });
+	});
+
+	const savedFile = () => join(configHome, "acme", "telemetry.json");
+	function writeSaved(content: string) {
+		mkdirSync(dirname(savedFile()), { recursive: true });
+		writeFileSync(savedFile(), content);
+	}
 
 	describe("outcomes", () => {
 		it("sends one completed event with the command path, duration, and ci", async () => {
@@ -280,5 +298,224 @@ describe("telemetry", () => {
 		expect(
 			events.every((event) => Object.keys(event).sort().join() === "ci,command,durationMs,outcome"),
 		).toBe(true);
+	});
+
+	describe("which setting wins", () => {
+		const SAVED_ON = '{"telemetry":"on"}';
+		const SAVED_OFF = '{"telemetry":"off"}';
+		const DAMAGED = "{not json";
+
+		// [case, DO_NOT_TRACK, app variable, saved file, opt-in result, opt-out result]
+		it.each([
+			[
+				"DO_NOT_TRACK over a saved on",
+				"1",
+				"1",
+				SAVED_ON,
+				[false, "do-not-track"],
+				[false, "do-not-track"],
+			],
+			[
+				"the variable's 0 over a saved on",
+				undefined,
+				"0",
+				SAVED_ON,
+				[false, "env"],
+				[false, "env"],
+			],
+			[
+				"the variable's FALSE over a saved on",
+				undefined,
+				"FALSE",
+				SAVED_ON,
+				[false, "env"],
+				[false, "env"],
+			],
+			[
+				"the variable's 1 over a saved off",
+				undefined,
+				"1",
+				SAVED_OFF,
+				[true, "env"],
+				[true, "env"],
+			],
+			["a saved on over the mode", "0", "", SAVED_ON, [true, "saved"], [true, "saved"]],
+			[
+				"a saved off over the mode",
+				undefined,
+				undefined,
+				SAVED_OFF,
+				[false, "saved"],
+				[false, "saved"],
+			],
+			[
+				"a damaged file, which sends nothing",
+				undefined,
+				undefined,
+				DAMAGED,
+				[false, "saved"],
+				[false, "saved"],
+			],
+			[
+				"the mode when nothing decides",
+				undefined,
+				undefined,
+				undefined,
+				[false, "default"],
+				[true, "default"],
+			],
+		] as const)(
+			"%s: status reports it and postRun follows it",
+			async (_case, doNotTrack, variable, file, optIn, optOut) => {
+				vi.stubEnv("DO_NOT_TRACK", doNotTrack);
+				vi.stubEnv(ENV, variable);
+				if (file !== undefined) writeSaved(file);
+				const saved = { [SAVED_ON]: "on", [SAVED_OFF]: "off", [DAMAGED]: "unreadable" } as const;
+				for (const [enabled, [sending, decidedBy]] of [
+					["opt-in", optIn],
+					["opt-out", optOut],
+				] as const) {
+					const send = recorder();
+					const app = new Crust("acme")
+						.extend(telemetry({ env: ENV, enabled, send }))
+						.add(defineCommand("deploy", (cmd) => cmd.action(() => {})));
+					const status = await app.run(["telemetry"]);
+					expect(status.status === "completed" && status.result, `${enabled} status`).toEqual({
+						sending,
+						decidedBy,
+						...(file === undefined ? {} : { saved: saved[file] }),
+						default: enabled === "opt-out" ? "on" : "off",
+					});
+					send.mockClear();
+					expect((await app.run(["deploy"])).status).toBe("completed");
+					expect(send.mock.calls.length, `${enabled} deploy`).toBe(sending ? 1 : 0);
+				}
+			},
+		);
+	});
+
+	describe("the telemetry command", () => {
+		const app = (send = recorder()) =>
+			new Crust("acme")
+				.extend(telemetry({ env: ENV, enabled: "opt-out", send, command: "analytics" }), json())
+				.add(defineCommand("deploy", (cmd) => cmd.action(() => {})));
+
+		it("shows, saves, and reports the state under its configured name", async () => {
+			expect(await captureExecute(app(), ["analytics"])).toEqual({
+				stdout: "Telemetry is on. This is the default.\nTurn it off with: acme analytics disable",
+				stderr: "",
+				exitCode: 0,
+			});
+			expect((await captureExecute(app(), ["analytics", "disable"])).stdout).toBe(
+				"Telemetry is off on this machine.",
+			);
+			expect(JSON.parse(readFileSync(savedFile(), "utf8"))).toEqual({ telemetry: "off" });
+			expect((await captureExecute(app(), ["analytics", "status"])).stdout).toBe(
+				'Telemetry is off. You turned it off with "acme analytics disable".',
+			);
+			expect((await captureExecute(app(), ["analytics", "--json"])).stdout).toBe(
+				'{"sending":false,"decidedBy":"saved","saved":"off","default":"on"}',
+			);
+
+			const send = recorder();
+			expect((await captureExecute(app(send), ["analytics", "enable"])).stdout).toBe(
+				"Telemetry is on on this machine.",
+			);
+			expect((await captureExecute(app(send), ["analytics", "enable", "--json"])).stdout).toBe(
+				'{"sending":true,"decidedBy":"saved","saved":"on","default":"on"}',
+			);
+			expect((await captureExecute(app(), ["analytics"])).stdout).toBe(
+				'Telemetry is on. You turned it on with "acme analytics enable".',
+			);
+			// The command's own runs follow the setting it saved.
+			expect(send.mock.calls.map(([event]) => event.command)).toEqual([
+				["acme", "analytics", "enable"],
+				["acme", "analytics", "enable"],
+			]);
+		});
+
+		it("says the default and how to turn it on under opt-in", async () => {
+			const optIn = new Crust("acme").extend(
+				telemetry({ env: ENV, enabled: "opt-in", send: recorder() }),
+			);
+			expect((await captureExecute(optIn, ["telemetry"])).stdout).toBe(
+				"Telemetry is off. This is the default.\nTurn it on with: acme telemetry enable",
+			);
+		});
+
+		it("names the variable that decides, and saves a choice it overrides", async () => {
+			vi.stubEnv(ENV, "1");
+			expect((await captureExecute(app(), ["analytics"])).stdout).toBe(
+				"Telemetry is on because ACME_TELEMETRY=1 is set.",
+			);
+			expect((await captureExecute(app(), ["analytics", "disable"])).stdout).toBe(
+				"Telemetry is off on this machine, but stays on while ACME_TELEMETRY=1 is set.",
+			);
+			expect(JSON.parse(readFileSync(savedFile(), "utf8"))).toEqual({ telemetry: "off" });
+
+			vi.stubEnv("DO_NOT_TRACK", "1");
+			expect((await captureExecute(app(), ["analytics"])).stdout).toBe(
+				"Telemetry is off because DO_NOT_TRACK is set.",
+			);
+			expect((await captureExecute(app(), ["analytics", "enable", "--json"])).stdout).toBe(
+				'{"sending":false,"decidedBy":"do-not-track","saved":"on","default":"on"}',
+			);
+			expect((await captureExecute(app(), ["analytics", "enable"])).stdout).toBe(
+				"Telemetry is on on this machine, but stays off while DO_NOT_TRACK is set.",
+			);
+		});
+
+		it("never changes the saved setting through the variable", async () => {
+			writeSaved('{"telemetry":"off"}');
+			vi.stubEnv(ENV, "1");
+			const send = recorder();
+			await captureExecute(app(send), ["deploy"]);
+			expect(send).toHaveBeenCalledTimes(1);
+			expect(readFileSync(savedFile(), "utf8")).toBe('{"telemetry":"off"}');
+		});
+	});
+
+	describe("a damaged saved setting", () => {
+		it.each([
+			["a file that is not JSON", "{not json"],
+			["a value other than on or off", '{"telemetry":"maybe"}'],
+			["a root that is not an object", "[]"],
+		])(
+			"%s sends nothing, never fails the command, and status says how to fix it",
+			async (_case, content) => {
+				writeSaved(content);
+				const send = recorder();
+				const app = new Crust("acme")
+					.extend(telemetry({ env: ENV, enabled: "opt-out", send }), json())
+					.add(defineCommand("deploy", (cmd) => cmd.action(() => "done")));
+
+				expect(await app.run(["deploy"])).toMatchObject({ status: "completed", result: "done" });
+				expect(send).not.toHaveBeenCalled();
+				const note = `The saved setting could not be read. Run "acme telemetry enable" or "acme telemetry disable" to rewrite ${savedFile()}.`;
+				expect(await captureExecute(app, ["telemetry"])).toEqual({
+					stdout: `Telemetry is off.\n${note}`,
+					stderr: "",
+					exitCode: 0,
+				});
+				expect((await captureExecute(app, ["telemetry", "--json"])).stdout).toBe(
+					'{"sending":false,"decidedBy":"saved","saved":"unreadable","default":"on"}',
+				);
+
+				// A variable that decides the run still shows the note.
+				vi.stubEnv("DO_NOT_TRACK", "1");
+				expect((await captureExecute(app, ["telemetry"])).stdout).toBe(
+					`Telemetry is off because DO_NOT_TRACK is set.\n${note}`,
+				);
+				vi.stubEnv("DO_NOT_TRACK", undefined);
+
+				expect((await captureExecute(app, ["telemetry", "enable"])).stdout).toBe(
+					"Telemetry is on on this machine.",
+				);
+				expect(JSON.parse(readFileSync(savedFile(), "utf8"))).toEqual({ telemetry: "on" });
+				send.mockClear();
+				await app.run(["deploy"]);
+				expect(send).toHaveBeenCalledTimes(1);
+			},
+		);
 	});
 });

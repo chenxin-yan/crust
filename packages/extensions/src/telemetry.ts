@@ -1,11 +1,17 @@
 import {
+	type CommandDefinition,
+	type CommandShape,
+	type CrustCommandContext,
+	type Extension,
 	type ExtensionContext,
 	type ExtensionFactory,
 	type ExtensionId,
 	type InvocationOutcome,
+	defineCommand,
 	defineExtension,
 	defineExtensionId,
 } from "@crustjs/core";
+import type { StandardJSONSchema, StandardSchema } from "@crustjs/utils/schema";
 
 const TELEMETRY: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:telemetry");
 
@@ -23,14 +29,24 @@ export interface TelemetryEvent {
 
 export interface TelemetryOptions {
 	/**
-	 * Environment variable through which the user turns telemetry on or off, such as
-	 * `"ACME_TELEMETRY"`. `0` or `false` (any letter case) turns it off; under `"opt-in"`,
-	 * any other non-empty value turns it on. `DO_NOT_TRACK` set to anything but empty or `0`
-	 * turns it off in both modes.
+	 * Environment variable through which the user turns telemetry on or off for the runs where it
+	 * is set, such as `"ACME_TELEMETRY"`: `0` or `false` (any letter case) turns it off, any other
+	 * non-empty value on, over the saved setting. `DO_NOT_TRACK` set to anything but empty or `0`
+	 * turns it off over both.
 	 */
 	env: string;
-	/** `"opt-in"` sends only when the user sets `env`; `"opt-out"` sends unless the user turns it off. */
+	/**
+	 * What applies when neither variable nor a saved setting decides: `"opt-in"` sends nothing,
+	 * `"opt-out"` sends.
+	 */
 	enabled: "opt-in" | "opt-out";
+	/**
+	 * Name of the contributed command that shows the state and saves the user's choice
+	 * (`status`, `enable`, `disable`). A literal name keeps the host's command tree type-checked;
+	 * a dynamic `string` opens it.
+	 * @default "telemetry"
+	 */
+	command?: string;
 	/**
 	 * Delivers one event. Waited for at most 1 second, when `signal` aborts with a `TimeoutError`;
 	 * pass `signal` to the request so it ends too, or it keeps the process alive. Failures are ignored.
@@ -38,62 +54,226 @@ export interface TelemetryOptions {
 	send: (event: TelemetryEvent, options: { readonly signal: AbortSignal }) => Promise<void>;
 }
 
+/** What the `telemetry` command prints under `--json` and returns as its result. */
+export interface TelemetryStatus {
+	/** Whether this machine sends events now. */
+	readonly sending: boolean;
+	/** The first setting that decides: `DO_NOT_TRACK`, the app's variable, the saved choice, or `enabled`. */
+	readonly decidedBy: "do-not-track" | "env" | "saved" | "default";
+	/** The saved choice; `"unreadable"` when the file cannot be read, absent when nothing is saved. */
+	readonly saved?: SavedSetting;
+	/** `"on"` under `"opt-out"`, `"off"` under `"opt-in"`. */
+	readonly default: "on" | "off";
+}
+
+export type SavedSetting = "on" | "off" | "unreadable";
+
+const STATUS_JSON_SCHEMA = {
+	type: "object",
+	properties: {
+		sending: { type: "boolean", description: "Whether this machine sends events now" },
+		decidedBy: {
+			type: "string",
+			enum: ["do-not-track", "env", "saved", "default"],
+			description: "The first setting that decides",
+		},
+		saved: {
+			type: "string",
+			enum: ["on", "off", "unreadable"],
+			description: "The saved choice; absent when nothing is saved",
+		},
+		default: {
+			type: "string",
+			enum: ["on", "off"],
+			description: "What applies when nothing else decides",
+		},
+	},
+	required: ["sending", "decidedBy", "default"],
+	additionalProperties: false,
+};
+
+const statusSchema: StandardSchema<TelemetryStatus> & StandardJSONSchema<TelemetryStatus> = {
+	"~standard": {
+		version: 1,
+		vendor: "crust",
+		// SAFETY: only the actions below return here, and TypeScript checks that they return a status.
+		validate: (value) => ({ value: value as TelemetryStatus }),
+		jsonSchema: { input: () => STATUS_JSON_SCHEMA, output: () => STATUS_JSON_SCHEMA },
+	},
+};
+
+const DEFAULT_TELEMETRY_COMMAND = "telemetry";
+
+type TelemetrySubcommandShape = CommandShape<[], {}, {}, TelemetryStatus, {}>;
+
+/** The contributed command, spelled out because the exported factory needs a declared type. */
+type TelemetryCommandDefinition<Command extends string = typeof DEFAULT_TELEMETRY_COMMAND> =
+	CommandDefinition<
+		Command,
+		readonly [],
+		CommandShape<
+			[],
+			{},
+			{
+				status: TelemetrySubcommandShape;
+				enable: TelemetrySubcommandShape;
+				disable: TelemetrySubcommandShape;
+			},
+			TelemetryStatus,
+			{}
+		>
+	>;
+
+// A non-literal name cannot be keyed statically, so it keeps the open command namespace.
+type TelemetryCommands<Command extends string> = string extends Command
+	? readonly CommandDefinition<any, any, any, any>[]
+	: readonly [TelemetryCommandDefinition<Command>];
+
+/**
+ * {@link telemetry}'s signature: a `command` that is always present flows into the host's
+ * command tree, an absent one is `telemetry`, and a possibly absent one stays open.
+ */
+interface TelemetryExtension {
+	<const Command extends string>(
+		options: TelemetryOptions & { command: Command },
+	): Extension<{}, [], {}, TelemetryCommands<Command>>;
+	(
+		options: TelemetryOptions & { command?: undefined },
+	): Extension<{}, [], {}, readonly [TelemetryCommandDefinition]>;
+	// Omitted `Commands` is the open command namespace.
+	(options: TelemetryOptions): Extension<{}, [], {}>;
+	readonly id: ExtensionId;
+}
+
 const SEND_TIMEOUT_MS = 1_000;
 
 /** Per invocation: `performance.now()` when this Extension's `setup` ran. */
 const startedAt = /* @__PURE__ */ new WeakMap<ExtensionContext, number>();
 
-/** Read at `postRun` from `process.env`: `execute({ env })` only feeds flags' `env` fallbacks. */
-function isSending(options: TelemetryOptions): boolean {
+/**
+ * Which setting wins, for `postRun` and the command alike: `DO_NOT_TRACK`, the app's variable,
+ * the saved choice, then `enabled`. `readSaved` runs only when neither variable decides, so most
+ * runs never load the store. The variables are read from `process.env`: `execute({ env })` only
+ * feeds flags' `env` fallbacks.
+ */
+async function decide(
+	options: TelemetryOptions,
+	readSaved: () => Promise<SavedSetting | undefined>,
+): Promise<Pick<TelemetryStatus, "sending" | "decidedBy">> {
 	const doNotTrack = process.env.DO_NOT_TRACK;
-	if (doNotTrack && doNotTrack !== "0") return false;
+	if (doNotTrack && doNotTrack !== "0") return { sending: false, decidedBy: "do-not-track" };
 	const value = process.env[options.env];
-	if (value === "0" || value?.toLowerCase() === "false") return false;
-	return options.enabled === "opt-out" || !!value;
+	if (value === "0" || value?.toLowerCase() === "false")
+		return { sending: false, decidedBy: "env" };
+	if (value) return { sending: true, decidedBy: "env" };
+	const saved = await readSaved();
+	// An unreadable file sends nothing until `enable` or `disable` rewrites it.
+	if (saved !== undefined) return { sending: saved === "on", decidedBy: "saved" };
+	return { sending: options.enabled === "opt-out", decidedBy: "default" };
 }
 
+/** The contributed command: bare, it is `status`; `enable` and `disable` save, then report the result. */
+function telemetryCommand(options: TelemetryOptions, name: string) {
+	const report =
+		(change: "on" | "off" | undefined) =>
+		async ({ rootCommand, stdout }: Pick<CrustCommandContext, "rootCommand" | "stdout">) => {
+			// The store and the wording load only when the command runs.
+			const setting = await import("./telemetry-setting.ts");
+			const appName = rootCommand.meta.name;
+			if (change) await setting.writeSavedSetting(appName, change);
+			const saved = change ?? (await setting.readSavedSetting(appName));
+			const status: TelemetryStatus = {
+				...(await decide(options, async () => saved)),
+				...(saved && { saved }),
+				default: options.enabled === "opt-out" ? "on" : "off",
+			};
+			stdout(setting.describeStatus(status, change, appName, name, options.env));
+			return status;
+		};
+	const subcommand = <SubName extends "status" | "enable" | "disable">(
+		subName: SubName,
+		description: string,
+		change: "on" | "off" | undefined,
+	) =>
+		defineCommand(subName, { description }, (cmd) =>
+			cmd.output(statusSchema).action(report(change)),
+		);
+	return defineCommand(
+		name,
+		{ description: "Show whether usage telemetry is sent (shorthand for `status`)" },
+		(cmd) =>
+			cmd
+				.add(
+					subcommand(
+						"status",
+						"Show whether usage telemetry is sent and which setting decides it",
+						undefined,
+					),
+					subcommand("enable", "Turn usage telemetry on on this machine", "on"),
+					subcommand("disable", "Turn usage telemetry off on this machine", "off"),
+				)
+				.output(statusSchema)
+				.action(report(undefined)),
+	);
+}
+
+const telemetryFactory: ExtensionFactory<
+	[options: TelemetryOptions],
+	{},
+	[],
+	{},
+	readonly [TelemetryCommandDefinition<string>]
+> = /* @__PURE__ */ defineExtension(TELEMETRY).factory((extension, options) =>
+	extension
+		.add(telemetryCommand(options, options.command ?? DEFAULT_TELEMETRY_COMMAND))
+		.setup((ctx) => {
+			startedAt.set(ctx, performance.now());
+		})
+		.postRun(async (ctx, outcome) => {
+			const { sending } = await decide(options, async () => {
+				// Loaded only when neither variable decides, keeping it out of every CLI's startup.
+				const { readSavedSetting } = await import("./telemetry-setting.ts");
+				return readSavedSetting(ctx.commandPath[0]!);
+			});
+			if (!sending) return;
+			const started = startedAt.get(ctx);
+			const durationMs = started === undefined ? 0 : Math.round(performance.now() - started);
+			// Loaded only when sending, keeping it out of every CLI's startup.
+			const { isCI } = await import("@crustjs/utils/terminal");
+			const event: TelemetryEvent = {
+				command: ctx.commandPath,
+				outcome: outcome.status,
+				durationMs,
+				ci: isCI(),
+			};
+			// Its own deadline, not `ctx.signal`: that is already aborted after Ctrl-C.
+			const deadline = new AbortController();
+			const timer = setTimeout(
+				() => deadline.abort(new DOMException("Telemetry send timed out.", "TimeoutError")),
+				SEND_TIMEOUT_MS,
+			);
+			try {
+				// The race stops the wait even when `send` ignores the signal.
+				await Promise.race([
+					options.send(event, { signal: deadline.signal }),
+					new Promise<void>((resolve) => {
+						deadline.signal.addEventListener("abort", () => resolve(), { once: true });
+					}),
+				]);
+			} catch {
+				// Telemetry never changes the invocation's outcome.
+			} finally {
+				clearTimeout(timer);
+			}
+		}),
+);
+
+// SAFETY: the runtime command name is `options.command ?? "telemetry"`, which each overload's name restates.
 /**
  * Sends one usage event per invocation through the app's `send`, after the invocation settles.
  * Reports the outcome this Extension's `postRun` sees; an unknown command or flag fails before setup and sends nothing.
+ * Contributes a `telemetry` command (`status`, `enable`, `disable`) through which the user saves a choice for this machine.
  *
  * @see https://crustjs.com/docs/modules/extensions/telemetry
  */
-export const telemetry: ExtensionFactory<[options: TelemetryOptions]> =
-	/* @__PURE__ */ defineExtension(TELEMETRY).factory((extension, options) =>
-		extension
-			.setup((ctx) => {
-				startedAt.set(ctx, performance.now());
-			})
-			.postRun(async (ctx, outcome) => {
-				if (!isSending(options)) return;
-				const started = startedAt.get(ctx);
-				const durationMs = started === undefined ? 0 : Math.round(performance.now() - started);
-				// Loaded only when sending, keeping it out of every CLI's startup.
-				const { isCI } = await import("@crustjs/utils/terminal");
-				const event: TelemetryEvent = {
-					command: ctx.commandPath,
-					outcome: outcome.status,
-					durationMs,
-					ci: isCI(),
-				};
-				// Its own deadline, not `ctx.signal`: that is already aborted after Ctrl-C.
-				const deadline = new AbortController();
-				const timer = setTimeout(
-					() => deadline.abort(new DOMException("Telemetry send timed out.", "TimeoutError")),
-					SEND_TIMEOUT_MS,
-				);
-				try {
-					// The race stops the wait even when `send` ignores the signal.
-					await Promise.race([
-						options.send(event, { signal: deadline.signal }),
-						new Promise<void>((resolve) => {
-							deadline.signal.addEventListener("abort", () => resolve(), { once: true });
-						}),
-					]);
-				} catch {
-					// Telemetry never changes the invocation's outcome.
-				} finally {
-					clearTimeout(timer);
-				}
-			}),
-	);
+export const telemetry = telemetryFactory as TelemetryExtension;
