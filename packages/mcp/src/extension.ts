@@ -11,15 +11,15 @@ import {
 import { isCompiledExecutable } from "@crustjs/utils/artifacts";
 import { shellQuote } from "@crustjs/utils/process";
 
-import { serveStdio } from "./server.ts";
-import { MCP_COMMAND_NAME, type McpToolsOptions } from "./tools.ts";
+import { type McpServerOptions, serveStdio } from "./server.ts";
+import { MCP_COMMAND_NAME } from "./tools.ts";
 
 export const MCP: ExtensionId = defineExtensionId("crust:mcp");
 
 export const MCP_CLIENTS = ["claude", "cursor", "vscode"] as const;
 export type McpClient = (typeof MCP_CLIENTS)[number];
 
-export interface McpExtensionOptions extends McpToolsOptions {
+export interface McpExtensionOptions extends McpServerOptions {
 	/**
 	 * Returns the completed application to serve. Called when `mcp` runs, not
 	 * when the Extension is installed, so it may return the variable the

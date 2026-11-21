@@ -17,6 +17,13 @@ export const app = new Crust("my-cli", { description: "Manage deployments", vers
 	.extend(mcpExtension({ app: (): AnyCrust => app, exclude: [["wipe"]] }));
 //#endregion
 
+//#region discovery
+// Lists search_tools, get_tool_details and call_tool instead of every tool.
+export const large = new Crust("my-cli")
+	.add(deploy)
+	.extend(mcpExtension({ app: (): AnyCrust => large, discovery: "progressive" }));
+//#endregion
+
 //#region headless
 import { serveStdio } from "@crustjs/mcp";
 
