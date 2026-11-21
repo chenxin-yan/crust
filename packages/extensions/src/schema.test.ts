@@ -46,7 +46,7 @@ function buildCli() {
 					})
 					.flags({
 						force: { type: "boolean", short: "f", description: "Skip checks", default: false },
-						tag: { type: "string", multiple: true, env: { name: "DEPLOY_TAG" }, config: "tag" },
+						tag: { type: "string", multiple: true, env: { name: "DEPLOY_TAG" } },
 					})
 					.output(outputSchema(deployResult))
 					.action(() => ({ id: "dep_1" })),
@@ -84,7 +84,7 @@ describe("schema", () => {
 					tag: {
 						type: "array",
 						items: { type: "string" },
-						description: 'Falls back to $DEPLOY_TAG, then config key "tag"',
+						description: "Falls back to $DEPLOY_TAG",
 					},
 					raw: {
 						type: "array",
@@ -194,7 +194,7 @@ describe("schema", () => {
 				"Flags:",
 				"",
 				"- `-f`, `--force`, `--no-force` (boolean): Skip checks [default: false]",
-				"- `--tag` (string, multiple): [env: DEPLOY_TAG] [config: tag]",
+				"- `--tag` (string, multiple): [env: DEPLOY_TAG]",
 				"- `-h`, `--help` (boolean): Show help",
 				"",
 				"## `mycli remote <command> [options]`",

@@ -64,10 +64,6 @@ export interface ArgvParseResult<
 	};
 	/** Argv/env value errors by definition label, in binding order; {@link validateParsed} throws the first. */
 	valueErrors?: ReadonlyMap<string, CrustError>;
-	/** Origin label of each flag {@link bindConfigInput} bound; read only while its source is `config`. */
-	configFrom?: Readonly<Record<string, string>>;
-	/** Flags {@link bindStructuredInput} replaced; {@link overlayBound} keeps them over config values. */
-	boundFlags?: ReadonlySet<string>;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -635,12 +631,8 @@ function coerceStructuredValue(
 	return coerceToken(def, String(value), label, index);
 }
 
-function coerceStructuredFlag(
-	name: string,
-	def: FlagDef,
-	value: RunInputValue,
-	label = `--${name}`,
-): ParsedFlagValue {
+function coerceStructuredFlag(name: string, def: FlagDef, value: RunInputValue): ParsedFlagValue {
+	const label = `--${name}`;
 	// Only multiple flags interpret arrays as occurrences; scalar JSON can itself be an array.
 	if (def.multiple) {
 		if (!isOccurrenceArray(value)) {
@@ -1025,113 +1017,7 @@ export function bindStructuredInput(
 			raw: raw === undefined ? sources.raw : structured.sources.raw && ("bound" as const),
 		}),
 		valueErrors,
-		boundFlags: new Set(Object.keys(inputFlags)),
 	};
-}
-
-/**
- * Lay a {@link bindStructuredInput} result over a {@link bindConfigInput} result, both bound
- * against the same parse, without converting either payload again: the flags `bound`
- * replaced keep its values, every other flag keeps the config layer's.
- */
-export function overlayBound(configured: ArgvParseResult, bound: ArgvParseResult): ArgvParseResult {
-	const replaced = bound.boundFlags ?? new Set<string>();
-	const replacedLabels = new Set([...replaced].map((name) => `--${name}`));
-	const flags = { ...configured.flags };
-	const sources = Object.fromEntries(
-		Object.entries(configured.sources.flags).filter(([name]) => !replaced.has(name)),
-	);
-	for (const name of replaced) {
-		flags[name] = bound.flags[name];
-		const source = Object.hasOwn(bound.sources.flags, name) ? bound.sources.flags[name] : undefined;
-		if (source !== undefined) sources[name] = source;
-	}
-	return {
-		...bound,
-		flags,
-		sources: Object.freeze({ ...bound.sources, flags: Object.freeze(sources) }),
-		// A replaced flag's config value error no longer applies, like its environment one.
-		valueErrors: new Map(
-			[...(configured.valueErrors ?? [])].filter(([label]) => !replacedLabels.has(label)),
-		),
-		configFrom: configured.configFrom,
-	};
-}
-
-/**
- * Bind config-file values under a parse result, as `bindInput(input, { source: "config" })`
- * does: a flag takes its config value only when nothing but its default supplied one, so
- * argv, typed `run()` input and `env` win. Values convert as typed `run()` input; a value
- * that fails is deferred to `valueErrors` like an environment value, labeled with its
- * origin, so a flag handler such as `--help` still runs.
- *
- * @param parsed - The invocation's original parse result; each call re-binds against it
- * @param from - Each flag's origin for error messages, e.g. `/repo/acme.config.json key "org"`
- * @throws {CrustError} `PARSE` on a flag the command does not declare
- */
-export function bindConfigInput(
-	command: CommandNode,
-	parsed: ArgvParseResult,
-	flags: Readonly<Record<string, RunInputValue | undefined>>,
-	from: Readonly<Record<string, string>>,
-): ArgvParseResult {
-	const values: Record<string, ParsedFlagValue> = { ...parsed.flags };
-	const sources: Record<string, ValueSource> = { ...parsed.sources.flags };
-	const configFrom: Record<string, string> = {};
-	const valueErrors = new Map(parsed.valueErrors ?? []);
-	for (const [name, value] of Object.entries(flags)) {
-		if (value === undefined) continue;
-		if (!Object.hasOwn(command.effectiveFlags, name)) {
-			throw new CrustError("PARSE", `Unknown flag "--${name}"`, {
-				flag: name,
-				reason: "unknown-flag",
-			});
-		}
-		// SAFETY: hasOwn above proves the definition exists.
-		const def = command.effectiveFlags[name]!;
-		const given = Object.hasOwn(sources, name) ? sources[name] : undefined;
-		// An empty array is zero occurrences, as for typed input: it supplies nothing.
-		if (
-			(given !== undefined && given !== "default") ||
-			(def.multiple && isOccurrenceArray(value) && value.length === 0)
-		)
-			continue;
-		const origin = (Object.hasOwn(from, name) ? from[name] : undefined) ?? "config";
-		configFrom[name] = origin;
-		try {
-			values[name] = coerceStructuredFlag(name, def, value, `--${name} (from ${origin})`);
-		} catch (error) {
-			if (!(error instanceof CrustError)) throw error;
-			values[name] = undefined;
-			valueErrors.set(`--${name}`, error);
-		}
-		sources[name] = "config";
-	}
-	return {
-		...parsed,
-		flags: values,
-		sources: Object.freeze({ ...parsed.sources, flags: Object.freeze(sources) }),
-		...(valueErrors.size > 0 && { valueErrors }),
-		configFrom,
-	};
-}
-
-/**
- * Each env- or config-supplied flag's origin, as its value errors name it: `$ACME_ORG`, or
- * the `from` label given to {@link bindConfigInput}.
- */
-export function flagOrigins(command: CommandNode, parsed: ArgvParseResult): Record<string, string> {
-	const origins: Record<string, string> = {};
-	for (const [name, source] of Object.entries(parsed.sources.flags)) {
-		const env = Object.hasOwn(command.effectiveFlags, name)
-			? command.effectiveFlags[name]?.env
-			: undefined;
-		const config = parsed.configFrom?.[name];
-		if (source === "env" && env) origins[name] = `$${env.name}`;
-		// The source check also keeps a config label from outliving a later plain bind.
-		else if (source === "config" && config !== undefined) origins[name] = config;
-	}
-	return origins;
 }
 
 /**

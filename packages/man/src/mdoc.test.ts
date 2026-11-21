@@ -284,17 +284,15 @@ describe("renderManPageMdoc", () => {
 		expect(mdoc).not.toContain("__complete");
 	});
 
-	it("renders the flag `env` variable name and `config` key after the description, never a value", async () => {
+	it("renders the flag `env` variable name after the description, never its value", async () => {
 		const app = new Crust("demo", { description: "Demo." })
-			.flags({
-				token: { type: "string", env: { name: "HOME" }, config: "token", description: "API token" },
-			})
+			.flags({ token: { type: "string", env: { name: "HOME" }, description: "API token" } })
 			.action(() => {});
 
 		const root = await app.snapshot();
 		const mdoc = renderManPageMdoc({ root, section: 1 });
 
-		expect(mdoc).toContain("API token [env: HOME] [config: token]");
+		expect(mdoc).toContain("API token [env: HOME]");
 		// HOME is set in every test environment; the page must show the name only.
 		expect(process.env.HOME).toBeTruthy();
 		expect(mdoc).not.toContain(process.env.HOME as string);

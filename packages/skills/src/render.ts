@@ -483,7 +483,6 @@ function formatFieldDescription(field: DocumentationArg | DocumentationFlag): st
 			field.choices,
 			(annotation) => `\`${annotation}\``,
 			flag?.env?.name,
-			flag?.config,
 		) || "-"
 	);
 }

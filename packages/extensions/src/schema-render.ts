@@ -94,7 +94,6 @@ export function renderCommandIndex(root: CommandSnapshot, consumer: ExtensionId)
 							flag.choices,
 							undefined,
 							flag.env?.name,
-							flag.config,
 						),
 					),
 				);

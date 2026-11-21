@@ -92,8 +92,6 @@ export interface FlagSnapshot {
 	readonly default?: unknown;
 	/** Declared environment binding; never contains the variable's value. */
 	readonly env?: Readonly<NonNullable<FlagDef["env"]>>;
-	/** Declared config-file key (`FlagDef.config`); never contains the file's value. */
-	readonly config?: string;
 	/** Delimiter that splits string argv values of a repeatable flag into occurrences. */
 	readonly delimiter?: string;
 	/**
@@ -228,7 +226,6 @@ function snapshotFlag(def: FlagDef, extension: ExtensionId | undefined): FlagSna
 		choices: def.choices ? Object.freeze([...def.choices]) : undefined,
 		default: serializableDefault(def.default),
 		env: def.env ? freezeCompact({ name: def.env.name, delimiter: def.env.delimiter }) : undefined,
-		config: def.config,
 		delimiter: def.delimiter,
 		inputSchema: def.schema && standardJsonSchema(def.schema, "input"),
 		extension,

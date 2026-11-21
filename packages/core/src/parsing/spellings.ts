@@ -233,17 +233,6 @@ export function normalizeFlag<const D extends FlagDef>(name: string | undefined,
 			reason: "empty-env",
 		});
 	}
-	// "." stays free for nested key paths.
-	if (
-		def.config !== undefined &&
-		(typeof def.config !== "string" || def.config === "" || def.config.includes("."))
-	) {
-		throw new CrustError("DEFINITION", `${label} config must be a non-empty key without "."`, {
-			subject: "flag",
-			...named,
-			reason: "invalid-config",
-		});
-	}
 	for (const [field, delimiter] of [
 		["delimiter", def.delimiter],
 		["env.delimiter", def.env?.delimiter],

@@ -10,8 +10,6 @@ export type {
 	CompletionRenderOptions,
 	CompletionShell,
 } from "./completion/index.ts";
-export { config } from "./config.ts";
-export type { ConfigOptions } from "./config.ts";
 export { ConfirmationRequiredError, confirm } from "./confirm.ts";
 export { didYouMean } from "./did-you-mean.ts";
 export type { DidYouMeanOptions } from "./did-you-mean.ts";

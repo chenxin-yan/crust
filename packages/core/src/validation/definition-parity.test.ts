@@ -176,7 +176,7 @@ describe("flag spellings", () => {
 });
 
 describe("flag values", () => {
-	it("rejects invalid defaults, delimiters, env bindings and config keys", () => {
+	it("rejects invalid defaults, delimiters and env bindings", () => {
 		expect(() =>
 			new Crust("cli").flags({
 				// @ts-expect-error -- default outside choices
@@ -213,18 +213,6 @@ describe("flag values", () => {
 				a: { type: "string", env: { name: "A", delimiter: "," } },
 			}),
 		).toThrow(definitionError("delimiter-without-multiple"));
-		expect(() =>
-			new Crust("cli").flags({
-				// @ts-expect-error -- empty config key
-				a: { type: "string", config: "" },
-			}),
-		).toThrow(definitionError("invalid-config"));
-		expect(() =>
-			new Crust("cli").flags({
-				// @ts-expect-error -- "." is reserved for nested config keys
-				a: { type: "string", config: "api.org" },
-			}),
-		).toThrow(definitionError("invalid-config"));
 	});
 
 	// Types reject the definition; runtime cannot tell a parser is async until it returns a Promise.
