@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
@@ -8,11 +9,17 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { help } from "./help.ts";
 import { schema } from "./schema.ts";
 import { search } from "./search.ts";
+import { telemetry } from "./telemetry.ts";
 
-const state = vi.hoisted(() => ({ rankingLoaded: false }));
+const state = vi.hoisted(() => ({ rankingLoaded: false, storeLoaded: false }));
 // search() ranks commands only when `search` runs; registering it must not load the ranking.
 vi.mock("@crustjs/utils/search", async (importOriginal) => {
 	state.rankingLoaded = true;
+	return importOriginal();
+});
+// telemetry() reads its saved setting only when a variable does not decide, or its command runs.
+vi.mock("@crustjs/store", async (importOriginal) => {
+	state.storeLoaded = true;
 	return importOriginal();
 });
 
@@ -104,5 +111,41 @@ describe("search() at startup", () => {
 		const found = await captureExecute(app, ["search", "deploy"]);
 		expect(found.stdout).toBe("acme deploy  Deploy the app");
 		expect(state.rankingLoaded).toBe(true);
+	});
+});
+
+describe("telemetry() at startup", () => {
+	it("loads the store only when neither variable decides or `telemetry` runs", async () => {
+		const configHome = mkdtempSync(join(tmpdir(), "crust-telemetry-startup-"));
+		vi.stubEnv("XDG_CONFIG_HOME", configHome);
+		vi.stubEnv("APPDATA", configHome);
+		try {
+			const send = vi.fn(async () => {});
+			const app = new Crust("acme")
+				.extend(telemetry({ env: "ACME_TELEMETRY", enabled: "opt-out", send }), help())
+				.add(defineCommand("deploy", (cmd) => cmd.action(() => {})));
+			for (const [variable, doNotTrack] of [
+				["0", undefined],
+				["1", undefined],
+				[undefined, "1"],
+			] as const) {
+				vi.stubEnv("ACME_TELEMETRY", variable);
+				vi.stubEnv("DO_NOT_TRACK", doNotTrack);
+				for (const argv of [["deploy"], ["--help"]]) {
+					expect((await captureExecute(app, argv)).exitCode, argv.join(" ")).toBe(0);
+				}
+			}
+			expect(send).toHaveBeenCalledTimes(2);
+			expect(state.storeLoaded).toBe(false);
+
+			vi.stubEnv("ACME_TELEMETRY", undefined);
+			vi.stubEnv("DO_NOT_TRACK", undefined);
+			expect((await captureExecute(app, ["deploy"])).exitCode).toBe(0);
+			expect(state.storeLoaded).toBe(true);
+			expect(send).toHaveBeenCalledTimes(3);
+		} finally {
+			vi.unstubAllEnvs();
+			rmSync(configHome, { recursive: true, force: true });
+		}
 	});
 });

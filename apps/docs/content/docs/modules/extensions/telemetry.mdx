@@ -1,0 +1,142 @@
+---
+title: Telemetry
+description: Send one usage event per invocation through your own send function.
+---
+
+## Usage
+
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../../examples/modules/extensions/telemetry.ts#usage
+</include>
+
+With `ACME_TELEMETRY=1`, `acme deploy` passes this event to `send` after the command settles:
+
+```json
+{ "command": ["acme", "deploy"], "outcome": "completed", "durationMs": 12, "ci": false }
+```
+
+This Extension has no transport of its own and no default mode: your `send` delivers the event, and you choose `"opt-in"` or `"opt-out"`. It prints nothing unless its command runs; tell your users about telemetry and how to turn it off in your own docs.
+
+## The `telemetry` command
+
+`telemetry()` adds a command through which a user sees the state and saves a preference on their machine, once. Bare, it is `status`. For an `"opt-out"` app that also extends [`json()`](/docs/modules/extensions/json), starting with nothing saved:
+
+```sh
+$ acme telemetry
+Telemetry is on (the default). Turn it off with: acme telemetry disable
+
+$ acme telemetry disable
+Saved telemetry preference: off.
+
+$ acme telemetry
+Telemetry is off (saved preference). Turn it on with: acme telemetry enable
+
+$ ACME_TELEMETRY=1 acme telemetry
+Telemetry is on for this run because ACME_TELEMETRY is set.
+The saved preference is off.
+
+$ DO_NOT_TRACK=1 acme telemetry enable
+Saved telemetry preference: on.
+Telemetry stays off for this run because DO_NOT_TRACK is set.
+
+$ acme telemetry --json
+{"sending":true,"decidedBy":"saved","saved":"on","default":"on"}
+```
+
+`enable` and `disable` save the preference, then report what holds for this run when a variable overrides it. Messages name a variable, never its value. All three declare an [`.output()`](/docs/api/crust#outputschema) schema and return the state, so [`run()`](/docs/api/crust#runpath-input-options) gets it as the outcome's `result`, and with `json()` `--json` prints only the JSON:
+
+| Field       | Value                                                                                                    |
+| ----------- | -------------------------------------------------------------------------------------------------------- |
+| `sending`   | Whether this run would send events                                                                       |
+| `decidedBy` | The first setting that decides, in the order below: `"do-not-track"`, `"env"`, `"saved"`, or `"default"` |
+| `saved`     | `"on"` or `"off"` as saved, `"unreadable"` when the file cannot be read; absent when nothing is saved    |
+| `default`   | `"on"` under `"opt-out"`, `"off"` under `"opt-in"`                                                       |
+
+A save that fails, such as in a directory the user cannot write to, exits with code 1, says the preference could not be saved, and names the variable that does the same without a file (`ACME_TELEMETRY=0`). Nothing it printed claims a change.
+
+The command never reports itself: its invocations, bare or with `status`, `enable` or `disable`, their `--help`, and their failures, send no event under any setting, so neither checking nor opting out is recorded.
+
+Name the command with `command`; every message spells it as configured:
+
+<include lang="ts">../../../../examples/modules/extensions/telemetry.ts#command</include>
+
+A literal name keeps the command tree type-checked, as with [`skill()`](/docs/modules/skills); a `string` known only at runtime opens it. The command is a name at the root, not a path, and it cannot be left out. If the application has its own command of that name, TypeScript reports the collision at `.add()` or `.extend()` when both names are literals, and Core throws a `DEFINITION` error when the command tree is prepared (the first `execute()`, `run()` or `snapshot()`); pick another `command`. Like every Extension command, it is not an [MCP](/docs/modules/mcp) tool unless the application includes it.
+
+## When it sends
+
+The first setting in this order that decides wins:
+
+| Setting                                                | Effect                                             | `decidedBy`      |
+| ------------------------------------------------------ | -------------------------------------------------- | ---------------- |
+| `DO_NOT_TRACK` set to anything but empty or `0`        | No event                                           | `"do-not-track"` |
+| The `env` variable is `0` or `false` (any letter case) | No event, for the runs where it is set             | `"env"`          |
+| The `env` variable is any other non-empty value        | Sends, for the runs where it is set                | `"env"`          |
+| The preference saved by `enable` or `disable`          | Sends when `on`; no event when `off` or unreadable | `"saved"`        |
+| `enabled`                                              | `"opt-out"` sends; `"opt-in"` sends no event       | `"default"`      |
+
+An unset or empty variable decides nothing and falls through to the next row. The variables never change what is saved: `ACME_TELEMETRY=1` sends for that run even after `acme telemetry disable`, and `ACME_TELEMETRY=0` keeps a CI job quiet without touching the machine's preference.
+
+Both variables are read from `process.env` when the invocation settles; `execute({ env })` and `run()`'s `env` option only feed flags' `env` fallbacks. There is no test-runner detection, so a test suite opts out explicitly: set `DO_NOT_TRACK=1` or the `env` variable to `0`.
+
+Each invocation decides once, when it settles. Turning telemetry off stops the events of invocations that settle after the preference is saved; it does not retract an event already handed to `send`, or one that another process is sending.
+
+## Where the preference is kept
+
+In `telemetry.json` in the [config directory](/docs/modules/store#storage-paths) named after the root command: `~/.config/acme/telemetry.json` on Linux and macOS (under `$XDG_CONFIG_HOME` when it is set), `%APPDATA%\acme\telemetry.json` on Windows. It holds one key, `{"telemetry":"off"}` or `{"telemetry":"on"}`. The location is fixed. The file is written to a temporary file and renamed over the old one, so a reader sees the old or the new preference. On Linux and macOS the file is created readable by its owner only (`0600`), as is the directory when the command creates it (`0700`); an existing directory keeps its mode. On Windows modes do not apply: the file inherits the access rules of the CLI's config directory (`%APPDATA%\acme`), so its privacy is that directory's.
+
+Only a missing file means nothing is saved. A file that cannot be read (a link whose target is gone included), or holds anything but exactly that one key with `"on"` or `"off"` (`{}` included), is unreadable: when neither variable decides, no event is sent, and the command that ran never fails because of it. `status` says so and names the file; `enable` or `disable` rewrites it, given write permission to the directory. When the config directory itself cannot be resolved (for example, a relative `HOME`), `status` says that instead.
+
+The file is read only when it is needed: when the command runs, or when an invocation settles and neither variable decided. Adding `telemetry()` loads nothing more at startup.
+
+## The event
+
+| Field        | Value                                                                                        |
+| ------------ | -------------------------------------------------------------------------------------------- |
+| `command`    | Command names from the root through the command that ran, such as `["acme", "deploy"]`       |
+| `outcome`    | `"completed"`, `"failed"`, or `"handled"`                                                    |
+| `durationMs` | Whole milliseconds from the Extension's `setup` to its `postRun`; `0` if its setup never ran |
+| `ci`         | Whether `CI` is set to anything other than empty, `0`, or `false`                            |
+
+The event never contains argument or flag values: `command` holds only the names you defined, never what the user typed after them.
+
+## What the outcome covers
+
+The event reports the outcome the Extension's `postRun` hook sees:
+
+- `completed`: the Command Action finished. A command without an action also reports `completed` unless an Extension with a `noAction` hook, such as [`help()`](/docs/modules/extensions/help), takes it.
+- `handled`: a flag handler (`--help`, `--version`, `--llms`) or a `noAction` hook ended the invocation.
+- `failed`: the action, a hook, or validation threw. A run cancelled with Ctrl-C or `SIGTERM` reports `failed` (an `AbortError`), or `completed` if the action ignored the cancellation.
+
+Not covered:
+
+- Failures while routing or parsing argv, before a command is selected: an unknown command (`acme nope`, or `acme keys nope` under a group without an action) or an unknown flag fails before any `setup`, so no event is sent. Once a command is selected, its validation runs after `setup` and reports `failed`: a missing required argument, a value of the wrong type (`--replicas many` for a number flag), or an extra word after a command that has an action (`acme deploy nope` reports `["acme", "deploy"]`).
+- The `telemetry` command's own invocations (see above).
+- Outcome changes by later hooks: another Extension's `postRun` that throws fails a completed invocation, but every `postRun` receives the outcome as it was, so the event still says `completed`.
+- The process exit code.
+
+## Delivery
+
+`send` runs inside `postRun`, so an invocation that sends ends only when it settles, or after 1 second at most. At that deadline its `signal` aborts with a `TimeoutError`; pass it to `fetch` (or whatever does the work) so the request ends too. It is not `ctx.signal`, which is already aborted after Ctrl-C. A `send` that throws, rejects, or takes longer is ignored and never changes the outcome or the exit code.
+
+The 1 second bounds only the wait. Work that ignores `signal`, such as a request without it or a timer, keeps the process alive until it finishes, and so does code that blocks the event loop. That includes Ctrl-C: Crust exits by the signal only once the event loop is empty.
+
+## Not slowing commands down
+
+Only invocations that call `send` wait for it. Those do wait: a `send` that makes a request adds its round trip, up to the full second on a slow network, to the command the user ran. (The second bounds only that wait, not reading the saved preference or code that blocks.) To keep the network off the command's path, have `send` append the event to a private local file and return:
+
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../../examples/modules/extensions/telemetry-queue.ts
+</include>
+
+The events are then collected but not yet delivered, so whatever uploads them later, such as a scheduled job or a background command, must follow three rules:
+
+- Before uploading, check the effective setting again (`acme telemetry --json`, or `run(["telemetry"])`, and its `sending`). If it is off, delete the queued events instead: a user who turned telemetry off after an event was queued did not agree to its delivery.
+- Lose no event while uploading: a command that is running can still append to a file the uploader has already read, also after that file was renamed. Delete only what was uploaded, and leave anything appended since for the next run.
+- Keep the queue readable by the user only. The example's modes do that on Linux and macOS when it creates the directory and the file; they change neither an existing file nor Windows permissions.
+
+## API
+
+<auto-type-table
+  path="../../../../../../packages/extensions/src/telemetry.ts"
+  name="TelemetryOptions"
+/>
