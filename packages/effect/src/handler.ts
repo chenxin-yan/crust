@@ -119,8 +119,7 @@ export function service<F extends AnyContextFactory>(
 		tryCrust((): Promise<FactoryValueOf<F>> => {
 			const ctx: ContextBag = input.ctx;
 			const provider = effectiveProviders(ctx).find((source) => source.name === name);
-			// A structural copy of a factory, which core allows, carries the original's `of`.
-			if (provider?.factory.of === factory.of && Object.hasOwn(ctx, name)) {
+			if (provider?.factory === factory && Object.hasOwn(ctx, name)) {
 				return readContext<FactoryValueOf<F>>(ctx, name);
 			}
 			throw new CrustError(
