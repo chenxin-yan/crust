@@ -24,6 +24,7 @@ const saved = {
 	xdg: process.env.XDG_CONFIG_HOME,
 	appData: process.env.APPDATA,
 	telemetry: process.env.ACME_TELEMETRY,
+	noCache: process.env.ACME_NO_CACHE,
 };
 
 beforeEach(() => {
@@ -31,7 +32,9 @@ beforeEach(() => {
 	// configDir() reads XDG_CONFIG_HOME on Linux and macOS, APPDATA on Windows: both point here.
 	process.env.XDG_CONFIG_HOME = join(root, "xdg");
 	process.env.APPDATA = join(root, "xdg");
+	// flag: false settings read process.env: the fixtures' variables come only from each case.
 	delete process.env.ACME_TELEMETRY;
+	delete process.env.ACME_NO_CACHE;
 	cwd = join(root, "repo", "sub");
 	mkdirSync(cwd, { recursive: true });
 	process.chdir(cwd);
@@ -43,6 +46,7 @@ afterEach(() => {
 		["XDG_CONFIG_HOME", saved.xdg],
 		["APPDATA", saved.appData],
 		["ACME_TELEMETRY", saved.telemetry],
+		["ACME_NO_CACHE", saved.noCache],
 	] as const) {
 		if (value === undefined) delete process.env[name];
 		else process.env[name] = value;
@@ -284,12 +288,12 @@ describe("settings", () => {
 			token: { type: "string", flag: false, required: true },
 		});
 		const app = shows(config);
-		const { exitCode, stderr } = await captureExecute(app, ["show"]);
+		const { exitCode, stderr } = await captureExecute(app, ["show"], { env: {} });
 		expect(exitCode).toBe(1);
 		expect(stderr).toContain(
 			`Missing setting "org" of acme: pass --org, set ACME_ORG, or set "org" in acme.config.json or ${globalFile()}.`,
 		);
-		const token = await captureExecute(app, ["show", "--org", "o"]);
+		const token = await captureExecute(app, ["show", "--org", "o"], { env: {} });
 		expect(token.stderr).toContain(
 			`Missing setting "token" of acme: set "token" in acme.config.json or ${globalFile()}.`,
 		);

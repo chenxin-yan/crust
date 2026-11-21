@@ -88,9 +88,11 @@ function requests(): string[] {
 it("a generated command binds a setting from the project file, or from its flag", async () => {
 	writeFileSync(join(root, "acme.config.json"), JSON.stringify({ account: "from-file" }));
 	const urls = requests();
-	expect(await captureExecute(app, ["zones", "list-zones"])).toMatchObject({ exitCode: 0 });
+	expect(await captureExecute(app, ["zones", "list-zones"], { env: {} })).toMatchObject({
+		exitCode: 0,
+	});
 	expect(
-		await captureExecute(app, ["zones", "list-zones", "--account", "from-flag"]),
+		await captureExecute(app, ["zones", "list-zones", "--account", "from-flag"], { env: {} }),
 	).toMatchObject({ exitCode: 0 });
 	expect(urls).toEqual([
 		"https://api.acme.example/v1/accounts/from-file/zones",
@@ -101,7 +103,7 @@ it("a generated command binds a setting from the project file, or from its flag"
 it("a generated command fails a missing setting before any request", async () => {
 	mkdirSync(join(root, "xdg"));
 	const urls = requests();
-	const { exitCode, stderr } = await captureExecute(app, ["zones", "list-zones"]);
+	const { exitCode, stderr } = await captureExecute(app, ["zones", "list-zones"], { env: {} });
 	expect(exitCode).toBe(1);
 	expect(stderr).toContain('Missing setting "account" of acme: pass --account, set ACME_ACCOUNT');
 	expect(urls).toEqual([]);

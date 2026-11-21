@@ -31,7 +31,8 @@ function acme(command: string, env: Record<string, string> = {}) {
 			cwd: home,
 			encoding: "utf8",
 			env: {
-				...process.env,
+				// The fixture's own variable comes only from the case, never from this shell.
+				...Object.fromEntries(Object.entries(process.env).filter(([name]) => name !== "ACME_ORG")),
 				XDG_CONFIG_HOME: join(home, "xdg"),
 				APPDATA: join(home, "xdg"),
 				...env,
