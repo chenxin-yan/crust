@@ -254,6 +254,9 @@ importers:
       '@crustjs/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@crustjs/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@crustjs/core':
         specifier: workspace:*
         version: link:../../packages/core
