@@ -1,12 +1,7 @@
 import { Crust, defineCommand, type FactoryValueOf } from "@crustjs/core";
 import type { Store } from "@crustjs/store";
 
-import {
-	type ConfigBuilder,
-	type ConfigFactory,
-	type ConfigFlagDef,
-	defineConfig,
-} from "./index.ts";
+import { type Config, type ConfigBuilder, type ConfigFlagDef, defineConfig } from "./index.ts";
 
 type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -26,21 +21,29 @@ const config = defineConfig({
 	telemetry: { type: "boolean", flag: false, env: { name: "ACME_TELEMETRY" } },
 });
 
-// `await ctx.config`: inferred as the settings would be as flags; required and defaulted
+// Each setting's value: inferred as the settings would be as flags; required and defaulted
 // settings are never undefined, choices are a union, parse gives its output.
-type Value = FactoryValueOf<typeof config>;
-type _Value = Expect<
+const { org, region, port, timeout, tags, yes, telemetry } = config.settings;
+type _Values = Expect<
 	Equal<
-		Value,
-		Readonly<{
-			org: string;
-			region: "us" | "eu";
-			port: number | undefined;
-			timeout: number;
-			tags: string[] | undefined;
-			yes: boolean | undefined;
-			telemetry: boolean | undefined;
-		}>
+		[
+			FactoryValueOf<typeof org>,
+			FactoryValueOf<typeof region>,
+			FactoryValueOf<typeof port>,
+			FactoryValueOf<typeof timeout>,
+			FactoryValueOf<typeof tags>,
+			FactoryValueOf<typeof yes>,
+			FactoryValueOf<typeof telemetry>,
+		],
+		[
+			string,
+			"us" | "eu",
+			number | undefined,
+			number,
+			string[] | undefined,
+			boolean | undefined,
+			boolean | undefined,
+		]
 	>
 >;
 
@@ -69,30 +72,99 @@ void config.global.patch({ timeout: 30 });
 // @ts-expect-error -- without `global`, the config exposes no global store
 void defineConfig({ name: "acme", project: true }).flags({}).global;
 
-// The factory: `.use(config)`, `.provide(config())`, `.provide(config.of(...))`.
+// A command `.use()`s the settings it reads, and gets only their flags.
 const deploy = defineCommand("deploy", (command) =>
-	command.use(config).action(async ({ ctx }) => {
-		const { org, region } = await ctx.config;
-		type _Org = Expect<Equal<typeof org, string>>;
-		return region;
+	command.use(org, region).action(async ({ ctx, flags }) => {
+		const value = await ctx.org;
+		type _Org = Expect<Equal<typeof value, string>>;
+		type _Region = Expect<Equal<Awaited<typeof ctx.region>, "us" | "eu">>;
+		// `flags.org` is only what was typed or came from env; the settled value is `await ctx.org`.
+		type _Flag = Expect<Equal<typeof flags.org, string | undefined>>;
+		// @ts-expect-error -- a setting the command did not `.use()`
+		void ctx.port;
+		// @ts-expect-error -- nor its flag
+		void flags.port;
+		return value;
 	}),
 );
-const app = new Crust("acme").provide(config()).add(deploy);
-new Crust("acme").provide(config.of({} as Value)).add(deploy);
-// @ts-expect-error -- a test double has the setting types
-config.of({ org: 1 });
-const _factory: ConfigFactory<{ org: { type: "string" } }, true> = defineConfig({
+const serve = defineCommand("serve", (command) =>
+	command.use(port, telemetry).action(async ({ ctx }) => (await ctx.port) ?? 0),
+);
+const app = new Crust("acme").extend(config.extension).add(deploy, serve);
+// @ts-expect-error -- the settings' Extension is missing
+new Crust("acme").add(deploy);
+// A test replaces one setting with its double, without the Extension.
+new Crust("acme").provide(org.of("test-org"), region.of("eu")).add(deploy);
+// @ts-expect-error -- a double has the setting's type
+org.of(1);
+// @ts-expect-error -- a setting that is not in the config
+void config.settings.nope;
+// @ts-expect-error -- a setting name that another provided Context already has
+new Crust("acme").provide(org.of("x")).extend(config.extension).add(deploy);
+const _config: Config<{ org: { type: "string" } }, true> = defineConfig({
 	name: "acme",
 	global: true,
 }).flags({ org: { type: "string" } });
 
-// Typed input: every flag a setting owns is optional (a required setting may come from a file).
+// Typed input: a command takes only its settings' flags, all optional (a file may give them).
 void app.run(["deploy"], {});
-void app.run(["deploy"], { flags: { org: "o", region: "eu", port: 1, tags: ["a"] } });
+void app.run(["deploy"], { flags: { org: "o", region: "eu" } });
 // @ts-expect-error -- outside choices
 void app.run(["deploy"], { flags: { region: "mars" } });
+// @ts-expect-error -- deploy does not use port
+void app.run(["deploy"], { flags: { port: 1 } });
+void app.run(["serve"], { flags: { port: 1 } });
 // @ts-expect-error -- a setting with `flag: false` owns no flag
-void app.run(["deploy"], { flags: { telemetry: true } });
+void app.run(["serve"], { flags: { telemetry: true } });
+
+// The Extension's tuple of Contexts holds every setting, whatever their number.
+const one = defineConfig({ name: "one", global: true }).flags({ a: { type: "string" } });
+new Crust("one")
+	.extend(one.extension)
+	.add(defineCommand("x", (command) => command.use(one.settings.a)));
+const thirty = defineConfig({ name: "thirty", global: true }).flags({
+	s0: { type: "string" },
+	s1: { type: "number" },
+	s2: { type: "boolean" },
+	s3: { type: "string" },
+	s4: { type: "number" },
+	s5: { type: "boolean" },
+	s6: { type: "string" },
+	s7: { type: "number" },
+	s8: { type: "boolean" },
+	s9: { type: "string" },
+	s10: { type: "number" },
+	s11: { type: "boolean" },
+	s12: { type: "string" },
+	s13: { type: "number" },
+	s14: { type: "boolean" },
+	s15: { type: "string" },
+	s16: { type: "number" },
+	s17: { type: "boolean" },
+	s18: { type: "string" },
+	s19: { type: "number" },
+	s20: { type: "boolean" },
+	s21: { type: "string" },
+	s22: { type: "number" },
+	s23: { type: "boolean" },
+	s24: { type: "string" },
+	s25: { type: "number" },
+	s26: { type: "boolean" },
+	s27: { type: "string" },
+	s28: { type: "number" },
+	s29: { type: "string", required: true },
+});
+const first = defineCommand("first", (command) =>
+	command.use(thirty.settings.s0).action(async ({ ctx }) => ctx.s0),
+);
+const last = defineCommand("last", (command) =>
+	command.use(thirty.settings.s29, thirty.settings.s14).action(async ({ ctx }) => {
+		type _S29 = Expect<Equal<Awaited<typeof ctx.s29>, string>>;
+		type _S14 = Expect<Equal<Awaited<typeof ctx.s14>, boolean | undefined>>;
+		return ctx.s29;
+	}),
+);
+new Crust("thirty").extend(thirty.extension).add(first, last);
 
 // A setting is a flag definition for a string, number or boolean.
 const shared = { type: "string", description: "Organization" } as const satisfies ConfigFlagDef;

@@ -1,8 +1,11 @@
 import {
 	CrustError,
 	defineContext,
+	defineExtension,
+	defineExtensionId,
 	defineFlag,
 	type ContextFactory,
+	type Extension,
 	type FlagDef,
 	type FlagsDef,
 	type ValidatedInput,
@@ -60,7 +63,7 @@ type ConfigFlags<F extends ConfigFlagsDef> = {
 	? D
 	: never;
 
-/** `await ctx.config`: inferred as the settings would be as flags (`required`, `default`, `choices`, `parse`). */
+/** Each setting's value: inferred as the settings would be as flags (`required`, `default`, `choices`, `parse`). */
 type ConfigValue<F extends ConfigFlagsDef> = {
 	[K in keyof F]: Omit<F[K], "flag">;
 } extends infer D extends FlagsDef
@@ -80,19 +83,61 @@ type ConfigFileContent<F extends ConfigFlagsDef> = {
 	? { -readonly [K in keyof S]: InferStoreConfig<S>[K] }
 	: never;
 
+/** The flag a setting's Context owns: none for `flag: false`. */
+type SettingFlags<F extends ConfigFlagsDef, K extends keyof F> = (
+	F[K] extends { flag: false } ? {} : { [P in K]: FlagOf<F[K]> }
+) extends infer D extends FlagsDef
+	? D
+	: never;
+
+/** A setting's Context: named after it, owning its flag, its value settled from every source. */
+type SettingContext<F extends ConfigFlagsDef, K extends keyof F & string> = ContextFactory<
+	K,
+	void,
+	ConfigValue<F>[K],
+	SettingFlags<F, K>
+>;
+
 /**
- * What {@link defineConfig} returns for the settings `F` and the `global` option `G`: the
- * `config` Context factory (`.use(config)`, `.provide(config())`, `config.of(value)`), the JSON
- * Schema of a file, and with `global` set, the typed store of the global file.
+ * The settings' Contexts as a tuple: core types the Contexts an Extension provides from a static
+ * tuple, and an object of settings has no order.
+ *
+ * This relies on TypeScript inferring the LAST overload of an intersection of functions (built from
+ * the union of setting names), which is unspecified behaviour. The order it yields does not matter
+ * here: every Context has its own name, and nothing reads the tuple's order (at run time the
+ * Extension provides the settings in key order). If it ever stops
+ * working, the replacement is a core change: map a non-tuple array of distinctly named Context
+ * instances to their values by name, as a tuple is mapped today.
  */
-export type ConfigFactory<
+type SettingInstances<
 	F extends ConfigFlagsDef,
-	G extends ConfigFileOption | undefined = undefined,
-> = ContextFactory<"config", void, ConfigValue<F>, ConfigFlags<F>> &
-	(G extends ConfigFileOption ? { readonly global: Store<ConfigFileContent<F>> } : {}) & {
-		/** The JSON Schema (draft 2020-12) of a config file. */
-		jsonSchema(): Record<string, unknown>;
-	};
+	Keys = keyof F & string,
+	Acc extends readonly unknown[] = [],
+> = [Keys] extends [never]
+	? Acc
+	: (
+				(Keys extends unknown ? (last: () => Keys) => void : never) extends (last: infer I) => void
+					? I
+					: never
+		  ) extends () => infer K
+		? K extends keyof F & string
+			? SettingInstances<F, Exclude<Keys, K>, [ReturnType<SettingContext<F, K>>, ...Acc]>
+			: Acc
+		: Acc;
+
+/**
+ * What `.flags()` returns for the settings `F` and the `global` option `G`: one Context factory
+ * per setting, the Extension that provides them all, the JSON Schema of a file, and with `global`
+ * set, the typed store of the global file.
+ */
+export type Config<F extends ConfigFlagsDef, G extends ConfigFileOption | undefined = undefined> = {
+	/** Each setting's Context factory, by setting name: `.use()` one where a command reads it. */
+	readonly settings: { readonly [K in keyof F & string]: SettingContext<F, K> };
+	/** Provides every setting to the app: `.extend(config.extension)`. */
+	readonly extension: Extension<{}, SettingInstances<F>, {}, []>;
+	/** The JSON Schema (draft 2020-12) of a config file. */
+	jsonSchema(): Record<string, unknown>;
+} & (G extends ConfigFileOption ? { readonly global: Store<ConfigFileContent<F>> } : {});
 
 /** A property no setting has, which a generic `F` would otherwise admit. */
 type KnownPropertiesBrand<D> = [Exclude<keyof D, AllKeys<ConfigFlagDef>>] extends [never]
@@ -278,7 +323,7 @@ const OPTIONS = new Set(["name", "global", "project"]);
 export interface ConfigBuilder<G extends ConfigFileOption | undefined> {
 	/**
 	 * Declare the settings, each the flag definition you would write in a command's `.flags({...})`,
-	 * and get the `config` Context factory.
+	 * and get a Context per setting and the Extension that provides them.
 	 */
 	flags<const F extends ConfigFlagsDef>(
 		// Same value brands as defineFlag (default within choices, synchronous parse), per setting.
@@ -286,16 +331,17 @@ export interface ConfigBuilder<G extends ConfigFileOption | undefined> {
 			readonly [K in keyof F]: LocalValueBrand<Omit<F[K], "flag">> & KnownPropertiesBrand<F[K]>;
 		} & ReservedNameBrand<F> &
 			CoreFlagChecks<F>,
-	): ConfigFactory<F, G>;
+	): Config<F, G>;
 }
 
 /**
- * A CLI's settings as one lazy Context named `config`, declared once:
- * `defineConfig({ name, global, project }).flags({...})`. Each setting is the flag definition you
- * would write in a command's `.flags({...})`: the Context owns those flags, so argv, `--input`,
- * typed `run()` input and `env` resolve as for any flag, and what is still unset comes from the
- * project file, then the global file, then the `default`. Nothing is read, and `@crustjs/store`
- * is not imported, until a command reads `await ctx.config`.
+ * A CLI's settings, declared once: `defineConfig({ name, global, project }).flags({...})`. Each
+ * setting is the flag definition you would write in a command's `.flags({...})` and becomes its own
+ * lazy Context, named after it, that owns that flag: a command `.use()`s the settings it reads and
+ * gets only their flags. argv, `--input`, typed `run()` input and `env` resolve as for any flag;
+ * what is still unset comes from the project file, then the global file, then the `default`. The
+ * files are read once per invocation, when a command first reads a setting its flag and variable
+ * did not give, and `@crustjs/store` is not imported before that.
  *
  * @throws {CrustError} `DEFINITION` for an unknown option, a file name with a directory or not
  *   ending in `.json`, or no file at all; `.flags()` throws it for a setting that is not a string,
@@ -351,17 +397,6 @@ function withSettings(
 		}
 		return [key, ownSetting(name, key, def)] as const;
 	});
-	// The package applies `default` and `required` after the files; on the flag, core would apply
-	// them first. Built with fromEntries, so a key like `__proto__` stays an own property.
-	const flagsOf = (offline: boolean) =>
-		Object.fromEntries(
-			settings.flatMap(([key, def]) => {
-				const { flag, default: _default, required: _required, ...owned } = def;
-				return (flag === false) === offline ? [[key, owned]] : [];
-			}),
-		);
-	const flags = flagsOf(false);
-	const offline = flagsOf(true);
 	const fields = storeFields(settings);
 
 	// The import is cached, not a store: the config directory is resolved again for each use.
@@ -387,77 +422,96 @@ function withSettings(
 			: [`${globalFile} in the configuration directory of ${name}`]),
 	];
 	const width = Math.max(0, ...settings.map(([key]) => key.length));
-	const context = defineContext("config")
-		.flags(flags as never)
-		.sections({
-			title: "Configuration",
-			body: [
-				`Each setting is the first of: its flag, its environment variable, ${where.join(", ")}, its default.`,
-				...settings.map(([key, def]) =>
-					`${key.padEnd(width)}  ${formatDescription(def.description, def.default, def.choices, undefined, def.env?.name)}`.trimEnd(),
-				),
-			].join("\n"),
-		})
-		.setup(async ({ flags: parsed }) => {
-			const store = await loadStore();
-			const projectPath = projectFile === undefined ? undefined : findUp(projectFile, store);
-			const globalPath = globalFile === undefined ? undefined : globalAt(store);
-			const read = (path: string | undefined) =>
-				path === undefined ? undefined : storeAt(store, path, fields).read();
-			// Core resolves env for the flags; a setting without a flag gets the same env handling here.
-			const [fromProject, fromGlobal, fromEnv] = await Promise.all([
-				read(projectPath),
-				read(globalPath),
-				parseFlagValues(offline, process.env) as Promise<FileValues>,
-			]);
-			// Own properties only: a setting named `constructor` must not read Object.prototype.
-			const own = (record: FileValues | undefined, key: string) =>
-				record !== undefined && Object.hasOwn(record, key) ? record[key] : undefined;
-			const issues: { message: string; path: string }[] = [];
-			const values = settings.map(([key, def]) => {
-				// The first source with a value wins; `null` from a parser is a value. Lazy, so a lower
-				// source's parser runs only when it is needed.
-				const sources = [
-					() => own(parsed, key),
-					() => own(fromEnv, key),
-					() => settled(key, def, own(fromProject, key), projectPath!),
-					() => settled(key, def, own(fromGlobal, key), globalPath!),
-					// A fresh array each time: an action may change the value it gets.
-					() =>
-						settled(
-							key,
-							def,
-							Array.isArray(def.default) ? [...def.default] : def.default,
-							"its default",
-						),
-				];
-				let value: unknown;
-				for (const source of sources) {
-					value = source();
-					if (value !== undefined) break;
-				}
-				if (value === undefined && def.required) {
-					const files = [
-						...(projectFile === undefined ? [] : [projectFile]),
-						...(globalPath === undefined ? [] : [globalPath]),
-					];
-					issues.push({ message: missingMessage(name, key, def, files), path: `config.${key}` });
-				}
-				return [key, value] as const;
-			});
-			if (issues.length > 0) {
-				throw new CrustError("VALIDATION", issues.map(({ message }) => message).join("\n"), {
-					issues,
+	const readFiles = async () => {
+		const store = await loadStore();
+		const projectPath = projectFile === undefined ? undefined : findUp(projectFile, store);
+		const globalPath = globalFile === undefined ? undefined : globalAt(store);
+		const read = (path: string | undefined) =>
+			path === undefined ? undefined : storeAt(store, path, fields).read();
+		const [project, global] = await Promise.all([read(projectPath), read(globalPath)]);
+		return { project, projectPath, global, globalPath };
+	};
+	// One read of the files for the settings of an invocation, cleared when the invocation that started
+	// it ends: invocations that overlap in one process may share a read (the same files, read moments
+	// apart), and no read, or failed read, outlives the invocation that started it.
+	let filesRead: ReturnType<typeof readFiles> | undefined;
+
+	// Own properties only: a setting named `constructor` must not read Object.prototype.
+	const own = (record: FileValues | undefined, key: string) =>
+		record !== undefined && Object.hasOwn(record, key) ? record[key] : undefined;
+
+	const contexts = settings.map(([key, def]) => {
+		// The package applies `default` and `required` after the files; on the flag, core would apply
+		// them first.
+		const { flag, default: _default, required: _required, ...owned } = def;
+		const base = defineContext(key);
+		const withFlag = flag === false ? base : base.flags({ [key]: owned } as never);
+		const context = withFlag.setup(async ({ flags, defer }) => {
+			// Core resolves env for a flag; a setting without one gets the same env handling here.
+			const given =
+				flag === false
+					? own((await parseFlagValues({ [key]: owned }, process.env)) as FileValues, key)
+					: own(flags as FileValues, key);
+			// `null` from a parser is a value: only undefined falls through, and a setting its flag or
+			// variable gave reads no file.
+			if (given !== undefined) return given;
+			if (filesRead === undefined) {
+				const started = readFiles();
+				filesRead = started;
+				defer(() => {
+					if (filesRead === started) filesRead = undefined;
 				});
 			}
-			return Object.freeze(Object.fromEntries(values));
+			const read = await filesRead;
+			for (const value of [
+				() => settled(key, def, own(read.project, key), read.projectPath!),
+				() => settled(key, def, own(read.global, key), read.globalPath!),
+				// A fresh array each time: an action may change the value it gets.
+				() =>
+					settled(
+						key,
+						def,
+						Array.isArray(def.default) ? [...def.default] : def.default,
+						"its default",
+					),
+			]) {
+				const settledValue = value();
+				if (settledValue !== undefined) return settledValue;
+			}
+			if (def.required) {
+				const places = [
+					...(projectFile === undefined ? [] : [projectFile]),
+					...(read.globalPath === undefined ? [] : [read.globalPath]),
+				];
+				const message = missingMessage(name, key, def, places);
+				throw new CrustError("VALIDATION", message, {
+					issues: [{ message, path: `config.${key}` }],
+				});
+			}
+			return undefined;
 		});
-
-	// A callable copy keeps the factory's defining record, so `.use(config)` and `.provide(config())`
-	// name the same Context; core freezes the original, so `global` and `jsonSchema` need a copy.
-	const factory = Object.assign((...args: []) => context(...args), context, {
-		jsonSchema: () => jsonSchema(name, settings),
+		return [key, context] as const;
 	});
+
+	const result: Record<string, unknown> = {
+		settings: Object.freeze(Object.fromEntries(contexts)),
+		// SAFETY: the type of `extension` is `Config["extension"]`; the runtime list is erased.
+		extension: defineExtension(defineExtensionId(`crust:config:${name}`))
+			.provide(...(contexts.map(([, context]) => context()) as never[]))
+			.sections(() => [
+				{
+					command: [],
+					title: "Configuration",
+					body: [
+						`Each setting is the first of: its flag, its environment variable, ${where.join(", ")}, its default.`,
+						...settings.map(([key, def]) =>
+							`${key.padEnd(width)}  ${formatDescription(def.description, def.default, def.choices, undefined, def.env?.name)}`.trimEnd(),
+						),
+					].join("\n"),
+				},
+			]),
+		jsonSchema: () => jsonSchema(name, settings),
+	};
 	if (globalFile !== undefined) {
 		const global: AnyStore = {
 			read: async () => (await globalStore()).read(),
@@ -466,9 +520,9 @@ function withSettings(
 			patch: async (partial, mutation) => (await globalStore()).patch(partial, mutation),
 			reset: async (mutation) => (await globalStore()).reset(mutation),
 		};
-		Object.defineProperty(factory, "global", { value: Object.freeze(global), enumerable: true });
+		result.global = Object.freeze(global);
 	}
-	return Object.freeze(factory);
+	return Object.freeze(result);
 }
 
 /** What a user writes in a file for one setting: the text type for `parse`, never the parsed value. */

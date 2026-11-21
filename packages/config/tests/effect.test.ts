@@ -1,4 +1,4 @@
-// `service(config)` from @crustjs/effect reads the config, whose factory is a structural copy.
+// `service(org)` from @crustjs/effect reads a setting: each is a real Context factory.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -40,20 +40,19 @@ const config = defineConfig({
 	name: "acme",
 	global: true,
 }).flags({ org: { type: "string", default: "from-default" } });
+const { org } = config.settings;
 
-const org = handler(function* () {
-	return (yield* service(config)).org;
+const readOrg = handler(function* () {
+	return yield* service(org);
 });
 
-it("service(config) reads the provided config and its .of() double", async () => {
-	expect(await new Crust("acme").provide(config()).action(org).run([])).toMatchObject({
+it("service(org) reads the setting provided by the Extension, and its .of() double", async () => {
+	expect(await new Crust("acme").extend(config.extension).action(readOrg).run([])).toMatchObject({
 		status: "completed",
 		result: "from-default",
 	});
-	expect(
-		await new Crust("acme")
-			.provide(config.of({ org: "double" }))
-			.action(org)
-			.run([]),
-	).toMatchObject({ status: "completed", result: "double" });
+	expect(await new Crust("acme").provide(org.of("double")).action(readOrg).run([])).toMatchObject({
+		status: "completed",
+		result: "double",
+	});
 });

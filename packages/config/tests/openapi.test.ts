@@ -70,13 +70,10 @@ const api = defineApi({
 	},
 	baseUrl: "https://api.acme.example/v1",
 })
-	.use(config)
-	.each(() => ({ bind: { account_id: async (ctx) => (await ctx.config).account } }));
+	.use(config.settings.account)
+	.each(() => ({ bind: { account_id: (ctx) => ctx.account } }));
 
-const app = new Crust("acme")
-	.provide(config())
-	.extend(api.extension)
-	.add(...api.commands);
+const app = new Crust("acme").extend(config.extension, api.extension).add(...api.commands);
 
 /** The URLs the generated command requested. */
 function requests(): string[] {

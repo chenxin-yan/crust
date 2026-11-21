@@ -23,7 +23,7 @@ registerHooks({
 });
 `;
 
-function acme(command: string) {
+function acme(command: string, env: Record<string, string> = {}) {
 	const result = spawnSync(
 		process.execPath,
 		["--import", join(built, "hooks.mjs"), join(built, "cli.mjs"), command],
@@ -34,7 +34,7 @@ function acme(command: string) {
 				...process.env,
 				XDG_CONFIG_HOME: join(home, "xdg"),
 				APPDATA: join(home, "xdg"),
-				ACME_ORG: "acme-corp",
+				...env,
 			},
 			timeout: 30_000,
 		},
@@ -72,17 +72,24 @@ describe.skipIf(!hasBun)("a built CLI", () => {
 		rmSync(home, { recursive: true, force: true });
 	});
 
-	it("does not load the store for a command that does not read the config", () => {
+	it("does not load the store for a command that uses no setting", () => {
 		const { status, stdout, stderr } = acme("ping");
 		expect(status, stderr).toBe(0);
 		expect(stdout).toBe("pong\n");
 		expect(stderr).not.toContain("loaded @crustjs/store");
 	});
 
-	it("loads the store when a command reads the config", () => {
-		const { status, stdout, stderr } = acme("show");
+	it("does not load the store for a setting its variable gave", () => {
+		const { status, stdout, stderr } = acme("show", { ACME_ORG: "acme-corp" });
 		expect(status, stderr).toBe(0);
 		expect(stdout).toBe("org=acme-corp\n");
+		expect(stderr).not.toContain("loaded @crustjs/store");
+	});
+
+	it("loads the store when a setting comes from the files", () => {
+		const { status, stdout, stderr } = acme("show");
+		expect(status, stderr).toBe(0);
+		expect(stdout).toBe("org=undefined\n");
 		expect(stderr).toContain("loaded @crustjs/store");
 	});
 });

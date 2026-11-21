@@ -1,4 +1,4 @@
-import { Crust } from "@crustjs/core";
+import { Crust, defineCommand } from "@crustjs/core";
 
 import { defineConfig } from "../../../src/index.ts";
 
@@ -8,10 +8,14 @@ const config = defineConfig({
 	project: true,
 }).flags({ org: { type: "string", env: { name: "ACME_ORG" } } });
 
+const { org } = config.settings;
+
 await new Crust("acme")
-	.provide(config())
-	.command("ping", (command) => command.action(({ stdout }) => stdout("pong")))
-	.command("show", (command) =>
-		command.use(config).action(async ({ ctx, stdout }) => stdout(`org=${(await ctx.config).org}`)),
+	.extend(config.extension)
+	.add(
+		defineCommand("ping", (command) => command.action(({ stdout }) => stdout("pong"))),
+		defineCommand("show", (command) =>
+			command.use(org).action(async ({ ctx, stdout }) => stdout(`org=${await ctx.org}`)),
+		),
 	)
 	.execute();

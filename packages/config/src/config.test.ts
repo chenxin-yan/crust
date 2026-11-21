@@ -12,8 +12,8 @@ import { dirname, join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
 import { help, input, version } from "@crustjs/extensions";
-import { captureExecute } from "@crustjs/testing";
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { captureExecute, type ExecutableApp } from "@crustjs/testing";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { defineConfig } from "./config.ts";
 
@@ -72,24 +72,63 @@ function acme() {
 		yes: { type: "boolean", noNegate: true },
 		telemetry: { type: "boolean", flag: false, env: { name: "ACME_TELEMETRY" } },
 	});
-	const show = defineCommand("show", (command) =>
-		command.use(config).action(async ({ ctx, stdout }) => {
-			const value = await ctx.config;
-			stdout(JSON.stringify(value));
-			return value;
-		}),
-	);
-	const ping = defineCommand("ping", (command) =>
+	const app = shows(
+		config,
+		new Crust("acme", { version: "1.0.0" }).extend(help(), version(), input()) as never,
+	).command("ping", (command) =>
 		command.action(({ stdout }) => {
 			stdout("pong");
 			return "pong";
 		}),
 	);
-	const app = new Crust("acme", { version: "1.0.0" })
-		.provide(config())
-		.extend(help(), version(), input())
-		.add(show, ping);
 	return { config, app };
+}
+
+interface LooseCommand {
+	use(...factories: unknown[]): LooseCommand;
+	action(
+		run: (input: {
+			ctx: Record<string, Promise<unknown>>;
+			stdout: (text: string) => void;
+		}) => unknown,
+	): LooseCommand;
+}
+interface LooseApp extends ExecutableApp {
+	extend(...extensions: unknown[]): LooseApp;
+	command(name: string, recipe: (command: LooseCommand) => LooseCommand): LooseApp;
+	run(
+		path: string[],
+		input?: object,
+		options?: object,
+	): Promise<{ status: string; result?: unknown; error?: unknown }>;
+}
+
+/**
+ * An app whose `show` reads every setting of `config` and returns and prints them by name, typed
+ * loosely for any config: the typed shape is pinned in config.test-d.ts.
+ */
+function shows(
+	config: { readonly settings: object; readonly extension: unknown },
+	// SAFETY: test-only view of the same calls the typed tests make.
+	app = new Crust("acme") as unknown as LooseApp,
+): LooseApp {
+	const names = Object.keys(config.settings);
+	return app.extend(config.extension).command("show", (command) =>
+		command.use(...Object.values(config.settings)).action(async ({ ctx, stdout }) => {
+			const value = Object.fromEntries(
+				await Promise.all(names.map(async (name) => [name, await ctx[name]] as const)),
+			);
+			stdout(JSON.stringify(value));
+			return value;
+		}),
+	);
+}
+
+/** `show` through typed `run()` with no environment: the settings, or the failure's error. */
+async function result(app: LooseApp, flags = {}) {
+	const outcome = await app.run(["show"], { flags }, { env: {} });
+	if (outcome.status !== "completed") throw outcome.error;
+	return outcome.result as Record<string, unknown>;
 }
 
 /** `acme show` through argv: the settings it printed. */
@@ -165,9 +204,7 @@ describe("files", () => {
 		}).flags({ org: { type: "string" }, region: { type: "string" } });
 		write(join(root, "xdg", "acme", "settings.json"), { org: "global", region: "global" });
 		write(join(root, "repo", ".acme.json"), { org: "project" });
-		const app = new Crust("acme")
-			.provide(config())
-			.command("show", (command) => command.use(config).action(async ({ ctx }) => ctx.config));
+		const app = shows(config);
 		expect(await app.run(["show"], {})).toMatchObject({
 			result: { org: "project", region: "global" },
 		});
@@ -246,15 +283,14 @@ describe("settings", () => {
 			org: { type: "string", env: { name: "ACME_ORG" }, required: true },
 			token: { type: "string", flag: false, required: true },
 		});
-		const app = new Crust("acme")
-			.provide(config())
-			.command("show", (command) => command.use(config).action(async ({ ctx }) => ctx.config));
+		const app = shows(config);
 		const { exitCode, stderr } = await captureExecute(app, ["show"]);
 		expect(exitCode).toBe(1);
 		expect(stderr).toContain(
 			`Missing setting "org" of acme: pass --org, set ACME_ORG, or set "org" in acme.config.json or ${globalFile()}.`,
 		);
-		expect(stderr).toContain(
+		const token = await captureExecute(app, ["show", "--org", "o"]);
+		expect(token.stderr).toContain(
 			`Missing setting "token" of acme: set "token" in acme.config.json or ${globalFile()}.`,
 		);
 		write(projectFile(), { token: "t" });
@@ -309,9 +345,7 @@ describe("errors", () => {
 			},
 		});
 		write(projectFile(), { when: "soon" });
-		const app = new Crust("acme")
-			.provide(config())
-			.command("show", (command) => command.use(config).action(async ({ ctx }) => ctx.config));
+		const app = shows(config);
 		const { exitCode, stderr } = await captureExecute(app, ["show"]);
 		expect(exitCode).toBe(1);
 		// As core shows a parser's message for a flag, the file path shows it too.
@@ -382,21 +416,104 @@ describe("config.jsonSchema()", () => {
 	});
 });
 
-describe("the factory", () => {
-	it("is a copy of the Context factory that core treats as the same Context", async () => {
+describe("one Context per setting", () => {
+	it("gives a command only the flags of the settings it uses", async () => {
 		const { config } = acme();
-		const show = defineCommand("show", (command) =>
-			command.use(config).action(async ({ ctx }) => (await ctx.config).org),
+		const { org, port } = config.settings;
+		// Reusable commands: an inline `.command()` child would also parse its parent's provided flags.
+		const serve = defineCommand("serve", (command) =>
+			command.use(port).action(async ({ ctx }) => ctx.port),
 		);
-		const double = { org: "double" } as Parameters<typeof config.of>[0];
-		expect(
-			await new Crust("acme").provide(config.of(double)).add(show).run(["show"], {}),
-		).toMatchObject({ status: "completed", result: "double" });
-		write(projectFile(), { org: "file" });
-		expect(await new Crust("acme").provide(config()).add(show).run(["show"], {})).toMatchObject({
+		const deploy = defineCommand("deploy", (command) =>
+			command.use(org).action(async ({ ctx }) => ctx.org),
+		);
+		const app = new Crust("acme").extend(config.extension).add(serve, deploy);
+		expect(await app.run(["serve"], { flags: { port: 8080 } })).toMatchObject({
 			status: "completed",
-			result: "file",
+			result: 8080,
 		});
+		const unknown = await captureExecute(app, ["serve", "--org", "x"]);
+		expect(unknown.exitCode).toBe(1);
+		expect(unknown.stderr).toContain('Unknown flag "--org"');
+		write(projectFile(), { org: "file" });
+		expect(await app.run(["deploy"], {}, { env: {} })).toMatchObject({ result: "file" });
+	});
+
+	it("reads each file once for a command that reads three settings from it", async () => {
+		const { config } = acme();
+		write(projectFile(), { org: "o", region: "eu", port: 1 });
+		const fs = process.getBuiltinModule("node:fs/promises");
+		const open = fs.open;
+		const opened: string[] = [];
+		const spy = vi.spyOn(fs, "open").mockImplementation((path, ...rest) => {
+			opened.push(String(path));
+			return open(path, ...rest);
+		});
+		try {
+			const { org, region, port } = config.settings;
+			const show = defineCommand("show", (command) =>
+				command
+					.use(org, region, port)
+					.action(async ({ ctx }) => [await ctx.org, await ctx.region, await ctx.port]),
+			);
+			const app = new Crust("acme").extend(config.extension).add(show);
+			expect(await app.run(["show"], {}, { env: {} })).toMatchObject({
+				result: ["o", "eu", 1],
+			});
+			expect(opened.filter((path) => path === projectFile())).toHaveLength(1);
+			opened.length = 0;
+			expect(await app.run(["show"], { flags: { org: "f", region: "us", port: 2 } })).toMatchObject(
+				{ result: ["f", "us", 2] },
+			);
+			expect(opened.filter((path) => path === projectFile())).toHaveLength(0);
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	it("reads the files again for the next run, even with the same caller signal", async () => {
+		const { config } = acme();
+		const deploy = defineCommand("deploy", (command) =>
+			command.use(config.settings.org).action(async ({ ctx }) => ctx.org),
+		);
+		const app = new Crust("acme").extend(config.extension).add(deploy);
+		const { signal } = new AbortController();
+		write(projectFile(), { org: "first" });
+		expect(await app.run(["deploy"], {}, { env: {}, signal })).toMatchObject({ result: "first" });
+		write(projectFile(), { org: "second" });
+		expect(await app.run(["deploy"], {}, { env: {}, signal })).toMatchObject({ result: "second" });
+		write(projectFile(), "{ broken");
+		expect(await app.run(["deploy"], {}, { env: {}, signal })).toMatchObject({ status: "failed" });
+		write(projectFile(), { org: "fixed" });
+		expect(await app.run(["deploy"], {}, { env: {}, signal })).toMatchObject({ result: "fixed" });
+	});
+
+	it("reads no file for a setting its flag or variable gave", async () => {
+		const { config } = acme();
+		const { org } = config.settings;
+		write(projectFile(), "{ broken");
+		const app = new Crust("acme")
+			.extend(config.extension)
+			.command("deploy", (command) => command.use(org).action(async ({ ctx }) => ctx.org));
+		expect(await app.run(["deploy"], { flags: { org: "flag" } })).toMatchObject({
+			status: "completed",
+			result: "flag",
+		});
+		expect(await app.run(["deploy"], {}, { env: { ACME_ORG: "env" } })).toMatchObject({
+			result: "env",
+		});
+		expect(await app.run(["deploy"], {}, { env: {} })).toMatchObject({ status: "failed" });
+	});
+
+	it("replaces one setting in a test with its .of() double", async () => {
+		const { org } = acme().config.settings;
+		const show = defineCommand("show", (command) =>
+			command.use(org).action(async ({ ctx }) => ctx.org),
+		);
+		// Without the Extension: a setting's Context depends on nothing.
+		expect(await new Crust("acme").provide(org.of("double")).add(show).run(["show"])).toMatchObject(
+			{ status: "completed", result: "double" },
+		);
 	});
 
 	it("documents the settings and their files on the providing command", async () => {
@@ -411,33 +528,6 @@ describe("the factory", () => {
 });
 
 describe("review fixes", () => {
-	interface LooseCommand {
-		use(factory: unknown): LooseCommand;
-		action(run: (input: { ctx: { config: Promise<unknown> } }) => unknown): LooseCommand;
-	}
-	interface LooseApp {
-		provide(instance: unknown): LooseApp;
-		command(name: string, recipe: (command: LooseCommand) => LooseCommand): LooseApp;
-		run(path: string[], input: object, options?: object): Promise<unknown>;
-	}
-	/** An app whose `show` returns the settings of `config`, typed loosely for any config. */
-	function shows(config: unknown): LooseApp {
-		// SAFETY: test-only view of the same calls the typed tests make.
-		const app = new Crust("acme") as unknown as LooseApp;
-		return app
-			.provide((config as () => unknown)())
-			.command("show", (command) => command.use(config).action(async ({ ctx }) => ctx.config));
-	}
-	async function result(app: LooseApp, flags = {}) {
-		const outcome = (await app.run(["show"], { flags }, { env: {} })) as {
-			status: string;
-			result?: unknown;
-			error?: unknown;
-		};
-		if (outcome.status !== "completed") throw outcome.error;
-		return outcome.result as Record<string, unknown>;
-	}
-
 	it("keeps null from a parser as the winning value", async () => {
 		const config = defineConfig({
 			name: "acme",
@@ -493,9 +583,9 @@ describe("review fixes", () => {
 			tags: { type: "string", multiple: true, choices, default: ["a"] },
 		});
 		choices.push("z");
-		const app = new Crust("acme").provide(config()).command("show", (command) =>
-			command.use(config).action(async ({ ctx }) => {
-				const { tags } = await ctx.config;
+		const app = new Crust("acme").extend(config.extension).command("show", (command) =>
+			command.use(config.settings.tags).action(async ({ ctx }) => {
+				const tags = await ctx.tags;
 				const copy = [...tags];
 				tags.push("b");
 				return copy;
@@ -525,12 +615,13 @@ describe("review fixes", () => {
 		expect(JSON.parse(readFileSync(globalFile(), "utf8"))).toEqual({ org: "first" });
 	});
 
-	it("fails on an invalid value in a file even when a flag overrides that setting", async () => {
+	it("fails on an invalid value in a file a command reads, even when a flag gives that setting", async () => {
 		const config = defineConfig({
 			name: "acme",
 			global: true,
-		}).flags({ region: { type: "string", choices: ["us", "eu"] } });
-		write(globalFile(), { region: "old" });
+		}).flags({ region: { type: "string", choices: ["us", "eu"] }, org: { type: "string" } });
+		// org comes from the file, which must be valid as a whole.
+		write(globalFile(), { region: "old", org: "o" });
 		await expect(result(shows(config), { region: "us" })).rejects.toMatchObject({
 			code: "VALIDATION",
 			details: { path: globalFile() },
@@ -622,6 +713,8 @@ describe("defineConfig(options).flags(settings)", () => {
 		expect(Object.isFrozen(builder)).toBe(true);
 		const config = builder.flags({ org: { type: "string" } });
 		expect("flags" in config).toBe(false);
-		expect(config.contextName).toBe("config");
+		// Settings, the Extension, the schema and the global store: nothing callable, no Context.
+		expect(Object.keys(config).sort()).toEqual(["extension", "global", "jsonSchema", "settings"]);
+		expect(config.settings.org.contextName).toBe("org");
 	});
 });
