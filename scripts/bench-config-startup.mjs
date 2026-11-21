@@ -126,7 +126,12 @@ const apps = Object.fromEntries(
 // No config file anywhere: `show` with the config reads two missing files.
 const home = join(out, "home");
 mkdirSync(join(home, "xdg"), { recursive: true });
-const env = { ...process.env, XDG_CONFIG_HOME: join(home, "xdg"), BENCH_ORG: "acme" };
+const env = {
+	...process.env,
+	XDG_CONFIG_HOME: join(home, "xdg"),
+	APPDATA: join(home, "xdg"),
+	BENCH_ORG: "acme",
+};
 for (const [name, builds] of Object.entries(apps)) {
 	for (const [runtime, { start }] of Object.entries(builds)) {
 		for (const [command, expected] of [

@@ -30,7 +30,12 @@ function acme(command: string) {
 		{
 			cwd: home,
 			encoding: "utf8",
-			env: { ...process.env, XDG_CONFIG_HOME: join(home, "xdg"), ACME_ORG: "acme-corp" },
+			env: {
+				...process.env,
+				XDG_CONFIG_HOME: join(home, "xdg"),
+				APPDATA: join(home, "xdg"),
+				ACME_ORG: "acme-corp",
+			},
 			timeout: 30_000,
 		},
 	);

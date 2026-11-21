@@ -14,12 +14,15 @@ let cwd: string;
 const saved = {
 	cwd: process.cwd(),
 	xdg: process.env.XDG_CONFIG_HOME,
+	appData: process.env.APPDATA,
 	telemetry: process.env.ACME_TELEMETRY,
 };
 
 beforeEach(() => {
 	root = mkdtempSync(join(tmpdir(), "crust-config-"));
+	// configDir() reads XDG_CONFIG_HOME on Linux and macOS, APPDATA on Windows: both point here.
 	process.env.XDG_CONFIG_HOME = join(root, "xdg");
+	process.env.APPDATA = join(root, "xdg");
 	delete process.env.ACME_TELEMETRY;
 	cwd = join(root, "repo", "sub");
 	mkdirSync(cwd, { recursive: true });
@@ -30,6 +33,7 @@ afterEach(() => {
 	process.chdir(saved.cwd);
 	for (const [name, value] of [
 		["XDG_CONFIG_HOME", saved.xdg],
+		["APPDATA", saved.appData],
 		["ACME_TELEMETRY", saved.telemetry],
 	] as const) {
 		if (value === undefined) delete process.env[name];

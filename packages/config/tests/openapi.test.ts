@@ -11,18 +11,29 @@ import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 import { defineConfig } from "../src/index.ts";
 
 let root: string;
-const saved = { cwd: process.cwd(), xdg: process.env.XDG_CONFIG_HOME };
+const saved = {
+	cwd: process.cwd(),
+	xdg: process.env.XDG_CONFIG_HOME,
+	appData: process.env.APPDATA,
+};
 
 beforeEach(() => {
 	root = mkdtempSync(join(tmpdir(), "crust-config-openapi-"));
+	// configDir() reads XDG_CONFIG_HOME on Linux and macOS, APPDATA on Windows: both point here.
 	process.env.XDG_CONFIG_HOME = join(root, "xdg");
+	process.env.APPDATA = join(root, "xdg");
 	process.chdir(root);
 });
 
 afterEach(() => {
 	process.chdir(saved.cwd);
-	if (saved.xdg === undefined) delete process.env.XDG_CONFIG_HOME;
-	else process.env.XDG_CONFIG_HOME = saved.xdg;
+	for (const [name, value] of [
+		["XDG_CONFIG_HOME", saved.xdg],
+		["APPDATA", saved.appData],
+	] as const) {
+		if (value === undefined) delete process.env[name];
+		else process.env[name] = value;
+	}
 	vi.unstubAllGlobals();
 	rmSync(root, { recursive: true, force: true });
 });
