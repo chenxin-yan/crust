@@ -21,16 +21,24 @@ export function settingFile(appName: string): string | Error {
 }
 
 /**
- * One read decides: no file is nothing saved; anything but a JSON object whose only key is
+ * One read decides: no entry is nothing saved; anything but a JSON object whose only key is
  * `telemetry`, set to `"on"` or `"off"`, is `"unreadable"`. Never throws.
  */
 export async function readSavedSetting(file: string | Error): Promise<SavedSetting | undefined> {
 	if (file instanceof Error) return "unreadable";
+	const fs = process.getBuiltinModule("node:fs/promises");
 	let text: string;
 	try {
-		text = await process.getBuiltinModule("node:fs/promises").readFile(file, "utf8");
+		text = await fs.readFile(file, "utf8");
 	} catch (error) {
-		return isErrnoException(error) && error.code === "ENOENT" ? undefined : "unreadable";
+		if (!isErrnoException(error) || error.code !== "ENOENT") return "unreadable";
+		// A link whose target is missing also reads as ENOENT, and it is an entry, not an absent file.
+		return (await fs.lstat(file).then(
+			() => true,
+			() => false,
+		))
+			? "unreadable"
+			: undefined;
 	}
 	try {
 		const document: unknown = JSON.parse(text);
@@ -57,7 +65,10 @@ export async function writeSavedSetting(
 	setting: "on" | "off",
 	env: string,
 ): Promise<void> {
-	const instead = `Set ${env}=${setting === "on" ? "1" : "0"} to turn telemetry ${setting} without a saved preference.`;
+	const instead =
+		setting === "on"
+			? `Set ${env}=1 to turn telemetry on without a saved preference. DO_NOT_TRACK still turns it off.`
+			: `Set ${env}=0 to turn telemetry off without a saved preference.`;
 	if (file instanceof Error) {
 		throw new Error(
 			`Could not save the telemetry preference: ${file.message.replace(/\.?$/, ".")}\n${instead}`,

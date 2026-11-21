@@ -1,10 +1,12 @@
 import {
+	chmodSync,
 	mkdirSync,
 	mkdtempSync,
 	readdirSync,
 	readFileSync,
 	rmSync,
 	statSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -541,7 +543,9 @@ describe("telemetry", () => {
 				expect(statSync(savedFile()).mode & 0o777).toBe(0o600);
 
 				rmSync(dirname(savedFile()), { recursive: true });
-				mkdirSync(dirname(savedFile()), { mode: 0o755 });
+				mkdirSync(dirname(savedFile()));
+				// Set after creation: mkdir's mode is cut by the umask.
+				chmodSync(dirname(savedFile()), 0o755);
 				await captureExecute(app(), ["analytics", "enable"]);
 				expect(statSync(dirname(savedFile())).mode & 0o777).toBe(0o755);
 				expect(statSync(savedFile()).mode & 0o777).toBe(0o600);
@@ -565,8 +569,26 @@ describe("telemetry", () => {
 					`Set ACME_TELEMETRY=${value} to turn telemetry ${state} without a saved preference.`,
 				);
 				expect(result.stderr, verb).not.toMatch(/Saved telemetry preference/);
+				// The variable cannot turn telemetry on while DO_NOT_TRACK is set, so the hint says so.
+				expect(result.stderr.includes("DO_NOT_TRACK still turns it off"), verb).toBe(
+					verb === "enable",
+				);
 			}
 		});
+
+		it.skipIf(process.platform === "win32")(
+			"reads a link whose target is missing as unreadable, not as nothing saved",
+			async () => {
+				mkdirSync(dirname(savedFile()), { recursive: true });
+				symlinkSync(join(configHome, "gone.json"), savedFile());
+				const send = recorder();
+				expect((await captureExecute(app(send), ["analytics", "--json"])).stdout).toBe(
+					'{"sending":false,"decidedBy":"saved","saved":"unreadable","default":"on"}',
+				);
+				await captureExecute(app(send), ["deploy"]);
+				expect(send).not.toHaveBeenCalled();
+			},
+		);
 
 		it("removes its temporary file when the rename fails", async () => {
 			// A directory in the file's place: the temporary file is written, then cannot replace it.

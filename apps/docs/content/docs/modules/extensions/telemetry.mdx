@@ -82,9 +82,9 @@ Each invocation decides once, when it settles. Turning telemetry off stops the e
 
 ## Where the preference is kept
 
-In `telemetry.json` in the [config directory](/docs/modules/store#storage-paths) named after the root command: `~/.config/acme/telemetry.json` on Linux and macOS (under `$XDG_CONFIG_HOME` when it is set), `%APPDATA%\acme\telemetry.json` on Windows. It holds one key, `{"telemetry":"off"}` or `{"telemetry":"on"}`. The location is fixed. The file is written to a temporary file and renamed over the old one, so a reader sees the old or the new preference, and it is readable by its owner only, as is the directory when the command creates it.
+In `telemetry.json` in the [config directory](/docs/modules/store#storage-paths) named after the root command: `~/.config/acme/telemetry.json` on Linux and macOS (under `$XDG_CONFIG_HOME` when it is set), `%APPDATA%\acme\telemetry.json` on Windows. It holds one key, `{"telemetry":"off"}` or `{"telemetry":"on"}`. The location is fixed. The file is written to a temporary file and renamed over the old one, so a reader sees the old or the new preference. On Linux and macOS the file is created readable by its owner only (`0600`), as is the directory when the command creates it (`0700`); an existing directory keeps its mode. On Windows it has the permissions of the user's `%APPDATA%` directory.
 
-Only a missing file means nothing is saved. A file that cannot be read, or holds anything but exactly that one key with `"on"` or `"off"` (`{}` included), is unreadable: when neither variable decides, no event is sent, and the command that ran never fails because of it. `status` says so and names the file; `enable` or `disable` rewrites it, given write permission to the directory. When the config directory itself cannot be resolved (for example, a relative `HOME`), `status` says that instead.
+Only a missing file means nothing is saved. A file that cannot be read (a link whose target is gone included), or holds anything but exactly that one key with `"on"` or `"off"` (`{}` included), is unreadable: when neither variable decides, no event is sent, and the command that ran never fails because of it. `status` says so and names the file; `enable` or `disable` rewrites it, given write permission to the directory. When the config directory itself cannot be resolved (for example, a relative `HOME`), `status` says that instead.
 
 The file is read only when it is needed: when the command runs, or when an invocation settles and neither variable decided. Adding `telemetry()` loads nothing more at startup.
 
@@ -131,8 +131,8 @@ Only invocations that call `send` wait for it. Those do wait: a `send` that make
 The events are then collected but not yet delivered, so whatever uploads them later, such as a scheduled job or a background command, must follow three rules:
 
 - Before uploading, check the effective setting again (`acme telemetry --json`, or `run(["telemetry"])`, and its `sending`). If it is off, delete the queued events instead: a user who turned telemetry off after an event was queued did not agree to its delivery.
-- Rename the queue to a batch file first, upload the batch, and delete only the batch once the upload succeeds. Events that other processes append in the meantime go to a new queue file.
-- Keep the queue and its batches readable by the user only, as the example does.
+- Lose no event while uploading: a command that is running can still append to a file the uploader has already read, also after that file was renamed. Delete only what was uploaded, and leave anything appended since for the next run.
+- Keep the queue readable by the user only. The example's modes do that on Linux and macOS when it creates the directory and the file; they change neither an existing file nor Windows permissions.
 
 ## API
 
