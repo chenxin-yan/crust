@@ -96,24 +96,25 @@ The same events reach `run()`'s `onEvent` callback. Under MCP, each yield sends 
 
 An agent learns a CLI from what it prints about itself. Write `description`s for commands, arguments, and flags: every surface below reads them.
 
-| Surface                                                            | When it fits                                                                                                                |
-| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| `--help` from [`help()`](/docs/modules/extensions/help)            | One command, for people and agents                                                                                          |
-| `--llms` from [`schema()`](/docs/modules/extensions/schema)        | The whole CLI in compact Markdown, documentation sections included; an agent's first call                                   |
-| `schema <path>` from [`schema()`](/docs/modules/extensions/schema) | One command's `input` and `output` JSON Schema, before building `--input` or parsing `--json`, or for code generation       |
-| [Skills](#skills)                                                  | The same information, installed ahead of time into an agent's skill directory; the agent still runs the CLI                 |
-| [MCP](#mcp)                                                        | Tools for clients that call tools instead of a shell, with the same input schema and, where MCP can carry it, output schema |
+| Surface                                                              | When it fits                                                                                                                |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `--help` from [`help()`](/docs/modules/extensions/help)              | One command, for people and agents                                                                                          |
+| `--llms` from [`schema()`](/docs/modules/extensions/schema)          | The whole CLI in compact Markdown, documentation sections included; an agent's first call                                   |
+| `schema <path>` from [`schema()`](/docs/modules/extensions/schema)   | One command's `input` and `output` JSON Schema, before building `--input` or parsing `--json`, or for code generation       |
+| `search "<task>"` from [`search()`](/docs/modules/extensions/search) | The five commands that best match a task in words, when `--llms` is too large for the agent's context                       |
+| [Skills](#skills)                                                    | The same information, installed ahead of time into an agent's skill directory; the agent still runs the CLI                 |
+| [MCP](#mcp)                                                          | Tools for clients that call tools instead of a shell, with the same input schema and, where MCP can carry it, output schema |
 
 All of them read the same command snapshot (descriptions, arguments and flags, `.output()`, sections).
 
-On a large CLI in a shell, filter instead of reading everything: `my-cli --llms | grep -i '^## .*purge'` prints the commands whose heading matches, and for an [API CLI](#the-api-command) `my-cli api --list | grep -i purge` prints the matching operations.
+On a large CLI in a shell, search for a task in words with `my-cli search "purge the cache"`, or grep for an exact word: `my-cli --llms | grep -i '^## .*purge'` prints the commands whose heading matches, and for an [API CLI](#the-api-command) `my-cli api --list | grep -i purge` prints the matching operations.
 
 ```sh
 $ my-cli schema deploy
 {"input":{"type":"object","properties":{"target":{"type":"string","enum":["staging","prod"]},…},"required":["target"]},"output":{…}}
 ```
 
-`json()` and `input()` add "JSON output" and "JSON input" sections to root help. Document your own conventions, such as exit codes and environment variables, with [documentation sections](/docs/guide/commands#documentation-sections).
+`json()`, `input()`, and `search()` add "JSON output", "JSON input", and "Find a command" sections to root help. Document your own conventions, such as exit codes and environment variables, with [documentation sections](/docs/guide/commands#documentation-sections).
 
 ## Dry run
 
