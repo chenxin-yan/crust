@@ -170,6 +170,24 @@ export interface ExtensionContext<
 		definition: CommandDefinition<any, any, any, any>,
 	) => readonly string[] | undefined;
 	/**
+	 * Parses `argv` for the command at `path` (canonical names from the application root, in the
+	 * form of {@link ExtensionContext.commandPath}; aliases route as on the command line) as an
+	 * invocation of it would, without running it: argv, then environment fallbacks and defaults,
+	 * then required-value checks and Standard Schemas. It builds only the commands on the path and
+	 * runs no Extension hook, Context setup, or Command Action, so values other Extensions bind in
+	 * their hooks (`bindInput`) are not applied.
+	 *
+	 * @throws {CrustError} `COMMAND_NOT_FOUND` for a name the path does not have, `PARSE` for a path
+	 *   that does not start at the root, and the `PARSE` and `VALIDATION` errors the command's
+	 *   own invocation would fail with
+	 *
+	 * @example `await ctx.parseCommandArgv(["tool", "db", "migrate"], ["--to", "3"])` → `{ path: ["tool", "db", "migrate"], args: {}, flags: { to: 3 }, rawArgs: [] }`
+	 */
+	readonly parseCommandArgv: (
+		path: readonly string[],
+		argv: readonly string[],
+	) => Promise<ParsedCommandArgv>;
+	/**
 	 * Bound positional values for the resolved command, before validation: parsed from
 	 * argv tokens for `execute()`, taken as-is from the structured input for typed `run()`
 	 * (URL/JSON values keep their identity). An argument whose argv value is invalid is
@@ -241,6 +259,16 @@ export interface ExtensionContext<
 	 * ```
 	 */
 	readonly bindInput: (input: RunInputPayload) => void;
+}
+
+/** What {@link ExtensionContext.parseCommandArgv} returns: the values the Command Action would receive. */
+export interface ParsedCommandArgv {
+	/** The command's canonical path, in the form of {@link ExtensionContext.commandPath}, also when `path` used an alias. */
+	readonly path: readonly string[];
+	readonly args: Readonly<Record<string, unknown>>;
+	readonly flags: Readonly<Record<string, unknown>>;
+	/** Tokens after the `--` separator that no declared argument consumed. */
+	readonly rawArgs: readonly string[];
 }
 
 /** The context {@link ExtensionHooks.setup} receives. */

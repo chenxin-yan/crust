@@ -1,11 +1,13 @@
 import {
 	type CommandDefinition,
 	type CommandShape,
+	type CommandSnapshot,
 	type ContextBag,
 	type ContextFactory,
 	type ContextInstance,
 	type ContextMap,
 	type Extension,
+	type ExtensionContext,
 	type ExtensionId,
 	type MergeContext,
 	type UseSource,
@@ -28,15 +30,19 @@ import {
 	type ConfirmResult,
 	type GeneratedDefinition,
 	generateCommands,
+	operationRequest,
 } from "./commands.ts";
 import { type CommandPlan, buildProblems, planCommands } from "./lint.ts";
 import { type Operation, operationLabel, operations } from "./operations.ts";
 import type { OperationOverride, OverrideEntry } from "./overrides.ts";
+import { type GeneratedPreview, createPreviewCommand } from "./preview.ts";
 import { isPlainObject } from "./request.ts";
 import {
 	type DataFile,
 	INDEX_FILE,
 	indexedCommands,
+	type SpecIndex,
+	isPlannedCommand,
 	isSpecIndex,
 	missingCommands,
 	onlyOperations,
@@ -100,7 +106,7 @@ export interface Api<
 		{},
 		readonly [ApiCommandDefinition<Operations>],
 		never,
-		{}
+		{ api: ApiClient<Operations> }
 	>;
 	/** The `api` Context: `.use(acme.client)` in a command, then `await ctx.api`. */
 	readonly client: ContextFactory<"api", void, ApiClient<Operations>>;
@@ -304,6 +310,7 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 	};
 	// A built CLI's index names the top-level commands; without it there are none, and the
 	// Extension reports why.
+	let builtIndex: SpecIndex | undefined;
 	const indexed = (): readonly GeneratedDefinition[] => {
 		try {
 			const index = readBuiltFile(base.id, INDEX_FILE);
@@ -312,19 +319,46 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 					`api: the OpenAPI data "${builtFilePath(base.id, INDEX_FILE)}" is not an index this version of @crustjs/openapi reads. Run \`crust build\`, and ship its "${base.id}" directory with the CLI.`,
 				);
 			}
+			builtIndex = index;
 			return indexedCommands(index, state.added, options, dataFile);
 		} catch (error) {
 			base.indexFailure = error;
 			return [];
 		}
 	};
+	// The planned command at `words` below where `commands` are added, from the data its command
+	// was built from: the index and the group's file in a built CLI.
+	const planAt = (words: readonly string[]): PlannedCommand | undefined => {
+		const group = words.slice(0, -1).join(" ");
+		const name = words.at(-1);
+		const at = (each: CommandPlan) => each.group === group && each.name === name;
+		if (builtIndex === undefined) {
+			const found = built().find(at);
+			return found && { plan: found, spec: base.document() };
+		}
+		const [top] = words;
+		const root =
+			words.length === 1 ? builtIndex.commands.find((each) => each.name === top) : undefined;
+		if (root !== undefined) {
+			const data = dataFile(root.file);
+			return { plan: data.plans([root.operationId])[0]!, spec: data.spec };
+		}
+		const grouped = builtIndex.groups.find((each) => each.name === top);
+		if (grouped?.file === undefined) return undefined;
+		const data = dataFile(grouped.file);
+		const found = data.plans(grouped.operationIds).find(at);
+		return found && { plan: found, spec: data.spec };
+	};
 	let extension: Api["extension"] | undefined;
 	let commands: readonly GeneratedDefinition[] | undefined;
 	const handle = Object.freeze({
 		get extension() {
-			return (extension ??= apiExtension(base, state, unavailable, built, () =>
-				buildProblems(plan().diagnostics),
-			));
+			return (extension ??= apiExtension(base, state, {
+				unavailable,
+				built,
+				planAt,
+				problems: () => buildProblems(plan().diagnostics),
+			}));
 		},
 		client: base.client,
 		get commands() {
@@ -381,11 +415,55 @@ function createApi<Deps extends ContextMap, Added extends ContextMap>(
 function apiExtension(
 	base: ApiBase,
 	state: ApiState,
-	unavailable: () => ReadonlyMap<string, string>,
-	built: () => readonly CommandPlan[],
-	problems: () => string | undefined,
+	{
+		unavailable,
+		built,
+		planAt,
+		problems,
+	}: {
+		readonly unavailable: () => ReadonlyMap<string, string>;
+		readonly built: () => readonly CommandPlan[];
+		readonly planAt: (words: readonly string[]) => PlannedCommand | undefined;
+		readonly problems: () => string | undefined;
+	},
 ): Api["extension"] {
 	const { id, spec } = base;
+	// Each `api preview` invocation's generated request, by its `api` Context value.
+	const previews = new WeakMap<ApiClient, GeneratedPreview>();
+	/**
+	 * The generated commands of this handle that the command at a canonical `path`, whose snapshot
+	 * is `command`, can be. Where the app's tree places a top-level generated command on the path
+	 * (its first mount, `commandPathOf`), that decides: one, or none for a command `.add()`ed there.
+	 * Below a further mount, which the tree does not tell, it is every planned command a tail of the
+	 * path names and `command` has the shape of. Reads no group file a path does not route through.
+	 */
+	const generatedAt = (
+		path: readonly string[],
+		command: () => CommandSnapshot,
+		commandPathOf: ExtensionContext["commandPathOf"],
+	): readonly MountedCommand[] => {
+		const generated = base.readCommands.get(state)?.generated ?? [];
+		const tails: { readonly words: readonly string[]; readonly mount: readonly string[] }[] = [];
+		for (let depth = 1; depth < path.length; depth++) {
+			for (const definition of generated) {
+				if (definition.name !== path[depth]) continue;
+				const mount = commandPathOf(definition);
+				if (mount === undefined) continue;
+				const words = path.slice(depth);
+				if (mount.length === depth + 1 && mount.every((word, at) => word === path[at])) {
+					const found = planAt(words);
+					return found === undefined ? [] : [{ ...found, path: path.slice(1) }];
+				}
+				tails.push({ words, mount });
+			}
+		}
+		return tails.flatMap(({ words, mount }) => {
+			const found = planAt(words);
+			return found !== undefined && isPlannedCommand(command(), found.plan)
+				? [{ ...found, path: [...mount.slice(1, -1), ...words] }]
+				: [];
+		});
+	};
 	const loadSpec = async () => base.document();
 	const mismatch = (detail: string) =>
 		new CrustError(
@@ -394,12 +472,18 @@ function apiExtension(
 			{ subject: "extension", name: API, reason: "commands-mismatch" },
 		);
 	const extension = defineExtension(API)
+		.use(base.client)
 		.provide(base.client())
 		.add(
 			createApiCommand(base.client, loadSpec, {
 				baseUrl: base.baseUrl,
 				paginate: base.paginate,
 				unavailable,
+				preview: createPreviewCommand(base.client, {
+					baseUrl: base.baseUrl,
+					paginates: base.paginate !== undefined,
+					generated: previews,
+				}),
 			}),
 		)
 		.setup((ctx) => {
@@ -411,6 +495,53 @@ function apiExtension(
 				if (generated.some((definition) => ctx.commandPathOf(definition) !== undefined)) {
 					throw mismatch("the app holds generated commands of another chain of this API");
 				}
+			}
+		})
+		.preRun(async (ctx) => {
+			const [root, api, preview] = ctx.commandPath;
+			if (ctx.commandPath.length === 3 && api === "api" && preview === "preview") {
+				const { target, argv } = ctx.args;
+				// A request path is previewed by the command itself; its values are not checked yet.
+				if (!isWords(target) || target.length === 0 || target[0]!.startsWith("/")) return;
+				const parsed = await ctx.parseCommandArgv([root!, ...target], isWords(argv) ? argv : []);
+				// The target's snapshot: walking the root's builds only the commands on its path.
+				const candidates = generatedAt(
+					parsed.path,
+					() =>
+						parsed.path.slice(1).reduce((node, name) => node.subCommands[name]!, ctx.rootCommand),
+					ctx.commandPathOf,
+				);
+				const [found] = candidates;
+				if (found === undefined) {
+					throw new CrustError(
+						"PARSE",
+						`api preview: "${target.join(" ")}" is not a command generated from the OpenAPI spec`,
+						{ argument: "target" },
+					);
+				}
+				if (candidates.length > 1) {
+					const where = candidates
+						.map(({ path, plan }) => `"${path.join(" ")}" (${plan.op.id})`)
+						.join(" or ");
+					throw new CrustError(
+						"PARSE",
+						`api preview: "${target.join(" ")}" fits several generated commands, as the app adds them more than once: preview ${where} instead`,
+						{ argument: "target" },
+					);
+				}
+				// A binding is never called: its value is the placeholder `{name}`. The builder asks only
+				// for those the operation has an input of, as the command does.
+				const bound: string[] = [];
+				const request = await operationRequest(
+					found.spec,
+					found.plan,
+					{ arg: parsed.args, flag: parsed.flags },
+					(name) => {
+						bound.push(name);
+						return `{${name}}`;
+					},
+				);
+				previews.set(await ctx.ctx.api, { request, bound });
 			}
 		})
 		// A broken build fails every invocation with why, also one a missing command fails first.
@@ -459,4 +590,20 @@ function apiExtension(
 		}
 		return [...files].map(([path, content]) => ({ path: `${id}/${path}`, content }));
 	});
+}
+
+/** A planned command and the spec its schemas resolve in. */
+interface PlannedCommand {
+	readonly plan: CommandPlan;
+	readonly spec: OpenApiSpec;
+}
+
+/** A planned command, and its path below the root where the app first adds it. */
+interface MountedCommand extends PlannedCommand {
+	readonly path: readonly string[];
+}
+
+/** Whether an argument value is a list of words, as a variadic string argument's. */
+function isWords(value: unknown): value is readonly string[] {
+	return Array.isArray(value) && value.every((word) => typeof word === "string");
 }

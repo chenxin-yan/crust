@@ -259,6 +259,17 @@ describe("crust build checks the handle", () => {
 		expect((await build(unhandled)).error).toContain("GET /a: the override sets `confirm`");
 	});
 
+	it("fails for an override's paginate on a result that is not a list", async () => {
+		const acme = defineApi({ spec: clash, baseUrl: "https://api.example.com" }).override({
+			"users-list-users": { name: "list-b" },
+			listUsers: { paginate: () => undefined },
+		});
+
+		expect((await build(acme)).error).toContain(
+			"GET /a: the override sets `paginate`, but its result after `unwrap` is not a list",
+		);
+	});
+
 	it("fails for a document no command can come from", async () => {
 		const acme = defineApi({ spec: swagger, baseUrl: "https://api.example.com" });
 

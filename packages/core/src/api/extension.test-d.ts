@@ -10,6 +10,7 @@ import {
 	type Extension,
 	type ExtensionFactory,
 	type InvocationOutcome,
+	type ParsedCommandArgv,
 	type Renderer,
 } from "./extension.ts";
 
@@ -389,4 +390,17 @@ function _rendererSelector() {
 	// @ts-expect-error A resolved renderer still handles both text and diagnostics.
 	owned.renderer(async () => ({ text() {} }));
 	const _renderer: Renderer = { text() {}, diag() {}, error(_error: unknown) {} };
+}
+
+function _parseCommandArgv() {
+	defineExtension(defineExtensionId("test:parse")).preRun(async (ctx) => {
+		const parsed = await ctx.parseCommandArgv(["app", "db"], ["--to", "3"]);
+		type _parsed = Expect<Equal<typeof parsed, ParsedCommandArgv>>;
+		type _flags = Expect<Equal<typeof parsed.flags, Readonly<Record<string, unknown>>>>;
+		// @ts-expect-error -- `bindInput` replaces; there is no getter for the last payload
+		void ctx.boundInput;
+		const db = defineCommand("db", (c) => c);
+		// @ts-expect-error A path is a list of names, not a definition.
+		await ctx.parseCommandArgv(db, []);
+	});
 }

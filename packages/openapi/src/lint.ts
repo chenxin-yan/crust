@@ -92,6 +92,7 @@ export const PROBLEM_KINDS: Readonly<Record<Diagnostic["code"], "fix" | "skip" |
 	"override-stale": "fix",
 	"override-unknown-param": "fix",
 	"confirm-without-handler": "fix",
+	"paginate-needs-array": "fix",
 };
 
 // The canonical flag spellings core rejects (`assertUsableSpelling`): integer-like names, `no-`
@@ -318,6 +319,13 @@ export function planCommands(input: LintInput): {
 			paginates && resultSchema !== undefined
 				? withoutListLimits(spec, resultSchema, 0)
 				: resultSchema;
+		if (fields.paginate !== undefined && !paginates) {
+			report(
+				"paginate-needs-array",
+				`${label}: the override sets \`paginate\`, but its result after \`unwrap\` is not a list, so pages cannot be joined`,
+				"Set `unwrap` to return the page's list (with its `outputSchema`), or remove `paginate` from the override",
+			);
+		}
 		if (paginates) {
 			inputs.push({
 				kind: "flag",

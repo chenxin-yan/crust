@@ -19,7 +19,13 @@ import type { DefineApiOptions } from "./define-api.ts";
 import { type CommandPlan, type PlannedInput, boundNames } from "./lint.ts";
 import { kebab } from "./names.ts";
 import type { Param } from "./operations.ts";
-import { buildRequest, isPlainObject, readOperationResponse } from "./request.ts";
+import type { OperationOverride } from "./overrides.ts";
+import {
+	type OperationRequest,
+	buildRequest,
+	isPlainObject,
+	readOperationResponse,
+} from "./request.ts";
 
 /**
  * A generated or added definition. Its shape and Contexts are open: a generated command's are
@@ -28,6 +34,9 @@ import { buildRequest, isPlainObject, readOperationResponse } from "./request.ts
  */
 export type GeneratedDefinition = CommandDefinition<any, any, any, any>;
 import { type SchemaField, flagValue, record, standaloneSchema } from "./schema.ts";
+
+/** A `bind` entry of an override. */
+type Bind = NonNullable<NonNullable<OperationOverride["bind"]>[string]>;
 
 /** What a confirmation handler resolves to: nothing or `true` confirms, `false` declines. */
 export type ConfirmResult = void | boolean;
@@ -179,43 +188,13 @@ function operationRecipe(
 			.flags(flags)
 			.output(outputWrapper(advertisedOutput(spec, plan)))
 			.action(async ({ args: argValues, flags: flagValues, ctx, stdout }) => {
-				// Arguments and flags apart: an inherited flag may share an argument's name.
-				const values: Record<PlannedInput["kind"], Readonly<Record<string, unknown>>> = {
-					arg: argValues,
-					flag: flagValues,
-				};
-				// Keyed by the spec's names, which may be `__proto__`: without a prototype, it is a key.
-				// Cookie parameters get no input and are never sent.
-				const input: Record<Param["in"], Record<string, unknown>> = {
-					path: Object.create(null),
-					query: Object.create(null),
-					header: Object.create(null),
-					cookie: Object.create(null),
-				};
-				const bodyFields: Record<string, unknown> = Object.create(null);
-				let body: unknown;
-				for (const { kind, name, target } of inputs) {
-					const value = Object.hasOwn(values[kind], name) ? values[kind][name] : undefined;
-					if (value === undefined) continue;
-					if (target.in === "param") input[target.param.in][target.param.name] = value;
-					else if (target.in === "field") bodyFields[target.field.name] = value;
-					else if (target.in === "body") body = value;
-				}
-				// One value per binding, for every parameter and body field of its name.
-				// A binding the operation has no input for (an `.each()` rule's) is never called.
-				for (const [name, bind] of Object.entries(fields.bind ?? {})) {
-					if (bind === undefined) continue;
-					const params = op.params.filter((param) => param.name === name && param.in !== "cookie");
-					const field = plan.bodyFields.some((bodyField) => bodyField.name === name);
-					if (params.length === 0 && !field) continue;
-					const value = await bind(ctx);
-					for (const param of params) input[param.in][name] = value;
-					if (field) bodyFields[name] = value;
-				}
-				body = effectiveBody(spec, plan, body, bodyFields);
-				const { path, query, header } = input;
 				// Built, and so checked, before the confirmation, which a rejected request must not ask for.
-				const request = buildRequest(op, { path, query, header, body });
+				const request = await operationRequest(
+					spec,
+					plan,
+					{ arg: argValues, flag: flagValues },
+					(_name, bind) => bind(ctx),
+				);
 				if (typeof fields.confirm === "string") {
 					// An operation with `confirm` and no handler is left out (`confirm-without-handler`), so this is set.
 					// `false` declines like a throw, so a prompt that answers no sends nothing.
@@ -259,6 +238,56 @@ function operationRecipe(
 				}
 			})
 	);
+}
+
+/**
+ * The request a planned operation's command sends for its argument and flag `values`, each `bind`
+ * entry's value given by `bound`. Checked, with the `VALIDATION` errors of {@link buildRequest} and
+ * {@link effectiveBody}, before anything is sent.
+ */
+export async function operationRequest(
+	spec: OpenApiSpec,
+	plan: CommandPlan,
+	values: Readonly<Record<PlannedInput["kind"], Readonly<Record<string, unknown>>>>,
+	bound: (name: string, bind: Bind) => string | Promise<string>,
+): Promise<OperationRequest> {
+	const { op, fields, inputs } = plan;
+	// Keyed by the spec's names, which may be `__proto__`: without a prototype, it is a key.
+	// Cookie parameters get no input and are never sent.
+	const input: Record<Param["in"], Record<string, unknown>> = {
+		path: Object.create(null),
+		query: Object.create(null),
+		header: Object.create(null),
+		cookie: Object.create(null),
+	};
+	const bodyFields: Record<string, unknown> = Object.create(null);
+	let body: unknown;
+	// Arguments and flags apart: an inherited flag may share an argument's name.
+	for (const { kind, name, target } of inputs) {
+		const value = Object.hasOwn(values[kind], name) ? values[kind][name] : undefined;
+		if (value === undefined) continue;
+		if (target.in === "param") input[target.param.in][target.param.name] = value;
+		else if (target.in === "field") bodyFields[target.field.name] = value;
+		else if (target.in === "body") body = value;
+	}
+	// One value per binding, for every parameter and body field of its name.
+	// A binding the operation has no input for (an `.each()` rule's) is never called.
+	for (const [name, bind] of Object.entries(fields.bind ?? {})) {
+		if (bind === undefined) continue;
+		const params = op.params.filter((param) => param.name === name && param.in !== "cookie");
+		const field = plan.bodyFields.some((bodyField) => bodyField.name === name);
+		if (params.length === 0 && !field) continue;
+		const value = await bound(name, bind);
+		for (const param of params) input[param.in][name] = value;
+		if (field) bodyFields[name] = value;
+	}
+	const { path, query, header } = input;
+	return buildRequest(op, {
+		path,
+		query,
+		header,
+		body: effectiveBody(spec, plan, body, bodyFields),
+	});
 }
 
 /** The output JSON Schema a planned command advertises: its known result schema, when it can stand alone. */
