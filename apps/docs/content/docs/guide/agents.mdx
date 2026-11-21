@@ -215,7 +215,7 @@ Agents and CI jobs can't complete a browser login. With [`@crustjs/auth`](/docs/
 - Every command, argument, and flag has a `description`.
 - Results are returned, not only printed.
 - Every command that returns data declares `.output()`: typed, validated, discoverable, and no duplicate text under `--json`.
-- [`json()`](/docs/modules/extensions/json), [`input()`](/docs/modules/extensions/input), and [`schema()`](/docs/modules/extensions/schema) are registered.
+- [`json()`](/docs/modules/extensions/json), [`input()`](/docs/modules/extensions/input), and [`schema()`](/docs/modules/extensions/schema) are registered; a CLI with many commands adds [`search()`](/docs/modules/extensions/search).
 - Long-running commands yield events.
 - Long-running work passes `signal` to what it awaits: CI cancellation, agent harnesses, and `timeout` stop a command with `SIGTERM`, which aborts the `signal` and runs cleanup; the process then ends by `SIGTERM` (shells report 143). Work that ignores it runs until it finishes or a second `SIGTERM` arrives, and still ends by `SIGTERM`.
 - Commands that can preview declare a `dry-run` flag; generated API commands are previewed with `api preview`.
