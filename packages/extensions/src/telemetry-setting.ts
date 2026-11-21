@@ -1,87 +1,132 @@
 // ────────────────────────────────────────────────────────────────────────────
-// @crustjs/extensions — Telemetry's saved setting (loaded only when it is read or the command runs)
+// @crustjs/extensions — Telemetry's saved preference (loaded only when it is read or the command runs)
 // ────────────────────────────────────────────────────────────────────────────
 
-import { configDir, createStore } from "@crustjs/store";
+// Only `configDir` from the store: its object store cannot tell a missing file from one that lacks
+// the key, and either must not be read as "nothing saved".
+import { configDir } from "@crustjs/store";
+import { isErrnoException } from "@crustjs/utils/error";
 
 import type { SavedSetting, TelemetryStatus } from "./telemetry.ts";
 
-const FILE_NAME = "telemetry";
-
-function settingStore(appName: string) {
-	return createStore({
-		// configDir rejects path separators; encodeURIComponent is injective, so distinct names never collide.
-		dirPath: configDir(encodeURIComponent(appName)),
-		name: FILE_NAME,
-		// A rewrite replaces a damaged file instead of merging into it.
-		pruneUnknown: true,
-		fields: {
-			telemetry: {
-				type: "string",
-				validate: (value) => {
-					if (value !== "on" && value !== "off") throw new Error('Expected "on" or "off"');
-				},
-			},
-		},
-	});
-}
-
-/** The saved choice, `undefined` when nothing is saved, `"unreadable"` for any failure: it never throws. */
-export async function readSavedSetting(appName: string): Promise<SavedSetting | undefined> {
+/** The preference file, or why its directory could not be resolved. */
+export function settingFile(appName: string): string | Error {
 	try {
-		// SAFETY: the field's validator admits only "on" and "off".
-		return (await settingStore(appName).read()).telemetry as "on" | "off" | undefined;
-	} catch {
-		return "unreadable";
+		// configDir rejects path separators; encodeURIComponent is injective, so distinct names never collide.
+		const dir = configDir(encodeURIComponent(appName));
+		return process.getBuiltinModule("node:path").join(dir, "telemetry.json");
+	} catch (error) {
+		return error instanceof Error ? error : new Error(String(error));
 	}
 }
 
-export async function writeSavedSetting(appName: string, setting: "on" | "off"): Promise<void> {
-	await settingStore(appName).write({ telemetry: setting });
+/**
+ * One read decides: no file is nothing saved; anything but a JSON object whose only key is
+ * `telemetry`, set to `"on"` or `"off"`, is `"unreadable"`. Never throws.
+ */
+export async function readSavedSetting(file: string | Error): Promise<SavedSetting | undefined> {
+	if (file instanceof Error) return "unreadable";
+	let text: string;
+	try {
+		text = await process.getBuiltinModule("node:fs/promises").readFile(file, "utf8");
+	} catch (error) {
+		return isErrnoException(error) && error.code === "ENOENT" ? undefined : "unreadable";
+	}
+	try {
+		const document: unknown = JSON.parse(text);
+		if (typeof document === "object" && document !== null && !Array.isArray(document)) {
+			const keys = Object.keys(document);
+			const value = (document as { telemetry?: unknown }).telemetry;
+			if (keys.length === 1 && keys[0] === "telemetry" && (value === "on" || value === "off")) {
+				return value;
+			}
+		}
+	} catch {
+		// Not JSON.
+	}
+	return "unreadable";
 }
 
 /**
- * The text the command prints. `change` is the choice `enable` or `disable` just saved;
- * `command` is the contributed command's name, which every hint spells as configured.
+ * Replaces the preference atomically: a private temporary file in the same directory, renamed over
+ * the target, so a reader sees the old or the new choice. A new directory is private too; an
+ * existing one keeps its mode. Throws a message for the user that nothing was saved.
+ */
+export async function writeSavedSetting(
+	file: string | Error,
+	setting: "on" | "off",
+	env: string,
+): Promise<void> {
+	const instead = `Set ${env}=${setting === "on" ? "1" : "0"} to turn telemetry ${setting} without a saved preference.`;
+	if (file instanceof Error) {
+		throw new Error(
+			`Could not save the telemetry preference: ${file.message.replace(/\.?$/, ".")}\n${instead}`,
+			{ cause: file },
+		);
+	}
+	const fs = process.getBuiltinModule("node:fs/promises");
+	const { dirname } = process.getBuiltinModule("node:path");
+	const temp = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
+	try {
+		await fs.mkdir(dirname(file), { recursive: true, mode: 0o700 });
+		const handle = await fs.open(temp, "wx", 0o600);
+		try {
+			await handle.writeFile(`${JSON.stringify({ telemetry: setting })}\n`);
+			await handle.sync();
+		} finally {
+			await handle.close();
+		}
+		await fs.rename(temp, file);
+	} catch (error) {
+		await fs.rm(temp, { force: true }).catch(() => {});
+		const reason = error instanceof Error ? error.message : String(error);
+		throw new Error(`Could not save the telemetry preference to ${file}: ${reason}\n${instead}`, {
+			cause: error,
+		});
+	}
+}
+
+/**
+ * The text the command prints: what holds for this run, then what is saved. `change` is the choice
+ * `enable` or `disable` just saved; `cli` is the command as configured (`acme telemetry`). A variable
+ * is named, never its value.
  */
 export function describeStatus(
 	status: TelemetryStatus,
 	change: "on" | "off" | undefined,
-	appName: string,
-	command: string,
+	cli: string,
 	env: string,
+	file: string | Error,
 ): string {
-	const cli = `${appName} ${command}`;
 	const state = status.sending ? "on" : "off";
-	const variable =
-		status.decidedBy === "do-not-track"
-			? "DO_NOT_TRACK is set"
-			: `${env}=${process.env[env] ?? ""} is set`;
+	const variable = status.decidedBy === "do-not-track" ? "DO_NOT_TRACK" : env;
 	if (change !== undefined) {
+		const saved = `Saved telemetry preference: ${change}.`;
 		return status.sending === (change === "on")
-			? `Telemetry is ${change} on this machine.`
-			: `Telemetry is ${change} on this machine, but stays ${state} while ${variable}.`;
+			? saved
+			: `${saved}\nTelemetry stays ${state} for this run because ${variable} is set.`;
 	}
-	const lines =
-		status.decidedBy === "do-not-track" || status.decidedBy === "env"
-			? [`Telemetry is ${state} because ${variable}.`]
-			: status.decidedBy === "default"
-				? [
-						`Telemetry is ${state}. This is the default.`,
-						`Turn it ${status.sending ? "off" : "on"} with: ${cli} ${status.sending ? "disable" : "enable"}`,
-					]
-				: status.saved === "unreadable"
-					? ["Telemetry is off."]
-					: [
-							`Telemetry is ${state}. You turned it ${state} with "${cli} ${status.sending ? "enable" : "disable"}".`,
-						];
-	if (status.saved === "unreadable") {
-		const file = process
-			.getBuiltinModule("node:path")
-			.join(configDir(encodeURIComponent(appName)), `${FILE_NAME}.json`);
-		lines.push(
-			`The saved setting could not be read. Run "${cli} enable" or "${cli} disable" to rewrite ${file}.`,
-		);
+	const toggle = `Turn it ${status.sending ? "off" : "on"} with: ${cli} ${status.sending ? "disable" : "enable"}`;
+	const repair =
+		file instanceof Error
+			? file.message.replace(/\.?$/, ".")
+			: `Run "${cli} enable" or "${cli} disable" to rewrite ${file}.`;
+	switch (status.decidedBy) {
+		case "default":
+			return `Telemetry is ${state} (the default). ${toggle}`;
+		case "saved":
+			return status.saved === "unreadable"
+				? `Telemetry is off: the saved preference could not be read.\n${repair}`
+				: `Telemetry is ${state} (saved preference). ${toggle}`;
+		default: {
+			const run =
+				status.decidedBy === "env"
+					? `Telemetry is ${state} for this run because ${variable} is set.`
+					: `Telemetry is off because ${variable} is set.`;
+			if (status.saved === undefined) return run;
+			return status.saved === "unreadable"
+				? `${run}\nThe saved preference could not be read. ${repair}`
+				: `${run}\nThe saved preference is ${status.saved}.`;
+		}
 	}
-	return lines.join("\n");
 }

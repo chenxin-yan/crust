@@ -56,7 +56,7 @@ export interface TelemetryOptions {
 
 /** What the `telemetry` command prints under `--json` and returns as its result. */
 export interface TelemetryStatus {
-	/** Whether this machine sends events now. */
+	/** Whether an invocation settling now, with this environment, would send its event. */
 	readonly sending: boolean;
 	/** The first setting that decides: `DO_NOT_TRACK`, the app's variable, the saved choice, or `enabled`. */
 	readonly decidedBy: "do-not-track" | "env" | "saved" | "default";
@@ -71,7 +71,7 @@ export type SavedSetting = "on" | "off" | "unreadable";
 const STATUS_JSON_SCHEMA = {
 	type: "object",
 	properties: {
-		sending: { type: "boolean", description: "Whether this machine sends events now" },
+		sending: { type: "boolean", description: "Whether this run would send events" },
 		decidedBy: {
 			type: "string",
 			enum: ["do-not-track", "env", "saved", "default"],
@@ -167,7 +167,7 @@ async function decide(
 		return { sending: false, decidedBy: "env" };
 	if (value) return { sending: true, decidedBy: "env" };
 	const saved = await readSaved();
-	// An unreadable file sends nothing until `enable` or `disable` rewrites it.
+	// Reached only when neither variable decides: then an unreadable file sends nothing.
 	if (saved !== undefined) return { sending: saved === "on", decidedBy: "saved" };
 	return { sending: options.enabled === "opt-out", decidedBy: "default" };
 }
@@ -177,17 +177,25 @@ function telemetryCommand(options: TelemetryOptions, name: string) {
 	const report =
 		(change: "on" | "off" | undefined) =>
 		async ({ rootCommand, stdout }: Pick<CrustCommandContext, "rootCommand" | "stdout">) => {
-			// The store and the wording load only when the command runs.
+			// The file access and the wording load only when the command runs.
 			const setting = await import("./telemetry-setting.ts");
-			const appName = rootCommand.meta.name;
-			if (change) await setting.writeSavedSetting(appName, change);
-			const saved = change ?? (await setting.readSavedSetting(appName));
+			const file = setting.settingFile(rootCommand.meta.name);
+			if (change) await setting.writeSavedSetting(file, change, options.env);
+			const saved = change ?? (await setting.readSavedSetting(file));
 			const status: TelemetryStatus = {
 				...(await decide(options, async () => saved)),
 				...(saved && { saved }),
 				default: options.enabled === "opt-out" ? "on" : "off",
 			};
-			stdout(setting.describeStatus(status, change, appName, name, options.env));
+			stdout(
+				setting.describeStatus(
+					status,
+					change,
+					`${rootCommand.meta.name} ${name}`,
+					options.env,
+					file,
+				),
+			);
 			return status;
 		};
 	const subcommand = <SubName extends "status" | "enable" | "disable">(
@@ -200,7 +208,7 @@ function telemetryCommand(options: TelemetryOptions, name: string) {
 		);
 	return defineCommand(
 		name,
-		{ description: "Show whether usage telemetry is sent (shorthand for `status`)" },
+		{ description: "Show whether usage telemetry is sent, and why (shorthand for `status`)" },
 		(cmd) =>
 			cmd
 				.add(
@@ -209,8 +217,8 @@ function telemetryCommand(options: TelemetryOptions, name: string) {
 						"Show whether usage telemetry is sent and which setting decides it",
 						undefined,
 					),
-					subcommand("enable", "Turn usage telemetry on on this machine", "on"),
-					subcommand("disable", "Turn usage telemetry off on this machine", "off"),
+					subcommand("enable", "Save a preference to send usage telemetry", "on"),
+					subcommand("disable", "Save a preference not to send usage telemetry", "off"),
 				)
 				.output(statusSchema)
 				.action(report(undefined)),
@@ -223,21 +231,26 @@ const telemetryFactory: ExtensionFactory<
 	[],
 	{},
 	readonly [TelemetryCommandDefinition<string>]
-> = /* @__PURE__ */ defineExtension(TELEMETRY).factory((extension, options) =>
-	extension
-		.add(telemetryCommand(options, options.command ?? DEFAULT_TELEMETRY_COMMAND))
+> = /* @__PURE__ */ defineExtension(TELEMETRY).factory((extension, options) => {
+	const commandName = options.command ?? DEFAULT_TELEMETRY_COMMAND;
+	return extension
+		.add(telemetryCommand(options, commandName))
 		.setup((ctx) => {
 			startedAt.set(ctx, performance.now());
 		})
 		.postRun(async (ctx, outcome) => {
+			// Before the decision: reading the saved preference is not the command's time.
+			const endedAt = performance.now();
+			// The control command never reports itself: not a status check, an opt-out, its help, or its failures.
+			if (ctx.commandPath[1] === commandName) return;
 			const { sending } = await decide(options, async () => {
 				// Loaded only when neither variable decides, keeping it out of every CLI's startup.
-				const { readSavedSetting } = await import("./telemetry-setting.ts");
-				return readSavedSetting(ctx.commandPath[0]!);
+				const { readSavedSetting, settingFile } = await import("./telemetry-setting.ts");
+				return readSavedSetting(settingFile(ctx.commandPath[0]!));
 			});
 			if (!sending) return;
 			const started = startedAt.get(ctx);
-			const durationMs = started === undefined ? 0 : Math.round(performance.now() - started);
+			const durationMs = started === undefined ? 0 : Math.round(endedAt - started);
 			// Loaded only when sending, keeping it out of every CLI's startup.
 			const { isCI } = await import("@crustjs/utils/terminal");
 			const event: TelemetryEvent = {
@@ -265,14 +278,15 @@ const telemetryFactory: ExtensionFactory<
 			} finally {
 				clearTimeout(timer);
 			}
-		}),
-);
+		});
+});
 
 // SAFETY: the runtime command name is `options.command ?? "telemetry"`, which each overload's name restates.
 /**
  * Sends one usage event per invocation through the app's `send`, after the invocation settles.
  * Reports the outcome this Extension's `postRun` sees; an unknown command or flag fails before setup and sends nothing.
- * Contributes a `telemetry` command (`status`, `enable`, `disable`) through which the user saves a choice for this machine.
+ * Contributes a `telemetry` command (`status`, `enable`, `disable`) through which the user saves a preference
+ * for this machine; that command's own invocations never send an event.
  *
  * @see https://crustjs.com/docs/modules/extensions/telemetry
  */
