@@ -4,12 +4,7 @@ import { Crust, defineCommand } from "@crustjs/core";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { bearerAuth } from "./bearer-auth.ts";
-import {
-	type ApiClient,
-	type ApiClientOptions,
-	type AuthAttempt,
-	fetchNextPage,
-} from "./client.ts";
+import { type ApiAuth, type ApiClient, type AuthAttempt, fetchNextPage } from "./client.ts";
 import { defineApi } from "./define-api.ts";
 
 interface Call {
@@ -39,12 +34,11 @@ const unauthorized = () => new Response("expired", { status: 401 });
 const ok = () => new Response("{}");
 
 /** Runs `use` with the `api` Context of an app configured with `auth`. */
-async function withApi(auth: ApiClientOptions["auth"], use: (api: ApiClient) => Promise<void>) {
+async function withApi(auth: ApiAuth, use: (api: ApiClient) => Promise<void>) {
 	const acme = defineApi({
 		spec: { openapi: "3.1.0", paths: {} },
 		baseUrl: "https://api.example.com/v1",
-		auth,
-	});
+	}).auth(auth);
 	const app = new Crust("tool")
 		.extend(acme.extension)
 		.add(

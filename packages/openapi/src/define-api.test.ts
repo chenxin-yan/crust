@@ -4,10 +4,12 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { type CommandSnapshot, Crust, defineCommand, defineContext } from "@crustjs/core";
+import { confirm } from "@crustjs/extensions";
 import { captureExecute } from "@crustjs/testing";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { runBuildHooks } from "../../crust/tests/build-hooks.ts";
+import { bearerAuth } from "./bearer-auth.ts";
 import { defineApi } from "./define-api.ts";
 
 const spec = {
@@ -54,6 +56,7 @@ describe("defineApi() chain", () => {
 		const account = defineContext("account").setup(() => "acc");
 		const next = [
 			base.use(account),
+			base.auth(() => undefined),
 			base.onConfirm(() => {}),
 			base.each(() => undefined),
 			base.override({}),
@@ -276,5 +279,237 @@ describe("crust build checks the handle", () => {
 		expect((await build(acme)).error).toContain(
 			"Only OpenAPI 3.0 and 3.1 documents are supported; this one is",
 		);
+	});
+});
+
+describe(".auth() reads the Contexts .use()d before it", () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	const authSpec = {
+		openapi: "3.1.0",
+		paths: {
+			"/zones": {
+				get: {
+					operationId: "listZones",
+					tags: ["Zones"],
+					responses: { "200": { description: "OK" } },
+				},
+				delete: {
+					operationId: "deleteZones",
+					tags: ["Zones"],
+					responses: { "204": { description: "Deleted" } },
+				},
+			},
+			"/status": {
+				get: {
+					operationId: "getStatus",
+					security: [],
+					responses: { "200": { description: "OK" } },
+				},
+			},
+		},
+	};
+	const baseUrl = "https://api.example.com";
+
+	/** The `authorization` header of each request sent. */
+	function stubFetch() {
+		const sent: (string | null)[] = [];
+		vi.stubGlobal("fetch", async (_url: URL, init: RequestInit) => {
+			sent.push(new Headers(init.headers).get("authorization"));
+			return init.method === "DELETE" ? new Response(null, { status: 204 }) : Response.json({});
+		});
+		return sent;
+	}
+
+	/** The `--profile` flag's Context, which `auth` reads; `setup` counts its set-ups. */
+	function profileContext() {
+		const setup = vi.fn(({ flags }: { flags: { profile?: string } }) => flags.profile);
+		const profile = defineContext("profile")
+			.flags({ profile: { type: "string", description: "Account to use" } })
+			.setup(setup);
+		return { profile, setup };
+	}
+
+	/**
+	 * The documented app: `auth` reads `--profile`; `confirm` comes after `.auth()`, for
+	 * `.onConfirm()` only; an app command that uses the client is added to a generated group, and
+	 * another uses it at the root.
+	 */
+	function profileApp() {
+		const sent = stubFetch();
+		const { profile, setup } = profileContext();
+		const resolve = vi.fn(async ({ ctx }: { ctx: { profile: Promise<string | undefined> } }) => ({
+			value: `token-${(await ctx.profile) ?? "default"}`,
+		}));
+		const api = defineApi({ spec: authSpec, baseUrl }).use(profile).auth(bearerAuth(resolve));
+		const whoami = defineCommand("whoami", (command) =>
+			command.use(api.client).action(async ({ ctx }) => {
+				const client = await ctx.api;
+				await client.call("listZones");
+				await client.fetch("/zones");
+			}),
+		);
+		const acme = api
+			.use(confirm)
+			.onConfirm(async (ctx, message) => (await ctx.confirm)(message))
+			.override({ deleteZones: { confirm: "Delete every zone?" } })
+			.add("zones", whoami);
+		const app = new Crust("acme")
+			.provide(profile())
+			.extend(confirm(), acme.extension)
+			.add(...acme.commands)
+			.add(
+				defineCommand("me", (command) =>
+					command.use(acme.client).action(async ({ ctx }) => void (await ctx.api).fetch("/me")),
+				),
+				defineCommand("base", (command) =>
+					command.use(acme.client).action(async ({ ctx }) => void (await ctx.api).baseUrl),
+				),
+				defineCommand("hello", (command) => command.action(() => {})),
+			);
+		return { app, sent, setup, resolve };
+	}
+
+	it("reaches auth from --profile for api <path>, a generated command and the client of app commands, once per invocation", async () => {
+		const { app, sent, resolve } = profileApp();
+
+		for (const argv of [
+			["api", "/zones", "--profile", "work"],
+			["zones", "list-zones", "--profile", "home"],
+			["zones", "whoami", "--profile", "ci"],
+			["me", "--profile", "dev"],
+			["zones", "list-zones"],
+		]) {
+			expect((await captureExecute(app, argv)).exitCode, argv.join(" ")).toBe(0);
+		}
+
+		expect(sent).toEqual([
+			"Bearer token-work",
+			"Bearer token-home",
+			"Bearer token-ci",
+			"Bearer token-ci",
+			"Bearer token-dev",
+			"Bearer token-default",
+		]);
+		expect(resolve).toHaveBeenCalledTimes(5);
+	});
+
+	it("never calls auth, nor sets up its Contexts, for a public operation, api preview, or a command that only reads the client", async () => {
+		const { app, sent, setup, resolve } = profileApp();
+
+		expect((await captureExecute(app, ["get-status", "--profile", "work"])).exitCode).toBe(0);
+		const preview = await captureExecute(app, [
+			"api",
+			"preview",
+			"zones",
+			"list-zones",
+			"--",
+			"--profile",
+			"work",
+		]);
+		expect(preview.exitCode).toBe(0);
+		expect(JSON.parse(preview.stdout)).toMatchObject({ method: "GET", url: `${baseUrl}/zones` });
+		expect((await captureExecute(app, ["base", "--profile", "work"])).exitCode).toBe(0);
+
+		expect(sent).toEqual([null]);
+		expect(resolve).not.toHaveBeenCalled();
+		expect(setup).not.toHaveBeenCalled();
+	});
+
+	it("previews each invocation's own request, also when runs share the caller's signal", async () => {
+		const { app } = profileApp();
+		const { signal } = new AbortController();
+		const preview = async (target: [string, ...string[]]) => {
+			const outcome = await app.run(["api", "preview"], { args: { target } }, { signal });
+			return outcome.status === "completed" && outcome.result.url;
+		};
+
+		expect(await preview(["zones", "list-zones"])).toBe(`${baseUrl}/zones`);
+		expect(await preview(["/status"])).toBe(`${baseUrl}/status`);
+		expect(await Promise.all([preview(["zones", "list-zones"]), preview(["get-status"])])).toEqual([
+			`${baseUrl}/zones`,
+			`${baseUrl}/status`,
+		]);
+	});
+
+	it("puts the flags of the Contexts auth reads on the commands that use the client, and those .use()d after it on the generated commands only", async () => {
+		const { app } = profileApp();
+		const flagsOf = async (...path: string[]) =>
+			Object.keys(path.reduce((node, name) => node.subCommands[name]!, await app.snapshot()).flags);
+
+		expect(await flagsOf("zones", "delete-zones")).toEqual(
+			expect.arrayContaining(["profile", "yes"]),
+		);
+		expect(await flagsOf("api")).toContain("profile");
+		expect(await flagsOf("zones", "whoami")).toContain("profile");
+		expect(await flagsOf("me")).toContain("profile");
+		for (const path of [["api"], ["zones", "whoami"], ["me"]]) {
+			expect(await flagsOf(...path), path.join(" ")).not.toContain("yes");
+		}
+		for (const path of [["hello"], ["api", "preview"]]) {
+			expect(await flagsOf(...path), path.join(" ")).not.toContain("profile");
+		}
+		expect((await captureExecute(app, ["hello", "--profile", "work"])).stderr).toContain(
+			'Unknown flag "--profile"',
+		);
+	});
+
+	it("replaces a previous .auth(), and sends no credentials without one", async () => {
+		const sent = stubFetch();
+		const plain = defineApi({ spec: authSpec, baseUrl });
+		const first = vi.fn(() => ({ authorization: "first" }));
+		const replaced = plain.auth(first).auth(() => ({ authorization: "second" }));
+		for (const handle of [plain, replaced]) {
+			const app = new Crust("acme").extend(handle.extension).add(...handle.commands);
+			expect((await captureExecute(app, ["zones", "list-zones"])).exitCode).toBe(0);
+		}
+
+		expect(sent).toEqual([null, "second"]);
+		expect(first).not.toHaveBeenCalled();
+	});
+
+	it("fails to run a command that uses the client of a handle before .auth() in an app that extends one after it", async () => {
+		stubFetch();
+		const { profile } = profileContext();
+		const api = defineApi({ spec: authSpec, baseUrl });
+		const me = defineCommand("me", (command) =>
+			command.use(api.client).action(async ({ ctx }) => void (await ctx.api).fetch("/me")),
+		);
+		const acme = api
+			.use(profile)
+			.auth(async ({ ctx }) => ({ authorization: `${await ctx.profile}` }))
+			.add("zones", me);
+		const app = new Crust("acme")
+			.provide(profile())
+			.extend(acme.extension)
+			// @ts-expect-error -- FIX_DEPENDENCY_TYPE: `me`'s client is not the extended handle's; this checks the run-time check behind it.
+			.add(...acme.commands);
+
+		const outcome = await app.run(["zones", "me"]);
+		expect(outcome.status === "failed" && outcome.error).toMatchObject({
+			code: "DEFINITION",
+			message: expect.stringContaining(
+				'Context "profile", used by a replacement provider on command "me", owns flag "profile"',
+			),
+		});
+	});
+
+	it("fails to run an app that does not provide a Context auth reads", async () => {
+		const profile = defineContext("profile").setup(() => "work");
+		const acme = defineApi({ spec: authSpec, baseUrl })
+			.use(profile)
+			.auth(async ({ ctx }) => ({ authorization: `Bearer ${await ctx.profile}` }));
+		const app = new Crust("acme")
+			// @ts-expect-error -- FIX_MISSING_DEPENDENCY: `profile`; this checks the run-time check behind it.
+			.extend(acme.extension)
+			// @ts-expect-error -- FIX_MISSING_DEPENDENCY: `profile`, for the generated commands too.
+			.add(...acme.commands);
+
+		const outcome = await app.run(["zones", "list-zones"]);
+		expect(outcome.status === "failed" && outcome.error).toMatchObject({
+			message: 'No provider for Context "profile"',
+		});
 	});
 });

@@ -12,6 +12,7 @@ import { runInteractive } from "@crustjs/testing/interactive";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { runBuildHooks } from "../../crust/tests/build-hooks.ts";
+import type { ApiAuth } from "./client.ts";
 import { type DefineApiOptions, defineApi } from "./define-api.ts";
 import { ApiResponseError } from "./request.ts";
 
@@ -165,8 +166,11 @@ function stubFetch(
 
 const auth = vi.fn(() => ({ authorization: "Bearer secret" }));
 
-function buildApi(options: Partial<DefineApiOptions> = {}) {
-	return defineApi({ spec, baseUrl: "https://api.example.com/v1/", auth, ...options });
+function buildApi({
+	auth: replaced = auth,
+	...options
+}: Partial<DefineApiOptions> & { readonly auth?: ApiAuth } = {}) {
+	return defineApi({ spec, baseUrl: "https://api.example.com/v1/", ...options }).auth(replaced);
 }
 
 /** The snapshot of the command at `path` below `root`. */

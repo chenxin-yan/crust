@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { Crust, defineCommand } from "@crustjs/core";
+import { Crust, defineCommand, defineContext } from "@crustjs/core";
 import { didYouMean, help } from "@crustjs/extensions";
 import { captureExecute } from "@crustjs/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -173,7 +173,7 @@ function appOf(
 }
 
 /** Writes the build hook's files to `built.dir`, which makes this process a built CLI. */
-async function ship(app = appOf(chained())) {
+async function ship(app: Parameters<typeof runBuildHooks>[0] = appOf(chained())) {
 	const { files, error } = await runBuildHooks(app);
 	expect(error).toBeUndefined();
 	built.dir = join(root, "built");
@@ -435,6 +435,33 @@ describe("spec data files", () => {
 			stderr: `Error: api: the OpenAPI data was not found at "${join(built.dir!, "openapi", "groups", "g-dns.json")}". Run \`crust build\` first, and ship its "openapi" directory with the CLI.`,
 			exitCode: 1,
 		});
+	});
+
+	it("send a built CLI's generated commands through the handle's .auth(), with the flags of the Contexts it reads", async () => {
+		const profile = defineContext("profile")
+			.flags({ profile: { type: "string", description: "Account to use" } })
+			.setup(({ flags }) => flags.profile);
+		const authed = () =>
+			chained()
+				.use(profile)
+				.auth(async ({ ctx }) => ({ authorization: `Bearer ${await ctx.profile}` }));
+		const appWith = (acme: ReturnType<typeof authed>) =>
+			new Crust("acme")
+				.provide(profile())
+				.extend(help(), acme.extension)
+				.add(...acme.commands);
+		await ship(appWith(authed()));
+		const sent: (string | null)[] = [];
+		vi.stubGlobal("fetch", async (_url: URL, init: RequestInit) => {
+			sent.push(new Headers(init.headers).get("authorization"));
+			return Response.json([]);
+		});
+
+		const app = appWith(authed());
+		expect(await captureExecute(app, ["users", "list-users", "--profile", "work"])).toMatchObject({
+			exitCode: 0,
+		});
+		expect(sent).toEqual(["Bearer work"]);
 	});
 
 	it("give api preview the plan of a built CLI's command from its group's file only", async () => {

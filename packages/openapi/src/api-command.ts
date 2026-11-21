@@ -2,7 +2,9 @@ import {
 	type CommandDefinition,
 	type CommandShape,
 	type ContextFactory,
+	type ContextMap,
 	CrustError,
+	type FlagsDef,
 	defineCommand,
 } from "@crustjs/core";
 import type { JsonValue } from "@crustjs/utils/json";
@@ -381,18 +383,24 @@ const paginateFlag = {
 type ApiFlags = typeof browseFlags & ApiRequestFlags & typeof paginateFlag;
 
 /** The contributed `api` command, spelled out because `defineApi()` needs a declared type. */
-export type ApiCommandDefinition<Operations = unknown> = CommandDefinition<
+export type ApiCommandDefinition<
+	Operations = unknown,
+	AuthDeps extends ContextMap = {},
+	// The flags of the Contexts the client's `auth` reads, which `api` parses.
+	AuthFlags extends FlagsDef = {},
+> = CommandDefinition<
 	"api",
 	readonly [],
 	CommandShape<
 		readonly [typeof pathArg],
-		ApiFlags,
+		// `ApiFlags` alone without them: an intersection with `{}` makes every typed `run(["api"])` cost more.
+		keyof AuthFlags extends never ? ApiFlags : ApiFlags & AuthFlags,
 		{ readonly preview: PreviewShape },
 		JsonValue | undefined,
 		{},
 		readonly JsonValue[] | undefined
 	>,
-	{ api: ApiClient<Operations> }
+	{ api: ApiClient<Operations, AuthDeps> } & AuthDeps
 >;
 
 /**
