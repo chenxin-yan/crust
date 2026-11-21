@@ -271,8 +271,11 @@ function missingMessage(name: string, key: string, def: ConfigFlagDef, files: re
 /** The options of {@link defineConfig}, so an unknown one, such as `flags`, is refused at run time. */
 const OPTIONS = new Set(["name", "global", "project"]);
 
-/** What {@link defineConfig} returns: where the files are, waiting for `.flags()` and its settings. */
-interface ConfigBuilder<G extends ConfigFileOption | undefined> {
+/**
+ * What {@link defineConfig} returns for the `global` option `G`: where the files are, waiting for
+ * `.flags()` and its settings.
+ */
+export interface ConfigBuilder<G extends ConfigFileOption | undefined> {
 	/**
 	 * Declare the settings, each the flag definition you would write in a command's `.flags({...})`,
 	 * and get the `config` Context factory.

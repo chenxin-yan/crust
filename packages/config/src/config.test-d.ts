@@ -1,7 +1,12 @@
 import { Crust, defineCommand, type FactoryValueOf } from "@crustjs/core";
 import type { Store } from "@crustjs/store";
 
-import { type ConfigFactory, type ConfigFlagDef, defineConfig } from "./index.ts";
+import {
+	type ConfigBuilder,
+	type ConfigFactory,
+	type ConfigFlagDef,
+	defineConfig,
+} from "./index.ts";
 
 type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -182,3 +187,7 @@ new Crust("acme").provide(builder());
 void builder.global;
 // @ts-expect-error -- .flags() is called once
 void builder.flags({ org: { type: "string" } }).flags;
+
+// A module that exports the builder for another to finish can name its type in a declaration.
+export const files: ConfigBuilder<true> = defineConfig({ name: "acme", global: true });
+void files.flags({ org: { type: "string" } }).global;
