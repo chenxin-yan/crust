@@ -71,6 +71,28 @@ A plain object, such as a small inline spec or one in a test, works too: it is k
 
 Specs are pinned, never fetched: any other `spec`, such as a loader function, an `https:` URL, or a path string, is a `DEFINITION` [`CrustError`](/docs/api/errors) when `defineApi()` runs.
 
+## Which to use
+
+`api` and the generated commands read the same pinned spec, and a CLI ships both: the generated commands are its product, and `api` reaches what they leave out.
+
+|                                                                  | Generated commands                                | `api`                                                       |
+| ---------------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------- |
+| For                                                              | The operations your CLI offers, by name           | Any endpoint without a command, and browsing the spec       |
+| Input                                                            | Typed arguments and flags, checked before sending | A path, `-F` fields and a `--body`                          |
+| Output                                                           | The operation's [output schema](#output)          | The response body as it is                                  |
+| Your [overrides](#overrides): names, `confirm`, `bind`, `unwrap` | Applied                                           | Not applied: `api /users/42 -X DELETE` asks nothing         |
+| As [MCP](/docs/modules/mcp#tools) tools                          | Yes, like the commands you write                  | Only when `include` names `["api"]` or `["api", "preview"]` |
+
+Every operation becomes a command unless an override [excludes](#overrides) it or the spec deprecates it. An operation without a command, for either reason or because of a [problem](#what-crust-build-checks), stays reachable with `api <path>`. To offer fewer commands, give `.each()` a rule:
+
+<include lang="ts">../../../examples/modules/openapi.ts#curated</include>
+
+<include lang="ts">../../../examples/modules/openapi.ts#read-only</include>
+
+<include lang="ts">../../../examples/modules/openapi.ts#start-empty</include>
+
+An agent that runs commands unattended gets every generated command as an MCP tool, the ones that write and delete too. Narrow them with a rule like the read-only one, or with the MCP server's `exclude`, and let it check a request first with [`api preview`](#preview-a-request).
+
 ## The `api` command
 
 `acme.extension` contributes `api`: it browses the spec and sends requests below the base URL, with the client's auth.
