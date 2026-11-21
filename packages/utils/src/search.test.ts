@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { createSearchIndex, type SearchItem } from "./search.ts";
+import { commandSearchItem, createSearchIndex, type SearchItem } from "./search.ts";
 
 /** A search over `items` that returns the labels of the matches. */
 function searchOf(items: Readonly<Record<string, Partial<SearchItem>>>) {
@@ -98,6 +98,35 @@ describe("createSearchIndex", () => {
 		expect(searchOf({})("deploy")).toEqual([]);
 	});
 
+	it("returns nothing for a limit below one", () => {
+		expect(search("api", 0)).toEqual([]);
+		expect(search("api", -1)).toEqual([]);
+		expect(search("api", Number.NaN)).toEqual([]);
+	});
+
+	it("ranks a many-word query over a few hundred items in a fixed order", () => {
+		// Pseudo-random texts from a small vocabulary, so most query words match many items.
+		const vocabulary =
+			"zone cache purge key list get set delete for a the rule worker script token rotate account member record dns".split(
+				" ",
+			);
+		let seed = 1;
+		const word = () => vocabulary[(seed = (seed * 48271) % 2147483647) % vocabulary.length]!;
+		const text = (count: number) => Array.from({ length: count }, word).join(" ");
+		const items = Array.from({ length: 300 }, (_, at) => ({
+			names: [text(1 + (at % 4))],
+			descriptions: [text(3 + (at % 6))],
+			details: [text(at % 3)],
+		}));
+		const index = createSearchIndex(items);
+		expect(index(`${vocabulary.join(" ")} purged caches rot`, 20)).toEqual([
+			71, 83, 215, 99, 210, 26, 287, 275, 298, 137, 35, 293, 97, 11, 220, 165, 233, 184, 107, 1,
+		]);
+		expect(index("purge the cache for a zone", 20)).toEqual([
+			37, 169, 99, 233, 53, 181, 241, 224, 65, 165, 5, 194, 89, 191, 71, 80, 220, 64, 43, 16,
+		]);
+	});
+
 	it("breaks ties in item order and stops at the limit", () => {
 		const twins = searchOf({
 			pull: { descriptions: ["Sync the repo"] },
@@ -106,5 +135,24 @@ describe("createSearchIndex", () => {
 		});
 		expect(twins("sync")).toEqual(["pull", "push", "fetch"]);
 		expect(twins("sync", 1)).toEqual(["pull"]);
+	});
+});
+
+describe("commandSearchItem", () => {
+	it("indexes a command's path, name and aliases, description, and its own inputs", () => {
+		expect(
+			commandSearchItem(["keys", "rotate"], {
+				meta: { name: "rotate", description: "Rotate an API key", aliases: ["roll"] },
+				args: [{ name: "id", description: "Key to rotate" }, { name: "note" }],
+				flags: {
+					dryRun: { description: "Print the plan only" },
+					json: { description: "Print JSON", extension: "crust:json" },
+				},
+			}),
+		).toEqual({
+			names: ["keys", "rotate", "rotate", "roll"],
+			descriptions: ["Rotate an API key"],
+			details: ["id", "Key to rotate", "note", undefined, "dryRun", "Print the plan only"],
+		});
 	});
 });

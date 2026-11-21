@@ -10,7 +10,8 @@ export interface SearchItem {
 
 /**
  * Indexes of up to `limit` items that match the words of `query`, best first,
- * ties in item order. Items that match no word are left out.
+ * ties in item order. Items that match no word are left out; a `limit` below
+ * 1, or `NaN`, returns none.
  */
 export type SearchIndex = (query: string, limit: number) => readonly number[];
 
@@ -111,27 +112,59 @@ export function createSearchIndex(items: readonly SearchItem[]): SearchIndex {
 		}),
 	);
 	return (query, limit) => {
-		const queryWords = [...new Set(words(query))].map((word) => [word, stem(word)] as const);
-		const matches = indexed.map((fields) =>
-			queryWords.map(([word, wordStem]) =>
-				fields.reduce(
-					(sum, [weight, field]) => sum + weight * fieldMatch(field, word, wordStem),
-					0,
-				),
+		if (!(limit >= 1)) return [];
+		const totals = new Float64Array(indexed.length);
+		// One query word at a time, so memory stays one score per item whatever the query's length.
+		const scores = new Float64Array(indexed.length);
+		for (const word of new Set(words(query))) {
+			const wordStem = stem(word);
+			let matching = 0;
+			for (let item = 0; item < indexed.length; item++) {
+				let score = 0;
+				for (const [weight, field] of indexed[item]!) {
+					score += weight * fieldMatch(field, word, wordStem);
+				}
+				scores[item] = score;
+				if (score > 0) matching++;
+			}
+			if (matching === 0) continue;
+			const rarity = Math.log(1 + (indexed.length - matching + 0.5) / (matching + 0.5));
+			for (let item = 0; item < indexed.length; item++)
+				totals[item] = totals[item]! + scores[item]! * rarity;
+		}
+		const found: number[] = [];
+		for (let item = 0; item < indexed.length; item++) if (totals[item]! > 0) found.push(item);
+		return found.sort((a, b) => totals[b]! - totals[a]! || a - b).slice(0, limit);
+	};
+}
+
+/** The parts of a command {@link commandSearchItem} reads; a Crust command snapshot has them. */
+export interface SearchableCommand {
+	readonly meta: {
+		readonly name: string;
+		readonly description?: string;
+		readonly aliases?: readonly string[];
+	};
+	readonly args: readonly { readonly name: string; readonly description?: string }[];
+	readonly flags: Readonly<
+		Record<string, { readonly description?: string; readonly extension?: unknown }>
+	>;
+}
+
+/**
+ * The search item of the command at `path`: its path, name, and aliases as
+ * names; its description; its argument names and descriptions and those of the
+ * flags no Extension declares as details.
+ */
+export function commandSearchItem(path: readonly string[], command: SearchableCommand): SearchItem {
+	return {
+		names: [...path, command.meta.name, ...(command.meta.aliases ?? [])],
+		descriptions: [command.meta.description],
+		details: [
+			...command.args.flatMap((arg) => [arg.name, arg.description]),
+			...Object.entries(command.flags).flatMap(([name, flag]) =>
+				flag.extension === undefined ? [name, flag.description] : [],
 			),
-		);
-		const rarity = queryWords.map((_, at) => {
-			const matching = matches.filter((match) => match[at]! > 0).length;
-			return Math.log(1 + (indexed.length - matching + 0.5) / (matching + 0.5));
-		});
-		return matches
-			.map((match, item) => ({
-				item,
-				score: match.reduce((sum, value, word) => sum + value * rarity[word]!, 0),
-			}))
-			.filter(({ score }) => score > 0)
-			.sort((a, b) => b.score - a.score || a.item - b.item)
-			.slice(0, limit)
-			.map(({ item }) => item);
+		],
 	};
 }
