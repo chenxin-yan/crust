@@ -46,7 +46,7 @@ deploying flag-org to eu on port 8080
 
 Each key is settled on its own: here `org` comes from the project file and `region` from the global file. The files do not merge beyond that: only the nearest project file is read.
 
-The settings are ordinary flags of the `config` Context, so Core resolves the first two steps exactly as for any flag, and `--help`, typed `run()`, `--input`, [`schema`](/docs/modules/extensions/schema), [MCP](/docs/modules/mcp) and completion all see them. `@crustjs/config` does the last three when a command first reads `await ctx.config`. Until then nothing is read, and `@crustjs/store` is not even loaded, so `--help`, `--version` and a command that does not use the config work whatever is in the files.
+The settings are ordinary flags of the `config` Context, so Core resolves the first two steps exactly as for any flag, and `--help`, typed `run()`, `--input`, [`schema`](/docs/modules/extensions/schema), [MCP](/docs/modules/mcp) and completion all see them. `@crustjs/config` does the last three when a command first reads `await ctx.config`. Until then no file is read, so `--help`, `--version` and a command that does not use the config work whatever is in the files.
 
 ## The files
 
