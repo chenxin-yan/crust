@@ -182,7 +182,7 @@ describe("readJson", () => {
 		});
 		try {
 			await expect(readJson(filePath)).rejects.toMatchObject({
-				code: "PARSE",
+				code: "PATH",
 				message: `Store file is larger than 16 MiB: ${filePath}`,
 			});
 			expect(requested).toBe(16 * 1024 * 1024 + 1);

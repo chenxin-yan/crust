@@ -13,7 +13,6 @@ import { applyFieldDefaults, setDocumentValue, withUnknownKeys } from "./merge.t
 import { resolveStorePath } from "./path.ts";
 import {
 	deleteJson,
-	isUnreadFile,
 	MAX_FILE_BYTES,
 	readJson,
 	refuseSymlink,
@@ -522,15 +521,12 @@ export function createStore<const F extends FieldsDef>(
 		return mutate(
 			"write",
 			async () => {
-				// write() replaces a corrupt file, which leaves no unknown keys to keep. A file too large to
-				// read is not known to be corrupt, so it is never replaced.
+				// write() replaces a corrupt file, which leaves no unknown keys to keep.
 				const persisted =
 					pruneUnknown === true
 						? undefined
 						: await readPersisted().catch((err: unknown) => {
-								if (err instanceof CrustStoreError && err.is("PARSE") && !isUnreadFile(err)) {
-									return undefined;
-								}
+								if (err instanceof CrustStoreError && err.is("PARSE")) return undefined;
 								throw err;
 							});
 				// SAFETY: field definitions constrain config values and schema outputs to JSON-compatible values.

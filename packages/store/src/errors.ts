@@ -86,9 +86,9 @@ export interface StoreErrorDetailsMap {
 /**
  * All possible error codes emitted by `@crustjs/store`.
  *
- * - `PATH` — Invalid or unsupported store file path, a path that is not a regular file, or
- *   (strict stores) a symbolic link or unsafe directory
- * - `PARSE` — Malformed JSON in persisted config file, or a file larger than 16 MiB
+ * - `PATH` — Invalid or unsupported store file path, a path that is not a regular file, a file
+ *   larger than 16 MiB, or (strict stores) a symbolic link or unsafe directory
+ * - `PARSE` — Malformed JSON in persisted config file
  * - `IO` — Filesystem read, write, or delete failure
  * - `VALIDATION` — Config object rejected by a store validator, or a mutation that would write
  *   more than 16 MiB

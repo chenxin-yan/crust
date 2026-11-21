@@ -51,14 +51,6 @@ export interface WriteJsonOptions {
  */
 export const MAX_FILE_BYTES: number = 16 * 1024 * 1024;
 
-/** `PARSE` errors for a file the store did not read: its content is unknown, not corrupt. */
-const unreadFiles = new WeakSet<Error>();
-
-/** Whether `error` says a store file was too large to read, so nothing is known about its content. */
-export function isUnreadFile(error: unknown): boolean {
-	return error instanceof Error && unreadFiles.has(error);
-}
-
 /**
  * Reads and parses a JSON store file from disk.
  *
@@ -70,8 +62,9 @@ export function isUnreadFile(error: unknown): boolean {
  *
  * @param filePath - Absolute path to the JSON store file.
  * @returns Parsed JSON value, or `undefined` if the file does not exist.
- * @throws {CrustStoreError} `PATH` if the path is not a regular file (a directory, FIFO or device).
- * @throws {CrustStoreError} `PARSE` if the file contains malformed JSON or is larger than the limit.
+ * @throws {CrustStoreError} `PATH` if the path is not a regular file (a directory, FIFO or device),
+ *   or the file is larger than the limit.
+ * @throws {CrustStoreError} `PARSE` if the file contains malformed JSON.
  * @throws {CrustStoreError} `IO` on filesystem read failures other than ENOENT.
  */
 export async function readJson(filePath: string): Promise<JsonValue | undefined> {
@@ -79,13 +72,11 @@ export async function readJson(filePath: string): Promise<JsonValue | undefined>
 		new CrustStoreError("PATH", `Store file is not a regular file: ${filePath}`, {
 			path: filePath,
 		});
-	const tooLarge = () => {
-		const error = new CrustStoreError("PARSE", `Store file is larger than 16 MiB: ${filePath}`, {
+	// PATH, not PARSE: the file was not read, so nothing says it is corrupt and may be replaced.
+	const tooLarge = () =>
+		new CrustStoreError("PATH", `Store file is larger than 16 MiB: ${filePath}`, {
 			path: filePath,
 		});
-		unreadFiles.add(error);
-		return error;
-	};
 	const readError = (err: unknown) =>
 		new CrustStoreError(
 			"IO",
@@ -118,12 +109,12 @@ export async function readJson(filePath: string): Promise<JsonValue | undefined>
 		if (stats.size > MAX_FILE_BYTES) throw tooLarge();
 		// Read to the end rather than trusting the size: the file may grow while it is read. One buffer,
 		// grown only when full, and never more than one byte past the limit is asked for.
-		let buffer = Buffer.alloc(stats.size + 1);
+		let buffer = Buffer.allocUnsafe(stats.size + 1);
 		let length = 0;
 		for (;;) {
 			if (length === buffer.length) {
 				if (length > MAX_FILE_BYTES) break;
-				const grown = Buffer.alloc(Math.min(length * 2, MAX_FILE_BYTES + 1));
+				const grown = Buffer.allocUnsafe(Math.min(length * 2, MAX_FILE_BYTES + 1));
 				buffer.copy(grown, 0, 0, length);
 				buffer = grown;
 			}

@@ -383,33 +383,31 @@ describe("the store file", () => {
 		await writeFile(filePath, text);
 		const store = blobStore();
 
-		await expect(store.write({ blob: "small" })).rejects.toMatchObject({ code: "PARSE" });
-		await expect(store.patch({ blob: "small" })).rejects.toMatchObject({ code: "PARSE" });
-		await expect(store.update(() => ({ blob: "small" }))).rejects.toMatchObject({
-			code: "PARSE",
-		});
+		await expect(store.write({ blob: "small" })).rejects.toMatchObject({ code: "PATH" });
+		await expect(store.patch({ blob: "small" })).rejects.toMatchObject({ code: "PATH" });
+		await expect(store.update(() => ({ blob: "small" }))).rejects.toMatchObject({ code: "PATH" });
 		expect(await readFile(filePath, "utf-8")).toBe(text);
 	});
 
-	it("rejects a file over 16 MiB with PARSE", async () => {
+	it("rejects a file over 16 MiB with PATH", async () => {
 		const filePath = join(tempDir, "config.json");
 		await writeFile(filePath, JSON.stringify({ blob: blobOf(MiB16 + 1) }, null, "\t"));
 
 		await expect(blobStore().read()).rejects.toMatchObject({
-			code: "PARSE",
+			code: "PATH",
 			message: `Store file is larger than 16 MiB: ${filePath}`,
 			details: { path: filePath },
 		});
 	});
 
 	it("stops at the limit instead of reading a huge file", async () => {
-		// Sparse: 4 GiB on paper, nothing on disk. Reading it whole would fail, not answer PARSE.
+		// Sparse: 4 GiB on paper, nothing on disk. Reading it whole would fail, not answer PATH.
 		const filePath = join(tempDir, "config.json");
 		await writeFile(filePath, "");
 		await truncate(filePath, 4 * 1024 ** 3);
 
 		await expect(blobStore().read()).rejects.toMatchObject({
-			code: "PARSE",
+			code: "PATH",
 			message: `Store file is larger than 16 MiB: ${filePath}`,
 		});
 	});
