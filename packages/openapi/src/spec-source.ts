@@ -30,22 +30,42 @@ function parseJsonc(text: string): unknown {
  * copy `crust build` wrote to the artifact directory `id`.
  */
 export function readSpec(url: URL, id: string): OpenApiSpec {
-	const { readFileSync } = process.getBuiltinModule("node:fs");
-	const source = isSourceRun();
-	const file = source
-		? process.getBuiltinModule("node:url").fileURLToPath(url)
-		: process.getBuiltinModule("node:path").join(resolveArtifactDir(id), BUILT_SPEC_FILE);
+	const spec = isSourceRun()
+		? readObject(process.getBuiltinModule("node:url").fileURLToPath(url), parseJsonc)
+		: readBuiltFile(id, BUILT_SPEC_FILE);
+	return spec as OpenApiSpec;
+}
+
+/**
+ * Reads the JSON object `crust build` wrote to `file` (such as `"index.json"`) below the artifact
+ * directory `id`, in a built CLI.
+ */
+export function readBuiltFile(id: string, file: string): object {
+	return readObject(builtFilePath(id, file), JSON.parse, id);
+}
+
+/** Where a built CLI finds `file` below the artifact directory `id`. */
+export function builtFilePath(id: string, file: string): string {
+	return process.getBuiltinModule("node:path").join(resolveArtifactDir(id), file);
+}
+
+/** The JSON object in `file`, read with `parse`; `artifact` names the directory a built file comes from. */
+function readObject(file: string, parse: (text: string) => unknown, artifact?: string): object {
 	let spec: unknown;
 	try {
-		const text = readFileSync(file, "utf8");
-		spec = source ? parseJsonc(text) : JSON.parse(text);
+		spec = parse(process.getBuiltinModule("node:fs").readFileSync(file, "utf8"));
 	} catch (cause) {
-		if (!source && cause instanceof Error && "code" in cause && cause.code === "ENOENT") {
-			// No `cause`: the generated commands read the spec at start, where a runtime prints an
-			// uncaught error's cause (a raw ENOENT), and this message already says what is missing.
+		if (
+			artifact !== undefined &&
+			cause instanceof Error &&
+			"code" in cause &&
+			cause.code === "ENOENT"
+		) {
+			// No `cause`: a runtime or renderer may print an error's cause (a raw ENOENT), and this
+			// message already says what is missing.
 			// oxlint-disable-next-line preserve-caught-error -- see above.
 			throw new Error(
-				`api: the OpenAPI document was not found at "${file}". Run \`crust build\` first, and ship its "${id}" directory with the CLI.`,
+				`api: the OpenAPI data was not found at "${file}". Run \`crust build\` first, and ship its "${artifact}" directory with the CLI.`,
 			);
 		}
 		const reason = cause instanceof Error ? cause.message : String(cause);
@@ -54,5 +74,5 @@ export function readSpec(url: URL, id: string): OpenApiSpec {
 	if (typeof spec !== "object" || spec === null || Array.isArray(spec)) {
 		throw new Error(`api: the OpenAPI document "${file}" is not a JSON object`);
 	}
-	return spec as OpenApiSpec;
+	return spec;
 }

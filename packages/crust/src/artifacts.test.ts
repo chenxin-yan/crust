@@ -58,6 +58,17 @@ describe("mergeEntryArtifacts", () => {
 		expect(readFileSync(join(artifactDir, "man", "greet.1"), "utf8")).toBe("x\n");
 	});
 
+	it("merges a file several entries write with the same bytes, as one API's data shared by bins", () => {
+		for (const bin of ["greet", "admin", "third"]) write(`${bin}/openapi/index.json`, "{}\n");
+		const owners = new Map<string, ArtifactOwner>();
+
+		for (const bin of ["greet", "admin", "third"]) {
+			mergeEntryArtifacts(join(tmpDir, bin), artifactDir, bin, owners);
+		}
+
+		expect(readFileSync(join(artifactDir, "openapi", "index.json"), "utf8")).toBe("{}\n");
+	});
+
 	it("rejects a directory in one entry that is a file in another", () => {
 		write("greet/skills/tool");
 		write("admin/skills/tool/SKILL.md");

@@ -388,7 +388,7 @@ describe("the spec", () => {
 			);
 
 			expect({ stderr, exitCode }).toEqual({
-				stderr: `Error: api: the OpenAPI document was not found at "${join(dir, "spec.json")}". Run \`crust build\` first, and ship its "acme-not-built" directory with the CLI.`,
+				stderr: `Error: api: the OpenAPI data was not found at "${join(dir, "spec.json")}". Run \`crust build\` first, and ship its "acme-not-built" directory with the CLI.`,
 				exitCode: 1,
 			});
 		} finally {
