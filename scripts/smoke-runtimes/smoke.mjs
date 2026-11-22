@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { createAuth } from "../../packages/auth/dist/index.js";
 import { Crust } from "../../packages/core/dist/index.js";
 import { isInGitRepo } from "../../packages/create/dist/index.js";
 import { handler } from "../../packages/effect/dist/index.js";
@@ -24,6 +25,7 @@ import { createStyle, fg, padEnd, stringWidth, table } from "../../packages/styl
 import * as testing from "../../packages/testing/dist/index.js";
 
 const roots = {
+	auth: createAuth,
 	core: Crust,
 	create: isInGitRepo,
 	effect: handler,

@@ -1,0 +1,209 @@
+---
+title: "Auth"
+---
+
+`@crustjs/auth` signs a CLI in with OAuth. `createAuth()` returns one client whose `login()` runs a browser login over a loopback redirect with PKCE, or a device-code login; [Add login to your CLI](/docs/guide/login) builds a `login` command with it. The pieces it is made of (discovery, the browser and device logins, the token client) are exported from `@crustjs/auth/oauth` for flows the client does not cover. It is standalone: no Crust Context, and no external OAuth library; it builds on the runtime's `fetch`, Web Crypto, and `node:http`.
+
+## Install
+
+```npm
+npm install @crustjs/auth
+```
+
+## Quick example
+
+<include lang="ts">../../../examples/modules/auth.ts#client</include>
+
+## The client
+
+`createAuth(options)` validates the server settings with the same rules as the building blocks, does no I/O, and returns a frozen client. Its methods work detached, so you can pass `auth.login` around.
+
+<auto-type-table path="../../../../../packages/auth/src/types.ts" name="CreateAuthOptions" />
+
+- `app` is your CLI's name: non-empty, without `/` or `\`. The device-login message shows `name`, which defaults to `app`.
+- `issuer`, `clientId`, `clientSecret`, `redirectPath`, and `allowInsecureLoopback` follow the rules of [Servers](#servers); `hosts` and `ports` those of [Browser login](#browser-login).
+- `resource` names the API every login asks tokens for (RFC 8707 resource indicators, absolute URIs without a fragment), for a server that issues tokens per API; both logins and the code exchange send it.
+
+### Signing in
+
+`auth.login(options)` runs the whole sign-in and resolves to the [`TokenSet`](#token-client). It does not store the tokens yet; keep them in a private file, such as a [strict store](/docs/modules/store#strict-stores) (`strict: true`).
+
+<auto-type-table path="../../../../../packages/auth/src/types.ts" name="LoginOptions" />
+
+1. It picks the login as [Choosing a login](#choosing-a-login) describes, with `device` as the user's `--device` flag. On `"refuse"` it throws `LoginRequiresInteractionError`, whose message says to use the device login, before any request.
+2. It discovers the server, once per process.
+3. **Browser:** it listens on the loopback address, calls `onUrl`, waits for the browser, and exchanges the code once. The listener closes on every path.
+4. **Device code:** it starts the device login, calls `onCode`, and polls until the user approves.
+
+The client prints nothing and opens no browser by itself: it does not know your command's output stream. Show the prompts yourself, usually in two lines:
+
+```ts
+onUrl: async ({ url, open }) => { stderr(`Sign in at: ${url}`); await open(); },
+onCode: ({ message }) => stderr(message),
+```
+
+<auto-type-table path="../../../../../packages/auth/src/types.ts" name="BrowserLoginPrompt" />
+
+`open()` calls [`openBrowser()`](#opening-the-browser) with the URL and resolves `true` when a browser was launched, `false` when none could be, so you can ask the user to open the URL by hand. It never throws; show the URL in any case. You may skip it, or ask first.
+
+<auto-type-table path="../../../../../packages/auth/src/types.ts" name="DeviceLoginPrompt" />
+
+`message` is the [`deviceCodeMessage()`](#device-login) text for this login: the URL and its host, the code, and the anti-phishing warning. The prompt never carries the device code.
+
+If `onUrl` or `onCode` throws or rejects, the login fails with that error and closes the listener. `signal` cancels any wait with `AbortError`, including a pending `onUrl` or `onCode`: the login rejects at once, closes the listener, and ignores the callback's later result; `page` renders the browser's result page as in [Browser login](#browser-login).
+
+### Errors by code
+
+Every error is an `AuthError`; match on its `code`, typed as the `AuthErrorCode` union, never on `message`:
+
+<include lang="ts">../../../examples/modules/auth.ts#errors</include>
+
+The codes and their classes are listed in [Errors](#errors).
+
+## Building blocks
+
+`@crustjs/auth/oauth` exports the functions the client is built from, every error class, and their types. Use them to sign in with several servers, keep a session open across steps, or render the prompts differently. A login composed from them:
+
+<include lang="ts">../../../examples/modules/auth.ts#config</include>
+
+<include lang="ts">../../../examples/modules/auth.ts#browser</include>
+
+<include lang="ts">../../../examples/modules/auth.ts#device</include>
+
+## Servers
+
+`defineServers({ servers, allowCustomIssuers? })` validates every authorization server your CLI signs in with and returns a frozen config. `discover(config, issuer, { signal?, clientId?, fetch? })` then fetches the server's metadata and returns a frozen `AuthServer` that every other function takes.
+
+<auto-type-table path="../../../../../packages/auth/src/types.ts" name="AuthServerOptions" />
+
+- An issuer is an `https` URL with no query, fragment, or user info. Each issuer, and each `redirectPath`, may appear once in `servers`. A `redirectPath` is plain ASCII that a browser sends unchanged: no `%`, query, fragment, dot or empty segments, spaces, or characters such as `<` or `é`.
+- `clientId` on `discover()` replaces the declared client id; two client ids at one issuer are the same server.
+- Discovery reads `/.well-known/oauth-authorization-server` (inserted before the issuer's path, as RFC 8414 says) and, only on a 404, `<issuer>/.well-known/openid-configuration`. The document's `issuer` must equal yours exactly, trailing slash included.
+- Every endpoint must be an `https` URL without user info or a fragment. A query is kept byte for byte, but it must not set a parameter the library sends (`client_id`, `scope`, `redirect_uri`, …) or repeat a name. An endpoint on another host than the issuer is fine.
+- A server that lists `code_challenge_methods_supported` without `S256` is refused.
+- Metadata is cached in memory for the process, never on disk.
+
+Declare `servers` in code. Do not build the list from environment variables or other runtime input: the list is what decides which servers your users' tokens may reach.
+
+### Who is signed in
+
+`server.userinfoEndpoint` is the OpenID Connect user-info address from the metadata (`userinfo_endpoint`), checked like the other endpoints, or `undefined` when there is none. The library never requests it and drops the `id_token` unread: fetch it yourself with the access token as a bearer token.
+
+<include lang="ts">../../../examples/modules/auth.ts#userinfo</include>
+
+### Public clients
+
+Register your CLI with each server as a **public client** (token endpoint authentication `none`), with the loopback redirect URIs below. Every user can read a `clientSecret` shipped inside a CLI, so it is not confidential and does not make your client confidential; set one only for a server that insists. With a secret, the token client authenticates with HTTP Basic; without one, it sends only `client_id`.
+
+### Several servers and mix-up
+
+When a CLI can sign in with more than one server, a malicious server can name an honest server's sign-in page as its own and receive the honest server's code and PKCE verifier (a mix-up attack, RFC 9700 §4.4). Each `AuthServer` carries the `issPolicy` that decides how a browser login checks the `iss` parameter of the response:
+
+| Setup                                                               | Browser login                                          |
+| ------------------------------------------------------------------- | ------------------------------------------------------ |
+| The server's metadata says it sends `iss`                           | `iss` is required and must equal the issuer            |
+| One server in `servers` and no `allowCustomIssuers`                 | A missing `iss` is accepted; a present one must match  |
+| Several servers; this one has its own `redirectPath`                | A missing `iss` is accepted; a present one must match  |
+| Several servers (or `allowCustomIssuers`); no `iss` and no own path | Refused with `OAuthConfigError` (`mix-up-unprotected`) |
+
+<include lang="ts">../../../examples/modules/auth.ts#servers</include>
+
+A `redirectPath` protects a server only if you register that path with that server alone; the default path is `/callback`. A custom issuer (`allowCustomIssuers`, with `clientId` passed to `discover()`) has no path of its own, so it must send `iss`. The device login has no redirect and is not affected.
+
+### Development servers
+
+Plain `http` is refused everywhere except the loopback callback. For a local authorization server, set `allowInsecureLoopback: true` on its entry, in code:
+
+<include lang="ts">../../../examples/modules/auth.ts#dev</include>
+
+The issuer must then be `http://127.0.0.1:<port>` or `http://[::1]:<port>`, never `localhost`, and every endpoint and verification URL must be on that same origin. Nothing reads the option from the environment.
+
+## Browser login
+
+`createAuthorizationSession(server, options?)` starts one login. It checks the mix-up policy and every option first, and only then listens on the loopback address; a refused login binds nothing. The session freezes the issuer, client id, redirect URI, `state`, the PKCE pair, and the authorization URL `url`, which you open or print.
+
+Every session makes a fresh PKCE verifier of 256 random bits with its `S256` challenge, and a `state` of 256 random bits; the verifier is sent only in the token request and never exposed. The authorization URL is safe to print, since its `state` and challenge are not secrets. Never print a callback URL, a code, a token, or `deviceCode`.
+
+<auto-type-table
+  path="../../../../../packages/auth/src/types.ts"
+  name="AuthorizationSessionOptions"
+/>
+
+- The listener binds `127.0.0.1` on a free port: `http://127.0.0.1:<port>/callback`. Register that redirect URI; servers must accept any port for loopback IP redirects. With `hosts: ["127.0.0.1", "::1"]` it falls back to `http://[::1]:<port>/…`, which you must register as well. Fixed `ports` are tried in order, for servers that need pre-registered ports. The listener uses the default bind, without `reusePort`, which refuses a second listener on its port; Node and Bun offer no Windows `SO_EXCLUSIVEADDRUSE`.
+- `extra` adds parameters such as `audience`, and must not repeat a parameter the library sends or the endpoint's query sets. There is no `nonce`, `response_mode`, `request`, or `request_uri`: the session asks only for an authorization code, always with PKCE `S256` and `state`.
+
+`session.wait(onCallback, { timeoutMs?, signal?, page? })` waits for the browser, runs `onCallback({ code })` once, then answers the browser and closes the listener. Pass `client.exchangeCode(session, code)` as `onCallback`; the result page shows its outcome.
+
+- It serves only `GET` on the exact redirect path, compared byte for byte before any decoding, with a `Host` header of exactly `127.0.0.1:<port>` (or `[::1]:<port>`); on port 80 the browser's `127.0.0.1` (or `[::1]`) without the port also matches. Anything else gets a 404 or 421.
+- A request whose `state` is wrong or missing, or that repeats `code`, `state`, `error`, or `iss`, gets a 400 and the session keeps waiting: a stray or forged request cannot end the login.
+- The `iss` check runs before `error` or `code` is used. An `error` response rejects with an `OAuthError` and is never exchanged.
+- It rejects with `TimeoutError` after `timeoutMs` (5 minutes) and with `AbortError` on `signal` or `session.close()`, also while `onCallback` is still running (its late result is ignored). The listener and every open connection close on every outcome; a connection idle for 10 seconds is dropped.
+- `page` renders the result page from `{ outcome, errorCode? }` only, never server text or the code. The library sets `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, and `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'` on every page. If `page` throws, the default page is served.
+
+Call `session.close()` in a `finally`, as above, so an early error never leaves the port open.
+
+## Device login
+
+`startDeviceFlow(server, { scope?, resource?, signal?, fetch? })` starts an RFC 8628 device login and returns `{ userCode, verificationUri, verificationUriComplete?, expiresAt, poll }`. Show the code and the URL, then call `flow.poll({ signal? })` once.
+
+- `deviceCodeMessage({ app, userCode, verificationUri })` prints the default instructions: the URL and its host, the code, and a warning to continue only if the user started this sign-in, each value stripped of control characters and escape sequences. Always show `userCode` and `verificationUri`, even when you also open `verificationUriComplete`.
+- The response is checked before anything is shown: `verificationUri` must be `https`; `userCode` is stripped of control characters and escape sequences. The device code is never exposed.
+- Polling waits at least the server's `interval` (and no less than 5 seconds) before each request, adds 5 seconds for every `slow_down`, and doubles the wait after a network error. It stops at the code's expiry, aborting a request in flight, and rejects with `OAuthError` `expired_token`.
+- A server whose metadata has no device endpoint, or whose `grant_types_supported` lacks the device grant, is refused with `OAuthConfigError` (`unsupported`).
+
+## Choosing a login
+
+`detectLoginMode({ device?, noBrowser?, env?, platform?, stdin?, stdout?, stderr? })` returns `"browser"`, `"device"`, or `"refuse"`. The first matching row wins:
+
+| Condition                                                                          | Mode        |
+| ---------------------------------------------------------------------------------- | ----------- |
+| `device` or `noBrowser` (the user passed `--device` or `--no-browser`), even on CI | `"device"`  |
+| `CI` is set (`isCI()` from `@crustjs/utils/terminal`)                              | `"refuse"`  |
+| No terminal: stdin is not a TTY, or neither stdout nor stderr is                   | `"refuse"`  |
+| A terminal, but an SSH session or Linux with no display                            | `"device"`  |
+| Otherwise                                                                          | `"browser"` |
+
+On `"refuse"`, nobody is there to read a code, or nobody asked for one that someone else might approve. `auth.login()` throws `LoginRequiresInteractionError` then; with the building blocks, throw it yourself with a message naming your device-login flag and your token environment variable. With `"device"`, show `deviceCodeMessage()` on the terminal the user is at. It does not check that the server offers a device login; `startDeviceFlow()` does.
+
+## Opening the browser
+
+`openBrowser(url, { allowInsecureLoopbackOrigin? })` resolves `true` when a launcher started and `false` otherwise; it never throws. Always print the URL too.
+
+- Only `https` URLs without user info or control characters open, and plain `http` only on the development origin you pass.
+- The URL is one argument to `open` (macOS), `xdg-open`, or on Windows `rundll32 url.dll,FileProtocolHandler`, never through a shell, so `&` in a URL stays part of it. On Windows, CI checks only the launcher arguments; a real browser launch is a manual check on a Windows host.
+
+## Token client
+
+`createTokenClient(server, { fetch? })` returns:
+
+<auto-type-table path="../../../../../packages/auth/src/types.ts" name="TokenClient" />
+
+- `exchangeCode(session, code)` uses the session's token endpoint, redirect URI, and verifier; it has no parameter for either. It runs once per session and never retries.
+- Every request is a form `POST` to the endpoint URL as configured, with a 30-second timeout (10 for `revoke()`), a 1 MiB response cap, and no redirects: a 3xx response is an error.
+- A token response needs a non-empty `access_token` and a `Bearer` `token_type`; `expires_in` must be a positive number. `id_token` and unknown fields are dropped.
+
+<auto-type-table path="../../../../../packages/auth/src/types.ts" name="TokenSet" />
+
+`JSON.stringify()` and `util.inspect()` of a `TokenSet` print `[Redacted]` for its tokens. A copy made with `{ ...tokens }`, or the token strings themselves, are not protected.
+
+## Errors
+
+Every error extends `AuthError` and has a stable `code`. Match on `code` or the class, never on `message`. The classes are exported from `@crustjs/auth/oauth`; the root exports `AuthError` and `AuthErrorCode`.
+
+| Error                           | `code`                       | When                                                                                                                                               |
+| ------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OAuthError`                    | The protocol code            | The server returned an OAuth error (`access_denied`, `invalid_grant`, …) or an invalid response (`invalid_response`); an unknown code is `unknown` |
+| `OAuthConfigError`              | `oauth-config`               | A config, option, or server value was refused; `reason` says which                                                                                 |
+| `HttpError`                     | `http`                       | A response without an OAuth error, including any 3xx; `status` holds the code                                                                      |
+| `IssuerMismatchError`           | `issuer-mismatch`            | Metadata or a response named another issuer, or lacked a required `iss` (`reason`)                                                                 |
+| `TimeoutError`                  | `timeout`                    | A request or the browser wait ran out of time                                                                                                      |
+| `AbortError`                    | `abort`                      | Your `signal` was aborted                                                                                                                          |
+| `ResponseTooLargeError`         | `response-too-large`         | A response body was over 1 MiB                                                                                                                     |
+| `NetworkError`                  | `network`                    | The request could not be sent or its response not read (DNS, connection, TLS, a broken stream); the underlying error is dropped                    |
+| `LoginRequiresInteractionError` | `login-requires-interaction` | `auth.login()` (or your code) found no person at a terminal: `detectLoginMode()` returned `"refuse"`                                               |
+
+Errors carry local text, the `status`, and the allowlisted code only. A server's `error_description` and `error_uri`, response bodies, and URLs never appear in a message, property, or `cause`, since a hostile server could echo a secret into them.
+
+## Cancellation
+
+`auth.login()`, `discover()`, `createAuthorizationSession()`, `session.wait()`, `startDeviceFlow()`, `flow.poll()`, and the token client's `exchangeCode()`, `refresh()`, and `revoke()` take a `signal`. An aborted signal rejects with `AbortError` before any request or listener; aborting mid-way stops the request, sleep, or wait and closes the listener. Handle Ctrl-C in your command (a Crust command's `ctx.signal` already does) and pass its signal down.
