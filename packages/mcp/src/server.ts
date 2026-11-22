@@ -1,8 +1,9 @@
 import { type AnyCrust, type CommandSnapshot, CrustError, type RunOutcome } from "@crustjs/core";
 import { parseCommandInput, type RunInputPayload } from "@crustjs/core/tooling";
 import { isJsonObject, parseJsonValue } from "@crustjs/utils/json";
+import type { SearchIndex } from "@crustjs/utils/search";
 // Type-only: the SDK loads inside the server functions, so CLIs pay for it only when `mcp` runs.
-import type { CallToolResult, Server, Tool } from "@modelcontextprotocol/server";
+import type { CallToolResult, Server, ServerContext, Tool } from "@modelcontextprotocol/server";
 
 import { type McpTool, type McpToolsOptions, toolsFromSnapshot } from "./tools.ts";
 
@@ -73,76 +74,206 @@ function resultFromOutcome(outcome: RunOutcome<unknown>): CallToolResult {
 	}
 }
 
+/** A manifest entry with the snapshot of its command. */
+type ToolEntry = readonly [McpTool, CommandSnapshot];
+
+/** What `tools/list` and `get_tool_details` say about a tool: everything but the fields run() routing uses. */
+function listedTool({
+	path: _path,
+	urlFields: _urlFields,
+	argNames: _argNames,
+	...tool
+}: McpTool): Tool {
+	// SAFETY: the schemas are JSON; Crust types their keywords `unknown`, the SDK `JSONValue`.
+	return tool as Tool;
+}
+
+/** Run one command tool for `tools/call`, or `call_tool` in progressive discovery. */
+async function callCommandTool(
+	app: AnyCrust,
+	[tool, command]: ToolEntry,
+	values: Readonly<Record<string, unknown>>,
+	ctx: ServerContext,
+): Promise<CallToolResult> {
+	let input: RunInputPayload;
+	try {
+		input = parseCommandInput(command, values);
+	} catch (error) {
+		// Input shaping failures (bad URL, bad raw) surface like action failures.
+		return toolResultFromOutcome({ status: "failed", error, stdout: "", stderr: "" });
+	}
+	const { signal, notify } = ctx.mcpReq;
+	const progressToken = ctx.mcpReq._meta?.progressToken;
+	let progress = 0;
+	const onEvent =
+		progressToken === undefined
+			? undefined
+			: (event: unknown) => {
+					progress++;
+					const message = typeof event === "string" ? { message: event } : {};
+					notify({
+						method: "notifications/progress",
+						params: { progressToken, progress, ...message },
+					}).catch(() => {
+						// A lost progress notification must not fail the tool call.
+					});
+				};
+	// SAFETY: `path` comes from this app's own snapshot and run() validates `input`; AnyCrust erases the typed link.
+	const result = toolResultFromOutcome(
+		await app.run(
+			tool.path as never,
+			input as never,
+			onEvent === undefined ? { signal } : { signal, onEvent },
+		),
+	);
+	// MCP requires structuredContent from a tool with an outputSchema unless isError is set.
+	if (tool.outputSchema === undefined || result.structuredContent || result.isError) {
+		return result;
+	}
+	return {
+		content: [{ type: "text", text: OUTPUT_SCHEMA_UNMET }, ...result.content],
+		isError: true,
+	};
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const SEARCH_LIMIT_DEFAULT = 5;
+const SEARCH_LIMIT_MAX = 20;
+
+/** The fixed tool set of progressive discovery, built for each progressive server factory. */
+function discoveryTools(): Tool[] {
+	return [
+		{
+			name: "search_tools",
+			description:
+				"Find this server's tools for a task described in words. Returns their names and descriptions, best first, without their schemas.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					query: { type: "string", description: 'The task in words, e.g. "rotate an API key"' },
+					limit: {
+						type: "integer",
+						minimum: 1,
+						maximum: SEARCH_LIMIT_MAX,
+						default: SEARCH_LIMIT_DEFAULT,
+					},
+				},
+				required: ["query"],
+			},
+		},
+		{
+			name: "get_tool_details",
+			description:
+				"Describe a tool: its description, inputSchema, and outputSchema when it has one.",
+			inputSchema: {
+				type: "object",
+				properties: { name: { type: "string", description: "A name search_tools returned" } },
+				required: ["name"],
+			},
+		},
+		{
+			name: "call_tool",
+			description:
+				"Call a tool with arguments that match its inputSchema. The result is the tool's own result.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					name: { type: "string", description: "A name search_tools returned" },
+					arguments: { type: "object", description: "Input matching the tool's inputSchema" },
+				},
+				required: ["name"],
+			},
+		},
+	];
+}
+
+/** {@link createMcpServer} and {@link serveStdio} options: which tools, and how the server offers them. */
+export interface McpServerOptions extends McpToolsOptions {
+	/**
+	 * `"direct"` (the default) lists every tool. `"progressive"` lists only
+	 * `search_tools`, `get_tool_details`, and `call_tool`, which search,
+	 * describe, and call the same tools, so a large CLI does not fill the
+	 * client's context with every schema up front.
+	 */
+	readonly discovery?: "direct" | "progressive";
+}
+
 /** Prepares the tools once; each call of the result builds a new server for them. */
-async function serverFactory(app: AnyCrust, options: McpToolsOptions): Promise<() => Server> {
+async function serverFactory(app: AnyCrust, options: McpServerOptions): Promise<() => Server> {
 	const snapshot = await app.snapshot();
 	const tools = toolsFromSnapshot(snapshot, options);
 	const commandAt = (path: readonly string[]) =>
 		path.reduce<CommandSnapshot>((command, name) => command.subCommands[name]!, snapshot);
-	const byName = new Map<string, readonly [McpTool, CommandSnapshot]>(
+	const byName = new Map<string, ToolEntry>(
 		tools.map((tool) => [tool.name, [tool, commandAt(tool.path)]]),
 	);
+	const catalogue = options.discovery === "progressive" ? discoveryTools() : undefined;
+	// Built on the first search_tools call, so serving tools never loads the ranking.
+	let search: Promise<SearchIndex> | undefined;
 	const { ProtocolError, ProtocolErrorCode, Server } = await import("@modelcontextprotocol/server");
+	const invalid = (message: string) => new ProtocolError(ProtocolErrorCode.InvalidParams, message);
+	const toolNamed = (name: string): ToolEntry => {
+		const entry = byName.get(name);
+		if (!entry) throw invalid(`Tool ${name} not found`);
+		return entry;
+	};
+	/** A discovery tool's own result, shaped like a command's. */
+	const discovered = (result: unknown) =>
+		toolResultFromOutcome({ status: "completed", result, stdout: "", stderr: "" });
 	return () => {
 		const server = new Server(
 			{ name: snapshot.meta.name, version: snapshot.meta.version ?? DEFAULT_SERVER_VERSION },
 			{ capabilities: { tools: {} } },
 		);
 		server.setRequestHandler("tools/list", () => ({
-			// Everything but the fields run() routing uses.
-			tools: tools.map(
-				// SAFETY: the schemas are JSON; Crust types their keywords `unknown`, the SDK `JSONValue`.
-				({ path: _path, urlFields: _urlFields, argNames: _argNames, ...tool }) => tool as Tool,
-			),
+			tools: catalogue ?? tools.map(listedTool),
 		}));
-		server.setRequestHandler("tools/call", async (request, ctx) => {
-			const entry = byName.get(request.params.name);
-			if (!entry) {
-				throw new ProtocolError(
-					ProtocolErrorCode.InvalidParams,
-					`Tool ${request.params.name} not found`,
-				);
+		server.setRequestHandler("tools/call", async ({ params }, ctx) => {
+			const values = params.arguments ?? {};
+			if (catalogue === undefined) return callCommandTool(app, toolNamed(params.name), values, ctx);
+			switch (params.name) {
+				case "search_tools": {
+					const { query, limit = SEARCH_LIMIT_DEFAULT } = values;
+					if (typeof query !== "string") throw invalid("search_tools: query must be a string");
+					if (
+						typeof limit !== "number" ||
+						!Number.isInteger(limit) ||
+						limit < 1 ||
+						limit > SEARCH_LIMIT_MAX
+					) {
+						throw invalid(`search_tools: limit must be an integer from 1 to ${SEARCH_LIMIT_MAX}`);
+					}
+					search ??= import("@crustjs/utils/search").then(
+						({ commandSearchItem, createSearchIndex }) =>
+							createSearchIndex(
+								tools.map((tool) => commandSearchItem(tool.path, byName.get(tool.name)![1])),
+							),
+					);
+					return discovered(
+						(await search)(query, limit).map((at) => {
+							const { name, description } = tools[at]!;
+							return description === undefined ? { name } : { name, description };
+						}),
+					);
+				}
+				case "get_tool_details": {
+					if (typeof values.name !== "string") {
+						throw invalid("get_tool_details: name must be a string");
+					}
+					return discovered(listedTool(toolNamed(values.name)[0]));
+				}
+				case "call_tool": {
+					if (typeof values.name !== "string") throw invalid("call_tool: name must be a string");
+					const input = values.arguments === undefined ? {} : values.arguments;
+					if (!isRecord(input)) throw invalid("call_tool: arguments must be an object");
+					return callCommandTool(app, toolNamed(values.name), input, ctx);
+				}
+				default:
+					throw invalid(`Tool ${params.name} not found`);
 			}
-			const [tool, command] = entry;
-			let input: RunInputPayload;
-			try {
-				input = parseCommandInput(command, request.params.arguments ?? {});
-			} catch (error) {
-				// Input shaping failures (bad URL, bad raw) surface like action failures.
-				return toolResultFromOutcome({ status: "failed", error, stdout: "", stderr: "" });
-			}
-			const { signal, notify } = ctx.mcpReq;
-			const progressToken = ctx.mcpReq._meta?.progressToken;
-			let progress = 0;
-			const onEvent =
-				progressToken === undefined
-					? undefined
-					: (event: unknown) => {
-							progress++;
-							const message = typeof event === "string" ? { message: event } : {};
-							notify({
-								method: "notifications/progress",
-								params: { progressToken, progress, ...message },
-							}).catch(() => {
-								// A lost progress notification must not fail the tool call.
-							});
-						};
-			// SAFETY: `path` comes from this app's own snapshot and run() validates `input`; AnyCrust erases the typed link.
-			const result = toolResultFromOutcome(
-				await app.run(
-					tool.path as never,
-					input as never,
-					onEvent === undefined ? { signal } : { signal, onEvent },
-				),
-			);
-			// MCP requires structuredContent from a tool with an outputSchema unless isError is set.
-			if (tool.outputSchema === undefined || result.structuredContent || result.isError) {
-				return result;
-			}
-			return {
-				content: [{ type: "text", text: OUTPUT_SCHEMA_UNMET }, ...result.content],
-				isError: true,
-			};
 		});
 		return server;
 	};
@@ -160,7 +291,9 @@ async function serverFactory(app: AnyCrust, options: McpToolsOptions): Promise<(
  * `notifications/progress` with a running `progress` count and, for string
  * events, the string as `message`; failed sends are ignored. A tool with an
  * `outputSchema` whose call yields only captured stdout returns `isError`,
- * since MCP requires its `structuredContent` otherwise.
+ * since MCP requires its `structuredContent` otherwise. With `discovery: "progressive"`,
+ * `tools/list` returns only `search_tools`, `get_tool_details`, and `call_tool`, which
+ * search, describe, and call the same tools.
  *
  * Connected to a transport, the server speaks MCP 2025-11-25 and earlier;
  * {@link serveStdio} also serves 2026-07-28.
@@ -169,7 +302,7 @@ async function serverFactory(app: AnyCrust, options: McpToolsOptions): Promise<(
  */
 export async function createMcpServer(
 	app: AnyCrust,
-	options: McpToolsOptions = {},
+	options: McpServerOptions = {},
 ): Promise<Server> {
 	return (await serverFactory(app, options))();
 }
@@ -183,7 +316,7 @@ export async function createMcpServer(
  *
  * @throws before serving, when the snapshot cannot be prepared or the tool manifest is invalid
  */
-export async function serveStdio(app: AnyCrust, options: McpToolsOptions = {}): Promise<void> {
+export async function serveStdio(app: AnyCrust, options: McpServerOptions = {}): Promise<void> {
 	const createServer = await serverFactory(app, options);
 	const { StdioServerTransport, serveStdio: serve } =
 		await import("@modelcontextprotocol/server/stdio");

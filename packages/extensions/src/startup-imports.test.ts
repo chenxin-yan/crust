@@ -1,7 +1,20 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 
-import { describe, expect, it } from "vite-plus/test";
+import { Crust, defineCommand } from "@crustjs/core";
+import { captureExecute } from "@crustjs/testing";
+import { describe, expect, it, vi } from "vite-plus/test";
+
+import { help } from "./help.ts";
+import { schema } from "./schema.ts";
+import { search } from "./search.ts";
+
+const state = vi.hoisted(() => ({ rankingLoaded: false }));
+// search() ranks commands only when `search` runs; registering it must not load the ranking.
+vi.mock("@crustjs/utils/search", async (importOriginal) => {
+	state.rankingLoaded = true;
+	return importOriginal();
+});
 
 const srcDir = import.meta.dirname;
 
@@ -72,5 +85,24 @@ describe("startup import graph", () => {
 				relative(srcDir, entry),
 			).toEqual([]);
 		}
+	});
+});
+
+describe("search() at startup", () => {
+	it("loads the ranking only when `search` runs", async () => {
+		const app = new Crust("acme")
+			.extend(search(), help(), schema())
+			.add(
+				defineCommand("deploy", { description: "Deploy the app" }, (cmd) => cmd.action(() => {})),
+			);
+		for (const argv of [["deploy"], ["--help"], ["--llms"]]) {
+			expect((await captureExecute(app, argv)).exitCode, argv.join(" ")).toBe(0);
+		}
+		await app.snapshot();
+		expect(state.rankingLoaded).toBe(false);
+
+		const found = await captureExecute(app, ["search", "deploy"]);
+		expect(found.stdout).toBe("acme deploy  Deploy the app");
+		expect(state.rankingLoaded).toBe(true);
 	});
 });

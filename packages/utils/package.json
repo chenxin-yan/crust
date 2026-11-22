@@ -51,6 +51,10 @@
 			"types": "./dist/source.d.ts",
 			"import": "./dist/source.js"
 		},
+		"./search": {
+			"types": "./dist/search.d.ts",
+			"import": "./dist/search.js"
+		},
 		"./schema": {
 			"types": "./dist/schema.d.ts",
 			"import": "./dist/schema.js"

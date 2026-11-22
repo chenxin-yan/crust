@@ -2,7 +2,7 @@
 title: "MCP"
 ---
 
-`@crustjs/mcp` serves your commands as [MCP](https://modelcontextprotocol.io) tools. Each tool's JSON Schema comes from the same definitions that drive parsing and help, and every call runs through `app.run()`, with no per-command glue.
+`@crustjs/mcp` serves your commands as [MCP](https://modelcontextprotocol.io) tools. Each tool's JSON Schema comes from the same definitions that drive parsing and help, and every command invocation runs through `app.run()`, with no per-command glue.
 
 MCP serves clients that call tools instead of running a shell; [how agents use your CLI](/docs/guide/agents#how-agents-use-your-cli) shows where it fits beside the shell and skills.
 
@@ -74,6 +74,22 @@ Each tool's `inputSchema` comes from [`commandInputSchema()`](/docs/modules/core
 - Flags an Extension declares, such as `--help`, `--json`, or `--input`, are not tool inputs. A call that sends one fails with `PARSE: Flag "--json" is not command input: set it on the command line`, so it never selects a flag handler or reads stdin. Context-owned flags such as [`confirm()`](/docs/modules/extensions/confirm)'s `yes` stay.
 - A flag with an `env` binding is optional, and its description names the variable. An omitted value falls back to the variable in the server's environment, then to the default, as on the command line; a required flag still fails when neither supplies it.
 
+## Discovery
+
+By default `tools/list` returns every tool with its schemas. A CLI with hundreds of commands, such as one generated from an OpenAPI spec, fills the client's context with them before the first call. With `discovery: "progressive"`, `tools/list` returns three fixed tools over the same tool list instead:
+
+| Tool               | Arguments                                             | Result                                                                                                                                                      |
+| ------------------ | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search_tools`     | `query` (a task in words), `limit?` (1–20, default 5) | `{ "result": [{ name, description? }] }`: the tools that best match `query`, best first, without their schemas                                              |
+| `get_tool_details` | `name`                                                | The tool as direct `tools/list` would list it: `name`, `description` when it has one, `inputSchema`, and the `outputSchema` that listing advertises, if any |
+| `call_tool`        | `name`, `arguments?` (default `{}`)                   | The tool's own result, exactly as `tools/call` would return it, with [progress](#progress) for the request's token                                          |
+
+<include lang="ts">../../../examples/modules/mcp.ts#discovery</include>
+
+The three tools are the same for the server's whole life; the protocol does not let a server add tools as a side effect of other requests. `exclude`, `include`, and the rules above still decide which tools exist, so `search_tools` never finds a hidden, excluded, or unincluded Extension command, and `call_tool` and `get_tool_details` answer such names with `InvalidParams`, as `tools/call` does. A missing `query` or `name`, a `limit` out of range, or `arguments` that are not an object are `InvalidParams` too. The three tools advertise no `outputSchema`.
+
+`search_tools` matches the words of `query` against each tool's command path, name, and aliases, its description, and its argument and flag names and descriptions, with descending base weights in that order, all else equal. A word counts more the fewer tools it matches, so `for` or `a` in a long generated name weighs little next to a rare word such as `purge`, and a match counts more in a short name or description than in a long one.
+
 ## Results
 
 The outcome of `app.run()` decides the tool result:
@@ -113,10 +129,10 @@ Without a token, no notifications are sent. Either way, the tool result is the a
 
 <include lang="ts">../../../examples/modules/mcp.ts#headless</include>
 
-`serveStdio(app, options?)` serves the application over the stdio transport and resolves when the client disconnects; it is what `<cli> mcp` runs. `createMcpServer(app, options?)` returns the SDK's low-level `Server` with the same `tools/list` and `tools/call` handlers, to connect to a transport yourself, as in a test; connected that way it speaks 2025-11-25 and earlier only. Both take `exclude` and `include`, and reject when the tool list cannot be built.
+`serveStdio(app, options?)` serves the application over the stdio transport and resolves when the client disconnects; it is what `<cli> mcp` runs. `createMcpServer(app, options?)` returns the SDK's low-level `Server` with the same `tools/list` and `tools/call` handlers, to connect to a transport yourself, as in a test; connected that way it speaks 2025-11-25 and earlier only. Both take `exclude`, `include`, and `discovery`, and reject when the tool list cannot be built.
 
 - The server is named after the root command, with its `version` or `DEFAULT_SERVER_VERSION` (`0.0.0`).
-- Each call runs `app.run(path, input, { signal })` with its own captured output, plus an `onEvent` that sends [progress](#progress) when the request carries a progress token.
+- Each command invocation runs `app.run(path, input, { signal })` with its own captured output, plus an `onEvent` that sends [progress](#progress) when the request carries a progress token.
 - Client cancellation aborts only that call; disconnecting aborts all of them. Actions must honor `signal` to stop.
 - `toolResultFromOutcome(outcome)` is the outcome-to-result conversion described in [Results](#results), without the `outputSchema` check.
 
@@ -127,6 +143,8 @@ Without a token, no notifications are sent. Either way, the tool result is the a
 </Callout>
 
 Protocol frames also arrive on stdin. While the transport reads it, a `-` value that reads all of stdin, such as [`@crustjs/openapi`](/docs/modules/openapi)'s `--body -`, fails with `stdin is in use by another reader` instead of waiting for the client to disconnect.
+
+<auto-type-table path="../../../../../packages/mcp/src/server.ts" name="McpServerOptions" />
 
 <auto-type-table path="../../../../../packages/mcp/src/tools.ts" name="McpToolsOptions" />
 

@@ -15,6 +15,7 @@ export default defineConfig({
 			"src/primitive.ts",
 			"src/process.ts",
 			"src/source.ts",
+			"src/search.ts",
 			"src/schema.ts",
 			"src/signals.ts",
 			"src/terminal.ts",
