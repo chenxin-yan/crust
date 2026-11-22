@@ -10,7 +10,7 @@ import { pathToFileURL } from "node:url";
 import { Crust, CrustError, defineCommand } from "@crustjs/core";
 import { json } from "@crustjs/extensions";
 import { captureExecute } from "@crustjs/testing";
-import { resolveArtifactDir } from "@crustjs/utils/artifacts";
+import { artifactPath } from "@crustjs/utils/artifacts";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { runBuildHooks } from "../../crust/tests/build-hooks.ts";
@@ -381,7 +381,7 @@ describe("the spec", () => {
 	it("fails in a built CLI whose data directory is missing, naming it and the fix", async () => {
 		vi.stubEnv("CRUST_INTERNAL_BUILD", "1");
 		try {
-			const dir = resolveArtifactDir("acme-not-built");
+			const dir = artifactPath("acme-not-built");
 			const { stderr, exitCode } = await captureExecute(
 				buildApp({ spec: pathToFileURL(writeSpec()), id: "acme-not-built" }),
 				["api", "--list"],
@@ -415,7 +415,7 @@ describe("the spec", () => {
 		expect(await runBuildHooks(buildApp({ spec: url, id: "a/b" }))).toEqual({
 			files: new Map(),
 			error:
-				'Extension "crust:openapi" build failed: Artifact name must be a single directory name, got "a/b".',
+				'Extension "crust:openapi" build failed: `id` must be a single directory name, got "a/b".',
 		});
 	});
 });
@@ -529,6 +529,14 @@ describe("api <path>", () => {
 				"--body",
 				"@~/active/../body.json",
 			]);
+			const preview = await captureExecute(buildApp(), [
+				"api",
+				"preview",
+				"/users",
+				"--body",
+				"@~/active/../body.json",
+			]);
+			expect(JSON.parse(preview.stdout)).toMatchObject({ body: { name: "ada" } });
 		} finally {
 			vi.unstubAllEnvs();
 		}

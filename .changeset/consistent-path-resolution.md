@@ -11,7 +11,7 @@
 
 Paths now follow one rule everywhere: a relative path resolves against the place it was written.
 
-- A path the user types resolves against the working directory, with a leading `~` as the home directory. That now covers `create-crust [directory]` and its prompt, `completion --output-dir`, `--input @path`, `api --body @path`, and `CLAUDE_CONFIG_DIR`, so `--output-dir=~/completions` and `--input @~/args.json` work where they used to name a directory called `~`.
+- A path the user types resolves against the working directory, with a leading `~` as the home directory. That now covers `create-crust [directory]` and its prompt, `completion --output-dir`, `--input @path`, and `api --body @path`, so `--output-dir=~/completions` and `--input @~/args.json` work where they used to name a directory called `~`.
 - `type: "path"` also expands `~\` on Windows.
 - A path passed in code resolves against the working directory, as Node's `fs` does.
 

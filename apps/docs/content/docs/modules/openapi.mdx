@@ -54,7 +54,7 @@ spec: new URL("./acme.openapi.jsonc", import.meta.url),
 - The file may be JSONC: comments and trailing commas are allowed, whatever its name. Name it `<name>.openapi.jsonc` to have it [typed](#typed-client).
 - A file that cannot be read or parsed fails with `api: cannot read the OpenAPI document "<file>" (<reason>)`, and exit code 1.
 
-[`crust build`](/docs/guide/build-and-distribution) writes the document's data files to `<id>/` in the build output (`id` defaults to `"openapi"`), and a built CLI reads them there with [`resolveArtifactDir(id)`](/docs/api/crust#resolveartifactdirname). The entry never imports the document, so it stays out of the bundle, and start-up depends on the command that runs, not on the size of the API:
+[`crust build`](/docs/guide/build-and-distribution) writes the document's data files to `<id>/` in the build output (`id` defaults to `"openapi"`), and a built CLI reads them there with [`artifactPath(id)`](/docs/api/crust#artifactpathpath). The entry never imports the document, so it stays out of the bundle, and start-up depends on the command that runs, not on the size of the API:
 
 | File                                 | Holds                                                                                                                  | Read                                                    |
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |

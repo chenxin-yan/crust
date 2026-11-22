@@ -14,10 +14,11 @@ Performance targets the shipped artifact (after `crust build` bundling or compil
 
 A relative path resolves against the place it was written. Resolve it once at the public boundary and pass absolute paths inward. Helpers live in `@crustjs/utils/path`.
 
-- Typed by the end user (flag, positional, prompt answer, `@path`, environment variable): the working directory, with a leading `~` as the home directory. Declare flags and positionals `type: "path"`; resolve the rest with `resolveUserPath`, or only `expandHome` a path that is opened on the spot (`@path`), so the filesystem walks `..` through symlinks.
+- Typed by the end user (flag, positional, prompt answer, `@path`, a Crust environment variable): the working directory, with a leading `~` as the home directory. Declare flags and positionals `type: "path"`; resolve the rest with `resolveUserPath`, or only `expandHome` a path that is opened on the spot (`@path`), so the filesystem walks `..` through symlinks.
 - Written in `package.json` (`bin`, `crust.*`): the project root. Relative only, kept inside the project with `isWithin`.
 - Passed in code (function option): the working directory, or the function's own `cwd` option; `~` stays literal. Where a `URL` is accepted, convert with `resolvePathLike`.
 - Shipped with the CLI (templates, skills): `artifactPath("templates/base")`. It gives the same answer from source, a bundle, an npm install and a compiled executable; a module URL or a `package.json` lookup changes with the distribution.
+- An environment variable owned by another tool (`CLAUDE_CONFIG_DIR`): read it the way that tool does, so both name the same directory.
 - Persistent state (`createStore` `dirPath`, `XDG_*`, `APPDATA`): absolute paths only.
 - Resolving is pure. The code that uses the path checks it, and its error names the option and the absolute path.
 - Each public path option states its base in JSDoc.

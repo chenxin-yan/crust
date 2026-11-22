@@ -1,4 +1,4 @@
-import { isSourceRun, resolveArtifactDir } from "@crustjs/utils/artifacts";
+import { artifactPath, isSourceRun } from "@crustjs/utils/artifacts";
 
 import type { OpenApiSpec } from "./api-command.ts";
 
@@ -46,7 +46,7 @@ export function readBuiltFile(id: string, file: string): object {
 
 /** Where a built CLI finds `file` below the artifact directory `id`. */
 export function builtFilePath(id: string, file: string): string {
-	return process.getBuiltinModule("node:path").join(resolveArtifactDir(id), file);
+	return process.getBuiltinModule("node:path").join(artifactPath(id), file);
 }
 
 /** The JSON object in `file`, read with `parse`; `artifact` names the directory a built file comes from. */
