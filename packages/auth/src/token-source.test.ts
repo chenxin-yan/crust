@@ -29,7 +29,7 @@ import {
 	RefreshOutcomeUnknownError,
 	StaleCommitError,
 } from "./errors.ts";
-import { createTokenSource, refreshFlights } from "./token-source.ts";
+import { createTokenSource, refreshFlights, tokenSource } from "./token-source.ts";
 
 const roots: string[] = [];
 
@@ -494,6 +494,31 @@ describe("generation-conditional refresh", () => {
 });
 
 describe("logout", () => {
+	it("of a client's profile clears it as the remembered current profile in the same write; a building block's keeps it", async () => {
+		const w = world();
+		const profiled = (profile: string) =>
+			tokenSource(
+				{ config: w.config, identity: { ...w.identity, profile }, store: w.store, fetch: w.fetch },
+				true,
+			);
+		const work = profiled("work");
+		await login(profiled("default"));
+		await login(work);
+		const internals = credentialStoreInternals(w.store);
+		const server = work.key.slice("work#".length);
+		const choices = { [server]: "work", other: "work" };
+		await internals.update((document) => ({ ...document!, currentProfile: choices }));
+		await profiled("default").logout();
+		await w.source({ identity: { ...w.identity, profile: "work" } }).logout();
+		expect(w.document()).toMatchObject({ currentProfile: choices });
+		await login(work);
+		const update = vi.spyOn(internals, "update");
+		await work.logout();
+		expect(update).toHaveBeenCalledTimes(1);
+		expect(w.document()).toMatchObject({ currentProfile: { other: "work" } });
+		expect(w.document()).not.toHaveProperty(["currentProfile", server]);
+	});
+
 	it("tombstones the record, then revokes the refresh token with a POST to the endpoint as configured", async () => {
 		const order: string[] = [];
 		const w = world({

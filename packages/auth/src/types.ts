@@ -269,6 +269,21 @@ export interface CreateAuthOptions extends AuthServerOptions {
 	strict?: boolean;
 	/** Receives what you may want to tell the user, such as a login stored in plaintext. */
 	onWarning?: (warning: AuthWarning) => void;
+	/**
+	 * Turns on profiles: named logins, such as a work account and a personal one. The client then
+	 * has `profile(name)` and `profiles`. `{}` is enough.
+	 */
+	profiles?: ProfilesOptions;
+}
+
+/** Options of `profiles` in `createAuth()`. */
+export interface ProfilesOptions {
+	/**
+	 * An environment variable, such as `ACME_PROFILE`, whose value (trimmed) names the current
+	 * profile when it is not blank. Read at each call; it wins over the profile chosen with
+	 * `profiles.use()`.
+	 */
+	env?: string;
 }
 
 /**
@@ -340,6 +355,19 @@ export interface AuthStatus {
 	};
 }
 
+/** What `status()` reports on a client with `profiles`. */
+export interface ProfileAuthStatus extends AuthStatus {
+	/**
+	 * The profile and why it was picked: `"argument"`, the name given to `profile()`; `"env"`,
+	 * the profiles `env` variable; `"current"`, the one chosen with `profiles.use()`;
+	 * `"default"`, none of those. Absent for `"env"`.
+	 */
+	readonly profile?: {
+		readonly name: string;
+		readonly via: "argument" | "env" | "current" | "default";
+	};
+}
+
 /** The client `createAuth()` returns. Its methods work detached from it. */
 export interface AuthClient {
 	/**
@@ -362,6 +390,43 @@ export interface AuthClient {
 	readonly status: () => Promise<AuthStatus>;
 	/** Deletes the stored login, then revokes it at the server as a best effort. */
 	readonly logout: (options?: { signal?: AbortSignal }) => Promise<LogoutResult>;
+}
+
+/** A profile `profiles.list()` reports. */
+export interface AuthProfile {
+	readonly name: string;
+	/** Whether it is the current profile: the one the client's own methods use. */
+	readonly current: boolean;
+}
+
+/** The methods of one profile: its `status()` names the profile. */
+export interface ProfileClient extends AuthClient {
+	readonly status: () => Promise<ProfileAuthStatus>;
+}
+
+/**
+ * The client `createAuth()` returns with `profiles`. Its own methods use the current profile:
+ * the profiles `env` variable's, else the one chosen with `profiles.use()`, else `"default"`.
+ */
+export interface ProfileAuthClient extends ProfileClient {
+	/**
+	 * The same methods for the profile `name`: 1 to 64 letters, digits, `-`, `_` and `.`, not
+	 * starting with `.` or `-` (else `OAuthConfigError`). No name means the current profile. A
+	 * profile's first login creates it.
+	 */
+	readonly profile: (name?: string) => ProfileClient;
+	readonly profiles: {
+		/**
+		 * The profiles with a stored login for this server and client id, by name. Reads the login
+		 * file only: no request, refresh, lock or keyring.
+		 */
+		readonly list: () => Promise<readonly AuthProfile[]>;
+		/**
+		 * Remembers `name` as the current profile. A profile without a stored login →
+		 * `LoginRequiredError`. Its logout forgets it again.
+		 */
+		readonly use: (name: string, options?: { signal?: AbortSignal }) => Promise<void>;
+	};
 }
 
 /** Options of `credentialStore()`. */

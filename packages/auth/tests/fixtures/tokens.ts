@@ -12,6 +12,8 @@
 //   waits forever once the login's file write is about to start;
 // - `read <issuer> <app> <profile> <keyring file>`: prints the access token `get()` returns, or
 //   the error code and reason;
+// - `use <issuer> <app> <profile>`: remembers `<profile>` as current through a client with
+//   profiles; prints "ok", or the error code;
 // - `runtime`: real sockets: a refused token request on the runtime's own fetch, and a 401
 //   retry and a cross-origin redirect through @crustjs/openapi. Prints one JSON report.
 import { once } from "node:events";
@@ -22,6 +24,7 @@ import { type AddressInfo, connect } from "node:net";
 import { Crust, defineCommand } from "@crustjs/core";
 import { apiClient, apiCommand, type BearerCredential, bearerAuth } from "@crustjs/openapi";
 
+import { createAuth } from "../../src/client.ts";
 import { credentialStoreInternals } from "../../src/credentials.ts";
 import { keyrings } from "../../src/keyring.ts";
 import { createTokenSource, credentialStore, defineServers } from "../../src/oauth.ts";
@@ -194,6 +197,21 @@ if (mode === "refresh") {
 	} catch (error) {
 		const { code, reason } = error as { code?: string; reason?: string };
 		console.log(code === undefined ? String(error) : `${code}:${reason}`);
+	}
+} else if (mode === "use") {
+	const auth = createAuth({
+		app,
+		issuer: issuerArg!,
+		clientId: "cli",
+		apiOrigins: [issuerArg!],
+		allowInsecureLoopback: true,
+		profiles: {},
+	});
+	try {
+		await auth.profiles.use(profile);
+		console.log("ok");
+	} catch (error) {
+		console.log((error as { code?: string }).code ?? String(error));
 	}
 } else if (mode === "hold") {
 	const { store, source } = sourceFor(issuerArg!);
