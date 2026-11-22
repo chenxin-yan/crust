@@ -74,12 +74,6 @@ const api = defineApi({
 	.each(() => ({ bind: { org: (ctx) => ctx.org } }));
 //#endregion
 
-//#region app
-export const app = new Crust("acme", { version: "1.0.0" })
-	.extend(help(), version(), config.extension, configSchema, api.extension)
-	.add(deploy, serve, set, ...api.commands);
-//#endregion
-
 //#region given
 // `flags.port` is what this run was given; `await ctx.port` is the setting.
 const show = defineCommand("show", { description: "Show the port" }, (command) =>
@@ -91,6 +85,12 @@ const show = defineCommand("show", { description: "Show the port" }, (command) =
 );
 //#endregion
 
+//#region app
+export const app = new Crust("acme", { version: "1.0.0" })
+	.extend(help(), version(), config.extension, configSchema, api.extension)
+	.add(deploy, serve, show, set, ...api.commands);
+//#endregion
+
 //#region testing
 const tested = await new Crust("acme")
 	.provide(org.of("test-org"), region.of("eu"))
@@ -99,4 +99,3 @@ const tested = await new Crust("acme")
 //#endregion
 
 void tested;
-void show;

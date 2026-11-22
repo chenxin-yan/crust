@@ -65,7 +65,7 @@ A command that `.use()`s a setting has it in two places, and they answer differe
 | `await ctx.port` | The setting: the first of its flag, its variable, the project file, the global file and its default          | The value your command works with             |
 | `flags.port`     | Only what this run was given: `--port`, a key of `--input` or typed `run()` input, or the setting's variable | Telling whether the user gave it for this run |
 
-- `flags.port` being `undefined` means "not given for this run", not "has no value": a value from a file, or a default, is never in `flags`.
+- `flags.port` being `undefined` means the run gave no value for it, not that the setting has none: a value from a file, or a default, is never in `flags`. (A `parse` that returns `undefined` for what was typed leaves it `undefined` too.)
 - A value from the setting's environment variable is in `flags`, as for any flag with `env`.
 - A `flag: false` setting is never in `flags`, even when its variable is set. It exists only in `ctx`.
 
