@@ -323,6 +323,9 @@ function _typecheckChainContexts() {
 	defineApi({ spec, baseUrl })
 		// @ts-expect-error -- a confirmation is nothing, a boolean, or a throw
 		.onConfirm(async () => "yes");
+	// A missing required value is a VALIDATION error: nothing asks for it.
+	// @ts-expect-error -- the handle has no `onMissing`
+	void defineApi({ spec, baseUrl }).onMissing;
 	// The client is in `ctx` from the start.
 	defineApi({ spec, baseUrl }).each(() => ({
 		bind: { id: async (ctx) => (await ctx.api).baseUrl },
@@ -377,3 +380,6 @@ void [
 	_typecheckRegistrySelection,
 	_typecheckSpecIsAUrlOrAnObject,
 ];
+
+// @ts-expect-error -- `MissingField` is not exported
+type _NoMissingField = import("./index.ts").MissingField;

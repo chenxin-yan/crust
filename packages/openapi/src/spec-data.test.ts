@@ -437,6 +437,61 @@ describe("spec data files", () => {
 		});
 	});
 
+	it("give api preview the plan of a built CLI's command from its group's file only", async () => {
+		await ship();
+		for (const file of ["root.json", "groups/g-dns.json", "spec.json"]) {
+			rmSync(join(built.dir!, "openapi", file));
+		}
+		const app = appOf(chained());
+
+		expect(
+			await app.run(["api", "preview"], { args: { target: ["users", "get-user"], argv: ["u1"] } }),
+		).toMatchObject({
+			status: "completed",
+			result: { method: "GET", url: "https://api.acme.test/users/u1", bodyKind: "none" },
+		});
+		expect(
+			await app.run(["api", "preview"], {
+				args: { target: ["dns", "records", "list"], argv: ["z1"] },
+			}),
+		).toMatchObject({
+			status: "failed",
+			error: { message: expect.stringContaining("g-dns.json") },
+		});
+	});
+
+	it("give api preview in a built CLI the index and the target's group file only", async () => {
+		await ship();
+		const fs = process.getBuiltinModule("node:fs");
+		const read = vi.spyOn(fs, "readFileSync");
+		const reads = () =>
+			read.mock.calls.flatMap(([file]) =>
+				typeof file === "string" && file.startsWith(built.dir!)
+					? [file.slice(join(built.dir!, "openapi").length + 1)]
+					: [],
+			);
+		try {
+			const targets: [string, ...string[]][] = [
+				["users", "get-user"],
+				["more", "users", "get-user"],
+			];
+			for (const target of targets) {
+				read.mockClear();
+				// A fresh app, which reads what it needs from the start; it adds the commands below `more` too.
+				const acme = chained();
+				const app = appOf(acme).add(
+					defineCommand("more", (command) => command.add(...acme.commands)),
+				);
+				expect(await app.run(["api", "preview"], { args: { target, argv: ["u1"] } })).toMatchObject(
+					{ status: "completed" },
+				);
+				expect(reads()).toEqual(["index.json", "groups/g-users.json"]);
+			}
+		} finally {
+			read.mockRestore();
+		}
+	});
+
 	it("fail a command whose file lacks its operation, as one from another build does", async () => {
 		await ship();
 		writeFileSync(

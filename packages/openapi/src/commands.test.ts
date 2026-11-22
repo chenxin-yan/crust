@@ -1,7 +1,14 @@
-import { type CommandSnapshot, Crust, defineCommand, defineContext } from "@crustjs/core";
+import {
+	type AnyCrust,
+	type CommandSnapshot,
+	Crust,
+	defineCommand,
+	defineContext,
+} from "@crustjs/core";
 import { commandInputSchema } from "@crustjs/core/tooling";
-import { confirm, json } from "@crustjs/extensions";
+import { confirm, input, json } from "@crustjs/extensions";
 import { captureExecute } from "@crustjs/testing";
+import { runInteractive } from "@crustjs/testing/interactive";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { runBuildHooks } from "../../crust/tests/build-hooks.ts";
@@ -538,6 +545,23 @@ describe("generated commands", () => {
 	});
 });
 
+describe("a missing required value", () => {
+	it("fails with VALIDATION on a terminal too, and nothing asks for it", async () => {
+		const calls = stubFetch();
+		const acme = buildApi();
+		const app = new Crust("acme").extend(acme.extension).add(...acme.commands);
+
+		const run = runInteractive(app, ["users", "get-user"]);
+
+		await expect(run.done).rejects.toMatchObject({
+			code: "VALIDATION",
+			message: 'Missing required argument "<id>"',
+		});
+		expect(run.screen().trim()).toBe("");
+		expect(calls).toEqual([]);
+	});
+});
+
 describe("generated --paginate", () => {
 	const paginate = async (response: Response) => {
 		const next = response.headers.get("x-next");
@@ -564,6 +588,27 @@ describe("generated --paginate", () => {
 		stubFetch(() => Response.json([], { headers: { "x-next": "/users" } }));
 		const looping = await app.run(["users", "list-users"], { flags: { paginate: true } });
 		expect(failure(looping)).toContain("page 2 repeats the previous request");
+	});
+
+	it("uses an operation's own async paginate over the global one, printing the one list or returning it under --json", async () => {
+		const calls = stubFetch(({ url }) =>
+			url.endsWith("page=2")
+				? Response.json([{ id: "2" }])
+				: Response.json([{ id: "1" }], { headers: { "x-next": "/users?page=2" } }),
+		);
+		const acme = buildApi({ paginate: () => undefined }).override({ listUsers: { paginate } });
+		const app = new Crust("acme").extend(json(), acme.extension).add(...acme.commands);
+
+		const human = await captureExecute(app, ["users", "list-users", "--paginate"]);
+		const data = await captureExecute(app, ["users", "list-users", "--paginate", "--json"]);
+
+		expect(human).toEqual({
+			stdout: JSON.stringify([{ id: "1" }, { id: "2" }], null, 2),
+			stderr: "",
+			exitCode: 0,
+		});
+		expect(JSON.parse(data.stdout)).toEqual([{ id: "1" }, { id: "2" }]);
+		expect(calls).toHaveLength(4);
 	});
 
 	it("is offered after an unwrap without an outputSchema, not for a known non-list result, and fails for a page that is not a list", async () => {
@@ -618,6 +663,296 @@ describe("generated --paginate", () => {
 		expect(outcome).toMatchObject({ status: "completed", result: ["a", "b"] });
 		expect(pages).toHaveLength(2);
 		expect(auth).not.toHaveBeenCalled();
+	});
+});
+
+describe("api preview", () => {
+	/** An app whose generated commands fail the test if they authenticate, confirm, bind or send. */
+	function guardedApp() {
+		const sent = stubFetch(() => {
+			throw new Error("fetch called");
+		});
+		const credentials = vi.fn(async () => ({ id: "me" }));
+		const account = defineContext("account").setup(credentials);
+		const onConfirm = vi.fn();
+		const bind = vi.fn(async () => "acc_1");
+		const acme = buildApi({
+			auth: () => {
+				throw new Error("auth called");
+			},
+		})
+			.use(account)
+			.onConfirm(onConfirm)
+			.override({
+				deleteUser: { confirm: "Delete the user?" },
+				createUser: { bind: { role: bind } },
+			});
+		const app = new Crust("acme")
+			.extend(json(), acme.extension)
+			.provide(account())
+			.add(...acme.commands);
+		return { app, sent, untouched: [credentials, onConfirm, bind] };
+	}
+
+	it("prints the request a generated command would send, and touches nothing", async () => {
+		const { app, sent, untouched } = guardedApp();
+
+		const remove = await captureExecute(app, [
+			"api",
+			"preview",
+			"users",
+			"delete-user",
+			"--",
+			"u 1",
+		]);
+		const create = await app.run(["api", "preview"], {
+			args: { target: ["users", "create-user"], argv: ["--name", "Ada", "--age", "3"] },
+		});
+
+		expect(JSON.parse(remove.stdout)).toEqual({
+			method: "DELETE",
+			url: "https://api.example.com/v1/users/u%201",
+			headers: {},
+			bodyKind: "none",
+			body: null,
+		});
+		expect(create).toMatchObject({
+			status: "completed",
+			result: {
+				method: "POST",
+				url: "https://api.example.com/v1/users",
+				headers: { accept: "application/json", "content-type": "application/json" },
+				bodyKind: "json",
+				// The bound field is its placeholder, never the binding's value.
+				body: { name: "Ada", age: 3, role: "{role}" },
+				bound: ["role"],
+			},
+		});
+		expect(sent).toEqual([]);
+		for (const spy of untouched) expect(spy).not.toHaveBeenCalled();
+	});
+
+	it("keeps a bound path parameter as its placeholder in the URL", async () => {
+		const bind = vi.fn(async () => "me");
+		const acme = buildApi().override({ getUser: { bind: { id: bind } } });
+		const app = new Crust("acme").extend(acme.extension).add(...acme.commands);
+
+		expect(
+			await app.run(["api", "preview"], { args: { target: ["users", "get-user"] } }),
+		).toMatchObject({
+			result: { method: "GET", url: "https://api.example.com/v1/users/{id}", bound: ["id"] },
+		});
+		expect(bind).not.toHaveBeenCalled();
+	});
+
+	it("lists a rule's binding as bound only where the operation has an input of its name", async () => {
+		const bind = vi.fn(async () => "me");
+		const acme = buildApi().each(() => ({ bind: { id: bind } }));
+		const app = new Crust("acme").extend(acme.extension).add(...acme.commands);
+		const preview = async (...target: [string, ...string[]]) =>
+			(await app.run(["api", "preview"], { args: { target } })) as {
+				result?: unknown;
+				error?: unknown;
+			};
+
+		const list = await preview("users", "list-users");
+		expect(list.error).toBeUndefined();
+		expect(list.result).not.toHaveProperty("bound");
+		expect((await preview("users", "get-user")).result).toMatchObject({
+			url: "https://api.example.com/v1/users/{id}",
+			bound: ["id"],
+		});
+		expect(bind).not.toHaveBeenCalled();
+	});
+
+	it("fails as the command would, and for a target that is not a generated command", async () => {
+		const { app } = guardedApp();
+		const preview = (...argv: string[]) => captureExecute(app, ["api", "preview", ...argv]);
+
+		expect((await preview("users", "get-user")).stderr).toBe(
+			'Error: Missing required argument "<id>"',
+		);
+		expect((await preview("users", "create-user")).stderr).toBe(
+			'Error: createUser: missing the body field "name" (--name)',
+		);
+		expect((await preview("users", "nope")).stderr).toContain('Unknown command "nope"');
+		expect((await preview("api")).stderr).toBe(
+			'Error: api preview: "api" is not a command generated from the OpenAPI spec',
+		);
+		expect((await preview("users", "get-user", "-X", "PUT", "--", "1")).stderr).toBe(
+			"Error: api preview: --method is for a request path; put the command's own flags after --",
+		);
+	});
+
+	it("previews a command at every place the app adds it, but not an app command at a generated path", async () => {
+		const acme = buildApi();
+		const app = new Crust("acme")
+			.extend(acme.extension)
+			.add(...acme.commands)
+			.command("other", (command) => command.add(...acme.commands))
+			.command("mine", (command) =>
+				command.command("users", (users) =>
+					users.command("get-user", (own) =>
+						own.args({ name: "id", type: "string", required: true }).action(() => {}),
+					),
+				),
+			);
+		const preview = (...target: [string, ...string[]]) =>
+			app.run(["api", "preview"], { args: { target, argv: ["1"] } });
+
+		const targets: [string, ...string[]][] = [
+			["users", "get-user"],
+			["other", "users", "get-user"],
+		];
+		for (const target of targets) {
+			expect(await preview(...target)).toMatchObject({
+				status: "completed",
+				result: { url: "https://api.example.com/v1/users/1" },
+			});
+		}
+		expect(await preview("mine", "users", "get-user")).toMatchObject({
+			status: "failed",
+			error: {
+				message:
+					'api preview: "mine users get-user" is not a command generated from the OpenAPI spec',
+			},
+		});
+	});
+
+	it("previews a command below an aliased parent, and refuses --paginate before --", async () => {
+		const acme = buildApi({ paginate: () => undefined });
+		const app = new Crust("acme")
+			.extend(acme.extension)
+			.add(defineCommand("nested", { aliases: ["n"] }, (command) => command.add(...acme.commands)));
+
+		expect(
+			await app.run(["api", "preview"], {
+				args: { target: ["n", "users", "get-user"], argv: ["1"] },
+			}),
+		).toMatchObject({ result: { url: "https://api.example.com/v1/users/1" } });
+		expect(
+			(await captureExecute(app, ["api", "preview", "n", "users", "list-users", "--paginate"]))
+				.stderr,
+		).toBe(
+			"Error: api preview: --paginate is for a request path; put the command's own flags after --",
+		);
+	});
+
+	it("runs no set-up, so a value input()'s --input would bind is not applied", async () => {
+		const acme = buildApi();
+		const app = new Crust("acme").extend(input(), acme.extension).add(...acme.commands);
+
+		const { stderr } = await captureExecute(app, [
+			"api",
+			"preview",
+			"users",
+			"create-user",
+			"--",
+			"--input",
+			'{"name":"Ada"}',
+		]);
+
+		expect(stderr).toBe('Error: createUser: missing the body field "name" (--name)');
+	});
+
+	it("gives generated commands no --dry-run flag", async () => {
+		const acme = buildApi();
+		const snapshot = await new Crust("acme")
+			.extend(acme.extension)
+			.add(...acme.commands)
+			.snapshot();
+
+		expect(Object.keys(at(snapshot, "users", "create-user").flags)).not.toContain("dry-run");
+		expect(at(snapshot, "api", "preview").outputSchema).toMatchObject({
+			required: ["method", "url", "headers", "bodyKind", "body"],
+		});
+	});
+});
+
+describe("generated commands of the same shape at several mounts", () => {
+	// Two operations whose commands have one shape: `users list` and `other users list`.
+	const query = (name: string, description: string) => ({
+		name,
+		in: "query",
+		required: true,
+		schema: { type: "string" },
+		description,
+	});
+	const twins = {
+		openapi: "3.1.0",
+		paths: Object.fromEntries(
+			["users", "admins"].map((path) => [
+				`/${path}`,
+				{
+					get: {
+						operationId: path,
+						summary: "List",
+						parameters: [query("q", `Search the ${path}`), query("page", "The page")],
+						responses: { "200": { description: "OK" } },
+					},
+				},
+			]),
+		),
+	};
+
+	function twinsApp(mounts: "root" | "other" | "both") {
+		const sent = stubFetch(() => Response.json({}));
+		const acme = defineApi({ spec: twins, baseUrl: "https://api.example.com/v1/" }).override({
+			users: { group: "users", name: "list" },
+			admins: { group: "other users", name: "list" },
+		});
+		const under = (name: string) => defineCommand(name, (command) => command.add(...acme.commands));
+		const api = new Crust("acme").extend(acme.extension);
+		const app: AnyCrust =
+			mounts === "root"
+				? api.add(...acme.commands)
+				: mounts === "other"
+					? api.add(under("other"))
+					: api.add(...acme.commands).add(under("more"));
+		/** The URL `api preview` shows for a path, and the one the command requests. */
+		const urls = async (...path: [string, ...string[]]) => {
+			const outcome = await app.run(["api", "preview"], {
+				args: { target: path, argv: ["--q", "a", "--page", "1"] },
+			});
+			const preview =
+				outcome.status === "failed"
+					? (outcome.error as Error).message
+					: (outcome as { result: { url: string } }).result.url;
+			sent.length = 0;
+			await captureExecute(app, [...path, "--q", "a", "--page", "1"]);
+			return { preview, sent: sent[0]?.url };
+		};
+		return { urls };
+	}
+	const users = "https://api.example.com/v1/users?q=a&page=1";
+	const admins = "https://api.example.com/v1/admins?q=a&page=1";
+
+	it("decides a single mount by where the app adds the commands", async () => {
+		const { urls } = twinsApp("other");
+
+		expect(await urls("other", "users", "list")).toEqual({ preview: users, sent: users });
+		expect(await urls("other", "other", "users", "list")).toEqual({
+			preview: admins,
+			sent: admins,
+		});
+	});
+
+	it("decides the root mount by where the app adds the commands", async () => {
+		const { urls } = twinsApp("root");
+
+		expect(await urls("users", "list")).toEqual({ preview: users, sent: users });
+		expect(await urls("other", "users", "list")).toEqual({ preview: admins, sent: admins });
+	});
+
+	it("never guesses at a further mount where two operations fit", async () => {
+		const { urls } = twinsApp("both");
+
+		expect(await urls("more", "users", "list")).toEqual({ preview: users, sent: users });
+		expect(await urls("more", "other", "users", "list")).toEqual({
+			preview:
+				'api preview: "more other users list" fits several generated commands, as the app adds them more than once: preview "other users list" (admins) or "users list" (users) instead',
+			sent: admins,
+		});
 	});
 });
 

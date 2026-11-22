@@ -75,7 +75,8 @@ export interface Diagnostic {
 		| "override-unknown-operation"
 		| "override-stale"
 		| "override-unknown-param"
-		| "confirm-without-handler";
+		| "confirm-without-handler"
+		| "paginate-needs-array";
 	readonly message: string;
 	/** What to change in the spec or the configuration. */
 	readonly fix: string;

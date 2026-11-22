@@ -370,19 +370,25 @@ export function missingCommands(
 	return fewest === undefined || fewest.length === plans.length ? undefined : fewest;
 }
 
-/**
- * Whether `node` holds the planned command with its description, hidden state and arguments, and at
- * least its flags.
- */
+/** Whether `node` holds the planned command, as {@link isPlannedCommand} tells, at the plan's path below it. */
 function holds(node: CommandSnapshot, plan: CommandPlan): boolean {
 	let command: CommandSnapshot | undefined = node;
 	for (const word of [...(plan.group === "" ? [] : plan.group.split(" ")), plan.name]) {
 		command = Object.hasOwn(command.subCommands, word) ? command.subCommands[word] : undefined;
 		if (command === undefined) return false;
 	}
+	return isPlannedCommand(command, plan);
+}
+
+/**
+ * Whether `command` is the planned command: it declares `.output()` and has the plan's description,
+ * hidden state and arguments, and at least its flags.
+ */
+export function isPlannedCommand(command: CommandSnapshot, plan: CommandPlan): boolean {
 	const args = plan.inputs.filter(({ kind }) => kind === "arg").map(({ name }) => name);
 	const meta = operationMeta(plan);
 	return (
+		command.output === true &&
 		command.meta.description === meta.description &&
 		(command.meta.hidden === true) === (meta.hidden === true) &&
 		command.args.length === args.length &&

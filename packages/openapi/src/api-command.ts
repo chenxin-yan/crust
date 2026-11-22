@@ -9,6 +9,7 @@ import type { JsonValue } from "@crustjs/utils/json";
 
 import { type ApiClient, baseOriginUrl, fetchNextPage, resolveUrl } from "./client.ts";
 import type { DefineApiOptions } from "./define-api.ts";
+import type { PreviewCommandDefinition, PreviewShape } from "./preview.ts";
 import { ApiResponseError } from "./request.ts";
 import { isLocalRef, mergeParameters, rawOperations, refTarget } from "./spec-traversal.ts";
 
@@ -272,15 +273,8 @@ async function readBody(value: string, signal: AbortSignal): Promise<string> {
 	}
 }
 
-const pathArg = {
-	name: "path",
-	type: "string",
-	description: "Request path below the API base URL, e.g. /users",
-} as const;
-
-const apiFlags = {
-	list: { type: "boolean", noNegate: true, description: "List the API's operations" },
-	spec: { type: "string", description: "Print the OpenAPI definition of an operationId or path" },
+/** The request flags of `api <path>`, which `api preview` takes too. */
+export const requestFlags = {
 	method: {
 		type: "string",
 		short: "X",
@@ -299,6 +293,84 @@ const apiFlags = {
 		description: "key=value; true, false, null, and numbers are sent as JSON",
 	},
 	body: { type: "string", description: "Request body: inline, @file, or - for stdin" },
+} as const;
+
+export type ApiRequestFlags = typeof requestFlags;
+
+/** What `api <path>` sends for its request flags: `path` is the URL when `-F` fields went in its query. */
+export interface PassThroughRequest {
+	readonly url: URL;
+	readonly path: string;
+	readonly method: string;
+	readonly headers: Headers;
+	readonly body?: string;
+}
+
+/**
+ * The request `api <path>` sends for its request flags, with `--body` read by `readBodyFrom`,
+ * failing with a `PARSE` error, before any request, for a path off the base URL's origin or a flag
+ * value it cannot send.
+ */
+export async function passThroughRequest(
+	baseUrl: string,
+	requestPath: string,
+	flags: {
+		readonly method?: string | undefined;
+		readonly header?: readonly string[] | undefined;
+		readonly field?: readonly string[] | undefined;
+		readonly body?: string | undefined;
+	},
+	signal: AbortSignal,
+	readBodyFrom: (value: string, signal: AbortSignal) => Promise<string> = readBody,
+): Promise<PassThroughRequest> {
+	let url: URL;
+	try {
+		url = baseOriginUrl(baseUrl, requestPath);
+	} catch (cause) {
+		const message = cause instanceof Error ? cause.message : String(cause);
+		throw new CrustError("PARSE", message, { argument: "path" }).withCause(cause);
+	}
+
+	const fields = (flags.field ?? []).map(parseField);
+	const body = flags.body === undefined ? undefined : await readBodyFrom(flags.body, signal);
+	const method = parseMethod(
+		flags.method ?? (fields.length > 0 || body !== undefined ? "POST" : "GET"),
+	);
+	const headers = new Headers((flags.header ?? []).map(parseHeader));
+	let path = requestPath;
+	let requestBody = body;
+	if (fields.length > 0) {
+		// Fields go in the query when the method takes no body or --body is the body.
+		if (body !== undefined || method === "GET" || method === "HEAD") {
+			const query = new URLSearchParams(
+				fields.map(([key, value]): [string, string] => [key, String(value)]),
+			).toString();
+			// Through `url.search`, so a `#fragment` does not swallow the query and the
+			// path's own query stays as written (`searchParams` would re-encode it).
+			url.search = url.search === "" ? query : `${url.search.slice(1)}&${query}`;
+			path = url.href;
+		} else {
+			requestBody = JSON.stringify(Object.fromEntries(fields));
+		}
+	}
+	if (requestBody !== undefined && !headers.has("content-type")) {
+		headers.set("content-type", "application/json");
+	}
+	return { url, path, method, headers, ...(requestBody !== undefined && { body: requestBody }) };
+}
+
+const pathArg = {
+	name: "path",
+	type: "string",
+	description: "Request path below the API base URL, e.g. /users",
+} as const;
+
+const browseFlags = {
+	list: { type: "boolean", noNegate: true, description: "List the API's operations" },
+	spec: { type: "string", description: "Print the OpenAPI definition of an operationId or path" },
+} as const;
+
+const paginateFlag = {
 	paginate: {
 		type: "boolean",
 		noNegate: true,
@@ -306,14 +378,16 @@ const apiFlags = {
 	},
 } as const;
 
+type ApiFlags = typeof browseFlags & ApiRequestFlags & typeof paginateFlag;
+
 /** The contributed `api` command, spelled out because `defineApi()` needs a declared type. */
 export type ApiCommandDefinition<Operations = unknown> = CommandDefinition<
 	"api",
 	readonly [],
 	CommandShape<
 		readonly [typeof pathArg],
-		typeof apiFlags,
-		{},
+		ApiFlags,
+		{ readonly preview: PreviewShape },
 		JsonValue | undefined,
 		{},
 		readonly JsonValue[] | undefined
@@ -337,19 +411,26 @@ export function createApiCommand(
 		baseUrl,
 		paginate,
 		unavailable,
+		preview,
 	}: Pick<DefineApiOptions, "baseUrl" | "paginate"> & {
 		/** The code of the problem that leaves each such operation out, by `METHOD path`. */
 		readonly unavailable: () => ReadonlyMap<string, string>;
+		/** The `api preview` subcommand. */
+		readonly preview: PreviewCommandDefinition;
 	},
 ): ApiCommandDefinition {
 	return defineCommand(
 		"api",
-		{ description: "Call the HTTP API, or browse its OpenAPI spec" },
+		{
+			description:
+				"Send a request to any endpoint, or browse the OpenAPI spec; prefer a specific command when one exists",
+		},
 		(command) =>
 			command
 				.use(client)
+				.add(preview)
 				.args(pathArg)
-				.flags(apiFlags)
+				.flags({ ...browseFlags, ...requestFlags, ...paginateFlag })
 				.action(async ({ args, flags, ctx, signal, stdout, stderr }) => {
 					// Under the json() Extension's `--json`, the result is the output: JSON data on stdout.
 					const json = (flags as { json?: unknown }).json === true;
@@ -377,39 +458,12 @@ export function createApiCommand(
 					if (flags.paginate && paginate === undefined) {
 						throw new Error("--paginate: this CLI does not configure pagination");
 					}
-					let url: URL;
-					try {
-						url = baseOriginUrl(baseUrl, args.path);
-					} catch (cause) {
-						const message = cause instanceof Error ? cause.message : String(cause);
-						throw new CrustError("PARSE", message, { argument: "path" }).withCause(cause);
-					}
-
-					const fields = (flags.field ?? []).map(parseField);
-					const body = flags.body === undefined ? undefined : await readBody(flags.body, signal);
-					const method = parseMethod(
-						flags.method ?? (fields.length > 0 || body !== undefined ? "POST" : "GET"),
-					);
-					const headers = new Headers((flags.header ?? []).map(parseHeader));
-					let path = args.path;
-					let requestBody = body;
-					if (fields.length > 0) {
-						// Fields go in the query when the method takes no body or --body is the body.
-						if (body !== undefined || method === "GET" || method === "HEAD") {
-							const query = new URLSearchParams(
-								fields.map(([key, value]): [string, string] => [key, String(value)]),
-							).toString();
-							// Through `url.search`, so a `#fragment` does not swallow the query and the
-							// path's own query stays as written (`searchParams` would re-encode it).
-							url.search = url.search === "" ? query : `${url.search.slice(1)}&${query}`;
-							path = url.href;
-						} else {
-							requestBody = JSON.stringify(Object.fromEntries(fields));
-						}
-					}
-					if (requestBody !== undefined && !headers.has("content-type")) {
-						headers.set("content-type", "application/json");
-					}
+					const {
+						path,
+						method,
+						headers,
+						body: requestBody,
+					} = await passThroughRequest(baseUrl, args.path, flags, signal);
 
 					const api = await ctx.api;
 					/** The response and body of each page: just one without --paginate. Fails after a non-2xx page. */

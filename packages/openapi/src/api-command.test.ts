@@ -1043,6 +1043,157 @@ describe("api <path>", () => {
 	);
 });
 
+describe("api preview <path>", () => {
+	it("prints the request api <path> would send, credential headers redacted, and sends nothing", async () => {
+		const calls = stubFetch();
+		const auth = vi.fn(() => ({ authorization: "Bearer secret" }));
+		const sentinel = "s3cr3t-sentinel";
+		const { stdout, exitCode } = await captureExecute(buildApp({ auth }), [
+			"api",
+			"preview",
+			"/users?page=2",
+			"-X",
+			"patch",
+			"-F",
+			"active=true",
+			"--body",
+			'{"name":"ada"}',
+			...["Authorization", "Proxy-Authorization", "Cookie", "X-Api-Key"].flatMap((name) => [
+				"-H",
+				`${name}: ${sentinel}`,
+			]),
+			"-H",
+			"X-Trace: 1",
+		]);
+
+		expect(exitCode).toBe(0);
+		expect(stdout).not.toContain(sentinel);
+		expect(JSON.parse(stdout)).toEqual({
+			method: "PATCH",
+			url: "https://api.example.com/v1/users?page=2&active=true",
+			headers: {
+				authorization: "<redacted>",
+				"content-type": "application/json",
+				cookie: "<redacted>",
+				"proxy-authorization": "<redacted>",
+				"x-api-key": "<redacted>",
+				"x-trace": "1",
+			},
+			bodyKind: "json",
+			body: { name: "ada" },
+		});
+		expect(calls).toEqual([]);
+		expect(auth).not.toHaveBeenCalled();
+	});
+
+	it("shows a body that is not JSON as text, and no body as none", async () => {
+		const preview = async (...argv: string[]) =>
+			JSON.parse((await captureExecute(buildApp(), ["api", "preview", ...argv])).stdout) as unknown;
+
+		expect(
+			await preview("/users", "--body", "a=1", "-H", "Content-Type: text/plain"),
+		).toMatchObject({
+			method: "POST",
+			bodyKind: "bytes",
+			body: "a=1",
+		});
+		expect(await preview("/users")).toEqual({
+			method: "GET",
+			url: "https://api.example.com/v1/users",
+			headers: {},
+			bodyKind: "none",
+			body: null,
+		});
+	});
+
+	it("refuses to read stdin or take a second path", async () => {
+		const preview = async (...argv: string[]) =>
+			(await captureExecute(buildApp(), ["api", "preview", ...argv])).stderr;
+
+		expect(await preview("/users", "--body", "-")).toBe(
+			"Error: api preview: --body - would read stdin; pass the body inline or as @file",
+		);
+		expect(await preview("/users", "/teams")).toBe(
+			'Error: api preview: "/users /teams" is neither one request path nor a generated command',
+		);
+	});
+
+	// In a child process, so a read that blocks fails the test by its timeout instead of hanging it.
+	it.skipIf(process.platform === "win32")(
+		"reads a --body @file only from a regular file, never stdin or a FIFO",
+		() => {
+			const dir = mkdtempSync(join(tmpdir(), "crust-openapi-preview-"));
+			const fifo = join(dir, "fifo");
+			expect(spawnSync("mkfifo", [fifo]).status).toBe(0);
+			// Through a shell pipe, as `printf … | cli` gives stdin; spawnSync's `input` is a socket.
+			const preview = (file: string) =>
+				spawnSync(
+					"sh",
+					["-c", 'printf stdin-sentinel | "$NODE" --input-type=module -e "$SCRIPT"'],
+					{
+						cwd: join(import.meta.dirname, ".."),
+						encoding: "utf8",
+						timeout: 10_000,
+						env: {
+							...process.env,
+							NODE: process.execPath,
+							SCRIPT: `
+			import { Crust } from "@crustjs/core";
+			import { defineApi } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "define-api.ts")).href)};
+			const app = new Crust("tool").extend(defineApi({ spec: {}, baseUrl: "https://api.example.com" }).extension);
+			process.exitCode = await app.execute({ argv: ["api", "preview", "/x", "--body", ${JSON.stringify(`@${file}`)}] });
+		`,
+						},
+					},
+				);
+
+			for (const file of ["/dev/stdin", fifo]) {
+				expect(preview(file)).toMatchObject({
+					stdout: "",
+					stderr: `Error: api preview: --body @${file} is not a regular file; pass the body inline or as a file\n`,
+					status: 1,
+				});
+			}
+		},
+	);
+
+	it("previews the first request of --paginate, which needs pagination as api <path> does", async () => {
+		const paginate = vi.fn(() => undefined);
+		const preview = async (options: Partial<DefineApiOptions>) =>
+			captureExecute(buildApp(options), ["api", "preview", "/users", "--paginate"]);
+
+		expect(JSON.parse((await preview({ paginate })).stdout)).toMatchObject({
+			method: "GET",
+			url: "https://api.example.com/v1/users",
+		});
+		expect(paginate).not.toHaveBeenCalled();
+		expect((await preview({})).stderr).toBe(
+			"Error: --paginate: this CLI does not configure pagination",
+		);
+	});
+
+	it("returns the preview as the JSON result under --json, and api <path> still requests a path", async () => {
+		const calls = stubFetch();
+		const app = new Crust("tool").extend(json(), buildApi().extension);
+
+		const preview = await captureExecute(app, ["api", "preview", "/users", "--json"]);
+		await captureExecute(app, ["api", "/preview"]);
+
+		expect(JSON.parse(preview.stdout)).toMatchObject({ method: "GET", bodyKind: "none" });
+		expect(calls.map(({ url }) => url)).toEqual(["https://api.example.com/v1/preview"]);
+	});
+
+	it("describes api as the fallback, and a preview's --body without stdin, which it refuses", async () => {
+		const api = (await new Crust("tool").extend(buildApi().extension).snapshot()).subCommands.api;
+
+		expect(api?.meta.description).toBe(
+			"Send a request to any endpoint, or browse the OpenAPI spec; prefer a specific command when one exists",
+		);
+		expect(api?.flags.body?.description).toBe("Request body: inline, @file, or - for stdin");
+		expect(api?.subCommands.preview?.flags.body?.description).toBe("Request body: inline or @file");
+	});
+});
+
 describe("api with json()", () => {
 	const jsonApp = (options: Partial<DefineApiOptions> = {}) => buildApp(options).extend(json());
 

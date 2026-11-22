@@ -20,7 +20,7 @@ The package has a peer dependency on `@crustjs/core` and uses the runtime's glob
 
 `defineApi()` returns a frozen handle:
 
-- `acme.extension` is the Extension to pass to `.extend()`. It contributes one `api` command and provides the `api` Context; `acme.extension.id` is its identity.
+- `acme.extension` is the Extension to pass to `.extend()`. It contributes the `api` command, with its [`api preview`](#preview-a-request) subcommand, and provides the `api` Context; `acme.extension.id` is its identity.
 - `acme.client` is the `api` [Context](/docs/guide/contexts): a command declares it with `.use(acme.client)` and reads it with `await ctx.api`. See [The API client](#the-api-client).
 - `acme.commands` are the [generated commands](#generated-commands), to pass to `.add()`.
 
@@ -70,6 +70,28 @@ spec: new URL("./acme.openapi.jsonc", import.meta.url),
 A plain object, such as a small inline spec or one in a test, works too: it is kept in memory, bundled with the CLI, and the build writes nothing.
 
 Specs are pinned, never fetched: any other `spec`, such as a loader function, an `https:` URL, or a path string, is a `DEFINITION` [`CrustError`](/docs/api/errors) when `defineApi()` runs.
+
+## Which to use
+
+`api` and the generated commands read the same pinned spec, and a CLI ships both: the generated commands are its product, and `api` reaches what they leave out.
+
+|                                                                  | Generated commands                                | `api`                                                                                                                                       |
+| ---------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| For                                                              | The operations your CLI offers, by name           | Any endpoint without a command, and browsing the spec                                                                                       |
+| Input                                                            | Typed arguments and flags, checked before sending | A path, `-F` fields and a `--body`                                                                                                          |
+| Output                                                           | The operation's [output schema](#output)          | The response body as it is                                                                                                                  |
+| Your [overrides](#overrides): names, `confirm`, `bind`, `unwrap` | Applied                                           | Not applied: `api /users/42 -X DELETE` asks nothing                                                                                         |
+| As [MCP](/docs/modules/mcp#tools) tools                          | Yes, like the commands you write                  | Only when `include` names them: `["api", "preview"]` adds the preview alone; `["api"]` adds `api`, which sends any request, and its preview |
+
+Every operation becomes a command unless an override [excludes](#overrides) it or the spec deprecates it. An operation without a command, for either reason or because of a [problem](#what-crust-build-checks), stays reachable with `api <path>`. To offer fewer commands, give `.each()` a rule:
+
+<include lang="ts">../../../examples/modules/openapi.ts#curated</include>
+
+<include lang="ts">../../../examples/modules/openapi.ts#read-only</include>
+
+<include lang="ts">../../../examples/modules/openapi.ts#start-empty</include>
+
+An agent that runs commands unattended gets every generated command as an MCP tool, the ones that write and delete too. Narrow them with a rule like the read-only one, or with the MCP server's `exclude`, and let it check a request first with [`api preview`](#preview-a-request): `include: [["api", "preview"]]` offers the preview without `api` itself, which could send the requests your rule left out.
 
 ## The `api` command
 
@@ -171,6 +193,31 @@ Like `gh api`, the request must stay on the base URL's origin (scheme, host, and
 - `..` segments may leave the base URL's path: the boundary is the origin, not the path prefix.
 - Only redirects and `--paginate` pages may leave the origin. They must be `http:` or `https:` URLs, and are sent there without `Authorization`, `Cookie`, `Proxy-Authorization`, or any header named like an `auth` header, including values set with `-H`.
 
+### Preview a request
+
+`api preview` prints the request a generated command or `api <path>` would send, and sends nothing:
+
+```sh
+$ my-cli api preview users delete -- 42             # a generated command: its own arguments and flags go after --
+$ my-cli api preview /users/42 -X DELETE            # a request path, with the flags of api <path>
+{
+  "method": "DELETE",
+  "url": "https://api.acme.example/v1/users/42",
+  "headers": {},
+  "bodyKind": "none",
+  "body": null
+}
+```
+
+- The result is `{ method, url, headers, bodyKind, body, bound? }`: the absolute URL with its query; the headers by lower-case name; `bodyKind` `"json"` with the parsed body, `"bytes"` with any other body as text, or `"none"` with `body: null`. It is the same request the command would build, from the same plan, with the same `VALIDATION` errors, so a preview cannot disagree with what is sent.
+- Nothing runs that could have an effect: no `auth()` call, none of the generated command's Contexts (so no credential or keyring read), no [`.onConfirm()`](#confirmation) handler, no [`bind`](#overrides) function, no request. A bound parameter or body field stays the placeholder `{name}`, and its name is listed in `bound`. Headers the client adds, such as the `auth` ones, are not shown.
+- `Authorization`, `Proxy-Authorization`, `Cookie` and `X-Api-Key` headers given with `-H` show as `<redacted>`. Query parameters and body fields are shown as given.
+- The generated command's arguments and flags are parsed with its own definitions, environment fallbacks and defaults. No hook runs, so values other Extensions bind during set-up are not applied: `--input` from [`input()`](/docs/modules/extensions/input) and values from a configuration file are left out, and the preview fails as the command would without them.
+- A target starting with `/` is a request path, and `api preview` takes the `-X`, `-H`, `-F`, `--body` and `--paginate` flags of [`api <path>`](#send-requests) for it. It never reads stdin: `--body -` is refused, and `--body @file` reads only a regular file of at most 16 MiB, so `@/dev/stdin` or a FIFO is refused too. Any other target is a generated command's path, through an alias too, and at any place the app adds `acme.commands`, even more than one; its own flags go after `--`. Below the first place, a command is told apart only by its path and shape, so where a path there fits two operations of the same shape, `api preview` refuses it and names the paths to preview instead. `--paginate` previews the first page's request without calling `paginate`, and fails as `api <path> --paginate` does when the CLI configures no pagination.
+- It declares an [output schema](/docs/api/crust#outputschema), so `--json` prints only the preview. Like `api`, it is an Extension's command, so [MCP](/docs/modules/mcp#tools) offers it as a tool only when `include` names it: `include: [["api", "preview"]]` exposes the preview without the request-sending `api` tool, and `include: [["api"]]` exposes both.
+
+A request path always starts with `/`, so `api preview` never shadows one: `my-cli api /preview` requests `/preview`.
+
 ### Output and errors
 
 The response body goes to stdout:
@@ -203,6 +250,7 @@ $ my-cli api /users/9 --json
 | `api --spec <target>`   | The definition `--spec` prints, as above                                                                                                                                           |
 | `api <path>`            | The response body: parsed when it is JSON, otherwise its text as a JSON string; nothing for an empty body. A body that is not UTF-8 fails the command, since JSON can't hold it    |
 | `api <path> --paginate` | NDJSON: one `{"type":"event","data":…}` line per page with its body as above (an empty body is `""`), then `{"type":"result"}`, or `{"type":"error","error":…}` for a failing page |
+| `api preview …`         | The [preview](#preview-a-request) object                                                                                                                                           |
 
 - A non-2xx body is written to stderr, followed by the error JSON, whose `details` hold the `status`.
 - JSON numbers are read as JavaScript numbers, so digits beyond double precision are lost and `-0` becomes `0`. Without `--json`, the body is printed exactly, and `--paginate` pages keep their exact digits.
@@ -265,7 +313,7 @@ A command gets `--paginate` when a `paginate` function applies (an override's, e
 
 <include lang="ts">../../../examples/modules/openapi.ts#unwrap</include>
 
-A tuple schema (`prefixItems`) gets no `--paginate`. Its result is every page's result joined into one array, as `paginate` requests them, and the advertised schema leaves out the limits of one page's list (`minItems`, `maxItems`, `uniqueItems`, `contains`); the items keep theirs. Without `--paginate` offered, a spec parameter named `paginate` is an ordinary flag. A page whose result is not a list fails, naming the operation, and so does a `paginate` that returns the request just sent. (`api <path> --paginate` instead prints one JSON line per page.)
+A tuple schema (`prefixItems`) gets no `--paginate`. Its result is every page's result joined into one array, as `paginate` requests them, and the advertised schema leaves out the limits of one page's list (`minItems`, `maxItems`, `uniqueItems`, `contains`); the items keep theirs. Without `--paginate` offered, a spec parameter named `paginate` is an ordinary flag. An override's `paginate` on an operation whose result is known not to be a list, or is a tuple, leaves the operation out and fails `crust build` (`paginate-needs-array`); `defineApi`'s `paginate` is offered only where it applies. A page whose result is not a list fails, naming the operation, and so does a `paginate` that returns the request just sent. With and without `--paginate`, the result is a list of the same items, so one output schema describes both. (`api <path> --paginate` instead prints one JSON line per page.)
 
 ### Collisions and left-out operations
 
@@ -324,6 +372,7 @@ An operation that does not fit is left out of `acme.commands`, so a CLI run from
 | `override-stale`             | An `.override()` entry whose `expect` no longer matches the operation's method and path                                  | Fails         |
 | `override-unknown-param`     | An `.override()` entry's `flagName`, `bind` or `positional` names an input the operation does not have                   | Fails         |
 | `confirm-without-handler`    | A `confirm` message with no `.onConfirm()`                                                                               | Fails         |
+| `paginate-needs-array`       | An override's `paginate` on a result that is not a list, or is a tuple                                                   | Fails         |
 
 An alias of an added command, or a flag that clashes with an Extension's or a Context's, is core's `DEFINITION` error, also during the build.
 

@@ -29,6 +29,7 @@ export type {
 	ExtensionHooks,
 	InferExtensionFlags,
 	InvocationOutcome,
+	ParsedCommandArgv,
 	Renderer,
 	UsedContexts,
 	UseSource,

@@ -53,6 +53,22 @@ export const unwrapped = api.each(() => ({
 }));
 //#endregion
 
+//#region curated
+// Only the listed operations become commands; the others stay reachable with `api <path>`.
+const keep = new Set(["getUser", "deleteUser"]);
+export const curated = api.each((op) => ({ exclude: !keep.has(op.id) }));
+//#endregion
+
+//#region read-only
+// No command that writes. `undefined` keeps the default, so deprecated operations stay out.
+export const readOnly = api.each((op) => ({ exclude: op.method !== "get" || undefined }));
+//#endregion
+
+//#region start-empty
+// On a large spec: no command at first, then one operation at a time.
+export const grown = api.each(() => ({ exclude: true })).override({ getUser: { exclude: false } });
+//#endregion
+
 // What inspex registers from acme.openapi.jsonc, for this docs site, which runs no content mapper.
 declare module "@crustjs/openapi" {
 	interface Specs {
