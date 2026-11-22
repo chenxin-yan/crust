@@ -55,20 +55,20 @@
 		"@crustjs/style": "workspace:^"
 	},
 	"optionalDependencies": {
-		"@tsdown/exe": "0.23.4",
-		"tsdown": "0.23.4"
+		"@tsdown/exe": "0.23.7",
+		"tsdown": "0.23.7"
 	},
 	"peerDependencies": {
 		"@crustjs/core": "^0.6.0"
 	},
 	"devDependencies": {
 		"@arethetypeswrong/core": "^0.18.5",
-		"@crustjs/testing": "workspace:*",
 		"@crustjs/internal-config": "workspace:*",
+		"@crustjs/testing": "workspace:*",
 		"@crustjs/utils": "workspace:*",
 		"@types/semver": "^7.8.0",
 		"publint": "^0.3.25",
-		"semver": "^7.8.5",
+		"semver": "^7.8.6",
 		"vite-plus": "catalog:"
 	},
 	"engines": {

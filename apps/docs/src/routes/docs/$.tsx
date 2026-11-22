@@ -5,11 +5,17 @@ import browserCollections from "fumadocs-mdx:collections/browser";
 import * as Twoslash from "fumadocs-twoslash/ui";
 import { TypeTable } from "fumadocs-ui/components/type-table";
 import { DocsLayout } from "fumadocs-ui/layouts/docs";
-import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/layouts/docs/page";
+import {
+	DocsBody,
+	DocsDescription,
+	DocsPage,
+	DocsTitle,
+	MarkdownCopyButton,
+	ViewOptionsPopover,
+} from "fumadocs-ui/layouts/docs/page";
 import defaultMdxComponents from "fumadocs-ui/mdx";
 import { Suspense } from "react";
 
-import { LLMCopyButton, ViewOptions } from "@/components/ai/page-actions";
 import { CommunityLinks } from "@/components/community-links";
 import { baseOptions } from "@/lib/layout.shared";
 import { buildPageMeta, siteConfig } from "@/lib/seo";
@@ -76,9 +82,14 @@ const clientLoader = browserCollections.docs.createClientLoader({
 				<DocsTitle>{frontmatter.title}</DocsTitle>
 				<DocsDescription>{frontmatter.description}</DocsDescription>
 				<div className="flex flex-row gap-2 items-center border-b -mt-4 pb-6">
-					<LLMCopyButton markdownUrl={`${url}.mdx`} />
-					<ViewOptions
-						markdownUrl={`${url}.mdx`}
+					<MarkdownCopyButton markdownUrl={`${url}.md`} />
+					<ViewOptionsPopover
+						markdownUrl={`${url}.md`}
+						// AI prompts read this deployment's HTML page (robots.txt disallows `.md`), without the
+						// query and fragment that the default `window.location.href` would send.
+						pageUrl={
+							typeof window === "undefined" ? url : new URL(url, window.location.origin).href
+						}
 						githubUrl={`${siteConfig.githubUrl}/blob/main/apps/docs/content/docs/${path}`}
 					/>
 				</div>

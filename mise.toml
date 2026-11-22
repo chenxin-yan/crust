@@ -3,5 +3,5 @@
 idiomatic_version_file_enable_tools = ["pnpm"]
 
 [tools]
-bun = "1.4.4"
-node = "26.13.0"
+bun = "1.4.5"
+node = "26.13.1"

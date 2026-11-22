@@ -73,7 +73,6 @@ body {
 /* ── Code blocks ───────────────────────────────────────────────────────────── */
 code,
 pre,
-.fd-codeblock,
 code.shiki {
 	font-family: "Fira Code", monospace;
 }

@@ -195,11 +195,10 @@ type ExtractAllAliases<F> = ExtractShort<F> | ExtractLongAliases<F>;
 /** All narrowed canonical, short, and long-alias spellings in a flags record. */
 export type SpellingsOf<F extends FlagsDef> = string extends keyof F
 	? never
-	:
-			| (keyof F & string)
-			| {
-					[K in keyof F & string]: ExtractAllAliases<F[K]>;
-			  }[keyof F & string];
+	: | (keyof F & string)
+		| {
+				[K in keyof F & string]: ExtractAllAliases<F[K]>;
+		  }[keyof F & string];
 
 type NoPrefixBrand<S extends string> = [Extract<S, `no-${string}`>] extends [never]
 	? {}
@@ -638,9 +637,8 @@ type RecordFlagBrand<
 		// A flag without a known short or alias can only collide with another flag's alias.
 		| ([ExtractAllAliases<F[K]>] extends [never]
 				? AllAliases
-				:
-						| Exclude<Names, K>
-						| { [O in Exclude<Names, K>]: ExtractAllAliases<F[O & keyof F]> }[Exclude<Names, K>])
+				: | Exclude<Names, K>
+					| { [O in Exclude<Names, K>]: ExtractAllAliases<F[O & keyof F]> }[Exclude<Names, K>])
 	>;
 
 // `keyof` a union lists only shared keys, so a risky field in one branch would skip its checks.

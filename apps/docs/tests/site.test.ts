@@ -16,7 +16,11 @@ vi.mock("fumadocs-mdx:collections/server", () => ({
 		toFumadocsSource: () => ({
 			files: globSync("**/*.mdx", {
 				cwd: fileURLToPath(new URL("../content/docs", import.meta.url)),
-			}).map((path) => ({ type: "page", path, data: { title: path } })),
+			}).map((path) => ({
+				type: "page",
+				path,
+				data: { title: path, getText: async () => `body of ${path}` },
+			})),
 		}),
 	},
 }));
@@ -28,7 +32,7 @@ vi.mock("@tanstack/react-start", () => ({
 
 const { Route: sitemap } = await import("../src/routes/sitemap[.]xml");
 const { MODULES, SCAFFOLD_COMMANDS } = await import("../src/routes/index");
-const { source } = await import("../src/lib/source");
+const { docsLlms, source } = await import("../src/lib/source");
 const { absoluteUrl } = await import("../src/lib/seo");
 
 it("sitemap lists each Fumadocs page once, including the docs index", async () => {
@@ -44,6 +48,14 @@ it("sitemap lists each Fumadocs page once, including the docs index", async () =
 		...source.getPages().map((page) => absoluteUrl(page.url)),
 	]);
 	expect(new Set(locations).size).toBe(locations.length);
+});
+
+it("serves each page's Markdown at the `${url}.md` the page actions link", async () => {
+	for (const page of source.getPages()) {
+		const response = await docsLlms.serve(`${page.url}.md`);
+		expect(response?.headers.get("Content-Type")).toBe("text/markdown; charset=utf-8");
+		expect(await response?.text()).toContain(`body of ${page.path}`);
+	}
 });
 
 it("landing module list links every module page", () => {

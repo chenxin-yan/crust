@@ -102,13 +102,12 @@ export type CommandPath<
 	? readonly string[]
 	: string extends keyof Tree
 		? readonly string[]
-		:
-				| readonly []
-				| {
-						[K in keyof Tree & string]: Tree[K] extends CommandShape
-							? readonly [K, ...CommandPath<Tree[K]["children"], readonly [...Depth, unknown]>]
-							: never;
-				  }[keyof Tree & string];
+		: | readonly []
+			| {
+					[K in keyof Tree & string]: Tree[K] extends CommandShape
+						? readonly [K, ...CommandPath<Tree[K]["children"], readonly [...Depth, unknown]>]
+						: never;
+			  }[keyof Tree & string];
 
 // Editors complete path elements from this type instantiated with the partial literal being
 // typed (e.g. `["remote", ""]`), so an unknown literal path must resolve to the commands under

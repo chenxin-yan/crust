@@ -1,4 +1,4 @@
-import { type InferPageType, loader } from "fumadocs-core/source";
+import { llms, loader } from "fumadocs-core/source";
 import { lucideIconsPlugin } from "fumadocs-core/source/lucide-icons";
 import { docs } from "fumadocs-mdx:collections/server";
 
@@ -8,10 +8,9 @@ export const source = loader({
 	plugins: [lucideIconsPlugin()],
 });
 
-export async function getLLMText(page: InferPageType<typeof source>) {
-	const processed = await page.data.getText("processed");
+/** Serves `/llms.txt`, `/llms-full.txt` and each page's Markdown at `<page url>.md`. */
+export const docsLlms = llms(source, {
+	renderPage: async (page) => `# ${page.data.title} (${page.url})
 
-	return `# ${page.data.title}
-
-${processed}`;
-}
+${await page.data.getText("processed")}`,
+});

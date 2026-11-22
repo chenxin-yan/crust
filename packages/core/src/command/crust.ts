@@ -929,11 +929,10 @@ type ActionReturnOf<S extends AnyCollisionSpellings> = OutputStateOf<S>["actionR
  */
 type ActionReturn<S extends AnyCollisionSpellings> = [OutputSchemaOf<S>] extends [never]
 	? unknown
-	:
-			| InferInput<OutputSchemaOf<S>>
-			| PromiseLike<InferInput<OutputSchemaOf<S>>>
-			| AsyncGenerator<unknown, InferInput<OutputSchemaOf<S>>>
-			| PromiseLike<AsyncGenerator<unknown, InferInput<OutputSchemaOf<S>>>>;
+	: | InferInput<OutputSchemaOf<S>>
+		| PromiseLike<InferInput<OutputSchemaOf<S>>>
+		| AsyncGenerator<unknown, InferInput<OutputSchemaOf<S>>>
+		| PromiseLike<AsyncGenerator<unknown, InferInput<OutputSchemaOf<S>>>>;
 
 /** An awaited action return's value: an async generator's `return` value, else itself. */
 type ActionValue<V> = V extends AsyncGenerator<any, infer Returned> ? Awaited<Returned> : V;

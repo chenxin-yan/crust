@@ -436,14 +436,9 @@ type SchemaToken<F> = F extends { type: "boolean" }
 type InferPreSchemaExtensionFlag<F extends ExtensionFlagDef> = F extends {
 	schema: unknown;
 }
-	?
-			| (F extends { multiple: true } ? never : SchemaToken<F>)
-			| ("multiple" extends keyof F
-					? true extends F["multiple"]
-						? SchemaToken<F>[]
-						: never
-					: never)
-			| undefined
+	? | (F extends { multiple: true } ? never : SchemaToken<F>)
+		| ("multiple" extends keyof F ? (true extends F["multiple"] ? SchemaToken<F>[] : never) : never)
+		| undefined
 	: F extends { required: true } | { default: unknown }
 		? // Hooks run before validation enforces `required` and reports invalid values, which
 			// stay unset (not defaulted), so a required or defaulted value may still be absent.
@@ -465,9 +460,8 @@ type MayHoldInvalidValue<F extends ExtensionFlagDef> = F extends { type: "boolea
 	: true;
 
 type InferExtensionFlag<F> = F extends ExtensionFlagDef
-	?
-			| InferPreSchemaExtensionFlag<F>
-			| ("recursive" extends keyof F ? (false extends F["recursive"] ? undefined : never) : never)
+	? | InferPreSchemaExtensionFlag<F>
+		| ("recursive" extends keyof F ? (false extends F["recursive"] ? undefined : never) : never)
 	: never;
 
 /** Infer pre-validation hook values; dynamic or conditional records claim no typed ownership. */

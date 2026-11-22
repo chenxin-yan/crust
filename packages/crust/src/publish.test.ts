@@ -433,17 +433,15 @@ describe("publish manifest validation", () => {
 		const descriptor = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
 		const npm = join(tmpDir, "npm");
 		const which = vi.spyOn(processUtils, "which").mockReturnValue(npm);
-		const runProcess = vi
-			.spyOn(processUtils, "runProcess")
-			.mockImplementation(async (_npm, args) =>
-				args?.[0] === "view"
-					? viewError("E404", args[1]!)
-					: {
-							exitCode: 0,
-							stdout: isTTY ? "" : "registry stdout\n",
-							stderr: isTTY ? "" : "registry stderr\r\n",
-						},
-			);
+		const runProcess = vi.spyOn(processUtils, "runProcess").mockImplementation(async (_npm, args) =>
+			args?.[0] === "view"
+				? viewError("E404", args[1]!)
+				: {
+						exitCode: 0,
+						stdout: isTTY ? "" : "registry stdout\n",
+						stderr: isTTY ? "" : "registry stderr\r\n",
+					},
+		);
 		const stdout = vi.fn((_text: string) => {});
 		const stderr = vi.fn((_text: string) => {});
 		try {
