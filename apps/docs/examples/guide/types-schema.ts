@@ -27,4 +27,11 @@ new Crust("serve").args({ name: "port", type: "string", schema: Port });
 
 // @ts-expect-error a string flag hands its schema a string: write z.coerce.number()
 new Crust("serve").flags({ port: { type: "string", schema: z.number() } });
+
+// A json flag hands its schema the parsed JSON value
+const User = z.object({ name: z.string(), role: z.enum(["admin", "member"]).optional() });
+new Crust("create").flags({ body: { type: "json", schema: User } });
+
+// @ts-expect-error a json flag's schema must accept JSON data, and a Date is not
+new Crust("create").flags({ at: { type: "json", schema: z.date() } });
 //#endregion

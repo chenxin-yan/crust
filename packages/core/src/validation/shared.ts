@@ -1,3 +1,4 @@
+import type { JsonValue } from "@crustjs/utils/json";
 import type { InferInput, StandardSchema } from "@crustjs/utils/schema";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -223,15 +224,83 @@ type AcceptsTokenElements<E, A> = A extends readonly unknown[]
 		: true
 	: never;
 
-type SchemaInputMessage<T> = T extends { variadic: true } | { multiple: true }
-	? `schema input must accept ${SchemaTokenName<T>}[]; use an array schema`
-	: T extends { type: "boolean" }
-		? "schema input must accept boolean"
-		: "schema input must accept string; coerce it, e.g. z.coerce.number()";
+// A json flag hands its schema the parsed JSON value. Overlap again: some JSON value must fit
+// the input. An object fits when every required property does (optional keys may be absent,
+// and JSON has no symbol keys); a Date (its methods), bigint, or function never does.
+type AcceptsJson<Input, Seen extends readonly unknown[] = []> = [JsonValue] extends [Input]
+	? true
+	: true extends (Input extends unknown ? AcceptsJsonMember<Input, Seen> : never)
+		? true
+		: false;
+
+// A type recurring inside itself counts as no value, so a recursive input (`Link | null`)
+// compiles (TS2615 otherwise) and is accepted only when a finite value of it is JSON.
+type IsSeen<M, Seen> = true extends (
+	Seen extends unknown ? ([M] extends [Seen] ? ([Seen] extends [M] ? true : false) : false) : never
+)
+	? true
+	: false;
+
+// A recursive input that never repeats (`Nest<T> { next: Nest<T[]> | null }`) would recurse until
+// TS2589, so past this depth the check accepts and leaves the rest to runtime validation.
+type AcceptsJsonDepth = 8;
+
+type AcceptsJsonMember<M, Seen extends readonly unknown[]> = M extends
+	| string
+	| number
+	| boolean
+	| null
+	? true
+	: IsSeen<M, Seen[number]> extends true
+		? false
+		: M extends (...args: never[]) => unknown
+			? false
+			: Seen["length"] extends AcceptsJsonDepth
+				? true
+				: M extends readonly unknown[]
+					? AcceptsJsonElements<M, [...Seen, M]>
+					: M extends object
+						? false extends {
+								[K in keyof M]-?: {} extends Pick<M, K>
+									? true
+									: K extends symbol
+										? false
+										: AcceptsJson<M[K], [...Seen, M]>;
+							}[keyof M]
+							? false
+							: true
+						: false;
+
+// Only required tuple elements, leading or trailing a rest, must accept JSON; an open array
+// accepts `[]`.
+type AcceptsJsonElements<
+	M extends readonly unknown[],
+	Seen extends readonly unknown[],
+> = M extends readonly [infer H, ...infer R]
+	? AcceptsJson<H, Seen> extends true
+		? AcceptsJsonElements<R, Seen>
+		: false
+	: M extends readonly [...infer R, infer L]
+		? AcceptsJson<L, Seen> extends true
+			? AcceptsJsonElements<R, Seen>
+			: false
+		: true;
+
+type SchemaInputMessage<T> = T extends { type: "json" }
+	? "schema input must accept JSON data"
+	: T extends { variadic: true } | { multiple: true }
+		? `schema input must accept ${SchemaTokenName<T>}[]; use an array schema`
+		: T extends { type: "boolean" }
+			? "schema input must accept boolean"
+			: "schema input must accept string; coerce it, e.g. z.coerce.number()";
 
 /** Brand a schema whose input type cannot accept any value the parser hands it. */
 type SchemaInputBrand<T> = T extends { schema: infer S extends StandardSchema }
-	? AcceptsTokens<SchemaTokens<T>, InferInput<S>> extends true
+	? (
+			T extends { type: "json" }
+				? AcceptsJson<InferInput<S>>
+				: AcceptsTokens<SchemaTokens<T>, InferInput<S>>
+		) extends true
 		? {}
 		: { readonly FIX_SCHEMA_INPUT: SchemaInputMessage<T> }
 	: {};

@@ -5,15 +5,18 @@ import { coerceUrl } from "../parsing/coercers.ts";
 import type { RunInputPayload, RunInputValue, ValueType } from "../types.ts";
 import type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "./snapshot.ts";
 
+/** A JSON Schema `type` name. */
+type JsonSchemaTypeName = "string" | "number" | "integer" | "boolean" | "array" | "object" | "null";
+
 /**
  * JSON Schema fragment for one property of a command's JSON input. Schema-backed
  * definitions may carry any further keywords their JSON Schema declares.
  */
 export interface CommandInputPropertySchema {
-	readonly type?: "string" | "number" | "boolean" | "array";
+	readonly type?: JsonSchemaTypeName | readonly JsonSchemaTypeName[];
 	readonly description?: string;
 	readonly format?: string;
-	readonly enum?: readonly (string | boolean)[];
+	readonly enum?: readonly JsonValue[];
 	readonly items?: CommandInputPropertySchema;
 	readonly default?: unknown;
 	readonly [keyword: string]: unknown;
@@ -52,18 +55,35 @@ function valueSchema(
 	}
 }
 
+/** Keywords whose keys are names; only their values are schemas. */
+const NAMED_SCHEMA_KEYWORDS = new Set([
+	"properties",
+	"patternProperties",
+	"definitions",
+	"dependentSchemas",
+]);
+/** Keywords whose values are data, not schemas. */
+const DATA_KEYWORDS = new Set(["const", "enum", "default", "examples"]);
+
 /** `$ref`, `$defs`, `$id`, … resolve against the schema's own root, which nesting would move. */
-function hasRootKeyword(value: unknown): boolean {
-	if (typeof value !== "object" || value === null) return false;
-	return Object.entries(value).some(
-		([key, entry]) => (key.startsWith("$") && key !== "$comment") || hasRootKeyword(entry),
-	);
+function hasRootKeyword(schema: unknown): boolean {
+	if (typeof schema !== "object" || schema === null) return false;
+	if (Array.isArray(schema)) return schema.some(hasRootKeyword);
+	return Object.entries(schema).some(([key, entry]) => {
+		if (key.startsWith("$")) return key !== "$comment";
+		if (DATA_KEYWORDS.has(key)) return false;
+		if (NAMED_SCHEMA_KEYWORDS.has(key) && typeof entry === "object" && entry !== null) {
+			return Object.values(entry).some(hasRootKeyword);
+		}
+		return hasRootKeyword(entry);
+	});
 }
 
 /**
  * A schema-backed definition's `inputSchema` without `$schema`, when `run()`
  * accepts what it describes: schema-backed values bind as their token, a string
- * (a boolean for `type: "boolean"`), in an array for variadic and `multiple`.
+ * (a boolean for `type: "boolean"`), in an array for variadic and `multiple`;
+ * a json flag binds the JSON value itself, so any JSON Schema describes it.
  */
 function schemaPropertySchema(
 	def: ArgSnapshot | FlagSnapshot,
@@ -71,6 +91,7 @@ function schemaPropertySchema(
 ): CommandInputPropertySchema | undefined {
 	if (def.inputSchema === undefined) return undefined;
 	const { $schema: _dialect, ...schema } = def.inputSchema;
+	if (def.type === "json") return hasRootKeyword(schema) ? undefined : schema;
 	const token = def.type === "boolean" ? "boolean" : "string";
 	const value = list ? schema.items : schema;
 	// `prefixItems` constrains leading elements that `items` does not cover.

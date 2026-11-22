@@ -1,3 +1,4 @@
+import { parseJsonValue } from "@crustjs/utils/json";
 import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
 
 import type { CommandNode } from "../command/node.ts";
@@ -171,7 +172,8 @@ function resolveDefault(def: ArgDef | FlagDef, label: string) {
 /**
  * Coerce one raw text token for an argument or flag:
  *   raw token → choices validation → parse transform (if set) → built-in coercion.
- * Schema-backed definitions receive the raw token unchanged.
+ * Schema-backed definitions receive the raw token unchanged, except that a
+ * json flag's token is parsed as JSON first.
  */
 function coerceToken(
 	def: ArgDef | FlagDef,
@@ -179,7 +181,7 @@ function coerceToken(
 	label: string,
 	index?: number,
 ): ParsedArgValue {
-	if (def.schema) return raw;
+	if (def.schema && def.type !== "json") return raw;
 	if (def.choices) validateChoice(raw, def.choices, label);
 	if (def.parse) return invokeParse(def.parse, raw, label, index);
 	return coerceValue(raw, def.type, label);
@@ -615,6 +617,14 @@ function coerceStructuredValue(
 	label: string,
 	index?: number,
 ): ParsedArgValue {
+	// A broad schema input (`unknown`) type-checks any value; the schema must still get JSON data.
+	if (def.schema && def.type === "json") {
+		try {
+			return parseJsonValue(value);
+		} catch {
+			throw new CrustError("PARSE", `Expected ${STRUCTURED_EXPECTATIONS.json} for ${label}.`);
+		}
+	}
 	validateStructuredValue(def, value, label);
 	// Validated string and path values are text tokens; every other type arrives native.
 	if (def.type !== "string" && def.type !== "path") return value;

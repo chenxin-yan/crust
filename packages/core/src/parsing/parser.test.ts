@@ -585,11 +585,18 @@ describe("parseArgs \u2014 env fallback", () => {
 			flags: {
 				port: { type: "string", schema, env: { name: "APP_PORT" } },
 				tags: { type: "string", schema, env: { name: "APP_TAGS", delimiter: "," }, multiple: true },
+				body: { type: "json", schema, env: { name: "APP_BODY" } },
 			},
 		});
-		const parsed = parseArgs(cmd, [], { APP_PORT: "8080", APP_TAGS: "a,b" });
+		const parsed = parseArgs(cmd, [], {
+			APP_PORT: "8080",
+			APP_TAGS: "a,b",
+			APP_BODY: '{"name":"a"}',
+		});
 		expect(parsed.flags.port).toBe("8080");
 		expect(parsed.flags.tags).toEqual(["a", "b"]);
+		// A json flag's token is JSON text; its schema receives the parsed value.
+		expect(parsed.flags.body).toEqual({ name: "a" });
 	});
 
 	it("coerces boolean env values with the positional boolean spellings", () => {

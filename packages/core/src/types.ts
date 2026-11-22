@@ -1,6 +1,6 @@
 import type { JsonValue } from "@crustjs/utils/json";
 import type { BaseValueType } from "@crustjs/utils/primitive";
-import type { InferOutput, StandardSchema } from "@crustjs/utils/schema";
+import type { InferInput, InferOutput, StandardSchema } from "@crustjs/utils/schema";
 
 import type { ExtensionId } from "./identity.ts";
 import type { IsClosedName, IsStaticTuple, IsUnion } from "./validation/shared.ts";
@@ -449,6 +449,17 @@ type SchemaBooleanFlagDef = SchemaFlagBase & {
 } & (SingleOccurrenceFields | RepeatableOccurrenceFields);
 
 /**
+ * A schema-backed flag whose value token is JSON text. The schema receives the
+ * parsed JSON value (`JsonValue | undefined`); structured input (`run()`,
+ * `--input`, MCP) passes the JSON value itself. Its input type must accept JSON
+ * data, and its input JSON Schema becomes the flag's command input property.
+ */
+type SchemaJsonFlagDef = SchemaFlagBase & {
+	type: "json";
+	noNegate?: never;
+} & SingleOccurrenceFields;
+
+/**
  * Defines a single named flag for a CLI command.
  *
  * Discriminated by `type` and `multiple` for type-safe `default` values.
@@ -466,7 +477,8 @@ type SchemaBooleanFlagDef = SchemaFlagBase & {
 export type FlagDef =
 	| { [T in ValueType]: TypedFlagDef<T> | TypedMultiFlagDef<T> }[ValueType]
 	| SchemaStringFlagDef
-	| SchemaBooleanFlagDef;
+	| SchemaBooleanFlagDef
+	| SchemaJsonFlagDef;
 
 /** Record mapping flag names to their definitions */
 export type FlagsDef = Record<string, FlagDef>;
@@ -655,9 +667,9 @@ type InputBaseValue<D> = true extends IsUnion<D> | IsUnion<D[keyof D & "type"]>
 				? true
 				: boolean
 			: boolean
-		: D extends { schema: StandardSchema }
-			? D extends { type: "boolean" }
-				? boolean
+		: D extends { schema: infer S extends StandardSchema }
+			? D extends { type: "json" }
+				? InferInput<S>
 				: string
 			: D extends { type: "json" }
 				? JsonValue
@@ -905,7 +917,9 @@ type RawSchemaFlagInput = string | boolean | readonly (string | boolean)[] | und
 
 /** One flag value after syntax parsing and before required/schema validation. */
 type RawFlagValue<D extends FlagDef> = D extends { schema: StandardSchema }
-	? RawSchemaFlagInput
+	? D extends { type: "json" }
+		? JsonValue | undefined
+		: RawSchemaFlagInput
 	: InferFlagValue<D> | undefined;
 
 /** Positional counterpart of {@link RawFlagValue}. */
