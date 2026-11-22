@@ -1,5 +1,11 @@
 # @crustjs/tui
 
+## 0.0.9
+
+### Patch Changes
+
+- [#708](https://github.com/chenxin-yan/crust/pull/708) [`eee5648`](https://github.com/chenxin-yan/crust/commit/eee5648ebd33769c091dad20813ce51a05495b6a) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Require `@opentui/core` ^0.9.0. OpenTUI 0.9 always uses its native input parser and removes the `experimental_nativeInput` and `stdinParserMaxBufferBytes` renderer options, removes the `h()`/`Box()`/`Text()` composition API, and replaces Markdown's `renderNode` with `renderBlock`; see the [0.9.0 release notes](https://github.com/anomalyco/opentui/releases/tag/v0.9.0). `runTui()` behaves as before.
+
 ## 0.0.8
 
 ### Patch Changes

@@ -1,5 +1,38 @@
 # @crustjs/plugins
 
+## 0.7.0
+
+### Minor Changes
+
+- [#688](https://github.com/chenxin-yan/crust/pull/688) [`829a63e`](https://github.com/chenxin-yan/crust/commit/829a63ecbd719d51d784584eec40fedc5dd1a670) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `search()` adds `search <task...>`, which prints the five visible commands that best match a task described in words, best first, and returns them as `{ command, description?, hasAction }[]` (`SearchMatch`). It declares `.output()`, so with `json()` `--json` prints only the array; no match prints a line and returns `[]` with exit code 0. Group and Extension commands are included, hidden commands are not. A "Find a command" section on the root command points `--help` and `--llms` at it.
+
+- [#687](https://github.com/chenxin-yan/crust/pull/687) [`4110194`](https://github.com/chenxin-yan/crust/commit/4110194d4602bf6cf457cb4fa0a52f5fee87d3b6) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - New `telemetry({ env, enabled, send, command? })` Extension: after each invocation it passes one event, `{ command, outcome, durationMs, ci }`, to your `send`. `command` is the command path (`["acme", "deploy"]`), never argument or flag values; `outcome` is `completed`, `failed`, or `handled`. The Extension has no transport of its own and no default mode: your `send` delivers the event, and `enabled` is `"opt-in"` or `"opt-out"`. Only invocations that call `send` wait for it, at most 1 second, when its `signal` aborts with a `TimeoutError`: pass it to your request so it does not keep the process alive. Its failures are ignored. A failure while routing or parsing argv (an unknown command or flag) happens before setup and sends nothing; validation after a command is selected reports `failed`.
+  
+  It adds a `telemetry` command (rename it with `command`): bare or `status` shows whether events are sent and which setting decides, and `enable` / `disable` save the user's preference in `telemetry.json` in the CLI's config directory, written atomically, and created readable by its owner only on Linux and macOS (on Windows it inherits the config directory's access rules). Each returns the state as data (`{ sending, decidedBy, saved?, default }`), printed by `--json` under `json()`. The command's own invocations never send an event. A save that fails exits with code 1 and names the variable to use instead. The first setting that decides wins: `DO_NOT_TRACK` set to anything but empty or `0` turns it off; then the `env` variable (`0` or `false` off, any other non-empty value on; unset or empty decides nothing) for the runs where it is set, without changing what is saved; then the saved preference; then `enabled`. So under `"opt-out"`, a non-empty variable such as `ACME_TELEMETRY=1` also sends for that run after the user ran `telemetry disable`. A saved file that cannot be read or holds anything but `{"telemetry":"on"}` or `{"telemetry":"off"}` sends nothing when neither variable decides; `enable` or `disable` rewrites it. The file is read only when the command runs or neither variable decides.
+
+### Patch Changes
+
+- [#707](https://github.com/chenxin-yan/crust/pull/707) [`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Paths now follow one rule everywhere: a relative path resolves against the place it was written.
+  
+  - A path the user types resolves against the working directory, with a leading `~` as the home directory. That now covers `create-crust [directory]` and its prompt, `completion --output-dir`, `--input @path`, and `api --body @path`, so `--output-dir=~/completions` and `--input @~/args.json` work where they used to name a directory called `~`.
+  - `type: "path"` also expands `~\` on Windows.
+  - A path passed in code resolves against the working directory, as Node's `fs` does.
+  
+  **Behavior change:** in `@crustjs/skills`, a relative `sourceDir` (`installSkill()`, `getSkillStatus()`) or `extras` entry (`skill()`, `writeSkills()`) resolves against the working directory. It used to resolve against the nearest `package.json` above the CLI's entry file, which depended on how the CLI was distributed. During `crust build` the working directory is the project root, so `skill({ extras })` is unaffected there. Elsewhere, pass a path under `artifactPath()`, an absolute path, or a `file:` URL.
+  
+  **Behavior change:** in `@crustjs/create`, a `command` step's relative `cwd` resolves against the directory passed to `runSteps()`, where it used to resolve against the process working directory. `scaffold()` rejects an empty `template`, and a `template` URL that is not `file:` fails with `Path URL must use the file: protocol`.
+  
+  **Behavior change:** the `create-crust` prompt accepts the same directory paths as the positional argument, including `:` and `\`, so a Windows path such as `C:\projects\my-cli` can be typed. Only the basename is checked.
+  
+  **Behavior change:** `resolveSourceDir()` is removed from `@crustjs/utils/source`. Use `resolvePathLike()` from `@crustjs/utils/path`.
+
+- [#676](https://github.com/chenxin-yan/crust/pull/676) [`edb6671`](https://github.com/chenxin-yan/crust/commit/edb66715c2462bdc11a6032054dc759eb48ceb5b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `@crustjs/utils/terminal` exports `isCI(env = process.env)`, the rule `confirm()` and `updateNotifier()` use: `CI` counts as set unless it is unset, empty, `0`, or `false` in any letter case. `@crustjs/extensions` now imports it instead of keeping its own copy; behavior is unchanged.
+- Updated dependencies [[`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520), [`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520), [`f33da63`](https://github.com/chenxin-yan/crust/commit/f33da63cfb00fda51e6011b8aa7beb081fc42ead), [`a01d6e9`](https://github.com/chenxin-yan/crust/commit/a01d6e99886183a5dd52ec13712d5ba4fdcf353e), [`224c684`](https://github.com/chenxin-yan/crust/commit/224c684dfc59be282a1ef4319ade4c017b62283b), [`a02319d`](https://github.com/chenxin-yan/crust/commit/a02319d5fcfe494e707e795da269816e13772bf2), [`a36c855`](https://github.com/chenxin-yan/crust/commit/a36c855a4448a0878928c67d64f2540f2148b39c), [`edb6671`](https://github.com/chenxin-yan/crust/commit/edb66715c2462bdc11a6032054dc759eb48ceb5b), [`829a63e`](https://github.com/chenxin-yan/crust/commit/829a63ecbd719d51d784584eec40fedc5dd1a670)]:
+  - @crustjs/core@0.7.0
+  - @crustjs/utils@0.4.0
+  - @crustjs/store@0.6.0
+  - @crustjs/prompts@0.3.2
+
 ## 0.6.1
 
 ### Patch Changes

@@ -1,5 +1,60 @@
 # @crustjs/skills
 
+## 0.7.0
+
+### Minor Changes
+
+- [#707](https://github.com/chenxin-yan/crust/pull/707) [`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `artifactPath(path)` replaces `resolveArtifactDir(name)` and accepts a path below a shipped directory, so files shipped with your CLI no longer need a `join`.
+  
+  ```ts
+  import { artifactPath } from "@crustjs/core";
+  
+  const template = artifactPath("templates/base");
+  const schema = readFileSync(artifactPath("data/schema.json"), "utf8");
+  ```
+  
+  The path starts with an Extension artifact or `crust.include` directory name. An absolute path, an empty, `.`, or `..` segment, or a segment starting with a drive such as `D:` throws.
+  
+  `loadPackagedSkills()` reads the skills shipped with the CLI when called without a directory.
+  
+  **Behavior change:** `resolveArtifactDir()` is removed from `@crustjs/core`. Rename each call to `artifactPath()`; a single directory name works as before.
+
+- [#707](https://github.com/chenxin-yan/crust/pull/707) [`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Paths now follow one rule everywhere: a relative path resolves against the place it was written.
+  
+  - A path the user types resolves against the working directory, with a leading `~` as the home directory. That now covers `create-crust [directory]` and its prompt, `completion --output-dir`, `--input @path`, and `api --body @path`, so `--output-dir=~/completions` and `--input @~/args.json` work where they used to name a directory called `~`.
+  - `type: "path"` also expands `~\` on Windows.
+  - A path passed in code resolves against the working directory, as Node's `fs` does.
+  
+  **Behavior change:** in `@crustjs/skills`, a relative `sourceDir` (`installSkill()`, `getSkillStatus()`) or `extras` entry (`skill()`, `writeSkills()`) resolves against the working directory. It used to resolve against the nearest `package.json` above the CLI's entry file, which depended on how the CLI was distributed. During `crust build` the working directory is the project root, so `skill({ extras })` is unaffected there. Elsewhere, pass a path under `artifactPath()`, an absolute path, or a `file:` URL.
+  
+  **Behavior change:** in `@crustjs/create`, a `command` step's relative `cwd` resolves against the directory passed to `runSteps()`, where it used to resolve against the process working directory. `scaffold()` rejects an empty `template`, and a `template` URL that is not `file:` fails with `Path URL must use the file: protocol`.
+  
+  **Behavior change:** the `create-crust` prompt accepts the same directory paths as the positional argument, including `:` and `\`, so a Windows path such as `C:\projects\my-cli` can be typed. Only the basename is checked.
+  
+  **Behavior change:** `resolveSourceDir()` is removed from `@crustjs/utils/source`. Use `resolvePathLike()` from `@crustjs/utils/path`.
+
+- [#678](https://github.com/chenxin-yan/crust/pull/678) [`6748e68`](https://github.com/chenxin-yan/crust/commit/6748e683e31ccd038227de9fcaa7d092e8d86a7c) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - A link now counts as linked when it leads to this copy's skill directory through another link, as in the `.claude/skills/<name>` → `.agents/skills/<name>` layout that `npx skills` writes: real paths are compared, so `skills repair` and `skills install` leave such a link as it is.
+  
+  The agent list is now generated from the registry of the `skills` package (1.8.1): 78 agents instead of 37. Removed: `xum`. Added: `aider-desk`, `antigravity-cli`, `astrbot`, `autohand-code`, `bob`, `codearts-agent`, `codemaker`, `codestudio`, `continue`, `deepagents`, `dexto`, `eve`, `firebender`, `forgecode`, `fx`, `grok`, `hermes-agent`, `iflow-cli`, `inference-sh`, `jazz`, `kimchi`, `lingma`, `loaf`, `mcpjam`, `minimax-code`, `moxby`, `mux`, `neovate`, `ona`, `posit-assistant`, `promptscript`, `qoder-cn`, `reasonix`, `roo`, `rovodev`, `sarvam-code`, `tabnine-cli`, `terramind`, `tinycloud`, `windsurf`, `zcode`, and `zenflow`. Directories follow upstream, so some agents moved: amp, augment, command-code, crush, cursor, devin, droid, gemini-cli, github-copilot, goose, junie, kilo, mistral-vibe, opencode, openclaw, openhands, pochi, qwen-code, replit, and zencoder are no longer Universal because they use their own directory in at least one scope. `AgentTarget` is the generated id union. Agents without a global skills directory (eve, promptscript) are offered only at project scope, and naming one at global scope is an error. The environment variables upstream honors for a global directory are recorded in the generated table (`CLAUDE_CONFIG_DIR`, `XDG_CONFIG_HOME`, `GROK_HOME`, and others): values are trimmed, a blank value is ignored, and a relative value resolves against the working directory; upstream differs only for a padded or blank `XDG_CONFIG_HOME`. Per-platform paths are not carried.
+  
+  Agents are no longer detected through a `PATH` lookup. An additional agent counts as installed when the folder containing its global skills directory exists, such as `~/.claude` for `~/.claude/skills`; project folders, the home directory itself, and the shared `~/.agents` do not count.
+  
+  The Extension no longer registers its build hook inside a bundle that `crust build` produces, so a CLI built with Crust no longer ships the skill renderer: a one-command CLI with `skill({})` bundles about 11 KB smaller.
+  
+  `skills install` (and bare `skills`) accepts `--agent <id>` and `--skill <name>`, both repeatable, and `skills uninstall` accepts `--skill <name>`. There is no Universal choice: the shared folder is always linked. Each flag answers its prompt; whatever is left is still asked. With `--agent`, a directory the skill does not own is skipped with a warning instead of a confirmation. An unknown agent or skill, or `--all` together with `--agent` or `--skill`, is a usage error.
+  
+  Skills now use one shared link per scope, the layout `npx skills` writes. Only `.agents/skills/<name>` (or `~/.agents/skills/<name>`) points at the packaged skill; an agent with its own skills folder gets a link to that shared link, and an agent that reads `.agents/skills` needs nothing else. `skills install` always links the shared folder, its agent prompt lists only agents that need their own link (and is skipped when there are none), and a shared path the skill does not own means no agent link for that skill. Before each command, only a broken shared link is repaired, silently; nothing is printed for a shared link held by another installed copy or for a conflict at the shared path, which are left to `skills repair`. Agent links point at the shared link, which does not move, so they are not inspected. `skills repair` also re-points owned agent links that do not lead to this copy so that they target the shared link; an existing agent link that points straight at the packaged skill still leads to this copy, so it keeps working and is left as it is. `skills uninstall` removes the shared link and the agent links.
+  
+  Type changes: `InstallSkillResult` has a `shared` entry (the new `SharedLinkResult`); `SkillConflictDetails.agent` is optional and absent for a conflict at the shared link; `InstallSkillOptions.agents` defaults to the detected agents, since the shared folder is always linked; `InstallSkillOptions.force` also takes a list of paths, which overwrites only conflicts at those paths (an approval in `skills install` now covers only the path it named); `uninstallSkill()` with `agents` removes only those agents' own links and keeps the shared link, which only a call without `agents` removes. `installSkill()` writes nothing when an agent has no directory at the requested scope.
+
+### Patch Changes
+
+- Updated dependencies [[`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520), [`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520), [`f33da63`](https://github.com/chenxin-yan/crust/commit/f33da63cfb00fda51e6011b8aa7beb081fc42ead), [`a01d6e9`](https://github.com/chenxin-yan/crust/commit/a01d6e99886183a5dd52ec13712d5ba4fdcf353e), [`224c684`](https://github.com/chenxin-yan/crust/commit/224c684dfc59be282a1ef4319ade4c017b62283b), [`edb6671`](https://github.com/chenxin-yan/crust/commit/edb66715c2462bdc11a6032054dc759eb48ceb5b), [`829a63e`](https://github.com/chenxin-yan/crust/commit/829a63ecbd719d51d784584eec40fedc5dd1a670)]:
+  - @crustjs/core@0.7.0
+  - @crustjs/utils@0.4.0
+  - @crustjs/progress@0.2.2
+  - @crustjs/prompts@0.3.2
+
 ## 0.6.1
 
 ### Patch Changes

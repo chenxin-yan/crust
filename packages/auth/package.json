@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/auth",
-	"version": "0.0.0",
+	"version": "0.1.0",
 	"description": "OAuth sign-in for CLIs: browser and device-code login, plus the OAuth building blocks",
 	"type": "module",
 	"sideEffects": false,

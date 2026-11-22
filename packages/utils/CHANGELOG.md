@@ -1,5 +1,42 @@
 # @crustjs/utils
 
+## 0.4.0
+
+### Minor Changes
+
+- [#707](https://github.com/chenxin-yan/crust/pull/707) [`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `artifactPath(path)` replaces `resolveArtifactDir(name)` and accepts a path below a shipped directory, so files shipped with your CLI no longer need a `join`.
+  
+  ```ts
+  import { artifactPath } from "@crustjs/core";
+  
+  const template = artifactPath("templates/base");
+  const schema = readFileSync(artifactPath("data/schema.json"), "utf8");
+  ```
+  
+  The path starts with an Extension artifact or `crust.include` directory name. An absolute path, an empty, `.`, or `..` segment, or a segment starting with a drive such as `D:` throws.
+  
+  `loadPackagedSkills()` reads the skills shipped with the CLI when called without a directory.
+  
+  **Behavior change:** `resolveArtifactDir()` is removed from `@crustjs/core`. Rename each call to `artifactPath()`; a single directory name works as before.
+
+- [#707](https://github.com/chenxin-yan/crust/pull/707) [`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Paths now follow one rule everywhere: a relative path resolves against the place it was written.
+  
+  - A path the user types resolves against the working directory, with a leading `~` as the home directory. That now covers `create-crust [directory]` and its prompt, `completion --output-dir`, `--input @path`, and `api --body @path`, so `--output-dir=~/completions` and `--input @~/args.json` work where they used to name a directory called `~`.
+  - `type: "path"` also expands `~\` on Windows.
+  - A path passed in code resolves against the working directory, as Node's `fs` does.
+  
+  **Behavior change:** in `@crustjs/skills`, a relative `sourceDir` (`installSkill()`, `getSkillStatus()`) or `extras` entry (`skill()`, `writeSkills()`) resolves against the working directory. It used to resolve against the nearest `package.json` above the CLI's entry file, which depended on how the CLI was distributed. During `crust build` the working directory is the project root, so `skill({ extras })` is unaffected there. Elsewhere, pass a path under `artifactPath()`, an absolute path, or a `file:` URL.
+  
+  **Behavior change:** in `@crustjs/create`, a `command` step's relative `cwd` resolves against the directory passed to `runSteps()`, where it used to resolve against the process working directory. `scaffold()` rejects an empty `template`, and a `template` URL that is not `file:` fails with `Path URL must use the file: protocol`.
+  
+  **Behavior change:** the `create-crust` prompt accepts the same directory paths as the positional argument, including `:` and `\`, so a Windows path such as `C:\projects\my-cli` can be typed. Only the basename is checked.
+  
+  **Behavior change:** `resolveSourceDir()` is removed from `@crustjs/utils/source`. Use `resolvePathLike()` from `@crustjs/utils/path`.
+
+- [#676](https://github.com/chenxin-yan/crust/pull/676) [`edb6671`](https://github.com/chenxin-yan/crust/commit/edb66715c2462bdc11a6032054dc759eb48ceb5b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `@crustjs/utils/terminal` exports `isCI(env = process.env)`, the rule `confirm()` and `updateNotifier()` use: `CI` counts as set unless it is unset, empty, `0`, or `false` in any letter case. `@crustjs/extensions` now imports it instead of keeping its own copy; behavior is unchanged.
+
+- [#688](https://github.com/chenxin-yan/crust/pull/688) [`829a63e`](https://github.com/chenxin-yan/crust/commit/829a63ecbd719d51d784584eec40fedc5dd1a670) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `@crustjs/utils/search` exports `createSearchIndex(items)`, the word ranking behind `search()` in `@crustjs/extensions` and `search_tools` in `@crustjs/mcp`. Each item gives its texts in three weight classes (`names`, `descriptions`, `details`); the returned function takes a query and a limit and returns the indexes of the best matches, best first, ties in item order, and none for a limit below 1. A word counts more the fewer items it matches, and a match counts more in a short field than in a long one. `commandSearchItem(path, command)` builds the item of a command from its path, name, aliases, description, arguments, and the flags no Extension declares.
+
 ## 0.3.1
 
 ### Patch Changes

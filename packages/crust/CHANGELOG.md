@@ -1,5 +1,32 @@
 # @crustjs/crust
 
+## 0.7.0
+
+### Minor Changes
+
+- [#694](https://github.com/chenxin-yan/crust/pull/694) [`653f8f5`](https://github.com/chenxin-yan/crust/commit/653f8f5f01323e56cb48351479c467458db716a5) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `crust build` keeps one copy of a build artifact that several bins write at the same path with the same bytes, such as the data files of one API they share. Different bytes at the same path still fail the build, naming both bins.
+
+### Patch Changes
+
+- [#707](https://github.com/chenxin-yan/crust/pull/707) [`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Paths now follow one rule everywhere: a relative path resolves against the place it was written.
+  
+  - A path the user types resolves against the working directory, with a leading `~` as the home directory. That now covers `create-crust [directory]` and its prompt, `completion --output-dir`, `--input @path`, and `api --body @path`, so `--output-dir=~/completions` and `--input @~/args.json` work where they used to name a directory called `~`.
+  - `type: "path"` also expands `~\` on Windows.
+  - A path passed in code resolves against the working directory, as Node's `fs` does.
+  
+  **Behavior change:** in `@crustjs/skills`, a relative `sourceDir` (`installSkill()`, `getSkillStatus()`) or `extras` entry (`skill()`, `writeSkills()`) resolves against the working directory. It used to resolve against the nearest `package.json` above the CLI's entry file, which depended on how the CLI was distributed. During `crust build` the working directory is the project root, so `skill({ extras })` is unaffected there. Elsewhere, pass a path under `artifactPath()`, an absolute path, or a `file:` URL.
+  
+  **Behavior change:** in `@crustjs/create`, a `command` step's relative `cwd` resolves against the directory passed to `runSteps()`, where it used to resolve against the process working directory. `scaffold()` rejects an empty `template`, and a `template` URL that is not `file:` fails with `Path URL must use the file: protocol`.
+  
+  **Behavior change:** the `create-crust` prompt accepts the same directory paths as the positional argument, including `:` and `\`, so a Windows path such as `C:\projects\my-cli` can be typed. Only the basename is checked.
+  
+  **Behavior change:** `resolveSourceDir()` is removed from `@crustjs/utils/source`. Use `resolvePathLike()` from `@crustjs/utils/path`.
+
+- [#708](https://github.com/chenxin-yan/crust/pull/708) [`eee5648`](https://github.com/chenxin-yan/crust/commit/eee5648ebd33769c091dad20813ce51a05495b6a) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Update the bundled Node executable backend to `tsdown` and `@tsdown/exe` 0.23.7.
+- Updated dependencies [[`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520), [`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520), [`f33da63`](https://github.com/chenxin-yan/crust/commit/f33da63cfb00fda51e6011b8aa7beb081fc42ead), [`a01d6e9`](https://github.com/chenxin-yan/crust/commit/a01d6e99886183a5dd52ec13712d5ba4fdcf353e), [`224c684`](https://github.com/chenxin-yan/crust/commit/224c684dfc59be282a1ef4319ade4c017b62283b), [`829a63e`](https://github.com/chenxin-yan/crust/commit/829a63ecbd719d51d784584eec40fedc5dd1a670), [`4110194`](https://github.com/chenxin-yan/crust/commit/4110194d4602bf6cf457cb4fa0a52f5fee87d3b6), [`edb6671`](https://github.com/chenxin-yan/crust/commit/edb66715c2462bdc11a6032054dc759eb48ceb5b)]:
+  - @crustjs/core@0.7.0
+  - @crustjs/extensions@0.7.0
+
 ## 0.6.1
 
 ### Patch Changes

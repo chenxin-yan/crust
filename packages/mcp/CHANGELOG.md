@@ -1,5 +1,17 @@
 # @crustjs/mcp
 
+## 0.3.0
+
+### Minor Changes
+
+- [#688](https://github.com/chenxin-yan/crust/pull/688) [`829a63e`](https://github.com/chenxin-yan/crust/commit/829a63ecbd719d51d784584eec40fedc5dd1a670) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `discovery: "progressive"` (on `mcpExtension()`, `serveStdio()`, and `createMcpServer()`, typed `McpServerOptions`; `toolsFromSnapshot()` does not take it) makes `tools/list` return three fixed tools instead of one per command: `search_tools({ query, limit? })` returns the best-matching tools' names and descriptions (command names, then descriptions, then argument and flag names by descending base weight, all else equal, with words most tools share weighing least), `get_tool_details({ name })` returns one tool as `tools/list` would list it, and `call_tool({ name, arguments? })` calls it with the same result as `tools/call`. The default, `"direct"`, is unchanged. Unknown, hidden, excluded, and unincluded Extension tool names stay `InvalidParams` protocol errors.
+
+### Patch Changes
+
+- Updated dependencies [[`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520), [`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520), [`f33da63`](https://github.com/chenxin-yan/crust/commit/f33da63cfb00fda51e6011b8aa7beb081fc42ead), [`a01d6e9`](https://github.com/chenxin-yan/crust/commit/a01d6e99886183a5dd52ec13712d5ba4fdcf353e), [`224c684`](https://github.com/chenxin-yan/crust/commit/224c684dfc59be282a1ef4319ade4c017b62283b), [`edb6671`](https://github.com/chenxin-yan/crust/commit/edb66715c2462bdc11a6032054dc759eb48ceb5b), [`829a63e`](https://github.com/chenxin-yan/crust/commit/829a63ecbd719d51d784584eec40fedc5dd1a670)]:
+  - @crustjs/core@0.7.0
+  - @crustjs/utils@0.4.0
+
 ## 0.2.1
 
 ### Patch Changes

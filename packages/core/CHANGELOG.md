@@ -1,5 +1,48 @@
 # @crustjs/core
 
+## 0.7.0
+
+### Minor Changes
+
+- [#707](https://github.com/chenxin-yan/crust/pull/707) [`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `artifactPath(path)` replaces `resolveArtifactDir(name)` and accepts a path below a shipped directory, so files shipped with your CLI no longer need a `join`.
+  
+  ```ts
+  import { artifactPath } from "@crustjs/core";
+  
+  const template = artifactPath("templates/base");
+  const schema = readFileSync(artifactPath("data/schema.json"), "utf8");
+  ```
+  
+  The path starts with an Extension artifact or `crust.include` directory name. An absolute path, an empty, `.`, or `..` segment, or a segment starting with a drive such as `D:` throws.
+  
+  `loadPackagedSkills()` reads the skills shipped with the CLI when called without a directory.
+  
+  **Behavior change:** `resolveArtifactDir()` is removed from `@crustjs/core`. Rename each call to `artifactPath()`; a single directory name works as before.
+
+- [#695](https://github.com/chenxin-yan/crust/pull/695) [`f33da63`](https://github.com/chenxin-yan/crust/commit/f33da63cfb00fda51e6011b8aa7beb081fc42ead) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Extension hooks can parse argv for another command. `await ctx.parseCommandArgv(["my-cli", "db", "migrate"], ["--to", "3"])` resolves to the command's canonical `path` and the `args`, `flags`, and `rawArgs` its action would receive (argv, environment fallbacks, defaults, required checks, and Standard Schemas), without running any hook, Context setup, or action, and building only the commands on the path; a new `ParsedCommandArgv` type is exported.
+
+- [#677](https://github.com/chenxin-yan/crust/pull/677) [`a01d6e9`](https://github.com/chenxin-yan/crust/commit/a01d6e99886183a5dd52ec13712d5ba4fdcf353e) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Flags can take a structured value checked by a schema. `body: { type: "json", schema: z.object({ name: z.string() }) }` parses `--body '{"name":"ada"}'` (or its `env` value) as JSON and hands the schema the parsed value; `run()`, `--input`, and MCP pass the JSON value itself, and anything that is not JSON data (a `Date`, a bigint, a `URL`) is a `PARSE` error. `ctx.flags.body` is the schema's output, typed `run()` input takes the schema's input, and a schema issue is a `VALIDATION` error naming the flag. The schema's input JSON Schema becomes the flag's command input property (`CommandInputPropertySchema` now types any JSON Schema `type` and `enum`), so the `schema` command and MCP `tools/list` show the shape and an agent sends an object. The schema's input must accept JSON data: `z.date()` or `z.bigint()` on a `json` flag is a TypeScript error (`FIX_SCHEMA_INPUT`). A `json` schema flag takes one value; `multiple` is not supported.
+
+### Patch Changes
+
+- [#707](https://github.com/chenxin-yan/crust/pull/707) [`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Paths now follow one rule everywhere: a relative path resolves against the place it was written.
+  
+  - A path the user types resolves against the working directory, with a leading `~` as the home directory. That now covers `create-crust [directory]` and its prompt, `completion --output-dir`, `--input @path`, and `api --body @path`, so `--output-dir=~/completions` and `--input @~/args.json` work where they used to name a directory called `~`.
+  - `type: "path"` also expands `~\` on Windows.
+  - A path passed in code resolves against the working directory, as Node's `fs` does.
+  
+  **Behavior change:** in `@crustjs/skills`, a relative `sourceDir` (`installSkill()`, `getSkillStatus()`) or `extras` entry (`skill()`, `writeSkills()`) resolves against the working directory. It used to resolve against the nearest `package.json` above the CLI's entry file, which depended on how the CLI was distributed. During `crust build` the working directory is the project root, so `skill({ extras })` is unaffected there. Elsewhere, pass a path under `artifactPath()`, an absolute path, or a `file:` URL.
+  
+  **Behavior change:** in `@crustjs/create`, a `command` step's relative `cwd` resolves against the directory passed to `runSteps()`, where it used to resolve against the process working directory. `scaffold()` rejects an empty `template`, and a `template` URL that is not `file:` fails with `Path URL must use the file: protocol`.
+  
+  **Behavior change:** the `create-crust` prompt accepts the same directory paths as the positional argument, including `:` and `\`, so a Windows path such as `C:\projects\my-cli` can be typed. Only the basename is checked.
+  
+  **Behavior change:** `resolveSourceDir()` is removed from `@crustjs/utils/source`. Use `resolvePathLike()` from `@crustjs/utils/path`.
+
+- [#693](https://github.com/chenxin-yan/crust/pull/693) [`224c684`](https://github.com/chenxin-yan/crust/commit/224c684dfc59be282a1ef4319ade4c017b62283b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Export the `UseSource` and `UsedContexts` types: what a command's `.use()` accepts, and the Contexts such a call adds to `ctx`, for a library whose own `.use()` forwards to a command's.
+- Updated dependencies [[`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520), [`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520), [`edb6671`](https://github.com/chenxin-yan/crust/commit/edb66715c2462bdc11a6032054dc759eb48ceb5b), [`829a63e`](https://github.com/chenxin-yan/crust/commit/829a63ecbd719d51d784584eec40fedc5dd1a670)]:
+  - @crustjs/utils@0.4.0
+
 ## 0.6.1
 
 ### Patch Changes
