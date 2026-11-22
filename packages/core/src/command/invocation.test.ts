@@ -186,7 +186,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 				return [{ path: "generated-source/marker.txt", content: "ready" }];
 			}),
 			defineExtension(defineExtensionId("consumer"))
-				// Reads the earlier hook's file from disk, like skills reading resolveArtifactDir("skills").
+				// Reads the earlier hook's file from disk, like skills reading artifactPath("skills").
 				.sections(() => [
 					{
 						command: [],

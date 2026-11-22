@@ -196,7 +196,7 @@ async function previewBody(value: string): Promise<string> {
 		);
 	}
 	if (!value.startsWith("@")) return value;
-	const file = value.slice(1);
+	const file = (await import("@crustjs/utils/path")).expandHome(value.slice(1));
 	const fs = process.getBuiltinModule("node:fs");
 	let fd: number;
 	try {

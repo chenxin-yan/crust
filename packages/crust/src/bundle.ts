@@ -30,7 +30,7 @@ export function resolveBunPluginSource(specifier: string, cwd: string): string {
 }
 
 /**
- * Marks every Bun/Node bundle crust produces so `resolveArtifactDir` (core)
+ * Marks every Bun/Node bundle crust produces so `artifactPath` (core)
  * can tell a staged bundle from source at runtime. Not a `PUBLIC_*` variable:
  * it is internal to crust, never user-set.
  */

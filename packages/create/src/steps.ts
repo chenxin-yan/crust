@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { resolve as resolvePath } from "node:path";
 
 import { runProcess, which } from "@crustjs/utils/process";
 import { getTerminalSignal, writeProcessOutput } from "@crustjs/utils/terminal";
@@ -19,7 +20,8 @@ import type { PostScaffoldStep, RunStepsOptions } from "./types.ts";
  * the error propagates immediately (remaining steps are skipped).
  *
  * @param steps - Array of {@link PostScaffoldStep} objects to execute.
- * @param cwd - The working directory for steps (typically the scaffold dest).
+ * @param cwd - The working directory for steps (typically the scaffold dest). A relative path
+ *   resolves against the process working directory.
  * @param options - Where non-fatal warnings go and what cancels the steps; see {@link RunStepsOptions}.
  * @throws `signal.reason` when the signal aborts, after the running child exits or, 5 seconds
  *   later, is killed.
@@ -43,20 +45,21 @@ export async function runSteps(
 ): Promise<void> {
 	const stderr = options.stderr ?? ((text) => writeProcessOutput(2, `${text}\n`));
 	const signal = options.signal ?? getTerminalSignal();
+	const root = resolvePath(cwd);
 	for (const step of steps) {
 		signal?.throwIfAborted();
 		switch (step.type) {
 			case "install":
-				await runInstall(cwd, signal);
+				await runInstall(root, signal);
 				break;
 			case "git-init":
-				await runGitInit(cwd, step.commit, signal);
+				await runGitInit(root, step.commit, signal);
 				break;
 			case "open-editor":
-				await runOpenEditor(cwd, stderr);
+				await runOpenEditor(root, stderr);
 				break;
 			case "command":
-				await runCommand(step.cmd, step.cwd ?? cwd, signal);
+				await runCommand(step.cmd, step.cwd ? resolvePath(root, step.cwd) : root, signal);
 				break;
 		}
 	}

@@ -145,11 +145,11 @@ describe("runSteps", () => {
 	// ────────────────────────────────────────────────────────────────────────────
 
 	describe("command step", () => {
-		it("uses the provided cwd for the command", async () => {
+		it("resolves a relative command cwd against the runSteps directory", async () => {
 			const subDir = join(tempDir, "subdir");
 			mkdirSync(subDir);
 
-			await runSteps([{ type: "command", cmd: "echo test > file.txt", cwd: subDir }], tempDir);
+			await runSteps([{ type: "command", cmd: "echo test > file.txt", cwd: "subdir" }], tempDir);
 
 			// File should be in subDir, not tempDir
 			expect(existsSync(join(subDir, "file.txt"))).toBe(true);

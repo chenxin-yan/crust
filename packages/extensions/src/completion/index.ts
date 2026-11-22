@@ -66,7 +66,7 @@ export type CompletionCommandDefinition<Name extends string = "completion"> = Co
 		],
 		{
 			readonly "output-dir": {
-				readonly type: "string";
+				readonly type: "path";
 				readonly description: typeof OUTPUT_DIR_DESCRIPTION;
 			};
 		},
@@ -154,7 +154,7 @@ const completionFactory: ExtensionFactory<
 				})
 				.flags({
 					"output-dir": {
-						type: "string",
+						type: "path",
 						description: OUTPUT_DIR_DESCRIPTION,
 					},
 				})

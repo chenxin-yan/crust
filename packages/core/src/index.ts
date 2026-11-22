@@ -83,7 +83,7 @@ export type {
 } from "./errors.ts";
 export { CrustError } from "./errors.ts";
 // Runtime artifact resolution
-export { resolveArtifactDir } from "@crustjs/utils/artifacts";
+export { artifactPath } from "@crustjs/utils/artifacts";
 // Core types
 export type {
 	ArgDef,

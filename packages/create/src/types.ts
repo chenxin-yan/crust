@@ -19,13 +19,15 @@ export interface ScaffoldOptions {
 	/**
 	 * Template directory source.
 	 *
-	 * - `URL`: `file:` URL. Use `new URL("../templates/base", import.meta.url)` for
-	 *   templates shipped inside the generator package; the module URL anchors the path.
-	 * - `string`: filesystem path resolved from the current working directory, like `dest`
+	 * - `string`: filesystem path; a relative one resolves against the working directory, like
+	 *   `dest`. For templates shipped with a CLI built by `crust build`, pass
+	 *   `artifactPath("templates/base")`.
+	 * - `URL`: `file:` URL, such as `new URL("../templates/base", import.meta.url)` in a package
+	 *   that is published unbundled.
 	 */
 	readonly template: string | URL;
 
-	/** Absolute or relative path to the destination directory. */
+	/** Destination directory. A relative path resolves against the working directory. */
 	readonly dest: string;
 
 	/**
@@ -93,7 +95,8 @@ export type PostScaffoldStep =
 	/**
 	 * Run a command string through the platform shell (`/bin/sh` on POSIX,
 	 * `cmd.exe` on Windows). Shell syntax such as redirection follows the
-	 * host shell's semantics, which differ across platforms.
+	 * host shell's semantics, which differ across platforms. A relative `cwd`
+	 * resolves against the `runSteps` directory.
 	 */
 	| { readonly type: "command"; readonly cmd: string; readonly cwd?: string };
 

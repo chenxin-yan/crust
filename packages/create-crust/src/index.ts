@@ -1,13 +1,15 @@
 import { existsSync, readdirSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, relative } from "node:path";
 
-import { Crust, resolveArtifactDir } from "@crustjs/core";
+import { Crust, artifactPath } from "@crustjs/core";
 import { INSTALLED_COMMAND_NAME_RULE, isInstalledCommandName } from "@crustjs/core/tooling";
 import { detectPackageManager, isInGitRepo, runSteps, scaffold } from "@crustjs/create";
 import type { BuildOptions } from "@crustjs/crust";
 import { help, version } from "@crustjs/extensions";
 import { spinner } from "@crustjs/progress";
 import { confirm, input, select } from "@crustjs/prompts";
+import { resolveUserPath } from "@crustjs/utils/path";
+import { shellQuote } from "@crustjs/utils/process";
 import { Eta } from "eta/core";
 
 import corePkg from "../../core/package.json" with { type: "json" };
@@ -46,17 +48,12 @@ function validateProjectName(name: string): void {
 	}
 }
 
-// The prompt accepts a directory path, so parent segments only need to be
-// path-safe; the basename must also pass the project-name check.
-const INVALID_PATH_CHARS = /[<>:"|?*\\]/;
+// The prompt accepts a directory path like the positional; only its basename is checked.
 function validateProjectDirectory(path: string): void {
 	if (!path) {
 		throw new Error("Project directory cannot be empty");
 	}
-	if (INVALID_PATH_CHARS.test(path)) {
-		throw new Error(`Project directory contains invalid characters: ${path}`);
-	}
-	validateProjectName(basename(resolve(path)));
+	validateProjectName(basename(resolveUserPath(path)));
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -94,22 +91,22 @@ export const app = new Crust("create-crust", {
 	})
 	.args({
 		name: "directory",
-		type: "string",
+		type: "path",
 		description: "Project directory to scaffold into",
 	})
 	.action(async ({ args, flags, stdout, stderr }) => {
 		// ── Collect all prompts before any file operations ──────────────
 		// This ensures a mid-prompt Ctrl+C won't leave partially scaffolded files.
 
-		const targetDir =
+		const resolvedDir =
 			args.directory ??
-			(await input({
-				message: "Project directory",
-				default: "my-cli",
-				validate: validateProjectDirectory,
-			}));
-
-		const resolvedDir = resolve(process.cwd(), targetDir);
+			resolveUserPath(
+				await input({
+					message: "Project directory",
+					default: "my-cli",
+					validate: validateProjectDirectory,
+				}),
+			);
 		const isCwd = resolvedDir === process.cwd();
 		const name = basename(resolvedDir);
 		validateProjectName(name);
@@ -213,7 +210,7 @@ export const app = new Crust("create-crust", {
 			task: () =>
 				scaffold({
 					// `templates` is a crust.include directory staged next to this bundle.
-					template: join(resolveArtifactDir("templates"), "base"),
+					template: artifactPath("templates/base"),
 					dest: resolvedDir,
 					context,
 					render: (source, data) => eta.renderString(source, data),
@@ -238,9 +235,12 @@ export const app = new Crust("create-crust", {
 		stdout(`\nCreated ${name}!\n`);
 		stdout("Next steps:");
 		if (!isCwd) {
-			const cdTarget =
-				isAbsolute(targetDir) || targetDir.startsWith(".") ? targetDir : `./${targetDir}`;
-			stdout(`  cd ${cdTarget}`);
+			const fromCwd = relative(process.cwd(), resolvedDir);
+			const outsideCwd = isAbsolute(fromCwd) || fromCwd.startsWith("..");
+			const target = outsideCwd ? resolvedDir : `./${fromCwd}`;
+			// cmd.exe has no single quotes; a Windows path cannot contain a double quote.
+			const word = process.platform === "win32" ? `"${target}"` : shellQuote(target);
+			stdout(`  cd ${word}`);
 		}
 		if (!installDeps) stdout(`  ${context.install}`);
 		stdout(`  ${context.run} dev`);

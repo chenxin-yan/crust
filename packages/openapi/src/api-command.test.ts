@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { type RequestListener, createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -10,7 +10,7 @@ import { pathToFileURL } from "node:url";
 import { Crust, CrustError, defineCommand } from "@crustjs/core";
 import { json } from "@crustjs/extensions";
 import { captureExecute } from "@crustjs/testing";
-import { resolveArtifactDir } from "@crustjs/utils/artifacts";
+import { artifactPath } from "@crustjs/utils/artifacts";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { runBuildHooks } from "../../crust/tests/build-hooks.ts";
@@ -381,7 +381,7 @@ describe("the spec", () => {
 	it("fails in a built CLI whose data directory is missing, naming it and the fix", async () => {
 		vi.stubEnv("CRUST_INTERNAL_BUILD", "1");
 		try {
-			const dir = resolveArtifactDir("acme-not-built");
+			const dir = artifactPath("acme-not-built");
 			const { stderr, exitCode } = await captureExecute(
 				buildApp({ spec: pathToFileURL(writeSpec()), id: "acme-not-built" }),
 				["api", "--list"],
@@ -415,7 +415,7 @@ describe("the spec", () => {
 		expect(await runBuildHooks(buildApp({ spec: url, id: "a/b" }))).toEqual({
 			files: new Map(),
 			error:
-				'Extension "crust:openapi" build failed: Artifact name must be a single directory name, got "a/b".',
+				'Extension "crust:openapi" build failed: `id` must be a single directory name, got "a/b".',
 		});
 	});
 });
@@ -506,12 +506,43 @@ describe("api <path>", () => {
 	});
 
 	it("reads --body @file", async () => {
-		const file = join(mkdtempSync(join(tmpdir(), "crust-openapi-")), "body.json");
+		const dir = mkdtempSync(join(tmpdir(), "crust-openapi-"));
+		const file = join(dir, "body.json");
 		writeFileSync(file, '{"name":"grace"}');
 		const calls = stubFetch();
 		await captureExecute(buildApp(), ["api", "/users", "-X", "PUT", "--body", `@${file}`]);
 
 		expect(calls[0]).toMatchObject({ method: "PUT", body: '{"name":"grace"}' });
+
+		// `~` is the home directory. POSIX walks `..` through the symlink; Windows collapses it first.
+		const posix = process.platform !== "win32";
+		const name = posix ? "ada" : "grace";
+		mkdirSync(join(dir, "releases", "current"), { recursive: true });
+		if (posix) symlinkSync(join(dir, "releases", "current"), join(dir, "active"));
+		writeFileSync(join(dir, "releases", "body.json"), '{"name":"ada"}');
+		vi.stubEnv("HOME", dir);
+		vi.stubEnv("USERPROFILE", dir);
+		try {
+			await captureExecute(buildApp(), [
+				"api",
+				"/users",
+				"-X",
+				"PUT",
+				"--body",
+				"@~/active/../body.json",
+			]);
+			const preview = await captureExecute(buildApp(), [
+				"api",
+				"preview",
+				"/users",
+				"--body",
+				"@~/active/../body.json",
+			]);
+			expect(JSON.parse(preview.stdout)).toMatchObject({ body: { name } });
+		} finally {
+			vi.unstubAllEnvs();
+		}
+		expect(calls[1]).toMatchObject({ method: "PUT", body: `{"name":"${name}"}` });
 	});
 
 	it("prints a non-2xx body to stdout and a summary to stderr with exit code 1", async () => {

@@ -14,7 +14,7 @@ export interface RenderedFile {
 
 /** Options for linking one packaged skill source into the shared folder and agent directories. */
 export interface InstallSkillOptions {
-	/** Package directory `skills/<name>` containing the skill's SKILL.md. */
+	/** Directory `skills/<name>` containing the skill's SKILL.md. A relative path resolves against the working directory. */
 	sourceDir: string | URL;
 	/** Agents to link besides the shared `.agents/skills` folder, which is always linked. Omit to use detected agents. */
 	agents?: readonly AgentTarget[];
@@ -71,7 +71,7 @@ export interface UninstallSkillResult {
 
 export interface SkillStatusOptions {
 	name: string;
-	/** Expected source used to identify stale-target links. */
+	/** Expected source used to identify stale-target links. A relative path resolves against the working directory. */
 	sourceDir: string | URL;
 	agents?: readonly AgentTarget[];
 	scope?: Scope;
@@ -90,10 +90,13 @@ export interface SkillStatusResult {
 
 /**
  * Options for the skills extension. Packaged skills are read at runtime from
- * `resolveArtifactDir("skills")` (`@crustjs/core`), the directory `crust build` stages.
+ * `artifactPath("skills")` (`@crustjs/core`), the directory `crust build` stages.
  */
 export interface SkillOptions {
-	/** Hand-authored skill directories (URL, absolute, or package-root-relative path) built alongside the generated skill. */
+	/**
+	 * Hand-authored skill directories built alongside the generated skill. A relative path resolves
+	 * against the working directory, which is the project root during `crust build`.
+	 */
 	extras?: readonly (string | URL)[];
 	/** Generated command skill name. Defaults to the root command name. */
 	name?: string;

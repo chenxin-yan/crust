@@ -16,7 +16,7 @@ import {
 } from "@crustjs/core";
 // @crustjs/prompts and @crustjs/progress load inside the `skills` command so other commands skip their import cost.
 import { bold, dim, yellow } from "@crustjs/style";
-import { isSourceRun, resolveArtifactDir } from "@crustjs/utils/artifacts";
+import { isSourceRun } from "@crustjs/utils/artifacts";
 import { isWithin } from "@crustjs/utils/path";
 
 import {
@@ -39,13 +39,17 @@ import {
 	uninstallSkill,
 } from "./install.ts";
 import { resolveEffectiveScope, sharedSkillsDir } from "./link.ts";
-import { SkillSourceUnavailableError, loadPackagedSkills, type PackagedSkill } from "./source.ts";
+import {
+	SKILLS_ARTIFACT,
+	SkillSourceUnavailableError,
+	loadPackagedSkills,
+	type PackagedSkill,
+} from "./source.ts";
 import type { SkillOptions, SkillStatusResult } from "./types.ts";
 
 const DEFAULT_SKILL_COMMAND_NAME = "skills";
 const SKILLS_SECTION_TITLE = "Agent skills";
 const DEFAULT_SKILL_SCOPE = "global";
-const SKILLS_ARTIFACT = "skills";
 const SHARED_LABEL = "Shared";
 
 type SkillIO = Pick<InvocationIO, "stdout" | "stderr">;
@@ -70,10 +74,6 @@ async function resolveScope(
 	});
 }
 
-function loadArtifactSkills(): readonly PackagedSkill[] {
-	return loadPackagedSkills(resolveArtifactDir(SKILLS_ARTIFACT));
-}
-
 function parseAgentFlag(values: readonly string[]): AgentTarget[] {
 	return [...new Set(values)].map((value) => {
 		const agent = ALL_AGENTS.find((id) => id === value);
@@ -88,7 +88,7 @@ function parseAgentFlag(values: readonly string[]): AgentTarget[] {
 
 /** Checks `--skill` values against the packaged skills. */
 function checkSkillFlag(names: readonly string[]): readonly string[] {
-	const skills = loadArtifactSkills().map((packagedSkill) => packagedSkill.name);
+	const skills = loadPackagedSkills().map((packagedSkill) => packagedSkill.name);
 	const unknown = names.find((name) => !skills.includes(name));
 	if (unknown !== undefined) {
 		throw new CrustError(
@@ -182,7 +182,7 @@ async function repairBrokenSharedLink(packagedSkill: PackagedSkill, scope: Scope
 async function autoRepairSkills(options: SkillOptions, io: SkillIO): Promise<void> {
 	let skills: readonly PackagedSkill[];
 	try {
-		skills = loadArtifactSkills();
+		skills = loadPackagedSkills();
 	} catch (error) {
 		// A missing or invalid packaged asset must not prevent unrelated CLI commands
 		// from running; the explicit skill command surfaces the same failure loudly.
@@ -218,7 +218,7 @@ async function autoRepairSkills(options: SkillOptions, io: SkillIO): Promise<voi
 
 function formatSkillDocumentation(commandName: string, appName: string): string {
 	try {
-		return loadArtifactSkills()
+		return loadPackagedSkills()
 			.map((packagedSkill) => {
 				// Relativizing across unrelated roots yields ../ chains that still spell
 				// out the absolute path; keep the absolute form when outside the cwd.
@@ -384,7 +384,7 @@ function installedAgents(statusMap: SkillStatusMap): AgentTarget[] {
 
 async function loadStatuses(scope: Scope): Promise<Map<PackagedSkill, SkillStatusMap>> {
 	const statuses = new Map<PackagedSkill, SkillStatusMap>();
-	for (const packagedSkill of loadArtifactSkills()) {
+	for (const packagedSkill of loadPackagedSkills()) {
 		const status = await getSkillStatus({
 			name: packagedSkill.name,
 			sourceDir: packagedSkill.sourceDir,
@@ -726,7 +726,7 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 					defineCommand("repair", { description: "Repair installed skill links" }, (sub) =>
 						sub.flags(SCOPE_FLAG).action(async (context) => {
 							const scope = await resolveScope(context.flags.scope, options);
-							for (const packagedSkill of loadArtifactSkills()) {
+							for (const packagedSkill of loadPackagedSkills()) {
 								await repairInstalledSkill(packagedSkill, scope, context);
 							}
 						}),

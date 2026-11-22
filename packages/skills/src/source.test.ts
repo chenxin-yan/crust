@@ -31,6 +31,7 @@ describe("packaged skill sources", () => {
 		const load = () => loadPackagedSkills(root);
 		expect(load).toThrow(SkillSourceUnavailableError);
 		expect(load).toThrow(`Packaged skills not found at "${root}". Run \`crust build\` first.`);
+		expect(() => loadPackagedSkills("")).toThrow("Path cannot be empty");
 	});
 
 	it("rejects empty, invalid, and mismatched skill sources", async () => {

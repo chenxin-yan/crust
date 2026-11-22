@@ -10,6 +10,16 @@
 
 Performance targets the shipped artifact (after `crust build` bundling or compilation); unbundled dev-mode startup is not an optimization goal.
 
+## Paths
+
+A relative path resolves against the place it was written. Resolve it once at the public boundary, pass absolute paths inward, and state the base in the option's JSDoc. Helpers, with the details in their JSDoc: `@crustjs/utils/path`.
+
+- End user (flag, positional, prompt, `@path`, Crust env var): working directory, `~` expanded. Use `type: "path"`, else `resolveUserPath` or `expandHome`.
+- Code (function option): working directory or the function's own `cwd`. Use `resolvePathLike` where a `URL` is accepted.
+- `package.json` field: project root, relative only, kept inside with `isWithin`.
+- Shipped with the CLI: `artifactPath("templates/base")`.
+- Persistent state (`createStore` `dirPath`, `XDG_*`): absolute only. Another tool's env var (`CLAUDE_CONFIG_DIR`): as that tool reads it.
+
 ## Documentation
 
 Update relevant docs/code comments in the same change as the code. Stale docs = bug.

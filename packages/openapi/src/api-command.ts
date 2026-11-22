@@ -257,13 +257,15 @@ function parseHeader(header: string): [string, string] {
 	return entry;
 }
 
-/** Inline text, `@path` (relative to the working directory), or `-` (all of stdin). */
+/** Inline text, `@path` (relative to the working directory, `~` expanded), or `-` (all of stdin). */
 async function readBody(value: string, signal: AbortSignal): Promise<string> {
 	if (value !== "-" && !value.startsWith("@")) return value;
 	try {
 		return value === "-"
 			? await (await import("@crustjs/utils/process")).readStdin(signal)
-			: process.getBuiltinModule("node:fs").readFileSync(value.slice(1), "utf8");
+			: process
+					.getBuiltinModule("node:fs")
+					.readFileSync((await import("@crustjs/utils/path")).expandHome(value.slice(1)), "utf8");
 	} catch (cause) {
 		// Cancellation stays an abort, not a PARSE failure.
 		if (signal.aborted && cause === signal.reason) throw cause;

@@ -20,8 +20,8 @@ vi.mock("@crustjs/utils/artifacts", async (importOriginal) => {
 	return {
 		...actual,
 		isSourceRun: () => built.dir === undefined && actual.isSourceRun(),
-		resolveArtifactDir: (name: string) =>
-			built.dir === undefined ? actual.resolveArtifactDir(name) : `${built.dir}/${name}`,
+		artifactPath: (name: string) =>
+			built.dir === undefined ? actual.artifactPath(name) : `${built.dir}/${name}`,
 	};
 });
 

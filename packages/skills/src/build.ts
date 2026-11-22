@@ -2,8 +2,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
 import type { CommandSnapshot } from "@crustjs/core";
-import { isWithin } from "@crustjs/utils/path";
-import { resolveSourceDir } from "@crustjs/utils/source";
+import { isWithin, resolvePathLike } from "@crustjs/utils/path";
 
 import { loadBundleFiles, requireSkillFrontmatter } from "./bundle.ts";
 import { SkillSourceConflictError } from "./errors.ts";
@@ -15,7 +14,7 @@ import type { RenderedFile, SkillMeta } from "./types.ts";
 export interface WriteSkillsOptions {
 	/** Application whose command tree is rendered into a generated skill. Omit to write only `extras`. */
 	readonly app?: { snapshot(): Promise<CommandSnapshot> };
-	/** `skills` directory that receives one subdirectory per skill. */
+	/** `skills` directory that receives one subdirectory per skill. A relative path resolves against the working directory. */
 	readonly outDir: string;
 	/** Version recorded in the generated skill's SKILL.md metadata. Omitted when absent. */
 	readonly version?: string;
@@ -23,7 +22,7 @@ export interface WriteSkillsOptions {
 	readonly name?: string;
 	/** Generated skill description. Defaults to the root command description. */
 	readonly description?: string;
-	/** Hand-authored skill directories included alongside the generated skill. */
+	/** Hand-authored skill directories included alongside the generated skill. A relative path resolves against the working directory. */
 	readonly extras?: readonly (string | URL)[];
 }
 
@@ -54,7 +53,7 @@ async function writeSkillSource(
 		throw new Error(`Skill source outDir "${outDir}" must be named "skills".`);
 	}
 	for (const sourceDir of options.extras ?? []) {
-		const resolved = resolveSourceDir(sourceDir);
+		const resolved = resolvePathLike(sourceDir);
 		// outDir is replaced wholesale below; an extra nested inside it would be destroyed.
 		if (isWithin(outDir, resolved)) {
 			throw new Error(

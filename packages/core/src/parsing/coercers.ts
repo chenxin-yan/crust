@@ -1,4 +1,5 @@
 import type { JsonValue } from "@crustjs/utils/json";
+import { resolveUserPath } from "@crustjs/utils/path";
 
 import { CrustError } from "../errors.ts";
 
@@ -28,11 +29,8 @@ export function coerceUrl(raw: string, label: string): URL {
 /**
  * Coerce a raw argv string into an absolute filesystem path.
  *
- * Steps:
- * 1. Reject empty input.
- * 2. Expand a leading `~` (followed by `/` or end-of-string) to the user's
- *    home directory. `~username` is intentionally NOT expanded.
- * 3. Resolve against `process.cwd()` so the result is always absolute.
+ * Rejects empty input, then applies {@link resolveUserPath}: a leading `~` is
+ * the home directory and a relative path resolves against `process.cwd()`.
  *
  * Path-traversal (`..`) is allowed — coercion does not sandbox.
  */
@@ -40,9 +38,7 @@ export function coercePath(raw: string, label: string): string {
 	if (raw === "") {
 		throw new CrustError("PARSE", `Path for ${label} cannot be empty`);
 	}
-	// A replacer function keeps `$` sequences in the home directory literal.
-	const expanded = raw.replace(/^~(?=\/|$)/, () => process.getBuiltinModule("node:os").homedir());
-	return process.getBuiltinModule("node:path").resolve(process.cwd(), expanded);
+	return resolveUserPath(raw);
 }
 
 /**

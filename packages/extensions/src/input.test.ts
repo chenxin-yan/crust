@@ -1,13 +1,13 @@
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { Crust, CrustError, defineExtension, defineExtensionId } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { help } from "./help.ts";
 import { input } from "./input.ts";
@@ -155,6 +155,20 @@ describe("input", () => {
 
 		expect(exitCode).toBe(0);
 		expect(JSON.parse(stdout)).toMatchObject({ target: "prod", region: "eu" });
+
+		// `~` is the home directory. POSIX walks `..` through the symlink; Windows collapses it first.
+		const posix = process.platform !== "win32";
+		mkdirSync(join(dir, "releases", "current"), { recursive: true });
+		if (posix) symlinkSync(join(dir, "releases", "current"), join(dir, "active"));
+		writeFileSync(join(dir, "releases", "input.json"), '{"target":"staging"}');
+		vi.stubEnv("HOME", dir);
+		vi.stubEnv("USERPROFILE", dir);
+		try {
+			const home = await captureExecute(deployApp(), ["--input", "@~/active/../input.json"]);
+			expect(JSON.parse(home.stdout)).toMatchObject({ target: posix ? "staging" : "prod" });
+		} finally {
+			vi.unstubAllEnvs();
+		}
 	});
 
 	it("replaces typed run() input with JSON passed as the input flag", async () => {

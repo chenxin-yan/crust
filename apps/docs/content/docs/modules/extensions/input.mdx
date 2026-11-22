@@ -28,7 +28,7 @@ $ echo '{"target":"prod"}' | my-cli deploy --input -
 The value of `--input` is one of:
 
 - inline JSON;
-- `@path`, which reads the file at `path`, relative to the working directory;
+- `@path`, which reads the file at `path`: relative to the working directory, with a leading `~` as the home directory;
 - `-`, which reads all of stdin. Stdin that something else already read to the end reads as empty, which fails as invalid JSON. Stdin that another reader is consuming, such as the [MCP](/docs/modules/mcp) transport, fails with `--input: cannot read stdin (stdin is in use by another reader)`.
 
 It must be a JSON object keyed by the routed command's argument and flag names, plus `raw` for passthrough values received as `rawArgs`, like tokens after `--`. Flags an Extension declares, such as `--json` or `--help`, are not part of it; pass them on argv. This is the flat shape [`commandInputSchema()`](/docs/modules/core#tooling-subpath) describes and the [MCP](/docs/modules/mcp) server accepts. Variadic arguments and `multiple` flags take arrays, and `url` values take strings.

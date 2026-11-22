@@ -49,6 +49,7 @@
 		"@crustjs/create": "workspace:^",
 		"@crustjs/progress": "workspace:^",
 		"@crustjs/prompts": "workspace:^",
+		"@crustjs/utils": "workspace:^",
 		"eta": "^4.6.0"
 	},
 	"devDependencies": {

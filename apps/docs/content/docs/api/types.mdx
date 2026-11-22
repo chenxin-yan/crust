@@ -484,7 +484,7 @@ One entry returned by `.sections(snapshot)`: a section plus the canonical `comma
   name="ExtensionBuildContext"
 />
 
-Build hooks run in registration order, and each receives a snapshot refreshed after earlier hooks' files were written; a hook does not see its own outputs. There is no output directory: return files instead. During this phase, [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname) points at the entry's build output directory.
+Build hooks run in registration order, and each receives a snapshot refreshed after earlier hooks' files were written; a hook does not see its own outputs. There is no output directory: return files instead. During this phase, [`artifactPath(path)`](/docs/api/crust#artifactpathpath) points at the entry's build output directory.
 
 ### `BuildFile`
 

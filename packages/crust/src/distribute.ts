@@ -700,7 +700,7 @@ export async function runDistributeBuild<T extends string>(
 	for (const { name, sourceDir, dereference } of copies) {
 		const options = { recursive: true, dereference, verbatimSymlinks: !dereference };
 		cpSync(sourceDir, join(rootDir, name), options);
-		// resolveArtifactDir (core) computes `<root>/<name>` from a Node bundle but
+		// artifactPath (core) computes `<root>/<name>` from a Node bundle but
 		// `dirname(process.execPath)/<name>` from a compiled binary, which is a
 		// platform package's bin dir — the root package is unreachable from there,
 		// so each platform package ships its own copy of the artifacts.

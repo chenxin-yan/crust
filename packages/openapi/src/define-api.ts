@@ -18,7 +18,7 @@ import {
 	defineExtension,
 	defineExtensionId,
 } from "@crustjs/core";
-import { isSourceRun, resolveArtifactDir } from "@crustjs/utils/artifacts";
+import { artifactPath, isSourceRun } from "@crustjs/utils/artifacts";
 
 import {
 	type ApiCommandDefinition,
@@ -648,8 +648,12 @@ function apiExtension(
 		const problem = holds ? problems() : undefined;
 		if (problem !== undefined) throw new Error(problem);
 		if (!(spec instanceof URL)) return [];
+		// `id` names one directory; `artifactPath` alone would accept `a/b`.
+		if (/[\\/]/.test(id)) {
+			throw new Error(`\`id\` must be a single directory name, got ${JSON.stringify(id)}.`);
+		}
 		// Fails for an `id` the built CLI could not look up, by the lookup's own rule.
-		resolveArtifactDir(id);
+		artifactPath(id);
 		const document = base.document();
 		const text = JSON.stringify(document);
 		const files = new Map([[BUILT_SPEC_FILE, text]]);

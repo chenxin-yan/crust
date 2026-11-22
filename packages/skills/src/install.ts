@@ -2,7 +2,7 @@ import { lstat, mkdir, readlink, realpath, rm, stat, symlink, unlink } from "nod
 import { dirname, join, resolve } from "node:path";
 
 import { isErrnoException } from "@crustjs/utils/error";
-import { resolveSourceDir } from "@crustjs/utils/source";
+import { resolvePathLike } from "@crustjs/utils/path";
 
 import {
 	type AgentTarget,
@@ -139,7 +139,7 @@ async function linkEntry(opts: {
  * requested agents' own folders to that shared link.
  */
 export async function installSkill(options: InstallSkillOptions): Promise<InstallSkillResult> {
-	const sourceDir = resolveSourceDir(options.sourceDir);
+	const sourceDir = resolvePathLike(options.sourceDir);
 	const source = readSkillFrontmatter(sourceDir);
 	if (!isValidSkillName(source.name)) {
 		throw new Error(`Skill source "${sourceDir}" declares invalid name "${source.name}".`);
@@ -211,7 +211,7 @@ function linkStatus(inspection: LinkInspection): SkillLinkStatus {
 export async function getSkillStatus(options: SkillStatusOptions): Promise<SkillStatusResult> {
 	const scope = resolveEffectiveScope(options.scope ?? "global");
 	const agents = options.agents ?? getScopeAgents(scope);
-	const expectedSourceDir = resolveSourceDir(options.sourceDir);
+	const expectedSourceDir = resolvePathLike(options.sourceDir);
 	const results: SkillStatusResult["agents"] = [];
 
 	for (const [outputDir, groupedAgents] of groupAgentsByOutputDir(agents, scope, options.name)) {
@@ -231,10 +231,6 @@ export async function getSharedSkillStatus(
 ): Promise<{ outputDir: string; scope: Scope; status: SkillLinkStatus }> {
 	const scope = resolveEffectiveScope(options.scope ?? "global");
 	const outputDir = join(sharedSkillsDir(scope), options.name);
-	const inspection = await inspectLink(
-		outputDir,
-		options.name,
-		resolveSourceDir(options.sourceDir),
-	);
+	const inspection = await inspectLink(outputDir, options.name, resolvePathLike(options.sourceDir));
 	return { outputDir, scope, status: linkStatus(inspection) };
 }

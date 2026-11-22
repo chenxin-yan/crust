@@ -5,8 +5,7 @@
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 
-import { isWithin } from "@crustjs/utils/path";
-import { resolveSourceDir } from "@crustjs/utils/source";
+import { isWithin, resolvePathLike } from "@crustjs/utils/path";
 
 import type { RenderedFile } from "./types.ts";
 
@@ -196,7 +195,7 @@ function missingSkillMdError(root: string): Error {
  * `name`/`description` it declares in its `SKILL.md` frontmatter.
  *
  * Steps:
- * 1. Resolve `sourceDir` (URL / absolute / relative-from-package-root).
+ * 1. Resolve `sourceDir` (`file:` URL, or a path relative to the working directory).
  * 2. `realpath` the resolved path; reject if not a directory.
  * 3. Recursively walk, applying a per-entry path-traversal guard against the
  *    canonical root and a directory-cycle guard.
@@ -208,7 +207,7 @@ function missingSkillMdError(root: string): Error {
  * author owns it.
  */
 export async function loadBundleFiles(sourceDir: string | URL): Promise<LoadedBundle> {
-	const resolved = resolveSourceDir(sourceDir);
+	const resolved = resolvePathLike(sourceDir);
 
 	let canonicalRoot: string;
 	try {

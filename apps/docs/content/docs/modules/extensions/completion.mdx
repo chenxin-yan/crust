@@ -77,7 +77,7 @@ my-cli
 my-cli.fish
 ```
 
-With `--output-dir`, the required `<shell>` still selects a valid invocation, but the command writes all three files. It preserves unrelated files in that directory.
+With `--output-dir`, the required `<shell>` still selects a valid invocation, but the command writes all three files. The directory is a [`path`](/docs/guide/values-and-validation) value: relative to the working directory, with `~` expanded. It preserves unrelated files in that directory.
 
 ### Build artifacts
 
