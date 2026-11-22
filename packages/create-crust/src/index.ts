@@ -9,6 +9,7 @@ import { help, version } from "@crustjs/extensions";
 import { spinner } from "@crustjs/progress";
 import { confirm, input, select } from "@crustjs/prompts";
 import { resolveUserPath } from "@crustjs/utils/path";
+import { shellQuote } from "@crustjs/utils/process";
 import { Eta } from "eta/core";
 
 import corePkg from "../../core/package.json" with { type: "json" };
@@ -236,7 +237,10 @@ export const app = new Crust("create-crust", {
 		if (!isCwd) {
 			const fromCwd = relative(process.cwd(), resolvedDir);
 			const outsideCwd = isAbsolute(fromCwd) || fromCwd.startsWith("..");
-			stdout(`  cd ${outsideCwd ? resolvedDir : `./${fromCwd}`}`);
+			const target = outsideCwd ? resolvedDir : `./${fromCwd}`;
+			// cmd.exe has no single quotes; a Windows path cannot contain a double quote.
+			const word = process.platform === "win32" ? `"${target}"` : shellQuote(target);
+			stdout(`  cd ${word}`);
 		}
 		if (!installDeps) stdout(`  ${context.install}`);
 		stdout(`  ${context.run} dev`);

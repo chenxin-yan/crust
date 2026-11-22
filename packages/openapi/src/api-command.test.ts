@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { type RequestListener, createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -514,14 +514,25 @@ describe("api <path>", () => {
 
 		expect(calls[0]).toMatchObject({ method: "PUT", body: '{"name":"grace"}' });
 
+		// `~` is the home directory, and the filesystem walks `..` through the symlink.
+		mkdirSync(join(dir, "releases", "current"), { recursive: true });
+		symlinkSync(join(dir, "releases", "current"), join(dir, "active"));
+		writeFileSync(join(dir, "releases", "body.json"), '{"name":"ada"}');
 		vi.stubEnv("HOME", dir);
 		vi.stubEnv("USERPROFILE", dir);
 		try {
-			await captureExecute(buildApp(), ["api", "/users", "-X", "PUT", "--body", "@~/body.json"]);
+			await captureExecute(buildApp(), [
+				"api",
+				"/users",
+				"-X",
+				"PUT",
+				"--body",
+				"@~/active/../body.json",
+			]);
 		} finally {
 			vi.unstubAllEnvs();
 		}
-		expect(calls[1]).toMatchObject({ method: "PUT", body: '{"name":"grace"}' });
+		expect(calls[1]).toMatchObject({ method: "PUT", body: '{"name":"ada"}' });
 	});
 
 	it("prints a non-2xx body to stdout and a summary to stderr with exit code 1", async () => {

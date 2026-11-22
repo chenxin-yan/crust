@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -156,11 +156,15 @@ describe("input", () => {
 		expect(exitCode).toBe(0);
 		expect(JSON.parse(stdout)).toMatchObject({ target: "prod", region: "eu" });
 
+		// `~` is the home directory, and the filesystem walks `..` through the symlink.
+		mkdirSync(join(dir, "releases", "current"), { recursive: true });
+		symlinkSync(join(dir, "releases", "current"), join(dir, "active"));
+		writeFileSync(join(dir, "releases", "input.json"), '{"target":"staging"}');
 		vi.stubEnv("HOME", dir);
 		vi.stubEnv("USERPROFILE", dir);
 		try {
-			const home = await captureExecute(deployApp(), ["--input", "@~/input.json"]);
-			expect(JSON.parse(home.stdout)).toMatchObject({ target: "prod", region: "eu" });
+			const home = await captureExecute(deployApp(), ["--input", "@~/active/../input.json"]);
+			expect(JSON.parse(home.stdout)).toMatchObject({ target: "staging" });
 		} finally {
 			vi.unstubAllEnvs();
 		}

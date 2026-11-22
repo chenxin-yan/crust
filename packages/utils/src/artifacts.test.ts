@@ -60,7 +60,7 @@ function withNodeSea<T>(run: () => T): T {
 }
 
 describe("artifactPath", () => {
-	it("rejects absolute paths and empty, . or .. segments", () => {
+	it("rejects absolute and drive-qualified paths and empty, . or .. segments", () => {
 		for (const path of [
 			"",
 			".",
@@ -69,6 +69,9 @@ describe("artifactPath", () => {
 			"skills/",
 			"skills//demo",
 			"skills/../x",
+			"D:/templates",
+			"templates/D:/x",
+			"D:templates",
 			"a\\..",
 		]) {
 			expect(() => artifactPath(path)).toThrow("Artifact path must be names separated by");

@@ -195,7 +195,7 @@ function missingSkillMdError(root: string): Error {
  * `name`/`description` it declares in its `SKILL.md` frontmatter.
  *
  * Steps:
- * 1. Resolve `sourceDir` (URL / absolute / relative-from-package-root).
+ * 1. Resolve `sourceDir` (`file:` URL, or a path relative to the working directory).
  * 2. `realpath` the resolved path; reject if not a directory.
  * 3. Recursively walk, applying a per-entry path-traversal guard against the
  *    canonical root and a directory-cycle guard.

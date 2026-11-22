@@ -341,6 +341,7 @@ describe("create-crust CLI", () => {
 	it.each([
 		["nested-cli", "./nested-cli"],
 		["./nested-cli", "./nested-cli"],
+		["my apps/nested-cli", "'./my apps/nested-cli'"],
 	])(
 		"prints a cd step for %j as %j",
 		async (directory, cdTarget) => {

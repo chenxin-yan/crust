@@ -74,13 +74,17 @@ export function isSourceRun(): boolean {
  *   nearest package root of the real `process.argv[1]` entrypoint (following source
  *   links) — the output of the last `crust build`.
  *
- * @throws {Error} when `path` is absolute or has an empty, `.` or `..` segment, or in
- *   source mode when the entrypoint cannot be resolved or has no enclosing `package.json`.
+ * @throws {Error} when `path` is absolute, or has an empty, `.` or `..` segment or one
+ *   containing `:`, or in source mode when the entrypoint cannot be resolved or has no
+ *   enclosing `package.json`.
  */
 export function artifactPath(path: string): string {
 	const segments = path.split(/[\\/]/);
 	// Every segment must name something, which also rejects absolute paths and escapes.
-	if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
+	// A `:` would let a Windows drive (`D:`) replace the shipped root.
+	const invalid = (segment: string) =>
+		segment === "" || segment === "." || segment === ".." || segment.includes(":");
+	if (segments.some(invalid)) {
 		throw new Error(
 			`Artifact path must be names separated by "/", such as "templates/base", got ${JSON.stringify(path)}.`,
 		);

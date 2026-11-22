@@ -1,8 +1,9 @@
 import { type Dirent, existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 
 import { artifactPath } from "@crustjs/utils/artifacts";
 import { isErrnoException } from "@crustjs/utils/error";
+import { resolvePathLike } from "@crustjs/utils/path";
 
 import { probeFrontmatter, requireSkillFrontmatter, SKILL_MD } from "./bundle.ts";
 
@@ -42,7 +43,7 @@ export function readSkillFrontmatter(
 export function loadPackagedSkills(
 	path: string = artifactPath(SKILLS_ARTIFACT),
 ): readonly PackagedSkill[] {
-	const root = resolve(path);
+	const root = resolvePathLike(path);
 	let entries: Dirent[];
 	try {
 		entries = readdirSync(root, { withFileTypes: true });

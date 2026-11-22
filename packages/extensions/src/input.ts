@@ -23,10 +23,7 @@ async function readInput(value: string, signal: AbortSignal): Promise<string> {
 			? await (await import("@crustjs/utils/process")).readStdin(signal)
 			: process
 					.getBuiltinModule("node:fs")
-					.readFileSync(
-						(await import("@crustjs/utils/path")).resolveUserPath(value.slice(1)),
-						"utf8",
-					);
+					.readFileSync((await import("@crustjs/utils/path")).expandHome(value.slice(1)), "utf8");
 	} catch (cause) {
 		// Cancellation stays an abort, not a PARSE failure.
 		if (signal.aborted && cause === signal.reason) throw cause;

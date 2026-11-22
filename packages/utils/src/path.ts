@@ -6,21 +6,28 @@ export function isWithin(parent: string, child: string): boolean {
 }
 
 /**
- * Absolute path for a path the end user typed: a flag or positional value, a
- * prompt answer, an `@path`, or an environment variable.
+ * `raw` with a leading `~` replaced by the home directory (`~user` stays literal):
+ * no shell expands it in `--flag=~/x`, a prompt answer, or an environment value.
  *
- * A relative path resolves against the working directory. A leading `~` is the
- * home directory (`~user` stays literal): no shell expands it in `--flag=~/x`,
- * a prompt answer, or an environment value.
+ * Use it alone for a path opened on the spot, such as an `@path`: the filesystem
+ * then walks `..` through symlinks, which {@link resolveUserPath} collapses first.
+ */
+export function expandHome(raw: string): string {
+	const home = process.platform === "win32" ? /^~(?=[\\/]|$)/ : /^~(?=\/|$)/;
+	// A replacer function keeps `$` sequences in the home directory literal.
+	return raw.replace(home, () => process.getBuiltinModule("node:os").homedir());
+}
+
+/**
+ * Absolute path for a path the end user typed: a flag or positional value, a
+ * prompt answer, or an environment variable. A leading `~` is the home directory
+ * ({@link expandHome}) and a relative path resolves against the working directory.
  *
  * @throws {Error} when `raw` is empty.
  */
 export function resolveUserPath(raw: string): string {
 	if (raw === "") throw new Error("Path cannot be empty");
-	const home = process.platform === "win32" ? /^~(?=[\\/]|$)/ : /^~(?=\/|$)/;
-	// A replacer function keeps `$` sequences in the home directory literal.
-	const expanded = raw.replace(home, () => process.getBuiltinModule("node:os").homedir());
-	return process.getBuiltinModule("node:path").resolve(expanded);
+	return process.getBuiltinModule("node:path").resolve(expandHome(raw));
 }
 
 /**

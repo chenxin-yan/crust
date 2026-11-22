@@ -7,13 +7,20 @@ import { pathToFileURL } from "node:url";
 
 import { describe, expect, it } from "vite-plus/test";
 
-import { isWithin, resolvePathLike, resolveUserPath } from "./path.ts";
+import { expandHome, isWithin, resolvePathLike, resolveUserPath } from "./path.ts";
 
 describe("isWithin", () => {
 	it("distinguishes descendants from sibling paths with the same prefix", () => {
 		const parent = join("tmp", "skills");
 		expect(isWithin(parent, join(parent, "authored"))).toBe(true);
 		expect(isWithin(parent, join("tmp", "skills-backup"))).toBe(false);
+	});
+});
+
+describe("expandHome", () => {
+	it("replaces only a leading ~ and leaves the rest for the filesystem", () => {
+		expect(expandHome("~/a/../b")).toBe(`${homedir()}/a/../b`);
+		expect(expandHome("a/../b")).toBe("a/../b");
 	});
 });
 
