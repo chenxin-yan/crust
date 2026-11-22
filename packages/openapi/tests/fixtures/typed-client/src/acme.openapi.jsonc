@@ -1,0 +1,54 @@
+// The pinned spec: comments and trailing commas are allowed.
+{
+	"openapi": "3.1.0",
+	"info": { "title": "Acme", "version": "1" },
+	"paths": {
+		"/users/{id}": {
+			"get": {
+				"operationId": "getUser",
+				"parameters": [
+					{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+					{ "name": "expand", "in": "query", "schema": { "type": "boolean" } },
+				],
+				"responses": {
+					"200": {
+						"description": "The user",
+						"content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } },
+					},
+				},
+			},
+		},
+		"/users": {
+			"post": {
+				"operationId": "createUser",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"required": ["name"],
+								"properties": { "name": { "type": "string" } },
+							},
+						},
+					},
+				},
+				"responses": {
+					"201": {
+						"description": "Created",
+						"content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } },
+					},
+				},
+			},
+		},
+	},
+	"components": {
+		"schemas": {
+			"User": {
+				"type": "object",
+				"required": ["id", "name"],
+				"properties": { "id": { "type": "string" }, "name": { "type": "string" } },
+			},
+		},
+	},
+}

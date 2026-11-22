@@ -1,10 +1,10 @@
 // The @crustjs/openapi bridge: bearerAuth(auth.token) over an env token or a stored login,
-// through a real apiClient Context. The API is a stubbed global fetch; the authorization server is
+// through a real api client Context. The API is a stubbed global fetch; the authorization server is
 // the scripted fetch of the token source.
 import { rmSync } from "node:fs";
 
 import { Crust, defineCommand } from "@crustjs/core";
-import { type ApiClient, apiClient, apiCommand, bearerAuth } from "@crustjs/openapi";
+import { type ApiClient, bearerAuth, defineApi } from "@crustjs/openapi";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { createAuth } from "../src/client.ts";
@@ -63,17 +63,16 @@ async function withApi(
 		fetch: w.fetch,
 		env: "ACME_TOKEN",
 	});
+	const acme = defineApi({
+		spec: { openapi: "3.1.0", paths: {} },
+		baseUrl: options.baseUrl ?? "https://api.example.com/v1",
+		auth: bearerAuth(auth.token),
+	});
 	const app = new Crust("acme")
-		.extend(
-			apiCommand({
-				spec: { openapi: "3.1.0", paths: {} },
-				baseUrl: options.baseUrl ?? "https://api.example.com/v1",
-				auth: bearerAuth(auth.token),
-			}),
-		)
+		.extend(acme.extension)
 		.add(
 			defineCommand("call", {}, (command) =>
-				command.use(apiClient).action(async ({ ctx }) => use(await ctx.api)),
+				command.use(acme.client).action(async ({ ctx }) => use(await ctx.api)),
 			),
 		);
 	const outcome = await app.run(["call"], undefined, { signal: options.signal });
@@ -248,18 +247,17 @@ describe("bearer tokens for the API", () => {
 		const calls = stubApi(({ authorization }) =>
 			authorization === "Bearer AT1" ? unauthorized() : new Response("{}"),
 		);
+		const acme = defineApi({
+			spec: { openapi: "3.1.0", paths: {} },
+			baseUrl: "https://api.example.com/v1",
+			auth: bearerAuth(auth.token),
+		});
 		const app = new Crust("acme")
-			.extend(
-				apiCommand({
-					spec: { openapi: "3.1.0", paths: {} },
-					baseUrl: "https://api.example.com/v1",
-					auth: bearerAuth(auth.token),
-				}),
-			)
+			.extend(acme.extension)
 			.add(
 				defineCommand("call", {}, (command) =>
 					command
-						.use(apiClient)
+						.use(acme.client)
 						.action(async ({ ctx }) => (await (await ctx.api).fetch("/me")).status),
 				),
 			);

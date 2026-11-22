@@ -1,37 +1,48 @@
 import { Crust, defineCommand } from "@crustjs/core";
-import { apiClient, apiCommand } from "@crustjs/openapi";
+import { defineApi } from "@crustjs/openapi";
 
-// Usually the API's OpenAPI document: `import spec from "./openapi.json" with { type: "json" }`.
-const spec = {
-	openapi: "3.1.0",
-	info: { title: "Example API", version: "1.0.0" },
-	paths: {
-		"/users": { get: { operationId: "listUsers", summary: "List users" } },
+//#region cli
+const acme = defineApi({
+	// The pinned OpenAPI document, kept out of the bundle.
+	spec: new URL("./acme.openapi.jsonc", import.meta.url),
+	baseUrl: "https://api.acme.example/v1",
+	auth: () => ({ Authorization: `Bearer ${process.env.ACME_TOKEN}` }),
+	// The next page from a `Link: <url>; rel="next"` header; undefined after the last page.
+	paginate: (response) => {
+		const next = /<([^>]+)>;\s*rel="next"/.exec(response.headers.get("link") ?? "")?.[1];
+		return next === undefined ? undefined : { path: next };
 	},
-};
+});
 
-const app = new Crust("my-cli")
-	.extend(
-		apiCommand({
-			spec,
-			baseUrl: "https://api.example.com/v1",
-			auth: () => ({ Authorization: `Bearer ${process.env.EXAMPLE_TOKEN}` }),
-			// The next page from a `Link: <url>; rel="next"` header; undefined after the last page.
-			paginate: (response) => {
-				const next = /<([^>]+)>;\s*rel="next"/.exec(response.headers.get("link") ?? "")?.[1];
-				return next === undefined ? undefined : { path: next };
-			},
-		}),
-	)
-	.add(
-		// App commands share the same base URL and auth through the `api` Context.
-		defineCommand("whoami", { description: "Print the signed-in user" }, (command) =>
-			command.use(apiClient).action(async ({ ctx, stdout }) => {
-				const api = await ctx.api;
-				const response = await api.fetch("/me");
-				stdout(((await response.json()) as { login: string }).login);
-			}),
-		),
-	);
+const whoami = defineCommand("whoami", { description: "Print the signed-in user" }, (command) =>
+	command.use(acme.client).action(async ({ ctx, stdout }) => {
+		const api = await ctx.api;
+		const user = await api.call("getUser", { path: { id: "me" } });
+		stdout(user.name);
+	}),
+);
 
-await app.execute();
+await new Crust("acme").extend(acme.extension).add(whoami).execute();
+//#endregion
+
+// What inspex registers from acme.openapi.jsonc, for this docs site, which runs no content mapper.
+declare module "@crustjs/openapi" {
+	interface Specs {
+		acme: {
+			paths: {};
+			components: {};
+			operations: {
+				getUser: {
+					parameters: { query?: never; header?: never; path: { id: string }; cookie?: never };
+					requestBody?: never;
+					responses: {
+						200: {
+							headers: { [name: string]: unknown };
+							content: { "application/json": { id: string; name: string } };
+						};
+					};
+				};
+			};
+		};
+	}
+}

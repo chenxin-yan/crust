@@ -1,6 +1,6 @@
 import { createAuth } from "@crustjs/auth";
 import { defineCommand } from "@crustjs/core";
-import { apiCommand, bearerAuth } from "@crustjs/openapi";
+import { bearerAuth, defineApi } from "@crustjs/openapi";
 
 export const auth = createAuth({
 	app: "acme",
@@ -38,8 +38,8 @@ export const status = defineCommand("status", { description: "Show the sign-in" 
 	}),
 );
 
-export const api = apiCommand({
-	spec: { openapi: "3.1.0", info: { title: "Acme", version: "1" }, paths: {} },
+export const api = defineApi({
+	spec: new URL("./acme.openapi.jsonc", import.meta.url),
 	baseUrl: "https://api.acme.example",
 	auth: bearerAuth(auth.token),
 });

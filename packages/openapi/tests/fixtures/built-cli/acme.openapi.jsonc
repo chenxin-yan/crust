@@ -1,0 +1,10 @@
+// Read from source; a built CLI reads the copy `crust build` writes.
+{
+	"openapi": "3.1.0",
+	"info": { "title": "Acme", "version": "1" },
+	"paths": {
+		"/users": {
+			"get": { "operationId": "listUsers", "summary": "List the users (built-cli-marker)" },
+		},
+	},
+}
