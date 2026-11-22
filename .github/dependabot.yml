@@ -1,7 +1,10 @@
 version: 2
 updates:
   - package-ecosystem: github-actions
-    directory: /
+    # `/` alone skips composite actions nested under .github/actions.
+    directories:
+      - /
+      - /.github/actions/*
     schedule:
       interval: weekly
   # Only `skills`: packages/skills/src/agents.generated.ts is generated from its agent registry.
