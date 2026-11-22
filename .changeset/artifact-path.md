@@ -13,7 +13,7 @@ const template = artifactPath("templates/base");
 const schema = readFileSync(artifactPath("data/schema.json"), "utf8");
 ```
 
-The path starts with an Extension artifact or `crust.include` directory name. An absolute path, an empty, `.`, or `..` segment, or a segment containing `:` throws.
+The path starts with an Extension artifact or `crust.include` directory name. An absolute path, an empty, `.`, or `..` segment, or a segment starting with a drive such as `D:` throws.
 
 `loadPackagedSkills()` reads the skills shipped with the CLI when called without a directory.
 

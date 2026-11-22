@@ -156,15 +156,16 @@ describe("input", () => {
 		expect(exitCode).toBe(0);
 		expect(JSON.parse(stdout)).toMatchObject({ target: "prod", region: "eu" });
 
-		// `~` is the home directory, and the filesystem walks `..` through the symlink.
+		// `~` is the home directory. POSIX walks `..` through the symlink; Windows collapses it first.
+		const posix = process.platform !== "win32";
 		mkdirSync(join(dir, "releases", "current"), { recursive: true });
-		symlinkSync(join(dir, "releases", "current"), join(dir, "active"));
+		if (posix) symlinkSync(join(dir, "releases", "current"), join(dir, "active"));
 		writeFileSync(join(dir, "releases", "input.json"), '{"target":"staging"}');
 		vi.stubEnv("HOME", dir);
 		vi.stubEnv("USERPROFILE", dir);
 		try {
 			const home = await captureExecute(deployApp(), ["--input", "@~/active/../input.json"]);
-			expect(JSON.parse(home.stdout)).toMatchObject({ target: "staging" });
+			expect(JSON.parse(home.stdout)).toMatchObject({ target: posix ? "staging" : "prod" });
 		} finally {
 			vi.unstubAllEnvs();
 		}

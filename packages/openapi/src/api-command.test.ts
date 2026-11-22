@@ -514,9 +514,11 @@ describe("api <path>", () => {
 
 		expect(calls[0]).toMatchObject({ method: "PUT", body: '{"name":"grace"}' });
 
-		// `~` is the home directory, and the filesystem walks `..` through the symlink.
+		// `~` is the home directory. POSIX walks `..` through the symlink; Windows collapses it first.
+		const posix = process.platform !== "win32";
+		const name = posix ? "ada" : "grace";
 		mkdirSync(join(dir, "releases", "current"), { recursive: true });
-		symlinkSync(join(dir, "releases", "current"), join(dir, "active"));
+		if (posix) symlinkSync(join(dir, "releases", "current"), join(dir, "active"));
 		writeFileSync(join(dir, "releases", "body.json"), '{"name":"ada"}');
 		vi.stubEnv("HOME", dir);
 		vi.stubEnv("USERPROFILE", dir);
@@ -536,11 +538,11 @@ describe("api <path>", () => {
 				"--body",
 				"@~/active/../body.json",
 			]);
-			expect(JSON.parse(preview.stdout)).toMatchObject({ body: { name: "ada" } });
+			expect(JSON.parse(preview.stdout)).toMatchObject({ body: { name } });
 		} finally {
 			vi.unstubAllEnvs();
 		}
-		expect(calls[1]).toMatchObject({ method: "PUT", body: '{"name":"ada"}' });
+		expect(calls[1]).toMatchObject({ method: "PUT", body: `{"name":"${name}"}` });
 	});
 
 	it("prints a non-2xx body to stdout and a summary to stderr with exit code 1", async () => {

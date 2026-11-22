@@ -385,7 +385,7 @@ Returns the absolute path of a file or directory shipped with the running CLI: a
   ../../../examples/api/crust.ts#artifact
 </include>
 
-- `path` starts with a top-level directory name and may continue below it, such as `"skills"` or `"templates/base"`. An absolute path, an empty, `.`, or `..` segment, or a segment containing `:` throws.
+- `path` starts with a top-level directory name and may continue below it, such as `"skills"` or `"templates/base"`. An absolute path, an empty, `.`, or `..` segment, or a segment starting with a drive such as `D:` throws.
 - Nothing is probed, so the caller reports a missing file or directory.
 - From source, it throws when no `package.json` encloses the entrypoint.
 

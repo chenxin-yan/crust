@@ -121,6 +121,8 @@ describe("artifactPath", () => {
 		process.argv[1] = join(tmpDir, "src", "cli.ts");
 		await writeFile(process.argv[1], "");
 		expect(artifactPath("skills")).toBe(join(tmpDir, ".crust", "root", "skills"));
+		// A `:` after more than one letter is no drive: `crust.include` stages such a POSIX name.
+		expect(artifactPath("assets:v1")).toBe(join(tmpDir, ".crust", "root", "assets:v1"));
 		for (const path of ["templates/base/a.txt", "templates\\base\\a.txt"]) {
 			expect(artifactPath(path)).toBe(join(tmpDir, ".crust", "root", "templates", "base", "a.txt"));
 		}

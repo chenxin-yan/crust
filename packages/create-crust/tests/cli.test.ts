@@ -338,11 +338,19 @@ describe("create-crust CLI", () => {
 		expect(result.stdout).not.toContain("  cd ");
 	}, 30_000);
 
-	it.each([
-		["nested-cli", "./nested-cli"],
-		["./nested-cli", "./nested-cli"],
-		["my apps/nested-cli", "'./my apps/nested-cli'"],
-	])(
+	// Windows always double-quotes the target and joins it with a backslash.
+	it.each(
+		process.platform === "win32"
+			? [
+					["nested-cli", '"./nested-cli"'],
+					["my apps/nested-cli", String.raw`"./my apps\nested-cli"`],
+				]
+			: [
+					["nested-cli", "./nested-cli"],
+					["./nested-cli", "./nested-cli"],
+					["my apps/nested-cli", "'./my apps/nested-cli'"],
+				],
+	)(
 		"prints a cd step for %j as %j",
 		async (directory, cdTarget) => {
 			const tempRoot = makeTempRoot("create-crust-cd-step");
