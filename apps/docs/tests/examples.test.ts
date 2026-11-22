@@ -6,9 +6,11 @@ import { fileURLToPath } from "node:url";
 
 import { Crust } from "@crustjs/core";
 import { help } from "@crustjs/extensions";
+import { captureExecute } from "@crustjs/testing";
 import { expect, it } from "vite-plus/test";
 
 import { database } from "../examples/guide/contexts-setup";
+import { debug } from "../examples/guide/error-handling";
 import { audited, list } from "../examples/guide/extensions-provider-flags";
 import { app as extensionsExample } from "../examples/modules/extensions/index";
 
@@ -139,6 +141,93 @@ it("error-handling example reports an unreadable config as is, not as missing", 
 	} finally {
 		await rm(cwd, { recursive: true, force: true });
 	}
+});
+
+it("error-handling debug example prints the stack and the cause chain under --debug", () => {
+	const result = runGuideExample("error-handling.ts", ["debug", "--debug"]);
+	expect(result.status).toBe(1);
+	expect(result.stdout).toBe("");
+	expect(result.stderr).toMatch(/^ConfigNotFoundError: No app\.config\.json found\./);
+	expect(result.stderr).toMatch(/\n {4}at /);
+	expect(result.stderr).toMatch(/\nCaused by: Error: ENOENT/);
+	expect(runGuideExample("error-handling.ts", ["debug"]).stderr).toBe(
+		"Error: No app.config.json found. Run `app init` to create one.\n",
+	);
+});
+
+it("error-handling debug example prints a deep cause chain to its root", async () => {
+	let error = new Error("ROOT_CAUSE");
+	for (let depth = 1; depth <= 6; depth++) error = new Error(`WRAPPER_${depth}`, { cause: error });
+	const app = new Crust("app").extend(debug).action(() => {
+		throw error;
+	});
+	const { stderr } = await captureExecute(app, ["--debug"]);
+	expect(stderr.match(/^(?:Caused by: )?Error: \w+$/gm)).toEqual([
+		"Error: WRAPPER_6",
+		...[5, 4, 3, 2, 1].map((depth) => `Caused by: Error: WRAPPER_${depth}`),
+		"Caused by: Error: ROOT_CAUSE",
+	]);
+});
+
+it("error-handling debug example prints each error of a cause cycle once", async () => {
+	const first = new Error("CYCLE_A");
+	first.cause = new Error("CYCLE_B", { cause: first });
+	const app = new Crust("app").extend(debug).action(() => {
+		throw first;
+	});
+	const { stderr } = await captureExecute(app, ["--debug"]);
+	expect(stderr.match(/^(?:Caused by: )?Error: \w+$/gm)).toEqual([
+		"Error: CYCLE_A",
+		"Caused by: Error: CYCLE_B",
+	]);
+});
+
+it("error-handling debug example prints no error fields besides stacks", async () => {
+	const app = new Crust("app")
+		.extend(debug)
+		.flags({ token: { type: "string" } })
+		.action(({ flags }) => {
+			const request = { headers: { authorization: flags.token } };
+			throw Object.assign(
+				new Error("request failed", { cause: Object.assign(new Error("401"), { request }) }),
+				{
+					request,
+				},
+			);
+		});
+	const { stderr } = await captureExecute(app, ["--debug", "--token", "SECRET_SENTINEL"]);
+	expect(stderr).not.toContain("SECRET_SENTINEL");
+	expect(stderr).toMatch(/^Error: request failed\n/);
+	expect(stderr).toContain("Caused by: Error: 401");
+});
+
+it.each([
+	[[], {}, "Uploading 3 files...\nPublished v1.2.0\n"],
+	[["-q"], {}, "Published v1.2.0\n"],
+	[["--quiet"], {}, "Published v1.2.0\n"],
+	[[], { APP_QUIET: "1" }, "Published v1.2.0\n"],
+	[["--no-quiet"], { APP_QUIET: "1" }, "Uploading 3 files...\nPublished v1.2.0\n"],
+])("error-handling quiet example publishes with %j and %j", (argv, env, stdout) => {
+	const result = spawnSync(
+		"bun",
+		[
+			fileURLToPath(new URL("../examples/guide/error-handling.ts", import.meta.url)),
+			"quiet",
+			"publish",
+			...argv,
+		],
+		{ encoding: "utf8", env: { ...process.env, ...env }, timeout: 10_000 },
+	);
+	expect(result.status).toBe(0);
+	expect(result.stdout).toBe(stdout);
+	expect(result.stderr).toBe("");
+});
+
+it("error-handling debug example leaves cancellation silent under --debug", async () => {
+	const app = new Crust("app").extend(debug).action(() => {
+		throw new DOMException("Cancelled", "AbortError");
+	});
+	expect(await captureExecute(app, ["--debug"])).toEqual({ stdout: "", stderr: "", exitCode: 130 });
 });
 
 it("build guide example names its root after the guide's `bin` launcher", async () => {
