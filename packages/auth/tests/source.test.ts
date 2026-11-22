@@ -30,14 +30,29 @@ describe("library source", () => {
 		).toEqual([]);
 	});
 
-	it("reads the environment only to pick a login mode and for the client's env token", () => {
+	it("reads the environment only to pick a login mode, for the client's env token, and for the D-Bus session bus", () => {
 		expect(filesMatching(/process\.env|Bun\.env|import\.meta\.env/)).toEqual([
 			"client.ts",
+			"keyring.ts",
 			"login-mode.ts",
 			"types.ts",
 		]);
 		expect(readFileSync(join(srcDir, "client.ts"), "utf8").match(/process\.env/g)).toHaveLength(1);
 		expect(readFileSync(join(srcDir, "types.ts"), "utf8").match(/process\.env/g)).toHaveLength(1);
+		expect(readFileSync(join(srcDir, "keyring.ts"), "utf8").match(/process\.env\.\w+/g)).toEqual([
+			"process.env.DBUS_SESSION_BUS_ADDRESS",
+			"process.env.XDG_RUNTIME_DIR",
+		]);
+	});
+
+	it("never runs a keyring command, and loads the optional keyring module only on use", () => {
+		expect(filesMatching(/child_process|\bspawn\(|\bexec(File)?\(|secret-tool|"security"/)).toEqual(
+			["browser.ts"],
+		);
+		expect(filesMatching(/["']@napi-rs\/keyring["']/)).toEqual(["keyring.ts"]);
+		const keyring = readFileSync(join(srcDir, "keyring.ts"), "utf8");
+		expect(keyring).not.toMatch(/^import[^;]*@napi-rs\/keyring/m);
+		expect(keyring).toMatch(/try \{\s*napi = await import\("@napi-rs\/keyring"\);\s*\} catch/);
 	});
 
 	it("offers no password grant, credential form or embedded browser", () => {
@@ -88,6 +103,7 @@ describe("entry points", () => {
 			"AuthErrorCode",
 			"AuthStatus",
 			"AuthToken",
+			"AuthWarning",
 			"BrowserLoginPrompt",
 			"CallbackPageView",
 			"CreateAuthOptions",
