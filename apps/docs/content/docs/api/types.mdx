@@ -285,6 +285,10 @@ The awaited value a factory produces: `FactoryValueOf<typeof config>` is what `a
 
 `ContextMap` is the upper bound for Context registries inferred by `.provide()`; consumer-defined shapes need no index signature. `MergeContext<A, B>` is `A & B`. `AnyContextFactory` accepts any Context factory, and `AnyContextInstance` any Context instance; annotate an `ExtensionFactory` with `readonly AnyContextInstance[]` to leave its provided Contexts open.
 
+### `UseSource` and `UsedContexts`
+
+For a library whose own `.use()` forwards to a command's. `UseSource` is what a command's `.use()` accepts: a Context factory, an Extension or an Extension factory. `UsedContexts<Us>` is the `ContextMap` a `.use(...Us)` call adds to `ctx`.
+
 ## Extension types
 
 Declared in [`api/extension.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/api/extension.ts). See [Extensions](/docs/guide/extensions) for authoring.

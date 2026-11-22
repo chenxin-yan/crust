@@ -9,8 +9,8 @@ function _typecheckOperations() {
 	const method: "get" | "put" | "post" | "delete" | "options" | "head" | "patch" | "trace" =
 		op.method;
 	const location: "path" | "query" | "header" | "cookie" = (op.params[0] as Param).in;
-	const level: "error" | "warning" = result.diagnostics[0]!.level;
-	void [method, location, level];
+	const found: Diagnostic["code"] = result.diagnostics[0]!.code;
+	void [method, location, found];
 
 	// @ts-expect-error the method is lowercase, as in the spec
 	const upper: "GET" = op.method;

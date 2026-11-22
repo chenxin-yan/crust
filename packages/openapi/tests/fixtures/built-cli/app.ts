@@ -4,7 +4,8 @@ import { defineApi } from "../../../src/index.ts";
 
 const acme = defineApi({
 	spec: new URL("./acme.openapi.jsonc", import.meta.url),
-	baseUrl: "https://api.acme.test",
+	// The test serves the API locally.
+	baseUrl: process.env.ACME_BASE_URL ?? "https://api.acme.test",
 });
 
-export const app: AnyCrust = new Crust("acme").extend(acme.extension);
+export const app: AnyCrust = new Crust("acme").extend(acme.extension).add(...acme.commands);

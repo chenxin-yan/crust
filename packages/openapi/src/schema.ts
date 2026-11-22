@@ -181,6 +181,116 @@ export function valueKind(
 	return (items === undefined ? untyped : typeShape(items)) === "scalar" ? "array" : "other";
 }
 
+/** Whether a schema's values are arrays, by its own `type` or its {@link typedView}. */
+export function isArraySchema(spec: OpenApiSpec, value: unknown): boolean {
+	return typeShape(typedView(spec, value, 0)) === "array";
+}
+
+/**
+ * The flag value of a schema {@link valueKind} calls a scalar or an array of scalars: `number` for
+ * numbers and integers, `boolean`, else `string`, with a string enum as `choices`. A numeric enum
+ * is a plain `number`: the API checks it.
+ */
+export function flagValue(
+	spec: OpenApiSpec,
+	value: unknown,
+): {
+	type: "string" | "number" | "boolean";
+	multiple: boolean;
+	choices?: string[];
+	/** Whether the value may be `null`, which no flag sends: its `type` and its `enum`, where set, allow it. */
+	nullable: boolean;
+	/** For a list, whether its items may be `null`, by the same rule. */
+	itemNullable: boolean;
+} {
+	const view = record(typedView(spec, value, 0));
+	const multiple = typeShape(view) === "array";
+	const item = multiple ? record(typedView(spec, publishedSchema(spec, view?.items), 0)) : view;
+	const values = Array.isArray(item?.enum) ? item.enum.filter((entry) => entry !== null) : [];
+	const types = [item?.type, ...values.map((entry) => typeof entry)].flat();
+	const type = types.some((entry) => entry === "number" || entry === "integer")
+		? "number"
+		: types.includes("boolean")
+			? "boolean"
+			: "string";
+	const choices = values.every((entry): entry is string => typeof entry === "string") ? values : [];
+	return {
+		type,
+		multiple,
+		nullable: allowsNull(view),
+		itemNullable: multiple && allowsNull(item),
+		...(type === "string" && choices.length > 0 && { choices }),
+	};
+}
+
+/** Whether a node's `type` and `enum`, where set, both allow `null`. */
+function allowsNull(node: Readonly<Record<string, unknown>> | undefined): boolean {
+	const { type, enum: values } = node ?? {};
+	return (
+		(type === undefined || [type].flat().includes("null")) &&
+		(!Array.isArray(values) || values.includes(null))
+	);
+}
+
+/** The node budget of {@link standaloneSchema}: a larger schema is too big to publish whole. */
+const STANDALONE_NODES = 2000;
+/** Keys whose values are data, not schemas. */
+const DATA_KEYS = new Set(["const", "enum", "default", "examples", "example"]);
+/** Keys whose values map names to schemas. */
+const NAMED_SCHEMAS = new Set(["properties", "patternProperties", "dependentSchemas"]);
+
+/**
+ * `value` as a JSON Schema that stands alone, for `schema()` and MCP, which publish no schema with
+ * a `$ref`: each local `$ref` is replaced by its target, resolved like a published schema (so a
+ * 3.0 node is translated by {@link fromOpenApi30Node}), and other `$` keywords except `$comment`,
+ * and `x-` extensions, are dropped. `undefined` for a recursive schema, a `$ref` that cannot be followed, or one with
+ * more than `budget` nodes.
+ */
+export function standaloneSchema(
+	spec: OpenApiSpec,
+	value: unknown,
+	budget: number = STANDALONE_NODES,
+): unknown {
+	let nodes = 0;
+	const inline = (node: unknown, path: ReadonlySet<string>): unknown => {
+		if (++nodes > budget) throw new RangeError("too large");
+		if (Array.isArray(node)) return node.map((item) => inline(item, path));
+		const object = record(node);
+		if (object === undefined) return node;
+		const ref = object.$ref;
+		if (ref !== undefined) {
+			if (!isLocalRef(ref) || path.has(ref) || refTarget(spec, ref) === undefined) {
+				throw new RangeError("unresolvable");
+			}
+			return inline(publishedSchema(spec, object, path), new Set([...path, ref]));
+		}
+		const out: Record<string, unknown> = {};
+		for (const [key, entry] of Object.entries(object)) {
+			if (key.startsWith("$") && key !== "$comment") {
+				if (key === "$dynamicRef" || key === "$recursiveRef") throw new RangeError("dynamic");
+				continue;
+			}
+			// OpenAPI extensions are not JSON Schema, and may hold anything.
+			if (key.startsWith("x-")) continue;
+			const names = NAMED_SCHEMAS.has(key) ? record(entry) : undefined;
+			out[key] = DATA_KEYS.has(key)
+				? entry
+				: names
+					? Object.fromEntries(
+							Object.entries(names).map(([name, item]) => [name, inline(item, path)]),
+						)
+					: inline(entry, path);
+		}
+		return out;
+	};
+	try {
+		return inline(publishedSchema(spec, value), new Set());
+	} catch (error) {
+		if (error instanceof RangeError) return undefined;
+		throw error;
+	}
+}
+
 /** How many nested `allOf` levels {@link typedView} searches, so a cycle or a deep chain ends. */
 const TYPED_VIEW_DEPTH = 8;
 

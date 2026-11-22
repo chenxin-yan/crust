@@ -8,7 +8,12 @@ import type { CallInput } from "./typed-client.ts";
 /** A request for {@link ApiClient.fetch}: the path below the base URL with its query, and `init`. */
 export interface OperationRequest {
 	readonly path: string;
-	readonly init: RequestInit & { readonly method: string; readonly headers: Headers };
+	readonly init: RequestInit & {
+		readonly method: string;
+		readonly headers: Headers;
+		/** Set for a public operation (`security: []`), which is sent without credentials. */
+		readonly auth?: false;
+	};
 }
 
 /**
@@ -31,8 +36,13 @@ export class ApiResponseError extends Error {
 
 const LOCATIONS = ["path", "query", "header"] as const;
 
+/** What {@link buildRequest} takes: a {@link CallInput}, whose values it checks itself. */
+export type RequestInput = {
+	readonly [Location in (typeof LOCATIONS)[number]]?: Readonly<Record<string, unknown>>;
+} & { readonly body?: unknown };
+
 /** A 2xx status of the spec: `"200"` or a range such as `"2XX"`. */
-const isSuccess = (status: string): boolean => /^2(?:\d\d|XX)$/i.test(status);
+export const isSuccess = (status: string): boolean => /^2(?:\d\d|XX)$/i.test(status);
 
 /** The JSON media types of the operation's 2xx responses. */
 function successJsonTypes(op: Operation): string[] {
@@ -74,7 +84,7 @@ const isScalar = (value: unknown): value is Scalar =>
  * required input, a parameter the operation does not have, or one it cannot send, such as a path
  * value that would make an empty, `.` or `..` segment and so address another resource.
  */
-export function buildRequest(op: Operation, input: CallInput = {}): OperationRequest {
+export function buildRequest(op: Operation, input: RequestInput = {}): OperationRequest {
 	// The model leaves out Accept parameters, as OpenAPI says; the caller may still send one.
 	const accept = Object.keys(input.header ?? {}).find((name) => name.toLowerCase() === "accept");
 	const params: readonly Param[] =
@@ -177,7 +187,12 @@ export function buildRequest(op: Operation, input: CallInput = {}): OperationReq
 
 	return {
 		path: query.length === 0 ? path : `${path}?${query.join("&")}`,
-		init: { method: op.method.toUpperCase(), headers, ...(body !== undefined && { body }) },
+		init: {
+			method: op.method.toUpperCase(),
+			headers,
+			...(body !== undefined && { body }),
+			...(op.security?.length === 0 && { auth: false }),
+		},
 	};
 }
 
@@ -238,10 +253,7 @@ function serializable(
 
 /**
  * Sends `op` through `fetch` (without credentials for a public operation, `security: []`) and
- * returns a 2xx response's JSON body, `undefined` for no content, or the unread `Response` of
- * another media type where the spec declares no JSON for that status. A non-2xx response, a 2xx
- * answered with another media type than the JSON it declares, or a JSON body that does not parse
- * rejects with an {@link ApiResponseError}.
+ * returns its result as {@link readOperationResponse} reads it.
  */
 export async function callOperation(
 	fetch: ApiClient["fetch"],
@@ -249,9 +261,22 @@ export async function callOperation(
 	input?: CallInput,
 ): Promise<unknown> {
 	const { path, init } = buildRequest(op, input);
-	const response = await fetch(path, op.security?.length === 0 ? { ...init, auth: false } : init);
+	return readOperationResponse(op, { path, method: init.method }, await fetch(path, init));
+}
+
+/**
+ * A 2xx response's JSON body, `undefined` for no content, or the unread `Response` of another
+ * media type where the spec declares no JSON for that status. A non-2xx response, a 2xx
+ * answered with another media type than the JSON it declares, or a JSON body that does not parse
+ * rejects with an {@link ApiResponseError}.
+ */
+export async function readOperationResponse(
+	op: Operation,
+	{ path, method }: { readonly path: string; readonly method: string },
+	response: Response,
+): Promise<unknown> {
 	// Neither the query nor anything after it: a parameter may hold a credential.
-	const shown = `${init.method} ${path.replace(/\?[\s\S]*$/, "")}`;
+	const shown = `${method} ${path.replace(/\?[\s\S]*$/, "")}`;
 	if (!response.ok) {
 		await response.body?.cancel();
 		throw new ApiResponseError(
