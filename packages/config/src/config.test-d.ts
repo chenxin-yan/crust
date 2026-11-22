@@ -96,6 +96,63 @@ const deploy = defineCommand("deploy", (command) =>
 const serve = defineCommand("serve", (command) =>
 	command.use(port, telemetry).action(async ({ ctx }) => (await ctx.port) ?? 0),
 );
+
+// `flags` holds what the run was given for each kind of setting: typed as the flag, never required
+// and never defaulted, since `required` and `default` apply after the files. `ctx` holds the setting.
+defineCommand("every", (command) =>
+	command
+		.use(org, region, port, timeout, tags, yes, telemetry)
+		.flags({ local: { type: "string", required: true } })
+		.action(({ ctx, flags }) => {
+			type _Flags = Expect<
+				Equal<
+					[
+						typeof flags.org,
+						typeof flags.region,
+						typeof flags.port,
+						typeof flags.timeout,
+						typeof flags.tags,
+						typeof flags.yes,
+						// The command's own flags keep their types.
+						typeof flags.local,
+					],
+					[
+						string | undefined,
+						"us" | "eu" | undefined,
+						number | undefined,
+						number | undefined,
+						string[] | undefined,
+						boolean | undefined,
+						string,
+					]
+				>
+			>;
+			type _Ctx = Expect<
+				Equal<
+					[Awaited<typeof ctx.org>, Awaited<typeof ctx.region>, Awaited<typeof ctx.timeout>],
+					[string, "us" | "eu", number]
+				>
+			>;
+			// @ts-expect-error -- a `flag: false` setting is in `ctx` only
+			void flags.telemetry;
+			// @ts-expect-error -- an alias is a spelling, not a key of `flags`
+			void flags.listen;
+			// @ts-expect-error -- `ctx.org` is a promise: the missing `await` is caught
+			const text: string = ctx.org;
+			void text;
+		}),
+);
+// An inline child of the root reads every setting, typed the same way.
+new Crust("acme").extend(config.extension).command("inline", (command) =>
+	command.action(({ ctx, flags }) => {
+		type _Inline = Expect<
+			Equal<
+				[Awaited<typeof ctx.region>, typeof flags.region],
+				["us" | "eu", "us" | "eu" | undefined]
+			>
+		>;
+	}),
+);
 const app = new Crust("acme").extend(config.extension).add(deploy, serve);
 // @ts-expect-error -- the settings' Extension is missing
 new Crust("acme").add(deploy);
