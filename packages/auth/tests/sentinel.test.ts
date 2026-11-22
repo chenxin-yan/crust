@@ -4,25 +4,37 @@
  */
 // Run both logins with sentinel secrets, including a hostile server that echoes
 // them back, and check every diagnostic sink. Network bodies sent on purpose are not sinks.
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { inspect } from "node:util";
 
+import { Crust, defineCommand } from "@crustjs/core";
+import { apiClient, apiCommand, bearerAuth } from "@crustjs/openapi";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { createAuth } from "../src/client.ts";
 import { defineServers } from "../src/config.ts";
+import { credentialStore, credentialStoreInternals } from "../src/credentials.ts";
 import { startDeviceFlow } from "../src/device.ts";
 import { discover } from "../src/discovery.ts";
+import { LockRecoveryRequiredError } from "../src/errors.ts";
 import { createAuthorizationSession } from "../src/session.ts";
 import { createTokenClient } from "../src/token-client.ts";
 import {
 	callbackPath,
 	fakeFetch,
+	fakeTimersFrom,
 	json,
+	login,
 	metadataFor,
 	rawRequest,
 	type RecordedRequest,
 	restoreTerminal,
+	settle,
+	tempApp,
 	terminal,
+	type TokenWorld,
+	tokenWorld,
 	uniqueIssuer,
 	wellKnown,
 } from "./helpers.ts";
@@ -32,6 +44,9 @@ const STATIC = {
 	accessToken: "SENTINEL_AT_1",
 	refreshToken: "SENTINEL_RT_1",
 	idToken: "SENTINEL_IDT",
+	refreshedAccessToken: "SENTINEL_AT_2",
+	refreshedRefreshToken: "SENTINEL_RT_2",
+	envToken: "SENTINEL_ENV",
 	deviceCode: "SENTINEL_DEVICE",
 	secret: "SENTINEL_SECRET",
 };
@@ -60,8 +75,10 @@ function record(value: unknown, seen = new Set<unknown>()): void {
 }
 
 function captureSecretsFrom(request: RecordedRequest): void {
-	const verifier = request.body.get("code_verifier");
-	if (verifier) secrets.add(verifier);
+	for (const name of ["code_verifier", "refresh_token", "token"]) {
+		const value = request.body.get(name);
+		if (value) secrets.add(value);
+	}
 	const authorization = request.headers.get("authorization");
 	if (authorization) {
 		secrets.add(authorization);
@@ -84,10 +101,15 @@ beforeEach(() => {
 	}
 });
 
+const roots: string[] = [];
+
 afterEach(() => {
 	restoreTerminal();
 	vi.restoreAllMocks();
 	vi.useRealTimers();
+	vi.unstubAllEnvs();
+	vi.unstubAllGlobals();
+	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
 const echoAll = () => [...secrets].join(" ");
@@ -209,12 +231,15 @@ async function deviceLogin(token: () => Response) {
 /** The same logins through `createAuth()`; what its callbacks receive is a sink too. */
 async function clientLogins(token: () => Response) {
 	terminal({ tty: true });
+	const temp = tempApp();
+	roots.push(temp.root);
 	const w = world(token);
 	const auth = createAuth({
-		app: "acme",
+		app: temp.app,
 		issuer: w.issuer,
 		clientId: "cli",
 		clientSecret: STATIC.secret,
+		apiOrigins: ["https://api.example.com"],
 		fetch: w.fake.fetch,
 	});
 	record(auth);
@@ -238,19 +263,20 @@ async function clientLogins(token: () => Response) {
 	const response = await page!;
 	sinks.push(response.body, JSON.stringify(response.headers));
 
-	vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-	const device = auth
-		.login({
-			device: true,
-			onUrl: () => {
-				throw new Error("unexpected browser login");
-			},
-			onCode: (prompt) => record(prompt),
-		})
-		.then(record, record);
-	await vi.advanceTimersByTimeAsync(700_000);
-	await device;
+	await settle(
+		auth
+			.login({
+				device: true,
+				onUrl: () => {
+					throw new Error("unexpected browser login");
+				},
+				onCode: fakeTimersFrom((prompt) => record(prompt)),
+			})
+			.then(record, record),
+	);
 	vi.useRealTimers();
+	await auth.token().then(record, record);
+	await auth.status().then(record, record);
 }
 
 function expectNoSecretInSinks() {
@@ -297,6 +323,152 @@ describe("secret sentinel gate", () => {
 			error_uri: `https://x.example/${echoAll()}`,
 			state,
 		}));
+		expectNoSecretInSinks();
+	});
+});
+
+/** A stored login of the sentinel tokens, refreshed and revoked by `respond`. */
+async function storedLogin(respond: () => Response) {
+	const w = tokenWorld({
+		token: (request) => {
+			captureSecretsFrom(request);
+			return respond();
+		},
+	});
+	roots.push(w.root);
+	const revoking = fakeFetch({
+		[wellKnown(w.issuer)]: () => json(metadataFor(w.issuer)),
+		[`${w.issuer}/token`]: (request) => {
+			captureSecretsFrom(request);
+			return respond();
+		},
+		[`${w.issuer}/revoke`]: (request) => {
+			captureSecretsFrom(request);
+			return respond();
+		},
+	});
+	const source = w.source({ fetch: revoking.fetch });
+	record(
+		await login(source, { accessToken: STATIC.accessToken, refreshToken: STATIC.refreshToken }),
+	);
+	return { w, source };
+}
+
+/** The client of the stored login in `w`, with `ACME_TOKEN` (blank until a test sets it) as its `env`. */
+function clientOf(w: TokenWorld) {
+	vi.stubEnv("ACME_TOKEN", "");
+	return createAuth({
+		app: w.app,
+		issuer: w.issuer,
+		clientId: "cli",
+		apiOrigins: w.identity.apiOrigins,
+		fetch: w.fetch,
+		env: "ACME_TOKEN",
+	});
+}
+
+const refreshed = () =>
+	json({
+		access_token: STATIC.refreshedAccessToken,
+		refresh_token: STATIC.refreshedRefreshToken,
+		token_type: "Bearer",
+		expires_in: 3600,
+	});
+
+describe("secret sentinel gate: stored credentials", () => {
+	it("a refresh, the client's tokens and a logout leak nothing", async () => {
+		const { w, source } = await storedLogin(refreshed);
+		record(await source.get());
+		const auth = clientOf(w);
+		record(await auth.token());
+		vi.stubEnv("ACME_TOKEN", STATIC.envToken);
+		record(await auth.token());
+		record(await source.logout());
+		expectNoSecretInSinks();
+	});
+
+	it.each(Object.keys(hostile))(
+		"a server echoing secrets through %s leaks nothing from a refresh or logout",
+		async (name) => {
+			const { source } = await storedLogin(hostile[name]!);
+			await source.get().then(record, record);
+			await source.logout().then(record, record);
+			expectNoSecretInSinks();
+		},
+	);
+
+	it.each([
+		["stored", `${STATIC.accessToken}\nx`, STATIC.refreshedAccessToken],
+		["refreshed", STATIC.accessToken, `${STATIC.refreshedAccessToken}\nx`],
+	])(
+		"a %s token that is not a valid header value leaks nothing through bearerAuth",
+		async (_name, stored, refreshedValue) => {
+			secrets.add(stored).add(refreshedValue);
+			const { w, source } = await storedLogin(() =>
+				json({ access_token: refreshedValue, token_type: "Bearer", expires_in: 3600 }),
+			);
+			await (
+				await source.beginLogin()
+			).commit({
+				accessToken: stored,
+				refreshToken: STATIC.refreshToken,
+				tokenType: "Bearer",
+				expiresAt: undefined,
+				scope: undefined,
+			});
+			const api = vi.fn(async () => new Response("expired", { status: 401 }));
+			vi.stubGlobal("fetch", api);
+			const app = new Crust("acme")
+				.extend(
+					apiCommand({
+						spec: { openapi: "3.1.0", paths: {} },
+						baseUrl: "https://api.example.com",
+						auth: bearerAuth(clientOf(w).token),
+					}),
+				)
+				.add(
+					defineCommand("call", {}, (command) =>
+						command.use(apiClient).action(async ({ ctx }) => (await ctx.api).fetch("/me")),
+					),
+				);
+			const outcome = await app.run(["call"]);
+			expect(outcome.status).toBe("failed");
+			record(outcome);
+			sinks.push(outcome.stdout, outcome.stderr);
+			expect(api.mock.calls.length).toBe(stored === STATIC.accessToken ? 1 : 0);
+			expectNoSecretInSinks();
+		},
+	);
+
+	it("a corrupt file and a lock error leak nothing", async () => {
+		const { w, source } = await storedLogin(refreshed);
+		let lockPath = "";
+		// A lock left by a process on another platform: never taken over, reported with its owner.
+		await credentialStoreInternals(w.store).lockIdentity(source.key, async () => {
+			const lockFile = readdirSync(w.dir).find((file) => file.endsWith(".lock"))!;
+			lockPath = join(w.dir, lockFile);
+		});
+		writeFileSync(
+			lockPath,
+			JSON.stringify({
+				ownerId: "foreign",
+				pid: 1,
+				host: "other",
+				platform: "other",
+				createdAt: new Date().toISOString(),
+			}),
+		);
+		const locked = await w
+			.source({ store: credentialStore({ app: w.app, lockTimeout: 50 }) })
+			.get()
+			.catch((error: unknown) => error);
+		expect(locked).toBeInstanceOf(LockRecoveryRequiredError);
+		record(locked);
+		rmSync(lockPath);
+		mkdirSync(w.dir, { recursive: true });
+		writeFileSync(w.file, `{"version":1,"records":{"x":"${STATIC.refreshToken}`);
+		await source.get().then(record, record);
+		await source.logout().then(record, record);
 		expectNoSecretInSinks();
 	});
 });

@@ -1,15 +1,31 @@
 // Test doubles: a scripted authorization server behind an injected fetch, raw loopback
 // requests (fetch() would normalize the paths these tests send), and unique issuers so the
 // process-wide metadata cache never leaks between tests.
+import { mkdtempSync, readFileSync } from "node:fs";
 import { request } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { expect, vi } from "vite-plus/test";
 
 import { defineServers } from "../src/config.ts";
+import { credentialStore } from "../src/credentials.ts";
 import { discover } from "../src/discovery.ts";
 import { OAuthConfigError } from "../src/errors.ts";
 import type { Fetch } from "../src/http.ts";
-import type { AuthServer, AuthServerOptions } from "../src/types.ts";
+import { createTokenSource } from "../src/token-source.ts";
+import type {
+	AuthConfig,
+	AuthServer,
+	AuthServerOptions,
+	Credential,
+	CredentialIdentity,
+	CredentialStore,
+	DeviceLoginPrompt,
+	TokenSet,
+	TokenSource,
+	TokenSourceOptions,
+} from "../src/types.ts";
 
 let counter = 0;
 
@@ -212,4 +228,172 @@ export function restoreTerminal(): void {
 		if (descriptor) Object.defineProperty(stream, "isTTY", descriptor);
 		else delete (stream as { isTTY?: boolean }).isTTY;
 	});
+}
+
+/**
+ * A fresh app whose state directory is under a new temporary directory: the state variable
+ * is stubbed, so restore it with `vi.unstubAllEnvs()`. `dir` is where `credentials.json` goes.
+ */
+export function tempApp(): { app: string; root: string; dir: string } {
+	counter += 1;
+	const root = mkdtempSync(join(tmpdir(), "crust-auth-"));
+	const app = `app-${counter}`;
+	if (process.platform === "win32") {
+		vi.stubEnv("LOCALAPPDATA", root);
+		return { app, root, dir: join(root, app, "State") };
+	}
+	vi.stubEnv("XDG_STATE_HOME", root);
+	return { app, root, dir: join(root, app) };
+}
+
+/** A token response for the scripted server. */
+export const tokenResponse = (
+	accessToken: string,
+	refreshToken?: string,
+	expiresIn = 3600,
+): Response =>
+	json({
+		access_token: accessToken,
+		token_type: "Bearer",
+		expires_in: expiresIn,
+		...(refreshToken === undefined ? {} : { refresh_token: refreshToken }),
+	});
+
+/** A token set as a login returns it, expired unless `expiresAt` says otherwise. */
+export function loginTokens(fields: Partial<TokenSet> = {}): TokenSet {
+	return {
+		accessToken: "AT1",
+		refreshToken: "RT1",
+		tokenType: "Bearer",
+		expiresAt: Date.now() - 1,
+		scope: undefined,
+		...fields,
+	};
+}
+
+export interface TokenWorld {
+	app: string;
+	root: string;
+	/** The state directory. */
+	dir: string;
+	issuer: string;
+	config: AuthConfig;
+	store: CredentialStore;
+	identity: CredentialIdentity;
+	fetch: Fetch;
+	requests: RecordedRequest[];
+	/** A token source of `identity` over `store` and the scripted server. */
+	source(overrides?: Partial<TokenSourceOptions>): TokenSource;
+	tokenRequests(): RecordedRequest[];
+	/** `credentials.json`. */
+	file: string;
+	/** `credentials.json`, parsed. */
+	document(): { storeId: string; records: Record<string, any> };
+}
+
+/**
+ * A credentials file in a temporary state directory, a scripted server (`token` answers the
+ * token endpoint) and a token source for `https://api.example.com`.
+ */
+export function tokenWorld(
+	options: {
+		token?: Handler;
+		routes?: Record<string, Handler>;
+		metadata?: Record<string, unknown>;
+		identity?: Partial<CredentialIdentity>;
+		lockTimeout?: number;
+	} = {},
+): TokenWorld {
+	const temp = tempApp();
+	const issuer = uniqueIssuer();
+	const fake = fakeFetch({
+		[wellKnown(issuer)]: () => json(metadataFor(issuer, options.metadata)),
+		[`${issuer}/token`]: options.token ?? (() => tokenResponse("AT2", "RT2")),
+		...options.routes,
+	});
+	const config = defineServers({ servers: [{ issuer, clientId: "cli" }] });
+	const store = credentialStore({ app: temp.app, lockTimeout: options.lockTimeout ?? 5_000 });
+	const identity: CredentialIdentity = {
+		issuer,
+		clientId: "cli",
+		apiOrigins: ["https://api.example.com"],
+		...options.identity,
+	};
+	const source = (overrides: Partial<TokenSourceOptions> = {}) =>
+		createTokenSource({ config, identity, store, fetch: fake.fetch, ...overrides });
+	const tokenRequests = () =>
+		fake.requests.filter((recorded) => recorded.url === `${issuer}/token`);
+	const file = join(temp.dir, "credentials.json");
+	const document = () => JSON.parse(readFileSync(file, "utf8"));
+	return {
+		...temp,
+		...fake,
+		issuer,
+		config,
+		store,
+		identity,
+		source,
+		tokenRequests,
+		file,
+		document,
+	};
+}
+
+/** Commits a login of `tokens` through `source`. */
+export async function login(
+	source: TokenSource,
+	tokens: Partial<TokenSet> = {},
+): Promise<Credential> {
+	const ticket = await source.beginLogin();
+	return ticket.commit(loginTokens(tokens));
+}
+
+/** Takes a lock with `take` and holds it until `release()`; resolves once it is held. */
+export async function holdLock(
+	take: (fn: () => Promise<void>) => Promise<void>,
+): Promise<{ release(): Promise<void> }> {
+	const acquired = Promise.withResolvers<void>();
+	const released = Promise.withResolvers<void>();
+	const done = take(() => {
+		acquired.resolve();
+		return released.promise;
+	});
+	await Promise.race([acquired.promise, done]);
+	return {
+		async release() {
+			released.resolve();
+			await done;
+		},
+	};
+}
+
+/** An `onCode` that switches to fake timers first, so the device poll's waits can be skipped. */
+export function fakeTimersFrom(
+	onCode: (prompt: DeviceLoginPrompt) => void | Promise<void> = () => {},
+): (prompt: DeviceLoginPrompt) => void | Promise<void> {
+	return (prompt) => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+		return onCode(prompt);
+	};
+}
+
+/**
+ * Settles a device login: once {@link fakeTimersFrom} switched timers, a second of fake time
+ * per event loop turn; the login file's I/O runs on real time meanwhile.
+ */
+export async function settle<T>(promise: Promise<T>): Promise<unknown> {
+	const state = { done: false };
+	const result = promise.then(
+		(value) => value,
+		(error: unknown) => error,
+	);
+	void result.finally(() => {
+		state.done = true;
+	});
+	const deadline = Date.now() + 4_000;
+	while (!state.done && Date.now() < deadline) {
+		if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(1_000);
+		await new Promise((resolve) => setImmediate(resolve));
+	}
+	return result;
 }

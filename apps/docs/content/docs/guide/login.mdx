@@ -3,29 +3,34 @@ title: Add login to your CLI
 description: Sign users in from a terminal with a browser or a device code, using @crustjs/auth.
 ---
 
-A CLI that calls an API on the user's behalf needs their token. [`@crustjs/auth`](/docs/modules/auth) gives you one client that runs the whole OAuth sign-in: a browser on a desktop, a device code anywhere else.
+A CLI that calls an API on the user's behalf needs their token. [`@crustjs/auth`](/docs/modules/auth) gives you one client that signs the user in (a browser on a desktop, a device code anywhere else), keeps the login in a private file, and hands the token to your API calls.
 
 ## Before you start
 
 Register your CLI with your authorization server as a **public client**, with redirect URI `http://127.0.0.1/callback` (any port) and, if you use it, the device grant. Do not ship a client secret: one bundled in a CLI is readable by every user.
 
-## The command
+## The commands
 
-<include lang="ts" meta='title="login.ts"'>
+<include lang="ts" meta='title="auth.ts"'>
   ../../../examples/guide/login.ts
 </include>
 
-What it does:
+What they do:
 
-1. `createAuth()` checks the server settings once, without any request.
-2. `auth.login()` picks the login: `--device` always means a device code; on CI or with no terminal it refuses with `LoginRequiresInteractionError` (`code` `"login-requires-interaction"`), whose message says to use the device login; at a terminal over SSH or on Linux without a display it uses a device code; otherwise the browser. See [Choosing a login](/docs/modules/auth#choosing-a-login).
+1. `createAuth()` checks the settings once, without any request or file access. `apiOrigins` are the only hosts the stored login's token is sent to; declare them in code. A token from `ACME_TOKEN` is the user's own choice and is not checked against them.
+2. `auth.login()` picks the login: `--device` always means a device code; on CI or with no terminal it refuses with `LoginRequiresInteractionError` (`code` `"login-requires-interaction"`), whose message says to use the device login or set `ACME_TOKEN`; at a terminal over SSH or on Linux without a display it uses a device code; otherwise the browser. See [Choosing a login](/docs/modules/auth#choosing-a-login).
 3. **Browser:** `onUrl` gets the sign-in URL and `open()`, which opens it in the system browser. The command prints the URL, then opens it; the login waits for the browser to come back and frees the port on every path.
 4. **Device code:** `onCode` gets the code and `message`, the default instructions with the URL's host and an anti-phishing line. The login waits for approval at the pace the server asks for.
-5. The command's `ctx.signal` cancels the login on Ctrl-C.
+5. The tokens go to `credentials.json` in the app's state directory (`0600` on Unix). A `logout` that runs while a login waits is not undone: that login fails with `StaleCommitError` and stores nothing.
+6. The command's `ctx.signal` cancels the login, or the logout's wait for the file, on Ctrl-C.
 
 The client prints nothing itself: it does not know your command's output stream. Print to stderr, as above, so `--json` output and pipes stay clean.
 
-`auth.login()` resolves to the tokens and does not store them yet; storing the login (and `auth.token()`, `auth.status()`, `auth.logout()`) comes with the next change to `@crustjs/auth`.
+## Using the token
+
+`bearerAuth(auth.token)` gives [`@crustjs/openapi`](/docs/modules/openapi#authentication) the token for each invocation: `ACME_TOKEN` when it is set, so CI and agents need no login, otherwise the stored login, refreshed when it is about to expire and once more after a 401. Elsewhere, call `auth.token({ signal, baseUrl })` yourself. With no token, it throws `LoginRequiredError` (`code` `"login-required"`): tell the user to run `acme login`.
+
+`auth.status()` reads where the token would come from without a request, so `status` stays fast and offline. `auth.logout()` deletes the login and revokes it at the server, and reports both outcomes.
 
 ## More than one server
 

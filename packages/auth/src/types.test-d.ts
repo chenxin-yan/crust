@@ -1,5 +1,7 @@
 // Compile-time contracts, enforced by check:types (not vp test).
 
+import { type ApiClientOptions, bearerAuth } from "@crustjs/openapi";
+
 import type { AuthError, AuthErrorCode, OAuthError } from "./errors.ts";
 import type * as oauth from "./oauth.ts";
 import type { Pkce } from "./pkce.ts";
@@ -70,18 +72,18 @@ server.tokenEndpoint = "https://evil.example/token";
 // @ts-expect-error -- the verifier is not on the session
 void session.verifier;
 
-declare const auth: AuthClient;
+declare const client: AuthClient;
 declare const onUrl: Parameters<AuthClient["login"]>[0]["onUrl"];
 declare const onCode: Parameters<AuthClient["login"]>[0]["onCode"];
 
 // login() has no default output: both callbacks are required.
-void auth.login({ onUrl, onCode });
+void client.login({ onUrl, onCode });
 // @ts-expect-error -- onUrl is required
-void auth.login({ onCode });
+void client.login({ onCode });
 // @ts-expect-error -- onCode is required
-void auth.login({ onUrl });
+void client.login({ onUrl });
 // @ts-expect-error -- the options are required
-void auth.login();
+void client.login();
 
 // The prompt never carries the device code.
 export type NoDeviceCodeInPrompt = Expect<
@@ -101,3 +103,7 @@ void narrowed;
 export type ProtocolCodesAreAuthErrorCodes = Expect<
 	Equal<Extract<AuthErrorCode, OAuthError["code"]>, OAuthError["code"]>
 >;
+
+// The client's token() is bearerAuth()'s resolver as is, detached: it fits structurally, with no
+// dependency between the packages.
+export const clientAuth: NonNullable<ApiClientOptions["auth"]> = bearerAuth(client.token);
