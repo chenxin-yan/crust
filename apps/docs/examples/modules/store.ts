@@ -1,4 +1,6 @@
-import { createStore, configDir } from "@crustjs/store";
+import { join } from "node:path";
+
+import { createStore, configDir, CrustStoreError, stateDir, withLock } from "@crustjs/store";
 
 //#region store
 const store = createStore({
@@ -31,4 +33,26 @@ const ports = createStore({
 	},
 });
 await ports.read();
+//#endregion
+
+//#region strict
+const credentials = createStore({
+	dirPath: stateDir("my-cli"),
+	name: "credentials",
+	fields: { token: { type: "string" } },
+	strict: true,
+});
+try {
+	await credentials.patch({ token: "abc" }, { signal: AbortSignal.timeout(60_000) });
+} catch (error) {
+	if (error instanceof CrustStoreError && error.is("LOCK")) {
+		console.error(error.details.manualStep);
+	}
+	throw error;
+}
+
+// A lock on a path with no store document, for work that spans several steps.
+await withLock(join(stateDir("my-cli"), "refresh-default"), async () => {
+	await credentials.update((current) => ({ ...current, token: "def" }));
+});
 //#endregion

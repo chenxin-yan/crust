@@ -2,18 +2,23 @@
 // @crustjs/store — createStore factory and async object-store API
 // ────────────────────────────────────────────────────────────────────────────
 
+import { lstat } from "node:fs/promises";
+import { dirname } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
+import { isErrnoException } from "@crustjs/utils/error";
 import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
 import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
 import { normalizeStandardIssues, type StandardSchema } from "@crustjs/utils/schema";
 
 import { CrustStoreError, type ValidationErrorDetails } from "./errors.ts";
+import { checkDirectory, checkLockTimeout, withOperationLock } from "./lock.ts";
 import { applyFieldDefaults, setDocumentValue, withUnknownKeys } from "./merge.ts";
 import { resolveStorePath } from "./path.ts";
 import {
 	deleteJson,
 	readJson,
+	refuseSymlink,
 	withFileLock,
 	type WriteJsonOptions,
 	writeJson,
@@ -24,6 +29,7 @@ import type {
 	InferStoreConfig,
 	Store,
 	StoreDocument,
+	StoreMutationOptions,
 	StoreUpdater,
 	StoreValidatorIssue,
 	ValueType,
@@ -147,15 +153,35 @@ function jsonInstabilityIssues(document: StoreDocument): StoreValidatorIssue[] {
 /** Tail of each store file's mutation queue, shared by every store instance in the process. */
 const mutationQueues = new Map<string, Promise<unknown>>();
 
-/** Runs `task` after every mutation already queued for `filePath` settles, in call order. */
-function enqueue<T>(filePath: string, task: () => Promise<T>): Promise<T> {
-	const run = (mutationQueues.get(filePath) ?? Promise.resolve()).then(task);
+/**
+ * Runs `task` after every mutation already queued for `filePath` settles, in call order.
+ * An abort while queued rejects at once with `signal.reason`, and `task` never runs.
+ */
+function enqueue<T>(
+	filePath: string,
+	task: () => Promise<T>,
+	signal: AbortSignal | undefined,
+): Promise<T> {
+	let started = false;
+	const run = (mutationQueues.get(filePath) ?? Promise.resolve()).then(() => {
+		started = true;
+		signal?.throwIfAborted();
+		return task();
+	});
 	const tail = run.catch(() => {});
 	mutationQueues.set(filePath, tail);
 	void tail.then(() => {
 		if (mutationQueues.get(filePath) === tail) mutationQueues.delete(filePath);
 	});
-	return run;
+	if (signal === undefined) return run;
+	return new Promise<T>((resolve, reject) => {
+		const onAbort = () => {
+			if (!started) reject(signal.reason);
+		};
+		if (signal.aborted) onAbort();
+		signal.addEventListener("abort", onAbort, { once: true });
+		run.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+	});
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -173,7 +199,9 @@ function enqueue<T>(filePath: string, task: () => Promise<T>): Promise<T> {
  * @param options - Store configuration options.
  * @returns A {@link Store} instance with `read`, `write`, `update`, `patch`, and `reset` methods.
  * @throws {CrustStoreError} `PATH` if `dirPath` or `name` is invalid.
- * @throws {CrustStoreError} `DEFINITION` if a field mixes `schema` with `default` or `validate`.
+ * @throws {CrustStoreError} `DEFINITION` if a field mixes `schema` with `default` or `validate`,
+ *   `strict` is combined with a non-private `access`, or a strict store's `lockTimeout` is not a
+ *   finite number of at least 0.
  *
  * @example
  * ```ts
@@ -201,7 +229,7 @@ function enqueue<T>(filePath: string, task: () => Promise<T>): Promise<T> {
 export function createStore<const F extends FieldsDef>(
 	options: CreateStoreOptions<F>,
 ): Store<InferStoreConfig<F>> {
-	const { dirPath, name, fields, pruneUnknown, access } = options;
+	const { dirPath, name, fields, pruneUnknown, access, strict, lockTimeout } = options;
 	type Config = InferStoreConfig<F>;
 	const validators = new Map<string, FieldValidator>();
 
@@ -222,11 +250,22 @@ export function createStore<const F extends FieldsDef>(
 		}
 	}
 
+	// A strict store creates its directory (0700) and file (0600) with private bits only. An existing
+	// directory is accepted unless group or others can write to it, it is a symbolic link, or another
+	// user owns it (checkDirectory).
+	if (strict === true && access !== undefined && access !== "private") {
+		throw new CrustStoreError(
+			"DEFINITION",
+			`a strict store is always private: "strict" cannot be combined with access ${JSON.stringify(access)}`,
+		);
+	}
+	if (strict === true) checkLockTimeout("lockTimeout", lockTimeout);
+
 	const filePath = resolveStorePath(dirPath, name);
 
 	// Permission bits forwarded to every write (default → platform behavior).
 	const writeOptions: WriteJsonOptions =
-		access === "private"
+		access === "private" || strict === true
 			? { fileMode: 0o600, directoryMode: 0o700 }
 			: access === undefined || access === "default"
 				? {}
@@ -358,13 +397,48 @@ export function createStore<const F extends FieldsDef>(
 	}
 
 	/** Serialized within the process, then locked across processes. */
-	function mutate<T>(operation: "write" | "delete", task: () => Promise<T>): Promise<T> {
-		return enqueue(filePath, () =>
-			withFileLock(filePath, task, { operation, directoryMode: writeOptions.directoryMode }),
+	function mutate<T>(
+		operation: "write" | "delete",
+		task: () => Promise<T>,
+		signal: AbortSignal | undefined,
+	): Promise<T> {
+		return enqueue(
+			filePath,
+			async () => {
+				if (strict !== true) {
+					const { directoryMode } = writeOptions;
+					return withFileLock(filePath, task, { operation, directoryMode, signal });
+				}
+				// No directory means no store file: the reset is complete, and none is created. It does
+				// not run the delete, which would be unlocked once another process creates the store.
+				// lstat, so a dangling link at the directory path still meets the directory checks.
+				if (operation === "delete") {
+					const missing = await lstat(dirname(filePath)).then(
+						() => false,
+						(err: unknown) => isErrnoException(err) && err.code === "ENOENT",
+					);
+					// SAFETY: only reset() deletes, and it resolves to undefined.
+					if (missing) return undefined as T;
+				}
+				const checkedTask = async () => {
+					await refuseSymlink(filePath, operation);
+					return task();
+				};
+				return withOperationLock(operation, filePath, checkedTask, {
+					signal,
+					timeout: lockTimeout,
+				});
+			},
+			signal,
 		);
 	}
 
 	async function read(): Promise<Config> {
+		if (strict === true) {
+			// A file in a directory others can write to may have been planted by them.
+			await checkDirectory(filePath, "read");
+			await refuseSymlink(filePath, "read");
+		}
 		const document = toDocument(await readPersisted());
 		await runFieldValidators(document, "read");
 		// SAFETY: the document was normalized and validated against every field definition.
@@ -385,42 +459,57 @@ export function createStore<const F extends FieldsDef>(
 		return normalized as Config;
 	}
 
-	function write(config: Config): Promise<Config> {
-		return mutate("write", async () => {
-			// write() replaces a corrupt file, which leaves no unknown keys to keep.
-			const persisted =
-				pruneUnknown === true
-					? undefined
-					: await readPersisted().catch((err: unknown) => {
-							if (err instanceof CrustStoreError && err.is("PARSE")) return undefined;
-							throw err;
-						});
-			// SAFETY: field definitions constrain config values and schema outputs to JSON-compatible values.
-			return persist({ ...config } as StoreDocument, "write", persisted);
-		});
+	function write(config: Config, { signal }: StoreMutationOptions = {}): Promise<Config> {
+		return mutate(
+			"write",
+			async () => {
+				// write() replaces a corrupt file, which leaves no unknown keys to keep.
+				const persisted =
+					pruneUnknown === true
+						? undefined
+						: await readPersisted().catch((err: unknown) => {
+								if (err instanceof CrustStoreError && err.is("PARSE")) return undefined;
+								throw err;
+							});
+				// SAFETY: field definitions constrain config values and schema outputs to JSON-compatible values.
+				return persist({ ...config } as StoreDocument, "write", persisted);
+			},
+			signal,
+		);
 	}
 
-	function update(updater: StoreUpdater<Config>): Promise<Config> {
-		return mutate("write", async () => {
-			const persisted = await readPersisted();
-			const current = toDocument(persisted);
-			await runFieldValidators(current, "read");
-			// SAFETY: the document was normalized and validated against every field definition.
-			const updated = updater(current as Config);
-			// SAFETY: field definitions constrain updater output to JSON-compatible values.
-			return persist({ ...updated } as StoreDocument, "update", persisted);
-		});
+	function update(
+		updater: StoreUpdater<Config>,
+		{ signal }: StoreMutationOptions = {},
+	): Promise<Config> {
+		return mutate(
+			"write",
+			async () => {
+				const persisted = await readPersisted();
+				const current = toDocument(persisted);
+				await runFieldValidators(current, "read");
+				// SAFETY: the document was normalized and validated against every field definition.
+				const updated = updater(current as Config);
+				// SAFETY: field definitions constrain updater output to JSON-compatible values.
+				return persist({ ...updated } as StoreDocument, "update", persisted);
+			},
+			signal,
+		);
 	}
 
-	function patch(partial: Partial<Config>): Promise<Config> {
-		return mutate("write", async () => {
-			const persisted = await readPersisted();
-			return persist({ ...toDocument(persisted), ...partial }, "patch", persisted);
-		});
+	function patch(partial: Partial<Config>, { signal }: StoreMutationOptions = {}): Promise<Config> {
+		return mutate(
+			"write",
+			async () => {
+				const persisted = await readPersisted();
+				return persist({ ...toDocument(persisted), ...partial }, "patch", persisted);
+			},
+			signal,
+		);
 	}
 
-	function reset(): Promise<void> {
-		return mutate("delete", () => deleteJson(filePath));
+	function reset({ signal }: StoreMutationOptions = {}): Promise<void> {
+		return mutate("delete", () => deleteJson(filePath), signal);
 	}
 
 	return { read, write, update, patch, reset };

@@ -5,6 +5,9 @@
 // Errors
 export type { StoreErrorCode, ValidationErrorDetails } from "./errors.ts";
 export { CrustStoreError } from "./errors.ts";
+// Lock
+export type { LockOptions } from "./lock.ts";
+export { withLock } from "./lock.ts";
 // Path
 export type { PlatformEnv } from "./path.ts";
 export { cacheDir, configDir, dataDir, stateDir } from "./path.ts";
@@ -18,6 +21,7 @@ export type {
 	InferStoreConfig,
 	Store,
 	StoreAccess,
+	StoreMutationOptions,
 	StorePermissionBits,
 	StoreUpdater,
 	StoreValidatorIssue,

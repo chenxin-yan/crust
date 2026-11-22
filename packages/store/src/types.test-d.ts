@@ -3,6 +3,8 @@
 import type { StandardSchema } from "@crustjs/utils/schema";
 import { z } from "zod";
 
+import { type LockOptions, withLock } from "./lock.ts";
+import { createStore } from "./store.ts";
 import type { CreateStoreOptions, FieldsDef, InferStoreConfig } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -230,4 +232,36 @@ type Expect<T extends true> = T;
 			withValidate: { schema: z.string(), validate: () => {} },
 		};
 	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Strict stores, mutation options, and withLock
+// ────────────────────────────────────────────────────────────────────────────
+
+{
+	const fields = { n: { type: "number", default: 0 } } as const satisfies FieldsDef;
+	const store = createStore({
+		dirPath: "/tmp",
+		name: "n",
+		fields,
+		strict: true,
+		lockTimeout: 1_000,
+	});
+	const signal = new AbortController().signal;
+
+	// every mutation takes an optional signal
+	void store.write({ n: 1 }, { signal });
+	void store.update((current) => current, { signal });
+	void store.patch({ n: 1 }, { signal });
+	void store.reset({ signal });
+	void store.reset();
+	// @ts-expect-error -- read() is never locked, so it takes no signal
+	void store.read({ signal });
+	// @ts-expect-error -- strict is a boolean switch
+	createStore({ dirPath: "/tmp", name: "n", fields, strict: "yes" });
+
+	// withLock returns what its callback resolves to
+	const locked = withLock("/tmp/key", async () => 1, { signal, timeout: 1_000 });
+	type _Locked = Expect<Equal<typeof locked, Promise<number>>>;
+	const _options: LockOptions = {};
 }
