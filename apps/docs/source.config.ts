@@ -16,10 +16,7 @@ export const docs = defineDocs({
 	docs: {
 		schema: packagePageSchema,
 		postprocess: {
-			// "string" renders at build time: the default renders at request time through `fumadocs-core/server`,
-			// which resolves to its throwing browser stub in the Workers SSR environment.
-			// TODO: back to `true` once fixed: https://github.com/fuma-nama/fumadocs/issues/3895
-			includeProcessedMarkdown: { output: "string" },
+			includeProcessedMarkdown: true,
 		},
 	},
 });

@@ -17,3 +17,8 @@ overrides:
 allowBuilds:
   esbuild: false
   workerd: false
+
+# Published 2026-11-22 with the fix for fuma-nama/fumadocs#3895; delete once older than the default 24h minimumReleaseAge.
+minimumReleaseAgeExclude:
+  - fumadocs-core@16.19.7
+  - fumadocs-ui@16.19.7
