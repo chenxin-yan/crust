@@ -506,12 +506,22 @@ describe("api <path>", () => {
 	});
 
 	it("reads --body @file", async () => {
-		const file = join(mkdtempSync(join(tmpdir(), "crust-openapi-")), "body.json");
+		const dir = mkdtempSync(join(tmpdir(), "crust-openapi-"));
+		const file = join(dir, "body.json");
 		writeFileSync(file, '{"name":"grace"}');
 		const calls = stubFetch();
 		await captureExecute(buildApp(), ["api", "/users", "-X", "PUT", "--body", `@${file}`]);
 
 		expect(calls[0]).toMatchObject({ method: "PUT", body: '{"name":"grace"}' });
+
+		vi.stubEnv("HOME", dir);
+		vi.stubEnv("USERPROFILE", dir);
+		try {
+			await captureExecute(buildApp(), ["api", "/users", "-X", "PUT", "--body", "@~/body.json"]);
+		} finally {
+			vi.unstubAllEnvs();
+		}
+		expect(calls[1]).toMatchObject({ method: "PUT", body: '{"name":"grace"}' });
 	});
 
 	it("prints a non-2xx body to stdout and a summary to stderr with exit code 1", async () => {

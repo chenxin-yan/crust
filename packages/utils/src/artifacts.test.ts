@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { BUILD_OUT_DIR_ENV, isSourceRun, resolveArtifactDir } from "./artifacts.ts";
+import { BUILD_OUT_DIR_ENV, isSourceRun, artifactPath } from "./artifacts.ts";
 
 let tmpDir: string;
 let originalArgv1: string | undefined;
@@ -59,17 +59,26 @@ function withNodeSea<T>(run: () => T): T {
 	}
 }
 
-describe("resolveArtifactDir", () => {
-	it("rejects anything but a single directory name", () => {
-		for (const name of ["", ".", "..", "skills/demo", "a\\b", "/skills"]) {
-			expect(() => resolveArtifactDir(name)).toThrow("single directory name");
+describe("artifactPath", () => {
+	it("rejects absolute paths and empty, . or .. segments", () => {
+		for (const path of [
+			"",
+			".",
+			"..",
+			"/skills",
+			"skills/",
+			"skills//demo",
+			"skills/../x",
+			"a\\..",
+		]) {
+			expect(() => artifactPath(path)).toThrow("Artifact path must be names separated by");
 		}
 	});
 
 	it("resolves next to the executable inside a Bun compiled binary", () => {
 		process.argv[1] = join(tmpDir, "elsewhere", "cli.ts");
 		const result = withExecPath(join(tmpDir, "bin", "cli"), () =>
-			withBunMain("/$bunfs/root/cli", () => resolveArtifactDir("skills")),
+			withBunMain("/$bunfs/root/cli", () => artifactPath("skills")),
 		);
 		expect(result).toBe(join(tmpDir, "bin", "skills"));
 	});
@@ -79,7 +88,7 @@ describe("resolveArtifactDir", () => {
 		process.argv[1] = join(tmpDir, "elsewhere", "cli.ts");
 		vi.stubEnv("CRUST_INTERNAL_BUILD", "1");
 		const result = withExecPath(join(tmpDir, "bin", "cli.exe"), () =>
-			withBunMain("B:/~BUN/root/cli.exe", () => resolveArtifactDir("skills")),
+			withBunMain("B:/~BUN/root/cli.exe", () => artifactPath("skills")),
 		);
 		expect(result).toBe(join(tmpDir, "bin", "skills"));
 	});
@@ -89,7 +98,7 @@ describe("resolveArtifactDir", () => {
 		vi.stubEnv("CRUST_INTERNAL_BUILD", "1");
 		vi.stubEnv(BUILD_OUT_DIR_ENV, join(tmpDir, ".crust", "artifacts"));
 		const result = withExecPath(join(tmpDir, "bin", "cli"), () =>
-			withNodeSea(() => resolveArtifactDir("skills")),
+			withNodeSea(() => artifactPath("skills")),
 		);
 		expect(result).toBe(join(tmpDir, "bin", "skills"));
 	});
@@ -100,7 +109,7 @@ describe("resolveArtifactDir", () => {
 		vi.stubEnv("CRUST_INTERNAL_BUILD", "1");
 		vi.stubEnv(BUILD_OUT_DIR_ENV, join(tmpDir, "stale-build-output"));
 		// `<artifacts.ts dir>/../skills`, as `<bundle>/bin/cli.js` resolves `<bundle>/skills`.
-		expect(resolveArtifactDir("skills")).toBe(resolve(import.meta.dirname, "..", "skills"));
+		expect(artifactPath("skills")).toBe(resolve(import.meta.dirname, "..", "skills"));
 	});
 
 	it("resolves .crust/root under the nearest package root of argv[1] when running from source", async () => {
@@ -108,7 +117,10 @@ describe("resolveArtifactDir", () => {
 		await mkdir(join(tmpDir, "src"));
 		process.argv[1] = join(tmpDir, "src", "cli.ts");
 		await writeFile(process.argv[1], "");
-		expect(resolveArtifactDir("skills")).toBe(join(tmpDir, ".crust", "root", "skills"));
+		expect(artifactPath("skills")).toBe(join(tmpDir, ".crust", "root", "skills"));
+		for (const path of ["templates/base/a.txt", "templates\\base\\a.txt"]) {
+			expect(artifactPath(path)).toBe(join(tmpDir, ".crust", "root", "templates", "base", "a.txt"));
+		}
 	});
 
 	it("resolves source-linked artifacts from the real entrypoint's package, not the consumer", async () => {
@@ -121,7 +133,7 @@ describe("resolveArtifactDir", () => {
 		await writeFile(join(source, "src", "cli.ts"), "");
 		process.argv[1] = join(consumer, "node_modules", ".bin", "cli");
 		await symlink(join(source, "src", "cli.ts"), process.argv[1], "file");
-		expect(resolveArtifactDir("templates")).toBe(join(source, ".crust", "root", "templates"));
+		expect(artifactPath("templates")).toBe(join(source, ".crust", "root", "templates"));
 	});
 
 	it("resolves the build output directory while crust build prepares the snapshot", async () => {
@@ -129,7 +141,7 @@ describe("resolveArtifactDir", () => {
 		await writeFile(join(tmpDir, "package.json"), "{}");
 		process.argv[1] = join(tmpDir, "src", "cli.ts");
 		vi.stubEnv(BUILD_OUT_DIR_ENV, join(tmpDir, ".crust", "artifacts"));
-		expect(resolveArtifactDir("skills")).toBe(join(tmpDir, ".crust", "artifacts", "skills"));
+		expect(artifactPath("skills")).toBe(join(tmpDir, ".crust", "artifacts", "skills"));
 	});
 
 	it("reports artifact context for missing or broken source entrypoints", async () => {
@@ -138,7 +150,7 @@ describe("resolveArtifactDir", () => {
 		await symlink(missing, broken, "file");
 		for (const entrypoint of [missing, broken]) {
 			process.argv[1] = entrypoint;
-			expect(() => resolveArtifactDir("skills")).toThrow(
+			expect(() => artifactPath("skills")).toThrow(
 				`Could not resolve artifact "skills": could not resolve source entrypoint "${entrypoint}".`,
 			);
 		}
@@ -147,11 +159,11 @@ describe("resolveArtifactDir", () => {
 	it("names the entrypoint when no package root is found from source", async () => {
 		process.argv[1] = join(tmpDir, "cli.ts");
 		await writeFile(process.argv[1], "");
-		expect(() => resolveArtifactDir("skills")).toThrow(
+		expect(() => artifactPath("skills")).toThrow(
 			`Could not resolve artifact "skills": no package.json was found above entrypoint "${process.argv[1]}".`,
 		);
 		process.argv.length = 1;
-		expect(() => resolveArtifactDir("skills")).toThrow("process.argv[1] (unset)");
+		expect(() => artifactPath("skills")).toThrow("process.argv[1] (unset)");
 	});
 });
 

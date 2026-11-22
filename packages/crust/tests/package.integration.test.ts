@@ -69,7 +69,7 @@ describe.skipIf(!which("bun") || !which("npm"))("Bun runtime package", everyHost
 			join(project, "src", "greet.ts"),
 			`import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Crust, defineExtension, defineExtensionId, resolveArtifactDir } from ${JSON.stringify(coreDist)};
+import { Crust, defineExtension, defineExtensionId, artifactPath } from ${JSON.stringify(coreDist)};
 import { help } from ${JSON.stringify(extensionsDist)};
 import { punctuation } from "crust-greeting-dep";
 const man = defineExtension(defineExtensionId("man")).build(() => [{ path: "man/bun-greet.1", content: ".Dd" }]);
@@ -83,8 +83,8 @@ await new Crust("bun-greet", { description: "Greets under Bun" })
 		stdout(JSON.stringify({
 			greeting: flags.shout ? greeting.toUpperCase() : greeting,
 			bun: process.versions.bun ?? null,
-			asset: readFileSync(join(resolveArtifactDir("assets"), "greeting.txt"), "utf8").trim(),
-			man: readFileSync(join(resolveArtifactDir("man"), "bun-greet.1"), "utf8"),
+			asset: readFileSync(join(artifactPath("assets"), "greeting.txt"), "utf8").trim(),
+			man: readFileSync(join(artifactPath("man"), "bun-greet.1"), "utf8"),
 		}));
 	})
 	.execute();

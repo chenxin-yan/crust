@@ -5,8 +5,7 @@
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 
-import { isWithin } from "@crustjs/utils/path";
-import { resolveSourceDir } from "@crustjs/utils/source";
+import { isWithin, resolvePathLike } from "@crustjs/utils/path";
 
 import type { RenderedFile } from "./types.ts";
 
@@ -208,7 +207,7 @@ function missingSkillMdError(root: string): Error {
  * author owns it.
  */
 export async function loadBundleFiles(sourceDir: string | URL): Promise<LoadedBundle> {
-	const resolved = resolveSourceDir(sourceDir);
+	const resolved = resolvePathLike(sourceDir);
 
 	let canonicalRoot: string;
 	try {

@@ -158,13 +158,13 @@ my-cli api /users --paginate                       # every page, one JSON line e
 
 `api <path>` resolves `path` below `baseUrl`, keeping the base URL's own path; an absolute URL is used as is. Without `<path>`, `--list`, or `--spec`, it fails with a `VALIDATION` error.
 
-| Flag                        | Behavior                                                                                                                                                                                         |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `-X, --method`              | HTTP method. Default: `GET`, or `POST` when fields or a body are given. See [methods](#methods)                                                                                                  |
-| `-F, --field key=value`     | Repeatable. `true`, `false`, `null`, and JSON numbers become JSON values; anything else, such as `007`, stays a string. A number too large for a double, such as `1e309`, is rejected            |
-| `--body <value>`            | Request body: inline, `@path` (relative to the working directory), or `-` for all of stdin. Stdin already read to the end, such as by `--input -` from the `input()` Extension, is an empty body |
-| `-H, --header 'Key: Value'` | Repeatable request header. Overrides the `auth` header of the same name                                                                                                                          |
-| `--paginate`                | Fetches every page through the `paginate` option, printing each body as one JSON line                                                                                                            |
+| Flag                        | Behavior                                                                                                                                                                                                       |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-X, --method`              | HTTP method. Default: `GET`, or `POST` when fields or a body are given. See [methods](#methods)                                                                                                                |
+| `-F, --field key=value`     | Repeatable. `true`, `false`, `null`, and JSON numbers become JSON values; anything else, such as `007`, stays a string. A number too large for a double, such as `1e309`, is rejected                          |
+| `--body <value>`            | Request body: inline, `@path` (relative to the working directory, `~` expanded), or `-` for all of stdin. Stdin already read to the end, such as by `--input -` from the `input()` Extension, is an empty body |
+| `-H, --header 'Key: Value'` | Repeatable request header. Overrides the `auth` header of the same name                                                                                                                                        |
+| `--paginate`                | Fetches every page through the `paginate` option, printing each body as one JSON line                                                                                                                          |
 
 - Fields form a JSON object body. For `GET` and `HEAD`, or when `--body` is given, they become query parameters instead.
 - A body is sent with `Content-Type: application/json` unless a header sets it.

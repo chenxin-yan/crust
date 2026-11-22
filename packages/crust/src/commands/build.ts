@@ -38,7 +38,7 @@ export const buildCommand = defineCommand(
 					short: "t",
 				},
 				"env-file": {
-					type: "string",
+					type: "path",
 					multiple: true,
 					description: "Explicit env file(s) used for build-time constants; repeatable",
 				},

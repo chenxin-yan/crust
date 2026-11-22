@@ -30,8 +30,7 @@ import { hostTarget } from "./helpers.ts";
 // Global process keeps Bun's PUBLIC_* inlining (it rewrites only the global
 // \`process.env.X\`).
 const ENTRY = `import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { Crust, resolveArtifactDir } from "@crustjs/core";
+import { Crust, artifactPath } from "@crustjs/core";
 import { punctuation } from "fixture-punctuation";
 
 const runtime = process.versions.bun
@@ -45,7 +44,7 @@ await new Crust("greet", { version: "0.1.0" })
 		stdout(JSON.stringify({
 			greeting: flags.shout ? greeting.toUpperCase() : greeting,
 			runtime,
-			asset: readFileSync(join(resolveArtifactDir("assets"), "greeting.txt"), "utf8").trim(),
+			asset: readFileSync(artifactPath("assets/greeting.txt"), "utf8").trim(),
 			publicMessage: process.env.PUBLIC_MESSAGE ?? null,
 			secretMessage: process.env.SECRET_MESSAGE ?? null,
 		}));

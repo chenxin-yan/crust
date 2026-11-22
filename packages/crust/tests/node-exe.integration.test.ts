@@ -148,7 +148,7 @@ beforeAll(async () => {
 		join(project, "src", "greet.ts"),
 		`import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Crust, defineExtension, defineExtensionId, resolveArtifactDir } from ${JSON.stringify(coreDist)};
+import { Crust, defineExtension, defineExtensionId, artifactPath } from ${JSON.stringify(coreDist)};
 import { help } from ${JSON.stringify(extensionsDist)};
 import { mark } from "esm-dep";
 import cjs from "cjs-dep";
@@ -175,8 +175,8 @@ if (import.meta.main) await new Crust("greet", { description: "Greets from a Nod
 			helper,
 			cjs: [cjs.dirnameType(), cjs.sep],
 			dynamicImport: sep,
-			asset: readFileSync(join(resolveArtifactDir("assets"), "greeting.txt"), "utf8").trim(),
-			man: readFileSync(join(resolveArtifactDir("man"), "greet.1"), "utf8"),
+			asset: readFileSync(join(artifactPath("assets"), "greeting.txt"), "utf8").trim(),
+			man: readFileSync(join(artifactPath("man"), "greet.1"), "utf8"),
 		}));
 	})
 	.execute();

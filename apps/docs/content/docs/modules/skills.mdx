@@ -19,6 +19,7 @@ npm install @crustjs/skills
 `writeSkills()` generates one skill directory from `app` (a `SKILL.md` plus one file per command under `commands/`) and copies any authored `extras`.
 
 - `outDir` must be a dedicated directory named `skills`: it is replaced on every call. The returned paths are relative to it.
+- Relative `outDir` and `extras` paths resolve against the working directory.
 - An authored skill with the generated skill's name replaces the generated one.
 - An authored `SKILL.md` must give `name` and `description` as one-line plain or quoted YAML values; block scalars (`|`, `>-`) are rejected.
 - A runnable command with an [`.output()`](/docs/api/crust#outputschema) schema that converts to JSON Schema gets an `Output` section with that JSON Schema on one line, without its `$schema` key.
@@ -47,7 +48,7 @@ The Extension registers `my-cli skills` (alias `skill`) with `install`, `uninsta
 - A command name that collides with an app command fails with a `DEFINITION` error when the app prepares.
 - It adds an `Agent skills` section to the root command's documentation, such as help and man pages, listing each packaged skill and its source directory. It uses `except: [skill]`, so generated skills leave it out.
 
-During `crust build`, the Extension's build hook renders generated and authored skills under `skills/`, recorded as artifacts owned by `crust:skills`. A bundle that `crust build` produces does not register the hook, so the CLI it ships does not carry the renderer. At runtime the commands read them from [`resolveArtifactDir("skills")`](/docs/api/crust#resolveartifactdirname), so run `crust build` before using them; until then help shows a note instead of failing.
+During `crust build`, the Extension's build hook renders generated and authored skills under `skills/`, recorded as artifacts owned by `crust:skills`. A bundle that `crust build` produces does not register the hook, so the CLI it ships does not carry the renderer. At runtime the commands read them from [`artifactPath("skills")`](/docs/api/crust#artifactpathpath), so run `crust build` before using them; until then help shows a note instead of failing.
 
 The section's source paths are resolved when help or man output is generated. Build from the project root that contains the packaged skills directory so man pages do not embed absolute build-machine paths.
 
@@ -149,13 +150,11 @@ Names contain 1 to 64 lowercase letters, digits, and hyphens. They cannot start 
 ## Source helpers and errors
 
 ```ts
-import { resolveArtifactDir } from "@crustjs/core";
 import { loadPackagedSkills } from "@crustjs/skills";
 
-const root = resolveArtifactDir("skills");
-const skills = loadPackagedSkills(root);
+const skills = loadPackagedSkills();
 ```
 
-`loadPackagedSkills()` reads an absolute packaged skills root, validates each `SKILL.md` name and non-empty description, and skips directories without a `SKILL.md`.
+`loadPackagedSkills()` reads the skills shipped with the CLI, or the directory you pass, validates each `SKILL.md` name and non-empty description, and skips directories without a `SKILL.md`.
 
 `SkillConflictError` covers install conflicts, `SkillSourceConflictError` covers duplicate authored names, and `SkillSourceUnavailableError` means the root is missing or empty: the CLI has not been built yet.

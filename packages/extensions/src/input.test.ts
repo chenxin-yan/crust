@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 
 import { Crust, CrustError, defineExtension, defineExtensionId } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { help } from "./help.ts";
 import { input } from "./input.ts";
@@ -155,6 +155,15 @@ describe("input", () => {
 
 		expect(exitCode).toBe(0);
 		expect(JSON.parse(stdout)).toMatchObject({ target: "prod", region: "eu" });
+
+		vi.stubEnv("HOME", dir);
+		vi.stubEnv("USERPROFILE", dir);
+		try {
+			const home = await captureExecute(deployApp(), ["--input", "@~/input.json"]);
+			expect(JSON.parse(home.stdout)).toMatchObject({ target: "prod", region: "eu" });
+		} finally {
+			vi.unstubAllEnvs();
+		}
 	});
 
 	it("replaces typed run() input with JSON passed as the input flag", async () => {

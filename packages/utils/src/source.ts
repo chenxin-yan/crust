@@ -15,7 +15,7 @@
  * @returns The absolute path of the nearest enclosing directory containing
  *   `package.json`, or `null` if the filesystem root is reached first.
  *
- * @internal Shared by {@link resolveSourceDir} and `resolveArtifactDir`.
+ * @internal Used by `artifactPath`.
  */
 export function findNearestPackageRoot(startPath: string): string | null {
 	const { existsSync, statSync } = process.getBuiltinModule("node:fs");
@@ -38,90 +38,4 @@ export function findNearestPackageRoot(startPath: string): string | null {
 
 		current = parent;
 	}
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Shared — resolveSourceDir
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Resolves an absolute filesystem path from a caller-supplied source
- * directory descriptor. Designed for tools that ship reference assets
- * (templates, skill bundles, etc.) alongside their published package and
- * need a uniform way to locate them at runtime regardless of how the
- * consumer expressed the path.
- *
- * Three input modes are supported:
- * - **`URL`** — must use the `file:` protocol. Resolved via
- *   `url.fileURLToPath()`. The intended idiom is
- *   `new URL("./relative/path", import.meta.url)`.
- * - **Absolute string path** — returned as `path.resolve(input)`.
- * - **Relative string path** — resolved against the nearest `package.json`
- *   directory walking up from `process.argv[1]` (symlinks resolved). This makes
- *   `"templates/base"` resolve to `<entrypoint-package-root>/templates/base`
- *   regardless of cwd. For a linked bin (`node_modules/.bin/<cli>`), that is
- *   the package owning the real entrypoint file, not the project that
- *   installed it.
- *
- * Three failure modes throw descriptive `Error`s:
- * - URL with non-`file:` protocol — message names the offending protocol.
- * - Relative string path with `process.argv[1]` unset — message suggests
- *   switching to an absolute path or a `file:` URL.
- * - Relative string path but no `package.json` found walking up — message
- *   names the entrypoint and the relative input, and suggests switching to
- *   an absolute path or a `file:` URL.
- *
- * @param input - File URL, absolute path, or package-relative path.
- * @returns Absolute filesystem path.
- * @throws {Error} For any of the three failure modes above.
- *
- * @example
- * ```ts
- * import { resolveSourceDir } from "@crustjs/utils/source";
- *
- * // 1. file: URL — relative to the calling module
- * const a = resolveSourceDir(new URL("../templates/base", import.meta.url));
- *
- * // 2. Absolute path
- * const b = resolveSourceDir("/abs/path/to/templates/base");
- *
- * // 3. Relative path — resolved from the entrypoint's package root
- * const c = resolveSourceDir("templates/base");
- * ```
- */
-export function resolveSourceDir(input: string | URL): string {
-	const { existsSync, realpathSync } = process.getBuiltinModule("node:fs");
-	const { isAbsolute, resolve } = process.getBuiltinModule("node:path");
-	if (input instanceof URL) {
-		if (input.protocol !== "file:") {
-			throw new Error(`sourceDir URL must use file: protocol, got "${input.protocol}".`);
-		}
-		return process.getBuiltinModule("node:url").fileURLToPath(input);
-	}
-
-	if (isAbsolute(input)) {
-		return resolve(input);
-	}
-
-	const entrypoint = process.argv[1];
-	if (!entrypoint) {
-		throw new Error(
-			`Could not resolve relative sourceDir "${input}" because process.argv[1] is not set. ` +
-				`Pass an absolute path or a file: URL.`,
-		);
-	}
-
-	// Node keeps a linked bin's consumer-side .bin path in argv[1]; the package owning the real file is meant.
-	const packageRoot = findNearestPackageRoot(
-		existsSync(entrypoint) ? realpathSync(entrypoint) : resolve(entrypoint),
-	);
-	if (!packageRoot) {
-		throw new Error(
-			`Could not resolve relative sourceDir "${input}" from entrypoint "${entrypoint}" ` +
-				`because no package.json was found in its parent directories. ` +
-				`Pass an absolute path or a file: URL.`,
-		);
-	}
-
-	return resolve(packageRoot, input);
 }

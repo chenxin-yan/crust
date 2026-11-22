@@ -1,9 +1,13 @@
 import { type Dirent, existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
+import { artifactPath } from "@crustjs/utils/artifacts";
 import { isErrnoException } from "@crustjs/utils/error";
 
 import { probeFrontmatter, requireSkillFrontmatter, SKILL_MD } from "./bundle.ts";
+
+/** Artifact directory the skills Extension builds into and reads from. */
+export const SKILLS_ARTIFACT = "skills";
 
 /** The packaged skills root is missing or holds no skills: the CLI has not been built yet. */
 export class SkillSourceUnavailableError extends Error {
@@ -32,10 +36,13 @@ export function readSkillFrontmatter(
 }
 
 /**
- * Reads every self-describing skill directory under `root`, the absolute
- * packaged skills directory (normally `resolveArtifactDir("skills")`).
+ * Reads every self-describing skill directory under `path`, which defaults to the
+ * skills shipped with this CLI. A relative path resolves against the working directory.
  */
-export function loadPackagedSkills(root: string): readonly PackagedSkill[] {
+export function loadPackagedSkills(
+	path: string = artifactPath(SKILLS_ARTIFACT),
+): readonly PackagedSkill[] {
+	const root = resolve(path);
 	let entries: Dirent[];
 	try {
 		entries = readdirSync(root, { withFileTypes: true });

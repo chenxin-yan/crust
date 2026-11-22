@@ -57,9 +57,9 @@ await sync.execute(); // Ctrl-C → exit code 130, nothing rendered
 //#region artifact
 import { readdirSync } from "node:fs";
 
-import { resolveArtifactDir } from "@crustjs/core";
+import { artifactPath } from "@crustjs/core";
 
-const templates = readdirSync(resolveArtifactDir("templates"));
+const templates = readdirSync(artifactPath("templates"));
 //#endregion
 
 export { app, templates };

@@ -39,12 +39,12 @@ function run(command: string, args: string[], cwd: string, env?: NodeJS.ProcessE
 const probeSource = `
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { resolveArtifactDir } from ${JSON.stringify(artifactsModule)};
-const dir = resolveArtifactDir("templates");
+import { artifactPath } from ${JSON.stringify(artifactsModule)};
+const dir = artifactPath("templates");
 console.log(JSON.stringify({ dir, text: readFileSync(join(dir, "hello.txt"), "utf8") }));
 `;
 
-describe.skipIf(!canBuildSea)("resolveArtifactDir in a Node single executable application", () => {
+describe.skipIf(!canBuildSea)("artifactPath in a Node single executable application", () => {
 	it("resolves assets next to the executable despite the crust build marker", async () => {
 		writeFileSync(join(root, "probe.ts"), probeSource);
 		// Mirror a `crust build` bundle: everything inlined, the build marker defined.
@@ -100,7 +100,7 @@ describe.skipIf(!canBuildSea)("resolveArtifactDir in a Node single executable ap
 });
 
 // A static `node:sea` import fails to load on runtimes without that built-in.
-describe("resolveArtifactDir loads from source on other runtimes", () => {
+describe("artifactPath loads from source on other runtimes", () => {
 	it.skipIf(!which("bun"))("bun", () => {
 		writeFileSync(join(root, "package.json"), "{}");
 		writeFileSync(join(root, "probe.ts"), probeSource);

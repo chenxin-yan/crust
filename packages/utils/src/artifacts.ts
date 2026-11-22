@@ -3,7 +3,7 @@ import { findNearestPackageRoot } from "./source.ts";
 /**
  * Set by `crust build` while it prepares the Command Snapshot: the absolute
  * entry-isolated directory Extension build hooks write into. Core reads it
- * to run the hooks; `resolveArtifactDir` reads it so sections evaluated during
+ * to run the hooks; `artifactPath` reads it so sections evaluated during
  * that run see the artifacts being built instead of the wiped `.crust/root`.
  */
 export const BUILD_OUT_DIR_ENV = "CRUST_INTERNAL_BUILD_OUT_DIR";
@@ -58,32 +58,37 @@ export function isSourceRun(): boolean {
 }
 
 /**
- * Absolute path of a build artifact or `crust.include` directory shipped with
- * this CLI. `name` is a top-level directory name such as `"skills"`.
+ * Absolute path of a file or directory shipped with this CLI. `path` starts with
+ * a build artifact or `crust.include` directory name and may continue below it,
+ * such as `"skills"` or `"templates/base"`.
  *
- * The artifact path is computed from how the CLI is running — never probed:
- * - Compiled executable (Bun or Node SEA): `<dir of the executable>/<name>`, which
+ * The shipped root is computed from how the CLI is running — never probed:
+ * - Compiled executable (Bun or Node SEA): `<dir of the executable>/<path>`, which
  *   is a platform package's `bin/` or wherever the binary was placed.
- * - Crust-built Bun/Node bundle: `<name>` next to the bundle's `bin/` directory,
- *   i.e. `.crust/root/<name>` in place and `<installed root>/<name>` after install.
+ * - Crust-built Bun/Node bundle: `<path>` next to the bundle's `bin/` directory,
+ *   i.e. `.crust/root/<path>` in place and `<installed root>/<path>` after install.
  *   Build-only environment is ignored.
- * - Snapshot preparation inside `crust build`: `<build output dir>/<name>`, the
+ * - Snapshot preparation inside `crust build`: `<build output dir>/<path>`, the
  *   artifacts earlier Extension build hooks wrote in this same build.
- * - Source (`bun run`, `node`): `.crust/root/<name>` under the
+ * - Source (`bun run`, `node`): `.crust/root/<path>` under the
  *   nearest package root of the real `process.argv[1]` entrypoint (following source
  *   links) — the output of the last `crust build`.
  *
- * @throws {Error} when `name` is not a single path segment, or in source mode
- *   when the entrypoint cannot be resolved or has no enclosing `package.json`.
+ * @throws {Error} when `path` is absolute or has an empty, `.` or `..` segment, or in
+ *   source mode when the entrypoint cannot be resolved or has no enclosing `package.json`.
  */
-export function resolveArtifactDir(name: string): string {
-	if (name === "" || name === "." || name === ".." || /[\\/]/.test(name)) {
-		throw new Error(`Artifact name must be a single directory name, got ${JSON.stringify(name)}.`);
+export function artifactPath(path: string): string {
+	const segments = path.split(/[\\/]/);
+	// Every segment must name something, which also rejects absolute paths and escapes.
+	if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
+		throw new Error(
+			`Artifact path must be names separated by "/", such as "templates/base", got ${JSON.stringify(path)}.`,
+		);
 	}
 
 	const { dirname, join, resolve } = process.getBuiltinModule("node:path");
 	if (isCompiledExecutable()) {
-		return join(dirname(process.execPath), name);
+		return join(dirname(process.execPath), ...segments);
 	}
 
 	if (isCrustBundle()) {
@@ -93,14 +98,14 @@ export function resolveArtifactDir(name: string): string {
 			process.getBuiltinModule("node:url").fileURLToPath(import.meta.url),
 			"..",
 			"..",
-			name,
+			...segments,
 		);
 	}
 
 	// `crust build` wipes `.crust` before running the entry for its snapshot, so
 	// `.crust/root` cannot exist yet; the hooks' output directory is what is current.
 	const buildOutDir = process.env[BUILD_OUT_DIR_ENV];
-	if (buildOutDir) return join(buildOutDir, name);
+	if (buildOutDir) return join(buildOutDir, ...segments);
 
 	const entrypoint = process.argv[1];
 	let sourceEntrypoint = entrypoint;
@@ -110,7 +115,7 @@ export function resolveArtifactDir(name: string): string {
 			sourceEntrypoint = process.getBuiltinModule("node:fs").realpathSync(entrypoint);
 		} catch (cause) {
 			throw new Error(
-				`Could not resolve artifact "${name}": could not resolve source entrypoint "${entrypoint}".`,
+				`Could not resolve artifact "${path}": could not resolve source entrypoint "${entrypoint}".`,
 				{ cause },
 			);
 		}
@@ -118,9 +123,9 @@ export function resolveArtifactDir(name: string): string {
 	const packageRoot = sourceEntrypoint ? findNearestPackageRoot(sourceEntrypoint) : null;
 	if (!packageRoot) {
 		throw new Error(
-			`Could not resolve artifact "${name}": no package.json was found above ` +
+			`Could not resolve artifact "${path}": no package.json was found above ` +
 				`${entrypoint ? `entrypoint "${entrypoint}"` : "process.argv[1] (unset)"}.`,
 		);
 	}
-	return join(packageRoot, ".crust", "root", name);
+	return join(packageRoot, ".crust", "root", ...segments);
 }

@@ -27,6 +27,10 @@ describe("resolveAgentPath", () => {
 		expect(resolveAgentPath("claude-code", "global", "my-cli")).toBe(
 			join(homedir(), "custom-claude", "skills", "my-cli"),
 		);
+		vi.stubEnv("CLAUDE_CONFIG_DIR", "~/custom-claude");
+		expect(resolveAgentPath("claude-code", "global", "my-cli")).toBe(
+			join(homedir(), "custom-claude", "skills", "my-cli"),
+		);
 	});
 
 	it("follows XDG_CONFIG_HOME for an agent whose global directory is under it", () => {

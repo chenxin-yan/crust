@@ -8,10 +8,9 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { isErrnoException } from "@crustjs/utils/error";
-import { isWithin } from "@crustjs/utils/path";
+import { isWithin, resolvePathLike } from "@crustjs/utils/path";
 
 import type { ScaffoldOptions, ScaffoldResult } from "./types.ts";
 
@@ -156,7 +155,7 @@ function assertDestinationContained(realDestDir: string, relPath: string): void 
 export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult> {
 	const { template, dest, context, conflict = "abort", render = interpolate } = options;
 
-	const templateDir = template instanceof URL ? fileURLToPath(template) : resolve(template);
+	const templateDir = resolvePathLike(template);
 	const destDir = resolve(dest);
 
 	const templateStat = statSync(templateDir, { throwIfNoEntry: false });
