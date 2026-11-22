@@ -12,6 +12,7 @@
     "schema",
     "search",
     "confirm",
-    "next-steps"
+    "next-steps",
+    "telemetry"
   ]
 }

@@ -23,6 +23,8 @@ export { schema } from "./schema.ts";
 export type { CommandSchema } from "./schema.ts";
 export { search } from "./search.ts";
 export type { SearchMatch } from "./search.ts";
+export { telemetry } from "./telemetry.ts";
+export type { TelemetryEvent, TelemetryOptions } from "./telemetry.ts";
 export { updateNotifier } from "./update-notifier.ts";
 export type {
 	UpdateCommandResolver,
