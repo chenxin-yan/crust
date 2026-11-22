@@ -1,0 +1,116 @@
+name: Regenerate skills agents
+
+# Dependabot bumps the pinned `skills` package (.github/dependabot.yml). The agent list in
+# packages/skills/src/agents.generated.ts is generated from it, so this workflow regenerates the
+# list on Dependabot's pull request, which the generator's check would otherwise fail.
+on:
+  pull_request:
+    paths:
+      - packages/skills/package.json
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    name: Generate
+    # The pull request's author, not the actor: re-running the job must not change the answer.
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Read-only: this job installs and runs the newly published package.
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.result.outputs.changed }}
+      version: ${{ steps.result.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup
+
+      - name: Regenerate the agent list
+        run: pnpm --filter @crustjs/skills run generate:agents
+
+      - name: Collect the result
+        id: result
+        run: |
+          file=packages/skills/src/agents.generated.ts
+          if git diff --quiet -- "$file"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          version=$(node -p 'require("./packages/skills/package.json").devDependencies.skills')
+          mkdir "$RUNNER_TEMP/out"
+          cp "$file" "$RUNNER_TEMP/out/agents.generated.ts"
+          # The lines above the table name the version and upstream's copyright: a changeset only
+          # when an agent changed.
+          agents() { sed -n '/^export const AGENTS/,$p'; }
+          if ! diff -q <(git show "HEAD:$file" | agents) <(agents < "$file") > /dev/null; then
+            # shellcheck disable=SC2016 # the backticks are Markdown
+            printf -- '---\n"@crustjs/skills": patch\n---\n\nUpdate the agent list to `skills@%s`.\n' "$version" > "$RUNNER_TEMP/out/changeset.md"
+          fi
+          {
+            echo "changed=true"
+            echo "version=$version"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload the result
+        if: steps.result.outputs.changed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: skills-agents
+          if-no-files-found: error
+          path: ${{ runner.temp }}/out
+
+  commit:
+    name: Commit
+    needs: generate
+    if: needs.generate.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Write access, so this job runs nothing from the pull request: it copies two files and pushes.
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Download the result
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: skills-agents
+          path: ${{ runner.temp }}/in
+
+      - name: Commit and push
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          VERSION: ${{ needs.generate.outputs.version }}
+        run: |
+          # The other job ran the new package, so its output is data: two files by name, nothing else.
+          case "$VERSION" in *[!0-9A-Za-z.+-]*|"") echo "unexpected version"; exit 1 ;; esac
+          cp "$RUNNER_TEMP/in/agents.generated.ts" packages/skills/src/agents.generated.ts
+          # One note per pull request, so a later bump does not overwrite an unreleased one.
+          if [ -f "$RUNNER_TEMP/in/changeset.md" ]; then
+            cp "$RUNNER_TEMP/in/changeset.md" ".changeset/skills-agents-$PR.md"
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/skills/src/agents.generated.ts .changeset
+          # `[dependabot skip]` lets Dependabot keep rebasing the pull request after this commit.
+          git commit -m "chore(skills): regenerate the agent list for skills@$VERSION [dependabot skip]"
+          # Fails if the branch moved since the list was generated; the next run handles the new head.
+          git push "https://x-access-token:$GH_TOKEN@github.com/$REPO.git" "HEAD:refs/heads/$HEAD_REF"

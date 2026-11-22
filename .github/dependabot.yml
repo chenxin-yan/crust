@@ -4,3 +4,14 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  # Only `skills`: packages/skills/src/agents.generated.ts is generated from its agent registry.
+  # The bump fails the generator's check in CI until the file is regenerated (the failure names the command).
+  - package-ecosystem: npm
+    directory: /
+    # With a target branch, this entry applies to version updates only: `allow` would otherwise
+    # also keep Dependabot from opening security fixes for every other dependency.
+    target-branch: main
+    schedule:
+      interval: weekly
+    allow:
+      - dependency-name: skills
