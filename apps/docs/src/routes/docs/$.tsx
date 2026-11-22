@@ -18,7 +18,7 @@ import { Suspense } from "react";
 
 import { CommunityLinks } from "@/components/community-links";
 import { baseOptions } from "@/lib/layout.shared";
-import { absoluteUrl, buildPageMeta, siteConfig } from "@/lib/seo";
+import { buildPageMeta, siteConfig } from "@/lib/seo";
 import { source } from "@/lib/source";
 
 export const Route = createFileRoute("/docs/$")({
@@ -85,8 +85,11 @@ const clientLoader = browserCollections.docs.createClientLoader({
 					<MarkdownCopyButton markdownUrl={`${url}.md`} />
 					<ViewOptionsPopover
 						markdownUrl={`${url}.md`}
-						// AI prompts default to `window.location.href`, query and fragment included.
-						pageUrl={absoluteUrl(`${url}.md`)}
+						// AI prompts read this deployment's HTML page (robots.txt disallows `.md`), without the
+						// query and fragment that the default `window.location.href` would send.
+						pageUrl={
+							typeof window === "undefined" ? url : new URL(url, window.location.origin).href
+						}
 						githubUrl={`${siteConfig.githubUrl}/blob/main/apps/docs/content/docs/${path}`}
 					/>
 				</div>
