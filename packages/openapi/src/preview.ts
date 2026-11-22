@@ -2,7 +2,6 @@
 import {
 	type CommandDefinition,
 	type CommandShape,
-	type ContextFactory,
 	CrustError,
 	defineCommand,
 } from "@crustjs/core";
@@ -10,7 +9,7 @@ import type { JsonValue } from "@crustjs/utils/json";
 import type { StandardJSONSchema, StandardSchema } from "@crustjs/utils/schema";
 
 import { type ApiRequestFlags, passThroughRequest, requestFlags } from "./api-command.ts";
-import { type ApiClient, baseOriginUrl } from "./client.ts";
+import { baseOriginUrl } from "./client.ts";
 import { isJsonMediaType } from "./operations.ts";
 import { type OperationRequest, encode } from "./request.ts";
 
@@ -111,31 +110,23 @@ export type PreviewShape = CommandShape<
 >;
 
 /** The `api preview` command, spelled out because `defineApi()` needs a declared type. */
-export type PreviewCommandDefinition = CommandDefinition<
-	"preview",
-	readonly [],
-	PreviewShape,
-	{ api: ApiClient }
->;
+export type PreviewCommandDefinition = CommandDefinition<"preview", readonly [], PreviewShape>;
 
 /**
- * The `api preview` command over the `client` Context: a request path is built here, with the
+ * The `api preview` command, which sets up no Context: a request path is built here, with the
  * `api` command's flags; a generated command's request is the one its Extension's `preRun` put in
- * `generated` for this invocation's client.
+ * `generated` for this invocation's `target`.
  */
-export function createPreviewCommand(
-	client: ContextFactory<"api", void, ApiClient>,
-	{
-		baseUrl,
-		paginates,
-		generated,
-	}: {
-		readonly baseUrl: string;
-		/** Whether `defineApi` has a `paginate`, without which `--paginate` fails as for `api <path>`. */
-		readonly paginates: boolean;
-		readonly generated: WeakMap<ApiClient, GeneratedPreview>;
-	},
-): PreviewCommandDefinition {
+export function createPreviewCommand({
+	baseUrl,
+	paginates,
+	generated,
+}: {
+	readonly baseUrl: string;
+	/** Whether `defineApi` has a `paginate`, without which `--paginate` fails as for `api <path>`. */
+	readonly paginates: boolean;
+	readonly generated: WeakMap<readonly string[], GeneratedPreview>;
+}): PreviewCommandDefinition {
 	return defineCommand(
 		"preview",
 		{
@@ -144,12 +135,11 @@ export function createPreviewCommand(
 		},
 		(command) =>
 			command
-				.use(client)
 				.args(targetArg, argvArg)
 				.flags(previewFlags)
 				.output(previewSchema)
-				.action(async ({ args, flags, ctx, signal, stdout }) => {
-					const found = generated.get(await ctx.api);
+				.action(async ({ args, flags, signal, stdout }) => {
+					const found = generated.get(args.target);
 					let preview: ApiPreview;
 					if (found !== undefined) {
 						const [given] =

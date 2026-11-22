@@ -1,6 +1,6 @@
 // Compile-time contracts, enforced by check:types (not vp test).
 
-import { type ApiClientOptions, bearerAuth } from "@crustjs/openapi";
+import { type ApiAuth, bearerAuth } from "@crustjs/openapi";
 
 import { createAuth } from "./client.ts";
 import {
@@ -119,7 +119,7 @@ export type ProtocolCodesAreAuthErrorCodes = Expect<
 
 // The client's token() is bearerAuth()'s resolver as is, detached: it fits structurally, with no
 // dependency between the packages.
-export const clientAuth: NonNullable<ApiClientOptions["auth"]> = bearerAuth(client.token);
+export const clientAuth: ApiAuth = bearerAuth(client.token);
 
 // Profiles are opt-in, also in the types: only a client created with `profiles` has them.
 declare const serverOptions: Omit<CreateAuthOptions, "profiles">;
@@ -150,9 +150,7 @@ export type ProfileStatus = Expect<
 >;
 declare const flag: string | undefined;
 void profiled.profile(flag).login({ onUrl, onCode });
-export const profileAuth: NonNullable<ApiClientOptions["auth"]> = bearerAuth(
-	profiled.profile("work").token,
-);
+export const profileAuth: ApiAuth = bearerAuth(profiled.profile("work").token);
 export type ListedProfiles = Expect<
 	Equal<
 		Awaited<ReturnType<ProfileAuthClient["profiles"]["list"]>>,

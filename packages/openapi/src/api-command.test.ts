@@ -14,7 +14,7 @@ import { resolveArtifactDir } from "@crustjs/utils/artifacts";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { runBuildHooks } from "../../crust/tests/build-hooks.ts";
-import { fetchNextPage } from "./client.ts";
+import { type ApiAuth, fetchNextPage } from "./client.ts";
 import { type DefineApiOptions, defineApi } from "./define-api.ts";
 import { ApiResponseError } from "./request.ts";
 
@@ -81,16 +81,16 @@ function stubFetch(respond: (call: FetchCall) => Response = () => new Response("
 	return calls;
 }
 
-function buildApi(options: Partial<DefineApiOptions> = {}) {
-	return defineApi({
-		spec,
-		baseUrl: "https://api.example.com/v1/",
-		auth: () => ({ authorization: "Bearer secret" }),
-		...options,
-	});
+type BuildOptions = Partial<DefineApiOptions> & { readonly auth?: ApiAuth };
+
+function buildApi({
+	auth = () => ({ authorization: "Bearer secret" }),
+	...options
+}: BuildOptions = {}) {
+	return defineApi({ spec, baseUrl: "https://api.example.com/v1/", ...options }).auth(auth);
 }
 
-function buildApp(options: Partial<DefineApiOptions> = {}) {
+function buildApp(options: BuildOptions = {}) {
 	return new Crust("tool").extend(buildApi(options).extension);
 }
 
@@ -954,7 +954,8 @@ describe("api <path>", () => {
 		async (path, href) => {
 			const calls = stubFetch();
 			const message = `Cannot request ${href}: only URLs on https://api.example.com are allowed`;
-			for (const app of [buildApp(), buildApp({ auth: undefined })]) {
+			const withoutAuth = defineApi({ spec, baseUrl: "https://api.example.com/v1/" });
+			for (const app of [buildApp(), new Crust("tool").extend(withoutAuth.extension)]) {
 				const outcome = await app.run(["api"], {
 					args: { path },
 					flags: { header: ["Authorization: Bearer secret", "X-Api-Key: secret"] },
@@ -1159,7 +1160,7 @@ describe("api preview <path>", () => {
 
 	it("previews the first request of --paginate, which needs pagination as api <path> does", async () => {
 		const paginate = vi.fn(() => undefined);
-		const preview = async (options: Partial<DefineApiOptions>) =>
+		const preview = async (options: BuildOptions) =>
 			captureExecute(buildApp(options), ["api", "preview", "/users", "--paginate"]);
 
 		expect(JSON.parse((await preview({ paginate })).stdout)).toMatchObject({
@@ -1195,7 +1196,7 @@ describe("api preview <path>", () => {
 });
 
 describe("api with json()", () => {
-	const jsonApp = (options: Partial<DefineApiOptions> = {}) => buildApp(options).extend(json());
+	const jsonApp = (options: BuildOptions = {}) => buildApp(options).extend(json());
 
 	it("prints the response body as the JSON result on stdout", async () => {
 		stubFetch(({ url }) =>
@@ -1561,11 +1562,9 @@ describe("the api client", () => {
 			if (location === undefined) return record(request, response);
 			response.writeHead(request.url === "/v1/created" ? 303 : 302, { location }).end();
 		});
-		const acme = defineApi({
-			spec,
-			baseUrl: `${api.url}/v1`,
-			auth: () => ({ "X-Api-Key": "secret" }),
-		});
+		const acme = defineApi({ spec, baseUrl: `${api.url}/v1` }).auth(() => ({
+			"X-Api-Key": "secret",
+		}));
 		const app = new Crust("tool").extend(acme.extension).add(
 			defineCommand("probe", {}, (command) =>
 				command.use(acme.client).action(async ({ ctx, stdout }) => {

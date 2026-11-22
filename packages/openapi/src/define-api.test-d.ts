@@ -1,7 +1,7 @@
-import { Crust, defineCommand, defineContext } from "@crustjs/core";
+import { type ContextMap, Crust, defineCommand, defineContext } from "@crustjs/core";
 import { confirm, help } from "@crustjs/extensions";
 
-import { type ApiClient, defineApi } from "./index.ts";
+import { type ApiClient, bearerAuth, defineApi } from "./index.ts";
 import type { SpecOperationsOf } from "./typed-client.ts";
 
 type Equal<A, B> =
@@ -332,6 +332,187 @@ function _typecheckChainContexts() {
 	}));
 }
 
+const profile = defineContext("profile")
+	.flags({ profile: { type: "string", description: "Account to use" } })
+	.setup(({ flags }) => flags.profile);
+declare const login: {
+	profile(name: string | undefined): {
+		token(options: { signal: AbortSignal; baseUrl: string }): Promise<{ value: string }>;
+	};
+	token(options: { signal: AbortSignal; baseUrl: string }): Promise<{ value: string }>;
+};
+
+function _typecheckAuthChain() {
+	// `auth` reads exactly the Contexts of the factories `.use()`d before it.
+	const api = defineApi({ spec, baseUrl })
+		.use(profile, account)
+		.auth(async ({ ctx }) => {
+			type _Profile = Expect<Equal<Awaited<typeof ctx.profile>, string | undefined>>;
+			type _Account = Expect<Equal<Awaited<typeof ctx.account>, { id: string }>>;
+			// @ts-expect-error -- nor the client itself
+			void ctx.api;
+			return { authorization: `Bearer ${await ctx.profile}` };
+		});
+	const whoami = defineCommand("whoami", (command) =>
+		command.use(api.client).action(async ({ ctx }) => {
+			// A command that declares the client declares the Contexts its `auth` reads.
+			type _Profile = Expect<Equal<Awaited<typeof ctx.profile>, string | undefined>>;
+			// A helper generic in the Contexts `auth` reads takes it; one typed with the plain client does not.
+			const helper = <AuthDeps extends ContextMap>(client: ApiClient<unknown, AuthDeps>) =>
+				client.baseUrl;
+			helper(await ctx.api);
+			// @ts-expect-error -- the plain client's `auth` reads no Contexts
+			const _plain: ApiClient = await ctx.api;
+		}),
+	);
+	// Contexts `.use()`d after `.auth()` are the callbacks', not the client's.
+	const acme = api
+		.use(confirm, region)
+		.onConfirm(async (ctx, message) => (await ctx.confirm)(message))
+		.each(() => ({ bind: { id: async (ctx) => `${await ctx.profile}-${await ctx.region}` } }))
+		.add("users", whoami);
+	new Crust("acme")
+		.provide(profile(), account(), region())
+		.extend(confirm(), acme.extension)
+		.add(...acme.commands);
+	new Crust("acme")
+		.provide(account(), region())
+		// @ts-expect-error -- FIX_MISSING_DEPENDENCY: `profile`, which `auth` reads
+		.extend(confirm(), acme.extension);
+	// An app command uses the client of the handle the app extends, or of one before it after the same `.auth()`.
+	new Crust("acme")
+		.provide(profile(), account())
+		.extend(acme.extension)
+		.add(whoami)
+		.add(
+			defineCommand("me", (command) =>
+				command.use(acme.client).action(async ({ ctx }) => void (await ctx.profile)),
+			),
+		);
+
+	// The client of another `.auth()`, whose `auth` reads Contexts the app's client does not.
+	const plain = defineApi({ spec, baseUrl });
+	new Crust("acme")
+		.provide(profile(), account())
+		.extend(plain.extension)
+		// @ts-expect-error -- FIX_DEPENDENCY_TYPE: `api`, a client whose `auth` reads `profile` and `account`
+		.add(whoami);
+	new Crust("acme")
+		.provide(profile(), account())
+		.extend(plain.use(profile).auth(async () => undefined).extension)
+		// @ts-expect-error -- FIX_DEPENDENCY_TYPE: the same, also when the extended `auth` reads some of them
+		.add(whoami);
+	// Commands of one handle with the Extension of another, as before.
+	new Crust("acme")
+		.provide(profile(), account(), region())
+		.extend(confirm(), plain.extension)
+		// @ts-expect-error -- FIX_DEPENDENCY_TYPE: `api`
+		.add(...acme.commands);
+	// An app command added to the group of a handle after another `.auth()`.
+	new Crust("acme")
+		.provide(profile(), account())
+		.extend(plain.add("users", whoami).extension)
+		// @ts-expect-error -- FIX_DEPENDENCY_TYPE: `api`
+		.add(...plain.add("users", whoami).commands);
+	// The reverse: the client of a handle before `.auth()`, in an app that extends one after it.
+	const before = defineCommand("before", (command) =>
+		command.use(plain.client).action(async ({ ctx }) => void (await ctx.api)),
+	);
+	new Crust("acme")
+		.provide(profile(), account(), region())
+		.extend(confirm(), acme.extension)
+		// @ts-expect-error -- FIX_DEPENDENCY_TYPE: `api`, a client whose `auth` reads no Contexts
+		.add(before);
+	// The same command `.add()`ed to the handle before its `.auth()`.
+	const late = plain
+		.add("users", before)
+		.use(profile)
+		.auth(async () => undefined);
+	new Crust("acme")
+		.provide(profile())
+		.extend(late.extension)
+		// @ts-expect-error -- FIX_DEPENDENCY_TYPE: `api`
+		.add(...late.commands);
+	// Commands `.add()`ed from a named array count as its element type, in both directions.
+	const befores = [before];
+	const authedWithBefores = api.add("users", ...befores);
+	new Crust("acme")
+		.provide(profile(), account())
+		.extend(authedWithBefores.extension)
+		// @ts-expect-error -- FIX_DEPENDENCY_TYPE: `api`, a client whose `auth` reads no Contexts
+		.add(...authedWithBefores.commands);
+	const whoamis = [whoami];
+	const plainWithWhoamis = plain.add("users", ...whoamis);
+	new Crust("acme")
+		.provide(profile(), account())
+		.extend(plainWithWhoamis.extension)
+		// @ts-expect-error -- FIX_DEPENDENCY_TYPE: `api`, a client whose `auth` reads `profile` and `account`
+		.add(...plainWithWhoamis.commands);
+
+	// The flags of the Contexts `auth` reads: a command that uses the client parses them, and so does `api`.
+	const flagged = new Crust("acme")
+		.provide(profile(), account())
+		.extend(api.extension)
+		.add(
+			defineCommand("me", (command) =>
+				command.use(api.client).action(({ flags }) => {
+					type _Flag = Expect<Equal<typeof flags.profile, string | undefined>>;
+				}),
+			),
+		);
+	void flagged.run(["api"], { args: { path: "/x" }, flags: { profile: "work" } });
+	void flagged.run(["me"], { flags: { profile: "work" } });
+	// `api preview` sets up no Context, so it does not.
+	void flagged.run(
+		["api", "preview"],
+		// @ts-expect-error -- `api preview` has no `--profile`
+		{ args: { target: ["/x"] }, flags: { profile: "work" } },
+	);
+
+	// The factories of a named array `.use()`d before `.auth()` count too.
+	const head = defineContext("head").setup(() => 1);
+	const more = [profile];
+	const spread = plain.use(head, ...more).auth(async ({ ctx }) => void (await ctx.profile));
+	new Crust("acme").provide(head(), profile()).extend(spread.extension);
+	new Crust("acme")
+		.provide(head())
+		// @ts-expect-error -- FIX_MISSING_DEPENDENCY: `profile`, of the spread array
+		.extend(spread.extension);
+
+	defineApi({ spec, baseUrl })
+		.use(profile)
+		.use(region)
+		.auth(async ({ ctx }) => ({ authorization: `${await ctx.profile}-${await ctx.region}` }));
+	// Only Context factories: an Extension's Contexts are not readable in `auth`.
+	defineApi({ spec, baseUrl })
+		.use(confirm)
+		// @ts-expect-error -- `confirm` comes from an Extension
+		.auth(async ({ ctx }) => void (await ctx.confirm));
+	// Each `.auth()` reads the `.use()`s before it, not those after it.
+	defineApi({ spec, baseUrl })
+		// @ts-expect-error -- `profile` is `.use()`d after this `.auth()`
+		.auth(async ({ ctx }) => void (await ctx.profile))
+		.use(profile)
+		.auth(async ({ ctx }) => void (await ctx.profile));
+
+	// `bearerAuth()`'s resolver reads them too; the plain case needs no `.use()` nor `.provide()`.
+	defineApi({ spec, baseUrl })
+		.use(profile)
+		.auth(
+			bearerAuth(async ({ ctx, signal, baseUrl }) =>
+				login.profile(await ctx.profile).token({ signal, baseUrl }),
+			),
+		);
+	const simple = defineApi({ spec, baseUrl }).auth(bearerAuth(login.token));
+	new Crust("acme").extend(simple.extension).add(...simple.commands);
+	defineApi({ spec, baseUrl }).auth(
+		// @ts-expect-error -- `profile` is not `.use()`d before
+		bearerAuth(async ({ ctx }) => ({ value: String(await ctx.profile) })),
+	);
+	// @ts-expect-error -- `auth` is not an option: `.auth()` is
+	defineApi({ spec, baseUrl, auth: bearerAuth(login.token) });
+}
+
 function _typecheckTypedNames() {
 	defineApi({ id: "acme", spec, baseUrl })
 		.each((op) => {
@@ -371,6 +552,7 @@ function _typecheckUntypedNames() {
 }
 
 void [
+	_typecheckAuthChain,
 	_typecheckChainContexts,
 	_typecheckTypedNames,
 	_typecheckUntypedNames,

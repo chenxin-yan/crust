@@ -66,8 +66,7 @@ async function withApi(
 	const acme = defineApi({
 		spec: { openapi: "3.1.0", paths: {} },
 		baseUrl: options.baseUrl ?? "https://api.example.com/v1",
-		auth: bearerAuth(auth.token),
-	});
+	}).auth(bearerAuth(auth.token));
 	const app = new Crust("acme")
 		.extend(acme.extension)
 		.add(
@@ -250,8 +249,7 @@ describe("bearer tokens for the API", () => {
 		const acme = defineApi({
 			spec: { openapi: "3.1.0", paths: {} },
 			baseUrl: "https://api.example.com/v1",
-			auth: bearerAuth(auth.token),
-		});
+		}).auth(bearerAuth(auth.token));
 		const app = new Crust("acme")
 			.extend(acme.extension)
 			.add(

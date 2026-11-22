@@ -28,13 +28,13 @@ The client prints nothing itself: it does not know your command's output stream.
 
 ## Using the token
 
-`bearerAuth(auth.token)` gives [`@crustjs/openapi`](/docs/modules/openapi#authentication) the token for each invocation: `ACME_TOKEN` when it is set, so CI and agents need no login, otherwise the stored login, refreshed when it is about to expire and once more after a 401. Elsewhere, call `auth.token({ signal, baseUrl })` yourself. With no token, it throws `LoginRequiredError` (`code` `"login-required"`): tell the user to run `acme login`.
+`.auth(bearerAuth(auth.token))` on a [`@crustjs/openapi`](/docs/modules/openapi#authentication) handle gives it the token for each invocation: `ACME_TOKEN` when it is set, so CI and agents need no login, otherwise the stored login, refreshed when it is about to expire and once more after a 401. Elsewhere, call `auth.token({ signal, baseUrl })` yourself. With no token, it throws `LoginRequiredError` (`code` `"login-required"`): tell the user to run `acme login`.
 
 `auth.status()` reads where the token would come from without a request, so `status` stays fast and offline. `auth.logout()` deletes the login and revokes it at the server, and reports both outcomes.
 
 ## Several accounts
 
-To let a user keep more than one login with your server, such as a work account and a personal one, pass `profiles: { env: "ACME_PROFILE" }` to `createAuth()`. Then `auth.profile(flags.profile)` signs in to, reads, or signs out of one named login, `acme profile use work` (`auth.profiles.use()`) picks the one later runs use, and `acme profile list` (`auth.profiles.list()`) shows them. `ACME_PROFILE=work` picks a profile for one run. See [Profiles](/docs/modules/auth#profiles).
+To let a user keep more than one login with your server, such as a work account and a personal one, pass `profiles: { env: "ACME_PROFILE" }` to `createAuth()`. Then `auth.profile(flags.profile)` signs in to, reads, or signs out of one named login, `acme profile use work` (`auth.profiles.use()`) picks the one later runs use, and `acme profile list` (`auth.profiles.list()`) shows them. `ACME_PROFILE=work` picks a profile for one run, and so can a `--profile` flag on the API commands ([Auth that reads a flag](/docs/modules/openapi#auth-that-reads-a-flag)). See [Profiles](/docs/modules/auth#profiles).
 
 ## More than one server
 

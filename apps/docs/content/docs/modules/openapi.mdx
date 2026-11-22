@@ -21,7 +21,7 @@ The package has a peer dependency on `@crustjs/core` and uses the runtime's glob
 `defineApi()` returns a frozen handle:
 
 - `acme.extension` is the Extension to pass to `.extend()`. It contributes the `api` command, with its [`api preview`](#preview-a-request) subcommand, and provides the `api` Context; `acme.extension.id` is its identity.
-- `acme.client` is the `api` [Context](/docs/guide/contexts): a command declares it with `.use(acme.client)` and reads it with `await ctx.api`. See [The API client](#the-api-client).
+- `acme.client` is the `api` [Context](/docs/guide/contexts): a command declares it with `.use(acme.client)` and reads it with `await ctx.api`. Each `.auth()` makes a new one; see [The API client](#the-api-client).
 - `acme.commands` are the [generated commands](#generated-commands), to pass to `.add()`.
 
 Its chain shapes the generated commands, like `defineCommand` and `defineExtension`: every method returns a new frozen handle and leaves the one it was called on unchanged.
@@ -29,12 +29,13 @@ Its chain shapes the generated commands, like `defineCommand` and `defineExtensi
 | Method                                   | Does                                                                                                                                                    | A second call                                                                             |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | `.use(...sources)`                       | Context factories or Extensions every generated command `.use()`s; types `ctx` in the callbacks after it                                                | Appends                                                                                   |
+| `.auth((input, { baseUrl }) => …)`       | Sends credentials with requests; reads the Contexts of the factories `.use()`d before it. See [`.auth()`](#authfn)                                      | Replaces, with a new `client`                                                             |
 | `.onConfirm((ctx, message) => …)`        | Asks to confirm an operation's [`confirm`](#confirmation) message: resolving to nothing or `true` confirms; resolving to `false`, or throwing, declines | Replaces                                                                                  |
 | `.each((op) => override)`                | The [override](#overrides) for every operation                                                                                                          | Replaces                                                                                  |
 | `.override({ [operationId]: override })` | Overrides for single operations, whose fields replace the rule's                                                                                        | Appends; an entry for the same operationId replaces the earlier entry's fields one by one |
 | `.add(group, ...definitions)`            | Puts your own commands in a group path, such as `"users"` or `"dns records"` (`""` is the root), creating the group when no operation maps to it        | Appends                                                                                   |
 
-Declare a source with `.use()` before the callbacks that read it. The Contexts of the commands you `.add()` are required from the app too, but the callbacks see only those of `.use()`, which the generated commands use. Every handle of one `defineApi()` call shares the same `client`, so a command you `.add()` uses the client of an earlier handle, as `whoami` does with `api.client`.
+Declare a source with `.use()` before the callbacks that read it. The Contexts of the commands you `.add()` are required from the app too, but the callbacks see only those of `.use()`, which the generated commands use. A command you `.add()` uses the client of an earlier handle after the same `.auth()`, as `whoami` does with `api.client`: see [which client](#the-api-client).
 
 <auto-type-table
   path="../../../../../packages/openapi/src/define-api.ts"
@@ -210,7 +211,7 @@ $ my-cli api preview /users/42 -X DELETE            # a request path, with the f
 ```
 
 - The result is `{ method, url, headers, bodyKind, body, bound? }`: the absolute URL with its query; the headers by lower-case name; `bodyKind` `"json"` with the parsed body, `"bytes"` with any other body as text, or `"none"` with `body: null`. It is the same request the command would build, from the same plan, with the same `VALIDATION` errors, so a preview cannot disagree with what is sent.
-- Nothing runs that could have an effect: no `auth()` call, none of the generated command's Contexts (so no credential or keyring read), no [`.onConfirm()`](#confirmation) handler, no [`bind`](#overrides) function, no request. A bound parameter or body field stays the placeholder `{name}`, and its name is listed in `bound`. Headers the client adds, such as the `auth` ones, are not shown.
+- Nothing runs that could have an effect: no `.auth()` call, no Context set up (so no credential or keyring read), no [`.onConfirm()`](#confirmation) handler, no [`bind`](#overrides) function, no request. A bound parameter or body field stays the placeholder `{name}`, and its name is listed in `bound`. Headers the client adds, such as the `auth` ones, are not shown.
 - `Authorization`, `Proxy-Authorization`, `Cookie` and `X-Api-Key` headers given with `-H` show as `<redacted>`. Query parameters and body fields are shown as given.
 - The generated command's arguments and flags are parsed with its own definitions, environment fallbacks and defaults. No hook runs, so values other Extensions bind during set-up are not applied: `--input` from [`input()`](/docs/modules/extensions/input) and values from a configuration file are left out, and the preview fails as the command would without them.
 - A target starting with `/` is a request path, and `api preview` takes the `-X`, `-H`, `-F`, `--body` and `--paginate` flags of [`api <path>`](#send-requests) for it. It never reads stdin: `--body -` is refused, and `--body @file` reads only a regular file of at most 16 MiB, so `@/dev/stdin` or a FIFO is refused too. Any other target is a generated command's path, through an alias too, and at any place the app adds `acme.commands`, even more than one; its own flags go after `--`. Below the first place, a command is told apart only by its path and shape, so where a path there fits two operations of the same shape, `api preview` refuses it and names the paths to preview instead. `--paginate` previews the first page's request without calling `paginate`, and fails as `api <path> --paginate` does when the CLI configures no pagination.
@@ -422,7 +423,13 @@ Such an input leaves the operation out only when the operation cannot be called 
 
 ## The API client
 
-`acme.client` is the `api` Context. Every command that declares it with `.use(acme.client)` gets the same client: `call()` for an operation of the spec, and `fetch()` for any request, both bound to the base URL and auth.
+`acme.client` is the `api` Context. A command that declares it with `.use(acme.client)` gets the client: `call()` for an operation of the spec, and `fetch()` for any request, both bound to the base URL and [`.auth()`](#authfn).
+
+Each `.auth()` makes a new `client`, which the handles chained after it share; before any `.auth()`, every handle shares one client that sends no credentials. Take a command's client from the handle whose `extension` the app extends, or from one before it after the same `.auth()`. A command with another client fails to compile where the app adds it (`FIX_DEPENDENCY_TYPE`), also one that uses the client of a handle before `.auth()` and is `.add()`ed to a handle after it. The types tell clients apart by the types of the Contexts their `auth` reads only: a client of another `.auth()` that reads Contexts of the same types, or of an `.auth()` that reads none against the handle before it, compiles. Its requests then use the `auth` of the handle the app extends, provided the command parses the flags of the Contexts that `auth` reads; otherwise the command fails with a `DEFINITION` error and sends nothing.
+
+`ApiClient<Operations>` is the client of an `auth` that reads no Contexts. A helper that takes any handle's client is generic in them:
+
+<include lang="ts">../../../examples/modules/openapi.ts#helper</include>
 
 <auto-type-table path="../../../../../packages/openapi/src/client.ts" name="ApiClient" />
 
@@ -467,12 +474,25 @@ Unless `init.redirect` is `"manual"` or `"error"`, `fetch()` follows redirects i
 - A redirect to another origin continues without `Authorization`, `Cookie`, `Proxy-Authorization`, or any header named like an `auth` header, even when the request set its value.
 - After a redirect, the response (and its `clone()`) reports `redirected` as `true` and `url` as the final URL.
 
-### `auth(input)`
+### `.auth(fn)`
 
-- It runs at most once per invocation, on the first request that sends credentials: not when a command reads the Context, not for `auth: false` requests, and not for `api --list` or `api --spec`.
+`fn(input, { baseUrl })` returns the headers to send, or an `AuthAttempt`. Without `.auth()`, requests carry no credentials; a second `.auth()` replaces the first.
+
+- It runs at most once per invocation, on the first request that sends credentials: not when a command only reads the Context, not for `auth: false` requests, and not for `api --list`, `api --spec` or `api preview`.
 - It receives the [Context setup input](/docs/api/types#contextsetup-and-contextbag), including `signal`, `stdout`, and `stderr`, and as its second argument `{ baseUrl }`, the base URL as configured.
+- `input.ctx` holds the Contexts of the Context factories `.use()`d before `.auth()`, set up only when `fn` reads them; every factory a spread array may hold counts. Those `.use()`d after it are for the other callbacks only. An Extension's Contexts, such as `confirm`, are not readable in `fn`, wherever they are `.use()`d: the client is a Context, and a Context's `.use()` takes only factories.
 - Besides credentials, it may return any default headers, such as `User-Agent` or an API-version header. All of them are treated as credentials, so they go only to the base URL's origin.
 - It may return an `AuthAttempt` instead of the headers, to have a 401 retried; see [Authentication](#authentication).
+
+#### Auth that reads a flag
+
+The Contexts `fn` reads are the client's dependencies. Here a `profile` Context picks the [`@crustjs/auth` profile](/docs/modules/auth#profiles) whose token is sent:
+
+<include lang="ts">../../../examples/modules/openapi.ts#profile</include>
+
+- `@crustjs/openapi` puts `--profile` on the generated commands, `api`, and your commands that `.use(profiled.client)`, not on every command: a reusable command you `.add()` that does not use the client, and `api preview`, do not parse it. As for any Context the app `.provide()`s, the root and the inline `.command()` children after `.provide()` parse it too.
+- The app `.provide()`s the Context before `.extend(profiled.extension)`. One it does not provide fails to compile there (`FIX_MISSING_DEPENDENCY`), and at run time with `No provider for Context "profile"`.
+- Its flags must not be named like a flag of `api` (`-X`, `-H`, `-F`, `--body`, `--paginate`, `--list`, `--spec`): the app fails with `Flag "body" collides with existing flag "body" on command "api"`.
 
 ## Typed client
 
@@ -531,7 +551,7 @@ Where the mapper does not run (TypeScript 7.0 or older, 7.1 without `--runExtern
 
 ## Authentication
 
-`bearerAuth(resolve)` builds the `auth` option for a bearer token. `resolve({ signal, baseUrl })` returns `{ value, refresh? }`, which the [`auth.token`](/docs/modules/auth#the-token-status-and-logout) of an `@crustjs/auth` client does: a token from the environment, or a stored login that checks `baseUrl` against the origins it was issued for.
+`bearerAuth(resolve)` builds what [`.auth()`](#authfn) takes for a bearer token. `resolve({ signal, baseUrl, ctx })` returns `{ value, refresh? }`, which the [`auth.token`](/docs/modules/auth#the-token-status-and-logout) of an `@crustjs/auth` client does: a token from the environment, or a stored login that checks `baseUrl` against the origins it was issued for.
 
 <include lang="ts">../../../examples/modules/auth.ts#openapi</include>
 
