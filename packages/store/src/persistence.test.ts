@@ -29,6 +29,19 @@ const renameFailures = vi.hoisted((): string[] => []);
 const rmFailures = vi.hoisted((): string[] => []);
 // Error codes the next `sync` of a handle opened on the keyed path fails with.
 const syncFailures = vi.hoisted(() => new Map<string, string>());
+// Replaces `read` and `stat` of a handle opened on the keyed path, to model short reads and growth.
+const handleOverrides = vi.hoisted(
+	() =>
+		new Map<
+			string,
+			{
+				read?: (buffer: Buffer, offset: number, length: number) => number;
+				size?: number;
+			}
+		>(),
+);
+// Error codes the next `close` of a handle opened on the keyed path fails with, after closing.
+const closeFailures = vi.hoisted(() => new Map<string, string>());
 // Durability-relevant fs calls in order, as `<call> <path>`; the fsync order is asserted on it.
 const fsTrace = vi.hoisted((): string[] => []);
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -63,10 +76,35 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 			if (code !== undefined) throw Object.assign(new Error(code), { code });
 			return sync();
 		};
+		const close = handle.close.bind(handle);
+		handle.close = async () => {
+			await close();
+			const code = closeFailures.get(path);
+			closeFailures.delete(path);
+			if (code !== undefined) throw Object.assign(new Error(code), { code });
+		};
+		const override = handleOverrides.get(path);
+		if (override?.size !== undefined) {
+			const stat = handle.stat.bind(handle);
+			const size = override.size;
+			handle.stat = (async () => Object.assign(await stat(), { size })) as typeof handle.stat;
+		}
+		const read = override?.read;
+		if (read !== undefined) {
+			handle.read = (async (buffer: Buffer, offset: number, length: number) => ({
+				bytesRead: read(buffer, offset, length),
+				buffer,
+			})) as typeof handle.read;
+		}
 		return handle;
 	});
 	const mocked = { rename, chown, chmod, rm, open };
-	return { ...actual, ...mocked, default: { ...actual, ...mocked } };
+	const fs = { ...actual, ...mocked };
+	// The store loads built-ins with process.getBuiltinModule, which vi.mock does not reach.
+	const getBuiltinModule = process.getBuiltinModule.bind(process);
+	process.getBuiltinModule = (id: string) =>
+		id === "node:fs/promises" ? fs : getBuiltinModule(id);
+	return { ...fs, default: fs };
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -106,6 +144,51 @@ describe("readJson", () => {
 			details: { path: filePath },
 			cause: expect.any(SyntaxError),
 		});
+	});
+
+	it("fills one buffer across short reads, asking no more than it may keep", async () => {
+		const text = JSON.stringify({ items: "x".repeat(3000) });
+		await writeFile(filePath, text);
+		const buffers = new Set<ArrayBufferLike>();
+		let position = 0;
+		handleOverrides.set(filePath, {
+			read: (buffer, offset, length) => {
+				buffers.add(buffer.buffer);
+				expect(offset + length).toBeLessThanOrEqual(text.length + 1);
+				// One byte at a time, as a slow filesystem might answer.
+				if (position === text.length || length === 0) return 0;
+				buffer[offset] = text.charCodeAt(position++);
+				return 1;
+			},
+		});
+		try {
+			expect(await readJson(filePath)).toEqual(JSON.parse(text));
+			expect(buffers.size).toBe(1);
+		} finally {
+			handleOverrides.clear();
+		}
+	});
+
+	it("stops one byte past 16 MiB when the file grows after it was inspected", async () => {
+		await writeFile(filePath, "{}");
+		let requested = 0;
+		handleOverrides.set(filePath, {
+			size: 2,
+			read: (buffer, offset, length) => {
+				requested += length;
+				buffer.fill(32, offset, offset + length);
+				return length;
+			},
+		});
+		try {
+			await expect(readJson(filePath)).rejects.toMatchObject({
+				code: "PATH",
+				message: `Store file is larger than 16 MiB: ${filePath}`,
+			});
+			expect(requested).toBe(16 * 1024 * 1024 + 1);
+		} finally {
+			handleOverrides.clear();
+		}
 	});
 
 	// POSIX-only: on Windows chmod cannot make a file unreadable.
@@ -150,18 +233,11 @@ describe("writeJson", () => {
 	it("should create parent directory if missing", async () => {
 		const nested = join(tempDir, "deep", "nested", "config.json");
 
-		await writeJson(nested, { created: true });
+		await writeJson(nested, JSON.stringify({ created: true }));
 
 		expect(existsSync(nested)).toBe(true);
 		const raw = await readFile(nested, "utf-8");
 		expect(JSON.parse(raw)).toEqual({ created: true });
-	});
-
-	it("should produce tab-indented JSON", async () => {
-		await writeJson(filePath, { theme: "dark" });
-
-		const raw = await readFile(filePath, "utf-8");
-		expect(raw).toBe(JSON.stringify({ theme: "dark" }, null, "\t"));
 	});
 
 	// POSIX permission bits only. On Windows the store ignores modes (it uses
@@ -171,7 +247,7 @@ describe("writeJson", () => {
 			await mkdir(tempDir);
 			const previous = process.umask(0o777);
 			try {
-				await writeJson(filePath, { secret: true }, { fileMode: 0o600 });
+				await writeJson(filePath, JSON.stringify({ secret: true }), { fileMode: 0o600 });
 
 				const { mode } = await stat(filePath);
 				// Mask off the file-type bits, keep permission bits only.
@@ -186,7 +262,7 @@ describe("writeJson", () => {
 			const nested = join(tempDir, "secret-dir", "config.json");
 			const previous = process.umask(0o777);
 			try {
-				await writeJson(nested, { data: true }, { directoryMode: 0o700 });
+				await writeJson(nested, JSON.stringify({ data: true }), { directoryMode: 0o700 });
 
 				const { mode } = await stat(join(tempDir, "secret-dir"));
 				expect(mode & 0o777).toBe(0o700);
@@ -199,37 +275,37 @@ describe("writeJson", () => {
 			await mkdir(tempDir, { recursive: true });
 			await chmod(tempDir, 0o755);
 
-			await writeJson(filePath, { data: true }, { directoryMode: 0o700 });
+			await writeJson(filePath, JSON.stringify({ data: true }), { directoryMode: 0o700 });
 
 			const { mode } = await stat(tempDir);
 			expect(mode & 0o777).toBe(0o755);
 		});
 
 		it("keeps the mode of the file it replaces when no fileMode is set", async () => {
-			await writeJson(filePath, { data: 1 });
+			await writeJson(filePath, JSON.stringify({ data: 1 }));
 			await chmod(filePath, 0o600);
 
-			await writeJson(filePath, { data: 2 });
+			await writeJson(filePath, JSON.stringify({ data: 2 }));
 
 			expect((await stat(filePath)).mode & 0o7777).toBe(0o600);
 		});
 
 		it("gives the replacement the owner of the file it replaces", async () => {
-			await writeJson(filePath, { data: 1 });
+			await writeJson(filePath, JSON.stringify({ data: 1 }));
 			const { uid, gid } = await stat(filePath);
 			vi.mocked(chown).mockClear();
 
-			await writeJson(filePath, { data: 2 });
+			await writeJson(filePath, JSON.stringify({ data: 2 }));
 
 			expect(chown).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), uid, gid);
 		});
 
 		it("ignores a refused owner copy when not running as root", async () => {
-			await writeJson(filePath, { data: 1 });
+			await writeJson(filePath, JSON.stringify({ data: 1 }));
 			vi.mocked(chown).mockRejectedValueOnce(Object.assign(new Error("EPERM"), { code: "EPERM" }));
 			const getuid = vi.spyOn(process, "getuid").mockReturnValue(1000);
 			try {
-				await writeJson(filePath, { data: 2 });
+				await writeJson(filePath, JSON.stringify({ data: 2 }));
 			} finally {
 				getuid.mockRestore();
 			}
@@ -246,7 +322,7 @@ describe("writeJson", () => {
 			await writeFile(target, "{}");
 			await symlink(target, filePath);
 
-			await writeJson(filePath, { data: true });
+			await writeJson(filePath, JSON.stringify({ data: true }));
 
 			expect((await lstat(filePath)).isFile()).toBe(true);
 			expect(await readFile(target, "utf-8")).toBe("{}");
@@ -260,7 +336,7 @@ describe("writeJson", () => {
 			await mkdir(tempDir);
 			fsTrace.length = 0;
 
-			await writeJson(filePath, { data: true }, { fileMode: 0o600 });
+			await writeJson(filePath, JSON.stringify({ data: true }), { fileMode: 0o600 });
 
 			const tempPath = fsTrace[0]?.split(" ")[1] ?? "";
 			expect(tempPath).toMatch(/[\\/]\.config-[\w-]+\.tmp$/);
@@ -283,7 +359,7 @@ describe("writeJson", () => {
 			const nested = join(tempDir, "a", "b", "config.json");
 			fsTrace.length = 0;
 
-			await writeJson(nested, { data: true });
+			await writeJson(nested, JSON.stringify({ data: true }));
 
 			const tempPath = fsTrace.find((entry) => entry.endsWith(" wx"))?.split(" ")[1] ?? "";
 			expect(fsTrace).toEqual([
@@ -306,7 +382,7 @@ describe("writeJson", () => {
 			await mkdir(tempDir);
 			syncFailures.set(tempDir, "EIO");
 
-			await expect(writeJson(filePath, { data: true })).rejects.toMatchObject({
+			await expect(writeJson(filePath, JSON.stringify({ data: true }))).rejects.toMatchObject({
 				code: "IO",
 				details: { path: filePath, operation: "write" },
 				cause: { code: "EIO" },
@@ -319,7 +395,7 @@ describe("writeJson", () => {
 		async () => {
 			renameFailures.push("EPERM");
 
-			await expect(writeJson(filePath, { data: true })).rejects.toMatchObject({
+			await expect(writeJson(filePath, JSON.stringify({ data: true }))).rejects.toMatchObject({
 				code: "IO",
 				message: `Failed to finalize store file: ${filePath}`,
 				cause: { code: "EPERM" },
@@ -341,7 +417,7 @@ describe("writeJson", () => {
 		it("retries a rename that another program's open handle blocks", async () => {
 			renameFailures.push("EPERM", "EBUSY", "EACCES");
 
-			await writeJson(filePath, { data: true });
+			await writeJson(filePath, JSON.stringify({ data: true }));
 
 			expect(renameFailures).toEqual([]);
 			expect(JSON.parse(await readFile(filePath, "utf-8"))).toEqual({ data: true });
@@ -352,7 +428,7 @@ describe("writeJson", () => {
 			await mkdir(tempDir);
 			fsTrace.length = 0;
 
-			await writeJson(filePath, { data: true }, { fileMode: 0o600 });
+			await writeJson(filePath, JSON.stringify({ data: true }), { fileMode: 0o600 });
 
 			const tempPath = fsTrace[0]?.split(" ")[1] ?? "";
 			expect(fsTrace).toEqual([`open ${tempPath} wx`, `sync ${tempPath}`, `rename ${filePath}`]);
@@ -361,7 +437,7 @@ describe("writeJson", () => {
 		it("does not retry other rename errors", async () => {
 			renameFailures.push("ENOENT", "EPERM");
 
-			await expect(writeJson(filePath, { data: true })).rejects.toMatchObject({
+			await expect(writeJson(filePath, JSON.stringify({ data: true }))).rejects.toMatchObject({
 				cause: { code: "ENOENT" },
 			});
 		});
@@ -373,7 +449,7 @@ describe("writeJson", () => {
 		await writeFile(parentFile, "sentinel");
 		const badPath = join(parentFile, "impossible", "config.json");
 
-		await expect(writeJson(badPath, { data: true })).rejects.toMatchObject({
+		await expect(writeJson(badPath, JSON.stringify({ data: true }))).rejects.toMatchObject({
 			name: "CrustStoreError",
 			code: "IO",
 			details: { operation: "write" },
@@ -405,6 +481,48 @@ describe("withFileLock", () => {
 			expect(existsSync(`${filePath}.lock`)).toBe(false);
 		} finally {
 			rmFailures.length = 0;
+			await rm(tempDir, { recursive: true, force: true });
+		}
+	});
+
+	it("takes no lock when the host name cannot be read", async () => {
+		const tempDir = createTempDir();
+		await mkdir(tempDir, { recursive: true });
+		const filePath = join(tempDir, "config.json");
+		const os = process.getBuiltinModule("node:os");
+		const hostname = vi.spyOn(os, "hostname").mockImplementation(() => {
+			throw new Error("no host name");
+		});
+		const fn = vi.fn(async () => {});
+		try {
+			await expect(withFileLock(filePath, fn, { operation: "write" })).rejects.toMatchObject({
+				code: "IO",
+				details: { path: filePath, operation: "write" },
+				cause: { message: "no host name" },
+			});
+			expect(fn).not.toHaveBeenCalled();
+			expect(existsSync(`${filePath}.lock`)).toBe(false);
+		} finally {
+			hostname.mockRestore();
+			await rm(tempDir, { recursive: true, force: true });
+		}
+	});
+
+	it("removes the lock it created when closing it fails", async () => {
+		const tempDir = createTempDir();
+		await mkdir(tempDir, { recursive: true });
+		const filePath = join(tempDir, "config.json");
+		closeFailures.set(`${filePath}.lock`, "EIO");
+		const fn = vi.fn(async () => {});
+		try {
+			await expect(withFileLock(filePath, fn, { operation: "write" })).rejects.toMatchObject({
+				code: "IO",
+				cause: { code: "EIO" },
+			});
+			expect(fn).not.toHaveBeenCalled();
+			expect(existsSync(`${filePath}.lock`)).toBe(false);
+		} finally {
+			closeFailures.clear();
 			await rm(tempDir, { recursive: true, force: true });
 		}
 	});

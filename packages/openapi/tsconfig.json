@@ -1,5 +1,5 @@
 {
-	"extends": "@crustjs/config/tsconfig.base.json",
+	"extends": "@crustjs/internal-config/tsconfig.base.json",
 	"include": ["src", "tests"],
 	// Compiled by the test itself, with TypeScript 7.1 and the inspex content mapper.
 	"exclude": ["tests/fixtures/typed-client"]

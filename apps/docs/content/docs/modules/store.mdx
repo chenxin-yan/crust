@@ -31,8 +31,9 @@ Field types and defaults determine the state type. `createStore()` resolves `<di
 <auto-type-table path="../../../../../packages/store/src/types.ts" name="Store" />
 
 - `update()` rejects without calling `fn` when current state is invalid or a required value is missing. Use `write()` to initialize or `patch()` to repair.
-- `read()` coerces core number and boolean strings; only `"true"` and `"1"` become `true`. Persisted falsy values are kept.
+- `read()` and mutations convert number text, and the boolean text `"true"`, `"1"`, `"false"` and `"0"`; any other text in a boolean field fails with `Expected boolean`, as non-numeric text fails a number field. Persisted falsy values are kept.
 - Malformed JSON and non-object roots reject with `PARSE`. They never fall back to defaults; `write()` replaces such a file.
+- The store reads only a regular file, or a symbolic link to one (a [strict store](#strict-stores) refuses links). A directory, FIFO, or device at the path rejects with `PATH` at once, without waiting for a writer. A file larger than 16 MiB rejects with `PATH` too, and the store stops reading at the limit: it was not read, so a `write()` that keeps unknown keys does not replace it; a mutation that would write more than 16 MiB rejects with `VALIDATION` and leaves the file as it was. A leading byte order mark, which some Windows editors save, is ignored.
 - `write()`, `update()`, `patch()`, and `reset()` take an optional `{ signal }` last argument. Aborting it while the mutation still waits, behind earlier mutations of the same file or for its lock, rejects with `signal.reason` and changes nothing; once the mutation holds the lock, it runs to the end.
 
 ### Concurrency
@@ -101,6 +102,7 @@ Windows uses inherited ACLs, so the bits are not enforced there, and a strict st
 
 - Core `validate` callbacks run on read and mutation and throw to reject. They may return `{ value }` to transform, but transforms apply only on mutation.
 - A schema field gives validation, transformation, defaults, and optionality to its Standard Schema v1 `schema`, and cannot also set `default` or `validate`. `read()` returns the schema output without writing it. The field's type is the schema's `types.output`, or its successful `validate()` result when `types` is omitted. An output that is not JSON data, such as `Date`, is a `FIX_JSON_OUTPUT` compile error; optional properties (`z.string().optional()`) are accepted, including under `exactOptionalPropertyTypes`.
+- A string field, scalar or array, may list `choices`. A literal tuple narrows the field's type to their union. `read()` and mutations reject any other value with `Expected one of: …`, which never repeats the value; a `default` outside the choices throws `DEFINITION`.
 - Mutations revalidate transformed values and reject transforms whose result would read back differently.
 - Mutations reject explicit `undefined` for defaulted core fields, and values JSON cannot round-trip, such as `NaN`, `Infinity`, `-0`, sparse arrays, `undefined` properties, and cycles.
 
@@ -114,6 +116,6 @@ try {
 }
 ```
 
-`CrustStoreError.code` is `PATH`, `PARSE`, `IO`, `VALIDATION`, `DEFINITION`, or `LOCK`; `.is(code)` narrows `details`. A strict store's refusals are `PATH` with `details.reason` set to `"symlink"` or `"directory"`; `LOCK` means a strict lock was not acquired before its deadline.
+`CrustStoreError.code` is `PATH`, `PARSE`, `IO`, `VALIDATION`, `DEFINITION`, or `LOCK`; `.is(code)` narrows `details`. A `VALIDATION` error names the file in its message and in `details.path`, with one entry per field in `details.issues`. A strict store's refusals are `PATH` with `details.reason` set to `"symlink"` or `"directory"`; `LOCK` means a strict lock was not acquired before its deadline.
 
 Store has no encryption, migrations, other formats, or synchronous methods. The [package entry point](https://github.com/chenxin-yan/crust/blob/main/packages/store/src/index.ts) lists every export.

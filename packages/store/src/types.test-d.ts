@@ -265,3 +265,27 @@ type Expect<T extends true> = T;
 	type _Locked = Expect<Equal<typeof locked, Promise<number>>>;
 	const _options: LockOptions = {};
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// choices
+// ────────────────────────────────────────────────────────────────────────────
+
+{
+	const store = createStore({
+		dirPath: "/tmp",
+		name: "c",
+		fields: {
+			region: { type: "string", choices: ["us", "eu"] },
+			mode: { type: "string", choices: ["a", "b"], default: "a" },
+			tags: { type: "string", array: true, choices: ["x", "y"] },
+		},
+	});
+	type Config = Awaited<ReturnType<typeof store.read>>;
+	type _Region = Expect<Equal<Config["region"], "us" | "eu" | undefined>>;
+	type _Mode = Expect<Equal<Config["mode"], "a" | "b">>;
+	type _Tags = Expect<Equal<Config["tags"], ("x" | "y")[] | undefined>>;
+	// @ts-expect-error -- a value outside choices
+	void store.patch({ region: "mars" });
+	// @ts-expect-error -- choices are for string fields only
+	createStore({ dirPath: "/tmp", name: "c", fields: { n: { type: "number", choices: ["1"] } } });
+}

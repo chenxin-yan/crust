@@ -1,5 +1,5 @@
 {
-	"extends": "../packages/config/tsconfig.base.json",
+	"extends": "../packages/internal-config/tsconfig.base.json",
 	"compilerOptions": {
 		"declaration": false,
 		"isolatedDeclarations": false,

@@ -23,6 +23,8 @@ export interface IOErrorDetails {
  * read, write, update, or patch operations.
  */
 export interface ValidationErrorDetails {
+	/** Absolute path to the store file whose value failed validation. */
+	path: string;
 	/** The store operation during which validation failed. */
 	operation: "read" | "write" | "update" | "patch";
 	/** Structured validation issues for programmatic handling. */
@@ -84,12 +86,14 @@ export interface StoreErrorDetailsMap {
 /**
  * All possible error codes emitted by `@crustjs/store`.
  *
- * - `PATH` — Invalid or unsupported store file path, or (strict stores) a symbolic link or
- *   unsafe directory
+ * - `PATH` — Invalid or unsupported store file path, a path that is not a regular file, a file
+ *   larger than 16 MiB, or (strict stores) a symbolic link or unsafe directory
  * - `PARSE` — Malformed JSON in persisted config file
  * - `IO` — Filesystem read, write, or delete failure
- * - `VALIDATION` — Config object rejected by a store validator
- * - `DEFINITION` — A field mixes mutually exclusive definition modes, `strict` is combined
+ * - `VALIDATION` — Config object rejected by a store validator, or a mutation that would write
+ *   more than 16 MiB
+ * - `DEFINITION` — A field mixes mutually exclusive definition modes or has a default outside
+ *   its `choices`, `strict` is combined
  *   with an `access` other than `"private"`, or a lock timeout is not a finite number of at
  *   least 0
  * - `LOCK` — A strict lock was not acquired before its deadline

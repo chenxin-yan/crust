@@ -47,10 +47,10 @@
 		"postpack": "rm -f LICENSE"
 	},
 	"devDependencies": {
-		"@crustjs/config": "workspace:*",
 		"@crustjs/core": "workspace:*",
 		"@crustjs/prompts": "workspace:*",
 		"@crustjs/style": "workspace:*",
+		"@crustjs/internal-config": "workspace:*",
 		"vite-plus": "catalog:"
 	},
 	"peerDependencies": {

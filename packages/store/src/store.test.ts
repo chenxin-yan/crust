@@ -2,6 +2,7 @@
  * @module-tag windows
  * @module-tag macos
  */
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import {
@@ -13,6 +14,7 @@ import {
 	rm,
 	stat,
 	symlink,
+	truncate,
 	utimes,
 	writeFile,
 } from "node:fs/promises";
@@ -168,6 +170,44 @@ describe("store.read", () => {
 		expect(await store.read()).toEqual({ retries: 42, enabled: true, ports: [3000, 8080] });
 	});
 
+	it.each([
+		["true", true],
+		["1", true],
+		["false", false],
+		["0", false],
+	])("converts persisted %j to %j for a boolean field", async (text, value) => {
+		await writeFile(join(tempDir, "config.json"), JSON.stringify({ on: text, all: [text] }));
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: { on: { type: "boolean" }, all: { type: "boolean", array: true } },
+		});
+
+		expect(await store.read()).toEqual({ on: value, all: [value] });
+	});
+
+	it.each(["yes", "off", "", "TRUE"])(
+		"rejects persisted %j for a boolean field, on read and on write",
+		async (text) => {
+			await writeFile(join(tempDir, "config.json"), JSON.stringify({ on: text, all: [text] }));
+			const store = createStore({
+				dirPath: tempDir,
+				name: "config",
+				fields: { on: { type: "boolean" }, all: { type: "boolean", array: true } },
+			});
+
+			const issues = [
+				{ message: "Expected boolean", path: "on" },
+				{ message: "Expected boolean[]", path: "all" },
+			];
+			await expect(store.read()).rejects.toMatchObject({ details: { issues } });
+			await expect(store.write({ on: text, all: [text] } as never)).rejects.toMatchObject({
+				code: "VALIDATION",
+				details: { issues },
+			});
+		},
+	);
+
 	it.each(["abc", "", "  "])("should reject persisted %j for a number field", async (port) => {
 		const filePath = join(tempDir, "config.json");
 		await writeFile(filePath, JSON.stringify({ port }));
@@ -208,6 +248,212 @@ describe("store.read", () => {
 			},
 		});
 	});
+
+	it("names the file of a value that fails validation", async () => {
+		const filePath = join(tempDir, "config.json");
+		await writeFile(filePath, JSON.stringify({ port: "x" }));
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: { port: { type: "number" } },
+		});
+
+		const error = await store.read().catch((err: unknown) => err);
+		expect(error).toMatchObject({ code: "VALIDATION", details: { path: filePath } });
+		expect((error as Error).message).toContain(filePath);
+	});
+
+	it("rejects a value outside choices, for a scalar and for each array item", async () => {
+		await writeFile(
+			join(tempDir, "config.json"),
+			JSON.stringify({ region: "mars", tags: ["a", "z"] }),
+		);
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: {
+				region: { type: "string", choices: ["us", "eu"] },
+				tags: { type: "string", array: true, choices: ["a", "b"] },
+			},
+		});
+
+		await expect(store.read()).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: {
+				issues: [
+					{ message: "Expected one of: us, eu", path: "region" },
+					{ message: "Expected one of: a, b", path: "tags" },
+				],
+			},
+		});
+		await expect(store.patch({ region: "eu", tags: ["b"] })).resolves.toEqual({
+			region: "eu",
+			tags: ["b"],
+		});
+	});
+
+	it("rejects a default outside choices at definition", () => {
+		expect(() =>
+			createStore({
+				dirPath: tempDir,
+				name: "config",
+				fields: { region: { type: "string", choices: ["us"], default: "eu" } },
+			}),
+		).toThrow(expect.objectContaining({ code: "DEFINITION" }));
+	});
+
+	it("rejects an array a validator changed in place to hold a value outside choices", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: {
+				regions: {
+					type: "string",
+					array: true,
+					choices: ["us"],
+					validate: (items: string[]) => {
+						items.push("mars");
+					},
+				},
+			},
+		});
+
+		await expect(store.write({ regions: ["us"] })).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: { issues: [{ message: "Expected one of: us", path: "regions" }] },
+		});
+		expect(existsSync(join(tempDir, "config.json"))).toBe(false);
+	});
+
+	it("rejects a validate transform outside choices on write", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: {
+				region: { type: "string", choices: ["us", "eu"], validate: () => ({ value: "mars" }) },
+			},
+		});
+
+		await expect(store.write({ region: "us" })).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: { issues: [{ message: "Expected one of: us, eu", path: "region" }] },
+		});
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// the file a store reads
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("the store file", () => {
+	const MiB16 = 16 * 1024 * 1024;
+	const blobStore = () =>
+		createStore({ dirPath: tempDir, name: "config", fields: { blob: { type: "string" } } });
+	/** A `blob` whose file, as the store writes it, is `bytes` long. */
+	const blobOf = (bytes: number) =>
+		"x".repeat(bytes - JSON.stringify({ blob: "" }, null, "\t").length);
+
+	it("reads and writes a file of exactly 16 MiB", async () => {
+		const store = blobStore();
+		await store.write({ blob: blobOf(MiB16) });
+
+		expect((await stat(join(tempDir, "config.json"))).size).toBe(MiB16);
+		expect((await store.read()).blob).toHaveLength(blobOf(MiB16).length);
+	});
+
+	it("refuses a write over 16 MiB and keeps the file it would replace", async () => {
+		const store = blobStore();
+		await store.write({ blob: "old" });
+		const filePath = join(tempDir, "config.json");
+
+		const error = await store.patch({ blob: blobOf(MiB16 + 1) }).catch((err: unknown) => err);
+		expect(error).toMatchObject({
+			code: "VALIDATION",
+			details: { path: filePath, operation: "patch" },
+		});
+		expect((error as Error).message).toContain(filePath);
+		expect((error as Error).message).toContain("16 MiB");
+		expect(await store.read()).toEqual({ blob: "old" });
+		expect(await readdir(tempDir)).toEqual(["config.json"]);
+	});
+
+	it("write() keeps a file over 16 MiB byte for byte: unread is not corrupt", async () => {
+		const filePath = join(tempDir, "config.json");
+		const text = JSON.stringify({ blob: "kept", newer: blobOf(MiB16 + 1) });
+		await writeFile(filePath, text);
+		const store = blobStore();
+
+		await expect(store.write({ blob: "small" })).rejects.toMatchObject({ code: "PATH" });
+		await expect(store.patch({ blob: "small" })).rejects.toMatchObject({ code: "PATH" });
+		await expect(store.update(() => ({ blob: "small" }))).rejects.toMatchObject({ code: "PATH" });
+		expect(await readFile(filePath, "utf-8")).toBe(text);
+	});
+
+	it("rejects a file over 16 MiB with PATH", async () => {
+		const filePath = join(tempDir, "config.json");
+		await writeFile(filePath, JSON.stringify({ blob: blobOf(MiB16 + 1) }, null, "\t"));
+
+		await expect(blobStore().read()).rejects.toMatchObject({
+			code: "PATH",
+			message: `Store file is larger than 16 MiB: ${filePath}`,
+			details: { path: filePath },
+		});
+	});
+
+	it("stops at the limit instead of reading a huge file", async () => {
+		// Sparse: 4 GiB on paper, nothing on disk. Reading it whole would fail, not answer PATH.
+		const filePath = join(tempDir, "config.json");
+		await writeFile(filePath, "");
+		await truncate(filePath, 4 * 1024 ** 3);
+
+		await expect(blobStore().read()).rejects.toMatchObject({
+			code: "PATH",
+			message: `Store file is larger than 16 MiB: ${filePath}`,
+		});
+	});
+
+	it("ignores a leading byte order mark", async () => {
+		await writeFile(join(tempDir, "config.json"), `\uFEFF${JSON.stringify({ blob: "bom" })}`);
+
+		expect(await blobStore().read()).toEqual({ blob: "bom" });
+	});
+
+	it("refuses a directory at the store path", async () => {
+		const filePath = join(tempDir, "config.json");
+		await mkdir(filePath);
+
+		await expect(blobStore().read()).rejects.toMatchObject({
+			code: "PATH",
+			message: `Store file is not a regular file: ${filePath}`,
+			details: { path: filePath },
+		});
+	});
+
+	// POSIX-only: Windows has no FIFOs, and a symbolic link needs a privilege there.
+	it.skipIf(process.platform === "win32")(
+		"refuses a FIFO at once instead of waiting for a writer",
+		async () => {
+			const filePath = join(tempDir, "config.json");
+			execFileSync("mkfifo", [filePath]);
+
+			await expect(blobStore().read()).rejects.toMatchObject({
+				code: "PATH",
+				message: `Store file is not a regular file: ${filePath}`,
+			});
+		},
+		2_000,
+	);
+
+	it.skipIf(process.platform === "win32")(
+		"reads a regular file through a symbolic link",
+		async () => {
+			const target = join(tempDir, "target.json");
+			await writeFile(target, JSON.stringify({ blob: "linked" }));
+			await symlink(target, join(tempDir, "config.json"));
+
+			expect(await blobStore().read()).toEqual({ blob: "linked" });
+		},
+	);
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -215,6 +461,14 @@ describe("store.read", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("store.write", () => {
+	it("should produce tab-indented JSON", async () => {
+		const store = createStore({ dirPath: tempDir, name: "config", fields: BASIC_FIELDS });
+		await store.write({ theme: "dark", verbose: true });
+
+		const raw = await readFile(join(tempDir, "config.json"), "utf-8");
+		expect(raw).toBe(JSON.stringify({ theme: "dark", verbose: true }, null, "\t"));
+	});
+
 	it("should run field validators on write", async () => {
 		const store = createStore({
 			dirPath: tempDir,

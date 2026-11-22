@@ -34,6 +34,7 @@ it("docs and landing hovers explain selected values without builder or boilerpla
 			"../../../examples/guide/contexts-dependencies.ts": { config: "config: Promise<{ region: string; }>" },
 			"../../../examples/guide/extensions-consumer.ts": { sections: "sections: readonly CommandSection[]" },
 			"../../../examples/modules/env.ts#quick-example": { DATABASE_URL: "const DATABASE_URL: URL" },
+			"../../../examples/modules/config.ts#quick-example": { where: 'const where: "eu" | "us"' },
 			"../../../examples/modules/effect-env.ts#env-example": { PORT: "const PORT: number" },
 		};
 
@@ -93,6 +94,7 @@ it("docs and landing hovers explain selected values without builder or boilerpla
 		const pages = [
 			...readdirSync("content/docs/guide").filter(file => file.endsWith(".mdx")).map(file => "content/docs/guide/" + file),
 			"content/docs/modules/env.mdx",
+			"content/docs/modules/config.mdx",
 			"content/docs/modules/effect.mdx",
 		];
 		for (const page of pages) {

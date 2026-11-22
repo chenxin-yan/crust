@@ -45,10 +45,10 @@
 		"postpack": "rm -f LICENSE"
 	},
 	"devDependencies": {
-		"@crustjs/config": "workspace:*",
 		"@crustjs/core": "workspace:*",
 		"@crustjs/env": "workspace:*",
 		"@crustjs/testing": "workspace:*",
+		"@crustjs/internal-config": "workspace:*",
 		"effect": "catalog:",
 		"vite-plus": "catalog:"
 	},

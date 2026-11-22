@@ -2,16 +2,12 @@
 // @crustjs/store — JSON persistence primitives
 // ────────────────────────────────────────────────────────────────────────────
 
-import { chmod, chown, lstat, mkdir, open, readFile, rename, rm, stat } from "node:fs/promises";
-import { hostname } from "node:os";
-import { basename, dirname, join } from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
+import type { FileHandle } from "node:fs/promises";
 
 import { isErrnoException } from "@crustjs/utils/error";
 import type { JsonValue } from "@crustjs/utils/json";
 
 import { CrustStoreError, type IOErrorDetails } from "./errors.ts";
-import type { StoreDocument } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // WriteJsonOptions — File/directory permission control
@@ -49,29 +45,40 @@ export interface WriteJsonOptions {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
+ * The largest store file read or written. A store file may be one the user or another program
+ * put there, and it is read whole into memory; 16 MiB is far above any settings, state or cache
+ * document, and is the limit Crust already sets on a user-supplied file (`api preview --body @file`).
+ */
+export const MAX_FILE_BYTES: number = 16 * 1024 * 1024;
+
+/**
  * Reads and parses a JSON store file from disk.
  *
  * Returns `undefined` when the file does not exist (ENOENT), allowing callers
  * to fall back to defaults. Malformed JSON throws a `CrustStoreError` with `PARSE`
- * code — the store never silently recovers corrupt data.
+ * code — the store never silently recovers corrupt data. Only a regular file (or a
+ * symbolic link to one) is read, never more than {@link MAX_FILE_BYTES}, and a
+ * leading byte order mark is ignored.
  *
  * @param filePath - Absolute path to the JSON store file.
  * @returns Parsed JSON value, or `undefined` if the file does not exist.
+ * @throws {CrustStoreError} `PATH` if the path is not a regular file (a directory, FIFO or device),
+ *   or the file is larger than the limit.
  * @throws {CrustStoreError} `PARSE` if the file contains malformed JSON.
  * @throws {CrustStoreError} `IO` on filesystem read failures other than ENOENT.
  */
 export async function readJson(filePath: string): Promise<JsonValue | undefined> {
-	let raw: string;
-
-	try {
-		raw = await readFile(filePath, "utf-8");
-	} catch (err: unknown) {
-		// File not found is a normal case — nothing persisted yet
-		if (isErrnoException(err) && err.code === "ENOENT") {
-			return undefined;
-		}
-
-		throw new CrustStoreError(
+	const notRegular = () =>
+		new CrustStoreError("PATH", `Store file is not a regular file: ${filePath}`, {
+			path: filePath,
+		});
+	// PATH, not PARSE: the file was not read, so nothing says it is corrupt and may be replaced.
+	const tooLarge = () =>
+		new CrustStoreError("PATH", `Store file is larger than 16 MiB: ${filePath}`, {
+			path: filePath,
+		});
+	const readError = (err: unknown) =>
+		new CrustStoreError(
 			"IO",
 			`Failed to read store file: ${filePath}`,
 			{
@@ -80,6 +87,48 @@ export async function readJson(filePath: string): Promise<JsonValue | undefined>
 			},
 			err,
 		);
+
+	const fs = process.getBuiltinModule("node:fs/promises");
+	let handle: FileHandle;
+	try {
+		// Non-blocking, so opening a FIFO without a writer returns at once; Windows has no such flag.
+		handle = await fs.open(filePath, fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0));
+	} catch (err: unknown) {
+		// File not found is a normal case — nothing persisted yet
+		if (isErrnoException(err) && err.code === "ENOENT") {
+			return undefined;
+		}
+		if (isErrnoException(err) && err.code === "EISDIR") throw notRegular();
+		throw readError(err);
+	}
+
+	let raw: string;
+	try {
+		const stats = await handle.stat();
+		if (!stats.isFile()) throw notRegular();
+		if (stats.size > MAX_FILE_BYTES) throw tooLarge();
+		// Read to the end rather than trusting the size: the file may grow while it is read. One buffer,
+		// grown only when full, and never more than one byte past the limit is asked for.
+		let buffer = Buffer.allocUnsafe(stats.size + 1);
+		let length = 0;
+		for (;;) {
+			if (length === buffer.length) {
+				if (length > MAX_FILE_BYTES) break;
+				const grown = Buffer.allocUnsafe(Math.min(length * 2, MAX_FILE_BYTES + 1));
+				buffer.copy(grown, 0, 0, length);
+				buffer = grown;
+			}
+			const { bytesRead } = await handle.read(buffer, length, buffer.length - length, null);
+			if (bytesRead === 0) break;
+			length += bytesRead;
+		}
+		if (length > MAX_FILE_BYTES) throw tooLarge();
+		// Editors on Windows may save a byte order mark, which JSON.parse rejects.
+		raw = buffer.toString("utf-8", 0, length).replace(/^\uFEFF/u, "");
+	} catch (err: unknown) {
+		throw err instanceof CrustStoreError ? err : readError(err);
+	} finally {
+		await handle.close().catch(() => {});
 	}
 
 	try {
@@ -114,6 +163,8 @@ function isChownErrorOk(err: unknown): boolean {
  * its parent, so the store file's directory survives a power loss.
  */
 export async function ensureDirectory(filePath: string, mode: number | undefined): Promise<void> {
+	const { chmod, mkdir } = process.getBuiltinModule("node:fs/promises");
+	const { dirname } = process.getBuiltinModule("node:path");
 	const directoryMode = isWindows() ? undefined : mode;
 	const dir = dirname(filePath);
 	let createdDir: string | undefined;
@@ -168,7 +219,7 @@ export async function refuseSymlink(
 ): Promise<void> {
 	let stats;
 	try {
-		stats = await lstat(filePath);
+		stats = await process.getBuiltinModule("node:fs/promises").lstat(filePath);
 	} catch (err: unknown) {
 		if (isErrnoException(err) && err.code === "ENOENT") return;
 		throw new CrustStoreError(
@@ -192,11 +243,11 @@ export async function refuseSymlink(
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Atomically writes a JSON value to disk using a temp-file-and-rename strategy.
+ * Atomically writes JSON text to disk using a temp-file-and-rename strategy.
  *
  * Steps:
  * 1. Creates the parent directory if it does not exist.
- * 2. Writes serialized JSON to a temporary file in the same directory and
+ * 2. Writes the text to a temporary file in the same directory and
  *    flushes it to disk (`fsync`), so a crash after the rename cannot leave an
  *    empty or partial file in place. On POSIX the temp file gets the replaced
  *    file's owner and, unless `fileMode` is set, its mode.
@@ -212,15 +263,17 @@ export async function refuseSymlink(
  * throws a `CrustStoreError` with `IO` code.
  *
  * @param filePath - Absolute path to the target JSON store file.
- * @param data - The value to serialize and persist.
+ * @param json - The serialized document to persist.
  * @param options - Optional file/directory permission bits ({@link WriteJsonOptions}).
  * @throws {CrustStoreError} `IO` on filesystem write failures.
  */
 export async function writeJson(
 	filePath: string,
-	data: Readonly<StoreDocument>,
+	json: string,
 	options: WriteJsonOptions = {},
 ): Promise<void> {
+	const { chmod, chown, open, rm, stat } = process.getBuiltinModule("node:fs/promises");
+	const { basename, dirname, join } = process.getBuiltinModule("node:path");
 	const tempPath = join(
 		dirname(filePath),
 		`.${basename(filePath, ".json")}-${crypto.randomUUID()}.tmp`,
@@ -236,7 +289,6 @@ export async function writeJson(
 		: (options.fileMode ?? (existing === undefined ? undefined : existing.mode & 0o7777));
 
 	try {
-		const json = JSON.stringify(data, null, "\t");
 		const handle = await open(tempPath, "wx", fileMode);
 		try {
 			await handle.writeFile(json, "utf-8");
@@ -294,9 +346,9 @@ export async function writeJson(
  */
 async function syncDirectory(filePath: string, operation: "write" | "delete"): Promise<void> {
 	if (isWindows()) return;
-	const dir = dirname(filePath);
+	const dir = process.getBuiltinModule("node:path").dirname(filePath);
 	try {
-		const handle = await open(dir, "r");
+		const handle = await process.getBuiltinModule("node:fs/promises").open(dir, "r");
 		try {
 			await handle.sync();
 		} finally {
@@ -320,7 +372,10 @@ export const BUSY_CODES: ReadonlySet<string> = new Set(["EPERM", "EACCES", "EBUS
 
 /** Sleeps `ms`; an abort rejects with `signal.reason`. */
 export async function abortableSleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
-	await sleep(ms, undefined, { signal }).catch(() => signal?.throwIfAborted());
+	await process
+		.getBuiltinModule("node:timers/promises")
+		.setTimeout(ms, undefined, { signal })
+		.catch(() => signal?.throwIfAborted());
 }
 
 /**
@@ -331,6 +386,7 @@ export async function abortableSleep(ms: number, signal: AbortSignal | undefined
  * usually brief.
  */
 async function commit(tempPath: string, filePath: string): Promise<void> {
+	const { rename } = process.getBuiltinModule("node:fs/promises");
 	const start = Date.now();
 	for (let delay = 1; ; delay = Math.min(delay * 2, MAX_RETRY_DELAY_MS)) {
 		try {
@@ -339,7 +395,7 @@ async function commit(tempPath: string, filePath: string): Promise<void> {
 			const busy = isWindows() && isErrnoException(err) && BUSY_CODES.has(err.code ?? "");
 			if (!busy || Date.now() - start >= RENAME_RETRY_MS) throw err;
 		}
-		await sleep(delay);
+		await process.getBuiltinModule("node:timers/promises").setTimeout(delay);
 	}
 }
 
@@ -359,7 +415,7 @@ async function commit(tempPath: string, filePath: string): Promise<void> {
  */
 export async function deleteJson(filePath: string): Promise<void> {
 	try {
-		await rm(filePath, { force: true });
+		await process.getBuiltinModule("node:fs/promises").rm(filePath, { force: true });
 	} catch (err: unknown) {
 		throw new CrustStoreError(
 			"IO",
@@ -405,10 +461,13 @@ function isProcessAlive(pid: number): boolean {
 async function readLockPid(lockPath: string): Promise<number | undefined> {
 	try {
 		const owner: { pid?: unknown; host?: unknown } | null = JSON.parse(
-			await readFile(lockPath, "utf-8"),
+			await process.getBuiltinModule("node:fs/promises").readFile(lockPath, "utf-8"),
 		);
 		// A pid only identifies a process on the host that wrote it.
-		return owner?.host === hostname() && typeof owner.pid === "number" ? owner.pid : undefined;
+		return owner?.host === process.getBuiltinModule("node:os").hostname() &&
+			typeof owner.pid === "number"
+			? owner.pid
+			: undefined;
 	} catch {
 		return undefined;
 	}
@@ -422,10 +481,13 @@ async function isStaleLock(lockPath: string): Promise<boolean> {
 	if (pid !== undefined && !isProcessAlive(pid) && (await readLockPid(lockPath)) === pid) {
 		return true;
 	}
-	return stat(lockPath).then(
-		(lock) => Date.now() - lock.mtimeMs > STALE_LOCK_MS,
-		() => false,
-	);
+	return process
+		.getBuiltinModule("node:fs/promises")
+		.stat(lockPath)
+		.then(
+			(lock) => Date.now() - lock.mtimeMs > STALE_LOCK_MS,
+			() => false,
+		);
 }
 
 /**
@@ -449,6 +511,7 @@ export async function withFileLock<T>(
 	fn: () => Promise<T>,
 	options: FileLockOptions,
 ): Promise<T> {
+	const { open, rm } = process.getBuiltinModule("node:fs/promises");
 	const lockPath = `${filePath}.lock`;
 	const lockError = (err: unknown) =>
 		new CrustStoreError(
@@ -457,6 +520,14 @@ export async function withFileLock<T>(
 			{ path: filePath, operation: options.operation },
 			err,
 		);
+	// Before the lock exists, so a failure here leaves nothing to clean up.
+	let owner: string;
+	try {
+		const host = process.getBuiltinModule("node:os").hostname();
+		owner = JSON.stringify({ pid: process.pid, host });
+	} catch (err: unknown) {
+		throw lockError(err);
+	}
 	// On Windows a create or delete that races another process's delete of the same file
 	// fails with an access error. That is contention, until it outlasts a stale lock.
 	// TODO: Bun reports the delete's EPERM as EFAULT; drop EFAULT here once
@@ -474,11 +545,18 @@ export async function withFileLock<T>(
 		options.signal?.throwIfAborted();
 		try {
 			const handle = await open(lockPath, "wx");
-			// Creating the file took the lock; one without an owner is only recovered by age.
-			await handle.writeFile(JSON.stringify({ pid: process.pid, host: hostname() })).catch(() => {
-				named = false;
-			});
-			await handle.close();
+			try {
+				// Creating the file took the lock; one without an owner is only recovered by age.
+				await handle.writeFile(owner).catch(() => {
+					named = false;
+				});
+				await handle.close();
+			} catch (err: unknown) {
+				// The lock is ours but unusable: release it, so it never stalls the next mutation.
+				await handle.close().catch(() => {});
+				await rm(lockPath, { force: true }).catch(() => {});
+				throw err;
+			}
 			break;
 		} catch (err: unknown) {
 			if (isErrnoException(err) && err.code === "ENOENT") {
@@ -514,7 +592,7 @@ export async function withFileLock<T>(
 				() => !named,
 			);
 			if (done) break;
-			await sleep(10);
+			await process.getBuiltinModule("node:timers/promises").setTimeout(10);
 		}
 	}
 }
