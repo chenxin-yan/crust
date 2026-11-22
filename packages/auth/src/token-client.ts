@@ -110,7 +110,8 @@ export function createTokenClient(
 		return parseTokenResponse(response, requestStart);
 	};
 	return Object.freeze({
-		async exchangeCode(session, code, { signal } = {}) {
+		async exchangeCode(session, code, call = {}) {
+			const { signal } = call;
 			const internals = sessionInternals(session);
 			if (session.server !== server) {
 				throw new OAuthConfigError("server-mismatch", "The session belongs to another server");
@@ -132,7 +133,8 @@ export function createTokenClient(
 			for (const resource of internals.resource) body.append("resource", resource);
 			return grant(body, signal);
 		},
-		async refresh(refreshToken, { scope, resource, signal } = {}) {
+		async refresh(refreshToken, call = {}) {
+			const { scope, resource, signal } = call;
 			if (typeof refreshToken !== "string" || refreshToken === "") {
 				throw new OAuthConfigError("invalid-option", "refreshToken must be a non-empty string");
 			}
@@ -144,7 +146,8 @@ export function createTokenClient(
 			for (const value of checkResources(resource)) body.append("resource", value);
 			return grant(body, signal);
 		},
-		async revoke(token, { tokenTypeHint, signal } = {}) {
+		async revoke(token, call = {}) {
+			const { tokenTypeHint, signal } = call;
 			if (!server.revocationEndpoint) {
 				throw new OAuthConfigError("unsupported", "The server has no revocation endpoint");
 			}

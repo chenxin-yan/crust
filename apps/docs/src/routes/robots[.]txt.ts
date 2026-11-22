@@ -14,7 +14,7 @@ export const Route = createFileRoute("/robots.txt")({
 					"Disallow: /api/",
 					"Disallow: /llms.txt",
 					"Disallow: /llms-full.txt",
-					"Disallow: /llms.mdx/",
+					"Disallow: /*.md",
 					"",
 					`Sitemap: ${absoluteUrl("/sitemap.xml")}`,
 				];

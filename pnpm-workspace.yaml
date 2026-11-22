@@ -5,20 +5,13 @@ packages:
 
 catalog:
   # The docs examples type-check against @crustjs/effect, so both must resolve one copy.
-  effect: 4.1.1
-  vite: npm:@voidzero-dev/vite-plus-core@1.4.0
-  vite-plus: 1.4.0
+  effect: 4.1.5
+  vite: npm:@voidzero-dev/vite-plus-core@8.3.8000
+  vite-plus: 1.7.0
 
 overrides:
   # Vite plugins resolve the same Vite+ core that `vp build`/`vp test` run on.
   vite@*: "catalog:"
-
-# Vite+ core has its own version, outside plugins' upstream `vite` peer ranges.
-peerDependencyRules:
-  allowAny:
-    - vite
-  allowedVersions:
-    vite: "*"
 
 # Dependency install scripts stay blocked; these platform binaries resolve through optionalDependencies.
 allowBuilds:

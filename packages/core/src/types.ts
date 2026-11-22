@@ -539,21 +539,20 @@ export type InferArgValue<A extends ArgDef> = A extends {
 		? A extends { required: true; default?: never }
 			? [ResolveBaseType<A>, ...ResolveBaseType<A>[]]
 			: ResolveBaseType<A>[]
-		:
-				| ("variadic" extends keyof A
-						? true extends A["variadic"]
-							? ResolveBaseType<A>[]
-							: never
-						: never)
-				| (A extends { required: true }
-						? ResolveBaseType<A>
-						: // Defaults are raw inputs; only a definitely present default
-							// guarantees presence after its parser runs.
-							A extends { default: infer Default }
-							? undefined extends Default
-								? ResolveBaseType<A> | undefined
-								: ResolveBaseType<A>
-							: ResolveBaseType<A> | undefined);
+		: | ("variadic" extends keyof A
+					? true extends A["variadic"]
+						? ResolveBaseType<A>[]
+						: never
+					: never)
+			| (A extends { required: true }
+					? ResolveBaseType<A>
+					: // Defaults are raw inputs; only a definitely present default
+						// guarantees presence after its parser runs.
+						A extends { default: infer Default }
+						? undefined extends Default
+							? ResolveBaseType<A> | undefined
+							: ResolveBaseType<A>
+						: ResolveBaseType<A> | undefined);
 
 // Accumulate duplicates so long positional actions do not exhaust instantiation depth.
 type DuplicateArgNames<

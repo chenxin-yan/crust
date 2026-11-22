@@ -5,14 +5,20 @@ import browserCollections from "fumadocs-mdx:collections/browser";
 import * as Twoslash from "fumadocs-twoslash/ui";
 import { TypeTable } from "fumadocs-ui/components/type-table";
 import { DocsLayout } from "fumadocs-ui/layouts/docs";
-import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/layouts/docs/page";
+import {
+	DocsBody,
+	DocsDescription,
+	DocsPage,
+	DocsTitle,
+	MarkdownCopyButton,
+	ViewOptionsPopover,
+} from "fumadocs-ui/layouts/docs/page";
 import defaultMdxComponents from "fumadocs-ui/mdx";
 import { Suspense } from "react";
 
-import { LLMCopyButton, ViewOptions } from "@/components/ai/page-actions";
 import { CommunityLinks } from "@/components/community-links";
 import { baseOptions } from "@/lib/layout.shared";
-import { buildPageMeta, siteConfig } from "@/lib/seo";
+import { absoluteUrl, buildPageMeta, siteConfig } from "@/lib/seo";
 import { source } from "@/lib/source";
 
 export const Route = createFileRoute("/docs/$")({
@@ -76,9 +82,11 @@ const clientLoader = browserCollections.docs.createClientLoader({
 				<DocsTitle>{frontmatter.title}</DocsTitle>
 				<DocsDescription>{frontmatter.description}</DocsDescription>
 				<div className="flex flex-row gap-2 items-center border-b -mt-4 pb-6">
-					<LLMCopyButton markdownUrl={`${url}.mdx`} />
-					<ViewOptions
-						markdownUrl={`${url}.mdx`}
+					<MarkdownCopyButton markdownUrl={`${url}.md`} />
+					<ViewOptionsPopover
+						markdownUrl={`${url}.md`}
+						// AI prompts default to `window.location.href`, query and fragment included.
+						pageUrl={absoluteUrl(`${url}.md`)}
 						githubUrl={`${siteConfig.githubUrl}/blob/main/apps/docs/content/docs/${path}`}
 					/>
 				</div>
