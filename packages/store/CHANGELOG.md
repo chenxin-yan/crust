@@ -1,5 +1,33 @@
 # @crustjs/store
 
+## 0.6.0
+
+### Minor Changes
+
+- [#692](https://github.com/chenxin-yan/crust/pull/692) [`a02319d`](https://github.com/chenxin-yan/crust/commit/a02319d5fcfe494e707e795da269816e13772bf2) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - String fields take `choices`, validation errors name their file, and the store reads a file the user controls safely.
+  
+  - A string field, scalar or array, may list `choices`: a literal tuple narrows its type to their union, `read()` and every mutation reject other values with `Expected one of: …` (never repeating the value), and a `default` outside them throws `DEFINITION`.
+  - A `VALIDATION` error's first line names the store file (`Store validation failed (read) in <path>`), and its details gain `path`.
+  - Behaviour change: the store reads only a regular file, or a symbolic link to one. A directory, FIFO or device at the path now rejects at once with `PATH` (`Store file is not a regular file: <path>`) instead of hanging or failing with `IO`.
+  - Behaviour change: a store file larger than 16 MiB now rejects with `PATH` (`Store file is larger than 16 MiB: <path>`), read no further than the limit, and never replaced by a `write()` that keeps unknown keys, and a mutation that would write more than 16 MiB rejects with `VALIDATION` and leaves the file as it was.
+  - A leading byte order mark is ignored instead of failing with `PARSE`.
+  - The store's built module no longer imports a Node built-in at its top level; each function gets the built-ins it needs when it runs.
+  - Behaviour change: a boolean field converts only the text `"true"`, `"1"`, `"false"` and `"0"`, on read and on write. Any other text, such as `"yes"`, now fails with `Expected boolean` instead of reading as `false`, as non-numeric text already failed a number field.
+
+- [#679](https://github.com/chenxin-yan/crust/pull/679) [`a36c855`](https://github.com/chenxin-yan/crust/commit/a36c855a4448a0878928c67d64f2540f2148b39c) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Stores can now hold credentials: a `strict` mode whose lock is never taken from a running process, and writes and resets that survive a power loss.
+  
+  - New `strict: true` option on `createStore()`, for a file that must not lose an update and must stay private. Its lock is never taken over from a process that may still run, however long it holds it; a waiter takes over only an owner that is provably gone (on Linux, same machine, boot and PID namespace with the process gone or its pid reused; on macOS and Windows, same platform and hostname with the process gone), serialized through `<name>.json.lock.recover`. Otherwise the mutation rejects with the new `LOCK` error after `lockTimeout` (new option, 40 seconds by default), whose details name the file, its owner, and the manual step. A strict store refuses a store file that is a symbolic link on every platform, and on Unix an existing directory that is a link, belongs to another user, or is writable by group or other users (for `read()` as well as mutations), with `PATH` and `details.reason` `"symlink"` or `"directory"`. `strict` implies `access: "private"`; combining it with another `access` throws `DEFINITION`. Every process that opens the file must set `strict`.
+  - New `withLock(path, fn, { signal, timeout })` export: the same strict lock for work on a path that has no store document.
+  - `write()`, `update()`, `patch()`, and `reset()` take an optional `{ signal }` (new `StoreMutationOptions` type). Aborting while the mutation still waits, behind earlier mutations of the same file or for its lock, rejects with `signal.reason` and changes nothing. Without a signal, the default lock behaves as before.
+  - New `LOCK` error code, and an optional `reason` on `PATH` error details.
+  - On Unix, every store now flushes the directory after renaming a write into place and after `reset()` deletes the file, and the parent of each directory it creates, so a write or reset that resolved survives a power loss, except while another process is creating the same new directories: only the creator of a directory flushes its entry. A failed flush rejects with `IO`. Windows has no directory flush.
+  - The temporary file of a write is created exclusively.
+
+### Patch Changes
+
+- Updated dependencies [[`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520), [`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520), [`edb6671`](https://github.com/chenxin-yan/crust/commit/edb66715c2462bdc11a6032054dc759eb48ceb5b), [`829a63e`](https://github.com/chenxin-yan/crust/commit/829a63ecbd719d51d784584eec40fedc5dd1a670)]:
+  - @crustjs/utils@0.4.0
+
 ## 0.5.1
 
 ### Patch Changes

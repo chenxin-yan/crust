@@ -1,5 +1,12 @@
 # @crustjs/effect
 
+## 0.3.2
+
+### Patch Changes
+
+- Updated dependencies [[`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520), [`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520), [`f33da63`](https://github.com/chenxin-yan/crust/commit/f33da63cfb00fda51e6011b8aa7beb081fc42ead), [`a01d6e9`](https://github.com/chenxin-yan/crust/commit/a01d6e99886183a5dd52ec13712d5ba4fdcf353e), [`224c684`](https://github.com/chenxin-yan/crust/commit/224c684dfc59be282a1ef4319ade4c017b62283b)]:
+  - @crustjs/core@0.7.0
+
 ## 0.3.1
 
 ### Patch Changes

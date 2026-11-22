@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/effect",
-	"version": "0.3.1",
+	"version": "0.3.2",
 	"description": "Effect.ts v4 adapter for Crust Command Actions, Contexts, and errors",
 	"type": "module",
 	"sideEffects": false,

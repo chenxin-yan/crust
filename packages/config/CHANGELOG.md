@@ -1,0 +1,13 @@
+# @crustjs/config
+
+## 0.1.0
+
+### Minor Changes
+
+- [#692](https://github.com/chenxin-yan/crust/pull/692) [`a02319d`](https://github.com/chenxin-yan/crust/commit/a02319d5fcfe494e707e795da269816e13772bf2) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - New package `@crustjs/config`: a CLI's settings, read from JSON config files, as one typed Context per setting. `defineConfig({ name, global, project }).flags({...})` declares them: the options say where the files are, and the chained `.flags()` takes each setting as the flag definition of a string, number or boolean flag. It returns `settings` (each setting's Context factory, named after it), `extension` (`.extend(config.extension)` provides them all), `jsonSchema()`, and with `global` set, `global`, the typed store of the global file for a `config set` command. A command built with `defineCommand()` and added with `.add()` `.use()`s the settings it reads and takes only their flags (the root and its inline `.command()` children take every setting's flag, as for any Context an Extension provides), and reads each with `await ctx.<name>`: its flag (argv, `--input`, typed `run()` input), then its variable, then the project file (`<name>.config.json`, the nearest from the working directory up), then the global file (`config.json` in `configDir(name)`), then its `default`. `required` is checked, and `default` applied, after the files; `flag: false` makes a setting read only from its variable, the files and its default, and such a setting reads `process.env`, so `run(path, input, { env })` does not reach it. The files are read through `@crustjs/store` when a command reads a setting its flag and variable did not give, once for each such setting, so `--help`, `--version`, commands that use no setting, and settings given on the command line never read them. A test replaces one setting with its `.of()` double. Needs no change to `@crustjs/core`.
+
+### Patch Changes
+
+- Updated dependencies [[`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520), [`aa64910`](https://github.com/chenxin-yan/crust/commit/aa64910af94f0659c2790fb4ea3a5729852d3520), [`f33da63`](https://github.com/chenxin-yan/crust/commit/f33da63cfb00fda51e6011b8aa7beb081fc42ead), [`a01d6e9`](https://github.com/chenxin-yan/crust/commit/a01d6e99886183a5dd52ec13712d5ba4fdcf353e), [`224c684`](https://github.com/chenxin-yan/crust/commit/224c684dfc59be282a1ef4319ade4c017b62283b), [`a02319d`](https://github.com/chenxin-yan/crust/commit/a02319d5fcfe494e707e795da269816e13772bf2), [`a36c855`](https://github.com/chenxin-yan/crust/commit/a36c855a4448a0878928c67d64f2540f2148b39c)]:
+  - @crustjs/core@0.7.0
+  - @crustjs/store@0.6.0
