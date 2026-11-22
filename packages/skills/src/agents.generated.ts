@@ -1,4 +1,4 @@
-// Generated from the agent registry of skills@1.8.1 (https://github.com/vercel-labs/skills).
+// Generated from the agent registry of skills@1.9.0 (https://github.com/vercel-labs/skills).
 // skills is MIT licensed: Copyright (c) 2026 Vercel, Inc.
 // Do not edit; regenerate with `pnpm --filter @crustjs/skills run generate:agents`.
 
