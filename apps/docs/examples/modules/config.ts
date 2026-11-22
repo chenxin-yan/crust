@@ -80,6 +80,17 @@ export const app = new Crust("acme", { version: "1.0.0" })
 	.add(deploy, serve, set, ...api.commands);
 //#endregion
 
+//#region given
+// `flags.port` is what this run was given; `await ctx.port` is the setting.
+const show = defineCommand("show", { description: "Show the port" }, (command) =>
+	command.use(port).action(async ({ ctx, flags, stdout }) => {
+		// Given by --port, --input, typed run() input or the setting's variable; never a file or the default.
+		const given = flags.port !== undefined;
+		stdout(`port ${(await ctx.port) ?? "unset"}${given ? " (given for this run)" : ""}`);
+	}),
+);
+//#endregion
+
 //#region testing
 const tested = await new Crust("acme")
 	.provide(org.of("test-org"), region.of("eu"))
@@ -88,3 +99,4 @@ const tested = await new Crust("acme")
 //#endregion
 
 void tested;
+void show;

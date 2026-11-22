@@ -22,9 +22,11 @@ npm install @crustjs/config
 
 `defineConfig({ name, global, project })` says where the files are, and its `.flags({...})` declares the settings, as `.flags()` does on a command. It returns `settings`, each setting's Context factory by name; `extension`, which provides them all (`.extend(config.extension)`); `jsonSchema()`; and, with `global` set, `global`, the typed store of the global file. Call `.flags()` once.
 
+The settings are plain [Contexts](/docs/guide/contexts). `config.extension` has no hooks: it provides every setting's Context in one line and adds the ["Configuration" help section](#help). `.provide(org(), port())` works without it.
+
 - A command built with `defineCommand()` and added with `.add()` `.use()`s the settings it reads, and takes only their flags: `serve` above takes `--port`, and `serve --org x` is `Unknown flag "--org"`. Generated OpenAPI commands work the same way.
 - The root command and its inline `.command()` children take every setting's flag, as for any Context an Extension provides; use `defineCommand()` and `.add()` for a command that should take only its own.
-- Read a setting from `ctx`, one `await` per setting: `await ctx.port` is its settled value. `flags.port` holds only what was typed or came from the environment, never the files or the default.
+- Read a setting from `ctx`, one `await` per setting: `await ctx.port` is its settled value. Its flag is also in `flags`, with another meaning: see [`ctx` or `flags`](#ctx-or-flags).
 - The root command lists every setting's flag, since it provides them all.
 - Names follow core's rules: a second provider of a setting's name that the types can see on a command path is a compile error (`FIX_DUPLICATE_CONTEXT`), and two owners of one flag spelling on a command collide.
 
@@ -53,6 +55,28 @@ deploying flag-org to eu
 Each key is settled on its own: here `org` comes from the project file and `region` from the global file. The files do not merge beyond that: only the nearest project file is read.
 
 A setting's flag is an ordinary flag of its Context, so Core resolves the first two steps exactly as for any flag, and `--help`, typed `run()`, `--input`, [`schema`](/docs/modules/extensions/schema), [MCP](/docs/modules/mcp) and completion all see it. `@crustjs/config` does the last three when a command reads a setting that its flag and variable did not give: the files are read then, for that setting, so a command that reads several such settings reads the files once for each. A setting given by its flag or variable reads no file, so `--help`, `--version`, a command that uses no setting, and one whose settings all came from flags work whatever is in the files.
+
+## `ctx` or `flags`
+
+A command that `.use()`s a setting has it in two places, and they answer different questions:
+
+|                  | Holds                                                                                                        | Use it for                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------- |
+| `await ctx.port` | The setting: the first of its flag, its variable, the project file, the global file and its default          | The value your command works with             |
+| `flags.port`     | Only what this run was given: `--port`, a key of `--input` or typed `run()` input, or the setting's variable | Telling whether the user gave it for this run |
+
+- `flags.port` being `undefined` means "not given for this run", not "has no value": a value from a file, or a default, is never in `flags`.
+- A value from the setting's environment variable is in `flags`, as for any flag with `env`.
+- A `flag: false` setting is never in `flags`, even when its variable is set. It exists only in `ctx`.
+
+<include lang="ts">../../../examples/modules/config.ts#given</include>
+
+```sh
+$ acme show                      # acme.config.json: {"port":8080}
+port 8080
+$ acme show --port 1
+port 1 (given for this run)
+```
 
 ## The files
 
