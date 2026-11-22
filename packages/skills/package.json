@@ -39,6 +39,7 @@
 	"scripts": {
 		"build": "vp run build:task",
 		"dev": "vp pack --watch",
+		"generate:agents": "node scripts/generate-agents.ts",
 		"check:types": "vp run check:types:task",
 		"test": "vp run test:task",
 		"prepack": "cp ../../LICENSE LICENSE",
@@ -55,6 +56,7 @@
 		"@crustjs/core": "workspace:*",
 		"@crustjs/extensions": "workspace:*",
 		"@crustjs/testing": "workspace:*",
+		"skills": "1.8.1",
 		"vite-plus": "catalog:"
 	},
 	"peerDependencies": {

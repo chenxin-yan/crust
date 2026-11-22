@@ -12,16 +12,20 @@ export interface RenderedFile {
 	content: string | Uint8Array;
 }
 
-/** Options for linking one packaged skill source into agent directories. */
+/** Options for linking one packaged skill source into the shared folder and agent directories. */
 export interface InstallSkillOptions {
 	/** Package directory `skills/<name>` containing the skill's SKILL.md. */
 	sourceDir: string | URL;
-	/** Agent targets. Omit to use universal plus PATH-detected agents. */
+	/** Agents to link besides the shared `.agents/skills` folder, which is always linked. Omit to use detected agents. */
 	agents?: readonly AgentTarget[];
 	/** Agent-directory scope. @default "global" */
 	scope?: Scope;
-	/** Allow replacing a directory that is not owned by this skill. @default false */
-	force?: boolean;
+	/**
+	 * Replace entries this skill does not own: `true` for any, or a list of exact paths to replace
+	 * only those; a conflict elsewhere still throws. Re-pointing an owned link needs no `force`.
+	 * @default false
+	 */
+	force?: boolean | readonly string[];
 }
 
 export type InstallStatus = "installed" | "repaired" | "up-to-date";
@@ -35,12 +39,23 @@ export interface AgentResult {
 	status: InstallStatus;
 }
 
+/** The shared `.agents/skills/<name>` link, the only one that points at the packaged skill. */
+export interface SharedLinkResult {
+	outputDir: string;
+	/** Effective scope after remapping project scope at the home directory. */
+	scope: Scope;
+	status: InstallStatus;
+}
+
 export interface InstallSkillResult {
+	shared: SharedLinkResult;
+	/** Agents reading the shared folder report the shared link's directory and status. */
 	agents: AgentResult[];
 }
 
 export interface UninstallSkillOptions {
 	name: string;
+	/** Agents whose own links to remove; the shared link stays. Omit to remove every link, shared included. */
 	agents?: readonly AgentTarget[];
 	scope?: Scope;
 }
@@ -94,9 +109,10 @@ export interface SkillOptions {
 	 */
 	defaultScope?: Scope;
 	/**
-	 * Repair owned links whose target no longer exists before commands run. A link to another
-	 * live installed copy is left alone (`skills repair` re-points it). Never runs from source, so a
-	 * checkout does not take over an installed CLI's links. @default true
+	 * Before commands run, silently re-link the shared `.agents/skills` link when its target no
+	 * longer exists; agent links point at it and are not inspected. A working link, even to another
+	 * installed copy, and a conflict at the shared path are left to `skills repair`.
+	 * Never runs from source, so a checkout does not take over an installed CLI's links. @default true
 	 */
 	autoUpdate?: boolean;
 	/**

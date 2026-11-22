@@ -19,6 +19,7 @@ export type {
 	InstallSkillOptions,
 	InstallSkillResult,
 	InstallStatus,
+	SharedLinkResult,
 	SkillLinkStatus,
 	SkillOptions,
 	SkillStatusOptions,

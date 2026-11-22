@@ -6,6 +6,16 @@ import type {
 	FlagDef,
 } from "@crustjs/core";
 import { Crust, defineCommand } from "@crustjs/core";
+import { vi } from "vite-plus/test";
+
+import { AGENTS } from "../src/agents.generated.ts";
+
+/** Unsets every variable that relocates an agent's global directory, so the host's do not leak in. */
+export function stubAgentOverridesUnset(): void {
+	for (const row of Object.values(AGENTS)) {
+		if (row.length === 5) vi.stubEnv(row[3], undefined);
+	}
+}
 
 export async function withCwd<T>(dir: string, run: () => Promise<T>): Promise<T> {
 	// Preserve the original method for restoration; it is never called unbound.
@@ -16,6 +26,21 @@ export async function withCwd<T>(dir: string, run: () => Promise<T>): Promise<T>
 		return await run();
 	} finally {
 		process.cwd = cwd;
+	}
+}
+
+/** Runs with `dir` as the home directory (`HOME`, and `USERPROFILE` on Windows). */
+export async function withHome<T>(dir: string, run: () => Promise<T>): Promise<T> {
+	const saved = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+	process.env.HOME = dir;
+	process.env.USERPROFILE = dir;
+	try {
+		return await run();
+	} finally {
+		for (const [name, value] of Object.entries(saved)) {
+			if (value === undefined) delete process.env[name];
+			else process.env[name] = value;
+		}
 	}
 }
 
