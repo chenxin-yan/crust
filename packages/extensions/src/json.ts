@@ -149,6 +149,7 @@ export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__
 		// Argv that fails to parse never selects the renderer, but the person still asked for JSON.
 		.onError((error, ctx) => {
 			if (flushHeld.has(ctx) || !(error instanceof CrustError) || !error.is("PARSE")) return;
+			// shortcut: a `--json` meant for a passthrough argument also selects JSON here, since the hook cannot see where passthrough starts; upgrade if Core reports that boundary.
 			const end = ctx.argv.indexOf("--");
 			const words = end === -1 ? ctx.argv : ctx.argv.slice(0, end);
 			if (!words.includes("--json")) return;

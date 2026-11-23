@@ -3,6 +3,7 @@ import { captureExecute } from "@crustjs/testing";
 import { describe, expect, it } from "vite-plus/test";
 
 import { didYouMean } from "./did-you-mean.ts";
+import { jsonInput } from "./json-input.ts";
 import { json } from "./json.ts";
 import { noColor } from "./no-color.ts";
 
@@ -206,6 +207,15 @@ describe("didYouMean", () => {
 		expect(await stderrOf("create", "--secrt")).toBe('Error: Unknown flag "--secrt"\n');
 		expect(await stderrOf("create", "--zzz")).toBe('Error: Unknown flag "--zzz"\n');
 		expect(await stderrOf("create", "-t")).toBe('Error: Unknown flag "-t"\n');
+	});
+
+	it("never suggests the flag the error already names", async () => {
+		const app = new Crust("app").extend(didYouMean(), jsonInput(), json()).action(() => {});
+
+		const { stderr } = await captureExecute(app, ["--input", '{"json":true}']);
+
+		expect(stderr).toContain('Flag "--json" is not command input');
+		expect(stderr).not.toContain("Did you mean");
 	});
 
 	it("keeps a flag suggestion in the JSON error under --json", async () => {

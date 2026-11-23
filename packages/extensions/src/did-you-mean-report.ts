@@ -101,7 +101,9 @@ export function suggestFlag(error: CrustError<"PARSE">, command: CommandSnapshot
 	// A one-letter name may be a short flag, and any short name is within two edits of it.
 	if (flag === undefined || flag.length < 2) return;
 	const suggestion = findSuggestion(flag, flagCandidates(command.flags));
-	if (suggestion !== undefined) error.message += `. Did you mean "--${suggestion}"?`;
+	// Core also reports a known flag as `unknown-flag` (e.g. one given as `--input` JSON).
+	if (suggestion !== undefined && suggestion !== flag)
+		error.message += `. Did you mean "--${suggestion}"?`;
 }
 
 /** Report a command-not-found failure; loaded only when one occurs. */

@@ -184,6 +184,22 @@ describe("lookUpLatestVersion", () => {
 		expect(seen[0]?.aborted).toBe(true);
 	});
 
+	it("leaves no pending rejection after a sync throw", async () => {
+		const lookup = () => {
+			throw new Error("offline");
+		};
+		expect(await lookUpLatestVersion(lookup, 10)).toBeNull();
+		// The timeout fires after the call returned; an unhandled rejection fails the run.
+		await new Promise((resolve) => setTimeout(resolve, 30));
+	});
+
+	it("does not call the lookup when the invocation signal has already aborted", async () => {
+		const lookup = vi.fn(() => "2.0.0");
+
+		expect(await lookUpLatestVersion(lookup, 5000, AbortSignal.abort())).toBeNull();
+		expect(lookup).not.toHaveBeenCalled();
+	});
+
 	it("stops waiting as soon as the invocation signal aborts", async () => {
 		const controller = new AbortController();
 		const result = lookUpLatestVersion(

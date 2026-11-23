@@ -131,10 +131,12 @@ export async function lookUpLatestVersion(
 	const timeout = AbortSignal.timeout(timeoutMs);
 	const bound = signal ? AbortSignal.any([signal, timeout]) : timeout;
 	try {
+		bound.throwIfAborted();
 		const aborted = new Promise<never>((_resolve, reject) =>
 			bound.addEventListener("abort", () => reject(bound.reason), { once: true }),
 		);
-		const latest = await Promise.race([lookup(bound), aborted]);
+		// A sync throw must land inside the race, or `aborted` rejects later unhandled.
+		const latest = await Promise.race([Promise.resolve().then(() => lookup(bound)), aborted]);
 		return typeof latest === "string" && latest.length > 0 ? latest : null;
 	} catch {
 		return null;
