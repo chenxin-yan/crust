@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import { type Equal, type Expect, lineSink, unwrap } from "../../tests/helpers.ts";
-import { Crust, defineCommand } from "../command/crust.ts";
+import { type AnyCrust, Crust, defineCommand } from "../command/crust.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { ExecuteOptions } from "../types.ts";
 import { type AnyContextInstance, defineContext } from "./context.ts";
@@ -435,6 +435,7 @@ it("rejects supplied flag keys retired by same-ID Extension replacement", async 
 		.action(({ flags }): string => flags.oldFlag);
 	const replacement = defineExtension(id).flags({ newFlag: { type: "boolean" } });
 	await expect(
+		// @ts-expect-error -- the replacement retired oldFlag, in the types too
 		unwrap(original.extend(replacement).run([], { flags: { oldFlag: "supplied" } })),
 	).rejects.toMatchObject({ code: "PARSE", message: 'Unknown flag "--oldFlag"' });
 	expect(await original.run([], { flags: { oldFlag: "supplied" } })).toMatchObject({
@@ -451,6 +452,7 @@ it("rejects retired recursive keys on existing and later descendants and same-ca
 	const child = defineCommand("child", (c) => c.add(grand));
 	const original = new Crust("app").extend(old).add(child);
 	await expect(
+		// @ts-expect-error -- the replacement retired oldFlag, in the types too
 		unwrap(original.extend(replacement).run(["child", "grand"], { flags: { oldFlag: "value" } })),
 	).rejects.toThrow('Unknown flag "--oldFlag"');
 	const later = new Crust("app").extend(old, replacement).add(child);
@@ -513,12 +515,14 @@ it("keeps surviving and reintroduced keys and nonrecursive replacement scope", a
 		.command("child", (c) => c.action(() => "child"))
 		.action(() => {});
 	const removed = original.extend(defineExtension(id));
+	// @ts-expect-error -- the replacement retired local, in the types too
 	await expect(unwrap(removed.run([], { flags: { local: "value" } }))).rejects.toThrow(
 		'Unknown flag "--local"',
 	);
 	expect(await removed.run(["child"])).toMatchObject({ status: "completed", result: "child" });
 	const widened: Extension = old;
-	for (const app of [removed.extend(widened), original.extend(widened)]) {
+	const apps: AnyCrust[] = [removed.extend(widened), original.extend(widened)];
+	for (const app of apps) {
 		expect(await app.run([], { flags: { local: "value" } })).toMatchObject({
 			status: "completed",
 			result: undefined,

@@ -17,6 +17,7 @@ Types that match what runs, test doubles that fit where the real Context goes, a
 - A `choices` list built at runtime (`readonly Template[]`) types the input as its element type instead of rejecting every value.
 - An alias list known only at runtime no longer opens every typed path to any string; such aliases are no typed path, so use the command's name.
 - **Breaking:** `definition.as(name)` returns the copy without the original's aliases.
+- Registering a literal Extension id again in a later `.extend()` call removes the flags only the earlier registration contributed from every typed view, as the runtime does. `defineExtensionId()` keeps its literal: `ExtensionId<"acme:preview">`.
 - `InferFlags` and `InferArgs` are exported.
 - Clearer diagnostics: `.use()` on an app says to `.provide()`; `parse` on a non-string flag says it is for string flags; a missing Context mentions `.extend()`ing the Extension that provides it; a flag collision names the Context or Extension that owns each flag (`Flag "conn" of Context "cache" collides with existing flag "conn" of Context "db" on command "sub"`); and the published `.d.ts` files keep readable type names instead of one-letter aliases.
 - `@crustjs/openapi`: **Breaking:** `api <path> --paginate --json` prints every page body in one JSON array, like `gh api --paginate --slurp`, instead of NDJSON events.

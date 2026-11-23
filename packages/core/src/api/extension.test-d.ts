@@ -415,3 +415,37 @@ function _hookFlagsAreTheOwnedAndUsedContextFlags() {
 			const _level: "info" | "warn" = await ctx.settings;
 		});
 }
+
+// A same-id registration that drops a flag removes it from every typed view.
+function _replacingAnExtensionIdRecomputesItsFlags() {
+	const id = defineExtensionId("test:format");
+	const old = defineExtension(id).flags({ format: { type: "string", default: "text" } });
+	const replacement = defineExtension(id).flags({ color: { type: "boolean" } });
+	new Crust("x")
+		.extend(old)
+		.extend(replacement)
+		.action(({ flags }) => {
+			// @ts-expect-error -- the replacement does not contribute format
+			void flags.format;
+			type _color = Expect<Equal<typeof flags.color, boolean | undefined>>;
+		})
+		.command("child", (c) =>
+			c.action(({ flags }) => {
+				// @ts-expect-error -- nor does it reach children
+				void flags.format;
+			}),
+		);
+	new Crust("x")
+		.extend(old)
+		.extend(old)
+		.action(({ flags }) => {
+			type _format = Expect<Equal<typeof flags.format, string>>;
+		});
+	// Another id keeps its flags.
+	new Crust("x")
+		.extend(old)
+		.extend(defineExtension(defineExtensionId("test:other")))
+		.action(({ flags }) => {
+			type _format = Expect<Equal<typeof flags.format, string>>;
+		});
+}

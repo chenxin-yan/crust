@@ -641,9 +641,49 @@ type ReplaceEntries<Base, Next> = [LiteralKeys<Base> & LiteralKeys<Next>] extend
 	? Base & Next
 	: { [K in keyof Base as K extends LiteralKeys<Next> ? never : K]: Base[K] } & Next;
 
+/** The flag names each literal Extension id contributed so far; see `ReplacedFlagNames`. */
+type ExtensionFlagNamesOf<S extends AnyBuilderFacts> = Exclude<S["extensionFlagNames"], undefined>;
+
+/** An Extension's literal id; `never` for a runtime-only one, which the types cannot follow. */
+type LiteralExtensionId<E> = E extends { readonly id: ExtensionId<infer Id> }
+	? string extends Id
+		? never
+		: Id
+	: never;
+
+/** Flag names an Extension contributes, for a later same-id registration; an open record names none. */
+type ContributedFlagNames<E> = keyof (ExtensionOwnFlags<E> &
+	ExtensionProvidedFlags<E> &
+	ExtensionHookFlags<E>) extends infer K
+	? string extends K
+		? never
+		: K
+	: never;
+
+// A same-id registration replaces the earlier one at runtime, so the flags only the earlier one
+// contributed are gone; the later one's own come back through `ReplaceEntries`.
+type ReplacedFlagNames<S extends AnyBuilderFacts, Es extends readonly AnyExtension[]> = {
+	[K in keyof ExtensionFlagNamesOf<S>]: K extends LiteralExtensionId<Es[number]>
+		? ExtensionFlagNamesOf<S>[K]
+		: never;
+}[keyof ExtensionFlagNamesOf<S>];
+
 type WithoutNames<Base, Names> = [Names] extends [never]
 	? Base
 	: { [K in keyof Base as K extends Names ? never : K]: Base[K] };
+
+// Resolved with `infer R`, so a chain of `.extend()` calls keeps one flat record.
+type RegisteredFlagNames<Names extends object, Es extends readonly AnyExtension[]> = [
+	LiteralExtensionId<Es[number]>,
+] extends [never]
+	? Names
+	: {
+				[K in keyof Names as K extends LiteralExtensionId<Es[number]> ? never : K]: Names[K];
+		  } & {
+				[E in Es[number] as LiteralExtensionId<E>]: ContributedFlagNames<E>;
+		  } extends infer R extends object
+		? R
+		: never;
 
 // Extension commands join the tree like `.add()`: a colliding command is a definition error.
 // Resolving with `infer R` keeps a chain of `.extend()` calls from deferring one nested tree per
@@ -835,7 +875,10 @@ type BuilderFacts<
 	Output extends OutputState | undefined = InitialOutputState,
 	// Extension-provided Context flags registered so far; see `TreeWithInlineFlags`.
 	InlineFlags extends FlagsDef = {},
+	// Flag names each literal Extension id contributed; see `ReplacedFlagNames`.
+	ExtensionFlagNames extends object = {},
 > = {
+	readonly extensionFlagNames: ExtensionFlagNames;
 	readonly output: Output;
 	readonly actionDeps: ActionDeps;
 	readonly extensionCommands: ExtensionCommandSpellings;
@@ -853,6 +896,7 @@ type AnyBuilderFacts = {
 	readonly extensionCommands?: string | undefined;
 	readonly recursiveFlags?: FlagsDef | undefined;
 	readonly inlineFlags?: FlagsDef | undefined;
+	readonly extensionFlagNames?: object | undefined;
 	readonly demands: ContextMap;
 	readonly recipeDeps?: ContextMap | undefined;
 	readonly providers?: Record<string, ContextValue> | undefined;
@@ -1021,7 +1065,8 @@ type AfterUse<
 		Facts["extensionCommands"],
 		AppRecursiveFlagsOf<Facts>,
 		Facts["output"],
-		AppInlineFlagsOf<Facts>
+		AppInlineFlagsOf<Facts>,
+		ExtensionFlagNamesOf<Facts>
 	>,
 	Result,
 	Meta,
@@ -1054,7 +1099,8 @@ type AfterProvide<
 		Facts["extensionCommands"],
 		AppRecursiveFlagsOf<Facts>,
 		Facts["output"],
-		AppInlineFlagsOf<Facts>
+		AppInlineFlagsOf<Facts>,
+		ExtensionFlagNamesOf<Facts>
 	>,
 	Result,
 	Meta,
@@ -1131,11 +1177,11 @@ type AfterExtend<
 	// Not `MergeFlags`: re-instantiating an alias revisits its type arguments, so a chain of
 	// `.extend()` calls would nest one `MergeFlags<…>` level per call (TS2589 at about 100 calls).
 	// `ReplaceEntries` is a conditional, resolved at each call.
-	ReplaceEntries<Flags, ExtensionFlags<Es>>,
+	ReplaceEntries<WithoutNames<Flags, ReplacedFlagNames<Facts, Es>>, ExtensionFlags<Es>>,
 	A,
 	MergeProviders<Ctx, ExtensionsProvidesOutput<Es>>,
 	ExtensionCommandTree<Tree, Es, ExtensionCommandsOf<Facts>>,
-	ReplaceEntries<CtxFlags, ExtensionsProvidedFlags<Es>>,
+	ReplaceEntries<WithoutNames<CtxFlags, ReplacedFlagNames<Facts, Es>>, ExtensionsProvidedFlags<Es>>,
 	BuilderFacts<
 		Facts["demands"] & ExtensionDemandValues<Es>,
 		RecipeDepsOf<Facts>,
@@ -1148,9 +1194,16 @@ type AfterExtend<
 				KnownSpellings<ExtensionsCommandSpellings<Es>>,
 				Exclude<LiteralKeys<Tree>, ExtensionCommandsOf<Facts>>
 		  >,
-		ReplaceEntries<AppRecursiveFlagsOf<Facts>, RecursiveExtensionFlags<Es>>,
+		ReplaceEntries<
+			WithoutNames<AppRecursiveFlagsOf<Facts>, ReplacedFlagNames<Facts, Es>>,
+			RecursiveExtensionFlags<Es>
+		>,
 		Facts["output"],
-		ReplaceEntries<AppInlineFlagsOf<Facts>, ExtensionsProvidedFlags<Es>>
+		ReplaceEntries<
+			WithoutNames<AppInlineFlagsOf<Facts>, ReplacedFlagNames<Facts, Es>>,
+			ExtensionsProvidedFlags<Es>
+		>,
+		RegisteredFlagNames<ExtensionFlagNamesOf<Facts>, Es>
 	>,
 	Result,
 	Meta,
@@ -1177,7 +1230,8 @@ type AfterAdd<
 		State["facts"]["extensionCommands"],
 		AppRecursiveFlagsOf<State["facts"]>,
 		State["facts"]["output"],
-		AppInlineFlagsOf<State["facts"]>
+		AppInlineFlagsOf<State["facts"]>,
+		ExtensionFlagNamesOf<State["facts"]>
 	>,
 	State["result"],
 	State["meta"],
@@ -1731,9 +1785,10 @@ export class Crust<
 	 * contribute. Repeated calls accumulate Extensions in registration order,
 	 * except that registering an `ExtensionId` again keeps only the last
 	 * registration — its contributions and providers replace the earlier ones
-	 * and its hooks run once, at the later position. ID deduplication is
-	 * runtime-only: a literal flag or command name the later registration
-	 * contributes again takes its type, but removed paths can remain statically
+	 * and its hooks run once, at the later position. A literal flag or command name
+	 * the later registration contributes again takes its type. For a literal id
+	 * registered again in a later call, the flags only the earlier registration
+	 * contributed leave the types too; removed command paths can remain statically
 	 * visible and reject with `COMMAND_NOT_FOUND`. A command both registrations
 	 * contribute in one call is typed as either one's result. An `.action()` bound
 	 * before the later registration keeps the earlier flag types, so register

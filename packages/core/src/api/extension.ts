@@ -667,10 +667,11 @@ export type ExtensionFactory<
 	MetaKeys extends RootMetaKey = never,
 	HookDeps extends ContextMap = Deps,
 	HookFlags extends FlagsDef = {},
-> = ((
-	...args: Args
-) => Extension<Deps, Provide, Flags, Commands, MetaKeys, HookDeps, HookFlags>) & {
-	readonly id: ExtensionId;
+	Id extends string = string,
+> = ((...args: Args) => Extension<Deps, Provide, Flags, Commands, MetaKeys, HookDeps, HookFlags> & {
+	readonly id: ExtensionId<Id>;
+}) & {
+	readonly id: ExtensionId<Id>;
 };
 
 type ExtensionFactoryOf<Args extends readonly unknown[], E> =
@@ -685,7 +686,17 @@ type ExtensionFactoryOf<Args extends readonly unknown[], E> =
 			infer HookFlags
 		>
 	>
-		? ExtensionFactory<Args, Deps, Provide, Flags, Commands, MetaKeys, HookDeps, HookFlags>
+		? ExtensionFactory<
+				Args,
+				Deps,
+				Provide,
+				Flags,
+				Commands,
+				MetaKeys,
+				HookDeps,
+				HookFlags,
+				E extends { readonly id: ExtensionId<infer Id> } ? Id : string
+			>
 		: never;
 
 /** Hooks that run before flag validation, where pulling a Context that owns flags rejects. */
@@ -736,6 +747,7 @@ export interface ExtensionBuilder<
 	OF extends ExtensionFlagsDef = {},
 	Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
 	MetaKeys extends RootMetaKey = never,
+	Id extends string = string,
 > extends Extension<
 	ExtensionDeps<Use, Provide, Commands>,
 	Provide,
@@ -745,6 +757,7 @@ export interface ExtensionBuilder<
 	ContextDemands<Use>,
 	ContextUseFlags<Use>
 > {
+	readonly id: ExtensionId<Id>;
 	/**
 	 * Declare Contexts the hooks read from `ctx`. This consumes only: the
 	 * application (or `.provide()`) must supply each Context. Hooks run on every
@@ -752,7 +765,7 @@ export interface ExtensionBuilder<
 	 */
 	use<const Fs extends readonly [AnyContextFactory, ...AnyContextFactory[]]>(
 		...factories: Fs
-	): ExtensionBuilder<readonly [...Use, ...Fs], Provide, OF, Commands, MetaKeys>;
+	): ExtensionBuilder<readonly [...Use, ...Fs], Provide, OF, Commands, MetaKeys, Id>;
 	/**
 	 * Provide Contexts application-wide, regardless of chain position. Provided
 	 * Contexts are not exposed to this Extension's hooks unless also declared with `.use()`.
@@ -761,7 +774,7 @@ export interface ExtensionBuilder<
 	 */
 	provide<const Cs extends readonly AnyContextInstance[]>(
 		...instances: Cs & KnownContextInstances<Cs>
-	): ExtensionBuilder<Use, readonly [...Provide, ...Cs], OF, Commands, MetaKeys>;
+	): ExtensionBuilder<Use, readonly [...Provide, ...Cs], OF, Commands, MetaKeys, Id>;
 	/**
 	 * Own flags, one record keyed by flag name; repeated calls accumulate. `recursive`
 	 * (default `true`) contributes a flag to every command.
@@ -773,7 +786,8 @@ export interface ExtensionBuilder<
 		Provide,
 		AppendedFlags<OF, DefinedFlags<F, ExtensionFlagsDef>>,
 		Commands,
-		MetaKeys
+		MetaKeys,
+		Id
 	>;
 	/** Contribute root commands; names and aliases must not collide with any other root command. */
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
@@ -782,7 +796,7 @@ export interface ExtensionBuilder<
 	/** See {@link ExtensionHooks.setup}. */
 	setup(
 		hook: ExtensionHook<"setup", Use, OF, MetaKeys>,
-	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Id>;
 	/**
 	 * Take over the invocation when the user supplies `flag` (argv, environment, or typed
 	 * `run()` input), unless it is a negated boolean: `run` replaces `preRun`, validation,
@@ -794,44 +808,47 @@ export interface ExtensionBuilder<
 		flag: keyof OF & string,
 		run: ExtensionHook<"noAction", Use, OF, MetaKeys, true>,
 		options?: ExtensionHandleOptions,
-	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Id>;
 	/** See {@link ExtensionHooks.renderer}. */
 	renderer(
 		select: ExtensionHook<"renderer", Use, OF, MetaKeys>,
-	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Id>;
 	/** See {@link ExtensionHooks.preRun}. */
 	preRun(
 		hook: ExtensionHook<"preRun", Use, OF, MetaKeys>,
-	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Id>;
 	/** See {@link ExtensionHooks.noAction}. */
 	noAction(
 		hook: ExtensionHook<"noAction", Use, OF, MetaKeys>,
-	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Id>;
 	/** See {@link ExtensionHooks.postRun}. */
 	postRun(
 		hook: ExtensionHook<"postRun", Use, OF, MetaKeys>,
-	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Id>;
 	/** See {@link ExtensionHooks.onError}. */
 	onError(
 		hook: ExtensionHook<"onError", Use, OF, MetaKeys>,
-	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Id>;
 
 	/** Contribute documentation sections computed from the prepared root snapshot. */
 	sections(
 		contribute: (
 			snapshot: RootCommandSnapshot<MetaKeys>,
 		) => readonly ExtensionSectionContribution[],
-	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Id>;
 	/** Generate build artifacts; build tooling writes the returned files. */
 	build(
 		generate: (ctx: ExtensionBuildContext<MetaKeys>) => Awaitable<BuildArtifacts>,
-	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Id>;
 	/**
 	 * Make a configurable Extension: each call passes this handle and the call
 	 * arguments to `define`, which must return an Extension with this handle's id.
 	 */
 	factory<Args extends readonly unknown[], E extends AnyExtension>(
-		define: (extension: ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>, ...args: Args) => E,
+		define: (
+			extension: ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Id>,
+			...args: Args
+		) => E,
 	): ExtensionFactoryOf<Args, E>;
 }
 
@@ -930,9 +947,10 @@ function createExtension(state: ExtensionState): ErasedExtensionBuilder {
  * without preventing inference of flags, Contexts, or commands; chain
  * `.factory()` for a configurable Extension whose identity is a section consumer.
  */
-export function defineExtension<MetaKeys extends RootMetaKey = never>(
-	id: ExtensionId,
-): ExtensionBuilder<[], [], {}, [], MetaKeys> {
+export function defineExtension<
+	MetaKeys extends RootMetaKey = never,
+	const Id extends string = string,
+>(id: ExtensionId<Id>): ExtensionBuilder<[], [], {}, [], MetaKeys, Id> {
 	// SAFETY: metadata requirements are type-only; the runtime handle is identical for every MetaKeys.
 	return createExtension({
 		id,
@@ -942,5 +960,5 @@ export function defineExtension<MetaKeys extends RootMetaKey = never>(
 		commands: [],
 		hooks: {},
 		handlers: {},
-	}) as ExtensionBuilder<[], [], {}, [], MetaKeys>;
+	}) as ExtensionBuilder<[], [], {}, [], MetaKeys, Id>;
 }

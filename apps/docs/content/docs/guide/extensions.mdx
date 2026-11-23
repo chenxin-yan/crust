@@ -65,7 +65,7 @@ Return a chain on the supplied Extension to keep its id. See [`ExtensionBuilder`
 ### Ids and builders
 
 - Give each Extension a namespaced id, such as `acme:preview`, with `defineExtensionId()`.
-- Registering the same id again replaces the earlier registration.
+- Registering the same id again replaces the earlier registration. In a later `.extend()` call, the flags only the earlier one contributed leave the `flags` types as well.
 - Builder methods other than `.factory()` return new frozen Extensions; there is no build step.
 - Declare flags and Contexts before the hooks that read them. Collection methods such as `.flags()` append; setting a hook again replaces its callback.
 
