@@ -263,4 +263,15 @@ describe("multiselect — non-TTY", () => {
 
 		expect(result).toEqual(["a", "c"]);
 	});
+
+	it.each([
+		[{ required: true, default: [] }, "default value rejected: At least one item must be selected"],
+		[{ min: 2, default: ["a"] }, "default value rejected: Select at least 2 items"],
+		[{ max: 1, default: ["a", "b"] }, "default value rejected: Select at most 1 item"],
+		[{ max: 1, initial: ["a", "b"] }, "initial value rejected: Select at most 1 item"],
+	])("checks %o like Enter would", async (constraint, error) => {
+		await expect(
+			nonTTY({ message: "Select", choices: ["a", "b", "c"], ...constraint }),
+		).rejects.toThrow(error);
+	});
 });

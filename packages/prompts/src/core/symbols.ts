@@ -8,6 +8,9 @@ export const PREFIX_SYMBOL = "┃";
 /** Prefix glyph shown after the prompt is submitted. */
 export const PREFIX_SUBMITTED = "✓";
 
+/** Prefix glyph shown after the prompt is cancelled. */
+export const PREFIX_CANCELLED = "✗";
+
 /** Cursor indicator for focused items in list-style prompts. */
 export const CURSOR_INDICATOR = "›";
 

@@ -2,7 +2,7 @@
 title: "Prompts"
 ---
 
-`@crustjs/prompts` exports terminal prompts, shared themes, injected terminal IO, and helpers for custom prompts. Prompt UI writes to stderr by default.
+`@crustjs/prompts` exports terminal prompts, an `$EDITOR` helper, a URL launcher, shared themes, injected terminal IO, and helpers for custom prompts. Prompt UI writes to stderr by default.
 
 ## Install
 
@@ -32,7 +32,9 @@ The ambient `withTerminalIO()` scope is shared with `@crustjs/progress`.
 
 ## Prompts
 
-All prompt functions accept `(options, io?)`. Choice functions preserve literal choice value types when their choices are not widened. A plain-string choice is its own value, so `Choice<T>` only accepts plain strings that are themselves a `T`; non-string values such as numbers must use `{ label, value }` objects.
+All prompt functions accept `(options, io?)`. Choice functions preserve literal choice value types when their choices are not widened, and a `default` or `initial` outside literal choices is a compile error on that option, such as `Type '"bogus"' is not assignable to type '"eslint" | "prettier"'`. A plain-string choice is its own value, so `Choice<T>` only accepts plain strings that are themselves a `T`; non-string values such as numbers must use `{ label, value }` objects.
+
+Keys typed ahead of a prompt are kept for it: a pasted `my-app⏎n⏎` answers two prompts in a row on the same input.
 
 ### `input(options, io?)`
 
@@ -122,6 +124,32 @@ Multifilter combines fuzzy matching with multi-selection and returns values in o
   name="MultifilterOptions"
 />
 
+### `editor(options?, io?)`
+
+```ts
+const body = await editor({ initial: "## Summary\n", filename: "issue.md" });
+```
+
+Editor opens the user's editor on a temporary file holding `initial` and returns the file's text once the editor exits. The editor is `$VISUAL`, else `$EDITOR`, run by the shell as Git runs it, so a value such as `code --wait` works; it runs on the process's own terminal. The temporary file is named `filename` (editors pick syntax highlighting from its extension) and removed afterwards.
+
+- Where `canPrompt()` is false it rejects with `NonInteractiveError` without starting the editor.
+- It rejects when neither variable is set, or when the editor exits with a non-zero status.
+- When the resolved `signal` aborts, it stops the editor and rejects with `signal.reason`.
+
+<auto-type-table
+  path="../../../../../packages/prompts/src/prompts/editor.ts"
+  name="EditorOptions"
+/>
+
+## Opening a URL
+
+```ts
+const url = "https://example.com/login";
+if (!(await openUrl(url))) console.error(`Open ${url} in your browser.`);
+```
+
+`openUrl(url)` opens an `http` or `https` URL with the system launcher: `open` on macOS, `xdg-open`, or `rundll32 url.dll,FileProtocolHandler` on Windows. The URL is one argument, never passed through a shell, so `&` stays part of it. It resolves `true` when a launcher started and `false` when the URL is refused (another scheme, or control characters) or no launcher could start; it never throws. Always print the URL too, for a user without a browser. [`openBrowser()`](/docs/modules/auth#opening-the-browser) in `@crustjs/auth` is the same launcher with a stricter rule for URLs.
+
 ## Validation
 
 ```text
@@ -132,7 +160,7 @@ Multifilter combines fuzzy matching with multi-selection and returns values in o
 
 A `validate` callback throws to reject input, and its error message renders inline. A Standard Schema parses the raw string, returns its transformed output type, and renders the first issue or `Validation failed`.
 
-Async validators and schemas are supported. `initial` and non-interactive `default` values also pass through a configured schema or `validate` callback before being returned; a rejected value throws, for example `initial value rejected: Name is required`.
+Async validators and schemas are supported. `initial` and non-interactive `default` values also pass through a configured schema or `validate` callback before being returned; a rejected value throws, for example `initial value rejected: Name is required`. `multiselect()` and `multifilter()` check `required`, `min`, and `max` on them the same way, for example `default value rejected: Select at least 2 items`.
 
 ## Themes
 
@@ -155,21 +183,25 @@ NonInteractiveError: Prompts require an interactive terminal (TTY).
 ```
 
 - With `initial`, every prompt returns it without rendering.
-- A prompt renders only when both its input and its output are TTYs.
+- A prompt renders only where `canPrompt(io?)` is true: its input and its output are both TTYs, and `CI` is unset (empty, `0`, or `false` in any letter case counts as unset) unless the input was injected through `io` or [`withTerminalIO()`](#injecting-io), as [`runInteractive()`](/docs/modules/testing#runinteractiveapp-argv) does. `CI` guards against a pseudo-terminal nobody answers.
 - Otherwise, such as when stdin is piped or stderr is redirected, a prompt returns an explicitly supplied `default` (`password()` has none) or rejects with `NonInteractiveError`. `confirm()` defaults to yes interactively, but without a TTY only an explicit `default` counts.
-- Ctrl+C rejects with a `DOMException` whose name is `AbortError`.
-- When the resolved `signal` aborts, the prompt restores the terminal (cursor shown, raw mode off) and rejects with `signal.reason`. An already-aborted signal rejects before rendering.
+- Ctrl+C or Ctrl+D rejects with a `DOMException` whose name is `AbortError`, and the prompt replaces its frame with a cancelled line, such as `✗ Project name?`.
+- When the resolved `signal` aborts, the prompt draws the same cancelled line, restores the terminal (cursor shown, raw mode off), and rejects with `signal.reason`. An already-aborted signal rejects before rendering.
 
-To check before prompting, `isTTY(input?)` reports whether the resolved input stream is a TTY, and `assertTTY(input?)` throws `NonInteractiveError` when it is not. Neither checks the output stream.
+To choose before prompting, call `canPrompt(io?)`, the rule the prompts follow. The [`confirm()` Extension](/docs/modules/extensions/confirm) uses it too.
+
+```ts
+const runtime = flags.runtime ?? (canPrompt() ? await select({ choices: ["bun", "node"] }) : "bun");
+```
 
 ## Custom prompts
 
 <include lang="ts">../../../examples/modules/prompts.ts#custom</include>
 
-`runPrompt()` owns rendering, input, submission, cancellation (Ctrl+C and the resolved `signal`), and theme merging. Accept `(options, io?)` and forward the IO argument to `runPrompt()`, like the built-ins, so callers and tests can inject streams.
+`runPrompt()` owns rendering, input, submission, cancellation (Ctrl+C, Ctrl+D, and the resolved `signal`), redrawing after the terminal is resized, and theme merging. Accept `(options, io?)` and forward the IO argument to `runPrompt()`, like the built-ins, so callers and tests can inject streams. An optional `renderSubmitted` draws the submitted state and `renderCancelled` the cancelled one; without them the last frame stays on screen.
 
 - Only one prompt may use a given input or output stream at a time.
-- An error thrown by `render`, `handleKey`, or `renderSubmitted` rejects the promise after the terminal is restored.
+- An error thrown by `render`, `handleKey`, `renderSubmitted`, or `renderCancelled` rejects the promise after the terminal is restored.
 - `handleTextEdit()` provides the built-ins' cursor editing and returns `null` for keys it does not handle. The root also exports the fuzzy matching, list rendering, formatting, and glyph helpers the built-ins use; see [`index.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/prompts/src/index.ts).
 
 ### Testing custom prompts

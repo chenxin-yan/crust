@@ -300,3 +300,44 @@ export function which(command: string): string | null {
 	}
 	return null;
 }
+
+/** The system launcher and its arguments for {@link openUrl}; the URL is always one argv element. */
+export function urlLauncher(url: string, platform: string = process.platform): [string, string[]] {
+	if (platform === "darwin") return ["open", [url]];
+	// Not `cmd /c start`: cmd.exe would treat `&` in the URL as a command separator.
+	if (platform === "win32") return ["rundll32", ["url.dll,FileProtocolHandler", url]];
+	return ["xdg-open", [url]];
+}
+
+/**
+ * Opens `url` with the system launcher (the default browser), best effort. Only `http` and
+ * `https` URLs without control characters open, passed as one argument with no shell.
+ * Resolves `false` instead of throwing when the URL is refused or no launcher starts;
+ * print the URL as well, for a user without a browser.
+ */
+export async function openUrl(url: string): Promise<boolean> {
+	// oxlint-disable-next-line no-control-regex -- matching control characters is the point.
+	if (/[\x00-\x1f\x7f-\x9f]/.test(url)) return false;
+	const protocol = URL.parse(url)?.protocol;
+	if (protocol !== "https:" && protocol !== "http:") return false;
+	const [command, args] = urlLauncher(url);
+	const { spawn } = process.getBuiltinModule("node:child_process");
+	return new Promise((resolve) => {
+		try {
+			const child = spawn(command, args, {
+				shell: false,
+				stdio: "ignore",
+				detached: true,
+				windowsHide: true,
+			});
+			// A missing launcher is an async 'error' event; without a listener it would crash the process.
+			child.once("error", () => resolve(false));
+			child.once("spawn", () => {
+				child.unref();
+				resolve(true);
+			});
+		} catch {
+			resolve(false);
+		}
+	});
+}

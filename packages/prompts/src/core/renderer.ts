@@ -8,6 +8,7 @@ import { stringWidth } from "@crustjs/style";
 import {
 	getTerminalIO,
 	getTerminalSignal,
+	isCI,
 	type TerminalIO,
 	type TerminalInput,
 	type TerminalOutput,
@@ -115,6 +116,11 @@ export interface PromptConfig<S, T> {
 	 * If not provided, the last render output is left on screen.
 	 */
 	readonly renderSubmitted?: (state: S, value: T, theme: PromptTheme) => string;
+	/**
+	 * Optional: render the cancelled state, after Ctrl+C, Ctrl+D, or an aborted `signal`.
+	 * If not provided, the last render output is left on screen.
+	 */
+	readonly renderCancelled?: (state: S, theme: PromptTheme) => string;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -125,6 +131,14 @@ export interface PromptConfig<S, T> {
 const activeInputs = new WeakSet<TerminalInput>();
 /** Tracks active outputs — concurrent frames on one stream would erase each other. */
 const activeOutputs = new WeakSet<TerminalOutput>();
+
+type RawKey = [ch: string | undefined, key: KeyInfo | undefined];
+type KeyInfo = { name?: string; ctrl?: boolean; meta?: boolean; shift?: boolean };
+/**
+ * Keys decoded after a prompt submitted, such as the rest of a pasted `one⏎two⏎`, kept for
+ * the next prompt on the same input: the decoder emits a whole chunk before any is handled.
+ */
+const typedAhead = new WeakMap<TerminalInput, RawKey[]>();
 
 // ────────────────────────────────────────────────────────────────────────────
 // ANSI escape sequences
@@ -171,21 +185,17 @@ export class NonInteractiveError extends Error {
 }
 
 /**
- * Check whether the resolved prompt input is an interactive TTY.
- * @returns `true` if the input is a TTY, `false` otherwise
+ * Whether a prompt can ask here: the resolved input and output (explicit `io`, the ambient
+ * {@link withTerminalIO} scope, then `process.stdin` and `process.stderr`) are both TTYs, and
+ * `CI` is not set unless the input was injected. The rule every prompt follows: where it is
+ * `false`, a prompt returns its `default` or rejects with {@link NonInteractiveError}.
  */
-export function isTTY(input: Pick<TerminalInput, "isTTY"> = resolvePromptIO().input): boolean {
-	return !!input.isTTY;
-}
-
-/**
- * Check that the resolved prompt input is an interactive TTY.
- * @throws {NonInteractiveError} when the input is not a TTY
- */
-export function assertTTY(input: Pick<TerminalInput, "isTTY"> = resolvePromptIO().input): void {
-	if (!isTTY(input)) {
-		throw new NonInteractiveError();
-	}
+export function canPrompt(io?: TerminalIO): boolean {
+	const { input, output } = resolvePromptIO(io);
+	if (!(input.isTTY && output.isTTY)) return false;
+	// CI guards against a pseudo-terminal nobody answers; an injected input (such as
+	// `runInteractive()`'s fake terminal) is answered by whoever injected it.
+	return !isCI() || input !== process.stdin;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -203,7 +213,7 @@ function isSubmit<S, T>(result: HandleKeyResult<S, T>): result is SubmitResult<T
  * Run an interactive prompt with the given configuration.
  *
  * Manages the full terminal lifecycle:
- * 1. Asserts the resolved input and output are TTYs
+ * 1. Asserts a prompt can ask here ({@link canPrompt})
  * 2. Enables raw mode and hides cursor
  * 3. Renders initial state
  * 4. Listens for keypress events, delegating to `handleKey`
@@ -219,7 +229,8 @@ function isSubmit<S, T>(result: HandleKeyResult<S, T>): result is SubmitResult<T
  * @param config - Prompt configuration (render, handleKey, initialState, theme)
  * @param io - Optional input/output streams and cancellation signal, resolved per field.
  * @returns Promise resolving to the user's submitted value
- * @throws {NonInteractiveError} when the resolved input or output is not a TTY
+ * @throws {NonInteractiveError} when {@link canPrompt} is `false`
+ * @throws `DOMException` named `AbortError` on Ctrl+C or Ctrl+D
  * @throws `signal.reason` when the signal is or becomes aborted
  *
  * @example
@@ -235,7 +246,7 @@ function isSubmit<S, T>(result: HandleKeyResult<S, T>): result is SubmitResult<T
  * ```
  */
 export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Promise<T> {
-	const { render, handleKey, initialState, renderSubmitted } = config;
+	const { render, handleKey, initialState, renderSubmitted, renderCancelled } = config;
 	const { input: stdin, output, signal } = resolvePromptIO(io);
 	const theme = { ...defaultThemeFor(output), ...config.theme };
 	// SAFETY: readline's cursor helpers only call write(), which TerminalOutput provides.
@@ -256,12 +267,12 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Pr
 			return;
 		}
 
-		assertTTY(stdin);
-		assertTTY(output);
+		if (!canPrompt({ input: stdin, output })) throw new NonInteractiveError();
 		activeInputs.add(stdin);
 		activeOutputs.add(output);
 
 		let state = initialState;
+		let prevContent = "";
 		let prevLineCount = 0;
 		let isCleanedUp = false;
 		let rawModeEnabled = false;
@@ -272,6 +283,7 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Pr
 			isCleanedUp = true;
 			process.removeListener("exit", cleanup);
 			signal?.removeEventListener("abort", onAbort);
+			resizable?.removeListener("resize", onResize);
 			activeInputs.delete(stdin);
 			activeOutputs.delete(output);
 
@@ -299,7 +311,20 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Pr
 			output.write(content);
 
 			// Track physical line count (accounting for wrapping) for next erase
+			prevContent = content;
 			prevLineCount = physicalLineCount(content, columns);
+		}
+
+		// The terminal rewraps the frame at the new width, so the next erase must count rows at it.
+		// Only a terminal stream emits "resize"; an injected output may be a plain writer.
+		const resizable =
+			typeof (output as Partial<NodeJS.EventEmitter>).on === "function"
+				? // SAFETY: checked above; Node's tty.WriteStream emits "resize" when the width changes.
+					(output as unknown as NodeJS.EventEmitter)
+				: undefined;
+		function onResize(): void {
+			prevLineCount = physicalLineCount(prevContent, output.columns || 80);
+			scheduleRender();
 		}
 
 		// ── Keypress handler ────────────────────────────────────────────
@@ -338,31 +363,33 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Pr
 			}
 		}
 
-		// The process may end by the signal right after, skipping "exit" listeners.
-		function onAbort(): void {
+		function cancel(reason: unknown): void {
 			flushRender();
+			try {
+				if (renderCancelled) renderFrame(renderCancelled(state, theme));
+			} catch (err) {
+				reason = err;
+			}
 			output.write("\n");
 			cleanup();
-			reject(signal?.reason);
+			reject(reason);
 		}
 
-		function onKeypress(
-			ch: string | undefined,
-			key?: {
-				name?: string;
-				ctrl?: boolean;
-				meta?: boolean;
-				shift?: boolean;
-			},
-		): void {
-			// Ctrl+C → reject with a standard AbortError (handle immediately)
-			if (key?.ctrl && key.name === "c") {
-				flushRender();
-				output.write("\n");
-				cleanup();
-				reject(new DOMException("Prompt was cancelled.", "AbortError"));
+		// The process may end by the signal right after, skipping "exit" listeners.
+		function onAbort(): void {
+			cancel(signal?.reason);
+		}
+
+		// Decoded but not yet handled, in order; what is left at submit goes to `typedAhead`.
+		const unhandled: RawKey[] = [];
+
+		function onKeypress(ch: string | undefined, key?: KeyInfo): void {
+			// Ctrl+C or Ctrl+D (end of input) → reject with a standard AbortError (handle immediately)
+			if (key?.ctrl && (key.name === "c" || key.name === "d")) {
+				cancel(new DOMException("Prompt was cancelled.", "AbortError"));
 				return;
 			}
+			unhandled.push([ch, key]);
 
 			const event: KeypressEvent = {
 				char: ch ?? "",
@@ -376,6 +403,7 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Pr
 			// Chain onto the processing queue so each keypress waits for
 			// the previous one to finish before reading state
 			processing = processing.then(async () => {
+				unhandled.shift();
 				if (isCleanedUp) return;
 
 				try {
@@ -394,6 +422,7 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Pr
 						// Write newline to move past the prompt
 						output.write("\n");
 						cleanup();
+						if (unhandled.length > 0) typedAhead.set(stdin, unhandled.splice(0));
 						resolve(value);
 					} else {
 						state = result;
@@ -423,6 +452,11 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Pr
 
 			stdin.on("keypress", onKeypress);
 			signal?.addEventListener("abort", onAbort, { once: true });
+			resizable?.on("resize", onResize);
+
+			const ahead = typedAhead.get(stdin) ?? [];
+			typedAhead.delete(stdin);
+			for (const [ch, key] of ahead) onKeypress(ch, key);
 		} catch (err) {
 			cleanup();
 			reject(err);

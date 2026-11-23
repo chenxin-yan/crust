@@ -1,18 +1,7 @@
-import { confirm } from "@crustjs/prompts";
-import { getTerminalIO, isCI } from "@crustjs/utils/terminal";
+import { canPrompt, confirm } from "@crustjs/prompts";
 
-/**
- * Asks on the terminal, defaulting to No; `undefined` when stdin or stderr is not a TTY, or
- * under CI unless a `withTerminalIO` scope injected the terminal.
- */
+/** Asks on the terminal, defaulting to No; `undefined` where no prompt can ask ({@link canPrompt}). */
 export async function promptConfirmation(message: string): Promise<boolean | undefined> {
-	// The streams prompts resolve: the ambient terminal scope, then the process streams.
-	const ambient = getTerminalIO();
-	// CI guards against a pseudo-terminal nobody answers; an injected one (such as
-	// `runInteractive()`'s fake terminal) is answered by whoever injected it.
-	if (isCI() && ambient?.input?.isTTY !== true) return undefined;
-	const input = ambient?.input ?? process.stdin;
-	const output = ambient?.output ?? process.stderr;
-	if (!(input.isTTY && output.isTTY)) return undefined;
-	return confirm({ message, default: false }, { input, output });
+	if (!canPrompt()) return undefined;
+	return confirm({ message, default: false });
 }
