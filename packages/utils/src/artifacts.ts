@@ -91,7 +91,7 @@ export function artifactPath(path: string): string {
 		);
 	}
 
-	const { dirname, join, resolve } = process.getBuiltinModule("node:path");
+	const { dirname, join, relative, resolve, sep } = process.getBuiltinModule("node:path");
 	if (isCompiledExecutable()) {
 		return join(dirname(process.execPath), ...segments);
 	}
@@ -134,8 +134,9 @@ export function artifactPath(path: string): string {
 	const include = Array.isArray(crust?.include) ? crust.include : [];
 	const included = include.some((entry) => {
 		if (typeof entry !== "string") return false;
-		const names = entry.split(/[\\/]/).filter((name) => name !== "" && name !== ".");
-		return names.length > 0 && names.every((name, index) => name === segments[index]);
+		// Normalized as `crust build` stages it; a folder outside the project starts with `..`.
+		const name = relative(packageRoot, resolve(packageRoot, entry));
+		return name !== "" && name.split(sep).every((part, index) => part === segments[index]);
 	});
 	if (included) return join(packageRoot, ...segments);
 

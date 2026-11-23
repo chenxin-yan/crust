@@ -154,7 +154,9 @@ describe("artifactPath", () => {
 	it("resolves a path under a crust.include folder to that folder in the project from source", async () => {
 		await writeFile(
 			join(tmpDir, "package.json"),
-			JSON.stringify({ crust: { include: ["./templates", "assets/icons/", 1] } }),
+			JSON.stringify({
+				crust: { include: ["./templates", "assets/icons/", "assets/../docs", "../outside", 1] },
+			}),
 		);
 		await mkdir(join(tmpDir, "src"));
 		process.argv[1] = join(tmpDir, "src", "cli.ts");
@@ -162,6 +164,9 @@ describe("artifactPath", () => {
 		expect(artifactPath("templates")).toBe(join(tmpDir, "templates"));
 		expect(artifactPath("templates/base/a.txt")).toBe(join(tmpDir, "templates", "base", "a.txt"));
 		expect(artifactPath("assets/icons/x.png")).toBe(join(tmpDir, "assets", "icons", "x.png"));
+		// Normalized like crust build stages it: `assets/../docs` is `docs`, `../outside` is not shipped.
+		expect(artifactPath("docs/a.md")).toBe(join(tmpDir, "docs", "a.md"));
+		expect(artifactPath("outside")).toBe(join(tmpDir, ".crust", "root", "outside"));
 		// Build-only artifacts, and a name that only starts like an include, still come from the last build.
 		expect(artifactPath("skills")).toBe(join(tmpDir, ".crust", "root", "skills"));
 		expect(artifactPath("assets")).toBe(join(tmpDir, ".crust", "root", "assets"));
