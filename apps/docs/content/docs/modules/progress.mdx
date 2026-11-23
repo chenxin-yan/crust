@@ -96,7 +96,7 @@ One `spinner()` or `progress()` draws on a single row, so two running at once ov
 - Running indicators are redrawn together below everything else, in the order they started. A message with line breaks takes one row per line, each cut to the terminal's width; the count follows the last line.
 - `stop()` prints the indicator's final line above the running ones. After the last one stops, the cursor is shown again.
 - Without a terminal, each indicator prints only its final line, when it stops.
-- When the `signal` aborts, every running indicator stops with `✗`.
+- When the `signal` aborts, every running indicator stops with `✗`. An indicator started after the abort, for example to show cleanup, ignores it.
 - A line printed through Crust's process writer moves the rows below it, as with a single indicator. Other writes, such as `console.log` or `process.stderr.write`, land on the rows and leave stale text behind, so print through the action's `stdout()` or `stderr()` while a group runs. Keep the running rows within the terminal's height: rows that scroll off the top are not redrawn.
 
 <auto-type-table

@@ -61,31 +61,37 @@ export function progressGroup(options: ProgressGroupOptions = {}): ProgressGroup
 
 	const running = new Set<Item>();
 	let frameIndex = 0;
-	let drawnRows = 0;
+	// The display width of each row on screen.
+	let drawn: number[] = [];
 	let timerId: ReturnType<typeof setInterval> | undefined;
 	let removeSigint: (() => void) | undefined;
 	let releaseFrame: (() => void) | undefined;
 	const showCursor = () => sink.write(SHOW_CURSOR);
 	// Deferred a turn so a `stop()` with its own message, run by the cancellation itself, wins.
-	const onAbort = () =>
+	// Only the items running now: one started after the abort reports cleanup.
+	const onAbort = () => {
+		const aborted = [...running];
 		setImmediate(() => {
-			for (const item of running) stopItem(item, "error");
+			for (const item of aborted) stopItem(item, "error");
 		});
+	};
 
 	const count = (item: Item) => ` (${item.current}/${item.total})`;
 
-	// Rows never wrap and the cursor stays at the end of the last one, so moving up `drawnRows - 1`
-	// lands on the first; erasing to the end of the screen leaves the cursor at its start.
+	// Rows are drawn short of the last column and the cursor stays at the end of the last one, so
+	// moving up one less than the rows they take lands on the first; erasing to the end of the
+	// screen leaves the cursor at its start. A terminal narrowed since then reflowed each row.
 	function erase(): string {
-		const up = drawnRows > 1 ? `${ESC}${drawnRows - 1}A` : "";
-		drawnRows = 0;
-		return `\r${up}${ESC}J`;
+		const columns = sink.columns || 80;
+		const height = drawn.reduce((sum, width) => sum + Math.max(1, Math.ceil(width / columns)), 0);
+		drawn = [];
+		return `\r${height > 1 ? `${ESC}${height - 1}A` : ""}${ESC}J`;
 	}
 
-	function rows(): string {
+	function rows(): string[] {
 		const width = (sink.columns || 80) - 1;
 		const symbol = `${theme.spinner(frameAt(frames, frameIndex))} `;
-		const lines = [...running].flatMap((item) => {
+		return [...running].flatMap((item) => {
 			const parts = item.message.split(LINE_SPLIT);
 			return parts.map((part, index) => {
 				const head = index === 0 ? symbol : INDENT;
@@ -95,12 +101,13 @@ export function progressGroup(options: ProgressGroupOptions = {}): ProgressGroup
 				return fitRow(head + theme.message(fitRow(part, room) + tail), width);
 			});
 		});
-		drawnRows = lines.length;
-		return lines.join("\n");
 	}
 
-	function draw(): void {
-		sink.write(erase() + rows());
+	// `above` is printed in place of the old rows, above the new ones.
+	function draw(above = ""): void {
+		const lines = rows();
+		sink.write(erase() + above + lines.join("\n"));
+		drawn = lines.map(stringWidth);
 	}
 
 	function begin(): void {
@@ -143,17 +150,24 @@ export function progressGroup(options: ProgressGroupOptions = {}): ProgressGroup
 		running.delete(item);
 		const last = running.size === 0;
 		if (last) end();
-		const final = renderFinal(
-			item.message.replaceAll("\n", `\n${INDENT}`) + count(item),
-			theme,
-			outcome,
-			live ? erase() : "",
-		);
+		// `done` blocks retries, so a throwing theme or sink must not skip restoring the cursor.
+		// The first failure wins; boxed because any value (even undefined) can be thrown.
+		let renderFailure: { error: unknown } | undefined;
 		try {
-			sink.write(live && !last ? final + erase() + rows() : final);
-		} finally {
-			if (live && last) showCursor();
+			const text = item.message.replaceAll("\n", `\n${INDENT}`) + count(item);
+			if (live && !last) draw(renderFinal(text, theme, outcome, ""));
+			else sink.write(renderFinal(text, theme, outcome, live ? erase() : ""));
+		} catch (error) {
+			renderFailure = { error };
 		}
+		if (live && last) {
+			try {
+				showCursor();
+			} catch (error) {
+				if (!renderFailure) throw error;
+			}
+		}
+		if (renderFailure) throw renderFailure.error;
 	}
 
 	return {
@@ -165,7 +179,23 @@ export function progressGroup(options: ProgressGroupOptions = {}): ProgressGroup
 					item.state = "running";
 					running.add(item);
 					if (running.size === 1) begin();
-					if (isInteractive) draw();
+					if (!isInteractive) return;
+					try {
+						draw();
+					} catch (error) {
+						// A throwing theme or sink must not leave the item to the timer or the session open.
+						item.state = "done";
+						running.delete(item);
+						if (running.size === 0) {
+							end();
+							try {
+								showCursor();
+							} catch {
+								// The draw failure wins.
+							}
+						}
+						throw error;
+					}
 				},
 				advance(amount = 1, nextMessage?: string) {
 					item.current += amount;

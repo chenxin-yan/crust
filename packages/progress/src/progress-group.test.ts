@@ -20,7 +20,13 @@ function setup(columns = 40) {
 	const group = progressGroup({
 		spinner: { frames: ["-"], interval: 60_000 },
 		sigint: false,
-		sink: { isTTY: true, columns, write: (text: string) => terminal.write(text) },
+		sink: {
+			isTTY: true,
+			get columns() {
+				return terminal.cols;
+			},
+			write: (text: string) => terminal.write(text),
+		},
 	});
 	const screen = async () => {
 		await new Promise<void>((resolve) => terminal.write("", resolve));
@@ -90,6 +96,25 @@ describe("progressGroup on a terminal", () => {
 			b.stop();
 			expect(await screen()).toEqual(["✓ layer a", "  extracting files (1/2)", "✓ layer b (0/2)"]);
 		} finally {
+			terminal.dispose();
+		}
+	});
+
+	it("erases the rows a narrowed terminal reflowed", async () => {
+		const { terminal, group, screen } = setup();
+		const a = group.add({ total: 2, message: "layer one with a long name" });
+		const b = group.add({ total: 2, message: "b" });
+		try {
+			terminal.write("above\n");
+			a.start();
+			b.start();
+			await screen();
+			terminal.resize(20, 20);
+			a.advance();
+			expect(await screen()).toEqual(["above", "- layer one … (1/2)", "- b (0/2)"]);
+		} finally {
+			a.stop();
+			b.stop();
 			terminal.dispose();
 		}
 	});
@@ -171,6 +196,66 @@ describe("progressGroup on a terminal", () => {
 		await new Promise((resolve) => setImmediate(resolve));
 
 		expect(writes).toEqual(["✗ a (0/2)\n", "✗ b (0/2)\n"]);
+	});
+
+	it("leaves an indicator started after the abort to finish on its own", async () => {
+		const { sink, writes } = createFakeSink(false);
+		const controller = new AbortController();
+		const group = progressGroup({ sigint: false, sink, signal: controller.signal });
+		const a = group.add({ total: 1, message: "a" });
+		const cleanup = group.add({ total: 1, message: "cleanup" });
+
+		a.start();
+		controller.abort();
+		cleanup.start();
+		await new Promise((resolve) => setImmediate(resolve));
+		cleanup.advance();
+		cleanup.stop();
+
+		expect(writes).toEqual(["✗ a (0/1)\n", "✓ cleanup (1/1)\n"]);
+	});
+
+	it("restores the cursor and its listeners when the first draw throws", async () => {
+		const { sink, writes } = createFakeSink();
+		const previousExit = process.listeners("exit");
+		const previousSigint = process.listeners("SIGINT");
+		const themeError = new Error("theme boom");
+		const group = progressGroup({
+			sink,
+			theme: {
+				spinner: () => {
+					throw themeError;
+				},
+			},
+		});
+		const a = group.add({ total: 1, message: "a" });
+
+		expect(() => a.start()).toThrow(themeError);
+		expect(writes.at(-1)).toBe("\x1B[?25h");
+		expect(process.listeners("exit")).toEqual(previousExit);
+		expect(process.listeners("SIGINT")).toEqual(previousSigint);
+		const written = writes.length;
+		await new Promise((resolve) => setTimeout(resolve, 200));
+		expect(writes).toHaveLength(written);
+	});
+
+	it("restores the cursor when the last final line throws", () => {
+		const { sink, writes } = createFakeSink();
+		const themeError = new Error("theme boom");
+		const group = progressGroup({
+			sigint: false,
+			sink,
+			theme: {
+				success: () => {
+					throw themeError;
+				},
+			},
+		});
+		const a = group.add({ total: 1, message: "a" });
+
+		a.start();
+		expect(() => a.stop()).toThrow(themeError);
+		expect(writes.at(-1)).toBe("\x1B[?25h");
 	});
 });
 
