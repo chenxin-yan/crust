@@ -435,7 +435,7 @@ describe("nextSteps", () => {
 			"  app run -- --watch",
 			"  app run build",
 			"  app exec alpine echo hi",
-			"  app exec --rm -- alpine ls -- -la",
+			"  app exec --rm alpine ls -- -la",
 		]);
 		await replay(app, lines);
 		expect(seen).toEqual([

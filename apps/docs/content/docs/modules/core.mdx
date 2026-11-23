@@ -87,7 +87,6 @@ const visible = visibleSectionsFor(snapshot, defineExtensionId("acme:web-docs"))
 | `commandInputSchema()` / `CommandInputSchema` / `CommandInputPropertySchema`       | Describes a command's flat JSON input as JSON Schema               |
 | `parseCommandInput()` / `RunInputPayload` / `RunInputValue`                        | Splits flat JSON input into structured `run()` input               |
 | `commandInputFields()` / `CommandInputFields`                                      | Lists a command's arg names and `url` fields for that split        |
-| `RAW_INPUT_PROPERTY`                                                               | Name of the passthrough input property (`"raw"`)                   |
 | `standardJsonSchema()`                                                             | Converts a Standard Schema's input or output type to JSON Schema   |
 
 The [tooling entry point](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/tooling.ts) is the full export list.
@@ -140,10 +139,10 @@ Defaults are advertised as `JSON.stringify` copies: `URL`s become strings, and n
 
 `parseCommandInput(command, values)` turns such an object back into `run()` input; `run()` then validates it like any structured invocation.
 
-- Arg names fill `args`, `raw` fills `raw`, and every other name goes to `flags`, where `run()` rejects unknown ones. An Extension flag's name is rejected here, `Flag "--json" is not command input: set it on the command line`; an arg sharing that name still binds as the arg.
+- Arg names fill `args`, and every other name goes to `flags`, where `run()` rejects unknown ones. An Extension flag's name is rejected here, `Flag "--json" is not command input: set it on the command line`; an arg sharing that name still binds as the arg.
 - Strings for `url` definitions become `URL`s. `commandInputFields(command)` returns the arg names and `url` field names it uses.
 - `undefined` entries are skipped.
-- It rejects with `PARSE` for an Extension flag, a value that is not JSON data, a `raw` that is not an array of strings, or an invalid URL (the same `Invalid URL for --name.` error argv gives, without the value).
+- It rejects with `PARSE` for an Extension flag, a value that is not JSON data, or an invalid URL (the same `Invalid URL for --name.` error argv gives, without the value).
 
 ### JSON Schema from a Standard Schema
 

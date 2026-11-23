@@ -112,11 +112,13 @@ function stepArgv(
 		];
 	}
 	// After `--` a positional is never read as a flag, nor routed as a subcommand name or alias.
-	// With a `"passthrough"` argument it also keeps every later word, a `--` included, as typed.
+	// With a `"passthrough"` argument the parser stops reading flags at the first positional,
+	// so only that one can be misread.
+	const flagReadable = last?.variadic === "passthrough" ? positionals.slice(0, 1) : positionals;
 	const separator =
 		positionals.length > 0 &&
 		(Object.keys(command.subCommands).length > 0 ||
-			positionals.some((token) => token.startsWith("-")));
+			flagReadable.some((token) => token.startsWith("-")));
 	return [...names, ...options, ...(separator ? ["--"] : []), ...positionals];
 }
 

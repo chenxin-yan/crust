@@ -26,7 +26,7 @@ Next steps:
 `nextSteps(options?)` provides a [Context](/docs/guide/contexts) named `nextSteps`. A command declares it with [`.use(nextSteps)`](/docs/guide/extensions#use-an-extensions-contexts-from-a-command), then, from its action, awaits `ctx.nextSteps` and calls `.add(definition, input?, description?)` on it:
 
 - `definition`: the [command definition](/docs/api/crust#definecommandname-config-recipe) to suggest, such as `logs`. The step prints the path the application added it at, nested commands included.
-- `input`: arguments, flags, and `raw` tokens in the shape [`run()`](/docs/api/crust#runpath-input-options) takes them, typed from the definition's arguments and flags, such as `{ args: { env: "prod" }, flags: { force: true } }`.
+- `input`: arguments and flags in the shape [`run()`](/docs/api/crust#runpath-input-options) takes them, typed from the definition's arguments and flags, such as `{ args: { env: "prod" }, flags: { force: true } }`.
 - `description`: what the step is for, printed above its command line.
 
 `options.onError(error)` returns recovery steps for a failed invocation, or `undefined` for none:

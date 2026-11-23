@@ -138,7 +138,7 @@ Besides `args`, `flags`, and output, a hook's `ctx` offers:
   - Bind in `setup` so every `preRun` sees the values; it then also happens for `--help` and `--version`. Bind in `preRun` to bind only when the action will run.
   - The last call wins, and a bound flag never selects a handler.
   - An unknown key or a value that fails conversion throws a `PARSE` error from the calling hook.
-- **`ctx.sources`** reports where each value came from: `"argv"`, `"run"`, `"env"`, `"bound"`, or `"default"`. For example, with a boolean `verbose` flag (short `-V`) and a `port` flag read from `PORT`, `my-cli -V` with `PORT=9000` set gives `{ args: {}, flags: { verbose: "argv", port: "env" }, raw: undefined }`. Use it to skip the keys argv gave before converting input yourself.
+- **`ctx.sources`** reports where each value came from: `"argv"`, `"run"`, `"env"`, `"bound"`, or `"default"`. For example, with a boolean `verbose` flag (short `-V`) and a `port` flag read from `PORT`, `my-cli -V` with `PORT=9000` set gives `{ args: {}, flags: { verbose: "argv", port: "env" } }`. Use it to skip the keys argv gave before converting input yourself.
 - **`ctx.commandPathOf(definition)`** returns where a command definition is mounted, such as `["my-cli", "deploy"]`, or `undefined`. Use it to print command lines for definitions that app code passes to your Extension.
 - **`ctx.parseCommandArgv(path, argv)`** parses argv for the command at a path, such as `["my-cli", "deploy"]`, without running it, and resolves to its canonical `path` and the `args` and `flags` its action would receive. No hook or Context setup runs, so values other Extensions bind (such as `--input`) are not applied. Use it to explain or preview another command.
 
