@@ -297,7 +297,7 @@ publishing to github tags=undefined
 - **Docs:** generated documentation lists the variables as `[env: PUBLISH_REGISTRY, npm_config_registry]`, never their values.
 - **Programmatic calls:** [`run()`](/docs/api/crust#runpath-input-options) reads `process.env` too, for flags its input omits. To isolate a test from the caller's shell, wrap the call in [`withEnv()`](/docs/modules/testing#withenvenv-fn).
 - **Arguments:** positional arguments have no `env`; use a flag.
-- **Config files:** to also read a value from a JSON config file, declare it as a setting of [`@crustjs/config`](/docs/modules/config): the same flag definition, read after the variable.
+- **Config files:** to also read a value from a config file, define it as a setting of [`@crustjs/config`](/docs/modules/config) and take its flag with `config.flag()`: the files are read after the variable, before `default`.
 - **Secrets:** take tokens from `env`, stdin, or a prompt, not argv, which lands in shell history and process listings. Keep them out of [`nextSteps`](/docs/modules/extensions/next-steps) input too: steps print as command lines.
 
 #### Delimiters

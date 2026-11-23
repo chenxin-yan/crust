@@ -1,577 +1,552 @@
 import {
 	CrustError,
-	defineContext,
+	defineCommand,
 	defineExtension,
 	defineExtensionId,
-	defineFlag,
-	type ContextFactory,
+	type CommandDefinition,
 	type Extension,
+	type ExtensionContext,
 	type FlagDef,
 	type FlagsDef,
 	type ValidatedInput,
 } from "@crustjs/core";
 import { formatDescription, type LocalValueBrand, parseFlagValues } from "@crustjs/core/tooling";
-// Types only: the store loads when a command first reads the config, never at start-up.
-import type { FieldsDef, InferStoreConfig, Store } from "@crustjs/store";
 
-/** The value types a JSON file holds as the user types them; the store holds no others. */
-type SettingType = "string" | "number" | "boolean";
+declare const settingKey: unique symbol;
+
+/** A setting's key on a flag, as only `config.flag()` writes it: a string literal is not one. */
+export type SettingKey = string & { readonly [settingKey]: true };
+
+declare module "@crustjs/core" {
+	interface FlagExtras {
+		/**
+		 * The setting whose file value this flag takes when the run gives it none. Written only by
+		 * `config.flag(key)` from `@crustjs/config`, and read only by that config's `extension`.
+		 */
+		config?: SettingKey;
+	}
+}
 
 /**
- * One setting: the flag definition you would write in `.flags({...})` for a string, number or
- * boolean flag. `default` and `required` apply after the files are read.
+ * One setting: the definition of a string, number or boolean flag. Every command that takes the
+ * setting as a flag (`config.flag(key)`) uses it as is.
  */
-export type ConfigFlagDef = Extract<FlagDef, { type: SettingType; schema?: never }> & {
-	/** `false`: no flag; the setting comes from its environment variable, the files or its default. */
-	readonly flag?: false;
-	/** Each setting's flag is a record of its own, so it has no other flag to name. */
+export type ConfigSetting = Extract<
+	FlagDef,
+	{ type: "string" | "number" | "boolean"; schema?: never }
+> & {
+	/** A setting is shared by every command that takes it, so it requires no flag of one. */
 	readonly requires?: never;
+	/** Written by `config.flag(key)`. */
+	readonly config?: never;
 };
 
-/** Settings keyed by name: the flag's name and the key in the files. */
-type ConfigFlagsDef = Record<string, ConfigFlagDef>;
+/** Settings keyed by name: the key in the files and in `config.flag()`, `get()` and `set()`. */
+export type ConfigSettings = Record<string, ConfigSetting>;
 
 type AllKeys<T> = T extends unknown ? keyof T : never;
 
-/** Every property a setting may have; `false` for those a flag definition has but a setting does not. */
-const SETTING_PROPERTIES = {
-	type: true,
-	description: true,
-	short: true,
-	aliases: true,
-	env: true,
-	multiple: true,
-	delimiter: true,
-	choices: true,
-	negatable: true,
-	min: true,
-	max: true,
-	parse: true,
-	default: true,
-	required: true,
-	valueName: true,
-	flag: true,
-	hidden: true,
-	deprecated: true,
-	// A flag schema validates argv text; a file holds JSON values.
-	schema: false,
-	requires: false,
-	flags: false,
-} as const satisfies Record<AllKeys<ConfigFlagDef>, boolean>;
+/** A property no setting has, which a generic record of settings would otherwise admit. */
+type KnownPropertiesBrand<D> = [Exclude<keyof D, AllKeys<ConfigSetting>>] extends [never]
+	? {}
+	: {
+			readonly FIX_UNKNOWN_PROPERTY: `a setting has no property "${Exclude<keyof D, AllKeys<ConfigSetting>> & string}"`;
+		};
 
-/** A config file: `true` for its default name, or a file name of your own ending in `.json`. */
-type ConfigFileOption = true | `${string}.json`;
+/** `$schema` is a file's pointer to its JSON Schema. */
+type ReservedNameBrand<S> = [Extract<keyof S, "$schema">] extends [never]
+	? unknown
+	: { readonly FIX_RESERVED_NAME: "no setting may be named $schema" };
 
-/**
- * What a setting is once it can come from a file: no `default`, `required` or `flag` on the flag.
- * Distributed, so a definition typed as a union keeps each variant's own value type.
- */
-type FlagOf<D> = D extends unknown ? Omit<D, "default" | "required" | "flag"> : never;
-
-/**
- * A setting's value: inferred as the setting would be as a flag (`required`, `default`, `choices`,
- * `parse`), for each variant of a definition typed as a union.
- */
-type SettingValue<D> = D extends unknown
-	? { value: Omit<D, "flag"> } extends infer R extends FlagsDef
+/** A setting's value, as its flag's would be: `required`, `default`, `choices`, `parse`. */
+export type SettingValue<D> = D extends unknown
+	? { value: D } extends infer R extends FlagsDef
 		? ValidatedInput<[], R>["flags"]["value"]
 		: never
 	: never;
 
-/** The store field of a setting: what the user types, so a `parse` setting holds a string. */
-type StoreFieldOf<D extends ConfigFlagDef> = {
-	type: D extends { parse: (raw: string) => unknown } ? "string" : D["type"];
-} & (D extends { multiple: true } ? { array: true } : {}) &
-	(D extends { choices: infer C extends readonly string[] } ? { choices: C } : {});
+/** One item of a setting as a file holds it: what the user types for a `parse` setting. */
+type FileItem<D> = D extends { parse: (text: string) => unknown }
+	? string
+	: D extends { choices: readonly (infer C)[] }
+		? C
+		: D extends { type: "number" }
+			? number
+			: D extends { type: "boolean" }
+				? boolean
+				: string;
 
-/** A config file as the store reads it: every key may be unset, in the shape the user writes it. */
-type ConfigFileContent<F extends ConfigFlagsDef> = {
-	[K in keyof F]: StoreFieldOf<F[K]>;
-} extends infer S extends FieldsDef
-	? { -readonly [K in keyof S]: InferStoreConfig<S>[K] }
+/** A setting as a file holds it: a list for a `multiple` setting. */
+export type SettingFileValue<D> = D extends unknown
+	? D extends { multiple: true }
+		? readonly FileItem<D>[]
+		: FileItem<D>
 	: never;
 
-/** `true` for each variant of a definition that surely owns a flag: no `flag`, or `flag: undefined`. */
-type OwnsFlag<D> = D extends unknown
-	? "flag" extends keyof D
-		? D["flag" & keyof D] extends undefined
-			? true
-			: false
-		: true
-	: never;
+/** Values to save, by setting; `undefined` removes a setting from the file. */
+export type ConfigValues<S extends ConfigSettings, K extends keyof S> = {
+	readonly [P in K]?: SettingFileValue<S[P]> | undefined;
+};
 
-/**
- * The flag a setting's Context owns: none for `flag: false`, and none in the types when a definition
- * typed as a union or with an optional `flag` may not own one.
- */
-type SettingFlags<F extends ConfigFlagsDef, K extends keyof F> = (
-	[OwnsFlag<F[K]>] extends [true] ? { [P in K]: FlagOf<F[K]> } : {}
-) extends infer D extends FlagsDef
-	? D
-	: never;
+/** Where a setting's value comes from, as `config.list()` reports it. */
+export type ConfigSource =
+	| { readonly kind: "env"; readonly name: string }
+	| { readonly kind: "file"; readonly path: string }
+	| { readonly kind: "default" }
+	| { readonly kind: "unset" };
 
-/** A setting's Context: named after it, owning its flag, its value settled from every source. */
-type SettingContext<F extends ConfigFlagsDef, K extends keyof F & string> = ContextFactory<
-	K,
-	void,
-	SettingValue<F[K]>,
-	SettingFlags<F, K>
->;
+/** One setting in `config.list()`: its value, `undefined` when unset, and where it comes from. */
+export type ConfigEntry<S extends ConfigSettings> = {
+	readonly [K in keyof S & string]: {
+		readonly key: K;
+		readonly value: SettingValue<S[K]> | undefined;
+		readonly source: ConfigSource;
+	};
+}[keyof S & string];
 
-/**
- * The settings' Contexts as a tuple: core types the Contexts an Extension provides from a static
- * tuple, and an object of settings has no order.
- *
- * This relies on TypeScript inferring the LAST overload of an intersection of functions (built from
- * the union of setting names), which is unspecified behaviour. The order it yields does not matter
- * here: every Context has its own name, and nothing reads the tuple's order (at run time the
- * Extension provides the settings in key order). If it ever stops
- * working, the replacement is a core change: map a non-tuple array of distinctly named Context
- * instances to their values by name, as a tuple is mapped today.
- */
-type SettingInstances<
-	F extends ConfigFlagsDef,
-	Keys = keyof F & string,
-	Acc extends readonly unknown[] = [],
-> = [Keys] extends [never]
-	? Acc
-	: (
-				(Keys extends unknown ? (last: () => Keys) => void : never) extends (last: infer I) => void
-					? I
-					: never
-		  ) extends () => infer K
-		? K extends keyof F & string
-			? SettingInstances<F, Exclude<Keys, K>, [ReturnType<SettingContext<F, K>>, ...Acc]>
-			: Acc
-		: Acc;
+/** The `config` command that `command: true` adds. */
+export type ConfigCommandDefinition = CommandDefinition<"config">;
 
-/**
- * What `.flags()` returns for the settings `F` and the `global` option `G`: one Context factory
- * per setting, the Extension that provides them all, the JSON Schema of a file, and with `global`
- * set, the typed store of the global file.
- */
-export type Config<F extends ConfigFlagsDef, G extends ConfigFileOption | undefined = undefined> = {
-	/** Each setting's Context factory, by setting name: `.use()` one where a command reads it. */
-	readonly settings: { readonly [K in keyof F & string]: SettingContext<F, K> };
-	/** Provides every setting to the app: `.extend(config.extension)`. */
-	readonly extension: Extension<{}, SettingInstances<F>, {}, []>;
-	/** The JSON Schema (draft 2020-12) of a config file. */
+/** The files of {@link defineConfig}: their names and their format. */
+export type ConfigFiles = {
+	/** The user's own file, in the app's configuration directory. @default "config.json" */
+	readonly user?: string;
+	/** The project file, the nearest from the working directory up. @default "<name>.config.json" */
+	readonly project?: string;
+} & (
+	| { readonly parse?: never; readonly stringify?: never }
+	| {
+			/** Reads a file's text into an object of settings, such as an INI, TOML or YAML parser. */
+			readonly parse: (text: string) => unknown;
+			/** Writes an object of settings as a file's text, the reverse of `parse`. */
+			readonly stringify: (values: Record<string, unknown>) => string;
+	  }
+);
+
+/** The options of {@link defineConfig}. */
+export interface ConfigOptions<S extends ConfigSettings, P extends keyof S & string> {
+	/** The app's name: the user's file is in its configuration directory, `configDir(name)`. */
+	readonly name: string;
+	/** Every setting, each the definition of a string, number or boolean flag. */
+	readonly settings: S;
+	/**
+	 * Turns on the project file and lists the settings it may set. A project file arrives with a
+	 * cloned repository, so any other setting it sets is ignored with a warning.
+	 */
+	readonly project?: readonly P[];
+	/** The files' names and format; JSON by default. */
+	readonly files?: ConfigFiles;
+	/** Adds `config get`, `set`, `unset` and `list`. @default false */
+	readonly command?: boolean;
+}
+
+/** What {@link defineConfig} returns for the settings `S` and the project list `P`. */
+export interface Config<
+	S extends ConfigSettings,
+	P extends keyof S & string,
+	Commands extends readonly ConfigCommandDefinition[],
+> {
+	/**
+	 * The flag for a setting, under any flag name: `.flags({ format: config.flag("psFormat") })`.
+	 * When a run gives it no value, from argv, its variable or input, it takes the files' value.
+	 */
+	flag<K extends keyof S & string>(key: K): S[K] & { readonly config: SettingKey };
+	/**
+	 * A setting's value from its environment variable, the project file, the user's file, or its
+	 * default. Throws a `VALIDATION` `CrustError` for a `required` setting that none of them gives.
+	 */
+	get<K extends keyof S & string>(key: K): Promise<SettingValue<S[K]>>;
+	/** Every setting with its value and where it comes from. */
+	list(): Promise<ConfigEntry<S>[]>;
+	/** Save settings in the user's file; `undefined` removes one. */
+	set(values: ConfigValues<S, keyof S>): Promise<void>;
+	/** Save settings in the project file, the nearest, or a new one in the working directory. */
+	set(values: ConfigValues<S, P>, options: { readonly project: true }): Promise<void>;
+	/** Binds the files' values into the flags `config.flag()` gave: `.extend(config.extension)`. */
+	readonly extension: Extension<{}, [], {}, Commands>;
+	/** The JSON Schema (draft 2020-12) of a JSON config file. */
 	jsonSchema(): Record<string, unknown>;
-} & (G extends ConfigFileOption ? { readonly global: Store<ConfigFileContent<F>> } : {});
-
-/** A property no setting has, which a generic `F` would otherwise admit. */
-type KnownPropertiesBrand<D> = [Exclude<keyof D, AllKeys<ConfigFlagDef>>] extends [never]
-	? {}
-	: {
-			readonly FIX_UNKNOWN_PROPERTY: `a setting has no property "${Exclude<keyof D, AllKeys<ConfigFlagDef>> & string}"`;
-		};
-
-/** A file name with a directory, or with no name before `.json`, would read another place. */
-type FileNameBrand<N> = N extends
-	| `${string}/${string}`
-	| `${string}\\${string}`
-	| ".json"
-	| `${string}.json.json`
-	? { readonly FIX_FILE_NAME: "a file name ending in .json, without a directory" }
-	: unknown;
-
-/** `.` and `..` would name a directory above the app's own. */
-type AppNameBrand<N> = N extends "." | ".."
-	? { readonly FIX_APP_NAME: "a name of its own, not . or .." }
-	: unknown;
-
-/** `$schema` is a file's pointer to its JSON Schema; core refuses `__proto__` as a flag name. */
-type ReservedNameBrand<F> = [Extract<keyof F, "$schema" | "__proto__">] extends [never]
-	? unknown
-	: { readonly FIX_RESERVED_NAME: "no setting may be named $schema or __proto__" };
-
-/** As core's `.flags()`: a symbol key would never become a setting, a number key has no string name. */
-type StringKeyBrand<F> = [Exclude<keyof F, string>] extends [never]
-	? unknown
-	: { readonly FIX_SETTING_KEY: "setting names must be string keys; quote a numeric name" };
-
-type NoFileBrand<G, P> = [G, P] extends [undefined, undefined]
-	? { readonly FIX_NO_FILE: "set global, project, or both" }
-	: unknown;
-
-function definitionError(message: string): CrustError {
-	return new CrustError("DEFINITION", message);
 }
 
-/** A bare file name: no directory, and a name before `.json`. */
-function fileName(name: string, option: "global" | "project", value: true | string | undefined) {
-	if (value === undefined) return undefined;
-	const file =
-		value === true ? (option === "global" ? "config.json" : `${name}.config.json`) : value;
-	// The store refuses a name ending in .json, so `prefs.json.json` could never be read.
-	if (!/^[^/\\]+\.json$/u.test(file) || file.slice(0, -".json".length).endsWith(".json")) {
-		throw definitionError(
-			`${option} of config "${name}" must be true or a file name ending in .json, without a directory: got "${file}"`,
-		);
-	}
-	return file;
-}
+/** The variable name the files' text is converted under, as the text of an environment variable. */
+const TEXT = "CRUST_CONFIG_TEXT";
 
-/** The checks `.flags()` makes on a flag, for every setting; `undefined` properties change nothing. */
-function ownSetting(name: string, key: string, def: ConfigFlagDef): ConfigFlagDef {
-	for (const [property, value] of Object.entries(def)) {
-		const known = Object.hasOwn(SETTING_PROPERTIES, property);
-		if (
-			value === undefined ||
-			(known && SETTING_PROPERTIES[property as keyof typeof SETTING_PROPERTIES])
-		) {
-			continue;
-		}
-		throw definitionError(`Setting "${key}" of config "${name}" has no property "${property}"`);
-	}
-	if (def.type !== "string" && def.type !== "number" && def.type !== "boolean") {
-		throw definitionError(
-			`Setting "${key}" of config "${name}" is a string, number or boolean: a config file holds no ${(def as { type: string }).type}`,
-		);
-	}
-	const { flag, ...flagDef } = def;
-	let owned: FlagDef;
-	try {
-		// defineFlag's own copy, so changing the caller's definition later changes nothing here.
-		owned = defineFlag(flagDef as FlagDef);
-	} catch (error) {
-		if (!(error instanceof CrustError && error.is("DEFINITION"))) throw error;
-		throw definitionError(`Invalid setting "${key}" of config "${name}"`).withCause(error);
-	}
-	// SAFETY: the owned copy of a setting's flag definition, plus its own `flag`.
-	return (flag === undefined ? owned : { ...owned, flag }) as ConfigFlagDef;
-}
-
-/** The store field of each setting; a file value keeps within a number's `min` and `max`, as argv does. */
-function storeFields(settings: readonly (readonly [string, ConfigFlagDef])[]): FieldsDef {
-	const inRange =
-		({ min, max }: ConfigFlagDef) =>
-		(value: unknown) => {
-			// SAFETY: the store checked the type first; only number settings have a range.
-			for (const item of (Array.isArray(value) ? value : [value]) as number[]) {
-				if (min !== undefined && item < min) throw new Error(`Expected at least ${min}`);
-				if (max !== undefined && item > max) throw new Error(`Expected at most ${max}`);
-			}
-		};
-	const fields = settings.map(([key, def]) => [
-		key,
-		{
-			type: def.parse === undefined ? def.type : "string",
-			...(def.multiple ? { array: true } : {}),
-			...(def.choices === undefined ? {} : { choices: def.choices }),
-			...(def.min === undefined && def.max === undefined ? {} : { validate: inRange(def) }),
-		},
-	]);
-	// SAFETY: each field is a string, number or boolean store field built from its setting.
-	return Object.fromEntries(fields) as FieldsDef;
-}
+type FileValues = Readonly<Record<string, unknown>>;
+type ConfigFile = { readonly path: string; readonly values: FileValues };
 
 /**
- * The nearest entry named `file` from the working directory up, whatever it is: reading it checks
- * the kind, and a dangling link reads as a missing file. Only a missing entry is skipped.
+ * `text` from `env[variable]` as the setting's value, converted as core converts an environment
+ * variable's text; core's `--value (from $…)` in an error becomes `label`.
  */
-function findUp(file: string, store: StoreModule): string | undefined {
-	const { dirname, join } = process.getBuiltinModule("node:path");
-	const { lstatSync } = process.getBuiltinModule("node:fs");
-	for (let dir = process.cwd(); ; dir = dirname(dir)) {
-		const path = join(dir, file);
-		try {
-			lstatSync(path);
-			return path;
-		} catch (error) {
-			const code = (error as { code?: unknown }).code;
-			if (code !== "ENOENT" && code !== "ENOTDIR") {
-				throw new store.CrustStoreError(
-					"IO",
-					`Failed to inspect store file: ${path}`,
-					{ path, operation: "read" },
-					error,
-				);
-			}
+async function convert(
+	def: ConfigSetting,
+	env: Readonly<Record<string, string | undefined>>,
+	variable: string,
+	label: string,
+): Promise<unknown> {
+	const { default: _default, required: _required, ...flag } = def;
+	try {
+		return (await parseFlagValues({ value: { ...flag, env: variable } }, env)).value;
+	} catch (error) {
+		if (error instanceof CrustError) {
+			error.message = error.message.replaceAll(`--value (from $${variable})`, label);
 		}
+		throw error;
+	}
+}
+
+/** A file value as words, one per item: a number or boolean as its text. */
+function fileWords(key: string, def: ConfigSetting, value: unknown, path: string) {
+	const word = (item: unknown) =>
+		typeof item === "string" || typeof item === "number" || typeof item === "boolean"
+			? String(item)
+			: undefined;
+	const words = def.multiple && Array.isArray(value) ? value.map(word) : [word(value)];
+	if (words.every((item) => item !== undefined)) return words;
+	throw new CrustError(
+		"PARSE",
+		`Expected ${def.multiple ? "a value or a list of values" : "one value"} for "${key}" in ${path}.`,
+	);
+}
+
+/** Reads `path` into an object of settings; a missing file holds none. */
+async function readValues(path: string, parse: (text: string) => unknown): Promise<FileValues> {
+	let text: string;
+	try {
+		text = await process.getBuiltinModule("node:fs/promises").readFile(path, "utf8");
+	} catch (error) {
+		const code = (error as { code?: unknown }).code;
+		if (code === "ENOENT" || code === "ENOTDIR") return {};
+		throw error;
+	}
+	let values: unknown;
+	try {
+		values = parse(text.replace(/^\uFEFF/u, ""));
+	} catch (cause) {
+		// Not the parser's message: it may repeat the file's text.
+		throw new CrustError("PARSE", `Malformed config file: ${path}`).withCause(cause);
+	}
+	if (typeof values !== "object" || values === null || Array.isArray(values)) {
+		throw new CrustError("PARSE", `Config file ${path} must hold an object of settings`);
+	}
+	return values as FileValues;
+}
+
+/** Replaces `path` with `text` in one step, so a failed write leaves the old file whole. */
+async function writeFile(path: string, text: string): Promise<void> {
+	const fs = process.getBuiltinModule("node:fs/promises");
+	// A linked file, such as one from a dotfiles repository, stays a link.
+	const target = await fs.realpath(path).catch(() => path);
+	await fs.mkdir(process.getBuiltinModule("node:path").dirname(target), { recursive: true });
+	const temporary = `${target}.${process.pid}.tmp`;
+	try {
+		await fs.writeFile(temporary, text);
+		await fs.rename(temporary, target);
+	} catch (error) {
+		await fs.rm(temporary, { force: true });
+		throw error;
+	}
+}
+
+/** The nearest `file` from the working directory up. */
+function nearest(file: string): string | undefined {
+	const { dirname, join } = process.getBuiltinModule("node:path");
+	const { existsSync } = process.getBuiltinModule("node:fs");
+	for (let dir = process.cwd(); ; dir = dirname(dir)) {
+		if (existsSync(join(dir, file))) return join(dir, file);
 		if (dirname(dir) === dir) return undefined;
 	}
 }
 
-type StoreModule = typeof import("@crustjs/store");
-
-/** A store for the file at `path`, wherever its directory is. */
-function storeAt(store: StoreModule, path: string, fields: FieldsDef): AnyStore {
-	const { basename, dirname, sep } = process.getBuiltinModule("node:path");
-	// The store takes a directory ending in `.json` for a file path; the separator says it is one.
-	const dirPath = `${dirname(path)}${sep}`;
-	return store.createStore({ dirPath, name: basename(path, ".json"), fields });
-}
-
-type FileValues = Readonly<Record<string, unknown>>;
-type AnyStore = Store<Record<string, unknown>>;
-
-/** A file value or the default as the setting's value: a `parse` setting parses what the user typed. */
-function settled(key: string, def: ConfigFlagDef, value: unknown, where: string): unknown {
-	const { parse } = def;
-	if (parse === undefined || value === undefined) return value;
-	const parseOne = (raw: string) => {
-		let parsed: unknown;
-		try {
-			parsed = parse(raw);
-		} catch (cause) {
-			// As core shows a flag parser's message, so the parser must not echo a sensitive input.
-			const reason = cause instanceof Error ? cause.message : String(cause);
-			throw new CrustError("PARSE", `Invalid value for "${key}" in ${where}: ${reason}`).withCause(
-				cause,
-			);
-		}
-		// As core refuses it for argv; the rejection is handled so it never goes unhandled.
-		if (process.getBuiltinModule("node:util/types").isPromise(parsed)) {
-			parsed.catch(() => {});
-			throw new CrustError(
-				"PARSE",
-				`Invalid value for "${key}" in ${where}: parse must be synchronous`,
-			);
-		}
-		return parsed;
-	};
-	return Array.isArray(value) ? value.map(parseOne) : parseOne(value as string);
-}
-
-function missingMessage(name: string, key: string, def: ConfigFlagDef, files: readonly string[]) {
-	const ways = [
-		...(def.flag === false ? [] : [`pass --${key}`]),
-		...(def.env === undefined ? [] : [`set ${[def.env].flat().join(" or ")}`]),
-	];
-	const inFiles = `set "${key}" in ${files.join(" or ")}`;
-	const all = ways.length === 0 ? inFiles : `${ways.join(", ")}, or ${inFiles}`;
-	return `Missing setting "${key}" of ${name}: ${all}.`;
-}
-
-/** The options of {@link defineConfig}, so an unknown one, such as `flags`, is refused at run time. */
-const OPTIONS = new Set(["name", "global", "project"]);
-
-/**
- * What {@link defineConfig} returns for the `global` option `G`: where the files are, waiting for
- * `.flags()` and its settings.
- */
-export interface ConfigBuilder<G extends ConfigFileOption | undefined> {
-	/**
-	 * Declare the settings, each the flag definition you would write in a command's `.flags({...})`,
-	 * and get a Context per setting and the Extension that provides them.
-	 */
-	flags<const F extends ConfigFlagsDef>(
-		// Same value brands as defineFlag (default within choices, synchronous parse), per setting.
-		settings: F & {
-			readonly [K in keyof F]: LocalValueBrand<Omit<F[K], "flag">> & KnownPropertiesBrand<F[K]>;
-		} & ReservedNameBrand<F> &
-			StringKeyBrand<F>,
-	): Config<F, G>;
+/** How `config list` and `config get` print a value. */
+function shown(value: unknown, separator: string): string {
+	return Array.isArray(value) ? value.join(separator) : String(value);
 }
 
 /**
- * A CLI's settings, declared once: `defineConfig({ name, global, project }).flags({...})`. Each
- * setting is the flag definition you would write in a command's `.flags({...})` and becomes its own
- * lazy Context, named after it, that owns that flag. A command built with `defineCommand()` and
- * added with `.add()` `.use()`s the settings it reads and gets only their flags; the root and its
- * inline `.command()` children get every setting's flag, as for any Extension-provided Context.
- * argv, `--input`, typed `run()` input and `env` resolve as for any flag; what is still unset comes
- * from the project file, then the global file, then the `default`. The files are read for a setting
- * when a command reads it and neither its flag nor its variable gave it, once for each such setting,
- * and `@crustjs/store` is not imported before that.
- *
- * @throws {CrustError} `DEFINITION` for an unknown option, a file name with a directory or not
- *   ending in `.json`, or no file at all; `.flags()` throws it for a setting that is not a string,
- *   number or boolean flag definition, or one that `defineFlag` rejects (such as an empty
- *   delimiter) when the CLI runs from source and in `crust build`.
+ * A CLI's settings, each defined once: `defineConfig({ name, settings, project?, files?, command? })`.
+ * A command takes a setting as a flag with `config.flag(key)`, and `config.extension` binds the
+ * files' value into it when the run gives none, so the action reads the final value from `flags`:
+ * argv or input, then the flag's `env`, then the project file, then the user's file, then
+ * `default`. `get`, `list` and `set` read and save settings from anywhere.
  */
 export function defineConfig<
-	const G extends ConfigFileOption | undefined = undefined,
-	const P extends ConfigFileOption | undefined = undefined,
-	const N extends string = string,
+	const S extends ConfigSettings,
+	const P extends keyof S & string = never,
+	const C extends boolean = false,
 >(
-	options: {
-		/** The app name: the global file is in `configDir(name)`; the project file defaults to `<name>.config.json`. */
-		readonly name: N & AppNameBrand<N>;
-		/** `true` for `config.json` in `configDir(name)`, or a file name of your own there. */
-		readonly global?: G & FileNameBrand<G>;
-		/** `true` for `<name>.config.json`, or a file name of your own; the nearest from the working directory up. */
-		readonly project?: P & FileNameBrand<P>;
-	} & NoFileBrand<G, P>,
-): ConfigBuilder<G> {
-	const unknown = Object.keys(options).find((option) => !OPTIONS.has(option));
-	if (unknown !== undefined) {
-		throw definitionError(
-			`defineConfig() has no option "${unknown}"${unknown === "flags" ? ": declare the settings with .flags()" : ""}`,
-		);
-	}
-	const name: string = options.name;
-	if (!/^[^/\\]+$/u.test(name) || name === "." || name === "..") {
-		throw definitionError(`Config name "${name}" must be a non-empty name without a directory`);
-	}
-	const globalFile = fileName(name, "global", options.global);
-	const projectFile = fileName(name, "project", options.project);
-	if (globalFile === undefined && projectFile === undefined) {
-		throw definitionError(`Config "${name}" reads no file: set global, project, or both`);
-	}
-	return Object.freeze({
-		flags: (input: ConfigFlagsDef) => withSettings(name, globalFile, projectFile, input),
-	}) as unknown as ConfigBuilder<G>;
-}
+	options: ConfigOptions<S, P> & {
+		// Same value brands as defineFlag (default within choices, synchronous parse), per setting.
+		readonly settings: {
+			readonly [K in keyof S]: LocalValueBrand<S[K]> & KnownPropertiesBrand<S[K]>;
+		} & ReservedNameBrand<S>;
+		readonly command?: C;
+	},
+): Config<S, P, C extends true ? readonly [ConfigCommandDefinition] : []> {
+	const { name, settings, project } = options;
+	const fileOptions = options.files ?? {};
+	const parse = fileOptions.parse ?? JSON.parse;
+	const stringify =
+		fileOptions.stringify ??
+		((values: Record<string, unknown>) => `${JSON.stringify(values, null, 2)}\n`);
+	const projectName = fileOptions.project ?? `${name}.config.json`;
+	const userName = fileOptions.user ?? "config.json";
+	const keys = Object.keys(settings);
+	const isKey = (key: string) => Object.hasOwn(settings, key);
+	// The store loads when a command first reads the files, never at start-up.
+	const userPath = async () =>
+		process
+			.getBuiltinModule("node:path")
+			.join((await import("@crustjs/store")).configDir(name), userName);
 
-/** The config for `input`: a Context per setting, the Extension providing them, its schema and global store. */
-function withSettings(
-	name: string,
-	globalFile: string | undefined,
-	projectFile: string | undefined,
-	input: ConfigFlagsDef,
-) {
-	// As core's `.flags()`: a `{ __proto__: def }` literal sets the prototype instead of naming a setting.
-	const proto: unknown =
-		input === null || input === undefined ? undefined : Object.getPrototypeOf(input);
-	if (proto !== Object.prototype && proto !== null) {
-		throw definitionError(`.flags() of config "${name}" expects a plain object record of settings`);
-	}
-	const settings = Object.entries(input).map(([key, def]) => {
-		// `$schema` in a file points editors at its JSON Schema; core refuses `__proto__` as a flag name
-		// and when it parses env, so neither can be a setting.
-		if (key === "$schema" || key === "__proto__") {
-			throw definitionError(`Config "${name}" cannot have a setting named "${key}"`);
+	const warned = new Set<string>();
+	/** The files in the order they apply: the project file's allowed settings, then the user's file. */
+	const readFiles = async (warn: (line: string) => void): Promise<ConfigFile[]> => {
+		const user = await userPath();
+		const found = project === undefined ? undefined : nearest(projectName);
+		const read: ConfigFile[] = [];
+		if (found !== undefined) {
+			const values = { ...(await readValues(found, parse)) };
+			for (const key of Object.keys(values)) {
+				if (!isKey(key) || project!.includes(key as P)) continue;
+				delete values[key];
+				// Once per process: the Extension and an action's `get()` read the same files.
+				if (warned.has(`${found}\0${key}`)) continue;
+				warned.add(`${found}\0${key}`);
+				warn(`Warning: ${found} sets "${key}", which only ${user} may set; ignored.`);
+			}
+			read.push({ path: found, values });
 		}
-		return [key, ownSetting(name, key, def)] as const;
-	});
-	const fields = storeFields(settings);
-
-	// The import is cached, not a store: the config directory is resolved again for each use.
-	let storeModule: Promise<StoreModule> | undefined;
-	const loadStore = () =>
-		(storeModule ??= import("@crustjs/store").catch((error: unknown) => {
-			storeModule = undefined;
-			throw error;
-		}));
-	const globalAt = (store: StoreModule) =>
-		process.getBuiltinModule("node:path").join(store.configDir(name), globalFile!);
-	const globalStore = async () => {
-		const store = await loadStore();
-		return storeAt(store, globalAt(store), fields);
+		read.push({ path: user, values: await readValues(user, parse) });
+		return read;
 	};
 
-	const where = [
-		...(projectFile === undefined
-			? []
-			: [`${projectFile} (the nearest from the working directory up)`]),
-		...(globalFile === undefined
-			? []
-			: [`${globalFile} in the configuration directory of ${name}`]),
-	];
-	const width = Math.max(0, ...settings.map(([key]) => key.length));
-	const readFiles = async () => {
-		const store = await loadStore();
-		const projectPath = projectFile === undefined ? undefined : findUp(projectFile, store);
-		const globalPath = globalFile === undefined ? undefined : globalAt(store);
-		const read = (path: string | undefined) =>
-			path === undefined ? undefined : storeAt(store, path, fields).read();
-		const [project, global] = await Promise.all([read(projectPath), read(globalPath)]);
-		return { project, projectPath, global, globalPath };
+	/** Reads the files on the first call only, for the settings of one `list()` or `get()`. */
+	const filesOnce = (warn: (line: string) => void) => {
+		let pending: Promise<ConfigFile[]> | undefined;
+		return () => (pending ??= readFiles(warn));
 	};
 
-	// Own properties only: a setting named `constructor` must not read Object.prototype.
-	const own = (record: FileValues | undefined, key: string) =>
-		record !== undefined && Object.hasOwn(record, key) ? record[key] : undefined;
+	const resolve = async (
+		key: string,
+		files: () => Promise<ConfigFile[]>,
+	): Promise<{ value: unknown; source: ConfigSource }> => {
+		const def = settings[key]!;
+		for (const variable of [def.env ?? []].flat()) {
+			const value = await convert(def, process.env, variable, `"${key}" (from $${variable})`);
+			if (value !== undefined) return { value, source: { kind: "env", name: variable } };
+		}
+		for (const { path, values } of await files()) {
+			if (!Object.hasOwn(values, key)) continue;
+			const label = `"${key}" in ${path}`;
+			const converted = await Promise.all(
+				fileWords(key, def, values[key], path).map((word) =>
+					convert(def, { [TEXT]: word }, TEXT, label),
+				),
+			);
+			const value = def.multiple ? converted.flat() : converted[0];
+			return { value, source: { kind: "file", path } };
+		}
+		// Core's own default: a `parse` setting's default is parsed, as on the flag.
+		const { env: _env, required: _required, ...withDefault } = def;
+		const value = (await parseFlagValues({ value: withDefault }, {})).value;
+		return { value, source: value === undefined ? { kind: "unset" } : { kind: "default" } };
+	};
 
-	const contexts = settings.map(([key, def]) => {
-		// The package applies `default` and `required` after the files; on the flag, core would apply
-		// them first.
-		const { flag, default: _default, required: _required, ...owned } = def;
-		// A setting without a flag reads only its variable, without argv-only spellings. It is parsed
-		// under its own name, so a message names the setting; a name core refuses as an argv spelling
-		// (such as `no-proxy`) is the one DEFINITION error left here, and gets a neutral key.
-		const { short: _short, aliases: _aliases, ...envOnly } = owned;
-		const fromVariable = async (as = key): Promise<unknown> => {
-			try {
-				return own(await parseFlagValues({ [as]: envOnly }, process.env), as);
-			} catch (error) {
-				if (as !== key || !(error instanceof CrustError && error.is("DEFINITION"))) throw error;
-				return fromVariable("value");
+	const save = async (values: Record<string, unknown>, inProject: boolean): Promise<string> => {
+		if (inProject) {
+			const refused = Object.keys(values).filter((key) => !(project ?? []).includes(key as P));
+			if (refused.length > 0) {
+				throw new CrustError(
+					"VALIDATION",
+					`${projectName} cannot set ${refused.map((key) => `"${key}"`).join(", ")}; it may set only: ${(project ?? []).join(", ")}`,
+				);
 			}
-		};
-		const base = defineContext(key);
-		// Core offers `--no-<name>` for `default: true`, which the flag no longer carries.
-		const flagDef =
-			def.type === "boolean" && def.default === true ? { ...owned, negatable: true } : owned;
-		const withFlag = flag === false ? base : base.flags({ [key]: flagDef } as never);
-		const context = withFlag.setup(async ({ flags }) => {
-			// Core resolves env for a flag; a setting without one gets the same env handling here.
-			const given =
-				flag === false
-					? owned.env === undefined
-						? undefined
-						: await fromVariable()
-					: own(flags, key);
-			// `null` from a parser is a value: only undefined falls through, and a setting its flag or
-			// variable gave reads no file.
-			if (given !== undefined) return given;
-			const read = await readFiles();
-			for (const value of [
-				() => settled(key, def, own(read.project, key), read.projectPath!),
-				() => settled(key, def, own(read.global, key), read.globalPath!),
-				// A fresh array each time: an action may change the value it gets.
-				() =>
-					settled(
-						key,
-						def,
-						Array.isArray(def.default) ? [...def.default] : def.default,
-						"its default",
-					),
-			]) {
-				const settledValue = value();
-				if (settledValue !== undefined) return settledValue;
-			}
-			if (def.required) {
-				const places = [
-					...(projectFile === undefined ? [] : [projectFile]),
-					...(read.globalPath === undefined ? [] : [read.globalPath]),
-				];
-				const message = missingMessage(name, key, def, places);
-				throw new CrustError("VALIDATION", message, {
-					issues: [{ message, path: `config.${key}` }],
-				});
-			}
-			return undefined;
+		}
+		const path = inProject
+			? (nearest(projectName) ??
+				process.getBuiltinModule("node:path").join(process.cwd(), projectName))
+			: await userPath();
+		const next: Record<string, unknown> = { ...(await readValues(path, parse)) };
+		for (const [key, value] of Object.entries(values)) {
+			if (value === undefined) delete next[key];
+			else next[key] = value;
+		}
+		await writeFile(path, stringify(next));
+		return path;
+	};
+
+	const toStderr = (line: string) => void process.stderr.write(`${line}\n`);
+
+	const bindFiles = async (ctx: ExtensionContext) => {
+		const wanted = Object.entries(ctx.command.flags).filter(([flagName, flag]) => {
+			const source = ctx.sources.flags[flagName];
+			return (
+				flag.config !== undefined &&
+				isKey(flag.config) &&
+				(source === undefined || source === "default")
+			);
 		});
-		return [key, context] as const;
-	});
+		if (wanted.length === 0) return;
+		const read = await readFiles((line) => ctx.stderr(line));
+		for (const [flagName, flag] of wanted) {
+			const key: string = flag.config!;
+			const file = read.find(({ values }) => Object.hasOwn(values, key));
+			if (file === undefined) continue;
+			const words = fileWords(key, settings[key]!, file.values[key], file.path);
+			try {
+				ctx.bindText({ flags: { [flagName]: flag.multiple ? words : words[0]! } });
+			} catch (error) {
+				if (error instanceof CrustError) {
+					error.message = error.message.replaceAll(`--${flagName}`, `"${key}" in ${file.path}`);
+				}
+				throw error;
+			}
+		}
+	};
 
-	const result: Record<string, unknown> = {
-		settings: Object.freeze(Object.fromEntries(contexts)),
-		// SAFETY: the type of `extension` is `Config["extension"]`; the runtime list is erased.
-		extension: defineExtension(defineExtensionId(`crust:config:${name}`))
-			.provide(...(contexts.map(([, context]) => context()) as never[]))
-			.sections(() => [
-				{
-					command: [],
-					title: "Configuration",
-					body: [
-						`Each setting is the first of: its flag, its environment variable, ${where.join(", ")}, its default.`,
-						...settings.map(([key, def]) =>
-							`${key.padEnd(width)}  ${formatDescription(def.description, def.default, def.choices, undefined, def.env)}`.trimEnd(),
-						),
-					].join("\n"),
-				},
-			]),
+	// A file's error waits for the action, so `--help` works whatever the files hold, as for an
+	// invalid environment value.
+	const failures = new WeakMap<object, unknown>();
+	const where = [
+		...(project === undefined
+			? []
+			: [
+					`${projectName} (the nearest from the working directory up; only ${project.join(", ") || "no settings"})`,
+				]),
+		`${userName} in the configuration directory of ${name}`,
+	];
+	const width = Math.max(0, ...keys.map((key) => key.length));
+	const extension = defineExtension(defineExtensionId(`crust:config:${name}`))
+		.owns("config")
+		.setup(async (ctx) => {
+			try {
+				await bindFiles(ctx);
+			} catch (error) {
+				failures.set(ctx, error);
+			}
+		})
+		.preRun((ctx) => {
+			if (failures.has(ctx)) throw failures.get(ctx);
+		})
+		.sections(() => [
+			{
+				command: [],
+				title: "Configuration",
+				body: [
+					`A flag for a setting that the run does not give takes its environment variable, then ${where.join(", then ")}, then its default.`,
+					...keys.map((key) => {
+						const def = settings[key]!;
+						return `${key.padEnd(width)}  ${formatDescription(def.description, def.default, def.choices, undefined, def.env)}`.trimEnd();
+					}),
+				].join("\n"),
+			},
+		]);
+
+	const configCommand = () => {
+		const key = {
+			name: "key",
+			type: "string",
+			// SAFETY: the setting names, as the choices of the argument.
+			choices: keys as [string, ...string[]],
+			required: true,
+			description: "A setting",
+		} as const;
+		// `--project` exists only with a project file; the actions read it as optional.
+		const inProject: {} =
+			project === undefined
+				? {}
+				: { project: { type: "boolean", description: `Use ${projectName}, not your own file` } };
+		const toProject = (flags: object) => (flags as { project?: boolean }).project === true;
+		const origin = (source: ConfigSource) =>
+			source.kind === "env"
+				? `$${source.name}`
+				: source.kind === "file"
+					? source.path
+					: source.kind;
+		return defineCommand("config", { description: "Read and change settings" }, (command) =>
+			command
+				.command("list", { description: "Show every setting, its value and its source" }, (list) =>
+					list.action(async ({ stdout, stderr }) => {
+						const files = filesOnce((line) => stderr(line));
+						const entries = await Promise.all(
+							keys.map(async (setting) => ({ setting, ...(await resolve(setting, files)) })),
+						);
+						const values = entries.map(({ value }) =>
+							value === undefined ? "" : shown(value, ","),
+						);
+						const valueWidth = Math.max(0, ...values.map((value) => value.length));
+						entries.forEach(({ setting, source }, index) =>
+							stdout(
+								`${setting.padEnd(width)}  ${values[index]!.padEnd(valueWidth)}  ${origin(source)}`,
+							),
+						);
+					}),
+				)
+				.command("get", { description: "Print a setting's value" }, (get) =>
+					get.args(key).action(async ({ args, stdout, stderr }) => {
+						const { value } = await resolve(
+							args.key,
+							filesOnce((line) => stderr(line)),
+						);
+						if (value !== undefined) stdout(shown(value, "\n"));
+					}),
+				)
+				.command("set", { description: "Save a setting" }, (set) =>
+					set
+						.args(key, { name: "value", type: "string", required: true, description: "Its value" })
+						.flags(inProject)
+						.action(async ({ args, flags, stdout }) => {
+							const def = settings[args.key]!;
+							const value = await convert(def, { [TEXT]: args.value }, TEXT, `"${args.key}"`);
+							// A `parse` setting keeps what the user typed, as a file holds it.
+							const saved = def.parse === undefined ? value : args.value;
+							const path = await save({ [args.key]: saved }, toProject(flags));
+							stdout(`Saved ${args.key} in ${path}`);
+						}),
+				)
+				.command("unset", { description: "Remove a setting from a file" }, (unset) =>
+					unset
+						.args(key)
+						.flags(inProject)
+						.action(async ({ args, flags, stdout }) => {
+							const path = await save({ [args.key]: undefined }, toProject(flags));
+							stdout(`Removed ${args.key} from ${path}`);
+						}),
+				),
+		);
+	};
+
+	const config = {
+		flag: (key: string) => ({ ...settings[key], config: key }),
+		get: async (key: string) => {
+			const { value } = await resolve(key, filesOnce(toStderr));
+			const def = settings[key]!;
+			if (value === undefined && def.required) {
+				const variables = [def.env ?? []].flat().map((variable) => `$${variable}`);
+				throw new CrustError(
+					"VALIDATION",
+					`Missing setting "${key}" of ${name}: set ${[...variables, `"${key}" in ${await userPath()}`].join(" or ")}.`,
+				);
+			}
+			return value;
+		},
+		list: async () => {
+			const files = filesOnce(toStderr);
+			return Promise.all(keys.map(async (key) => ({ key, ...(await resolve(key, files)) })));
+		},
+		set: async (values: Record<string, unknown>, target?: { readonly project?: true }) => {
+			await save(values, target?.project === true);
+		},
+		extension: options.command ? extension.add(configCommand()) : extension,
 		jsonSchema: () => jsonSchema(name, settings),
 	};
-	if (globalFile !== undefined) {
-		const global: AnyStore = {
-			read: async () => (await globalStore()).read(),
-			write: async (config, mutation) => (await globalStore()).write(config, mutation),
-			update: async (updater, mutation) => (await globalStore()).update(updater, mutation),
-			patch: async (partial, mutation) => (await globalStore()).patch(partial, mutation),
-			reset: async (mutation) => (await globalStore()).reset(mutation),
-		};
-		result.global = Object.freeze(global);
-	}
-	return Object.freeze(result);
+	// SAFETY: each member matches `Config`'s; the types of keys and values are erased here.
+	return Object.freeze(config) as never;
 }
 
 /** What a user writes in a file for one setting: the text type for `parse`, never the parsed value. */
-function settingSchema(def: ConfigFlagDef): Record<string, unknown> {
+function settingSchema(def: ConfigSetting): Record<string, unknown> {
 	const item: Record<string, unknown> =
 		def.choices === undefined
 			? {
@@ -589,17 +564,16 @@ function settingSchema(def: ConfigFlagDef): Record<string, unknown> {
 	};
 }
 
-function jsonSchema(
-	name: string,
-	settings: readonly (readonly [string, ConfigFlagDef])[],
-): Record<string, unknown> {
+function jsonSchema(name: string, settings: ConfigSettings): Record<string, unknown> {
 	return {
 		$schema: "https://json-schema.org/draft/2020-12/schema",
 		title: `${name} config file`,
 		type: "object",
 		properties: {
 			$schema: { type: "string" },
-			...Object.fromEntries(settings.map(([key, def]) => [key, settingSchema(def)])),
+			...Object.fromEntries(
+				Object.entries(settings).map(([key, def]) => [key, settingSchema(def)]),
+			),
 		},
 		additionalProperties: false,
 	};

@@ -1,4 +1,5 @@
-// Generated OpenAPI commands read a setting through `bind`; the config knows nothing about openapi.
+// Generated OpenAPI commands read a setting through `bind` and `config.get()`; the config knows
+// nothing about openapi.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -40,15 +41,10 @@ afterEach(() => {
 
 const config = defineConfig({
 	name: "acme",
-	global: true,
-	project: true,
-}).flags({
-	account: {
-		type: "string",
-		description: "Account ID",
-		env: "ACME_ACCOUNT",
-		required: true,
+	settings: {
+		account: { type: "string", description: "Account ID", env: "ACME_ACCOUNT", required: true },
 	},
+	project: ["account"],
 });
 
 const api = defineApi({
@@ -69,9 +65,7 @@ const api = defineApi({
 		},
 	},
 	baseUrl: "https://api.acme.example/v1",
-})
-	.use(config.settings.account)
-	.each(() => ({ bind: { account_id: (ctx) => ctx.account } }));
+}).each(() => ({ bind: { account_id: () => config.get("account") } }));
 
 const app = new Crust("acme").extend(config.extension, api.extension).add(...api.commands);
 
@@ -88,18 +82,20 @@ function requests(): string[] {
 	return urls;
 }
 
-it("a generated command binds a setting from the project file, or from its flag", async () => {
+it("a generated command binds a setting from the project file, or from its variable", async () => {
 	writeFileSync(join(root, "acme.config.json"), JSON.stringify({ account: "from-file" }));
 	const urls = requests();
 	expect(await captureExecute(app, ["zones", "list-zones"], withoutAccount())).toMatchObject({
 		exitCode: 0,
 	});
 	expect(
-		await captureExecute(app, ["zones", "list-zones", "--account", "from-flag"], withoutAccount()),
+		await captureExecute(app, ["zones", "list-zones"], {
+			env: { ...process.env, ACME_ACCOUNT: "from-env" },
+		}),
 	).toMatchObject({ exitCode: 0 });
 	expect(urls).toEqual([
 		"https://api.acme.example/v1/accounts/from-file/zones",
-		"https://api.acme.example/v1/accounts/from-flag/zones",
+		"https://api.acme.example/v1/accounts/from-env/zones",
 	]);
 });
 
@@ -108,7 +104,7 @@ it("a generated command fails a missing setting before any request", async () =>
 	const urls = requests();
 	const { exitCode, stderr } = await captureExecute(app, ["zones", "list-zones"], withoutAccount());
 	expect(exitCode).toBe(2);
-	expect(stderr).toContain('Missing setting "account" of acme: pass --account, set ACME_ACCOUNT');
+	expect(stderr).toContain('Missing setting "account" of acme: set $ACME_ACCOUNT or "account" in');
 	expect(urls).toEqual([]);
 });
 
