@@ -191,9 +191,7 @@ export type RunInput<Shape extends CommandShape> = RunSection<
 				? {}
 				: NonNullable<RunInputPayload["flags"]>
 			: InputFlags<Shape["flags"]>
-	> & {
-		readonly raw?: readonly string[] | undefined;
-	};
+	>;
 
 // Check each prefix separately so JSON compatibility cannot recombine positional branches.
 type CompatibleRunValue<Expected, Actual> = Actual extends Expected

@@ -98,7 +98,7 @@ function renderRule(binName: string, parts: RuleParts): string {
  * positionals have been consumed past the path) or `*<N>` (fires when
  * N-or-more positionals have been consumed). A leading `<` counts only
  * positionals before `--` and fails after it; a leading `>` counts only
- * those after `--` and fails before it (an `afterDoubleDash` argument).
+ * those after `--` and fails before it (an `"afterDoubleDash"` argument).
  */
 function posPredicate(
 	ident: string,
@@ -134,7 +134,11 @@ function emitRules(
 	const condition = posPredicate(ident, path, current, "*0");
 	// Core routes nothing after `--`.
 	const subcommandCondition = posPredicate(ident, path, current, "<*0");
-	const split = current.args.at(-1)?.afterDoubleDash === true;
+	const lastVariadic = current.args.at(-1)?.variadic;
+	const split = lastVariadic === "afterDoubleDash";
+	// A `"passthrough"` argument keeps every word from the first positional on, flags included.
+	const flagCondition =
+		lastVariadic === "passthrough" ? posPredicate(ident, path, current, "<0") : condition;
 
 	// Subcommand rules: emit one rule per spelling so each can carry its
 	// own description in the menu. fishSingleQuote is applied via the
@@ -211,8 +215,8 @@ function emitRules(
 				continue;
 			}
 			const rule: RuleParts = spelling.startsWith("--")
-				? { condition, long: spelling.slice(2), description: desc }
-				: { condition, short: spelling.slice(1), description: desc };
+				? { condition: flagCondition, long: spelling.slice(2), description: desc }
+				: { condition: flagCondition, short: spelling.slice(1), description: desc };
 			if (flag.takesValue) {
 				emitValueRule(rule);
 			} else {
@@ -232,11 +236,12 @@ function emitRules(
 	// `complete -c <bin> -f` already keeps file completion off, so the
 	// suppression is implicit.
 	current.args.forEach((arg, idx) => {
-		// With an `afterDoubleDash` argument, `--` splits the slots: it reads only
+		// With an `"afterDoubleDash"` argument, `--` splits the slots: it reads only
 		// tokens after `--`, the others only tokens before.
-		const posSpec = arg.afterDoubleDash
-			? `>${arg.variadic ? "*" : ""}0`
-			: `${split ? "<" : ""}${arg.variadic ? "*" : ""}${idx}`;
+		const posSpec =
+			arg.variadic === "afterDoubleDash"
+				? ">*0"
+				: `${split ? "<" : ""}${arg.variadic ? "*" : ""}${idx}`;
 		if (arg.choices !== undefined) {
 			const posCondition = posPredicate(ident, path, current, posSpec);
 			for (const choice of arg.choices) {

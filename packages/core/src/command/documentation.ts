@@ -1,5 +1,5 @@
 import { isListed } from "../sections.ts";
-import type { CommandSection, DeclaredDefault } from "../types.ts";
+import type { CommandSection, DeclaredDefault, VariadicMode } from "../types.ts";
 import type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "./snapshot.ts";
 
 function isNonFiniteNumber(value: DeclaredDefault): value is number {
@@ -45,8 +45,8 @@ export interface DocumentationArg {
 	/**
 	 * Pre-formatted usage token: `<name>` if required, `[name]` if optional,
 	 * with `...` appended when variadic — e.g. `"<file>"`, `"[files...]"`.
-	 * An `afterDoubleDash` argument reads `-- <name>` (`-- <name>...` when
-	 * variadic), wrapped in `[…]` when optional — e.g. `"[-- <extra>...]"`.
+	 * A `variadic: "afterDoubleDash"` argument reads `-- <name>...`, wrapped in
+	 * `[…]` when optional — e.g. `"[-- <extra>...]"`.
 	 */
 	readonly token: string;
 	/** Value type (`"string"`, `"number"`, …); `undefined` for schema-backed args. */
@@ -55,10 +55,8 @@ export interface DocumentationArg {
 	readonly description?: string;
 	/** `true` when parsing fails if the argument is missing. */
 	readonly required: boolean;
-	/** `true` when the argument collects all remaining positionals into an array. */
-	readonly variadic: boolean;
-	/** `true` when the argument takes only the tokens after `--` on the command line. */
-	readonly afterDoubleDash: boolean;
+	/** How the argument collects its values into an array (see `ArgDef`'s `variadic`); `false` for one value. */
+	readonly variadic: VariadicMode | false;
 	/** Static enum of accepted values, e.g. `["json", "text"]`, if declared. */
 	readonly choices?: readonly string[];
 	/** Default value used when the argument is omitted, e.g. `3000`. */
@@ -168,8 +166,8 @@ export interface CommandDocumentation {
 
 function argToken(arg: ArgSnapshot): string {
 	// clap's `Arg::last` usage spelling: `[-- <ARG>...]`.
-	if (arg.afterDoubleDash) {
-		const token = `-- <${arg.name}>${arg.variadic ? "..." : ""}`;
+	if (arg.variadic === "afterDoubleDash") {
+		const token = `-- <${arg.name}>...`;
 		return arg.required ? token : `[${token}]`;
 	}
 	const name = arg.variadic ? `${arg.name}...` : arg.name;
@@ -212,13 +210,19 @@ export function buildCommandDocumentation(
 			...arg,
 			token: argToken(arg),
 			required: arg.required === true,
-			variadic: arg.variadic === true,
-			afterDoubleDash: arg.afterDoubleDash === true,
+			variadic: arg.variadic ?? false,
 		}),
 	);
-	// Options cannot follow `--`, so `[options]` goes before the argument that does.
-	const afterDoubleDash = args.at(-1)?.afterDoubleDash === true ? args.slice(-1) : [];
-	const beforeDoubleDash = args.slice(0, args.length - afterDoubleDash.length);
+	// Options cannot follow `--`, nor any positional of a command with a passthrough argument,
+	// so `[options]` goes before them.
+	const lastVariadic = args.at(-1)?.variadic;
+	const afterOptions =
+		lastVariadic === "passthrough"
+			? args
+			: lastVariadic === "afterDoubleDash"
+				? args.slice(-1)
+				: [];
+	const beforeOptions = args.slice(0, args.length - afterOptions.length);
 	const argSegments = (list: typeof args) =>
 		list.map((arg) => ({ kind: "arg", text: arg.token, required: arg.required }) as const);
 	const children = Object.entries(command.subCommands).flatMap(([name, child]) =>
@@ -232,9 +236,9 @@ export function buildCommandDocumentation(
 				...(children.length > 0 && !command.hasAction
 					? [{ kind: "command", text: "<command>" } as const]
 					: []),
-				...argSegments(beforeDoubleDash),
+				...argSegments(beforeOptions),
 				...(flags.length > 0 ? [{ kind: "options", text: "[options]" } as const] : []),
-				...argSegments(afterDoubleDash),
+				...argSegments(afterOptions),
 			];
 	const usage = usageSegments.map((segment) => segment.text).join(" ");
 

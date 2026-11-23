@@ -170,7 +170,7 @@ export interface ExtensionContext<
 	 *   that does not start at the root, and the `PARSE` and `VALIDATION` errors the command's
 	 *   own invocation would fail with
 	 *
-	 * @example `await ctx.parseCommandArgv(["tool", "db", "migrate"], ["--to", "3"])` → `{ path: ["tool", "db", "migrate"], args: {}, flags: { to: 3 }, rawArgs: [] }`
+	 * @example `await ctx.parseCommandArgv(["tool", "db", "migrate"], ["--to", "3"])` → `{ path: ["tool", "db", "migrate"], args: {}, flags: { to: 3 } }`
 	 */
 	readonly parseCommandArgv: (
 		path: readonly string[],
@@ -195,24 +195,17 @@ export interface ExtensionContext<
 	 */
 	readonly flags: Readonly<InferExtensionFlags<F> & Record<string, ParsedFlagValue>>;
 	/**
-	 * Tokens after the `--` separator that no declared argument consumed, or the `raw` array passed to typed `run()`.
-	 *
-	 * @example `["--dry-run"]`
-	 */
-	readonly rawArgs: readonly string[];
-	/**
 	 * Where each current value came from, keyed by declared argument name and canonical flag
 	 * name; a name without a value is absent. `argv` covers aliases, `--no-<name>`, and
-	 * `--tags ""`; `raw` is `argv` when passthrough tokens were left after `--`. It reads live:
+	 * `--tags ""`. It reads live:
 	 * after {@link ExtensionContext.bindInput}, supplied keys report `bound`. Empty in `onError`
 	 * after a routing or argv-syntax failure.
 	 *
-	 * @example `{ args: { target: "argv" }, flags: { trace: "env", port: "default" }, raw: undefined }`
+	 * @example `{ args: { target: "argv" }, flags: { trace: "env", port: "default" } }`
 	 */
 	readonly sources: {
 		readonly args: Readonly<Record<string, ValueSource>>;
 		readonly flags: Readonly<Record<string, ValueSource>>;
-		readonly raw: "argv" | "run" | "bound" | undefined;
 	};
 	/**
 	 * Aborted when the caller cancels the invocation (`execute({ signal })`,
@@ -225,7 +218,7 @@ export interface ExtensionContext<
 	/** Declared Contexts, constructed lazily on first property access. */
 	readonly ctx: ContextBag<Deps>;
 	/**
-	 * Bind structured input (arguments, flags, and `raw` passthrough tokens) into this
+	 * Bind structured input (arguments and flags) into this
 	 * invocation, for example a JSON object read from a flag. Call it from `setup`, so every
 	 * later hook, including each `preRun` whatever the `.extend()` order, sees the bound
 	 * values, or from `preRun`, so it happens only when the Command Action will run. Values
@@ -233,7 +226,7 @@ export interface ExtensionContext<
 	 * replaces the environment value or default, converted exactly as typed `run()` input is.
 	 * Under typed `run()` nothing came from argv, so supplied keys replace the typed input.
 	 * Each call re-binds against the original input, so the last call wins. Afterwards
-	 * `args`, `flags`, `rawArgs`, and `sources` report the bound values, and validation and the Command
+	 * `args`, `flags`, and `sources` report the bound values, and validation and the Command
 	 * Action use them. Flag handlers are chosen from the original input, so a bound flag never
 	 * selects one, even when bound in `setup`. A no-op in `onError` after a routing or argv-syntax failure.
 	 *
@@ -258,8 +251,6 @@ export interface ParsedCommandArgv {
 	readonly path: readonly string[];
 	readonly args: Readonly<Record<string, unknown>>;
 	readonly flags: Readonly<Record<string, unknown>>;
-	/** Tokens after the `--` separator that no declared argument consumed. */
-	readonly rawArgs: readonly string[];
 }
 
 /** The context {@link ExtensionHooks.setup} receives. */

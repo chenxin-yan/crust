@@ -85,7 +85,7 @@ describe("toolsFromSnapshot", () => {
 		const snapshot = await app.snapshot();
 		const tools = toolsFromSnapshot(snapshot);
 		expect(tools.map((tool) => tool.name)).toEqual(["work"]);
-		expect(Object.keys(tools[0]!.inputSchema.properties)).toEqual(["fast", "raw"]);
+		expect(Object.keys(tools[0]!.inputSchema.properties)).toEqual(["fast"]);
 		expect(
 			toolsFromSnapshot(snapshot, { include: [["schema"], ["mcp"], ["mcp", "config"]] }).map(
 				(tool) => tool.name,
@@ -143,7 +143,7 @@ describe("toolsFromSnapshot", () => {
 				Object.keys(inputSchema.properties),
 			]),
 		);
-		expect(properties).toEqual({ drop: ["yes", "raw"], list: ["raw"] });
+		expect(properties).toEqual({ drop: ["yes"], list: [] });
 	});
 
 	it("advertises output schemas in the shape structuredContent takes", async () => {

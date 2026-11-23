@@ -29,9 +29,6 @@ export interface CommandInputSchema {
 	readonly required?: readonly string[];
 }
 
-/** Command input property whose strings reach the action as `rawArgs`, like tokens after `--`. */
-export const RAW_INPUT_PROPERTY = "raw";
-
 function valueSchema(
 	type: ValueType | undefined,
 	choices: readonly string[] | undefined,
@@ -150,7 +147,7 @@ function formatPath(path: readonly string[]): string {
 
 /**
  * JSON Schema for a command's input as one flat object: each arg and flag by
- * name (variadic and `multiple` as arrays), plus {@link RAW_INPUT_PROPERTY}.
+ * name (variadic and `multiple` as arrays).
  * Flags an Extension declares (`--help`, `--json`, `--input`, …; see
  * {@link FlagSnapshot.extension}) are left out; Context-owned flags such as
  * `--yes` stay. Mapped from the snapshot's
@@ -166,7 +163,7 @@ function formatPath(path: readonly string[]): string {
  * Defaults are `JSON.stringify` copies (`URL`s become
  * strings; nested `undefined`, functions, and symbols are dropped); defaults
  * that fail to serialize or hold non-finite numbers are omitted. `path` names the command in the error thrown when an arg and a flag
- * share a name, or a definition is named `raw`.
+ * share a name.
  */
 export function commandInputSchema(
 	command: CommandSnapshot,
@@ -177,23 +174,18 @@ export function commandInputSchema(
 	const properties: Record<string, CommandInputPropertySchema> = Object.create(null);
 	const required: string[] = [];
 	const claim = (name: string, def: ArgSnapshot | FlagSnapshot, list: boolean) => {
-		if (Object.hasOwn(properties, name) || name === RAW_INPUT_PROPERTY) {
+		if (Object.hasOwn(properties, name)) {
 			throw new Error(
-				`Command "${formatPath(path)}" declares "${name}" more than once across args, flags, and "${RAW_INPUT_PROPERTY}"; command input is one flat object`,
+				`Command "${formatPath(path)}" declares "${name}" more than once across args and flags; command input is one flat object`,
 			);
 		}
 		properties[name] = propertySchema(def, list);
 		if (def.required === true && !("env" in def && def.env)) required.push(name);
 	};
-	for (const arg of command.args) claim(arg.name, arg, arg.variadic === true);
+	for (const arg of command.args) claim(arg.name, arg, arg.variadic !== undefined);
 	for (const [name, flag] of commandInputFlags(command)) {
 		claim(name, flag, flag.multiple === true);
 	}
-	properties[RAW_INPUT_PROPERTY] = {
-		type: "array",
-		items: { type: "string" },
-		description: "Passthrough values, received as `rawArgs`; they never fill arguments",
-	};
 	return required.length === 0
 		? { type: "object", properties }
 		: { type: "object", properties, required };
@@ -203,7 +195,7 @@ export function commandInputSchema(
 export interface CommandInputFields {
 	/** Arg and flag names declared as `type: "url"`; their strings become `URL`s before `run()`. */
 	readonly urlFields: readonly string[];
-	/** Arg names; every other input property except `raw` is a flag. */
+	/** Arg names; every other input property is a flag. */
 	readonly argNames: readonly string[];
 }
 
@@ -238,11 +230,11 @@ function isString(value: JsonValue): value is string {
  * describes) into structured `run()` input. Arg names fill `args`; any other
  * name goes to `flags`, where `run()` rejects unknown ones. Strings for `url`
  * definitions become `URL`s, and `undefined` entries are skipped. A key naming
- * a flag an Extension declares, and no arg or `raw`, is rejected, since command
+ * a flag an Extension declares, and no arg, is rejected, since command
  * input leaves it out, so such a key never selects a flag handler or reaches its Extension.
  *
  * @throws {CrustError} `PARSE` when a key names an Extension flag, a value is not JSON data,
- *   a `url` value is not a valid URL, or `raw` is not an array of strings
+ *   or a `url` value is not a valid URL
  */
 export function parseCommandInput(
 	command: CommandSnapshot,
@@ -252,14 +244,12 @@ export function parseCommandInput(
 	const args: Record<string, RunInputValue> = Object.create(null);
 	const flags: Record<string, RunInputValue> = Object.create(null);
 	const { argNames, urlFields } = commandInputFields(command);
-	let raw: readonly string[] | undefined;
 	for (const [name, value] of Object.entries(values)) {
 		if (value === undefined) continue;
 		const isArg = argNames.includes(name);
-		// Args and `raw` win over a same-named Extension flag, matching commandInputSchema.
+		// Args win over a same-named Extension flag, matching commandInputSchema.
 		if (
 			!isArg &&
-			name !== RAW_INPUT_PROPERTY &&
 			Object.hasOwn(command.flags, name) &&
 			command.flags[name]!.extension !== undefined
 		) {
@@ -271,13 +261,6 @@ export function parseCommandInput(
 		} catch {
 			throw new CrustError("PARSE", `Expected a JSON value for "${name}"`);
 		}
-		if (name === RAW_INPUT_PROPERTY) {
-			if (!Array.isArray(given) || !given.every(isString)) {
-				throw new CrustError("PARSE", `Expected an array of strings for "${RAW_INPUT_PROPERTY}"`);
-			}
-			raw = given;
-			continue;
-		}
 		const label = isArg ? `<${name}>` : `--${name}`;
 		const toUrl = (item: JsonValue) => (isString(item) ? coerceUrl(item, label) : item);
 		(isArg ? args : flags)[name] = urlFields.includes(name)
@@ -286,5 +269,5 @@ export function parseCommandInput(
 				: toUrl(given)
 			: given;
 	}
-	return raw === undefined ? { args, flags } : { args, flags, raw };
+	return { args, flags };
 }

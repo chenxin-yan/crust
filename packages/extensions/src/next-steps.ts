@@ -25,7 +25,7 @@ type DefinitionInput<D> =
 export interface NextStep {
 	/** The command's definition; the step names the command the application added from it. */
 	readonly command: AnyCommandDefinition;
-	/** Arguments, flags, and `raw` tokens in the shape `run()` takes, rendered as argv. */
+	/** Arguments and flags in the shape `run()` takes, rendered as argv. */
 	readonly input?: RunInputPayload | undefined;
 	/** What the step is for; printed above its command line. */
 	readonly description?: string | undefined;

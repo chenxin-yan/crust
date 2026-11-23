@@ -397,13 +397,7 @@ describeIfZsh("renderZsh · after `--`", () => {
 					.args(
 						{ name: "task", type: "string", choices: ["lint"], required: true },
 						{ name: "pkgs", type: "string", choices: ["cli"], variadic: true },
-						{
-							name: "extra",
-							type: "string",
-							choices: ["fix"],
-							variadic: true,
-							afterDoubleDash: true,
-						},
+						{ name: "extra", type: "string", choices: ["fix"], variadic: "afterDoubleDash" },
 					)
 					.action(() => {}),
 			),
@@ -411,7 +405,16 @@ describeIfZsh("renderZsh · after `--`", () => {
 				exec
 					.args(
 						{ name: "pod", type: "string", choices: ["web"], required: true },
-						{ name: "cmd", type: "string", choices: ["ls"], afterDoubleDash: true },
+						{ name: "cmd", type: "string", choices: ["ls"], variadic: "afterDoubleDash" },
+					)
+					.action(() => {}),
+			),
+			defineCommand("docker", (docker) =>
+				docker
+					.flags({ rm: { type: "boolean" } })
+					.args(
+						{ name: "image", type: "string", choices: ["alpine"], required: true },
+						{ name: "command", type: "string", choices: ["sh"], variadic: "passthrough" },
 					)
 					.action(() => {}),
 			),
@@ -433,17 +436,21 @@ describeIfZsh("renderZsh · after `--`", () => {
 		["mycli seek lint -- ", ["cli"]],
 		["mycli seek lint --w", ["--watch"]],
 		["mycli seek lint -- --w", []],
-		// Offers the arguments before an afterDoubleDash argument only before `--`.
+		// Offers the arguments before an "afterDoubleDash" argument only before `--`.
 		["mycli run ", ["lint"]],
 		["mycli run lint ", ["cli"]],
 		["mycli run lint cli ", ["cli"]],
 		["mycli exec web ", []],
-		// Offers an afterDoubleDash argument only after `--`.
+		// Offers an "afterDoubleDash" argument only after `--`.
 		["mycli run lint -- ", ["fix"]],
 		["mycli run -- x ", ["fix"]],
 		["mycli run lint -- --w", []],
 		["mycli exec web -- ", ["ls"]],
-		["mycli exec web -- ls ", []],
+		["mycli exec web -- ls ", ["ls"]],
+		// Offers no flags after the first positional of a "passthrough" command.
+		["mycli docker --r", ["--rm"]],
+		["mycli docker alpine ", ["sh"]],
+		["mycli docker alpine --r", []],
 	])("completes %j", async (line, expected) => {
 		expect(await zshComplete(scriptPath, line)).toEqual(expected);
 	});

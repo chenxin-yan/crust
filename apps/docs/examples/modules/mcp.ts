@@ -43,7 +43,6 @@ console.log(tools[0]?.inputSchema);
 //   properties: {
 //     target: { type: "string", enum: ["staging", "prod"] },
 //     "dry-run": { type: "boolean" },
-//     raw: { type: "array", items: { type: "string" }, description: "Passthrough values, received as `rawArgs`; they never fill arguments" },
 //   },
 //   required: ["target"],
 // }

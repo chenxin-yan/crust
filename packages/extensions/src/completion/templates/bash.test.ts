@@ -420,8 +420,7 @@ describe("renderBash · behavioural · -- and --name=value", () => {
 						name: "extra",
 						type: "string",
 						required: false,
-						variadic: true,
-						afterDoubleDash: true,
+						variadic: "afterDoubleDash",
 						choices: ["fix"],
 					},
 				],
@@ -436,9 +435,26 @@ describe("renderBash · behavioural · -- and --name=value", () => {
 						name: "cmd",
 						type: "string",
 						required: true,
-						variadic: false,
-						afterDoubleDash: true,
+						variadic: "afterDoubleDash",
 						choices: ["ls"],
+					},
+				],
+				subCommands: [],
+			},
+			{
+				name: "docker",
+				flags: [
+					{ name: "rm", spellings: ["--rm"], type: "boolean", takesValue: false },
+					{ name: "name", spellings: ["--name"], type: "string", takesValue: true },
+				],
+				args: [
+					{ name: "image", type: "string", required: true, variadic: false, choices: ["alpine"] },
+					{
+						name: "command",
+						type: "string",
+						required: false,
+						variadic: "passthrough",
+						choices: ["sh"],
 					},
 				],
 				subCommands: [],
@@ -451,8 +467,7 @@ describe("renderBash · behavioural · -- and --name=value", () => {
 						name: "extra",
 						type: "string",
 						required: false,
-						variadic: false,
-						afterDoubleDash: true,
+						variadic: "afterDoubleDash",
 						choices: ["fix"],
 					},
 				],
@@ -505,7 +520,7 @@ describe("renderBash · behavioural · -- and --name=value", () => {
 		expect(await complete(["mycli", "--", ""])).toEqual([]);
 	});
 
-	it("offers an afterDoubleDash argument only after `--`, and the others only before", async () => {
+	it('offers an "afterDoubleDash" argument only after `--`, and the others only before', async () => {
 		expect(await complete(["mycli", "run", ""])).toEqual(["lint"]);
 		expect(await complete(["mycli", "run", "lint", ""])).toEqual(["cli"]);
 		expect(await complete(["mycli", "run", "lint", "cli", "cli", ""])).toEqual(["cli"]);
@@ -514,11 +529,18 @@ describe("renderBash · behavioural · -- and --name=value", () => {
 		expect(await complete(["mycli", "run", "--", "--w"])).toEqual([]);
 		expect(await complete(["mycli", "exec", "web", ""])).toEqual([]);
 		expect(await complete(["mycli", "exec", "web", "--", ""])).toEqual(["ls"]);
-		// A single one takes one token; the rest reach rawArgs.
-		expect(await complete(["mycli", "exec", "web", "--", "ls", ""])).toEqual([]);
+		expect(await complete(["mycli", "exec", "web", "--", "ls", ""])).toEqual(["ls"]);
 	});
 
-	it("still offers subcommands before `--` when an afterDoubleDash argument is the only one", async () => {
+	it('offers no flags after the first positional of a command with a "passthrough" argument', async () => {
+		expect(await complete(["mycli", "docker", "--"])).toEqual(["--name", "--rm"]);
+		expect(await complete(["mycli", "docker", "--name", "x", ""])).toEqual(["alpine"]);
+		expect(await complete(["mycli", "docker", "alpine", "--"])).toEqual([]);
+		expect(await complete(["mycli", "docker", "alpine", ""])).toEqual(["sh"]);
+		expect(await complete(["mycli", "docker", "--rm", "alpine", "-x", ""])).toEqual(["sh"]);
+	});
+
+	it('still offers subcommands before `--` when an "afterDoubleDash" argument is the only one', async () => {
 		expect(await complete(["mycli", "wrap", ""])).toEqual(["child"]);
 		expect(await complete(["mycli", "wrap", "--", ""])).toEqual(["fix"]);
 	});

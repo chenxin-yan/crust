@@ -583,7 +583,7 @@ describe("Invocation pipeline — parseCommandArgv", () => {
 		vi.stubEnv("REGION", "eu");
 		const outcome = await app(
 			["app", "u", "delete"],
-			["u_1", "--force", "--tag", "a", "--trace", "--", "rest"],
+			["u_1", "--force", "--tag", "a", "--trace"],
 		).run(["preview"], {});
 
 		expect(outcome).toMatchObject({ status: "completed" });
@@ -593,7 +593,6 @@ describe("Invocation pipeline — parseCommandArgv", () => {
 				path: ["app", "users", "delete"],
 				args: { id: "u_1" },
 				flags: { force: true, region: "eu", tag: ["A"], trace: true },
-				rawArgs: ["rest"],
 			},
 		]);
 		// Only the preview invocation's own hooks and action ran; no sibling recipe was built.

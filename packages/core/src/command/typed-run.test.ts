@@ -17,7 +17,6 @@ interface StructuredRunCapture {
 		config: unknown;
 		offset: number | undefined;
 	};
-	rawArgs: string[];
 }
 describe("typed programmatic invocation", () => {
 	it("runs statically known Extension commands, aliases, flags, and typed results", async () => {
@@ -130,8 +129,8 @@ describe("typed programmatic invocation", () => {
 					config: { type: "json" },
 					offset: { type: "number" },
 				})
-				.action(({ args, flags, rawArgs }) => {
-					received = { args, flags, rawArgs };
+				.action(({ args, flags }) => {
+					received = { args, flags };
 				}),
 		);
 		const app = new Crust("git").add(remoteAdd).extend(
@@ -144,14 +143,12 @@ describe("typed programmatic invocation", () => {
 			app.run(["remote-add"], {
 				args: { name: "origin", count: 2, files: ["a.ts", "b.ts"] },
 				flags: { fetch: true, tag: ["one", "-two"], config: { force: true }, offset: -3 },
-				raw: ["--literal"],
 			}),
 		);
 
 		expect(received).toEqual({
 			args: { name: "origin", count: 2, files: ["a.ts", "b.ts"] },
 			flags: { fetch: true, tag: ["one", "-two"], config: { force: true }, offset: -3 },
-			rawArgs: ["--literal"],
 		});
 	});
 
@@ -238,7 +235,7 @@ describe("typed programmatic invocation", () => {
 	});
 });
 
-describe("afterDoubleDash arguments", () => {
+describe('variadic: "afterDoubleDash" arguments', () => {
 	function taskRunner() {
 		const received: unknown[] = [];
 		const binder = defineExtension(defineExtensionId("dd-binder"))
@@ -252,11 +249,11 @@ describe("afterDoubleDash arguments", () => {
 					.args(
 						{ name: "task", type: "string", required: true },
 						{ name: "pkgs", type: "string", variadic: true },
-						{ name: "extra", type: "string", variadic: true, afterDoubleDash: true },
+						{ name: "extra", type: "string", variadic: "afterDoubleDash" },
 					)
-					.action(({ args, rawArgs }) => {
+					.action(({ args }) => {
 						type _extra = Expect<Equal<typeof args.extra, string[]>>;
-						received.push({ args, rawArgs });
+						received.push(args);
 					}),
 			),
 		);
@@ -272,22 +269,20 @@ describe("afterDoubleDash arguments", () => {
 		);
 		expect(await app.execute({ argv: ["run", "--", "build"], io })).toBe(2);
 		expect(stderr.join("\n")).toContain('Missing required argument "<task>"');
-		expect(received).toEqual([
-			{ args: { task: "build", pkgs: ["core"], extra: ["--watch", "src"] }, rawArgs: [] },
-		]);
+		expect(received).toEqual([{ task: "build", pkgs: ["core"], extra: ["--watch", "src"] }]);
 	});
 
 	it("takes it by name from run() and bindInput, with earlier arguments omitted", async () => {
 		const { app, received } = taskRunner();
-		expect(
-			await app.run(["run"], { args: { task: "build", extra: ["--watch"] }, raw: ["x"] }),
-		).toMatchObject({ status: "completed" });
+		expect(await app.run(["run"], { args: { task: "build", extra: ["--watch"] } })).toMatchObject({
+			status: "completed",
+		});
 		expect(
 			await app.execute({ argv: ["run", "build", "--bind"], io: { stdout: { write() {} } } }),
 		).toBe(0);
 		expect(received).toEqual([
-			{ args: { task: "build", pkgs: [], extra: ["--watch"] }, rawArgs: ["x"] },
-			{ args: { task: "build", pkgs: [], extra: ["--bound"] }, rawArgs: [] },
+			{ task: "build", pkgs: [], extra: ["--watch"] },
+			{ task: "build", pkgs: [], extra: ["--bound"] },
 		]);
 	});
 });

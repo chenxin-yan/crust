@@ -31,11 +31,11 @@ The value of `--input` is one of:
 - `@path`, which reads the file at `path`: relative to the working directory, with a leading `~` as the home directory;
 - `-`, which reads all of stdin. Stdin that something else already read to the end reads as empty, which fails as invalid JSON. Stdin that another reader is consuming, such as the [MCP](/docs/modules/mcp) transport, fails with `--input: cannot read stdin (stdin is in use by another reader)`.
 
-It must be a JSON object keyed by the routed command's argument and flag names, plus `raw` for passthrough values received as `rawArgs`, like tokens after `--`. Flags an Extension declares, such as `--json` or `--help`, are not part of it; pass them on argv. This is the flat shape [`commandInputSchema()`](/docs/modules/core#tooling-subpath) describes and the [MCP](/docs/modules/mcp) server accepts. Variadic arguments and `multiple` flags take arrays, and `url` values take strings.
+It must be a JSON object keyed by the routed command's argument and flag names. Flags an Extension declares, such as `--json` or `--help`, are not part of it; pass them on argv. This is the flat shape [`commandInputSchema()`](/docs/modules/core#tooling-subpath) describes and the [MCP](/docs/modules/mcp) server accepts. Variadic arguments and `multiple` flags take arrays, and `url` values take strings.
 
 The object is bound with [`ctx.bindInput()`](/docs/api/types#extensioncontext), so values are converted and validated exactly as typed `run()` input:
 
-- Arguments and flags given on argv win over the same keys, even when equal to the default: `my-cli deploy staging --input @deploy.json` deploys `staging` whatever the file says. Overridden JSON values are dropped before conversion, so an invalid one does not fail; `raw` is overridden when argv has passthrough tokens after `--`.
+- Arguments and flags given on argv win over the same keys, even when equal to the default: `my-cli deploy staging --input @deploy.json` deploys `staging` whatever the file says. Overridden JSON values are dropped before conversion, so an invalid one does not fail.
 - Every other key replaces the environment value or default. Keys are replaced whole; objects are not merged.
 
 Under [`run()`](/docs/api/crust#runpath-input-options), pass the JSON text as the `input` flag, for example `{ args: { target: "dev" }, flags: { input: '{"target":"prod"}' } }`. Nothing came from argv, so its keys replace the typed input.

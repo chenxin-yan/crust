@@ -272,9 +272,21 @@ describe("rules TypeScript owns", () => {
 				),
 			() =>
 				new Crust("cli").args(
-					// @ts-expect-error -- afterDoubleDash must be last
-					{ name: "a", type: "string", afterDoubleDash: true },
+					// @ts-expect-error -- "afterDoubleDash" must be last
+					{ name: "a", type: "string", variadic: "afterDoubleDash" },
 					{ name: "b", type: "string" },
+				),
+			() =>
+				new Crust("cli").args(
+					// @ts-expect-error -- "passthrough" must be last
+					{ name: "a", type: "string", variadic: "passthrough" },
+					{ name: "b", type: "string" },
+				),
+			() =>
+				new Crust("cli").args(
+					// @ts-expect-error -- a required argument after an optional one
+					{ name: "a", type: "string" },
+					{ name: "b", type: "string", required: true },
 				),
 		];
 		for (const define of typeOnly) expect(await definitionReason(define)).toBeUndefined();

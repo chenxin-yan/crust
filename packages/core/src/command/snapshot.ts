@@ -8,6 +8,7 @@ import type {
 	DeclaredDefault,
 	FlagDef,
 	ValueType,
+	VariadicMode,
 } from "../types.ts";
 import { builtChildOf, builtChildrenOf, childMetaOf, type CommandNode } from "./node.ts";
 
@@ -42,10 +43,8 @@ export interface ArgSnapshot {
 	readonly description?: string;
 	/** `true` when parsing fails if the argument is missing. */
 	readonly required?: boolean;
-	/** `true` when the argument collects all remaining positionals into an array. */
-	readonly variadic?: boolean;
-	/** `true` when the argument takes only the tokens after `--` on the command line. */
-	readonly afterDoubleDash?: boolean;
+	/** How the argument collects its values into an array; see `ArgDef`'s `variadic`. */
+	readonly variadic?: VariadicMode;
 	/** Static enum of accepted values, e.g. `["json", "text"]`. */
 	readonly choices?: readonly string[];
 	/** Declared default value; `URL` defaults are serialized to their `href` string. */
@@ -206,7 +205,6 @@ function snapshotArg(def: ArgDef): ArgSnapshot {
 		description: def.description,
 		required: effectiveRequired(def),
 		variadic: def.variadic,
-		afterDoubleDash: def.afterDoubleDash,
 		choices: def.choices ? Object.freeze([...def.choices]) : undefined,
 		default: serializableDefault(def.default),
 		inputSchema: def.schema && standardJsonSchema(def.schema, "input"),

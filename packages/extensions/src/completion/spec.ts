@@ -25,6 +25,8 @@
  * the package entrypoint and may change across patch releases.
  */
 
+import type { VariadicMode } from "@crustjs/core";
+
 /** Fields shared by every named flag attached to a command. */
 interface CompletionFlagBase {
 	/**
@@ -81,17 +83,12 @@ interface CompletionArgBase {
 	/** `true` when the argument is required (per `ArgDef.required`). */
 	required: boolean;
 	/**
-	 * `true` when the argument collects all remaining positional values
-	 * (per `ArgDef.variadic`). Templates use this to keep offering value
-	 * candidates beyond the declared positional slot.
+	 * How the argument collects values (per `ArgDef.variadic`); `false` for one
+	 * value. Templates keep offering a variadic's candidates beyond its slot;
+	 * an `"afterDoubleDash"` one's only after `--`, and the other arguments' only
+	 * before; with a `"passthrough"` one, no flags after the first positional.
 	 */
-	variadic: boolean;
-	/**
-	 * `true` when the argument takes only the tokens after `--` (per
-	 * `ArgDef.afterDoubleDash`); only the last argument sets it. Templates
-	 * offer its values only after `--`, and the other arguments' only before.
-	 */
-	afterDoubleDash?: true;
+	variadic: VariadicMode | false;
 }
 
 /** Description of a single positional argument attached to a command. */

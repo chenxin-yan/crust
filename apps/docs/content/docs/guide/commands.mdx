@@ -173,6 +173,28 @@ $ echo $?
 
 If the parent's `.action()` declares arguments, matching subcommands still win, and other words become its [arguments](/docs/guide/arguments-and-flags#arguments). The action can still decline a word: `throw unknownCommand(command, name)` (from `@crustjs/core`, with the action's `command`) raises the same `COMMAND_NOT_FOUND` error Crust raises, so [`didYouMean()`](/docs/modules/extensions/did-you-mean) still suggests a subcommand.
 
+### Plugins and scripts
+
+To run an external program for a word that names no subcommand, as `git` runs `git-<name>` from `PATH` and `pnpm` runs a `package.json` script, give the root action a [`"passthrough"`](/docs/guide/arguments-and-flags#from-the-first-positional) argument:
+
+<include lang="ts" meta='title="src/cli.ts"'>
+  ../../../examples/guide/commands-plugins.ts
+</include>
+
+```sh
+$ tool deploy --prod -v
+# runs: tool-deploy --prod -v
+$ tool lint
+Error: Unknown command "lint".
+```
+
+- Real subcommands still win: `tool build` runs `build`.
+- Every word after the plugin's name reaches it as typed, flags included.
+- `exitCode(n)` passes the child's status on; see [exit status](/docs/guide/error-handling#exit-status). To stop a child spawned asynchronously when the run is cancelled, listen on the action's `signal` and pass `signal.reason.cause` (`"SIGINT"`, `"SIGTERM"`, or `"SIGPIPE"`) to `child.kill()`.
+- `unknownCommand()` declines a word nothing handles, so the error and suggestions match any other unknown command.
+
+[clig.dev](https://clig.dev/#future-proofing) advises against a catch-all subcommand: once any word runs something, you can't add a subcommand with that name without breaking someone's plugin or script. Prefer an explicit command, such as `tool run <script>`, unless a fallback is the point of your tool.
+
 ## User aliases
 
 To let users define their own shortcuts, such as `gh co 12` for `gh pr checkout 12`, expand them before Crust reads argv:

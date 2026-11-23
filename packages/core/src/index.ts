@@ -112,4 +112,5 @@ export type {
 	ValidatedInput,
 	ValueSource,
 	ValueType,
+	VariadicMode,
 } from "./types.ts";

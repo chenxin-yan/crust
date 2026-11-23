@@ -50,7 +50,7 @@ async function _runInputAcceptsUndefined() {
 	);
 	const app = new Crust("app").extend(nextSteps()).add(add);
 	await app.run(["add"], { args: { title: fromFlag }, flags: { count: maybeCount } });
-	await app.run(["add"], { args: undefined, flags: undefined, raw: undefined });
+	await app.run(["add"], { args: undefined, flags: undefined });
 	await app.at(["add"]).run({ args: { title: fromFlag } });
 
 	defineCommand("next", (c) =>

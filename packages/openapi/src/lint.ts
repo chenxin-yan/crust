@@ -1,5 +1,3 @@
-import { RAW_INPUT_PROPERTY } from "@crustjs/core/tooling";
-
 import type { OpenApiSpec } from "./api-command.ts";
 import { defaultGroup, defaultName, kebab } from "./names.ts";
 import {
@@ -84,7 +82,6 @@ export const PROBLEM_KINDS: Readonly<Record<Diagnostic["code"], "fix" | "skip" |
 	"unsupported-body-type": "skip",
 	"command-collision": "fix",
 	"flag-collision": "fix",
-	"reserved-input-name": "fix",
 	"unflaggable-name": "fix",
 	"unusable-name": "fix",
 	"positional-order": "fix",
@@ -336,13 +333,7 @@ export function planCommands(input: LintInput): {
 		}
 
 		for (const { kind, name, source } of inputs) {
-			if (name === RAW_INPUT_PROPERTY) {
-				report(
-					"reserved-input-name",
-					`${label}: ${source} would be the input "${name}", which holds passthrough values`,
-					"Set `flagName` for it in the operation's override",
-				);
-			} else if (kind === "flag" && UNFLAGGABLE.test(name)) {
+			if (kind === "flag" && UNFLAGGABLE.test(name)) {
 				report(
 					"unflaggable-name",
 					`${label}: ${source} would be the flag "${name}", which core rejects`,

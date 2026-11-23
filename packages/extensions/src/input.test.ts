@@ -23,10 +23,10 @@ function deployApp() {
 			tags: { type: "string", multiple: true },
 			origin: { type: "url" },
 		})
-		.action(({ args, flags, rawArgs, stdout }) => {
+		.action(({ args, flags, stdout }) => {
 			const { target } = args;
 			const { region, force, tags, origin } = flags;
-			const result = { target, region, force, tags, origin: origin?.href, rawArgs };
+			const result = { target, region, force, tags, origin: origin?.href };
 			stdout(JSON.stringify(result));
 			return result;
 		});
@@ -61,14 +61,13 @@ describe("input", () => {
 		for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 	});
 
-	it("binds args, flags, and raw passthrough from inline JSON", async () => {
+	it("binds args and flags from inline JSON", async () => {
 		const payload = JSON.stringify({
 			target: "prod",
 			region: "eu",
 			force: true,
 			tags: ["a", "b"],
 			origin: "https://example.com/",
-			raw: ["--dry"],
 		});
 
 		const { stdout, exitCode } = await captureExecute(deployApp(), ["--input", payload]);
@@ -80,7 +79,6 @@ describe("input", () => {
 			force: true,
 			tags: ["a", "b"],
 			origin: "https://example.com/",
-			rawArgs: ["--dry"],
 		});
 	});
 
@@ -113,12 +111,12 @@ describe("input", () => {
 			"--input",
 			'{"origin":"not a url"}',
 		]);
-		const raw = await captureExecute(deployApp(), ["prod", "--input", '{"raw":"x"}', "--", "a"]);
+		const target = await captureExecute(deployApp(), ["--input", '{"target":1}', "--", "prod"]);
 
 		expect(origin.exitCode).toBe(0);
 		expect(JSON.parse(origin.stdout)).toMatchObject({ origin: "https://example.com/" });
-		expect(raw.exitCode).toBe(0);
-		expect(JSON.parse(raw.stdout)).toMatchObject({ target: "prod", rawArgs: ["a"] });
+		expect(target.exitCode).toBe(0);
+		expect(JSON.parse(target.stdout)).toMatchObject({ target: "prod" });
 	});
 
 	it("passes an object to a json flag's schema, which validates it", async () => {
@@ -234,24 +232,14 @@ describe("input", () => {
 			.args({ name: "target", type: "string", default: "arg-default" })
 			.flags({ target: { type: "string", default: "flag-default" } })
 			.action(({ args, flags }) => `${args.target} ${flags.target}`);
-		const raw = new Crust("app")
-			.extend(input())
-			.flags({ raw: { type: "boolean" } })
-			.action(({ rawArgs }) => rawArgs);
 
-		const outcomes = [
-			await shared.run([], { flags: { input: "{}" } }),
-			await raw.run([], { flags: { input: "{}" } }),
-		];
-		for (const outcome of outcomes) {
-			expect(outcome).toMatchObject({
-				status: "failed",
-				error: {
-					code: "PARSE",
-					message: expect.stringMatching(/^--input: Command "app" declares/),
-				},
-			});
-		}
+		expect(await shared.run([], { flags: { input: "{}" } })).toMatchObject({
+			status: "failed",
+			error: {
+				code: "PARSE",
+				message: expect.stringMatching(/^--input: Command "app" declares/),
+			},
+		});
 		expect(await shared.run([], {})).toMatchObject({
 			status: "completed",
 			result: "arg-default flag-default",

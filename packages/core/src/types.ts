@@ -189,6 +189,16 @@ type ResolveUnparsedType<F> = F extends {
 // ArgDef — Positional argument definition (discriminated by `type`)
 // ────────────────────────────────────────────────────────────────────────────
 
+/**
+ * How a list argument collects its values; see {@link ArgDefBase.variadic}.
+ *
+ * - `true` — the remaining positional values
+ * - `"afterDoubleDash"` — only the words after `--` (`npm run`, `cargo run`)
+ * - `"passthrough"` — every word from the command's first positional on, kept as typed
+ *   (`docker run`, `pnpm run`)
+ */
+export type VariadicMode = true | "afterDoubleDash" | "passthrough";
+
 /** Shared fields present on every positional argument definition */
 interface ArgDefBase {
 	/** The argument name (used as the key in the parsed result and in help text) */
@@ -204,28 +214,26 @@ interface ArgDefBase {
 	/** Not supported with core value options — see {@link SchemaArgDef} */
 	schema?: never;
 	/**
-	 * When `true`, collects all remaining positional values into an array.
-	 * Only the last argument may be variadic, or the one before a final
-	 * `afterDoubleDash` argument.
+	 * Collects values into an array, in one of three modes:
 	 *
+	 * - `true`: the remaining positional values. Words after `--` are never read
+	 *   as flags but fill arguments like any others. Last, or directly before a
+	 *   final `"afterDoubleDash"` argument.
+	 * - `"afterDoubleDash"`: only the words after `--` (like clap's `Arg::last`):
+	 *   `run <task> [pkgs...] -- <extra...>`. Earlier arguments then fill only from
+	 *   words before `--`. Last.
+	 * - `"passthrough"`: the command reads flags only before its first positional;
+	 *   from there on every word is kept as typed, a later `--` included, and the
+	 *   words this argument's predecessors do not take are its values:
+	 *   `run [options] <image> [command...]`. A `--` before the first positional
+	 *   still ends flags. Last.
+	 *
+	 * Typed `run()` and command input supply every mode by name, as an array.
 	 * The validated output is always an array, never `undefined`.
 	 * Required core variadics without defaults infer `[T, ...T[]]` after
 	 * required validation; other core variadics infer `T[]`.
 	 */
-	variadic?: true;
-	/**
-	 * When `true`, the argument takes only the tokens after `--` on the command
-	 * line (like clap's `Arg::last`): `run <task> [pkgs...] -- <extra...>`.
-	 * Only the last declared argument may set it; it may be variadic, and the
-	 * argument before it may be variadic too. Earlier arguments then fill only
-	 * from tokens before `--`, and tokens after `--` that this argument does not
-	 * take reach `rawArgs`. Typed `run()` and command input supply it by name
-	 * like any argument.
-	 *
-	 * Without it, tokens after `--` are never read as flags but still fill the
-	 * declared arguments left empty, in order.
-	 */
-	afterDoubleDash?: true;
+	variadic?: VariadicMode;
 }
 
 /** A positional argument whose value is a string */
@@ -324,10 +332,8 @@ interface SchemaArgDef {
 	name: string;
 	/** Human-readable description for help text */
 	description?: string;
-	/** When `true`, collects all remaining raw tokens into a `string[]` for the schema */
-	variadic?: true;
-	/** When `true`, takes only the tokens after `--`; see `ArgDef`'s `afterDoubleDash` */
-	afterDoubleDash?: true;
+	/** Collects tokens into a `string[]` for the schema; see `ArgDef`'s `variadic` */
+	variadic?: VariadicMode;
 	/** Standard Schema that owns coercion, defaults, requiredness, and validation */
 	schema: StandardSchema;
 	type?: never;
@@ -340,8 +346,8 @@ interface SchemaArgDef {
 /**
  * Defines a single positional argument for a CLI command.
  *
- * Discriminated by `type` for type-safe `default` values. Boolean toggle
- * fields (`required`, `variadic`, `afterDoubleDash`) only accept `true`.
+ * Discriminated by `type` for type-safe `default` values. `required` only
+ * accepts `true`; `variadic` takes a {@link VariadicMode}.
  *
  * @example
  * ```ts
@@ -588,14 +594,14 @@ export type InferArgValue<A extends ArgDef> = A extends {
 	schema: infer S extends StandardSchema;
 }
 	? InferOutput<S>
-	: A extends { variadic: true }
+	: A extends { variadic: VariadicMode }
 		? A extends { required: true; default?: never }
 			? [ResolveBaseType<A>, ...ResolveBaseType<A>[]]
 			: ResolveBaseType<A>[]
 		: | ("variadic" extends keyof A
-					? true extends A["variadic"]
-						? ResolveBaseType<A>[]
-						: never
+					? [Extract<A["variadic"], VariadicMode>] extends [never]
+						? never
+						: ResolveBaseType<A>[]
 					: never)
 			| (A extends { required: true }
 					? ResolveBaseType<A>
@@ -707,7 +713,6 @@ export type RunInputValue = URL | JsonValue | readonly RunInputValue[];
 export interface RunInputPayload {
 	readonly args?: Readonly<Record<string, RunInputValue | undefined>> | undefined;
 	readonly flags?: Readonly<Record<string, RunInputValue | undefined>> | undefined;
-	readonly raw?: readonly string[] | undefined;
 }
 
 // Conditional definitions cannot certify supplied values; inspect before distribution.
@@ -746,14 +751,14 @@ type InputBaseValue<D> = true extends IsUnion<D> | IsUnion<D[keyof D & "type"]>
 // Resolve the shared input kind before occurrence handling distributes definition unions.
 type InputArgValue<D extends ArgDef, Value = InputBaseValue<D>> = [Value] extends [never]
 	? never
-	: D extends { variadic: true }
+	: D extends { variadic: VariadicMode }
 		? RequiredArgNames<[D]> extends never
 			? Value[]
 			: [Value, ...Value[]]
 		: "variadic" extends keyof D
-			? true extends D["variadic"]
-				? never
-				: Value
+			? [Extract<D["variadic"], VariadicMode>] extends [never]
+				? Value
+				: never
 			: Value;
 type InputFlagValue<D, Value = InputBaseValue<D>> = [Value] extends [never]
 	? never
@@ -794,10 +799,10 @@ type InputArgsPrefixes<
 		>
 	: Prefixes | Simplify<Supplied>;
 
-// An `afterDoubleDash` argument is given after `--` on argv, so it never follows the others' prefix.
+// An `"afterDoubleDash"` argument is given after `--` on argv, so it never follows the others' prefix.
 type InputArgsSplit<A extends ArgsDef> = A extends readonly [
 	...infer Init extends ArgsDef,
-	infer Last extends ArgDef & { afterDoubleDash: true },
+	infer Last extends ArgDef & { variadic: "afterDoubleDash" },
 ]
 	? InputArgsPrefixes<Init> extends infer Prefix
 		? Prefix extends unknown
@@ -813,7 +818,7 @@ type InputArgsSplit<A extends ArgsDef> = A extends readonly [
 
 /**
  * Supplied positional values form a prefix; defaults do not fill input gaps. A final
- * `afterDoubleDash` argument is independent of that prefix.
+ * `variadic: "afterDoubleDash"` argument is independent of that prefix.
  */
 export type InputArgs<A extends ArgsDef> = number extends A["length"]
 	? never
@@ -973,10 +978,10 @@ type RawFlagValue<D extends FlagDef> = D extends { schema: StandardSchema }
 
 /** Positional counterpart of {@link RawFlagValue}. */
 export type RawArgValue<D extends ArgDef> = D extends { schema: StandardSchema }
-	? D extends { variadic: true }
+	? D extends { variadic: VariadicMode }
 		? string[]
 		: string | undefined
-	: D extends { variadic: true }
+	: D extends { variadic: VariadicMode }
 		? ResolveBaseType<D>[] | undefined
 		: InferArgValue<D> | undefined;
 
@@ -1002,10 +1007,8 @@ export type DeclaredDefault = (ArgDef | FlagDef)["default"];
 export interface ParseResult<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef> {
 	args: RawParsedArgs<A>;
 	flags: RawParsedFlags<F>;
-	/** Positionals before `--` that were not consumed by a declared argument. */
+	/** Positional words no declared argument took, before or after `--`; validation rejects them. */
 	excessArgs: string[];
-	/** From argv, the tokens after `--` that no declared argument consumed; from structured `run()` input, its `raw` values. */
-	rawArgs: string[];
 }
 
 /** Fully validated input returned by the schema boundary. */

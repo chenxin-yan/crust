@@ -110,23 +110,22 @@ An installed command name uses letters, digits, `.`, `_`, and `-`, and starts wi
 
 ### Command input as JSON
 
-`commandInputSchema(command, path)` describes a command's input as one flat JSON object: every arg and flag by name, plus `raw` for the passthrough values the action receives as `rawArgs`. Flags an Extension declares (`--help`, `--json`, `--input`, …, marked by `extension` in their [`FlagSnapshot`](/docs/api/types#flagsnapshot)) configure the invocation, not the command, so they are left out; Context-owned flags such as `confirm()`'s `--yes` stay.
+`commandInputSchema(command, path)` describes a command's input as one flat JSON object: every arg and flag by name. Flags an Extension declares (`--help`, `--json`, `--input`, …, marked by `extension` in their [`FlagSnapshot`](/docs/api/types#flagsnapshot)) configure the invocation, not the command, so they are left out; Context-owned flags such as `confirm()`'s `--yes` stay.
 
-It throws, naming `path`, when an arg and a flag share a name or a definition is named `raw`.
+It throws, naming `path`, when an arg and a flag share a name.
 
-| Definition                     | Schema                                                                                                              |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| `type: "string"` / `"path"`    | `{ type: "string" }`                                                                                                |
-| `type: "number"` / `"boolean"` | `{ type: "number" }` / `{ type: "boolean" }`                                                                        |
-| `type: "url"`                  | `{ type: "string", format: "uri" }`; the string becomes a `URL` before `run()`                                      |
-| `type: "json"`                 | `{}` (any JSON)                                                                                                     |
-| `choices`                      | `{ type: "string", enum }`                                                                                          |
-| `variadic` / `multiple`        | `{ type: "array", items }`                                                                                          |
-| `required` without `default`   | listed in `required`, unless the flag has an `env` binding                                                          |
-| flag `env`                     | The description ends with `(falls back to $NAME)`, or is `Falls back to $NAME`                                      |
-| Standard Schema                | Its input JSON Schema when `run()` accepts that shape; otherwise the declared token type (`string` for schema args) |
-| custom `parse`                 | The declared token type; the command validates and transforms when it runs                                          |
-| every command                  | `raw: { type: "array", items: { type: "string" } }`, delivered to the action as `rawArgs`                           |
+| Definition                         | Schema                                                                                                              |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `type: "string"` / `"path"`        | `{ type: "string" }`                                                                                                |
+| `type: "number"` / `"boolean"`     | `{ type: "number" }` / `{ type: "boolean" }`                                                                        |
+| `type: "url"`                      | `{ type: "string", format: "uri" }`; the string becomes a `URL` before `run()`                                      |
+| `type: "json"`                     | `{}` (any JSON)                                                                                                     |
+| `choices`                          | `{ type: "string", enum }`                                                                                          |
+| `variadic` (any mode) / `multiple` | `{ type: "array", items }`                                                                                          |
+| `required` without `default`       | listed in `required`, unless the flag has an `env` binding                                                          |
+| flag `env`                         | The description ends with `(falls back to $NAME)`, or is `Falls back to $NAME`                                      |
+| Standard Schema                    | Its input JSON Schema when `run()` accepts that shape; otherwise the declared token type (`string` for schema args) |
+| custom `parse`                     | The declared token type; the command validates and transforms when it runs                                          |
 
 Standard Schema definitions:
 

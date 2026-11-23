@@ -52,11 +52,10 @@ const fixture = new Crust("fixture", { description: "Fixture", version: "1.2.3" 
 					origin: { type: "url" },
 					tag: { type: "string", multiple: true },
 				})
-				.action(({ args, flags, rawArgs }) => ({
+				.action(({ args, flags }) => ({
 					word: args.word.repeat(flags.times),
 					origin: flags.origin?.href,
 					tags: flags.tag,
-					rawArgs,
 				})),
 		),
 	)
@@ -113,7 +112,7 @@ describe("createMcpServer", () => {
 		});
 	});
 
-	it("runs typed input, converting url fields and passing raw through", async () => {
+	it("runs typed input, converting url fields", async () => {
 		const client = await connect(fixture);
 		const result = await client.callTool({
 			name: "echo",
@@ -122,14 +121,12 @@ describe("createMcpServer", () => {
 				times: 2,
 				origin: "https://example.com/x",
 				tag: ["one", "two"],
-				raw: ["--dry-run"],
 			},
 		});
 		const expected = {
 			word: "abab",
 			origin: "https://example.com/x",
 			tags: ["one", "two"],
-			rawArgs: ["--dry-run"],
 		};
 		expect(result.isError).toBeUndefined();
 		expect(result.structuredContent).toEqual(expected);
@@ -164,14 +161,13 @@ describe("createMcpServer", () => {
 		const client = await connect(fixture);
 		const result = await client.callTool({
 			name: "echo",
-			arguments: { word: "ab", times: -0, origin: "https://example.com/", tag: ["t"], raw: [] },
+			arguments: { word: "ab", times: -0, origin: "https://example.com/", tag: ["t"] },
 		});
 		expect(result.isError).toBeUndefined();
 		expect(result.structuredContent).toEqual({
 			word: "",
 			origin: "https://example.com/",
 			tags: ["t"],
-			rawArgs: [],
 		});
 	});
 
@@ -210,10 +206,11 @@ describe("createMcpServer", () => {
 				},
 			],
 		});
-		const badRaw = await client.callTool({ name: "echo", arguments: { word: "x", raw: "nope" } });
-		expect(badRaw).toMatchObject({
+		// No `raw` input: words for another program are an argument the command declares.
+		const raw = await client.callTool({ name: "echo", arguments: { word: "x", raw: ["-x"] } });
+		expect(raw).toMatchObject({
 			isError: true,
-			content: [{ type: "text", text: 'PARSE: Expected an array of strings for "raw"' }],
+			content: [{ type: "text", text: 'PARSE: Unknown flag "--raw"' }],
 		});
 	});
 
@@ -331,7 +328,6 @@ describe("createMcpServer", () => {
 			"hasOwnProperty",
 			"constructor",
 			"toString",
-			"raw",
 		]);
 		expect(tools[0]!.inputSchema.required).toEqual(["hasOwnProperty"]);
 		const result = await client.callTool({
@@ -438,7 +434,7 @@ describe("createMcpServer", () => {
 			structuredContent: { id: 1 },
 		};
 		const [tool] = (await client.listTools()).tools;
-		expect(Object.keys(tool!.inputSchema.properties ?? {})).toEqual(["raw"]);
+		expect(Object.keys(tool!.inputSchema.properties ?? {})).toEqual([]);
 		expect(await client.callTool({ name: "users" })).toEqual(expected);
 		expect(await client.callTool({ name: "users", arguments: { json: true } })).toEqual({
 			content: [
@@ -604,7 +600,7 @@ describe('discovery: "progressive"', () => {
 		const direct = await connect(fixture);
 		const client = await connect(fixture, progressive);
 		for (const [name, args] of [
-			["echo", { word: "ab", times: 2, origin: "https://example.com/", raw: ["-x"] }],
+			["echo", { word: "ab", times: 2, origin: "https://example.com/" }],
 			["echo", {}],
 			["fail", undefined],
 			["print", undefined],

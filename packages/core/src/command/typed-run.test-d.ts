@@ -412,7 +412,7 @@ function _typecheckRejectsUnknownInputKeysHeldInVariables(cond: boolean) {
 	// @ts-expect-error -- the same input through a handle
 	void handle.run(unknownKey);
 
-	const valid = { args: { entry: "a" }, flags: { minify: true }, raw: ["--"] };
+	const valid = { args: { entry: "a" }, flags: { minify: true } };
 	void app.run(["build"], valid);
 	void handle.run(valid, { stdout: () => {} });
 
@@ -432,10 +432,8 @@ function _typecheckOmitsUndefinedInputSections() {
 		.command("build", (command) => command.flags({ minify: { type: "boolean" } }))
 		.command("bare", (command) => command);
 	type Shape = (typeof app)["_types"]["shape"];
-	type _build = Expect<
-		Equal<keyof RunInput<CommandShapeAt<Shape, readonly ["build"]>>, "flags" | "raw">
-	>;
-	type _bare = Expect<Equal<keyof RunInput<CommandShapeAt<Shape, readonly ["bare"]>>, "raw">>;
+	type _build = Expect<Equal<keyof RunInput<CommandShapeAt<Shape, readonly ["build"]>>, "flags">>;
+	type _bare = Expect<Equal<keyof RunInput<CommandShapeAt<Shape, readonly ["bare"]>>, never>>;
 
 	// @ts-expect-error -- no args section
 	void app.run(["build"], { args: {} });
@@ -446,6 +444,7 @@ function _typecheckOmitsUndefinedInputSections() {
 	void app.at(["build"]).run(withArgs);
 	// @ts-expect-error -- no flags section
 	void app.run(["bare"], { flags: { minify: true } });
+	// @ts-expect-error -- no raw section: words after `--` are arguments
 	void app.run(["bare"], { raw: ["--"] });
 }
 

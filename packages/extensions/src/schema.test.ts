@@ -86,11 +86,6 @@ describe("schema", () => {
 						items: { type: "string" },
 						description: "Falls back to $DEPLOY_TAG",
 					},
-					raw: {
-						type: "array",
-						items: { type: "string" },
-						description: "Passthrough values, received as `rawArgs`; they never fill arguments",
-					},
 				},
 				required: ["target"],
 			},
@@ -106,7 +101,6 @@ describe("schema", () => {
 				type: "object",
 				properties: {
 					url: { type: "string", format: "uri" },
-					raw: expect.any(Object),
 				},
 				required: ["url"],
 			},
@@ -118,7 +112,7 @@ describe("schema", () => {
 
 		expect(Object.keys(JSON.parse(stdout))).toEqual(["input"]);
 		// Extension flags such as --help and --llms are no command input.
-		expect(Object.keys(JSON.parse(stdout).input.properties)).toEqual(["raw"]);
+		expect(Object.keys(JSON.parse(stdout).input.properties)).toEqual([]);
 	});
 
 	it("prints a json flag's schema input JSON Schema as its property", async () => {
@@ -265,7 +259,7 @@ describe("schema", () => {
 		expect(stdout).not.toContain("Secret");
 	});
 
-	it("--llms places an afterDoubleDash argument after --", async () => {
+	it('--llms places an "afterDoubleDash" argument after --', async () => {
 		const app = new Crust("mono")
 			.extend(schema())
 			.add(
@@ -273,7 +267,7 @@ describe("schema", () => {
 					cmd
 						.args(
 							{ name: "task", type: "string", required: true },
-							{ name: "extra", type: "string", variadic: true, afterDoubleDash: true },
+							{ name: "extra", type: "string", variadic: "afterDoubleDash" },
 						)
 						.action(() => {}),
 				),

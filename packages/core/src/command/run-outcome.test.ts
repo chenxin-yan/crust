@@ -269,20 +269,19 @@ it("ignores enumerable symbol properties without reading them", async () => {
 	expect(read).toBe(false);
 });
 
-it("accepts args, flags and raw sections and treats undefined unknown keys as omitted", async () => {
+it("accepts args and flags sections and treats undefined unknown keys as omitted", async () => {
 	const app = new Crust("app")
 		.args({ name: "file", type: "string", required: true })
 		.flags({ mode: { type: "string", required: true } })
-		.action(({ args, flags, rawArgs }) => ({ args, flags, rawArgs }));
+		.action(({ args, flags }) => ({ args, flags }));
 	const input = {
 		args: { file: "file.txt", unknown: undefined },
 		flags: { mode: "safe", unknown: undefined },
-		raw: ["--literal"],
 		unknown: undefined,
 	};
 	expect(await app.run([], input)).toEqual({
 		status: "completed",
-		result: { args: { file: "file.txt" }, flags: { mode: "safe" }, rawArgs: ["--literal"] },
+		result: { args: { file: "file.txt" }, flags: { mode: "safe" } },
 		exitCode: 0,
 		stdout: "",
 		stderr: "",

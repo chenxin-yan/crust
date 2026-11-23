@@ -37,17 +37,31 @@ const args = [
 
 A core variadic value is always an array. A required core variadic without a default resolves to a nonempty tuple; an omitted variadic with a scalar `default` resolves to `[default]`. `parse` runs once per element.
 
-`afterDoubleDash: true` makes the last argument take only the tokens after `--` on the command line, like clap's `Arg::last`; the other arguments then fill only from tokens before `--`, and leftover tokens after it reach `rawArgs`. It may be variadic, and so may the argument before it. Its value type is unchanged, and typed `run()` input supplies it by name. Setting it on any other argument is a TypeScript error (`FIX_AFTER_DOUBLE_DASH_POSITION`); nothing checks it at runtime. See [Only after `--`](/docs/guide/arguments-and-flags#only-after---).
+`variadic` is a `VariadicMode`, which says which words the argument collects:
+
+| Value               | Collects                                                                                                         |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `true`              | The remaining positional values, including words after `--`                                                      |
+| `"afterDoubleDash"` | Only the words after `--`, like clap's `Arg::last`; the other arguments fill only from words before `--`         |
+| `"passthrough"`     | Every word from the command's first positional on, as typed; the command reads flags only before that positional |
 
 ```ts
 const args = [
   { name: "task", type: "string", required: true },
   { name: "packages", type: "string", variadic: true },
-  { name: "extra", type: "string", variadic: true, afterDoubleDash: true },
+  { name: "extra", type: "string", variadic: "afterDoubleDash" },
 ] as const satisfies ArgsDef;
 ```
 
-A schema-backed argument has `name`, optional `description`, `variadic`, and `afterDoubleDash`, and a Standard Schema that receives `string | undefined` (or `string[]` when variadic). The schema owns coercion, defaults, requiredness, choices, and validation, so `type`, `required`, `default`, `choices`, and `parse` are unavailable. Its output type reaches the Command Action. TypeScript rejects a schema whose input type cannot accept a present value (`z.number()` instead of `z.coerce.number()`).
+TypeScript checks the order of an argument list, across `.args()` calls; nothing checks it at runtime:
+
+- An `"afterDoubleDash"` or `"passthrough"` argument is last (`FIX_LAST_ARGUMENT_POSITION`).
+- A `variadic: true` argument is last, or directly before a final `"afterDoubleDash"` argument (`FIX_VARIADIC_POSITION`).
+- No required argument follows an optional one (`FIX_REQUIRED_AFTER_OPTIONAL`), except an `"afterDoubleDash"` argument, which follows `--` instead. An argument with a `default` is optional, and so is a schema-backed one whose schema accepts `undefined`.
+
+Every mode is supplied by name, as an array, in typed `run()` input, `--input`, and MCP. A word no argument takes, before or after `--`, is a usage error. See [Wrapper commands](/docs/guide/arguments-and-flags#wrapper-commands).
+
+A schema-backed argument has `name`, optional `description` and `variadic`, and a Standard Schema that receives `string | undefined` (or `string[]` when variadic). The schema owns coercion, defaults, requiredness, choices, and validation, so `type`, `required`, `default`, `choices`, and `parse` are unavailable. Its output type reaches the Command Action. TypeScript rejects a schema whose input type cannot accept a present value (`z.number()` instead of `z.coerce.number()`).
 
 ```ts
 const args = [{ name: "port", schema: z.coerce.number().int().min(1) }] as const satisfies ArgsDef;
@@ -165,7 +179,7 @@ Declared in [`command/typed-run.ts`](https://github.com/chenxin-yan/crust/blob/m
 | `CommandTree`                        | Compile-time command tree accumulated by `.add()` and `.command()`                                |
 | `CommandPath<Tree>`                  | Every valid path through the tree, including the root path `[]`                                   |
 | `CommandShape` / `CommandShapeAt`    | Argument, flag, subtree, result, and event types of the command a path selects                    |
-| `RunInput<Shape>`                    | Structured `args` / `flags` / `raw` input; omits sections the shape lacks                         |
+| `RunInput<Shape>`                    | Structured `args` / `flags` input; omits sections the shape lacks                                 |
 | `InputArgs` / `InputFlags`           | Pre-parse input value types used by `RunInput`                                                    |
 | `RunInputArguments` / `RunArguments` | Argument tuples that make `input` optional when nothing is required                               |
 | `CommandHandle<Shape>`               | Path-bound invoker returned by `at()`: a readonly `path` and `run()`                              |
@@ -197,7 +211,7 @@ See the [source declaration](https://github.com/chenxin-yan/crust/blob/main/pack
 
 ### Parser boundary types
 
-For parser integrations and tooling. `ParseResult<A, F>` is the syntax-parsed input before required-value and schema validation: `excessArgs` holds positionals before `--` that no declared argument consumed, and `rawArgs` holds tokens after `--` that no declared argument consumed. `ParsedArgValue` and `ParsedFlagValue` are its erased value types. `ValidatedInput<A, F>` is the validated input passed to Command Actions.
+For parser integrations and tooling. `ParseResult<A, F>` is the syntax-parsed input before required-value and schema validation: `excessArgs` holds the positional words, before or after `--`, that no declared argument took; validation rejects them. `ParsedArgValue` and `ParsedFlagValue` are its erased value types. `ValidatedInput<A, F>` is the validated input passed to Command Actions.
 
 ## Invocation I/O
 
@@ -374,17 +388,17 @@ Returns where a [command definition](/docs/api/crust#definecommandname-config-re
 
 #### `parseCommandArgv(path, argv)`
 
-Parses `argv` for the command at `path` as an invocation of that command would, and resolves to a `ParsedCommandArgv`: the command's canonical `path` and the `args`, `flags`, and `rawArgs` its Command Action would receive. `path` has the form of `commandPath`, starting with the root's name; an alias routes as it does on the command line.
+Parses `argv` for the command at `path` as an invocation of that command would, and resolves to a `ParsedCommandArgv`: the command's canonical `path` and the `args` and `flags` its Command Action would receive. `path` has the form of `commandPath`, starting with the root's name; an alias routes as it does on the command line.
 
 - Values come from argv, then environment fallbacks and defaults; required values and Standard Schemas are checked, and schemas transform values, as before an action.
 - Only the commands on the path are built. No Extension hook, Context setup, or Command Action runs, so values other Extensions bind in their hooks, such as [`input()`](/docs/modules/extensions/input)'s `--input`, are not applied.
 - It rejects with `COMMAND_NOT_FOUND` for a name the path does not have, `PARSE` for a path that does not start at the root, and the `PARSE` or `VALIDATION` error the command's own invocation would fail with.
 
-#### `bindInput({ args, flags, raw })`
+#### `bindInput({ args, flags })`
 
 Binds structured input from `setup` or `preRun`, with the conversion typed `run()` uses.
 
-- Keys given explicitly on argv are kept, and their supplied values are never converted. A flag counts as given whenever it appears on argv (including `--no-<name>`, a value equal to its default, or `--tags ""`); a positional argument when argv supplied it; `raw` when argv has passthrough tokens after `--`.
+- Keys given explicitly on argv are kept, and their supplied values are never converted. A flag counts as given whenever it appears on argv (including `--no-<name>`, a value equal to its default, or `--tags ""`), and a positional argument when argv supplied it.
 - Supplied values replace environment values (including an invalid one) and defaults. Values that are not replaced are kept as bound, without re-running defaults or `parse`.
 - Positional arguments follow typed `run()` order: kept argv or `run()` positionals count as supplied, and bound input cannot skip one.
 - Each call re-binds against the original input, so the last call wins. Bound values are visible to every later hook; binding in `setup` lets each `preRun` see them whatever the `.extend()` order.
@@ -398,14 +412,13 @@ Reports where each current value came from as a [`ValueSource`](#valuesource), k
 | Source    | Meaning                                                                                                                                             |
 | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `argv`    | Given on argv. An alias or `--no-<name>` reports the canonical name; a flag counts as given by the `bindInput` rule above, so `--tags ""` is `argv` |
-| `run`     | Typed `run()` input. An empty array for a variadic argument, a `multiple` flag, or `raw` gives no value, as on argv                                 |
+| `run`     | Typed `run()` input. An empty array for a variadic argument or a `multiple` flag gives no value, as on argv                                         |
 | `env`     | The flag's `env` variable                                                                                                                           |
 | `bound`   | Supplied by `bindInput`                                                                                                                             |
 | `default` | The definition's default                                                                                                                            |
 
-- `raw` is `argv` when passthrough tokens are left after `--`, `run` when typed `run()` supplied `raw`, `bound` when `bindInput` did, and otherwise `undefined`.
 - It reads live: after `bindInput`, the keys it supplied report `bound`; keys a later call no longer supplies report their original source again.
-- In `onError` after a routing or argv syntax failure, it is `{ args: {}, flags: {}, raw: undefined }`.
+- In `onError` after a routing or argv syntax failure, it is `{ args: {}, flags: {} }`.
 - Use it to drop the keys argv gave before converting structured input yourself, so an invalid overridden value never fails.
 
 ### `ValueSource`

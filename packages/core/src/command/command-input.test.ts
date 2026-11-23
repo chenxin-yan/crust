@@ -5,12 +5,7 @@ import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
-import {
-	commandInputFields,
-	commandInputSchema,
-	parseCommandInput,
-	RAW_INPUT_PROPERTY,
-} from "./command-input.ts";
+import { commandInputFields, commandInputSchema, parseCommandInput } from "./command-input.ts";
 import { Crust, defineCommand } from "./crust.ts";
 
 const noop = () => {};
@@ -34,7 +29,8 @@ const send = defineCommand("send", (c) =>
 		.args(
 			{ name: "target", type: "string", required: true, description: "Where" },
 			{ name: "level", type: "string", choices: ["low", "high"], default: "low" },
-			{ name: "files", type: "path", variadic: true },
+			// Every variadic mode is an array of its values.
+			{ name: "files", type: "path", variadic: "passthrough" },
 		)
 		.flags({
 			count: { type: "number", required: true, default: 1 },
@@ -84,11 +80,6 @@ describe("commandInputSchema", () => {
 				payload: { description: "Any JSON" },
 				port: { type: "string" },
 				mode: { type: "string" },
-				[RAW_INPUT_PROPERTY]: {
-					type: "array",
-					items: { type: "string" },
-					description: "Passthrough values, received as `rawArgs`; they never fill arguments",
-				},
 			},
 			required: ["target"],
 		});
@@ -318,7 +309,7 @@ describe("commandInputSchema", () => {
 		const go = await extendedSnapshot();
 		expect(go.flags.input?.extension).toBe(presentation);
 		expect(go.flags.yes?.extension).toBeUndefined();
-		expect(Object.keys(commandInputSchema(go, ["go"]).properties)).toEqual(["yes", "raw"]);
+		expect(Object.keys(commandInputSchema(go, ["go"]).properties)).toEqual(["yes"]);
 	});
 
 	it("leaves env-backed flags optional and names the variable", async () => {
@@ -345,7 +336,7 @@ describe("commandInputSchema", () => {
 		expect(schema.required).toEqual(["scope"]);
 	});
 
-	it("rejects an arg and flag sharing a name, or a definition named raw, naming the path", async () => {
+	it("rejects an arg and flag sharing a name, naming the path", async () => {
 		const snapshot = await new Crust("cli")
 			.add(
 				defineCommand("x", (c) =>
@@ -358,11 +349,10 @@ describe("commandInputSchema", () => {
 			.flags({ raw: { type: "string" } })
 			.snapshot();
 		expect(() => commandInputSchema(snapshot.subCommands.x!, ["x"])).toThrow(
-			'Command "x" declares "name" more than once across args, flags, and "raw"; command input is one flat object',
+			'Command "x" declares "name" more than once across args and flags; command input is one flat object',
 		);
-		expect(() => commandInputSchema(snapshot, [])).toThrow(
-			'Command "<root>" declares "raw" more than once across args, flags, and "raw"; command input is one flat object',
-		);
+		// `raw` is an ordinary name.
+		expect(commandInputSchema(snapshot, []).properties).toEqual({ raw: { type: "string" } });
 	});
 });
 
@@ -379,7 +369,7 @@ describe("commandInputFields", () => {
 });
 
 describe("parseCommandInput", () => {
-	it("splits flat input into args and flags, building URLs and passing raw through", async () => {
+	it("splits flat input into args and flags, building URLs", async () => {
 		const input = parseCommandInput(await sendSnapshot(), {
 			target: "prod",
 			files: ["a", "b"],
@@ -388,7 +378,6 @@ describe("parseCommandInput", () => {
 			home: "https://home.example/",
 			payload: { nested: [1, null] },
 			skipped: undefined,
-			[RAW_INPUT_PROPERTY]: ["--dry-run"],
 		});
 		expect(input).toEqual({
 			args: { target: "prod", files: ["a", "b"] },
@@ -398,13 +387,12 @@ describe("parseCommandInput", () => {
 				home: new URL("https://home.example/"),
 				payload: { nested: [1, null] },
 			},
-			raw: ["--dry-run"],
 		});
 		expect(Object.getPrototypeOf(input.args)).toBeNull();
 		expect(Object.getPrototypeOf(input.flags)).toBeNull();
 	});
 
-	it("leaves unknown names to run() validation and omits raw when absent", async () => {
+	it("leaves unknown names to run() validation", async () => {
 		expect(parseCommandInput(await sendSnapshot(), { unknown: 1 })).toEqual({
 			args: {},
 			flags: { unknown: 1 },
@@ -431,14 +419,9 @@ describe("parseCommandInput", () => {
 		}
 	});
 
-	it("binds args and raw that share an Extension flag's name", async () => {
+	it("binds args that share an Extension flag's name", async () => {
 		const app = new Crust("cli")
-			.extend(
-				defineExtension(presentation).flags({
-					input: { type: "string" },
-					[RAW_INPUT_PROPERTY]: { type: "boolean" },
-				}),
-			)
+			.extend(defineExtension(presentation).flags({ input: { type: "string" } }))
 			.add(
 				defineCommand("echo", (c) =>
 					c.args({ name: "input", type: "string", required: true }).action(noop),
@@ -446,10 +429,9 @@ describe("parseCommandInput", () => {
 			);
 		const echo = (await app.snapshot()).subCommands.echo!;
 		expect(commandInputSchema(echo, ["echo"]).required).toEqual(["input"]);
-		expect(parseCommandInput(echo, { input: "hello", [RAW_INPUT_PROPERTY]: ["x"] })).toEqual({
+		expect(parseCommandInput(echo, { input: "hello" })).toEqual({
 			args: { input: "hello" },
 			flags: {},
-			raw: ["x"],
 		});
 	});
 
@@ -467,11 +449,6 @@ describe("parseCommandInput", () => {
 	it.each([
 		["a non-JSON value", { target: new Date(0) }, 'Expected a JSON value for "target"'],
 		["a non-finite number", { count: Number.NaN }, 'Expected a JSON value for "count"'],
-		[
-			"raw that is not a string array",
-			{ raw: ["ok", 1] },
-			'Expected an array of strings for "raw"',
-		],
 	])("rejects %s with PARSE", async (_label, values, message) => {
 		const snapshot = await sendSnapshot();
 		expect(() => parseCommandInput(snapshot, values)).toThrow(new CrustError("PARSE", message));

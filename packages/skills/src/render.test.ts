@@ -210,12 +210,12 @@ describe("renderSkill", () => {
 			expect(copy?.content).toContain("| `extras...` | string | No | Extra files |");
 		});
 
-		it("prefixes an afterDoubleDash argument with --", async () => {
+		it('prefixes an "afterDoubleDash" argument with --', async () => {
 			const cmd = makeCommand({
 				meta: { name: "run" },
 				args: [
 					{ name: "task", type: "string", required: true },
-					{ name: "extra", type: "string", variadic: true, afterDoubleDash: true },
+					{ name: "extra", type: "string", variadic: "afterDoubleDash" },
 				] as ArgDef[],
 				run() {},
 			});

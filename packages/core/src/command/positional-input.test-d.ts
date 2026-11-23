@@ -42,7 +42,7 @@ function _positionalPrefixes() {
 
 function _requiredTrailingPosition() {
 	const app = new Crust("required").args(
-		{ name: "first", type: "string" },
+		{ name: "first", type: "string", required: true },
 		{ name: "last", type: "string", required: true },
 	);
 	void app.run([], { args: { first: "a", last: "b" } });
@@ -126,7 +126,7 @@ function _afterDoubleDash() {
 	const app = new Crust("run").args(
 		{ name: "task", type: "string" },
 		{ name: "pkgs", type: "string", variadic: true },
-		{ name: "extra", type: "string", variadic: true, afterDoubleDash: true },
+		{ name: "extra", type: "string", variadic: "afterDoubleDash" },
 	);
 	type Args = InputArgs<(typeof app)["_types"]["args"]>;
 	// argv gives it after `--`, so it does not need the arguments before it
@@ -140,9 +140,24 @@ function _afterDoubleDash() {
 
 	const required = new Crust("exec").args(
 		{ name: "pod", type: "string" },
-		{ name: "command", type: "string", required: true, afterDoubleDash: true },
+		{ name: "command", type: "string", required: true, variadic: "afterDoubleDash" },
 	);
-	void required.run([], { args: { command: "ls" } });
-	// @ts-expect-error -- a required afterDoubleDash argument is still required
+	void required.run([], { args: { command: ["ls"] } });
+	// @ts-expect-error -- a required one takes at least one word
+	void required.run([], { args: { command: [] } });
+	// @ts-expect-error -- a required "afterDoubleDash" argument is still required
 	void required.run([], { args: { pod: "web" } });
+}
+
+function _passthrough() {
+	const app = new Crust("docker-run").args(
+		{ name: "image", type: "string", required: true },
+		{ name: "command", type: "string", variadic: "passthrough" },
+	);
+	type Args = InputArgs<(typeof app)["_types"]["args"]>;
+	const full: Args = { image: "alpine", command: ["ls", "-la"] };
+	// @ts-expect-error -- argv fills the arguments before it first, so they form a prefix
+	const gap: Args = { command: ["ls"] };
+	type _value = Expect<Equal<InferArgValue<(typeof app)["_types"]["args"][1]>, string[]>>;
+	void [full, gap];
 }

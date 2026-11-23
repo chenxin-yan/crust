@@ -41,7 +41,7 @@ function stepArgv(
 ): string[] {
 	let command = root;
 	for (const name of names) command = command.subCommands[name]!;
-	const { args = {}, flags = {}, raw = [] } = input ?? {};
+	const { args = {}, flags = {} } = input ?? {};
 
 	const options: string[] = [];
 	for (const [name, value] of Object.entries(flags)) {
@@ -80,24 +80,21 @@ function stepArgv(
 	for (const arg of command.args) {
 		// hasOwn: an argument named `constructor` or `__proto__` must not read Object.prototype.
 		const value = Object.hasOwn(args, arg.name) ? args[arg.name] : undefined;
+		const afterSeparator = arg.variadic === "afterDoubleDash";
 		if (value === undefined) {
-			if (!arg.afterDoubleDash) omitted ??= arg.name;
+			if (!afterSeparator) omitted ??= arg.name;
 			continue;
 		}
-		// An `afterDoubleDash` argument reads only tokens after `--`, so earlier omissions don't shift it.
-		if (omitted !== undefined && !arg.afterDoubleDash)
+		// An `"afterDoubleDash"` argument reads only tokens after `--`, so earlier omissions don't shift it.
+		if (omitted !== undefined && !afterSeparator)
 			throw new Error(`argument "${arg.name}" follows omitted "${omitted}"`);
-		(arg.afterDoubleDash ? afterDoubleDash : positionals).push(
+		(afterSeparator ? afterDoubleDash : positionals).push(
 			...(arg.variadic && Array.isArray(value) ? value : [value]).map((item) =>
 				argvValue(item, arg.type, `argument "${arg.name}"`),
 			),
 		);
 	}
-	if (last?.afterDoubleDash) {
-		// Tokens after `--` fill the `afterDoubleDash` argument before they reach `rawArgs`.
-		if (raw.length > 0 && (last.variadic || afterDoubleDash.length === 0)) {
-			throw new Error(`raw tokens would fill argument "${last.name}"`);
-		}
+	if (last?.variadic === "afterDoubleDash") {
 		// `--` belongs to that argument, so the ones before it have no escape from flag and subcommand parsing.
 		for (const [index, token] of positionals.entries()) {
 			if (token.startsWith("-") && token !== "-") {
@@ -107,20 +104,20 @@ function stepArgv(
 				throw new Error(`argument value ${JSON.stringify(token)} names a subcommand`);
 			}
 		}
-		const after = [...afterDoubleDash, ...raw];
-		return [...names, ...options, ...positionals, ...(after.length > 0 ? ["--", ...after] : [])];
-	}
-	// Tokens after `--` fill unfilled positional arguments before they reach `rawArgs`.
-	if (raw.length > 0 && (omitted !== undefined || last?.variadic)) {
-		throw new Error("raw tokens would fill a positional argument");
+		return [
+			...names,
+			...options,
+			...positionals,
+			...(afterDoubleDash.length > 0 ? ["--", ...afterDoubleDash] : []),
+		];
 	}
 	// After `--` a positional is never read as a flag, nor routed as a subcommand name or alias.
+	// With a `"passthrough"` argument it also keeps every later word, a `--` included, as typed.
 	const separator =
-		raw.length > 0 ||
-		(positionals.length > 0 &&
-			(Object.keys(command.subCommands).length > 0 ||
-				positionals.some((token) => token.startsWith("-"))));
-	return [...names, ...options, ...(separator ? ["--"] : []), ...positionals, ...raw];
+		positionals.length > 0 &&
+		(Object.keys(command.subCommands).length > 0 ||
+			positionals.some((token) => token.startsWith("-")));
+	return [...names, ...options, ...(separator ? ["--"] : []), ...positionals];
 }
 
 /**

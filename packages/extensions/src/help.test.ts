@@ -116,19 +116,13 @@ describe("help", () => {
 		expect(lines).toContain("  -f, --force, --no-force      Force it");
 	});
 
-	it("renderHelp shows an afterDoubleDash argument after -- and [options]", async () => {
+	it('renderHelp shows an "afterDoubleDash" argument after -- and [options]', async () => {
 		const command = new Crust("run")
 			.flags({ watch: { type: "boolean", description: "Watch" } })
 			.args(
 				{ name: "task", type: "string", required: true },
 				{ name: "pkgs", type: "string", variadic: true },
-				{
-					name: "extra",
-					type: "string",
-					variadic: true,
-					afterDoubleDash: true,
-					description: "Extra",
-				},
+				{ name: "extra", type: "string", variadic: "afterDoubleDash", description: "Extra" },
 			);
 
 		const lines = stripAnsi(await renderHelp(await command.snapshot())).split("\n");

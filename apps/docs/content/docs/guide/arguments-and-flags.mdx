@@ -39,6 +39,8 @@ Positional values fill definitions in order. Each definition is one of:
 | `default: value` | The default                  | `string`              |
 | Neither          | `undefined`                  | `string \| undefined` |
 
+A required argument can't follow an optional one, since the optional one could then never be left out. TypeScript rejects that list.
+
 See [`ArgDef`](/docs/api/types#argdef) for every option.
 
 ### Variadic arguments
@@ -67,22 +69,30 @@ Error: Invalid value for <runtime>. Expected one of: bun, node
 
 `choices` types the value as their string union (plus `undefined` here, since the argument is neither required nor defaulted). Any other value fails before the action runs.
 
-### Pass through raw tokens
-
-<include lang="ts">../../../examples/guide/arguments-raw.ts</include>
+### Words after `--`
 
 ```sh
-$ wrap -- --watch src
---watch src
+$ convert -- -report.md yaml
+-report.md -> yaml
+$ convert -- report.md yaml draft extra
+Error: Unexpected positional argument: "extra"
 ```
 
-Tokens after `--` are never parsed as flags. Use them for wrapper commands that pass options to another tool:
-
-- They first fill declared positional arguments that are still empty: `wrap [target] -- --watch src` binds `target` to `--watch`.
-- A variadic argument takes all of them.
-- The rest reach the Command Action as `rawArgs`.
+Words after `--` are never read as flags. They fill arguments like any other positional values, so `--` passes a value that starts with `-`. A word no argument takes is a usage error (exit code `2`), before or after `--`.
 
 This follows the POSIX utility syntax guidelines ([Guideline 10](https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap12.html#tag_12_02)): tokens after `--` are operands, like the positionals before it. getopt, Node.js `util.parseArgs`, Commander, and clap behave the same way by default.
+
+### Wrapper commands
+
+A command that hands words to another program declares a list argument for them. `variadic` says which words it collects:
+
+| `variadic`          | Collects                                          | Like                                                         |
+| ------------------- | ------------------------------------------------- | ------------------------------------------------------------ |
+| `true`              | The remaining positional values                   | `cp <files...>`                                              |
+| `"afterDoubleDash"` | Only the words after `--`                         | `npm run <script> -- <args...>`, `kubectl exec <pod> -- ...` |
+| `"passthrough"`     | Every word from the first positional on, as typed | `docker run <image> <command...>`, `pnpm run <script> ...`   |
+
+Each value is an array in the action. A command picks at most one of the last two, as every tool does: either the other program's words follow `--`, or they start at the first positional.
 
 #### Only after `--`
 
@@ -95,14 +105,35 @@ $ run build core cli -- --watch
 build in core, cli: --watch
 ```
 
-`afterDoubleDash: true` makes an argument take only the tokens after `--`, like clap's [`Arg::last`](https://docs.rs/clap/latest/clap/struct.Arg.html#method.last). Use it when the arguments before `--` and the ones after it belong to different consumers, as in `run <task> [packages...] -- <args...>`:
+`variadic: "afterDoubleDash"` makes an argument take only the words after `--`, like clap's [`Arg::last`](https://docs.rs/clap/latest/clap/struct.Arg.html#method.last). Use it when the arguments before `--` and the ones after it belong to different consumers, as in `run <task> [packages...] -- <args...>`:
 
-- Only the last argument can set it. It can be variadic, and the argument before it can be variadic too.
-- The other arguments fill only from tokens before `--`, so a variadic before it stops at `--`.
-- Without variadic, it takes one token; the remaining tokens after `--` reach `rawArgs`.
+- It must be the last argument. A `variadic: true` argument may come right before it.
+- The other arguments fill only from words before `--`, so a variadic before it stops at `--`.
 - If it is required and missing, the error says to pass it after `--`.
 - Help shows it after `[options]` as `[-- <extra>...]` (`run <task> [packages...] [options] [-- <extra>...]`), or `-- <extra>...` when required. Shell completion offers its values only after `--`.
-- [`run()`](/docs/api/crust#runpath-input-options), `--input`, and MCP supply it by name like any other argument.
+- [`run()`](/docs/api/crust#runpath-input-options), `--input`, and MCP supply it by name, as an array.
+
+#### From the first positional
+
+<include lang="ts" meta="twoslash">
+  ../../../examples/guide/arguments-passthrough.ts
+</include>
+
+```sh
+$ run --rm alpine ls -la --color
+alpine (--rm): ls -la --color
+$ run alpine sh -c 'echo $HOME' --rm
+alpine: sh -c echo $HOME --rm
+```
+
+`variadic: "passthrough"` hands the other program its words as the user typed them, with no `--`:
+
+- The command reads its flags only before its first positional. From there on every word is kept, flags and a later `--` included, so `--rm` after `alpine` belongs to the wrapped command, and so does `--help`. A `--` before the first positional still ends flags.
+- It must be the last argument. The arguments before it take the first positional values; it takes the rest.
+- Help shows `[options]` before every argument: `run [options] <image> [command...]`. Shell completion offers no flags after the first positional.
+- [`run()`](/docs/api/crust#runpath-input-options), `--input`, and MCP supply it by name, as an array.
+
+To fall back to plugins or scripts for words that name no subcommand, give the root action a `"passthrough"` argument; see [Unknown commands](/docs/guide/commands#unknown-commands).
 
 {/* TODO: remove once https://github.com/oven-sh/bun/issues/13984 ships; see the matching TODO in packages/core/src/command/invocation.ts. */}
 
@@ -257,7 +288,7 @@ $ serve --tag -nightly
 Error: Missing value for flag "--tag"; to pass a value starting with "-", write --tag=<value>
 ```
 
-Attach a dash-leading flag value with `=`. For a positional argument, pass it after `--`, as in `seek -- -5`: POSIX treats every token after `--` as an operand, even one that starts with `-`; see [raw tokens](#pass-through-raw-tokens). Arguments before an [`afterDoubleDash`](#only-after---) argument read nothing after `--`, so give them such values through a flag instead.
+Attach a dash-leading flag value with `=`. For a positional argument, pass it after `--`, as in `seek -- -5`: POSIX treats every token after `--` as an operand, even one that starts with `-`; see [Words after `--`](#words-after---). Arguments before a [`variadic: "afterDoubleDash"`](#only-after---) argument read nothing after `--`, so give them such values through a flag instead.
 
 ### Reuse across commands
 

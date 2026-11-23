@@ -70,8 +70,7 @@ const targetArg = {
 const argvArg = {
 	name: "argv",
 	type: "string",
-	variadic: true,
-	afterDoubleDash: true,
+	variadic: "afterDoubleDash",
 	description: "The generated command's arguments and flags, after --",
 } as const;
 

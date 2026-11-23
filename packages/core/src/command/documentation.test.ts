@@ -69,29 +69,43 @@ describe("buildCommandDocumentation", () => {
 		expect(model.flags).toMatchObject([{ name: "region", required: false }]);
 	});
 
-	it("renders an afterDoubleDash arg after -- and [options], like clap's last", async () => {
+	it('renders an "afterDoubleDash" arg after -- and [options], like clap\'s last', async () => {
 		const run = await docs(
 			new Crust("run")
 				.flags({ watch: { type: "boolean" } })
 				.args(
 					{ name: "task", type: "string", required: true },
 					{ name: "pkgs", type: "string", variadic: true },
-					{ name: "extra", type: "string", variadic: true, afterDoubleDash: true },
+					{ name: "extra", type: "string", variadic: "afterDoubleDash" },
 				)
 				.action(() => {}),
 		);
 		expect(run.usage).toBe("run <task> [pkgs...] [options] [-- <extra>...]");
-		expect(run.args.map((arg) => [arg.token, arg.afterDoubleDash])).toEqual([
+		expect(run.args.map((arg) => [arg.token, arg.variadic])).toEqual([
 			["<task>", false],
-			["[pkgs...]", false],
-			["[-- <extra>...]", true],
+			["[pkgs...]", true],
+			["[-- <extra>...]", "afterDoubleDash"],
 		]);
 		const exec = await docs(
 			new Crust("exec")
-				.args({ name: "command", type: "string", required: true, afterDoubleDash: true })
+				.args({ name: "command", type: "string", required: true, variadic: "afterDoubleDash" })
 				.action(() => {}),
 		);
-		expect(exec.usage).toBe("exec -- <command>");
+		expect(exec.usage).toBe("exec -- <command>...");
+	});
+
+	it('puts [options] before every arg of a command with a "passthrough" arg', async () => {
+		const run = await docs(
+			new Crust("run")
+				.flags({ rm: { type: "boolean" } })
+				.args(
+					{ name: "image", type: "string", required: true },
+					{ name: "command", type: "string", variadic: "passthrough" },
+				)
+				.action(() => {}),
+		);
+		expect(run.usage).toBe("run [options] <image> [command...]");
+		expect(run.args.map((arg) => arg.variadic)).toEqual([false, "passthrough"]);
 	});
 
 	it("uses explicit usage unchanged", async () => {
