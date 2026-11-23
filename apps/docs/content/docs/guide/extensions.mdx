@@ -71,7 +71,7 @@ Return a chain on the supplied Extension to keep its id. See [`ExtensionBuilder`
 
 ## Owned flags and commands
 
-The preview flag above is available on every command, so no command may declare its own `--preview`. Set `recursive: false` on a flag definition to make it root-only; then only the root's flags must avoid its spellings.
+The preview flag above is available on every command, so no command may declare its own `--preview`. Set `recursive: false` on a flag definition to make it root-only; then only the root's flags must avoid its spellings, and a subcommand that reuses one must take a value only if the root's flag does.
 
 Extension flags configure the invocation, not the command, so [`--input`](/docs/modules/extensions/input) JSON, `schema`, and [MCP](/docs/modules/mcp#tools) tool inputs leave them out. For a flag agents should set, own it through a [provided Context](#dependency-injection) instead.
 
@@ -107,14 +107,14 @@ setup → handle → preRun → validation → action → postRun
   ../../../examples/guide/extensions-hooks.ts
 </include>
 
-| Hook        | Runs                                                                                 | Use it for                                                                                   |
-| ----------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| `setup`     | Every invocation, in `.extend()` order, before any handler                           | Process settings such as color or log level                                                  |
-| `.handle()` | When its flag is passed; ends the invocation as `handled`                            | Flags that take over, like `--help`                                                          |
-| `noAction`  | The command has no action and no handler took over, after validation; ends `handled` | Fallbacks such as help for a command group                                                   |
-| `preRun`    | Only when the action will run, in `.extend()` order, before validation               | Login checks, deprecation warnings                                                           |
-| `postRun`   | After every invocation that reached hooks, in reverse order                          | Reporting the outcome                                                                        |
-| `onError`   | `execute()` failures, in `.extend()` order                                           | Custom error output; see [Error handling](/docs/guide/error-handling#customize-error-output) |
+| Hook        | Runs                                                                                                                | Use it for                                                                                   |
+| ----------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `setup`     | Every invocation, in `.extend()` order, before any handler                                                          | Process settings such as color or log level                                                  |
+| `.handle()` | When its flag is passed; ends the invocation as `handled`                                                           | Flags that take over, like `--help`                                                          |
+| `noAction`  | The command has no action and no handler took over, after validation (skipped for a group run bare); ends `handled` | Fallbacks such as help for a command group                                                   |
+| `preRun`    | Only when the action will run, in `.extend()` order, before validation                                              | Login checks, deprecation warnings                                                           |
+| `postRun`   | After every invocation that reached hooks, in reverse order                                                         | Reporting the outcome                                                                        |
+| `onError`   | `execute()` failures, in `.extend()` order                                                                          | Custom error output; see [Error handling](/docs/guide/error-handling#customize-error-output) |
 
 - **`setup`:** every setup runs, so setups must not depend on each other. Register cleanup with `ctx.defer()`, as in a Context's setup. It runs after `postRun` hooks, in reverse order together with Context cleanup, including after a failure.
 - **`preRun`:** never runs for `--help`, `--version`, or `noAction`. Throw to fail the invocation; `preRun` can't end it successfully.

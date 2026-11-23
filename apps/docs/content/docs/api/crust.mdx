@@ -234,7 +234,7 @@ const whoami = new Crust("whoami")
 - Called before `.action()`, TypeScript requires the action to return the schema's input type, or a promise of it; an async generator action must `return` it. Called after `.action()`, TypeScript checks the action's inferred awaited return against the schema's input.
 - After the action resolves, Crust validates its result; the schema's awaited output becomes the `result`, typed in `run()`.
 - A rejected result fails the invocation with an [`OUTPUT`](/docs/api/errors#outputerrordetails) error, exit `1` under `execute()`.
-- A command without an action passes `undefined` to the schema, whose output becomes the result. A `handled` invocation (a flag handler or `noAction` took over) has no result to validate.
+- A command without an action and without subcommands passes `undefined` to the schema, whose output becomes the result. A `handled` invocation (a flag handler or `noAction` took over) has no result to validate.
 - A later `.output()` replaces the schema. Without `.output()`, results are not validated.
 - The command's [`CommandSnapshot`](/docs/api/types#commandsnapshot) has `output: true` and, when the schema can produce one, its output JSON Schema in `outputSchema` (see [`standardJsonSchema()`](/docs/modules/core#tooling-subpath)).
 
@@ -362,7 +362,7 @@ Ctrl-C (`SIGINT`) and `SIGTERM` (sent by `docker stop`, Kubernetes, systemd, `ti
 2. Route the command path, materializing pending commands as needed.
 3. Parse argv (`execute()`) or bind structured input (`run()`).
 4. Run Extension `setup` hooks in registration order, then choose the [renderer](/docs/guide/extensions#renderers) for action and Context output.
-5. If the user passed a flag with an Extension handler, run the selected handler (eager handlers first, then the flag given first) and end the invocation with a `handled` outcome. Otherwise, if the routed command has no Command Action, run steps 7 and 8, then the application's `noAction` hook, if any, and end it the same way. Without a `noAction` hook, a command with subcommands fails with `Missing command. Available: …` (`VALIDATION`).
+5. If the user passed a flag with an Extension handler, run the selected handler (eager handlers first, then the flag given first) and end the invocation with a `handled` outcome. Otherwise, if the routed command has no Command Action, run steps 7 and 8 (skipped for a command with subcommands when `execute()` got nothing after its path), then the application's `noAction` hook, if any, and end it the same way. Without a `noAction` hook, a command with subcommands fails with `Missing command. Available: …` (`VALIDATION`).
 6. Run Extension `preRun` hooks in registration order. They run only before a Command Action.
 7. Check required values and positional structure.
 8. Apply Standard Schemas and aggregate their issues.

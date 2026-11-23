@@ -265,6 +265,7 @@ describe("resolveCommand — known-flag skipping", () => {
 		const root = makeNode({ meta: "app", subCommands: { mid } });
 		for (const argv of [
 			["--force", "mid", "leaf"],
+			["--force=1", "mid", "leaf"],
 			["mid", "-f", "leaf"],
 		]) {
 			expect(() => resolveCommand(root, argv)).toThrow(
@@ -277,9 +278,29 @@ describe("resolveCommand — known-flag skipping", () => {
 				}),
 			);
 		}
-		// Nobody knows it: the parser reports the plain error, as after the name.
-		const result = resolveCommand(root, ["--bogus", "mid", "leaf"]);
-		expect(result.commandPath).toEqual(["app"]);
+		// Nobody knows it, or the subcommand word follows `--`: the parser reports the plain error.
+		for (const argv of [
+			["--bogus", "mid", "leaf"],
+			["--force", "--", "mid", "leaf"],
+		]) {
+			expect(resolveCommand(root, argv).commandPath).toEqual(["app"]);
+		}
+	});
+
+	it("does not hint past a word the action's arguments take", () => {
+		const ls = makeNode({
+			meta: "ls",
+			flags: { long: { type: "boolean", short: "l", description: "long" } },
+			run() {},
+		});
+		const root = makeNode({
+			meta: "app",
+			args: [{ name: "file", type: "string" }],
+			subCommands: { ls },
+			run() {},
+		});
+		// `app notes.txt ls` runs the root action, so `ls -l` would not have run either.
+		expect(resolveCommand(root, ["-l", "notes.txt", "ls"]).commandPath).toEqual(["app"]);
 	});
 });
 

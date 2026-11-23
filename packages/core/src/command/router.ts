@@ -137,11 +137,25 @@ function subcommandKnowing(
 	for (const word of rest) {
 		if (word === "--") return undefined;
 		const child = findChild(node.subCommands, word);
-		// Not a subcommand: a positional or a flag's value.
-		if (!child) continue;
+		if (!child) {
+			// Routing would hand this word to the action's arguments, so no later subcommand runs.
+			if (!word.startsWith("-") && node.run && node.args.length > 0) return undefined;
+			// Otherwise a flag, a flag's value, or a word routing rejects anyway.
+			continue;
+		}
 		path.push(child.canonicalName);
 		node = child.node;
-		if (!(matchFlagToken(node.flagSpellings, token) instanceof CrustError)) return path;
+		const match = matchFlagToken(node.flagSpellings, token);
+		// `--force=1` on a boolean `--force` is still a flag this subcommand knows.
+		if (
+			!(
+				match instanceof CrustError &&
+				match.is("PARSE") &&
+				match.details?.reason === "unknown-flag"
+			)
+		) {
+			return path;
+		}
 	}
 	return undefined;
 }

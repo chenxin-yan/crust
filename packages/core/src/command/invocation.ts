@@ -611,7 +611,7 @@ export function buildExtensionTree(
 		path: string,
 		isRoot: boolean,
 		contributor?: ExtensionId,
-		ancestorFlagShapes: FlagShapes = new Map(),
+		ancestorFlagShapes?: FlagShapes,
 	): CommandNode => {
 		// Extension providers are application-wide, so an extended Extension's Contexts reach every command.
 		for (const id of source.usedExtensions) {
@@ -692,7 +692,7 @@ export function buildExtensionTree(
 				...demandedFactories(prepared.demands),
 				...hookContexts,
 			]);
-			flagShapes = checkReusedFlagShapes(prepared, path, ancestorFlagShapes);
+			flagShapes = checkReusedFlagShapes(prepared, path, ancestorFlagShapes ?? new Map());
 		}
 		applyNodeContextSections(prepared, path, sectionContextsFor(prepared, isRoot));
 		freezeNode(prepared);
@@ -1062,8 +1062,11 @@ async function dispatch(
 				await handler.run(extensionContext);
 				outcome = { status: "handled", by: handler.by };
 			} else if (!resolvedNode.run && (prepared.noAction || isGroup)) {
-				// A command without an action checks its input as one with an action does.
-				await validate();
+				// A command without an action checks its input as one with an action does. A group typed
+				// bare shows help or names its commands, as cobra does, even when a required value is
+				// missing; typed `run()` input is code, whose required values TypeScript enforces.
+				const bareGroup = isGroup && "argv" in input && route.argv.length === 0;
+				if (!bareGroup) await validate();
 				if (!prepared.noAction) throw missingCommand(resolvedNode);
 				await prepared.noAction.run(extensionContext);
 				outcome = { status: "handled", by: prepared.noAction.by };

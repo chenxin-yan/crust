@@ -2475,9 +2475,12 @@ describe("Crust .execute()", () => {
 		});
 	});
 
-	it("checks a group's input and names its commands when no noAction shows help", async () => {
+	it("names a bare group's commands without noAction, even with a required flag unset, and checks typed input", async () => {
 		const app = new Crust("app")
-			.flags({ level: { type: "string", choices: ["debug", "info"] } })
+			.flags({
+				level: { type: "string", choices: ["debug", "info"] },
+				token: { type: "string", required: true },
+			})
 			.command("db", (db) => db.command("migrate", (m) => m.action(() => {})))
 			.command("hidden", { hidden: true }, (c) => c.action(() => {}));
 
@@ -2486,9 +2489,14 @@ describe("Crust .execute()", () => {
 		expect(stderrChunks.join("\n")).toContain("Missing command. Available: db");
 
 		stderrChunks.length = 0;
-		await app.execute({ argv: ["--level", "bogus"] });
+		await app.execute({ argv: ["--token", "t", "--level", "bogus"] });
 		expect(process.exitCode).toBe(2);
 		expect(stderrChunks.join("\n")).toContain("--level");
+
+		stderrChunks.length = 0;
+		await app.execute({ argv: ["--level", "info"] });
+		expect(process.exitCode).toBe(2);
+		expect(stderrChunks.join("\n")).toContain('Missing required flag "--token"');
 
 		stderrChunks.length = 0;
 		await app.execute({ argv: ["db"] });
