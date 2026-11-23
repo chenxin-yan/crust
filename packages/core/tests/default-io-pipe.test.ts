@@ -302,6 +302,32 @@ process.exitCode = 0;
 			});
 		});
 
+		it(`exits after the action stops reading stdin that stays open (${runtime})`, async () => {
+			const source = `${importCore("dist/index.js")}await new Crust("head")
+	.action(async ({ stdin, stdout }) => {
+		for await (const chunk of stdin.stream()) {
+			stdout.write(chunk);
+			break;
+		}
+	})
+	.execute({ argv: [] });
+`;
+			const proc = spawn(runtime, ["--input-type=module", "--eval", source], {
+				stdio: ["pipe", "pipe", "inherit"],
+				timeout: 5_000,
+			});
+			const stdout = text(proc.stdout);
+			proc.stdin.write("a\n");
+			// stdin stays open: the process must exit on its own once the action returns.
+			const [code, signal] = await once(proc, "close");
+			proc.stdin.destroy();
+			expect({ stdout: await stdout, code, signal }).toEqual({
+				stdout: "a\n",
+				code: 0,
+				signal: null,
+			});
+		});
+
 		it.runIf(fdWriter)(
 			`stops waiting on stdin at Ctrl-C and dies by SIGINT (${runtime})`,
 			async () => {

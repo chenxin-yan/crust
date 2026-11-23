@@ -50,7 +50,7 @@ export interface InvocationIO {
 /** An output stream an `execute()` caller passes instead of the process's. A Node.js writable stream fits. */
 export interface OutputSink {
 	/** Receives each write as it was made: `stdout(text)` arrives as one chunk, `text` and a newline. */
-	write(chunk: string | Uint8Array): void;
+	readonly write: (chunk: string | Uint8Array) => void;
 	/** Read on each `isTTY` access; absent means no terminal. */
 	readonly isTTY?: boolean | undefined;
 	/** Read on each `columns` access. */
@@ -108,10 +108,11 @@ export interface ExecuteOptions {
 	/**
 	 * Streams that replace the process's, such as in in-process tests; each one omitted stays the
 	 * process's. `stdin` takes any async iterable of text or bytes, such as a Node.js readable
-	 * stream; its `isTTY` answers `stdin.isTTY`. On macOS and Linux, the process's stdout and
-	 * stderr are written synchronously to file descriptor 1 or 2, so patching
-	 * `process.stdout.write` does not capture them. Windows writes through `process.stdout` /
-	 * `process.stderr`.
+	 * stream; its `isTTY` answers `stdin.isTTY`. Setting any of them, `stdin` alone included, runs
+	 * the invocation in process: a cancelling signal only sets the exit code and never re-raises.
+	 * On macOS and Linux, the process's stdout and stderr are written synchronously to file
+	 * descriptor 1 or 2, so patching `process.stdout.write` does not capture them. Windows writes
+	 * through `process.stdout` / `process.stderr`.
 	 */
 	io?: {
 		stdin?: AsyncIterable<string | Uint8Array> & { readonly isTTY?: boolean | undefined };

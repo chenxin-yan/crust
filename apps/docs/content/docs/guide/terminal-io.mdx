@@ -38,7 +38,7 @@ Write data on stdout and messages for people on stderr, so `app | jq` and `app >
 
 - Both readers stop when the invocation is cancelled, such as by Ctrl+C while waiting for input, and throw the cancellation.
 - Each read continues where the last one stopped. Stopping a `for await` loop early leaves the rest of the input for the next read.
-- A read throws while another reader consumes the process's stdin, such as the [`mcp`](/docs/modules/mcp) stdio server, whose protocol messages arrive there.
+- A read throws while another reader consumes stdin: an earlier read that has not finished, such as a `stdin.text()` inside a `for await` loop over `stdin.stream()`, or the [`mcp`](/docs/modules/mcp) stdio server, whose protocol messages arrive on the process's stdin.
 - Under `run()`, `stdin` is the process's stdin.
 
 ## Page long output

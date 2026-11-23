@@ -982,6 +982,30 @@ describe("Invocation pipeline — streams", () => {
 		expect(lines).toEqual(["a", "bc", "[]"]);
 	});
 
+	it("refuses a stdin read started inside another read", async () => {
+		const lines: string[] = [];
+		const app = new Crust("app").action(async ({ stdin, stdout }) => {
+			for await (const chunk of stdin.stream()) {
+				stdout(new TextDecoder().decode(chunk));
+				await stdin.text().catch((error: Error) => stdout(error.message));
+			}
+		});
+		await app.execute({
+			argv: [],
+			io: {
+				stdin: Readable.from(["a", "b"]),
+				stdout: lineSink(lines),
+				stderr: { write() {} },
+			},
+		});
+		expect(lines).toEqual([
+			"a",
+			"stdin is in use by another reader",
+			"b",
+			"stdin is in use by another reader",
+		]);
+	});
+
 	it("stops reading stdin with the invocation's cancellation", async () => {
 		const controller = new AbortController();
 		const stdin = new PassThrough();

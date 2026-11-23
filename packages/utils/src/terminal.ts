@@ -25,15 +25,19 @@ export interface TerminalIO {
 	readonly signal?: AbortSignal;
 }
 
+/** Inputs with an unfinished `readInput`, which pauses between chunks and so escapes the flowing check. */
+const reading = new WeakSet<TerminalInput>();
+
 /**
  * The chunks `input` delivers from now until it ends. Read asynchronously: a synchronous read
  * would block the event loop, so Ctrl-C could not cancel a read waiting on an open pipe or
  * terminal. Throws `signal.reason` once `signal` aborts. Input an earlier consumer already read
  * to its end yields nothing, since its `end` event cannot fire again. Throws while another
- * reader consumes `input` (a flowing stream with a `data` listener), such as an MCP stdio
- * transport whose protocol frames arrive there: reading would steal them, and the read would
- * end only when that reader's peer hangs up. Pauses `input` between chunks and once done, so a
- * slow consumer holds back the writer and a stopped read no longer keeps the process alive.
+ * reader consumes `input`: a flowing stream with a `data` listener, such as an MCP stdio
+ * transport whose protocol frames arrive there (reading would steal them, and the read would
+ * end only when that reader's peer hangs up), or an unfinished earlier `readInput` of `input`
+ * (the two would split the chunks). Pauses `input` between chunks and once done, so a slow
+ * consumer holds back the writer and a stopped read no longer keeps the process alive.
  */
 export async function* readInput(
 	input: TerminalInput,
@@ -41,7 +45,7 @@ export async function* readInput(
 ): AsyncGenerator<Uint8Array, void, undefined> {
 	signal.throwIfAborted();
 	if (input.readableEnded || input.destroyed) return;
-	if (input.readableFlowing === true && input.listenerCount("data") > 0) {
+	if (reading.has(input) || (input.readableFlowing === true && input.listenerCount("data") > 0)) {
 		throw new Error("stdin is in use by another reader");
 	}
 	const chunks: Uint8Array[] = [];
@@ -65,6 +69,7 @@ export async function* readInput(
 	};
 	input.on("data", onData).once("end", onEnd).once("error", onError);
 	signal.addEventListener("abort", notify);
+	reading.add(input);
 	try {
 		for (;;) {
 			signal.throwIfAborted();
@@ -82,7 +87,11 @@ export async function* readInput(
 		}
 	} finally {
 		signal.removeEventListener("abort", notify);
+		reading.delete(input);
 		input.off("data", onData).off("end", onEnd).off("error", onError);
+		// Node's `process.stdin` stops its handle on a `pause` event, which an already-paused stream
+		// does not emit; after a pause inside `onData` the handle may still be reading.
+		input.resume();
 		input.pause();
 	}
 }

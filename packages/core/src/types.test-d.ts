@@ -172,3 +172,15 @@ import type {
 	const options: ExecuteOptions = { argv };
 	void options;
 }
+
+{
+	// An OutputSink receives bytes too, so a string-only writer is rejected; a Node.js stream fits.
+	const lines: string[] = [];
+	const textOnly: ExecuteOptions = {
+		// @ts-expect-error -- `stdout.write(bytes)` would hand it a Uint8Array
+		io: { stdout: { write: (line: string) => lines.push(line) } },
+	};
+	const stream: ExecuteOptions = { io: { stdout: process.stdout, stderr: process.stderr } };
+	void textOnly;
+	void stream;
+}
